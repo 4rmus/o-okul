@@ -1,0 +1,74 @@
+export { getJobContext, requireJobTenantContext, runWithJobContext } from "./context/job-context.js";
+export { TenantDbAccess } from "./db/tenant-db.js";
+export { createExamEvaluationProcessor } from "./jobs/exam-evaluation-processor.js";
+export type { ExamEvaluationProcessor, ExamEvaluationProcessorOptions } from "./jobs/exam-evaluation-processor.js";
+export { processExamEvaluationJob } from "./jobs/exam-evaluation-job.js";
+export type {
+  ExamEvaluationJobAdapter,
+  ExamEvaluationJobInput,
+  ExamEvaluationJobPayload,
+  ExamEvaluationJobResult,
+  ExamEvaluationScoringInput,
+} from "./jobs/exam-evaluation-job.js";
+export { processExcelImportJob } from "./jobs/excel-import-job.js";
+export { PostgresReportGenerationAdapter } from "./jobs/postgres-report-generation-adapter.js";
+export { createReportGenerationProcessor } from "./jobs/report-generation-processor.js";
+export type { ReportGenerationProcessor, ReportGenerationProcessorOptions } from "./jobs/report-generation-processor.js";
+export { createExamResultSummarySnapshot, examResultSummaryReportType, processReportGenerationJob } from "./jobs/report-generation-job.js";
+export type {
+  ExamResultForReport,
+  ReportGenerationJobAdapter,
+  ReportGenerationJobInput,
+  ReportGenerationJobPayload,
+  ReportGenerationJobResult,
+  ReportSnapshotCandidate,
+  ReportType,
+} from "./jobs/report-generation-job.js";
+export { createSmsBatchProcessor } from "./jobs/sms-batch-processor.js";
+export type { SmsBatchProcessor, SmsBatchProcessorOptions } from "./jobs/sms-batch-processor.js";
+export { processSmsBatchJob } from "./jobs/sms-batch-job.js";
+export type { SmsBatchJobPayload, SmsBatchJobResult } from "./jobs/sms-batch-job.js";
+export { FormatAnalyzerService } from "./jobs/format-analyzer-service.js";
+export type { AnswerFieldSpec, FieldSpec, FormatAnalyzerInput, ParserConfigSuggestion, ParserDelimiter, ParserEncoding } from "./jobs/format-analyzer-service.js";
+export { OpticalAnswerParser } from "./jobs/optical-answer-parser.js";
+export type {
+  ImportQuarantineReason,
+  MatchedParsedAnswer,
+  OpticalAnswerParserInput,
+  OpticalAnswerParseResult,
+  OpticalAnswerParticipant,
+  UnmatchedParsedAnswer,
+} from "./jobs/optical-answer-parser.js";
+export { OpticalParseWorkflow } from "./jobs/optical-parse-workflow.js";
+export type {
+  OpticalParseInputLoader,
+  OpticalParseResultSaver,
+  OpticalParseWorkflowResult,
+  RawImportContentReader,
+} from "./jobs/optical-parse-workflow.js";
+export { createOpticalParseProcessor } from "./jobs/optical-parse-processor.js";
+export type { OpticalParseProcessor, OpticalParseProcessorOptions, OpticalParseWorkflowRunner } from "./jobs/optical-parse-processor.js";
+export { processTenantJob } from "./jobs/job-runner.js";
+export { PostgresExamEvaluationAdapter } from "./jobs/postgres-exam-evaluation-adapter.js";
+export { PostgresOpticalParseInputAdapter } from "./jobs/postgres-optical-parse-input-adapter.js";
+export type { LoadOpticalParseInput, OpticalParseInputBundle } from "./jobs/postgres-optical-parse-input-adapter.js";
+export { PostgresOpticalParseAdapter } from "./jobs/postgres-optical-parse-adapter.js";
+export type { SavedOpticalParseResult, SaveOpticalParseResultInput } from "./jobs/postgres-optical-parse-adapter.js";
+export { PostgresParserConfigAdapter } from "./jobs/postgres-parser-config-adapter.js";
+export type { ApprovedParserConfigInput, SavedParserConfig } from "./jobs/postgres-parser-config-adapter.js";
+export { createS3ClientConfigFromEnv, createS3RawImportContentReaderFromEnv, S3RawImportContentReader } from "./jobs/s3-raw-import-content-reader.js";
+export type { S3ClientLike, S3RawImportContentReaderOptions } from "./jobs/s3-raw-import-content-reader.js";
+export { scoreExam, scoringEngineVersion } from "./jobs/scoring-engine.js";
+export type {
+  AnswerKeyItem,
+  BranchScore,
+  Choice,
+  OutcomeScore,
+  QuestionScore,
+  ScoringConfig,
+  ScoringResult,
+  StudentAnswer,
+} from "./jobs/scoring-engine.js";
+export { createExcelImportBullWorker, createExamEvaluationBullWorker, createRedisConnectionOptions, createReportGenerationBullWorker, createSmsBatchBullWorker } from "./queue/bullmq-worker.js";
+export type { BullExcelImportJob, BullExamEvaluationJob, BullReportGenerationJob, BullSmsBatchJob, BullWorkerFactory, BullWorkerInstance, ExcelImportBullWorkerOptions, ExamEvaluationBullWorkerOptions, ReportGenerationBullWorkerOptions, SmsBatchBullWorkerOptions } from "./queue/bullmq-worker.js";
+export { assertTenantJobPayload, createJobId, queueNames } from "./queue/queues.js";

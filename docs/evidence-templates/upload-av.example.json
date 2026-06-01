@@ -1,0 +1,23 @@
+{
+  "result": "PASS",
+  "environment": "staging",
+  "checkedAt": "2026-05-31",
+  "scannerDecision": {
+    "mode": "provider",
+    "approvedBy": "security-ops@example.test",
+    "approvalReference": "UPLOAD-AV-2026-05",
+    "scannerName": "example-av-provider",
+    "signatureVersion": "2026.05.31",
+    "failClosed": true
+  },
+  "uploadSurfaces": [
+    "homework_material_file",
+    "support_ticket_attachment"
+  ],
+  "scanResults": {
+    "cleanFileAccepted": true,
+    "eicarRejected": true,
+    "scannerUnavailableRejected": true
+  },
+  "gaps": []
+}

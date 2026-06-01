@@ -1,0 +1,167 @@
+import "reflect-metadata";
+import { INestApplication } from "@nestjs/common";
+import { Test } from "@nestjs/testing";
+import request from "supertest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { AppModule } from "../app.module.js";
+
+describe("Schedule API", () => {
+  let app: INestApplication;
+  let server: Parameters<typeof request>[0];
+  let tenantAAccessToken: string;
+  let teacherAAccessToken: string;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleRef.createNestApplication();
+    await app.init();
+    server = app.getHttpServer() as Parameters<typeof request>[0];
+
+    const login = await request(server)
+      .post("/auth/login")
+      .send({ email: "admin-a@example.test", password: "password" })
+      .expect(200);
+    tenantAAccessToken = (login.body as { accessToken: string }).accessToken;
+
+    const teacherLogin = await request(server)
+      .post("/auth/login")
+      .send({ email: "teacher-a@example.test", password: "password" })
+      .expect(200);
+    teacherAAccessToken = (teacherLogin.body as { accessToken: string }).accessToken;
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it("tenant A sadece kendi ders programı kayıtlarını listeler", async () => {
+    const response = await request(server)
+      .get("/schedule-lessons")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual([
+      {
+        id: "lesson-a",
+        tenantId: "tenant-a",
+        classId: "class-a",
+        teacherId: "teacher-a",
+        title: "Matematik",
+        startsAt: "2026-06-01T09:00:00.000Z",
+        endsAt: "2026-06-01T10:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("ders programı CRUD akışını tenant içinde tamamlar", async () => {
+    const created = await request(server)
+      .post("/schedule-lessons")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        classId: "class-a",
+        teacherId: "teacher-a",
+        title: "Geometri",
+        startsAt: "2026-06-01T10:00:00.000Z",
+        endsAt: "2026-06-01T11:00:00.000Z",
+      })
+      .expect(201);
+
+    const lessonId = (created.body as { id: string }).id;
+    expect(created.body).toMatchObject({
+      tenantId: "tenant-a",
+      classId: "class-a",
+      teacherId: "teacher-a",
+      title: "Geometri",
+    });
+
+    await request(server)
+      .patch(`/schedule-lessons/${lessonId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ title: "Analitik Geometri" })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.title).toBe("Analitik Geometri");
+      });
+
+    await request(server)
+      .delete(`/schedule-lessons/${lessonId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(204);
+    await request(server)
+      .get(`/schedule-lessons/${lessonId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(404);
+  });
+
+  it("öğretmen saat çakışmasını tenant içinde 409 ile engeller", async () => {
+    await request(server)
+      .post("/schedule-lessons")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        classId: "class-a",
+        teacherId: "teacher-a",
+        title: "Çakışan Ders",
+        startsAt: "2026-06-01T09:30:00.000Z",
+        endsAt: "2026-06-01T10:30:00.000Z",
+      })
+      .expect(409);
+  });
+
+  it("tenant A başka tenant class/teacher ile ders programı oluşturamaz", async () => {
+    await request(server)
+      .post("/schedule-lessons")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        classId: "class-b",
+        teacherId: "teacher-a",
+        title: "Gizli Ders",
+        startsAt: "2026-06-01T11:00:00.000Z",
+        endsAt: "2026-06-01T12:00:00.000Z",
+      })
+      .expect(403);
+
+    await request(server)
+      .post("/schedule-lessons")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        classId: "class-a",
+        teacherId: "teacher-b",
+        title: "Gizli Ogretmen",
+        startsAt: "2026-06-01T11:00:00.000Z",
+        endsAt: "2026-06-01T12:00:00.000Z",
+      })
+      .expect(403);
+  });
+
+  it("teacher ders programını okuyabilir ama yazamaz", async () => {
+    await request(server).get("/schedule-lessons").set("Authorization", `Bearer ${teacherAAccessToken}`).expect(200);
+    await request(server).get("/schedule-lessons/lesson-a").set("Authorization", `Bearer ${teacherAAccessToken}`).expect(200);
+    await request(server).get("/schedule-lessons/lesson-b").set("Authorization", `Bearer ${teacherAAccessToken}`).expect(403);
+
+    await request(server)
+      .post("/schedule-lessons")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({
+        classId: "class-a",
+        teacherId: "teacher-a",
+        title: "Teacher Dersi",
+        startsAt: "2026-06-01T11:00:00.000Z",
+        endsAt: "2026-06-01T12:00:00.000Z",
+      })
+      .expect(403);
+
+    await request(server)
+      .patch("/schedule-lessons/lesson-a")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({ title: "Teacher Güncelleme" })
+      .expect(403);
+
+    await request(server)
+      .delete("/schedule-lessons/lesson-a")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(403);
+  });
+});

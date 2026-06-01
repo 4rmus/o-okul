@@ -1,0 +1,15 @@
+export { AppModule } from "./app.module.js";
+export { InMemorySessionStore, PostgresSessionStore } from "./auth/session-store.js";
+export { TokenService } from "./auth/token-service.js";
+export { getRequestContext, requireTenantContext, runWithRequestContext } from "./context/request-context.js";
+export { ParserConfigApprovalService, parserConfigRepositoryToken } from "./exam/parser-config-approval.service.js";
+export { ParserConfigSuggestionService } from "./exam/parser-config-suggestion.service.js";
+export { PostgresParserConfigRepository } from "./exam/postgres-parser-config-repository.js";
+export { PostgresRawImportRepository } from "./exam/postgres-raw-import-repository.js";
+export { RawImportQueueService, rawImportQueueProducerToken } from "./exam/raw-import-queue.service.js";
+export { createRawImportS3Key, RawImportUploadService, rawImportArchiveStoreToken, rawImportRepositoryToken } from "./exam/raw-import-upload.service.js";
+export { createS3RawImportArchiveStoreFromEnv, S3RawImportArchiveStore } from "./exam/s3-raw-import-archive-store.js";
+export { createBullTenantQueueProducer } from "./queue/bullmq-producer.js";
+export { createTenantQueueJob } from "./queue/job-producer.js";
+export { assertRole, hasRole, isSystemAdmin, roles } from "./rbac/roles.js";
+export { assertTenantResourceAccess, filterTenantResources } from "./tenant/tenant-access.js";

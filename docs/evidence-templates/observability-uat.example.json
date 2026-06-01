@@ -1,0 +1,23 @@
+{
+  "result": "PASS",
+  "environment": "staging",
+  "checkedAt": "2026-05-30",
+  "prometheusScrapeOk": true,
+  "grafanaDashboardOk": true,
+  "lokiLogPanelOk": true,
+  "alertWebhookStatus": 204,
+  "dashboardPanelsVerified": [
+    "API up",
+    "Request rate",
+    "Average duration",
+    "Readiness failures",
+    "Docker logs"
+  ],
+  "alertsVerified": [
+    "UzmanHocamApiDown",
+    "UzmanHocamReadinessFailing",
+    "UzmanHocamHigh5xxRate",
+    "UzmanHocamSlowRequests"
+  ],
+  "gaps": []
+}

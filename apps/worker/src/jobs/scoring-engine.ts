@@ -1,0 +1,182 @@
+export const scoringEngineVersion = "2026.05.scaled-net";
+
+export type Choice = "A" | "B" | "C" | "D" | "E" | "";
+
+export interface StudentAnswer {
+  questionNo: number;
+  answer: Choice;
+}
+
+export interface AnswerKeyItem {
+  questionNo: number;
+  correctAnswer: Exclude<Choice, "">;
+  branch: string;
+  outcomeCode?: string;
+}
+
+export interface ScoringConfig {
+  wrongPenalty: number;
+  rawScoreMultiplier?: number;
+  standardScoreBase?: number;
+  standardScoreMultiplier?: number;
+  answerKeyVersion: string;
+  engineVersion: string;
+  computedAt: string;
+}
+
+export interface BranchScore {
+  branch: string;
+  correct: number;
+  wrong: number;
+  blank: number;
+  net: number;
+}
+
+export interface QuestionScore {
+  questionNo: number;
+  branch: string;
+  outcomeCode?: string;
+  answer: Choice;
+  correctAnswer: Exclude<Choice, "">;
+  status: "CORRECT" | "WRONG" | "BLANK";
+}
+
+export interface OutcomeScore {
+  outcomeCode: string;
+  branch: string;
+  correct: number;
+  wrong: number;
+  blank: number;
+  net: number;
+}
+
+export interface ScoringResult {
+  total: {
+    correct: number;
+    wrong: number;
+    blank: number;
+    net: number;
+    rawScore: number;
+    standardScore: number;
+  };
+  branches: BranchScore[];
+  outcomes?: OutcomeScore[];
+  questions: QuestionScore[];
+  _meta: {
+    answerKeyVersion: string;
+    engineVersion: string;
+    computedAt: string;
+  };
+}
+
+export function scoreExam(
+  answers: StudentAnswer[],
+  answerKey: AnswerKeyItem[],
+  config: ScoringConfig,
+): ScoringResult {
+  const answerMap = new Map(answers.map((answer) => [answer.questionNo, answer.answer]));
+  const branchScores = new Map<string, BranchScore>();
+  const outcomeScores = new Map<string, OutcomeScore>();
+  const questions: QuestionScore[] = [];
+
+  for (const key of answerKey) {
+    const score = ensureBranchScore(branchScores, key.branch);
+    const outcome = key.outcomeCode ? ensureOutcomeScore(outcomeScores, key.outcomeCode, key.branch) : undefined;
+    const answer = answerMap.get(key.questionNo) ?? "";
+
+    if (answer === "") {
+      score.blank += 1;
+      if (outcome) outcome.blank += 1;
+      questions.push({ ...key, answer, status: "BLANK" });
+    } else if (answer === key.correctAnswer) {
+      score.correct += 1;
+      if (outcome) outcome.correct += 1;
+      questions.push({ ...key, answer, status: "CORRECT" });
+    } else {
+      score.wrong += 1;
+      if (outcome) outcome.wrong += 1;
+      questions.push({ ...key, answer, status: "WRONG" });
+    }
+  }
+
+  const branches = [...branchScores.values()].map((score) => ({
+    ...score,
+    net: calculateNet(score.correct, score.wrong, config.wrongPenalty),
+  }));
+  const outcomes = [...outcomeScores.values()].map((score) => ({
+    ...score,
+    net: calculateNet(score.correct, score.wrong, config.wrongPenalty),
+  }));
+  const total = branches.reduce(
+    (sum, score) => ({
+      correct: sum.correct + score.correct,
+      wrong: sum.wrong + score.wrong,
+      blank: sum.blank + score.blank,
+      net: sum.net + score.net,
+    }),
+    { correct: 0, wrong: 0, blank: 0, net: 0 },
+  );
+  const rawScore = calculateRawScore(total.net, config);
+
+  return {
+    total: {
+      ...total,
+      rawScore,
+      standardScore: calculateStandardScore(rawScore, config),
+    },
+    branches,
+    ...(outcomes.length > 0 ? { outcomes } : {}),
+    questions,
+    _meta: {
+      answerKeyVersion: config.answerKeyVersion,
+      engineVersion: config.engineVersion,
+      computedAt: config.computedAt,
+    },
+  };
+}
+
+function ensureBranchScore(scores: Map<string, BranchScore>, branch: string): BranchScore {
+  const existing = scores.get(branch);
+  if (existing) {
+    return existing;
+  }
+
+  const score = { branch, correct: 0, wrong: 0, blank: 0, net: 0 };
+  scores.set(branch, score);
+  return score;
+}
+
+function ensureOutcomeScore(scores: Map<string, OutcomeScore>, outcomeCode: string, branch: string): OutcomeScore {
+  const existing = scores.get(outcomeCode);
+  if (existing) {
+    return existing;
+  }
+
+  const score = { outcomeCode, branch, correct: 0, wrong: 0, blank: 0, net: 0 };
+  scores.set(outcomeCode, score);
+  return score;
+}
+
+function calculateNet(correct: number, wrong: number, wrongPenalty: number): number {
+  return correct - wrong * wrongPenalty;
+}
+
+function calculateRawScore(net: number, config: ScoringConfig): number {
+  if (config.rawScoreMultiplier === undefined) {
+    return net;
+  }
+  return roundScore(net * config.rawScoreMultiplier);
+}
+
+function calculateStandardScore(rawScore: number, config: ScoringConfig): number {
+  if (config.standardScoreBase === undefined && config.standardScoreMultiplier === undefined) {
+    return rawScore;
+  }
+  const base = config.standardScoreBase ?? 0;
+  const multiplier = config.standardScoreMultiplier ?? 1;
+  return roundScore(base + rawScore * multiplier);
+}
+
+function roundScore(value: number): number {
+  return Math.round(value * 10000) / 10000;
+}

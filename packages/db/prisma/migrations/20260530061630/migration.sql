@@ -1,0 +1,5 @@
+-- RenameIndex
+ALTER INDEX "ExamResult_tenantId_participantId_answerKeyVersion_parserConfig" RENAME TO "ExamResult_tenantId_participantId_answerKeyVersion_parserCo_key";
+
+-- RenameIndex
+ALTER INDEX "ParsedAnswer_tenantId_rawImportId_participantId_parserConfigVer" RENAME TO "ParsedAnswer_tenantId_rawImportId_participantId_parserConfi_key";

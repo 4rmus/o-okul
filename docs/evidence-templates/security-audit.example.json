@@ -1,0 +1,32 @@
+{
+  "result": "PASS",
+  "environment": "staging",
+  "checkedAt": "2026-05-30",
+  "prodEnvCheckOk": true,
+  "httpsOk": true,
+  "rlsLiveCheckOk": true,
+  "noCriticalFindings": true,
+  "healthStatus": 200,
+  "readinessStatus": 200,
+  "securityHeadersVerified": [
+    "Strict-Transport-Security",
+    "X-Content-Type-Options",
+    "X-Frame-Options",
+    "Referrer-Policy",
+    "Permissions-Policy",
+    "Content-Security-Policy"
+  ],
+  "authControlsVerified": [
+    "COOKIE_SECURE=true",
+    "login lockout",
+    "strong JWT secrets",
+    "refresh session revocation"
+  ],
+  "dataControlsVerified": [
+    "RLS live check",
+    "tenant isolation",
+    "audit PII redaction",
+    "SENTRY_SEND_DEFAULT_PII=false"
+  ],
+  "findings": []
+}

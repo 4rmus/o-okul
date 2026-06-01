@@ -1,0 +1,29 @@
+{
+  "result": "PASS",
+  "environment": "staging",
+  "checkedAt": "2026-05-30",
+  "tester": "qa-owner",
+  "releaseCandidate": "staging-2026-05-30",
+  "rollbackImageTag": "uzman-hocam-api:previous-pass",
+  "restoreBackupReference": "s3://backup-bucket/base/2026-05-30.dump",
+  "flowsVerified": [
+    "tenant admin login",
+    "teacher workflow",
+    "guardian workflow",
+    "raw import smoke",
+    "report generation smoke",
+    "sms batch smoke",
+    "privacy purge"
+  ],
+  "commandsPassed": [
+    "pnpm run ci",
+    "pnpm prod:env:check",
+    "pnpm db:rls:check:live",
+    "pnpm raw-import:smoke",
+    "pnpm report-generation:smoke",
+    "pnpm queue:smoke",
+    "pnpm sms:smoke",
+    "pnpm traefik:https:smoke"
+  ],
+  "defects": []
+}

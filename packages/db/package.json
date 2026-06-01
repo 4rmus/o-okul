@@ -1,0 +1,37 @@
+{
+  "name": "@uzman-hocam/db",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "db:generate": "prisma generate --config prisma.config.ts",
+    "db:audit-log-partition:check": "node scripts/check-audit-log-partition.mjs",
+    "db:migrate": "prisma migrate dev --config prisma.config.ts",
+    "db:rls:check": "node scripts/check-rls.mjs",
+    "db:rls:check:live": "node scripts/check-rls-live.mjs",
+    "db:seed": "tsx prisma/seed.ts",
+    "dev": "tsc -p tsconfig.json --watch",
+    "lint": "prisma validate --config prisma.config.ts && tsc -p tsconfig.json --noEmit",
+    "test": "prisma validate --config prisma.config.ts && pnpm db:rls:check && pnpm db:audit-log-partition:check && tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.20.0",
+    "dotenv": "^17.4.2",
+    "prisma": "^7.8.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.8.0",
+    "pg": "^8.21.0"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "result": "PASS",
+  "environment": "staging",
+  "checkedAt": "2026-05-30",
+  "inventorySource": "staging readonly inventory query",
+  "dataSubjectCounts": {
+    "student": 12,
+    "teacher": 3,
+    "guardian": 10,
+    "user": 4
+  },
+  "purgeCoverage": {
+    "student": ["firstName", "lastName"],
+    "teacher": ["firstName", "lastName"],
+    "guardian": ["firstName", "lastName", "phone"],
+    "user": ["email", "name"]
+  },
+  "auditActionsVerified": [
+    "kvkk.student_pii_purged",
+    "kvkk.teacher_pii_purged",
+    "kvkk.guardian_pii_purged",
+    "kvkk.user_pii_purged"
+  ],
+  "gaps": []
+}

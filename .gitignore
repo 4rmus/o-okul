@@ -1,0 +1,14 @@
+node_modules/
+.turbo/
+dist/
+.next/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+test-results/
+playwright-report/
+.claude/
+optik-form-ornek/

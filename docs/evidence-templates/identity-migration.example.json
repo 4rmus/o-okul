@@ -1,0 +1,42 @@
+{
+  "result": "PASS",
+  "environment": "staging",
+  "checkedAt": "2026-05-31",
+  "migrationDecision": {
+    "approvedBy": "product-ops@example.test",
+    "approvalReference": "IDENTITY-MIG-2026-05",
+    "activationMode": "invite"
+  },
+  "subjects": [
+    {
+      "role": "STUDENT",
+      "sourceRecords": 3,
+      "linkedUsers": 3,
+      "tenantMembershipsCreated": 3
+    },
+    {
+      "role": "GUARDIAN",
+      "sourceRecords": 2,
+      "linkedUsers": 2,
+      "tenantMembershipsCreated": 2
+    },
+    {
+      "role": "TEACHER",
+      "sourceRecords": 1,
+      "linkedUsers": 1,
+      "tenantMembershipsCreated": 1
+    }
+  ],
+  "invitationFlow": {
+    "created": 6,
+    "accepted": 6,
+    "expiredOrRevoked": 0
+  },
+  "verifications": [
+    "identity_link_audit_ready",
+    "tenant_memberships_created",
+    "wrong_role_access_rejected",
+    "cross_tenant_activation_rejected"
+  ],
+  "gaps": []
+}

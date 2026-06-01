@@ -1,0 +1,4 @@
+ogrenci_no	kitapcik	cevaplar
+100001	A	ABCDE
+100002	B	AB-DE
+999999	A	ABCDE

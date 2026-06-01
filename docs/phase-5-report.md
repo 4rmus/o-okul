@@ -1,0 +1,139 @@
+# Faz 5 Durum Raporu
+
+## Tamamlanan repo içi kapsam
+
+- Faz 5 mesaj/duyuru kapsamı için ilk küçük dilim olarak okul/öğretmen duyuru API'si başlatıldı.
+- `GET /announcements` endpoint'i eklendi; `TENANT_ADMIN` ve `TEACHER` rolleri yalnız kendi
+  tenant duyurularını okuyabilir.
+- `GET /announcements/:id` endpoint'i tenant dışı duyuruları `403` ile reddeder.
+- `POST /announcements` endpoint'i eklendi; yalnız `TENANT_ADMIN` rolü tenant içinde duyuru
+  oluşturabilir.
+- Duyuru oluşturma `title`, `body` ve `audience` doğrulaması yapar; `audience` şimdilik `SCHOOL`
+  veya `TEACHERS` olabilir.
+- Duyuru için `Announcement` Prisma modeli ve migration eklendi.
+- `Announcement` tablosu tenant foreign key, tenant/audience indexleri ve RLS policy ile korunur.
+- RLS statik kontrolü tüm migration'ları okuyacak şekilde genişletildi; duyuru tablosu dahil 23
+  tenant tablosunu ve app rolü yetkilerini doğrular.
+- `ANNOUNCEMENT_STORE=postgres` ile seçilen `PostgresAnnouncementStore` eklendi; listeleme,
+  tekil okuma ve oluşturma `withTenantQuery` üzerinden tenant setting'leriyle çalışır.
+- Web panelinde duyuru listeleme ve duyuru yayınlama görünümü eklendi; `GET /announcements` ve
+  `POST /announcements` akışı mevcut oturum token'ı ile kullanılır.
+- Web E2E senaryosu duyuru listesini, hedef kitle seçimini ve yeni duyurunun listede görünmesini
+  doğrular.
+- Mobil duyuru tablosu dar ekranda hedef kitle ve tarih metinleri taşmayacak şekilde doğrulandı.
+- Mesaj şablonları için ilk API dilimi eklendi: `GET /message-templates`,
+  `GET /message-templates/:id`, `POST /message-templates`, `PATCH /message-templates/:id` ve
+  `DELETE /message-templates/:id`.
+- Mesaj şablonları şimdilik yalnız `SMS` kanalını kabul eder; sağlayıcı seçimi ve gerçek gönderim
+  bu dilimin kapsamı dışında bırakıldı.
+- `MessageTemplate` Prisma modeli ve migration eklendi; tablo tenant foreign key, indexler,
+  RLS policy ve app rolü yetkisiyle korunur.
+- `MESSAGE_TEMPLATE_STORE=postgres` ile seçilen `PostgresMessageTemplateStore` eklendi; listeleme,
+  tekil okuma, oluşturma, güncelleme ve soft-delete `withTenantQuery` üzerinden tenant
+  setting'leriyle çalışır.
+- SMS batch kuyruğu için ilk API/worker dilimi eklendi: `POST /sms-batches` tenant içindeki SMS
+  şablonunu ve alıcı listesini `sms-batch` kuyruğuna bağlar.
+- `sms-batch` job payload'ı şablon id, mesaj gövdesi ve alıcıları taşır; job id
+  `templateId + contentHash` ile idempotent üretilir.
+- Worker `sms-batch` kuyruğunu dinleyecek şekilde genişletildi; işleyici mesajları
+  `@uzman-hocam/sms-adapter` arayüzüne verir. Gerçek sağlayıcı entegrasyonu yerine bu dilimde
+  no-op adapter kullanılır.
+- SMS adapter GSM-7 ve Unicode metinler için tekli/çoklu SMS segment hesabı yapar; Türkçe
+  GSM-7 dışı karakterler Unicode limitleriyle hesaplanır.
+- No-op adapter gönderim sonucuna segment tahminini ekler; worker batch sonucunda toplam
+  `billableSegments` değerini üretir.
+- SMS adapter env factory'si eklendi; `NODE_ENV=production` ortamında gerçek sağlayıcı seçilmeden
+  no-op adapter ile başlamak `SMS_PROVIDER_REQUIRED` hatasıyla engellenir.
+- Worker SMS batch processor, provider seçimini kendi içinde tekrar tanımlamak yerine
+  `@uzman-hocam/sms-adapter` paketindeki env factory'sini kullanır; Docker Compose worker env'i
+  `SMS_PROVIDER` ve `SMS_ALLOW_NOOP_IN_PRODUCTION` değerlerini açıkça taşır.
+- Netgsm REST v2 SMS adapter eklendi; `SMS_PROVIDER=netgsm` seçildiğinde Basic Auth ile
+  `https://api.netgsm.com.tr/sms/rest/v2/send` endpoint'ine JSON mesaj listesi gönderir,
+  `code: "00"` sonucunu `jobid` ile başarılı kabul eder ve sağlayıcı hata kodlarını batch
+  sonuçlarına taşır.
+- `pnpm sms:smoke` eklendi; Netgsm test/canlı credential geldiğinde tek alıcıya kontrollü smoke
+  gönderimi yapılır, gerçek sağlayıcı için `SMS_SMOKE_CONFIRM=send` gerekir.
+- Materyal havuzu için ilk API dilimi eklendi: `GET /homework/materials`,
+  `GET /homework/materials/:id`, `POST /homework/materials`, `PATCH /homework/materials/:id` ve
+  `DELETE /homework/materials/:id`.
+- Materyal havuzu mevcut `HomeworkMaterial` tenant tablosu ve RLS hattını kullanır.
+- Materyal CRUD akışı tenant dışı erişimi `403`, silinmiş materyali `404`, başlıksız oluşturmayı
+  `400` ile reddeder; `TEACHER` rolü okur, yazma işlemleri `TENANT_ADMIN` rolünde kalır.
+- Materyal dosyaları için `HomeworkMaterialFile` modeli, RLS migration'ı,
+  `GET /homework/materials/:id/files` ve `POST /homework/materials/:id/files` akışı eklendi;
+  dosya adı normalize edilir, içerik tipi izin listesiyle sınırlandırılır ve boyut limiti 64 KiB
+  olarak uygulanır.
+- Kişiye özel materyal ataması için `HomeworkMaterialAssignment` modeli, RLS migration'ı,
+  `GET /homework/materials/:id/assignments` ve `POST /homework/materials/:id/assignments`
+  akışı eklendi; materyal ve öğrenci aynı tenant içinde doğrulanır, `TEACHER` okur,
+  `TENANT_ADMIN` atama yapar.
+- Hata kitapçığı için skor motoru soru bazlı `CORRECT`, `WRONG`, `BLANK` dökümü üretir;
+  `ReportSnapshot` öğrenci özetleri bu dökümü taşır ve
+  `GET /exams/:examId/reports/snapshots/:snapshotId/students/:studentId/error-booklet`
+  yalnız yanlış/boş soruları döner.
+- Destek bildirimi için ilk API dilimi eklendi: `GET /support-tickets`,
+  `GET /support-tickets/:id`, `POST /support-tickets` ve `PATCH /support-tickets/:id`.
+- `SupportTicket` Prisma modeli ve migration eklendi; tablo tenant foreign key, status/priority
+  indexleri, RLS policy ve app rolü yetkisiyle korunur.
+- Destek bildirimi oluşturma `subject`, `message` ve `priority` doğrulaması yapar; durum
+  güncelleme `OPEN`, `IN_PROGRESS`, `RESOLVED`, `CLOSED` değerleriyle sınırlıdır.
+- Destek bildirimi dosya ekleri için `SupportTicketAttachment` modeli, RLS migration'ı,
+  `GET /support-tickets/:id/attachments` ve `POST /support-tickets/:id/attachments` akışı
+  eklendi; dosya adı normalize edilir, içerik tipi izin listesiyle sınırlandırılır ve boyut limiti
+  64 KiB olarak uygulanır.
+- Destek bildirimi dosya ekleri için `GET /support-tickets/:id/attachments/:attachmentId/download`
+  akışı eklendi; liste endpoint'i dosya içeriğini döndürmez, indirme ise ticket/tenant eşleşmesini
+  doğruladıktan sonra dosyayı base64 olarak verir.
+- Destek bildirimi dosya ekleri için geriye uyumlu storage katmanı eklendi; varsayılan inline
+  base64 kalır, `SUPPORT_ATTACHMENT_STORAGE=s3` seçildiğinde MinIO/S3 uyumlu obje depolama
+  kullanılır; S3 modunda veritabanı dosya içeriğini değil `storageKey` referansını taşır.
+- Destek bildirimi yorumları için `SupportTicketComment` modeli, RLS migration'ı,
+  `GET /support-tickets/:id/comments` ve `POST /support-tickets/:id/comments` akışı eklendi;
+  yorum gövdesi zorunludur, tenant dışı ticket yorumları `403` ile korunur.
+- RLS statik kontrolü materyal dosyası, materyal ataması, destek bildirimi, eki ve yorumu
+  tabloları dahil 28 tenant tablosunu doğrular.
+- Web panelinde materyal havuzu için listeleme, ekleme, düzenleme ve silme görünümü eklendi.
+- Web panelinde materyal dosyası seçme, yükleme ve materyal altında dosyaları görme akışı eklendi.
+- Web panelinde materyali öğrenciye atama ve materyal altında öğrenci atamalarını görme akışı
+  eklendi.
+- Web panelinde ilk öğrenci raporu için hata kitapçığı özeti eklendi.
+- Web panelinde destek bildirimi için listeleme, yeni bildirim açma, işleme alma ve çözüldü
+  işaretleme görünümü eklendi.
+- Web panelinde destek bildirimi eki seçme, yükleme ve ticket altında ekleri görme akışı eklendi.
+- Web panelinde destek bildirimi ekleri için indirme aksiyonu eklendi.
+- Web panelinde destek bildirimi yorumu ekleme ve ticket altında yorumları görme akışı eklendi.
+
+## Çalıştırılan doğrulamalar
+
+- `corepack pnpm --filter @uzman-hocam/api test -- announcement`
+- `corepack pnpm --filter @uzman-hocam/api test -- message-template`
+- `corepack pnpm --filter @uzman-hocam/api test -- sms-batch`
+- `corepack pnpm --filter @uzman-hocam/api test -- homework`
+- `corepack pnpm --filter @uzman-hocam/api test -- report-generation`
+- `corepack pnpm --filter @uzman-hocam/api test -- support-ticket`
+- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/support-ticket/support-ticket.e2e.test.ts src/support-ticket/support-ticket-store.test.ts`
+- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/support-ticket/support-ticket-attachment-storage.test.ts src/support-ticket/support-ticket.service.test.ts src/support-ticket/support-ticket.e2e.test.ts src/support-ticket/support-ticket-store.test.ts`
+- `corepack pnpm --filter @uzman-hocam/sms-adapter test`
+- `corepack pnpm --filter @uzman-hocam/sms-adapter exec vitest run src/index.test.ts`
+- `corepack pnpm --filter @uzman-hocam/worker test -- sms-batch`
+- `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/sms-batch-processor.test.ts src/jobs/sms-batch-job.test.ts`
+- `corepack pnpm --filter @uzman-hocam/worker test -- scoring-engine report-generation-job exam-evaluation-job`
+- `corepack pnpm --filter @uzman-hocam/api typecheck`
+- `corepack pnpm --filter @uzman-hocam/db lint`
+- `corepack pnpm --filter @uzman-hocam/web typecheck`
+- `corepack pnpm --filter @uzman-hocam/web test:e2e`
+- Playwright mobil görsel kontrolü: `apps/web/test-results/announcement-panel-mobile.png`
+- Playwright materyal paneli görsel kontrolü: `apps/web/test-results/material-file-panel.png`
+- Playwright hata kitapçığı görsel kontrolü: `apps/web/test-results/error-booklet-panel.png`
+- Playwright destek paneli görsel kontrolü: `apps/web/test-results/support-ticket-panel.png`
+- Playwright destek yorum paneli görsel kontrolü: `apps/web/test-results/support-comment-panel.png`
+- Playwright destek eki indirme görsel kontrolü:
+  `apps/web/test-results/support-attachment-download-panel.png`
+- `corepack pnpm db:migrate`
+- `corepack pnpm db:rls:check`
+- `corepack pnpm db:rls:check:live`
+- `corepack pnpm run ci`
+
+## Kalan işler
+
+- Netgsm test credential/canlı hesap doğrulaması ve `pnpm sms:smoke` staging sonucu.

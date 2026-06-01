@@ -1,0 +1,35 @@
+{
+  "name": "@uzman-hocam/api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "echo \"NestJS API PR 3'te eklenecek\"",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.1.24",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.9.1",
+    "@types/pg": "^8.20.0",
+    "@types/supertest": "^7.2.0",
+    "supertest": "^7.2.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.7"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1056.0",
+    "@nestjs/common": "^11.1.24",
+    "@nestjs/core": "^11.1.24",
+    "@nestjs/platform-express": "^11.1.24",
+    "@uzman-hocam/shared-types": "workspace:*",
+    "bullmq": "^5.77.6",
+    "exceljs": "^4.4.0",
+    "pg": "^8.21.0",
+    "puppeteer-core": "^25.1.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  }
+}

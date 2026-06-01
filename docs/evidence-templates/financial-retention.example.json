@@ -1,0 +1,21 @@
+{
+  "result": "PASS",
+  "environment": "staging",
+  "checkedAt": "2026-05-31",
+  "policyDecision": {
+    "approvedBy": "finance-ops@example.test",
+    "approvalReference": "KVKK-FIN-RET-2026-05",
+    "retentionPeriodYears": 10,
+    "legalBasis": "Finansal kayıtlar yasal saklama yükümlülüğü nedeniyle PII purge dışında tutulur.",
+    "purgeException": true
+  },
+  "financialRecords": {
+    "paymentPlans": 4,
+    "installments": 12
+  },
+  "purgeBehaviorVerified": [
+    "privacy.me.purge_preserves_payment_plans",
+    "payment_plan_records_excluded_from_pii_purge"
+  ],
+  "gaps": []
+}

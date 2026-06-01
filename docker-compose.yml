@@ -1,0 +1,139 @@
+name: uzman-hocam
+
+services:
+  api:
+    build:
+      context: .
+      target: api
+    environment:
+      NODE_ENV: production
+      PORT: 3100
+      STUDENT_QUOTA: ${STUDENT_QUOTA:-200}
+      DATABASE_URL: ${DATABASE_URL}
+      DIRECT_DATABASE_URL: ${DIRECT_DATABASE_URL}
+      AUTH_USER_STORE: ${AUTH_USER_STORE:-postgres}
+      AUTH_SESSION_STORE: ${AUTH_SESSION_STORE:-postgres}
+      USER_MANAGEMENT_STORE: ${USER_MANAGEMENT_STORE:-postgres}
+      IDENTITY_INVITATION_STORE: ${IDENTITY_INVITATION_STORE:-postgres}
+      PASSWORD_RESET_STORE: ${PASSWORD_RESET_STORE:-postgres}
+      REDIS_URL: ${REDIS_URL}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      STUDENT_PII_ENCRYPTION_KEY: ${STUDENT_PII_ENCRYPTION_KEY}
+      STUDENT_PII_HASH_KEY: ${STUDENT_PII_HASH_KEY}
+      COOKIE_SECURE: ${COOKIE_SECURE}
+      SUPPORT_ATTACHMENT_STORAGE: ${SUPPORT_ATTACHMENT_STORAGE:-inline}
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: ${S3_REGION}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE}
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - frontend_net
+      - backend_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      target: worker
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      DIRECT_DATABASE_URL: ${DIRECT_DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      QUEUE_PREFIX: ${QUEUE_PREFIX}
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: ${S3_REGION}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE}
+      SMS_PROVIDER: ${SMS_PROVIDER:-noop}
+      SMS_ALLOW_NOOP_IN_PRODUCTION: ${SMS_ALLOW_NOOP_IN_PRODUCTION:-false}
+      NETGSM_ENDPOINT: ${NETGSM_ENDPOINT:-https://api.netgsm.com.tr/sms/rest/v2/send}
+      NETGSM_USERCODE: ${NETGSM_USERCODE:-}
+      NETGSM_PASSWORD: ${NETGSM_PASSWORD:-}
+      NETGSM_MSG_HEADER: ${NETGSM_MSG_HEADER:-}
+      NETGSM_IYS_FILTER: ${NETGSM_IYS_FILTER:-0}
+      NETGSM_APP_NAME: ${NETGSM_APP_NAME:-}
+    networks:
+      - backend_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend_net
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend_net
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend_net
+
+networks:
+  frontend_net:
+  backend_net:
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

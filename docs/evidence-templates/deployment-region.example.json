@@ -1,0 +1,12 @@
+{
+  "result": "PASS",
+  "environment": "staging",
+  "checkedAt": "2026-05-30",
+  "provider": "tr-provider-example",
+  "region": "tr-istanbul-1",
+  "datacenterCountryCode": "TR",
+  "dataResidencyVerified": true,
+  "evidenceReference": "provider-console-or-contract-reference",
+  "servicesVerified": ["api", "worker", "postgres", "redis", "object-storage"],
+  "gaps": []
+}

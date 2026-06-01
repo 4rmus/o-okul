@@ -1,0 +1,11 @@
+{
+  "version": "pilot-answer-key-v1",
+  "wrongPenalty": 0.25,
+  "questions": [
+    { "questionNo": 1, "correctAnswer": "A", "branch": "Turkce" },
+    { "questionNo": 2, "correctAnswer": "B", "branch": "Turkce" },
+    { "questionNo": 3, "correctAnswer": "C", "branch": "Matematik" },
+    { "questionNo": 4, "correctAnswer": "D", "branch": "Matematik" },
+    { "questionNo": 5, "correctAnswer": "E", "branch": "Fen" }
+  ]
+}

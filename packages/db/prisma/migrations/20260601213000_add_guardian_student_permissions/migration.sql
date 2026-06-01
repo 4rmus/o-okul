@@ -1,0 +1,7 @@
+ALTER TABLE "GuardianStudent"
+  ADD COLUMN "relationshipType" TEXT NOT NULL DEFAULT 'GUARDIAN',
+  ADD COLUMN "isPrimary" BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN "canViewFinance" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "canReceiveSms" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "canReceiveAnnouncements" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "canOpenSupportTickets" BOOLEAN NOT NULL DEFAULT true;
