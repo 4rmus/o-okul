@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { GradeLevelRecord as SharedGradeLevelRecord } from "@uzman-hocam/shared-types";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export interface GradeLevelRecord extends SharedGradeLevelRecord {
@@ -130,7 +131,7 @@ export class PostgresGradeLevelStore implements GradeLevelStore {
 }
 
 export function createGradeLevelStore(): GradeLevelStore {
-  return process.env.GRADE_LEVEL_STORE === "postgres" ? new PostgresGradeLevelStore() : new InMemoryGradeLevelStore();
+  return resolvePersistenceDriver(process.env.GRADE_LEVEL_STORE) === "postgres" ? new PostgresGradeLevelStore() : new InMemoryGradeLevelStore();
 }
 
 interface GradeLevelRow {

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { CourseRecord as SharedCourseRecord } from "@uzman-hocam/shared-types";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export interface CourseRecord extends SharedCourseRecord {
@@ -130,7 +131,7 @@ export class PostgresCourseStore implements CourseStore {
 }
 
 export function createCourseStore(): CourseStore {
-  return process.env.COURSE_STORE === "postgres" ? new PostgresCourseStore() : new InMemoryCourseStore();
+  return resolvePersistenceDriver(process.env.COURSE_STORE) === "postgres" ? new PostgresCourseStore() : new InMemoryCourseStore();
 }
 
 interface CourseRow {

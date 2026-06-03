@@ -4,6 +4,9 @@ import { ClassCompareBar, ExamResultDonut, LoadingState, ProgressLineChart, Topi
 import type { ReportSnapshotRecord } from "@uzman-hocam/shared-types";
 import { useAuth } from "../../providers.js";
 import { useKurumOverviewQuery, useKurumReportSummaryQuery, useKurumStudentProgressQuery } from "./kurum-dashboard-data.js";
+import { PageFrame } from "./_shared/page-frame.js";
+import { MetricPanelGrid } from "./_shared/metric-panel-grid.js";
+import { ReportChartPanel } from "../_shared/report-chart-panel.js";
 
 export function KurumDashboard() {
   const { auth } = useAuth();
@@ -22,65 +25,42 @@ export function KurumDashboard() {
   const progressPoints = progressQuery.data?.points ?? [];
 
   return (
-    <>
-      <header className="next-topbar">
-        <div>
-          <h1>Kurum Paneli</h1>
-          <p>Next.js App Router artık gerçek oturum ve Query verisiyle çalışır.</p>
-        </div>
-      </header>
+      <PageFrame title="Kurum Paneli" subtitle="Kurumsal özetin ve son sınav analizlerinin tek ekranda görünümü.">
       {overviewQuery.isPending ? <LoadingState label="Kurum özeti yükleniyor…" /> : null}
-      <section className="next-dashboard-grid" aria-label="Kurum özeti">
-        <article className="next-metric">
-          <span>Sınıf</span>
-          <strong>{overview.classCount}</strong>
-        </article>
-        <article className="next-metric">
-          <span>Öğretmen</span>
-          <strong>{overview.teacherCount}</strong>
-        </article>
-        <article className="next-metric">
-          <span>Öğrenci</span>
-          <strong>{overview.studentCount}</strong>
-        </article>
-      </section>
+      <MetricPanelGrid
+        ariaLabel="Kurum özeti"
+        metrics={[
+          { label: "Sınıf", value: overview.classCount },
+          { label: "Öğretmen", value: overview.teacherCount },
+          { label: "Öğrenci", value: overview.studentCount },
+        ]}
+      />
       <section className="next-session-panel" aria-label="Oturum özeti">
         <span>{auth?.session.tenantId ?? "-"}</span>
         <span>{auth?.session.userId ?? "-"}</span>
         <span>{roles}</span>
       </section>
-      <section className="next-chart-panel" aria-label="Sınav sonuç özeti">
-        <div>
-          <h2>Sınav Sonuç Özeti</h2>
-          <p>{reportQuery.data ? "İSEM LGS-1 sınav raporu" : "Hazır rapor bekleniyor"}</p>
-        </div>
-        <ExamResultDonut result={examResult} />
-      </section>
-      <section className="next-chart-panel" aria-label="Sınıf karşılaştırması">
-        <div>
-          <h2>Sınıf Karşılaştırması</h2>
-          <p>{classCompare.length > 0 ? "Sınıf ortalama netleri" : "Sınıf raporu bekleniyor"}</p>
-        </div>
-        <ClassCompareBar classes={classCompare} />
-      </section>
-      <section className="next-chart-panel" aria-label="Öğrenci gelişimi">
-        <div>
-          <h2>Öğrenci Gelişimi</h2>
-          <p>{progressPoints.length > 0 ? "İlk öğrencinin sınav gelişimi" : "Gelişim verisi bekleniyor"}</p>
-        </div>
-        <ProgressLineChart points={progressPoints} />
-      </section>
-      <section className="next-chart-panel" aria-label="Branş analizi">
-        <div>
-          <h2>Branş Analizi</h2>
-          <p>{topicRadar.length > 0 ? "Branş net dağılımı" : "Branş raporu bekleniyor"}</p>
-        </div>
-        <TopicRadarChart branches={topicRadar} />
-      </section>
+      <div className="next-report-visual-grid">
+        <ReportChartPanel
+          description={reportQuery.data ? "İSEM LGS-1 sınav raporu" : "Hazır rapor bekleniyor"}
+          title="Sınav Sonuç Özeti"
+        >
+          <ExamResultDonut result={examResult} />
+        </ReportChartPanel>
+        <ReportChartPanel description={classCompare.length > 0 ? "Sınıf ortalama netleri" : "Sınıf raporu bekleniyor"} title="Sınıf Karşılaştırması">
+          <ClassCompareBar classes={classCompare} />
+        </ReportChartPanel>
+        <ReportChartPanel description={progressPoints.length > 0 ? "İlk öğrencinin sınav gelişimi" : "Gelişim verisi bekleniyor"} title="Öğrenci Gelişimi">
+          <ProgressLineChart points={progressPoints} />
+        </ReportChartPanel>
+        <ReportChartPanel description={topicRadar.length > 0 ? "Branş net dağılımı" : "Branş raporu bekleniyor"} title="Branş Analizi">
+          <TopicRadarChart branches={topicRadar} />
+        </ReportChartPanel>
+      </div>
       {overviewQuery.isError ? <p className="next-form-error">Kurum özeti alınamadı.</p> : null}
       {reportQuery.isError ? <p className="next-form-error">Rapor özeti alınamadı.</p> : null}
       {progressQuery.isError ? <p className="next-form-error">Öğrenci gelişimi alınamadı.</p> : null}
-    </>
+    </PageFrame>
   );
 }
 

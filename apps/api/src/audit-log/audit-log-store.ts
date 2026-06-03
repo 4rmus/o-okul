@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 import type { AuditLogRecord, CreateAuditLogInput } from "./audit-log.service.js";
 
@@ -103,7 +104,7 @@ export class PostgresAuditLogStore implements AuditLogStore {
 }
 
 export function createAuditLogStore(): AuditLogStore {
-  return process.env.AUDIT_LOG_STORE === "postgres"
+  return resolvePersistenceDriver(process.env.AUDIT_LOG_STORE) === "postgres"
     ? new PostgresAuditLogStore()
     : new InMemoryAuditLogStore();
 }

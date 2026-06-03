@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 import type { AttendanceRecord, AttendanceStatus } from "@uzman-hocam/shared-types";
 
@@ -172,7 +173,7 @@ export class PostgresAttendanceStore implements AttendanceStore {
 }
 
 export function createAttendanceStore(): AttendanceStore {
-  return process.env.ATTENDANCE_STORE === "postgres" ? new PostgresAttendanceStore() : new InMemoryAttendanceStore();
+  return resolvePersistenceDriver(process.env.ATTENDANCE_STORE) === "postgres" ? new PostgresAttendanceStore() : new InMemoryAttendanceStore();
 }
 
 interface AttendanceRow {

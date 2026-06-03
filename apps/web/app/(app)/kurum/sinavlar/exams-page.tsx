@@ -16,6 +16,7 @@ import {
   type ExamFormPayload,
   type ExamFormState,
 } from "../../../../src/form-validation.js";
+import { PageFrame } from "../_shared/page-frame.js";
 
 const emptyForm: ExamFormState = {
   title: "",
@@ -180,55 +181,57 @@ export function ExamsPage() {
   }
 
   return (
-    <section className="next-list-panel" aria-label="Sınav yönetimi">
-      <div className="next-section-header">
-        <div>
-          <h1>Sınavlar</h1>
-          <p>Deneme sınavlarını oluştur, yayın durumunu takip et ve rapor zincirine hazırla.</p>
-        </div>
+    <PageFrame
+      title="Sınavlar"
+      subtitle="Deneme sınavlarını oluştur, yayın durumunu takip et ve rapor zincirine hazırla."
+      actions={
         <Button onClick={openCreateForm}>
           <Plus size={17} aria-hidden="true" />
           Sınav ekle
         </Button>
-      </div>
-      {error || examsQuery.isError ? <p className="uh-crud-page__error">{error || "Sınavlar alınamadı."}</p> : null}
-      <table className="uh-data-table">
-        <thead>
-          <tr>
-            <th>Sınav</th>
-            <th>Durum</th>
-            <th>Başlangıç</th>
-            <th>İşlem</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((exam) => (
-            <tr key={exam.id}>
-              <td>{exam.title}</td>
-              <td>{examStatusLabel(exam.status)}</td>
-              <td>{formatDateTime(exam.startsAt)}</td>
-              <td>
-                <div className="next-row-actions">
-                  {exam.status === "PUBLISHED" ? <span>Yayında</span> : null}
-                  <button type="button" onClick={() => setSelectedExamId(exam.id)} aria-label={`${exam.title} katılımcıları`}>
-                    <Users size={17} aria-hidden="true" />
-                  </button>
-                  {exam.status === "DRAFT" ? (
-                    <button type="button" onClick={() => void handlePublish(exam)} aria-label={`${exam.title} yayınla`}>
-                      <CheckCircle2 size={17} aria-hidden="true" />
-                    </button>
-                  ) : null}
-                </div>
-              </td>
-            </tr>
-          ))}
-          {rows.length === 0 && !examsQuery.isPending ? (
+      }
+    >
+      <section className="next-list-panel" aria-label="Sınav yönetimi">
+        <h2>Sınav yönetimi</h2>
+        {error || examsQuery.isError ? <p className="uh-crud-page__error">{error || "Sınavlar alınamadı."}</p> : null}
+        <table className="uh-data-table">
+          <thead>
             <tr>
-              <td colSpan={4}>Sınav kaydı yok</td>
+              <th>Sınav</th>
+              <th>Durum</th>
+              <th>Başlangıç</th>
+              <th>İşlem</th>
             </tr>
-          ) : null}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((exam) => (
+              <tr key={exam.id}>
+                <td>{exam.title}</td>
+                <td>{examStatusLabel(exam.status)}</td>
+                <td>{formatDateTime(exam.startsAt)}</td>
+                <td>
+                  <div className="next-row-actions">
+                    {exam.status === "PUBLISHED" ? <span>Yayında</span> : null}
+                    <button type="button" onClick={() => setSelectedExamId(exam.id)} aria-label={`${exam.title} katılımcıları`}>
+                      <Users size={17} aria-hidden="true" />
+                    </button>
+                    {exam.status === "DRAFT" ? (
+                      <button type="button" onClick={() => void handlePublish(exam)} aria-label={`${exam.title} yayınla`}>
+                        <CheckCircle2 size={17} aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && !examsQuery.isPending ? (
+              <tr>
+                <td colSpan={4}>Sınav kaydı yok</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </section>
       {examsQuery.isPending ? <p className="next-status-note">Sınavlar yükleniyor</p> : null}
       {selectedExam ? (
         <section className="next-subsection" aria-label="Sınav katılımcıları">
@@ -382,7 +385,7 @@ export function ExamsPage() {
           />
         </label>
       </FormModal>
-    </section>
+    </PageFrame>
   );
 }
 

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { GuardianRelationshipType, GuardianStudentRecord } from "@uzman-hocam/shared-types";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export type GuardianStudentInput = Pick<GuardianStudentRecord, "tenantId" | "guardianId" | "studentId"> &
@@ -216,7 +217,7 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
 }
 
 export function createGuardianStudentStore(): GuardianStudentStore {
-  return process.env.GUARDIAN_STUDENT_STORE === "postgres"
+  return resolvePersistenceDriver(process.env.GUARDIAN_STUDENT_STORE) === "postgres"
     ? new PostgresGuardianStudentStore()
     : new InMemoryGuardianStudentStore();
 }

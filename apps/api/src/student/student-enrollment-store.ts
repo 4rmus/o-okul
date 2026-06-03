@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { StudentEnrollmentRecord, StudentStatus } from "@uzman-hocam/shared-types";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export type StudentEnrollmentInput = Pick<StudentEnrollmentRecord, "tenantId" | "studentId" | "startsAt" | "status"> &
@@ -133,7 +134,7 @@ export class PostgresStudentEnrollmentStore implements StudentEnrollmentStore {
 }
 
 export function createStudentEnrollmentStore(): StudentEnrollmentStore {
-  return process.env.STUDENT_ENROLLMENT_STORE === "postgres"
+  return resolvePersistenceDriver(process.env.STUDENT_ENROLLMENT_STORE) === "postgres"
     ? new PostgresStudentEnrollmentStore()
     : new InMemoryStudentEnrollmentStore();
 }

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 import type { MessageTemplateRecord } from "./message-template.service.js";
 
@@ -153,7 +154,7 @@ export class PostgresMessageTemplateStore implements MessageTemplateStore {
 }
 
 export function createMessageTemplateStore(): MessageTemplateStore {
-  return process.env.MESSAGE_TEMPLATE_STORE === "postgres"
+  return resolvePersistenceDriver(process.env.MESSAGE_TEMPLATE_STORE) === "postgres"
     ? new PostgresMessageTemplateStore()
     : new InMemoryMessageTemplateStore();
 }

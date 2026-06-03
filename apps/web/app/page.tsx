@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function HomePage() {
   return (
     <main className="next-auth-layout">
@@ -8,9 +10,9 @@ export default function HomePage() {
         </div>
         <div className="next-form">
           <h1 id="home-title">Uzman Hocam</h1>
-          <a className="next-button" href="/login">
+          <Link className="next-button" href="/login">
             Girişe geç
-          </a>
+          </Link>
         </div>
       </section>
     </main>

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 import type {
   PaymentInstallmentRecord,
@@ -278,7 +279,7 @@ export class PostgresPaymentPlanStore implements PaymentPlanStore {
 }
 
 export function createPaymentPlanStore(): PaymentPlanStore {
-  return process.env.PAYMENT_PLAN_STORE === "postgres" ? new PostgresPaymentPlanStore() : new InMemoryPaymentPlanStore();
+  return resolvePersistenceDriver(process.env.PAYMENT_PLAN_STORE) === "postgres" ? new PostgresPaymentPlanStore() : new InMemoryPaymentPlanStore();
 }
 
 interface PaymentPlanRow {

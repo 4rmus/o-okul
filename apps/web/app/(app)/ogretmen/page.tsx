@@ -1,4 +1,4 @@
-import { TeacherPortalPage } from "../role-portals.js";
+import { TeacherPortalPage } from "../portals/teacher-portal-page.js";
 
 export default function Page() {
   return <TeacherPortalPage />;

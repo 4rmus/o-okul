@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 import type { TeacherNoteRecord, TeacherNoteVisibility } from "@uzman-hocam/shared-types";
 
@@ -218,7 +219,7 @@ export class PostgresTeacherNoteStore implements TeacherNoteStore {
 }
 
 export function createTeacherNoteStore(): TeacherNoteStore {
-  return process.env.TEACHER_NOTE_STORE === "postgres" ? new PostgresTeacherNoteStore() : new InMemoryTeacherNoteStore();
+  return resolvePersistenceDriver(process.env.TEACHER_NOTE_STORE) === "postgres" ? new PostgresTeacherNoteStore() : new InMemoryTeacherNoteStore();
 }
 
 interface TeacherNoteRow {

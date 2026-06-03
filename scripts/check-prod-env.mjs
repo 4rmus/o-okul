@@ -30,11 +30,7 @@ function checkContract(file) {
     "STUDENT_PII_HASH_KEY",
     "COOKIE_DOMAIN",
     "COOKIE_SECURE",
-    "STUDENT_STORE",
-    "TEACHER_STORE",
-    "GUARDIAN_STORE",
-    "GUARDIAN_STUDENT_STORE",
-    "PAYMENT_PLAN_STORE",
+    "PERSISTENCE_DRIVER",
     "SMS_PROVIDER",
     "SMS_ALLOW_NOOP_IN_PRODUCTION",
     "SMS_SMOKE_TO",
@@ -108,20 +104,7 @@ function checkProductionEnv(env) {
   requireNotContains(env, failures, "COOKIE_DOMAIN", ["localhost", "127.0.0.1"]);
   requireHttpsUrl(env, failures, "TRAEFIK_HTTPS_SMOKE_URL");
 
-  for (const storeKey of [
-    "CLASS_STORE",
-    "STUDENT_STORE",
-    "TEACHER_STORE",
-    "GUARDIAN_STORE",
-    "GUARDIAN_STUDENT_STORE",
-    "SCHEDULE_STORE",
-    "STUDY_SESSION_STORE",
-    "HOMEWORK_STORE",
-    "PAYMENT_PLAN_STORE",
-    "REPORT_SNAPSHOT_STORE",
-  ]) {
-    requireNotEqual(env, failures, storeKey, "in-memory");
-  }
+  requireEqual(env, failures, "PERSISTENCE_DRIVER", "postgres");
 
   requireEqual(env, failures, "SMS_PROVIDER", "netgsm");
   requireEqual(env, failures, "SMS_ALLOW_NOOP_IN_PRODUCTION", "false");
@@ -199,12 +182,6 @@ function requireSet(env, failures, key) {
 function requireEqual(env, failures, key, expected) {
   if (env[key] !== expected) {
     failures.push(`${key} ${expected} olmalı.`);
-  }
-}
-
-function requireNotEqual(env, failures, key, value) {
-  if (env[key] === value) {
-    failures.push(`${key} ${value} olamaz.`);
   }
 }
 

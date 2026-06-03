@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ClassRecord as SharedClassRecord } from "@uzman-hocam/shared-types";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export interface ClassRecord extends SharedClassRecord {
@@ -147,7 +148,7 @@ export class PostgresClassStore implements ClassStore {
 }
 
 export function createClassStore(): ClassStore {
-  return process.env.CLASS_STORE === "postgres" ? new PostgresClassStore() : new InMemoryClassStore();
+  return resolvePersistenceDriver(process.env.CLASS_STORE) === "postgres" ? new PostgresClassStore() : new InMemoryClassStore();
 }
 
 interface ClassRow {

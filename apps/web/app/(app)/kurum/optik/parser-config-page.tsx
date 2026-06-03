@@ -6,6 +6,7 @@ import type { AnswerChoice, AnswerKeyRecord, ParserConfigSuggestion, StudentReco
 import { CheckCircle2, FileSpreadsheet, FileText, RefreshCw, Upload, Wand2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
+import { PageFrame } from "../_shared/page-frame.js";
 import {
   answerKeyImportFormSchema,
   firstFormError,
@@ -425,26 +426,25 @@ export function ParserConfigPage() {
   }
 
   return (
-    <section className="next-list-panel" aria-label="Optik operasyon">
-      <div className="next-section-header">
-        <div>
-          <h1>Optik Operasyon</h1>
-          <p>Cevap anahtarı, format onayı, optik yükleme ve karantina çözümünü aynı akışta yönet.</p>
+    <PageFrame
+      title="Optik Operasyon"
+      subtitle="Cevap anahtarı, format onayı, optik yükleme ve karantina çözümünü aynı akışta yönet."
+    >
+      <section className="next-list-panel" aria-label="Optik operasyon">
+        <div className="next-segmented" role="tablist" aria-label="Optik sekmeleri">
+          {tabs.map((tab) => (
+            <button key={tab.id} type="button" aria-pressed={activeTab === tab.id} onClick={() => setActiveTab(tab.id)}>
+              {tab.label}
+            </button>
+          ))}
         </div>
-      </div>
-      <div className="next-segmented" role="tablist" aria-label="Optik sekmeleri">
-        {tabs.map((tab) => (
-          <button key={tab.id} type="button" aria-pressed={activeTab === tab.id} onClick={() => setActiveTab(tab.id)}>
-            {tab.label}
-          </button>
-        ))}
-      </div>
-      {error ? <p className="uh-crud-page__error">{error}</p> : null}
-      {activeTab === "format" ? renderFormatTab() : null}
-      {activeTab === "answer-key" ? renderAnswerKeyTab() : null}
-      {activeTab === "upload" ? renderUploadTab() : null}
-      {activeTab === "quarantine" ? renderQuarantineTab() : null}
-    </section>
+        {error ? <p className="uh-crud-page__error">{error}</p> : null}
+        {activeTab === "format" ? renderFormatTab() : null}
+        {activeTab === "answer-key" ? renderAnswerKeyTab() : null}
+        {activeTab === "upload" ? renderUploadTab() : null}
+        {activeTab === "quarantine" ? renderQuarantineTab() : null}
+      </section>
+    </PageFrame>
   );
 
   function renderFormatTab() {

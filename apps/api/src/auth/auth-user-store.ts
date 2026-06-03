@@ -1,5 +1,6 @@
 import { scryptSync, timingSafeEqual } from "node:crypto";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withBypassRlsQuery } from "../db/tenant-query.js";
 
 export interface AuthUser {
@@ -205,7 +206,7 @@ export class PostgresAuthUserStore implements AuthUserStore {
 }
 
 export function createAuthUserStore(): AuthUserStore {
-  return process.env.AUTH_USER_STORE === "postgres" ? new PostgresAuthUserStore() : new InMemoryAuthUserStore();
+  return resolvePersistenceDriver(process.env.AUTH_USER_STORE) === "postgres" ? new PostgresAuthUserStore() : new InMemoryAuthUserStore();
 }
 
 export function hashPassword(password: string, salt = "demo-auth-salt"): string {

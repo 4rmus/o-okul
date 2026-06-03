@@ -3,18 +3,21 @@
 import { useState, type ReactNode } from "react";
 import { Button } from "@uzman-hocam/ui";
 import { useAuth } from "../../../providers.js";
+import { PageFrame } from "../../_shared/page-frame.js";
+import { MetricPanelGrid } from "../../_shared/metric-panel-grid.js";
 
-export function PortalFrame({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
+interface PortalFrameProps {
+  title: string;
+  subtitle: string;
+  actions?: ReactNode;
+  children: ReactNode;
+}
+
+export function PortalFrame({ actions, children, subtitle, title }: PortalFrameProps) {
   return (
-    <>
-      <header className="next-topbar">
-        <div>
-          <h1>{title}</h1>
-          <p>{subtitle}</p>
-        </div>
-      </header>
+    <PageFrame title={title} subtitle={subtitle} actions={actions}>
       <div className="next-portal-stack">{children}</div>
-    </>
+    </PageFrame>
   );
 }
 
@@ -48,14 +51,5 @@ export function AccessPanel({ title, demoEmail, demoLabel }: { title: string; de
 }
 
 export function MetricGrid({ items }: { items: Array<{ label: string; value: number | string }> }) {
-  return (
-    <section className="next-dashboard-grid" aria-label="Portal özeti">
-      {items.map((item) => (
-        <article className="next-metric" key={item.label}>
-          <span>{item.label}</span>
-          <strong>{item.value}</strong>
-        </article>
-      ))}
-    </section>
-  );
+  return <MetricPanelGrid ariaLabel="Portal özeti" metrics={items} />;
 }

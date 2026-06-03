@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export interface AnnouncementReceiptRecord {
@@ -118,7 +119,7 @@ export class PostgresAnnouncementReceiptStore implements AnnouncementReceiptStor
 }
 
 export function createAnnouncementReceiptStore(): AnnouncementReceiptStore {
-  return process.env.ANNOUNCEMENT_RECEIPT_STORE === "postgres"
+  return resolvePersistenceDriver(process.env.ANNOUNCEMENT_RECEIPT_STORE) === "postgres"
     ? new PostgresAnnouncementReceiptStore()
     : new InMemoryAnnouncementReceiptStore();
 }

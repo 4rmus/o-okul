@@ -18,6 +18,7 @@ import { CheckCircle2, Clock, Pencil, RotateCcw, TriangleAlert } from "lucide-re
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, type ListMeta } from "../../../../src/api-client.js";
 import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
 
 interface FinanceFilters {
   campusId: string;
@@ -220,20 +221,14 @@ export function FinancePage() {
 
   return (
     <>
-      <section className="next-dashboard-grid" aria-label="Finans özeti">
-        <article className="next-metric">
-          <span>Bekleyen ödeme</span>
-          <strong>{formatMoney(metrics.pendingAmount, metrics.currency)}</strong>
-        </article>
-        <article className="next-metric">
-          <span>Gecikmiş</span>
-          <strong>{formatMoney(metrics.overdueAmount, metrics.currency)}</strong>
-        </article>
-        <article className="next-metric">
-          <span>Ödenen</span>
-          <strong>{formatMoney(metrics.paidAmount, metrics.currency)}</strong>
-        </article>
-      </section>
+      <MetricPanelGrid
+        ariaLabel="Finans özeti"
+        metrics={[
+          { label: "Bekleyen ödeme", value: formatMoney(metrics.pendingAmount, metrics.currency) },
+          { label: "Gecikmiş", value: formatMoney(metrics.overdueAmount, metrics.currency) },
+          { label: "Ödenen", value: formatMoney(metrics.paidAmount, metrics.currency) },
+        ]}
+      />
       <CrudPage
         actions={
           <>

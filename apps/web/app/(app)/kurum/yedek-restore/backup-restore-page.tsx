@@ -1,5 +1,9 @@
 "use client";
 
+import { EvidenceGateSection, EvidenceListSection } from "../_shared/evidence-panels.js";
+import { PageFrame } from "../_shared/page-frame.js";
+import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
+
 const backupGates = [
   {
     title: "Lokal restore smoke",
@@ -41,50 +45,18 @@ const restoreEvidenceFields = [
 
 export function BackupRestorePage() {
   return (
-    <>
-      <header className="next-topbar">
-        <div>
-          <h1>Yedek / Restore</h1>
-          <p>Canlıya çıkmadan önce backup, restore ve PITR kanıt kapılarını izle.</p>
-        </div>
-      </header>
-      <section className="next-dashboard-grid" aria-label="Yedek restore özeti">
-        <article className="next-metric">
-          <span>Restore smoke</span>
-          <strong>Hazır</strong>
-        </article>
-        <article className="next-metric">
-          <span>Off-host hedef</span>
-          <strong>Env gerekir</strong>
-        </article>
-        <article className="next-metric">
-          <span>Drill raporu</span>
-          <strong>Kanıt gerekir</strong>
-        </article>
-      </section>
-      <section className="next-report-list" aria-label="Yedek restore kapıları">
-        <h2>Kanıt Kapıları</h2>
-        {backupGates.map((gate) => (
-          <article key={gate.title}>
-            <h3>{gate.title}</h3>
-            <p>{gate.status}</p>
-            <p>{gate.detail}</p>
-            <code>{gate.command}</code>
-          </article>
-        ))}
-      </section>
-      <section className="next-report-list" aria-label="Restore drill raporu">
-        <h2>Restore Drill Raporu</h2>
-        {restoreEvidenceFields.map((field) => (
-          <p key={field}>{field}</p>
-        ))}
-      </section>
-      <section className="next-report-list" aria-label="Kritik restore tabloları">
-        <h2>Kritik Tablolar</h2>
-        {requiredTables.map((table) => (
-          <p key={table}>{table}</p>
-        ))}
-      </section>
-    </>
+    <PageFrame title="Yedek / Restore" subtitle="Canlıya çıkmadan önce backup, restore ve PITR kanıt kapılarını izle.">
+      <MetricPanelGrid
+        ariaLabel="Yedek restore özeti"
+        metrics={[
+          { label: "Restore smoke", value: "Hazır" },
+          { label: "Off-host hedef", value: "Env gerekir" },
+          { label: "Drill raporu", value: "Kanıt gerekir" },
+        ]}
+      />
+      <EvidenceGateSection title="Kanıt Kapıları" ariaLabel="Yedek restore kapıları" gates={backupGates} />
+      <EvidenceListSection title="Restore Drill Raporu" ariaLabel="Restore drill raporu" items={restoreEvidenceFields} />
+      <EvidenceListSection title="Kritik Tablolar" ariaLabel="Kritik restore tabloları" items={requiredTables} />
+    </PageFrame>
   );
 }

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import pg from "pg";
 
 export type SessionStatus = "ACTIVE" | "REVOKED" | "COMPROMISED";
@@ -293,7 +294,7 @@ export class PostgresSessionStore implements SessionStore {
 }
 
 export function createSessionStore(): SessionStore {
-  return process.env.AUTH_SESSION_STORE === "postgres" ? new PostgresSessionStore() : new InMemorySessionStore();
+  return resolvePersistenceDriver(process.env.AUTH_SESSION_STORE) === "postgres" ? new PostgresSessionStore() : new InMemorySessionStore();
 }
 
 export function hashRefreshToken(refreshToken: string): string {

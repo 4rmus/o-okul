@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withExplicitTenantQuery, withTenantQuery } from "../db/tenant-query.js";
 import type { StudentRecord } from "./student.service.js";
 
@@ -397,7 +398,7 @@ export class PostgresStudentStore implements StudentStore {
 }
 
 export function createStudentStore(): StudentStore {
-  return process.env.STUDENT_STORE === "postgres" ? new PostgresStudentStore() : new InMemoryStudentStore();
+  return resolvePersistenceDriver(process.env.STUDENT_STORE) === "postgres" ? new PostgresStudentStore() : new InMemoryStudentStore();
 }
 
 interface StudentRow {

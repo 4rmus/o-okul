@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AcademicTermRecord as SharedAcademicTermRecord, AcademicYearRecord as SharedAcademicYearRecord } from "@uzman-hocam/shared-types";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export interface AcademicYearRecord extends SharedAcademicYearRecord {
@@ -224,7 +225,7 @@ export class PostgresAcademicCalendarStore implements AcademicCalendarStore {
 }
 
 export function createAcademicCalendarStore(): AcademicCalendarStore {
-  return process.env.ACADEMIC_CALENDAR_STORE === "postgres"
+  return resolvePersistenceDriver(process.env.ACADEMIC_CALENDAR_STORE) === "postgres"
     ? new PostgresAcademicCalendarStore()
     : new InMemoryAcademicCalendarStore();
 }

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 import type {
   HomeworkMaterialAssignmentRecord,
@@ -494,7 +495,7 @@ export class PostgresHomeworkStore implements HomeworkStore {
 }
 
 export function createHomeworkStore(): HomeworkStore {
-  return process.env.HOMEWORK_STORE === "postgres" ? new PostgresHomeworkStore() : new InMemoryHomeworkStore();
+  return resolvePersistenceDriver(process.env.HOMEWORK_STORE) === "postgres" ? new PostgresHomeworkStore() : new InMemoryHomeworkStore();
 }
 
 interface HomeworkMaterialRow {

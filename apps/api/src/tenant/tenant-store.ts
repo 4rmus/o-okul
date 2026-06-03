@@ -1,4 +1,5 @@
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withBypassRlsQuery } from "../db/tenant-query.js";
 
 export interface TenantRecord {
@@ -48,5 +49,5 @@ interface TenantRow {
 }
 
 export function createTenantStore(): TenantStore {
-  return process.env.TENANT_STORE === "postgres" ? new PostgresTenantStore() : new InMemoryTenantStore();
+  return resolvePersistenceDriver(process.env.TENANT_STORE) === "postgres" ? new PostgresTenantStore() : new InMemoryTenantStore();
 }

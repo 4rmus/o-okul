@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 import type { StudySessionRecord } from "./study-session.service.js";
 
@@ -239,7 +240,7 @@ export class PostgresStudySessionStore implements StudySessionStore {
 }
 
 export function createStudySessionStore(): StudySessionStore {
-  return process.env.STUDY_SESSION_STORE === "postgres" ? new PostgresStudySessionStore() : new InMemoryStudySessionStore();
+  return resolvePersistenceDriver(process.env.STUDY_SESSION_STORE) === "postgres" ? new PostgresStudySessionStore() : new InMemoryStudySessionStore();
 }
 
 interface StudySessionBaseRow {

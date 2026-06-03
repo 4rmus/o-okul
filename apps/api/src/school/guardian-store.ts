@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { GuardianRecord as SharedGuardianRecord } from "@uzman-hocam/shared-types";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withExplicitTenantQuery, withTenantQuery } from "../db/tenant-query.js";
 
 export interface GuardianRecord extends SharedGuardianRecord {
@@ -222,7 +223,7 @@ export class PostgresGuardianStore implements GuardianStore {
 }
 
 export function createGuardianStore(): GuardianStore {
-  return process.env.GUARDIAN_STORE === "postgres" ? new PostgresGuardianStore() : new InMemoryGuardianStore();
+  return resolvePersistenceDriver(process.env.GUARDIAN_STORE) === "postgres" ? new PostgresGuardianStore() : new InMemoryGuardianStore();
 }
 
 interface GuardianRow {

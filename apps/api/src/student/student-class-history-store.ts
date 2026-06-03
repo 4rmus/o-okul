@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { StudentClassHistoryRecord } from "@uzman-hocam/shared-types";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export type StudentClassHistoryInput = Pick<StudentClassHistoryRecord, "tenantId" | "studentId" | "startsAt"> &
@@ -127,7 +128,7 @@ export class PostgresStudentClassHistoryStore implements StudentClassHistoryStor
 }
 
 export function createStudentClassHistoryStore(): StudentClassHistoryStore {
-  return process.env.STUDENT_CLASS_HISTORY_STORE === "postgres"
+  return resolvePersistenceDriver(process.env.STUDENT_CLASS_HISTORY_STORE) === "postgres"
     ? new PostgresStudentClassHistoryStore()
     : new InMemoryStudentClassHistoryStore();
 }

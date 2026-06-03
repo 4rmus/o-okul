@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { TeacherAssignmentRecord, TeacherAssignmentRole } from "@uzman-hocam/shared-types";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export type TeacherAssignmentInput = Pick<TeacherAssignmentRecord, "tenantId" | "teacherId" | "role"> &
@@ -213,7 +214,7 @@ export class PostgresTeacherAssignmentStore implements TeacherAssignmentStore {
 }
 
 export function createTeacherAssignmentStore(): TeacherAssignmentStore {
-  return process.env.TEACHER_ASSIGNMENT_STORE === "postgres"
+  return resolvePersistenceDriver(process.env.TEACHER_ASSIGNMENT_STORE) === "postgres"
     ? new PostgresTeacherAssignmentStore()
     : new InMemoryTeacherAssignmentStore();
 }

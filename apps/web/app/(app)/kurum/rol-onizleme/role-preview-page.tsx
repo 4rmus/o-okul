@@ -1,5 +1,8 @@
 "use client";
 
+import { PageFrame } from "../_shared/page-frame.js";
+import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
+
 const roleCards = [
   {
     title: "Öğretmen Portalı",
@@ -40,27 +43,18 @@ const evidenceChecks = [
 
 export function RolePreviewPage() {
   return (
-    <>
-      <header className="next-topbar">
-        <div>
-          <h1>Rol Önizleme</h1>
-          <p>Kurum admin için öğretmen, öğrenci ve veli portal kapsamlarını güvenli şekilde izle.</p>
-        </div>
-      </header>
-      <section className="next-dashboard-grid" aria-label="Rol önizleme özeti">
-        <article className="next-metric">
-          <span>Portal</span>
-          <strong>3 rol</strong>
-        </article>
-        <article className="next-metric">
-          <span>Erişim</span>
-          <strong>Kişi hesabı</strong>
-        </article>
-        <article className="next-metric">
-          <span>Kapsam</span>
-          <strong>/me bağlı</strong>
-        </article>
-      </section>
+    <PageFrame
+      title="Rol Önizleme"
+      subtitle="Kurum admin için öğretmen, öğrenci ve veli portal kapsamlarını güvenli şekilde izle."
+    >
+      <MetricPanelGrid
+        ariaLabel="Rol önizleme özeti"
+        metrics={[
+          { label: "Portal", value: "3 rol" },
+          { label: "Erişim", value: "Kişi hesabı" },
+          { label: "Kapsam", value: "/me bağlı" },
+        ]}
+      />
       <section className="next-report-list" aria-label="Rol portal kartları">
         <h2>Portal Kapsamları</h2>
         {roleCards.map((role) => (
@@ -75,7 +69,7 @@ export function RolePreviewPage() {
       </section>
       <RolePreviewList title="Erişim Kuralları" ariaLabel="Rol erişim kuralları" items={accessRules} />
       <RolePreviewList title="Kanıt Komutları" ariaLabel="Rol önizleme kanıt komutları" items={evidenceChecks} />
-    </>
+    </PageFrame>
   );
 }
 

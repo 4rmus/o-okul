@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@uzman-hocam/ui";
 import { RefreshCw } from "lucide-react";
 import { apiUrl } from "../../../../src/api-client.js";
+import { PageFrame } from "../_shared/page-frame.js";
+import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
 
 interface HealthStatus {
   status: "ok";
@@ -44,31 +46,24 @@ export function SystemHealthPage() {
   const health = healthQuery.data;
 
   return (
-    <>
-      <header className="next-topbar">
-        <div>
-          <h1>Sistem Sağlığı</h1>
-          <p>API yaşam, hazırlık ve temel metrik sinyallerini izle.</p>
-        </div>
+    <PageFrame
+      title="Sistem Sağlığı"
+      subtitle="API yaşam, hazırlık ve temel metrik sinyallerini izle."
+      actions={
         <Button onClick={() => void healthQuery.refetch()}>
           <RefreshCw size={17} aria-hidden="true" />
           Yenile
         </Button>
-      </header>
-      <section className="next-dashboard-grid" aria-label="Sistem sağlık özeti">
-        <article className="next-metric">
-          <span>API</span>
-          <strong>{health?.health.ok ? "Çalışıyor" : "Sorunlu"}</strong>
-        </article>
-        <article className="next-metric">
-          <span>Hazırlık</span>
-          <strong>{health?.ready.ok ? "Hazır" : "Hazır değil"}</strong>
-        </article>
-        <article className="next-metric">
-          <span>Uptime</span>
-          <strong>{formatUptime(health?.metrics.data?.uptimeSeconds)}</strong>
-        </article>
-      </section>
+      }
+    >
+      <MetricPanelGrid
+        ariaLabel="Sistem sağlık özeti"
+        metrics={[
+          { label: "API", value: health?.health.ok ? "Çalışıyor" : "Sorunlu" },
+          { label: "Hazırlık", value: health?.ready.ok ? "Hazır" : "Hazır değil" },
+          { label: "Uptime", value: formatUptime(health?.metrics.data?.uptimeSeconds) },
+        ]}
+      />
       <section className="next-report-list" aria-label="Bağımlılık durumu">
         <h2>Bağımlılıklar</h2>
         <p>Postgres: {dependencyLabel(health?.ready.data?.dependencies.postgres, health?.ready.ok)}</p>
@@ -87,7 +82,7 @@ export function SystemHealthPage() {
           </>
         ) : null}
       </section>
-    </>
+    </PageFrame>
   );
 }
 

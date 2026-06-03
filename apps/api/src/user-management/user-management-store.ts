@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withExplicitTenantQuery } from "../db/tenant-query.js";
 import { hashPassword } from "../auth/auth-user-store.js";
 import type { Role } from "../rbac/roles.js";
@@ -250,7 +251,7 @@ export class PostgresUserManagementStore implements UserManagementStore {
 }
 
 export function createUserManagementStore(): UserManagementStore {
-  return (process.env.USER_MANAGEMENT_STORE ?? process.env.AUTH_USER_STORE) === "postgres"
+  return resolvePersistenceDriver(process.env.USER_MANAGEMENT_STORE ?? process.env.AUTH_USER_STORE) === "postgres"
     ? new PostgresUserManagementStore()
     : new InMemoryUserManagementStore();
 }

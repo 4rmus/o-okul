@@ -1,5 +1,9 @@
 "use client";
 
+import { EvidenceGateSection, EvidenceListSection } from "../_shared/evidence-panels.js";
+import { PageFrame } from "../_shared/page-frame.js";
+import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
+
 const uatGates = [
   {
     title: "UAT kanıtı",
@@ -52,52 +56,22 @@ const rollbackFields = ["releaseCandidate", "rollbackImageTag", "restoreBackupRe
 
 export function UatRollbackPage() {
   return (
-    <>
-      <header className="next-topbar">
-        <div>
-          <h1>UAT / Rollback</h1>
-          <p>Staging/prod UAT, rollback image ve restore backup kanıtlarını izle.</p>
-        </div>
-      </header>
-      <section className="next-dashboard-grid" aria-label="UAT rollback özeti">
-        <article className="next-metric">
-          <span>UAT raporu</span>
-          <strong>Kanıt gerekir</strong>
-        </article>
-        <article className="next-metric">
-          <span>Rollback</span>
-          <strong>Image tag</strong>
-        </article>
-        <article className="next-metric">
-          <span>Restore referansı</span>
-          <strong>Backup gerekir</strong>
-        </article>
-      </section>
-      <section className="next-report-list" aria-label="UAT rollback kapıları">
-        <h2>Kanıt Kapıları</h2>
-        {uatGates.map((gate) => (
-          <article key={gate.title}>
-            <h3>{gate.title}</h3>
-            <p>{gate.status}</p>
-            <p>{gate.detail}</p>
-            <code>{gate.command}</code>
-          </article>
-        ))}
-      </section>
-      <UatList title="UAT Akışları" ariaLabel="UAT akışları" items={uatFlows} />
-      <UatList title="Zorunlu Komutlar" ariaLabel="Zorunlu komutlar" items={requiredCommands} />
-      <UatList title="Rollback Alanları" ariaLabel="Rollback alanları" items={rollbackFields} />
-    </>
-  );
-}
-
-function UatList({ ariaLabel, items, title }: { ariaLabel: string; items: readonly string[]; title: string }) {
-  return (
-    <section className="next-report-list" aria-label={ariaLabel}>
-      <h2>{title}</h2>
-      {items.map((item) => (
-        <p key={item}>{item}</p>
-      ))}
-    </section>
+    <PageFrame
+      title="UAT / Rollback"
+      subtitle="Staging/prod UAT, rollback image ve restore backup kanıtlarını izle."
+    >
+      <MetricPanelGrid
+        ariaLabel="UAT rollback özeti"
+        metrics={[
+          { label: "UAT raporu", value: "Kanıt gerekir" },
+          { label: "Rollback", value: "Image tag" },
+          { label: "Restore referansı", value: "Backup gerekir" },
+        ]}
+      />
+      <EvidenceGateSection title="Kanıt Kapıları" ariaLabel="UAT rollback kapıları" gates={uatGates} />
+      <EvidenceListSection title="UAT Akışları" ariaLabel="UAT akışları" items={uatFlows} />
+      <EvidenceListSection title="Zorunlu Komutlar" ariaLabel="Zorunlu komutlar" items={requiredCommands} />
+      <EvidenceListSection title="Rollback Alanları" ariaLabel="Rollback alanları" items={rollbackFields} />
+    </PageFrame>
   );
 }

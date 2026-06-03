@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 import type { AnnouncementRecord } from "./announcement.service.js";
 
@@ -108,7 +109,7 @@ export class PostgresAnnouncementStore implements AnnouncementStore {
 }
 
 export function createAnnouncementStore(): AnnouncementStore {
-  return process.env.ANNOUNCEMENT_STORE === "postgres"
+  return resolvePersistenceDriver(process.env.ANNOUNCEMENT_STORE) === "postgres"
     ? new PostgresAnnouncementStore()
     : new InMemoryAnnouncementStore();
 }

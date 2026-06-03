@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 import type {
   SupportTicketAttachmentRecord,
@@ -329,7 +330,7 @@ export class PostgresSupportTicketStore implements SupportTicketStore {
 }
 
 export function createSupportTicketStore(): SupportTicketStore {
-  return process.env.SUPPORT_TICKET_STORE === "postgres"
+  return resolvePersistenceDriver(process.env.SUPPORT_TICKET_STORE) === "postgres"
     ? new PostgresSupportTicketStore()
     : new InMemorySupportTicketStore();
 }

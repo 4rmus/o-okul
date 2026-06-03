@@ -509,7 +509,7 @@ function AnnouncementRecipientReportPanel({ report }: { report: AnnouncementReci
         <span>Okundu: {report.read}</span>
         <span>Bekleyen: {report.unread}</span>
       </div>
-      <table>
+      <table className="uh-data-table">
         <thead>
           <tr>
             <th>Alıcı</th>

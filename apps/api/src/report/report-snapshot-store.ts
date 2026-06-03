@@ -1,4 +1,5 @@
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 import type { ReportSnapshotRecord } from "./report-generation.service.js";
 
@@ -233,7 +234,7 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
 }
 
 export function createReportSnapshotStore(): ReportSnapshotStore {
-  return process.env.REPORT_SNAPSHOT_STORE === "postgres"
+  return resolvePersistenceDriver(process.env.REPORT_SNAPSHOT_STORE) === "postgres"
     ? new PostgresReportSnapshotStore()
     : new InMemoryReportSnapshotStore();
 }

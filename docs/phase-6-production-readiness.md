@@ -38,10 +38,9 @@ pnpm backup:restore:smoke
 - Staging ve prod ayrı VPS veya ayrı compose override ile çalışır.
 - `NODE_ENV=production` kullanılır.
 - `COOKIE_SECURE=true` ve production domain'e uygun `COOKIE_DOMAIN` ayarlanır.
-- `CLASS_STORE`, `STUDENT_STORE`, `TEACHER_STORE`, `GUARDIAN_STORE`, `GUARDIAN_STUDENT_STORE`,
-  `ATTENDANCE_STORE`, `TEACHER_NOTE_STORE`, `SCHEDULE_STORE`, `STUDY_SESSION_STORE`, `HOMEWORK_STORE`,
-  `PAYMENT_PLAN_STORE` ve `REPORT_SNAPSHOT_STORE`
-  in-memory bırakılmaz.
+- `PERSISTENCE_DRIVER=postgres` ayarlanır; tüm store'lar (sınıf, öğrenci, oturum, denetim kaydı, ödeme planı vb.)
+  bu tek sürücüye bağlıdır ve production'da asla in-memory'ye düşmez. `apps/api` boot guard'ı
+  (`assertPersistenceConfig`) production'da postgres dışı bir değerde veya `DATABASE_URL` eksikse başlatmayı durdurur.
 
 ## Secret ve Erişim
 

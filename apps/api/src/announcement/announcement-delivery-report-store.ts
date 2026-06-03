@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AnnouncementDeliveryReportRecord } from "@uzman-hocam/shared-types";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export interface AnnouncementDeliveryReportStore {
@@ -148,7 +149,7 @@ export class PostgresAnnouncementDeliveryReportStore implements AnnouncementDeli
 }
 
 export function createAnnouncementDeliveryReportStore(): AnnouncementDeliveryReportStore {
-  return process.env.ANNOUNCEMENT_DELIVERY_REPORT_STORE === "postgres"
+  return resolvePersistenceDriver(process.env.ANNOUNCEMENT_DELIVERY_REPORT_STORE) === "postgres"
     ? new PostgresAnnouncementDeliveryReportStore()
     : new InMemoryAnnouncementDeliveryReportStore();
 }

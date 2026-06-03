@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withExplicitTenantQuery } from "../db/tenant-query.js";
 import type { Role } from "../rbac/roles.js";
 
@@ -231,7 +232,7 @@ export class PostgresIdentityInvitationStore implements IdentityInvitationStore 
 }
 
 export function createIdentityInvitationStore(): IdentityInvitationStore {
-  return (process.env.IDENTITY_INVITATION_STORE ?? process.env.AUTH_USER_STORE) === "postgres"
+  return resolvePersistenceDriver(process.env.IDENTITY_INVITATION_STORE ?? process.env.AUTH_USER_STORE) === "postgres"
     ? new PostgresIdentityInvitationStore()
     : new InMemoryIdentityInvitationStore();
 }

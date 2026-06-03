@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 import type { ScheduleLessonRecord } from "./schedule.service.js";
 
@@ -198,7 +199,7 @@ export class PostgresScheduleStore implements ScheduleStore {
 }
 
 export function createScheduleStore(): ScheduleStore {
-  return process.env.SCHEDULE_STORE === "postgres" ? new PostgresScheduleStore() : new InMemoryScheduleStore();
+  return resolvePersistenceDriver(process.env.SCHEDULE_STORE) === "postgres" ? new PostgresScheduleStore() : new InMemoryScheduleStore();
 }
 
 interface ScheduleLessonRow {

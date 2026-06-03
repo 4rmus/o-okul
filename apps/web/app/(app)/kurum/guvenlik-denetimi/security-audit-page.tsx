@@ -1,5 +1,9 @@
 "use client";
 
+import { EvidenceGateSection, EvidenceListSection } from "../_shared/evidence-panels.js";
+import { PageFrame } from "../_shared/page-frame.js";
+import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
+
 const securityGates = [
   {
     title: "Güvenlik denetimi",
@@ -52,52 +56,22 @@ const dataControls = [
 
 export function SecurityAuditPage() {
   return (
-    <>
-      <header className="next-topbar">
-        <div>
-          <h1>Güvenlik Denetimi</h1>
-          <p>Canlıya çıkış öncesi güvenlik kanıt kapılarını ve zorunlu kontrolleri izle.</p>
-        </div>
-      </header>
-      <section className="next-dashboard-grid" aria-label="Güvenlik denetimi özeti">
-        <article className="next-metric">
-          <span>Denetim raporu</span>
-          <strong>Kanıt gerekir</strong>
-        </article>
-        <article className="next-metric">
-          <span>HTTPS</span>
-          <strong>2xx + HSTS</strong>
-        </article>
-        <article className="next-metric">
-          <span>RLS</span>
-          <strong>Canlı kontrol</strong>
-        </article>
-      </section>
-      <section className="next-report-list" aria-label="Güvenlik denetimi kapıları">
-        <h2>Kanıt Kapıları</h2>
-        {securityGates.map((gate) => (
-          <article key={gate.title}>
-            <h3>{gate.title}</h3>
-            <p>{gate.status}</p>
-            <p>{gate.detail}</p>
-            <code>{gate.command}</code>
-          </article>
-        ))}
-      </section>
-      <AuditList title="Header Kontrolleri" ariaLabel="Header kontrolleri" items={securityHeaders} />
-      <AuditList title="Auth Kontrolleri" ariaLabel="Auth kontrolleri" items={authControls} />
-      <AuditList title="Veri Kontrolleri" ariaLabel="Veri kontrolleri" items={dataControls} />
-    </>
-  );
-}
-
-function AuditList({ ariaLabel, items, title }: { ariaLabel: string; items: readonly string[]; title: string }) {
-  return (
-    <section className="next-report-list" aria-label={ariaLabel}>
-      <h2>{title}</h2>
-      {items.map((item) => (
-        <p key={item}>{item}</p>
-      ))}
-    </section>
+    <PageFrame
+      title="Güvenlik Denetimi"
+      subtitle="Canlıya çıkış öncesi güvenlik kanıt kapılarını ve zorunlu kontrolleri izle."
+    >
+      <MetricPanelGrid
+        ariaLabel="Güvenlik denetimi özeti"
+        metrics={[
+          { label: "Denetim raporu", value: "Kanıt gerekir" },
+          { label: "HTTPS", value: "2xx + HSTS" },
+          { label: "RLS", value: "Canlı kontrol" },
+        ]}
+      />
+      <EvidenceGateSection title="Kanıt Kapıları" ariaLabel="Güvenlik denetimi kapıları" gates={securityGates} />
+      <EvidenceListSection title="Header Kontrolleri" ariaLabel="Header kontrolleri" items={securityHeaders} />
+      <EvidenceListSection title="Auth Kontrolleri" ariaLabel="Auth kontrolleri" items={authControls} />
+      <EvidenceListSection title="Veri Kontrolleri" ariaLabel="Veri kontrolleri" items={dataControls} />
+    </PageFrame>
   );
 }

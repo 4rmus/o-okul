@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { NotificationDeviceTokenRecord } from "@uzman-hocam/shared-types";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export interface NotificationDeviceTokenInput {
@@ -166,7 +167,7 @@ export class PostgresNotificationDeviceTokenStore implements NotificationDeviceT
 }
 
 export function createNotificationDeviceTokenStore(): NotificationDeviceTokenStore {
-  return process.env.NOTIFICATION_DEVICE_TOKEN_STORE === "postgres"
+  return resolvePersistenceDriver(process.env.NOTIFICATION_DEVICE_TOKEN_STORE) === "postgres"
     ? new PostgresNotificationDeviceTokenStore()
     : new InMemoryNotificationDeviceTokenStore();
 }

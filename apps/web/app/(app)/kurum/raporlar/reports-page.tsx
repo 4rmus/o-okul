@@ -2,7 +2,14 @@
 
 import { type FormEvent, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Input } from "@uzman-hocam/ui";
+import {
+  Button,
+  ClassCompareBar,
+  Input,
+  ProgressLineChart,
+  TopicRadarChart,
+  ExamResultDonut,
+} from "@uzman-hocam/ui";
 import type {
   AcademicTermRecord,
   CampusRecord,
@@ -20,6 +27,9 @@ import { KarneSheet } from "../../_shared/karne-sheet.js";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import { firstFormError, reportQueryFormSchema } from "../../../../src/form-validation.js";
+import { PageFrame } from "../_shared/page-frame.js";
+import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
+import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 
 interface ReportData {
   snapshots: ReportSnapshotRecord[];
@@ -88,6 +98,11 @@ export function ReportsPage() {
   const termNameById = new Map(terms.map((term) => [term.id, term.name]));
   const latestSnapshot = reportData?.snapshots[0] ?? null;
   const studentReport = reportData?.studentReport ?? null;
+  const branchRadar = toBranchRadar(latestSnapshot);
+  const outcomeBars = toOutcomeBars(latestSnapshot);
+  const classBars = toClassBars(latestSnapshot);
+  const examResult = toExamResult(latestSnapshot);
+  const progressPoints = toProgressPoints(reportData?.studentProgress ?? null);
 
   async function loadReports(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -149,9 +164,12 @@ export function ReportsPage() {
   }
 
   return (
-    <>
+    <PageFrame
+      title="Sınav Raporu"
+      subtitle="Raporu sorgula, üret ve Excel/PDF olarak dışa aktar."
+    >
       <form className="next-support-tool" onSubmit={(event) => void loadReports(event)}>
-        <h1>Sınav Raporu</h1>
+        <h2>Rapor sorgusu</h2>
         <label>
           Rapor sınav ID
           <Input required value={examId} onChange={(event) => setExamId(event.target.value)} />
@@ -234,35 +252,44 @@ export function ReportsPage() {
         </Button>
       </form>
       <section className="next-report-panel" aria-label="Rapor özeti">
-        <h2>Rapor Özeti</h2>
-        {latestSnapshot ? (
-          <>
-            <div className="next-dashboard-grid">
-              <article className="next-metric">
-                <span>Durum</span>
-                <strong>{latestSnapshot.status}</strong>
-              </article>
-              <article className="next-metric">
-                <span>Sonuç</span>
-                <strong>{latestSnapshot.snapshotData?.resultCount ?? "-"}</strong>
-              </article>
-              <article className="next-metric">
-                <span>Ortalama net</span>
-                <strong>{formatNumber(latestSnapshot.snapshotData?.averages?.net)}</strong>
-              </article>
-              <article className="next-metric">
-                <span>Standart puan</span>
-                <strong>{formatNumber(latestSnapshot.snapshotData?.averages?.standardScore)}</strong>
-              </article>
-              <article className="next-metric">
-                <span>Bağlam</span>
-                <strong>{formatReportContext(latestSnapshot, { campusNameById, classNameById, courseNameById, gradeLevelNameById, termNameById })}</strong>
-              </article>
-            </div>
+            <h2>Rapor Özeti</h2>
+            {latestSnapshot ? (
+              <>
+            <MetricPanelGrid
+              ariaLabel="Rapor özeti"
+              metrics={[
+                { label: "Durum", value: latestSnapshot.status },
+                { label: "Sonuç", value: latestSnapshot.snapshotData?.resultCount ?? "-" },
+                { label: "Ortalama net", value: formatNumber(latestSnapshot.snapshotData?.averages?.net) },
+                { label: "Standart puan", value: formatNumber(latestSnapshot.snapshotData?.averages?.standardScore) },
+                {
+                  label: "Bağlam",
+                  value: formatReportContext(latestSnapshot, {
+                    campusNameById,
+                    classNameById,
+                    courseNameById,
+                    gradeLevelNameById,
+                    termNameById,
+                  }),
+                },
+              ]}
+            />
             <div className="next-report-visual-grid">
-              <BranchNetChart branches={latestSnapshot.snapshotData?.branches ?? []} />
-              <OutcomeNetChart outcomes={latestSnapshot.snapshotData?.outcomes ?? []} />
-              <ClassComparisonChart classes={latestSnapshot.snapshotData?.classes ?? []} />
+              <ReportChartPanel description="Soru bazlı doğruluk dağılımı" title="Sınav Sonuç Dağılımı">
+                <ExamResultDonut result={examResult} />
+              </ReportChartPanel>
+              <ReportChartPanel description="Branş ortalaması" title="Branş Netleri">
+                <TopicRadarChart branches={branchRadar} />
+              </ReportChartPanel>
+              <ReportChartPanel description="Kazanım bazlı net karşılaştırması" title="Kazanım Netleri">
+                <ClassCompareBar classes={outcomeBars} />
+              </ReportChartPanel>
+              <ReportChartPanel description="Sınıf ortalama netleri" title="Sınıf Karşılaştırması">
+                <ClassCompareBar classes={classBars} />
+              </ReportChartPanel>
+              <ReportChartPanel description="Net ve standart puan gelişimi" title="Öğrenci Gelişim Eğrisi">
+                <ProgressLineChart points={progressPoints} />
+              </ReportChartPanel>
             </div>
             <StudentReportCard
               report={studentReport}
@@ -295,7 +322,7 @@ export function ReportsPage() {
           <p>Hazır rapor yok</p>
         )}
       </section>
-    </>
+    </PageFrame>
   );
 }
 
@@ -408,129 +435,44 @@ function formatReportContext(
   return parts.length > 0 ? parts.join(" / ") : "-";
 }
 
-function BranchNetChart({ branches }: { branches: NonNullable<ReportSnapshotRecord["snapshotData"]>["branches"] }) {
-  const rows = branches ?? [];
-  const maxNet = Math.max(1, ...rows.map((branch) => Math.abs(branch.net)));
-  return (
-    <section className="next-report-list" aria-label="Branş net grafiği">
-      <h3>Branş Netleri</h3>
-      <div className="next-report-bars" aria-hidden="true">
-        {rows.map((branch) => (
-          <div key={branch.branch} className="next-report-bar-row">
-            <span>{branch.branch}</span>
-            <div className="next-report-bar-track">
-              <div className="next-report-bar-fill" style={{ width: `${Math.min(100, Math.abs(branch.net) / maxNet * 100)}%` }} />
-            </div>
-            <strong>{formatNumber(branch.net)}</strong>
-          </div>
-        ))}
-      </div>
-      <table className="uh-chart-table">
-        <caption>Branş net tablosu</caption>
-        <thead>
-          <tr>
-            <th>Branş</th>
-            <th>Net</th>
-            <th>Sonuç</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((branch) => (
-            <tr key={branch.branch}>
-              <td>{branch.branch}</td>
-              <td>{formatNumber(branch.net)}</td>
-              <td>{branch.resultCount}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
+function toBranchRadar(snapshot: ReportSnapshotRecord | null) {
+  return (snapshot?.snapshotData?.branches ?? []).map((branch) => ({
+    branch: branch.branch,
+    net: branch.net,
+    resultCount: branch.resultCount,
+  }));
 }
 
-function OutcomeNetChart({ outcomes }: { outcomes: NonNullable<ReportSnapshotRecord["snapshotData"]>["outcomes"] }) {
-  const rows = [...(outcomes ?? [])]
-    .sort((first, second) => first.net - second.net)
-    .slice(0, 6);
-  const maxNet = Math.max(1, ...rows.map((outcome) => Math.abs(outcome.net)));
-  return (
-    <section className="next-report-list" aria-label="Kazanım analizi">
-      <h3>Kazanım Analizi</h3>
-      {rows.length === 0 ? <p>Kazanım verisi bekleniyor.</p> : null}
-      <div className="next-report-bars" aria-hidden="true">
-        {rows.map((outcome) => (
-          <div key={`${outcome.branch}-${outcome.outcomeCode}`} className="next-report-bar-row">
-            <span>{outcome.outcomeCode}</span>
-            <div className="next-report-bar-track">
-              <div className="next-report-bar-fill next-report-bar-fill--muted" style={{ width: `${Math.min(100, Math.abs(outcome.net) / maxNet * 100)}%` }} />
-            </div>
-            <strong>{formatNumber(outcome.net)}</strong>
-          </div>
-        ))}
-      </div>
-      {rows.length > 0 ? (
-        <table className="uh-chart-table">
-          <caption>Kazanım net tablosu</caption>
-          <thead>
-            <tr>
-              <th>Kazanım</th>
-              <th>Branş</th>
-              <th>Net</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((outcome) => (
-              <tr key={`${outcome.branch}-${outcome.outcomeCode}`}>
-                <td>{outcome.outcomeCode}</td>
-                <td>{outcome.branch}</td>
-                <td>{formatNumber(outcome.net)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : null}
-    </section>
-  );
+function toOutcomeBars(snapshot: ReportSnapshotRecord | null) {
+  return [...(snapshot?.snapshotData?.outcomes ?? [])]
+    .sort((first, second) => second.net - first.net)
+    .slice(0, 12)
+    .map((outcome) => ({
+      className: `${outcome.branch} / ${outcome.outcomeCode}`,
+      net: outcome.net,
+    }));
 }
 
-function ClassComparisonChart({ classes }: { classes: NonNullable<ReportSnapshotRecord["snapshotData"]>["classes"] }) {
-  const rows = classes ?? [];
-  const maxNet = Math.max(1, ...rows.map((classSummary) => Math.abs(classSummary.averages.net ?? 0)));
-  return (
-    <section className="next-report-list" aria-label="Sınıf karşılaştırması">
-      <h3>Sınıf Karşılaştırması</h3>
-      <div className="next-report-bars" aria-hidden="true">
-        {rows.map((classSummary) => (
-          <div key={classSummary.classId ?? "no-class"} className="next-report-bar-row">
-            <span>{classSummary.className ?? "Sınıfsız"}</span>
-            <div className="next-report-bar-track">
-              <div className="next-report-bar-fill next-report-bar-fill--accent" style={{ width: `${Math.min(100, Math.abs(classSummary.averages.net ?? 0) / maxNet * 100)}%` }} />
-            </div>
-            <strong>{formatNumber(classSummary.averages.net)}</strong>
-          </div>
-        ))}
-      </div>
-      <table className="uh-chart-table">
-        <caption>Sınıf net tablosu</caption>
-        <thead>
-          <tr>
-            <th>Sınıf</th>
-            <th>Net</th>
-            <th>Standart puan</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((classSummary) => (
-            <tr key={classSummary.classId ?? "no-class"}>
-              <td>{classSummary.className ?? "Sınıfsız"}</td>
-              <td>{formatNumber(classSummary.averages.net)}</td>
-              <td>{formatNumber(classSummary.averages.standardScore)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
+function toClassBars(snapshot: ReportSnapshotRecord | null) {
+  return (snapshot?.snapshotData?.classes ?? []).map((record) => ({
+    classId: record.classId,
+    className: record.className ?? "Sınıfsız",
+    net: record.averages.net,
+    standardScore: record.averages.standardScore,
+  }));
+}
+
+function toExamResult(snapshot: ReportSnapshotRecord | null) {
+  const averages = snapshot?.snapshotData?.averages;
+  return {
+    correct: averages?.correct ?? 0,
+    wrong: averages?.wrong ?? 0,
+    blank: averages?.blank ?? 0,
+  };
+}
+
+function toProgressPoints(progress: ReportStudentProgress | null) {
+  return progress?.points ?? [];
 }
 
 function StudentReportCard({

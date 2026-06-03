@@ -29,6 +29,15 @@ import type {
 import { ArrowLeft } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
+import {
+  ClassCompareBar,
+  ExamResultDonut,
+  ProgressLineChart,
+  TopicRadarChart,
+} from "@uzman-hocam/ui";
+import { PageFrame } from "../_shared/page-frame.js";
+import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
+import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 
 interface StudentBaseDetail {
   attendanceSummary: AttendanceSummaryRecord | null;
@@ -139,55 +148,58 @@ export function StudentDetailPage({ studentId }: { studentId: string }) {
   const errorBooklet = errorBookletQuery.data ?? null;
   const progress = progressQuery.data ?? null;
   const studentName = detail ? `${detail.profile.firstName} ${detail.profile.lastName}` : "Öğrenci 360";
+  const examResult = toStudentExamResult(report);
+  const branchRadar = toStudentBranchRadar(report);
+  const outcomeBars = toStudentOutcomeBars(report);
+  const progressPoints = toProgressPoints(progress);
 
   return (
-    <div className="next-portal-stack">
-      <Link className="uh-button uh-button--secondary next-detail-back" href="/kurum/ogrenciler">
-        <ArrowLeft size={17} aria-hidden="true" />
-        Öğrencilere dön
-      </Link>
+    <PageFrame
+      title={studentName}
+      subtitle="Öğrenci 360"
+      actions={
+        <Link className="uh-button uh-button--secondary" href="/kurum/ogrenciler">
+          <ArrowLeft size={17} aria-hidden="true" />
+          Öğrencilere dön
+        </Link>
+      }
+    >
 
       <section className="next-report-panel" aria-label="Öğrenci 360 detay">
-        <div className="next-detail-header">
-          <div>
-            <h1>{studentName}</h1>
-            <p>Öğrenci 360</p>
-          </div>
-          <div className="next-detail-selects">
-            <label>
-              Sınav
-              <select
-                aria-label="Sınav"
-                value={selectedExamId}
-                onChange={(event) => {
-                  setSelectedExamId(event.target.value);
-                  setSelectedSnapshotId("");
-                }}
-              >
-                {exams.map((exam) => (
-                  <option key={exam.id} value={exam.id}>
-                    {exam.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Sınav raporu
-              <select
-                aria-label="Sınav raporu"
-                disabled={snapshots.length === 0}
-                value={selectedSnapshot?.id ?? ""}
-                onChange={(event) => setSelectedSnapshotId(event.target.value)}
-              >
-                {snapshots.length === 0 ? <option value="">Hazır rapor yok</option> : null}
-                {snapshots.map((snapshot) => (
-                  <option key={snapshot.id} value={snapshot.id}>
-                    {formatSnapshotLabel(snapshot, studentId)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+        <div className="next-detail-selects">
+          <label>
+            Sınav
+            <select
+              aria-label="Sınav"
+              value={selectedExamId}
+              onChange={(event) => {
+                setSelectedExamId(event.target.value);
+                setSelectedSnapshotId("");
+              }}
+            >
+              {exams.map((exam) => (
+                <option key={exam.id} value={exam.id}>
+                  {exam.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Sınav raporu
+            <select
+              aria-label="Sınav raporu"
+              disabled={snapshots.length === 0}
+              value={selectedSnapshot?.id ?? ""}
+              onChange={(event) => setSelectedSnapshotId(event.target.value)}
+            >
+              {snapshots.length === 0 ? <option value="">Hazır rapor yok</option> : null}
+              {snapshots.map((snapshot) => (
+                <option key={snapshot.id} value={snapshot.id}>
+                  {formatSnapshotLabel(snapshot, studentId)}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         {detailQuery.isPending ? (
@@ -196,35 +208,31 @@ export function StudentDetailPage({ studentId }: { studentId: string }) {
           <p className="uh-crud-page__error">Öğrenci detayı alınamadı.</p>
         ) : detail ? (
           <>
-            <div className="next-dashboard-grid">
-              <article className="next-metric">
-                <span>Devamsızlık</span>
-                <strong>{detail.attendanceSummary?.total ?? 0}</strong>
-              </article>
-              <article className="next-metric">
-                <span>Bekleyen ödeme</span>
-                <strong>{formatPendingPayment(detail.paymentPlans)}</strong>
-              </article>
-              <article className="next-metric">
-                <span>Son net</span>
-                <strong>{formatNumber(report?.total?.net)}</strong>
-              </article>
-              <article className="next-metric">
-                <span>Hata kitapçığı</span>
-                <strong>{errorBooklet ? `${errorBooklet.items.length} soru` : "-"}</strong>
-              </article>
-              <article className="next-metric">
-                <span>Kayıt durumu</span>
-                <strong>{formatStudentStatus(detail.profile.status)}</strong>
-              </article>
-              <article className="next-metric">
-                <span>Net gelişimi</span>
-                <strong>{formatDelta(progress?.netDelta)}</strong>
-              </article>
-              <article className="next-metric">
-                <span>Standart puan</span>
-                <strong>{formatNumber(report?.total?.standardScore)}</strong>
-              </article>
+            <MetricPanelGrid
+              ariaLabel="Öğrenci özeti"
+              metrics={[
+                { label: "Devamsızlık", value: detail.attendanceSummary?.total ?? 0 },
+                { label: "Bekleyen ödeme", value: formatPendingPayment(detail.paymentPlans) },
+                { label: "Son net", value: formatNumber(report?.total?.net) },
+                { label: "Hata kitapçığı", value: errorBooklet ? `${errorBooklet.items.length} soru` : "-" },
+                { label: "Kayıt durumu", value: formatStudentStatus(detail.profile.status) },
+                { label: "Net gelişimi", value: formatDelta(progress?.netDelta) },
+                { label: "Standart puan", value: formatNumber(report?.total?.standardScore) },
+              ]}
+            />
+            <div className="next-report-visual-grid">
+              <ReportChartPanel description="Soru bazlı doğruluk grafiği" title="Öğrenci Sonuç Dağılımı">
+                <ExamResultDonut result={examResult} />
+              </ReportChartPanel>
+              <ReportChartPanel description="Rapor bazlı branş netleri" title="Branş Netleri">
+                <TopicRadarChart branches={branchRadar} />
+              </ReportChartPanel>
+              <ReportChartPanel description="Kazanım bazlı net karşılaştırması" title="Kazanım Netleri">
+                <ClassCompareBar classes={outcomeBars} />
+              </ReportChartPanel>
+              <ReportChartPanel description="Net ve standart puan gelişimi" title="Öğrenci Gelişim">
+                <ProgressLineChart points={progressPoints} />
+              </ReportChartPanel>
             </div>
 
             <div className="next-student-detail-grid">
@@ -344,7 +352,7 @@ export function StudentDetailPage({ studentId }: { studentId: string }) {
           </>
         ) : null}
       </section>
-    </div>
+    </PageFrame>
   );
 }
 
@@ -593,4 +601,33 @@ function formatDateTime(value: string) {
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString("tr-TR");
+}
+
+function toStudentExamResult(report: ReportStudentSnapshot | null) {
+  return {
+    correct: report?.total?.correct ?? 0,
+    wrong: report?.total?.wrong ?? 0,
+    blank: report?.total?.blank ?? 0,
+  };
+}
+
+function toStudentBranchRadar(report: ReportStudentSnapshot | null) {
+  return (report?.branches ?? []).map((branch) => ({
+    branch: branch.branch,
+    net: branch.net ?? 0,
+  }));
+}
+
+function toStudentOutcomeBars(report: ReportStudentSnapshot | null) {
+  return [...(report?.outcomes ?? [])]
+    .sort((first, second) => (second.net ?? 0) - (first.net ?? 0))
+    .slice(0, 12)
+    .map((outcome) => ({
+      className: `${outcome.branch} / ${outcome.outcomeCode}`,
+      net: outcome.net ?? 0,
+    }));
+}
+
+function toProgressPoints(progress: ReportStudentProgress | null) {
+  return progress?.points ?? [];
 }

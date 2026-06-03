@@ -1,5 +1,9 @@
 "use client";
 
+import { EvidenceGateSection, EvidenceListSection } from "../_shared/evidence-panels.js";
+import { PageFrame } from "../_shared/page-frame.js";
+import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
+
 const releaseGates = [
   {
     title: "Toplu kanıt zinciri",
@@ -64,52 +68,22 @@ const openExternalEvidence = [
 
 export function LiveReleasePage() {
   return (
-    <>
-      <header className="next-topbar">
-        <div>
-          <h1>Canlı Yayın</h1>
-          <p>Release öncesi production kanıt zincirini, özet dosyasını ve dış ortam gereksinimlerini izle.</p>
-        </div>
-      </header>
-      <section className="next-dashboard-grid" aria-label="Canlı yayın özeti">
-        <article className="next-metric">
-          <span>Kanıt zinciri</span>
-          <strong>17 kapı</strong>
-        </article>
-        <article className="next-metric">
-          <span>Release özeti</span>
-          <strong>PASS gerekir</strong>
-        </article>
-        <article className="next-metric">
-          <span>Dış ortam</span>
-          <strong>Kanıt bekler</strong>
-        </article>
-      </section>
-      <section className="next-report-list" aria-label="Canlı yayın kapıları">
-        <h2>Kanıt Kapıları</h2>
-        {releaseGates.map((gate) => (
-          <article key={gate.title}>
-            <h3>{gate.title}</h3>
-            <p>{gate.status}</p>
-            <p>{gate.detail}</p>
-            <code>{gate.command}</code>
-          </article>
-        ))}
-      </section>
-      <ReleaseList title="Production Evidence Adımları" ariaLabel="Production evidence adımları" items={productionEvidenceSteps} />
-      <ReleaseList title="Release Özeti Alanları" ariaLabel="Release özeti alanları" items={summaryFields} />
-      <ReleaseList title="Dış Ortam Kanıtları" ariaLabel="Dış ortam kanıtları" items={openExternalEvidence} />
-    </>
-  );
-}
-
-function ReleaseList({ ariaLabel, items, title }: { ariaLabel: string; items: readonly string[]; title: string }) {
-  return (
-    <section className="next-report-list" aria-label={ariaLabel}>
-      <h2>{title}</h2>
-      {items.map((item) => (
-        <p key={item}>{item}</p>
-      ))}
-    </section>
+    <PageFrame
+      title="Canlı Yayın"
+      subtitle="Release öncesi production kanıt zincirini, özet dosyasını ve dış ortam gereksinimlerini izle."
+    >
+      <MetricPanelGrid
+        ariaLabel="Canlı yayın özeti"
+        metrics={[
+          { label: "Kanıt zinciri", value: "17 kapı" },
+          { label: "Release özeti", value: "PASS gerekir" },
+          { label: "Dış ortam", value: "Kanıt bekler" },
+        ]}
+      />
+      <EvidenceGateSection title="Kanıt Kapıları" ariaLabel="Canlı yayın kapıları" gates={releaseGates} />
+      <EvidenceListSection title="Production Evidence Adımları" ariaLabel="Production evidence adımları" items={productionEvidenceSteps} />
+      <EvidenceListSection title="Release Özeti Alanları" ariaLabel="Release özeti alanları" items={summaryFields} />
+      <EvidenceListSection title="Dış Ortam Kanıtları" ariaLabel="Dış ortam kanıtları" items={openExternalEvidence} />
+    </PageFrame>
   );
 }

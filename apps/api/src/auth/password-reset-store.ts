@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import pg from "pg";
 
 export type PasswordResetStatus = "PENDING" | "USED" | "REVOKED";
@@ -144,7 +145,7 @@ export class PostgresPasswordResetStore implements PasswordResetStore {
 }
 
 export function createPasswordResetStore(): PasswordResetStore {
-  return (process.env.PASSWORD_RESET_STORE ?? process.env.AUTH_USER_STORE) === "postgres"
+  return resolvePersistenceDriver(process.env.PASSWORD_RESET_STORE ?? process.env.AUTH_USER_STORE) === "postgres"
     ? new PostgresPasswordResetStore()
     : new InMemoryPasswordResetStore();
 }

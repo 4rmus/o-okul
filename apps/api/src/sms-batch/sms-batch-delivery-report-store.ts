@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export interface SmsBatchDeliveryReportRecord {
@@ -110,7 +111,7 @@ export class PostgresSmsBatchDeliveryReportStore implements SmsBatchDeliveryRepo
 }
 
 export function createSmsBatchDeliveryReportStore(): SmsBatchDeliveryReportStore {
-  return process.env.SMS_BATCH_DELIVERY_REPORT_STORE === "postgres"
+  return resolvePersistenceDriver(process.env.SMS_BATCH_DELIVERY_REPORT_STORE) === "postgres"
     ? new PostgresSmsBatchDeliveryReportStore()
     : new InMemorySmsBatchDeliveryReportStore();
 }

@@ -6,77 +6,16 @@ import { usePathname, useRouter } from "next/navigation";
 import type { NotificationDeviceTokenRecord } from "@uzman-hocam/shared-types";
 import { apiBaseUrl, apiRequest } from "../../src/api-client.js";
 import { useAuth } from "../providers.js";
+import { dynamicDetailParents, institutionNavGroups, rolePortalItems, staticBreadcrumbLabels } from "./_shared/navigation.js";
+const allNavigationItems = [
+  ...institutionNavGroups.flatMap((group) => group.items),
+  ...rolePortalItems,
+];
 
-const institutionNavGroups = [
-  {
-    label: "Kurum",
-    items: [{ href: "/kurum", label: "Genel Bakış" }],
-  },
-  {
-    label: "Kişiler",
-    items: [
-      { href: "/kurum/ogrenciler", label: "Öğrenciler" },
-      { href: "/kurum/veliler", label: "Veliler" },
-      { href: "/kurum/ogretmenler", label: "Öğretmenler" },
-    ],
-  },
-  {
-    label: "Akademik",
-    items: [
-      { href: "/kurum/kampusler", label: "Kampüsler" },
-      { href: "/kurum/akademik-takvim", label: "Akademik Takvim" },
-      { href: "/kurum/seviyeler", label: "Seviyeler" },
-      { href: "/kurum/siniflar", label: "Sınıflar" },
-      { href: "/kurum/dersler", label: "Dersler" },
-      { href: "/kurum/program", label: "Ders Programı" },
-      { href: "/kurum/etutler", label: "Etütler" },
-      { href: "/kurum/devamsizlik", label: "Devamsızlık" },
-      { href: "/kurum/notlar", label: "Öğretmen Notları" },
-      { href: "/kurum/materyaller", label: "Materyaller" },
-    ],
-  },
-  {
-    label: "Sınav ve Rapor",
-    items: [
-      { href: "/kurum/sinavlar", label: "Sınavlar" },
-      { href: "/kurum/optik", label: "Optik" },
-      { href: "/kurum/raporlar", label: "Raporlar" },
-    ],
-  },
-  {
-    label: "Finans",
-    items: [{ href: "/kurum/finans", label: "Ödemeler" }],
-  },
-  {
-    label: "İletişim",
-    items: [
-      { href: "/kurum/duyurular", label: "Duyurular" },
-      { href: "/kurum/sablonlar", label: "Şablonlar" },
-      { href: "/kurum/destek", label: "Destek" },
-    ],
-  },
-  {
-    label: "Operasyon",
-    items: [
-      { href: "/kurum/kullanicilar", label: "Kullanıcılar" },
-      { href: "/kurum/rol-onizleme", label: "Rol Önizleme" },
-      { href: "/kurum/denetim", label: "Denetim" },
-      { href: "/kurum/kvkk", label: "KVKK" },
-      { href: "/kurum/guvenlik-denetimi", label: "Güvenlik Denetimi" },
-      { href: "/kurum/gozlemlenebilirlik", label: "Gözlemlenebilirlik" },
-      { href: "/kurum/uat-rollback", label: "UAT / Rollback" },
-      { href: "/kurum/canli-yayin", label: "Canlı Yayın" },
-      { href: "/kurum/sistem-sagligi", label: "Sistem Sağlığı" },
-      { href: "/kurum/yedek-restore", label: "Yedek / Restore" },
-    ],
-  },
-] as const;
-
-const rolePortalItems = [
-  { href: "/ogretmen", label: "Öğretmen Portalı", role: "TEACHER", subjectType: "TEACHER" },
-  { href: "/ogrenci", label: "Öğrenci Portalı", role: "STUDENT", subjectType: "STUDENT" },
-  { href: "/veli", label: "Veli Portalı", role: "GUARDIAN", subjectType: "GUARDIAN" },
-] as const;
+const breadcrumbLabelByPath = {
+  ...Object.fromEntries(allNavigationItems.map((item) => [item.href, item.label])),
+  ...staticBreadcrumbLabels,
+};
 
 export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -85,7 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isBootstrapping && !auth) {
-      window.location.replace("/login");
+      router.replace("/login");
       return;
     }
 
@@ -127,41 +66,75 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <main className="next-app-shell">
       <aside className="next-sidebar" aria-label="Ana menü">
-        <div className="next-brand">
-          <span className="next-brand-mark">UH</span>
-          <span>Uzman Hocam</span>
-        </div>
-        <nav>
+        <header className="next-sidebar-header">
+          <div className="next-brand">
+            <span className="next-brand-mark">UH</span>
+            <span>Uzman Hocam</span>
+          </div>
+        </header>
+        <nav className="next-sidebar-nav" aria-label="Ana menü">
           {hasInstitutionAccess(auth.session.roles)
             ? institutionNavGroups.map((group) => (
-                <div key={group.label} className="next-sidebar-group">
+                <section key={group.label} className="next-sidebar-group">
                   <p className="next-sidebar-group-title">{group.label}</p>
-                  {group.items.map((item) => (
-                    <Link key={item.href} href={item.href} aria-current={navCurrent(item.href)}>
-                      {item.label}
-                    </Link>
-                  ))}
-                </div>
+                  <ul className="next-sidebar-group-list">
+                    {group.items.map((item) => (
+                      <li key={item.href}>
+                        <Link className="next-sidebar-link" href={item.href} aria-current={navCurrent(item.href)}>
+                          {item.label}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               ))
             : null}
           {visiblePortalItems.length > 0 ? (
-            <div className="next-sidebar-group">
+            <section className="next-sidebar-group">
               <p className="next-sidebar-group-title">Portal</p>
-              {visiblePortalItems.map((item) => (
-                <Link key={item.href} href={item.href} aria-current={navCurrent(item.href)}>
-                  {item.label}
-                </Link>
-              ))}
-            </div>
+              <ul className="next-sidebar-group-list">
+                {visiblePortalItems.map((item) => (
+                  <li key={item.href}>
+                    <Link className="next-sidebar-link" href={item.href} aria-current={navCurrent(item.href)}>
+                      {item.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ) : null}
-          <button type="button" onClick={() => void handleLogout()}>
+          <button className="next-sidebar-logout" type="button" onClick={() => void handleLogout()}>
             Çıkış
           </button>
         </nav>
         <PushDevicePanel accessToken={auth.accessToken} />
       </aside>
-      <section className="next-workspace">{children}</section>
+      <section className="next-workspace">
+        <RouteBreadcrumb pathname={pathname} />
+        {children}
+      </section>
     </main>
+  );
+}
+
+function RouteBreadcrumb({ pathname }: { pathname: string }) {
+  const crumbs = getBreadcrumbs(pathname);
+
+  return (
+    <nav className="next-breadcrumb" aria-label="Gezinme yolu">
+      <ol>
+        {crumbs.map((crumb, index) => (
+          <li key={crumb.path}>
+            {crumb.isCurrent ? (
+              <span aria-current="page">{crumb.label}</span>
+            ) : (
+              <Link href={crumb.path}>{crumb.label}</Link>
+            )}
+            {index < crumbs.length - 1 ? <span aria-hidden="true">/</span> : null}
+          </li>
+        ))}
+      </ol>
+    </nav>
   );
 }
 
@@ -260,6 +233,52 @@ function canAccessPath(session: AppSession, pathname: string) {
   }
 
   return true;
+}
+
+function getBreadcrumbs(pathname: string) {
+  const cleanPath = pathname && pathname.startsWith("/") ? pathname : `/${pathname ?? ""}`;
+  const segments = cleanPath.split("/").filter(Boolean);
+
+  if (segments.length === 0) {
+    return [{ label: "Ana Sayfa", path: "/", isCurrent: true }];
+  }
+
+  const items: Array<{ label: string; path: string; isCurrent: boolean }> = [
+    { label: "Ana Sayfa", path: "/", isCurrent: false },
+  ];
+
+  let current = "";
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+    if (segment === undefined) continue;
+
+    current += `/${segment}`;
+    const isCurrent = index === segments.length - 1;
+    const previous = index === 0 ? undefined : segments[index - 1];
+    items.push({
+      label: resolveBreadcrumbLabel(current, previous, segment, index),
+      path: current,
+      isCurrent,
+    });
+  }
+
+  return items;
+}
+
+function resolveBreadcrumbLabel(path: string, previousSegment: string | undefined, currentSegment: string, index: number) {
+  const customLabel = breadcrumbLabelByPath[path];
+  if (customLabel) return customLabel;
+
+  if (index >= 2 && previousSegment && dynamicDetailParents.includes(previousSegment)) {
+    return "Detay";
+  }
+
+  if (currentSegment === "kurum") return "Kurum";
+
+  return currentSegment
+    .split("-")
+    .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
+    .join(" ");
 }
 
 function getHomePath(session: AppSession) {
