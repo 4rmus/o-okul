@@ -99,6 +99,8 @@ const demoMaterialAssignments: HomeworkMaterialAssignmentRecord[] = [
     tenantId: "tenant-a",
     materialId: "material-a",
     studentId: "student-a",
+    courseId: "course-math",
+    termId: "term-2026-spring",
     assignedById: "user-tenant-a",
     note: "Bireysel tekrar",
     dueAt: "2026-06-09T12:00:00.000Z",
@@ -109,6 +111,8 @@ const demoMaterialAssignments: HomeworkMaterialAssignmentRecord[] = [
     tenantId: "tenant-b",
     materialId: "material-b",
     studentId: "student-b",
+    courseId: "course-turkish",
+    termId: "term-2026-spring",
     assignedById: "user-tenant-b",
     createdAt: "2026-06-08T09:20:00.000Z",
   },
@@ -359,14 +363,16 @@ export class PostgresHomeworkStore implements HomeworkStore {
   ): Promise<HomeworkMaterialAssignmentRecord> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<HomeworkMaterialAssignmentRow>(
-        `INSERT INTO "HomeworkMaterialAssignment" ("id", "tenantId", "materialId", "studentId", "assignedById", "note", "dueAt", "createdAt", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+        `INSERT INTO "HomeworkMaterialAssignment" ("id", "tenantId", "materialId", "studentId", "courseId", "termId", "assignedById", "note", "dueAt", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
          RETURNING *`,
         [
           randomUUID(),
           input.tenantId,
           input.materialId,
           input.studentId,
+          input.courseId ?? null,
+          input.termId ?? null,
           input.assignedById ?? null,
           input.note ?? null,
           input.dueAt ?? null,
@@ -518,6 +524,8 @@ interface HomeworkMaterialAssignmentRow {
   tenantId: string;
   materialId: string;
   studentId: string;
+  courseId: string | null;
+  termId: string | null;
   assignedById: string | null;
   note: string | null;
   dueAt: Date | string | null;
@@ -570,6 +578,8 @@ function toHomeworkMaterialAssignmentRecord(record: HomeworkMaterialAssignmentRo
     tenantId: record.tenantId,
     materialId: record.materialId,
     studentId: record.studentId,
+    courseId: record.courseId ?? undefined,
+    termId: record.termId ?? undefined,
     assignedById: record.assignedById ?? undefined,
     note: record.note ?? undefined,
     dueAt: record.dueAt ? toIsoString(record.dueAt) : undefined,

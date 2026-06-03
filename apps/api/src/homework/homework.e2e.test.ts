@@ -197,6 +197,8 @@ describe("Homework API", () => {
         tenantId: "tenant-a",
         materialId: "material-a",
         studentId: "student-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
         assignedById: "user-tenant-a",
         note: "Bireysel tekrar",
         dueAt: "2026-06-09T12:00:00.000Z",
@@ -209,6 +211,8 @@ describe("Homework API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
         studentId: "student-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
         note: "Ek tekrar",
         dueAt: "2026-06-10T12:00:00.000Z",
       })
@@ -218,6 +222,8 @@ describe("Homework API", () => {
       tenantId: "tenant-a",
       materialId: "material-a",
       studentId: "student-a",
+      courseId: "course-math",
+      termId: "term-2026-spring",
       assignedById: "user-tenant-a",
       note: "Ek tekrar",
       dueAt: "2026-06-10T12:00:00.000Z",
@@ -287,10 +293,35 @@ describe("Homework API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(403);
 
+    const teacherCreated = await request(server)
+      .post("/homework/materials/material-a/assignments")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({ studentId: "student-a", courseId: "course-math", termId: "term-2026-spring", note: "Öğretmen takibi" })
+      .expect(201);
+    expect(teacherCreated.body).toMatchObject({
+      tenantId: "tenant-a",
+      materialId: "material-a",
+      studentId: "student-a",
+      courseId: "course-math",
+      termId: "term-2026-spring",
+      assignedById: "teacher-tenant-a",
+      note: "Öğretmen takibi",
+    });
+
+    const classC = await request(server)
+      .post("/classes")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "9-C", level: "9" })
+      .expect(201);
+    const unscopedStudent = await request(server)
+      .post("/students")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Kapsam", lastName: "Dışı", classId: classC.body.id })
+      .expect(201);
     await request(server)
       .post("/homework/materials/material-a/assignments")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
-      .send({ studentId: "student-a" })
+      .send({ studentId: unscopedStudent.body.id })
       .expect(403);
 
     await request(server)

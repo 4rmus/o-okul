@@ -40,6 +40,15 @@ function checkContract(file) {
     "SMS_SMOKE_TO",
     "SMS_SMOKE_BODY",
     "SMS_SMOKE_CONFIRM",
+    "NOTIFICATION_PROVIDER",
+    "NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION",
+    "NOTIFICATION_HTTP_ENDPOINT",
+    "NOTIFICATION_HTTP_BEARER_TOKEN",
+    "NOTIFICATION_SMOKE_EMAIL_TO",
+    "NOTIFICATION_SMOKE_PUSH_TO",
+    "NOTIFICATION_SMOKE_SUBJECT",
+    "NOTIFICATION_SMOKE_BODY",
+    "NOTIFICATION_SMOKE_CONFIRM",
     "S3_ENDPOINT",
     "S3_BUCKET",
     "SUPPORT_ATTACHMENT_STORAGE",
@@ -119,6 +128,14 @@ function checkProductionEnv(env) {
   for (const key of ["NETGSM_USERCODE", "NETGSM_PASSWORD", "NETGSM_MSG_HEADER"]) {
     requireSet(env, failures, key);
   }
+
+  requireEqual(env, failures, "NOTIFICATION_PROVIDER", "http");
+  requireEqual(env, failures, "NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION", "false");
+  requireHttpsUrl(env, failures, "NOTIFICATION_HTTP_ENDPOINT");
+  requireSecret(env, failures, "NOTIFICATION_HTTP_BEARER_TOKEN");
+  requireSet(env, failures, "NOTIFICATION_SMOKE_EMAIL_TO");
+  requireSet(env, failures, "NOTIFICATION_SMOKE_PUSH_TO");
+  requireEqual(env, failures, "NOTIFICATION_SMOKE_CONFIRM", "send");
 
   requireEqual(env, failures, "SUPPORT_ATTACHMENT_STORAGE", "s3");
   requireSet(env, failures, "S3_BUCKET");

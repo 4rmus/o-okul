@@ -38,8 +38,17 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
          WHERE er."tenantId" = $1
            AND er."examId" = $2
            AND er."deletedAt" IS NULL
+           AND ($3::text IS NULL OR c."campusId" = $3)
+           AND ($4::text IS NULL OR c."gradeLevelId" = $4)
+           AND ($5::text IS NULL OR s."classId" = $5)
          ORDER BY er."studentId" ASC, er."resultKey" ASC`,
-        [input.tenantId, input.examId],
+        [
+          input.tenantId,
+          input.examId,
+          optionalText(input.campusId) ?? null,
+          optionalText(input.gradeLevelId) ?? null,
+          optionalText(input.classId) ?? null,
+        ],
       );
 
       return result.rows.map((row) => ({
@@ -66,6 +75,11 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
         id: row.id,
         tenantId: row.tenantId,
         examId: row.examId,
+        campusId: snapshot.campusId,
+        gradeLevelId: snapshot.gradeLevelId,
+        classId: snapshot.classId,
+        courseId: snapshot.courseId,
+        termId: snapshot.termId,
         reportType: parseReportType(row.reportType),
         status: "READY",
         inputRefs: parseJsonObject(row.inputRefs) as ReportGenerationJobResult["inputRefs"],
@@ -107,6 +121,11 @@ async function insertSnapshot(
        "id",
        "tenantId",
        "examId",
+       "campusId",
+       "gradeLevelId",
+       "classId",
+       "courseId",
+       "termId",
        "reportType",
        "status",
        "inputRefs",
@@ -114,12 +133,17 @@ async function insertSnapshot(
        "generatedAt",
        "updatedAt"
      )
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, now())
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb, $13, now())
      RETURNING "id", "tenantId", "examId", "reportType", "inputRefs", "snapshotData", "generatedAt"`,
     [
       randomUUID(),
       snapshot.tenantId,
       snapshot.examId,
+      snapshot.campusId ?? null,
+      snapshot.gradeLevelId ?? null,
+      snapshot.classId ?? null,
+      snapshot.courseId ?? null,
+      snapshot.termId ?? null,
       snapshot.reportType,
       snapshot.status,
       JSON.stringify(snapshot.inputRefs),
@@ -137,6 +161,11 @@ function parseScoringResult(value: unknown): ScoringResult {
     throw new Error("REPORT_RESULT_SCORE_INVALID");
   }
   return score as ScoringResult;
+}
+
+function optionalText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
 }
 
 function parseReportType(value: string): ReportGenerationJobResult["reportType"] {

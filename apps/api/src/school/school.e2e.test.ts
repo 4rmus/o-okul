@@ -10,6 +10,8 @@ describe("School management API", () => {
   let server: Parameters<typeof request>[0];
   let tenantAAccessToken: string;
   let teacherAAccessToken: string;
+  let studentAAccessToken: string;
+  let guardianAAccessToken: string;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -31,6 +33,18 @@ describe("School management API", () => {
       .send({ email: "teacher-a@example.test", password: "password" })
       .expect(200);
     teacherAAccessToken = (teacherLogin.body as { accessToken: string }).accessToken;
+
+    const studentLogin = await request(server)
+      .post("/auth/login")
+      .send({ email: "student-a@example.test", password: "password" })
+      .expect(200);
+    studentAAccessToken = (studentLogin.body as { accessToken: string }).accessToken;
+
+    const guardianLogin = await request(server)
+      .post("/auth/login")
+      .send({ email: "guardian-a@example.test", password: "password" })
+      .expect(200);
+    guardianAAccessToken = (guardianLogin.body as { accessToken: string }).accessToken;
   });
 
   afterAll(async () => {
@@ -43,7 +57,111 @@ describe("School management API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(200);
 
-    expect(response.body).toEqual([{ id: "class-a", tenantId: "tenant-a", name: "8-A", level: "8" }]);
+    expect(response.body).toEqual([
+      {
+        id: "class-a",
+        tenantId: "tenant-a",
+        name: "8-A",
+        level: "8",
+        campusId: "campus-main",
+        gradeLevelId: "grade-8",
+        section: "A",
+      },
+    ]);
+  });
+
+  it("tenant A sadece kendi kampüs kayıtlarını listeler", async () => {
+    const response = await request(server)
+      .get("/campuses")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual([{ id: "campus-main", tenantId: "tenant-a", name: "Merkez Kampus", code: "MRK" }]);
+  });
+
+  it("tenant A sadece kendi seviye kayıtlarını listeler", async () => {
+    const response = await request(server)
+      .get("/grade-levels")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual([{ id: "grade-8", tenantId: "tenant-a", name: "8. Sınıf", code: "8" }]);
+  });
+
+  it("tenant A sadece kendi ders kayıtlarını listeler", async () => {
+    const response = await request(server)
+      .get("/courses")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual([{ id: "course-math", tenantId: "tenant-a", name: "Matematik", code: "MAT" }]);
+  });
+
+  it("tenant A sadece kendi akademik yıl ve dönem kayıtlarını listeler", async () => {
+    await request(server)
+      .get("/academic-years")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([
+          {
+            id: "academic-year-2026",
+            tenantId: "tenant-a",
+            name: "2025-2026",
+            startsAt: "2025-09-01",
+            endsAt: "2026-06-30",
+            isActive: true,
+          },
+        ]);
+      });
+
+    await request(server)
+      .get("/academic-terms")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([
+          {
+            id: "term-2026-spring",
+            tenantId: "tenant-a",
+            academicYearId: "academic-year-2026",
+            name: "2. Donem",
+            startsAt: "2026-02-01",
+            endsAt: "2026-06-30",
+            isActive: true,
+          },
+        ]);
+      });
+  });
+
+  it("öğrenci ve veli rapor bağlamı için ders ve dönem adlarını okuyabilir", async () => {
+    for (const token of [studentAAccessToken, guardianAAccessToken]) {
+      await request(server)
+        .get("/courses")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(200)
+        .expect(({ body }) => {
+          expect(body).toEqual([{ id: "course-math", tenantId: "tenant-a", name: "Matematik", code: "MAT" }]);
+        });
+
+      await request(server)
+        .get("/academic-terms")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(200)
+        .expect(({ body }) => {
+          expect(body).toEqual([
+            {
+              id: "term-2026-spring",
+              tenantId: "tenant-a",
+              academicYearId: "academic-year-2026",
+              name: "2. Donem",
+              startsAt: "2026-02-01",
+              endsAt: "2026-06-30",
+              isActive: true,
+            },
+          ]);
+        });
+    }
   });
 
   it("sınıf, öğretmen, veli ve öğrenci listelerinde page/limit/q/sort uygular", async () => {
@@ -129,8 +247,13 @@ describe("School management API", () => {
     const created = await request(server)
       .post("/classes")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ name: "9-A", level: "9" })
-      .expect(201);
+      .send({ name: "9-A", level: "8", campusId: "campus-main", gradeLevelId: "grade-8", section: "A" })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body.campusId).toBe("campus-main");
+        expect(body.gradeLevelId).toBe("grade-8");
+        expect(body.section).toBe("A");
+      });
 
     const classId = (created.body as { id: string }).id;
 
@@ -141,10 +264,148 @@ describe("School management API", () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body.name).toBe("9 Fen");
+        expect(body.campusId).toBe("campus-main");
+        expect(body.gradeLevelId).toBe("grade-8");
       });
 
     await request(server).delete(`/classes/${classId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
     await request(server).get(`/classes/${classId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(404);
+  });
+
+  it("kampüs CRUD akışını tenant içinde tamamlar", async () => {
+    const created = await request(server)
+      .post("/campuses")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "Batı Kampus", code: "BTI" })
+      .expect(201);
+
+    const campusId = (created.body as { id: string }).id;
+
+    await request(server)
+      .patch(`/campuses/${campusId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "Batı Şube" })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.name).toBe("Batı Şube");
+        expect(body.code).toBe("BTI");
+      });
+
+    await request(server)
+      .get("/campuses")
+      .query({ q: "batı", sort: "name", page: "1", limit: "1" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: campusId, name: "Batı Şube" })]);
+      });
+
+    await request(server).delete(`/campuses/${campusId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+    await request(server).get(`/campuses/${campusId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(404);
+  });
+
+  it("seviye CRUD akışını tenant içinde tamamlar", async () => {
+    const created = await request(server)
+      .post("/grade-levels")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "9. Sınıf", code: "9" })
+      .expect(201);
+
+    const gradeLevelId = (created.body as { id: string }).id;
+
+    await request(server)
+      .patch(`/grade-levels/${gradeLevelId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "Hazırlık" })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.name).toBe("Hazırlık");
+        expect(body.code).toBe("9");
+      });
+
+    await request(server)
+      .get("/grade-levels")
+      .query({ q: "hazırlık", sort: "name", page: "1", limit: "1" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: gradeLevelId, name: "Hazırlık" })]);
+      });
+
+    await request(server).delete(`/grade-levels/${gradeLevelId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+    await request(server).get(`/grade-levels/${gradeLevelId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(404);
+  });
+
+  it("ders CRUD akışını tenant içinde tamamlar", async () => {
+    const created = await request(server)
+      .post("/courses")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "Fen Bilimleri", code: "FEN" })
+      .expect(201);
+
+    const courseId = (created.body as { id: string }).id;
+
+    await request(server)
+      .patch(`/courses/${courseId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "Fen" })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.name).toBe("Fen");
+        expect(body.code).toBe("FEN");
+      });
+
+    await request(server).delete(`/courses/${courseId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+    await request(server).get(`/courses/${courseId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(404);
+  });
+
+  it("akademik yıl ve dönem CRUD akışını tenant içinde tamamlar", async () => {
+    const yearCreated = await request(server)
+      .post("/academic-years")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "2026-2027", startsAt: "2026-09-01", endsAt: "2027-06-30", isActive: false })
+      .expect(201);
+    const yearId = (yearCreated.body as { id: string }).id;
+
+    await request(server)
+      .patch(`/academic-years/${yearId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "2026-27", isActive: true })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.name).toBe("2026-27");
+        expect(body.isActive).toBe(true);
+      });
+
+    const termCreated = await request(server)
+      .post("/academic-terms")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ academicYearId: yearId, name: "1. Donem", startsAt: "2026-09-01", endsAt: "2027-01-31", isActive: true })
+      .expect(201);
+    const termId = (termCreated.body as { id: string }).id;
+
+    await request(server)
+      .patch(`/academic-terms/${termId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "Guz Donemi" })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.name).toBe("Guz Donemi");
+      });
+
+    await request(server)
+      .get("/academic-terms")
+      .query({ q: "guz", sort: "name", page: "1", limit: "1" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: termId, name: "Guz Donemi" })]);
+      });
+
+    await request(server).delete(`/academic-terms/${termId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+    await request(server).get(`/academic-terms/${termId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(404);
+    await request(server).delete(`/academic-years/${yearId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+    await request(server).get(`/academic-years/${yearId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(404);
   });
 
   it("tenant A başka tenantId ile class oluşturamaz", async () => {
@@ -152,6 +413,38 @@ describe("School management API", () => {
       .post("/classes")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ tenantId: "tenant-b", name: "Gizli Sube" })
+      .expect(403);
+  });
+
+  it("tenant A başka tenant kampüsü ile class oluşturamaz", async () => {
+    await request(server)
+      .post("/classes")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "Gizli Kampus Sinifi", campusId: "campus-b" })
+      .expect(403);
+  });
+
+  it("tenant A başka tenant seviyesi ile class oluşturamaz", async () => {
+    await request(server)
+      .post("/classes")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "Gizli Seviye Sinifi", gradeLevelId: "grade-7" })
+      .expect(403);
+  });
+
+  it("tenant A başka tenantId ile ders oluşturamaz", async () => {
+    await request(server)
+      .post("/courses")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ tenantId: "tenant-b", name: "Gizli Ders" })
+      .expect(403);
+  });
+
+  it("tenant A başka tenant akademik yılına dönem oluşturamaz", async () => {
+    await request(server)
+      .post("/academic-terms")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ academicYearId: "academic-year-2026-b", name: "Gizli Donem", startsAt: "2026-02-01", endsAt: "2026-06-30" })
       .expect(403);
   });
 
@@ -350,15 +643,22 @@ describe("School management API", () => {
     const assignmentCreated = await request(server)
       .post("/teachers/teacher-a/assignments")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ classId: "class-a", role: "CLASS_TEACHER" })
+      .send({ classId: "class-a", courseId: "course-math", role: "CLASS_TEACHER" })
       .expect(201);
     const assignmentId = (assignmentCreated.body as { id: string }).id;
     expect(assignmentCreated.body).toEqual(expect.objectContaining({
       tenantId: "tenant-a",
       teacherId: "teacher-a",
       classId: "class-a",
+      courseId: "course-math",
       role: "CLASS_TEACHER",
     }));
+
+    await request(server)
+      .post("/teachers/teacher-a/assignments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ classId: "class-a", courseId: "course-turkish", role: "BRANCH_TEACHER" })
+      .expect(403);
 
     await request(server)
       .patch(`/teachers/teacher-a/assignments/${assignmentId}`)
@@ -407,9 +707,21 @@ describe("School management API", () => {
     const nextClass = await request(server)
       .post("/classes")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ name: "8-C", level: "8" })
+      .send({ name: "8-C", level: "8", campusId: "campus-main", gradeLevelId: "grade-8", section: "C" })
       .expect(201);
     const nextClassId = (nextClass.body as { id: string }).id;
+    const nextGradeLevel = await request(server)
+      .post("/grade-levels")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "9. Sınıf", code: "9" })
+      .expect(201);
+    const nextGradeLevelId = (nextGradeLevel.body as { id: string }).id;
+    const promotedClass = await request(server)
+      .post("/classes")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "9-C", level: "9", campusId: "campus-main", gradeLevelId: nextGradeLevelId, section: "C" })
+      .expect(201);
+    const promotedClassId = (promotedClass.body as { id: string }).id;
 
     const created = await request(server)
       .post("/students")
@@ -423,6 +735,23 @@ describe("School management API", () => {
       });
 
     const studentId = (created.body as { id: string }).id;
+
+    await request(server)
+      .get(`/students/${studentId}/enrollments`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([
+          expect.objectContaining({
+            studentId,
+            classId: "class-a",
+            academicYearId: "academic-year-2026",
+            termId: "term-2026-spring",
+            status: "ACTIVE",
+            reason: "CREATED",
+          }),
+        ]);
+      });
 
     await request(server)
       .get("/students")
@@ -460,10 +789,155 @@ describe("School management API", () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body).toEqual([
-          expect.objectContaining({ studentId, classId: "class-a", reason: "CREATED", endsAt: expect.any(String) }),
-          expect.objectContaining({ studentId, classId: nextClassId, reason: "CLASS_CHANGED" }),
+          expect.objectContaining({ studentId, classId: "class-a", academicYearId: "academic-year-2026", termId: "term-2026-spring", reason: "CREATED", endsAt: expect.any(String) }),
+          expect.objectContaining({ studentId, classId: nextClassId, academicYearId: "academic-year-2026", termId: "term-2026-spring", reason: "CLASS_CHANGED" }),
         ]);
         expect(body[1].endsAt).toBeUndefined();
+      });
+
+    await request(server)
+      .patch(`/students/${studentId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ status: "GRADUATED" })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.status).toBe("GRADUATED");
+      });
+
+    await request(server)
+      .get("/students")
+      .query({ status: "GRADUATED" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: studentId, status: "GRADUATED" })]);
+      });
+
+    await request(server)
+      .get(`/students/${studentId}/class-history`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body[1]).toEqual(expect.objectContaining({ studentId, classId: nextClassId, reason: "CLASS_CHANGED", endsAt: expect.any(String) }));
+      });
+
+    await request(server)
+      .get(`/students/${studentId}/enrollments`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([
+          expect.objectContaining({ studentId, classId: "class-a", reason: "CREATED", endsAt: expect.any(String) }),
+          expect.objectContaining({ studentId, classId: nextClassId, reason: "CLASS_CHANGED", status: "GRADUATED", endsAt: expect.any(String) }),
+        ]);
+      });
+
+    await request(server)
+      .post(`/students/${studentId}/enrollments/renew`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        academicYearId: "academic-year-2026",
+        termId: "term-2026-spring",
+        classId: nextClassId,
+        startsAt: "2026-06-05",
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.objectContaining({
+          studentId,
+          classId: nextClassId,
+          academicYearId: "academic-year-2026",
+          termId: "term-2026-spring",
+          status: "ACTIVE",
+          reason: "RENEWED",
+          startsAt: "2026-06-05",
+        }));
+      });
+
+    await request(server)
+      .post(`/students/${studentId}/enrollments/transfer`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        classId: "class-a",
+        academicYearId: "academic-year-2026",
+        termId: "term-2026-spring",
+        startsAt: "2026-06-06",
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.objectContaining({
+          studentId,
+          classId: "class-a",
+          status: "ACTIVE",
+          reason: "TRANSFERRED",
+          startsAt: "2026-06-06",
+        }));
+      });
+
+    await request(server)
+      .post("/students/enrollments/bulk-renew")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        studentIds: [studentId],
+        classIdBySourceClassId: { "class-a": nextClassId },
+        academicYearId: "academic-year-2026",
+        termId: "term-2026-spring",
+        startsAt: "2026-06-07",
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body.updatedCount).toBe(1);
+        expect(body.enrollments).toEqual([
+          expect.objectContaining({
+            studentId,
+            classId: nextClassId,
+            status: "ACTIVE",
+            reason: "RENEWED",
+            startsAt: "2026-06-07",
+          }),
+        ]);
+      });
+
+    await request(server)
+      .get("/students")
+      .query({ classId: nextClassId, status: "ACTIVE" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: studentId, classId: nextClassId, status: "ACTIVE" })]);
+      });
+
+    await request(server)
+      .post("/students/enrollments/bulk-renew")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        studentIds: [studentId],
+        useAutomaticClassMapping: true,
+        academicYearId: "academic-year-2026",
+        termId: "term-2026-spring",
+        startsAt: "2026-06-08",
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body.updatedCount).toBe(1);
+        expect(body.enrollments).toEqual([
+          expect.objectContaining({
+            studentId,
+            classId: promotedClassId,
+            status: "ACTIVE",
+            reason: "RENEWED",
+            startsAt: "2026-06-08",
+          }),
+        ]);
+      });
+
+    await request(server)
+      .get("/students")
+      .query({ classId: promotedClassId, status: "ACTIVE" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: studentId, classId: promotedClassId, status: "ACTIVE" })]);
       });
 
     await request(server)
@@ -471,7 +945,15 @@ describe("School management API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(204);
     await request(server)
+      .delete(`/classes/${promotedClassId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(204);
+    await request(server)
       .delete(`/classes/${nextClassId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(204);
+    await request(server)
+      .delete(`/grade-levels/${nextGradeLevelId}`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(204);
   });

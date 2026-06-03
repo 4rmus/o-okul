@@ -49,6 +49,8 @@ describe("Study Session API", () => {
         tenantId: "tenant-a",
         classId: "class-a",
         teacherId: "teacher-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
         studentIds: ["student-a"],
         title: "Matematik Etut",
         capacity: 4,
@@ -58,6 +60,23 @@ describe("Study Session API", () => {
     ]);
   });
 
+  it("etüt listesinde page/limit/q/sort uygular", async () => {
+    await request(server)
+      .get("/study-sessions")
+      .query({ q: "matematik", sort: "-startsAt", page: "1", limit: "1" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: "study-a", title: "Matematik Etut" })]);
+      });
+
+    await request(server)
+      .get("/study-sessions")
+      .query({ sort: "unknown" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(400);
+  });
+
   it("etüt CRUD akışını tenant içinde tamamlar", async () => {
     const created = await request(server)
       .post("/study-sessions")
@@ -65,6 +84,8 @@ describe("Study Session API", () => {
       .send({
         classId: "class-a",
         teacherId: "teacher-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
         studentIds: ["student-a"],
         title: "Problem Çözümü",
         capacity: 2,
@@ -166,6 +187,36 @@ describe("Study Session API", () => {
         teacherId: "teacher-a",
         studentIds: ["student-b"],
         title: "Gizli Öğrenci",
+        capacity: 2,
+        startsAt: "2026-06-02T15:00:00.000Z",
+        endsAt: "2026-06-02T16:00:00.000Z",
+      })
+      .expect(403);
+
+    await request(server)
+      .post("/study-sessions")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        classId: "class-a",
+        teacherId: "teacher-a",
+        courseId: "course-turkish",
+        studentIds: ["student-a"],
+        title: "Gizli Ders",
+        capacity: 2,
+        startsAt: "2026-06-02T15:00:00.000Z",
+        endsAt: "2026-06-02T16:00:00.000Z",
+      })
+      .expect(403);
+
+    await request(server)
+      .post("/study-sessions")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        classId: "class-a",
+        teacherId: "teacher-a",
+        termId: "term-2026-spring-b",
+        studentIds: ["student-a"],
+        title: "Gizli Donem",
         capacity: 2,
         startsAt: "2026-06-02T15:00:00.000Z",
         endsAt: "2026-06-02T16:00:00.000Z",

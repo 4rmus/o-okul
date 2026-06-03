@@ -16,6 +16,7 @@ import type {
   ReportStudentProgress,
   ReportStudentSnapshot,
   StudentClassHistoryRecord,
+  StudentEnrollmentRecord,
   StudentProfileRecord,
   StudentRecord,
   TeacherNoteRecord,
@@ -49,6 +50,7 @@ interface StudentDetail {
   progress: ReportStudentProgress | null;
   report: ReportStudentSnapshot | null;
   classHistory: StudentClassHistoryRecord[];
+  enrollments: StudentEnrollmentRecord[];
   teacherNotes: TeacherNoteRecord[];
 }
 
@@ -58,6 +60,17 @@ interface StudentListFilters {
   responsibleTeacherId: string;
   status: "" | StudentRecord["status"];
   guardianLinked: "" | "true" | "false";
+}
+
+interface EnrollmentActionState {
+  startsAt: string;
+  classId: string;
+}
+
+interface BulkEnrollmentActionState extends EnrollmentActionState {
+  studentIds: string[];
+  classIdBySourceClassId: Record<string, string>;
+  useAutomaticClassMapping: boolean;
 }
 
 const emptyForm: StudentFormState = {
@@ -83,6 +96,19 @@ const emptyFilters: StudentListFilters = {
   guardianLinked: "",
 };
 
+const emptyEnrollmentAction: EnrollmentActionState = {
+  startsAt: "",
+  classId: "",
+};
+
+const emptyBulkEnrollmentAction: BulkEnrollmentActionState = {
+  startsAt: "",
+  classId: "",
+  studentIds: [],
+  classIdBySourceClassId: {},
+  useAutomaticClassMapping: false,
+};
+
 export function StudentsPage() {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
@@ -100,8 +126,16 @@ export function StudentsPage() {
   const [form, setForm] = useState<StudentFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isEnrollmentSaving, setIsEnrollmentSaving] = useState(false);
+  const [isBulkEnrollmentSaving, setIsBulkEnrollmentSaving] = useState(false);
+  const [enrollmentAction, setEnrollmentAction] = useState<EnrollmentActionState>(emptyEnrollmentAction);
+  const [bulkEnrollmentAction, setBulkEnrollmentAction] = useState<BulkEnrollmentActionState>({
+    ...emptyBulkEnrollmentAction,
+    startsAt: new Date().toISOString().slice(0, 10),
+  });
   const [error, setError] = useState("");
   const rows = studentsQuery.data?.data ?? [];
+  const sourceClassIds = [...new Set(rows.map((student) => student.classId).filter((classId): classId is string => Boolean(classId)))].sort();
 
   const detailQuery = useQuery({
     queryKey: ["next-student-detail", auth?.session.tenantId ?? "anonymous", editingStudent?.id ?? "none"],
@@ -193,6 +227,10 @@ export function StudentsPage() {
       responsibleTeacherId: student.responsibleTeacherId ?? "",
       status: student.status,
     });
+    setEnrollmentAction({
+      startsAt: new Date().toISOString().slice(0, 10),
+      classId: student.classId ?? "",
+    });
     setError("");
     setIsFormOpen(true);
   }
@@ -201,6 +239,7 @@ export function StudentsPage() {
     setIsFormOpen(false);
     setEditingStudent(null);
     setForm(emptyForm);
+    setEnrollmentAction(emptyEnrollmentAction);
     setError("");
   }
 
@@ -277,6 +316,74 @@ export function StudentsPage() {
     }
   }
 
+  async function handleRenewEnrollment() {
+    if (!auth || !editingStudent || isEnrollmentSaving) return;
+
+    setError("");
+    setIsEnrollmentSaving(true);
+    try {
+      await renewStudentEnrollment(auth.accessToken, editingStudent.id, {
+        classId: enrollmentAction.classId,
+        startsAt: enrollmentAction.startsAt,
+      });
+      setForm((current) => ({ ...current, classId: enrollmentAction.classId, status: "ACTIVE" }));
+      void queryClient.invalidateQueries({ queryKey: listQueryKey });
+      void queryClient.invalidateQueries({ queryKey: ["next-student-detail"] });
+    } catch {
+      setError("Kayıt yenileme yapılamadı.");
+    } finally {
+      setIsEnrollmentSaving(false);
+    }
+  }
+
+  async function handleTransferEnrollment() {
+    if (!auth || !editingStudent || isEnrollmentSaving) return;
+
+    setError("");
+    setIsEnrollmentSaving(true);
+    try {
+      await transferStudentEnrollment(auth.accessToken, editingStudent.id, {
+        classId: enrollmentAction.classId,
+        startsAt: enrollmentAction.startsAt,
+      });
+      setForm((current) => ({
+        ...current,
+        classId: enrollmentAction.classId,
+        status: enrollmentAction.classId ? "ACTIVE" : "TRANSFERRED",
+      }));
+      void queryClient.invalidateQueries({ queryKey: listQueryKey });
+      void queryClient.invalidateQueries({ queryKey: ["next-student-detail"] });
+    } catch {
+      setError("Nakil işlemi yapılamadı.");
+    } finally {
+      setIsEnrollmentSaving(false);
+    }
+  }
+
+  async function handleBulkRenewEnrollment() {
+    if (!auth || isBulkEnrollmentSaving || rows.length === 0) return;
+
+    setError("");
+    setIsBulkEnrollmentSaving(true);
+    try {
+      await bulkRenewStudentEnrollments(auth.accessToken, {
+        classId: bulkEnrollmentAction.classId,
+        classIdBySourceClassId: Object.fromEntries(
+          Object.entries(bulkEnrollmentAction.classIdBySourceClassId).filter(([, classId]) => Boolean(classId)),
+        ),
+        startsAt: bulkEnrollmentAction.startsAt,
+        studentIds: rows.map((student) => student.id),
+        useAutomaticClassMapping: bulkEnrollmentAction.useAutomaticClassMapping,
+      });
+      void queryClient.invalidateQueries({ queryKey: listQueryKey });
+      void queryClient.invalidateQueries({ queryKey: ["next-student-detail"] });
+    } catch {
+      setError("Toplu dönem geçişi yapılamadı.");
+    } finally {
+      setIsBulkEnrollmentSaving(false);
+    }
+  }
+
   return (
     <>
       <CrudPage
@@ -343,6 +450,8 @@ export function StudentsPage() {
                   <option value="">Tümü</option>
                   <option value="ACTIVE">Aktif</option>
                   <option value="PASSIVE">Pasif</option>
+                  <option value="GRADUATED">Mezun</option>
+                  <option value="TRANSFERRED">Nakil</option>
                 </select>
               </label>
               <label>
@@ -359,6 +468,63 @@ export function StudentsPage() {
                   <option value="false">Bağlı değil</option>
                 </select>
               </label>
+            </div>
+            <div className="next-list-controls" aria-label="Toplu dönem geçişi">
+              <label>
+                Geçiş tarihi
+                <Input
+                  type="date"
+                  value={bulkEnrollmentAction.startsAt}
+                  onChange={(event) => setBulkEnrollmentAction((current) => ({ ...current, startsAt: event.target.value }))}
+                />
+              </label>
+              <label>
+                Hedef sınıf
+                <select
+                  value={bulkEnrollmentAction.classId}
+                  onChange={(event) => setBulkEnrollmentAction((current) => ({ ...current, classId: event.target.value }))}
+                >
+                  <option value="">Sınıfsız</option>
+                  {classes.map((klass) => (
+                    <option key={klass.id} value={klass.id}>
+                      {klass.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="next-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={bulkEnrollmentAction.useAutomaticClassMapping}
+                  onChange={(event) => setBulkEnrollmentAction((current) => ({ ...current, useAutomaticClassMapping: event.target.checked }))}
+                />
+                Otomatik seviye yükselt
+              </label>
+              {sourceClassIds.map((sourceClassId) => (
+                <label key={sourceClassId}>
+                  {(classNameById.get(sourceClassId) ?? sourceClassId)} hedefi
+                  <select
+                    value={bulkEnrollmentAction.classIdBySourceClassId[sourceClassId] ?? ""}
+                    onChange={(event) => setBulkEnrollmentAction((current) => ({
+                      ...current,
+                      classIdBySourceClassId: {
+                        ...current.classIdBySourceClassId,
+                        [sourceClassId]: event.target.value,
+                      },
+                    }))}
+                  >
+                    <option value="">Varsayılan</option>
+                    {classes.map((klass) => (
+                      <option key={klass.id} value={klass.id}>
+                        {klass.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+              <Button type="button" variant="secondary" onClick={() => void handleBulkRenewEnrollment()} disabled={isBulkEnrollmentSaving || rows.length === 0}>
+                Listelenenleri geçir
+              </Button>
             </div>
             <Button onClick={openCreateForm}>
               <Plus size={17} aria-hidden="true" />
@@ -436,6 +602,8 @@ export function StudentsPage() {
           >
             <option value="ACTIVE">Aktif</option>
             <option value="PASSIVE">Pasif</option>
+            <option value="GRADUATED">Mezun</option>
+            <option value="TRANSFERRED">Nakil</option>
           </select>
         </label>
         <label>
@@ -521,6 +689,41 @@ export function StudentsPage() {
             />
           </label>
         </div>
+        {editingStudent ? (
+          <section className="next-form-section" aria-label="Kayıt işlemleri">
+            <p className="next-form-section-title">Kayıt işlemleri</p>
+            <label>
+              İşlem tarihi
+              <Input
+                type="date"
+                value={enrollmentAction.startsAt}
+                onChange={(event) => setEnrollmentAction((current) => ({ ...current, startsAt: event.target.value }))}
+              />
+            </label>
+            <label>
+              Yeni sınıf
+              <select
+                value={enrollmentAction.classId}
+                onChange={(event) => setEnrollmentAction((current) => ({ ...current, classId: event.target.value }))}
+              >
+                <option value="">Kurumdan ayrıldı</option>
+                {classes.map((klass) => (
+                  <option key={klass.id} value={klass.id}>
+                    {klass.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="next-form-list">
+              <Button type="button" onClick={() => void handleRenewEnrollment()} disabled={isEnrollmentSaving}>
+                Kayıt yenile
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => void handleTransferEnrollment()} disabled={isEnrollmentSaving}>
+                Nakil işle
+              </Button>
+            </div>
+          </section>
+        ) : null}
         {editingStudent ? <StudentDetailPanel detail={detail} loading={detailQuery.isPending} /> : null}
       </FormModal>
     </>
@@ -563,11 +766,11 @@ function StudentDetailPanel({ detail, loading }: { detail?: StudentDetail; loadi
         </div>
         <div>
           <dt>Son net</dt>
-          <dd>{formatNumber(detail?.report?.total.net)}</dd>
+          <dd>{formatNumber(detail?.report?.total?.net)}</dd>
         </div>
         <div>
           <dt>Hata kitapçığı</dt>
-          <dd>{detail?.errorBooklet ? `${detail.errorBooklet.items.length} soru` : "-"}</dd>
+          <dd>{detail?.errorBooklet?.items ? `${detail.errorBooklet.items.length} soru` : "-"}</dd>
         </div>
         <div>
           <dt>Net gelişimi</dt>
@@ -588,7 +791,20 @@ function StudentDetailPanel({ detail, loading }: { detail?: StudentDetail; loadi
           <ul>
             {detail.classHistory.map((record) => (
               <li key={record.id}>
-                {record.classId ?? "Sınıfsız"} · {formatDate(record.startsAt)}
+                {record.classId ?? "Sınıfsız"} · {formatClassHistoryAcademicContext(record)} · {formatDate(record.startsAt)}
+                {record.endsAt ? ` - ${formatDate(record.endsAt)}` : " - devam ediyor"}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {detail && detail.enrollments.length > 0 ? (
+        <div className="next-form-guardians">
+          <span className="next-field-hint">Kayıt geçmişi</span>
+          <ul>
+            {detail.enrollments.map((record) => (
+              <li key={record.id}>
+                {formatEnrollmentReason(record.reason)} · {formatStudentStatus(record.status)} · {record.classId ?? "Sınıfsız"} · {formatClassHistoryAcademicContext(record)} · {formatDate(record.startsAt)}
                 {record.endsAt ? ` - ${formatDate(record.endsAt)}` : " - devam ediyor"}
               </li>
             ))}
@@ -650,6 +866,7 @@ async function loadStudentDetail(accessToken: string, id: string): Promise<Stude
     progress,
     report,
     classHistory,
+    enrollments,
     teacherNotes,
   ] = await Promise.all([
     apiRequestOrNull<AttendanceSummaryRecord>(accessToken, `${apiBaseUrl}/attendance/summary?studentId=${encodeURIComponent(id)}`),
@@ -658,9 +875,10 @@ async function loadStudentDetail(accessToken: string, id: string): Promise<Stude
     apiRequest<GuardianRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/guardians`),
     loadStudentHomeworkAssignments(accessToken, id),
     apiRequest<PaymentPlanWithInstallmentsRecord[]>(accessToken, `${apiBaseUrl}/payment-plans?studentId=${encodeURIComponent(id)}`),
-    apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/exams/exam-demo/reports/students/${encodeURIComponent(id)}/progress`),
+    apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/exams/exam-demo-isem-lgs-1/reports/students/${encodeURIComponent(id)}/progress`),
     loadLatestStudentReport(accessToken, id),
     apiRequest<StudentClassHistoryRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/class-history`),
+    apiRequest<StudentEnrollmentRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/enrollments`),
     apiRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/teacher-notes?studentId=${encodeURIComponent(id)}`),
   ]);
   return {
@@ -673,6 +891,7 @@ async function loadStudentDetail(accessToken: string, id: string): Promise<Stude
     progress,
     report,
     classHistory,
+    enrollments,
     teacherNotes,
   };
 }
@@ -695,7 +914,7 @@ async function loadLatestStudentReport(accessToken: string, studentId: string): 
   if (!snapshot) return null;
   return apiRequestOrNull<ReportStudentSnapshot>(
     accessToken,
-    `${apiBaseUrl}/exams/exam-demo/reports/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}`,
+    `${apiBaseUrl}/exams/exam-demo-isem-lgs-1/reports/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}`,
   );
 }
 
@@ -704,12 +923,12 @@ async function loadLatestErrorBooklet(accessToken: string, studentId: string): P
   if (!snapshot) return null;
   return apiRequestOrNull<ReportErrorBooklet>(
     accessToken,
-    `${apiBaseUrl}/exams/exam-demo/reports/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}/error-booklet`,
+    `${apiBaseUrl}/exams/exam-demo-isem-lgs-1/reports/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}/error-booklet`,
   );
 }
 
 async function loadLatestSnapshot(accessToken: string, studentId: string): Promise<ReportSnapshotRecord | null> {
-  const snapshots = await apiRequest<ReportSnapshotRecord[]>(accessToken, `${apiBaseUrl}/exams/exam-demo/reports/snapshots`);
+  const snapshots = await apiRequest<ReportSnapshotRecord[]>(accessToken, `${apiBaseUrl}/exams/exam-demo-isem-lgs-1/reports/snapshots`);
   return snapshots.find((snapshot) =>
     snapshot.status === "READY" && snapshot.snapshotData?.students?.some((student) => student.studentId === studentId),
   ) ?? null;
@@ -751,6 +970,30 @@ async function updateStudentProfile(accessToken: string, id: string, input: Stud
     body: JSON.stringify(input),
     headers: { "content-type": "application/json" },
     method: "PATCH",
+  });
+}
+
+async function renewStudentEnrollment(accessToken: string, id: string, input: EnrollmentActionState) {
+  return apiRequest<StudentEnrollmentRecord>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/enrollments/renew`, {
+    body: JSON.stringify(input),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+}
+
+async function transferStudentEnrollment(accessToken: string, id: string, input: EnrollmentActionState) {
+  return apiRequest<StudentEnrollmentRecord | null>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/enrollments/transfer`, {
+    body: JSON.stringify(input),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+}
+
+async function bulkRenewStudentEnrollments(accessToken: string, input: BulkEnrollmentActionState) {
+  return apiRequest<{ updatedCount: number; enrollments: StudentEnrollmentRecord[] }>(accessToken, `${apiBaseUrl}/students/enrollments/bulk-renew`, {
+    body: JSON.stringify(input),
+    headers: { "content-type": "application/json" },
+    method: "POST",
   });
 }
 
@@ -808,7 +1051,27 @@ function formatDelta(value: number | undefined) {
 }
 
 function formatStudentStatus(status: StudentRecord["status"]) {
-  return status === "PASSIVE" ? "Pasif" : "Aktif";
+  const labels: Record<StudentRecord["status"], string> = {
+    ACTIVE: "Aktif",
+    GRADUATED: "Mezun",
+    PASSIVE: "Pasif",
+    TRANSFERRED: "Nakil",
+  };
+  return labels[status] ?? status;
+}
+
+function formatClassHistoryAcademicContext(record: StudentClassHistoryRecord) {
+  return [record.academicYearId, record.termId].filter(Boolean).join(" / ") || "Akademik bağlam yok";
+}
+
+function formatEnrollmentReason(reason: string | undefined) {
+  const labels: Record<string, string> = {
+    CLASS_CHANGED: "Sınıf değişikliği",
+    CREATED: "İlk kayıt",
+    RENEWED: "Kayıt yenileme",
+    TRANSFERRED: "Nakil",
+  };
+  return reason ? labels[reason] ?? reason : "Kayıt";
 }
 
 function formatDate(value: string) {

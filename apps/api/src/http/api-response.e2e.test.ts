@@ -39,7 +39,15 @@ describe("API success response envelope", () => {
       .expect(200);
 
     expect(response.body).toEqual({
-      data: { id: "class-a", tenantId: "tenant-a", name: "8-A", level: "8" },
+      data: {
+        id: "class-a",
+        tenantId: "tenant-a",
+        campusId: "campus-main",
+        gradeLevelId: "grade-8",
+        name: "8-A",
+        level: "8",
+        section: "A",
+      },
     });
   });
 
@@ -50,7 +58,15 @@ describe("API success response envelope", () => {
       .expect(200);
 
     expect(response.body).toEqual({
-      data: [{ id: "class-a", tenantId: "tenant-a", name: "8-A", level: "8" }],
+      data: [{
+        id: "class-a",
+        tenantId: "tenant-a",
+        campusId: "campus-main",
+        gradeLevelId: "grade-8",
+        name: "8-A",
+        level: "8",
+        section: "A",
+      }],
       meta: { total: 1, page: 1, limit: 1, totalPages: 1 },
     });
   });

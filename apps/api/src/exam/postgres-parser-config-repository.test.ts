@@ -30,7 +30,7 @@ describe("PostgresParserConfigRepository", () => {
       () => repository.saveApproved(createInput()),
     );
 
-    const businessQueries = queries.filter((query) => !query.sql.includes("set_config"));
+    const businessQueries = queries.filter((query) => !query.sql.includes("set_config") && !["BEGIN", "COMMIT", "ROLLBACK"].includes(query.sql));
     expect(businessQueries).toHaveLength(1);
     expect(businessQueries[0]?.sql).toContain('INSERT INTO "ParserConfig"');
     expect(businessQueries[0]?.sql).toContain('"id"');

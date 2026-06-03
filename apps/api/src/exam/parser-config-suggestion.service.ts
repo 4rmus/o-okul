@@ -1,5 +1,10 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
-import { FormatAnalyzerService, type ParserConfigSuggestion } from "@uzman-hocam/shared-types";
+import {
+  FormatAnalyzerService,
+  getParserConfigPresetSuggestion,
+  type ParserConfigPreset,
+  type ParserConfigSuggestion,
+} from "@uzman-hocam/shared-types";
 import type { RequestContext } from "../context/request-context.js";
 
 export interface ParserConfigSuggestionInput {
@@ -7,6 +12,7 @@ export interface ParserConfigSuggestionInput {
   sampleText?: string;
   fileBase64?: string;
   sampleSize?: number;
+  preset?: ParserConfigPreset;
 }
 
 export interface ParserConfigSuggestionResult {
@@ -28,6 +34,21 @@ export class ParserConfigSuggestionService {
     }
 
     const examId = required(input.examId, "PARSER_CONFIG_EXAM_REQUIRED");
+    if (input.preset) {
+      try {
+        return {
+          examId,
+          suggestion: getParserConfigPresetSuggestion(input.preset),
+          status: "suggested",
+        };
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith("FORMAT_ANALYZER_")) {
+          throw new BadRequestException(error.message);
+        }
+        throw error;
+      }
+    }
+
     const content = readContent(input);
 
     try {

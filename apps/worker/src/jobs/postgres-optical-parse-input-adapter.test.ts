@@ -27,6 +27,7 @@ describe("PostgresOpticalParseInputAdapter", () => {
         return [{
           participantId: "participant-a",
           studentNo: "12345",
+          nationalIdHash: "national-hash-a",
           participantNo: "P-12345",
           bookletType: "A",
         }];
@@ -52,6 +53,7 @@ describe("PostgresOpticalParseInputAdapter", () => {
       participants: [{
         participantId: "participant-a",
         studentNo: "12345",
+        nationalIdHash: "national-hash-a",
         participantNo: "P-12345",
         bookletType: "A",
       }],
@@ -63,6 +65,7 @@ describe("PostgresOpticalParseInputAdapter", () => {
     expect(rawImportQuery?.values).toEqual(["tenant-a", "raw-import-a"]);
     const participantQuery = client.queries.find((query) => query.sql.includes('FROM "ExamParticipant"'));
     expect(participantQuery?.sql).toContain('INNER JOIN "Student" s');
+    expect(participantQuery?.sql).toContain('s."nationalIdHash" AS "nationalIdHash"');
     expect(participantQuery?.sql).toContain('ep."status" IN (\'REGISTERED\', \'ATTENDED\')');
     expect(participantQuery?.values).toEqual(["tenant-a", "exam-a"]);
     expect(client.queries.at(-1)?.sql).toBe("COMMIT");
@@ -72,6 +75,54 @@ describe("PostgresOpticalParseInputAdapter", () => {
     const adapter = new PostgresOpticalParseInputAdapter(new FakePool(new FakeClient(() => [])));
 
     await expect(adapter.load({ tenantId: "tenant-a", rawImportId: "raw-import-a" })).rejects.toThrow("OPTICAL_PARSE_INPUT_NOT_FOUND");
+  });
+
+  it("fixed ParserConfig içinde çok-segmentli cevap alanını kabul eder", async () => {
+    const fieldMapping = {
+      studentNo: { kind: "fixed", start: 11, length: 4 },
+      nationalId: { kind: "fixed", start: 36, length: 11 },
+      bookletType: { kind: "fixed", start: 50, length: 1 },
+      answers: {
+        kind: "fixed",
+        estimatedQuestionCount: 90,
+        segments: [
+          { start: 51, length: 20 },
+          { start: 71, length: 10 },
+          { start: 91, length: 10 },
+          { start: 111, length: 10 },
+          { start: 131, length: 20 },
+          { start: 151, length: 20 },
+        ],
+      },
+    };
+    const client = new FakeClient((sql) => {
+      if (sql.includes('FROM "RawImport"')) {
+        return [{
+          tenantId: "tenant-a",
+          examId: "exam-a",
+          rawImportId: "raw-import-a",
+          parserConfigVersion: "parser-v1",
+          s3Key: "raw/import/a.dat",
+          fileName: "a.dat",
+          delimiter: "FIXED",
+          skipHeaderLines: 0,
+          fieldMapping,
+        }];
+      }
+      if (sql.includes('FROM "ExamParticipant"')) {
+        return [];
+      }
+      return [];
+    });
+    const adapter = new PostgresOpticalParseInputAdapter(new FakePool(client));
+
+    const result = await adapter.load({ tenantId: "tenant-a", rawImportId: "raw-import-a" });
+
+    expect(result.parserConfig).toEqual({
+      delimiter: "FIXED",
+      skipHeaderLines: 0,
+      fieldMapping,
+    });
   });
 
   it("ParserConfig fieldMapping şekli hatalıysa reddeder", async () => {

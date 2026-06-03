@@ -11,6 +11,7 @@ describe("postgres exam evaluation adapter", () => {
         return [{
           examId: "exam-a",
           studentId: "student-a",
+          bookletType: "A",
           parserConfigVersion: "parser-v1",
           answers: [{ questionNo: 1, answer: "A" }, { questionNo: 2, answer: "" }],
           keyData: {
@@ -38,7 +39,9 @@ describe("postgres exam evaluation adapter", () => {
       examId: "exam-a",
       studentId: "student-a",
       parserConfigVersion: "parser-v1",
+      bookletType: "A",
       answers: [{ questionNo: 1, answer: "A" }, { questionNo: 2, answer: "" }],
+      bookletVariants: [],
       answerKey: [
         { questionNo: 1, correctAnswer: "A", branch: "Matematik" },
         { questionNo: 2, correctAnswer: "B", branch: "Türkçe" },
@@ -68,7 +71,38 @@ describe("postgres exam evaluation adapter", () => {
     expect(select?.sql).toContain('INNER JOIN "AnswerKey" ak');
     expect(select?.sql).toContain('AND ak."examId" = pa."examId"');
     expect(select?.values).toEqual(["tenant-a", "raw-import-a", "participant-a", "answer-key-a"]);
+    expect(client.queries.find((query) => query.sql.includes('FROM "ExamBookletVariant"'))?.values).toEqual([
+      "tenant-a",
+      "exam-a",
+    ]);
     expect(client.queries.at(-1)?.sql).toBe("COMMIT");
+  });
+
+  it("ExamBookletVariant kayıtlarını scoring input'a taşır", async () => {
+    const client = new FakeClient((sql) => {
+      if (sql.includes('FROM "ParsedAnswer"')) {
+        return [{
+          examId: "exam-a",
+          studentId: "student-a",
+          bookletType: "B",
+          parserConfigVersion: "parser-v1",
+          answers: [{ questionNo: 1, answer: "B" }, { questionNo: 2, answer: "A" }],
+          keyData: [{ questionNo: 1, correctAnswer: "A", branch: "Matematik" }],
+          scoringConfig: null,
+          answerKeyVersion: "answer-key-v1",
+        }];
+      }
+      if (sql.includes('FROM "ExamBookletVariant"')) {
+        return [{ code: "B", permutation: [2, 1] }];
+      }
+      return [];
+    });
+    const adapter = new PostgresExamEvaluationAdapter(new FakePool(client));
+
+    const input = await adapter.loadInput(createInput());
+
+    expect(input.bookletType).toBe("B");
+    expect(input.bookletVariants).toEqual([{ code: "B", permutation: [2, 1] }]);
   });
 
   it("input kaydı yoksa net hata verir", async () => {
@@ -77,12 +111,79 @@ describe("postgres exam evaluation adapter", () => {
     await expect(adapter.loadInput(createInput())).rejects.toThrow("EXAM_EVALUATION_INPUT_NOT_FOUND");
   });
 
+  it("ParsedAnswer yoksa çözülmüş karantinadan cevapları materyalize edip input yükler", async () => {
+    let parsedAnswerSelectCount = 0;
+    const client = new FakeClient((sql) => {
+      if (sql.includes('FROM "ParsedAnswer"')) {
+        parsedAnswerSelectCount += 1;
+        if (parsedAnswerSelectCount === 1) {
+          return [];
+        }
+        return [{
+          examId: "exam-a",
+          studentId: "student-a",
+          bookletType: "A",
+          parserConfigVersion: "parser-v1",
+          answers: [{ questionNo: 1, answer: "A" }, { questionNo: 2, answer: "B" }],
+          keyData: {
+            questions: [
+              { questionNo: 1, correctAnswer: "A", branch: "Matematik" },
+              { questionNo: 2, correctAnswer: "B", branch: "Türkçe" },
+            ],
+          },
+          scoringConfig: null,
+          answerKeyVersion: "answer-key-v1",
+        }];
+      }
+      if (sql.includes('FROM "ImportQuarantine"')) {
+        return [{
+          tenantId: "tenant-a",
+          examId: "exam-a",
+          rawImportId: "raw-import-a",
+          rowNumber: 12,
+          rawRow: { line: "99999\tA\tAB" },
+          parserConfigVersion: "parser-v1",
+          delimiter: "TAB",
+          skipHeaderLines: 0,
+          fieldMapping: {
+            studentNo: { kind: "delimited", column: 0 },
+            bookletType: { kind: "delimited", column: 1 },
+            answers: { kind: "delimited", column: 2, estimatedQuestionCount: 2 },
+          },
+        }];
+      }
+      return [];
+    });
+    const adapter = new PostgresExamEvaluationAdapter(new FakePool(client), () => "2026-05-30T03:00:00.000Z");
+
+    const input = await adapter.loadInput(createInput());
+
+    const quarantineSelect = client.queries.find((query) => query.sql.includes('FROM "ImportQuarantine"'));
+    const parsedInsert = client.queries.find((query) => query.sql.includes('INSERT INTO "ParsedAnswer"'));
+    expect(parsedAnswerSelectCount).toBe(2);
+    expect(quarantineSelect?.sql).toContain('q."status" = \'RESOLVED\'');
+    expect(quarantineSelect?.sql).toContain('ep."studentId" = q."resolvedStudentId"');
+    expect(quarantineSelect?.values).toEqual(["tenant-a", "raw-import-a", "participant-a"]);
+    expect(parsedInsert?.sql).toContain('ON CONFLICT ("tenantId", "rawImportId", "participantId", "parserConfigVersion")');
+    expect(parsedInsert?.values).toEqual([
+      "tenant-a",
+      "exam-a",
+      "raw-import-a",
+      "participant-a",
+      "parser-v1",
+      12,
+      JSON.stringify([{ questionNo: 1, answer: "A" }, { questionNo: 2, answer: "B" }]),
+    ]);
+    expect(input.answers).toEqual([{ questionNo: 1, answer: "A" }, { questionNo: 2, answer: "B" }]);
+  });
+
   it("hatalı parsed answer JSON değerini reddeder", async () => {
     const client = new FakeClient((sql) => {
       if (sql.includes('FROM "ParsedAnswer"')) {
         return [{
           examId: "exam-a",
           studentId: "student-a",
+          bookletType: "A",
           parserConfigVersion: "parser-v1",
           answers: [{ questionNo: 0, answer: "A" }],
           keyData: [{ questionNo: 1, correctAnswer: "A", branch: "Matematik" }],
@@ -128,18 +229,26 @@ describe("postgres exam evaluation adapter", () => {
 
   it("insert conflict durumunda mevcut sonucu okuyup döner", async () => {
     const result = createResult();
+    const existingResult = {
+      ...result,
+      score: {
+        ...result.score,
+        total: { ...result.score.total, correct: 2, net: 2, rawScore: 2, standardScore: 2 },
+      },
+    };
     const client = new FakeClient((sql) => {
       if (sql.includes('INSERT INTO "ExamResult"')) return [];
-      if (sql.includes('FROM "ExamResult"')) return [createResultRow(result)];
+      if (sql.includes('FROM "ExamResult"')) return [createResultRow(existingResult)];
       return [];
     });
     const adapter = new PostgresExamEvaluationAdapter(new FakePool(client));
 
-    await expect(adapter.saveResult(result)).resolves.toEqual(result);
+    await expect(adapter.saveResult(result)).resolves.toEqual(existingResult);
     expect(client.queries.find((query) => query.sql.includes('FROM "ExamResult"'))?.values).toEqual([
       "tenant-a",
       `participant-a_answer-key-v1_parser-v1_${scoringEngineVersion}`,
     ]);
+    expect(client.queries.some((query) => query.sql.includes("DO UPDATE"))).toBe(false);
   });
 });
 

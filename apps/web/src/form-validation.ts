@@ -15,9 +15,120 @@ const optionalDate = optionalText().refine((value) => !value || /^\d{4}-\d{2}-\d
   message: "Doğum tarihi geçerli olmalıdır.",
 });
 
+const requiredDateTime = (fieldName: string) => requiredText(fieldName).refine((value) => !Number.isNaN(Date.parse(value)), {
+  message: `${fieldName} geçerli olmalıdır.`,
+});
+
 export const classFormSchema = z.object({
   name: requiredText("Sınıf adı"),
   level: optionalText(),
+  campusId: optionalText(),
+  gradeLevelId: optionalText(),
+  section: optionalText(),
+});
+
+export const campusFormSchema = z.object({
+  name: requiredText("Kampüs adı"),
+  code: optionalText(),
+});
+
+export const gradeLevelFormSchema = z.object({
+  name: requiredText("Seviye adı"),
+  code: optionalText(),
+});
+
+export const academicYearFormSchema = z.object({
+  name: requiredText("Akademik yıl adı"),
+  startsAt: optionalDate.refine((value) => Boolean(value), { message: "Başlangıç zorunludur." }),
+  endsAt: optionalDate.refine((value) => Boolean(value), { message: "Bitiş zorunludur." }),
+  isActive: z.boolean(),
+}).superRefine((value, context) => {
+  if (Date.parse(value.startsAt) >= Date.parse(value.endsAt)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Bitiş başlangıçtan sonra olmalıdır.",
+      path: ["endsAt"],
+    });
+  }
+});
+
+export const academicTermFormSchema = z.object({
+  academicYearId: requiredText("Akademik yıl"),
+  name: requiredText("Dönem adı"),
+  startsAt: optionalDate.refine((value) => Boolean(value), { message: "Başlangıç zorunludur." }),
+  endsAt: optionalDate.refine((value) => Boolean(value), { message: "Bitiş zorunludur." }),
+  isActive: z.boolean(),
+}).superRefine((value, context) => {
+  if (Date.parse(value.startsAt) >= Date.parse(value.endsAt)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Bitiş başlangıçtan sonra olmalıdır.",
+      path: ["endsAt"],
+    });
+  }
+});
+
+export const courseFormSchema = z.object({
+  name: requiredText("Ders adı"),
+  code: optionalText(),
+});
+
+export const examFormSchema = z.object({
+  title: requiredText("Sınav adı"),
+  startsAt: optionalText().refine((value) => !value || !Number.isNaN(Date.parse(value)), {
+    message: "Başlangıç geçerli olmalıdır.",
+  }),
+});
+
+export const examParticipantFormSchema = z.object({
+  studentId: requiredText("Öğrenci"),
+  participantNo: optionalText(),
+  bookletType: optionalText(),
+});
+
+export const scheduleLessonFormSchema = z.object({
+  classId: requiredText("Sınıf"),
+  teacherId: requiredText("Öğretmen"),
+  courseId: optionalText(),
+  termId: optionalText(),
+  title: requiredText("Ders başlığı"),
+  startsAt: requiredDateTime("Başlangıç"),
+  endsAt: requiredDateTime("Bitiş"),
+}).superRefine((value, context) => {
+  if (Date.parse(value.startsAt) >= Date.parse(value.endsAt)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Bitiş başlangıçtan sonra olmalıdır.",
+      path: ["endsAt"],
+    });
+  }
+});
+
+export const studySessionFormSchema = z.object({
+  classId: requiredText("Sınıf"),
+  teacherId: requiredText("Öğretmen"),
+  courseId: optionalText(),
+  termId: optionalText(),
+  studentIds: z.array(z.string()).min(1, "En az bir öğrenci seçilmelidir."),
+  title: requiredText("Etüt başlığı"),
+  capacity: z.coerce.number().int("Kapasite tam sayı olmalıdır.").min(1, "Kapasite en az 1 olmalıdır."),
+  startsAt: requiredDateTime("Başlangıç"),
+  endsAt: requiredDateTime("Bitiş"),
+}).superRefine((value, context) => {
+  if (Date.parse(value.startsAt) >= Date.parse(value.endsAt)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Bitiş başlangıçtan sonra olmalıdır.",
+      path: ["endsAt"],
+    });
+  }
+  if (value.studentIds.length > value.capacity) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Kapasite öğrenci sayısından küçük olamaz.",
+      path: ["capacity"],
+    });
+  }
 });
 
 export const teacherFormSchema = z.object({
@@ -30,6 +141,8 @@ export const teacherAssignmentFormSchema = z.object({
   role: z.enum(["CLASS_TEACHER", "BRANCH_TEACHER", "GUIDANCE_COUNSELOR", "RESPONSIBLE_TEACHER"]),
   classId: optionalText(),
   studentId: optionalText(),
+  courseId: optionalText(),
+  termId: optionalText(),
   startsAt: optionalDate,
   endsAt: optionalDate,
 }).superRefine((value, context) => {
@@ -53,7 +166,7 @@ export const studentFormSchema = z.object({
   lastName: requiredText("Soyad"),
   classId: optionalText(),
   responsibleTeacherId: optionalText(),
-  status: z.enum(["ACTIVE", "PASSIVE"]),
+  status: z.enum(["ACTIVE", "PASSIVE", "GRADUATED", "TRANSFERRED"]),
   nationalId: optionalNationalId,
   phone: optionalText(),
   email: optionalEmail,
@@ -81,7 +194,12 @@ export const studentFormSchema = z.object({
 export const announcementFormSchema = z.object({
   title: requiredText("Başlık"),
   body: requiredText("Duyuru metni"),
-  audience: z.enum(["SCHOOL", "TEACHERS"]),
+  audience: z.enum(["SCHOOL", "TEACHERS", "STUDENTS", "GUARDIANS"]),
+  campusId: optionalText(),
+  gradeLevelId: optionalText(),
+  classId: optionalText(),
+  courseId: optionalText(),
+  termId: optionalText(),
 });
 
 export const messageTemplateFormSchema = z.object({
@@ -93,6 +211,12 @@ export const supportTicketFormSchema = z.object({
   subject: requiredText("Konu"),
   message: requiredText("Mesaj"),
   priority: z.enum(["LOW", "NORMAL", "HIGH"]),
+  studentId: optionalText(),
+  campusId: optionalText(),
+  gradeLevelId: optionalText(),
+  classId: optionalText(),
+  courseId: optionalText(),
+  termId: optionalText(),
 });
 
 export const homeworkMaterialFormSchema = z.object({
@@ -135,6 +259,29 @@ export const parserConfigApprovalFormSchema = z.object({
   version: requiredText("Versiyon"),
 });
 
+export const answerKeyImportFormSchema = z.object({
+  examId: requiredText("Sınav ID"),
+  version: requiredText("Anahtar versiyonu"),
+  fileBase64: requiredText("Cevap anahtarı dosyası"),
+});
+
+export const rawImportUploadFormSchema = z.object({
+  examId: requiredText("Sınav ID"),
+  parserConfigVersion: requiredText("Parser versiyonu"),
+  sourceType: requiredText("Kaynak tipi"),
+  fileName: requiredText("Optik dosya"),
+  fileBase64: requiredText("Optik dosya"),
+});
+
+export const quarantineLookupFormSchema = z.object({
+  examId: requiredText("Sınav ID"),
+  rawImportId: requiredText("Raw import ID"),
+});
+
+export const quarantineResolveFormSchema = z.object({
+  resolvedStudentId: requiredText("Öğrenci"),
+});
+
 export const reportQueryFormSchema = z.object({
   examId: requiredText("Rapor sınav ID"),
 });
@@ -151,8 +298,53 @@ export const supportTicketCommentFormSchema = z.object({
   body: requiredText("Yorum"),
 });
 
+export const attendanceFormSchema = z.object({
+  studentId: requiredText("Öğrenci"),
+  courseId: optionalText(),
+  termId: optionalText(),
+  date: optionalDate.refine((value) => Boolean(value), { message: "Tarih zorunludur." }),
+  status: z.enum(["PRESENT", "ABSENT", "LATE", "EXCUSED"]),
+});
+
+export const teacherNoteFormSchema = z.object({
+  studentId: requiredText("Öğrenci"),
+  teacherId: optionalText(),
+  courseId: optionalText(),
+  termId: optionalText(),
+  visibility: z.enum(["INTERNAL", "GUARDIAN_STUDENT"]),
+  body: requiredText("Not"),
+  developmentStatus: optionalText(),
+});
+
+export const materialAssignmentFormSchema = z.object({
+  materialId: requiredText("Materyal"),
+  studentId: requiredText("Öğrenci"),
+  courseId: optionalText(),
+  termId: optionalText(),
+  note: optionalText(),
+  dueAt: optionalDate,
+});
+
 export type ClassFormState = z.input<typeof classFormSchema>;
 export type ClassFormPayload = z.output<typeof classFormSchema>;
+export type CampusFormState = z.input<typeof campusFormSchema>;
+export type CampusFormPayload = z.output<typeof campusFormSchema>;
+export type GradeLevelFormState = z.input<typeof gradeLevelFormSchema>;
+export type GradeLevelFormPayload = z.output<typeof gradeLevelFormSchema>;
+export type AcademicYearFormState = z.input<typeof academicYearFormSchema>;
+export type AcademicYearFormPayload = z.output<typeof academicYearFormSchema>;
+export type AcademicTermFormState = z.input<typeof academicTermFormSchema>;
+export type AcademicTermFormPayload = z.output<typeof academicTermFormSchema>;
+export type CourseFormState = z.input<typeof courseFormSchema>;
+export type CourseFormPayload = z.output<typeof courseFormSchema>;
+export type ExamFormState = z.input<typeof examFormSchema>;
+export type ExamFormPayload = z.output<typeof examFormSchema>;
+export type ExamParticipantFormState = z.input<typeof examParticipantFormSchema>;
+export type ExamParticipantFormPayload = z.output<typeof examParticipantFormSchema>;
+export type ScheduleLessonFormState = z.input<typeof scheduleLessonFormSchema>;
+export type ScheduleLessonFormPayload = z.output<typeof scheduleLessonFormSchema>;
+export type StudySessionFormState = z.input<typeof studySessionFormSchema>;
+export type StudySessionFormPayload = z.output<typeof studySessionFormSchema>;
 export type TeacherFormState = z.input<typeof teacherFormSchema>;
 export type TeacherFormPayload = z.output<typeof teacherFormSchema>;
 export type TeacherAssignmentFormState = z.input<typeof teacherAssignmentFormSchema>;
@@ -176,9 +368,18 @@ export type IdentityInvitationFormState = z.input<typeof identityInvitationFormS
 export type IdentityInvitationFormPayload = z.output<typeof identityInvitationFormSchema>;
 export type ParserConfigSuggestionFormPayload = z.output<typeof parserConfigSuggestionFormSchema>;
 export type ParserConfigApprovalFormPayload = z.output<typeof parserConfigApprovalFormSchema>;
+export type AnswerKeyImportFormPayload = z.output<typeof answerKeyImportFormSchema>;
+export type RawImportUploadFormPayload = z.output<typeof rawImportUploadFormSchema>;
+export type QuarantineLookupFormPayload = z.output<typeof quarantineLookupFormSchema>;
+export type QuarantineResolveFormPayload = z.output<typeof quarantineResolveFormSchema>;
 export type ReportQueryFormPayload = z.output<typeof reportQueryFormSchema>;
 export type SupportTicketAttachmentFormPayload = z.output<typeof supportTicketAttachmentFormSchema>;
 export type SupportTicketCommentFormPayload = z.output<typeof supportTicketCommentFormSchema>;
+export type AttendanceFormState = z.input<typeof attendanceFormSchema>;
+export type AttendanceFormPayload = z.output<typeof attendanceFormSchema>;
+export type TeacherNoteFormState = z.input<typeof teacherNoteFormSchema>;
+export type TeacherNoteFormPayload = z.output<typeof teacherNoteFormSchema>;
+export type MaterialAssignmentFormPayload = z.output<typeof materialAssignmentFormSchema>;
 
 export function firstFormError(error: z.ZodError): string {
   return error.issues[0]?.message ?? "Form bilgilerini kontrol edin.";

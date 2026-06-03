@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AuditLogService, CreateAuditLogInput } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import type { ReportSnapshotStore } from "../report/report-snapshot-store.js";
 import {
   ParserConfigApprovalService,
   type ApprovedParserConfigInput,
@@ -11,7 +12,12 @@ describe("ParserConfigApprovalService", () => {
   it("tenant context ile onaylanmış ParserConfig kaydını repository'ye verir", async () => {
     const repository = new FakeRepository();
     const auditLogs = new FakeAuditLogService();
-    const service = new ParserConfigApprovalService(repository, auditLogs as unknown as AuditLogService);
+    const snapshots = new FakeReportSnapshotStore();
+    const service = new ParserConfigApprovalService(
+      repository,
+      auditLogs as unknown as AuditLogService,
+      snapshots,
+    );
 
     const result = await service.approve(createContext(), {
       examId: "exam-a",
@@ -46,6 +52,11 @@ describe("ParserConfigApprovalService", () => {
         mappedFields: ["studentNo", "bookletType", "answers"],
       },
     }]);
+    expect(snapshots.markStaleInputs).toEqual([{
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      reason: "parser_config.approved",
+    }]);
   });
 
   it("öneri eksikse repository'ye gitmeden reddeder", async () => {
@@ -57,6 +68,18 @@ describe("ParserConfigApprovalService", () => {
       version: "parser-v1",
     })).rejects.toMatchObject({ status: 400 });
     expect(repository.inputs).toHaveLength(0);
+  });
+
+  it("öneri eksikse snapshot STALE yazmaz", async () => {
+    const repository = new FakeRepository();
+    const snapshots = new FakeReportSnapshotStore();
+    const service = new ParserConfigApprovalService(repository, undefined, snapshots);
+
+    await expect(service.approve(createContext(), {
+      examId: "exam-a",
+      version: "parser-v1",
+    })).rejects.toMatchObject({ status: 400 });
+    expect(snapshots.markStaleInputs).toEqual([]);
   });
 
   it("versiyon çakışmasını 409 olarak döndürür", async () => {
@@ -125,5 +148,22 @@ class FakeAuditLogService {
   async record(input: CreateAuditLogInput) {
     this.records.push(input);
     return { id: "audit-a", createdAt: "2026-06-06T09:00:00.000Z", ...input };
+  }
+}
+
+class FakeReportSnapshotStore implements ReportSnapshotStore {
+  readonly markStaleInputs: Array<{ tenantId: string; examId: string; reason: string }> = [];
+
+  async listByExam() {
+    return [];
+  }
+
+  async findById() {
+    return undefined;
+  }
+
+  async markStaleByExam(tenantId: string, examId: string, reason: string) {
+    this.markStaleInputs.push({ tenantId, examId, reason });
+    return 1;
   }
 }

@@ -35,14 +35,14 @@ describe("PostgresClassStore", () => {
       },
     );
 
-    const businessQueries = queries.filter((query) => !query.sql.includes("set_config"));
+    const businessQueries = queries.filter((query) => !query.sql.includes("set_config") && !["BEGIN", "COMMIT", "ROLLBACK"].includes(query.sql));
     expect(queries.some((query) => query.values?.[0] === "tenant-a")).toBe(true);
     expect(businessQueries[0]?.sql).toContain('SELECT * FROM "Class"');
     expect(businessQueries[1]?.values).toEqual(["class-a"]);
     expect(businessQueries[2]?.sql).toContain('INSERT INTO "Class"');
-    expect(businessQueries[2]?.values).toEqual([expect.any(String), "tenant-a", "9-A", "9"]);
+    expect(businessQueries[2]?.values).toEqual([expect.any(String), "tenant-a", null, null, "9-A", "9", null]);
     expect(businessQueries[4]?.sql).toContain('UPDATE "Class"');
-    expect(businessQueries[4]?.values).toEqual(["class-a", "9 Fen", false, null]);
+    expect(businessQueries[4]?.values).toEqual(["class-a", "9 Fen", false, null, false, null, false, null, false, null]);
     expect(businessQueries[6]?.values).toEqual(["class-a", "2026-05-29T20:00:00.000Z"]);
   });
 });

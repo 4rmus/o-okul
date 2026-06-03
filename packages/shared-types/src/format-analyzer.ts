@@ -1,15 +1,22 @@
 export type ParserEncoding = "UTF-8" | "ISO-8859-9" | "CP1254";
 export type ParserDelimiter = "TAB" | "COMMA" | "PIPE" | "FIXED";
+export type ParserConfigPreset = "OPTIK_7108_LGS";
 
 export type FieldSpec =
   | { kind: "delimited"; column: number }
   | { kind: "fixed"; start: number; length: number };
+
+export interface AnswerSegmentSpec {
+  start: number;
+  length: number;
+}
 
 export interface AnswerFieldSpec {
   kind: FieldSpec["kind"];
   column?: number;
   start?: number;
   length?: number;
+  segments?: AnswerSegmentSpec[];
   estimatedQuestionCount: number;
 }
 
@@ -18,6 +25,7 @@ export interface ParserConfigSuggestion {
   delimiter: ParserDelimiter;
   skipHeaderLines: number;
   fieldMapping: {
+    nationalId?: FieldSpec;
     studentNo: FieldSpec;
     bookletType: FieldSpec;
     answers: AnswerFieldSpec;
@@ -32,6 +40,38 @@ export interface FormatAnalyzerInput {
   sampleText?: string;
   content?: string | Uint8Array;
   sampleSize?: number;
+}
+
+export function getParserConfigPresetSuggestion(preset: ParserConfigPreset): ParserConfigSuggestion {
+  if (preset !== "OPTIK_7108_LGS") {
+    throw new Error("FORMAT_ANALYZER_PRESET_UNKNOWN");
+  }
+
+  return {
+    encoding: "UTF-8",
+    delimiter: "FIXED",
+    skipHeaderLines: 0,
+    fieldMapping: {
+      nationalId: { kind: "fixed", start: 36, length: 11 },
+      studentNo: { kind: "fixed", start: 11, length: 4 },
+      bookletType: { kind: "fixed", start: 50, length: 1 },
+      answers: {
+        kind: "fixed",
+        estimatedQuestionCount: 90,
+        segments: [
+          { start: 51, length: 20 },
+          { start: 71, length: 10 },
+          { start: 91, length: 10 },
+          { start: 111, length: 10 },
+          { start: 131, length: 20 },
+          { start: 151, length: 20 },
+        ],
+      },
+    },
+    version: 1,
+    confidence: "high",
+    warnings: [],
+  };
 }
 
 interface DelimiterCandidate {

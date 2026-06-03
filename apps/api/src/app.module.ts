@@ -7,8 +7,18 @@ import { AttendanceController } from "./attendance/attendance.controller.js";
 import { attendanceStoreToken, createAttendanceStore } from "./attendance/attendance-store.js";
 import { AttendanceService } from "./attendance/attendance.service.js";
 import { AnnouncementController } from "./announcement/announcement.controller.js";
+import {
+  announcementDeliveryReportStoreToken,
+  createAnnouncementDeliveryReportStore,
+} from "./announcement/announcement-delivery-report-store.js";
+import { announcementReceiptStoreToken, createAnnouncementReceiptStore } from "./announcement/announcement-receipt-store.js";
 import { announcementStoreToken, createAnnouncementStore } from "./announcement/announcement-store.js";
-import { AnnouncementService } from "./announcement/announcement.service.js";
+import {
+  AnnouncementService,
+  announcementDeliveryQueueProducerToken,
+  notificationAdapterToken,
+} from "./announcement/announcement.service.js";
+import { createNotificationAdapterFromEnv } from "@uzman-hocam/notification-adapter";
 import { AuthController } from "./auth/auth.controller.js";
 import { authUserStoreToken, createAuthUserStore } from "./auth/auth-user-store.js";
 import { AuthService } from "./auth/auth.service.js";
@@ -16,14 +26,24 @@ import { IdentityResolver } from "./auth/identity-resolver.js";
 import { createPasswordResetStore, passwordResetStoreToken } from "./auth/password-reset-store.js";
 import { authSessionStoreToken, createSessionStore } from "./auth/session-store.js";
 import { RequestContextMiddleware } from "./context/request-context.middleware.js";
+import { AnswerKeyController } from "./exam/answer-key.controller.js";
+import { AnswerKeyExcelImportService } from "./exam/answer-key-excel-import.service.js";
+import { AnswerKeyService, answerKeyRepositoryToken } from "./exam/answer-key.service.js";
 import { ExamController } from "./exam/exam.controller.js";
-import { ExamService, examRepositoryToken } from "./exam/exam.service.js";
+import { ExamService, examParticipantRepositoryToken, examRepositoryToken } from "./exam/exam.service.js";
+import { PostgresAnswerKeyRepository } from "./exam/postgres-answer-key-repository.js";
+import { PostgresExamParticipantRepository } from "./exam/postgres-exam-participant-repository.js";
 import { PostgresExamRepository } from "./exam/postgres-exam-repository.js";
 import { ParserConfigController } from "./exam/parser-config.controller.js";
 import { ParserConfigApprovalService, parserConfigRepositoryToken } from "./exam/parser-config-approval.service.js";
 import { ParserConfigSuggestionService } from "./exam/parser-config-suggestion.service.js";
 import { PostgresParserConfigRepository } from "./exam/postgres-parser-config-repository.js";
 import { RawImportController } from "./exam/raw-import.controller.js";
+import {
+  createRawImportQuarantineStore,
+  rawImportQuarantineStoreToken,
+} from "./exam/raw-import-quarantine-store.js";
+import { RawImportQuarantineService } from "./exam/raw-import-quarantine.service.js";
 import { PostgresRawImportRepository } from "./exam/postgres-raw-import-repository.js";
 import { RawImportQueueService, rawImportQueueProducerToken } from "./exam/raw-import-queue.service.js";
 import {
@@ -51,6 +71,11 @@ import { MeController } from "./me/me.controller.js";
 import { MetricsController } from "./metrics/metrics.controller.js";
 import { MetricsMiddleware } from "./metrics/metrics.middleware.js";
 import { MetricsService } from "./metrics/metrics.service.js";
+import {
+  createNotificationDeviceTokenStore,
+  notificationDeviceTokenStoreToken,
+} from "./notification-device/notification-device-store.js";
+import { NotificationDeviceService } from "./notification-device/notification-device.service.js";
 import { PaymentController } from "./payment/payment.controller.js";
 import { createPaymentPlanStore, paymentPlanStoreToken } from "./payment/payment-store.js";
 import { PaymentService } from "./payment/payment.service.js";
@@ -71,20 +96,33 @@ import {
   reportPdfRendererToken,
 } from "./report/report-generation.service.js";
 import { createReportSnapshotStore, reportSnapshotStoreToken } from "./report/report-snapshot-store.js";
+import { AcademicCalendarController } from "./school/academic-calendar.controller.js";
+import { academicCalendarStoreToken, createAcademicCalendarStore } from "./school/academic-calendar-store.js";
+import { campusStoreToken, createCampusStore } from "./school/campus-store.js";
+import { CampusesController } from "./school/campuses.controller.js";
 import { classStoreToken, createClassStore } from "./school/class-store.js";
 import { ClassesController } from "./school/classes.controller.js";
+import { courseStoreToken, createCourseStore } from "./school/course-store.js";
+import { CoursesController } from "./school/courses.controller.js";
 import { createGuardianStudentStore, guardianStudentStoreToken } from "./school/guardian-student-store.js";
 import { createGuardianStore, guardianStoreToken } from "./school/guardian-store.js";
 import { GuardiansController } from "./school/guardians.controller.js";
+import { gradeLevelStoreToken, createGradeLevelStore } from "./school/grade-level-store.js";
+import { GradeLevelsController } from "./school/grade-levels.controller.js";
 import { SchoolService } from "./school/school.service.js";
 import { createTeacherAssignmentStore, teacherAssignmentStoreToken } from "./school/teacher-assignment-store.js";
 import { createTeacherStore, teacherStoreToken } from "./school/teacher-store.js";
 import { TeachersController } from "./school/teachers.controller.js";
 import { SecurityHeadersMiddleware } from "./security/security-headers.middleware.js";
+import {
+  createSmsBatchDeliveryReportStore,
+  smsBatchDeliveryReportStoreToken,
+} from "./sms-batch/sms-batch-delivery-report-store.js";
 import { SmsBatchController } from "./sms-batch/sms-batch.controller.js";
 import { SmsBatchService, smsBatchQueueProducerToken } from "./sms-batch/sms-batch.service.js";
 import { StudentController } from "./student/student.controller.js";
 import { createStudentClassHistoryStore, studentClassHistoryStoreToken } from "./student/student-class-history-store.js";
+import { createStudentEnrollmentStore, studentEnrollmentStoreToken } from "./student/student-enrollment-store.js";
 import { StudentImportService } from "./student/student-import.service.js";
 import { createStudentStore, studentStoreToken } from "./student/student-store.js";
 import { StudentService } from "./student/student.service.js";
@@ -98,6 +136,7 @@ import { SupportTicketService } from "./support-ticket/support-ticket.service.js
 import { TeacherNoteController } from "./teacher-note/teacher-note.controller.js";
 import { createTeacherNoteStore, teacherNoteStoreToken } from "./teacher-note/teacher-note-store.js";
 import { TeacherNoteService } from "./teacher-note/teacher-note.service.js";
+import { createTenantStore, tenantStoreToken } from "./tenant/tenant-store.js";
 import { UserManagementController } from "./user-management/user-management.controller.js";
 import { createUserManagementStore, userManagementStoreToken } from "./user-management/user-management-store.js";
 import { UserManagementService } from "./user-management/user-management.service.js";
@@ -105,10 +144,15 @@ import { UserManagementService } from "./user-management/user-management.service
 @Module({
   controllers: [
     AuditLogController,
+    AcademicCalendarController,
     AnnouncementController,
+    AnswerKeyController,
     AttendanceController,
     AuthController,
+    CampusesController,
     ClassesController,
+    CoursesController,
+    GradeLevelsController,
     GuardiansController,
     HealthController,
     HomeworkController,
@@ -147,6 +191,22 @@ import { UserManagementService } from "./user-management/user-management.service
       provide: announcementStoreToken,
       useFactory: createAnnouncementStore,
     },
+    {
+      provide: announcementReceiptStoreToken,
+      useFactory: createAnnouncementReceiptStore,
+    },
+    {
+      provide: announcementDeliveryReportStoreToken,
+      useFactory: createAnnouncementDeliveryReportStore,
+    },
+    {
+      provide: announcementDeliveryQueueProducerToken,
+      useFactory: createBullTenantQueueProducer,
+    },
+    {
+      provide: notificationAdapterToken,
+      useFactory: () => createNotificationAdapterFromEnv(process.env),
+    },
     AuthService,
     {
       provide: authUserStoreToken,
@@ -161,9 +221,27 @@ import { UserManagementService } from "./user-management/user-management.service
       useFactory: createPasswordResetStore,
     },
     IdentityResolver,
+    AnswerKeyService,
+    AnswerKeyExcelImportService,
+    {
+      provide: answerKeyRepositoryToken,
+      useFactory: () => new PostgresAnswerKeyRepository(),
+    },
+    {
+      provide: academicCalendarStoreToken,
+      useFactory: createAcademicCalendarStore,
+    },
+    {
+      provide: campusStoreToken,
+      useFactory: createCampusStore,
+    },
     {
       provide: classStoreToken,
       useFactory: createClassStore,
+    },
+    {
+      provide: courseStoreToken,
+      useFactory: createCourseStore,
     },
     {
       provide: guardianStoreToken,
@@ -172,6 +250,10 @@ import { UserManagementService } from "./user-management/user-management.service
     {
       provide: guardianStudentStoreToken,
       useFactory: createGuardianStudentStore,
+    },
+    {
+      provide: gradeLevelStoreToken,
+      useFactory: createGradeLevelStore,
     },
     {
       provide: teacherStoreToken,
@@ -194,10 +276,15 @@ import { UserManagementService } from "./user-management/user-management.service
     },
     MessageTemplateService,
     MetricsService,
+    NotificationDeviceService,
     PaymentService,
     {
       provide: messageTemplateStoreToken,
       useFactory: createMessageTemplateStore,
+    },
+    {
+      provide: notificationDeviceTokenStoreToken,
+      useFactory: createNotificationDeviceTokenStore,
     },
     {
       provide: paymentPlanStoreToken,
@@ -208,6 +295,10 @@ import { UserManagementService } from "./user-management/user-management.service
       provide: examRepositoryToken,
       useFactory: () => new PostgresExamRepository(),
     },
+    {
+      provide: examParticipantRepositoryToken,
+      useFactory: () => new PostgresExamParticipantRepository(),
+    },
     ParserConfigApprovalService,
     ParserConfigSuggestionService,
     {
@@ -215,6 +306,7 @@ import { UserManagementService } from "./user-management/user-management.service
       useFactory: () => new PostgresParserConfigRepository(),
     },
     RawImportQueueService,
+    RawImportQuarantineService,
     RawImportUploadService,
     {
       provide: rawImportArchiveStoreToken,
@@ -227,6 +319,10 @@ import { UserManagementService } from "./user-management/user-management.service
     {
       provide: rawImportRepositoryToken,
       useFactory: () => new PostgresRawImportRepository(),
+    },
+    {
+      provide: rawImportQuarantineStoreToken,
+      useFactory: createRawImportQuarantineStore,
     },
     {
       provide: rawImportQueueProducerToken,
@@ -253,6 +349,10 @@ import { UserManagementService } from "./user-management/user-management.service
     SchoolService,
     SmsBatchService,
     {
+      provide: smsBatchDeliveryReportStoreToken,
+      useFactory: createSmsBatchDeliveryReportStore,
+    },
+    {
       provide: smsBatchQueueProducerToken,
       useFactory: createBullTenantQueueProducer,
     },
@@ -270,6 +370,10 @@ import { UserManagementService } from "./user-management/user-management.service
       provide: studentClassHistoryStoreToken,
       useFactory: createStudentClassHistoryStore,
     },
+    {
+      provide: studentEnrollmentStoreToken,
+      useFactory: createStudentEnrollmentStore,
+    },
     StudentService,
     SupportTicketService,
     TeacherNoteService,
@@ -277,6 +381,10 @@ import { UserManagementService } from "./user-management/user-management.service
     {
       provide: teacherNoteStoreToken,
       useFactory: createTeacherNoteStore,
+    },
+    {
+      provide: tenantStoreToken,
+      useFactory: createTenantStore,
     },
     {
       provide: userManagementStoreToken,

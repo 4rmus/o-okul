@@ -9,11 +9,19 @@ import {
   type StudentImportDryRunResult,
   type StudentImportResult,
 } from "./student-import.service.js";
-import { StudentService, type StudentProfileInput, type StudentRecord } from "./student.service.js";
+import {
+  StudentService,
+  type StudentBulkEnrollmentInput,
+  type StudentBulkEnrollmentResult,
+  type StudentEnrollmentActionInput,
+  type StudentProfileInput,
+  type StudentRecord,
+} from "./student.service.js";
 import { SchoolService } from "../school/school.service.js";
 import type {
   GuardianRecord,
   GuardianStudentRecord,
+  StudentEnrollmentRecord,
   StudentStatus,
   StudentClassHistoryRecord,
   StudentProfileRecord,
@@ -68,6 +76,12 @@ export class StudentController {
     return this.students.listClassHistory(getRequestContext(), id);
   }
 
+  @Get(":id/enrollments")
+  @Roles("TEACHER")
+  enrollments(@Param("id") id: string): Promise<StudentEnrollmentRecord[]> {
+    return this.students.listEnrollments(getRequestContext(), id);
+  }
+
   @Get(":id/guardians")
   @Roles("TEACHER")
   guardians(@Param("id") id: string): Promise<GuardianRecord[]> {
@@ -92,6 +106,12 @@ export class StudentController {
     return this.students.create(getRequestContext(), body);
   }
 
+  @Post("enrollments/bulk-renew")
+  @Roles("TENANT_ADMIN")
+  bulkRenewEnrollments(@Body() body: StudentBulkEnrollmentInput): Promise<StudentBulkEnrollmentResult> {
+    return this.students.bulkRenewEnrollments(getRequestContext(), body);
+  }
+
   @Post("imports/dry-run")
   @Roles("TENANT_ADMIN")
   dryRunImport(@Body() body: { fileBase64?: string }): Promise<StudentImportDryRunResult> {
@@ -114,6 +134,18 @@ export class StudentController {
   @Roles("TENANT_ADMIN")
   updateProfile(@Param("id") id: string, @Body() body: StudentProfileInput): Promise<StudentProfileRecord> {
     return this.students.updateProfile(getRequestContext(), id, body);
+  }
+
+  @Post(":id/enrollments/renew")
+  @Roles("TENANT_ADMIN")
+  renewEnrollment(@Param("id") id: string, @Body() body: StudentEnrollmentActionInput): Promise<StudentEnrollmentRecord> {
+    return this.students.renewEnrollment(getRequestContext(), id, body);
+  }
+
+  @Post(":id/enrollments/transfer")
+  @Roles("TENANT_ADMIN")
+  transferEnrollment(@Param("id") id: string, @Body() body: StudentEnrollmentActionInput): Promise<StudentEnrollmentRecord | null> {
+    return this.students.transferEnrollment(getRequestContext(), id, body);
   }
 
   @Post(":id/purge-pii")
@@ -144,7 +176,7 @@ export class StudentController {
       filtered = filtered.filter((student) => student.responsibleTeacherId === query.responsibleTeacherId);
     }
     if (query.status) {
-      if (!["ACTIVE", "PASSIVE"].includes(query.status)) {
+      if (!["ACTIVE", "PASSIVE", "GRADUATED", "TRANSFERRED"].includes(query.status)) {
         throw new BadRequestException("STUDENT_STATUS_INVALID");
       }
       filtered = filtered.filter((student) => student.status === query.status);

@@ -1,47 +1,63 @@
-import { Controller, ForbiddenException, Get, Param, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import type {
   HomeworkMaterialAssignmentRecord,
+  GuardianRecord,
   MeProfileResponse,
   ReportErrorBooklet,
   ReportStudentProgress,
   ReportStudentSnapshot,
   ScheduleLessonRecord,
   StudentRecord,
+  StudentClassHistoryRecord,
+  StudentEnrollmentRecord,
   StudentProfileRecord,
   TeacherRecord,
   AttendanceRecord,
   AttendanceSummaryRecord,
   TeacherNoteRecord,
   PaymentPlanWithInstallmentsRecord,
+  AnnouncementRecord,
+  SupportTicketRecord,
+  GuardianStudentRecord,
+  NotificationDeviceTokenRecord,
 } from "@uzman-hocam/shared-types";
+import { AnnouncementService } from "../announcement/announcement.service.js";
 import { AttendanceService } from "../attendance/attendance.service.js";
 import { getRequestContext, type RequestContext } from "../context/request-context.js";
 import { HomeworkService } from "../homework/homework.service.js";
+import {
+  NotificationDeviceService,
+  type RegisterNotificationDeviceInput,
+} from "../notification-device/notification-device.service.js";
 import { PaymentService } from "../payment/payment.service.js";
 import { ScheduleService } from "../program/schedule.service.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { ReportGenerationService } from "../report/report-generation.service.js";
-import { SchoolService } from "../school/school.service.js";
+import { type GuardianNotificationPreferenceInput, SchoolService } from "../school/school.service.js";
 import { StudentService } from "../student/student.service.js";
+import { SupportTicketService } from "../support-ticket/support-ticket.service.js";
 import { TeacherNoteService } from "../teacher-note/teacher-note.service.js";
 
 @Controller("me")
 @UseGuards(RolesGuard)
 export class MeController {
   constructor(
+    private readonly announcements: AnnouncementService,
     private readonly attendance: AttendanceService,
     private readonly homework: HomeworkService,
+    private readonly notificationDevices: NotificationDeviceService,
     private readonly payments: PaymentService,
     private readonly reports: ReportGenerationService,
     private readonly school: SchoolService,
     private readonly schedules: ScheduleService,
     private readonly students: StudentService,
+    private readonly supportTickets: SupportTicketService,
     private readonly teacherNotes: TeacherNoteService,
   ) {}
 
   @Get("profile")
-  @Roles("GUARDIAN")
+  @Roles("TENANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN")
   profile(): MeProfileResponse {
     const context = getRequestContext();
     return {
@@ -51,6 +67,24 @@ export class MeController {
       subjectType: context.subjectType,
       subjectId: context.subjectId,
     };
+  }
+
+  @Get("notification-devices")
+  @Roles("TENANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN")
+  notificationDevicesList(): Promise<NotificationDeviceTokenRecord[]> {
+    return this.notificationDevices.listCurrentUser(getRequestContext());
+  }
+
+  @Post("notification-devices")
+  @Roles("TENANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN")
+  registerNotificationDevice(@Body() body: RegisterNotificationDeviceInput): Promise<NotificationDeviceTokenRecord> {
+    return this.notificationDevices.registerCurrentUser(getRequestContext(), body);
+  }
+
+  @Delete("notification-devices/:id")
+  @Roles("TENANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN")
+  disableNotificationDevice(@Param("id") id: string): Promise<NotificationDeviceTokenRecord> {
+    return this.notificationDevices.disableCurrentUser(getRequestContext(), id);
   }
 
   @Get("student")
@@ -63,6 +97,34 @@ export class MeController {
   @Roles("STUDENT")
   studentProfile(): Promise<StudentProfileRecord> {
     return this.students.findCurrentStudentProfile(getRequestContext());
+  }
+
+  @Get("student/guardians")
+  @Roles("STUDENT")
+  studentGuardians(): Promise<GuardianRecord[]> {
+    return this.school.listCurrentStudentGuardians(getRequestContext());
+  }
+
+  @Get("student/guardian-links")
+  @Roles("STUDENT")
+  studentGuardianLinks(): Promise<GuardianStudentRecord[]> {
+    return this.school.listCurrentStudentGuardianLinks(getRequestContext());
+  }
+
+  @Get("student/class-history")
+  @Roles("STUDENT")
+  studentClassHistory(): Promise<StudentClassHistoryRecord[]> {
+    const context = getRequestContext();
+    assertStudentContext(context);
+    return this.students.listClassHistory(context, context.subjectId);
+  }
+
+  @Get("student/enrollments")
+  @Roles("STUDENT")
+  studentEnrollments(): Promise<StudentEnrollmentRecord[]> {
+    const context = getRequestContext();
+    assertStudentContext(context);
+    return this.students.listEnrollments(context, context.subjectId);
   }
 
   @Get("student/homework/material-assignments")
@@ -87,6 +149,30 @@ export class MeController {
   @Roles("STUDENT")
   studentTeacherNotes(): Promise<TeacherNoteRecord[]> {
     return this.teacherNotes.listCurrentStudent(getRequestContext());
+  }
+
+  @Get("student/announcements")
+  @Roles("STUDENT")
+  studentAnnouncements(): Promise<AnnouncementRecord[]> {
+    return this.announcements.listCurrentStudent(getRequestContext());
+  }
+
+  @Post("student/announcements/:id/read")
+  @Roles("STUDENT")
+  markStudentAnnouncementRead(@Param("id") id: string): Promise<AnnouncementRecord> {
+    return this.announcements.markCurrentStudentRead(getRequestContext(), id);
+  }
+
+  @Get("student/support-tickets")
+  @Roles("STUDENT")
+  studentSupportTickets(): Promise<SupportTicketRecord[]> {
+    return this.supportTickets.listCurrentStudent(getRequestContext());
+  }
+
+  @Post("student/support-tickets")
+  @Roles("STUDENT")
+  createStudentSupportTicket(@Body() body: Partial<SupportTicketRecord>): Promise<SupportTicketRecord> {
+    return this.supportTickets.createCurrentStudent(getRequestContext(), body);
   }
 
   @Get("student/reports/:examId/snapshots/:snapshotId")
@@ -149,6 +235,22 @@ export class MeController {
     return this.students.findProfileForViewer(context, studentId);
   }
 
+  @Get("guardian/students/:studentId/class-history")
+  @Roles("GUARDIAN")
+  guardianStudentClassHistory(@Param("studentId") studentId: string): Promise<StudentClassHistoryRecord[]> {
+    const context = getRequestContext();
+    assertGuardianContext(context);
+    return this.students.listClassHistory(context, studentId);
+  }
+
+  @Get("guardian/students/:studentId/enrollments")
+  @Roles("GUARDIAN")
+  guardianStudentEnrollments(@Param("studentId") studentId: string): Promise<StudentEnrollmentRecord[]> {
+    const context = getRequestContext();
+    assertGuardianContext(context);
+    return this.students.listEnrollments(context, studentId);
+  }
+
   @Get("guardian/homework/material-assignments")
   @Roles("GUARDIAN")
   guardianHomeworkMaterialAssignments(): Promise<HomeworkMaterialAssignmentRecord[]> {
@@ -173,10 +275,67 @@ export class MeController {
     return this.teacherNotes.listCurrentGuardianStudent(getRequestContext(), studentId);
   }
 
+  @Get("guardian/students/:studentId/announcements")
+  @Roles("GUARDIAN")
+  guardianStudentAnnouncements(@Param("studentId") studentId: string): Promise<AnnouncementRecord[]> {
+    return this.announcements.listCurrentGuardianStudent(getRequestContext(), studentId);
+  }
+
+  @Post("guardian/students/:studentId/announcements/:id/read")
+  @Roles("GUARDIAN")
+  markGuardianStudentAnnouncementRead(
+    @Param("studentId") studentId: string,
+    @Param("id") id: string,
+  ): Promise<AnnouncementRecord> {
+    return this.announcements.markCurrentGuardianStudentRead(getRequestContext(), studentId, id);
+  }
+
+  @Get("guardian/students/:studentId/notification-preferences")
+  @Roles("GUARDIAN")
+  guardianStudentNotificationPreferences(@Param("studentId") studentId: string): Promise<GuardianStudentRecord> {
+    return this.school.findCurrentGuardianNotificationPreferences(getRequestContext(), studentId);
+  }
+
+  @Patch("guardian/students/:studentId/notification-preferences")
+  @Roles("GUARDIAN")
+  updateGuardianStudentNotificationPreferences(
+    @Param("studentId") studentId: string,
+    @Body() body: GuardianNotificationPreferenceInput,
+  ): Promise<GuardianStudentRecord> {
+    return this.school.updateCurrentGuardianNotificationPreferences(getRequestContext(), studentId, body);
+  }
+
   @Get("guardian/students/:studentId/payment-plans")
   @Roles("GUARDIAN")
   guardianStudentPaymentPlans(@Param("studentId") studentId: string): Promise<PaymentPlanWithInstallmentsRecord[]> {
     return this.payments.listCurrentGuardianStudent(getRequestContext(), studentId);
+  }
+
+  @Get("guardian/students/:studentId/support-tickets")
+  @Roles("GUARDIAN")
+  guardianStudentSupportTickets(@Param("studentId") studentId: string): Promise<SupportTicketRecord[]> {
+    return this.supportTickets.listCurrentGuardianStudent(getRequestContext(), studentId);
+  }
+
+  @Post("guardian/students/:studentId/support-tickets")
+  @Roles("GUARDIAN")
+  createGuardianStudentSupportTicket(
+    @Param("studentId") studentId: string,
+    @Body() body: Partial<SupportTicketRecord>,
+  ): Promise<SupportTicketRecord> {
+    return this.supportTickets.createCurrentGuardianStudent(getRequestContext(), studentId, body);
+  }
+
+  @Get("teacher/support-tickets")
+  @Roles("TEACHER")
+  teacherSupportTickets(): Promise<SupportTicketRecord[]> {
+    return this.supportTickets.listCurrentTeacher(getRequestContext());
+  }
+
+  @Post("teacher/support-tickets")
+  @Roles("TEACHER")
+  createTeacherSupportTicket(@Body() body: Partial<SupportTicketRecord>): Promise<SupportTicketRecord> {
+    return this.supportTickets.createCurrentTeacher(getRequestContext(), body);
   }
 
   @Get("guardian/students/:studentId/reports/:examId/snapshots/:snapshotId")
@@ -252,10 +411,28 @@ export class MeController {
   teacherSchedule(): Promise<ScheduleLessonRecord[]> {
     return this.schedules.listCurrentTeacherLessons(getRequestContext());
   }
+
+  @Get("teacher/announcements")
+  @Roles("TEACHER")
+  teacherAnnouncements(): Promise<AnnouncementRecord[]> {
+    return this.announcements.listCurrentTeacher(getRequestContext());
+  }
+
+  @Post("teacher/announcements/:id/read")
+  @Roles("TEACHER")
+  markTeacherAnnouncementRead(@Param("id") id: string): Promise<AnnouncementRecord> {
+    return this.announcements.markCurrentTeacherRead(getRequestContext(), id);
+  }
 }
 
 function assertGuardianContext(context: RequestContext): void {
   if (context.subjectType !== "GUARDIAN" || !context.subjectId) {
+    throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
+  }
+}
+
+function assertStudentContext(context: RequestContext): asserts context is RequestContext & { subjectType: "STUDENT"; subjectId: string } {
+  if (context.subjectType !== "STUDENT" || !context.subjectId) {
     throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
   }
 }

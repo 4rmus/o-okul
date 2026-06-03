@@ -1,6 +1,13 @@
 export type TenantId = string;
-export { FormatAnalyzerService } from "./format-analyzer.js";
+export { FormatAnalyzerService, getParserConfigPresetSuggestion } from "./format-analyzer.js";
 export type {
+  AcademicTermRecord,
+  AcademicYearRecord,
+  AnnouncementDeliveryChannel,
+  AnnouncementDeliveryReportRecord,
+  AnnouncementDeliveryStatus,
+  AnnouncementRecipientRecord,
+  AnnouncementRecipientReport,
   AnnouncementRecord,
   AnswerChoice,
   AnswerKeyBranchSummary,
@@ -12,9 +19,14 @@ export type {
   AttendanceSummaryRecord,
   AuditLogRecord,
   AuthResponse,
+  CampusRecord,
   ClassRecord,
+  CourseRecord,
+  ExamParticipantRecord,
+  ExamParticipantStatus,
   ExamRecord,
   ExamStatus,
+  GradeLevelRecord,
   GuardianRelationshipType,
   GuardianStudentRecord,
   GuardianRecord,
@@ -23,6 +35,7 @@ export type {
   HomeworkMaterialRecord,
   HomeworkRecord,
   MeProfileResponse,
+  NotificationDeviceTokenRecord,
   MessageTemplateRecord,
   PaymentInstallmentRecord,
   PaymentInstallmentStatus,
@@ -44,6 +57,7 @@ export type {
   ScheduleLessonRecord,
   Session,
   StudentClassHistoryRecord,
+  StudentEnrollmentRecord,
   StudentProfileRecord,
   StudentRecord,
   StudentStatus,
@@ -61,8 +75,10 @@ export type {
 } from "./domain.js";
 export type {
   AnswerFieldSpec,
+  AnswerSegmentSpec,
   FieldSpec,
   FormatAnalyzerInput,
+  ParserConfigPreset,
   ParserConfigSuggestion,
   ParserDelimiter,
   ParserEncoding,

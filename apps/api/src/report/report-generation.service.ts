@@ -16,6 +16,12 @@ import ExcelJS from "exceljs";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import type { ProducedJob, TenantQueueJobInput } from "../queue/job-producer.js";
+import { examParticipantRepositoryToken, examRepositoryToken, type ExamParticipantRepository, type ExamRepository } from "../exam/exam.service.js";
+import { type TeacherAssignmentStore, teacherAssignmentStoreToken } from "../school/teacher-assignment-store.js";
+import { type StudentStore, studentStoreToken } from "../student/student-store.js";
+import type { StudentRecord } from "../student/student.service.js";
+import { assertTenantResourceAccess, filterTenantResources, isTeacherSubjectContext } from "../tenant/tenant-access.js";
+import { tenantStoreToken, type TenantStore } from "../tenant/tenant-store.js";
 import { reportSnapshotStoreToken, type ReportSnapshotStore } from "./report-snapshot-store.js";
 
 export const reportGenerationQueueProducerToken = Symbol("reportGenerationQueueProducer");
@@ -30,6 +36,11 @@ export interface EnqueueReportGenerationInput {
   examId?: string;
   reportType?: string;
   contentHash?: string;
+  campusId?: string;
+  gradeLevelId?: string;
+  classId?: string;
+  courseId?: string;
+  termId?: string;
 }
 
 export interface ReportGenerationQueueResult {
@@ -45,6 +56,11 @@ export interface ReportSnapshotRecord {
   id: string;
   tenantId: string;
   examId: string;
+  campusId?: string;
+  gradeLevelId?: string;
+  classId?: string;
+  courseId?: string;
+  termId?: string;
   reportType: string;
   status: string;
   inputRefs: Record<string, unknown>;
@@ -54,6 +70,14 @@ export interface ReportSnapshotRecord {
   deletedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ReportSnapshotListFilters {
+  campusId?: string;
+  gradeLevelId?: string;
+  classId?: string;
+  courseId?: string;
+  termId?: string;
 }
 
 export interface ReportSnapshotExportResult {
@@ -90,6 +114,21 @@ export class ReportGenerationService {
     @Inject(reportPdfRendererToken)
     private readonly pdfRenderer: ReportPdfRenderer = createReportPdfRenderer(),
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional()
+    @Inject(studentStoreToken)
+    private readonly studentStore?: StudentStore,
+    @Optional()
+    @Inject(teacherAssignmentStoreToken)
+    private readonly teacherAssignmentStore?: TeacherAssignmentStore,
+    @Optional()
+    @Inject(examRepositoryToken)
+    private readonly examRepository?: ExamRepository,
+    @Optional()
+    @Inject(examParticipantRepositoryToken)
+    private readonly examParticipants?: ExamParticipantRepository,
+    @Optional()
+    @Inject(tenantStoreToken)
+    private readonly tenantStore?: TenantStore,
   ) {}
 
   async enqueueGeneration(
@@ -103,6 +142,7 @@ export class ReportGenerationService {
     const examId = required(input.examId, "REPORT_EXAM_REQUIRED");
     const reportType = parseReportType(input.reportType);
     const contentHash = required(input.contentHash, "REPORT_CONTENT_HASH_REQUIRED");
+    const reportContext = resolveReportContext(input);
 
     const job = await this.producer.enqueue({
       queueName: "report-generation",
@@ -111,6 +151,7 @@ export class ReportGenerationService {
       entityId: examId,
       contentHash,
       reportType,
+      ...reportContext,
     });
     await this.auditLogs?.record({
       tenantId: context.tenantId,
@@ -118,7 +159,7 @@ export class ReportGenerationService {
       entityType: "ReportGeneration",
       entityId: examId,
       action: "report_generation.queued",
-      diff: { reportType, contentHash, jobId: job.options.jobId },
+      diff: { reportType, contentHash, jobId: job.options.jobId, ...reportContext },
     });
 
     return {
@@ -131,12 +172,17 @@ export class ReportGenerationService {
     };
   }
 
-  async listSnapshots(context: RequestContext, examId: string | undefined): Promise<ReportSnapshotRecord[]> {
+  async listSnapshots(
+    context: RequestContext,
+    examId: string | undefined,
+    filters: ReportSnapshotListFilters = {},
+  ): Promise<ReportSnapshotRecord[]> {
     if (!context.tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }
 
-    return this.snapshots.listByExam(context.tenantId, required(examId, "REPORT_EXAM_REQUIRED"));
+    const snapshots = await this.snapshots.listByExam(context.tenantId, required(examId, "REPORT_EXAM_REQUIRED"));
+    return Promise.all(filterReportSnapshots(snapshots, filters).map((snapshot) => this.scopeSnapshotForTeacher(context, snapshot)));
   }
 
   async exportSnapshotExcel(
@@ -158,7 +204,7 @@ export class ReportGenerationService {
       throw new BadRequestException("REPORT_SNAPSHOT_NOT_READY");
     }
 
-    return createSnapshotWorkbook(snapshot);
+    return createSnapshotWorkbook(await this.scopeSnapshotForTeacher(context, snapshot));
   }
 
   async exportSnapshotPdf(
@@ -180,7 +226,7 @@ export class ReportGenerationService {
       throw new BadRequestException("REPORT_SNAPSHOT_NOT_READY");
     }
 
-    return createSnapshotPdf(snapshot, this.pdfRenderer);
+    return createSnapshotPdf(await this.scopeSnapshotForTeacher(context, snapshot), this.pdfRenderer);
   }
 
   async getStudentReport(
@@ -196,6 +242,7 @@ export class ReportGenerationService {
     const resolvedExamId = required(examId, "REPORT_EXAM_REQUIRED");
     const resolvedSnapshotId = required(snapshotId, "REPORT_SNAPSHOT_REQUIRED");
     const resolvedStudentId = required(studentId, "REPORT_STUDENT_REQUIRED");
+    await this.assertTeacherStudentReportScope(context, resolvedStudentId);
     const snapshot = await this.snapshots.findById(context.tenantId, resolvedExamId, resolvedSnapshotId);
     if (!snapshot) {
       throw new NotFoundException("REPORT_SNAPSHOT_NOT_FOUND");
@@ -203,6 +250,7 @@ export class ReportGenerationService {
     if (snapshot.status !== "READY" || !snapshot.snapshotData) {
       throw new BadRequestException("REPORT_SNAPSHOT_NOT_READY");
     }
+    await this.assertTeacherStudentReportScope(context, resolvedStudentId, snapshot);
 
     const student = readRecords(snapshot.snapshotData.students)
       .find((candidate) => readText(candidate.studentId) === resolvedStudentId);
@@ -214,16 +262,27 @@ export class ReportGenerationService {
     const className = readText(student.className);
     const outcomes = readRecords(student.outcomes).map(readOutcomeSummary);
     const statistics = readStudentStatistics(student.statistics);
+    const branchAverages = createStudentBranchAverageLookup(snapshot.snapshotData, classId);
+    const institutionName = await this.findInstitutionName(context);
+    const examMeta = await this.findExamMeta(context, resolvedExamId);
+    const participantMeta = await this.findParticipantMeta(context, resolvedExamId, resolvedStudentId);
+    const studentName = await this.findStudentDisplayName(context, resolvedStudentId);
     return {
       tenantId: context.tenantId,
+      ...(institutionName ? { institutionName } : {}),
       examId: resolvedExamId,
+      ...examMeta,
       snapshotId: resolvedSnapshotId,
       studentId: resolvedStudentId,
+      ...(studentName ? { studentName } : {}),
+      ...participantMeta,
       ...(classId ? { classId } : {}),
       ...(className ? { className } : {}),
+      ...(snapshot.courseId ? { courseId: snapshot.courseId } : {}),
       resultKey: readText(student.resultKey),
+      ...(snapshot.termId ? { termId: snapshot.termId } : {}),
       total: readScoreSummary(student.total),
-      branches: readRecords(student.branches).map(readBranchSummary),
+      branches: readRecords(student.branches).map((branch) => readBranchSummary(branch, branchAverages)),
       ...(outcomes.length > 0 ? { outcomes } : {}),
       ...(statistics ? { statistics } : {}),
       generatedAt: snapshot.generatedAt,
@@ -253,6 +312,7 @@ export class ReportGenerationService {
     const resolvedExamId = required(examId, "REPORT_EXAM_REQUIRED");
     const resolvedSnapshotId = required(snapshotId, "REPORT_SNAPSHOT_REQUIRED");
     const resolvedStudentId = required(studentId, "REPORT_STUDENT_REQUIRED");
+    await this.assertTeacherStudentReportScope(context, resolvedStudentId);
     const snapshot = await this.snapshots.findById(context.tenantId, resolvedExamId, resolvedSnapshotId);
     if (!snapshot) {
       throw new NotFoundException("REPORT_SNAPSHOT_NOT_FOUND");
@@ -260,6 +320,7 @@ export class ReportGenerationService {
     if (snapshot.status !== "READY" || !snapshot.snapshotData) {
       throw new BadRequestException("REPORT_SNAPSHOT_NOT_READY");
     }
+    await this.assertTeacherStudentReportScope(context, resolvedStudentId, snapshot);
 
     const student = readRecords(snapshot.snapshotData.students)
       .find((candidate) => readText(candidate.studentId) === resolvedStudentId);
@@ -302,6 +363,7 @@ export class ReportGenerationService {
 
     const resolvedExamId = required(examId, "REPORT_EXAM_REQUIRED");
     const resolvedStudentId = required(studentId, "REPORT_STUDENT_REQUIRED");
+    await this.assertTeacherStudentReportScope(context, resolvedStudentId);
     const snapshots = await this.snapshots.listByExam(context.tenantId, resolvedExamId);
     const points: ReportStudentProgressPoint[] = [];
 
@@ -311,10 +373,16 @@ export class ReportGenerationService {
       const student = readRecords(snapshot.snapshotData.students)
         .find((candidate) => readText(candidate.studentId) === resolvedStudentId);
       if (student) {
+        if (isTeacherSubjectContext(context) && !(await this.canTeacherAccessStudentReport(context, resolvedStudentId, snapshot))) {
+          continue;
+        }
         points.push({
           snapshotId: snapshot.id,
+          ...(snapshot.courseId ? { courseId: snapshot.courseId } : {}),
           ...(snapshot.generatedAt ? { generatedAt: snapshot.generatedAt } : {}),
+          ...(snapshot.termId ? { termId: snapshot.termId } : {}),
           total: readScoreSummary(student.total),
+          branches: readRecords(student.branches).map((branch) => readBranchSummary(branch)),
         });
       }
     }
@@ -359,6 +427,180 @@ export class ReportGenerationService {
 
     return snapshot.id;
   }
+
+  private async assertTeacherStudentReportScope(
+    context: RequestContext,
+    studentId: string,
+    reportContext?: Pick<ReportSnapshotRecord, "courseId" | "termId">,
+  ): Promise<void> {
+    if (!isTeacherSubjectContext(context)) {
+      return;
+    }
+    if (!(await this.canTeacherAccessStudentReport(context, studentId, reportContext))) {
+      throw new ForbiddenException("FORBIDDEN_SUBJECT");
+    }
+  }
+
+  private async findStudentDisplayName(context: RequestContext, studentId: string): Promise<string | undefined> {
+    if (!this.studentStore) return undefined;
+
+    const student = await this.studentStore.findById(studentId);
+    if (!student || student.tenantId !== context.tenantId) return undefined;
+
+    return `${student.firstName} ${student.lastName}`.trim() || undefined;
+  }
+
+  private async findInstitutionName(context: RequestContext): Promise<string | undefined> {
+    if (!this.tenantStore || !context.tenantId) return undefined;
+
+    try {
+      const tenant = await this.tenantStore.findById(context.tenantId);
+      return tenant?.name.trim() || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async findExamMeta(context: RequestContext, examId: string): Promise<Pick<ReportStudentSnapshot, "examStartsAt" | "examTitle">> {
+    if (!this.examRepository || !context.tenantId) return {};
+
+    let exam;
+    try {
+      exam = await this.examRepository.findById(context.tenantId, examId);
+    } catch {
+      return {};
+    }
+    if (!exam) return {};
+
+    return {
+      ...(exam.title ? { examTitle: exam.title } : {}),
+      ...(exam.startsAt ? { examStartsAt: exam.startsAt } : {}),
+    };
+  }
+
+  private async findParticipantMeta(
+    context: RequestContext,
+    examId: string,
+    studentId: string,
+  ): Promise<Pick<ReportStudentSnapshot, "bookletType" | "participantNo">> {
+    if (!this.examParticipants || !context.tenantId) return {};
+
+    let participant;
+    try {
+      participant = (await this.examParticipants.list(context.tenantId, examId))
+        .find((candidate) => candidate.studentId === studentId);
+    } catch {
+      return {};
+    }
+    if (!participant) return {};
+
+    return {
+      ...(participant.participantNo ? { participantNo: participant.participantNo } : {}),
+      ...(participant.bookletType ? { bookletType: participant.bookletType } : {}),
+    };
+  }
+
+  private async canTeacherAccessStudentReport(
+    context: RequestContext & { subjectType: "TEACHER"; subjectId: string },
+    studentId: string,
+    reportContext?: Pick<ReportSnapshotRecord, "courseId" | "termId">,
+  ): Promise<boolean> {
+    if (!this.studentStore || !this.teacherAssignmentStore) {
+      throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
+    }
+
+    const student = await this.studentStore.findById(studentId);
+    if (!student) {
+      return false;
+    }
+
+    try {
+      assertTenantResourceAccess(context, student);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "FORBIDDEN_TENANT";
+      throw new ForbiddenException(message);
+    }
+
+    const assignments = filterTenantResources(context, await this.teacherAssignmentStore.listByTeacher(context.subjectId));
+    return isTeacherScopedStudent(context.subjectId, student, assignments, reportContext);
+  }
+
+  private async scopeSnapshotForTeacher(
+    context: RequestContext,
+    snapshot: ReportSnapshotRecord,
+  ): Promise<ReportSnapshotRecord> {
+    if (!isTeacherSubjectContext(context)) {
+      return snapshot;
+    }
+
+    const scope = await this.resolveTeacherReportScope(context, snapshot);
+    const snapshotData = snapshot.snapshotData ?? {};
+    const scopedStudents = readRecords(snapshotData.students)
+      .filter((student) => scope.studentIds.has(readText(student.studentId)));
+    const scopedClasses = readRecords(snapshotData.classes)
+      .filter((classSummary) => scope.classIds.has(readText(classSummary.classId)));
+
+    return {
+      ...snapshot,
+      snapshotData: {
+        reportType: readText(snapshotData.reportType) || snapshot.reportType,
+        ...(readText(snapshotData.generatedAt) || snapshot.generatedAt
+          ? { generatedAt: readText(snapshotData.generatedAt) || snapshot.generatedAt }
+          : {}),
+        resultCount: scopedStudents.length,
+        classes: scopedClasses,
+        students: scopedStudents,
+      },
+    };
+  }
+
+  private async resolveTeacherReportScope(
+    context: RequestContext & { subjectType: "TEACHER"; subjectId: string },
+    reportContext: Pick<ReportSnapshotRecord, "courseId" | "termId">,
+  ): Promise<{ studentIds: Set<string>; classIds: Set<string> }> {
+    if (!this.studentStore || !this.teacherAssignmentStore) {
+      throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
+    }
+
+    const assignments = filterTenantResources(context, await this.teacherAssignmentStore.listByTeacher(context.subjectId));
+    const scopedStudents = filterTenantResources(context, await this.studentStore.list())
+      .filter((student) => !student.deletedAt && isTeacherScopedStudent(context.subjectId, student, assignments, reportContext));
+
+    return {
+      studentIds: new Set(scopedStudents.map((student) => student.id)),
+      classIds: new Set(scopedStudents.map((student) => student.classId).filter((classId): classId is string => Boolean(classId))),
+    };
+  }
+}
+
+function isTeacherScopedStudent(
+  teacherId: string,
+  student: StudentRecord,
+  assignments: Array<{ teacherId: string; studentId?: string; classId?: string; courseId?: string; termId?: string; startsAt?: string; endsAt?: string }>,
+  reportContext?: Pick<ReportSnapshotRecord, "courseId" | "termId">,
+): boolean {
+  return student.responsibleTeacherId === teacherId ||
+    assignments.some((assignment) =>
+      assignment.teacherId === teacherId &&
+      isAssignmentActive(assignment) &&
+      matchesReportContext(assignment, reportContext) &&
+      (assignment.studentId === student.id || Boolean(student.classId && assignment.classId === student.classId)),
+    );
+}
+
+function matchesReportContext(
+  assignment: { courseId?: string; termId?: string },
+  reportContext: Pick<ReportSnapshotRecord, "courseId" | "termId"> | undefined,
+): boolean {
+  if (!reportContext) return true;
+  if (assignment.courseId && assignment.courseId !== reportContext.courseId) return false;
+  if (assignment.termId && assignment.termId !== reportContext.termId) return false;
+  return true;
+}
+
+function isAssignmentActive(assignment: { startsAt?: string; endsAt?: string }): boolean {
+  const today = new Date().toISOString().slice(0, 10);
+  return (!assignment.startsAt || assignment.startsAt <= today) && (!assignment.endsAt || assignment.endsAt >= today);
 }
 
 function parseReportType(value: string | undefined): typeof examResultSummaryReportType {
@@ -375,6 +617,30 @@ function required(value: string | undefined, errorCode: string): string {
     throw new BadRequestException(errorCode);
   }
   return trimmed;
+}
+
+function optionalText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+function resolveReportContext(input: ReportSnapshotListFilters): ReportSnapshotListFilters {
+  return {
+    campusId: optionalText(input.campusId),
+    gradeLevelId: optionalText(input.gradeLevelId),
+    classId: optionalText(input.classId),
+    courseId: optionalText(input.courseId),
+    termId: optionalText(input.termId),
+  };
+}
+
+function filterReportSnapshots(records: ReportSnapshotRecord[], filters: ReportSnapshotListFilters): ReportSnapshotRecord[] {
+  return records
+    .filter((snapshot) => !filters.campusId || snapshot.campusId === filters.campusId)
+    .filter((snapshot) => !filters.gradeLevelId || snapshot.gradeLevelId === filters.gradeLevelId)
+    .filter((snapshot) => !filters.classId || snapshot.classId === filters.classId)
+    .filter((snapshot) => !filters.courseId || snapshot.courseId === filters.courseId)
+    .filter((snapshot) => !filters.termId || snapshot.termId === filters.termId);
 }
 
 async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<ReportSnapshotExportResult> {
@@ -396,6 +662,7 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
     ["averageNet", readNumber(averages.net)],
     ["averageRawScore", readNumber(averages.rawScore)],
     ["averageStandardScore", readNumber(averages.standardScore)],
+    ["averageEstimatedRawScore", readNumber(averages.estimatedRawScore)],
   ]);
 
   const branches = workbook.addWorksheet("Branches");
@@ -412,7 +679,18 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
   }
 
   const classes = workbook.addWorksheet("Classes");
-  classes.addRow(["classId", "className", "resultCount", "correct", "wrong", "blank", "net", "rawScore", "standardScore"]);
+  classes.addRow([
+    "classId",
+    "className",
+    "resultCount",
+    "correct",
+    "wrong",
+    "blank",
+    "net",
+    "rawScore",
+    "standardScore",
+    "estimatedRawScore",
+  ]);
   for (const classSummary of readRecords(snapshotData.classes)) {
     const averages = readRecord(classSummary.averages);
     classes.addRow([
@@ -425,13 +703,33 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
       readNumber(averages.net),
       readNumber(averages.rawScore),
       readNumber(averages.standardScore),
+      readNumber(averages.estimatedRawScore),
     ]);
   }
 
   const students = workbook.addWorksheet("Students");
-  students.addRow(["studentId", "classId", "className", "resultKey", "correct", "wrong", "blank", "net", "rawScore", "standardScore"]);
+  students.addRow([
+    "studentId",
+    "classId",
+    "className",
+    "resultKey",
+    "correct",
+    "wrong",
+    "blank",
+    "net",
+    "rawScore",
+    "standardScore",
+    "generalRank",
+    "generalOutOf",
+    "generalPercentile",
+    "classRank",
+    "classOutOf",
+    "classPercentile",
+    "estimatedRawScore",
+  ]);
   for (const student of readRecords(snapshotData.students)) {
     const total = readRecord(student.total);
+    const statistics = readStudentStatistics(student.statistics);
     students.addRow([
       readText(student.studentId),
       readText(student.classId),
@@ -443,7 +741,44 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
       readNumber(total.net),
       readNumber(total.rawScore),
       readNumber(total.standardScore),
+      statistics?.general.rank ?? "",
+      statistics?.general.outOf ?? "",
+      statistics?.general.percentile ?? "",
+      statistics?.class?.rank ?? "",
+      statistics?.class?.outOf ?? "",
+      statistics?.class?.percentile ?? "",
+      readNumber(total.estimatedRawScore),
     ]);
+  }
+
+  const branchStatistics = workbook.addWorksheet("BranchStatistics");
+  branchStatistics.addRow([
+    "studentId",
+    "branch",
+    "standardScore",
+    "generalRank",
+    "generalOutOf",
+    "generalPercentile",
+    "classRank",
+    "classOutOf",
+    "classPercentile",
+  ]);
+  for (const student of readRecords(snapshotData.students)) {
+    const studentId = readText(student.studentId);
+    const statistics = readStudentStatistics(student.statistics);
+    for (const branch of statistics?.branches ?? []) {
+      branchStatistics.addRow([
+        studentId,
+        branch.branch,
+        branch.standardScore,
+        branch.general.rank,
+        branch.general.outOf,
+        branch.general.percentile,
+        branch.class?.rank ?? "",
+        branch.class?.outOf ?? "",
+        branch.class?.percentile ?? "",
+      ]);
+    }
   }
 
   for (const worksheet of workbook.worksheets) {
@@ -530,6 +865,7 @@ function createSnapshotPdfLines(snapshot: ReportSnapshotRecord): string[] {
     `Sonuc sayisi: ${readNumber(snapshotData.resultCount) || "-"}`,
     `Ortalama net: ${readNumber(averages.net) || "-"}`,
     `Standart puan: ${readNumber(averages.standardScore) || "-"}`,
+    `Ortalama tahmini ham puan: ${readNumber(averages.estimatedRawScore) || "-"}`,
     "",
     "Branslar",
     ...readRecords(snapshotData.branches).slice(0, 8).map((branch) =>
@@ -545,8 +881,15 @@ function createSnapshotPdfLines(snapshot: ReportSnapshotRecord): string[] {
     "Ogrenciler",
     ...readRecords(snapshotData.students).slice(0, 12).map((student) => {
       const total = readRecord(student.total);
-      return `${readText(student.studentId) || "-"} ${readText(student.className) || ""}: ${readNumber(total.net) || "-"} net`;
+      const statistics = readStudentStatistics(student.statistics);
+      return `${readText(student.studentId) || "-"} ${readText(student.className) || ""}: ${readNumber(total.net) || "-"} net, genel ${formatPdfRank(statistics?.general)}, sinif ${formatPdfRank(statistics?.class)}`;
     }),
+    "",
+    "Ogrenci Karnesi",
+    "Bolum Analizi",
+    "Puan - Sira Analizi",
+    "Bolum Basari Yuzdeleri",
+    "Son Sinav Netleri",
   ];
 }
 
@@ -571,6 +914,15 @@ function createSnapshotPdfHtml(snapshot: ReportSnapshotRecord): string {
     .card { border: 1px solid #dce3ec; border-radius: 8px; padding: 12px; }
     .card span { color: #66758a; display: block; font-size: 11px; margin-bottom: 7px; }
     .card strong { font-size: 18px; }
+    .karne { border: 3px solid #d9a428; margin: 0 0 24px; padding: 14px; }
+    .karne-header { display: grid; grid-template-columns: 1fr 160px; border: 1px solid #d9a428; }
+    .karne-header div { padding: 10px 12px; }
+    .karne-header h2 { margin: 0 0 6px; }
+    .karne-header strong { display: block; font-size: 20px; }
+    .karne-brand { align-items: center; border-left: 1px solid #d9a428; color: #0f766e; display: grid; font-weight: 800; text-align: center; }
+    .karne-summary { display: grid; grid-template-columns: repeat(4, 1fr); margin: 10px 0; }
+    .karne-summary span { border: 1px solid #d9a428; font-size: 11px; font-weight: 700; padding: 7px; text-align: center; }
+    .karne-grid { display: grid; gap: 12px; grid-template-columns: 1.3fr .7fr; }
     h2 { color: #16324f; font-size: 16px; margin: 22px 0 10px; }
     table { border-collapse: collapse; font-size: 12px; width: 100%; }
     th { background: #eef3f8; color: #273447; text-align: left; }
@@ -586,35 +938,42 @@ function createSnapshotPdfHtml(snapshot: ReportSnapshotRecord): string {
   <main class="content">
     <section class="cards">
       ${renderPdfCard("Sınav", snapshot.examId)}
-      ${renderPdfCard("Snapshot", snapshot.id)}
-      ${renderPdfCard("Sonuç", readNumber(snapshotData.resultCount) || "-")}
-      ${renderPdfCard("Ortalama net", readNumber(averages.net) || "-")}
-      ${renderPdfCard("Standart puan", readNumber(averages.standardScore) || "-")}
-      ${renderPdfCard("Durum", snapshot.status)}
-      ${renderPdfCard("Üretim", snapshot.generatedAt ?? "-")}
-      ${renderPdfCard("Rapor tipi", snapshot.reportType)}
+    ${renderPdfCard("Snapshot", snapshot.id)}
+    ${renderPdfCard("Sonuç", readNumber(snapshotData.resultCount) || "-")}
+    ${renderPdfCard("Ortalama net", readNumber(averages.net) || "-")}
+    ${renderPdfCard("Standart puan", readNumber(averages.standardScore) || "-")}
+    ${renderPdfCard("Tahmini ham puan", readNumber(averages.estimatedRawScore) || "-")}
+    ${renderPdfCard("Durum", snapshot.status)}
+    ${renderPdfCard("Üretim", snapshot.generatedAt ?? "-")}
+    ${renderPdfCard("Rapor tipi", snapshot.reportType)}
     </section>
+    ${renderPdfStudentKarne(students[0], createStudentBranchAverageLookup(snapshotData, readText(students[0]?.classId)))}
     ${renderPdfTable("Branş Başarı", ["Branş", "Sonuç", "Net"], branches, (branch) => [
       readText(branch.branch) || "-",
       readNumber(branch.resultCount) || "-",
       readNumber(branch.net) || "-",
     ])}
-    ${renderPdfTable("Sınıf Başarı", ["Sınıf", "Sonuç", "Net", "Standart puan"], classes, (classSummary) => {
+    ${renderPdfTable("Sınıf Başarı", ["Sınıf", "Sonuç", "Net", "Standart puan", "Tahmini ham puan"], classes, (classSummary) => {
       const classAverages = readRecord(classSummary.averages);
       return [
         readText(classSummary.className) || "Sınıfsız",
         readNumber(classSummary.resultCount) || "-",
         readNumber(classAverages.net) || "-",
         readNumber(classAverages.standardScore) || "-",
+        readNumber(classAverages.estimatedRawScore) || "-",
       ];
     })}
-    ${renderPdfTable("Öğrenci Özeti", ["Öğrenci", "Sınıf", "Net", "Standart puan"], students, (student) => {
+    ${renderPdfTable("Öğrenci Özeti", ["Öğrenci", "Sınıf", "Net", "Standart puan", "Tahmini ham puan", "Genel sıra", "Sınıf sıra"], students, (student) => {
       const total = readRecord(student.total);
+      const statistics = readStudentStatistics(student.statistics);
       return [
         readText(student.studentId) || "-",
         readText(student.className) || "-",
         readNumber(total.net) || "-",
         readNumber(total.standardScore) || "-",
+        readNumber(total.estimatedRawScore) || "-",
+        formatPdfRank(statistics?.general),
+        formatPdfRank(statistics?.class),
       ];
     })}
     <p class="footer">Bu çıktı hazır ReportSnapshot verisinden üretilmiştir.</p>
@@ -623,24 +982,109 @@ function createSnapshotPdfHtml(snapshot: ReportSnapshotRecord): string {
 </html>`;
 }
 
+function renderPdfStudentKarne(
+  student: Record<string, unknown> | undefined,
+  branchAverages = new Map<string, Pick<ReportStudentBranchSummary, "classNetAverage" | "generalNetAverage" | "schoolNetAverage">>(),
+): string {
+  if (!student) return "";
+
+  const total = readRecord(student.total);
+  const statistics = readStudentStatistics(student.statistics);
+  const branches = readRecords(student.branches);
+  const outcomes = readRecords(student.outcomes).slice(0, 6);
+
+  return `<section class="karne">
+      <div class="karne-header">
+        <div>
+          <h2>Öğrenci Karnesi</h2>
+          <strong>${escapeHtml(readText(student.studentId) || "-")}</strong>
+          <span>${escapeHtml(readText(student.className) || readText(student.classId) || "-")}</span>
+        </div>
+        <div class="karne-brand">UZMAN HOCAM</div>
+      </div>
+      <div class="karne-summary">
+        <span>Net ${escapeHtml(formatPdfValue(readNumber(total.net)))}</span>
+        <span>Standart puan ${escapeHtml(formatPdfValue(readNumber(total.standardScore)))}</span>
+        <span>Genel sıra ${escapeHtml(formatPdfRank(statistics?.general))}</span>
+        <span>Sınıf sıra ${escapeHtml(formatPdfRank(statistics?.class))}</span>
+      </div>
+      <div class="karne-grid">
+        ${renderPdfTable("BÖLÜM ANALİZİ", ["No", "Branş", "Soru sayısı", "Doğru", "Yanlış", "Boş", "Net", "Sınıf net ort", "Okul net ort", "Genel net ort"], branches, (branch, index) => [
+          index + 1,
+          readText(branch.branch) || "-",
+          formatPdfValue(branchQuestionCount(branch)),
+          formatPdfValue(readNumber(branch.correct)),
+          formatPdfValue(readNumber(branch.wrong)),
+          formatPdfValue(readNumber(branch.blank)),
+          formatPdfValue(readNumber(branch.net)),
+          formatPdfValue(branchAverages.get(readText(branch.branch))?.classNetAverage ?? readNumber(branch.classNetAverage)),
+          formatPdfValue(branchAverages.get(readText(branch.branch))?.schoolNetAverage ?? readNumber(branch.schoolNetAverage)),
+          formatPdfValue(branchAverages.get(readText(branch.branch))?.generalNetAverage ?? readNumber(branch.generalNetAverage)),
+        ])}
+        <section>
+          <h2>PUAN - SIRA ANALİZİ</h2>
+          <table>
+            <tbody>
+        <tr><th>PUAN</th><td>${escapeHtml(formatPdfValue(readNumber(total.standardScore)))}</td></tr>
+        <tr><th>Tahmini ham puan</th><td>${escapeHtml(formatPdfValue(readNumber(total.estimatedRawScore)))}</td></tr>
+        <tr><th>SIRA</th><td>${escapeHtml(formatPdfRank(statistics?.general))}</td></tr>
+        <tr><th>SINIF</th><td>${escapeHtml(formatPdfRank(statistics?.class))}</td></tr>
+      </tbody>
+    </table>
+        </section>
+      </div>
+      ${renderPdfTable("BÖLÜM BAŞARI YÜZDELERİ", ["Kazanım", "Branş", "Net"], outcomes, (outcome) => [
+        readText(outcome.outcomeCode) || "-",
+        readText(outcome.branch) || "-",
+        formatPdfValue(readNumber(outcome.net)),
+      ])}
+      ${renderPdfTable("SON SINAV NETLERİ", ["Öğrenci", "Net", "Puan", "Tahmini ham puan"], [student], (row) => {
+        const rowTotal = readRecord(row.total);
+        return [
+          readText(row.studentId) || "-",
+          formatPdfValue(readNumber(rowTotal.net)),
+          formatPdfValue(readNumber(rowTotal.standardScore)),
+          formatPdfValue(readNumber(rowTotal.estimatedRawScore)),
+        ];
+      })}
+    </section>`;
+}
+
 function renderPdfCard(label: string, value: string | number): string {
   return `<article class="card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></article>`;
+}
+
+function formatPdfValue(value: string | number): string {
+  return value === "" ? "-" : String(value);
+}
+
+function formatPdfRank(rank: ReportScopeRank | undefined): string {
+  if (!rank) return "-";
+  return `${rank.rank}/${rank.outOf} (%${rank.percentile})`;
 }
 
 function renderPdfTable(
   title: string,
   headers: string[],
   rows: Record<string, unknown>[],
-  mapRow: (row: Record<string, unknown>) => Array<string | number>,
+  mapRow: (row: Record<string, unknown>, index: number) => Array<string | number>,
 ): string {
   if (rows.length === 0) return "";
 
   const headerHtml = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("");
   const rowHtml = rows
-    .map((row) => `<tr>${mapRow(row).map((cell) => `<td>${escapeHtml(String(cell))}</td>`).join("")}</tr>`)
+    .map((row, index) => `<tr>${mapRow(row, index).map((cell) => `<td>${escapeHtml(String(cell))}</td>`).join("")}</tr>`)
     .join("");
 
   return `<section><h2>${escapeHtml(title)}</h2><table><thead><tr>${headerHtml}</tr></thead><tbody>${rowHtml}</tbody></table></section>`;
+}
+
+function branchQuestionCount(branch: Record<string, unknown>): string | number {
+  const correct = readNumber(branch.correct);
+  const wrong = readNumber(branch.wrong);
+  const blank = readNumber(branch.blank);
+  if (correct === "" || wrong === "" || blank === "") return "-";
+  return correct + wrong + blank;
 }
 
 function escapeHtml(value: string): string {
@@ -725,7 +1169,7 @@ function readOptionalNumber(value: unknown): number | undefined {
 
 function readScoreSummary(value: unknown): ReportStudentScoreSummary {
   const record = readRecord(value);
-  return {
+  const summary: ReportStudentScoreSummary = {
     correct: readOptionalNumber(record.correct),
     wrong: readOptionalNumber(record.wrong),
     blank: readOptionalNumber(record.blank),
@@ -733,17 +1177,69 @@ function readScoreSummary(value: unknown): ReportStudentScoreSummary {
     rawScore: readOptionalNumber(record.rawScore),
     standardScore: readOptionalNumber(record.standardScore),
   };
+  const estimatedRawScore = readOptionalNumber(record.estimatedRawScore);
+  if (estimatedRawScore !== undefined) {
+    summary.estimatedRawScore = estimatedRawScore;
+  }
+  return summary;
 }
 
-function readBranchSummary(value: unknown): ReportStudentBranchSummary {
+function readBranchSummary(
+  value: unknown,
+  averages: Map<string, Pick<ReportStudentBranchSummary, "classNetAverage" | "generalNetAverage" | "schoolNetAverage">> = new Map(),
+): ReportStudentBranchSummary {
   const record = readRecord(value);
+  const branch = readText(record.branch);
+  const branchAverages = averages.get(branch);
   return {
-    branch: readText(record.branch),
+    branch,
     correct: readOptionalNumber(record.correct),
     wrong: readOptionalNumber(record.wrong),
     blank: readOptionalNumber(record.blank),
     net: readOptionalNumber(record.net),
+    ...(branchAverages?.classNetAverage !== undefined ? { classNetAverage: branchAverages.classNetAverage } : {}),
+    ...(branchAverages?.schoolNetAverage !== undefined ? { schoolNetAverage: branchAverages.schoolNetAverage } : {}),
+    ...(branchAverages?.generalNetAverage !== undefined ? { generalNetAverage: branchAverages.generalNetAverage } : {}),
   };
+}
+
+function createStudentBranchAverageLookup(
+  snapshotData: Record<string, unknown>,
+  classId: string,
+): Map<string, Pick<ReportStudentBranchSummary, "classNetAverage" | "generalNetAverage" | "schoolNetAverage">> {
+  const averages = new Map<string, Pick<ReportStudentBranchSummary, "classNetAverage" | "generalNetAverage" | "schoolNetAverage">>();
+  const schoolBranches = readRecords(snapshotData.branches);
+  const classBranches = readRecords(readRecords(snapshotData.classes).find((klass) => readText(klass.classId) === classId)?.branches);
+  const generalBranches = readRecords(readRecord(snapshotData.statistics).branches);
+  for (const branch of schoolBranches) {
+    const branchName = readText(branch.branch);
+    if (!branchName) continue;
+    const schoolNetAverage = readOptionalNumber(branch.net);
+    averages.set(branchName, {
+      ...(schoolNetAverage !== undefined ? { schoolNetAverage } : {}),
+    });
+  }
+  for (const branch of classBranches) {
+    const branchName = readText(branch.branch);
+    if (!branchName) continue;
+    const current = averages.get(branchName) ?? {};
+    const classNetAverage = readOptionalNumber(branch.net);
+    averages.set(branchName, {
+      ...current,
+      ...(classNetAverage !== undefined ? { classNetAverage } : {}),
+    });
+  }
+  for (const branch of generalBranches) {
+    const branchName = readText(branch.branch);
+    if (!branchName) continue;
+    const current = averages.get(branchName) ?? {};
+    const generalNetAverage = readOptionalNumber(branch.meanNet);
+    averages.set(branchName, {
+      ...current,
+      ...(generalNetAverage !== undefined ? { generalNetAverage } : {}),
+    });
+  }
+  return averages;
 }
 
 function readStudentStatistics(value: unknown): ReportStudentStatistics | undefined {

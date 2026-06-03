@@ -4,7 +4,7 @@ import pg from "pg";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export type TeacherAssignmentInput = Pick<TeacherAssignmentRecord, "tenantId" | "teacherId" | "role"> &
-  Partial<Pick<TeacherAssignmentRecord, "classId" | "studentId" | "courseId" | "startsAt" | "endsAt">>;
+  Partial<Pick<TeacherAssignmentRecord, "classId" | "studentId" | "courseId" | "termId" | "startsAt" | "endsAt">>;
 
 export interface TeacherAssignmentStore {
   list(): Promise<TeacherAssignmentRecord[]>;
@@ -24,6 +24,7 @@ const demoAssignments: TeacherAssignmentRecord[] = [
     tenantId: "tenant-a",
     teacherId: "teacher-a",
     classId: "class-a",
+    termId: "term-2026-spring",
     role: "CLASS_TEACHER",
   },
   {
@@ -31,6 +32,7 @@ const demoAssignments: TeacherAssignmentRecord[] = [
     tenantId: "tenant-a",
     teacherId: "teacher-a",
     studentId: "student-a",
+    termId: "term-2026-spring",
     role: "RESPONSIBLE_TEACHER",
   },
 ];
@@ -135,12 +137,13 @@ export class PostgresTeacherAssignmentStore implements TeacherAssignmentStore {
            "classId",
            "studentId",
            "courseId",
+           "termId",
            "role",
            "startsAt",
            "endsAt",
            "updatedAt"
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9::date, now())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10::date, now())
          RETURNING *`,
         [
           randomUUID(),
@@ -149,6 +152,7 @@ export class PostgresTeacherAssignmentStore implements TeacherAssignmentStore {
           input.classId ?? null,
           input.studentId ?? null,
           input.courseId ?? null,
+          input.termId ?? null,
           input.role,
           input.startsAt ?? null,
           input.endsAt ?? null,
@@ -169,9 +173,10 @@ export class PostgresTeacherAssignmentStore implements TeacherAssignmentStore {
          SET "classId" = CASE WHEN $2 THEN $3 ELSE "classId" END,
              "studentId" = CASE WHEN $4 THEN $5 ELSE "studentId" END,
              "courseId" = CASE WHEN $6 THEN $7 ELSE "courseId" END,
-             "role" = COALESCE($8, "role"),
-             "startsAt" = CASE WHEN $9 THEN $10::date ELSE "startsAt" END,
-             "endsAt" = CASE WHEN $11 THEN $12::date ELSE "endsAt" END,
+             "termId" = CASE WHEN $8 THEN $9 ELSE "termId" END,
+             "role" = COALESCE($10, "role"),
+             "startsAt" = CASE WHEN $11 THEN $12::date ELSE "startsAt" END,
+             "endsAt" = CASE WHEN $13 THEN $14::date ELSE "endsAt" END,
              "updatedAt" = now()
          WHERE "id" = $1
          RETURNING *`,
@@ -183,6 +188,8 @@ export class PostgresTeacherAssignmentStore implements TeacherAssignmentStore {
           input.studentId || null,
           input.courseId !== undefined,
           input.courseId || null,
+          input.termId !== undefined,
+          input.termId || null,
           input.role ?? null,
           input.startsAt !== undefined,
           input.startsAt ?? null,
@@ -218,6 +225,7 @@ interface TeacherAssignmentRow {
   classId: string | null;
   studentId: string | null;
   courseId: string | null;
+  termId: string | null;
   role: TeacherAssignmentRole;
   startsAt: Date | string | null;
   endsAt: Date | string | null;
@@ -233,6 +241,7 @@ function toTeacherAssignmentRecord(row: TeacherAssignmentRow): TeacherAssignment
     classId: row.classId ?? undefined,
     studentId: row.studentId ?? undefined,
     courseId: row.courseId ?? undefined,
+    termId: row.termId ?? undefined,
     role: row.role,
     startsAt: row.startsAt ? toDateString(row.startsAt) : undefined,
     endsAt: row.endsAt ? toDateString(row.endsAt) : undefined,

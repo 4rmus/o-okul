@@ -40,6 +40,41 @@ describe("ParserConfigSuggestionService", () => {
     expect(result.suggestion.skipHeaderLines).toBe(0);
   });
 
+  it("OPTİK-7108 LGS presetini örnek dosya istemeden döndürür", () => {
+    const service = new ParserConfigSuggestionService();
+
+    const result = service.suggest(createContext(), {
+      examId: "exam-a",
+      preset: "OPTIK_7108_LGS",
+    });
+
+    expect(result).toMatchObject({
+      examId: "exam-a",
+      status: "suggested",
+      suggestion: {
+        delimiter: "FIXED",
+        skipHeaderLines: 0,
+        confidence: "high",
+        fieldMapping: {
+          studentNo: { kind: "fixed", start: 11, length: 4 },
+          bookletType: { kind: "fixed", start: 50, length: 1 },
+          answers: {
+            kind: "fixed",
+            estimatedQuestionCount: 90,
+            segments: [
+              { start: 51, length: 20 },
+              { start: 71, length: 10 },
+              { start: 91, length: 10 },
+              { start: 111, length: 10 },
+              { start: 131, length: 20 },
+              { start: 151, length: 20 },
+            ],
+          },
+        },
+      },
+    });
+  });
+
   it("örnek yoksa analiz etmeden 400 döner", () => {
     const service = new ParserConfigSuggestionService();
 

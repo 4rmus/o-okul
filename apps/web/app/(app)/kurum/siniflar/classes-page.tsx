@@ -3,7 +3,7 @@
 import { type FormEvent, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
-import type { ClassRecord } from "@uzman-hocam/shared-types";
+import type { CampusRecord, ClassRecord, GradeLevelRecord } from "@uzman-hocam/shared-types";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -18,6 +18,9 @@ import { buildListUrl, initialListQuery, ListControls, type ListQueryState } fro
 const emptyForm: ClassFormState = {
   name: "",
   level: "",
+  campusId: "",
+  gradeLevelId: "",
+  section: "",
 };
 
 export function ClassesPage() {
@@ -32,11 +35,27 @@ export function ClassesPage() {
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
+  const campusesQuery = useQuery({
+    queryKey: ["next-class-campuses", auth?.session.tenantId ?? "anonymous"],
+    queryFn: () => loadCampuses(auth?.accessToken ?? ""),
+    enabled: Boolean(auth),
+    refetchOnWindowFocus: false,
+  });
+  const gradeLevelsQuery = useQuery({
+    queryKey: ["next-class-grade-levels", auth?.session.tenantId ?? "anonymous"],
+    queryFn: () => loadGradeLevels(auth?.accessToken ?? ""),
+    enabled: Boolean(auth),
+    refetchOnWindowFocus: false,
+  });
   const [editingClass, setEditingClass] = useState<ClassRecord | null>(null);
   const [form, setForm] = useState<ClassFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
   const rows = classesQuery.data?.data ?? [];
+  const campuses = campusesQuery.data?.data ?? [];
+  const gradeLevels = gradeLevelsQuery.data?.data ?? [];
+  const campusNames = new Map(campuses.map((record) => [record.id, record.name]));
+  const gradeLevelNames = new Map(gradeLevels.map((record) => [record.id, record.name]));
 
   const columns: Array<DataTableColumn<ClassRecord>> = [
     {
@@ -47,7 +66,17 @@ export function ClassesPage() {
     {
       key: "level",
       header: "Seviye",
-      render: (record) => record.level ?? "-",
+      render: (record) => gradeLevelLabel(record, gradeLevelNames),
+    },
+    {
+      key: "section",
+      header: "Şube",
+      render: (record) => record.section ?? "-",
+    },
+    {
+      key: "campusId",
+      header: "Kampüs",
+      render: (record) => campusLabel(record.campusId, campusNames),
     },
     {
       key: "actions",
@@ -74,7 +103,13 @@ export function ClassesPage() {
 
   function openEditForm(record: ClassRecord) {
     setEditingClass(record);
-    setForm({ name: record.name, level: record.level ?? "" });
+    setForm({
+      name: record.name,
+      level: record.level ?? "",
+      campusId: record.campusId ?? "",
+      gradeLevelId: record.gradeLevelId ?? "",
+      section: record.section ?? "",
+    });
     setError("");
     setIsFormOpen(true);
   }
@@ -142,9 +177,12 @@ export function ClassesPage() {
         columns={columns}
         description="Kurum sınıflarını aynı CRUD kalıbıyla yönet."
         emptyText="Sınıf kaydı yok"
-        error={error || (classesQuery.isError ? "Sınıflar alınamadı." : undefined)}
+        error={
+          error ||
+          (classesQuery.isError ? "Sınıflar alınamadı." : campusesQuery.isError ? "Kampüsler alınamadı." : gradeLevelsQuery.isError ? "Seviyeler alınamadı." : undefined)
+        }
         getRowKey={(record) => record.id}
-        loading={classesQuery.isPending}
+        loading={classesQuery.isPending || campusesQuery.isPending || gradeLevelsQuery.isPending}
         rows={rows}
         title="Sınıflar"
       />
@@ -166,10 +204,38 @@ export function ClassesPage() {
         </label>
         <label>
           Seviye
+          <select
+            value={form.gradeLevelId ?? ""}
+            onChange={(event) => {
+              const gradeLevel = gradeLevels.find((record) => record.id === event.target.value);
+              setForm((current) => ({ ...current, gradeLevelId: event.target.value, level: gradeLevel?.code ?? "" }));
+            }}
+          >
+            <option value="">Seçiniz</option>
+            {gradeLevels.map((record) => (
+              <option key={record.id} value={record.id}>
+                {record.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Şube
           <Input
-            value={form.level ?? ""}
-            onChange={(event) => setForm((current) => ({ ...current, level: event.target.value }))}
+            value={form.section ?? ""}
+            onChange={(event) => setForm((current) => ({ ...current, section: event.target.value }))}
           />
+        </label>
+        <label>
+          Kampüs
+          <select value={form.campusId ?? ""} onChange={(event) => setForm((current) => ({ ...current, campusId: event.target.value }))}>
+            <option value="">Seçiniz</option>
+            {campuses.map((record) => (
+              <option key={record.id} value={record.id}>
+                {record.name}
+              </option>
+            ))}
+          </select>
         </label>
       </FormModal>
     </>
@@ -181,10 +247,20 @@ const classSortOptions = [
   { label: "Sınıf Z-A", value: "-name" },
   { label: "Seviye A-Z", value: "level" },
   { label: "Seviye Z-A", value: "-level" },
+  { label: "Şube A-Z", value: "section" },
+  { label: "Şube Z-A", value: "-section" },
 ];
 
 async function loadClasses(accessToken: string, listQuery: ListQueryState) {
   return apiListRequest<ClassRecord>(accessToken, buildListUrl(`${apiBaseUrl}/classes`, listQuery));
+}
+
+async function loadCampuses(accessToken: string) {
+  return apiListRequest<CampusRecord>(accessToken, `${apiBaseUrl}/campuses`);
+}
+
+async function loadGradeLevels(accessToken: string) {
+  return apiListRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels`);
 }
 
 async function createClass(accessToken: string, input: ClassFormPayload) {
@@ -211,4 +287,14 @@ async function deleteClass(accessToken: string, id: string) {
   if (!response.ok) {
     throw new Error("CLASS_DELETE_FAILED");
   }
+}
+
+function campusLabel(campusId: string | undefined, campusNames: Map<string, string>) {
+  if (!campusId) return "-";
+  return campusNames.get(campusId) ?? campusId;
+}
+
+function gradeLevelLabel(record: ClassRecord, gradeLevelNames: Map<string, string>) {
+  if (record.gradeLevelId) return gradeLevelNames.get(record.gradeLevelId) ?? record.gradeLevelId;
+  return record.level ?? "-";
 }

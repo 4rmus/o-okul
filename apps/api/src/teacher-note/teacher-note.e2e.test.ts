@@ -49,6 +49,8 @@ describe("TeacherNote API", () => {
             tenantId: "tenant-a",
             studentId: "student-a",
             teacherId: "teacher-a",
+            courseId: "course-math",
+            termId: "term-2026-spring",
             visibility: "INTERNAL",
             body: "Dikkat takibi iç notu",
             developmentStatus: "FOLLOW_UP",
@@ -59,12 +61,35 @@ describe("TeacherNote API", () => {
             tenantId: "tenant-a",
             studentId: "student-a",
             teacherId: "teacher-a",
+            courseId: "course-math",
+            termId: "term-2026-spring",
             visibility: "GUARDIAN_STUDENT",
             body: "Problem çözme rutini güçleniyor.",
             developmentStatus: "IMPROVING",
             createdAt: "2026-06-04T10:00:00.000Z",
           },
         ]);
+      });
+
+    await request(server)
+      .get("/teacher-notes")
+      .query({ classId: "class-a" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.arrayContaining([
+          expect.objectContaining({ id: "teacher-note-internal-a", studentId: "student-a" }),
+          expect.objectContaining({ id: "teacher-note-visible-a", studentId: "student-a" }),
+        ]));
+      });
+
+    await request(server)
+      .get("/teacher-notes")
+      .query({ classId: "class-b" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([]);
       });
   });
 

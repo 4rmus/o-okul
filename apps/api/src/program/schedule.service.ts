@@ -3,7 +3,7 @@ import type { ScheduleLessonRecord as SharedScheduleLessonRecord } from "@uzman-
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { SchoolService } from "../school/school.service.js";
-import { assertTenantResourceAccess, filterTenantResources } from "../tenant/tenant-access.js";
+import { assertTenantResourceAccess, filterTenantResources, isTeacherSubjectContext } from "../tenant/tenant-access.js";
 import { type ScheduleStore, scheduleStoreToken } from "./schedule-store.js";
 
 export interface ScheduleLessonRecord extends SharedScheduleLessonRecord {
@@ -19,7 +19,7 @@ export class ScheduleService {
   ) {}
 
   async list(context: RequestContext): Promise<ScheduleLessonRecord[]> {
-    return filterTenantResources(context, await this.store.list()).filter((lesson) => !lesson.deletedAt);
+    return this.filterReadableLessons(context, filterTenantResources(context, await this.store.list()).filter((lesson) => !lesson.deletedAt));
   }
 
   async listCurrentTeacherLessons(context: RequestContext): Promise<ScheduleLessonRecord[]> {
@@ -39,13 +39,15 @@ export class ScheduleService {
       throw new NotFoundException("SCHEDULE_LESSON_NOT_FOUND");
     }
 
-    this.assertAccess(context, lesson);
+    this.assertReadAccess(context, lesson);
     return lesson;
   }
 
   async create(context: RequestContext, input: Partial<ScheduleLessonRecord>): Promise<ScheduleLessonRecord> {
     const tenantId = this.resolveTenantId(context, input.tenantId);
     await this.assertClassAndTeacher(context, input.classId, input.teacherId);
+    await this.assertCourse(context, input.courseId);
+    await this.assertTerm(context, input.termId);
     const timeRange = this.resolveTimeRange(input.startsAt, input.endsAt);
     await this.assertTeacherAvailable(context, input.teacherId ?? "", timeRange.startsAt, timeRange.endsAt);
 
@@ -54,6 +56,8 @@ export class ScheduleService {
         tenantId,
         classId: input.classId ?? "",
         teacherId: input.teacherId ?? "",
+        courseId: input.courseId,
+        termId: input.termId,
         title: input.title ?? "",
         startsAt: timeRange.startsAt,
         endsAt: timeRange.endsAt,
@@ -76,10 +80,14 @@ export class ScheduleService {
 
   async update(context: RequestContext, id: string, input: Partial<ScheduleLessonRecord>): Promise<ScheduleLessonRecord> {
     const lesson = await this.findOne(context, id);
-    const changedFields = changedInputFields(input, ["classId", "teacherId", "title", "startsAt", "endsAt"]);
+    const changedFields = changedInputFields(input, ["classId", "teacherId", "courseId", "termId", "title", "startsAt", "endsAt"]);
     const classId = input.classId ?? lesson.classId;
     const teacherId = input.teacherId ?? lesson.teacherId;
+    const courseId = input.courseId ?? lesson.courseId;
+    const termId = input.termId ?? lesson.termId;
     await this.assertClassAndTeacher(context, classId, teacherId);
+    await this.assertCourse(context, courseId);
+    await this.assertTerm(context, termId);
     const timeRange = this.resolveTimeRange(input.startsAt ?? lesson.startsAt, input.endsAt ?? lesson.endsAt);
     await this.assertTeacherAvailable(context, teacherId, timeRange.startsAt, timeRange.endsAt, id);
 
@@ -87,6 +95,8 @@ export class ScheduleService {
       this.store.update(id, {
         classId,
         teacherId,
+        courseId,
+        termId,
         title: input.title ?? lesson.title,
         startsAt: timeRange.startsAt,
         endsAt: timeRange.endsAt,
@@ -141,6 +151,22 @@ export class ScheduleService {
     await this.school.findTeacher(context, teacherId);
   }
 
+  private async assertCourse(context: RequestContext, courseId: string | undefined) {
+    if (!courseId) {
+      return;
+    }
+
+    await this.school.findCourse(context, courseId);
+  }
+
+  private async assertTerm(context: RequestContext, termId: string | undefined) {
+    if (!termId) {
+      return;
+    }
+
+    await this.school.findAcademicTerm(context, termId);
+  }
+
   private resolveTimeRange(startsAt: string | undefined, endsAt: string | undefined): { startsAt: string; endsAt: string } {
     const startTime = Date.parse(startsAt ?? "");
     const endTime = Date.parse(endsAt ?? "");
@@ -183,6 +209,21 @@ export class ScheduleService {
       const message = error instanceof Error ? error.message : "FORBIDDEN_TENANT";
       throw new ForbiddenException(message);
     }
+  }
+
+  private assertReadAccess(context: RequestContext, lesson: ScheduleLessonRecord): void {
+    this.assertAccess(context, lesson);
+    if (isTeacherSubjectContext(context) && lesson.teacherId !== context.subjectId) {
+      throw new ForbiddenException("FORBIDDEN_SUBJECT");
+    }
+  }
+
+  private filterReadableLessons(context: RequestContext, lessons: ScheduleLessonRecord[]): ScheduleLessonRecord[] {
+    if (!isTeacherSubjectContext(context)) {
+      return lessons;
+    }
+
+    return lessons.filter((lesson) => lesson.teacherId === context.subjectId);
   }
 
   private async writeSchedule<T>(operation: () => Promise<T>): Promise<T> {

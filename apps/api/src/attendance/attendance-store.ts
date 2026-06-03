@@ -9,14 +9,14 @@ export interface AttendanceStore {
   findById(id: string): Promise<AttendanceRecord | undefined>;
   findByStudentDate(studentId: string, date: string): Promise<AttendanceRecord | undefined>;
   create(input: Omit<AttendanceRecord, "id">): Promise<AttendanceRecord>;
-  update(id: string, input: Pick<AttendanceRecord, "status">): Promise<AttendanceRecord | undefined>;
+  update(id: string, input: Pick<AttendanceRecord, "status"> & Pick<Partial<AttendanceRecord>, "courseId" | "termId">): Promise<AttendanceRecord | undefined>;
   softDelete(id: string, deletedAt: string): Promise<AttendanceRecord | undefined>;
 }
 
 export const attendanceStoreToken = Symbol("AttendanceStore");
 
 const demoAttendance: AttendanceRecord[] = [
-  { id: "attendance-a", tenantId: "tenant-a", studentId: "student-a", date: "2026-06-03", status: "ABSENT" },
+  { id: "attendance-a", tenantId: "tenant-a", studentId: "student-a", courseId: "course-math", termId: "term-2026-spring", date: "2026-06-03", status: "ABSENT" },
   { id: "attendance-b", tenantId: "tenant-b", studentId: "student-b", date: "2026-06-03", status: "PRESENT" },
 ];
 
@@ -48,11 +48,13 @@ export class InMemoryAttendanceStore implements AttendanceStore {
     return record;
   }
 
-  async update(id: string, input: Pick<AttendanceRecord, "status">): Promise<AttendanceRecord | undefined> {
+  async update(id: string, input: Pick<AttendanceRecord, "status"> & Pick<Partial<AttendanceRecord>, "courseId" | "termId">): Promise<AttendanceRecord | undefined> {
     const record = await this.findById(id);
     if (!record) return undefined;
 
     record.status = input.status;
+    if (input.courseId !== undefined) record.courseId = input.courseId;
+    if (input.termId !== undefined) record.termId = input.termId;
     return record;
   }
 
@@ -117,10 +119,10 @@ export class PostgresAttendanceStore implements AttendanceStore {
   async create(input: Omit<AttendanceRecord, "id">): Promise<AttendanceRecord> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<AttendanceRow>(
-        `INSERT INTO "Attendance" ("id", "tenantId", "studentId", "date", "status", "updatedAt")
-         VALUES ($1, $2, $3, $4::date, $5, now())
+        `INSERT INTO "Attendance" ("id", "tenantId", "studentId", "courseId", "termId", "date", "status", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6::date, $7, now())
          RETURNING *`,
-        [randomUUID(), input.tenantId, input.studentId, input.date, input.status],
+        [randomUUID(), input.tenantId, input.studentId, input.courseId ?? null, input.termId ?? null, input.date, input.status],
       );
       const record = result.rows[0];
       if (!record) {
@@ -130,7 +132,7 @@ export class PostgresAttendanceStore implements AttendanceStore {
     });
   }
 
-  async update(id: string, input: Pick<AttendanceRecord, "status">): Promise<AttendanceRecord | undefined> {
+  async update(id: string, input: Pick<AttendanceRecord, "status"> & Pick<Partial<AttendanceRecord>, "courseId" | "termId">): Promise<AttendanceRecord | undefined> {
     const existing = await this.findById(id);
     if (!existing) return undefined;
 
@@ -138,11 +140,13 @@ export class PostgresAttendanceStore implements AttendanceStore {
       const result = await client.query<AttendanceRow>(
         `UPDATE "Attendance"
          SET "status" = $2,
+             "courseId" = CASE WHEN $3 THEN $4 ELSE "courseId" END,
+             "termId" = CASE WHEN $5 THEN $6 ELSE "termId" END,
              "updatedAt" = now()
          WHERE "id" = $1
            AND "deletedAt" IS NULL
          RETURNING *`,
-        [id, input.status],
+        [id, input.status, input.courseId !== undefined, input.courseId ?? null, input.termId !== undefined, input.termId ?? null],
       );
       return result.rows[0] ? toAttendanceRecord(result.rows[0]) : undefined;
     });
@@ -175,6 +179,8 @@ interface AttendanceRow {
   id: string;
   tenantId: string;
   studentId: string;
+  courseId: string | null;
+  termId: string | null;
   date: string | Date;
   status: AttendanceStatus;
   deletedAt: Date | null;
@@ -185,6 +191,8 @@ function toAttendanceRecord(row: AttendanceRow): AttendanceRecord {
     id: row.id,
     tenantId: row.tenantId,
     studentId: row.studentId,
+    courseId: row.courseId ?? undefined,
+    termId: row.termId ?? undefined,
     date: formatDate(row.date),
     status: row.status,
     deletedAt: row.deletedAt?.toISOString(),

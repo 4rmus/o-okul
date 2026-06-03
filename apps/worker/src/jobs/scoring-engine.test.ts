@@ -27,7 +27,7 @@ describe("ScoringEngine", () => {
       config,
     );
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       total: {
         correct: 2,
         wrong: 1,
@@ -111,7 +111,7 @@ describe("ScoringEngine", () => {
       config,
     );
 
-    expect(result.total).toEqual({
+    expect(result.total).toMatchObject({
       correct: 1,
       wrong: 0,
       blank: 3,
@@ -152,7 +152,7 @@ describe("ScoringEngine", () => {
       },
     );
 
-    expect(result.total).toEqual({
+    expect(result.total).toMatchObject({
       correct: 2,
       wrong: 1,
       blank: 1,
@@ -170,5 +170,26 @@ describe("ScoringEngine", () => {
     const partialAnswerKey = answerKey.slice(0, 2);
 
     expect(scoreExam([...answers], partialAnswerKey, config)).toEqual(scoreExam([...answers], partialAnswerKey, config));
+  });
+
+  it("sabit katsayıyla tahmini puanı hesaplar", () => {
+    const result = scoreExam(
+      [
+        { questionNo: 1, answer: "A" },
+        { questionNo: 2, answer: "B" },
+        { questionNo: 3, answer: "C" },
+        { questionNo: 4, answer: "" },
+      ],
+      [
+        { questionNo: 1, correctAnswer: "A", branch: "Türkçe" },
+        { questionNo: 2, correctAnswer: "B", branch: "Matematik" },
+        { questionNo: 3, correctAnswer: "C", branch: "Fen Bilimleri" },
+        { questionNo: 4, correctAnswer: "D", branch: "Din Kültürü" },
+      ],
+      config,
+    );
+
+    expect(result.total.rawScore).toBe(3);
+    expect(result.total.estimatedRawScore).toBe(13.044);
   });
 });

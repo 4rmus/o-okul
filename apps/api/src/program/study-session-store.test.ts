@@ -18,6 +18,7 @@ describe("PostgresStudySessionStore", () => {
               tenantId: "tenant-a",
               classId: "class-a",
               teacherId: "teacher-a",
+              courseId: null,
               studentIds: ["student-a"],
               title: "Matematik Etut",
               capacity: 4,
@@ -53,7 +54,7 @@ describe("PostgresStudySessionStore", () => {
       },
     );
 
-    const businessQueries = queries.filter((query) => !query.sql.includes("set_config"));
+    const businessQueries = queries.filter((query) => !query.sql.includes("set_config") && !["BEGIN", "COMMIT", "ROLLBACK"].includes(query.sql));
     expect(queries.some((query) => query.values?.[0] === "tenant-a")).toBe(true);
     expect(businessQueries[0]?.sql).toContain('LEFT JOIN "StudySessionStudent"');
     expect(businessQueries[1]?.values).toEqual(["study-a"]);
@@ -63,6 +64,8 @@ describe("PostgresStudySessionStore", () => {
       "tenant-a",
       "class-a",
       "teacher-a",
+      null,
+      null,
       "Problem Çözümü",
       2,
       "2026-06-02T14:00:00.000Z",
@@ -88,10 +91,10 @@ describe("PostgresStudySessionStore", () => {
       null,
     ]);
     const updateQueries = businessQueries.filter((query) => query.sql.includes('UPDATE "StudySession"'));
-    expect(updateQueries[0]?.values).toEqual(["study-a", null, null, "Problem Tekrarı", 3, null, null]);
+    expect(updateQueries[0]?.values).toEqual(["study-a", null, null, false, null, false, null, "Problem Tekrarı", 3, null, null]);
     expect(studentDeleteQueries[1]?.values).toEqual(["tenant-a", "study-a"]);
     expect(studentInsertQueries[1]?.values).toEqual([[expect.any(String)], "tenant-a", "study-a", ["student-a"]]);
-    expect(updateQueries[1]?.values).toEqual(["study-a", null, null, "Problem Pekiştirme", null, null, null]);
+    expect(updateQueries[1]?.values).toEqual(["study-a", null, null, false, null, false, null, "Problem Pekiştirme", null, null, null]);
     expect(updateQueries[2]?.values).toEqual(["study-a", "2026-06-02T16:00:00.000Z"]);
   });
 

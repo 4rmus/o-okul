@@ -14,6 +14,11 @@ export type ReportType = typeof examResultSummaryReportType;
 
 export interface ReportGenerationJobPayload extends TenantJobPayload {
   reportType: ReportType;
+  campusId?: string;
+  gradeLevelId?: string;
+  classId?: string;
+  courseId?: string;
+  termId?: string;
 }
 
 export interface ReportGenerationJobInput {
@@ -23,6 +28,11 @@ export interface ReportGenerationJobInput {
   examId: string;
   reportType: ReportType;
   contentHash: string;
+  campusId?: string;
+  gradeLevelId?: string;
+  classId?: string;
+  courseId?: string;
+  termId?: string;
 }
 
 export interface ExamResultForReport {
@@ -40,6 +50,11 @@ export interface ExamResultForReport {
 export interface ReportSnapshotCandidate {
   tenantId: string;
   examId: string;
+  campusId?: string;
+  gradeLevelId?: string;
+  classId?: string;
+  courseId?: string;
+  termId?: string;
   reportType: ReportType;
   status: "READY";
   inputRefs: {
@@ -77,6 +92,7 @@ interface ScoreAverages {
   blank: number;
   net: number;
   rawScore: number;
+  estimatedRawScore?: number;
   standardScore: number;
 }
 
@@ -104,6 +120,7 @@ interface ClassAverages {
   className: string | null;
   resultCount: number;
   averages: ScoreAverages;
+  branches: BranchAverages[];
 }
 
 interface BranchStatisticsSummary {
@@ -165,6 +182,11 @@ export async function processReportGenerationJob(
         examId: job.payload.entityId,
         reportType: job.payload.reportType,
         contentHash: job.payload.contentHash,
+        campusId: job.payload.campusId,
+        gradeLevelId: job.payload.gradeLevelId,
+        classId: job.payload.classId,
+        courseId: job.payload.courseId,
+        termId: job.payload.termId,
       };
       const results = await adapter.loadResults(input);
       const snapshot = createExamResultSummarySnapshot(input, results, now());
@@ -174,7 +196,7 @@ export async function processReportGenerationJob(
 }
 
 export function createExamResultSummarySnapshot(
-  input: Pick<ReportGenerationJobInput, "tenantId" | "examId" | "reportType">,
+  input: Pick<ReportGenerationJobInput, "tenantId" | "examId" | "reportType" | "campusId" | "classId" | "courseId" | "gradeLevelId" | "termId">,
   results: ExamResultForReport[],
   generatedAt: string,
 ): ReportSnapshotCandidate {
@@ -200,6 +222,7 @@ export function createExamResultSummarySnapshot(
   return {
     tenantId: input.tenantId,
     examId: input.examId,
+    ...resolveReportContext(input),
     reportType: input.reportType,
     status: "READY",
     inputRefs: {
@@ -223,6 +246,21 @@ export function createExamResultSummarySnapshot(
   };
 }
 
+function optionalText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+function resolveReportContext(input: Partial<Pick<ReportGenerationJobInput, "campusId" | "classId" | "courseId" | "gradeLevelId" | "termId">>) {
+  return {
+    campusId: optionalText(input.campusId),
+    gradeLevelId: optionalText(input.gradeLevelId),
+    classId: optionalText(input.classId),
+    courseId: optionalText(input.courseId),
+    termId: optionalText(input.termId),
+  };
+}
+
 function assertReportGenerationPayload(payload: ReportGenerationJobPayload): void {
   if (payload.reportType !== examResultSummaryReportType) {
     throw new Error("REPORT_GENERATION_PAYLOAD_INVALID");
@@ -230,12 +268,14 @@ function assertReportGenerationPayload(payload: ReportGenerationJobPayload): voi
 }
 
 function createTotalAverages(results: ExamResultForReport[]): ScoreAverages {
+  const estimatedRawScore = averageOptional(results.map((result) => result.score.total.estimatedRawScore));
   return {
     correct: average(results.map((result) => result.score.total.correct)),
     wrong: average(results.map((result) => result.score.total.wrong)),
     blank: average(results.map((result) => result.score.total.blank)),
     net: average(results.map((result) => result.score.total.net)),
     rawScore: average(results.map((result) => result.score.total.rawScore)),
+    ...(estimatedRawScore !== undefined ? { estimatedRawScore } : {}),
     standardScore: average(results.map((result) => result.score.total.standardScore)),
   };
 }
@@ -352,6 +392,7 @@ function createClassAverages(results: ExamResultForReport[]): ClassAverages[] {
         className: first?.className ?? null,
         resultCount: classResults.length,
         averages: createTotalAverages(classResults),
+        branches: createBranchAverages(classResults),
       };
     });
 }
@@ -366,4 +407,12 @@ function average(values: number | number[]): number {
   const list = Array.isArray(values) ? values : [values];
   const total = list.reduce((sum, value) => sum + value, 0);
   return Number((total / list.length).toFixed(4));
+}
+
+function averageOptional(values: Array<number | undefined>): number | undefined {
+  const validValues = values.filter((value): value is number => value !== undefined);
+  if (validValues.length === 0) {
+    return undefined;
+  }
+  return average(validValues);
 }

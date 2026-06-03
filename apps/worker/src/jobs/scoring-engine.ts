@@ -12,6 +12,7 @@ export interface AnswerKeyItem {
   correctAnswer: Exclude<Choice, "">;
   branch: string;
   outcomeCode?: string;
+  topic?: string;
 }
 
 export interface ScoringConfig {
@@ -36,6 +37,7 @@ export interface QuestionScore {
   questionNo: number;
   branch: string;
   outcomeCode?: string;
+  topic?: string;
   answer: Choice;
   correctAnswer: Exclude<Choice, "">;
   status: "CORRECT" | "WRONG" | "BLANK";
@@ -58,6 +60,7 @@ export interface ScoringResult {
     net: number;
     rawScore: number;
     standardScore: number;
+    estimatedRawScore?: number;
   };
   branches: BranchScore[];
   outcomes?: OutcomeScore[];
@@ -68,6 +71,10 @@ export interface ScoringResult {
     computedAt: string;
   };
 }
+
+const highPriorityBranches = new Set(["TURKCE", "MATEMATIK", "FEN BILIMLERI"]);
+const highPriorityBranchMultiplier = 4.348;
+const defaultBranchMultiplier = 1.08;
 
 export function scoreExam(
   answers: StudentAnswer[],
@@ -117,11 +124,13 @@ export function scoreExam(
     { correct: 0, wrong: 0, blank: 0, net: 0 },
   );
   const rawScore = calculateRawScore(total.net, config);
+  const estimatedRawScore = calculateEstimatedRawScore(branches);
 
   return {
     total: {
       ...total,
       rawScore,
+      estimatedRawScore,
       standardScore: calculateStandardScore(rawScore, config),
     },
     branches,
@@ -166,6 +175,30 @@ function calculateRawScore(net: number, config: ScoringConfig): number {
     return net;
   }
   return roundScore(net * config.rawScoreMultiplier);
+}
+
+function calculateEstimatedRawScore(branches: BranchScore[]): number {
+  return roundScore(
+    branches.reduce((sum, branch) => {
+      const multiplier = estimateBranchMultiplier(branch.branch);
+      return sum + branch.net * multiplier;
+    }, 0),
+  );
+}
+
+function estimateBranchMultiplier(branch: string): number {
+  const normalized = normalizeBranchName(branch);
+  return highPriorityBranches.has(normalized) ? highPriorityBranchMultiplier : defaultBranchMultiplier;
+}
+
+function normalizeBranchName(branch: string): string {
+  return branch
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function calculateStandardScore(rawScore: number, config: ScoringConfig): number {

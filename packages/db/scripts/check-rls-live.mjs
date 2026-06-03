@@ -23,6 +23,8 @@ const ids = {
   classB: "00000000-0000-4000-8000-0000000000b2",
   studentA: "00000000-0000-4000-8000-0000000000a3",
   studentB: "00000000-0000-4000-8000-0000000000b3",
+  studentEnrollmentA: "00000000-0000-4000-8000-0000000000f3",
+  studentEnrollmentB: "00000000-0000-4000-8000-0000000000f4",
   attendanceA: "00000000-0000-4000-8000-0000000000e3",
   attendanceB: "00000000-0000-4000-8000-0000000000e4",
   paymentPlanA: "00000000-0000-4000-8000-0000000000e7",
@@ -58,6 +60,8 @@ const ids = {
   rawImportB: "00000000-0000-4000-8000-0000000000bb",
   answerKeyA: "00000000-0000-4000-8000-0000000000ac",
   answerKeyB: "00000000-0000-4000-8000-0000000000bc",
+  bookletVariantA: "00000000-0000-4000-8000-0000000000f5",
+  bookletVariantB: "00000000-0000-4000-8000-0000000000f6",
   examResultA: "00000000-0000-4000-8000-0000000000ad",
   examResultB: "00000000-0000-4000-8000-0000000000bd",
   parsedAnswerA: "00000000-0000-4000-8000-0000000000a0",
@@ -68,8 +72,12 @@ const ids = {
   snapshotB: "00000000-0000-4000-8000-0000000000c2",
   announcementA: "00000000-0000-4000-8000-0000000000d1",
   announcementB: "00000000-0000-4000-8000-0000000000d2",
+  announcementDeliveryReportA: "00000000-0000-4000-8000-0000000000df",
+  announcementDeliveryReportB: "00000000-0000-4000-8000-0000000000e1",
   messageTemplateA: "00000000-0000-4000-8000-0000000000d3",
   messageTemplateB: "00000000-0000-4000-8000-0000000000d4",
+  smsBatchDeliveryReportA: "00000000-0000-4000-8000-0000000000dd",
+  smsBatchDeliveryReportB: "00000000-0000-4000-8000-0000000000de",
   supportTicketA: "00000000-0000-4000-8000-0000000000d7",
   supportTicketB: "00000000-0000-4000-8000-0000000000d8",
   supportTicketAttachmentA: "00000000-0000-4000-8000-0000000000d9",
@@ -158,6 +166,15 @@ async function seedFixtures() {
        VALUES ($1, $2, $3, 'Ada', 'A', 'A-001', now()), ($4, $5, $6, 'Bora', 'B', 'B-001', now())
        ON CONFLICT ("id") DO NOTHING`,
       [ids.studentA, ids.tenantA, ids.classA, ids.studentB, ids.tenantB, ids.classB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "StudentEnrollment" ("id", "tenantId", "studentId", "classId", "status", "startsAt", "reason", "updatedAt")
+       VALUES
+         ($1, $2, $3, $4, 'ACTIVE', '2026-06-01', 'RLS', now()),
+         ($5, $6, $7, $8, 'ACTIVE', '2026-06-01', 'RLS', now())
+       ON CONFLICT ("id") DO NOTHING`,
+      [ids.studentEnrollmentA, ids.tenantA, ids.studentA, ids.classA, ids.studentEnrollmentB, ids.tenantB, ids.studentB, ids.classB],
     );
 
     await adminClient.query(
@@ -331,6 +348,15 @@ async function seedFixtures() {
     );
 
     await adminClient.query(
+      `INSERT INTO "ExamBookletVariant" ("id", "tenantId", "examId", "code", "permutation", "updatedAt")
+       VALUES
+         ($1, $2, $3, 'B', '[1]'::jsonb, now()),
+         ($4, $5, $6, 'B', '[1]'::jsonb, now())
+       ON CONFLICT ("id") DO NOTHING`,
+      [ids.bookletVariantA, ids.tenantA, ids.examA, ids.bookletVariantB, ids.tenantB, ids.examB],
+    );
+
+    await adminClient.query(
       `INSERT INTO "ExamResult" ("id", "tenantId", "examId", "studentId", "participantId", "rawImportId", "answerKeyId", "answerKeyVersion", "parserConfigVersion", "engineVersion", "resultKey", "scoreData", "computedAt", "updatedAt")
        VALUES
          ($1, $2, $3, $4, $5, $6, $7, 'answer-key-v1', 'parser-v1', 'engine-v1', $8, '{"total":{"net":1}}'::jsonb, now(), now()),
@@ -410,6 +436,40 @@ async function seedFixtures() {
          ($3, $4, 'RLS Şablon B', 'SMS', 'B mesajı', now())
        ON CONFLICT ("id") DO NOTHING`,
       [ids.messageTemplateA, ids.tenantA, ids.messageTemplateB, ids.tenantB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "AnnouncementDeliveryReport" (
+         "id", "tenantId", "announcementId", "channel", "recipientCount", "deliveredCount", "failedCount", "status", "updatedAt"
+       )
+       VALUES
+         ($1, $2, $3, 'EMAIL', 3, 2, 1, 'completed', now()),
+         ($4, $5, $6, 'EMAIL', 1, 1, 0, 'completed', now())
+       ON CONFLICT ("tenantId", "announcementId", "channel") DO NOTHING`,
+      [
+        ids.announcementDeliveryReportA,
+        ids.tenantA,
+        ids.announcementA,
+        ids.announcementDeliveryReportB,
+        ids.tenantB,
+        ids.announcementB,
+      ],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "SmsBatchDeliveryReport" ("id", "tenantId", "jobId", "templateId", "recipientCount", "status", "updatedAt")
+       VALUES
+         ($1, $2, 'rls-job-a', $3, 2, 'queued', now()),
+         ($4, $5, 'rls-job-b', $6, 1, 'queued', now())
+       ON CONFLICT ("tenantId", "jobId") DO NOTHING`,
+      [
+        ids.smsBatchDeliveryReportA,
+        ids.tenantA,
+        ids.messageTemplateA,
+        ids.smsBatchDeliveryReportB,
+        ids.tenantB,
+        ids.messageTemplateB,
+      ],
     );
 
     await adminClient.query(
@@ -633,6 +693,7 @@ try {
     "AuthSession",
     "IdentityInvitation",
     "Student",
+    "StudentEnrollment",
     "Attendance",
     "PaymentPlan",
     "PaymentInstallment",
@@ -649,12 +710,15 @@ try {
     "ExamParticipant",
     "RawImport",
     "AnswerKey",
+    "ExamBookletVariant",
     "ExamResult",
     "ParsedAnswer",
     "ImportQuarantine",
     "ReportSnapshot",
     "Announcement",
+    "AnnouncementDeliveryReport",
     "MessageTemplate",
+    "SmsBatchDeliveryReport",
     "SupportTicket",
     "SupportTicketAttachment",
     "SupportTicketComment",

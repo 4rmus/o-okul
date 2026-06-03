@@ -25,6 +25,7 @@ const tenantScopedTables = [
   "ExamParticipant",
   "RawImport",
   "AnswerKey",
+  "ExamBookletVariant",
   "ExamResult",
   "ParsedAnswer",
   "ImportQuarantine",
@@ -49,8 +50,9 @@ for (const file of sourceRoots.flatMap(listTsFiles)) {
     continue;
   }
 
-  if (!contents.includes("withTenantQuery") && !contents.includes("withTenantDb")) {
-    failures.push(`${file}: tenant tablosu SQL'i withTenantQuery/withTenantDb dışından çalışıyor.`);
+  const tenantWrappers = ["withTenantQuery", "withExplicitTenantQuery", "withBypassRlsQuery", "withTenantDb"];
+  if (!tenantWrappers.some((wrapper) => contents.includes(wrapper))) {
+    failures.push(`${file}: tenant tablosu SQL'i tenant/bypass wrapper dışından çalışıyor.`);
   }
 }
 

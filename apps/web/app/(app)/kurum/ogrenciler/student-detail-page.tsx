@@ -4,8 +4,11 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import type {
+  AcademicTermRecord,
   AttendanceSummaryRecord,
   AuditLogRecord,
+  ClassRecord,
+  CourseRecord,
   ExamRecord,
   GuardianRecord,
   GuardianStudentRecord,
@@ -17,6 +20,7 @@ import type {
   ReportStudentProgress,
   ReportStudentSnapshot,
   StudentClassHistoryRecord,
+  StudentEnrollmentRecord,
   StudentProfileRecord,
   TeacherAssignmentRecord,
   TeacherNoteRecord,
@@ -29,18 +33,22 @@ import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
 interface StudentBaseDetail {
   attendanceSummary: AttendanceSummaryRecord | null;
   auditLogs: AuditLogRecord[];
+  classes: ClassRecord[];
+  courses: CourseRecord[];
   guardianLinks: GuardianStudentRecord[];
   profile: StudentProfileRecord;
   guardians: GuardianRecord[];
   homeworkAssignments: HomeworkMaterialAssignmentRecord[];
   paymentPlans: PaymentPlanWithInstallmentsRecord[];
   classHistory: StudentClassHistoryRecord[];
+  enrollments: StudentEnrollmentRecord[];
   teacherAssignments: TeacherAssignmentRecord[];
   teachers: TeacherRecord[];
   teacherNotes: TeacherNoteRecord[];
+  terms: AcademicTermRecord[];
 }
 
-const defaultExamId = "exam-demo";
+const defaultExamId = "exam-demo-isem-lgs-1";
 
 export function StudentDetailPage({ studentId }: { studentId: string }) {
   const { auth } = useAuth();
@@ -123,6 +131,9 @@ export function StudentDetailPage({ studentId }: { studentId: string }) {
     () => new Map((detail?.teachers ?? []).map((teacher) => [teacher.id, `${teacher.firstName} ${teacher.lastName}`])),
     [detail?.teachers],
   );
+  const classNameById = useMemo(() => new Map((detail?.classes ?? []).map((record) => [record.id, record.name])), [detail?.classes]);
+  const courseNameById = useMemo(() => new Map((detail?.courses ?? []).map((record) => [record.id, record.name])), [detail?.courses]);
+  const termNameById = useMemo(() => new Map((detail?.terms ?? []).map((record) => [record.id, record.name])), [detail?.terms]);
   const exams = examsQuery.data ?? [];
   const report = reportQuery.data ?? null;
   const errorBooklet = errorBookletQuery.data ?? null;
@@ -196,7 +207,7 @@ export function StudentDetailPage({ studentId }: { studentId: string }) {
               </article>
               <article className="next-metric">
                 <span>Son net</span>
-                <strong>{formatNumber(report?.total.net)}</strong>
+                <strong>{formatNumber(report?.total?.net)}</strong>
               </article>
               <article className="next-metric">
                 <span>Hata kitapçığı</span>
@@ -212,7 +223,7 @@ export function StudentDetailPage({ studentId }: { studentId: string }) {
               </article>
               <article className="next-metric">
                 <span>Standart puan</span>
-                <strong>{formatNumber(report?.total.standardScore)}</strong>
+                <strong>{formatNumber(report?.total?.standardScore)}</strong>
               </article>
             </div>
 
@@ -263,8 +274,7 @@ export function StudentDetailPage({ studentId }: { studentId: string }) {
                   detail.teacherAssignments.map((assignment) => (
                     <p key={assignment.id}>
                       {teacherNameById.get(assignment.teacherId) ?? assignment.teacherId}: {formatTeacherAssignmentRole(assignment.role)}
-                      {assignment.classId ? ` - Sınıf ${assignment.classId}` : ""}
-                      {assignment.startsAt ? ` - ${formatDate(assignment.startsAt)}` : ""}
+                      {formatTeacherAssignmentScope(assignment, classNameById, courseNameById, termNameById)}
                     </p>
                   ))
                 ) : (
@@ -277,12 +287,26 @@ export function StudentDetailPage({ studentId }: { studentId: string }) {
                 {detail.classHistory.length > 0 ? (
                   detail.classHistory.map((record) => (
                     <p key={record.id}>
-                      {record.classId ?? "Sınıfsız"}: {formatDate(record.startsAt)}
+                      {record.classId ?? "Sınıfsız"} · {formatClassHistoryAcademicContext(record)}: {formatDate(record.startsAt)}
                       {record.endsAt ? ` - ${formatDate(record.endsAt)}` : " - devam ediyor"}
                     </p>
                   ))
                 ) : (
                   <p>Sınıf geçmişi yok</p>
+                )}
+              </section>
+
+              <section className="next-report-list" aria-label="Kayıt geçmişi">
+                <h2>Kayıt geçmişi</h2>
+                {detail.enrollments.length > 0 ? (
+                  detail.enrollments.map((record) => (
+                    <p key={record.id}>
+                      {formatEnrollmentReason(record.reason)} · {formatStudentStatus(record.status)} · {record.classId ? classNameById.get(record.classId) ?? record.classId : "Sınıfsız"} · {formatClassHistoryAcademicContext(record)}: {formatDate(record.startsAt)}
+                      {record.endsAt ? ` - ${formatDate(record.endsAt)}` : " - devam ediyor"}
+                    </p>
+                  ))
+                ) : (
+                  <p>Kayıt geçmişi yok</p>
                 )}
               </section>
 
@@ -334,9 +358,13 @@ async function loadStudentBaseDetail(accessToken: string, id: string): Promise<S
     homeworkAssignments,
     paymentPlans,
     classHistory,
+    enrollments,
     teacherAssignments,
     teachers,
     teacherNotes,
+    classes,
+    courses,
+    terms,
   ] = await Promise.all([
     apiRequestOrNull<AttendanceSummaryRecord>(accessToken, `${apiBaseUrl}/attendance/summary?studentId=${encodeURIComponent(id)}`),
     apiRequestOrNull<AuditLogRecord[]>(accessToken, `${apiBaseUrl}/audit-logs`),
@@ -346,22 +374,30 @@ async function loadStudentBaseDetail(accessToken: string, id: string): Promise<S
     loadStudentHomeworkAssignments(accessToken, id),
     apiRequest<PaymentPlanWithInstallmentsRecord[]>(accessToken, `${apiBaseUrl}/payment-plans?studentId=${encodeURIComponent(id)}`),
     apiRequest<StudentClassHistoryRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/class-history`),
+    apiRequest<StudentEnrollmentRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/enrollments`),
     apiRequest<TeacherAssignmentRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/teacher-assignments`),
     apiRequest<TeacherRecord[]>(accessToken, `${apiBaseUrl}/teachers`),
     apiRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/teacher-notes?studentId=${encodeURIComponent(id)}`),
+    apiRequest<ClassRecord[]>(accessToken, `${apiBaseUrl}/classes`),
+    apiRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`),
+    apiRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`),
   ]);
   return {
     attendanceSummary,
     auditLogs: auditLogs ?? [],
+    classes,
+    courses,
     guardianLinks,
     guardians,
     homeworkAssignments,
     paymentPlans,
     profile,
     classHistory,
+    enrollments,
     teacherAssignments,
     teachers,
     teacherNotes,
+    terms,
   };
 }
 
@@ -495,8 +531,44 @@ function formatTeacherAssignmentRole(role: TeacherAssignmentRecord["role"]) {
   return labels[role] ?? role;
 }
 
+function formatTeacherAssignmentScope(
+  assignment: TeacherAssignmentRecord,
+  classNames: ReadonlyMap<string, string>,
+  courseNames: ReadonlyMap<string, string>,
+  termNames: ReadonlyMap<string, string>,
+) {
+  const parts = [
+    assignment.classId ? classNames.get(assignment.classId) ?? assignment.classId : undefined,
+    assignment.courseId ? courseNames.get(assignment.courseId) ?? assignment.courseId : undefined,
+    assignment.termId ? termNames.get(assignment.termId) ?? assignment.termId : undefined,
+    assignment.startsAt ? formatDate(assignment.startsAt) : undefined,
+    assignment.endsAt ? formatDate(assignment.endsAt) : undefined,
+  ].filter(Boolean);
+  return parts.length > 0 ? ` - ${parts.join(" · ")}` : "";
+}
+
 function formatStudentStatus(status: StudentProfileRecord["status"]) {
-  return status === "PASSIVE" ? "Pasif" : "Aktif";
+  const labels: Record<StudentProfileRecord["status"], string> = {
+    ACTIVE: "Aktif",
+    GRADUATED: "Mezun",
+    PASSIVE: "Pasif",
+    TRANSFERRED: "Nakil",
+  };
+  return labels[status] ?? status;
+}
+
+function formatClassHistoryAcademicContext(record: { academicYearId?: string; termId?: string }) {
+  return [record.academicYearId, record.termId].filter(Boolean).join(" / ") || "Akademik bağlam yok";
+}
+
+function formatEnrollmentReason(reason: string | undefined) {
+  const labels: Record<string, string> = {
+    CLASS_CHANGED: "Sınıf değişikliği",
+    CREATED: "İlk kayıt",
+    RENEWED: "Kayıt yenileme",
+    TRANSFERRED: "Nakil",
+  };
+  return reason ? labels[reason] ?? reason : "Kayıt";
 }
 
 function formatGuardianPermissions(link: GuardianStudentRecord) {

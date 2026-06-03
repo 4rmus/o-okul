@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
-import type { ExamRecord } from "@uzman-hocam/shared-types";
+import type { ExamParticipantRecord, ExamRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
@@ -32,5 +32,24 @@ export class ExamController {
   @Roles("TENANT_ADMIN")
   publish(@Param("examId") examId: string): Promise<ExamRecord> {
     return this.exams.publish(getRequestContext(), examId);
+  }
+
+  @Get(":examId/participants")
+  @Roles("TEACHER")
+  participants(@Param("examId") examId: string): Promise<ExamParticipantRecord[]> {
+    return this.exams.listParticipants(getRequestContext(), examId);
+  }
+
+  @Post(":examId/participants")
+  @Roles("TENANT_ADMIN")
+  addParticipant(
+    @Param("examId") examId: string,
+    @Body() body: { studentId?: string; participantNo?: string; bookletType?: string },
+  ): Promise<ExamParticipantRecord> {
+    return this.exams.addParticipant(getRequestContext(), examId, {
+      studentId: body.studentId,
+      participantNo: body.participantNo,
+      bookletType: body.bookletType,
+    });
   }
 }

@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
+import { hashPassword } from "../apps/api/dist/auth/auth-user-store.js";
 import { createBullTenantQueueProducer } from "../apps/api/dist/queue/bullmq-producer.js";
 import {
   createRedisConnectionOptions,
@@ -17,6 +19,10 @@ const resultCount = readResultCount();
 const runId = randomUUID();
 const tenantId = process.env.REPORT_GENERATION_SMOKE_TENANT_ID ?? "tenant-smoke-report";
 const userId = process.env.REPORT_GENERATION_SMOKE_USER_ID ?? "user-smoke-report";
+const smokeEmail = process.env.REPORT_GENERATION_SMOKE_EMAIL ?? `report-smoke-${runId}@example.test`;
+const smokePassword = process.env.REPORT_GENERATION_SMOKE_PASSWORD ?? "password";
+const evidencePath = process.env.REPORT_GENERATION_SMOKE_EVIDENCE_PATH;
+const membershipId = `membership-report-smoke-${runId}`;
 const examId = `exam-report-smoke-${runId}`;
 const rawImportId = `raw-import-report-smoke-${runId}`;
 const answerKeyId = `answer-key-report-smoke-${runId}`;
@@ -77,6 +83,28 @@ try {
     throw new Error("REPORT_GENERATION_SMOKE_SNAPSHOT_MISMATCH");
   }
 
+  if (evidencePath) {
+    await writeFile(
+      evidencePath,
+      JSON.stringify(
+        {
+          tenantId,
+          userId,
+          email: smokeEmail,
+          password: smokePassword,
+          examId,
+          snapshotId: snapshot.id,
+          firstStudentId: snapshot.firstStudentId,
+          resultCount,
+          contentHash,
+          queuedJobId: producedJob.options.jobId,
+        },
+        null,
+        2,
+      ),
+    );
+  }
+
   console.log(
     `ReportGeneration live smoke passed: tenant ${tenantId}, exam ${examId}, first student ${snapshot.firstStudentId}, ${resultCount} results, queued ${producedJob.options.jobId}, snapshot ${snapshot.id}, seed ${seedDurationMs}ms, generation ${generationDurationMs}ms`,
   );
@@ -97,6 +125,21 @@ async function seedReportInput() {
        VALUES ($1, $2, $3, 'ACTIVE', now())
        ON CONFLICT ("id") DO UPDATE SET "updatedAt" = now()`,
       [tenantId, "Report Smoke Tenant", `report-smoke-${runId}`],
+    );
+    await client.query(
+      `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
+       VALUES ($1, $2, 'Report Smoke Admin', $3, now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "email" = EXCLUDED."email",
+           "passwordHash" = EXCLUDED."passwordHash",
+           "updatedAt" = now()`,
+      [userId, smokeEmail, hashPassword(smokePassword)],
+    );
+    await client.query(
+      `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
+       VALUES ($1, $2, $3, 'TENANT_ADMIN', now())
+       ON CONFLICT ("tenantId", "userId", "role") DO UPDATE SET "updatedAt" = now()`,
+      [membershipId, tenantId, userId],
     );
     await client.query(
       `INSERT INTO "Exam" ("id", "tenantId", "title", "status", "updatedAt")

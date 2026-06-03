@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type { StudySessionRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
+import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { StudySessionService } from "./study-session.service.js";
@@ -12,8 +13,8 @@ export class StudySessionController {
 
   @Get()
   @Roles("TEACHER")
-  list(): Promise<StudySessionRecord[]> {
-    return this.studySessions.list(getRequestContext());
+  async list(@Query() query: ListQuery): Promise<StudySessionRecord[]> {
+    return applyListQuery(await this.studySessions.list(getRequestContext()), query, studySessionListFields);
   }
 
   @Get(":id")
@@ -41,3 +42,14 @@ export class StudySessionController {
     return this.studySessions.delete(getRequestContext(), id);
   }
 }
+
+const studySessionListFields = [
+  { name: "title", read: (record: StudySessionRecord) => record.title },
+  { name: "classId", read: (record: StudySessionRecord) => record.classId },
+  { name: "teacherId", read: (record: StudySessionRecord) => record.teacherId },
+  { name: "courseId", read: (record: StudySessionRecord) => record.courseId },
+  { name: "termId", read: (record: StudySessionRecord) => record.termId },
+  { name: "capacity", read: (record: StudySessionRecord) => record.capacity },
+  { name: "startsAt", read: (record: StudySessionRecord) => record.startsAt },
+  { name: "endsAt", read: (record: StudySessionRecord) => record.endsAt },
+];

@@ -4,7 +4,7 @@ import pg from "pg";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export type StudentClassHistoryInput = Pick<StudentClassHistoryRecord, "tenantId" | "studentId" | "startsAt"> &
-  Partial<Pick<StudentClassHistoryRecord, "classId" | "endsAt" | "reason">>;
+  Partial<Pick<StudentClassHistoryRecord, "classId" | "academicYearId" | "termId" | "endsAt" | "reason">>;
 
 export interface StudentClassHistoryStore {
   listByStudent(studentId: string): Promise<StudentClassHistoryRecord[]>;
@@ -20,6 +20,8 @@ const demoHistory: StudentClassHistoryRecord[] = [
     tenantId: "tenant-a",
     studentId: "student-a",
     classId: "class-a",
+    academicYearId: "academic-year-2026",
+    termId: "term-2026-spring",
     startsAt: "2026-06-01",
   },
 ];
@@ -79,18 +81,22 @@ export class PostgresStudentClassHistoryStore implements StudentClassHistoryStor
            "tenantId",
            "studentId",
            "classId",
+           "academicYearId",
+           "termId",
            "startsAt",
            "endsAt",
            "reason",
            "updatedAt"
          )
-         VALUES ($1, $2, $3, $4, $5::date, $6::date, $7, now())
+         VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8::date, $9, now())
          RETURNING *`,
         [
           randomUUID(),
           input.tenantId,
           input.studentId,
           input.classId ?? null,
+          input.academicYearId ?? null,
+          input.termId ?? null,
           input.startsAt,
           input.endsAt ?? null,
           input.reason ?? null,
@@ -131,6 +137,8 @@ interface StudentClassHistoryRow {
   tenantId: string;
   studentId: string;
   classId: string | null;
+  academicYearId: string | null;
+  termId: string | null;
   startsAt: Date | string;
   endsAt: Date | string | null;
   reason: string | null;
@@ -144,6 +152,8 @@ function toStudentClassHistoryRecord(row: StudentClassHistoryRow): StudentClassH
     tenantId: row.tenantId,
     studentId: row.studentId,
     classId: row.classId ?? undefined,
+    academicYearId: row.academicYearId ?? undefined,
+    termId: row.termId ?? undefined,
     startsAt: toDateString(row.startsAt),
     endsAt: row.endsAt ? toDateString(row.endsAt) : undefined,
     reason: row.reason ?? undefined,

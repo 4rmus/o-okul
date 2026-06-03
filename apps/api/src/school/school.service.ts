@@ -1,9 +1,15 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type {
+  AcademicTermRecord as SharedAcademicTermRecord,
+  AcademicYearRecord as SharedAcademicYearRecord,
+  CampusRecord as SharedCampusRecord,
   ClassRecord as SharedClassRecord,
+  CourseRecord as SharedCourseRecord,
+  GradeLevelRecord as SharedGradeLevelRecord,
   GuardianRecord as SharedGuardianRecord,
   GuardianRelationshipType,
   GuardianStudentRecord,
+  StudentRecord as SharedStudentRecord,
   TeacherAssignmentRecord,
   TeacherAssignmentRole,
   TeacherRecord as SharedTeacherRecord,
@@ -11,7 +17,11 @@ import type {
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { assertTeacherScopedStudentAccess, assertTenantResourceAccess, filterTenantResources } from "../tenant/tenant-access.js";
+import { type AcademicCalendarStore, academicCalendarStoreToken } from "./academic-calendar-store.js";
+import { type CampusStore, campusStoreToken } from "./campus-store.js";
 import { type ClassStore, classStoreToken } from "./class-store.js";
+import { type CourseStore, courseStoreToken } from "./course-store.js";
+import { type GradeLevelStore, gradeLevelStoreToken } from "./grade-level-store.js";
 import { type GuardianStudentStore, guardianStudentStoreToken } from "./guardian-student-store.js";
 import { type GuardianStore, guardianStoreToken } from "./guardian-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
@@ -26,6 +36,26 @@ export interface ClassRecord extends SharedClassRecord {
   deletedAt?: string;
 }
 
+export interface CampusRecord extends SharedCampusRecord {
+  deletedAt?: string;
+}
+
+export interface GradeLevelRecord extends SharedGradeLevelRecord {
+  deletedAt?: string;
+}
+
+export interface AcademicYearRecord extends SharedAcademicYearRecord {
+  deletedAt?: string;
+}
+
+export interface AcademicTermRecord extends SharedAcademicTermRecord {
+  deletedAt?: string;
+}
+
+export interface CourseRecord extends SharedCourseRecord {
+  deletedAt?: string;
+}
+
 export interface TeacherRecord extends SharedTeacherRecord {
   deletedAt?: string;
 }
@@ -34,16 +64,21 @@ export interface GuardianRecord extends SharedGuardianRecord {
   deletedAt?: string;
 }
 
-type SchoolRecord = ClassRecord | TeacherRecord | GuardianRecord;
+type SchoolRecord = AcademicYearRecord | AcademicTermRecord | CampusRecord | ClassRecord | CourseRecord | GradeLevelRecord | TeacherRecord | GuardianRecord;
 
 export type GuardianStudentRelationInput = Partial<Pick<
   GuardianStudentRecord,
   "relationshipType" | "isPrimary" | "canViewFinance" | "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets"
 >>;
 
+export type GuardianNotificationPreferenceInput = Partial<Pick<
+  GuardianStudentRecord,
+  "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets"
+>>;
+
 export type TeacherAssignmentRelationInput = Partial<Pick<
   TeacherAssignmentRecord,
-  "classId" | "studentId" | "courseId" | "role" | "startsAt" | "endsAt"
+  "classId" | "studentId" | "courseId" | "termId" | "role" | "startsAt" | "endsAt"
 >>;
 
 const guardianRelationshipTypes: GuardianRelationshipType[] = ["MOTHER", "FATHER", "GUARDIAN", "EMERGENCY_CONTACT", "OTHER"];
@@ -52,7 +87,11 @@ const teacherAssignmentRoles: TeacherAssignmentRole[] = ["CLASS_TEACHER", "BRANC
 @Injectable()
 export class SchoolService {
   constructor(
+    @Inject(academicCalendarStoreToken) private readonly academicCalendarStore: AcademicCalendarStore,
+    @Inject(campusStoreToken) private readonly campusStore: CampusStore,
     @Inject(classStoreToken) private readonly classStore: ClassStore,
+    @Inject(courseStoreToken) private readonly courseStore: CourseStore,
+    @Inject(gradeLevelStoreToken) private readonly gradeLevelStore: GradeLevelStore,
     @Inject(teacherStoreToken) private readonly teacherStore: TeacherStore,
     @Inject(guardianStoreToken) private readonly guardianStore: GuardianStore,
     @Inject(guardianStudentStoreToken) private readonly guardianStudentStore: GuardianStudentStore,
@@ -65,16 +104,303 @@ export class SchoolService {
     return this.list(context, await this.classStore.list());
   }
 
+  async listCampuses(context: RequestContext): Promise<CampusRecord[]> {
+    return this.list(context, await this.campusStore.list());
+  }
+
+  async findCampus(context: RequestContext, id: string): Promise<CampusRecord> {
+    return this.findRecord(context, await this.campusStore.findById(id), "CAMPUS_NOT_FOUND");
+  }
+
+  async createCampus(context: RequestContext, input: Partial<CampusRecord>): Promise<CampusRecord> {
+    const tenantId = this.resolveTenantId(context, input.tenantId);
+    const record = await this.campusStore.create({
+      tenantId,
+      name: input.name ?? "",
+      code: optionalText(input.code),
+    });
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "Campus",
+      entityId: record.id,
+      action: "campus.created",
+      diff: { fieldsSet: presentFields(record, ["name", "code"]) },
+    });
+    return record;
+  }
+
+  async updateCampus(context: RequestContext, id: string, input: Partial<CampusRecord>): Promise<CampusRecord> {
+    await this.findCampus(context, id);
+    const changedFields = changedInputFields(input, ["name", "code"]);
+    const record = await this.campusStore.update(id, {
+      name: input.name,
+      code: input.code !== undefined ? optionalText(input.code) : undefined,
+    });
+    if (!record) {
+      throw new NotFoundException("CAMPUS_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "Campus",
+      entityId: record.id,
+      action: "campus.updated",
+      diff: { fieldsChanged: changedFields },
+    });
+    return record;
+  }
+
+  async deleteCampus(context: RequestContext, id: string): Promise<void> {
+    const existing = await this.findCampus(context, id);
+    const record = await this.campusStore.softDelete(id, new Date().toISOString());
+    if (!record) {
+      throw new NotFoundException("CAMPUS_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "Campus",
+      entityId: record.id,
+      action: "campus.deleted",
+      diff: { name: existing.name, deletedAt: record.deletedAt },
+    });
+  }
+
+  async listGradeLevels(context: RequestContext): Promise<GradeLevelRecord[]> {
+    return this.list(context, await this.gradeLevelStore.list());
+  }
+
+  async findGradeLevel(context: RequestContext, id: string): Promise<GradeLevelRecord> {
+    return this.findRecord(context, await this.gradeLevelStore.findById(id), "GRADE_LEVEL_NOT_FOUND");
+  }
+
+  async createGradeLevel(context: RequestContext, input: Partial<GradeLevelRecord>): Promise<GradeLevelRecord> {
+    const tenantId = this.resolveTenantId(context, input.tenantId);
+    const record = await this.gradeLevelStore.create({
+      tenantId,
+      name: input.name ?? "",
+      code: optionalText(input.code),
+    });
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "GradeLevel",
+      entityId: record.id,
+      action: "grade_level.created",
+      diff: { fieldsSet: presentFields(record, ["name", "code"]) },
+    });
+    return record;
+  }
+
+  async updateGradeLevel(context: RequestContext, id: string, input: Partial<GradeLevelRecord>): Promise<GradeLevelRecord> {
+    await this.findGradeLevel(context, id);
+    const changedFields = changedInputFields(input, ["name", "code"]);
+    const record = await this.gradeLevelStore.update(id, {
+      name: input.name,
+      code: input.code !== undefined ? optionalText(input.code) : undefined,
+    });
+    if (!record) {
+      throw new NotFoundException("GRADE_LEVEL_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "GradeLevel",
+      entityId: record.id,
+      action: "grade_level.updated",
+      diff: { fieldsChanged: changedFields },
+    });
+    return record;
+  }
+
+  async deleteGradeLevel(context: RequestContext, id: string): Promise<void> {
+    const existing = await this.findGradeLevel(context, id);
+    const record = await this.gradeLevelStore.softDelete(id, new Date().toISOString());
+    if (!record) {
+      throw new NotFoundException("GRADE_LEVEL_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "GradeLevel",
+      entityId: record.id,
+      action: "grade_level.deleted",
+      diff: { name: existing.name, deletedAt: record.deletedAt },
+    });
+  }
+
+  async listAcademicYears(context: RequestContext): Promise<AcademicYearRecord[]> {
+    return this.list(context, await this.academicCalendarStore.listYears());
+  }
+
+  async findAcademicYear(context: RequestContext, id: string): Promise<AcademicYearRecord> {
+    return this.findRecord(context, await this.academicCalendarStore.findYearById(id), "ACADEMIC_YEAR_NOT_FOUND");
+  }
+
+  async createAcademicYear(context: RequestContext, input: Partial<AcademicYearRecord>): Promise<AcademicYearRecord> {
+    const tenantId = this.resolveTenantId(context, input.tenantId);
+    const range = resolveDateRange(input.startsAt, input.endsAt, "ACADEMIC_YEAR_DATE_INVALID");
+    const record = await this.academicCalendarStore.createYear({
+      tenantId,
+      name: input.name ?? "",
+      startsAt: range.startsAt,
+      endsAt: range.endsAt,
+      isActive: Boolean(input.isActive),
+    });
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "AcademicYear",
+      entityId: record.id,
+      action: "academic_year.created",
+      diff: { fieldsSet: presentFields(record, ["name", "startsAt", "endsAt", "isActive"]) },
+    });
+    return record;
+  }
+
+  async updateAcademicYear(context: RequestContext, id: string, input: Partial<AcademicYearRecord>): Promise<AcademicYearRecord> {
+    const existing = await this.findAcademicYear(context, id);
+    const range = resolveDateRange(input.startsAt ?? existing.startsAt, input.endsAt ?? existing.endsAt, "ACADEMIC_YEAR_DATE_INVALID");
+    const record = await this.academicCalendarStore.updateYear(id, {
+      name: input.name,
+      startsAt: range.startsAt,
+      endsAt: range.endsAt,
+      isActive: input.isActive,
+    });
+    if (!record) {
+      throw new NotFoundException("ACADEMIC_YEAR_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "AcademicYear",
+      entityId: record.id,
+      action: "academic_year.updated",
+      diff: { fieldsChanged: changedInputFields(input, ["name", "startsAt", "endsAt", "isActive"]) },
+    });
+    return record;
+  }
+
+  async deleteAcademicYear(context: RequestContext, id: string): Promise<void> {
+    const existing = await this.findAcademicYear(context, id);
+    const record = await this.academicCalendarStore.softDeleteYear(id, new Date().toISOString());
+    if (!record) {
+      throw new NotFoundException("ACADEMIC_YEAR_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "AcademicYear",
+      entityId: record.id,
+      action: "academic_year.deleted",
+      diff: { name: existing.name, deletedAt: record.deletedAt },
+    });
+  }
+
+  async listAcademicTerms(context: RequestContext): Promise<AcademicTermRecord[]> {
+    return this.list(context, await this.academicCalendarStore.listTerms());
+  }
+
+  async findAcademicTerm(context: RequestContext, id: string): Promise<AcademicTermRecord> {
+    return this.findRecord(context, await this.academicCalendarStore.findTermById(id), "ACADEMIC_TERM_NOT_FOUND");
+  }
+
+  async createAcademicTerm(context: RequestContext, input: Partial<AcademicTermRecord>): Promise<AcademicTermRecord> {
+    const tenantId = this.resolveTenantId(context, input.tenantId);
+    const academicYear = await this.findAcademicYear(context, input.academicYearId ?? "");
+    if (academicYear.tenantId !== tenantId) {
+      throw new ForbiddenException("FORBIDDEN_TENANT");
+    }
+    const range = resolveDateRange(input.startsAt, input.endsAt, "ACADEMIC_TERM_DATE_INVALID");
+    const record = await this.academicCalendarStore.createTerm({
+      tenantId,
+      academicYearId: academicYear.id,
+      name: input.name ?? "",
+      startsAt: range.startsAt,
+      endsAt: range.endsAt,
+      isActive: Boolean(input.isActive),
+    });
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "AcademicTerm",
+      entityId: record.id,
+      action: "academic_term.created",
+      diff: { fieldsSet: presentFields(record, ["academicYearId", "name", "startsAt", "endsAt", "isActive"]) },
+    });
+    return record;
+  }
+
+  async updateAcademicTerm(context: RequestContext, id: string, input: Partial<AcademicTermRecord>): Promise<AcademicTermRecord> {
+    const existing = await this.findAcademicTerm(context, id);
+    const academicYearId = input.academicYearId ?? existing.academicYearId;
+    await this.findAcademicYear(context, academicYearId);
+    const range = resolveDateRange(input.startsAt ?? existing.startsAt, input.endsAt ?? existing.endsAt, "ACADEMIC_TERM_DATE_INVALID");
+    const record = await this.academicCalendarStore.updateTerm(id, {
+      academicYearId,
+      name: input.name,
+      startsAt: range.startsAt,
+      endsAt: range.endsAt,
+      isActive: input.isActive,
+    });
+    if (!record) {
+      throw new NotFoundException("ACADEMIC_TERM_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "AcademicTerm",
+      entityId: record.id,
+      action: "academic_term.updated",
+      diff: { fieldsChanged: changedInputFields(input, ["academicYearId", "name", "startsAt", "endsAt", "isActive"]) },
+    });
+    return record;
+  }
+
+  async deleteAcademicTerm(context: RequestContext, id: string): Promise<void> {
+    const existing = await this.findAcademicTerm(context, id);
+    const record = await this.academicCalendarStore.softDeleteTerm(id, new Date().toISOString());
+    if (!record) {
+      throw new NotFoundException("ACADEMIC_TERM_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "AcademicTerm",
+      entityId: record.id,
+      action: "academic_term.deleted",
+      diff: { name: existing.name, deletedAt: record.deletedAt },
+    });
+  }
+
   async findClass(context: RequestContext, id: string): Promise<ClassRecord> {
     return this.find(context, await this.classStore.list(), id, "CLASS_NOT_FOUND");
   }
 
   async createClass(context: RequestContext, input: Partial<ClassRecord>): Promise<ClassRecord> {
     const tenantId = this.resolveTenantId(context, input.tenantId);
+    const campusId = optionalText(input.campusId);
+    const gradeLevelId = optionalText(input.gradeLevelId);
+    if (campusId) {
+      const campus = await this.findCampus(context, campusId);
+      if (campus.tenantId !== tenantId) {
+        throw new ForbiddenException("FORBIDDEN_TENANT");
+      }
+    }
+    if (gradeLevelId) {
+      const gradeLevel = await this.findGradeLevel(context, gradeLevelId);
+      if (gradeLevel.tenantId !== tenantId) {
+        throw new ForbiddenException("FORBIDDEN_TENANT");
+      }
+    }
     const record = await this.classStore.create({
       tenantId,
+      campusId,
+      gradeLevelId,
       name: input.name ?? "",
       level: input.level,
+      section: optionalText(input.section),
     });
     await this.auditLogs?.record({
       tenantId: record.tenantId,
@@ -82,15 +408,29 @@ export class SchoolService {
       entityType: "Class",
       entityId: record.id,
       action: "class.created",
-      diff: { name: record.name, level: record.level },
+      diff: { name: record.name, level: record.level, campusId: record.campusId, gradeLevelId: record.gradeLevelId, section: record.section },
     });
     return record;
   }
 
   async updateClass(context: RequestContext, id: string, input: Partial<ClassRecord>): Promise<ClassRecord> {
     const existing = await this.findClass(context, id);
-    const previousState = { name: existing.name, level: existing.level };
-    const record = await this.classStore.update(id, { name: input.name, level: input.level });
+    const previousState = { name: existing.name, level: existing.level, campusId: existing.campusId, gradeLevelId: existing.gradeLevelId, section: existing.section };
+    const campusId = input.campusId !== undefined ? optionalText(input.campusId) : undefined;
+    const gradeLevelId = input.gradeLevelId !== undefined ? optionalText(input.gradeLevelId) : undefined;
+    if (campusId) {
+      await this.findCampus(context, campusId);
+    }
+    if (gradeLevelId) {
+      await this.findGradeLevel(context, gradeLevelId);
+    }
+    const record = await this.classStore.update(id, {
+      name: input.name,
+      level: input.level,
+      campusId,
+      gradeLevelId,
+      section: input.section !== undefined ? optionalText(input.section) : undefined,
+    });
     if (!record) {
       throw new NotFoundException("CLASS_NOT_FOUND");
     }
@@ -102,7 +442,7 @@ export class SchoolService {
       action: "class.updated",
       diff: {
         before: previousState,
-        after: { name: record.name, level: record.level },
+        after: { name: record.name, level: record.level, campusId: record.campusId, gradeLevelId: record.gradeLevelId, section: record.section },
       },
     });
     return record;
@@ -120,6 +460,69 @@ export class SchoolService {
       entityType: "Class",
       entityId: record.id,
       action: "class.deleted",
+      diff: { name: existing.name, deletedAt: record.deletedAt },
+    });
+  }
+
+  async listCourses(context: RequestContext): Promise<CourseRecord[]> {
+    return this.list(context, await this.courseStore.list());
+  }
+
+  async findCourse(context: RequestContext, id: string): Promise<CourseRecord> {
+    return this.findRecord(context, await this.courseStore.findById(id), "COURSE_NOT_FOUND");
+  }
+
+  async createCourse(context: RequestContext, input: Partial<CourseRecord>): Promise<CourseRecord> {
+    const tenantId = this.resolveTenantId(context, input.tenantId);
+    const record = await this.courseStore.create({
+      tenantId,
+      name: input.name ?? "",
+      code: optionalText(input.code),
+    });
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "Course",
+      entityId: record.id,
+      action: "course.created",
+      diff: { fieldsSet: presentFields(record, ["name", "code"]) },
+    });
+    return record;
+  }
+
+  async updateCourse(context: RequestContext, id: string, input: Partial<CourseRecord>): Promise<CourseRecord> {
+    await this.findCourse(context, id);
+    const changedFields = changedInputFields(input, ["name", "code"]);
+    const record = await this.courseStore.update(id, {
+      name: input.name,
+      code: input.code !== undefined ? optionalText(input.code) : undefined,
+    });
+    if (!record) {
+      throw new NotFoundException("COURSE_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "Course",
+      entityId: record.id,
+      action: "course.updated",
+      diff: { fieldsChanged: changedFields },
+    });
+    return record;
+  }
+
+  async deleteCourse(context: RequestContext, id: string): Promise<void> {
+    const existing = await this.findCourse(context, id);
+    const record = await this.courseStore.softDelete(id, new Date().toISOString());
+    if (!record) {
+      throw new NotFoundException("COURSE_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "Course",
+      entityId: record.id,
+      action: "course.deleted",
       diff: { name: existing.name, deletedAt: record.deletedAt },
     });
   }
@@ -243,6 +646,12 @@ export class SchoolService {
     input: TeacherAssignmentRelationInput,
   ): Promise<TeacherAssignmentRecord> {
     const teacher = await this.findTeacher(context, teacherId);
+    if (input.courseId) {
+      await this.findCourse(context, input.courseId);
+    }
+    if (input.termId) {
+      await this.findAcademicTerm(context, input.termId);
+    }
     const assignmentInput = this.resolveTeacherAssignmentInput(teacher, input) as TeacherAssignmentInput;
     const record = await this.teacherAssignmentStore.create(assignmentInput);
     await this.auditLogs?.record({
@@ -268,6 +677,12 @@ export class SchoolService {
       throw new NotFoundException("TEACHER_ASSIGNMENT_NOT_FOUND");
     }
     this.assertAccess(context, existing);
+    if (input.courseId) {
+      await this.findCourse(context, input.courseId);
+    }
+    if (input.termId) {
+      await this.findAcademicTerm(context, input.termId);
+    }
 
     const assignmentInput = this.resolveTeacherAssignmentInput(teacher, input, false);
     const record = await this.teacherAssignmentStore.update(assignmentId, assignmentInput);
@@ -423,6 +838,18 @@ export class SchoolService {
     return filterTenantResources(context, await this.guardianStudentStore.listByStudent(student.id));
   }
 
+  async listCurrentStudentGuardians(context: RequestContext): Promise<GuardianRecord[]> {
+    const student = await this.findCurrentStudentForGuardianRelation(context);
+    const links = filterTenantResources(context, await this.guardianStudentStore.listByStudent(student.id));
+    const guardians = await Promise.all(links.map((link) => this.guardianStore.findById(link.guardianId)));
+    return guardians.filter((guardian): guardian is GuardianRecord => guardian !== undefined && !guardian.deletedAt && guardian.tenantId === student.tenantId);
+  }
+
+  async listCurrentStudentGuardianLinks(context: RequestContext): Promise<GuardianStudentRecord[]> {
+    const student = await this.findCurrentStudentForGuardianRelation(context);
+    return filterTenantResources(context, await this.guardianStudentStore.listByStudent(student.id));
+  }
+
   async linkGuardianStudent(
     context: RequestContext,
     guardianId: string,
@@ -484,6 +911,37 @@ export class SchoolService {
     return updated;
   }
 
+  async findCurrentGuardianNotificationPreferences(context: RequestContext, studentId: string): Promise<GuardianStudentRecord> {
+    return this.findCurrentGuardianStudentLink(context, studentId);
+  }
+
+  async updateCurrentGuardianNotificationPreferences(
+    context: RequestContext,
+    studentId: string,
+    input: GuardianNotificationPreferenceInput,
+  ): Promise<GuardianStudentRecord> {
+    const link = await this.findCurrentGuardianStudentLink(context, studentId);
+    const relation = resolveGuardianNotificationPreference(input);
+    const updated = await this.guardianStudentStore.update(link.guardianId, link.studentId, relation);
+    if (!updated) {
+      throw new NotFoundException("GUARDIAN_STUDENT_NOT_FOUND");
+    }
+
+    await this.auditLogs?.record({
+      tenantId: updated.tenantId,
+      actorUserId: context.userId,
+      entityType: "GuardianStudent",
+      entityId: updated.id,
+      action: "guardian_student.notification_preferences_updated",
+      diff: {
+        guardianId: updated.guardianId,
+        studentId: updated.studentId,
+        fieldsChanged: changedInputFields(relation, guardianNotificationPreferenceFields),
+      },
+    });
+    return updated;
+  }
+
   async unlinkGuardianStudent(context: RequestContext, guardianId: string, studentId: string): Promise<void> {
     const guardian = await this.findGuardian(context, guardianId);
     const student = await this.studentStore.findById(studentId);
@@ -504,6 +962,36 @@ export class SchoolService {
       action: "guardian_student.unlinked",
       diff: { guardianId: guardian.id, studentId: student.id },
     });
+  }
+
+  private async findCurrentGuardianStudentLink(context: RequestContext, studentId: string): Promise<GuardianStudentRecord> {
+    if (context.subjectType !== "GUARDIAN" || !context.subjectId) {
+      throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
+    }
+
+    const student = await this.studentStore.findById(studentId);
+    if (!student) {
+      throw new NotFoundException("STUDENT_NOT_FOUND");
+    }
+    this.assertAccess(context, student);
+
+    const link = (await this.guardianStudentStore.listByStudent(student.id)).find((candidate) => candidate.guardianId === context.subjectId);
+    if (!link) {
+      throw new ForbiddenException("FORBIDDEN_SUBJECT");
+    }
+    return link;
+  }
+
+  private async findCurrentStudentForGuardianRelation(context: RequestContext): Promise<SharedStudentRecord> {
+    if (context.subjectType !== "STUDENT" || !context.subjectId) {
+      throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
+    }
+    const student = await this.studentStore.findById(context.subjectId);
+    if (!student) {
+      throw new NotFoundException("STUDENT_NOT_FOUND");
+    }
+    this.assertAccess(context, student);
+    return student;
   }
 
   private list<TRecord extends SchoolRecord>(context: RequestContext, records: TRecord[]): TRecord[] {
@@ -530,7 +1018,7 @@ export class SchoolService {
     record: TRecord | undefined,
     notFoundMessage: string,
   ): TRecord {
-    if (!record) {
+    if (!record || record.deletedAt) {
       throw new NotFoundException(notFoundMessage);
     }
 
@@ -597,6 +1085,7 @@ export class SchoolService {
     if (applyDefaults || input.classId !== undefined) assignment.classId = optionalText(input.classId);
     if (applyDefaults || input.studentId !== undefined) assignment.studentId = optionalText(input.studentId);
     if (applyDefaults || input.courseId !== undefined) assignment.courseId = optionalText(input.courseId);
+    if (applyDefaults || input.termId !== undefined) assignment.termId = optionalText(input.termId);
     if (applyDefaults || input.startsAt !== undefined) assignment.startsAt = optionalDate(input.startsAt, "TEACHER_ASSIGNMENT_STARTS_AT_INVALID");
     if (applyDefaults || input.endsAt !== undefined) assignment.endsAt = optionalDate(input.endsAt, "TEACHER_ASSIGNMENT_ENDS_AT_INVALID");
     if (applyDefaults && (!assignment.classId && !assignment.studentId)) {
@@ -626,10 +1115,17 @@ const guardianStudentRelationFields: Array<keyof GuardianStudentRelationInput> =
   "canOpenSupportTickets",
 ];
 
+const guardianNotificationPreferenceFields: Array<keyof GuardianNotificationPreferenceInput> = [
+  "canReceiveSms",
+  "canReceiveAnnouncements",
+  "canOpenSupportTickets",
+];
+
 const teacherAssignmentRelationFields: Array<keyof TeacherAssignmentRelationInput> = [
   "classId",
   "studentId",
   "courseId",
+  "termId",
   "role",
   "startsAt",
   "endsAt",
@@ -656,6 +1152,20 @@ function resolveGuardianStudentRelation(
     relation.canReceiveAnnouncements = resolveBoolean(input.canReceiveAnnouncements, true);
   }
   if (applyDefaults || input.canOpenSupportTickets !== undefined) {
+    relation.canOpenSupportTickets = resolveBoolean(input.canOpenSupportTickets, true);
+  }
+  return relation;
+}
+
+function resolveGuardianNotificationPreference(input: GuardianNotificationPreferenceInput): GuardianNotificationPreferenceInput {
+  const relation: GuardianNotificationPreferenceInput = {};
+  if (input.canReceiveSms !== undefined) {
+    relation.canReceiveSms = resolveBoolean(input.canReceiveSms, true);
+  }
+  if (input.canReceiveAnnouncements !== undefined) {
+    relation.canReceiveAnnouncements = resolveBoolean(input.canReceiveAnnouncements, true);
+  }
+  if (input.canOpenSupportTickets !== undefined) {
     relation.canOpenSupportTickets = resolveBoolean(input.canOpenSupportTickets, true);
   }
   return relation;
@@ -697,6 +1207,15 @@ function optionalDate(value: string | undefined, message: string): string | unde
     throw new BadRequestException(message);
   }
   return trimmed;
+}
+
+function resolveDateRange(startsAt: string | undefined, endsAt: string | undefined, message: string): { startsAt: string; endsAt: string } {
+  const start = optionalDate(startsAt, message);
+  const end = optionalDate(endsAt, message);
+  if (!start || !end || Date.parse(start) >= Date.parse(end)) {
+    throw new BadRequestException(message);
+  }
+  return { startsAt: start, endsAt: end };
 }
 
 function isAssignmentActive(assignment: Pick<TeacherAssignmentRecord, "startsAt" | "endsAt">): boolean {

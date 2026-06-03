@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type { ScheduleLessonRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
+import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { ScheduleService } from "./schedule.service.js";
@@ -12,8 +13,8 @@ export class ScheduleController {
 
   @Get()
   @Roles("TEACHER")
-  list(): Promise<ScheduleLessonRecord[]> {
-    return this.schedule.list(getRequestContext());
+  async list(@Query() query: ListQuery): Promise<ScheduleLessonRecord[]> {
+    return applyListQuery(await this.schedule.list(getRequestContext()), query, scheduleLessonListFields);
   }
 
   @Get(":id")
@@ -41,3 +42,13 @@ export class ScheduleController {
     return this.schedule.delete(getRequestContext(), id);
   }
 }
+
+const scheduleLessonListFields = [
+  { name: "title", read: (record: ScheduleLessonRecord) => record.title },
+  { name: "classId", read: (record: ScheduleLessonRecord) => record.classId },
+  { name: "teacherId", read: (record: ScheduleLessonRecord) => record.teacherId },
+  { name: "courseId", read: (record: ScheduleLessonRecord) => record.courseId },
+  { name: "termId", read: (record: ScheduleLessonRecord) => record.termId },
+  { name: "startsAt", read: (record: ScheduleLessonRecord) => record.startsAt },
+  { name: "endsAt", read: (record: ScheduleLessonRecord) => record.endsAt },
+];

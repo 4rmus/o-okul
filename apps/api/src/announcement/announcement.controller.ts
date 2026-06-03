@@ -3,7 +3,14 @@ import { getRequestContext } from "../context/request-context.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
-import { AnnouncementService, type AnnouncementRecord } from "./announcement.service.js";
+import type { AnnouncementDeliveryReportRecord, AnnouncementRecipientReport } from "@uzman-hocam/shared-types";
+import {
+  AnnouncementService,
+  type AnnouncementDeliveryQueueResult,
+  type AnnouncementDeliveryResultInput,
+  type AnnouncementDeliverySendInput,
+  type AnnouncementRecord,
+} from "./announcement.service.js";
 
 @Controller("announcements")
 @UseGuards(RolesGuard)
@@ -22,6 +29,30 @@ export class AnnouncementController {
     return this.announcements.findOne(getRequestContext(), id);
   }
 
+  @Get(":id/recipients")
+  @Roles("TENANT_ADMIN")
+  recipients(@Param("id") id: string): Promise<AnnouncementRecipientReport> {
+    return this.announcements.recipientReport(getRequestContext(), id);
+  }
+
+  @Get(":id/delivery-reports")
+  @Roles("TENANT_ADMIN")
+  deliveryReports(@Param("id") id: string): Promise<AnnouncementDeliveryReportRecord[]> {
+    return this.announcements.deliveryReports(getRequestContext(), id);
+  }
+
+  @Post(":id/delivery-results")
+  @Roles("TENANT_ADMIN")
+  deliveryResult(@Param("id") id: string, @Body() body: AnnouncementDeliveryResultInput): Promise<AnnouncementDeliveryQueueResult> {
+    return this.announcements.enqueueDeliveryResult(getRequestContext(), id, body);
+  }
+
+  @Post(":id/deliveries")
+  @Roles("TENANT_ADMIN")
+  sendDelivery(@Param("id") id: string, @Body() body: AnnouncementDeliverySendInput): Promise<AnnouncementDeliveryQueueResult> {
+    return this.announcements.sendExternalDelivery(getRequestContext(), id, body);
+  }
+
   @Post()
   @Roles("TENANT_ADMIN")
   create(@Body() body: Partial<AnnouncementRecord>): Promise<AnnouncementRecord> {
@@ -33,5 +64,10 @@ const announcementListFields = [
   { name: "title", read: (record: AnnouncementRecord) => record.title },
   { name: "body", read: (record: AnnouncementRecord) => record.body },
   { name: "audience", read: (record: AnnouncementRecord) => record.audience },
+  { name: "campusId", read: (record: AnnouncementRecord) => record.campusId },
+  { name: "gradeLevelId", read: (record: AnnouncementRecord) => record.gradeLevelId },
+  { name: "classId", read: (record: AnnouncementRecord) => record.classId },
+  { name: "courseId", read: (record: AnnouncementRecord) => record.courseId },
+  { name: "termId", read: (record: AnnouncementRecord) => record.termId },
   { name: "publishedAt", read: (record: AnnouncementRecord) => record.publishedAt },
 ];

@@ -38,6 +38,9 @@ importers:
       '@nestjs/platform-express':
         specifier: ^11.1.24
         version: 11.1.24(@nestjs/common@11.1.24(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.24)
+      '@uzman-hocam/notification-adapter':
+        specifier: workspace:*
+        version: link:../../packages/notification-adapter
       '@uzman-hocam/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
@@ -146,6 +149,9 @@ importers:
       '@types/node':
         specifier: ^25.9.1
         version: 25.9.1
+      exceljs:
+        specifier: ^4.4.0
+        version: 4.4.0
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -170,6 +176,9 @@ importers:
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
+      exceljs:
+        specifier: ^4.4.0
+        version: 4.4.0
       prisma:
         specifier: ^7.8.0
         version: 7.8.0(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3)
@@ -179,6 +188,18 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+      vitest:
+        specifier: ^4.1.7
+        version: 4.1.7(@types/node@25.9.1)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.3))
+
+  packages/notification-adapter:
+    devDependencies:
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.7
+        version: 4.1.7(@types/node@25.9.1)(vite@8.0.14(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.3))
 
   packages/shared-types:
     devDependencies:

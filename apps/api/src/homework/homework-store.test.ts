@@ -16,6 +16,8 @@ describe("PostgresHomeworkStore", () => {
                 tenantId: "tenant-a",
                 materialId: "material-a",
                 studentId: "student-a",
+                courseId: "course-math",
+                termId: "term-2026-spring",
                 assignedById: "user-tenant-a",
                 note: "Bireysel tekrar",
                 dueAt: new Date("2026-06-09T12:00:00.000Z"),
@@ -128,6 +130,8 @@ describe("PostgresHomeworkStore", () => {
           tenantId: "tenant-a",
           materialId: "material-a",
           studentId: "student-a",
+          courseId: "course-math",
+          termId: "term-2026-spring",
           assignedById: "user-tenant-a",
           note: "Bireysel tekrar",
           dueAt: "2026-06-09T12:00:00.000Z",
@@ -136,7 +140,7 @@ describe("PostgresHomeworkStore", () => {
       },
     );
 
-    const businessQueries = queries.filter((query) => !query.sql.includes("set_config"));
+    const businessQueries = queries.filter((query) => !query.sql.includes("set_config") && !["BEGIN", "COMMIT", "ROLLBACK"].includes(query.sql));
     expect(queries.some((query) => query.values?.[0] === "tenant-a")).toBe(true);
     expect(businessQueries[0]?.sql).toContain('SELECT * FROM "HomeworkMaterial"');
     expect(businessQueries[1]?.sql).toContain('WHERE "id" = $1');
@@ -188,6 +192,8 @@ describe("PostgresHomeworkStore", () => {
       "tenant-a",
       "material-a",
       "student-a",
+      "course-math",
+      "term-2026-spring",
       "user-tenant-a",
       "Bireysel tekrar",
       "2026-06-09T12:00:00.000Z",

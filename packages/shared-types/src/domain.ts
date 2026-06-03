@@ -22,11 +22,69 @@ export interface MeProfileResponse {
   subjectId?: string;
 }
 
+export interface NotificationDeviceTokenRecord {
+  id: string;
+  tenantId: string;
+  userId: string;
+  subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER";
+  subjectId?: string;
+  provider: string;
+  token: string;
+  platform?: string;
+  lastSeenAt: string;
+  disabledAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface ClassRecord {
   id: string;
   tenantId: string;
   name: string;
   level?: string;
+  campusId?: string;
+  gradeLevelId?: string;
+  section?: string;
+}
+
+export interface CampusRecord {
+  id: string;
+  tenantId: string;
+  name: string;
+  code?: string;
+}
+
+export interface GradeLevelRecord {
+  id: string;
+  tenantId: string;
+  name: string;
+  code?: string;
+}
+
+export interface CourseRecord {
+  id: string;
+  tenantId: string;
+  name: string;
+  code?: string;
+}
+
+export interface AcademicYearRecord {
+  id: string;
+  tenantId: string;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  isActive: boolean;
+}
+
+export interface AcademicTermRecord {
+  id: string;
+  tenantId: string;
+  academicYearId: string;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  isActive: boolean;
 }
 
 export interface TeacherRecord {
@@ -47,6 +105,7 @@ export interface TeacherAssignmentRecord {
   classId?: string;
   studentId?: string;
   courseId?: string;
+  termId?: string;
   role: TeacherAssignmentRole;
   startsAt?: string;
   endsAt?: string;
@@ -91,13 +150,38 @@ export interface StudentRecord {
   userId?: string;
 }
 
-export type StudentStatus = "ACTIVE" | "PASSIVE";
+export type StudentStatus = "ACTIVE" | "PASSIVE" | "GRADUATED" | "TRANSFERRED";
 
 export interface StudentClassHistoryRecord {
   id: string;
   tenantId: string;
   studentId: string;
   classId?: string;
+  className?: string;
+  campusName?: string;
+  gradeLevelName?: string;
+  section?: string;
+  academicYearId?: string;
+  termId?: string;
+  startsAt: string;
+  endsAt?: string;
+  reason?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface StudentEnrollmentRecord {
+  id: string;
+  tenantId: string;
+  studentId: string;
+  academicYearId?: string;
+  termId?: string;
+  classId?: string;
+  className?: string;
+  campusName?: string;
+  gradeLevelName?: string;
+  section?: string;
+  status: StudentStatus;
   startsAt: string;
   endsAt?: string;
   reason?: string;
@@ -106,6 +190,11 @@ export interface StudentClassHistoryRecord {
 }
 
 export interface StudentProfileRecord extends StudentRecord {
+  className?: string;
+  campusName?: string;
+  gradeLevelName?: string;
+  section?: string;
+  responsibleTeacherName?: string;
   nationalIdMasked?: string;
   birthDate?: string;
   phone?: string;
@@ -118,6 +207,8 @@ export interface ScheduleLessonRecord {
   tenantId: string;
   classId: string;
   teacherId: string;
+  courseId?: string;
+  termId?: string;
   title: string;
   startsAt: string;
   endsAt: string;
@@ -128,6 +219,8 @@ export interface StudySessionRecord {
   tenantId: string;
   classId: string;
   teacherId: string;
+  courseId?: string;
+  termId?: string;
   studentIds: string[];
   title: string;
   capacity: number;
@@ -173,7 +266,10 @@ export interface HomeworkMaterialAssignmentRecord {
   id: string;
   tenantId: string;
   materialId: string;
+  materialTitle?: string;
   studentId: string;
+  courseId?: string;
+  termId?: string;
   assignedById?: string;
   note?: string;
   dueAt?: string;
@@ -185,8 +281,50 @@ export interface AnnouncementRecord {
   tenantId: string;
   title: string;
   body: string;
-  audience: "SCHOOL" | "TEACHERS";
+  audience: "SCHOOL" | "TEACHERS" | "STUDENTS" | "GUARDIANS";
+  campusId?: string;
+  gradeLevelId?: string;
+  classId?: string;
+  courseId?: string;
+  termId?: string;
   publishedAt: string;
+  readAt?: string;
+}
+
+export interface AnnouncementRecipientRecord {
+  announcementId: string;
+  recipientType: "STUDENT" | "GUARDIAN" | "TEACHER";
+  subjectId: string;
+  userId?: string;
+  displayName: string;
+  relatedStudentId?: string;
+  relatedStudentName?: string;
+  readAt?: string;
+}
+
+export interface AnnouncementRecipientReport {
+  announcementId: string;
+  total: number;
+  read: number;
+  unread: number;
+  recipients: AnnouncementRecipientRecord[];
+}
+
+export type AnnouncementDeliveryChannel = "EMAIL" | "PUSH";
+export type AnnouncementDeliveryStatus = "queued" | "completed" | "failed";
+
+export interface AnnouncementDeliveryReportRecord {
+  id: string;
+  tenantId: string;
+  announcementId: string;
+  channel: AnnouncementDeliveryChannel;
+  recipientCount: number;
+  deliveredCount: number;
+  failedCount: number;
+  status: AnnouncementDeliveryStatus;
+  providerErrorCode?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface MessageTemplateRecord {
@@ -204,6 +342,8 @@ export interface AttendanceRecord {
   id: string;
   tenantId: string;
   studentId: string;
+  courseId?: string;
+  termId?: string;
   date: string;
   status: AttendanceStatus;
   deletedAt?: string;
@@ -225,6 +365,8 @@ export interface TeacherNoteRecord {
   tenantId: string;
   studentId: string;
   teacherId: string;
+  courseId?: string;
+  termId?: string;
   visibility: TeacherNoteVisibility;
   body: string;
   developmentStatus?: string;
@@ -251,6 +393,11 @@ export interface PaymentPlanRecord {
   id: string;
   tenantId: string;
   studentId: string;
+  campusId?: string;
+  gradeLevelId?: string;
+  classId?: string;
+  courseId?: string;
+  termId?: string;
   title: string;
   totalAmount: number;
   currency: string;
@@ -266,6 +413,12 @@ export interface SupportTicketRecord {
   id: string;
   tenantId: string;
   requesterId?: string;
+  studentId?: string;
+  campusId?: string;
+  gradeLevelId?: string;
+  classId?: string;
+  courseId?: string;
+  termId?: string;
   subject: string;
   message: string;
   priority: "LOW" | "NORMAL" | "HIGH";
@@ -317,6 +470,11 @@ export interface ReportSnapshotRecord {
   id: string;
   tenantId: string;
   examId: string;
+  campusId?: string;
+  gradeLevelId?: string;
+  classId?: string;
+  courseId?: string;
+  termId?: string;
   reportType: string;
   status: string;
   inputRefs: Record<string, unknown>;
@@ -329,6 +487,7 @@ export interface ReportSnapshotRecord {
       blank?: number;
       net?: number;
       rawScore?: number;
+      estimatedRawScore?: number;
       standardScore?: number;
     };
     branches?: Array<{
@@ -357,7 +516,9 @@ export interface ReportSnapshotRecord {
         wrong?: number;
         blank?: number;
         net?: number;
+        rawScore?: number;
         standardScore?: number;
+        estimatedRawScore?: number;
       };
     }>;
     students?: Array<{
@@ -370,7 +531,9 @@ export interface ReportSnapshotRecord {
         wrong?: number;
         blank?: number;
         net?: number;
+        rawScore?: number;
         standardScore?: number;
+        estimatedRawScore?: number;
       };
       branches?: Array<{
         branch: string;
@@ -417,6 +580,7 @@ export interface ReportStudentScoreSummary {
   net?: number;
   rawScore?: number;
   standardScore?: number;
+  estimatedRawScore?: number;
 }
 
 export interface ReportStudentBranchSummary {
@@ -425,6 +589,9 @@ export interface ReportStudentBranchSummary {
   wrong?: number;
   blank?: number;
   net?: number;
+  classNetAverage?: number;
+  schoolNetAverage?: number;
+  generalNetAverage?: number;
 }
 
 export interface ReportStudentOutcomeSummary {
@@ -467,12 +634,20 @@ export interface ReportStudentStatistics {
 
 export interface ReportStudentSnapshot {
   tenantId: string;
+  institutionName?: string;
   examId: string;
+  examTitle?: string;
+  examStartsAt?: string;
   snapshotId: string;
   studentId: string;
+  studentName?: string;
+  participantNo?: string;
+  bookletType?: string;
   classId?: string;
   className?: string;
+  courseId?: string;
   resultKey: string;
+  termId?: string;
   total: ReportStudentScoreSummary;
   branches: ReportStudentBranchSummary[];
   outcomes?: ReportStudentOutcomeSummary[];
@@ -482,8 +657,12 @@ export interface ReportStudentSnapshot {
 
 export interface ReportStudentProgressPoint {
   snapshotId: string;
+  courseId?: string;
+  examTitle?: string;
   generatedAt?: string;
+  termId?: string;
   total: ReportStudentScoreSummary;
+  branches?: ReportStudentBranchSummary[];
 }
 
 export interface ReportStudentProgress {
@@ -516,6 +695,20 @@ export interface ExamRecord {
   updatedAt: string;
 }
 
+export type ExamParticipantStatus = "REGISTERED" | "ATTENDED" | "ABSENT";
+
+export interface ExamParticipantRecord {
+  id: string;
+  tenantId: string;
+  examId: string;
+  studentId: string;
+  participantNo?: string;
+  bookletType?: string;
+  status: ExamParticipantStatus | string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type AnswerChoice = "A" | "B" | "C" | "D" | "E";
 
 export interface AnswerKeyItemInput {
@@ -523,6 +716,7 @@ export interface AnswerKeyItemInput {
   correctAnswer: AnswerChoice;
   branch: string;
   outcomeCode?: string;
+  topic?: string;
 }
 
 export interface AnswerKeyScoringConfig {

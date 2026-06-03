@@ -60,7 +60,7 @@ export class HomeworkController {
   }
 
   @Post("materials/:id/assignments")
-  @Roles("TENANT_ADMIN")
+  @Roles("TEACHER")
   assignMaterial(
     @Param("id") id: string,
     @Body() body: CreateHomeworkMaterialAssignmentInput,

@@ -1,4 +1,4 @@
-import type { SmsAdapter, SmsMessage } from "@uzman-hocam/sms-adapter";
+import type { SmsAdapter, SmsMessage, SmsSendResult } from "@uzman-hocam/sms-adapter";
 import { runWithJobContext } from "../context/job-context.js";
 import { assertTenantJobPayload, type QueueJob, type TenantJobPayload } from "../queue/queues.js";
 
@@ -17,9 +17,33 @@ export interface SmsBatchJobResult {
   status: "completed";
 }
 
+export interface SmsBatchDeliveryCompletedInput {
+  tenantId: string;
+  jobId: string;
+  templateId: string;
+  recipientCount: number;
+  sentCount: number;
+  failedCount: number;
+  billableSegments: number;
+}
+
+export interface SmsBatchDeliveryFailedInput {
+  tenantId: string;
+  jobId: string;
+  templateId: string;
+  recipientCount: number;
+  providerErrorCode: string;
+}
+
+export interface SmsBatchDeliveryReporter {
+  markCompleted(input: SmsBatchDeliveryCompletedInput): Promise<void>;
+  markFailed(input: SmsBatchDeliveryFailedInput): Promise<void>;
+}
+
 export async function processSmsBatchJob(
   job: QueueJob<SmsBatchJobPayload>,
   adapter: SmsAdapter,
+  deliveryReporter?: SmsBatchDeliveryReporter,
 ): Promise<SmsBatchJobResult> {
   if (job.name !== "sms-batch") {
     throw new Error("SMS_BATCH_JOB_NAME_INVALID");
@@ -34,20 +58,47 @@ export async function processSmsBatchJob(
       jobId: job.id,
     },
     async () => {
-      const results = await adapter.sendBatch(createMessages(job.payload));
-      return {
+      let results: SmsSendResult[];
+      try {
+        results = await adapter.sendBatch(createMessages(job.payload));
+      } catch (error) {
+        await deliveryReporter?.markFailed({
+          tenantId: job.payload.tenantId,
+          jobId: job.id,
+          templateId: job.payload.templateId,
+          recipientCount: job.payload.recipients.length,
+          providerErrorCode: resolveProviderErrorCode(error),
+        });
+        throw error;
+      }
+
+      const result = {
         tenantId: job.payload.tenantId,
         templateId: job.payload.templateId,
-        sentCount: results.filter((result) => result.status === "sent").length,
-        failedCount: results.filter((result) => result.status === "failed").length,
+        sentCount: results.filter((item) => item.status === "sent").length,
+        failedCount: results.filter((item) => item.status === "failed").length,
         billableSegments: results.reduce(
-          (total, result) => total + (result.segmentEstimate?.segments ?? 0),
+          (total, item) => total + (item.segmentEstimate?.segments ?? 0),
           0,
         ),
-        status: "completed",
+        status: "completed" as const,
       };
+      await deliveryReporter?.markCompleted({
+        tenantId: job.payload.tenantId,
+        jobId: job.id,
+        templateId: job.payload.templateId,
+        recipientCount: job.payload.recipients.length,
+        sentCount: result.sentCount,
+        failedCount: result.failedCount,
+        billableSegments: result.billableSegments,
+      });
+      return result;
     },
   );
+}
+
+function resolveProviderErrorCode(error: unknown): string {
+  return error instanceof Error && error.message ? error.message : "SMS_BATCH_FAILED";
 }
 
 function assertSmsBatchPayload(payload: SmsBatchJobPayload): void {

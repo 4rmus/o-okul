@@ -48,10 +48,30 @@ describe("Attendance API", () => {
             id: "attendance-a",
             tenantId: "tenant-a",
             studentId: "student-a",
+            courseId: "course-math",
+            termId: "term-2026-spring",
             date: "2026-06-03",
             status: "ABSENT",
           },
         ]);
+      });
+
+    await request(server)
+      .get("/attendance")
+      .query({ classId: "class-a" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: "attendance-a", studentId: "student-a" })]);
+      });
+
+    await request(server)
+      .get("/attendance")
+      .query({ classId: "class-b" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([]);
       });
 
     await request(server)

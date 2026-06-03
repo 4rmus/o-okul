@@ -163,6 +163,52 @@ describe("BullMQ tenant queue producer", () => {
     }]);
   });
 
+  it("announcement-delivery job'unu BullMQ add çağrısına teslim özetleriyle verir", async () => {
+    const queues: FakeQueue[] = [];
+    const producer = createBullTenantQueueProducer({
+      connection: { host: "127.0.0.1", port: 6379 },
+      prefix: "uzman-hocam-test",
+      createQueue: (name, options) => {
+        const queue = new FakeQueue(name, options);
+        queues.push(queue);
+        return queue;
+      },
+    });
+
+    const produced = await producer.enqueue({
+      queueName: "announcement-delivery",
+      tenantId: "tenant-a",
+      userId: "user-a",
+      entityId: "announcement-a",
+      contentHash: "email-report-v1",
+      channel: "EMAIL",
+      recipientCount: 3,
+      deliveredCount: 2,
+      failedCount: 1,
+      status: "completed",
+      providerErrorCode: "EMAIL_PROVIDER_RETRY",
+    });
+
+    expect(queues).toHaveLength(1);
+    expect(queues[0]?.name).toBe("announcement-delivery");
+    expect(queues[0]?.adds).toEqual([{
+      name: "announcement-delivery",
+      data: {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        entityId: "announcement-a",
+        contentHash: "email-report-v1",
+        channel: "EMAIL",
+        recipientCount: 3,
+        deliveredCount: 2,
+        failedCount: 1,
+        status: "completed",
+        providerErrorCode: "EMAIL_PROVIDER_RETRY",
+      },
+      options: produced.options,
+    }]);
+  });
+
 });
 
 function createExcelImportInput(entityId: string, contentHash = `${entityId}-hash`) {

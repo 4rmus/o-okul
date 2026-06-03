@@ -11,6 +11,7 @@ export type {
   ExamEvaluationScoringInput,
 } from "./jobs/exam-evaluation-job.js";
 export { processExcelImportJob } from "./jobs/excel-import-job.js";
+export { PostgresSmsBatchDeliveryReporter } from "./jobs/postgres-sms-batch-delivery-reporter.js";
 export { PostgresReportGenerationAdapter } from "./jobs/postgres-report-generation-adapter.js";
 export { createReportGenerationProcessor } from "./jobs/report-generation-processor.js";
 export type { ReportGenerationProcessor, ReportGenerationProcessorOptions } from "./jobs/report-generation-processor.js";
@@ -27,9 +28,15 @@ export type {
 export { createSmsBatchProcessor } from "./jobs/sms-batch-processor.js";
 export type { SmsBatchProcessor, SmsBatchProcessorOptions } from "./jobs/sms-batch-processor.js";
 export { processSmsBatchJob } from "./jobs/sms-batch-job.js";
-export type { SmsBatchJobPayload, SmsBatchJobResult } from "./jobs/sms-batch-job.js";
-export { FormatAnalyzerService } from "./jobs/format-analyzer-service.js";
-export type { AnswerFieldSpec, FieldSpec, FormatAnalyzerInput, ParserConfigSuggestion, ParserDelimiter, ParserEncoding } from "./jobs/format-analyzer-service.js";
+export type {
+  SmsBatchDeliveryCompletedInput,
+  SmsBatchDeliveryFailedInput,
+  SmsBatchDeliveryReporter,
+  SmsBatchJobPayload,
+  SmsBatchJobResult,
+} from "./jobs/sms-batch-job.js";
+export { FormatAnalyzerService, getParserConfigPresetSuggestion } from "./jobs/format-analyzer-service.js";
+export type { AnswerFieldSpec, AnswerSegmentSpec, FieldSpec, FormatAnalyzerInput, ParserConfigPreset, ParserConfigSuggestion, ParserDelimiter, ParserEncoding } from "./jobs/format-analyzer-service.js";
 export { OpticalAnswerParser } from "./jobs/optical-answer-parser.js";
 export type {
   ImportQuarantineReason,

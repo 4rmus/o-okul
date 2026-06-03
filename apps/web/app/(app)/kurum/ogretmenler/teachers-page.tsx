@@ -3,7 +3,7 @@
 import { type FormEvent, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
-import type { ClassRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
+import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -28,6 +28,8 @@ const emptyAssignmentForm: TeacherAssignmentFormState = {
   role: "CLASS_TEACHER",
   classId: "",
   studentId: "",
+  courseId: "",
+  termId: "",
   startsAt: "",
   endsAt: "",
 };
@@ -59,6 +61,24 @@ export function TeachersPage() {
   });
   const classes = classesQuery.data ?? [];
   const classNameById = new Map(classes.map((klass) => [klass.id, klass.name]));
+
+  const coursesQuery = useQuery({
+    queryKey: ["next-courses-for-teacher-assignments", auth?.session.tenantId ?? "anonymous"],
+    queryFn: () => loadCourses(auth?.accessToken ?? ""),
+    enabled: Boolean(auth),
+    refetchOnWindowFocus: false,
+  });
+  const courses = coursesQuery.data ?? [];
+  const courseNameById = new Map(courses.map((course) => [course.id, course.name]));
+
+  const termsQuery = useQuery({
+    queryKey: ["next-terms-for-teacher-assignments", auth?.session.tenantId ?? "anonymous"],
+    queryFn: () => loadTerms(auth?.accessToken ?? ""),
+    enabled: Boolean(auth),
+    refetchOnWindowFocus: false,
+  });
+  const terms = termsQuery.data ?? [];
+  const termNameById = new Map(terms.map((term) => [term.id, term.name]));
 
   const studentsQuery = useQuery({
     queryKey: ["next-students-for-teacher-assignments", auth?.session.tenantId ?? "anonymous"],
@@ -269,6 +289,8 @@ export function TeachersPage() {
                       {formatTeacherAssignmentRole(assignment.role)}
                       {assignment.classId ? ` · ${classNameById.get(assignment.classId) ?? assignment.classId}` : ""}
                       {assignment.studentId ? ` · ${studentNameById.get(assignment.studentId) ?? assignment.studentId}` : ""}
+                      {assignment.courseId ? ` · ${courseNameById.get(assignment.courseId) ?? assignment.courseId}` : ""}
+                      {assignment.termId ? ` · ${termNameById.get(assignment.termId) ?? assignment.termId}` : ""}
                     </span>
                     <button
                       type="button"
@@ -327,6 +349,34 @@ export function TeachersPage() {
               </select>
             </label>
             <label>
+              Atama branşı
+              <select
+                value={assignmentForm.courseId}
+                onChange={(event) => setAssignmentForm((current) => ({ ...current, courseId: event.target.value }))}
+              >
+                <option value="">Branş seçilmedi</option>
+                {courses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Atama dönemi
+              <select
+                value={assignmentForm.termId}
+                onChange={(event) => setAssignmentForm((current) => ({ ...current, termId: event.target.value }))}
+              >
+                <option value="">Dönem seçilmedi</option>
+                {terms.map((term) => (
+                  <option key={term.id} value={term.id}>
+                    {term.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
               Başlangıç
               <Input
                 type="date"
@@ -374,6 +424,14 @@ async function loadStudents(accessToken: string) {
   return apiRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/students`);
 }
 
+async function loadCourses(accessToken: string) {
+  return apiRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`);
+}
+
+async function loadTerms(accessToken: string) {
+  return apiRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`);
+}
+
 async function loadTeacherAssignments(accessToken: string, teacherId: string) {
   return apiRequest<TeacherAssignmentRecord[]>(accessToken, `${apiBaseUrl}/teachers/${encodeURIComponent(teacherId)}/assignments`);
 }
@@ -400,6 +458,8 @@ async function createTeacherAssignment(accessToken: string, teacherId: string, i
       role: input.role,
       classId: input.classId || undefined,
       studentId: input.studentId || undefined,
+      courseId: input.courseId || undefined,
+      termId: input.termId || undefined,
       startsAt: input.startsAt || undefined,
       endsAt: input.endsAt || undefined,
     }),

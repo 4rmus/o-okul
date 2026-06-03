@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type {
+  SmsBatchDeliveryCompletedInput,
+  SmsBatchDeliveryFailedInput,
+  SmsBatchDeliveryReporter,
+} from "./sms-batch-job.js";
 import { createSmsBatchProcessor } from "./sms-batch-processor.js";
 
 describe("createSmsBatchProcessor", () => {
@@ -13,6 +18,7 @@ describe("createSmsBatchProcessor", () => {
 
   it("lokalde açıkça no-op adapter ile çalışabilir", async () => {
     const processor = createSmsBatchProcessor({
+      deliveryReporter: new FakeDeliveryReporter(),
       env: {
         NODE_ENV: "development",
         SMS_PROVIDER: "noop",
@@ -37,3 +43,16 @@ describe("createSmsBatchProcessor", () => {
     });
   });
 });
+
+class FakeDeliveryReporter implements SmsBatchDeliveryReporter {
+  completed: SmsBatchDeliveryCompletedInput[] = [];
+  failed: SmsBatchDeliveryFailedInput[] = [];
+
+  async markCompleted(input: SmsBatchDeliveryCompletedInput): Promise<void> {
+    this.completed.push(input);
+  }
+
+  async markFailed(input: SmsBatchDeliveryFailedInput): Promise<void> {
+    this.failed.push(input);
+  }
+}

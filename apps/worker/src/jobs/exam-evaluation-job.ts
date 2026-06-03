@@ -1,5 +1,6 @@
 import { runWithJobContext } from "../context/job-context.js";
 import { assertTenantJobPayload, type QueueJob, type TenantJobPayload } from "../queue/queues.js";
+import { alignAnswersToMaster, type ExamBookletVariantInput } from "./booklet-alignment.js";
 import { scoreExam, type AnswerKeyItem, type ScoringConfig, type ScoringResult, type StudentAnswer } from "./scoring-engine.js";
 
 export interface ExamEvaluationJobPayload extends TenantJobPayload {
@@ -22,7 +23,9 @@ export interface ExamEvaluationScoringInput {
   examId: string;
   studentId: string;
   parserConfigVersion: string;
+  bookletType?: string | null;
   answers: StudentAnswer[];
+  bookletVariants?: ExamBookletVariantInput[];
   answerKey: AnswerKeyItem[];
   scoringConfig: ScoringConfig;
 }
@@ -74,7 +77,12 @@ export async function processExamEvaluationJob(
         contentHash: job.payload.contentHash,
       };
       const scoringInput = await adapter.loadInput(input);
-      const score = scoreExam(scoringInput.answers, scoringInput.answerKey, scoringInput.scoringConfig);
+      const answers = alignAnswersToMaster(
+        scoringInput.answers,
+        scoringInput.bookletType,
+        scoringInput.bookletVariants,
+      );
+      const score = scoreExam(answers, scoringInput.answerKey, scoringInput.scoringConfig);
       const result: ExamEvaluationJobResult = {
         tenantId: job.payload.tenantId,
         examId: scoringInput.examId,

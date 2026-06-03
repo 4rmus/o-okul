@@ -9,7 +9,7 @@ export interface ScheduleStore {
   create(input: Omit<ScheduleLessonRecord, "id">): Promise<ScheduleLessonRecord>;
   update(
     id: string,
-    input: Partial<Pick<ScheduleLessonRecord, "classId" | "teacherId" | "title" | "startsAt" | "endsAt">>,
+    input: Partial<Pick<ScheduleLessonRecord, "classId" | "teacherId" | "courseId" | "termId" | "title" | "startsAt" | "endsAt">>,
   ): Promise<ScheduleLessonRecord | undefined>;
   softDelete(id: string, deletedAt: string): Promise<ScheduleLessonRecord | undefined>;
 }
@@ -22,6 +22,8 @@ const demoLessons: ScheduleLessonRecord[] = [
     tenantId: "tenant-a",
     classId: "class-a",
     teacherId: "teacher-a",
+    courseId: "course-math",
+    termId: "term-2026-spring",
     title: "Matematik",
     startsAt: "2026-06-01T09:00:00.000Z",
     endsAt: "2026-06-01T10:00:00.000Z",
@@ -31,6 +33,8 @@ const demoLessons: ScheduleLessonRecord[] = [
     tenantId: "tenant-b",
     classId: "class-b",
     teacherId: "teacher-b",
+    courseId: "course-turkish",
+    termId: "term-2026-spring-b",
     title: "Turkce",
     startsAt: "2026-06-01T09:00:00.000Z",
     endsAt: "2026-06-01T10:00:00.000Z",
@@ -59,13 +63,15 @@ export class InMemoryScheduleStore implements ScheduleStore {
 
   async update(
     id: string,
-    input: Partial<Pick<ScheduleLessonRecord, "classId" | "teacherId" | "title" | "startsAt" | "endsAt">>,
+    input: Partial<Pick<ScheduleLessonRecord, "classId" | "teacherId" | "courseId" | "termId" | "title" | "startsAt" | "endsAt">>,
   ): Promise<ScheduleLessonRecord | undefined> {
     const record = await this.findById(id);
     if (!record) return undefined;
 
     if (input.classId !== undefined) record.classId = input.classId;
     if (input.teacherId !== undefined) record.teacherId = input.teacherId;
+    if (input.courseId !== undefined) record.courseId = input.courseId;
+    if (input.termId !== undefined) record.termId = input.termId;
     if (input.title !== undefined) record.title = input.title;
     if (input.startsAt !== undefined) record.startsAt = input.startsAt;
     if (input.endsAt !== undefined) record.endsAt = input.endsAt;
@@ -109,10 +115,10 @@ export class PostgresScheduleStore implements ScheduleStore {
       });
 
       const result = await client.query<ScheduleLessonRow>(
-        `INSERT INTO "ScheduleLesson" ("id", "tenantId", "classId", "teacherId", "title", "startsAt", "endsAt", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+        `INSERT INTO "ScheduleLesson" ("id", "tenantId", "classId", "teacherId", "courseId", "termId", "title", "startsAt", "endsAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
          RETURNING *`,
-        [randomUUID(), input.tenantId, input.classId, input.teacherId, input.title, input.startsAt, input.endsAt],
+        [randomUUID(), input.tenantId, input.classId, input.teacherId, input.courseId ?? null, input.termId ?? null, input.title, input.startsAt, input.endsAt],
       );
       const record = result.rows[0];
       if (!record) {
@@ -124,7 +130,7 @@ export class PostgresScheduleStore implements ScheduleStore {
 
   async update(
     id: string,
-    input: Partial<Pick<ScheduleLessonRecord, "classId" | "teacherId" | "title" | "startsAt" | "endsAt">>,
+    input: Partial<Pick<ScheduleLessonRecord, "classId" | "teacherId" | "courseId" | "termId" | "title" | "startsAt" | "endsAt">>,
   ): Promise<ScheduleLessonRecord | undefined> {
     const existing = await this.findById(id);
     if (!existing) return undefined;
@@ -148,9 +154,11 @@ export class PostgresScheduleStore implements ScheduleStore {
         `UPDATE "ScheduleLesson"
          SET "classId" = COALESCE($2, "classId"),
              "teacherId" = COALESCE($3, "teacherId"),
-             "title" = COALESCE($4, "title"),
-             "startsAt" = COALESCE($5, "startsAt"),
-             "endsAt" = COALESCE($6, "endsAt"),
+             "courseId" = CASE WHEN $4 THEN $5 ELSE "courseId" END,
+             "termId" = CASE WHEN $6 THEN $7 ELSE "termId" END,
+             "title" = COALESCE($8, "title"),
+             "startsAt" = COALESCE($9, "startsAt"),
+             "endsAt" = COALESCE($10, "endsAt"),
              "updatedAt" = now()
          WHERE "id" = $1
          RETURNING *`,
@@ -158,6 +166,10 @@ export class PostgresScheduleStore implements ScheduleStore {
           id,
           input.classId ?? null,
           input.teacherId ?? null,
+          input.courseId !== undefined,
+          input.courseId || null,
+          input.termId !== undefined,
+          input.termId || null,
           input.title ?? null,
           input.startsAt ?? null,
           input.endsAt ?? null,
@@ -194,6 +206,8 @@ interface ScheduleLessonRow {
   tenantId: string;
   classId: string;
   teacherId: string;
+  courseId: string | null;
+  termId: string | null;
   title: string;
   startsAt: Date;
   endsAt: Date;
@@ -206,6 +220,8 @@ function toScheduleLessonRecord(record: ScheduleLessonRow): ScheduleLessonRecord
     tenantId: record.tenantId,
     classId: record.classId,
     teacherId: record.teacherId,
+    courseId: record.courseId ?? undefined,
+    termId: record.termId ?? undefined,
     title: record.title,
     startsAt: record.startsAt.toISOString(),
     endsAt: record.endsAt.toISOString(),

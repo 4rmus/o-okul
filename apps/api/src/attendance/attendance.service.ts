@@ -2,6 +2,8 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import type { AttendanceRecord, AttendanceStatus, AttendanceSummaryRecord } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
+import { type CourseStore, courseStoreToken } from "../school/course-store.js";
 import { type GuardianStudentStore, guardianStudentStoreToken } from "../school/guardian-student-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
 import {
@@ -13,7 +15,13 @@ import {
 } from "../tenant/tenant-access.js";
 import { type AttendanceStore, attendanceStoreToken } from "./attendance-store.js";
 
-export type AttendanceInput = Pick<AttendanceRecord, "studentId" | "date" | "status">;
+export type AttendanceInput = Pick<AttendanceRecord, "studentId" | "date" | "status"> &
+  Pick<Partial<AttendanceRecord>, "courseId" | "termId">;
+
+export interface AttendanceListFilters {
+  classId?: string;
+  studentId?: string;
+}
 
 const attendanceStatuses: AttendanceStatus[] = ["PRESENT", "ABSENT", "LATE", "EXCUSED"];
 
@@ -21,13 +29,18 @@ const attendanceStatuses: AttendanceStatus[] = ["PRESENT", "ABSENT", "LATE", "EX
 export class AttendanceService {
   constructor(
     @Inject(attendanceStoreToken) private readonly store: AttendanceStore,
+    @Inject(academicCalendarStoreToken) private readonly academicCalendarStore: AcademicCalendarStore,
+    @Inject(courseStoreToken) private readonly courseStore: CourseStore,
     @Inject(studentStoreToken) private readonly studentStore: StudentStore,
     @Inject(guardianStudentStoreToken) private readonly guardianStudentStore: GuardianStudentStore,
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
-  async list(context: RequestContext): Promise<AttendanceRecord[]> {
-    return this.filterForTeacherScope(context, filterTenantResources(context, await this.store.list()).filter((record) => !record.deletedAt));
+  async list(context: RequestContext, filters: AttendanceListFilters = {}): Promise<AttendanceRecord[]> {
+    const records = filters.studentId
+      ? await this.listForTenantStudent(context, filters.studentId)
+      : await this.filterForTeacherScope(context, filterTenantResources(context, await this.store.list()).filter((record) => !record.deletedAt));
+    return this.filterByStudentClass(context, records, filters.classId);
   }
 
   async listForTenantStudent(context: RequestContext, studentId: string): Promise<AttendanceRecord[]> {
@@ -69,6 +82,7 @@ export class AttendanceService {
 
   async create(context: RequestContext, input: Partial<AttendanceInput>): Promise<AttendanceRecord> {
     const student = await this.findStudentForTeacherScope(context, requiredText(input.studentId, "ATTENDANCE_STUDENT_REQUIRED"));
+    const contextInput = await this.resolveAcademicContext(context, student.tenantId, input);
     const date = requiredDate(input.date);
     const status = resolveStatus(input.status);
     const existing = await this.store.findByStudentDate(student.id, date);
@@ -79,6 +93,7 @@ export class AttendanceService {
     const record = await this.store.create({
       tenantId: student.tenantId,
       studentId: student.id,
+      ...contextInput,
       date,
       status,
     });
@@ -88,15 +103,16 @@ export class AttendanceService {
       entityType: "Attendance",
       entityId: record.id,
       action: "attendance.created",
-      diff: { studentId: record.studentId, date: record.date, status: record.status },
+      diff: { studentId: record.studentId, courseId: record.courseId, termId: record.termId, date: record.date, status: record.status },
     });
     return record;
   }
 
-  async update(context: RequestContext, id: string, input: Partial<Pick<AttendanceRecord, "status">>): Promise<AttendanceRecord> {
+  async update(context: RequestContext, id: string, input: Partial<Pick<AttendanceRecord, "status" | "courseId" | "termId">>): Promise<AttendanceRecord> {
     const existing = await this.findOneForTenant(context, id);
+    const contextInput = await this.resolveAcademicContext(context, existing.tenantId, input);
     const status = resolveStatus(input.status);
-    const record = await this.store.update(id, { status });
+    const record = await this.store.update(id, { status, ...contextInput });
     if (!record) {
       throw new NotFoundException("ATTENDANCE_NOT_FOUND");
     }
@@ -106,7 +122,10 @@ export class AttendanceService {
       entityType: "Attendance",
       entityId: record.id,
       action: "attendance.updated",
-      diff: { before: { status: existing.status }, after: { status: record.status } },
+      diff: {
+        before: { courseId: existing.courseId, termId: existing.termId, status: existing.status },
+        after: { courseId: record.courseId, termId: record.termId, status: record.status },
+      },
     });
     return record;
   }
@@ -176,6 +195,35 @@ export class AttendanceService {
     }
   }
 
+  private async resolveAcademicContext(
+    context: RequestContext,
+    tenantId: string,
+    input: Partial<Pick<AttendanceRecord, "courseId" | "termId">>,
+  ): Promise<Pick<Partial<AttendanceRecord>, "courseId" | "termId">> {
+    const result: Pick<Partial<AttendanceRecord>, "courseId" | "termId"> = {};
+    if (input.courseId !== undefined) {
+      const courseId = optionalText(input.courseId);
+      if (courseId) {
+        const course = await this.courseStore.findById(courseId);
+        if (!course) throw new NotFoundException("COURSE_NOT_FOUND");
+        this.assertTenantAccess(context, course);
+        if (course.tenantId !== tenantId) throw new ForbiddenException("FORBIDDEN_TENANT");
+      }
+      result.courseId = courseId;
+    }
+    if (input.termId !== undefined) {
+      const termId = optionalText(input.termId);
+      if (termId) {
+        const term = await this.academicCalendarStore.findTermById(termId);
+        if (!term) throw new NotFoundException("ACADEMIC_TERM_NOT_FOUND");
+        this.assertTenantAccess(context, term);
+        if (term.tenantId !== tenantId) throw new ForbiddenException("FORBIDDEN_TENANT");
+      }
+      result.termId = termId;
+    }
+    return result;
+  }
+
   private assertSubjectAccess(
     context: RequestContext,
     resource: { tenantId: string; id?: string; guardianIds?: string[] },
@@ -207,6 +255,18 @@ export class AttendanceService {
     const scopedStudentIds = new Set(filterTeacherScopedStudents(context, await this.studentStore.list()).map((student) => student.id));
     return records.filter((record) => scopedStudentIds.has(record.studentId));
   }
+
+  private async filterByStudentClass(context: RequestContext, records: AttendanceRecord[], classId: string | undefined): Promise<AttendanceRecord[]> {
+    const normalizedClassId = optionalText(classId);
+    if (!normalizedClassId) return records;
+
+    const studentIds = new Set(
+      filterTenantResources(context, await this.studentStore.list())
+        .filter((student) => student.classId === normalizedClassId)
+        .map((student) => student.id),
+    );
+    return records.filter((record) => studentIds.has(record.studentId));
+  }
 }
 
 function summarize(studentId: string, records: AttendanceRecord[]): AttendanceSummaryRecord {
@@ -237,6 +297,11 @@ function requiredDate(value: string | undefined): string {
     throw new BadRequestException("ATTENDANCE_DATE_INVALID");
   }
   return trimmed;
+}
+
+function optionalText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
 }
 
 function resolveStatus(value: AttendanceStatus | undefined): AttendanceStatus {

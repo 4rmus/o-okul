@@ -42,7 +42,7 @@ describe("PostgresStudentStore", () => {
       },
     );
 
-    const businessQueries = queries.filter((query) => !query.sql.includes("set_config"));
+    const businessQueries = queries.filter((query) => !query.sql.includes("set_config") && !["BEGIN", "COMMIT", "ROLLBACK"].includes(query.sql));
     expect(queries.some((query) => query.values?.[0] === "tenant-a")).toBe(true);
     expect(businessQueries[0]?.sql).toContain('SELECT * FROM "Student"');
     expect(businessQueries[1]?.values).toEqual(["student-a"]);

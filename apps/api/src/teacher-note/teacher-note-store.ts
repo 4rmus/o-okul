@@ -10,7 +10,7 @@ export interface TeacherNoteStore {
   create(input: Omit<TeacherNoteRecord, "id" | "createdAt">): Promise<TeacherNoteRecord>;
   update(
     id: string,
-    input: Pick<TeacherNoteRecord, "body" | "visibility"> & Pick<Partial<TeacherNoteRecord>, "developmentStatus">,
+    input: Pick<TeacherNoteRecord, "body" | "visibility"> & Pick<Partial<TeacherNoteRecord>, "courseId" | "termId" | "developmentStatus">,
   ): Promise<TeacherNoteRecord | undefined>;
   softDelete(id: string, deletedAt: string): Promise<TeacherNoteRecord | undefined>;
 }
@@ -23,6 +23,8 @@ const demoNotes: TeacherNoteRecord[] = [
     tenantId: "tenant-a",
     studentId: "student-a",
     teacherId: "teacher-a",
+    courseId: "course-math",
+    termId: "term-2026-spring",
     visibility: "INTERNAL",
     body: "Dikkat takibi iç notu",
     developmentStatus: "FOLLOW_UP",
@@ -33,6 +35,8 @@ const demoNotes: TeacherNoteRecord[] = [
     tenantId: "tenant-a",
     studentId: "student-a",
     teacherId: "teacher-a",
+    courseId: "course-math",
+    termId: "term-2026-spring",
     visibility: "GUARDIAN_STUDENT",
     body: "Problem çözme rutini güçleniyor.",
     developmentStatus: "IMPROVING",
@@ -76,13 +80,15 @@ export class InMemoryTeacherNoteStore implements TeacherNoteStore {
 
   async update(
     id: string,
-    input: Pick<TeacherNoteRecord, "body" | "visibility"> & Pick<Partial<TeacherNoteRecord>, "developmentStatus">,
+    input: Pick<TeacherNoteRecord, "body" | "visibility"> & Pick<Partial<TeacherNoteRecord>, "courseId" | "termId" | "developmentStatus">,
   ): Promise<TeacherNoteRecord | undefined> {
     const record = await this.findById(id);
     if (!record) return undefined;
 
     record.body = input.body;
     record.visibility = input.visibility;
+    if (input.courseId !== undefined) record.courseId = input.courseId;
+    if (input.termId !== undefined) record.termId = input.termId;
     record.developmentStatus = input.developmentStatus;
     return record;
   }
@@ -135,14 +141,16 @@ export class PostgresTeacherNoteStore implements TeacherNoteStore {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<TeacherNoteRow>(
         `INSERT INTO "TeacherNote"
-           ("id", "tenantId", "studentId", "teacherId", "visibility", "body", "developmentStatus", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+           ("id", "tenantId", "studentId", "teacherId", "courseId", "termId", "visibility", "body", "developmentStatus", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
          RETURNING *`,
         [
           randomUUID(),
           input.tenantId,
           input.studentId,
           input.teacherId,
+          input.courseId ?? null,
+          input.termId ?? null,
           input.visibility,
           input.body,
           input.developmentStatus ?? null,
@@ -158,7 +166,7 @@ export class PostgresTeacherNoteStore implements TeacherNoteStore {
 
   async update(
     id: string,
-    input: Pick<TeacherNoteRecord, "body" | "visibility"> & Pick<Partial<TeacherNoteRecord>, "developmentStatus">,
+    input: Pick<TeacherNoteRecord, "body" | "visibility"> & Pick<Partial<TeacherNoteRecord>, "courseId" | "termId" | "developmentStatus">,
   ): Promise<TeacherNoteRecord | undefined> {
     const existing = await this.findById(id);
     if (!existing) return undefined;
@@ -168,12 +176,23 @@ export class PostgresTeacherNoteStore implements TeacherNoteStore {
         `UPDATE "TeacherNote"
          SET "body" = $2,
              "visibility" = $3,
-             "developmentStatus" = $4,
+             "courseId" = CASE WHEN $4 THEN $5 ELSE "courseId" END,
+             "termId" = CASE WHEN $6 THEN $7 ELSE "termId" END,
+             "developmentStatus" = $8,
              "updatedAt" = now()
          WHERE "id" = $1
            AND "deletedAt" IS NULL
          RETURNING *`,
-        [id, input.body, input.visibility, input.developmentStatus ?? null],
+        [
+          id,
+          input.body,
+          input.visibility,
+          input.courseId !== undefined,
+          input.courseId ?? null,
+          input.termId !== undefined,
+          input.termId ?? null,
+          input.developmentStatus ?? null,
+        ],
       );
       return result.rows[0] ? toTeacherNoteRecord(result.rows[0]) : undefined;
     });
@@ -207,6 +226,8 @@ interface TeacherNoteRow {
   tenantId: string;
   studentId: string;
   teacherId: string;
+  courseId: string | null;
+  termId: string | null;
   visibility: TeacherNoteVisibility;
   body: string;
   developmentStatus: string | null;
@@ -220,6 +241,8 @@ function toTeacherNoteRecord(row: TeacherNoteRow): TeacherNoteRecord {
     tenantId: row.tenantId,
     studentId: row.studentId,
     teacherId: row.teacherId,
+    courseId: row.courseId ?? undefined,
+    termId: row.termId ?? undefined,
     visibility: row.visibility,
     body: row.body,
     developmentStatus: row.developmentStatus ?? undefined,

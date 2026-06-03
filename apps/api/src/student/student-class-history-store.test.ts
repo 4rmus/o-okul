@@ -15,6 +15,8 @@ describe("PostgresStudentClassHistoryStore", () => {
               tenantId: "tenant-a",
               studentId: "student-a",
               classId: "class-a",
+              academicYearId: "academic-year-2026",
+              termId: "term-2026-spring",
               startsAt: "2026-06-01",
               endsAt: null,
               reason: "CREATED",
@@ -34,6 +36,8 @@ describe("PostgresStudentClassHistoryStore", () => {
           tenantId: "tenant-a",
           studentId: "student-a",
           classId: "class-a",
+          academicYearId: "academic-year-2026",
+          termId: "term-2026-spring",
           startsAt: "2026-06-01",
           reason: "CREATED",
         });
@@ -41,7 +45,7 @@ describe("PostgresStudentClassHistoryStore", () => {
       },
     );
 
-    const businessQueries = queries.filter((query) => !query.sql.includes("set_config"));
+    const businessQueries = queries.filter((query) => !query.sql.includes("set_config") && !["BEGIN", "COMMIT", "ROLLBACK"].includes(query.sql));
     expect(queries.some((query) => query.values?.[0] === "tenant-a")).toBe(true);
     expect(businessQueries[0]?.sql).toContain('FROM "StudentClassHistory"');
     expect(businessQueries[0]?.values).toEqual(["student-a"]);
@@ -51,6 +55,8 @@ describe("PostgresStudentClassHistoryStore", () => {
       "tenant-a",
       "student-a",
       "class-a",
+      "academic-year-2026",
+      "term-2026-spring",
       "2026-06-01",
       null,
       "CREATED",

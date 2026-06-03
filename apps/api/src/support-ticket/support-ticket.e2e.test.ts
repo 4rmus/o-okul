@@ -10,6 +10,8 @@ describe("Support ticket API", () => {
   let server: Parameters<typeof request>[0];
   let tenantAAccessToken: string;
   let teacherAAccessToken: string;
+  let studentAAccessToken: string;
+  let guardianAAccessToken: string;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -31,6 +33,18 @@ describe("Support ticket API", () => {
       .send({ email: "teacher-a@example.test", password: "password" })
       .expect(200);
     teacherAAccessToken = (teacherLogin.body as { accessToken: string }).accessToken;
+
+    const studentLogin = await request(server)
+      .post("/auth/login")
+      .send({ email: "student-a@example.test", password: "password" })
+      .expect(200);
+    studentAAccessToken = (studentLogin.body as { accessToken: string }).accessToken;
+
+    const guardianLogin = await request(server)
+      .post("/auth/login")
+      .send({ email: "guardian-a@example.test", password: "password" })
+      .expect(200);
+    guardianAAccessToken = (guardianLogin.body as { accessToken: string }).accessToken;
   });
 
   afterAll(async () => {
@@ -48,6 +62,12 @@ describe("Support ticket API", () => {
         id: "support-ticket-a",
         tenantId: "tenant-a",
         requesterId: "user-tenant-a",
+        studentId: "student-a",
+        campusId: "campus-main",
+        gradeLevelId: "grade-8",
+        classId: "class-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
         subject: "Optik dosya yüklenemiyor",
         message: "TXT dosyası yüklenirken hata alıyoruz.",
         priority: "NORMAL",
@@ -55,6 +75,30 @@ describe("Support ticket API", () => {
         createdAt: "2026-06-08T09:00:00.000Z",
       },
     ]);
+  });
+
+  it("destek taleplerini akademik bağlam filtresiyle listeler", async () => {
+    const response = await request(server)
+      .get("/support-tickets?campusId=campus-main&gradeLevelId=grade-8&classId=class-a&courseId=course-math&termId=term-2026-spring")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual([
+      expect.objectContaining({
+        id: "support-ticket-a",
+        campusId: "campus-main",
+        gradeLevelId: "grade-8",
+        classId: "class-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
+      }),
+    ]);
+
+    const emptyResponse = await request(server)
+      .get("/support-tickets?courseId=course-turkish")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200);
+    expect(emptyResponse.body).toEqual([]);
   });
 
   it("destek taleplerini arama, sıralama ve sayfalama sorgusuyla listeler", async () => {
@@ -79,6 +123,9 @@ describe("Support ticket API", () => {
         subject: "Rapor PDF indirilemiyor",
         message: "PDF butonu hata veriyor.",
         priority: "HIGH",
+        classId: "class-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
       })
       .expect(201);
 
@@ -88,9 +135,177 @@ describe("Support ticket API", () => {
       subject: "Rapor PDF indirilemiyor",
       message: "PDF butonu hata veriyor.",
       priority: "HIGH",
+      classId: "class-a",
+      courseId: "course-math",
+      termId: "term-2026-spring",
       status: "OPEN",
     });
     expect(typeof (created.body as { createdAt?: unknown }).createdAt).toBe("string");
+  });
+
+  it("öğretmen me yüzeyinden yalnız kendi destek taleplerini açar ve listeler", async () => {
+    const created = await request(server)
+      .post("/me/teacher/support-tickets")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({
+        subject: "Portal yoklama sorunu",
+        message: "Yoklama kaydet düğmesi hata verdi.",
+        priority: "NORMAL",
+        studentId: "student-a",
+        campusId: "campus-main",
+        gradeLevelId: "grade-8",
+        classId: "class-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
+      })
+      .expect(201);
+
+    expect(created.body).toMatchObject({
+      tenantId: "tenant-a",
+      requesterId: "teacher-tenant-a",
+      subject: "Portal yoklama sorunu",
+      studentId: "student-a",
+      campusId: "campus-main",
+      gradeLevelId: "grade-8",
+      classId: "class-a",
+      courseId: "course-math",
+      termId: "term-2026-spring",
+      status: "OPEN",
+    });
+
+    await request(server)
+      .get("/me/teacher/support-tickets")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.arrayContaining([expect.objectContaining({ id: created.body.id, requesterId: "teacher-tenant-a" })]));
+        expect(body).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: "support-ticket-a" })]));
+      });
+  });
+
+  it("öğretmen kapsam dışı sınıf için destek talebi açamaz", async () => {
+    const createdClass = await request(server)
+      .post("/classes")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "Destek Dışı", level: "8" })
+      .expect(201);
+
+    await request(server)
+      .post("/me/teacher/support-tickets")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({
+        subject: "Kapsam dışı",
+        message: "Bu sınıf benim kapsamımda değil.",
+        classId: createdClass.body.id,
+      })
+      .expect(403);
+  });
+
+  it("öğrenci kendi portalından destek talebi açar ve listeler", async () => {
+    const created = await request(server)
+      .post("/me/student/support-tickets")
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .send({
+        subject: "Ödev dosyası açılmıyor",
+        message: "Materyal bağlantısı hata veriyor.",
+        priority: "NORMAL",
+      })
+      .expect(201);
+
+    expect(created.body).toMatchObject({
+      tenantId: "tenant-a",
+      requesterId: "student-tenant-a",
+      studentId: "student-a",
+      subject: "Ödev dosyası açılmıyor",
+      status: "OPEN",
+    });
+
+    await request(server)
+      .get("/me/student/support-tickets")
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: created.body.id, studentId: "student-a" })]);
+      });
+  });
+
+  it("veli bağlı ve izinli öğrenci için destek talebi açar", async () => {
+    const created = await request(server)
+      .post("/me/guardian/students/student-a/support-tickets")
+      .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .send({
+        subject: "Rapor sorusu",
+        message: "Son raporu görüntüleyemiyorum.",
+        priority: "HIGH",
+      })
+      .expect(201);
+
+    expect(created.body).toMatchObject({
+      tenantId: "tenant-a",
+      requesterId: "guardian-tenant-a",
+      studentId: "student-a",
+      subject: "Rapor sorusu",
+      priority: "HIGH",
+    });
+
+    await request(server)
+      .get("/me/guardian/students/student-a/support-tickets")
+      .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: created.body.id, requesterId: "guardian-tenant-a" })]);
+      });
+
+    await request(server)
+      .get("/me/guardian/students/student-b/support-tickets")
+      .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .expect(403);
+  });
+
+  it("veli destek izni kapalıysa talep açamaz", async () => {
+    await request(server)
+      .get("/me/guardian/students/student-a/notification-preferences")
+      .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.objectContaining({
+          guardianId: "guardian-a",
+          studentId: "student-a",
+          canReceiveSms: true,
+          canReceiveAnnouncements: true,
+          canOpenSupportTickets: true,
+        }));
+      });
+
+    await request(server)
+      .patch("/me/guardian/students/student-a/notification-preferences")
+      .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .send({ canReceiveSms: false, canReceiveAnnouncements: false, canOpenSupportTickets: false })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.objectContaining({
+          canReceiveSms: false,
+          canReceiveAnnouncements: false,
+          canOpenSupportTickets: false,
+        }));
+      });
+
+    await request(server)
+      .get("/me/guardian/students/student-b/notification-preferences")
+      .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .expect(403);
+
+    await request(server)
+      .post("/me/guardian/students/student-a/support-tickets")
+      .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .send({ subject: "İzin kapalı", message: "Açılamamalı.", priority: "LOW" })
+      .expect(403);
+
+    await request(server)
+      .patch("/me/guardian/students/student-a/notification-preferences")
+      .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .send({ canReceiveSms: true, canReceiveAnnouncements: true, canOpenSupportTickets: true })
+      .expect(200);
   });
 
   it("tenant A başka tenant destek talebini okuyamaz", async () => {
@@ -299,6 +514,12 @@ describe("Support ticket API", () => {
       .post("/support-tickets")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .send({ subject: "Konu", message: "Mesaj", priority: "URGENT" })
+      .expect(400);
+
+    await request(server)
+      .post("/support-tickets")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({ subject: "Konu", message: "Mesaj", classId: "class-b" })
       .expect(400);
 
     await request(server)

@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import type { ParserConfigSuggestion } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { reportSnapshotStoreToken, type ReportSnapshotStore } from "../report/report-snapshot-store.js";
 
 export const parserConfigRepositoryToken = Symbol("ParserConfigRepository");
 
@@ -39,6 +40,9 @@ export class ParserConfigApprovalService {
     @Inject(parserConfigRepositoryToken)
     private readonly repository: ParserConfigRepository,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional()
+    @Inject(reportSnapshotStoreToken)
+    private readonly snapshots?: ReportSnapshotStore,
   ) {}
 
   async approve(
@@ -60,6 +64,7 @@ export class ParserConfigApprovalService {
         version,
         suggestion,
       });
+      await this.snapshots?.markStaleByExam(context.tenantId, examId, "parser_config.approved");
       await this.auditLogs?.record({
         tenantId: context.tenantId,
         actorUserId: context.userId,

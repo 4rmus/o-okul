@@ -9,7 +9,7 @@ export interface StudySessionStore {
   create(input: Omit<StudySessionRecord, "id">): Promise<StudySessionRecord>;
   update(
     id: string,
-    input: Partial<Pick<StudySessionRecord, "classId" | "teacherId" | "studentIds" | "title" | "capacity" | "startsAt" | "endsAt">>,
+    input: Partial<Pick<StudySessionRecord, "classId" | "teacherId" | "courseId" | "termId" | "studentIds" | "title" | "capacity" | "startsAt" | "endsAt">>,
   ): Promise<StudySessionRecord | undefined>;
   softDelete(id: string, deletedAt: string): Promise<StudySessionRecord | undefined>;
 }
@@ -22,6 +22,8 @@ const demoSessions: StudySessionRecord[] = [
     tenantId: "tenant-a",
     classId: "class-a",
     teacherId: "teacher-a",
+    courseId: "course-math",
+    termId: "term-2026-spring",
     studentIds: ["student-a"],
     title: "Matematik Etut",
     capacity: 4,
@@ -33,6 +35,8 @@ const demoSessions: StudySessionRecord[] = [
     tenantId: "tenant-b",
     classId: "class-b",
     teacherId: "teacher-b",
+    courseId: "course-turkish",
+    termId: "term-2026-spring-b",
     studentIds: ["student-b"],
     title: "Turkce Etut",
     capacity: 4,
@@ -64,13 +68,15 @@ export class InMemoryStudySessionStore implements StudySessionStore {
 
   async update(
     id: string,
-    input: Partial<Pick<StudySessionRecord, "classId" | "teacherId" | "studentIds" | "title" | "capacity" | "startsAt" | "endsAt">>,
+    input: Partial<Pick<StudySessionRecord, "classId" | "teacherId" | "courseId" | "termId" | "studentIds" | "title" | "capacity" | "startsAt" | "endsAt">>,
   ): Promise<StudySessionRecord | undefined> {
     const record = await this.findById(id);
     if (!record) return undefined;
 
     if (input.classId !== undefined) record.classId = input.classId;
     if (input.teacherId !== undefined) record.teacherId = input.teacherId;
+    if (input.courseId !== undefined) record.courseId = input.courseId;
+    if (input.termId !== undefined) record.termId = input.termId;
     if (input.studentIds !== undefined) record.studentIds = [...input.studentIds];
     if (input.title !== undefined) record.title = input.title;
     if (input.capacity !== undefined) record.capacity = input.capacity;
@@ -119,10 +125,10 @@ export class PostgresStudySessionStore implements StudySessionStore {
       });
 
       const result = await client.query<StudySessionBaseRow>(
-        `INSERT INTO "StudySession" ("id", "tenantId", "classId", "teacherId", "title", "capacity", "startsAt", "endsAt", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+        `INSERT INTO "StudySession" ("id", "tenantId", "classId", "teacherId", "courseId", "termId", "title", "capacity", "startsAt", "endsAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
          RETURNING *`,
-        [randomUUID(), input.tenantId, input.classId, input.teacherId, input.title, input.capacity, input.startsAt, input.endsAt],
+        [randomUUID(), input.tenantId, input.classId, input.teacherId, input.courseId ?? null, input.termId ?? null, input.title, input.capacity, input.startsAt, input.endsAt],
       );
       const record = result.rows[0];
       if (!record) {
@@ -136,7 +142,7 @@ export class PostgresStudySessionStore implements StudySessionStore {
 
   async update(
     id: string,
-    input: Partial<Pick<StudySessionRecord, "classId" | "teacherId" | "studentIds" | "title" | "capacity" | "startsAt" | "endsAt">>,
+    input: Partial<Pick<StudySessionRecord, "classId" | "teacherId" | "courseId" | "termId" | "studentIds" | "title" | "capacity" | "startsAt" | "endsAt">>,
   ): Promise<StudySessionRecord | undefined> {
     const existing = await this.findById(id);
     if (!existing) return undefined;
@@ -162,10 +168,12 @@ export class PostgresStudySessionStore implements StudySessionStore {
         `UPDATE "StudySession"
          SET "classId" = COALESCE($2, "classId"),
              "teacherId" = COALESCE($3, "teacherId"),
-             "title" = COALESCE($4, "title"),
-             "capacity" = COALESCE($5, "capacity"),
-             "startsAt" = COALESCE($6, "startsAt"),
-             "endsAt" = COALESCE($7, "endsAt"),
+             "courseId" = CASE WHEN $4 THEN $5 ELSE "courseId" END,
+             "termId" = CASE WHEN $6 THEN $7 ELSE "termId" END,
+             "title" = COALESCE($8, "title"),
+             "capacity" = COALESCE($9, "capacity"),
+             "startsAt" = COALESCE($10, "startsAt"),
+             "endsAt" = COALESCE($11, "endsAt"),
              "updatedAt" = now()
          WHERE "id" = $1
          RETURNING *`,
@@ -173,6 +181,10 @@ export class PostgresStudySessionStore implements StudySessionStore {
           id,
           input.classId ?? null,
           input.teacherId ?? null,
+          input.courseId !== undefined,
+          input.courseId || null,
+          input.termId !== undefined,
+          input.termId || null,
           input.title ?? null,
           input.capacity ?? null,
           input.startsAt ?? null,
@@ -235,6 +247,8 @@ interface StudySessionBaseRow {
   tenantId: string;
   classId: string;
   teacherId: string;
+  courseId: string | null;
+  termId: string | null;
   title: string;
   capacity: number;
   startsAt: Date;
@@ -323,6 +337,8 @@ function toStudySessionRecord(record: StudySessionRow): StudySessionRecord {
     tenantId: record.tenantId,
     classId: record.classId,
     teacherId: record.teacherId,
+    courseId: record.courseId ?? undefined,
+    termId: record.termId ?? undefined,
     studentIds: record.studentIds,
     title: record.title,
     capacity: record.capacity,

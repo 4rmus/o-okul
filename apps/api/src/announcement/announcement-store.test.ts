@@ -16,6 +16,11 @@ describe("PostgresAnnouncementStore", () => {
               title: "Veli toplantısı",
               body: "Cuma günü 8-A sınıfı için veli toplantısı yapılacaktır.",
               audience: "SCHOOL",
+              campusId: "campus-main",
+              gradeLevelId: "grade-8",
+              classId: "class-a",
+              courseId: "course-math",
+              termId: "term-2026-spring",
               publishedAt: new Date("2026-06-08T09:00:00.000Z"),
               deletedAt: null,
             },
@@ -36,12 +41,17 @@ describe("PostgresAnnouncementStore", () => {
           title: "Servis saati",
           body: "Pazartesi servisleri 08:30'da hareket edecektir.",
           audience: "SCHOOL",
+          campusId: "campus-main",
+          gradeLevelId: "grade-8",
+          classId: "class-a",
+          courseId: "course-math",
+          termId: "term-2026-spring",
           publishedAt: "2026-06-08T10:00:00.000Z",
         });
       },
     );
 
-    const businessQueries = queries.filter((query) => !query.sql.includes("set_config"));
+    const businessQueries = queries.filter((query) => !query.sql.includes("set_config") && !["BEGIN", "COMMIT", "ROLLBACK"].includes(query.sql));
     expect(queries.some((query) => query.values?.[0] === "tenant-a")).toBe(true);
     expect(businessQueries[0]?.sql).toContain('SELECT * FROM "Announcement"');
     expect(businessQueries[1]?.sql).toContain('WHERE "id" = $1');
@@ -53,6 +63,11 @@ describe("PostgresAnnouncementStore", () => {
       "Servis saati",
       "Pazartesi servisleri 08:30'da hareket edecektir.",
       "SCHOOL",
+      "campus-main",
+      "grade-8",
+      "class-a",
+      "course-math",
+      "term-2026-spring",
       "2026-06-08T10:00:00.000Z",
     ]);
   });

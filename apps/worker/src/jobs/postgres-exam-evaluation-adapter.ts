@@ -1,10 +1,13 @@
 import { type Queryable, type TenantQueryable, withTenantDb } from "@uzman-hocam/db";
+import type { ParserConfigSuggestion, ParserDelimiter } from "./format-analyzer-service.js";
 import {
   type ExamEvaluationJobAdapter,
   type ExamEvaluationJobInput,
   type ExamEvaluationJobResult,
   type ExamEvaluationScoringInput,
 } from "./exam-evaluation-job.js";
+import type { ExamBookletVariantInput } from "./booklet-alignment.js";
+import { OpticalAnswerParser } from "./optical-answer-parser.js";
 import { scoringEngineVersion, type AnswerKeyItem, type Choice, type ScoringConfig, type ScoringResult, type StudentAnswer } from "./scoring-engine.js";
 
 const defaultWrongPenalty = 0.25;
@@ -18,50 +21,31 @@ export class PostgresExamEvaluationAdapter implements ExamEvaluationJobAdapter {
 
   async loadInput(input: ExamEvaluationJobInput): Promise<ExamEvaluationScoringInput> {
     return withTenantDb(this.pool, { tenantId: input.tenantId }, async (client) => {
-      const result = await client.query<ExamEvaluationInputRow>(
-        `SELECT
-           pa."examId" AS "examId",
-           ep."studentId" AS "studentId",
-           pa."parserConfigVersion" AS "parserConfigVersion",
-           pa."answers" AS "answers",
-           ak."keyData" AS "keyData",
-           ak."scoringConfig" AS "scoringConfig",
-           ak."version" AS "answerKeyVersion"
-         FROM "ParsedAnswer" pa
-         INNER JOIN "RawImport" ri
-           ON ri."tenantId" = pa."tenantId"
-          AND ri."examId" = pa."examId"
-          AND ri."id" = pa."rawImportId"
-          AND ri."parserConfigVersion" = pa."parserConfigVersion"
-         INNER JOIN "ExamParticipant" ep
-           ON ep."tenantId" = pa."tenantId"
-          AND ep."examId" = pa."examId"
-          AND ep."id" = pa."participantId"
-         INNER JOIN "AnswerKey" ak
-           ON ak."tenantId" = pa."tenantId"
-          AND ak."examId" = pa."examId"
-         WHERE pa."tenantId" = $1
-           AND pa."rawImportId" = $2
-           AND pa."participantId" = $3
-           AND ak."id" = $4
-           AND pa."status" = 'MATCHED'
-           AND pa."deletedAt" IS NULL
-           AND ri."deletedAt" IS NULL
-           AND ep."deletedAt" IS NULL
-           AND ak."deletedAt" IS NULL
-         LIMIT 1`,
-        [input.tenantId, input.rawImportId, input.participantId, input.answerKeyId],
-      );
-      const row = result.rows[0];
+      let row = await findEvaluationInput(client, input);
+      if (!row) {
+        await materializeResolvedQuarantineParsedAnswer(client, input);
+        row = await findEvaluationInput(client, input);
+      }
       if (!row) {
         throw new Error("EXAM_EVALUATION_INPUT_NOT_FOUND");
       }
+      const variants = await client.query<ExamBookletVariantRow>(
+        `SELECT "code", "permutation"
+         FROM "ExamBookletVariant"
+         WHERE "tenantId" = $1
+           AND "examId" = $2
+           AND "deletedAt" IS NULL
+         ORDER BY "code" ASC`,
+        [input.tenantId, row.examId],
+      );
 
       return {
         examId: row.examId,
         studentId: row.studentId,
         parserConfigVersion: row.parserConfigVersion,
+        bookletType: row.bookletType,
         answers: parseStudentAnswers(row.answers),
+        bookletVariants: variants.rows.map(toExamBookletVariant),
         answerKey: parseAnswerKey(row.keyData),
         scoringConfig: parseScoringConfig(row.scoringConfig, row.answerKeyVersion, this.now()),
       };
@@ -101,14 +85,171 @@ export class PostgresExamEvaluationAdapter implements ExamEvaluationJobAdapter {
   }
 }
 
+async function findEvaluationInput(
+  client: Queryable,
+  input: ExamEvaluationJobInput,
+): Promise<ExamEvaluationInputRow | undefined> {
+  const result = await client.query<ExamEvaluationInputRow>(
+    `SELECT
+           pa."examId" AS "examId",
+           ep."studentId" AS "studentId",
+           ep."bookletType" AS "bookletType",
+           pa."parserConfigVersion" AS "parserConfigVersion",
+           pa."answers" AS "answers",
+           ak."keyData" AS "keyData",
+           ak."scoringConfig" AS "scoringConfig",
+           ak."version" AS "answerKeyVersion"
+         FROM "ParsedAnswer" pa
+         INNER JOIN "RawImport" ri
+           ON ri."tenantId" = pa."tenantId"
+          AND ri."examId" = pa."examId"
+          AND ri."id" = pa."rawImportId"
+          AND ri."parserConfigVersion" = pa."parserConfigVersion"
+         INNER JOIN "ExamParticipant" ep
+           ON ep."tenantId" = pa."tenantId"
+          AND ep."examId" = pa."examId"
+          AND ep."id" = pa."participantId"
+         INNER JOIN "AnswerKey" ak
+           ON ak."tenantId" = pa."tenantId"
+          AND ak."examId" = pa."examId"
+         WHERE pa."tenantId" = $1
+           AND pa."rawImportId" = $2
+           AND pa."participantId" = $3
+           AND ak."id" = $4
+           AND pa."status" = 'MATCHED'
+           AND pa."deletedAt" IS NULL
+           AND ri."deletedAt" IS NULL
+           AND ep."deletedAt" IS NULL
+           AND ak."deletedAt" IS NULL
+         LIMIT 1`,
+    [input.tenantId, input.rawImportId, input.participantId, input.answerKeyId],
+  );
+  return result.rows[0];
+}
+
+async function materializeResolvedQuarantineParsedAnswer(
+  client: Queryable,
+  input: ExamEvaluationJobInput,
+): Promise<void> {
+  const result = await client.query<ResolvedQuarantineInputRow>(
+    `SELECT
+       q."tenantId" AS "tenantId",
+       q."examId" AS "examId",
+       q."rawImportId" AS "rawImportId",
+       q."rowNumber" AS "rowNumber",
+       q."rawRow" AS "rawRow",
+       ri."parserConfigVersion" AS "parserConfigVersion",
+       pc."delimiter" AS "delimiter",
+       pc."skipHeaderLines" AS "skipHeaderLines",
+       pc."fieldMapping" AS "fieldMapping"
+     FROM "ImportQuarantine" q
+     INNER JOIN "RawImport" ri
+       ON ri."tenantId" = q."tenantId"
+      AND ri."examId" = q."examId"
+      AND ri."id" = q."rawImportId"
+     INNER JOIN "ParserConfig" pc
+       ON pc."tenantId" = ri."tenantId"
+      AND pc."examId" = ri."examId"
+      AND pc."version" = ri."parserConfigVersion"
+     INNER JOIN "ExamParticipant" ep
+       ON ep."tenantId" = q."tenantId"
+      AND ep."examId" = q."examId"
+      AND ep."studentId" = q."resolvedStudentId"
+     WHERE q."tenantId" = $1
+       AND q."rawImportId" = $2
+       AND ep."id" = $3
+       AND q."status" = 'RESOLVED'
+       AND q."deletedAt" IS NULL
+       AND ri."deletedAt" IS NULL
+       AND pc."status" = 'APPROVED'
+       AND pc."deletedAt" IS NULL
+       AND ep."deletedAt" IS NULL
+     ORDER BY q."updatedAt" DESC
+     LIMIT 1`,
+    [input.tenantId, input.rawImportId, input.participantId],
+  );
+  const row = result.rows[0];
+  if (!row) return;
+
+  const rawRow = parseJsonObject(row.rawRow);
+  const line = rawRow.line;
+  if (typeof line !== "string") {
+    throw new Error("EXAM_EVALUATION_RESOLVED_QUARANTINE_INVALID");
+  }
+
+  const parsed = new OpticalAnswerParser().parseResolvedQuarantine({
+    tenantId: row.tenantId,
+    examId: row.examId,
+    rawImportId: row.rawImportId,
+    parserConfigVersion: row.parserConfigVersion,
+    line,
+    rowNumber: row.rowNumber,
+    parserConfig: {
+      delimiter: parseDelimiter(row.delimiter),
+      skipHeaderLines: row.skipHeaderLines,
+      fieldMapping: parseFieldMapping(row.fieldMapping),
+    },
+    participantId: input.participantId,
+  });
+
+  await client.query(
+    `INSERT INTO "ParsedAnswer" (
+       "tenantId",
+       "examId",
+       "rawImportId",
+       "participantId",
+       "parserConfigVersion",
+       "rowNumber",
+       "answers",
+       "status",
+       "updatedAt"
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, 'MATCHED', now())
+     ON CONFLICT ("tenantId", "rawImportId", "participantId", "parserConfigVersion")
+     DO UPDATE SET
+       "rowNumber" = EXCLUDED."rowNumber",
+       "answers" = EXCLUDED."answers",
+       "status" = 'MATCHED',
+       "deletedAt" = NULL,
+       "updatedAt" = now()`,
+    [
+      parsed.tenantId,
+      parsed.examId,
+      parsed.rawImportId,
+      parsed.participantId,
+      parsed.parserConfigVersion,
+      parsed.rowNumber,
+      JSON.stringify(parsed.answers),
+    ],
+  );
+}
+
+interface ResolvedQuarantineInputRow {
+  tenantId: string;
+  examId: string;
+  rawImportId: string;
+  rowNumber: number;
+  rawRow: unknown;
+  parserConfigVersion: string;
+  delimiter: string;
+  skipHeaderLines: number;
+  fieldMapping: unknown;
+}
+
 interface ExamEvaluationInputRow {
   examId: string;
   studentId: string;
+  bookletType: string | null;
   parserConfigVersion: string;
   answers: unknown;
   keyData: unknown;
   scoringConfig: unknown;
   answerKeyVersion: string;
+}
+
+interface ExamBookletVariantRow {
+  code: string;
+  permutation: unknown;
 }
 
 interface ExamResultRow {
@@ -211,8 +352,25 @@ function parseAnswerKey(value: unknown): AnswerKeyItem[] {
       correctAnswer: record.correctAnswer,
       branch: record.branch,
       ...(typeof record.outcomeCode === "string" && record.outcomeCode.trim() ? { outcomeCode: record.outcomeCode } : {}),
+      ...(typeof record.topic === "string" && record.topic.trim() ? { topic: record.topic } : {}),
     };
   });
+}
+
+function toExamBookletVariant(row: ExamBookletVariantRow): ExamBookletVariantInput {
+  const parsed = typeof row.permutation === "string" ? JSON.parse(row.permutation) as unknown : row.permutation;
+  if (!Array.isArray(parsed)) {
+    throw new Error("EXAM_EVALUATION_INPUT_INVALID");
+  }
+  return {
+    code: row.code,
+    permutation: parsed.map((value) => {
+      if (!isQuestionNo(value)) {
+        throw new Error("EXAM_EVALUATION_INPUT_INVALID");
+      }
+      return value;
+    }),
+  };
 }
 
 function parseScoringConfig(value: unknown, answerKeyVersion: string, computedAt: string): ScoringConfig {
@@ -235,6 +393,33 @@ function parseScoringResult(value: unknown): ScoringResult {
     throw new Error("EXAM_EVALUATION_RESULT_INVALID");
   }
   return score as ScoringResult;
+}
+
+function parseDelimiter(value: string): ParserDelimiter {
+  if (value === "TAB" || value === "COMMA" || value === "PIPE" || value === "FIXED") {
+    return value;
+  }
+  throw new Error("EXAM_EVALUATION_RESOLVED_QUARANTINE_INVALID");
+}
+
+function parseFieldMapping(value: unknown): ParserConfigSuggestion["fieldMapping"] {
+  const parsed = typeof value === "string" ? JSON.parse(value) as unknown : value;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("EXAM_EVALUATION_RESOLVED_QUARANTINE_INVALID");
+  }
+  const record = parsed as Partial<ParserConfigSuggestion["fieldMapping"]>;
+  if (!record.studentNo || !record.bookletType || !record.answers) {
+    throw new Error("EXAM_EVALUATION_RESOLVED_QUARANTINE_INVALID");
+  }
+  return record as ParserConfigSuggestion["fieldMapping"];
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> {
+  const parsed = typeof value === "string" ? JSON.parse(value) as unknown : value;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("EXAM_EVALUATION_RESOLVED_QUARANTINE_INVALID");
+  }
+  return parsed as Record<string, unknown>;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

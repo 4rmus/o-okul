@@ -1,16 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  createAnnouncementDeliveryBullWorker,
   createExcelImportBullWorker,
   createExamEvaluationBullWorker,
   createReportGenerationBullWorker,
   createRedisConnectionOptions,
   createSmsBatchBullWorker,
+  type BullAnnouncementDeliveryJob,
   type BullExcelImportJob,
   type BullExamEvaluationJob,
   type BullReportGenerationJob,
   type BullSmsBatchJob,
   type BullWorkerFactory,
 } from "./bullmq-worker.js";
+import type { AnnouncementDeliveryJobPayload, AnnouncementDeliveryJobResult } from "../jobs/announcement-delivery-job.js";
 import type { ExcelImportJobResult } from "../jobs/excel-import-job.js";
 import type { ExamEvaluationJobPayload, ExamEvaluationJobResult } from "../jobs/exam-evaluation-job.js";
 import { examResultSummaryReportType, type ReportGenerationJobPayload, type ReportGenerationJobResult } from "../jobs/report-generation-job.js";
@@ -279,6 +282,60 @@ describe("BullMQ SMS batch worker", () => {
   });
 });
 
+describe("BullMQ announcement delivery worker", () => {
+  it("BullMQ job'unu announcement delivery processor imzasına çevirir", async () => {
+    const calls: Array<{
+      name: string;
+      processor: (job: BullAnnouncementDeliveryJob) => Promise<AnnouncementDeliveryJobResult>;
+      options: unknown;
+    }> = [];
+    const createWorker: BullWorkerFactory<BullAnnouncementDeliveryJob, AnnouncementDeliveryJobResult> = (name, processor, options) => {
+      calls.push({ name, processor, options });
+      return { close: async () => undefined };
+    };
+    const processedJobs: Array<QueueJob<AnnouncementDeliveryJobPayload>> = [];
+    const result = createAnnouncementDeliveryResult();
+
+    createAnnouncementDeliveryBullWorker({
+      connection: { host: "127.0.0.1", port: 6379 },
+      createWorker,
+      workerOptions: { prefix: "uzman-hocam-test" },
+      processor: async (job) => {
+        processedJobs.push(job);
+        return result;
+      },
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.name).toBe("announcement-delivery");
+    expect(calls[0]?.options).toEqual({
+      connection: { host: "127.0.0.1", port: 6379 },
+      prefix: "uzman-hocam-test",
+    });
+    await expect(calls[0]?.processor(createAnnouncementDeliveryBullJob())).resolves.toBe(result);
+    expect(processedJobs).toEqual([{
+      id: "announcement-a_email-report-v1",
+      name: "announcement-delivery",
+      payload: createAnnouncementDeliveryPayload(),
+    }]);
+  });
+
+  it("announcement-delivery BullMQ job adı yanlışsa işi başlatmaz", async () => {
+    let processor: ((job: BullAnnouncementDeliveryJob) => Promise<AnnouncementDeliveryJobResult>) | undefined;
+    createAnnouncementDeliveryBullWorker({
+      connection: { host: "127.0.0.1", port: 6379 },
+      createWorker: (_name, createdProcessor) => {
+        processor = createdProcessor;
+        return { close: async () => undefined };
+      },
+      processor: async () => createAnnouncementDeliveryResult(),
+    });
+
+    await expect(processor?.({ ...createAnnouncementDeliveryBullJob(), name: "sms-batch" }))
+      .rejects.toThrow("BULLMQ_ANNOUNCEMENT_DELIVERY_JOB_NAME_INVALID");
+  });
+});
+
 function createBullJob(): BullExamEvaluationJob {
   return {
     id: "raw-import-a_hash-a",
@@ -311,6 +368,14 @@ function createSmsBatchBullJob(): BullSmsBatchJob {
   };
 }
 
+function createAnnouncementDeliveryBullJob(): BullAnnouncementDeliveryJob {
+  return {
+    id: "announcement-a_email-report-v1",
+    name: "announcement-delivery",
+    data: createAnnouncementDeliveryPayload(),
+  };
+}
+
 function createPayload(): ExamEvaluationJobPayload {
   return {
     tenantId: "tenant-a",
@@ -339,6 +404,21 @@ function createReportGenerationPayload(): ReportGenerationJobPayload {
     entityId: "exam-a",
     contentHash: "results-v1",
     reportType: examResultSummaryReportType,
+  };
+}
+
+function createAnnouncementDeliveryPayload(): AnnouncementDeliveryJobPayload {
+  return {
+    tenantId: "tenant-a",
+    userId: "user-a",
+    entityId: "announcement-a",
+    contentHash: "email-report-v1",
+    channel: "EMAIL",
+    recipientCount: 3,
+    deliveredCount: 2,
+    failedCount: 1,
+    status: "completed",
+    providerErrorCode: "EMAIL_PROVIDER_RETRY",
   };
 }
 
@@ -404,6 +484,7 @@ function createReportGenerationResult(): ReportGenerationJobResult {
         className: "8-A",
         resultCount: 1,
         averages: { correct: 1, wrong: 0, blank: 0, net: 1, rawScore: 1, standardScore: 1 },
+        branches: [{ branch: "Matematik", resultCount: 1, correct: 1, wrong: 0, blank: 0, net: 1 }],
       }],
       statistics: {
         count: 1,
@@ -439,6 +520,18 @@ function createSmsBatchResult(): SmsBatchJobResult {
     sentCount: 1,
     failedCount: 0,
     billableSegments: 1,
+    status: "completed",
+  };
+}
+
+function createAnnouncementDeliveryResult(): AnnouncementDeliveryJobResult {
+  return {
+    tenantId: "tenant-a",
+    announcementId: "announcement-a",
+    channel: "EMAIL",
+    recipientCount: 3,
+    deliveredCount: 2,
+    failedCount: 1,
     status: "completed",
   };
 }

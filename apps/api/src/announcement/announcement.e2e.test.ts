@@ -1,20 +1,38 @@
 import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
+import type { NotificationAdapter, NotificationMessage, NotificationSendResult } from "@uzman-hocam/notification-adapter";
 import request from "supertest";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
+import type { ProducedJob, TenantQueueJobInput } from "../queue/job-producer.js";
+import {
+  announcementDeliveryQueueProducerToken,
+  notificationAdapterToken,
+  type AnnouncementDeliveryQueueProducer,
+} from "./announcement.service.js";
 
 describe("Announcement API", () => {
   let app: INestApplication;
   let server: Parameters<typeof request>[0];
+  let producer: FakeProducer;
+  let notificationAdapter: FakeNotificationAdapter;
   let tenantAAccessToken: string;
   let teacherAAccessToken: string;
+  let studentAAccessToken: string;
+  let guardianAAccessToken: string;
 
   beforeAll(async () => {
+    producer = new FakeProducer();
+    notificationAdapter = new FakeNotificationAdapter();
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(announcementDeliveryQueueProducerToken)
+      .useValue(producer)
+      .overrideProvider(notificationAdapterToken)
+      .useValue(notificationAdapter)
+      .compile();
 
     app = moduleRef.createNestApplication();
     await app.init();
@@ -31,6 +49,24 @@ describe("Announcement API", () => {
       .send({ email: "teacher-a@example.test", password: "password" })
       .expect(200);
     teacherAAccessToken = (teacherLogin.body as { accessToken: string }).accessToken;
+
+    const studentLogin = await request(server)
+      .post("/auth/login")
+      .send({ email: "student-a@example.test", password: "password" })
+      .expect(200);
+    studentAAccessToken = (studentLogin.body as { accessToken: string }).accessToken;
+
+    const guardianLogin = await request(server)
+      .post("/auth/login")
+      .send({ email: "guardian-a@example.test", password: "password" })
+      .expect(200);
+    guardianAAccessToken = (guardianLogin.body as { accessToken: string }).accessToken;
+  });
+
+  beforeEach(() => {
+    producer.inputs = [];
+    notificationAdapter.messages = [];
+    notificationAdapter.results = [];
   });
 
   afterAll(async () => {
@@ -50,6 +86,9 @@ describe("Announcement API", () => {
         title: "Veli toplantısı",
         body: "Cuma günü 8-A sınıfı için veli toplantısı yapılacaktır.",
         audience: "SCHOOL",
+        campusId: "campus-main",
+        gradeLevelId: "grade-8",
+        classId: "class-a",
         publishedAt: "2026-06-08T09:00:00.000Z",
       },
     ]);
@@ -82,7 +121,10 @@ describe("Announcement API", () => {
       .send({
         title: "Deneme sınavı bilgilendirme",
         body: "Pazartesi günü genel deneme sınavı yapılacaktır.",
-        audience: "TEACHERS",
+        audience: "GUARDIANS",
+        classId: "class-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
       })
       .expect(201);
 
@@ -90,9 +132,264 @@ describe("Announcement API", () => {
       tenantId: "tenant-a",
       title: "Deneme sınavı bilgilendirme",
       body: "Pazartesi günü genel deneme sınavı yapılacaktır.",
-      audience: "TEACHERS",
+      audience: "GUARDIANS",
+      classId: "class-a",
+      courseId: "course-math",
+      termId: "term-2026-spring",
     });
     expect(typeof (response.body as { publishedAt?: unknown }).publishedAt).toBe("string");
+  });
+
+  it("tenant admin duyuru alıcı ve okunma raporunu görür", async () => {
+    await request(server)
+      .post("/me/student/announcements/announcement-a/read")
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .expect(201);
+
+    await request(server)
+      .get("/announcements/announcement-a/recipients")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          announcementId: "announcement-a",
+          total: 3,
+          read: 1,
+          unread: 2,
+        });
+        expect(body.recipients).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              recipientType: "STUDENT",
+              subjectId: "student-a",
+              displayName: "Ada A",
+              readAt: expect.any(String),
+            }),
+            expect.objectContaining({
+              recipientType: "GUARDIAN",
+              subjectId: "guardian-a",
+              relatedStudentId: "student-a",
+            }),
+            expect.objectContaining({
+              recipientType: "TEACHER",
+              subjectId: "teacher-a",
+            }),
+          ]),
+        );
+      });
+
+    await request(server)
+      .get("/announcements/announcement-a/recipients")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(403);
+  });
+
+  it("tenant admin duyuru dış bildirim teslim raporlarını görür", async () => {
+    await request(server)
+      .get("/announcements/announcement-a/delivery-reports")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([
+          expect.objectContaining({
+            announcementId: "announcement-a",
+            channel: "EMAIL",
+            recipientCount: 3,
+            deliveredCount: 2,
+            failedCount: 1,
+            status: "completed",
+          }),
+          expect.objectContaining({
+            announcementId: "announcement-a",
+            channel: "PUSH",
+            recipientCount: 3,
+            deliveredCount: 0,
+            failedCount: 0,
+            status: "queued",
+          }),
+        ]);
+      });
+
+    await request(server)
+      .get("/announcements/announcement-a/delivery-reports")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(403);
+  });
+
+  it("tenant admin sağlayıcı teslim sonucunu announcement-delivery queue'ya bağlar", async () => {
+    const response = await request(server)
+      .post("/announcements/announcement-a/delivery-results")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        channel: "EMAIL",
+        recipientCount: 3,
+        deliveredCount: 2,
+        failedCount: 1,
+        status: "completed",
+        providerErrorCode: "EMAIL_PROVIDER_RETRY",
+      })
+      .expect(201);
+
+    expect(producer.inputs).toHaveLength(1);
+    expect(producer.inputs[0]).toMatchObject({
+      queueName: "announcement-delivery",
+      tenantId: "tenant-a",
+      userId: "user-tenant-a",
+      entityId: "announcement-a",
+      channel: "EMAIL",
+      recipientCount: 3,
+      deliveredCount: 2,
+      failedCount: 1,
+      status: "completed",
+      providerErrorCode: "EMAIL_PROVIDER_RETRY",
+    });
+    expect(response.body).toEqual({
+      tenantId: "tenant-a",
+      announcementId: "announcement-a",
+      channel: "EMAIL",
+      recipientCount: 3,
+      deliveredCount: 2,
+      failedCount: 1,
+      queueName: "announcement-delivery",
+      jobId: `${producer.inputs[0]?.entityId}_${producer.inputs[0]?.contentHash}`,
+      status: "queued",
+    });
+  });
+
+  it("tenant admin duyuru alıcılarına e-posta gönderir ve sonucu rapor kuyruğuna bağlar", async () => {
+    notificationAdapter.results = [
+      { channel: "EMAIL", to: "guardian-a@example.test", status: "sent", providerMessageId: "mail-1" },
+      { channel: "EMAIL", to: "student-a@example.test", status: "failed", errorCode: "EMAIL_BOUNCED" },
+      { channel: "EMAIL", to: "teacher-a@example.test", status: "sent", providerMessageId: "mail-3" },
+    ];
+
+    const response = await request(server)
+      .post("/announcements/announcement-a/deliveries")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ channel: "EMAIL" })
+      .expect(201);
+
+    expect(notificationAdapter.messages).toEqual([
+      {
+        channel: "EMAIL",
+        to: "guardian-a@example.test",
+        subject: "Veli toplantısı",
+        body: "Cuma günü 8-A sınıfı için veli toplantısı yapılacaktır.",
+      },
+      {
+        channel: "EMAIL",
+        to: "student-a@example.test",
+        subject: "Veli toplantısı",
+        body: "Cuma günü 8-A sınıfı için veli toplantısı yapılacaktır.",
+      },
+      {
+        channel: "EMAIL",
+        to: "teacher-a@example.test",
+        subject: "Veli toplantısı",
+        body: "Cuma günü 8-A sınıfı için veli toplantısı yapılacaktır.",
+      },
+    ]);
+    expect(producer.inputs).toHaveLength(1);
+    expect(producer.inputs[0]).toMatchObject({
+      queueName: "announcement-delivery",
+      tenantId: "tenant-a",
+      userId: "user-tenant-a",
+      entityId: "announcement-a",
+      channel: "EMAIL",
+      recipientCount: 3,
+      deliveredCount: 2,
+      failedCount: 1,
+      status: "completed",
+      providerErrorCode: "EMAIL_BOUNCED",
+    });
+    expect(response.body).toEqual({
+      tenantId: "tenant-a",
+      announcementId: "announcement-a",
+      channel: "EMAIL",
+      recipientCount: 3,
+      deliveredCount: 2,
+      failedCount: 1,
+      queueName: "announcement-delivery",
+      jobId: `${producer.inputs[0]?.entityId}_${producer.inputs[0]?.contentHash}`,
+      status: "queued",
+    });
+  });
+
+  it("tenant admin duyuru alıcılarına push gönderir ve sonucu rapor kuyruğuna bağlar", async () => {
+    await request(server)
+      .post("/me/notification-devices")
+      .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .send({ provider: "fcm", token: "guardian-device-token", platform: "ios" })
+      .expect(201);
+    await request(server)
+      .post("/me/notification-devices")
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .send({ provider: "fcm", token: "student-device-token", platform: "android" })
+      .expect(201);
+    await request(server)
+      .post("/me/notification-devices")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({ provider: "fcm", token: "teacher-device-token", platform: "web" })
+      .expect(201);
+
+    const response = await request(server)
+      .post("/announcements/announcement-a/deliveries")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ channel: "PUSH" })
+      .expect(201);
+
+    expect(notificationAdapter.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ channel: "PUSH", to: "guardian-device-token" }),
+      expect.objectContaining({ channel: "PUSH", to: "student-device-token" }),
+      expect.objectContaining({ channel: "PUSH", to: "teacher-device-token" }),
+    ]));
+    expect(producer.inputs).toHaveLength(1);
+    expect(producer.inputs[0]).toMatchObject({
+      queueName: "announcement-delivery",
+      tenantId: "tenant-a",
+      entityId: "announcement-a",
+      channel: "PUSH",
+      recipientCount: 3,
+      deliveredCount: 3,
+      failedCount: 0,
+      status: "completed",
+    });
+    expect(response.body).toEqual(expect.objectContaining({
+      announcementId: "announcement-a",
+      channel: "PUSH",
+      recipientCount: 3,
+      deliveredCount: 3,
+      failedCount: 0,
+      status: "queued",
+    }));
+  });
+
+  it("duyuru teslim sonucu sayıları ve erişimi doğrular", async () => {
+    await request(server)
+      .post("/announcements/announcement-a/delivery-results")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        channel: "EMAIL",
+        recipientCount: 3,
+        deliveredCount: 3,
+        failedCount: 1,
+        status: "completed",
+      })
+      .expect(400);
+
+    await request(server)
+      .post("/announcements/announcement-a/delivery-results")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({
+        channel: "EMAIL",
+        recipientCount: 1,
+        deliveredCount: 1,
+        failedCount: 0,
+        status: "completed",
+      })
+      .expect(403);
+
+    expect(producer.inputs).toHaveLength(0);
   });
 
   it("tenant admin başka tenant adına duyuru oluşturamaz", async () => {
@@ -120,7 +417,20 @@ describe("Announcement API", () => {
       .send({
         title: "Hatalı hedef",
         body: "Geçersiz hedef",
-        audience: "GUARDIANS",
+        audience: "UNKNOWN",
+      })
+      .expect(400);
+  });
+
+  it("duyuru hedef referanslarını tenant içinde doğrular", async () => {
+    await request(server)
+      .post("/announcements")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        title: "Başka tenant dersi",
+        body: "Tenant dışı hedef reddedilmeli.",
+        audience: "STUDENTS",
+        courseId: "course-turkish",
       })
       .expect(400);
   });
@@ -140,3 +450,43 @@ describe("Announcement API", () => {
     await request(server).get("/announcements").expect(401);
   });
 });
+
+class FakeProducer implements AnnouncementDeliveryQueueProducer {
+  inputs: TenantQueueJobInput[] = [];
+
+  async enqueue(input: TenantQueueJobInput): Promise<ProducedJob> {
+    this.inputs.push(input);
+    return {
+      queueName: input.queueName,
+      name: input.queueName,
+      payload: input,
+      options: {
+        attempts: 5,
+        backoff: {
+          type: "exponential",
+          delay: 1000,
+        },
+        jobId: `${input.entityId}_${input.contentHash}`,
+        removeOnFail: false,
+      },
+    } as ProducedJob;
+  }
+}
+
+class FakeNotificationAdapter implements NotificationAdapter {
+  messages: NotificationMessage[] = [];
+  results: NotificationSendResult[] = [];
+
+  async sendBatch(messages: NotificationMessage[]): Promise<NotificationSendResult[]> {
+    this.messages = messages.map((message) => ({ ...message }));
+    if (this.results.length > 0) {
+      return this.results.map((result) => ({ ...result }));
+    }
+    return messages.map((message, index) => ({
+      channel: message.channel,
+      to: message.to,
+      status: "sent",
+      providerMessageId: `fake-${index + 1}`,
+    }));
+  }
+}

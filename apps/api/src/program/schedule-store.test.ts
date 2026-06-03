@@ -18,6 +18,7 @@ describe("PostgresScheduleStore", () => {
               tenantId: "tenant-a",
               classId: "class-a",
               teacherId: "teacher-a",
+              courseId: null,
               title: "Matematik",
               startsAt: new Date("2026-06-01T09:00:00.000Z"),
               endsAt: new Date("2026-06-01T10:00:00.000Z"),
@@ -48,7 +49,7 @@ describe("PostgresScheduleStore", () => {
       },
     );
 
-    const businessQueries = queries.filter((query) => !query.sql.includes("set_config"));
+    const businessQueries = queries.filter((query) => !query.sql.includes("set_config") && !["BEGIN", "COMMIT", "ROLLBACK"].includes(query.sql));
     expect(queries.some((query) => query.values?.[0] === "tenant-a")).toBe(true);
     expect(businessQueries[0]?.sql).toContain('SELECT * FROM "ScheduleLesson"');
     expect(businessQueries[1]?.values).toEqual(["lesson-a"]);
@@ -58,6 +59,8 @@ describe("PostgresScheduleStore", () => {
       "tenant-a",
       "class-a",
       "teacher-a",
+      null,
+      null,
       "Geometri",
       "2026-06-01T10:00:00.000Z",
       "2026-06-01T11:00:00.000Z",
@@ -71,7 +74,7 @@ describe("PostgresScheduleStore", () => {
       null,
     ]);
     const updateQueries = businessQueries.filter((query) => query.sql.includes('UPDATE "ScheduleLesson"'));
-    expect(updateQueries[0]?.values).toEqual(["lesson-a", null, null, "Analitik Geometri", null, null]);
+    expect(updateQueries[0]?.values).toEqual(["lesson-a", null, null, false, null, false, null, "Analitik Geometri", null, null]);
     expect(updateQueries[1]?.values).toEqual(["lesson-a", "2026-06-01T12:00:00.000Z"]);
   });
 

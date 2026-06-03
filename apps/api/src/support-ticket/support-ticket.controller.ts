@@ -13,7 +13,10 @@ import {
   SupportTicketService,
   type CreateSupportTicketAttachmentInput,
   type CreateSupportTicketCommentInput,
+  type SupportTicketListFilters,
 } from "./support-ticket.service.js";
+
+interface SupportTicketListQuery extends ListQuery, SupportTicketListFilters {}
 
 @Controller("support-tickets")
 @UseGuards(RolesGuard)
@@ -22,8 +25,8 @@ export class SupportTicketController {
 
   @Get()
   @Roles("TEACHER")
-  async list(@Query() query: ListQuery): Promise<SupportTicketRecord[]> {
-    return applyListQuery(await this.tickets.list(getRequestContext()), query, supportTicketListFields);
+  async list(@Query() query: SupportTicketListQuery): Promise<SupportTicketRecord[]> {
+    return applyListQuery(await this.tickets.list(getRequestContext(), query), query, supportTicketListFields);
   }
 
   @Get(":id")
@@ -93,5 +96,11 @@ const supportTicketListFields = [
   { name: "priority", read: (record: SupportTicketRecord) => record.priority },
   { name: "status", read: (record: SupportTicketRecord) => record.status },
   { name: "requesterId", read: (record: SupportTicketRecord) => record.requesterId },
+  { name: "studentId", read: (record: SupportTicketRecord) => record.studentId },
+  { name: "campusId", read: (record: SupportTicketRecord) => record.campusId },
+  { name: "gradeLevelId", read: (record: SupportTicketRecord) => record.gradeLevelId },
+  { name: "classId", read: (record: SupportTicketRecord) => record.classId },
+  { name: "courseId", read: (record: SupportTicketRecord) => record.courseId },
+  { name: "termId", read: (record: SupportTicketRecord) => record.termId },
   { name: "createdAt", read: (record: SupportTicketRecord) => record.createdAt },
 ];

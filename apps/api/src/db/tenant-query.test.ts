@@ -102,8 +102,10 @@ describe("withTenantQuery", () => {
     );
 
     expect(queries).toEqual([
+      { sql: "BEGIN", values: undefined },
       { sql: "SELECT set_config('app.bypass_rls', $1, true)", values: ["true"] },
       { sql: "SELECT system_scope", values: undefined },
+      { sql: "COMMIT", values: undefined },
     ]);
   });
 });

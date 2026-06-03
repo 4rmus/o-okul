@@ -5,6 +5,7 @@ import type { ReportSnapshotRecord } from "./report-generation.service.js";
 export interface ReportSnapshotStore {
   listByExam(tenantId: string, examId: string): Promise<ReportSnapshotRecord[]>;
   findById(tenantId: string, examId: string, snapshotId: string): Promise<ReportSnapshotRecord | undefined>;
+  markStaleByExam(tenantId: string, examId: string, reason: string): Promise<number>;
 }
 
 export const reportSnapshotStoreToken = Symbol("ReportSnapshotStore");
@@ -14,6 +15,11 @@ const demoSnapshots: ReportSnapshotRecord[] = [
     id: "snapshot-demo",
     tenantId: "tenant-a",
     examId: "exam-demo",
+    campusId: "campus-main",
+    gradeLevelId: "grade-8",
+    classId: "class-a",
+    courseId: "course-math",
+    termId: "term-2026-spring",
     reportType: "EXAM_RESULT_SUMMARY",
     status: "READY",
     inputRefs: {
@@ -109,6 +115,30 @@ export class InMemoryReportSnapshotStore implements ReportSnapshotStore {
         !snapshot.deletedAt,
     );
   }
+
+  async markStaleByExam(tenantId: string, examId: string, reason: string): Promise<number> {
+    const staleAt = new Date().toISOString();
+    let changed = 0;
+    for (const snapshot of this.snapshots) {
+      if (
+        snapshot.tenantId !== tenantId ||
+        snapshot.examId !== examId ||
+        snapshot.deletedAt ||
+        snapshot.status === "STALE"
+      ) {
+        continue;
+      }
+      snapshot.status = "STALE";
+      snapshot.staleAt = staleAt;
+      snapshot.updatedAt = staleAt;
+      snapshot.inputRefs = {
+        ...snapshot.inputRefs,
+        staleReason: reason,
+      };
+      changed += 1;
+    }
+    return changed;
+  }
 }
 
 export class PostgresReportSnapshotStore implements ReportSnapshotStore {
@@ -125,6 +155,11 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
            "id",
            "tenantId",
            "examId",
+           "campusId",
+           "gradeLevelId",
+           "classId",
+           "courseId",
+           "termId",
            "reportType",
            "status",
            "inputRefs",
@@ -152,6 +187,11 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
            "id",
            "tenantId",
            "examId",
+           "campusId",
+           "gradeLevelId",
+           "classId",
+           "courseId",
+           "termId",
            "reportType",
            "status",
            "inputRefs",
@@ -172,6 +212,24 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
       return result.rows[0] ? toReportSnapshotRecord(result.rows[0]) : undefined;
     });
   }
+
+  async markStaleByExam(tenantId: string, examId: string, reason: string): Promise<number> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query(
+        `UPDATE "ReportSnapshot"
+         SET "status" = 'STALE',
+             "staleAt" = COALESCE("staleAt", now()),
+             "inputRefs" = COALESCE("inputRefs", '{}'::jsonb) || $3::jsonb,
+             "updatedAt" = now()
+         WHERE "tenantId" = $1
+           AND "examId" = $2
+           AND "deletedAt" IS NULL
+           AND "status" <> 'STALE'`,
+        [tenantId, examId, JSON.stringify({ staleReason: reason })],
+      );
+      return result.rowCount ?? 0;
+    });
+  }
 }
 
 export function createReportSnapshotStore(): ReportSnapshotStore {
@@ -184,6 +242,11 @@ interface ReportSnapshotRow {
   id: string;
   tenantId: string;
   examId: string;
+  campusId: string | null;
+  gradeLevelId: string | null;
+  classId: string | null;
+  courseId: string | null;
+  termId: string | null;
   reportType: string;
   status: string;
   inputRefs: unknown;
@@ -200,6 +263,11 @@ function toReportSnapshotRecord(row: ReportSnapshotRow): ReportSnapshotRecord {
     id: row.id,
     tenantId: row.tenantId,
     examId: row.examId,
+    campusId: row.campusId ?? undefined,
+    gradeLevelId: row.gradeLevelId ?? undefined,
+    classId: row.classId ?? undefined,
+    courseId: row.courseId ?? undefined,
+    termId: row.termId ?? undefined,
     reportType: row.reportType,
     status: row.status,
     inputRefs: parseJsonObject(row.inputRefs),

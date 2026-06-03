@@ -21,14 +21,17 @@
     "dev": "tsc -p tsconfig.json --watch",
     "lint": "prisma validate --config prisma.config.ts && tsc -p tsconfig.json --noEmit",
     "test": "prisma validate --config prisma.config.ts && pnpm db:rls:check && pnpm db:audit-log-partition:check && tsc -p tsconfig.json --noEmit",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:seed-exams": "tsx prisma/seed-exams.ts"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",
     "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
     "prisma": "^7.8.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.7"
   },
   "dependencies": {
     "@prisma/client": "^7.8.0",

@@ -65,6 +65,7 @@ function validateReport(report) {
     "raw import smoke",
     "report generation smoke",
     "sms batch smoke",
+    "notification provider smoke",
     "privacy purge",
   ]);
   requireList(report, failures, "commandsPassed", [
@@ -75,6 +76,7 @@ function validateReport(report) {
     "pnpm report-generation:smoke",
     "pnpm queue:smoke",
     "pnpm sms:smoke",
+    "pnpm notification:smoke",
     "pnpm traefik:https:smoke",
   ]);
 

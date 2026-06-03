@@ -42,6 +42,40 @@
   GSM-7 dışı karakterler Unicode limitleriyle hesaplanır.
 - No-op adapter gönderim sonucuna segment tahminini ekler; worker batch sonucunda toplam
   `billableSegments` değerini üretir.
+- SMS batch teslim raporu için `SmsBatchDeliveryReport` tenant tablosu eklendi; `POST /sms-batches`
+  aynı `jobId` ile queued rapor kaydı oluşturur ve kurum admin `GET /sms-batches/:jobId` ile
+  raporu okur.
+- Worker SMS batch sonucunu aynı rapor kaydına `completed/failed`, gönderilen/başarısız adet,
+  toplam segment ve sağlayıcı hata kodu ile yazar.
+- `POST /sms-batches/recipients/preview` duyuru hedefinden veya sınıf/kampüs/seviye/ders/dönem/
+  öğrenci durumu filtresinden `canReceiveSms=true` ve telefonu olan velileri üretir.
+- Kurum `/kurum/sablonlar` ekranı seçili SMS şablonundan duyuru hedefi, alıcı filtresi veya manuel alıcı
+  listesiyle batch gönderim başlatır; mesaj önizlemesini ve `GET /sms-batches/:jobId`
+  teslim raporunu aynı ekranda gösterir.
+- Kurum `/kurum/duyurular` ekranı veli, öğrenci veya tüm okul hedefli duyurudan seçili SMS
+  şablonuyla batch gönderim başlatır ve aynı panelde teslim raporunu gösterir.
+- E-posta/push gibi SMS dışı duyuru bildirimleri için `AnnouncementDeliveryReport` tenant tablosu
+  eklendi; EMAIL/PUSH kanalında alıcı, teslim, başarısız adet, durum ve sağlayıcı hata kodu
+  tutulur. Kurum admin `GET /announcements/:id/delivery-reports` ile raporu okur; öğretmen
+  erişimi 403 olur.
+- `announcement-delivery` queue job sözleşmesi ve worker processor eklendi; worker EMAIL/PUSH
+  teslim özetini `AnnouncementDeliveryReport` kaydına upsert eder.
+- Kurum admin `POST /announcements/:id/delivery-results` ile EMAIL/PUSH sağlayıcı teslim sonucunu
+  doğrulanmış sayılarla `announcement-delivery` kuyruğuna bağlar.
+- E-posta/push sağlayıcı sözleşmesi için `@uzman-hocam/notification-adapter` eklendi; lokal no-op,
+  üretimde no-op engeli ve Bearer token destekli HTTP sağlayıcı yolu test edildi.
+- `pnpm notification:smoke` eklendi; e-posta ve push test alıcılarıyla kontrollü provider smoke
+  yapılır, gerçek sağlayıcı için `NOTIFICATION_SMOKE_CONFIRM=send` gerekir.
+- Kurum admin `POST /announcements/:id/deliveries` ile EMAIL duyuru gönderimini başlatır; servis
+  gerçek duyuru alıcılarını çözer, `User.email` adresleriyle adapter mesajı üretir ve sonucu
+  `announcement-delivery` kuyruğuna rapor özeti olarak bağlar.
+- Push cihaz tokenları için `NotificationDeviceToken` tenant tablosu, RLS policy'si ve
+  `/me/notification-devices` kayıt/listeleme/kapatma yüzeyi eklendi; kurum admin
+  `POST /announcements/:id/deliveries` ile PUSH gönderimini duyuru alıcılarının aktif cihaz
+  tokenlarından üretip aynı rapor kuyruğuna bağlar.
+- Next app shell `Bildirim cihazı` paneli eklendi; tarayıcı Web Push aboneliğini alır,
+  `/me/notification-devices` yüzeyine `web-push` cihazı olarak kaydeder ve aktif cihaz
+  sayısını gösterir.
 - SMS adapter env factory'si eklendi; `NODE_ENV=production` ortamında gerçek sağlayıcı seçilmeden
   no-op adapter ile başlamak `SMS_PROVIDER_REQUIRED` hatasıyla engellenir.
 - Worker SMS batch processor, provider seçimini kendi içinde tekrar tanımlamak yerine
@@ -102,17 +136,57 @@
 - Web panelinde destek bildirimi eki seçme, yükleme ve ticket altında ekleri görme akışı eklendi.
 - Web panelinde destek bildirimi ekleri için indirme aksiyonu eklendi.
 - Web panelinde destek bildirimi yorumu ekleme ve ticket altında yorumları görme akışı eklendi.
+- Ödeme planı akademik bağlamı genişledi: `PaymentPlan` artık `campusId`, `gradeLevelId`,
+  `classId`, `courseId` ve `termId` taşır; yeni plan öğrenci sınıfından kampüs/seviye/sınıf
+  bağlamını miras alır, kurum listesi bu alanlarla filtrelenebilir ve Postgres store aynı kolonları
+  tenant-aware SQL ile yazar/okur.
+- Ödeme işaretleme ve taksit düzenleme dilimi eklendi: kurum admin
+  `PATCH /payment-plans/:planId/installments/:installmentId` ile taksidi `PAID`, `OVERDUE`,
+  `PENDING` veya `CANCELED` durumuna alır; aynı uç nokta taksit tutarı ve vadesini de düzenler.
+  `PAID` durumunda `paidAt` yazılır, diğer durumlarda ödeme tarihi temizlenir ve PII içermeyen
+  `payment_installment.updated` audit kaydı oluşur.
+- Kurum finans ekranı eklendi: sol menüde ayrı Finans grubu ve `/kurum/finans` rotası var; ekran
+  bekleyen, gecikmiş ve ödenen tutar özetlerini, akademik bağlam filtrelerini, taksit listesini ve
+  ödendi/gecikmiş/beklemede hızlı durum aksiyonlarını gösterir.
+- Destek bildirimi bağlamı genişledi: `SupportTicket` artık `campusId`, `gradeLevelId`, `classId`,
+  `courseId` ve `termId` taşır; kurum destek API'si ve `/kurum/destek` ekranı bu alanlara göre
+  filtreler, destek oluşturma formu da akademik bağlam seçebilir.
 
 ## Çalıştırılan doğrulamalar
 
 - `corepack pnpm --filter @uzman-hocam/api test -- announcement`
+- `corepack pnpm --filter @uzman-hocam/db exec prisma validate --config prisma.config.ts`
+- `corepack pnpm --filter @uzman-hocam/db run db:rls:check`
+- `corepack pnpm --filter @uzman-hocam/shared-types typecheck`
+- `corepack pnpm --filter @uzman-hocam/api typecheck`
+- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/payment/payment.e2e.test.ts src/payment/payment-store.test.ts`
+- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/me/me-access-matrix.e2e.test.ts`
+- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/app.e2e.test.ts`
+- `corepack pnpm --filter @uzman-hocam/web typecheck`
+- `corepack pnpm --filter @uzman-hocam/api typecheck`
+- `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next login gerçek auth store ile kurum paneline geçer"`
+- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/announcement/announcement-delivery-report-store.test.ts src/announcement/announcement.e2e.test.ts`
+- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/announcement/announcement.e2e.test.ts`
+- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/me/me-access-matrix.e2e.test.ts src/announcement/announcement.e2e.test.ts`
+- `corepack pnpm --filter @uzman-hocam/web typecheck`
+- `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next rol portalları bağlı kişi verisini gösterir"`
+- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/queue/job-producer.test.ts src/queue/bullmq-producer.test.ts`
+- `corepack pnpm --filter @uzman-hocam/worker typecheck`
+- `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/announcement-delivery-job.test.ts src/jobs/announcement-delivery-processor.test.ts src/jobs/postgres-announcement-delivery-reporter.test.ts src/queue/bullmq-worker.test.ts`
+- `corepack pnpm --filter @uzman-hocam/notification-adapter typecheck`
+- `corepack pnpm --filter @uzman-hocam/notification-adapter test`
 - `corepack pnpm --filter @uzman-hocam/api test -- message-template`
 - `corepack pnpm --filter @uzman-hocam/api test -- sms-batch`
+- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/sms-batch/sms-batch.service.test.ts src/sms-batch/sms-batch.e2e.test.ts`
+- `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/sms-batch-job.test.ts src/jobs/sms-batch-processor.test.ts src/jobs/postgres-sms-batch-delivery-reporter.test.ts`
+- `corepack pnpm --filter @uzman-hocam/web typecheck`
+- `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next login gerçek auth store ile kurum paneline geçer"`
 - `corepack pnpm --filter @uzman-hocam/api test -- homework`
 - `corepack pnpm --filter @uzman-hocam/api test -- report-generation`
 - `corepack pnpm --filter @uzman-hocam/api test -- support-ticket`
 - `corepack pnpm --filter @uzman-hocam/api exec vitest run src/support-ticket/support-ticket.e2e.test.ts src/support-ticket/support-ticket-store.test.ts`
 - `corepack pnpm --filter @uzman-hocam/api exec vitest run src/support-ticket/support-ticket-attachment-storage.test.ts src/support-ticket/support-ticket.service.test.ts src/support-ticket/support-ticket.e2e.test.ts src/support-ticket/support-ticket-store.test.ts`
+- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/support-ticket/support-ticket.e2e.test.ts src/support-ticket/support-ticket-store.test.ts src/support-ticket/support-ticket.service.test.ts`
 - `corepack pnpm --filter @uzman-hocam/sms-adapter test`
 - `corepack pnpm --filter @uzman-hocam/sms-adapter exec vitest run src/index.test.ts`
 - `corepack pnpm --filter @uzman-hocam/worker test -- sms-batch`
@@ -122,6 +196,8 @@
 - `corepack pnpm --filter @uzman-hocam/db lint`
 - `corepack pnpm --filter @uzman-hocam/web typecheck`
 - `corepack pnpm --filter @uzman-hocam/web test:e2e`
+- `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next login gerçek auth store ile kurum paneline geçer"`
+- `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next rol portalları bağlı kişi verisini gösterir"`
 - Playwright mobil görsel kontrolü: `apps/web/test-results/announcement-panel-mobile.png`
 - Playwright materyal paneli görsel kontrolü: `apps/web/test-results/material-file-panel.png`
 - Playwright hata kitapçığı görsel kontrolü: `apps/web/test-results/error-booklet-panel.png`

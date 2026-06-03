@@ -41,10 +41,16 @@ describe("Me access matrix", () => {
     const studentEndpoints = [
       "/me/student",
       "/me/student/profile",
+      "/me/student/guardians",
+      "/me/student/guardian-links",
+      "/me/student/class-history",
+      "/me/student/enrollments",
       "/me/student/homework/material-assignments",
       "/me/student/attendance",
       "/me/student/attendance/summary",
       "/me/student/teacher-notes",
+      "/me/student/announcements",
+      "/me/student/support-tickets",
       "/me/student/reports/exam-demo/latest",
       "/me/student/reports/exam-demo/latest/error-booklet",
       "/me/student/reports/exam-demo/snapshots/snapshot-demo",
@@ -65,9 +71,14 @@ describe("Me access matrix", () => {
       "/me/guardian/students",
       "/me/guardian/homework/material-assignments",
       "/me/guardian/students/student-a/profile",
+      "/me/guardian/students/student-a/class-history",
+      "/me/guardian/students/student-a/enrollments",
       "/me/guardian/students/student-a/attendance",
       "/me/guardian/students/student-a/attendance/summary",
       "/me/guardian/students/student-a/teacher-notes",
+      "/me/guardian/students/student-a/announcements",
+      "/me/guardian/students/student-a/notification-preferences",
+      "/me/guardian/students/student-a/support-tickets",
       "/me/guardian/students/student-a/payment-plans",
       "/me/guardian/students/student-a/reports/exam-demo/latest",
       "/me/guardian/students/student-a/reports/exam-demo/latest/error-booklet",
@@ -87,9 +98,14 @@ describe("Me access matrix", () => {
   it("veli başka tenant veya bağlı olmayan öğrenci IDOR denemesinde kayıt alamaz", async () => {
     const idorEndpoints = [
       "/me/guardian/students/student-b/profile",
+      "/me/guardian/students/student-b/class-history",
+      "/me/guardian/students/student-b/enrollments",
       "/me/guardian/students/student-b/attendance",
       "/me/guardian/students/student-b/attendance/summary",
       "/me/guardian/students/student-b/teacher-notes",
+      "/me/guardian/students/student-b/announcements",
+      "/me/guardian/students/student-b/notification-preferences",
+      "/me/guardian/students/student-b/support-tickets",
       "/me/guardian/students/student-b/payment-plans",
       "/me/guardian/students/student-b/reports/exam-demo/latest",
       "/me/guardian/students/student-b/reports/exam-demo/latest/error-booklet",
@@ -107,7 +123,7 @@ describe("Me access matrix", () => {
   });
 
   it("öğretmen /me yüzeylerini yalnız öğretmen subject'i açar", async () => {
-    const teacherEndpoints = ["/me/teacher", "/me/teacher/schedule"];
+    const teacherEndpoints = ["/me/teacher", "/me/teacher/schedule", "/me/teacher/announcements"];
 
     for (const endpoint of teacherEndpoints) {
       await request(server).get(endpoint).set("Authorization", `Bearer ${teacherToken}`).expect(200);
@@ -115,6 +131,28 @@ describe("Me access matrix", () => {
       await request(server).get(endpoint).set("Authorization", `Bearer ${guardianToken}`).expect(403);
       await request(server).get(endpoint).set("Authorization", `Bearer ${adminToken}`).expect(403);
     }
+  });
+
+  it("öğretmen rapor yüzeyleri yanlış rol ve başka tenant öğrenci denemesinde veri sızdırmaz", async () => {
+    const teacherReportEndpoints = [
+      "/exams/exam-demo/reports/snapshots",
+      "/exams/exam-demo/reports/snapshots/snapshot-demo/students/student-a",
+      "/exams/exam-demo/reports/snapshots/snapshot-demo/students/student-a/error-booklet",
+      "/exams/exam-demo/reports/students/student-a/progress",
+    ];
+
+    for (const endpoint of teacherReportEndpoints) {
+      await request(server).get(endpoint).set("Authorization", `Bearer ${teacherToken}`).expect(200);
+      await request(server).get(endpoint).set("Authorization", `Bearer ${adminToken}`).expect(200);
+      await request(server).get(endpoint).set("Authorization", `Bearer ${studentToken}`).expect(403);
+      await request(server).get(endpoint).set("Authorization", `Bearer ${guardianToken}`).expect(403);
+    }
+
+    const response = await request(server)
+      .get("/exams/exam-demo/reports/snapshots/snapshot-demo/students/student-b")
+      .set("Authorization", `Bearer ${teacherToken}`)
+      .expect(403);
+    expect(JSON.stringify(response.body)).not.toContain("student-b");
   });
 
   it("parametresiz /me/profile sadece oturum context'i döner, kaynak kaydı döndürmez", async () => {
@@ -129,5 +167,57 @@ describe("Me access matrix", () => {
       });
 
     await request(server).get("/me/profile").expect(401);
+  });
+
+  it("kullanıcı kendi push cihaz tokenını kaydeder, listeler ve kapatır", async () => {
+    const create = await request(server)
+      .post("/me/notification-devices")
+      .set("Authorization", `Bearer ${studentToken}`)
+      .send({ provider: "fcm", token: "student-access-matrix-device", platform: "web" })
+      .expect(201);
+
+    expect(create.body).toMatchObject({
+      tenantId: "tenant-a",
+      userId: "student-tenant-a",
+      subjectType: "STUDENT",
+      subjectId: "student-a",
+      provider: "fcm",
+      token: "student-access-matrix-device",
+      platform: "web",
+    });
+
+    await request(server)
+      .get("/me/notification-devices")
+      .set("Authorization", `Bearer ${studentToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([
+          expect.objectContaining({
+            id: create.body.id,
+            token: "student-access-matrix-device",
+          }),
+        ]);
+      });
+
+    await request(server)
+      .delete(`/me/notification-devices/${create.body.id}`)
+      .set("Authorization", `Bearer ${studentToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          id: create.body.id,
+          disabledAt: expect.any(String),
+        });
+      });
+
+    await request(server)
+      .post("/me/notification-devices")
+      .set("Authorization", `Bearer ${studentToken}`)
+      .send({ provider: "", token: "" })
+      .expect(400);
+
+    await request(server)
+      .get("/me/notification-devices")
+      .expect(401);
   });
 });

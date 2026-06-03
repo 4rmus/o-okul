@@ -43,6 +43,8 @@ export interface CreateHomeworkMaterialFileInput {
 
 export interface CreateHomeworkMaterialAssignmentInput {
   studentId?: string;
+  courseId?: string;
+  termId?: string;
   note?: string;
   dueAt?: string;
 }
@@ -215,12 +217,20 @@ export class HomeworkService {
       throw new BadRequestException("HOMEWORK_MATERIAL_ASSIGNMENT_STUDENT_REQUIRED");
     }
 
-    await this.students.findOne(context, input.studentId);
+    await this.students.findOneForViewer(context, input.studentId);
+    if (input.courseId) {
+      await this.school.findCourse(context, input.courseId);
+    }
+    if (input.termId) {
+      await this.school.findAcademicTerm(context, input.termId);
+    }
 
     const record = await this.store.createMaterialAssignment({
       tenantId: material.tenantId,
       materialId: material.id,
       studentId: input.studentId,
+      courseId: optionalText(input.courseId),
+      termId: optionalText(input.termId),
       assignedById: context.userId,
       note: optionalText(input.note),
       dueAt: this.resolveOptionalDate(input.dueAt),
@@ -235,7 +245,7 @@ export class HomeworkService {
       diff: {
         materialId: record.materialId,
         studentId: record.studentId,
-        fieldsSet: presentFields(record, ["note", "dueAt"]),
+        fieldsSet: presentFields(record, ["courseId", "termId", "note", "dueAt"]),
       },
     });
     return record;
@@ -400,10 +410,18 @@ export class HomeworkService {
     studentIds: string[],
   ): Promise<HomeworkMaterialAssignmentRecord[]> {
     const studentIdSet = new Set(studentIds);
+    const materials = await this.listMaterials(context);
+    const materialTitleById = new Map(materials.map((material) => [material.id, material.title]));
     const assignments = await Promise.all(
-      (await this.listMaterials(context)).map((material) => this.listMaterialAssignments(context, material.id)),
+      materials.map((material) => this.listMaterialAssignments(context, material.id)),
     );
-    return assignments.flat().filter((assignment) => studentIdSet.has(assignment.studentId));
+    return assignments
+      .flat()
+      .filter((assignment) => studentIdSet.has(assignment.studentId))
+      .map((assignment) => ({
+        ...assignment,
+        materialTitle: materialTitleById.get(assignment.materialId),
+      }));
   }
 
   private async filterHomeworkForTeacherScope(context: RequestContext, homeworks: HomeworkRecord[]): Promise<HomeworkRecord[]> {

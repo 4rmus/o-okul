@@ -19,7 +19,7 @@ describe("PostgresRawImportRepository", () => {
       () => repository.create(createInput()),
     );
 
-    const businessQueries = queries.filter((query) => !query.sql.includes("set_config"));
+    const businessQueries = queries.filter((query) => !query.sql.includes("set_config") && !["BEGIN", "COMMIT", "ROLLBACK"].includes(query.sql));
     expect(businessQueries).toHaveLength(1);
     expect(businessQueries[0]?.sql).toContain('INSERT INTO "RawImport"');
     expect(businessQueries[0]?.sql).toContain('"id"');
@@ -58,7 +58,7 @@ describe("PostgresRawImportRepository", () => {
       () => repository.create(createInput()),
     );
 
-    const businessQueries = queries.filter((query) => !query.sql.includes("set_config"));
+    const businessQueries = queries.filter((query) => !query.sql.includes("set_config") && !["BEGIN", "COMMIT", "ROLLBACK"].includes(query.sql));
     expect(businessQueries).toHaveLength(2);
     expect(businessQueries[1]?.sql).toContain('FROM "RawImport"');
     expect(businessQueries[1]?.values).toEqual(["tenant-a", "exam-a", "hash-a", "parser-v1"]);

@@ -60,6 +60,7 @@ export class PostgresOpticalParseInputAdapter {
         `SELECT
            ep."id" AS "participantId",
            s."studentNo" AS "studentNo",
+           s."nationalIdHash" AS "nationalIdHash",
            ep."participantNo" AS "participantNo",
            ep."bookletType" AS "bookletType"
          FROM "ExamParticipant" ep
@@ -107,6 +108,7 @@ interface RawImportParserConfigRow {
 interface ParticipantRow {
   participantId: string;
   studentNo: string | null;
+  nationalIdHash: string | null;
   participantNo: string | null;
   bookletType: string | null;
 }
@@ -128,6 +130,9 @@ function parseFieldMapping(value: unknown): ParserConfigSuggestion["fieldMapping
     throw new Error("OPTICAL_PARSE_INPUT_INVALID");
   }
   assertFieldSpec(record.studentNo);
+  if (record.nationalId) {
+    assertFieldSpec(record.nationalId);
+  }
   assertFieldSpec(record.bookletType);
   assertAnswerFieldSpec(record.answers);
 
@@ -163,6 +168,15 @@ function assertAnswerFieldSpec(value: unknown): void {
     return;
   }
   if (record.kind === "fixed") {
+    if (Array.isArray(record.segments)) {
+      for (const segment of record.segments) {
+        const segmentRecord = asRecord(segment);
+        if (!isNonNegativeInteger(segmentRecord.start) || !isPositiveInteger(segmentRecord.length)) {
+          throw new Error("OPTICAL_PARSE_INPUT_INVALID");
+        }
+      }
+      return;
+    }
     if (!isNonNegativeInteger(record.start) || !isPositiveInteger(record.length)) {
       throw new Error("OPTICAL_PARSE_INPUT_INVALID");
     }

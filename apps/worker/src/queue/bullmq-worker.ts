@@ -1,5 +1,13 @@
 import { Worker, type ConnectionOptions, type WorkerOptions } from "bullmq";
 import {
+  createAnnouncementDeliveryProcessor,
+  type AnnouncementDeliveryProcessor,
+} from "../jobs/announcement-delivery-processor.js";
+import {
+  type AnnouncementDeliveryJobPayload,
+  type AnnouncementDeliveryJobResult,
+} from "../jobs/announcement-delivery-job.js";
+import {
   createExamEvaluationProcessor,
   type ExamEvaluationProcessor,
 } from "../jobs/exam-evaluation-processor.js";
@@ -34,6 +42,7 @@ const examEvaluationQueueName = "exam-evaluation";
 const excelImportQueueName = "excel-import";
 const reportGenerationQueueName = "report-generation";
 const smsBatchQueueName = "sms-batch";
+const announcementDeliveryQueueName = "announcement-delivery";
 
 export interface BullExamEvaluationJob {
   id?: string | number;
@@ -57,6 +66,12 @@ export interface BullSmsBatchJob {
   id?: string | number;
   name: string;
   data: SmsBatchJobPayload;
+}
+
+export interface BullAnnouncementDeliveryJob {
+  id?: string | number;
+  name: string;
+  data: AnnouncementDeliveryJobPayload;
 }
 
 export interface BullWorkerInstance {
@@ -98,6 +113,13 @@ export interface SmsBatchBullWorkerOptions {
   processor?: SmsBatchProcessor;
   workerOptions?: Omit<WorkerOptions, "connection">;
   createWorker?: BullWorkerFactory<BullSmsBatchJob, SmsBatchJobResult>;
+}
+
+export interface AnnouncementDeliveryBullWorkerOptions {
+  connection: ConnectionOptions;
+  processor?: AnnouncementDeliveryProcessor;
+  workerOptions?: Omit<WorkerOptions, "connection">;
+  createWorker?: BullWorkerFactory<BullAnnouncementDeliveryJob, AnnouncementDeliveryJobResult>;
 }
 
 export function createExamEvaluationBullWorker(
@@ -157,6 +179,22 @@ export function createSmsBatchBullWorker(
   return createWorker(
     smsBatchQueueName,
     async (job) => processor(toSmsBatchQueueJob(job)),
+    {
+      ...options.workerOptions,
+      connection: options.connection,
+    },
+  );
+}
+
+export function createAnnouncementDeliveryBullWorker(
+  options: AnnouncementDeliveryBullWorkerOptions,
+): BullWorkerInstance {
+  const processor = options.processor ?? createAnnouncementDeliveryProcessor();
+  const createWorker = options.createWorker ?? createDefaultAnnouncementDeliveryWorker;
+
+  return createWorker(
+    announcementDeliveryQueueName,
+    async (job) => processor(toAnnouncementDeliveryQueueJob(job)),
     {
       ...options.workerOptions,
       connection: options.connection,
@@ -251,6 +289,23 @@ function toSmsBatchQueueJob(
   };
 }
 
+function toAnnouncementDeliveryQueueJob(
+  job: BullAnnouncementDeliveryJob,
+): QueueJob<AnnouncementDeliveryJobPayload> {
+  if (job.id === undefined || job.id === null || job.id === "") {
+    throw new Error("BULLMQ_JOB_ID_MISSING");
+  }
+  if (job.name !== announcementDeliveryQueueName) {
+    throw new Error("BULLMQ_ANNOUNCEMENT_DELIVERY_JOB_NAME_INVALID");
+  }
+
+  return {
+    id: String(job.id),
+    name: announcementDeliveryQueueName,
+    payload: job.data,
+  };
+}
+
 function parseRedisDb(pathname: string): number | undefined {
   if (!pathname || pathname === "/") {
     return undefined;
@@ -305,6 +360,18 @@ function createDefaultSmsBatchWorker(
   options: WorkerOptions,
 ): BullWorkerInstance {
   return new Worker<SmsBatchJobPayload, SmsBatchJobResult>(
+    name,
+    processor,
+    options,
+  );
+}
+
+function createDefaultAnnouncementDeliveryWorker(
+  name: string,
+  processor: (job: BullAnnouncementDeliveryJob) => Promise<AnnouncementDeliveryJobResult>,
+  options: WorkerOptions,
+): BullWorkerInstance {
+  return new Worker<AnnouncementDeliveryJobPayload, AnnouncementDeliveryJobResult>(
     name,
     processor,
     options,

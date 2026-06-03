@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import {
   type AnswerFieldSpec,
   type FieldSpec,
@@ -10,6 +11,7 @@ export interface OpticalAnswerParticipant {
   participantId: string;
   studentNo?: string | null;
   participantNo?: string | null;
+  nationalIdHash?: string | null;
   bookletType?: string | null;
 }
 
@@ -21,6 +23,17 @@ export interface OpticalAnswerParserInput {
   content: string | Buffer;
   parserConfig: Pick<ParserConfigSuggestion, "delimiter" | "skipHeaderLines" | "fieldMapping">;
   participants: OpticalAnswerParticipant[];
+}
+
+export interface ResolvedQuarantineParseInput {
+  tenantId: string;
+  examId: string;
+  rawImportId: string;
+  parserConfigVersion: string;
+  line: string;
+  rowNumber: number;
+  parserConfig: Pick<ParserConfigSuggestion, "delimiter" | "skipHeaderLines" | "fieldMapping">;
+  participantId: string;
 }
 
 export interface MatchedParsedAnswer {
@@ -62,7 +75,9 @@ export interface OpticalAnswerParseResult {
 interface ParsedOpticalRow {
   rowNumber: number;
   line: string;
+  maskedLine: string;
   studentNo: string;
+  nationalIdHash?: string;
   bookletType: string;
   answers: StudentAnswer[];
   rawAnswers: string;
@@ -114,11 +129,46 @@ export class OpticalAnswerParser {
 
     return { matched, unmatched };
   }
+
+  parseResolvedQuarantine(input: ResolvedQuarantineParseInput): MatchedParsedAnswer {
+    validateResolvedInput(input);
+
+    const row = parseLine(input.line, input.parserConfig, input.rowNumber);
+    const reason = getQuarantineReason(row, input.parserConfig.fieldMapping.absentMarker);
+    if (reason) {
+      throw new Error(`OPTICAL_RESOLVED_QUARANTINE_${reason}`);
+    }
+
+    return {
+      tenantId: input.tenantId,
+      examId: input.examId,
+      rawImportId: input.rawImportId,
+      participantId: input.participantId,
+      parserConfigVersion: input.parserConfigVersion,
+      rowNumber: row.rowNumber,
+      answers: row.answers,
+      status: "MATCHED",
+    };
+  }
 }
 
 function validateInput(input: OpticalAnswerParserInput): void {
   if (!input.tenantId || !input.examId || !input.rawImportId || !input.parserConfigVersion) {
     throw new Error("OPTICAL_PARSE_INPUT_INVALID");
+  }
+}
+
+function validateResolvedInput(input: ResolvedQuarantineParseInput): void {
+  if (
+    !input.tenantId ||
+    !input.examId ||
+    !input.rawImportId ||
+    !input.parserConfigVersion ||
+    !input.participantId ||
+    !Number.isInteger(input.rowNumber) ||
+    input.rowNumber <= 0
+  ) {
+    throw new Error("OPTICAL_RESOLVED_QUARANTINE_INPUT_INVALID");
   }
 }
 
@@ -128,6 +178,9 @@ function parseLine(
   rowNumber: number,
 ): ParsedOpticalRow {
   const warnings: string[] = [];
+  const nationalId = parserConfig.fieldMapping.nationalId
+    ? extractField(line, parserConfig.delimiter, parserConfig.fieldMapping.nationalId).trim()
+    : "";
   const studentNo = extractField(line, parserConfig.delimiter, parserConfig.fieldMapping.studentNo).trim();
   const bookletType = extractField(line, parserConfig.delimiter, parserConfig.fieldMapping.bookletType).trim();
   const rawAnswers = extractAnswerField(line, parserConfig.delimiter, parserConfig.fieldMapping.answers);
@@ -142,7 +195,11 @@ function parseLine(
   return {
     rowNumber,
     line,
+    maskedLine: parserConfig.fieldMapping.nationalId
+      ? maskField(line, parserConfig.delimiter, parserConfig.fieldMapping.nationalId)
+      : line,
     studentNo,
+    ...(nationalId ? { nationalIdHash: toNationalIdHash(nationalId, warnings) } : {}),
     bookletType,
     rawAnswers,
     answers: toStudentAnswers(rawAnswers, parserConfig.fieldMapping.answers, warnings),
@@ -156,8 +213,7 @@ function normalizeLines(content: string | Buffer): string[] {
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
     .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
+    .filter((line) => line.trim().length > 0);
 }
 
 function extractField(line: string, delimiter: ParserDelimiter, spec: FieldSpec): string {
@@ -170,6 +226,9 @@ function extractField(line: string, delimiter: ParserDelimiter, spec: FieldSpec)
 
 function extractAnswerField(line: string, delimiter: ParserDelimiter, spec: AnswerFieldSpec): string {
   if (spec.kind === "fixed") {
+    if (spec.segments?.length) {
+      return spec.segments.map((segment) => line.slice(segment.start, segment.start + segment.length)).join("");
+    }
     return line.slice(spec.start ?? 0, (spec.start ?? 0) + (spec.length ?? 0));
   }
 
@@ -234,9 +293,23 @@ function findParticipants(
   row: ParsedOpticalRow,
   participants: OpticalAnswerParticipant[],
 ): OpticalAnswerParticipant[] {
+  if (row.nationalIdHash) {
+    const nationalIdCandidates = participants.filter((participant) => participant.nationalIdHash === row.nationalIdHash);
+    if (nationalIdCandidates.length > 0) {
+      return preferBookletMatch(row, nationalIdCandidates);
+    }
+  }
+
   const candidates = participants.filter((participant) =>
     [participant.studentNo, participant.participantNo].some((value) => value === row.studentNo),
   );
+  return preferBookletMatch(row, candidates);
+}
+
+function preferBookletMatch(
+  row: ParsedOpticalRow,
+  candidates: OpticalAnswerParticipant[],
+): OpticalAnswerParticipant[] {
   const bookletMatches = candidates.filter((participant) =>
     participant.bookletType && participant.bookletType === row.bookletType,
   );
@@ -254,11 +327,65 @@ function toUnmatched(
     rawImportId: input.rawImportId,
     rowNumber: row.rowNumber,
     rawRow: {
-      line: row.line,
+      line: row.maskedLine,
       studentNo: row.studentNo,
       bookletType: row.bookletType,
       warnings: row.warnings,
     },
     reason,
   };
+}
+
+function toNationalIdHash(value: string, warnings: string[]): string | undefined {
+  const normalized = value.replace(/\D/g, "");
+  if (!/^\d{11}$/.test(normalized)) {
+    warnings.push("NATIONAL_ID_INVALID");
+    return undefined;
+  }
+  return createHmac("sha256", getNationalIdHashKey()).update(normalized).digest("hex");
+}
+
+function maskField(line: string, delimiter: ParserDelimiter, spec: FieldSpec): string {
+  if (spec.kind === "fixed") {
+    const value = line.slice(spec.start, spec.start + spec.length);
+    const masked = maskNationalId(value);
+    return `${line.slice(0, spec.start)}${masked.padEnd(spec.length, " ")}${line.slice(spec.start + spec.length)}`;
+  }
+
+  const values = splitLine(line, delimiter);
+  if (values[spec.column] !== undefined) {
+    values[spec.column] = maskNationalId(values[spec.column]!);
+  }
+  return values.join(delimiterValue(delimiter));
+}
+
+function maskNationalId(value: string): string {
+  const normalized = value.replace(/\D/g, "");
+  if (normalized.length < 4) {
+    return "";
+  }
+  return `*******${normalized.slice(-4)}`;
+}
+
+function delimiterValue(delimiter: ParserDelimiter): string {
+  if (delimiter === "TAB") return "\t";
+  if (delimiter === "PIPE") return "|";
+  if (delimiter === "COMMA") return ",";
+  return "";
+}
+
+function getNationalIdHashKey(): Buffer {
+  const value = process.env.STUDENT_PII_HASH_KEY;
+  if (!value) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("STUDENT_PII_HASH_KEY_REQUIRED");
+    }
+    return Buffer.from("22222222222222222222222222222222");
+  }
+
+  const key = value.startsWith("base64:") ? Buffer.from(value.slice("base64:".length), "base64") : Buffer.from(value);
+  if (key.length !== 32) {
+    throw new Error("STUDENT_PII_HASH_KEY_INVALID_LENGTH");
+  }
+  return key;
 }

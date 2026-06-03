@@ -31,6 +31,11 @@ describe("postgres report generation adapter", () => {
       examId: "exam-a",
       reportType: examResultSummaryReportType,
       contentHash: "results-v1",
+      campusId: "campus-main",
+      gradeLevelId: "grade-8",
+      classId: "class-a",
+      courseId: "course-math",
+      termId: "term-2026-spring",
     });
 
     expect(results).toEqual([{
@@ -57,8 +62,46 @@ describe("postgres report generation adapter", () => {
     expect(select?.sql).toContain('LEFT JOIN "Student"');
     expect(select?.sql).toContain('LEFT JOIN "Class"');
     expect(select?.sql).toContain('AND er."deletedAt" IS NULL');
-    expect(select?.values).toEqual(["tenant-a", "exam-a"]);
+    expect(select?.sql).toContain('c."campusId" = $3');
+    expect(select?.sql).toContain('c."gradeLevelId" = $4');
+    expect(select?.sql).toContain('s."classId" = $5');
+    expect(select?.values).toEqual(["tenant-a", "exam-a", "campus-main", "grade-8", "class-a"]);
     expect(client.queries.at(-1)?.sql).toBe("COMMIT");
+  });
+
+  it("rapor kapsamı boşsa sonuç sorgusunu sınıf filtresi olmadan çalıştırır", async () => {
+    const client = new FakeClient((sql) => {
+      if (sql.includes('FROM "ExamResult"')) {
+        return [{
+          studentId: "student-a",
+          classId: "class-a",
+          className: "8-A",
+          resultKey: "result-a",
+          answerKeyVersion: "answer-key-v1",
+          parserConfigVersion: "parser-v1",
+          engineVersion: "engine-v1",
+          scoreData: createScore(),
+          computedAt: "2026-05-30T07:00:00.000Z",
+        }];
+      }
+      return [];
+    });
+    const adapter = new PostgresReportGenerationAdapter(new FakePool(client));
+
+    await adapter.loadResults({
+      tenantId: "tenant-a",
+      userId: "user-a",
+      jobId: "exam-a_results-v1",
+      examId: "exam-a",
+      reportType: examResultSummaryReportType,
+      contentHash: "results-v1",
+      campusId: " ",
+      gradeLevelId: "",
+      classId: undefined,
+    });
+
+    const select = client.queries.find((query) => query.sql.includes('FROM "ExamResult"'));
+    expect(select?.values).toEqual(["tenant-a", "exam-a", null, null, null]);
   });
 
   it("ReportSnapshot kaydını READY status ve inputRefs ile yazar", async () => {
@@ -69,10 +112,10 @@ describe("postgres report generation adapter", () => {
           id: "snapshot-a",
           tenantId: values?.[1],
           examId: values?.[2],
-          reportType: values?.[3],
-          inputRefs: JSON.parse(values?.[5] as string),
-          snapshotData: JSON.parse(values?.[6] as string),
-          generatedAt: values?.[7],
+          reportType: values?.[8],
+          inputRefs: JSON.parse(values?.[10] as string),
+          snapshotData: JSON.parse(values?.[11] as string),
+          generatedAt: values?.[12],
         }];
       }
       return [];
@@ -86,11 +129,12 @@ describe("postgres report generation adapter", () => {
     expect(insert?.sql).toContain('"status"');
     expect(insert?.values?.[1]).toBe("tenant-a");
     expect(insert?.values?.[2]).toBe("exam-a");
-    expect(insert?.values?.[3]).toBe(examResultSummaryReportType);
-    expect(insert?.values?.[4]).toBe("READY");
-    expect(JSON.parse(insert?.values?.[5] as string)).toEqual(snapshot.inputRefs);
-    expect(JSON.parse(insert?.values?.[6] as string)).toEqual(snapshot.snapshotData);
-    expect(insert?.values?.[7]).toBe("2026-05-30T08:00:00.000Z");
+    expect(insert?.values?.slice(3, 8)).toEqual(["campus-main", "grade-8", "class-a", "course-math", "term-2026-spring"]);
+    expect(insert?.values?.[8]).toBe(examResultSummaryReportType);
+    expect(insert?.values?.[9]).toBe("READY");
+    expect(JSON.parse(insert?.values?.[10] as string)).toEqual(snapshot.inputRefs);
+    expect(JSON.parse(insert?.values?.[11] as string)).toEqual(snapshot.snapshotData);
+    expect(insert?.values?.[12]).toBe("2026-05-30T08:00:00.000Z");
   });
 
   it("hatalı scoreData değerini reddeder", async () => {
@@ -125,6 +169,11 @@ function createSnapshot(): ReportSnapshotCandidate {
   return {
     tenantId: "tenant-a",
     examId: "exam-a",
+    campusId: "campus-main",
+    gradeLevelId: "grade-8",
+    classId: "class-a",
+    courseId: "course-math",
+    termId: "term-2026-spring",
     reportType: examResultSummaryReportType,
     status: "READY",
     inputRefs: {
@@ -144,6 +193,7 @@ function createSnapshot(): ReportSnapshotCandidate {
         className: "8-A",
         resultCount: 1,
         averages: { correct: 1, wrong: 0, blank: 0, net: 1, rawScore: 1, standardScore: 1 },
+        branches: [{ branch: "Matematik", resultCount: 1, correct: 1, wrong: 0, blank: 0, net: 1 }],
       }],
       statistics: {
         count: 1,

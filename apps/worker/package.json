@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.9.1",
+    "exceljs": "^4.4.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.7"
   },

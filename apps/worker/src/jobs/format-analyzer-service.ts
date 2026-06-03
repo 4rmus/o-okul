@@ -1,8 +1,10 @@
-export { FormatAnalyzerService } from "@uzman-hocam/shared-types";
+export { FormatAnalyzerService, getParserConfigPresetSuggestion } from "@uzman-hocam/shared-types";
 export type {
   AnswerFieldSpec,
+  AnswerSegmentSpec,
   FieldSpec,
   FormatAnalyzerInput,
+  ParserConfigPreset,
   ParserConfigSuggestion,
   ParserDelimiter,
   ParserEncoding,

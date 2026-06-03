@@ -13,6 +13,7 @@
     "raw import smoke",
     "report generation smoke",
     "sms batch smoke",
+    "notification provider smoke",
     "privacy purge"
   ],
   "commandsPassed": [
@@ -23,6 +24,7 @@
     "pnpm report-generation:smoke",
     "pnpm queue:smoke",
     "pnpm sms:smoke",
+    "pnpm notification:smoke",
     "pnpm traefik:https:smoke"
   ],
   "defects": []

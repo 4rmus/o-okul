@@ -1,0 +1,165 @@
+import pg from "pg";
+import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
+
+export const rawImportQuarantineStoreToken = Symbol("RawImportQuarantineStore");
+
+export interface ImportQuarantineRecord {
+  id: string;
+  tenantId: string;
+  examId: string;
+  rawImportId: string;
+  rowNumber: number;
+  rawRow: Record<string, unknown>;
+  reason: string;
+  status: string;
+  resolvedStudentId?: string;
+  resolvedParticipantId?: string;
+  answerKeyId?: string;
+  rawImportSha256?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RawImportQuarantineStore {
+  listByRawImport(tenantId: string, examId: string, rawImportId: string): Promise<ImportQuarantineRecord[]>;
+  resolve(input: {
+    tenantId: string;
+    examId: string;
+    rawImportId: string;
+    quarantineId: string;
+    resolvedStudentId: string;
+  }): Promise<ImportQuarantineRecord | undefined>;
+}
+
+export class PostgresRawImportQuarantineStore implements RawImportQuarantineStore {
+  constructor(private readonly pool: TenantQueryable = new pg.Pool({ connectionString: process.env.DATABASE_URL })) {}
+
+  async listByRawImport(tenantId: string, examId: string, rawImportId: string): Promise<ImportQuarantineRecord[]> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<ImportQuarantineRow>(
+        `SELECT *
+         FROM "ImportQuarantine"
+         WHERE "tenantId" = $1
+           AND "examId" = $2
+           AND "rawImportId" = $3
+           AND "deletedAt" IS NULL
+         ORDER BY "rowNumber" ASC`,
+        [tenantId, examId, rawImportId],
+      );
+      return result.rows.map(toRecord);
+    });
+  }
+
+  async resolve(input: {
+    tenantId: string;
+    examId: string;
+    rawImportId: string;
+    quarantineId: string;
+    resolvedStudentId: string;
+  }): Promise<ImportQuarantineRecord | undefined> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<ImportQuarantineRow>(
+        `WITH resolved AS (
+           UPDATE "ImportQuarantine"
+           SET "status" = 'RESOLVED',
+               "resolvedStudentId" = $5,
+               "updatedAt" = now()
+           WHERE "tenantId" = $1
+             AND "examId" = $2
+             AND "rawImportId" = $3
+             AND "id" = $4
+             AND "status" = 'OPEN'
+             AND "deletedAt" IS NULL
+             AND EXISTS (
+               SELECT 1
+               FROM "Student"
+               WHERE "Student"."tenantId" = $1
+                 AND "Student"."id" = $5
+                 AND "Student"."deletedAt" IS NULL
+             )
+           RETURNING *
+         )
+         SELECT
+           resolved.*,
+           ep."id" AS "resolvedParticipantId",
+           ak."id" AS "answerKeyId",
+           ri."sha256" AS "rawImportSha256"
+         FROM resolved
+         INNER JOIN "ExamParticipant" ep
+           ON ep."tenantId" = resolved."tenantId"
+          AND ep."examId" = resolved."examId"
+          AND ep."studentId" = resolved."resolvedStudentId"
+          AND ep."deletedAt" IS NULL
+         INNER JOIN "RawImport" ri
+           ON ri."tenantId" = resolved."tenantId"
+          AND ri."examId" = resolved."examId"
+          AND ri."id" = resolved."rawImportId"
+          AND ri."deletedAt" IS NULL
+         INNER JOIN LATERAL (
+           SELECT "id"
+           FROM "AnswerKey"
+           WHERE "tenantId" = resolved."tenantId"
+             AND "examId" = resolved."examId"
+             AND "status" = 'PUBLISHED'
+             AND "deletedAt" IS NULL
+           ORDER BY "publishedAt" DESC NULLS LAST, "updatedAt" DESC
+           LIMIT 1
+         ) ak ON TRUE`,
+        [input.tenantId, input.examId, input.rawImportId, input.quarantineId, input.resolvedStudentId],
+      );
+      return result.rows[0] ? toRecord(result.rows[0]) : undefined;
+    });
+  }
+}
+
+export function createRawImportQuarantineStore(): RawImportQuarantineStore {
+  return new PostgresRawImportQuarantineStore();
+}
+
+interface ImportQuarantineRow {
+  id: string;
+  tenantId: string;
+  examId: string;
+  rawImportId: string;
+  rowNumber: number;
+  rawRow: unknown;
+  reason: string;
+  status: string;
+  resolvedStudentId: string | null;
+  resolvedParticipantId?: string | null;
+  answerKeyId?: string | null;
+  rawImportSha256?: string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+function toRecord(row: ImportQuarantineRow): ImportQuarantineRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    examId: row.examId,
+    rawImportId: row.rawImportId,
+    rowNumber: row.rowNumber,
+    rawRow: parseJsonObject(row.rawRow),
+    reason: row.reason,
+    status: row.status,
+    ...(row.resolvedStudentId ? { resolvedStudentId: row.resolvedStudentId } : {}),
+    ...(row.resolvedParticipantId ? { resolvedParticipantId: row.resolvedParticipantId } : {}),
+    ...(row.answerKeyId ? { answerKeyId: row.answerKeyId } : {}),
+    ...(row.rawImportSha256 ? { rawImportSha256: row.rawImportSha256 } : {}),
+    createdAt: toIso(row.createdAt),
+    updatedAt: toIso(row.updatedAt),
+  };
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> {
+  const parsed = typeof value === "string" ? JSON.parse(value) as unknown : value;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("IMPORT_QUARANTINE_RAW_ROW_INVALID");
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function toIso(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : value;
+}

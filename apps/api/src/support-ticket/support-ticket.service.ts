@@ -9,6 +9,17 @@ import type {
 } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { type GuardianStudentStore, guardianStudentStoreToken } from "../school/guardian-student-store.js";
+import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
+import { type CampusStore, campusStoreToken } from "../school/campus-store.js";
+import { type ClassStore, classStoreToken } from "../school/class-store.js";
+import { type CourseStore, courseStoreToken } from "../school/course-store.js";
+import { type GradeLevelStore, gradeLevelStoreToken } from "../school/grade-level-store.js";
+import {
+  type TeacherAssignmentStore,
+  teacherAssignmentStoreToken,
+} from "../school/teacher-assignment-store.js";
+import { type StudentStore, studentStoreToken } from "../student/student-store.js";
 import { assertTenantResourceAccess, filterTenantResources } from "../tenant/tenant-access.js";
 import { assertUploadContentMatchesContentType } from "../upload/upload-validation.js";
 import {
@@ -48,19 +59,44 @@ export interface CreateSupportTicketCommentInput {
   body?: string;
 }
 
+export interface SupportTicketListFilters {
+  campusId?: string;
+  classId?: string;
+  courseId?: string;
+  gradeLevelId?: string;
+  studentId?: string;
+  termId?: string;
+}
+
+type SupportTicketContextFields = Pick<
+  SupportTicketRecord,
+  "campusId" | "classId" | "courseId" | "gradeLevelId" | "studentId" | "termId"
+>;
+
 const maxAttachmentBytes = 64 * 1024;
 
 @Injectable()
 export class SupportTicketService {
   constructor(
     @Inject(supportTicketStoreToken) private readonly store: SupportTicketStore,
+    @Inject(academicCalendarStoreToken) private readonly academicCalendarStore: AcademicCalendarStore,
+    @Inject(campusStoreToken) private readonly campusStore: CampusStore,
+    @Inject(classStoreToken) private readonly classStore: ClassStore,
+    @Inject(courseStoreToken) private readonly courseStore: CourseStore,
+    @Inject(gradeLevelStoreToken) private readonly gradeLevelStore: GradeLevelStore,
+    @Inject(teacherAssignmentStoreToken) private readonly teacherAssignmentStore: TeacherAssignmentStore,
+    @Inject(studentStoreToken) private readonly studentStore: StudentStore,
+    @Inject(guardianStudentStoreToken) private readonly guardianStudentStore: GuardianStudentStore,
     @Inject(supportTicketAttachmentStorageToken)
     private readonly attachmentStorage: SupportTicketAttachmentStorage,
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
-  async list(context: RequestContext): Promise<SupportTicketRecord[]> {
-    return filterTenantResources(context, await this.store.list()).filter((ticket) => !ticket.deletedAt);
+  async list(context: RequestContext, filters: SupportTicketListFilters = {}): Promise<SupportTicketRecord[]> {
+    return filterSupportTickets(
+      filterTenantResources(context, await this.store.list()).filter((ticket) => !ticket.deletedAt),
+      filters,
+    );
   }
 
   async findOne(context: RequestContext, id: string): Promise<SupportTicketRecord> {
@@ -78,10 +114,12 @@ export class SupportTicketService {
     input: Partial<SupportTicketRecord>,
   ): Promise<SupportTicketRecord> {
     const tenantId = this.resolveTenantId(context, input.tenantId);
+    const ticketContext = await this.resolveTicketContext(tenantId, input);
 
     const record = await this.store.create({
       tenantId,
       requesterId: context.userId,
+      ...ticketContext,
       subject: requiredText(input.subject, "SUPPORT_TICKET_SUBJECT_REQUIRED"),
       message: requiredText(input.message, "SUPPORT_TICKET_MESSAGE_REQUIRED"),
       priority: resolvePriority(input.priority),
@@ -94,9 +132,60 @@ export class SupportTicketService {
       entityType: "SupportTicket",
       entityId: record.id,
       action: "support_ticket.created",
-      diff: { priority: record.priority, status: record.status, subject: record.subject },
+      diff: {
+        priority: record.priority,
+        status: record.status,
+        subject: record.subject,
+        campusId: record.campusId,
+        classId: record.classId,
+        courseId: record.courseId,
+        gradeLevelId: record.gradeLevelId,
+        studentId: record.studentId,
+        termId: record.termId,
+      },
     });
     return record;
+  }
+
+  async listCurrentStudent(context: RequestContext): Promise<SupportTicketRecord[]> {
+    const student = await this.findCurrentStudent(context);
+    return (await this.list(context)).filter((ticket) => ticket.requesterId === context.userId && ticket.studentId === student.id);
+  }
+
+  async createCurrentStudent(
+    context: RequestContext,
+    input: Partial<SupportTicketRecord>,
+  ): Promise<SupportTicketRecord> {
+    const student = await this.findCurrentStudent(context);
+    return this.create(context, { ...input, tenantId: student.tenantId, studentId: student.id });
+  }
+
+  async listCurrentGuardianStudent(context: RequestContext, studentId: string): Promise<SupportTicketRecord[]> {
+    const student = await this.findGuardianSupportStudent(context, studentId);
+    return (await this.list(context)).filter((ticket) => ticket.requesterId === context.userId && ticket.studentId === student.id);
+  }
+
+  async createCurrentGuardianStudent(
+    context: RequestContext,
+    studentId: string,
+    input: Partial<SupportTicketRecord>,
+  ): Promise<SupportTicketRecord> {
+    const student = await this.findGuardianSupportStudent(context, studentId);
+    return this.create(context, { ...input, tenantId: student.tenantId, studentId: student.id });
+  }
+
+  async listCurrentTeacher(context: RequestContext): Promise<SupportTicketRecord[]> {
+    this.assertTeacherContext(context);
+    return (await this.list(context)).filter((ticket) => ticket.requesterId === context.userId);
+  }
+
+  async createCurrentTeacher(
+    context: RequestContext,
+    input: Partial<SupportTicketRecord>,
+  ): Promise<SupportTicketRecord> {
+    this.assertTeacherContext(context);
+    await this.assertTeacherTicketScope(context, input);
+    return this.create(context, input);
   }
 
   async update(
@@ -254,6 +343,147 @@ export class SupportTicketService {
     return resolvedTenantId;
   }
 
+  private async findCurrentStudent(context: RequestContext) {
+    if (context.subjectType !== "STUDENT" || !context.subjectId) {
+      throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
+    }
+
+    const student = await this.studentStore.findById(context.subjectId);
+    if (!student || student.deletedAt) {
+      throw new NotFoundException("STUDENT_NOT_FOUND");
+    }
+    this.assertAccess(context, student);
+    return student;
+  }
+
+  private async findGuardianSupportStudent(context: RequestContext, studentId: string) {
+    if (context.subjectType !== "GUARDIAN" || !context.subjectId) {
+      throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
+    }
+
+    const student = await this.studentStore.findById(studentId);
+    if (!student || student.deletedAt) {
+      throw new NotFoundException("STUDENT_NOT_FOUND");
+    }
+    this.assertAccess(context, student);
+    const link = (await this.guardianStudentStore.listByStudent(student.id)).find((candidate) => candidate.guardianId === context.subjectId);
+    if (!link) {
+      throw new ForbiddenException("FORBIDDEN_SUBJECT");
+    }
+    if (!link.canOpenSupportTickets) {
+      throw new ForbiddenException("FORBIDDEN_SUPPORT_PERMISSION");
+    }
+    return student;
+  }
+
+  private assertTeacherContext(context: RequestContext): void {
+    if (context.subjectType !== "TEACHER" || !context.subjectId) {
+      throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
+    }
+  }
+
+  private async assertTeacherTicketScope(
+    context: RequestContext,
+    input: Partial<SupportTicketContextFields>,
+  ): Promise<void> {
+    const studentId = optionalText(input.studentId);
+    const classId = optionalText(input.classId);
+    if (!studentId && !classId) {
+      return;
+    }
+
+    const assignments = filterTenantResources(context, await this.teacherAssignmentStore.listByTeacher(context.subjectId ?? ""))
+      .filter((assignment) => !assignment.endsAt || new Date(assignment.endsAt).getTime() >= Date.now());
+    const student = studentId ? await this.studentStore.findById(studentId) : undefined;
+    if (studentId && (!student || student.tenantId !== context.tenantId || student.deletedAt)) {
+      throw new BadRequestException("SUPPORT_TICKET_STUDENT_NOT_FOUND");
+    }
+    if (student && classId && student.classId && student.classId !== classId) {
+      throw new BadRequestException("SUPPORT_TICKET_CONTEXT_MISMATCH");
+    }
+
+    const inStudentScope = student
+      ? student.responsibleTeacherId === context.subjectId ||
+        assignments.some((assignment) =>
+          assignment.studentId === student.id || Boolean(student.classId && assignment.classId === student.classId),
+        )
+      : false;
+    const inClassScope = classId ? assignments.some((assignment) => assignment.classId === classId) : false;
+
+    if (!inStudentScope && !inClassScope) {
+      throw new ForbiddenException("FORBIDDEN_TEACHER_SUPPORT_SCOPE");
+    }
+  }
+
+  private async resolveTicketContext(
+    tenantId: string,
+    input: Partial<SupportTicketContextFields>,
+  ): Promise<SupportTicketContextFields> {
+    const contextFields: SupportTicketContextFields = {
+      campusId: optionalText(input.campusId),
+      classId: optionalText(input.classId),
+      courseId: optionalText(input.courseId),
+      gradeLevelId: optionalText(input.gradeLevelId),
+      studentId: optionalText(input.studentId),
+      termId: optionalText(input.termId),
+    };
+
+    if (contextFields.campusId) {
+      await this.assertTenantLookup(
+        await this.campusStore.findById(contextFields.campusId),
+        tenantId,
+        "SUPPORT_TICKET_CAMPUS_NOT_FOUND",
+      );
+    }
+    if (contextFields.gradeLevelId) {
+      await this.assertTenantLookup(
+        await this.gradeLevelStore.findById(contextFields.gradeLevelId),
+        tenantId,
+        "SUPPORT_TICKET_GRADE_LEVEL_NOT_FOUND",
+      );
+    }
+    if (contextFields.classId) {
+      await this.assertTenantLookup(
+        await this.classStore.findById(contextFields.classId),
+        tenantId,
+        "SUPPORT_TICKET_CLASS_NOT_FOUND",
+      );
+    }
+    if (contextFields.courseId) {
+      await this.assertTenantLookup(
+        await this.courseStore.findById(contextFields.courseId),
+        tenantId,
+        "SUPPORT_TICKET_COURSE_NOT_FOUND",
+      );
+    }
+    if (contextFields.termId) {
+      await this.assertTenantLookup(
+        await this.academicCalendarStore.findTermById(contextFields.termId),
+        tenantId,
+        "SUPPORT_TICKET_TERM_NOT_FOUND",
+      );
+    }
+    if (contextFields.studentId) {
+      await this.assertTenantLookup(
+        await this.studentStore.findById(contextFields.studentId),
+        tenantId,
+        "SUPPORT_TICKET_STUDENT_NOT_FOUND",
+      );
+    }
+
+    return contextFields;
+  }
+
+  private async assertTenantLookup(
+    record: { tenantId: string; deletedAt?: string } | undefined,
+    tenantId: string,
+    errorCode: string,
+  ): Promise<void> {
+    if (!record || record.tenantId !== tenantId || record.deletedAt) {
+      throw new BadRequestException(errorCode);
+    }
+  }
+
   private assertAccess(context: RequestContext, resource: { tenantId: string }): void {
     try {
       assertTenantResourceAccess(context, resource);
@@ -270,6 +500,21 @@ function requiredText(value: string | undefined, errorCode: string): string {
     throw new BadRequestException(errorCode);
   }
   return trimmed;
+}
+
+function optionalText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+function filterSupportTickets(records: SupportTicketRecord[], filters: SupportTicketListFilters): SupportTicketRecord[] {
+  return records
+    .filter((ticket) => !filters.campusId || ticket.campusId === filters.campusId)
+    .filter((ticket) => !filters.classId || ticket.classId === filters.classId)
+    .filter((ticket) => !filters.courseId || ticket.courseId === filters.courseId)
+    .filter((ticket) => !filters.gradeLevelId || ticket.gradeLevelId === filters.gradeLevelId)
+    .filter((ticket) => !filters.studentId || ticket.studentId === filters.studentId)
+    .filter((ticket) => !filters.termId || ticket.termId === filters.termId);
 }
 
 function resolvePriority(value: SupportTicketPriority | undefined): SupportTicketPriority {

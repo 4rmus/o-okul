@@ -29,6 +29,12 @@ const demoTickets: SupportTicketRecord[] = [
     id: "support-ticket-a",
     tenantId: "tenant-a",
     requesterId: "user-tenant-a",
+    studentId: "student-a",
+    campusId: "campus-main",
+    gradeLevelId: "grade-8",
+    classId: "class-a",
+    courseId: "course-math",
+    termId: "term-2026-spring",
     subject: "Optik dosya yüklenemiyor",
     message: "TXT dosyası yüklenirken hata alıyoruz.",
     priority: "NORMAL",
@@ -188,13 +194,19 @@ export class PostgresSupportTicketStore implements SupportTicketStore {
   async create(input: Omit<SupportTicketRecord, "id">): Promise<SupportTicketRecord> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<SupportTicketRow>(
-        `INSERT INTO "SupportTicket" ("id", "tenantId", "requesterId", "subject", "message", "priority", "status", "createdAt", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+        `INSERT INTO "SupportTicket" ("id", "tenantId", "requesterId", "studentId", "campusId", "gradeLevelId", "classId", "courseId", "termId", "subject", "message", "priority", "status", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now())
          RETURNING *`,
         [
           randomUUID(),
           input.tenantId,
           input.requesterId ?? null,
+          input.studentId ?? null,
+          input.campusId ?? null,
+          input.gradeLevelId ?? null,
+          input.classId ?? null,
+          input.courseId ?? null,
+          input.termId ?? null,
           input.subject,
           input.message,
           input.priority,
@@ -326,6 +338,12 @@ interface SupportTicketRow {
   id: string;
   tenantId: string;
   requesterId: string | null;
+  studentId: string | null;
+  campusId: string | null;
+  gradeLevelId: string | null;
+  classId: string | null;
+  courseId: string | null;
+  termId: string | null;
   subject: string;
   message: string;
   priority: SupportTicketRecord["priority"];
@@ -364,6 +382,12 @@ function toSupportTicketRecord(record: SupportTicketRow): SupportTicketRecord {
     id: record.id,
     tenantId: record.tenantId,
     requesterId: record.requesterId ?? undefined,
+    studentId: record.studentId ?? undefined,
+    campusId: record.campusId ?? undefined,
+    gradeLevelId: record.gradeLevelId ?? undefined,
+    classId: record.classId ?? undefined,
+    courseId: record.courseId ?? undefined,
+    termId: record.termId ?? undefined,
     subject: record.subject,
     message: record.message,
     priority: record.priority,

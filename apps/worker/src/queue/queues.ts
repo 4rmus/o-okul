@@ -1,4 +1,5 @@
 export const queueNames = [
+  "announcement-delivery",
   "exam-evaluation",
   "excel-import",
   "report-generation",

@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type {
   StudentClassHistoryRecord,
+  StudentEnrollmentRecord,
   StudentProfileRecord,
   StudentRecord as SharedStudentRecord,
   StudentStatus,
@@ -18,6 +19,11 @@ import {
   type GuardianStudentStore,
   guardianStudentStoreToken,
 } from "../school/guardian-student-store.js";
+import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
+import { type CampusStore, campusStoreToken } from "../school/campus-store.js";
+import { type ClassRecord, type ClassStore, classStoreToken } from "../school/class-store.js";
+import { type GradeLevelRecord, type GradeLevelStore, gradeLevelStoreToken } from "../school/grade-level-store.js";
+import { type TeacherStore, teacherStoreToken } from "../school/teacher-store.js";
 import {
   type TeacherAssignmentStore,
   teacherAssignmentStoreToken,
@@ -27,13 +33,18 @@ import {
   type StudentClassHistoryStore,
   studentClassHistoryStoreToken,
 } from "./student-class-history-store.js";
+import {
+  type StudentEnrollmentStore,
+  studentEnrollmentStoreToken,
+} from "./student-enrollment-store.js";
 import { decryptTcIdentity, encryptTcIdentity, hashTcIdentity, maskTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
 
 export interface StudentRecord extends SharedStudentRecord {
   deletedAt?: string;
 }
 
-const studentStatuses: StudentStatus[] = ["ACTIVE", "PASSIVE"];
+const studentStatuses: StudentStatus[] = ["ACTIVE", "PASSIVE", "GRADUATED", "TRANSFERRED"];
+const terminalStudentStatuses: StudentStatus[] = ["GRADUATED", "TRANSFERRED"];
 
 export interface StudentQuotaPreview {
   limit: number;
@@ -50,6 +61,24 @@ export interface StudentProfileInput {
   photoKey?: string;
 }
 
+export interface StudentEnrollmentActionInput {
+  academicYearId?: string;
+  termId?: string;
+  classId?: string;
+  startsAt?: string;
+}
+
+export interface StudentBulkEnrollmentInput extends StudentEnrollmentActionInput {
+  studentIds?: string[];
+  classIdBySourceClassId?: Record<string, string>;
+  useAutomaticClassMapping?: boolean;
+}
+
+export interface StudentBulkEnrollmentResult {
+  updatedCount: number;
+  enrollments: StudentEnrollmentRecord[];
+}
+
 @Injectable()
 export class StudentService {
   private readonly maxStudentsPerTenant = Number.parseInt(process.env.STUDENT_QUOTA ?? "", 10) || 2;
@@ -59,6 +88,12 @@ export class StudentService {
     @Inject(guardianStudentStoreToken) private readonly guardianStudentStore: GuardianStudentStore,
     @Inject(teacherAssignmentStoreToken) private readonly teacherAssignmentStore: TeacherAssignmentStore,
     @Inject(studentClassHistoryStoreToken) private readonly classHistoryStore: StudentClassHistoryStore,
+    @Inject(studentEnrollmentStoreToken) private readonly enrollmentStore: StudentEnrollmentStore,
+    @Inject(academicCalendarStoreToken) private readonly academicCalendarStore: AcademicCalendarStore,
+    @Inject(campusStoreToken) private readonly campusStore: CampusStore,
+    @Inject(classStoreToken) private readonly classStore: ClassStore,
+    @Inject(gradeLevelStoreToken) private readonly gradeLevelStore: GradeLevelStore,
+    @Inject(teacherStoreToken) private readonly teacherStore: TeacherStore,
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
@@ -116,12 +151,12 @@ export class StudentService {
     if (isTeacherSubjectContext(context)) {
       await this.assertTeacherAssignmentScope(context, student);
       await this.recordProfileView(context, student.id, student.tenantId);
-      return toStudentProfile(student);
+      return this.toStudentProfile(student);
     }
 
     this.assertSubjectAccess(context, { ...student, guardianIds });
     await this.recordProfileView(context, student.id, student.tenantId);
-    return toStudentProfile(student);
+    return this.toStudentProfile(student);
   }
 
   async findCurrentStudentProfile(context: RequestContext): Promise<StudentProfileRecord> {
@@ -134,7 +169,12 @@ export class StudentService {
 
   async listClassHistory(context: RequestContext, id: string): Promise<StudentClassHistoryRecord[]> {
     await this.findOneForViewer(context, id);
-    return filterTenantResources(context, await this.classHistoryStore.listByStudent(id));
+    return this.withClassNames(filterTenantResources(context, await this.classHistoryStore.listByStudent(id)));
+  }
+
+  async listEnrollments(context: RequestContext, id: string): Promise<StudentEnrollmentRecord[]> {
+    await this.findOneForViewer(context, id);
+    return this.withClassNames(filterTenantResources(context, await this.enrollmentStore.listByStudent(id)));
   }
 
   async updateProfile(context: RequestContext, id: string, input: StudentProfileInput): Promise<StudentProfileRecord> {
@@ -175,7 +215,7 @@ export class StudentService {
         fieldsChanged: changedInputFields(input, ["nationalId", "birthDate", "phone", "email", "photoKey"]),
       },
     });
-    return toStudentProfile(updated);
+    return this.toStudentProfile(updated);
   }
 
   async listCurrentGuardianStudents(context: RequestContext): Promise<StudentRecord[]> {
@@ -213,11 +253,22 @@ export class StudentService {
       status: resolveStudentStatus(input.status),
     });
     if (student.classId) {
+      const academicContext = await this.resolveCurrentAcademicContext(context);
       await this.classHistoryStore.create({
         tenantId: student.tenantId,
         studentId: student.id,
         classId: student.classId,
+        ...academicContext,
         startsAt: todayDateString(),
+        reason: "CREATED",
+      });
+      await this.enrollmentStore.create({
+        tenantId: student.tenantId,
+        studentId: student.id,
+        classId: student.classId,
+        ...academicContext,
+        startsAt: todayDateString(),
+        status: student.status,
         reason: "CREATED",
       });
     }
@@ -280,7 +331,9 @@ export class StudentService {
     if (!updated) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
-    await this.recordClassHistoryIfChanged(previous, updated, input);
+    await this.recordClassHistoryIfChanged(context, previous, updated, input);
+    await this.closeClassHistoryForTerminalStatus(previous, updated);
+    await this.closeEnrollmentForTerminalStatus(previous, updated);
     await this.auditLogs?.record({
       tenantId: updated.tenantId,
       actorUserId: context.userId,
@@ -290,6 +343,156 @@ export class StudentService {
       diff: { fieldsChanged: changedFields },
     });
     return updated;
+  }
+
+  async renewEnrollment(context: RequestContext, id: string, input: StudentEnrollmentActionInput): Promise<StudentEnrollmentRecord> {
+    const existing = await this.findOne(context, id);
+    const startsAt = input.startsAt ? enrollmentDate(input.startsAt) : todayDateString();
+    const academicContext = await this.resolveEnrollmentAcademicContext(context, input);
+    const classId = input.classId !== undefined ? optionalText(input.classId) : existing.classId;
+    const updated = await this.store.update(id, {
+      classId,
+      status: "ACTIVE",
+    });
+    if (!updated) {
+      throw new NotFoundException("STUDENT_NOT_FOUND");
+    }
+
+    await this.classHistoryStore.closeActiveForStudent(updated.id, startsAt);
+    if (classId) {
+      await this.classHistoryStore.create({
+        tenantId: updated.tenantId,
+        studentId: updated.id,
+        classId,
+        ...academicContext,
+        startsAt,
+        reason: "RENEWED",
+      });
+    }
+    await this.enrollmentStore.closeActiveForStudent(updated.id, startsAt);
+    const enrollment = await this.enrollmentStore.create({
+      tenantId: updated.tenantId,
+      studentId: updated.id,
+      classId,
+      ...academicContext,
+      startsAt,
+      status: "ACTIVE",
+      reason: "RENEWED",
+    });
+    await this.auditLogs?.record({
+      tenantId: updated.tenantId,
+      actorUserId: context.userId,
+      entityType: "StudentEnrollment",
+      entityId: enrollment.id,
+      action: "student.enrollment_renewed",
+      diff: { studentId: updated.id, classId, ...academicContext },
+    });
+    return enrollment;
+  }
+
+  async bulkRenewEnrollments(context: RequestContext, input: StudentBulkEnrollmentInput): Promise<StudentBulkEnrollmentResult> {
+    const studentIds = [...new Set(input.studentIds ?? [])].filter(Boolean);
+    if (studentIds.length === 0) {
+      throw new BadRequestException("STUDENT_BULK_ENROLLMENT_STUDENTS_REQUIRED");
+    }
+
+    const automaticClassMapping = input.useAutomaticClassMapping ? await this.buildAutomaticClassMapping(context) : {};
+    const enrollments: StudentEnrollmentRecord[] = [];
+    for (const studentId of studentIds) {
+      const student = await this.findOne(context, studentId);
+      const mappedClassId = student.classId ? input.classIdBySourceClassId?.[student.classId] : undefined;
+      const automaticClassId = student.classId ? automaticClassMapping[student.classId] : undefined;
+      enrollments.push(await this.renewEnrollment(context, studentId, {
+        academicYearId: input.academicYearId,
+        termId: input.termId,
+        classId: mappedClassId ?? automaticClassId ?? input.classId,
+        startsAt: input.startsAt,
+      }));
+    }
+    return {
+      updatedCount: enrollments.length,
+      enrollments,
+    };
+  }
+
+  private async buildAutomaticClassMapping(context: RequestContext): Promise<Record<string, string>> {
+    const classes = filterTenantResources(context, await this.classStore.list()).filter((record) => !record.deletedAt);
+    const gradeLevels = filterTenantResources(context, await this.gradeLevelStore.list()).filter((record) => !record.deletedAt);
+    const gradeLevelById = new Map(gradeLevels.map((record) => [record.id, record]));
+    const mapping: Record<string, string> = {};
+
+    for (const sourceClass of classes) {
+      const targetGradeCode = nextGradeCode(resolveClassGradeCode(sourceClass, gradeLevelById));
+      if (!targetGradeCode) continue;
+
+      const targetClass = classes.find((candidate) =>
+        candidate.id !== sourceClass.id &&
+        resolveClassGradeCode(candidate, gradeLevelById) === targetGradeCode &&
+        (!sourceClass.campusId || candidate.campusId === sourceClass.campusId) &&
+        (!sourceClass.section || candidate.section === sourceClass.section),
+      );
+      if (targetClass) {
+        mapping[sourceClass.id] = targetClass.id;
+      }
+    }
+
+    return mapping;
+  }
+
+  async transferEnrollment(context: RequestContext, id: string, input: StudentEnrollmentActionInput): Promise<StudentEnrollmentRecord | null> {
+    await this.findOne(context, id);
+    const startsAt = input.startsAt ? enrollmentDate(input.startsAt) : todayDateString();
+    const academicContext = await this.resolveEnrollmentAcademicContext(context, input);
+    const classId = input.classId !== undefined ? optionalText(input.classId) : undefined;
+    const nextStatus: StudentStatus = classId ? "ACTIVE" : "TRANSFERRED";
+    const updated = await this.store.update(id, {
+      classId: classId ?? "",
+      status: nextStatus,
+    });
+    if (!updated) {
+      throw new NotFoundException("STUDENT_NOT_FOUND");
+    }
+
+    await this.classHistoryStore.closeActiveForStudent(updated.id, startsAt);
+    await this.enrollmentStore.closeActiveForStudent(updated.id, startsAt, classId ? undefined : "TRANSFERRED");
+    if (!classId) {
+      await this.auditLogs?.record({
+        tenantId: updated.tenantId,
+        actorUserId: context.userId,
+        entityType: "Student",
+        entityId: updated.id,
+        action: "student.transferred_out",
+        diff: { studentId: updated.id },
+      });
+      return null;
+    }
+
+    await this.classHistoryStore.create({
+      tenantId: updated.tenantId,
+      studentId: updated.id,
+      classId,
+      ...academicContext,
+      startsAt,
+      reason: "TRANSFERRED",
+    });
+    const enrollment = await this.enrollmentStore.create({
+      tenantId: updated.tenantId,
+      studentId: updated.id,
+      classId,
+      ...academicContext,
+      startsAt,
+      status: "ACTIVE",
+      reason: "TRANSFERRED",
+    });
+    await this.auditLogs?.record({
+      tenantId: updated.tenantId,
+      actorUserId: context.userId,
+      entityType: "StudentEnrollment",
+      entityId: enrollment.id,
+      action: "student.enrollment_transferred",
+      diff: { studentId: updated.id, classId, ...academicContext },
+    });
+    return enrollment;
   }
 
   async delete(context: RequestContext, id: string): Promise<void> {
@@ -409,6 +612,7 @@ export class StudentService {
   }
 
   private async recordClassHistoryIfChanged(
+    context: RequestContext,
     existing: StudentRecord,
     updated: StudentRecord,
     input: Partial<StudentRecord>,
@@ -418,16 +622,151 @@ export class StudentService {
     }
 
     const changedAt = todayDateString();
+    const academicContext = await this.resolveCurrentAcademicContext(context);
     await this.classHistoryStore.closeActiveForStudent(updated.id, changedAt);
+    await this.enrollmentStore.closeActiveForStudent(updated.id, changedAt);
     if (updated.classId) {
       await this.classHistoryStore.create({
         tenantId: updated.tenantId,
         studentId: updated.id,
         classId: updated.classId,
+        ...academicContext,
         startsAt: changedAt,
         reason: "CLASS_CHANGED",
       });
+      await this.enrollmentStore.create({
+        tenantId: updated.tenantId,
+        studentId: updated.id,
+        classId: updated.classId,
+        ...academicContext,
+        startsAt: changedAt,
+        status: updated.status,
+        reason: "CLASS_CHANGED",
+      });
     }
+  }
+
+  private async closeClassHistoryForTerminalStatus(existing: StudentRecord, updated: StudentRecord): Promise<void> {
+    if (existing.status === updated.status || !terminalStudentStatuses.includes(updated.status)) {
+      return;
+    }
+
+    await this.classHistoryStore.closeActiveForStudent(updated.id, todayDateString());
+  }
+
+  private async closeEnrollmentForTerminalStatus(existing: StudentRecord, updated: StudentRecord): Promise<void> {
+    if (existing.status === updated.status || !terminalStudentStatuses.includes(updated.status)) {
+      return;
+    }
+
+    await this.enrollmentStore.closeActiveForStudent(updated.id, todayDateString(), updated.status);
+  }
+
+  private async resolveCurrentAcademicContext(context: RequestContext): Promise<{ academicYearId?: string; termId?: string }> {
+    const years = filterTenantResources(context, await this.academicCalendarStore.listYears()).filter((year) => !year.deletedAt);
+    const activeYear = years.find((year) => year.isActive);
+    const terms = filterTenantResources(context, await this.academicCalendarStore.listTerms()).filter((term) => !term.deletedAt);
+    const activeTerm = terms.find((term) => term.isActive && (!activeYear || term.academicYearId === activeYear.id));
+    return {
+      academicYearId: activeYear?.id ?? activeTerm?.academicYearId,
+      termId: activeTerm?.id,
+    };
+  }
+
+  private async resolveEnrollmentAcademicContext(
+    context: RequestContext,
+    input: StudentEnrollmentActionInput,
+  ): Promise<{ academicYearId?: string; termId?: string }> {
+    const fallback = await this.resolveCurrentAcademicContext(context);
+    if (!input.academicYearId && !input.termId) {
+      return fallback;
+    }
+
+    const years = filterTenantResources(context, await this.academicCalendarStore.listYears()).filter((year) => !year.deletedAt);
+    const terms = filterTenantResources(context, await this.academicCalendarStore.listTerms()).filter((term) => !term.deletedAt);
+    const term = input.termId ? terms.find((record) => record.id === input.termId) : undefined;
+    if (input.termId && !term) {
+      throw new BadRequestException("STUDENT_ENROLLMENT_TERM_INVALID");
+    }
+
+    const academicYearId = input.academicYearId ?? term?.academicYearId ?? fallback.academicYearId;
+    if (input.academicYearId && !years.some((year) => year.id === input.academicYearId)) {
+      throw new BadRequestException("STUDENT_ENROLLMENT_ACADEMIC_YEAR_INVALID");
+    }
+    if (term && academicYearId && term.academicYearId !== academicYearId) {
+      throw new BadRequestException("STUDENT_ENROLLMENT_TERM_YEAR_MISMATCH");
+    }
+
+    return {
+      academicYearId,
+      termId: term?.id ?? fallback.termId,
+    };
+  }
+
+  private async toStudentProfile(student: {
+    id: string;
+    tenantId: string;
+    firstName: string;
+    lastName: string;
+    classId?: string;
+    responsibleTeacherId?: string;
+    status: StudentStatus;
+    userId?: string;
+    nationalIdEncrypted?: string;
+    birthDate?: string;
+    phone?: string;
+    email?: string;
+    photoKey?: string;
+  }): Promise<StudentProfileRecord> {
+    const [schoolClass, teacher] = await Promise.all([
+      student.classId ? this.classStore.findById(student.classId) : undefined,
+      student.responsibleTeacherId ? this.teacherStore.findById(student.responsibleTeacherId) : undefined,
+    ]);
+    const [campus, gradeLevel] = await Promise.all([
+      schoolClass?.campusId ? this.campusStore.findById(schoolClass.campusId) : undefined,
+      schoolClass?.gradeLevelId ? this.gradeLevelStore.findById(schoolClass.gradeLevelId) : undefined,
+    ]);
+    return toStudentProfile(student, {
+      className: schoolClass?.tenantId === student.tenantId ? schoolClass.name : undefined,
+      campusName: campus?.tenantId === student.tenantId ? campus.name : undefined,
+      gradeLevelName: gradeLevel?.tenantId === student.tenantId ? gradeLevel.name : undefined,
+      section: schoolClass?.tenantId === student.tenantId ? schoolClass.section : undefined,
+      responsibleTeacherName: teacher?.tenantId === student.tenantId ? `${teacher.firstName} ${teacher.lastName}` : undefined,
+    });
+  }
+
+  private async withClassNames<TRecord extends { tenantId: string; classId?: string }>(
+    records: TRecord[],
+  ): Promise<Array<TRecord & { campusName?: string; className?: string; gradeLevelName?: string; section?: string }>> {
+    const classIds = [...new Set(records.map((record) => record.classId).filter((id): id is string => Boolean(id)))];
+    const classes = await Promise.all(classIds.map((id) => this.classStore.findById(id)));
+    const classById = new Map(
+      classes
+        .filter((record): record is ClassRecord => Boolean(record))
+        .map((record) => [record.id, record]),
+    );
+    const campusIds = [...new Set(classes.map((record) => record?.campusId).filter((id): id is string => Boolean(id)))];
+    const gradeLevelIds = [...new Set(classes.map((record) => record?.gradeLevelId).filter((id): id is string => Boolean(id)))];
+    const [campuses, gradeLevels] = await Promise.all([
+      Promise.all(campusIds.map((id) => this.campusStore.findById(id))),
+      Promise.all(gradeLevelIds.map((id) => this.gradeLevelStore.findById(id))),
+    ]);
+    const campusById = new Map(campuses.filter((record): record is NonNullable<typeof record> => Boolean(record)).map((record) => [record.id, record]));
+    const gradeLevelById = new Map(gradeLevels.filter((record): record is NonNullable<typeof record> => Boolean(record)).map((record) => [record.id, record]));
+
+    return records.map((record) => {
+      const schoolClass = record.classId ? classById.get(record.classId) : undefined;
+      const isTenantClass = schoolClass?.tenantId === record.tenantId;
+      const campus = isTenantClass && schoolClass?.campusId ? campusById.get(schoolClass.campusId) : undefined;
+      const gradeLevel = isTenantClass && schoolClass?.gradeLevelId ? gradeLevelById.get(schoolClass.gradeLevelId) : undefined;
+      return {
+        ...record,
+        className: isTenantClass ? schoolClass.name : undefined,
+        campusName: campus?.tenantId === record.tenantId ? campus.name : undefined,
+        gradeLevelName: gradeLevel?.tenantId === record.tenantId ? gradeLevel.name : undefined,
+        section: isTenantClass ? schoolClass.section : undefined,
+      };
+    });
   }
 
   private async recordProfileView(context: RequestContext, studentId: string, tenantId: string): Promise<void> {
@@ -450,6 +789,19 @@ function changedInputFields<TRecord extends object>(input: Partial<TRecord>, fie
   return fields.filter((field) => input[field] !== undefined).map(String);
 }
 
+function resolveClassGradeCode(record: ClassRecord, gradeLevelById: Map<string, GradeLevelRecord>): string | undefined {
+  if (record.gradeLevelId) {
+    const gradeLevelCode = gradeLevelById.get(record.gradeLevelId)?.code?.trim();
+    if (gradeLevelCode) return gradeLevelCode;
+  }
+  return record.level?.trim() || undefined;
+}
+
+function nextGradeCode(code: string | undefined): string | undefined {
+  if (!code || !/^\d+$/.test(code)) return undefined;
+  return String(Number.parseInt(code, 10) + 1);
+}
+
 function toStudentProfile(student: {
   id: string;
   tenantId: string;
@@ -464,7 +816,7 @@ function toStudentProfile(student: {
   phone?: string;
   email?: string;
   photoKey?: string;
-}): StudentProfileRecord {
+}, labels: { campusName?: string; className?: string; gradeLevelName?: string; responsibleTeacherName?: string; section?: string } = {}): StudentProfileRecord {
   return {
     id: student.id,
     tenantId: student.tenantId,
@@ -474,6 +826,11 @@ function toStudentProfile(student: {
     responsibleTeacherId: student.responsibleTeacherId,
     status: student.status,
     userId: student.userId,
+    ...(labels.className ? { className: labels.className } : {}),
+    ...(labels.campusName ? { campusName: labels.campusName } : {}),
+    ...(labels.gradeLevelName ? { gradeLevelName: labels.gradeLevelName } : {}),
+    ...(labels.section ? { section: labels.section } : {}),
+    ...(labels.responsibleTeacherName ? { responsibleTeacherName: labels.responsibleTeacherName } : {}),
     nationalIdMasked: student.nationalIdEncrypted ? maskTcIdentity(decryptTcIdentity(student.nationalIdEncrypted)) : undefined,
     birthDate: student.birthDate,
     phone: student.phone,
@@ -492,6 +849,14 @@ function optionalDate(value: string | undefined): string | undefined {
   if (trimmed === undefined) return undefined;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
     throw new BadRequestException("STUDENT_BIRTH_DATE_INVALID");
+  }
+  return trimmed;
+}
+
+function enrollmentDate(value: string): string {
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    throw new BadRequestException("STUDENT_ENROLLMENT_STARTS_AT_INVALID");
   }
   return trimmed;
 }

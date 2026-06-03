@@ -19,6 +19,11 @@ describe("report generation job", () => {
     entityId: "exam-a",
     contentHash: "results-v1",
     reportType: examResultSummaryReportType,
+    campusId: "campus-main",
+    gradeLevelId: "grade-8",
+    classId: "class-a",
+    courseId: "course-math",
+    termId: "term-2026-spring",
   };
 
   it("ExamResult girdilerinden READY ReportSnapshot üretir", async () => {
@@ -38,11 +43,21 @@ describe("report generation job", () => {
       examId: "exam-a",
       reportType: examResultSummaryReportType,
       contentHash: "results-v1",
+      campusId: "campus-main",
+      gradeLevelId: "grade-8",
+      classId: "class-a",
+      courseId: "course-math",
+      termId: "term-2026-spring",
     }]);
     expect(result).toEqual({
       id: "snapshot-a",
       tenantId: "tenant-a",
       examId: "exam-a",
+      campusId: "campus-main",
+      gradeLevelId: "grade-8",
+      classId: "class-a",
+      courseId: "course-math",
+      termId: "term-2026-spring",
       reportType: examResultSummaryReportType,
       status: "READY",
       inputRefs: {
@@ -80,6 +95,10 @@ describe("report generation job", () => {
               rawScore: 7.75,
               standardScore: 7.75,
             },
+            branches: [
+              { branch: "Matematik", resultCount: 1, correct: 4, wrong: 1, blank: 0, net: 3.75 },
+              { branch: "Türkçe", resultCount: 1, correct: 4, wrong: 0, blank: 1, net: 4 },
+            ],
           },
           {
             classId: "class-b",
@@ -93,6 +112,10 @@ describe("report generation job", () => {
               rawScore: 7.5,
               standardScore: 7.5,
             },
+            branches: [
+              { branch: "Matematik", resultCount: 1, correct: 4, wrong: 1, blank: 0, net: 3.75 },
+              { branch: "Türkçe", resultCount: 1, correct: 4, wrong: 1, blank: 0, net: 3.75 },
+            ],
           },
         ],
         statistics: {

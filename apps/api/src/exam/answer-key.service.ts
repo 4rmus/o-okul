@@ -8,6 +8,7 @@ import type {
 } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { reportSnapshotStoreToken, type ReportSnapshotStore } from "../report/report-snapshot-store.js";
 
 export const answerKeyRepositoryToken = Symbol("AnswerKeyRepository");
 
@@ -19,6 +20,17 @@ export interface SaveAnswerKeyInput {
   version: string;
   questions: AnswerKeyItemInput[];
   scoringConfig: AnswerKeyScoringConfig;
+  bookletVariants?: SaveAnswerKeyBookletVariantInput[];
+}
+
+export interface SaveAnswerKeyBookletVariantInput {
+  code: string;
+  permutation: number[];
+}
+
+export interface AnswerKeyBookletVariantSummary {
+  code: string;
+  questionCount: number;
 }
 
 export interface AnswerKeyRepository {
@@ -32,6 +44,19 @@ export interface CreateAnswerKeyInput {
   version?: string;
   questions?: unknown;
   scoringConfig?: unknown;
+  dryRun?: unknown;
+  bookletVariants?: unknown;
+}
+
+export interface AnswerKeyDryRunResult {
+  tenantId: string;
+  examId: string;
+  version: string;
+  questionCount: number;
+  branches: AnswerKeyBranchSummary[];
+  scoringConfig: AnswerKeyScoringConfig;
+  bookletVariants: AnswerKeyBookletVariantSummary[];
+  status: "DRY_RUN";
 }
 
 @Injectable()
@@ -40,17 +65,36 @@ export class AnswerKeyService {
     @Inject(answerKeyRepositoryToken)
     private readonly repository: AnswerKeyRepository,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional()
+    @Inject(reportSnapshotStoreToken)
+    private readonly snapshots?: ReportSnapshotStore,
   ) {}
 
-  async create(context: RequestContext, input: CreateAnswerKeyInput): Promise<AnswerKeyRecord> {
+  async create(context: RequestContext, input: CreateAnswerKeyInput): Promise<AnswerKeyRecord | AnswerKeyDryRunResult> {
     const tenantId = requireTenant(context);
     const examId = requiredString(input.examId, "ANSWER_KEY_EXAM_REQUIRED");
     const version = requiredString(input.version, "ANSWER_KEY_VERSION_REQUIRED");
     const questions = parseQuestions(input.questions);
     const scoringConfig = parseScoringConfig(input.scoringConfig);
+    const bookletVariants = parseBookletVariants(input.bookletVariants, questions.length);
+    const summary = summarizeAnswerKeyQuestions(questions);
+
+    if (input.dryRun === true) {
+      return {
+        tenantId,
+        examId,
+        version,
+        questionCount: summary.questionCount,
+        branches: summary.branches,
+        scoringConfig,
+        bookletVariants: summarizeBookletVariants(bookletVariants),
+        status: "DRY_RUN",
+      };
+    }
 
     try {
-      const record = await this.repository.create({ tenantId, examId, version, questions, scoringConfig });
+      const record = await this.repository.create({ tenantId, examId, version, questions, scoringConfig, bookletVariants });
+      await this.snapshots?.markStaleByExam(tenantId, examId, "answer_key.created");
       await this.auditLogs?.record({
         tenantId,
         actorUserId: context.userId,
@@ -91,6 +135,7 @@ export class AnswerKeyService {
     if (!record) {
       throw new BadRequestException("ANSWER_KEY_NOT_FOUND");
     }
+    await this.snapshots?.markStaleByExam(tenantId, resolvedExamId, "answer_key.published");
     await this.auditLogs?.record({
       tenantId,
       actorUserId: context.userId,
@@ -146,15 +191,57 @@ function parseQuestions(value: unknown): AnswerKeyItemInput[] {
     }
 
     const outcomeCode = typeof record.outcomeCode === "string" && record.outcomeCode.trim() ? record.outcomeCode.trim() : undefined;
+    const topic = typeof record.topic === "string" && record.topic.trim() ? record.topic.trim() : undefined;
     return {
       questionNo,
       correctAnswer,
       branch,
       ...(outcomeCode ? { outcomeCode } : {}),
+      ...(topic ? { topic } : {}),
     };
   });
 
   return questions.sort((a, b) => a.questionNo - b.questionNo);
+}
+
+function parseBookletVariants(value: unknown, questionCount: number): SaveAnswerKeyBookletVariantInput[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new BadRequestException("ANSWER_KEY_BOOKLET_VARIANTS_INVALID");
+  }
+
+  const seen = new Set<string>();
+  return value.map((item) => {
+    const record = item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : {};
+    const code = typeof record.code === "string" ? record.code.trim().toUpperCase() : "";
+    if (!code) {
+      throw new BadRequestException("ANSWER_KEY_BOOKLET_CODE_REQUIRED");
+    }
+    if (seen.has(code)) {
+      throw new BadRequestException("ANSWER_KEY_BOOKLET_CODE_DUPLICATE");
+    }
+    seen.add(code);
+
+    const permutation = Array.isArray(record.permutation) ? record.permutation : [];
+    if (permutation.length !== questionCount) {
+      throw new BadRequestException("ANSWER_KEY_BOOKLET_PERMUTATION_INVALID");
+    }
+    const used = new Set<number>();
+    const parsed = permutation.map((value) => {
+      if (typeof value !== "number" || !Number.isInteger(value) || value <= 0 || value > questionCount || used.has(value)) {
+        throw new BadRequestException("ANSWER_KEY_BOOKLET_PERMUTATION_INVALID");
+      }
+      used.add(value);
+      return value;
+    });
+    return { code, permutation: parsed };
+  });
+}
+
+function summarizeBookletVariants(variants: SaveAnswerKeyBookletVariantInput[]): AnswerKeyBookletVariantSummary[] {
+  return variants.map((variant) => ({ code: variant.code, questionCount: variant.permutation.length }));
 }
 
 function parseScoringConfig(value: unknown): AnswerKeyScoringConfig {

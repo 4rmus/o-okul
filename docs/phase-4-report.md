@@ -26,6 +26,11 @@
   tenant içindeki hazır rapor snapshot'larını okuyabilir.
 - Report snapshot okuma yolu default demo/in-memory store ile repo içi dashboard'u kırmadan çalışır;
   `REPORT_SNAPSHOT_STORE=postgres` ile Postgres `ReportSnapshot` tablosunu tenant-aware sorgular.
+- `ReportSnapshot` kayıtları artık `campusId`, `gradeLevelId`, `classId`, `courseId` ve `termId`
+  bağlamını taşır; rapor üretim job payload'ı bu bağlamı worker'a aktarır, worker da snapshot
+  kaydına yazar.
+- `GET /exams/:examId/reports/snapshots` endpoint'i ve kurum `/kurum/raporlar` ekranı
+  kampüs/seviye/sınıf/ders/dönem filtreleriyle rapor listesini daraltır.
 - Web dashboard'a sınav raporu paneli eklendi; hazır snapshot varsa durum, sonuç sayısı, ortalama
   net, standart puan ve ilk branş özetleri gösterilir.
 - `GET /exams/:examId/reports/snapshots/:snapshotId/export.xlsx` endpoint'i eklendi; hazır snapshot
@@ -137,6 +142,9 @@
 - `REPORT_GENERATION_SMOKE_TENANT_ID=tenant-a REPORT_GENERATION_SMOKE_USER_ID=user-tenant-a pnpm report-generation:perf` — 10.000 sonuç; seed 1255ms, snapshot generation 442ms
 - `pnpm --filter @uzman-hocam/api build`
 - `pnpm --filter @uzman-hocam/api test -- report-snapshot-store`
+- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/report/report-generation.service.test.ts src/report/report-generation.controller.e2e.test.ts src/report/report-snapshot-store.test.ts src/queue/job-producer.test.ts`
+- `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/report-generation-job.test.ts src/jobs/postgres-report-generation-adapter.test.ts`
+- `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next login gerçek auth store ile kurum paneline geçer"`
 - `docker run --rm -v "$PWD/scripts:/scripts:ro" -e API_BASE_URL=http://host.docker.internal:3100 -e API_TOKEN=<redacted> -e EXAM_ID=exam-report-smoke-3d4c1e91-c4ef-4620-aaed-a4338823ecf8 -e STUDENT_ID=student-report-smoke-3d4c1e91-c4ef-4620-aaed-a4338823ecf8-00000 -e EXPECTED_RESULT_COUNT=10000 -e K6_VUS=1 -e K6_DURATION=5s grafana/k6:latest run /scripts/k6-report-listing.js`
 
 ## Geçiş Kontrolü

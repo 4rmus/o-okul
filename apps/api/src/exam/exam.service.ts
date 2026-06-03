@@ -1,9 +1,18 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
-import type { ExamRecord } from "@uzman-hocam/shared-types";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from "@nestjs/common";
+import type { ExamParticipantRecord, ExamRecord } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 
 export const examRepositoryToken = Symbol("ExamRepository");
+export const examParticipantRepositoryToken = Symbol("ExamParticipantRepository");
 
 export interface CreateExamRepositoryInput {
   tenantId: string;
@@ -18,9 +27,28 @@ export interface ExamRepository {
   publish(tenantId: string, examId: string): Promise<ExamRecord | undefined>;
 }
 
+export interface CreateExamParticipantRepositoryInput {
+  tenantId: string;
+  examId: string;
+  studentId: string;
+  participantNo?: string;
+  bookletType?: string;
+}
+
+export interface ExamParticipantRepository {
+  list(tenantId: string, examId: string): Promise<ExamParticipantRecord[]>;
+  create(input: CreateExamParticipantRepositoryInput): Promise<ExamParticipantRecord>;
+}
+
 export interface CreateExamInput {
   title?: string;
   startsAt?: string;
+}
+
+export interface CreateExamParticipantInput {
+  studentId?: string;
+  participantNo?: string;
+  bookletType?: string;
 }
 
 @Injectable()
@@ -28,6 +56,8 @@ export class ExamService {
   constructor(
     @Inject(examRepositoryToken)
     private readonly repository: ExamRepository,
+    @Inject(examParticipantRepositoryToken)
+    private readonly participants: ExamParticipantRepository,
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
@@ -56,11 +86,7 @@ export class ExamService {
   async get(context: RequestContext, examId: string | undefined): Promise<ExamRecord> {
     const tenantId = requireTenant(context);
     const id = requiredString(examId, "EXAM_ID_REQUIRED");
-    const exam = await this.repository.findById(tenantId, id);
-    if (!exam) {
-      throw new NotFoundException("EXAM_NOT_FOUND");
-    }
-    return exam;
+    return this.requireExam(tenantId, id);
   }
 
   async publish(context: RequestContext, examId: string | undefined): Promise<ExamRecord> {
@@ -78,6 +104,58 @@ export class ExamService {
       action: "exam.published",
       diff: { status: exam.status },
     });
+    return exam;
+  }
+
+  async listParticipants(context: RequestContext, examId: string | undefined): Promise<ExamParticipantRecord[]> {
+    const tenantId = requireTenant(context);
+    const id = requiredString(examId, "EXAM_ID_REQUIRED");
+    await this.requireExam(tenantId, id);
+    return this.participants.list(tenantId, id);
+  }
+
+  async addParticipant(
+    context: RequestContext,
+    examId: string | undefined,
+    input: CreateExamParticipantInput,
+  ): Promise<ExamParticipantRecord> {
+    const tenantId = requireTenant(context);
+    const id = requiredString(examId, "EXAM_ID_REQUIRED");
+    const studentId = requiredString(input.studentId, "EXAM_PARTICIPANT_STUDENT_REQUIRED");
+    const participantNo = optionalString(input.participantNo);
+    const bookletType = optionalString(input.bookletType);
+    await this.requireExam(tenantId, id);
+
+    try {
+      const participant = await this.participants.create({
+        tenantId,
+        examId: id,
+        studentId,
+        ...(participantNo ? { participantNo } : {}),
+        ...(bookletType ? { bookletType } : {}),
+      });
+      await this.auditLogs?.record({
+        tenantId,
+        actorUserId: context.userId,
+        entityType: "ExamParticipant",
+        entityId: participant.id,
+        action: "exam_participant.created",
+        diff: { examId: id, studentId },
+      });
+      return participant;
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException("EXAM_PARTICIPANT_EXISTS");
+      }
+      throw error;
+    }
+  }
+
+  private async requireExam(tenantId: string, examId: string): Promise<ExamRecord> {
+    const exam = await this.repository.findById(tenantId, examId);
+    if (!exam) {
+      throw new NotFoundException("EXAM_NOT_FOUND");
+    }
     return exam;
   }
 }
@@ -106,4 +184,16 @@ function optionalIso(value: string | undefined, errorCode: string): string | und
     throw new BadRequestException(errorCode);
   }
   return trimmed;
+}
+
+function optionalString(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return error.message === "EXAM_PARTICIPANT_EXISTS" || "code" in error && error.code === "23505";
 }

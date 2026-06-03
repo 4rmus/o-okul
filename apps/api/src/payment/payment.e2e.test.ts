@@ -85,6 +85,8 @@ describe("PaymentPlan API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
         studentId: "student-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
         title: "2026 Yaz kursu",
         totalAmount: 120000,
         installments: [
@@ -97,6 +99,11 @@ describe("PaymentPlan API", () => {
     expect(created.body).toMatchObject({
       tenantId: "tenant-a",
       studentId: "student-a",
+      campusId: "campus-main",
+      gradeLevelId: "grade-8",
+      classId: "class-a",
+      courseId: "course-math",
+      termId: "term-2026-spring",
       title: "2026 Yaz kursu",
       totalAmount: 120000,
       currency: "TRY",
@@ -105,6 +112,41 @@ describe("PaymentPlan API", () => {
         { tenantId: "tenant-a", installmentNo: 2, amount: 60000, dueDate: "2026-08-15", status: "PENDING" },
       ],
     });
+
+    await request(server)
+      .get("/payment-plans?campusId=campus-main&gradeLevelId=grade-8&classId=class-a&courseId=course-math&termId=term-2026-spring")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([
+          expect.objectContaining({
+            id: created.body.id,
+            campusId: "campus-main",
+            gradeLevelId: "grade-8",
+            classId: "class-a",
+            courseId: "course-math",
+            termId: "term-2026-spring",
+          }),
+        ]);
+      });
+  });
+
+  it("ödeme planı sınıf/kampüs bağlamı çelişirse reddeder", async () => {
+    await request(server)
+      .post("/payment-plans")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        studentId: "student-a",
+        classId: "class-a",
+        campusId: "unknown-campus",
+        title: "Hatalı bağlam",
+        totalAmount: 10000,
+        installments: [{ installmentNo: 1, amount: 10000, dueDate: "2026-07-15" }],
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(JSON.stringify(body)).toContain("PAYMENT_PLAN_CLASS_CAMPUS_MISMATCH");
+      });
   });
 
   it("başka tenant öğrencisine ödeme planı oluşturmayı reddeder", async () => {
@@ -145,6 +187,78 @@ describe("PaymentPlan API", () => {
     await request(server)
       .get("/me/guardian/students/student-b/payment-plans")
       .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .expect(403);
+  });
+
+  it("kurum ödeme taksidini düzenler, ödendi ve gecikmiş olarak işaretler", async () => {
+    await request(server)
+      .patch("/payment-plans/payment-plan-a/installments/payment-installment-a-1")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ amount: 55000, dueDate: "2026-07-05" })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.installments[0]).toMatchObject({
+          id: "payment-installment-a-1",
+          amount: 55000,
+          dueDate: "2026-07-05",
+          status: "PENDING",
+        });
+      });
+
+    await request(server)
+      .patch("/payment-plans/payment-plan-a/installments/payment-installment-a-1")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ status: "PAID", paidAt: "2026-07-02T09:30:00.000Z" })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.installments).toEqual([
+          expect.objectContaining({
+            id: "payment-installment-a-1",
+            amount: 55000,
+            dueDate: "2026-07-05",
+            status: "PAID",
+            paidAt: "2026-07-02T09:30:00.000Z",
+          }),
+          expect.objectContaining({
+            id: "payment-installment-a-2",
+            status: "PENDING",
+          }),
+        ]);
+      });
+
+    await request(server)
+      .patch("/payment-plans/payment-plan-a/installments/payment-installment-a-1")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ status: "OVERDUE" })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.installments[0]).toMatchObject({
+          id: "payment-installment-a-1",
+          status: "OVERDUE",
+        });
+        expect(body.installments[0]).not.toHaveProperty("paidAt");
+      });
+  });
+
+  it("öğretmen ve öğrenci ödeme taksidi güncelleyemez", async () => {
+    await request(server)
+      .patch("/payment-plans/payment-plan-a/installments/payment-installment-a-1")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({ status: "PAID" })
+      .expect(403);
+
+    await request(server)
+      .patch("/payment-plans/payment-plan-a/installments/payment-installment-a-1")
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .send({ status: "PAID" })
+      .expect(403);
+  });
+
+  it("kurum başka tenant ödeme taksidini güncelleyemez", async () => {
+    await request(server)
+      .patch("/payment-plans/payment-plan-b/installments/payment-installment-b-1")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ status: "PAID" })
       .expect(403);
   });
 

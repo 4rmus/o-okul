@@ -53,6 +53,11 @@ describe("Student profile + TC API", () => {
         expect(body).toMatchObject({
           id: "student-a",
           tenantId: "tenant-a",
+          className: "8-A",
+          campusName: "Merkez Kampus",
+          gradeLevelName: "8. Sınıf",
+          section: "A",
+          responsibleTeacherName: "Ayse Ogretmen",
           nationalIdMasked: "*******0146",
           birthDate: "2012-05-10",
           phone: "5551234567",
@@ -83,14 +88,43 @@ describe("Student profile + TC API", () => {
       .expect(409);
   });
 
-  it("öğrenci ve veli profili maskeli görür, teacher doğrudan profil göremez", async () => {
+  it("öğrenci, veli ve kapsamlı öğretmen profili maskeli görür", async () => {
     await request(server)
       .get("/me/student/profile")
       .set("Authorization", `Bearer ${studentAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
         expect(body.nationalIdMasked).toBe("*******0146");
+        expect(body.className).toBe("8-A");
+        expect(body.campusName).toBe("Merkez Kampus");
+        expect(body.gradeLevelName).toBe("8. Sınıf");
+        expect(body.section).toBe("A");
+        expect(body.responsibleTeacherName).toBe("Ayse Ogretmen");
         expect(JSON.stringify(body)).not.toContain("10000000146");
+      });
+    await request(server)
+      .get("/me/student/class-history")
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body[0]).toMatchObject({
+          className: "8-A",
+          campusName: "Merkez Kampus",
+          gradeLevelName: "8. Sınıf",
+          section: "A",
+        });
+      });
+    await request(server)
+      .get("/me/student/enrollments")
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body[0]).toMatchObject({
+          className: "8-A",
+          campusName: "Merkez Kampus",
+          gradeLevelName: "8. Sınıf",
+          section: "A",
+        });
       });
 
     await request(server)
@@ -99,6 +133,35 @@ describe("Student profile + TC API", () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body.nationalIdMasked).toBe("*******0146");
+        expect(body.className).toBe("8-A");
+        expect(body.campusName).toBe("Merkez Kampus");
+        expect(body.gradeLevelName).toBe("8. Sınıf");
+        expect(body.section).toBe("A");
+        expect(body.responsibleTeacherName).toBe("Ayse Ogretmen");
+      });
+    await request(server)
+      .get("/me/guardian/students/student-a/class-history")
+      .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body[0]).toMatchObject({
+          className: "8-A",
+          campusName: "Merkez Kampus",
+          gradeLevelName: "8. Sınıf",
+          section: "A",
+        });
+      });
+    await request(server)
+      .get("/me/guardian/students/student-a/enrollments")
+      .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body[0]).toMatchObject({
+          className: "8-A",
+          campusName: "Merkez Kampus",
+          gradeLevelName: "8. Sınıf",
+          section: "A",
+        });
       });
 
     await request(server)
@@ -109,7 +172,16 @@ describe("Student profile + TC API", () => {
     await request(server)
       .get("/students/student-a/profile")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
-      .expect(403);
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.nationalIdMasked).toBe("*******0146");
+        expect(body.className).toBe("8-A");
+        expect(body.campusName).toBe("Merkez Kampus");
+        expect(body.gradeLevelName).toBe("8. Sınıf");
+        expect(body.section).toBe("A");
+        expect(body.responsibleTeacherName).toBe("Ayse Ogretmen");
+        expect(JSON.stringify(body)).not.toContain("10000000146");
+      });
   });
 
   it("profil görüntüleme audit kaydı ham TC içermez", async () => {

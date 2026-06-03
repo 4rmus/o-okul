@@ -39,7 +39,7 @@ describe("PostgresTeacherAssignmentStore", () => {
       },
     );
 
-    const businessQueries = queries.filter((query) => !query.sql.includes("set_config"));
+    const businessQueries = queries.filter((query) => !query.sql.includes("set_config") && !["BEGIN", "COMMIT", "ROLLBACK"].includes(query.sql));
     expect(queries.some((query) => query.values?.[0] === "tenant-a")).toBe(true);
     expect(businessQueries[0]?.sql).toContain('FROM "TeacherAssignment"');
     expect(businessQueries[0]?.values).toEqual(["teacher-a"]);
@@ -53,6 +53,7 @@ describe("PostgresTeacherAssignmentStore", () => {
       "class-a",
       null,
       null,
+      null,
       "CLASS_TEACHER",
       null,
       null,
@@ -64,6 +65,8 @@ describe("PostgresTeacherAssignmentStore", () => {
       null,
       true,
       "student-a",
+      false,
+      null,
       false,
       null,
       "GUIDANCE_COUNSELOR",

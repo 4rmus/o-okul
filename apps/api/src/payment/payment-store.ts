@@ -13,11 +13,24 @@ export interface CreatePaymentPlanStoreInput {
   installments: Array<Omit<PaymentInstallmentRecord, "id" | "tenantId" | "planId" | "createdAt">>;
 }
 
+export interface PaymentPlanListFilters {
+  campusId?: string;
+  gradeLevelId?: string;
+  classId?: string;
+  courseId?: string;
+  termId?: string;
+}
+
 export interface PaymentPlanStore {
-  list(): Promise<PaymentPlanWithInstallmentsRecord[]>;
-  listByStudent(studentId: string): Promise<PaymentPlanWithInstallmentsRecord[]>;
+  list(filters?: PaymentPlanListFilters): Promise<PaymentPlanWithInstallmentsRecord[]>;
+  listByStudent(studentId: string, filters?: PaymentPlanListFilters): Promise<PaymentPlanWithInstallmentsRecord[]>;
   findById(id: string): Promise<PaymentPlanWithInstallmentsRecord | undefined>;
   create(input: CreatePaymentPlanStoreInput): Promise<PaymentPlanWithInstallmentsRecord>;
+  updateInstallment(
+    planId: string,
+    installmentId: string,
+    input: Pick<PaymentInstallmentRecord, "amount" | "dueDate" | "status"> & Pick<Partial<PaymentInstallmentRecord>, "paidAt">,
+  ): Promise<PaymentPlanWithInstallmentsRecord | undefined>;
 }
 
 export const paymentPlanStoreToken = Symbol("PaymentPlanStore");
@@ -80,12 +93,12 @@ export class InMemoryPaymentPlanStore implements PaymentPlanStore {
   private readonly plans = demoPaymentPlans.map((record) => ({ ...record }));
   private readonly installments = demoPaymentInstallments.map((record) => ({ ...record }));
 
-  async list(): Promise<PaymentPlanWithInstallmentsRecord[]> {
-    return this.withInstallments(this.plans.filter((record) => !record.deletedAt));
+  async list(filters: PaymentPlanListFilters = {}): Promise<PaymentPlanWithInstallmentsRecord[]> {
+    return this.withInstallments(filterPaymentPlans(this.plans.filter((record) => !record.deletedAt), filters));
   }
 
-  async listByStudent(studentId: string): Promise<PaymentPlanWithInstallmentsRecord[]> {
-    return this.withInstallments(this.plans.filter((record) => record.studentId === studentId && !record.deletedAt));
+  async listByStudent(studentId: string, filters: PaymentPlanListFilters = {}): Promise<PaymentPlanWithInstallmentsRecord[]> {
+    return this.withInstallments(filterPaymentPlans(this.plans.filter((record) => record.studentId === studentId && !record.deletedAt), filters));
   }
 
   async findById(id: string): Promise<PaymentPlanWithInstallmentsRecord | undefined> {
@@ -111,6 +124,24 @@ export class InMemoryPaymentPlanStore implements PaymentPlanStore {
     return { ...plan, installments };
   }
 
+  async updateInstallment(
+    planId: string,
+    installmentId: string,
+    input: Pick<PaymentInstallmentRecord, "amount" | "dueDate" | "status"> & Pick<Partial<PaymentInstallmentRecord>, "paidAt">,
+  ): Promise<PaymentPlanWithInstallmentsRecord | undefined> {
+    const plan = this.plans.find((record) => record.id === planId && !record.deletedAt);
+    if (!plan) return undefined;
+
+    const installment = this.installments.find((record) => record.id === installmentId && record.planId === planId && !record.deletedAt);
+    if (!installment) return undefined;
+
+    installment.amount = input.amount;
+    installment.dueDate = input.dueDate;
+    installment.status = input.status;
+    installment.paidAt = input.paidAt;
+    return this.withInstallments([plan]).then((records) => records[0]);
+  }
+
   private async withInstallments(plans: PaymentPlanRecord[]): Promise<PaymentPlanWithInstallmentsRecord[]> {
     return plans.map((plan) => ({
       ...plan,
@@ -124,23 +155,23 @@ export class InMemoryPaymentPlanStore implements PaymentPlanStore {
 export class PostgresPaymentPlanStore implements PaymentPlanStore {
   constructor(private readonly pool: TenantQueryable = new pg.Pool({ connectionString: process.env.DATABASE_URL })) {}
 
-  async list(): Promise<PaymentPlanWithInstallmentsRecord[]> {
+  async list(filters: PaymentPlanListFilters = {}): Promise<PaymentPlanWithInstallmentsRecord[]> {
     return withTenantQuery(this.pool, async (client) => {
-      const plans = await selectPlans(client);
+      const plans = await selectPlans(client, filters);
       return withInstallments(client, plans);
     });
   }
 
-  async listByStudent(studentId: string): Promise<PaymentPlanWithInstallmentsRecord[]> {
+  async listByStudent(studentId: string, filters: PaymentPlanListFilters = {}): Promise<PaymentPlanWithInstallmentsRecord[]> {
     return withTenantQuery(this.pool, async (client) => {
-      const plans = await selectPlans(client, studentId);
+      const plans = await selectPlans(client, { ...filters, studentId });
       return withInstallments(client, plans);
     });
   }
 
   async findById(id: string): Promise<PaymentPlanWithInstallmentsRecord | undefined> {
     return withTenantQuery(this.pool, async (client) => {
-      const plans = await selectPlans(client, undefined, id);
+      const plans = await selectPlans(client, { id });
       const records = await withInstallments(client, plans);
       return records[0];
     });
@@ -150,10 +181,35 @@ export class PostgresPaymentPlanStore implements PaymentPlanStore {
     return withTenantQuery(this.pool, async (client) => {
       const planId = randomUUID();
       const planResult = await client.query<PaymentPlanRow>(
-        `INSERT INTO "PaymentPlan" ("id", "tenantId", "studentId", "title", "totalAmount", "currency", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, now())
+        `INSERT INTO "PaymentPlan" (
+           "id",
+           "tenantId",
+           "studentId",
+           "campusId",
+           "gradeLevelId",
+           "classId",
+           "courseId",
+           "termId",
+           "title",
+           "totalAmount",
+           "currency",
+           "updatedAt"
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
          RETURNING *`,
-        [planId, input.plan.tenantId, input.plan.studentId, input.plan.title, input.plan.totalAmount, input.plan.currency],
+        [
+          planId,
+          input.plan.tenantId,
+          input.plan.studentId,
+          input.plan.campusId ?? null,
+          input.plan.gradeLevelId ?? null,
+          input.plan.classId ?? null,
+          input.plan.courseId ?? null,
+          input.plan.termId ?? null,
+          input.plan.title,
+          input.plan.totalAmount,
+          input.plan.currency,
+        ],
       );
       const plan = planResult.rows[0];
       if (!plan) {
@@ -192,6 +248,33 @@ export class PostgresPaymentPlanStore implements PaymentPlanStore {
       return record;
     });
   }
+
+  async updateInstallment(
+    planId: string,
+    installmentId: string,
+    input: Pick<PaymentInstallmentRecord, "amount" | "dueDate" | "status"> & Pick<Partial<PaymentInstallmentRecord>, "paidAt">,
+  ): Promise<PaymentPlanWithInstallmentsRecord | undefined> {
+    return withTenantQuery(this.pool, async (client) => {
+      const updated = await client.query<{ planId: string }>(
+        `UPDATE "PaymentInstallment"
+         SET "amount" = $3,
+             "dueDate" = $4::date,
+             "status" = $5,
+             "paidAt" = $6,
+             "updatedAt" = now()
+         WHERE "planId" = $1
+           AND "id" = $2
+           AND "deletedAt" IS NULL
+         RETURNING "planId"`,
+        [planId, installmentId, input.amount, input.dueDate, input.status, input.paidAt ?? null],
+      );
+      if (!updated.rows[0]) return undefined;
+
+      const plans = await selectPlans(client, { id: planId });
+      const records = await withInstallments(client, plans);
+      return records[0];
+    });
+  }
 }
 
 export function createPaymentPlanStore(): PaymentPlanStore {
@@ -202,6 +285,11 @@ interface PaymentPlanRow {
   id: string;
   tenantId: string;
   studentId: string;
+  campusId: string | null;
+  gradeLevelId: string | null;
+  classId: string | null;
+  courseId: string | null;
+  termId: string | null;
   title: string;
   totalAmount: number;
   currency: string;
@@ -222,17 +310,29 @@ interface PaymentInstallmentRow {
   deletedAt: Date | null;
 }
 
-async function selectPlans(client: Queryable, studentId?: string, id?: string): Promise<PaymentPlanRecord[]> {
+interface PaymentPlanQueryFilters extends PaymentPlanListFilters {
+  id?: string;
+  studentId?: string;
+}
+
+async function selectPlans(client: Queryable, filtersInput: PaymentPlanQueryFilters = {}): Promise<PaymentPlanRecord[]> {
   const filters = [`"deletedAt" IS NULL`];
   const values: string[] = [];
 
-  if (studentId) {
-    values.push(studentId);
+  if (filtersInput.studentId) {
+    values.push(filtersInput.studentId);
     filters.push(`"studentId" = $${values.length}`);
   }
-  if (id) {
-    values.push(id);
+  if (filtersInput.id) {
+    values.push(filtersInput.id);
     filters.push(`"id" = $${values.length}`);
+  }
+  for (const field of ["campusId", "gradeLevelId", "classId", "courseId", "termId"] as const) {
+    const value = filtersInput[field];
+    if (value) {
+      values.push(value);
+      filters.push(`"${field}" = $${values.length}`);
+    }
   }
 
   const result = await client.query<PaymentPlanRow>(
@@ -277,12 +377,26 @@ function toPaymentPlanRecord(row: PaymentPlanRow): PaymentPlanRecord {
     id: row.id,
     tenantId: row.tenantId,
     studentId: row.studentId,
+    campusId: row.campusId ?? undefined,
+    gradeLevelId: row.gradeLevelId ?? undefined,
+    classId: row.classId ?? undefined,
+    courseId: row.courseId ?? undefined,
+    termId: row.termId ?? undefined,
     title: row.title,
     totalAmount: row.totalAmount,
     currency: row.currency,
     createdAt: row.createdAt.toISOString(),
     deletedAt: row.deletedAt?.toISOString(),
   };
+}
+
+function filterPaymentPlans(plans: PaymentPlanRecord[], filters: PaymentPlanListFilters): PaymentPlanRecord[] {
+  return plans
+    .filter((plan) => !filters.campusId || plan.campusId === filters.campusId)
+    .filter((plan) => !filters.gradeLevelId || plan.gradeLevelId === filters.gradeLevelId)
+    .filter((plan) => !filters.classId || plan.classId === filters.classId)
+    .filter((plan) => !filters.courseId || plan.courseId === filters.courseId)
+    .filter((plan) => !filters.termId || plan.termId === filters.termId);
 }
 
 function toPaymentInstallmentRecord(row: PaymentInstallmentRow): PaymentInstallmentRecord {

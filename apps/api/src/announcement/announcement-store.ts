@@ -18,6 +18,9 @@ const demoAnnouncements: AnnouncementRecord[] = [
     title: "Veli toplantısı",
     body: "Cuma günü 8-A sınıfı için veli toplantısı yapılacaktır.",
     audience: "SCHOOL",
+    campusId: "campus-main",
+    gradeLevelId: "grade-8",
+    classId: "class-a",
     publishedAt: "2026-06-08T09:00:00.000Z",
   },
   {
@@ -78,10 +81,22 @@ export class PostgresAnnouncementStore implements AnnouncementStore {
   async create(input: Omit<AnnouncementRecord, "id">): Promise<AnnouncementRecord> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<AnnouncementRow>(
-        `INSERT INTO "Announcement" ("id", "tenantId", "title", "body", "audience", "publishedAt", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, now())
+        `INSERT INTO "Announcement" ("id", "tenantId", "title", "body", "audience", "campusId", "gradeLevelId", "classId", "courseId", "termId", "publishedAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
          RETURNING *`,
-        [randomUUID(), input.tenantId, input.title, input.body, input.audience, input.publishedAt],
+        [
+          randomUUID(),
+          input.tenantId,
+          input.title,
+          input.body,
+          input.audience,
+          input.campusId ?? null,
+          input.gradeLevelId ?? null,
+          input.classId ?? null,
+          input.courseId ?? null,
+          input.termId ?? null,
+          input.publishedAt,
+        ],
       );
       const record = result.rows[0];
       if (!record) {
@@ -104,6 +119,11 @@ interface AnnouncementRow {
   title: string;
   body: string;
   audience: AnnouncementRecord["audience"];
+  campusId: string | null;
+  gradeLevelId: string | null;
+  classId: string | null;
+  courseId: string | null;
+  termId: string | null;
   publishedAt: Date | string;
   deletedAt: Date | string | null;
 }
@@ -115,6 +135,11 @@ function toAnnouncementRecord(record: AnnouncementRow): AnnouncementRecord {
     title: record.title,
     body: record.body,
     audience: record.audience,
+    campusId: record.campusId ?? undefined,
+    gradeLevelId: record.gradeLevelId ?? undefined,
+    classId: record.classId ?? undefined,
+    courseId: record.courseId ?? undefined,
+    termId: record.termId ?? undefined,
     publishedAt: toIsoString(record.publishedAt),
     deletedAt: record.deletedAt ? toIsoString(record.deletedAt) : undefined,
   };

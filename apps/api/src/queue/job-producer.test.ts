@@ -105,6 +105,42 @@ describe("createTenantQueueJob", () => {
     });
   });
 
+  it("announcement-delivery job payload'ına kanal ve teslim sayılarını ekler", () => {
+    const job = createTenantQueueJob({
+      queueName: "announcement-delivery",
+      tenantId: "tenant-a",
+      userId: "user-a",
+      entityId: "announcement-a",
+      contentHash: "email-report-v1",
+      channel: "EMAIL",
+      recipientCount: 3,
+      deliveredCount: 2,
+      failedCount: 1,
+      status: "completed",
+      providerErrorCode: "EMAIL_PROVIDER_RETRY",
+    });
+
+    expect(job).toMatchObject({
+      queueName: "announcement-delivery",
+      name: "announcement-delivery",
+      payload: {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        entityId: "announcement-a",
+        contentHash: "email-report-v1",
+        channel: "EMAIL",
+        recipientCount: 3,
+        deliveredCount: 2,
+        failedCount: 1,
+        status: "completed",
+        providerErrorCode: "EMAIL_PROVIDER_RETRY",
+      },
+      options: {
+        jobId: "announcement-a_email-report-v1",
+      },
+    });
+  });
+
   it("tenant/user bilgisi eksik payload üretmez", () => {
     expect(() =>
       createTenantQueueJob({
@@ -158,6 +194,23 @@ describe("createTenantQueueJob", () => {
         recipients: [],
       }),
     ).toThrow("SMS_BATCH_JOB_PAYLOAD_INVALID");
+  });
+
+  it("announcement-delivery sayıları tutarsızsa payload üretmez", () => {
+    expect(() =>
+      createTenantQueueJob({
+        queueName: "announcement-delivery",
+        tenantId: "tenant-a",
+        userId: "user-a",
+        entityId: "announcement-a",
+        contentHash: "email-report-v1",
+        channel: "EMAIL",
+        recipientCount: 3,
+        deliveredCount: 3,
+        failedCount: 1,
+        status: "completed",
+      }),
+    ).toThrow("ANNOUNCEMENT_DELIVERY_JOB_PAYLOAD_INVALID");
   });
 
 });

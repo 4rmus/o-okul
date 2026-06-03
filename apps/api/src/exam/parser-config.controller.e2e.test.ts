@@ -4,6 +4,7 @@ import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
+import { reportSnapshotStoreToken, type ReportSnapshotStore } from "../report/report-snapshot-store.js";
 import {
   parserConfigRepositoryToken,
   type ApprovedParserConfigInput,
@@ -14,14 +15,18 @@ describe("ParserConfigController", () => {
   let app: INestApplication;
   let server: Parameters<typeof request>[0];
   let repository: FakeParserConfigRepository;
+  let snapshots: FakeReportSnapshotStore;
 
   beforeAll(async () => {
     repository = new FakeParserConfigRepository();
+    snapshots = new FakeReportSnapshotStore();
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
       .overrideProvider(parserConfigRepositoryToken)
       .useValue(repository)
+      .overrideProvider(reportSnapshotStoreToken)
+      .useValue(snapshots)
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -32,6 +37,7 @@ describe("ParserConfigController", () => {
   beforeEach(() => {
     repository.inputs = [];
     repository.conflict = false;
+    snapshots.markStaleInputs = [];
   });
 
   afterAll(async () => {
@@ -50,6 +56,7 @@ describe("ParserConfigController", () => {
       .expect(201);
 
     expect(repository.inputs).toHaveLength(0);
+    expect(snapshots.markStaleInputs).toEqual([]);
     expect(response.body).toMatchObject({
       examId: "exam-a",
       status: "suggested",
@@ -134,6 +141,11 @@ describe("ParserConfigController", () => {
       version: "parser-v1",
       suggestion: createSuggestion(),
     }]);
+    expect(snapshots.markStaleInputs).toEqual([{
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      reason: "parser_config.approved",
+    }]);
     expect(response.body).toMatchObject({
       tenantId: "tenant-a",
       examId: "exam-a",
@@ -154,6 +166,7 @@ describe("ParserConfigController", () => {
       .expect(403);
 
     expect(repository.inputs).toHaveLength(0);
+    expect(snapshots.markStaleInputs).toEqual([]);
   });
 
   it("auth yoksa onay endpointini reddeder", async () => {
@@ -188,6 +201,7 @@ describe("ParserConfigController", () => {
       .expect(409);
 
     expect(repository.inputs).toHaveLength(1);
+    expect(snapshots.markStaleInputs).toEqual([]);
   });
 
   async function login(email: string) {
@@ -231,5 +245,22 @@ class FakeParserConfigRepository implements ParserConfigRepository {
       fieldMapping: input.suggestion.fieldMapping,
       status: "APPROVED" as const,
     };
+  }
+}
+
+class FakeReportSnapshotStore implements ReportSnapshotStore {
+  markStaleInputs: Array<{ tenantId: string; examId: string; reason: string }> = [];
+
+  async listByExam() {
+    return [];
+  }
+
+  async findById() {
+    return undefined;
+  }
+
+  async markStaleByExam(tenantId: string, examId: string, reason: string) {
+    this.markStaleInputs.push({ tenantId, examId, reason });
+    return 1;
   }
 }

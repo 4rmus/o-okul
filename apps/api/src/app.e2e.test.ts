@@ -298,6 +298,8 @@ describe("API auth + tenant isolation", () => {
             tenantId: "tenant-a",
             classId: "class-a",
             teacherId: "teacher-a",
+            courseId: "course-math",
+            termId: "term-2026-spring",
             title: "Matematik",
             startsAt: "2026-06-01T09:00:00.000Z",
             endsAt: "2026-06-01T10:00:00.000Z",
@@ -326,7 +328,10 @@ describe("API auth + tenant isolation", () => {
             id: "material-assignment-a",
             tenantId: "tenant-a",
             materialId: "material-a",
+            materialTitle: "Kesirler Çalışma Kağıdı",
             studentId: "student-a",
+            courseId: "course-math",
+            termId: "term-2026-spring",
             assignedById: "user-tenant-a",
             note: "Bireysel tekrar",
             dueAt: "2026-06-09T12:00:00.000Z",
@@ -367,6 +372,8 @@ describe("API auth + tenant isolation", () => {
             id: "attendance-a",
             tenantId: "tenant-a",
             studentId: "student-a",
+            courseId: "course-math",
+            termId: "term-2026-spring",
             date: "2026-06-03",
             status: "ABSENT",
           },
@@ -414,6 +421,8 @@ describe("API auth + tenant isolation", () => {
             tenantId: "tenant-a",
             studentId: "student-a",
             teacherId: "teacher-a",
+            courseId: "course-math",
+            termId: "term-2026-spring",
             visibility: "GUARDIAN_STUDENT",
             body: "Problem çözme rutini güçleniyor.",
             developmentStatus: "IMPROVING",
@@ -444,6 +453,79 @@ describe("API auth + tenant isolation", () => {
       .expect(403);
   });
 
+  it("me duyuruları rol ve öğrenci kapsamına göre listeler", async () => {
+    const student = await login("student-a@example.test");
+    await request(server)
+      .get("/me/student/announcements")
+      .set("Authorization", `Bearer ${student.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([
+          expect.objectContaining({
+            id: "announcement-a",
+            tenantId: "tenant-a",
+            title: "Veli toplantısı",
+            audience: "SCHOOL",
+            classId: "class-a",
+          }),
+        ]);
+      });
+    await request(server)
+      .post("/me/student/announcements/announcement-a/read")
+      .set("Authorization", `Bearer ${student.accessToken}`)
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.objectContaining({ id: "announcement-a", readAt: expect.any(String) }));
+      });
+    await request(server)
+      .get("/me/student/announcements")
+      .set("Authorization", `Bearer ${student.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body[0]).toEqual(expect.objectContaining({ id: "announcement-a", readAt: expect.any(String) }));
+      });
+
+    const guardian = await login("guardian-a@example.test");
+    await request(server)
+      .get("/me/guardian/students/student-a/announcements")
+      .set("Authorization", `Bearer ${guardian.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.map((announcement: { id: string }) => announcement.id)).toEqual(["announcement-a"]);
+      });
+    await request(server)
+      .post("/me/guardian/students/student-a/announcements/announcement-a/read")
+      .set("Authorization", `Bearer ${guardian.accessToken}`)
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.objectContaining({ id: "announcement-a", readAt: expect.any(String) }));
+      });
+    await request(server)
+      .get("/me/guardian/students/student-b/announcements")
+      .set("Authorization", `Bearer ${guardian.accessToken}`)
+      .expect(403);
+    await request(server)
+      .post("/me/guardian/students/student-b/announcements/announcement-a/read")
+      .set("Authorization", `Bearer ${guardian.accessToken}`)
+      .expect(403);
+
+    const teacher = await login("teacher-a@example.test");
+    await request(server)
+      .get("/me/teacher/announcements")
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.map((announcement: { id: string }) => announcement.id)).toEqual(["announcement-a"]);
+      });
+    await request(server)
+      .post("/me/teacher/announcements/announcement-a/read")
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.objectContaining({ id: "announcement-a", readAt: expect.any(String) }));
+      });
+  });
+
   it("me rapor endpointleri öğrenci ve veliyi bağlı öğrenciyle sınırlar", async () => {
     const student = await login("student-a@example.test");
     await request(server)
@@ -456,6 +538,8 @@ describe("API auth + tenant isolation", () => {
           examId: "exam-demo",
           snapshotId: "snapshot-demo",
           studentId: "student-a",
+          courseId: "course-math",
+          termId: "term-2026-spring",
         });
       });
     await request(server)
@@ -477,6 +561,8 @@ describe("API auth + tenant isolation", () => {
           studentId: "student-a",
           classId: "class-a",
           className: "8-A",
+          courseId: "course-math",
+          termId: "term-2026-spring",
         });
       });
     await request(server)
@@ -501,14 +587,22 @@ describe("API auth + tenant isolation", () => {
       .set("Authorization", `Bearer ${guardian.accessToken}`)
       .expect(200)
       .expect(({ body }) => {
-        expect(body.studentId).toBe("student-a");
+        expect(body).toMatchObject({
+          studentId: "student-a",
+          courseId: "course-math",
+          termId: "term-2026-spring",
+        });
       });
     await request(server)
       .get("/me/guardian/students/student-a/reports/exam-demo/snapshots/snapshot-demo")
       .set("Authorization", `Bearer ${guardian.accessToken}`)
       .expect(200)
       .expect(({ body }) => {
-        expect(body.studentId).toBe("student-a");
+        expect(body).toMatchObject({
+          studentId: "student-a",
+          courseId: "course-math",
+          termId: "term-2026-spring",
+        });
       });
     await request(server)
       .get("/me/guardian/students/student-b/reports/exam-demo/snapshots/snapshot-demo")

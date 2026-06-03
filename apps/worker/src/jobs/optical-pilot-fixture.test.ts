@@ -53,7 +53,7 @@ describe("optical pilot fixtures", () => {
       reason: "STUDENT_NOT_FOUND",
       rawRow: expect.objectContaining({ studentNo: "999999" }),
     })]);
-    expect(scoreMatchedRows(result.matched.map((row) => row.answers)).map((score) => score.total)).toEqual([
+    expect(scoreMatchedRows(result.matched.map((row) => row.answers)).map((score) => score.total)).toMatchObject([
       { correct: 5, wrong: 0, blank: 0, net: 5, rawScore: 5, standardScore: 5 },
       { correct: 4, wrong: 0, blank: 1, net: 4, rawScore: 4, standardScore: 4 },
     ]);

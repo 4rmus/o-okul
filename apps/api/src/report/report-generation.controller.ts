@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import type { ReportErrorBooklet, ReportStudentProgress, ReportStudentSnapshot } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { Roles } from "../rbac/roles.decorator.js";
@@ -6,10 +6,13 @@ import { RolesGuard } from "../rbac/roles.guard.js";
 import {
   ReportGenerationService,
   type ReportGenerationQueueResult,
+  type ReportSnapshotListFilters,
   type ReportSnapshotExportResult,
   type ReportSnapshotPdfResult,
   type ReportSnapshotRecord,
 } from "./report-generation.service.js";
+
+interface ReportSnapshotListQuery extends ReportSnapshotListFilters {}
 
 @Controller("exams/:examId/reports")
 @UseGuards(RolesGuard)
@@ -18,8 +21,8 @@ export class ReportGenerationController {
 
   @Get("snapshots")
   @Roles("TENANT_ADMIN", "TEACHER")
-  listSnapshots(@Param("examId") examId: string): Promise<ReportSnapshotRecord[]> {
-    return this.reports.listSnapshots(getRequestContext(), examId);
+  listSnapshots(@Param("examId") examId: string, @Query() query: ReportSnapshotListQuery): Promise<ReportSnapshotRecord[]> {
+    return this.reports.listSnapshots(getRequestContext(), examId, query);
   }
 
   @Get("snapshots/:snapshotId/export.xlsx")
@@ -73,12 +76,27 @@ export class ReportGenerationController {
   @Roles("TENANT_ADMIN")
   enqueue(
     @Param("examId") examId: string,
-    @Body() body: { reportType?: string; contentHash?: string },
+    @Body() body: EnqueueReportGenerationBody,
   ): Promise<ReportGenerationQueueResult> {
     return this.reports.enqueueGeneration(getRequestContext(), {
       examId,
       reportType: body.reportType,
       contentHash: body.contentHash,
+      campusId: body.campusId,
+      gradeLevelId: body.gradeLevelId,
+      classId: body.classId,
+      courseId: body.courseId,
+      termId: body.termId,
     });
   }
+}
+
+interface EnqueueReportGenerationBody {
+  reportType?: string;
+  contentHash?: string;
+  campusId?: string;
+  gradeLevelId?: string;
+  classId?: string;
+  courseId?: string;
+  termId?: string;
 }

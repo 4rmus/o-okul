@@ -57,6 +57,7 @@ describe("exam evaluation job", () => {
           blank: 1,
           net: 0.75,
           rawScore: 0.75,
+          estimatedRawScore: 3.261,
           standardScore: 0.75,
         },
         branches: [
@@ -86,6 +87,26 @@ describe("exam evaluation job", () => {
     const second = await processExamEvaluationJob(job, createAdapter());
 
     expect(first.resultKey).toBe(second.resultKey);
+  });
+
+  it("B kitapçığı cevaplarını puanlamadan önce master sıraya hizalar", async () => {
+    const adapter = createAdapter({
+      bookletType: "B",
+      answers: [
+        { questionNo: 1, answer: "B" },
+        { questionNo: 2, answer: "A" },
+        { questionNo: 3, answer: "C" },
+      ],
+      bookletVariants: [{ code: "B", permutation: [2, 1, 3] }],
+    });
+
+    const result = await processExamEvaluationJob(createJob(payload), adapter);
+
+    expect(result.score.questions).toEqual([
+      { questionNo: 1, branch: "Matematik", answer: "A", correctAnswer: "A", status: "CORRECT" },
+      { questionNo: 2, branch: "Matematik", answer: "B", correctAnswer: "B", status: "CORRECT" },
+      { questionNo: 3, branch: "Türkçe", answer: "C", correctAnswer: "C", status: "CORRECT" },
+    ]);
   });
 
   it("adapter kayıt bulamazsa hatayı net şekilde yukarı taşır", async () => {
@@ -151,7 +172,7 @@ function createJob(payload: ExamEvaluationJobPayload): QueueJob<ExamEvaluationJo
   };
 }
 
-function createAdapter(): ExamEvaluationJobAdapter & {
+function createAdapter(overrides: Partial<Awaited<ReturnType<ExamEvaluationJobAdapter["loadInput"]>>> = {}): ExamEvaluationJobAdapter & {
   loadInputs: Parameters<ExamEvaluationJobAdapter["loadInput"]>[0][];
   savedResults: ExamEvaluationJobResult[];
 } {
@@ -180,6 +201,7 @@ function createAdapter(): ExamEvaluationJobAdapter & {
           engineVersion: scoringEngineVersion,
           wrongPenalty: 0.25,
         },
+        ...overrides,
       };
     },
     async saveResult(result) {

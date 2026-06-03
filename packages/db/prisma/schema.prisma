@@ -24,9 +24,15 @@ model Tenant {
   memberships TenantMembership[]
   authSessions AuthSession[]
   identityInvitations IdentityInvitation[]
+  campuses    Campus[]
+  gradeLevels GradeLevel[]
   classes     Class[]
+  courses     Course[]
+  academicYears AcademicYear[]
+  academicTerms AcademicTerm[]
   students    Student[]
   studentClassHistory StudentClassHistory[]
+  studentEnrollments StudentEnrollment[]
   teacherAssignments TeacherAssignment[]
   attendance  Attendance[]
   teacherNotes TeacherNote[]
@@ -48,15 +54,19 @@ model Tenant {
   examParticipants ExamParticipant[]
   rawImports  RawImport[]
   answerKeys  AnswerKey[]
+  examBookletVariants ExamBookletVariant[]
   parsedAnswers ParsedAnswer[]
   examResults ExamResult[]
   importQuarantines ImportQuarantine[]
   reportSnapshots ReportSnapshot[]
   announcements Announcement[]
+  announcementDeliveryReports AnnouncementDeliveryReport[]
   messageTemplates MessageTemplate[]
+  smsBatchDeliveryReports SmsBatchDeliveryReport[]
   supportTickets SupportTicket[]
   supportTicketAttachments SupportTicketAttachment[]
   supportTicketComments SupportTicketComment[]
+  notificationDeviceTokens NotificationDeviceToken[]
   auditLogs   AuditLog[]
 }
 
@@ -70,12 +80,34 @@ model User {
   memberships TenantMembership[]
   authSessions AuthSession[]
   passwordResetTokens PasswordResetToken[]
+  notificationDeviceTokens NotificationDeviceToken[]
   studentProfile Student?       @relation("StudentAccountUser")
   teacherProfile Teacher?       @relation("TeacherAccountUser")
   guardianProfile Guardian?     @relation("GuardianAccountUser")
   createdStudents Student[]      @relation("StudentCreatedBy")
   updatedStudents Student[]      @relation("StudentUpdatedBy")
   checkedHomework Homework[]      @relation("HomeworkCheckedBy")
+}
+
+model NotificationDeviceToken {
+  id          String    @id @default(uuid())
+  tenantId    String
+  userId      String
+  subjectType String?
+  subjectId   String?
+  provider    String
+  token       String
+  platform    String?
+  lastSeenAt  DateTime
+  disabledAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, token])
+  @@index([tenantId, userId, disabledAt])
+  @@index([tenantId, subjectType, subjectId, disabledAt], map: "NotificationDeviceToken_tenantId_subjectType_subjectId_disabled")
 }
 
 model TenantMembership {
@@ -159,20 +191,145 @@ model PasswordResetToken {
 model Class {
   id        String    @id @default(uuid())
   tenantId  String
+  campusId  String?
+  gradeLevelId String?
   name      String
   level     String?
+  section   String?
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campus    Campus?   @relation(fields: [tenantId, campusId], references: [tenantId, id], onDelete: Restrict)
+  gradeLevel GradeLevel? @relation(fields: [tenantId, gradeLevelId], references: [tenantId, id], onDelete: Restrict)
   students  Student[]
   studentClassHistory StudentClassHistory[]
+  studentEnrollments StudentEnrollment[]
   teacherAssignments TeacherAssignment[]
   scheduleLessons ScheduleLesson[]
   studySessions StudySession[]
   homework  Homework[]
+  supportTickets SupportTicket[]
+  reportSnapshots ReportSnapshot[]
+  paymentPlans PaymentPlan[]
 
+  @@unique([tenantId, id])
+  @@index([tenantId, campusId])
+  @@index([tenantId, gradeLevelId])
   @@index([tenantId, deletedAt])
+}
+
+model GradeLevel {
+  id        String    @id @default(uuid())
+  tenantId  String
+  name      String
+  code      String?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  classes   Class[]
+  supportTickets SupportTicket[]
+  reportSnapshots ReportSnapshot[]
+  paymentPlans PaymentPlan[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, deletedAt])
+}
+
+model Campus {
+  id        String    @id @default(uuid())
+  tenantId  String
+  name      String
+  code      String?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  classes   Class[]
+  supportTickets SupportTicket[]
+  reportSnapshots ReportSnapshot[]
+  paymentPlans PaymentPlan[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, deletedAt])
+}
+
+model Course {
+  id        String    @id @default(uuid())
+  tenantId  String
+  name      String
+  code      String?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  teacherAssignments TeacherAssignment[]
+  scheduleLessons ScheduleLesson[]
+  studySessions StudySession[]
+  attendance Attendance[]
+  teacherNotes TeacherNote[]
+  homeworkMaterialAssignments HomeworkMaterialAssignment[]
+  supportTickets SupportTicket[]
+  reportSnapshots ReportSnapshot[]
+  paymentPlans PaymentPlan[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, deletedAt])
+}
+
+model AcademicYear {
+  id        String    @id @default(uuid())
+  tenantId  String
+  name      String
+  startsAt  DateTime  @db.Date
+  endsAt    DateTime  @db.Date
+  isActive  Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  terms     AcademicTerm[]
+  studentClassHistory StudentClassHistory[]
+  studentEnrollments StudentEnrollment[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, name])
+  @@index([tenantId, isActive, deletedAt])
+}
+
+model AcademicTerm {
+  id             String    @id @default(uuid())
+  tenantId       String
+  academicYearId String
+  name           String
+  startsAt       DateTime  @db.Date
+  endsAt         DateTime  @db.Date
+  isActive       Boolean   @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear @relation(fields: [tenantId, academicYearId], references: [tenantId, id], onDelete: Cascade)
+  teacherAssignments TeacherAssignment[]
+  scheduleLessons ScheduleLesson[]
+  studySessions StudySession[]
+  attendance Attendance[]
+  teacherNotes TeacherNote[]
+  homeworkMaterialAssignments HomeworkMaterialAssignment[]
+  supportTickets SupportTicket[]
+  reportSnapshots ReportSnapshot[]
+  paymentPlans PaymentPlan[]
+  studentClassHistory StudentClassHistory[]
+  studentEnrollments StudentEnrollment[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, academicYearId, name])
+  @@index([tenantId, academicYearId, deletedAt])
+  @@index([tenantId, isActive, deletedAt])
 }
 
 model Student {
@@ -212,6 +369,7 @@ model Student {
   paymentPlans PaymentPlan[]
   teacherAssignments TeacherAssignment[]
   classHistory StudentClassHistory[]
+  enrollments StudentEnrollment[]
 
   @@index([tenantId, deletedAt])
   @@index([tenantId, status, deletedAt])
@@ -227,6 +385,8 @@ model StudentClassHistory {
   tenantId  String
   studentId String
   classId   String?
+  academicYearId String?
+  termId    String?
   startsAt  DateTime  @db.Date
   endsAt    DateTime? @db.Date
   reason    String?
@@ -235,10 +395,40 @@ model StudentClassHistory {
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   student   Student   @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
   class     Class?    @relation(fields: [classId], references: [id], onDelete: SetNull)
+  academicYear AcademicYear? @relation(fields: [tenantId, academicYearId], references: [tenantId, id], onDelete: Restrict)
+  term      AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
 
   @@index([tenantId, studentId, startsAt])
   @@index([tenantId, classId])
+  @@index([tenantId, academicYearId])
+  @@index([tenantId, termId])
   @@index([tenantId, endsAt])
+}
+
+model StudentEnrollment {
+  id        String    @id @default(uuid())
+  tenantId  String
+  studentId String
+  academicYearId String?
+  termId    String?
+  classId   String?
+  status    String    @default("ACTIVE")
+  startsAt  DateTime  @db.Date
+  endsAt    DateTime? @db.Date
+  reason    String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  student   Student   @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
+  academicYear AcademicYear? @relation(fields: [tenantId, academicYearId], references: [tenantId, id], onDelete: Restrict)
+  term      AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
+  class     Class?    @relation(fields: [classId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, studentId, startsAt])
+  @@index([tenantId, academicYearId])
+  @@index([tenantId, termId])
+  @@index([tenantId, classId])
+  @@index([tenantId, status, endsAt])
 }
 
 model Teacher {
@@ -269,6 +459,7 @@ model TeacherAssignment {
   classId   String?
   studentId String?
   courseId  String?
+  termId    String?
   role      String
   startsAt  DateTime? @db.Date
   endsAt    DateTime? @db.Date
@@ -278,10 +469,14 @@ model TeacherAssignment {
   teacher   Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   class     Class?    @relation(fields: [classId], references: [id], onDelete: Cascade)
   student   Student?  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  course    Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
+  term      AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
 
   @@index([tenantId, teacherId])
   @@index([tenantId, classId])
   @@index([tenantId, studentId])
+  @@index([tenantId, courseId])
+  @@index([tenantId, termId])
   @@index([tenantId, role])
 }
 
@@ -327,6 +522,8 @@ model Attendance {
   id        String    @id @default(uuid())
   tenantId  String
   studentId String
+  courseId  String?
+  termId    String?
   date      DateTime  @db.Date
   status    String
   deletedAt DateTime?
@@ -334,10 +531,14 @@ model Attendance {
   updatedAt DateTime  @updatedAt
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   student   Student   @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
+  course    Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
+  term      AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
 
   @@unique([tenantId, studentId, date])
   @@index([tenantId, date, deletedAt])
   @@index([tenantId, studentId, date, deletedAt])
+  @@index([tenantId, courseId])
+  @@index([tenantId, termId])
 }
 
 model TeacherNote {
@@ -345,6 +546,8 @@ model TeacherNote {
   tenantId          String
   studentId         String
   teacherId         String
+  courseId          String?
+  termId            String?
   visibility        String    @default("INTERNAL")
   body              String
   developmentStatus String?
@@ -354,15 +557,24 @@ model TeacherNote {
   tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   student           Student   @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
   teacher           Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  course            Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
+  term              AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
 
   @@index([tenantId, studentId, visibility, deletedAt])
   @@index([tenantId, teacherId, deletedAt])
+  @@index([tenantId, courseId])
+  @@index([tenantId, termId])
 }
 
 model PaymentPlan {
   id          String    @id @default(uuid())
   tenantId    String
   studentId   String
+  campusId    String?
+  gradeLevelId String?
+  classId     String?
+  courseId    String?
+  termId      String?
   title       String
   totalAmount Int
   currency    String    @default("TRY")
@@ -371,9 +583,19 @@ model PaymentPlan {
   updatedAt   DateTime  @updatedAt
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   student     Student   @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
+  campus      Campus?   @relation(fields: [tenantId, campusId], references: [tenantId, id], onDelete: Restrict)
+  gradeLevel  GradeLevel? @relation(fields: [tenantId, gradeLevelId], references: [tenantId, id], onDelete: Restrict)
+  class       Class?    @relation(fields: [classId], references: [id], onDelete: SetNull)
+  course      Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
+  term        AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
   installments PaymentInstallment[]
 
   @@index([tenantId, studentId, deletedAt])
+  @@index([tenantId, campusId])
+  @@index([tenantId, gradeLevelId])
+  @@index([tenantId, classId])
+  @@index([tenantId, courseId])
+  @@index([tenantId, termId])
   @@unique([tenantId, id])
 }
 
@@ -401,6 +623,8 @@ model ScheduleLesson {
   tenantId  String
   classId   String
   teacherId String
+  courseId  String?
+  termId    String?
   title     String
   startsAt  DateTime
   endsAt    DateTime
@@ -410,10 +634,14 @@ model ScheduleLesson {
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   class     Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
   teacher   Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  course    Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
+  term      AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
 
   @@index([tenantId, deletedAt])
   @@index([tenantId, teacherId, startsAt, endsAt, deletedAt])
   @@index([tenantId, classId, startsAt])
+  @@index([tenantId, courseId])
+  @@index([tenantId, termId])
 }
 
 model StudySession {
@@ -421,6 +649,8 @@ model StudySession {
   tenantId  String
   classId   String
   teacherId String
+  courseId  String?
+  termId    String?
   title     String
   capacity  Int
   startsAt  DateTime
@@ -431,11 +661,15 @@ model StudySession {
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   class     Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
   teacher   Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  course    Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
+  term      AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
   students  StudySessionStudent[]
 
   @@index([tenantId, deletedAt])
   @@index([tenantId, teacherId, startsAt, endsAt, deletedAt])
   @@index([tenantId, classId, startsAt])
+  @@index([tenantId, courseId])
+  @@index([tenantId, termId])
 }
 
 model StudySessionStudent {
@@ -495,6 +729,8 @@ model HomeworkMaterialAssignment {
   tenantId    String
   materialId  String
   studentId   String
+  courseId    String?
+  termId      String?
   assignedById String?
   note        String?
   dueAt       DateTime?
@@ -504,9 +740,13 @@ model HomeworkMaterialAssignment {
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   material    HomeworkMaterial @relation(fields: [tenantId, materialId], references: [tenantId, id], onDelete: Cascade)
   student     Student   @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
+  course      Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
+  term        AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
 
   @@index([tenantId, materialId, deletedAt])
   @@index([tenantId, studentId, deletedAt])
+  @@index([tenantId, courseId])
+  @@index([tenantId, termId])
 }
 
 model Homework {
@@ -548,6 +788,7 @@ model Exam {
   participants ExamParticipant[]
   rawImports RawImport[]
   answerKeys AnswerKey[]
+  bookletVariants ExamBookletVariant[]
   parsedAnswers ParsedAnswer[]
   examResults ExamResult[]
   importQuarantines ImportQuarantine[]
@@ -653,6 +894,24 @@ model AnswerKey {
   @@index([tenantId, deletedAt])
 }
 
+model ExamBookletVariant {
+  id          String    @id @default(uuid())
+  tenantId    String
+  examId      String
+  code        String
+  permutation Json
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  exam        Exam      @relation(fields: [tenantId, examId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, examId, code])
+  @@index([tenantId, examId])
+  @@index([tenantId, deletedAt])
+}
+
 model LearningOutcome {
   id        String    @id @default(uuid())
   tenantId  String
@@ -752,6 +1011,11 @@ model ReportSnapshot {
   id           String    @id @default(uuid())
   tenantId     String
   examId       String
+  campusId     String?
+  gradeLevelId String?
+  classId      String?
+  courseId     String?
+  termId       String?
   reportType   String
   status       String    @default("PENDING")
   inputRefs    Json
@@ -763,10 +1027,20 @@ model ReportSnapshot {
   updatedAt    DateTime  @updatedAt
   tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   exam         Exam      @relation(fields: [tenantId, examId], references: [tenantId, id], onDelete: Cascade)
+  campus       Campus?   @relation(fields: [tenantId, campusId], references: [tenantId, id], onDelete: Restrict)
+  gradeLevel   GradeLevel? @relation(fields: [tenantId, gradeLevelId], references: [tenantId, id], onDelete: Restrict)
+  class        Class?    @relation(fields: [classId], references: [id], onDelete: SetNull)
+  course       Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
+  term         AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
 
   @@unique([tenantId, id])
   @@index([tenantId, examId])
   @@index([tenantId, status, deletedAt])
+  @@index([tenantId, campusId])
+  @@index([tenantId, gradeLevelId])
+  @@index([tenantId, classId])
+  @@index([tenantId, courseId])
+  @@index([tenantId, termId])
 }
 
 model Announcement {
@@ -775,14 +1049,61 @@ model Announcement {
   title       String
   body        String
   audience    String    @default("SCHOOL")
+  campusId    String?
+  gradeLevelId String?
+  classId     String?
+  courseId    String?
+  termId      String?
   publishedAt DateTime  @default(now())
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deliveryReports AnnouncementDeliveryReport[]
 
   @@index([tenantId, deletedAt])
   @@index([tenantId, audience, publishedAt])
+  @@index([tenantId, campusId])
+  @@index([tenantId, gradeLevelId])
+  @@index([tenantId, classId])
+  @@index([tenantId, courseId])
+  @@index([tenantId, termId])
+}
+
+model AnnouncementReceipt {
+  id             String   @id @default(uuid())
+  tenantId       String
+  announcementId String
+  userId         String
+  subjectType    String
+  subjectId      String
+  readAt         DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, announcementId, userId, subjectType, subjectId], map: "AnnouncementReceipt_tenantId_announcementId_userId_subjectType_")
+  @@index([tenantId, userId, subjectType, subjectId])
+  @@index([tenantId, announcementId])
+}
+
+model AnnouncementDeliveryReport {
+  id                String   @id @default(uuid())
+  tenantId          String
+  announcementId    String
+  channel           String
+  recipientCount    Int      @default(0)
+  deliveredCount    Int      @default(0)
+  failedCount       Int      @default(0)
+  status            String   @default("queued")
+  providerErrorCode String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  announcement      Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, announcementId, channel])
+  @@index([tenantId, announcementId])
+  @@index([tenantId, channel, status])
 }
 
 model MessageTemplate {
@@ -800,24 +1121,61 @@ model MessageTemplate {
   @@index([tenantId, channel])
 }
 
+model SmsBatchDeliveryReport {
+  id               String   @id @default(uuid())
+  tenantId         String
+  jobId            String
+  templateId       String
+  recipientCount   Int
+  sentCount        Int      @default(0)
+  failedCount      Int      @default(0)
+  billableSegments Int      @default(0)
+  status           String   @default("queued")
+  providerErrorCode String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, jobId])
+  @@index([tenantId, status, updatedAt])
+  @@index([tenantId, templateId])
+}
+
 model SupportTicket {
-  id          String    @id @default(uuid())
-  tenantId    String
-  requesterId String?
-  subject     String
-  message     String
-  priority    String    @default("NORMAL")
-  status      String    @default("OPEN")
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  attachments SupportTicketAttachment[]
-  comments    SupportTicketComment[]
+  id           String    @id @default(uuid())
+  tenantId     String
+  requesterId  String?
+  studentId    String?
+  campusId     String?
+  gradeLevelId String?
+  classId      String?
+  courseId     String?
+  termId       String?
+  subject      String
+  message      String
+  priority     String    @default("NORMAL")
+  status       String    @default("OPEN")
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campus       Campus?   @relation(fields: [tenantId, campusId], references: [tenantId, id], onDelete: Restrict)
+  gradeLevel   GradeLevel? @relation(fields: [tenantId, gradeLevelId], references: [tenantId, id], onDelete: Restrict)
+  class        Class?    @relation(fields: [classId], references: [id], onDelete: SetNull)
+  course       Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
+  term         AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
+  attachments  SupportTicketAttachment[]
+  comments     SupportTicketComment[]
 
   @@unique([tenantId, id])
   @@index([tenantId, status, deletedAt])
   @@index([tenantId, priority])
+  @@index([tenantId, studentId])
+  @@index([tenantId, campusId])
+  @@index([tenantId, gradeLevelId])
+  @@index([tenantId, classId])
+  @@index([tenantId, courseId])
+  @@index([tenantId, termId])
 }
 
 model SupportTicketAttachment {

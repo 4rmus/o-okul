@@ -4,11 +4,14 @@ import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { ExamRecord } from "@uzman-hocam/shared-types";
+import type { ExamParticipantRecord, ExamRecord } from "@uzman-hocam/shared-types";
 import { AppModule } from "../app.module.js";
 import {
+  examParticipantRepositoryToken,
   examRepositoryToken,
+  type CreateExamParticipantRepositoryInput,
   type CreateExamRepositoryInput,
+  type ExamParticipantRepository,
   type ExamRepository,
 } from "./exam.service.js";
 
@@ -16,12 +19,16 @@ describe("ExamController", () => {
   let app: INestApplication;
   let server: Parameters<typeof request>[0];
   let repository: FakeExamRepository;
+  let participants: FakeExamParticipantRepository;
 
   beforeAll(async () => {
     repository = new FakeExamRepository();
+    participants = new FakeExamParticipantRepository();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(examRepositoryToken)
       .useValue(repository)
+      .overrideProvider(examParticipantRepositoryToken)
+      .useValue(participants)
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -31,6 +38,7 @@ describe("ExamController", () => {
 
   beforeEach(() => {
     repository.exams.clear();
+    participants.participants.clear();
   });
 
   afterAll(async () => {
@@ -120,6 +128,76 @@ describe("ExamController", () => {
     expect(published.body).toMatchObject({ id: created.body.id, status: "PUBLISHED" });
   });
 
+  it("TENANT_ADMIN sınava katılımcı ekler, TEACHER listeleyebilir", async () => {
+    const admin = await login("admin-a@example.test");
+    const created = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ title: "Katılımcılı Deneme" })
+      .expect(201);
+
+    const added = await request(server)
+      .post(`/exams/${created.body.id}/participants`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ studentId: "student-a", participantNo: "42", bookletType: "A" })
+      .expect(201);
+
+    expect(added.body).toMatchObject({
+      tenantId: "tenant-a",
+      examId: created.body.id,
+      studentId: "student-a",
+      participantNo: "42",
+      bookletType: "A",
+      status: "REGISTERED",
+    });
+
+    const teacher = await login("teacher-a@example.test");
+    const list = await request(server)
+      .get(`/exams/${created.body.id}/participants`)
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .expect(200);
+    expect(list.body).toHaveLength(1);
+    expect(list.body[0]).toMatchObject({ studentId: "student-a", status: "REGISTERED" });
+  });
+
+  it("TEACHER katılımcı ekleyemez", async () => {
+    const admin = await login("admin-a@example.test");
+    const created = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ title: "Yetki Denemesi" })
+      .expect(201);
+
+    const teacher = await login("teacher-a@example.test");
+    await request(server)
+      .post(`/exams/${created.body.id}/participants`)
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .send({ studentId: "student-a" })
+      .expect(403);
+  });
+
+  it("aynı öğrenci aynı sınava ikinci kez eklenemez", async () => {
+    const admin = await login("admin-a@example.test");
+    const created = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ title: "Tekil Katılımcı" })
+      .expect(201);
+
+    await request(server)
+      .post(`/exams/${created.body.id}/participants`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ studentId: "student-a" })
+      .expect(201);
+    await request(server)
+      .post(`/exams/${created.body.id}/participants`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ studentId: "student-a" })
+      .expect(409);
+
+    expect(participants.participants.size).toBe(1);
+  });
+
   async function login(email: string) {
     const response = await request(server).post("/auth/login").send({ email, password: "password" }).expect(200);
     return response.body as { accessToken: string };
@@ -161,5 +239,41 @@ class FakeExamRepository implements ExamRepository {
     const updated: ExamRecord = { ...exam, status: "PUBLISHED" };
     this.exams.set(examId, updated);
     return updated;
+  }
+}
+
+class FakeExamParticipantRepository implements ExamParticipantRepository {
+  participants = new Map<string, ExamParticipantRecord>();
+
+  async list(tenantId: string, examId: string): Promise<ExamParticipantRecord[]> {
+    return [...this.participants.values()].filter(
+      (participant) => participant.tenantId === tenantId && participant.examId === examId,
+    );
+  }
+
+  async create(input: CreateExamParticipantRepositoryInput): Promise<ExamParticipantRecord> {
+    const exists = [...this.participants.values()].some(
+      (participant) =>
+        participant.tenantId === input.tenantId &&
+        participant.examId === input.examId &&
+        participant.studentId === input.studentId,
+    );
+    if (exists) {
+      throw new Error("EXAM_PARTICIPANT_EXISTS");
+    }
+    const now = "2026-03-01T00:00:00.000Z";
+    const participant: ExamParticipantRecord = {
+      id: randomUUID(),
+      tenantId: input.tenantId,
+      examId: input.examId,
+      studentId: input.studentId,
+      ...(input.participantNo ? { participantNo: input.participantNo } : {}),
+      ...(input.bookletType ? { bookletType: input.bookletType } : {}),
+      status: "REGISTERED",
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.participants.set(participant.id, participant);
+    return participant;
   }
 }

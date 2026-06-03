@@ -54,9 +54,9 @@ kanıtlamaktır.
 
 **Makul varsayılanla çözülen, Faz öncesi onaylanacak kararlar** (mimariyi değiştirmez):
 - **Veli↔Öğrenci bağlama:** Kurum yöneticisi tarafından kurulur (telefon doğrulama Faz 5'e
-  opsiyonel). → *Faz 1 öncesi onayla.*
+  opsiyonel). Karar: DEC-20260531-01.
 - **Standart puan formülü:** `ScoringConfig` ile **konfigüre edilebilir**; varsayılan = ham net +
-  basit sıralama, T-skor/yüzdelik opsiyon. → *Faz 3 öncesi onayla.*
+  basit sıralama; T-skor/yüzdelik v1 kapsamı dışı. Karar: DEC-20260531-02.
 - **Kota davranışı:** Aşımda **hard-block** (PRD ile uyumlu). Ödeme/fatura entegrasyonu **v1
   kapsamı dışı**; abonelik/kota sistem yöneticisi tarafından manuel yönetilir.
 - **Dil:** UI Türkçe; i18n'e hazır altyapı ama tek dil.
@@ -143,7 +143,7 @@ kaydı, GUARDIAN yalnız bağlı öğrenci). Controller asla ham Prisma'ya eriş
 `FormModal` = react-hook-form + Zod; toast = `sonner`; silme = `AlertDialog`.
 
 ### 3.6 Arka Plan İşleri (BullMQ, ayrı worker)
-Kuyruklar: `exam-evaluation`, `excel-import`, `report-generation`, `sms-batch`.
+Kuyruklar: `announcement-delivery`, `exam-evaluation`, `excel-import`, `report-generation`, `sms-batch`.
 Her job: `attempts:5` + exponential backoff, `jobId = entity_contentHash` (idempotency),
 `removeOnFail:false` (ölü mektup saklanır), `updateProgress` ile ilerleme (SSE/polling).
 
@@ -452,7 +452,7 @@ Backend ve güvenlik incelemeleri **bağımsız olarak** aynı yapısal boşluğ
 | Modül | Kapsam | Ön koşul | Güvenlik notu |
 |---|---|---|---|
 | **M1 Devamsızlık** | `Attendance(studentId, date, status: PRESENT/ABSENT/LATE/EXCUSED)`; öğretmen/kurum girer; veli/öğrenci görür; özet endpoint | M0 | RLS + kişi-düzeyi |
-| **M2 Ödeme planı** | `PaymentPlan + PaymentInstallment(taksit, vade, durum)`; **yalnız kurum oluşturur**; **yalnız kurum+veli görür** (öğrenci/öğretmen 403). Fatura entegrasyonu YOK | M0 | owner-RLS + finansal PII + audit; hiyerarşi tuzağı (`@Roles` tek başına yetmez) |
+| **M2 Ödeme planı** | `PaymentPlan + PaymentInstallment(taksit, vade, durum)`; **yalnız kurum oluşturur, taksiti düzenler ve durumunu işaretler**; **yalnız kurum+veli görür** (öğrenci/öğretmen 403); plan kampüs/seviye/sınıf/ders/dönem bağlamı taşıyabilir. Fatura entegrasyonu YOK | M0 | owner-RLS + finansal PII + audit; hiyerarşi tuzağı (`@Roles` tek başına yetmez) |
 | **M3 Kazanım** | `LearningOutcome` + `AnswerKeyItem.outcomeCode` (additive); ScoringEngine/ReportSnapshot kazanım kırılımı (saf fonksiyon + idempotency korunur); error-booklet'a kazanım | sınav alt sistemi + M0 | deterministik puanlama + idempotency kapısı |
 | **M4 Profil + TC** | `Student.nationalId(TC)/birthDate/phone/email/photoKey`; TC algoritma doğrulama; `@@unique([tenantId, nationalIdHash])` | M0 | **TC: AES-256-GCM + HMAC-hash** (deterministik şifre yasak), rol-bazlı maskeleme, görüntüleme audit'i |
 | **M5 Öğretmen notu** | `TeacherNote(studentId, teacherId, visibility: INTERNAL/GUARDIAN_STUDENT/...)`; gelişim durumu | M0 | `visibility` filtresi (INTERNAL sızıntı testi) |
@@ -520,9 +520,9 @@ Backend ve güvenlik incelemeleri **bağımsız olarak** aynı yapısal boşluğ
 - **Durum:** Vite artefakt sökümü, Playwright e2e yeniden yazımı, >200 rps RLS yük smoke'u,
   kimlik-bağı envanter audit'i, kimlik-bağı davet/göç kanıt kapısı, KVKK self-service ödeme koruma
   testi, KVKK finansal saklama kanıt kapısı, upload magic-byte kontrolü ve upload AV kanıt kapısı
-  tamamlandı. Kimlik-bağı davet/göç modeli, gerçek KVKK finansal saklama süresi ve foto upload AV
-  sağlayıcısı için ürün/ops kararı gerekir; canlıya hazır sayılmadan önce bu kapılar ayrıca
-  kapatılmalıdır.
+  tamamlandı. Kimlik-bağı davet/göç modeli de eklendi; canlıya hazır sayılmadan önce üretim göç
+  onay referansı ve gerçek raporu, gerçek KVKK finansal saklama süresi ve foto upload AV
+  sağlayıcı/local scanner kararı ayrıca kapatılmalıdır.
 - **Agent:** `devops-architect` / `performance-engineer` ∥ `security-engineer` →
   `refactoring-expert` → `quality-engineer` (tam e2e regresyon).
 
@@ -534,7 +534,7 @@ Backend ve güvenlik incelemeleri **bağımsız olarak** aynı yapısal boşluğ
   dökümantasyon boşluğu.
 - **RBAC hiyerarşi tuzağı:** `roleRank >=` → TEACHER, GUARDIAN yetkisini devralır. "Öğretmen
   görmemeli" kuralları (ödeme, INTERNAL not) servis-katmanı kapsam + owner-RLS ile çift zorlanır.
-- **Onay bekleyen (ürün/ops):** kimlik-bağı veri göçü/davet akışı (Faz D öncesi); finansal kayıt
+- **Onay bekleyen (ürün/ops):** üretim kimlik göç onay referansı ve gerçek raporu; finansal kayıt
   yasal-saklama vs KVKK purge istisnası; foto upload AV sağlayıcısı/local scanner.
 - **Başarı oranı paydası:** v1'de ayrı `successRate` alanı üretilmez; gerekirse payda
   `correct + wrong + blank`, boş soru paydada yer alır ama neti düşürmez (DEC-20260531-03).

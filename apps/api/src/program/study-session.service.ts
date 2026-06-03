@@ -4,7 +4,7 @@ import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { SchoolService } from "../school/school.service.js";
 import { StudentService } from "../student/student.service.js";
-import { assertTenantResourceAccess, filterTenantResources } from "../tenant/tenant-access.js";
+import { assertTenantResourceAccess, filterTenantResources, isTeacherSubjectContext } from "../tenant/tenant-access.js";
 import { type StudySessionStore, studySessionStoreToken } from "./study-session-store.js";
 
 export interface StudySessionRecord extends SharedStudySessionRecord {
@@ -21,7 +21,7 @@ export class StudySessionService {
   ) {}
 
   async list(context: RequestContext): Promise<StudySessionRecord[]> {
-    return filterTenantResources(context, await this.store.list()).filter((session) => !session.deletedAt);
+    return this.filterReadableSessions(context, filterTenantResources(context, await this.store.list()).filter((session) => !session.deletedAt));
   }
 
   async findOne(context: RequestContext, id: string): Promise<StudySessionRecord> {
@@ -33,13 +33,15 @@ export class StudySessionService {
       throw new NotFoundException("STUDY_SESSION_NOT_FOUND");
     }
 
-    this.assertAccess(context, session);
+    this.assertReadAccess(context, session);
     return session;
   }
 
   async create(context: RequestContext, input: Partial<StudySessionRecord>): Promise<StudySessionRecord> {
     const tenantId = this.resolveTenantId(context, input.tenantId);
     await this.assertLinks(context, input.classId, input.teacherId, input.studentIds);
+    await this.assertCourse(context, input.courseId);
+    await this.assertTerm(context, input.termId);
     const capacity = this.resolveCapacity(input.capacity, input.studentIds);
     const timeRange = this.resolveTimeRange(input.startsAt, input.endsAt);
     await this.assertAvailable(context, input.teacherId ?? "", input.studentIds ?? [], timeRange.startsAt, timeRange.endsAt);
@@ -49,6 +51,8 @@ export class StudySessionService {
         tenantId,
         classId: input.classId ?? "",
         teacherId: input.teacherId ?? "",
+        courseId: input.courseId,
+        termId: input.termId,
         studentIds: input.studentIds ?? [],
         title: input.title ?? "",
         capacity,
@@ -75,11 +79,15 @@ export class StudySessionService {
 
   async update(context: RequestContext, id: string, input: Partial<StudySessionRecord>): Promise<StudySessionRecord> {
     const session = await this.findOne(context, id);
-    const changedFields = changedInputFields(input, ["classId", "teacherId", "studentIds", "title", "capacity", "startsAt", "endsAt"]);
+    const changedFields = changedInputFields(input, ["classId", "teacherId", "courseId", "termId", "studentIds", "title", "capacity", "startsAt", "endsAt"]);
     const classId = input.classId ?? session.classId;
     const teacherId = input.teacherId ?? session.teacherId;
+    const courseId = input.courseId ?? session.courseId;
+    const termId = input.termId ?? session.termId;
     const studentIds = input.studentIds ?? session.studentIds;
     await this.assertLinks(context, classId, teacherId, studentIds);
+    await this.assertCourse(context, courseId);
+    await this.assertTerm(context, termId);
     const capacity = this.resolveCapacity(input.capacity ?? session.capacity, studentIds);
     const timeRange = this.resolveTimeRange(input.startsAt ?? session.startsAt, input.endsAt ?? session.endsAt);
     await this.assertAvailable(context, teacherId, studentIds, timeRange.startsAt, timeRange.endsAt, id);
@@ -88,6 +96,8 @@ export class StudySessionService {
       this.store.update(id, {
         classId,
         teacherId,
+        courseId,
+        termId,
         studentIds,
         title: input.title ?? session.title,
         capacity,
@@ -148,6 +158,22 @@ export class StudySessionService {
     await this.school.findClass(context, classId);
     await this.school.findTeacher(context, teacherId);
     await Promise.all(studentIds.map((studentId) => this.students.findOne(context, studentId)));
+  }
+
+  private async assertCourse(context: RequestContext, courseId: string | undefined) {
+    if (!courseId) {
+      return;
+    }
+
+    await this.school.findCourse(context, courseId);
+  }
+
+  private async assertTerm(context: RequestContext, termId: string | undefined) {
+    if (!termId) {
+      return;
+    }
+
+    await this.school.findAcademicTerm(context, termId);
   }
 
   private resolveCapacity(capacity: number | undefined, studentIds: string[] | undefined): number {
@@ -211,6 +237,21 @@ export class StudySessionService {
       const message = error instanceof Error ? error.message : "FORBIDDEN_TENANT";
       throw new ForbiddenException(message);
     }
+  }
+
+  private assertReadAccess(context: RequestContext, session: StudySessionRecord): void {
+    this.assertAccess(context, session);
+    if (isTeacherSubjectContext(context) && session.teacherId !== context.subjectId) {
+      throw new ForbiddenException("FORBIDDEN_SUBJECT");
+    }
+  }
+
+  private filterReadableSessions(context: RequestContext, sessions: StudySessionRecord[]): StudySessionRecord[] {
+    if (!isTeacherSubjectContext(context)) {
+      return sessions;
+    }
+
+    return sessions.filter((session) => session.teacherId === context.subjectId);
   }
 
   private async writeStudySession<T>(operation: () => Promise<T>): Promise<T> {

@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { SmsAdapter, SmsMessage, SmsSendResult } from "@uzman-hocam/sms-adapter";
 import { getJobContext } from "../context/job-context.js";
-import { processSmsBatchJob } from "./sms-batch-job.js";
+import {
+  processSmsBatchJob,
+  type SmsBatchDeliveryCompletedInput,
+  type SmsBatchDeliveryFailedInput,
+  type SmsBatchDeliveryReporter,
+} from "./sms-batch-job.js";
 
 describe("processSmsBatchJob", () => {
   it("SMS batch job'unu adapter'a mesaj listesi olarak verir", async () => {
+    const deliveryReporter = new FakeDeliveryReporter();
     const adapter = new FakeSmsAdapter([
       {
         to: "5000000001",
@@ -49,6 +55,7 @@ describe("processSmsBatchJob", () => {
         },
       },
       adapter,
+      deliveryReporter,
     );
 
     expect(adapter.messages).toEqual([
@@ -63,6 +70,15 @@ describe("processSmsBatchJob", () => {
       billableSegments: 2,
       status: "completed",
     });
+    expect(deliveryReporter.completed).toEqual([{
+      tenantId: "tenant-a",
+      jobId: "message-template-a_sms-hash-a",
+      templateId: "message-template-a",
+      recipientCount: 2,
+      sentCount: 1,
+      failedCount: 1,
+      billableSegments: 2,
+    }]);
   });
 
   it("job context'i adapter çalışırken taşır", async () => {
@@ -150,6 +166,41 @@ describe("processSmsBatchJob", () => {
       ),
     ).rejects.toThrow("SMS_BATCH_PAYLOAD_INVALID");
   });
+
+  it("adapter hata verirse teslim raporunu failed yapar", async () => {
+    const deliveryReporter = new FakeDeliveryReporter();
+    const adapter: SmsAdapter = {
+      async sendBatch() {
+        throw new Error("PROVIDER_DOWN");
+      },
+    };
+
+    await expect(processSmsBatchJob(
+      {
+        id: "message-template-a_sms-hash-a",
+        name: "sms-batch",
+        payload: {
+          tenantId: "tenant-a",
+          userId: "user-a",
+          entityId: "message-template-a",
+          contentHash: "sms-hash-a",
+          templateId: "message-template-a",
+          messageBody: "Mesaj",
+          recipients: [{ to: "5000000001" }, { to: "5000000002" }],
+        },
+      },
+      adapter,
+      deliveryReporter,
+    )).rejects.toThrow("PROVIDER_DOWN");
+
+    expect(deliveryReporter.failed).toEqual([{
+      tenantId: "tenant-a",
+      jobId: "message-template-a_sms-hash-a",
+      templateId: "message-template-a",
+      recipientCount: 2,
+      providerErrorCode: "PROVIDER_DOWN",
+    }]);
+  });
 });
 
 class FakeSmsAdapter implements SmsAdapter {
@@ -160,5 +211,18 @@ class FakeSmsAdapter implements SmsAdapter {
   async sendBatch(messages: SmsMessage[]): Promise<SmsSendResult[]> {
     this.messages = messages;
     return this.results;
+  }
+}
+
+class FakeDeliveryReporter implements SmsBatchDeliveryReporter {
+  completed: SmsBatchDeliveryCompletedInput[] = [];
+  failed: SmsBatchDeliveryFailedInput[] = [];
+
+  async markCompleted(input: SmsBatchDeliveryCompletedInput): Promise<void> {
+    this.completed.push(input);
+  }
+
+  async markFailed(input: SmsBatchDeliveryFailedInput): Promise<void> {
+    this.failed.push(input);
   }
 }

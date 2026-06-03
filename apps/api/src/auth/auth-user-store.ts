@@ -1,5 +1,6 @@
 import { scryptSync, timingSafeEqual } from "node:crypto";
 import pg from "pg";
+import { type TenantQueryable, withBypassRlsQuery } from "../db/tenant-query.js";
 
 export interface AuthUser {
   id: string;
@@ -130,7 +131,7 @@ export class InMemoryAuthUserStore implements AuthUserStore {
 }
 
 export class PostgresAuthUserStore implements AuthUserStore {
-  constructor(private readonly pool: pg.Pool = new pg.Pool({ connectionString: process.env.DATABASE_URL })) {}
+  constructor(private readonly pool: TenantQueryable = new pg.Pool({ connectionString: process.env.DATABASE_URL })) {}
 
   async findByEmail(email: string): Promise<AuthUser | undefined> {
     const result = await this.queryAuthUsers(
@@ -155,10 +156,7 @@ export class PostgresAuthUserStore implements AuthUserStore {
   }
 
   async purgePii(id: string, input: { email: string; name: string; purgedAt: string }): Promise<AuthUser | undefined> {
-    const client = await this.pool.connect();
-    try {
-      await client.query("BEGIN");
-      await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
+    const updated = await withBypassRlsQuery(this.pool, async (client) => {
       const update = await client.query(
         `UPDATE "User"
          SET "email" = $2, "name" = $3, "passwordHash" = '', "updatedAt" = now()
@@ -166,21 +164,13 @@ export class PostgresAuthUserStore implements AuthUserStore {
          RETURNING "id"`,
         [id, input.email, input.name],
       );
-      await client.query("COMMIT");
-      return update.rows[0] ? this.findById(id) : undefined;
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
-    }
+      return Boolean(update.rows[0]);
+    });
+    return updated ? this.findById(id) : undefined;
   }
 
   async updatePassword(id: string, passwordHash: string): Promise<AuthUser | undefined> {
-    const client = await this.pool.connect();
-    try {
-      await client.query("BEGIN");
-      await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
+    const updated = await withBypassRlsQuery(this.pool, async (client) => {
       const update = await client.query(
         `UPDATE "User"
          SET "passwordHash" = $2,
@@ -189,21 +179,13 @@ export class PostgresAuthUserStore implements AuthUserStore {
          RETURNING "id"`,
         [id, passwordHash],
       );
-      await client.query("COMMIT");
-      return update.rows[0] ? this.findById(id) : undefined;
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
-    }
+      return Boolean(update.rows[0]);
+    });
+    return updated ? this.findById(id) : undefined;
   }
 
   private async queryAuthUsers(whereSql: string, values: unknown[]): Promise<AuthUser[]> {
-    const client = await this.pool.connect();
-    try {
-      await client.query("BEGIN");
-      await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
+    return withBypassRlsQuery(this.pool, async (client) => {
       const result = await client.query<AuthUserRow>(
         `SELECT
            u."id",
@@ -217,14 +199,8 @@ export class PostgresAuthUserStore implements AuthUserStore {
          ${whereSql}`,
         values,
       );
-      await client.query("COMMIT");
       return result.rows.map(toAuthUser);
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
-    }
+    });
   }
 }
 

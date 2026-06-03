@@ -57,6 +57,11 @@ describe("ReportGenerationController", () => {
       .send({
         reportType: examResultSummaryReportType,
         contentHash: "results-v1",
+        campusId: "campus-main",
+        gradeLevelId: "grade-8",
+        classId: "class-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
       })
       .expect(201);
 
@@ -67,6 +72,11 @@ describe("ReportGenerationController", () => {
       entityId: "exam-a",
       contentHash: "results-v1",
       reportType: examResultSummaryReportType,
+      campusId: "campus-main",
+      gradeLevelId: "grade-8",
+      classId: "class-a",
+      courseId: "course-math",
+      termId: "term-2026-spring",
     }]);
     expect(response.body).toEqual({
       tenantId: "tenant-a",
@@ -88,6 +98,17 @@ describe("ReportGenerationController", () => {
 
     expect(snapshotStore.inputs).toContainEqual({ tenantId: "tenant-a", examId: "exam-a" });
     expect(response.body).toEqual([fakeSnapshot, fakePreviousSnapshot]);
+  });
+
+  it("TENANT_ADMIN rapor snapshotlarını akademik bağlam filtresiyle listeler", async () => {
+    const issued = await login("admin-a@example.test");
+
+    const response = await request(server)
+      .get("/exams/exam-a/reports/snapshots?courseId=course-math&termId=term-2026-spring")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual([fakeSnapshot]);
   });
 
   it("TEACHER hazır rapor snapshotlarını okuyabilir", async () => {
@@ -121,6 +142,9 @@ describe("ReportGenerationController", () => {
     await workbook.xlsx.load(file as Parameters<ExcelJS.Workbook["xlsx"]["load"]>[0]);
     expect(workbook.getWorksheet("Students")?.getCell("A2").value).toBe("student-a");
     expect(workbook.getWorksheet("Classes")?.getCell("B2").value).toBe("8-A");
+    expect(workbook.getWorksheet("Students")?.getCell("K2").value).toBe(3);
+    expect(workbook.getWorksheet("Students")?.getCell("M2").value).toBe(92.5);
+    expect(workbook.getWorksheet("BranchStatistics")?.getCell("D2").value).toBe(3);
   });
 
   it("TEACHER hazır rapor snapshotını PDF olarak alabilir", async () => {
@@ -142,6 +166,8 @@ describe("ReportGenerationController", () => {
     expect(Buffer.from(response.body.fileBase64 as string, "base64").toString("utf8")).toContain("%PDF-1.4");
     expect(pdfRenderer.inputs.at(-1)?.html).toContain("Sınav Raporu");
     expect(pdfRenderer.inputs.at(-1)?.html).toContain("Sınıf Başarı");
+    expect(pdfRenderer.inputs.at(-1)?.html).toContain("Genel sıra");
+    expect(pdfRenderer.inputs.at(-1)?.html).toContain("3/40 (%92.5)");
   });
 
   it("TEACHER hazır snapshot içinden öğrenci sınav raporu okuyabilir", async () => {
@@ -159,12 +185,16 @@ describe("ReportGenerationController", () => {
     });
     expect(response.body).toEqual({
       tenantId: "tenant-a",
+      institutionName: "DNA EĞİTİM KURUMU",
       examId: "exam-a",
       snapshotId: "snapshot-a",
       studentId: "student-a",
+      studentName: "Ada A",
       classId: "class-a",
       className: "8-A",
+      courseId: "course-math",
       resultKey: "result-a",
+      termId: "term-2026-spring",
       total: {
         correct: 18,
         wrong: 2,
@@ -180,8 +210,17 @@ describe("ReportGenerationController", () => {
           wrong: 2,
           blank: 0,
           net: 17.5,
+          schoolNetAverage: 17.5,
         },
       ],
+      statistics: {
+        standardScore: 72.5,
+        general: { rank: 3, outOf: 40, percentile: 92.5 },
+        class: { rank: 1, outOf: 20, percentile: 97.5 },
+        branches: [
+          { branch: "Matematik", standardScore: 72.5, general: { rank: 3, outOf: 40, percentile: 92.5 }, class: { rank: 1, outOf: 20, percentile: 97.5 } },
+        ],
+      },
       generatedAt: "2026-06-06T09:00:00.000Z",
     });
   });
@@ -228,7 +267,9 @@ describe("ReportGenerationController", () => {
       points: [
         {
           snapshotId: "snapshot-previous",
+          courseId: "course-turkish",
           generatedAt: "2026-06-05T09:00:00.000Z",
+          termId: "term-2026-spring",
           total: {
             correct: 15,
             wrong: 4,
@@ -237,10 +278,21 @@ describe("ReportGenerationController", () => {
             rawScore: 70,
             standardScore: 80,
           },
+          branches: [
+            {
+              branch: "Matematik",
+              correct: 15,
+              wrong: 4,
+              blank: 1,
+              net: 14,
+            },
+          ],
         },
         {
           snapshotId: "snapshot-a",
+          courseId: "course-math",
           generatedAt: "2026-06-06T09:00:00.000Z",
+          termId: "term-2026-spring",
           total: {
             correct: 18,
             wrong: 2,
@@ -249,6 +301,15 @@ describe("ReportGenerationController", () => {
             rawScore: 87.5,
             standardScore: 87.5,
           },
+          branches: [
+            {
+              branch: "Matematik",
+              correct: 18,
+              wrong: 2,
+              blank: 0,
+              net: 17.5,
+            },
+          ],
         },
       ],
       netDelta: 3.5,
@@ -333,6 +394,11 @@ const fakeSnapshot: ReportSnapshotRecord = {
   id: "snapshot-a",
   tenantId: "tenant-a",
   examId: "exam-a",
+  campusId: "campus-main",
+  gradeLevelId: "grade-8",
+  classId: "class-a",
+  courseId: "course-math",
+  termId: "term-2026-spring",
   reportType: examResultSummaryReportType,
   status: "READY",
   inputRefs: { resultKeys: ["result-a"] },
@@ -396,6 +462,14 @@ const fakeSnapshot: ReportSnapshotRecord = {
           { questionNo: 2, branch: "Matematik", answer: "C", correctAnswer: "B", status: "WRONG" },
           { questionNo: 3, branch: "Matematik", answer: "", correctAnswer: "D", status: "BLANK" },
         ],
+        statistics: {
+          standardScore: 72.5,
+          general: { rank: 3, outOf: 40, percentile: 92.5 },
+          class: { rank: 1, outOf: 20, percentile: 97.5 },
+          branches: [
+            { branch: "Matematik", standardScore: 72.5, general: { rank: 3, outOf: 40, percentile: 92.5 }, class: { rank: 1, outOf: 20, percentile: 97.5 } },
+          ],
+        },
       },
     ],
   },
@@ -407,6 +481,8 @@ const fakeSnapshot: ReportSnapshotRecord = {
 const fakePreviousSnapshot: ReportSnapshotRecord = {
   ...fakeSnapshot,
   id: "snapshot-previous",
+  classId: "class-b",
+  courseId: "course-turkish",
   inputRefs: { resultKeys: ["result-previous"] },
   snapshotData: {
     resultCount: 1,
@@ -460,5 +536,9 @@ class FakeReportSnapshotStore implements ReportSnapshotStore {
     return [fakeSnapshot, fakePreviousSnapshot].find(
       (snapshot) => snapshot.tenantId === tenantId && snapshot.examId === examId && snapshot.id === snapshotId,
     );
+  }
+
+  async markStaleByExam(): Promise<number> {
+    return 0;
   }
 }

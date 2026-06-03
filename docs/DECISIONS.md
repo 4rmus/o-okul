@@ -50,10 +50,12 @@ Durum: Onaylı
 Karar: TXT/DAT optik değerlendirme hedef kapsamda; gerçek örnek dosya gelene kadar parser kontrollü
 beta kabul edilir.
 Kaynak: Kullanıcı görüşmesi / master plan §2 ve §5.
-Kanıt: `MASTER_PLAN.md` §2/§5.
+Kanıt: `MASTER_PLAN.md` §2/§5; `docs/phase-3-report.md` sentetik pilot fixture notu;
+`apps/worker/src/jobs/optical-pilot-fixture.test.ts`.
 Etkilenen ADR: Yok
-Açık soru: Faz 3 öncesi örnek TXT/DAT ve cevap anahtarı formatı gerekli.
-Son kontrol: 2026-05-29
+Açık soru: Gerçek cihazdan alınmış TXT/DAT örneği ve cevap anahtarı formatı geldiğinde gerçek cihaz
+fixture'ı eklenmeli.
+Son kontrol: 2026-06-02
 
 ### DEC-20260529-05 — Kota davranışı
 
@@ -98,12 +100,17 @@ Karar: Gerçek SMS sağlayıcısı seçilene kadar `SMS_PROVIDER=noop` yalnız l
 SMS adapter ile başlamaz. İlk gerçek sağlayıcı implementasyonu Netgsm REST v2 olarak eklendi;
 canlı gönderim için `SMS_PROVIDER=netgsm`, `NETGSM_USERCODE`, `NETGSM_PASSWORD` ve
 `NETGSM_MSG_HEADER` secret değerleri gerekir.
+E-posta/push tarafında `NOTIFICATION_PROVIDER=noop` yalnız lokal/test kullanım içindir; production
+env kontrolü `NOTIFICATION_PROVIDER=http`, gerçek HTTPS endpoint, Bearer token ve
+`pnpm notification:smoke` sonucunu zorunlu tutar.
 Kaynak: Master plan Faz 5 SMS adapter kapsamı ve Netgsm resmi REST v2 SMS dokümanı.
 Kanıt: `packages/sms-adapter/src/index.ts`, `apps/worker/src/jobs/sms-batch-processor.ts`,
-`docker-compose.yml`, `.env.example`, `pnpm sms:smoke`.
+`packages/notification-adapter/src/index.ts`, `docker-compose.yml`, `.env.example`,
+`pnpm sms:smoke`, `pnpm notification:smoke`.
 Etkilenen ADR: Yok
 Açık soru: Netgsm test credential/canlı hesap doğrulaması hâlâ `OPEN-20260529-04` altında bekliyor;
-smoke komutu hazır, gerçek sağlayıcıda `SMS_SMOKE_CONFIRM=send` ister.
+smoke komutu hazır, gerçek sağlayıcıda `SMS_SMOKE_CONFIRM=send` ister. E-posta/push için
+staging HTTP provider credential'ı ve `NOTIFICATION_SMOKE_CONFIRM=send` sonucu bekliyor.
 Son kontrol: 2026-05-30
 
 ### DEC-20260531-01 — Veli-öğrenci bağlama
@@ -149,5 +156,5 @@ Son kontrol: 2026-05-31
 
 | ID | Faz | Bloklar mı? | Soru | Beklenen kanıt |
 |---|---|---|---|---|
-| OPEN-20260529-03 | Faz 3 | Evet | Örnek TXT/DAT ve cevap anahtarı formatı nedir? | Gerçek cihaz örnek dosyası + parser fixture |
+| OPEN-20260529-03 | Faz 3 | Evet | Gerçek cihaz TXT/DAT ve cevap anahtarı formatı nedir? | Gerçek cihaz örnek dosyası + sentetik pilot fixture yanına gerçek parser fixture |
 | OPEN-20260529-04 | Faz 5 | Hayır | Netgsm test credential/canlı hesap doğrulaması nasıl yapılacak? | Test hesabı secretları + `pnpm sms:smoke` canlı/staging sonucu |

@@ -1,4 +1,4 @@
-export type TenantQueueName = "exam-evaluation" | "excel-import" | "report-generation" | "sms-batch";
+export type TenantQueueName = "announcement-delivery" | "exam-evaluation" | "excel-import" | "report-generation" | "sms-batch";
 
 interface BaseTenantQueueJobInput {
   queueName: TenantQueueName;
@@ -18,6 +18,11 @@ export interface ExamEvaluationQueueJobInput extends BaseTenantQueueJobInput {
 export interface ReportGenerationQueueJobInput extends BaseTenantQueueJobInput {
   queueName: "report-generation";
   reportType: "EXAM_RESULT_SUMMARY";
+  campusId?: string;
+  gradeLevelId?: string;
+  classId?: string;
+  courseId?: string;
+  termId?: string;
 }
 
 export interface SmsBatchQueueJobInput extends BaseTenantQueueJobInput {
@@ -27,11 +32,22 @@ export interface SmsBatchQueueJobInput extends BaseTenantQueueJobInput {
   recipients: Array<{ to: string }>;
 }
 
+export interface AnnouncementDeliveryQueueJobInput extends BaseTenantQueueJobInput {
+  queueName: "announcement-delivery";
+  channel: "EMAIL" | "PUSH";
+  recipientCount: number;
+  deliveredCount: number;
+  failedCount: number;
+  status: "completed" | "failed";
+  providerErrorCode?: string;
+}
+
 export type TenantQueueJobInput =
+  | AnnouncementDeliveryQueueJobInput
   | ExamEvaluationQueueJobInput
   | ReportGenerationQueueJobInput
   | SmsBatchQueueJobInput
-  | (BaseTenantQueueJobInput & { queueName: Exclude<TenantQueueName, "exam-evaluation" | "report-generation" | "sms-batch"> });
+  | (BaseTenantQueueJobInput & { queueName: Exclude<TenantQueueName, "announcement-delivery" | "exam-evaluation" | "report-generation" | "sms-batch"> });
 
 export interface ProducedJob<TInput extends TenantQueueJobInput = TenantQueueJobInput> {
   queueName: TInput["queueName"];
@@ -67,6 +83,9 @@ export function createTenantQueueJob(input: TenantQueueJobInput): ProducedJob {
   ) {
     throw new Error("SMS_BATCH_JOB_PAYLOAD_INVALID");
   }
+  if (input.queueName === "announcement-delivery" && !isAnnouncementDeliveryInputValid(input)) {
+    throw new Error("ANNOUNCEMENT_DELIVERY_JOB_PAYLOAD_INVALID");
+  }
 
   return {
     queueName: input.queueName,
@@ -82,6 +101,14 @@ export function createTenantQueueJob(input: TenantQueueJobInput): ProducedJob {
       removeOnFail: false,
     },
   };
+}
+
+function isAnnouncementDeliveryInputValid(input: AnnouncementDeliveryQueueJobInput): boolean {
+  if (input.channel !== "EMAIL" && input.channel !== "PUSH") return false;
+  if (input.status !== "completed" && input.status !== "failed") return false;
+  const counts = [input.recipientCount, input.deliveredCount, input.failedCount];
+  if (counts.some((value) => !Number.isInteger(value) || value < 0)) return false;
+  return input.deliveredCount + input.failedCount <= input.recipientCount;
 }
 
 function createPayload<TInput extends TenantQueueJobInput>(input: TInput): Omit<TInput, "queueName"> {

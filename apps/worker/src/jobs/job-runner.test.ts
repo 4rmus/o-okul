@@ -40,7 +40,7 @@ describe("worker tenant job runner", () => {
     expect(db.writes).toHaveLength(1);
   });
 
-  it("planlanan Faz 0 kuyruk adlarını sabit tutar", () => {
-    expect(queueNames).toEqual(["exam-evaluation", "excel-import", "report-generation", "sms-batch"]);
+  it("tenant worker kuyruk adlarını sabit tutar", () => {
+    expect(queueNames).toEqual(["announcement-delivery", "exam-evaluation", "excel-import", "report-generation", "sms-batch"]);
   });
 });

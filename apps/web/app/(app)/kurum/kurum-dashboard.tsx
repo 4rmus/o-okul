@@ -9,7 +9,7 @@ export function KurumDashboard() {
   const { auth } = useAuth();
   const accessToken = auth?.accessToken ?? "";
   const tenantId = auth?.session.tenantId ?? "anonymous";
-  const examId = "exam-demo";
+  const examId = "exam-demo-isem-lgs-1";
   const roles = auth?.session.roles.join(", ") ?? "-";
   const overviewQuery = useKurumOverviewQuery(accessToken, tenantId, Boolean(auth));
   const reportQuery = useKurumReportSummaryQuery(accessToken, tenantId, examId, Boolean(auth));
@@ -52,7 +52,7 @@ export function KurumDashboard() {
       <section className="next-chart-panel" aria-label="Sınav sonuç özeti">
         <div>
           <h2>Sınav Sonuç Özeti</h2>
-          <p>{reportQuery.data ? "exam-demo snapshot verisi" : "Hazır rapor bekleniyor"}</p>
+          <p>{reportQuery.data ? "İSEM LGS-1 sınav raporu" : "Hazır rapor bekleniyor"}</p>
         </div>
         <ExamResultDonut result={examResult} />
       </section>

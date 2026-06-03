@@ -2,6 +2,8 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundEx
 import type { TeacherNoteRecord, TeacherNoteVisibility } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
+import { type CourseStore, courseStoreToken } from "../school/course-store.js";
 import { type GuardianStudentStore, guardianStudentStoreToken } from "../school/guardian-student-store.js";
 import { type TeacherStore, teacherStoreToken } from "../school/teacher-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
@@ -16,7 +18,12 @@ import {
 import { type TeacherNoteStore, teacherNoteStoreToken } from "./teacher-note-store.js";
 
 export type TeacherNoteInput = Pick<TeacherNoteRecord, "studentId" | "body" | "visibility"> &
-  Pick<Partial<TeacherNoteRecord>, "teacherId" | "developmentStatus">;
+  Pick<Partial<TeacherNoteRecord>, "teacherId" | "courseId" | "termId" | "developmentStatus">;
+
+export interface TeacherNoteListFilters {
+  classId?: string;
+  studentId?: string;
+}
 
 const noteVisibilities: TeacherNoteVisibility[] = ["INTERNAL", "GUARDIAN_STUDENT"];
 
@@ -24,19 +31,19 @@ const noteVisibilities: TeacherNoteVisibility[] = ["INTERNAL", "GUARDIAN_STUDENT
 export class TeacherNoteService {
   constructor(
     @Inject(teacherNoteStoreToken) private readonly store: TeacherNoteStore,
+    @Inject(academicCalendarStoreToken) private readonly academicCalendarStore: AcademicCalendarStore,
+    @Inject(courseStoreToken) private readonly courseStore: CourseStore,
     @Inject(studentStoreToken) private readonly studentStore: StudentStore,
     @Inject(teacherStoreToken) private readonly teacherStore: TeacherStore,
     @Inject(guardianStudentStoreToken) private readonly guardianStudentStore: GuardianStudentStore,
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
-  async list(context: RequestContext, studentId?: string): Promise<TeacherNoteRecord[]> {
-    if (studentId) {
-      const student = await this.findStudentForTeacherScope(context, studentId);
-      return filterTenantResources(context, await this.store.listByStudent(student.id)).filter((note) => !note.deletedAt);
-    }
-
-    return this.filterForTeacherScope(context, filterTenantResources(context, await this.store.list()).filter((note) => !note.deletedAt));
+  async list(context: RequestContext, filters: TeacherNoteListFilters = {}): Promise<TeacherNoteRecord[]> {
+    const notes = filters.studentId
+      ? await this.listForTenantStudent(context, filters.studentId)
+      : await this.filterForTeacherScope(context, filterTenantResources(context, await this.store.list()).filter((note) => !note.deletedAt));
+    return this.filterByStudentClass(context, notes, filters.classId);
   }
 
   async listCurrentStudent(context: RequestContext): Promise<TeacherNoteRecord[]> {
@@ -58,10 +65,12 @@ export class TeacherNoteService {
   async create(context: RequestContext, input: Partial<TeacherNoteInput>): Promise<TeacherNoteRecord> {
     const student = await this.findStudentForTeacherScope(context, requiredText(input.studentId, "TEACHER_NOTE_STUDENT_REQUIRED"));
     const teacher = await this.findTeacherForTenant(context, await this.resolveTeacherId(context, input.teacherId));
+    const academicContext = await this.resolveAcademicContext(context, student.tenantId, input);
     const record = await this.store.create({
       tenantId: student.tenantId,
       studentId: student.id,
       teacherId: teacher.id,
+      ...academicContext,
       visibility: resolveVisibility(input.visibility),
       body: requiredText(input.body, "TEACHER_NOTE_BODY_REQUIRED"),
       developmentStatus: optionalText(input.developmentStatus),
@@ -75,6 +84,8 @@ export class TeacherNoteService {
       diff: {
         studentId: record.studentId,
         teacherId: record.teacherId,
+        courseId: record.courseId,
+        termId: record.termId,
         visibility: record.visibility,
         developmentStatus: record.developmentStatus,
       },
@@ -85,12 +96,14 @@ export class TeacherNoteService {
   async update(
     context: RequestContext,
     id: string,
-    input: Partial<Pick<TeacherNoteRecord, "body" | "visibility" | "developmentStatus">>,
+    input: Partial<Pick<TeacherNoteRecord, "body" | "visibility" | "courseId" | "termId" | "developmentStatus">>,
   ): Promise<TeacherNoteRecord> {
     const existing = await this.findOneForTenant(context, id);
+    const academicContext = await this.resolveAcademicContext(context, existing.tenantId, input);
     const record = await this.store.update(id, {
       body: input.body !== undefined ? requiredText(input.body, "TEACHER_NOTE_BODY_REQUIRED") : existing.body,
       visibility: input.visibility !== undefined ? resolveVisibility(input.visibility) : existing.visibility,
+      ...academicContext,
       developmentStatus:
         input.developmentStatus !== undefined ? optionalText(input.developmentStatus) : existing.developmentStatus,
     });
@@ -104,8 +117,8 @@ export class TeacherNoteService {
       entityId: record.id,
       action: "teacher_note.updated",
       diff: {
-        before: { visibility: existing.visibility, developmentStatus: existing.developmentStatus },
-        after: { visibility: record.visibility, developmentStatus: record.developmentStatus },
+        before: { courseId: existing.courseId, termId: existing.termId, visibility: existing.visibility, developmentStatus: existing.developmentStatus },
+        after: { courseId: record.courseId, termId: record.termId, visibility: record.visibility, developmentStatus: record.developmentStatus },
       },
     });
     return record;
@@ -138,6 +151,11 @@ export class TeacherNoteService {
     return filterTenantResources(context, await this.store.listByStudent(student.id)).filter(
       (note) => !note.deletedAt && note.visibility === "GUARDIAN_STUDENT",
     );
+  }
+
+  private async listForTenantStudent(context: RequestContext, studentId: string): Promise<TeacherNoteRecord[]> {
+    const student = await this.findStudentForTeacherScope(context, studentId);
+    return filterTenantResources(context, await this.store.listByStudent(student.id)).filter((note) => !note.deletedAt);
   }
 
   private async findStudentForTenant(context: RequestContext, studentId: string) {
@@ -194,6 +212,35 @@ export class TeacherNoteService {
     }
   }
 
+  private async resolveAcademicContext(
+    context: RequestContext,
+    tenantId: string,
+    input: Partial<Pick<TeacherNoteRecord, "courseId" | "termId">>,
+  ): Promise<Pick<Partial<TeacherNoteRecord>, "courseId" | "termId">> {
+    const result: Pick<Partial<TeacherNoteRecord>, "courseId" | "termId"> = {};
+    if (input.courseId !== undefined) {
+      const courseId = optionalText(input.courseId);
+      if (courseId) {
+        const course = await this.courseStore.findById(courseId);
+        if (!course) throw new NotFoundException("COURSE_NOT_FOUND");
+        this.assertTenantAccess(context, course);
+        if (course.tenantId !== tenantId) throw new ForbiddenException("FORBIDDEN_TENANT");
+      }
+      result.courseId = courseId;
+    }
+    if (input.termId !== undefined) {
+      const termId = optionalText(input.termId);
+      if (termId) {
+        const term = await this.academicCalendarStore.findTermById(termId);
+        if (!term) throw new NotFoundException("ACADEMIC_TERM_NOT_FOUND");
+        this.assertTenantAccess(context, term);
+        if (term.tenantId !== tenantId) throw new ForbiddenException("FORBIDDEN_TENANT");
+      }
+      result.termId = termId;
+    }
+    return result;
+  }
+
   private assertSubjectAccess(
     context: RequestContext,
     resource: { tenantId: string; id?: string; guardianIds?: string[] },
@@ -238,6 +285,18 @@ export class TeacherNoteService {
 
     const scopedStudentIds = new Set(filterTeacherScopedStudents(context, await this.studentStore.list()).map((student) => student.id));
     return notes.filter((note) => note.teacherId === context.subjectId && scopedStudentIds.has(note.studentId));
+  }
+
+  private async filterByStudentClass(context: RequestContext, notes: TeacherNoteRecord[], classId: string | undefined): Promise<TeacherNoteRecord[]> {
+    const normalizedClassId = optionalText(classId);
+    if (!normalizedClassId) return notes;
+
+    const studentIds = new Set(
+      filterTenantResources(context, await this.studentStore.list())
+        .filter((student) => student.classId === normalizedClassId)
+        .map((student) => student.id),
+    );
+    return notes.filter((note) => studentIds.has(note.studentId));
   }
 }
 

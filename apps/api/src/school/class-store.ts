@@ -11,15 +11,15 @@ export interface ClassStore {
   list(): Promise<ClassRecord[]>;
   findById(id: string): Promise<ClassRecord | undefined>;
   create(input: Omit<ClassRecord, "id">): Promise<ClassRecord>;
-  update(id: string, input: Partial<Pick<ClassRecord, "name" | "level">>): Promise<ClassRecord | undefined>;
+  update(id: string, input: Partial<Pick<ClassRecord, "name" | "level" | "campusId" | "gradeLevelId" | "section">>): Promise<ClassRecord | undefined>;
   softDelete(id: string, deletedAt: string): Promise<ClassRecord | undefined>;
 }
 
 export const classStoreToken = Symbol("ClassStore");
 
 const demoClasses: ClassRecord[] = [
-  { id: "class-a", tenantId: "tenant-a", name: "8-A", level: "8" },
-  { id: "class-b", tenantId: "tenant-b", name: "7-B", level: "7" },
+  { id: "class-a", tenantId: "tenant-a", name: "8-A", level: "8", campusId: "campus-main", gradeLevelId: "grade-8", section: "A" },
+  { id: "class-b", tenantId: "tenant-b", name: "7-B", level: "7", gradeLevelId: "grade-7", section: "B" },
 ];
 
 export class InMemoryClassStore implements ClassStore {
@@ -42,12 +42,15 @@ export class InMemoryClassStore implements ClassStore {
     return record;
   }
 
-  async update(id: string, input: Partial<Pick<ClassRecord, "name" | "level">>): Promise<ClassRecord | undefined> {
+  async update(id: string, input: Partial<Pick<ClassRecord, "name" | "level" | "campusId" | "gradeLevelId" | "section">>): Promise<ClassRecord | undefined> {
     const record = await this.findById(id);
     if (!record) return undefined;
 
     if (input.name !== undefined) record.name = input.name;
     if (input.level !== undefined) record.level = input.level;
+    if (input.campusId !== undefined) record.campusId = input.campusId;
+    if (input.gradeLevelId !== undefined) record.gradeLevelId = input.gradeLevelId;
+    if (input.section !== undefined) record.section = input.section;
     return record;
   }
 
@@ -80,10 +83,10 @@ export class PostgresClassStore implements ClassStore {
   async create(input: Omit<ClassRecord, "id">): Promise<ClassRecord> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<ClassRow>(
-        `INSERT INTO "Class" ("id", "tenantId", "name", "level", "updatedAt")
-         VALUES ($1, $2, $3, $4, now())
+        `INSERT INTO "Class" ("id", "tenantId", "campusId", "gradeLevelId", "name", "level", "section", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, now())
          RETURNING *`,
-        [randomUUID(), input.tenantId, input.name, input.level ?? null],
+        [randomUUID(), input.tenantId, input.campusId ?? null, input.gradeLevelId ?? null, input.name, input.level ?? null, input.section ?? null],
       );
       const record = result.rows[0];
       if (!record) {
@@ -93,7 +96,7 @@ export class PostgresClassStore implements ClassStore {
     });
   }
 
-  async update(id: string, input: Partial<Pick<ClassRecord, "name" | "level">>): Promise<ClassRecord | undefined> {
+  async update(id: string, input: Partial<Pick<ClassRecord, "name" | "level" | "campusId" | "gradeLevelId" | "section">>): Promise<ClassRecord | undefined> {
     const existing = await this.findById(id);
     if (!existing) return undefined;
 
@@ -102,10 +105,24 @@ export class PostgresClassStore implements ClassStore {
         `UPDATE "Class"
          SET "name" = COALESCE($2, "name"),
              "level" = CASE WHEN $3 THEN $4 ELSE "level" END,
+             "campusId" = CASE WHEN $5 THEN $6 ELSE "campusId" END,
+             "gradeLevelId" = CASE WHEN $7 THEN $8 ELSE "gradeLevelId" END,
+             "section" = CASE WHEN $9 THEN $10 ELSE "section" END,
              "updatedAt" = now()
          WHERE "id" = $1
          RETURNING *`,
-        [id, input.name ?? null, input.level !== undefined, input.level ?? null],
+        [
+          id,
+          input.name ?? null,
+          input.level !== undefined,
+          input.level ?? null,
+          input.campusId !== undefined,
+          input.campusId ?? null,
+          input.gradeLevelId !== undefined,
+          input.gradeLevelId ?? null,
+          input.section !== undefined,
+          input.section ?? null,
+        ],
       );
       return result.rows[0] ? toClassRecord(result.rows[0]) : undefined;
     });
@@ -136,8 +153,11 @@ export function createClassStore(): ClassStore {
 interface ClassRow {
   id: string;
   tenantId: string;
+  campusId: string | null;
+  gradeLevelId: string | null;
   name: string;
   level: string | null;
+  section: string | null;
   deletedAt: Date | null;
 }
 
@@ -145,8 +165,11 @@ function toClassRecord(record: ClassRow): ClassRecord {
   return {
     id: record.id,
     tenantId: record.tenantId,
+    campusId: record.campusId ?? undefined,
+    gradeLevelId: record.gradeLevelId ?? undefined,
     name: record.name,
     level: record.level ?? undefined,
+    section: record.section ?? undefined,
     deletedAt: record.deletedAt?.toISOString(),
   };
 }

@@ -49,11 +49,30 @@ describe("Schedule API", () => {
         tenantId: "tenant-a",
         classId: "class-a",
         teacherId: "teacher-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
         title: "Matematik",
         startsAt: "2026-06-01T09:00:00.000Z",
         endsAt: "2026-06-01T10:00:00.000Z",
       },
     ]);
+  });
+
+  it("ders programı listesinde page/limit/q/sort uygular", async () => {
+    await request(server)
+      .get("/schedule-lessons")
+      .query({ q: "matematik", sort: "-startsAt", page: "1", limit: "1" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: "lesson-a", title: "Matematik" })]);
+      });
+
+    await request(server)
+      .get("/schedule-lessons")
+      .query({ sort: "unknown" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(400);
   });
 
   it("ders programı CRUD akışını tenant içinde tamamlar", async () => {
@@ -63,6 +82,8 @@ describe("Schedule API", () => {
       .send({
         classId: "class-a",
         teacherId: "teacher-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
         title: "Geometri",
         startsAt: "2026-06-01T10:00:00.000Z",
         endsAt: "2026-06-01T11:00:00.000Z",
@@ -130,6 +151,32 @@ describe("Schedule API", () => {
         classId: "class-a",
         teacherId: "teacher-b",
         title: "Gizli Ogretmen",
+        startsAt: "2026-06-01T11:00:00.000Z",
+        endsAt: "2026-06-01T12:00:00.000Z",
+      })
+      .expect(403);
+
+    await request(server)
+      .post("/schedule-lessons")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        classId: "class-a",
+        teacherId: "teacher-a",
+        courseId: "course-turkish",
+        title: "Gizli Ders",
+        startsAt: "2026-06-01T11:00:00.000Z",
+        endsAt: "2026-06-01T12:00:00.000Z",
+      })
+      .expect(403);
+
+    await request(server)
+      .post("/schedule-lessons")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        classId: "class-a",
+        teacherId: "teacher-a",
+        termId: "term-2026-spring-b",
+        title: "Gizli Donem",
         startsAt: "2026-06-01T11:00:00.000Z",
         endsAt: "2026-06-01T12:00:00.000Z",
       })
