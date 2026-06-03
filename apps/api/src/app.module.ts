@@ -26,6 +26,9 @@ import { IdentityResolver } from "./auth/identity-resolver.js";
 import { createPasswordResetStore, passwordResetStoreToken } from "./auth/password-reset-store.js";
 import { authSessionStoreToken, createSessionStore } from "./auth/session-store.js";
 import { RequestContextMiddleware } from "./context/request-context.middleware.js";
+import { DevelopmentController } from "./development/development.controller.js";
+import { createDevelopmentStore, developmentStoreToken } from "./development/development-store.js";
+import { DevelopmentService } from "./development/development.service.js";
 import { AnswerKeyController } from "./exam/answer-key.controller.js";
 import { AnswerKeyExcelImportService } from "./exam/answer-key-excel-import.service.js";
 import { AnswerKeyService, answerKeyRepositoryToken } from "./exam/answer-key.service.js";
@@ -87,6 +90,7 @@ import { StudySessionController } from "./program/study-session.controller.js";
 import { createStudySessionStore, studySessionStoreToken } from "./program/study-session-store.js";
 import { StudySessionService } from "./program/study-session.service.js";
 import { createBullTenantQueueProducer } from "./queue/bullmq-producer.js";
+import { CapabilityGuard } from "./rbac/capability.guard.js";
 import { RolesGuard } from "./rbac/roles.guard.js";
 import { ReportGenerationController } from "./report/report-generation.controller.js";
 import {
@@ -136,6 +140,8 @@ import { SupportTicketService } from "./support-ticket/support-ticket.service.js
 import { TeacherNoteController } from "./teacher-note/teacher-note.controller.js";
 import { createTeacherNoteStore, teacherNoteStoreToken } from "./teacher-note/teacher-note-store.js";
 import { TeacherNoteService } from "./teacher-note/teacher-note.service.js";
+import { TenantController } from "./tenant/tenant.controller.js";
+import { TenantService } from "./tenant/tenant.service.js";
 import { createTenantStore, tenantStoreToken } from "./tenant/tenant-store.js";
 import { UserManagementController } from "./user-management/user-management.controller.js";
 import { createUserManagementStore, userManagementStoreToken } from "./user-management/user-management-store.js";
@@ -152,6 +158,7 @@ import { UserManagementService } from "./user-management/user-management.service
     CampusesController,
     ClassesController,
     CoursesController,
+    DevelopmentController,
     GradeLevelsController,
     GuardiansController,
     HealthController,
@@ -173,6 +180,7 @@ import { UserManagementService } from "./user-management/user-management.service
     SupportTicketController,
     TeachersController,
     TeacherNoteController,
+    TenantController,
     UserManagementController,
   ],
   providers: [
@@ -208,6 +216,7 @@ import { UserManagementService } from "./user-management/user-management.service
       useFactory: () => createNotificationAdapterFromEnv(process.env),
     },
     AuthService,
+    DevelopmentService,
     {
       provide: authUserStoreToken,
       useFactory: createAuthUserStore,
@@ -242,6 +251,10 @@ import { UserManagementService } from "./user-management/user-management.service
     {
       provide: courseStoreToken,
       useFactory: createCourseStore,
+    },
+    {
+      provide: developmentStoreToken,
+      useFactory: createDevelopmentStore,
     },
     {
       provide: guardianStoreToken,
@@ -377,6 +390,7 @@ import { UserManagementService } from "./user-management/user-management.service
     StudentService,
     SupportTicketService,
     TeacherNoteService,
+    TenantService,
     UserManagementService,
     {
       provide: teacherNoteStoreToken,
@@ -405,6 +419,10 @@ import { UserManagementService } from "./user-management/user-management.service
     {
       provide: APP_GUARD,
       useClass: RolesGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: CapabilityGuard,
     },
   ],
 })

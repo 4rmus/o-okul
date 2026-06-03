@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type {
+  GuardianRelationshipType,
   StudentClassHistoryRecord,
   StudentEnrollmentRecord,
   StudentProfileRecord,
@@ -19,6 +20,8 @@ import {
   type GuardianStudentStore,
   guardianStudentStoreToken,
 } from "../school/guardian-student-store.js";
+import { type GuardianRecord, type GuardianStore, guardianStoreToken } from "../school/guardian-store.js";
+import { IdentityInvitationService } from "../identity-invitation/identity-invitation.service.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
 import { type CampusStore, campusStoreToken } from "../school/campus-store.js";
 import { type ClassRecord, type ClassStore, classStoreToken } from "../school/class-store.js";
@@ -79,6 +82,23 @@ export interface StudentBulkEnrollmentResult {
   enrollments: StudentEnrollmentRecord[];
 }
 
+export interface StudentGuardianProvisionInput {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  email?: string;
+  relationshipType?: GuardianRelationshipType;
+  isPrimary?: boolean;
+  canViewFinance?: boolean;
+  canReceiveSms?: boolean;
+  canReceiveAnnouncements?: boolean;
+  canOpenSupportTickets?: boolean;
+}
+
+export interface StudentCreateInput extends Partial<StudentRecord> {
+  guardian?: StudentGuardianProvisionInput;
+}
+
 @Injectable()
 export class StudentService {
   private readonly maxStudentsPerTenant = Number.parseInt(process.env.STUDENT_QUOTA ?? "", 10) || 2;
@@ -86,6 +106,7 @@ export class StudentService {
   constructor(
     @Inject(studentStoreToken) private readonly store: StudentStore,
     @Inject(guardianStudentStoreToken) private readonly guardianStudentStore: GuardianStudentStore,
+    @Inject(guardianStoreToken) private readonly guardianStore: GuardianStore,
     @Inject(teacherAssignmentStoreToken) private readonly teacherAssignmentStore: TeacherAssignmentStore,
     @Inject(studentClassHistoryStoreToken) private readonly classHistoryStore: StudentClassHistoryStore,
     @Inject(studentEnrollmentStoreToken) private readonly enrollmentStore: StudentEnrollmentStore,
@@ -94,6 +115,7 @@ export class StudentService {
     @Inject(classStoreToken) private readonly classStore: ClassStore,
     @Inject(gradeLevelStoreToken) private readonly gradeLevelStore: GradeLevelStore,
     @Inject(teacherStoreToken) private readonly teacherStore: TeacherStore,
+    private readonly identityInvitations: IdentityInvitationService,
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
@@ -233,7 +255,7 @@ export class StudentService {
       });
   }
 
-  async create(context: RequestContext, input: Partial<StudentRecord>): Promise<StudentRecord> {
+  async create(context: RequestContext, input: StudentCreateInput): Promise<StudentRecord> {
     const tenantId = input.tenantId ?? context.tenantId;
     if (!tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
@@ -280,6 +302,9 @@ export class StudentService {
       action: "student.created",
       diff: { fieldsSet: presentFields(student, ["firstName", "lastName", "classId", "responsibleTeacherId", "status"]) },
     });
+    if (input.guardian) {
+      await this.autoProvisionGuardian(context, student, input.guardian);
+    }
     return student;
   }
 
@@ -559,6 +584,65 @@ export class StudentService {
       const message = error instanceof Error ? error.message : "FORBIDDEN_TENANT";
       throw new ForbiddenException(message);
     }
+  }
+
+  private async autoProvisionGuardian(
+    context: RequestContext,
+    student: StudentRecord,
+    input: StudentGuardianProvisionInput,
+  ): Promise<void> {
+    const guardianInput = parseGuardianProvisionInput(input, student);
+    const guardian =
+      await this.findGuardianByPhone(student.tenantId, guardianInput.phone)
+      ?? await this.guardianStore.create({
+        tenantId: student.tenantId,
+        firstName: guardianInput.firstName,
+        lastName: guardianInput.lastName,
+        phone: guardianInput.phone,
+      });
+
+    const link = await this.guardianStudentStore.create({
+      tenantId: student.tenantId,
+      guardianId: guardian.id,
+      studentId: student.id,
+      relationshipType: guardianInput.relationshipType,
+      isPrimary: guardianInput.isPrimary,
+      canViewFinance: guardianInput.canViewFinance,
+      canReceiveSms: guardianInput.canReceiveSms,
+      canReceiveAnnouncements: guardianInput.canReceiveAnnouncements,
+      canOpenSupportTickets: guardianInput.canOpenSupportTickets,
+    });
+
+    let invitationId: string | undefined;
+    if (guardianInput.email && !guardian.userId) {
+      const invitation = await this.identityInvitations.create(context, {
+        subjectType: "GUARDIAN",
+        subjectId: guardian.id,
+        email: guardianInput.email,
+        name: `${guardian.firstName} ${guardian.lastName}`,
+      });
+      invitationId = invitation.invitation.id;
+    }
+
+    await this.auditLogs?.record({
+      tenantId: student.tenantId,
+      actorUserId: context.userId,
+      entityType: "GuardianStudent",
+      entityId: link.id,
+      action: "guardian.auto_provisioned",
+      diff: {
+        guardianId: guardian.id,
+        studentId: student.id,
+        invitationId,
+      },
+    });
+  }
+
+  private async findGuardianByPhone(tenantId: string, phone: string | undefined): Promise<GuardianRecord | undefined> {
+    if (!phone) return undefined;
+    return (await this.guardianStore.list()).find(
+      (guardian) => guardian.tenantId === tenantId && guardian.phone === phone && !guardian.deletedAt,
+    );
   }
 
   private assertSubjectAccess(context: RequestContext, resource: { tenantId: string; studentId?: string; guardianIds?: string[]; id?: string }): void {
@@ -885,4 +969,47 @@ function resolveStudentStatus(value: StudentStatus | undefined): StudentStatus {
 
 function todayDateString(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function parseGuardianProvisionInput(input: StudentGuardianProvisionInput, student: StudentRecord) {
+  const phone = optionalGuardianText(input.phone);
+  const email = optionalGuardianEmail(input.email);
+  if (!phone && !email) {
+    throw new BadRequestException("GUARDIAN_CONTACT_REQUIRED");
+  }
+
+  return {
+    firstName: optionalGuardianText(input.firstName) ?? "Veli",
+    lastName: optionalGuardianText(input.lastName) ?? optionalGuardianText(student.lastName) ?? "Veli",
+    phone,
+    email,
+    relationshipType: resolveGuardianRelationshipType(input.relationshipType),
+    isPrimary: input.isPrimary,
+    canViewFinance: input.canViewFinance,
+    canReceiveSms: input.canReceiveSms,
+    canReceiveAnnouncements: input.canReceiveAnnouncements,
+    canOpenSupportTickets: input.canOpenSupportTickets,
+  };
+}
+
+function optionalGuardianText(value: string | undefined): string | undefined {
+  const text = value?.trim();
+  return text || undefined;
+}
+
+function optionalGuardianEmail(value: string | undefined): string | undefined {
+  const email = optionalGuardianText(value)?.toLowerCase();
+  if (!email) return undefined;
+  if (!email.includes("@")) {
+    throw new BadRequestException("GUARDIAN_EMAIL_INVALID");
+  }
+  return email;
+}
+
+function resolveGuardianRelationshipType(value: GuardianRelationshipType | undefined): GuardianRelationshipType | undefined {
+  if (value === undefined) return undefined;
+  if (["MOTHER", "FATHER", "GUARDIAN", "EMERGENCY_CONTACT", "OTHER"].includes(value)) {
+    return value;
+  }
+  throw new BadRequestException("GUARDIAN_RELATIONSHIP_TYPE_INVALID");
 }

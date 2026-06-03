@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Use
 import type { GradeLevelRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { SchoolService } from "./school.service.js";
@@ -24,20 +25,20 @@ export class GradeLevelsController {
   }
 
   @Post()
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("class:manage")
   create(@Body() body: Partial<GradeLevelRecord>): Promise<GradeLevelRecord> {
     return this.school.createGradeLevel(getRequestContext(), body);
   }
 
   @Patch(":id")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("class:manage")
   update(@Param("id") id: string, @Body() body: Partial<GradeLevelRecord>): Promise<GradeLevelRecord> {
     return this.school.updateGradeLevel(getRequestContext(), id, body);
   }
 
   @Delete(":id")
   @HttpCode(204)
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("class:manage")
   async delete(@Param("id") id: string): Promise<void> {
     await this.school.deleteGradeLevel(getRequestContext(), id);
   }

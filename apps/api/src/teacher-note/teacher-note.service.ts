@@ -5,11 +5,15 @@ import type { RequestContext } from "../context/request-context.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
 import { type CourseStore, courseStoreToken } from "../school/course-store.js";
 import { type GuardianStudentStore, guardianStudentStoreToken } from "../school/guardian-student-store.js";
+import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";
+import {
+  type TeacherAssignmentStore,
+  teacherAssignmentStoreToken,
+} from "../school/teacher-assignment-store.js";
 import { type TeacherStore, teacherStoreToken } from "../school/teacher-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
 import {
   assertSubjectResourceAccess,
-  assertTeacherScopedStudentAccess,
   assertTenantResourceAccess,
   filterTeacherScopedStudents,
   filterTenantResources,
@@ -36,6 +40,7 @@ export class TeacherNoteService {
     @Inject(studentStoreToken) private readonly studentStore: StudentStore,
     @Inject(teacherStoreToken) private readonly teacherStore: TeacherStore,
     @Inject(guardianStudentStoreToken) private readonly guardianStudentStore: GuardianStudentStore,
+    @Inject(teacherAssignmentStoreToken) private readonly teacherAssignmentStore: TeacherAssignmentStore,
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
@@ -66,6 +71,13 @@ export class TeacherNoteService {
     const student = await this.findStudentForTeacherScope(context, requiredText(input.studentId, "TEACHER_NOTE_STUDENT_REQUIRED"));
     const teacher = await this.findTeacherForTenant(context, await this.resolveTeacherId(context, input.teacherId));
     const academicContext = await this.resolveAcademicContext(context, student.tenantId, input);
+    await assertTeacherAssigned(context, this.teacherAssignmentStore, {
+      tenantId: student.tenantId,
+      studentId: student.id,
+      classId: student.classId,
+      courseId: academicContext.courseId,
+      termId: academicContext.termId,
+    });
     const record = await this.store.create({
       tenantId: student.tenantId,
       studentId: student.id,
@@ -100,6 +112,14 @@ export class TeacherNoteService {
   ): Promise<TeacherNoteRecord> {
     const existing = await this.findOneForTenant(context, id);
     const academicContext = await this.resolveAcademicContext(context, existing.tenantId, input);
+    const student = await this.findStudentForTenant(context, existing.studentId);
+    await assertTeacherAssigned(context, this.teacherAssignmentStore, {
+      tenantId: existing.tenantId,
+      studentId: existing.studentId,
+      classId: student.classId,
+      courseId: academicContext.courseId ?? existing.courseId,
+      termId: academicContext.termId ?? existing.termId,
+    });
     const record = await this.store.update(id, {
       body: input.body !== undefined ? requiredText(input.body, "TEACHER_NOTE_BODY_REQUIRED") : existing.body,
       visibility: input.visibility !== undefined ? resolveVisibility(input.visibility) : existing.visibility,
@@ -170,7 +190,11 @@ export class TeacherNoteService {
 
   private async findStudentForTeacherScope(context: RequestContext, studentId: string) {
     const student = await this.findStudentForTenant(context, studentId);
-    this.assertTeacherScope(context, student);
+    await assertTeacherAssigned(context, this.teacherAssignmentStore, {
+      tenantId: student.tenantId,
+      studentId: student.id,
+      classId: student.classId,
+    });
     return student;
   }
 
@@ -251,15 +275,6 @@ export class TeacherNoteService {
         studentId: resource.id,
         guardianIds: resource.guardianIds,
       });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "FORBIDDEN_SUBJECT";
-      throw new ForbiddenException(message);
-    }
-  }
-
-  private assertTeacherScope(context: RequestContext, resource: { tenantId: string; responsibleTeacherId?: string }): void {
-    try {
-      assertTeacherScopedStudentAccess(context, resource);
     } catch (error) {
       const message = error instanceof Error ? error.message : "FORBIDDEN_SUBJECT";
       throw new ForbiddenException(message);

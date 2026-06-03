@@ -1,10 +1,11 @@
-export const roles = ["SYSTEM_ADMIN", "TENANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN"] as const;
+export const roles = ["SYSTEM_ADMIN", "TENANT_ADMIN", "ASSISTANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN"] as const;
 
 export type Role = (typeof roles)[number];
 
 const roleRank: Record<Role, number> = {
   SYSTEM_ADMIN: 5,
   TENANT_ADMIN: 4,
+  ASSISTANT_ADMIN: 3.5,
   TEACHER: 3,
   STUDENT: 2,
   GUARDIAN: 1,

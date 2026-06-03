@@ -10,6 +10,12 @@ import {
 import type { ExamParticipantRecord, ExamRecord } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";
+import {
+  type TeacherAssignmentStore,
+  teacherAssignmentStoreToken,
+} from "../school/teacher-assignment-store.js";
+import { type StudentStore, studentStoreToken } from "../student/student-store.js";
 
 export const examRepositoryToken = Symbol("ExamRepository");
 export const examParticipantRepositoryToken = Symbol("ExamParticipantRepository");
@@ -58,6 +64,10 @@ export class ExamService {
     private readonly repository: ExamRepository,
     @Inject(examParticipantRepositoryToken)
     private readonly participants: ExamParticipantRepository,
+    @Inject(studentStoreToken)
+    private readonly students: StudentStore,
+    @Inject(teacherAssignmentStoreToken)
+    private readonly teacherAssignments: TeacherAssignmentStore,
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
@@ -125,6 +135,15 @@ export class ExamService {
     const participantNo = optionalString(input.participantNo);
     const bookletType = optionalString(input.bookletType);
     await this.requireExam(tenantId, id);
+    const student = await this.students.findById(studentId);
+    if (!student || student.tenantId !== tenantId) {
+      throw new NotFoundException("STUDENT_NOT_FOUND");
+    }
+    await assertTeacherAssigned(context, this.teacherAssignments, {
+      tenantId,
+      studentId: student.id,
+      classId: student.classId,
+    });
 
     try {
       const participant = await this.participants.create({

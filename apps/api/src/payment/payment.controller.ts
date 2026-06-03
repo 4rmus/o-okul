@@ -1,17 +1,18 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type { PaymentPlanWithInstallmentsRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
-import { Roles } from "../rbac/roles.decorator.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
+import { CapabilityGuard } from "../rbac/capability.guard.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { PaymentService, type PaymentInstallmentUpdateInput, type PaymentPlanInput } from "./payment.service.js";
 
 @Controller("payment-plans")
-@UseGuards(RolesGuard)
+@UseGuards(RolesGuard, CapabilityGuard)
 export class PaymentController {
   constructor(private readonly payments: PaymentService) {}
 
   @Get()
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("finance:manage")
   list(
     @Query("studentId") studentId?: string,
     @Query("campusId") campusId?: string,
@@ -24,13 +25,13 @@ export class PaymentController {
   }
 
   @Post()
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("finance:manage")
   create(@Body() body: Partial<PaymentPlanInput>): Promise<PaymentPlanWithInstallmentsRecord> {
     return this.payments.create(getRequestContext(), body);
   }
 
   @Patch(":planId/installments/:installmentId")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("finance:manage")
   updateInstallment(
     @Param("planId") planId: string,
     @Param("installmentId") installmentId: string,

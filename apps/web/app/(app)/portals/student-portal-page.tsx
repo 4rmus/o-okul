@@ -24,6 +24,7 @@ import type { SupportTicketFormPayload } from "../../../src/form-validation.js";
 import { useAuth } from "../../providers.js";
 import { AttendancePanel, TeacherNotesPanel } from "./_shared/activity-panels.js";
 import { AnnouncementsPanel } from "./_shared/announcements-panel.js";
+import { DevelopmentTrendPanel, type DevelopmentTrendItem } from "./_shared/development-panel.js";
 import { HomeworkAssignmentsPanel } from "./_shared/homework-panels.js";
 import { AccessPanel, MetricGrid, PortalFrame } from "./_shared/portal-shell.js";
 import { ReportPanel } from "./_shared/report-panel.js";
@@ -56,6 +57,7 @@ export function StudentPortalPage() {
           { label: "Toplam devamsızlık", value: data?.attendanceSummary.total ?? 0 },
           { label: "Geç kalma", value: data?.attendanceSummary.late ?? 0 },
           { label: "Not", value: data?.teacherNotes.length ?? 0 },
+          { label: "Gelişim", value: data?.developmentAssessments.length ?? 0 },
           { label: "Ödev", value: data?.homeworkAssignments.length ?? 0 },
           { label: "Net", value: formatNumber(data?.report?.total.net) },
         ]}
@@ -93,6 +95,7 @@ export function StudentPortalPage() {
         termNames={termNameById}
       />
       <AttendancePanel records={data?.attendance ?? []} />
+      <DevelopmentTrendPanel assessments={data?.developmentAssessments ?? []} />
       <TeacherNotesPanel notes={data?.teacherNotes ?? []} />
       {query.isError ? <p className="next-form-error">Öğrenci portal verisi alınamadı.</p> : null}
     </PortalFrame>
@@ -100,7 +103,7 @@ export function StudentPortalPage() {
 }
 
 async function loadStudentPortal(accessToken: string) {
-  const [profile, guardians, guardianLinks, classHistory, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, report, errorBooklet, progress, courses, terms] = await Promise.all([
+  const [profile, guardians, guardianLinks, classHistory, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, report, errorBooklet, progress, courses, terms] = await Promise.all([
     apiRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/student/profile`),
     apiRequest<GuardianRecord[]>(accessToken, `${apiBaseUrl}/me/student/guardians`),
     apiRequest<GuardianStudentRecord[]>(accessToken, `${apiBaseUrl}/me/student/guardian-links`),
@@ -115,6 +118,7 @@ async function loadStudentPortal(accessToken: string) {
     apiRequest<AttendanceRecord[]>(accessToken, `${apiBaseUrl}/me/student/attendance`),
     apiRequest<AttendanceSummaryRecord>(accessToken, `${apiBaseUrl}/me/student/attendance/summary`),
     apiRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/me/student/teacher-notes`),
+    apiRequest<DevelopmentTrendItem[]>(accessToken, `${apiBaseUrl}/me/student/development-assessments`),
     apiRequestOrNull<ReportStudentSnapshot>(accessToken, `${apiBaseUrl}/me/student/reports/${portalExamId}/latest`),
     apiRequestOrNull<ReportErrorBooklet>(
       accessToken,
@@ -125,7 +129,7 @@ async function loadStudentPortal(accessToken: string) {
     apiRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`),
   ]);
 
-  return { profile, guardians, guardianLinks, classHistory, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, report, errorBooklet, progress, courses, terms };
+  return { profile, guardians, guardianLinks, classHistory, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, report, errorBooklet, progress, courses, terms };
 }
 
 async function markAnnouncementRead(accessToken: string, path: string) {

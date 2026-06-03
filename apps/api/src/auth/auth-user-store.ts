@@ -43,6 +43,15 @@ const demoUsers: AuthUser[] = [
     membershipVersion: 1,
   },
   {
+    id: "assistant-tenant-a",
+    email: "assistant-a@example.test",
+    name: "Assistant Admin A",
+    passwordHash: hashPassword("password"),
+    tenantId: "tenant-a",
+    roles: ["ASSISTANT_ADMIN"],
+    membershipVersion: 1,
+  },
+  {
     id: "teacher-tenant-a",
     email: "teacher-a@example.test",
     name: "Teacher A",
@@ -76,6 +85,15 @@ const demoUsers: AuthUser[] = [
     passwordHash: hashPassword("password"),
     tenantId: "system",
     roles: ["SYSTEM_ADMIN"],
+    membershipVersion: 1,
+  },
+  {
+    id: "user-expired-tenant",
+    email: "expired-tenant@example.test",
+    name: "Expired Tenant User",
+    passwordHash: hashPassword("password"),
+    tenantId: "tenant-expired",
+    roles: ["TENANT_ADMIN"],
     membershipVersion: 1,
   },
   {

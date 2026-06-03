@@ -10,7 +10,12 @@ import type {
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { type ScheduleStore, scheduleStoreToken } from "../program/schedule-store.js";
+import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";
 import { SchoolService } from "../school/school.service.js";
+import {
+  type TeacherAssignmentStore,
+  teacherAssignmentStoreToken,
+} from "../school/teacher-assignment-store.js";
 import { StudentService } from "../student/student.service.js";
 import { assertTenantResourceAccess, filterTenantResources, isTeacherSubjectContext } from "../tenant/tenant-access.js";
 import { assertUploadContentMatchesContentType } from "../upload/upload-validation.js";
@@ -58,6 +63,7 @@ export class HomeworkService {
     private readonly students: StudentService,
     @Inject(homeworkStoreToken) private readonly store: HomeworkStore,
     @Inject(scheduleStoreToken) private readonly scheduleStore: ScheduleStore,
+    @Inject(teacherAssignmentStoreToken) private readonly teacherAssignmentStore: TeacherAssignmentStore,
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
@@ -217,13 +223,20 @@ export class HomeworkService {
       throw new BadRequestException("HOMEWORK_MATERIAL_ASSIGNMENT_STUDENT_REQUIRED");
     }
 
-    await this.students.findOneForViewer(context, input.studentId);
+    const student = await this.students.findOneForViewer(context, input.studentId);
     if (input.courseId) {
       await this.school.findCourse(context, input.courseId);
     }
     if (input.termId) {
       await this.school.findAcademicTerm(context, input.termId);
     }
+    await assertTeacherAssigned(context, this.teacherAssignmentStore, {
+      tenantId: material.tenantId,
+      studentId: student.id,
+      classId: student.classId,
+      courseId: optionalText(input.courseId),
+      termId: optionalText(input.termId),
+    });
 
     const record = await this.store.createMaterialAssignment({
       tenantId: material.tenantId,
@@ -272,6 +285,10 @@ export class HomeworkService {
   async create(context: RequestContext, input: Partial<HomeworkRecord>): Promise<HomeworkRecord> {
     const tenantId = this.resolveTenantId(context, input.tenantId);
     await this.assertClassAccess(context, input.classId);
+    await assertTeacherAssigned(context, this.teacherAssignmentStore, {
+      tenantId,
+      classId: input.classId,
+    });
     const dueAt = this.resolveOptionalDate(input.dueAt);
 
     const record = await this.store.create({
@@ -299,6 +316,10 @@ export class HomeworkService {
     const tenantId = this.resolveTenantId(context, input.tenantId);
     await this.assertClassAccess(context, input.classId);
     const material = await this.findMaterial(context, input.materialId);
+    await assertTeacherAssigned(context, this.teacherAssignmentStore, {
+      tenantId,
+      classId: input.classId,
+    });
     const dueAt = this.resolveOptionalDate(input.dueAt);
 
     const record = await this.store.create({
@@ -325,6 +346,10 @@ export class HomeworkService {
     const homework = await this.findOne(context, id);
     const classId = input.classId ?? homework.classId;
     await this.assertClassAccess(context, classId);
+    await assertTeacherAssigned(context, this.teacherAssignmentStore, {
+      tenantId: homework.tenantId,
+      classId,
+    });
 
     const record = await this.store.update(id, {
       classId,
@@ -348,6 +373,10 @@ export class HomeworkService {
 
   async delete(context: RequestContext, id: string): Promise<void> {
     const existing = await this.findOne(context, id);
+    await assertTeacherAssigned(context, this.teacherAssignmentStore, {
+      tenantId: existing.tenantId,
+      classId: existing.classId,
+    });
     const homework = await this.store.softDelete(id, new Date().toISOString());
     if (!homework) {
       throw new NotFoundException("HOMEWORK_NOT_FOUND");
@@ -367,7 +396,11 @@ export class HomeworkService {
       throw new BadRequestException("HOMEWORK_CHECK_STATUS_REQUIRED");
     }
 
-    await this.findOne(context, id);
+    const existing = await this.findOne(context, id);
+    await assertTeacherAssigned(context, this.teacherAssignmentStore, {
+      tenantId: existing.tenantId,
+      classId: existing.classId,
+    });
     const homework = await this.store.updateCheckStatus(
       id,
       checked ? new Date().toISOString() : undefined,

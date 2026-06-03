@@ -26,6 +26,7 @@ import type { SupportTicketFormPayload } from "../../../src/form-validation.js";
 import { useAuth } from "../../providers.js";
 import { AttendancePanel, TeacherNotesPanel } from "./_shared/activity-panels.js";
 import { AnnouncementsPanel } from "./_shared/announcements-panel.js";
+import { DevelopmentTrendPanel, type DevelopmentTrendItem } from "./_shared/development-panel.js";
 import { GuardianRelationshipSummaryPanel, NotificationPreferencesPanel, PaymentPlansPanel } from "./_shared/guardian-panels.js";
 import { HomeworkAssignmentsPanel } from "./_shared/homework-panels.js";
 import { AccessPanel, MetricGrid, PortalFrame } from "./_shared/portal-shell.js";
@@ -84,6 +85,7 @@ export function GuardianPortalPage() {
           { label: "Devamsızlık", value: data?.attendanceSummary.total ?? 0 },
           { label: "Ödeme planı", value: data?.paymentPlans.length ?? 0 },
           { label: "Öğretmen notu", value: data?.teacherNotes.length ?? 0 },
+          { label: "Gelişim", value: data?.developmentAssessments.length ?? 0 },
           { label: "Ödev", value: data?.homeworkAssignments.length ?? 0 },
           { label: "Bekleyen ödeme", value: canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Kapalı" },
         ]}
@@ -144,6 +146,7 @@ export function GuardianPortalPage() {
         termNames={termNameById}
       />
       <PaymentPlansPanel canViewFinance={canViewFinance} plans={data?.paymentPlans ?? []} />
+      <DevelopmentTrendPanel assessments={data?.developmentAssessments ?? []} />
       <TeacherNotesPanel notes={data?.teacherNotes ?? []} />
       <AttendancePanel records={data?.attendance ?? []} />
       {studentsQuery.isError || studentQuery.isError ? <p className="next-form-error">Veli portal verisi alınamadı.</p> : null}
@@ -152,7 +155,7 @@ export function GuardianPortalPage() {
 }
 
 async function loadGuardianStudentPortal(accessToken: string, studentId: string) {
-  const [profile, classHistory, enrollments, notificationPreferences, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, paymentPlans, report, errorBooklet, progress, courses, terms] = await Promise.all([
+  const [profile, classHistory, enrollments, notificationPreferences, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, paymentPlans, report, errorBooklet, progress, courses, terms] = await Promise.all([
     apiRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/profile`),
     apiRequest<StudentClassHistoryRecord[]>(
       accessToken,
@@ -181,6 +184,10 @@ async function loadGuardianStudentPortal(accessToken: string, studentId: string)
       `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/attendance/summary`,
     ),
     apiRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/teacher-notes`),
+    apiRequest<DevelopmentTrendItem[]>(
+      accessToken,
+      `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/development-assessments`,
+    ),
     apiRequestOrEmptyPaymentPlans(
       accessToken,
       `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/payment-plans`,
@@ -212,6 +219,7 @@ async function loadGuardianStudentPortal(accessToken: string, studentId: string)
     attendance,
     attendanceSummary,
     teacherNotes,
+    developmentAssessments,
     paymentPlans,
     report,
     errorBooklet,

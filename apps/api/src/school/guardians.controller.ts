@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Use
 import type { GuardianRecord, GuardianStudentRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { type GuardianStudentRelationInput, SchoolService } from "./school.service.js";
@@ -30,13 +31,13 @@ export class GuardiansController {
   }
 
   @Post()
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("student:manage")
   create(@Body() body: Partial<GuardianRecord>): Promise<GuardianRecord> {
     return this.school.createGuardian(getRequestContext(), body);
   }
 
   @Patch(":id")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("student:manage")
   update(@Param("id") id: string, @Body() body: Partial<GuardianRecord>): Promise<GuardianRecord> {
     return this.school.updateGuardian(getRequestContext(), id, body);
   }
@@ -48,7 +49,7 @@ export class GuardiansController {
   }
 
   @Post(":id/students")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("student:manage")
   linkStudent(
     @Param("id") id: string,
     @Body() body: { studentId?: string } & GuardianStudentRelationInput,
@@ -57,7 +58,7 @@ export class GuardiansController {
   }
 
   @Patch(":id/students/:studentId")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("student:manage")
   updateStudentLink(
     @Param("id") id: string,
     @Param("studentId") studentId: string,
@@ -68,14 +69,14 @@ export class GuardiansController {
 
   @Delete(":id/students/:studentId")
   @HttpCode(204)
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("student:manage")
   async unlinkStudent(@Param("id") id: string, @Param("studentId") studentId: string): Promise<void> {
     await this.school.unlinkGuardianStudent(getRequestContext(), id, studentId);
   }
 
   @Delete(":id")
   @HttpCode(204)
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("student:manage")
   async delete(@Param("id") id: string): Promise<void> {
     await this.school.deleteGuardian(getRequestContext(), id);
   }

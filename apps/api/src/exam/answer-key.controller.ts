@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 import type { AnswerKeyRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
@@ -24,7 +25,7 @@ export class AnswerKeyController {
   ) {}
 
   @Post()
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   create(
     @Param("examId") examId: string,
     @Body() body: Omit<CreateAnswerKeyInput, "examId">,
@@ -45,7 +46,7 @@ export class AnswerKeyController {
   }
 
   @Post("imports/dry-run")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   dryRunImport(
     @Param("examId") examId: string,
     @Body() body: Omit<AnswerKeyExcelImportInput, "examId">,
@@ -59,7 +60,7 @@ export class AnswerKeyController {
   }
 
   @Post("imports")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   import(
     @Param("examId") examId: string,
     @Body() body: Omit<AnswerKeyExcelImportInput, "examId">,
@@ -73,7 +74,7 @@ export class AnswerKeyController {
   }
 
   @Post(":version/publish")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   publish(
     @Param("examId") examId: string,
     @Param("version") version: string,
