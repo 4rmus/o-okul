@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Use
 import type { AcademicTermRecord, AcademicYearRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { SchoolService } from "./school.service.js";
@@ -24,20 +25,20 @@ export class AcademicCalendarController {
   }
 
   @Post("academic-years")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   createYear(@Body() body: Partial<AcademicYearRecord>): Promise<AcademicYearRecord> {
     return this.school.createAcademicYear(getRequestContext(), body);
   }
 
   @Patch("academic-years/:id")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   updateYear(@Param("id") id: string, @Body() body: Partial<AcademicYearRecord>): Promise<AcademicYearRecord> {
     return this.school.updateAcademicYear(getRequestContext(), id, body);
   }
 
   @Delete("academic-years/:id")
   @HttpCode(204)
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   async deleteYear(@Param("id") id: string): Promise<void> {
     await this.school.deleteAcademicYear(getRequestContext(), id);
   }
@@ -55,20 +56,20 @@ export class AcademicCalendarController {
   }
 
   @Post("academic-terms")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   createTerm(@Body() body: Partial<AcademicTermRecord>): Promise<AcademicTermRecord> {
     return this.school.createAcademicTerm(getRequestContext(), body);
   }
 
   @Patch("academic-terms/:id")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   updateTerm(@Param("id") id: string, @Body() body: Partial<AcademicTermRecord>): Promise<AcademicTermRecord> {
     return this.school.updateAcademicTerm(getRequestContext(), id, body);
   }
 
   @Delete("academic-terms/:id")
   @HttpCode(204)
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   async deleteTerm(@Param("id") id: string): Promise<void> {
     await this.school.deleteAcademicTerm(getRequestContext(), id);
   }

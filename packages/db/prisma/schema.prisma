@@ -9,6 +9,7 @@ datasource db {
 enum TenantRole {
   SYSTEM_ADMIN
   TENANT_ADMIN
+  ASSISTANT_ADMIN
   TEACHER
   STUDENT
   GUARDIAN
@@ -18,6 +19,10 @@ model Tenant {
   id          String             @id @default(uuid())
   name        String
   slug        String             @unique
+  plan        String             @default("TRIAL")
+  licenseStartsAt DateTime?          @db.Timestamptz(6)
+  licenseEndsAt   DateTime?          @db.Timestamptz(6)
+  seatLimit   Int?
   status      String             @default("ACTIVE")
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
@@ -36,6 +41,9 @@ model Tenant {
   teacherAssignments TeacherAssignment[]
   attendance  Attendance[]
   teacherNotes TeacherNote[]
+  developmentCriteria DevelopmentCriterion[]
+  developmentAssessments DevelopmentAssessment[]
+  developmentScores DevelopmentScore[]
   paymentPlans PaymentPlan[]
   paymentInstallments PaymentInstallment[]
   teachers    Teacher[]
@@ -68,6 +76,62 @@ model Tenant {
   supportTicketComments SupportTicketComment[]
   notificationDeviceTokens NotificationDeviceToken[]
   auditLogs   AuditLog[]
+}
+
+model DevelopmentCriterion {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  scaleMin  Int      @default(1)
+  scaleMax  Int      @default(5)
+  sortOrder Int      @default(0)
+  deletedAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "DevelopmentCriterion_tenantId_fkey")
+  scores DevelopmentScore[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, deletedAt])
+}
+
+model DevelopmentAssessment {
+  id          String   @id @default(uuid())
+  tenantId    String
+  studentId   String
+  teacherId   String
+  termId      String?
+  periodLabel String
+  mentorNote  String?
+  visibility  String   @default("GUARDIAN")
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "DevelopmentAssessment_tenantId_fkey")
+  student Student @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction, map: "DevelopmentAssessment_student_fkey")
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "DevelopmentAssessment_teacher_fkey")
+  scores DevelopmentScore[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, studentId, createdAt])
+}
+
+model DevelopmentScore {
+  id           String   @id @default(uuid())
+  tenantId     String
+  assessmentId String
+  criterionId  String
+  score        Int
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "DevelopmentScore_tenantId_fkey")
+  assessment DevelopmentAssessment @relation(fields: [tenantId, assessmentId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction, map: "DevelopmentScore_assessment_fkey")
+  criterion DevelopmentCriterion @relation(fields: [tenantId, criterionId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "DevelopmentScore_criterion_fkey")
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, assessmentId, criterionId])
 }
 
 model User {
@@ -366,6 +430,7 @@ model Student {
   homeworkMaterialAssignments HomeworkMaterialAssignment[]
   attendance Attendance[]
   teacherNotes TeacherNote[]
+  developmentAssessments DevelopmentAssessment[]
   paymentPlans PaymentPlan[]
   teacherAssignments TeacherAssignment[]
   classHistory StudentClassHistory[]
@@ -446,6 +511,7 @@ model Teacher {
   scheduleLessons ScheduleLesson[]
   studySessions StudySession[]
   teacherNotes TeacherNote[]
+  developmentAssessments DevelopmentAssessment[]
   responsibleStudents Student[] @relation("StudentResponsibleTeacher")
   teacherAssignments TeacherAssignment[]
 

@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Use
 import type { TeacherAssignmentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { SchoolService } from "./school.service.js";
@@ -30,25 +31,25 @@ export class TeachersController {
   }
 
   @Post()
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("staff:manage")
   create(@Body() body: Partial<TeacherRecord>): Promise<TeacherRecord> {
     return this.school.createTeacher(getRequestContext(), body);
   }
 
   @Post(":id/assignments")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("staff:manage")
   createAssignment(@Param("id") id: string, @Body() body: Partial<TeacherAssignmentRecord>): Promise<TeacherAssignmentRecord> {
     return this.school.createTeacherAssignment(getRequestContext(), id, body);
   }
 
   @Patch(":id")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("staff:manage")
   update(@Param("id") id: string, @Body() body: Partial<TeacherRecord>): Promise<TeacherRecord> {
     return this.school.updateTeacher(getRequestContext(), id, body);
   }
 
   @Patch(":id/assignments/:assignmentId")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("staff:manage")
   updateAssignment(
     @Param("id") id: string,
     @Param("assignmentId") assignmentId: string,
@@ -65,14 +66,14 @@ export class TeachersController {
 
   @Delete(":id")
   @HttpCode(204)
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("staff:manage")
   async delete(@Param("id") id: string): Promise<void> {
     await this.school.deleteTeacher(getRequestContext(), id);
   }
 
   @Delete(":id/assignments/:assignmentId")
   @HttpCode(204)
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("staff:manage")
   async deleteAssignment(@Param("id") id: string, @Param("assignmentId") assignmentId: string): Promise<void> {
     await this.school.deleteTeacherAssignment(getRequestContext(), id, assignmentId);
   }

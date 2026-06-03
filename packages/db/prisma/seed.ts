@@ -10,6 +10,7 @@ const pool = new pg.Pool({ connectionString: databaseUrl });
 const demoPasswordHash = "scrypt:demo-auth-salt:uG-yNMDIMmz8JL5XDnE2Eoc939a2mw8PcRPoJb8CXac";
 
 const demoSubjectUsers = [
+  { id: "user-demo-assistant", email: "assistant@demo.local", name: "Demo Müdür Yardımcısı", role: "ASSISTANT_ADMIN" },
   { id: "user-demo-teacher", email: "teacher@demo.local", name: "Demo Öğretmen", role: "TEACHER" },
   { id: "user-demo-student", email: "student@demo.local", name: "Demo Öğrenci", role: "STUDENT" },
   { id: "user-demo-guardian", email: "guardian@demo.local", name: "Demo Veli", role: "GUARDIAN" },

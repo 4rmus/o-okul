@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import type {
+  DevelopmentTrendItem,
   HomeworkMaterialAssignmentRecord,
   GuardianRecord,
   MeProfileResponse,
@@ -24,6 +25,7 @@ import type {
 import { AnnouncementService } from "../announcement/announcement.service.js";
 import { AttendanceService } from "../attendance/attendance.service.js";
 import { getRequestContext, type RequestContext } from "../context/request-context.js";
+import { DevelopmentService } from "../development/development.service.js";
 import { HomeworkService } from "../homework/homework.service.js";
 import {
   NotificationDeviceService,
@@ -45,6 +47,7 @@ export class MeController {
   constructor(
     private readonly announcements: AnnouncementService,
     private readonly attendance: AttendanceService,
+    private readonly development: DevelopmentService,
     private readonly homework: HomeworkService,
     private readonly notificationDevices: NotificationDeviceService,
     private readonly payments: PaymentService,
@@ -149,6 +152,12 @@ export class MeController {
   @Roles("STUDENT")
   studentTeacherNotes(): Promise<TeacherNoteRecord[]> {
     return this.teacherNotes.listCurrentStudent(getRequestContext());
+  }
+
+  @Get("student/development-assessments")
+  @Roles("STUDENT")
+  studentDevelopmentAssessments(): Promise<DevelopmentTrendItem[]> {
+    return this.development.listCurrentStudent(getRequestContext());
   }
 
   @Get("student/announcements")
@@ -273,6 +282,12 @@ export class MeController {
   @Roles("GUARDIAN")
   guardianStudentTeacherNotes(@Param("studentId") studentId: string): Promise<TeacherNoteRecord[]> {
     return this.teacherNotes.listCurrentGuardianStudent(getRequestContext(), studentId);
+  }
+
+  @Get("guardian/students/:studentId/development-assessments")
+  @Roles("GUARDIAN")
+  guardianStudentDevelopmentAssessments(@Param("studentId") studentId: string): Promise<DevelopmentTrendItem[]> {
+    return this.development.listCurrentGuardianStudent(getRequestContext(), studentId);
   }
 
   @Get("guardian/students/:studentId/announcements")

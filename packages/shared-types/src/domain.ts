@@ -374,6 +374,25 @@ export interface TeacherNoteRecord {
   deletedAt?: string;
 }
 
+export type DevelopmentAssessmentVisibility = "INTERNAL" | "GUARDIAN";
+
+export interface DevelopmentTrendScore {
+  criterionId: string;
+  criterionName: string;
+  score: number;
+  scaleMin: number;
+  scaleMax: number;
+}
+
+export interface DevelopmentTrendItem {
+  id: string;
+  periodLabel: string;
+  mentorNote?: string;
+  visibility: DevelopmentAssessmentVisibility;
+  createdAt?: string;
+  scores: DevelopmentTrendScore[];
+}
+
 export type PaymentInstallmentStatus = "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
 
 export interface PaymentInstallmentRecord {

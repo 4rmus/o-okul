@@ -1,10 +1,16 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type { AttendanceRecord, AttendanceStatus, AttendanceSummaryRecord } from "@uzman-hocam/shared-types";
+import { AnnouncementService } from "../announcement/announcement.service.js";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
 import { type CourseStore, courseStoreToken } from "../school/course-store.js";
 import { type GuardianStudentStore, guardianStudentStoreToken } from "../school/guardian-student-store.js";
+import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";
+import {
+  type TeacherAssignmentStore,
+  teacherAssignmentStoreToken,
+} from "../school/teacher-assignment-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
 import {
   assertSubjectResourceAccess,
@@ -24,6 +30,7 @@ export interface AttendanceListFilters {
 }
 
 const attendanceStatuses: AttendanceStatus[] = ["PRESENT", "ABSENT", "LATE", "EXCUSED"];
+const absenceWarningThreshold = Number.parseInt(process.env.ATTENDANCE_ABSENCE_WARNING_THRESHOLD ?? "", 10) || 5;
 
 @Injectable()
 export class AttendanceService {
@@ -33,6 +40,8 @@ export class AttendanceService {
     @Inject(courseStoreToken) private readonly courseStore: CourseStore,
     @Inject(studentStoreToken) private readonly studentStore: StudentStore,
     @Inject(guardianStudentStoreToken) private readonly guardianStudentStore: GuardianStudentStore,
+    @Inject(teacherAssignmentStoreToken) private readonly teacherAssignmentStore: TeacherAssignmentStore,
+    private readonly announcements: AnnouncementService,
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
@@ -83,12 +92,20 @@ export class AttendanceService {
   async create(context: RequestContext, input: Partial<AttendanceInput>): Promise<AttendanceRecord> {
     const student = await this.findStudentForTeacherScope(context, requiredText(input.studentId, "ATTENDANCE_STUDENT_REQUIRED"));
     const contextInput = await this.resolveAcademicContext(context, student.tenantId, input);
+    await assertTeacherAssigned(context, this.teacherAssignmentStore, {
+      tenantId: student.tenantId,
+      studentId: student.id,
+      classId: student.classId,
+      courseId: contextInput.courseId,
+      termId: contextInput.termId,
+    });
     const date = requiredDate(input.date);
     const status = resolveStatus(input.status);
     const existing = await this.store.findByStudentDate(student.id, date);
     if (existing) {
       throw new ConflictException("ATTENDANCE_ALREADY_EXISTS");
     }
+    const previousAbsenceCount = countAbsences(await this.store.listByStudent(student.id));
 
     const record = await this.store.create({
       tenantId: student.tenantId,
@@ -105,13 +122,23 @@ export class AttendanceService {
       action: "attendance.created",
       diff: { studentId: record.studentId, courseId: record.courseId, termId: record.termId, date: record.date, status: record.status },
     });
+    await this.warnIfAbsenceThresholdCrossed(context, student, previousAbsenceCount, countAbsences(await this.store.listByStudent(student.id)));
     return record;
   }
 
   async update(context: RequestContext, id: string, input: Partial<Pick<AttendanceRecord, "status" | "courseId" | "termId">>): Promise<AttendanceRecord> {
     const existing = await this.findOneForTenant(context, id);
     const contextInput = await this.resolveAcademicContext(context, existing.tenantId, input);
+    const student = await this.findStudentForTenant(context, existing.studentId);
+    await assertTeacherAssigned(context, this.teacherAssignmentStore, {
+      tenantId: existing.tenantId,
+      studentId: existing.studentId,
+      classId: student.classId,
+      courseId: contextInput.courseId ?? existing.courseId,
+      termId: contextInput.termId ?? existing.termId,
+    });
     const status = resolveStatus(input.status);
+    const previousAbsenceCount = countAbsences(await this.store.listByStudent(existing.studentId));
     const record = await this.store.update(id, { status, ...contextInput });
     if (!record) {
       throw new NotFoundException("ATTENDANCE_NOT_FOUND");
@@ -127,6 +154,7 @@ export class AttendanceService {
         after: { courseId: record.courseId, termId: record.termId, status: record.status },
       },
     });
+    await this.warnIfAbsenceThresholdCrossed(context, student, previousAbsenceCount, countAbsences(await this.store.listByStudent(existing.studentId)));
     return record;
   }
 
@@ -169,7 +197,11 @@ export class AttendanceService {
 
   private async findStudentForTeacherScope(context: RequestContext, studentId: string) {
     const student = await this.findStudentForTenant(context, studentId);
-    this.assertTeacherScope(context, student);
+    await assertTeacherAssigned(context, this.teacherAssignmentStore, {
+      tenantId: student.tenantId,
+      studentId: student.id,
+      classId: student.classId,
+    });
     return student;
   }
 
@@ -240,13 +272,6 @@ export class AttendanceService {
     }
   }
 
-  private assertTeacherScope(context: RequestContext, resource: { tenantId: string; responsibleTeacherId?: string }): void {
-    const scoped = filterTeacherScopedStudents(context, [resource]);
-    if (scoped.length === 0) {
-      throw new ForbiddenException("FORBIDDEN_SUBJECT");
-    }
-  }
-
   private async filterForTeacherScope(context: RequestContext, records: AttendanceRecord[]): Promise<AttendanceRecord[]> {
     if (!isTeacherSubjectContext(context)) {
       return records;
@@ -267,6 +292,45 @@ export class AttendanceService {
     );
     return records.filter((record) => studentIds.has(record.studentId));
   }
+
+  private async warnIfAbsenceThresholdCrossed(
+    context: RequestContext,
+    student: { tenantId: string; id: string; firstName?: string; lastName?: string; classId?: string },
+    previousAbsenceCount: number,
+    currentAbsenceCount: number,
+  ): Promise<void> {
+    if (absenceWarningThreshold <= 0 || previousAbsenceCount >= absenceWarningThreshold || currentAbsenceCount < absenceWarningThreshold) {
+      return;
+    }
+
+    let announcementId: string | undefined;
+    if (student.classId) {
+      const announcement = await this.announcements.create(context, {
+        tenantId: student.tenantId,
+        audience: "GUARDIANS",
+        classId: student.classId,
+        title: "Devamsızlık eşiği uyarısı",
+        body: "Sınıfınızda devamsızlık eşiğine ulaşan öğrenci bulunmaktadır. Lütfen veli panelinizden öğrencinizin devamsızlık özetini kontrol edin.",
+      });
+      announcementId = announcement.id;
+    }
+
+    await this.auditLogs?.record({
+      tenantId: student.tenantId,
+      actorUserId: context.userId,
+      entityType: "Attendance",
+      entityId: student.id,
+      action: "attendance.threshold_warned",
+      diff: {
+        studentId: student.id,
+        classId: student.classId,
+        previousAbsenceCount,
+        currentAbsenceCount,
+        threshold: absenceWarningThreshold,
+        announcementId,
+      },
+    });
+  }
 }
 
 function summarize(studentId: string, records: AttendanceRecord[]): AttendanceSummaryRecord {
@@ -281,6 +345,10 @@ function summarize(studentId: string, records: AttendanceRecord[]): AttendanceSu
     },
     { studentId, total: 0, present: 0, absent: 0, late: 0, excused: 0 },
   );
+}
+
+function countAbsences(records: AttendanceRecord[]): number {
+  return records.filter((record) => !record.deletedAt && record.status === "ABSENT").length;
 }
 
 function requiredText(value: string | undefined, errorCode: string): string {

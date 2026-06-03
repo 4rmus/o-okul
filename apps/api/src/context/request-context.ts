@@ -4,6 +4,7 @@ export interface RequestContext {
   userId: string;
   tenantId: string | null;
   roles: string[];
+  capabilities?: string[];
   bypassRls: boolean;
   subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER";
   subjectId?: string;

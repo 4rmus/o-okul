@@ -37,7 +37,7 @@ export function assertSubjectResourceAccess(context: RequestContext, resource: S
     return;
   }
 
-  if (context.roles.includes("TENANT_ADMIN")) {
+  if (hasTenantManagementRole(context)) {
     return;
   }
 
@@ -83,7 +83,7 @@ export function assertTeacherScopedStudentAccess(context: RequestContext, resour
     return;
   }
 
-  if (context.roles.includes("TENANT_ADMIN")) {
+  if (hasTenantManagementRole(context)) {
     return;
   }
 
@@ -104,7 +104,7 @@ export function filterTeacherScopedStudents<T extends TeacherScopedStudentResour
     return tenantResources;
   }
 
-  if (context.roles.includes("TENANT_ADMIN")) {
+  if (hasTenantManagementRole(context)) {
     return tenantResources;
   }
 
@@ -131,4 +131,8 @@ function assertMatchingSubjectList(resourceSubjectIds: string[], contextSubjectI
   if (!resourceSubjectIds.includes(contextSubjectId)) {
     throw new Error("FORBIDDEN_SUBJECT");
   }
+}
+
+function hasTenantManagementRole(context: RequestContext): boolean {
+  return context.roles.includes("TENANT_ADMIN") || context.roles.includes("ASSISTANT_ADMIN");
 }

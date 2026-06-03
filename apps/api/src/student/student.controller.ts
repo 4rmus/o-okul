@@ -1,6 +1,7 @@
 import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
@@ -101,49 +102,49 @@ export class StudentController {
   }
 
   @Post()
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("student:manage")
   create(@Body() body: Partial<StudentRecord>): Promise<StudentRecord> {
     return this.students.create(getRequestContext(), body);
   }
 
   @Post("enrollments/bulk-renew")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("student:manage")
   bulkRenewEnrollments(@Body() body: StudentBulkEnrollmentInput): Promise<StudentBulkEnrollmentResult> {
     return this.students.bulkRenewEnrollments(getRequestContext(), body);
   }
 
   @Post("imports/dry-run")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("student:manage")
   dryRunImport(@Body() body: { fileBase64?: string }): Promise<StudentImportDryRunResult> {
     return this.imports.dryRun(getRequestContext(), body);
   }
 
   @Post("imports")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("student:manage")
   import(@Body() body: { fileBase64?: string }): Promise<StudentImportResult> {
     return this.imports.import(getRequestContext(), body);
   }
 
   @Patch(":id")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("student:manage")
   update(@Param("id") id: string, @Body() body: Partial<StudentRecord>): Promise<StudentRecord> {
     return this.students.update(getRequestContext(), id, body);
   }
 
   @Patch(":id/profile")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("student:manage")
   updateProfile(@Param("id") id: string, @Body() body: StudentProfileInput): Promise<StudentProfileRecord> {
     return this.students.updateProfile(getRequestContext(), id, body);
   }
 
   @Post(":id/enrollments/renew")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("student:manage")
   renewEnrollment(@Param("id") id: string, @Body() body: StudentEnrollmentActionInput): Promise<StudentEnrollmentRecord> {
     return this.students.renewEnrollment(getRequestContext(), id, body);
   }
 
   @Post(":id/enrollments/transfer")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("student:manage")
   transferEnrollment(@Param("id") id: string, @Body() body: StudentEnrollmentActionInput): Promise<StudentEnrollmentRecord | null> {
     return this.students.transferEnrollment(getRequestContext(), id, body);
   }
@@ -156,7 +157,7 @@ export class StudentController {
 
   @Delete(":id")
   @HttpCode(204)
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("student:manage")
   async delete(@Param("id") id: string): Promise<void> {
     await this.students.delete(getRequestContext(), id);
   }

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import type { ReportErrorBooklet, ReportStudentProgress, ReportStudentSnapshot } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
@@ -73,7 +74,7 @@ export class ReportGenerationController {
   }
 
   @Post("generation-jobs")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   enqueue(
     @Param("examId") examId: string,
     @Body() body: EnqueueReportGenerationBody,

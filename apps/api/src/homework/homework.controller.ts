@@ -7,6 +7,7 @@ import type {
 } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
@@ -45,7 +46,7 @@ export class HomeworkController {
   }
 
   @Post("materials/:id/files")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   addMaterialFile(
     @Param("id") id: string,
     @Body() body: CreateHomeworkMaterialFileInput,
@@ -69,13 +70,13 @@ export class HomeworkController {
   }
 
   @Post("materials")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   createMaterial(@Body() body: Partial<HomeworkMaterialRecord>): Promise<HomeworkMaterialRecord> {
     return this.homework.createMaterial(getRequestContext(), body);
   }
 
   @Patch("materials/:id")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   updateMaterial(
     @Param("id") id: string,
     @Body() body: Partial<HomeworkMaterialRecord>,
@@ -85,7 +86,7 @@ export class HomeworkController {
 
   @Delete("materials/:id")
   @HttpCode(204)
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   deleteMaterial(@Param("id") id: string): Promise<void> {
     return this.homework.deleteMaterial(getRequestContext(), id);
   }
@@ -97,19 +98,19 @@ export class HomeworkController {
   }
 
   @Post()
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   create(@Body() body: Partial<HomeworkRecord>): Promise<HomeworkRecord> {
     return this.homework.create(getRequestContext(), body);
   }
 
   @Post("from-material")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   createFromMaterial(@Body() body: { tenantId?: string; classId?: string; materialId?: string; dueAt?: string }): Promise<HomeworkRecord> {
     return this.homework.createFromMaterial(getRequestContext(), body);
   }
 
   @Patch(":id")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   update(@Param("id") id: string, @Body() body: Partial<HomeworkRecord>): Promise<HomeworkRecord> {
     return this.homework.update(getRequestContext(), id, body);
   }
@@ -122,7 +123,7 @@ export class HomeworkController {
 
   @Delete(":id")
   @HttpCode(204)
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   delete(@Param("id") id: string): Promise<void> {
     return this.homework.delete(getRequestContext(), id);
   }
