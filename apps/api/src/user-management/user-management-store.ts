@@ -177,7 +177,10 @@ export class PostgresUserManagementStore implements UserManagementStore {
       const created = await client.query<{ id: string }>(
         `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
          VALUES ($1, $2, $3, $4, now())
-         ON CONFLICT ("email") DO NOTHING
+         ON CONFLICT ("email") DO UPDATE
+         SET "name" = EXCLUDED."name",
+             "passwordHash" = EXCLUDED."passwordHash",
+             "updatedAt" = now()
          RETURNING "id"`,
         [randomUUID(), normalizedEmail, input.name, hashPassword(input.password, randomUUID())],
       );

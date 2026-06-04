@@ -20,6 +20,16 @@ export interface ListResult<TItem> {
   meta: ListMeta;
 }
 
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+  }
+}
+
 export const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3100";
 export const apiBaseUrl = `${apiUrl}/api/v1`;
 
@@ -93,7 +103,7 @@ export async function authenticatedFetch(accessToken: string, input: RequestInfo
 export async function apiRequest<T>(accessToken: string, input: RequestInfo | URL, init: RequestInit = {}): Promise<T> {
   const response = await authenticatedFetch(accessToken, input, init);
   if (!response.ok) {
-    throw new Error("API_REQUEST_FAILED");
+    throw new ApiRequestError("API_REQUEST_FAILED", response.status, await readErrorCode(response));
   }
 
   return readData<T>(response);
@@ -106,7 +116,7 @@ export async function apiListRequest<TItem>(
 ): Promise<ListResult<TItem>> {
   const response = await authenticatedFetch(accessToken, input, init);
   if (!response.ok) {
-    throw new Error("API_LIST_REQUEST_FAILED");
+    throw new ApiRequestError("API_LIST_REQUEST_FAILED", response.status, await readErrorCode(response));
   }
 
   const envelope = await readEnvelope<TItem[]>(response);
@@ -166,6 +176,25 @@ export async function readData<T>(response: Response): Promise<T> {
   return (await readEnvelope<T>(response)).data;
 }
 
+export function apiErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiRequestError && error.status === 403) {
+    return "Bu işlem için yetkiniz yok.";
+  }
+  if (error instanceof ApiRequestError && error.status === 401) {
+    return "Oturum doğrulanamadı. Lütfen tekrar giriş yapın.";
+  }
+  return fallback;
+}
+
 async function readEnvelope<T>(response: Response): Promise<ApiEnvelope<T>> {
   return (await response.json()) as ApiEnvelope<T>;
+}
+
+async function readErrorCode(response: Response): Promise<string | undefined> {
+  try {
+    const body = (await response.clone().json()) as { error?: { code?: string } };
+    return body.error?.code;
+  } catch {
+    return undefined;
+  }
 }

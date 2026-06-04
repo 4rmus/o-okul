@@ -12,8 +12,10 @@ describe("School management API", () => {
   let teacherAAccessToken: string;
   let studentAAccessToken: string;
   let guardianAAccessToken: string;
+  const originalStudentQuota = process.env.STUDENT_QUOTA;
 
   beforeAll(async () => {
+    process.env.STUDENT_QUOTA = "2";
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -49,6 +51,11 @@ describe("School management API", () => {
 
   afterAll(async () => {
     await app.close();
+    if (originalStudentQuota === undefined) {
+      delete process.env.STUDENT_QUOTA;
+    } else {
+      process.env.STUDENT_QUOTA = originalStudentQuota;
+    }
   });
 
   it("tenant A sadece kendi class kayıtlarını listeler", async () => {
@@ -992,6 +999,18 @@ describe("School management API", () => {
 
     await request(server)
       .delete(`/students/${studentId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(204);
+    const replacement = await request(server)
+      .post("/students")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Yeni", lastName: "Numara" })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body.studentNo).toBe(created.body.studentNo);
+      });
+    await request(server)
+      .delete(`/students/${replacement.body.id}`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(204);
     await request(server)

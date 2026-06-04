@@ -9,8 +9,10 @@ import { AppModule } from "./app.module.js";
 describe("API auth + tenant isolation", () => {
   let app: INestApplication;
   let server: Parameters<typeof request>[0];
+  const originalStudentQuota = process.env.STUDENT_QUOTA;
 
   beforeAll(async () => {
+    process.env.STUDENT_QUOTA = "2";
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -22,6 +24,11 @@ describe("API auth + tenant isolation", () => {
 
   afterAll(async () => {
     await app.close();
+    if (originalStudentQuota === undefined) {
+      delete process.env.STUDENT_QUOTA;
+    } else {
+      process.env.STUDENT_QUOTA = originalStudentQuota;
+    }
   });
 
   async function login(email: string) {
@@ -132,6 +139,7 @@ describe("API auth + tenant isolation", () => {
       {
         id: "student-a",
         tenantId: "tenant-a",
+        studentNo: "100",
         firstName: "Ada",
         lastName: "A",
         classId: "class-a",
@@ -255,6 +263,7 @@ describe("API auth + tenant isolation", () => {
           {
             id: "student-a",
             tenantId: "tenant-a",
+            studentNo: "100",
             firstName: "Ada",
             lastName: "A",
             classId: "class-a",
@@ -664,6 +673,7 @@ describe("API auth + tenant isolation", () => {
       {
         id: "student-a",
         tenantId: "tenant-a",
+        studentNo: "100",
         firstName: "Ada",
         lastName: "A",
         classId: "class-a",
@@ -672,6 +682,44 @@ describe("API auth + tenant isolation", () => {
         userId: "student-tenant-a",
       },
     ]);
+  });
+
+  it("student CSV dry-run sihirbaz şablonundaki sınıf adını çözer", async () => {
+    const issued = await login("admin-a@example.test");
+    const fileBase64 = Buffer.from("\uFEFFokul_no;ad;soyad;sinif\n320;Ece;Csv;8-A\n", "utf8").toString("base64");
+
+    const response = await request(server)
+      .post("/students/imports/dry-run")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ fileBase64 })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      dryRun: true,
+      totalRows: 1,
+      validRows: [{ row: 2, studentNo: "320", firstName: "Ece", lastName: "Csv", classId: "class-a" }],
+      errors: [],
+      wouldImport: true,
+    });
+  });
+
+  it("student CSV dry-run okul no çakışmasını satır bazında raporlar", async () => {
+    const issued = await login("admin-a@example.test");
+    const fileBase64 = Buffer.from("\uFEFFokul_no;ad;soyad;sinif\n100;Ece;Csv;8-A\n", "utf8").toString("base64");
+
+    const response = await request(server)
+      .post("/students/imports/dry-run")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ fileBase64 })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      dryRun: true,
+      totalRows: 1,
+      validRows: [],
+      errors: [{ row: 2, field: "studentNo", code: "STUDENT_NO_DUPLICATE", value: "100" }],
+      wouldImport: false,
+    });
   });
 
   it("student Excel dry-run hatalı satır için satır-bazlı hata döner", async () => {
@@ -720,6 +768,7 @@ describe("API auth + tenant isolation", () => {
       {
         id: "student-a",
         tenantId: "tenant-a",
+        studentNo: "100",
         firstName: "Ada",
         lastName: "A",
         classId: "class-a",
@@ -744,7 +793,7 @@ describe("API auth + tenant isolation", () => {
       rowCount: 1,
     });
 
-    await expect(readStudentWorkbookRows(response.body.fileBase64 as string)).resolves.toEqual([["Ada", "A"]]);
+    await expect(readStudentWorkbookRows(response.body.fileBase64 as string)).resolves.toEqual([["100", "Ada", "A", "8-A"]]);
   });
 
   it("student Excel import hata veya kota aşımında rollback davranışı gösterir", async () => {
@@ -761,6 +810,7 @@ describe("API auth + tenant isolation", () => {
       {
         id: "student-a",
         tenantId: "tenant-a",
+        studentNo: "100",
         firstName: "Ada",
         lastName: "A",
         classId: "class-a",
@@ -781,6 +831,7 @@ describe("API auth + tenant isolation", () => {
       {
         id: "student-a",
         tenantId: "tenant-a",
+        studentNo: "100",
         firstName: "Ada",
         lastName: "A",
         classId: "class-a",
@@ -793,13 +844,21 @@ describe("API auth + tenant isolation", () => {
     const imported = await request(server)
       .post("/students/imports")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ fileBase64: await createStudentWorkbookBase64([["Ece", "Import"]]) })
+      .send({ fileBase64: await createStudentWorkbookBase64([["320", "Ece", "Import", "8-A"]], ["okul_no", "ad", "soyad", "sinif"]) })
       .expect(201);
 
     expect(imported.body).toMatchObject({
       importedRows: 1,
-      students: [{ tenantId: "tenant-a", firstName: "Ece", lastName: "Import" }],
+      students: [{ tenantId: "tenant-a", studentNo: "320", firstName: "Ece", lastName: "Import", classId: "class-a" }],
     });
+
+    await request(server)
+      .get(`/students/${encodeURIComponent(imported.body.students[0].id)}/class-history`)
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ classId: "class-a", reason: "CREATED" })]);
+      });
 
     await request(server)
       .post("/students/imports")
@@ -889,10 +948,10 @@ function readCookieValue(cookie: string, name: string): string {
   return decodeURIComponent(value?.slice(name.length + 1) ?? "");
 }
 
-async function createStudentWorkbookBase64(rows: Array<[string, string]>): Promise<string> {
+async function createStudentWorkbookBase64(rows: string[][], headers = ["firstName", "lastName"]): Promise<string> {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Students");
-  worksheet.addRow(["firstName", "lastName"]);
+  worksheet.addRow(headers);
   for (const row of rows) {
     worksheet.addRow(row);
   }
@@ -901,7 +960,7 @@ async function createStudentWorkbookBase64(rows: Array<[string, string]>): Promi
   return Buffer.from(buffer).toString("base64");
 }
 
-async function readStudentWorkbookRows(fileBase64: string): Promise<Array<[string, string]>> {
+async function readStudentWorkbookRows(fileBase64: string): Promise<string[][]> {
   const workbook = new ExcelJS.Workbook();
   const bytes = Buffer.from(fileBase64, "base64");
   const file = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
@@ -909,10 +968,15 @@ async function readStudentWorkbookRows(fileBase64: string): Promise<Array<[strin
   const worksheet = workbook.worksheets[0];
   expect(worksheet).toBeDefined();
 
-  const rows: Array<[string, string]> = [];
+  const rows: string[][] = [];
   worksheet?.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return;
-    rows.push([String(row.getCell(1).value ?? ""), String(row.getCell(2).value ?? "")]);
+    rows.push([
+      String(row.getCell(1).value ?? ""),
+      String(row.getCell(2).value ?? ""),
+      String(row.getCell(3).value ?? ""),
+      String(row.getCell(4).value ?? ""),
+    ]);
   });
   return rows;
 }

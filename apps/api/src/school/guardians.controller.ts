@@ -43,7 +43,7 @@ export class GuardiansController {
   }
 
   @Post(":id/purge-pii")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("privacy:manage")
   purgePii(@Param("id") id: string): Promise<GuardianRecord> {
     return this.school.purgeGuardianPii(getRequestContext(), id);
   }

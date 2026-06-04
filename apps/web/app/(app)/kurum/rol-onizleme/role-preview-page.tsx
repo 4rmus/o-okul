@@ -3,9 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@uzman-hocam/ui";
-import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import { useAuth } from "../../../providers.js";
-import { institutionNavGroups } from "../../_shared/navigation.js";
+import { getInstitutionNavGroups, hasInstitutionAccess } from "../../_shared/access.js";
 import { OperationDecisionNotice, ReferenceBadge } from "../_shared/evidence-panels.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
@@ -112,8 +112,8 @@ export function RolePreviewPage() {
       setSession(previewSession);
       setProfile(previewProfile);
       setPortalProbe(previewPortalProbe);
-    } catch {
-      setError("Rol önizleme başlatılamadı.");
+    } catch (previewError) {
+      setError(apiErrorMessage(previewError, "Rol önizleme başlatılamadı."));
     }
   }
 
@@ -162,7 +162,7 @@ export function RolePreviewPage() {
           </Link>
         </section>
       ) : null}
-      <section className="next-report-list" aria-label="Rol görünüm önizleme">
+      <section className="next-report-list next-role-preview-list" aria-label="Rol görünüm önizleme">
         <h2>Görünüm Önizleme</h2>
         <label>
           Rol
@@ -183,7 +183,7 @@ export function RolePreviewPage() {
           </article>
         ))}
       </section>
-      <section className="next-report-list" aria-label="Rol portal kartları">
+      <section className="next-report-list next-role-preview-list" aria-label="Rol portal kartları">
         <h2>Portal Kapsamları</h2>
         {roleCards.map((role) => (
           <article key={role.title}>
@@ -230,15 +230,12 @@ function buildRolePreviewSections(role: PreviewRole) {
     return [{ title: "Portal", items: ["Veli Portalı", "/veli", "Kurum sol menüsü görünmez"] }];
   }
 
-  return institutionNavGroups
-    .filter((group) => role === "TENANT_ADMIN" || (group.label !== "Finans" && group.label !== "Operasyon"))
-    .map((group) => ({
-      title: group.label,
-      items: group.items
-        .filter((item) => role === "TENANT_ADMIN" || item.requiredCapability !== "finance:manage")
-        .map((item) => item.label),
-    }))
-    .filter((group) => group.items.length > 0);
+  return hasInstitutionAccess([role])
+    ? getInstitutionNavGroups([role]).map((group) => ({
+        title: group.label,
+        items: group.items.map((item) => item.label),
+      }))
+    : [];
 }
 
 function buildPortalPreviewHref(session: RolePreviewSession): string {

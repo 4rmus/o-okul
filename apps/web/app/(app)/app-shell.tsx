@@ -6,6 +6,14 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ClassRecord, GuardianRecord, NotificationDeviceTokenRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../src/api-client.js";
 import { useAuth } from "../providers.js";
+import {
+  canAccessInstitutionPath,
+  getInstitutionNavGroups,
+  hasCapabilityForRoles,
+  hasInstitutionAccess,
+  hasSubjectPortalAccess,
+  hasSystemAccess,
+} from "./_shared/access.js";
 import { dynamicDetailParents, institutionNavGroups, rolePortalItems, staticBreadcrumbLabels, systemNavGroups } from "./_shared/navigation.js";
 const allNavigationItems = [
   ...systemNavGroups.flatMap((group) => group.items),
@@ -25,15 +33,9 @@ interface CommandPaletteItem {
   label: string;
 }
 
-type NavigationItem = {
-  href: string;
-  label: string;
-  requiredCapability?: string;
-};
-
 type NavigationGroup = {
   label: string;
-  items: readonly NavigationItem[];
+  items: readonly { href: string; label: string }[];
 };
 
 const entitySearchLimit = 3;
@@ -65,6 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     () => buildCommandItems(visibleInstitutionNavGroups, visibleSystemNavGroups, visiblePortalItems, auth?.session.roles ?? []),
     [auth?.session.roles, visibleInstitutionNavGroups, visiblePortalItems, visibleSystemNavGroups],
   );
+  const canUsePushDevices = auth?.session ? hasInstitutionAccess(auth.session.roles) || visiblePortalItems.length > 0 : false;
 
   useEffect(() => {
     if (!isBootstrapping && !auth) {
@@ -189,7 +192,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             Çıkış
           </button>
         </nav>
-        <PushDevicePanel accessToken={auth.accessToken} />
+        {canUsePushDevices ? <PushDevicePanel accessToken={auth.accessToken} /> : null}
       </aside>
       <section className="next-workspace">
         <RouteBreadcrumb pathname={pathname} />
@@ -503,10 +506,6 @@ function getHomePath(session: AppSession) {
   return "/login";
 }
 
-function hasInstitutionAccess(roles: readonly string[]) {
-  return roles.includes("TENANT_ADMIN") || roles.includes("ASSISTANT_ADMIN");
-}
-
 function buildCommandItems(
   institutionGroups: readonly NavigationGroup[],
   systemGroups: readonly NavigationGroup[],
@@ -609,88 +608,6 @@ function normalizeCommandText(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/ı/g, "i");
-}
-
-function getInstitutionNavGroups(roles: readonly string[]) {
-  return institutionNavGroups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => canAccessNavigationItem(roles, item)),
-    }))
-    .filter((group) => group.items.length > 0);
-}
-
-function canAccessInstitutionPath(roles: readonly string[], pathname: string) {
-  const item = findInstitutionNavigationItem(pathname);
-  return item ? canAccessNavigationItem(roles, item) : true;
-}
-
-function findInstitutionNavigationItem(pathname: string) {
-  const items = institutionNavGroups.flatMap((group) => group.items);
-  return items
-    .filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
-    .sort((left, right) => right.href.length - left.href.length)[0];
-}
-
-function canAccessNavigationItem(roles: readonly string[], item: NavigationItem) {
-  return !item.requiredCapability || hasCapabilityForRoles(roles, item.requiredCapability);
-}
-
-function hasCapabilityForRoles(roles: readonly string[], requiredCapability: string) {
-  if (roles.includes("SYSTEM_ADMIN") && requiredCapability.startsWith("system:")) {
-    return true;
-  }
-
-  const capabilities = capabilitiesForRoles(roles);
-  return capabilities.some((capability) => capability === requiredCapability || matchesCapabilityWildcard(capability, requiredCapability));
-}
-
-function capabilitiesForRoles(roles: readonly string[]) {
-  const capabilities = new Set<string>();
-  for (const role of roles) {
-    for (const capability of roleCapabilityMap[role] ?? []) {
-      capabilities.add(capability);
-    }
-  }
-  return [...capabilities];
-}
-
-const roleCapabilityMap: Record<string, readonly string[]> = {
-  SYSTEM_ADMIN: ["system:*", "tenant:*"],
-  TENANT_ADMIN: [
-    "academic:*",
-    "announcement:*",
-    "attendance:*",
-    "audit:*",
-    "class:*",
-    "finance:*",
-    "note:*",
-    "observability:*",
-    "operation:*",
-    "privacy:*",
-    "role-preview:*",
-    "security:*",
-    "staff:*",
-    "student:*",
-    "support:*",
-    "user:*",
-  ],
-  ASSISTANT_ADMIN: ["academic:*", "announcement:*", "attendance:*", "class:*", "note:*", "staff:*", "student:*", "support:*"],
-  TEACHER: ["academic:read", "attendance:write-assigned", "homework:write-assigned", "note:write-assigned"],
-  STUDENT: ["self:read"],
-  GUARDIAN: ["ward:read"],
-};
-
-function matchesCapabilityWildcard(capability: string, requiredCapability: string) {
-  return capability.endsWith(":*") && requiredCapability.startsWith(capability.slice(0, -1));
-}
-
-function hasSystemAccess(roles: readonly string[]) {
-  return roles.includes("SYSTEM_ADMIN");
-}
-
-function hasSubjectPortalAccess(session: AppSession, role: string, subjectType: AppSession["subjectType"]) {
-  return session.roles.includes(role) && session.subjectType === subjectType;
 }
 
 async function resolveWebPushToken(): Promise<string> {

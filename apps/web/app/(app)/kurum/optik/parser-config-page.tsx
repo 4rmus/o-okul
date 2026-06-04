@@ -5,7 +5,7 @@ import { Button, EmptyState, Input } from "@uzman-hocam/ui";
 import type { AnswerChoice, AnswerKeyRecord, ParserConfigSuggestion, StudentRecord } from "@uzman-hocam/shared-types";
 import { CheckCircle2, FileSpreadsheet, FileText, RefreshCw, Upload, Wand2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import {
   answerKeyImportFormSchema,
@@ -178,8 +178,8 @@ export function ParserConfigPage() {
       );
       setExamId(result.examId);
       setSuggestion(result.suggestion);
-    } catch {
-      setError("Optik format önerisi alınamadı.");
+    } catch (suggestionError) {
+      setError(apiErrorMessage(suggestionError, "Optik format önerisi alınamadı."));
     }
   }
 
@@ -216,8 +216,8 @@ export function ParserConfigPage() {
     }
     try {
       setSavedConfig(await approveParserConfig(auth.accessToken, parsedForm.data.examId, parsedForm.data.version, suggestion));
-    } catch {
-      setError("Optik format onaylanamadı.");
+    } catch (approvalError) {
+      setError(apiErrorMessage(approvalError, "Optik format onaylanamadı."));
     }
   }
 
@@ -242,8 +242,8 @@ export function ParserConfigPage() {
     try {
       setAnswerKeyDryRun(await dryRunAnswerKeyImport(auth.accessToken, parsedForm.data));
       setAnswerKeyImport(null);
-    } catch {
-      setError("Cevap anahtarı doğrulanamadı.");
+    } catch (dryRunError) {
+      setError(apiErrorMessage(dryRunError, "Cevap anahtarı doğrulanamadı."));
     }
   }
 
@@ -258,8 +258,8 @@ export function ParserConfigPage() {
     }
     try {
       setAnswerKeyImport(await importAnswerKey(auth.accessToken, parsedForm.data));
-    } catch {
-      setError("Cevap anahtarı içe aktarılamadı.");
+    } catch (importError) {
+      setError(apiErrorMessage(importError, "Cevap anahtarı içe aktarılamadı."));
     }
   }
 
@@ -319,8 +319,8 @@ export function ParserConfigPage() {
       } else {
         setManualAnswerKey(result as AnswerKeyRecord);
       }
-    } catch {
-      setError(dryRun ? "Manuel cevap anahtarı doğrulanamadı." : "Manuel cevap anahtarı kaydedilemedi.");
+    } catch (manualError) {
+      setError(apiErrorMessage(manualError, dryRun ? "Manuel cevap anahtarı doğrulanamadı." : "Manuel cevap anahtarı kaydedilemedi."));
     }
   }
 
@@ -354,8 +354,8 @@ export function ParserConfigPage() {
       setReportContentHash(result.rawImport.sha256);
       setReportJob(null);
       setActiveTab("quarantine");
-    } catch {
-      setError("Optik cevap dosyası yüklenemedi.");
+    } catch (uploadError) {
+      setError(apiErrorMessage(uploadError, "Optik cevap dosyası yüklenemedi."));
     }
   }
 
@@ -376,8 +376,8 @@ export function ParserConfigPage() {
       ]);
       setQuarantines(records);
       setStudents(studentRecords);
-    } catch {
-      setError("Karantina kayıtları alınamadı.");
+    } catch (lookupError) {
+      setError(apiErrorMessage(lookupError, "Karantina kayıtları alınamadı."));
     }
   }
 
@@ -398,8 +398,8 @@ export function ParserConfigPage() {
         resolvedStudentId: parsedForm.data.resolvedStudentId,
       });
       setQuarantines((current) => current.map((item) => (item.id === resolved.id ? resolved : item)));
-    } catch {
-      setError("Karantina kaydı çözülemedi.");
+    } catch (resolveError) {
+      setError(apiErrorMessage(resolveError, "Karantina kaydı çözülemedi."));
     }
   }
 
@@ -420,8 +420,8 @@ export function ParserConfigPage() {
     }
     try {
       setReportJob(await enqueueReportGeneration(auth.accessToken, normalizedExamId, normalizedContentHash));
-    } catch {
-      setError("Rapor üretimi kuyruğa alınamadı.");
+    } catch (reportError) {
+      setError(apiErrorMessage(reportError, "Rapor üretimi kuyruğa alınamadı."));
     }
   }
 

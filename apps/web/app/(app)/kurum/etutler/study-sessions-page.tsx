@@ -6,7 +6,7 @@ import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, Stud
 import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import {
   firstFormError,
   studySessionFormSchema,
@@ -137,8 +137,8 @@ export function StudySessionsPage() {
       void savedSession;
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
-    } catch {
-      setError("Etüt kaydedilemedi.");
+    } catch (submitError) {
+      setError(apiErrorMessage(submitError, "Etüt kaydedilemedi."));
     }
   }
 
@@ -150,8 +150,8 @@ export function StudySessionsPage() {
     try {
       await deleteSession(auth.accessToken, record.id);
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
-    } catch {
-      setError("Etüt silinemedi.");
+    } catch (deleteError) {
+      setError(apiErrorMessage(deleteError, "Etüt silinemedi."));
     }
   }
 
@@ -189,7 +189,14 @@ export function StudySessionsPage() {
           />
         }
         emptyText="Etüt kaydı yok"
-        error={error || (sessionsQuery.isError ? "Etütler alınamadı." : referenceQuery.isError ? "Seçim listeleri alınamadı." : undefined)}
+        error={
+          error ||
+          (sessionsQuery.isError
+            ? apiErrorMessage(sessionsQuery.error, "Etütler alınamadı.")
+            : referenceQuery.isError
+              ? apiErrorMessage(referenceQuery.error, "Seçim listeleri alınamadı.")
+              : undefined)
+        }
         getRowKey={(record) => record.id}
         loading={sessionsQuery.isPending || referenceQuery.isPending}
         rows={rows}

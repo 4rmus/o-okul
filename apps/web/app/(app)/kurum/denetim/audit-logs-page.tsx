@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CrudPage, EmptyState, type DataTableColumn } from "@uzman-hocam/ui";
 import type { AuditLogRecord } from "@uzman-hocam/shared-types";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiErrorMessage, apiListRequest } from "../../../../src/api-client.js";
 import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
 
 export function AuditLogsPage() {
@@ -62,7 +62,7 @@ export function AuditLogsPage() {
         />
       }
       emptyText="Denetim kaydı yok"
-      error={auditLogsQuery.isError ? "Denetim kayıtları alınamadı." : undefined}
+      error={auditLogsQuery.isError ? apiErrorMessage(auditLogsQuery.error, "Denetim kayıtları alınamadı.") : undefined}
       getRowKey={(record) => record.id}
       loading={auditLogsQuery.isPending}
       rows={rows}

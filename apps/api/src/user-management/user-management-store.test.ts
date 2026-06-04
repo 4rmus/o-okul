@@ -54,6 +54,8 @@ describe("PostgresUserManagementStore", () => {
 
     expect(queries.some((query) => query.sql.includes("set_config('app.current_tenant_id'"))).toBe(true);
     const insertUser = queries.find((query) => query.sql.includes('INSERT INTO "User"'));
+    expect(insertUser?.sql).toContain('ON CONFLICT ("email") DO UPDATE');
+    expect(insertUser?.sql).toContain('"passwordHash" = EXCLUDED."passwordHash"');
     expect(insertUser?.values).toEqual([
       expect.any(String),
       "created@example.test",

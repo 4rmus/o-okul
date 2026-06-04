@@ -8,6 +8,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./charts": {
+      "types": "./src/charts.ts",
+      "default": "./src/charts.ts"
     }
   },
   "scripts": {

@@ -6,7 +6,7 @@ import type { GuardianRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/
 import { ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 
 type KvkkRecord =
   | { kind: "student"; record: StudentRecord }
@@ -99,8 +99,8 @@ export function KvkkPage() {
       queryClient.setQueryData<GuardianRecord[]>(guardiansKey, (current = []) =>
         current.map((record) => (record.id === purged.id ? purged : record)),
       );
-    } catch {
-      setError("PII temizlenemedi.");
+    } catch (purgeError) {
+      setError(apiErrorMessage(purgeError, "PII temizlenemedi."));
     }
   }
 
@@ -119,7 +119,13 @@ export function KvkkPage() {
       emptyText="Temizlenecek kayıt yok"
       error={
         error ||
-        (studentsQuery.isError || teachersQuery.isError || guardiansQuery.isError ? "KVKK kayıtları alınamadı." : undefined)
+        (studentsQuery.isError
+          ? apiErrorMessage(studentsQuery.error, "KVKK kayıtları alınamadı.")
+          : teachersQuery.isError
+            ? apiErrorMessage(teachersQuery.error, "KVKK kayıtları alınamadı.")
+            : guardiansQuery.isError
+              ? apiErrorMessage(guardiansQuery.error, "KVKK kayıtları alınamadı.")
+              : undefined)
       }
       getRowKey={(item) => `${item.kind}:${item.record.id}`}
       loading={studentsQuery.isPending || teachersQuery.isPending || guardiansQuery.isPending}

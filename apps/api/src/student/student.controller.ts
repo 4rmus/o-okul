@@ -150,7 +150,7 @@ export class StudentController {
   }
 
   @Post(":id/purge-pii")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("privacy:manage")
   purgePii(@Param("id") id: string): Promise<StudentRecord> {
     return this.students.purgePii(getRequestContext(), id);
   }
@@ -209,6 +209,7 @@ export class StudentController {
 }
 
 const studentListFields = [
+  { name: "studentNo", read: (record: StudentRecord) => Number(record.studentNo) || undefined },
   { name: "firstName", read: (record: StudentRecord) => record.firstName },
   { name: "lastName", read: (record: StudentRecord) => record.lastName },
   { name: "classId", read: (record: StudentRecord) => record.classId },

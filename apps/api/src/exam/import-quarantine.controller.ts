@@ -1,6 +1,6 @@
 import { Controller, Get, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
-import { Roles } from "../rbac/roles.decorator.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { RawImportQuarantineService } from "./raw-import-quarantine.service.js";
 
@@ -10,7 +10,7 @@ export class ImportQuarantineController {
   constructor(private readonly quarantines: RawImportQuarantineService) {}
 
   @Get("summary")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   summary() {
     return this.quarantines.summary(getRequestContext());
   }

@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import { Plus } from "lucide-react";
 import { useAuth } from "../../../providers.js";
+import { ApiRequestError } from "../../../../src/api-client.js";
 import {
   firstFormError,
   tenantCreateFormSchema,
@@ -113,8 +114,8 @@ export function TenantsPage() {
       closeForm();
       setIssuedToken(created.admin.activationToken ? { email: created.admin.email, token: created.admin.activationToken } : null);
       void queryClient.invalidateQueries({ queryKey: ["next-tenant", created.tenant.id] });
-    } catch {
-      setError("Kurum oluşturulamadı.");
+    } catch (createError) {
+      setError(tenantCreateErrorMessage(createError));
     }
   }
 
@@ -328,6 +329,13 @@ function statusLabel(status: string) {
   if (status === "SUSPENDED") return "Askıda";
   if (status === "TRIAL") return "Deneme";
   return status;
+}
+
+function tenantCreateErrorMessage(error: unknown) {
+  if (error instanceof ApiRequestError && error.code === "TENANT_SLUG_ALREADY_EXISTS") {
+    return "Bu slug zaten kullanımda. Farklı bir slug gir.";
+  }
+  return "Kurum oluşturulamadı.";
 }
 
 const tenantSortOptions = [

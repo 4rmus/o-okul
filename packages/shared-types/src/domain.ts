@@ -151,6 +151,7 @@ export interface GuardianStudentRecord {
 export interface StudentRecord {
   id: string;
   tenantId: string;
+  studentNo?: string;
   firstName: string;
   lastName: string;
   classId?: string;

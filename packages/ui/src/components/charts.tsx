@@ -45,6 +45,18 @@ const defaultChartOptions = {
   },
 } as const;
 
+function ChartEmptyState({ label }: { label: string }) {
+  return <div className="uh-chart-empty-state">{label}</div>;
+}
+
+function EmptyTableRow({ colSpan, label }: { colSpan: number; label: string }) {
+  return (
+    <tr>
+      <td colSpan={colSpan}>{label}</td>
+    </tr>
+  );
+}
+
 export interface ExamResultDonutInput {
   correct?: number;
   wrong?: number;
@@ -84,7 +96,7 @@ export function ExamResultDonut({ className, result, ...props }: ExamResultDonut
 
   return (
     <div {...props} className={classNames("uh-exam-result-donut", className)}>
-      <Doughnut data={data} options={options} />
+      {total > 0 ? <Doughnut data={data} options={options} /> : <ChartEmptyState label="Sonuç verisi yok" />}
       <table className="uh-chart-table">
         <caption>{total > 0 ? `Toplam ${total} soru` : "Sonuç verisi yok"}</caption>
         <tbody>
@@ -152,16 +164,20 @@ export function ClassCompareBar({ className, classes, ...props }: ClassCompareBa
 
   return (
     <div {...props} className={classNames("uh-class-compare-bar", className)}>
-      <Bar data={data} options={options} />
+      {rows.length > 0 ? <Bar data={data} options={options} /> : <ChartEmptyState label="Sınıf verisi yok" />}
       <table className="uh-chart-table">
         <caption>{rows.length > 0 ? "Sınıf net karşılaştırması" : "Sınıf verisi yok"}</caption>
         <tbody>
-          {rows.map((record) => (
-            <tr key={record.id}>
-              <th scope="row">{record.name}</th>
-              <td>{record.net}</td>
-            </tr>
-          ))}
+          {rows.length > 0 ? (
+            rows.map((record) => (
+              <tr key={record.id}>
+                <th scope="row">{record.name}</th>
+                <td>{record.net}</td>
+              </tr>
+            ))
+          ) : (
+            <EmptyTableRow colSpan={2} label="Sınıf verisi yok" />
+          )}
         </tbody>
       </table>
     </div>
@@ -218,17 +234,21 @@ export function ProgressLineChart({ className, points, ...props }: ProgressLineC
 
   return (
     <div {...props} className={classNames("uh-progress-line-chart", className)}>
-      <Line data={data} options={options} />
+      {rows.length > 0 ? <Line data={data} options={options} /> : <ChartEmptyState label="Gelişim verisi yok" />}
       <table className="uh-chart-table">
         <caption>{rows.length > 0 ? "Öğrenci gelişim grafiği" : "Gelişim verisi yok"}</caption>
         <tbody>
-          {rows.map((point) => (
-            <tr key={point.id}>
-              <th scope="row">{point.label}</th>
-              <td>{point.net}</td>
-              <td>{point.standardScore}</td>
-            </tr>
-          ))}
+          {rows.length > 0 ? (
+            rows.map((point) => (
+              <tr key={point.id}>
+                <th scope="row">{point.label}</th>
+                <td>{point.net}</td>
+                <td>{point.standardScore}</td>
+              </tr>
+            ))
+          ) : (
+            <EmptyTableRow colSpan={3} label="Gelişim verisi yok" />
+          )}
         </tbody>
       </table>
     </div>
@@ -280,17 +300,21 @@ export function TopicRadarChart({ branches, className, ...props }: TopicRadarCha
 
   return (
     <div {...props} className={classNames("uh-topic-radar-chart", className)}>
-      <Radar data={data} options={options} />
+      {rows.length > 0 ? <Radar data={data} options={options} /> : <ChartEmptyState label="Branş verisi yok" />}
       <table className="uh-chart-table">
         <caption>{rows.length > 0 ? "Branş net analizi" : "Branş verisi yok"}</caption>
         <tbody>
-          {rows.map((branch) => (
-            <tr key={branch.name}>
-              <th scope="row">{branch.name}</th>
-              <td>{branch.net}</td>
-              <td>{branch.resultCount}</td>
-            </tr>
-          ))}
+          {rows.length > 0 ? (
+            rows.map((branch) => (
+              <tr key={branch.name}>
+                <th scope="row">{branch.name}</th>
+                <td>{branch.net}</td>
+                <td>{branch.resultCount}</td>
+              </tr>
+            ))
+          ) : (
+            <EmptyTableRow colSpan={3} label="Branş verisi yok" />
+          )}
         </tbody>
       </table>
     </div>

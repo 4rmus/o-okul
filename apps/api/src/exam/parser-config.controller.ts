@@ -1,6 +1,6 @@
 import { Body, Controller, Param, Post, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
-import { Roles } from "../rbac/roles.decorator.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
   ParserConfigApprovalService,
@@ -22,7 +22,7 @@ export class ParserConfigController {
   ) {}
 
   @Post("suggestions")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   suggest(
     @Param("examId") examId: string,
     @Body() body: Omit<ParserConfigSuggestionInput, "examId">,
@@ -36,7 +36,7 @@ export class ParserConfigController {
   }
 
   @Post("approvals")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   approve(
     @Param("examId") examId: string,
     @Body() body: { version?: string; suggestion?: ParserConfigSuggestion },

@@ -48,6 +48,7 @@ export interface StudentRecord extends SharedStudentRecord {
 
 const studentStatuses: StudentStatus[] = ["ACTIVE", "PASSIVE", "GRADUATED", "TRANSFERRED"];
 const terminalStudentStatuses: StudentStatus[] = ["GRADUATED", "TRANSFERRED"];
+const defaultStudentQuota = 200;
 
 export interface StudentQuotaPreview {
   limit: number;
@@ -101,7 +102,7 @@ export interface StudentCreateInput extends Partial<StudentRecord> {
 
 @Injectable()
 export class StudentService {
-  private readonly maxStudentsPerTenant = Number.parseInt(process.env.STUDENT_QUOTA ?? "", 10) || 2;
+  private readonly maxStudentsPerTenant = Number.parseInt(process.env.STUDENT_QUOTA ?? "", 10) || defaultStudentQuota;
 
   constructor(
     @Inject(studentStoreToken) private readonly store: StudentStore,
@@ -300,7 +301,7 @@ export class StudentService {
       entityType: "Student",
       entityId: student.id,
       action: "student.created",
-      diff: { fieldsSet: presentFields(student, ["firstName", "lastName", "classId", "responsibleTeacherId", "status"]) },
+      diff: { fieldsSet: presentFields(student, ["studentNo", "firstName", "lastName", "classId", "responsibleTeacherId", "status"]) },
     });
     if (input.guardian) {
       await this.autoProvisionGuardian(context, student, input.guardian);
@@ -310,7 +311,7 @@ export class StudentService {
 
   async createMany(
     context: RequestContext,
-    inputs: Array<Pick<StudentRecord, "firstName" | "lastName">>,
+    inputs: Array<Pick<StudentRecord, "firstName" | "lastName"> & Partial<Pick<StudentRecord, "classId" | "studentNo">>>,
   ): Promise<StudentRecord[]> {
     const tenantId = context.tenantId;
     if (!tenantId) {
@@ -323,12 +324,45 @@ export class StudentService {
       throw new ConflictException("STUDENT_QUOTA_EXCEEDED");
     }
 
-    return this.store.createMany(inputs.map((input) => ({
+    for (const input of inputs) {
+      if (!input.classId) continue;
+      const schoolClass = await this.classStore.findById(input.classId);
+      if (!schoolClass) {
+        throw new NotFoundException("CLASS_NOT_FOUND");
+      }
+      this.assertAccess(context, schoolClass);
+    }
+
+    const students = await this.store.createMany(inputs.map((input) => ({
       tenantId,
+      studentNo: input.studentNo,
       firstName: input.firstName,
       lastName: input.lastName,
+      classId: input.classId,
       status: "ACTIVE",
     })));
+    const academicContext = await this.resolveCurrentAcademicContext(context);
+    for (const student of students) {
+      if (!student.classId) continue;
+      await this.classHistoryStore.create({
+        tenantId: student.tenantId,
+        studentId: student.id,
+        classId: student.classId,
+        ...academicContext,
+        startsAt: todayDateString(),
+        reason: "CREATED",
+      });
+      await this.enrollmentStore.create({
+        tenantId: student.tenantId,
+        studentId: student.id,
+        classId: student.classId,
+        ...academicContext,
+        startsAt: todayDateString(),
+        status: student.status,
+        reason: "CREATED",
+      });
+    }
+    return students;
   }
 
   async previewQuota(context: RequestContext, incoming: number): Promise<StudentQuotaPreview> {

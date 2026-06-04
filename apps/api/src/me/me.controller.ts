@@ -40,6 +40,8 @@ import { type GuardianNotificationPreferenceInput, SchoolService } from "../scho
 import { StudentService } from "../student/student.service.js";
 import { SupportTicketService } from "../support-ticket/support-ticket.service.js";
 import { TeacherNoteService } from "../teacher-note/teacher-note.service.js";
+import { TenantService, type TenantWriteBody } from "../tenant/tenant.service.js";
+import type { TenantRecord } from "../tenant/tenant-store.js";
 
 @Controller("me")
 @UseGuards(RolesGuard)
@@ -57,6 +59,7 @@ export class MeController {
     private readonly students: StudentService,
     private readonly supportTickets: SupportTicketService,
     private readonly teacherNotes: TeacherNoteService,
+    private readonly tenants: TenantService,
   ) {}
 
   @Get("profile")
@@ -70,6 +73,18 @@ export class MeController {
       subjectType: context.subjectType,
       subjectId: context.subjectId,
     };
+  }
+
+  @Get("tenant")
+  @Roles("TENANT_ADMIN", "ASSISTANT_ADMIN")
+  tenant(): Promise<TenantRecord> {
+    return this.tenants.findCurrent(getRequestContext());
+  }
+
+  @Patch("tenant")
+  @Roles("TENANT_ADMIN", "ASSISTANT_ADMIN")
+  updateTenant(@Body() body: TenantWriteBody): Promise<TenantRecord> {
+    return this.tenants.updateCurrent(getRequestContext(), body);
   }
 
   @Get("notification-devices")

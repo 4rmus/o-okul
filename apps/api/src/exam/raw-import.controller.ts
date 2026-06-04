@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
-import { Roles } from "../rbac/roles.decorator.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { RawImportQuarantineService } from "./raw-import-quarantine.service.js";
 import {
@@ -17,7 +17,7 @@ export class RawImportController {
   ) {}
 
   @Post()
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   upload(
     @Param("examId") examId: string,
     @Body() body: {
@@ -39,7 +39,7 @@ export class RawImportController {
   }
 
   @Get(":rawImportId/quarantines")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   listQuarantines(
     @Param("examId") examId: string,
     @Param("rawImportId") rawImportId: string,
@@ -48,7 +48,7 @@ export class RawImportController {
   }
 
   @Post(":rawImportId/quarantines/:quarantineId/resolve")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("academic:manage")
   resolveQuarantine(
     @Param("examId") examId: string,
     @Param("rawImportId") rawImportId: string,

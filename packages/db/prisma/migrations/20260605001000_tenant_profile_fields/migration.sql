@@ -1,0 +1,4 @@
+ALTER TABLE "Tenant"
+  ADD COLUMN IF NOT EXISTS "institutionType" TEXT,
+  ADD COLUMN IF NOT EXISTS "contactEmail" TEXT,
+  ADD COLUMN IF NOT EXISTS "logoUrl" TEXT;

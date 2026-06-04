@@ -1,19 +1,24 @@
-import { BadRequestException, ConflictException, Injectable, Optional } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, Optional } from "@nestjs/common";
 import ExcelJS from "exceljs";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import { StudentService, type StudentRecord } from "./student.service.js";
 
 export interface StudentImportError {
   row: number;
-  field: "firstName" | "lastName" | "quota";
-  code: "REQUIRED" | "STUDENT_QUOTA_EXCEEDED";
+  field: "className" | "firstName" | "lastName" | "quota" | "studentNo";
+  code: "CLASS_NOT_FOUND" | "REQUIRED" | "STUDENT_NO_DUPLICATE" | "STUDENT_QUOTA_EXCEEDED";
+  value?: string;
 }
 
 export interface StudentImportPreviewRow {
   row: number;
+  classId?: string;
+  className?: string;
   firstName: string;
   lastName: string;
+  studentNo?: string;
 }
 
 export interface StudentImportDryRunResult {
@@ -50,6 +55,7 @@ interface StudentImportDryRunInput {
 export class StudentImportService {
   constructor(
     private readonly students: StudentService,
+    @Inject(classStoreToken) private readonly classes: ClassStore,
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
@@ -58,9 +64,8 @@ export class StudentImportService {
       throw new BadRequestException("IMPORT_FILE_REQUIRED");
     }
 
-    const worksheet = await this.readFirstWorksheet(input.fileBase64);
-    const rows = this.readRows(worksheet);
-    const errors = this.validateRows(rows);
+    const rows = await this.readRows(input.fileBase64);
+    const errors = await this.validateRows(context, rows);
     const quota = await this.students.previewQuota(context, rows.length);
 
     if (quota.wouldExceed) {
@@ -114,10 +119,12 @@ export class StudentImportService {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Students");
     const students = await this.students.list(context);
+    const classes = (await this.classes.list()).filter((record) => record.tenantId === context.tenantId && !record.deletedAt);
+    const classById = new Map(classes.map((record) => [record.id, record]));
 
-    worksheet.addRow(["firstName", "lastName"]);
+    worksheet.addRow(["okul_no", "ad", "soyad", "sinif"]);
     for (const student of students) {
-      worksheet.addRow([student.firstName, student.lastName]);
+      worksheet.addRow([student.studentNo ?? "", student.firstName, student.lastName, student.classId ? classById.get(student.classId)?.name ?? "" : ""]);
     }
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -129,9 +136,18 @@ export class StudentImportService {
     };
   }
 
-  private async readFirstWorksheet(fileBase64: string): Promise<ExcelJS.Worksheet> {
-    const workbook = new ExcelJS.Workbook();
+  private async readRows(fileBase64: string): Promise<StudentImportPreviewRow[]> {
     const bytes = Buffer.from(fileBase64, "base64");
+    if (isXlsx(bytes)) {
+      const worksheet = await this.readFirstWorksheet(bytes);
+      return this.readWorksheetRows(worksheet);
+    }
+
+    return this.readDelimitedRows(bytes.toString("utf8"));
+  }
+
+  private async readFirstWorksheet(bytes: Buffer): Promise<ExcelJS.Worksheet> {
+    const workbook = new ExcelJS.Workbook();
     const file = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
     await workbook.xlsx.load(file as Parameters<ExcelJS.Workbook["xlsx"]["load"]>[0]);
 
@@ -143,35 +159,96 @@ export class StudentImportService {
     return worksheet;
   }
 
-  private readRows(worksheet: ExcelJS.Worksheet): StudentImportPreviewRow[] {
-    const rows: StudentImportPreviewRow[] = [];
+  private readWorksheetRows(worksheet: ExcelJS.Worksheet): StudentImportPreviewRow[] {
+    const matrix: Array<{ rowNumber: number; cells: string[] }> = [];
 
     worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return;
-
-      const firstName = this.cellText(row.getCell(1).value);
-      const lastName = this.cellText(row.getCell(2).value);
-      if (!firstName && !lastName) return;
-
-      rows.push({ row: rowNumber, firstName, lastName });
+      const cells: string[] = [];
+      for (let index = 1; index <= row.cellCount; index += 1) {
+        cells.push(this.cellText(row.getCell(index).value));
+      }
+      matrix.push({ rowNumber, cells });
     });
+
+    return this.readMatrixRows(matrix);
+  }
+
+  private readDelimitedRows(content: string): StudentImportPreviewRow[] {
+    const lines = content.replace(/^\uFEFF/, "").split(/\r?\n/);
+    const delimiter = detectDelimiter(lines.find((line) => line.trim()) ?? "");
+    const matrix = lines
+      .map((line, index) => ({ rowNumber: index + 1, cells: parseDelimitedLine(line, delimiter).map((cell) => cell.trim()) }))
+      .filter((row) => row.cells.some((cell) => cell));
+
+    return this.readMatrixRows(matrix);
+  }
+
+  private readMatrixRows(matrix: Array<{ rowNumber: number; cells: string[] }>): StudentImportPreviewRow[] {
+    const rows: StudentImportPreviewRow[] = [];
+    const header = matrix[0]?.cells ?? [];
+    const studentNoIndex = findHeaderIndex(header, ["studentNo", "schoolNo", "okulNo", "okulNumarasi", "okulNumarası", "ogrenciNo", "öğrenciNo"]);
+    const firstNameIndex = findHeaderIndex(header, ["firstName", "ad", "adi", "adı", "isim"]) ?? 0;
+    const lastNameIndex = findHeaderIndex(header, ["lastName", "soyad", "soyadi", "soyadı"]) ?? 1;
+    const classIndex = findHeaderIndex(header, ["class", "className", "sinif", "sınıf", "sube", "şube", "sinifAdi", "sınıfAdı"]);
+
+    for (const row of matrix.slice(1)) {
+      const studentNo = studentNoIndex === undefined ? "" : row.cells[studentNoIndex]?.trim() ?? "";
+      const firstName = row.cells[firstNameIndex]?.trim() ?? "";
+      const lastName = row.cells[lastNameIndex]?.trim() ?? "";
+      const className = classIndex === undefined ? "" : row.cells[classIndex]?.trim() ?? "";
+      if (!studentNo && !firstName && !lastName) continue;
+
+      rows.push({ row: row.rowNumber, firstName, lastName, ...(studentNo ? { studentNo } : {}), ...(className ? { className } : {}) });
+    }
 
     return rows;
   }
 
-  private validateRows(rows: StudentImportPreviewRow[]): StudentImportError[] {
+  private async validateRows(context: RequestContext, rows: StudentImportPreviewRow[]): Promise<StudentImportError[]> {
     const errors: StudentImportError[] = [];
+    const classes = (await this.classes.list()).filter((record) => record.tenantId === context.tenantId && !record.deletedAt);
+    const classByName = new Map(classes.map((record) => [this.normalizeValue(record.name), record]));
+    const existingStudentNos = new Set(
+      (await this.students.list(context))
+        .map((student) => student.studentNo)
+        .filter((studentNo): studentNo is string => Boolean(studentNo))
+        .map((studentNo) => this.normalizeStudentNo(studentNo)),
+    );
+    const seenStudentNos = new Set<string>();
 
     for (const row of rows) {
+      if (row.studentNo) {
+        const normalizedStudentNo = this.normalizeStudentNo(row.studentNo);
+        if (seenStudentNos.has(normalizedStudentNo) || existingStudentNos.has(normalizedStudentNo)) {
+          errors.push({ row: row.row, field: "studentNo", code: "STUDENT_NO_DUPLICATE", value: row.studentNo });
+        }
+        seenStudentNos.add(normalizedStudentNo);
+      }
       if (!row.firstName) {
         errors.push({ row: row.row, field: "firstName", code: "REQUIRED" });
       }
       if (!row.lastName) {
         errors.push({ row: row.row, field: "lastName", code: "REQUIRED" });
       }
+      if (row.className) {
+        const classRecord = classByName.get(this.normalizeValue(row.className));
+        if (classRecord) {
+          row.classId = classRecord.id;
+        } else {
+          errors.push({ row: row.row, field: "className", code: "CLASS_NOT_FOUND", value: row.className });
+        }
+      }
     }
 
     return errors;
+  }
+
+  private normalizeValue(value: string): string {
+    return value.trim().toLocaleLowerCase("tr-TR");
+  }
+
+  private normalizeStudentNo(value: string): string {
+    return value.trim();
   }
 
   private cellText(value: ExcelJS.CellValue): string {
@@ -190,4 +267,53 @@ export class StudentImportService {
 
     return String(value).trim();
   }
+}
+
+function isXlsx(bytes: Buffer): boolean {
+  return bytes[0] === 0x50 && bytes[1] === 0x4b;
+}
+
+function detectDelimiter(line: string): string {
+  if (line.includes(";")) return ";";
+  if (line.includes("\t")) return "\t";
+  return ",";
+}
+
+function parseDelimitedLine(line: string, delimiter: string): string[] {
+  const cells: string[] = [];
+  let current = "";
+  let quoted = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      current += '"';
+      index += 1;
+      continue;
+    }
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (char === delimiter && !quoted) {
+      cells.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+
+  cells.push(current);
+  return cells;
+}
+
+function findHeaderIndex(header: string[], names: string[]): number | undefined {
+  const normalizedNames = new Set(names.map(normalizeHeader));
+  const index = header.findIndex((cell) => normalizedNames.has(normalizeHeader(cell)));
+  return index === -1 ? undefined : index;
+}
+
+function normalizeHeader(value: string): string {
+  return value.trim().toLocaleLowerCase("tr-TR").replace(/[\s_-]+/g, "");
 }

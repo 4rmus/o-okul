@@ -6,7 +6,7 @@ import type { AcademicTermRecord, ClassRecord, CourseRecord, ScheduleLessonRecor
 import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import {
   firstFormError,
   scheduleLessonFormSchema,
@@ -128,8 +128,8 @@ export function ScheduleLessonsPage() {
       void savedLesson;
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
-    } catch {
-      setError("Ders programı kaydedilemedi.");
+    } catch (submitError) {
+      setError(apiErrorMessage(submitError, "Ders programı kaydedilemedi."));
     }
   }
 
@@ -141,8 +141,8 @@ export function ScheduleLessonsPage() {
     try {
       await deleteLesson(auth.accessToken, record.id);
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
-    } catch {
-      setError("Ders programı silinemedi.");
+    } catch (deleteError) {
+      setError(apiErrorMessage(deleteError, "Ders programı silinemedi."));
     }
   }
 
@@ -175,7 +175,14 @@ export function ScheduleLessonsPage() {
           />
         }
         emptyText="Ders programı kaydı yok"
-        error={error || (lessonsQuery.isError ? "Ders programı alınamadı." : referenceQuery.isError ? "Seçim listeleri alınamadı." : undefined)}
+        error={
+          error ||
+          (lessonsQuery.isError
+            ? apiErrorMessage(lessonsQuery.error, "Ders programı alınamadı.")
+            : referenceQuery.isError
+              ? apiErrorMessage(referenceQuery.error, "Seçim listeleri alınamadı.")
+              : undefined)
+        }
         getRowKey={(record) => record.id}
         loading={lessonsQuery.isPending || referenceQuery.isPending}
         rows={rows}

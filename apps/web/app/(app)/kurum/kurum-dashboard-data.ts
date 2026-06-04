@@ -3,8 +3,10 @@
 import { useQuery } from "@tanstack/react-query";
 import type {
   AttendanceRecord,
+  AnnouncementRecord,
   ClassRecord,
   ExamRecord,
+  GuardianRecord,
   PaymentPlanWithInstallmentsRecord,
   ReportSnapshotRecord,
   ReportStudentProgress,
@@ -12,7 +14,7 @@ import type {
   SupportTicketRecord,
   TeacherRecord,
 } from "@uzman-hocam/shared-types";
-import { apiBaseUrl, apiRequest } from "../../../src/api-client.js";
+import { apiBaseUrl, apiListRequest, apiRequest } from "../../../src/api-client.js";
 
 export interface KurumReportSummary {
   exam: ExamRecord | null;
@@ -21,6 +23,7 @@ export interface KurumReportSummary {
 
 export interface KurumOverview {
   classCount: number;
+  guardianCount: number;
   teacherCount: number;
   studentCount: number;
 }
@@ -32,7 +35,14 @@ export interface KurumDecisionSignals {
   attendanceAlerts: number;
 }
 
+export interface KurumAnnouncementSummary {
+  latestPublishedAt?: string;
+  latestTitle?: string;
+  publishedCount: number;
+}
+
 export interface KurumDashboardData {
+  announcements: KurumAnnouncementSummary;
   decisionSignals: KurumDecisionSignals;
   overview: KurumOverview;
   report: KurumReportSummary;
@@ -67,12 +77,13 @@ export function useKurumStudentProgressQuery(
 }
 
 async function loadKurumDashboardData(accessToken: string): Promise<KurumDashboardData> {
-  const [overview, decisionSignals, report] = await Promise.all([
+  const [overview, decisionSignals, report, announcements] = await Promise.all([
     loadKurumOverview(accessToken),
     loadKurumDecisionSignals(accessToken),
     loadLatestReportSummary(accessToken),
+    loadAnnouncementSummary(accessToken),
   ]);
-  return { decisionSignals, overview, report };
+  return { announcements, decisionSignals, overview, report };
 }
 
 async function loadKurumDecisionSignals(accessToken: string): Promise<KurumDecisionSignals> {
@@ -92,16 +103,31 @@ async function loadKurumDecisionSignals(accessToken: string): Promise<KurumDecis
 }
 
 async function loadKurumOverview(accessToken: string): Promise<KurumOverview> {
-  const [classes, teachers, students] = await Promise.all([
+  const [classes, teachers, students, guardians] = await Promise.all([
     apiRequest<ClassRecord[]>(accessToken, `${apiBaseUrl}/classes`),
     apiRequest<TeacherRecord[]>(accessToken, `${apiBaseUrl}/teachers`),
     apiRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/students`),
+    safeListRequest<GuardianRecord>(accessToken, `${apiBaseUrl}/guardians?page=1&limit=1`),
   ]);
 
   return {
     classCount: classes.length,
+    guardianCount: guardians.meta.total,
     teacherCount: teachers.length,
     studentCount: students.length,
+  };
+}
+
+async function loadAnnouncementSummary(accessToken: string): Promise<KurumAnnouncementSummary> {
+  const announcements = await safeListRequest<AnnouncementRecord>(
+    accessToken,
+    `${apiBaseUrl}/announcements?page=1&limit=5&sort=-publishedAt`,
+  );
+  const latestAnnouncement = announcements.data[0];
+  return {
+    latestPublishedAt: latestAnnouncement?.publishedAt,
+    latestTitle: latestAnnouncement?.title,
+    publishedCount: announcements.meta.total,
   };
 }
 
@@ -110,6 +136,22 @@ async function safeRequest<T>(accessToken: string, url: string, fallback: T): Pr
     return await apiRequest<T>(accessToken, url);
   } catch {
     return fallback;
+  }
+}
+
+async function safeListRequest<T>(accessToken: string, url: string) {
+  try {
+    return await apiListRequest<T>(accessToken, url);
+  } catch {
+    return {
+      data: [],
+      meta: {
+        limit: 0,
+        page: 1,
+        total: 0,
+        totalPages: 0,
+      },
+    };
   }
 }
 

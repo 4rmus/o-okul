@@ -4,12 +4,8 @@ import { type FormEvent, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Button,
-  ClassCompareBar,
   EmptyState,
   Input,
-  ProgressLineChart,
-  TopicRadarChart,
-  ExamResultDonut,
 } from "@uzman-hocam/ui";
 import type {
   AcademicTermRecord,
@@ -26,10 +22,11 @@ import type {
 import { Download, RefreshCw } from "lucide-react";
 import { KarneSheet } from "../../_shared/karne-sheet.js";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import { firstFormError, reportQueryFormSchema } from "../../../../src/form-validation.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
+import { ClassCompareBar, ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 
 interface ReportData {
@@ -111,9 +108,9 @@ export function ReportsPage() {
     try {
       setReportData(await loadReportData(auth.accessToken, parsedForm.data.examId, filters));
       setLoadedExamId(parsedForm.data.examId);
-    } catch {
+    } catch (loadError) {
       setReportData(null);
-      setError("Rapor alınamadı.");
+      setError(apiErrorMessage(loadError, "Rapor alınamadı."));
     }
   }
 
@@ -138,8 +135,8 @@ export function ReportsPage() {
         contentHash: normalizedContentHash,
       });
       setQueueMessage(`${result.jobId} kuyruğa alındı.`);
-    } catch {
-      setError("Rapor üretimi kuyruğa alınamadı.");
+    } catch (queueError) {
+      setError(apiErrorMessage(queueError, "Rapor üretimi kuyruğa alınamadı."));
     }
   }
 
@@ -152,8 +149,8 @@ export function ReportsPage() {
         ? await exportReportSnapshotExcel(auth.accessToken, loadedExamId, latestSnapshot.id)
         : await exportReportSnapshotPdf(auth.accessToken, loadedExamId, latestSnapshot.id);
       downloadBase64File(result);
-    } catch {
-      setError("Rapor çıktısı alınamadı.");
+    } catch (exportError) {
+      setError(apiErrorMessage(exportError, "Rapor çıktısı alınamadı."));
     }
   }
 

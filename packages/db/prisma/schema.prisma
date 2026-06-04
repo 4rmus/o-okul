@@ -22,6 +22,9 @@ model Tenant {
   plan        String             @default("TRIAL")
   licenseStartsAt DateTime?          @db.Timestamptz(6)
   licenseEndsAt   DateTime?          @db.Timestamptz(6)
+  institutionType String?
+  contactEmail String?
+  logoUrl     String?
   seatLimit   Int?
   status      String             @default("ACTIVE")
   createdAt   DateTime           @default(now())
@@ -405,7 +408,7 @@ model Student {
   status      String    @default("ACTIVE")
   firstName   String
   lastName    String
-  studentNo   String?
+  studentNo   String
   nationalIdEncrypted String?
   nationalIdHash String?
   birthDate   DateTime? @db.Date
@@ -441,7 +444,7 @@ model Student {
   @@index([tenantId, status, deletedAt])
   @@index([tenantId, classId, deletedAt])
   @@index([tenantId, responsibleTeacherId])
-  @@unique([tenantId, studentNo])
+  @@index([tenantId, studentNo])
   @@unique([tenantId, nationalIdHash])
   @@unique([tenantId, id])
 }

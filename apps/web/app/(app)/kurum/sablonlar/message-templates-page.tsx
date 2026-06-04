@@ -15,7 +15,7 @@ import type {
 } from "@uzman-hocam/shared-types";
 import { Pencil, Plus, Search, Send, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import {
   firstFormError,
   messageTemplateFormSchema,
@@ -151,8 +151,8 @@ export function MessageTemplatesPage() {
       void savedTemplate;
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
-    } catch {
-      setError("Şablon kaydedilemedi.");
+    } catch (submitError) {
+      setError(apiErrorMessage(submitError, "Şablon kaydedilemedi."));
     }
   }
 
@@ -164,8 +164,8 @@ export function MessageTemplatesPage() {
     try {
       await deleteMessageTemplate(auth.accessToken, template.id);
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
-    } catch {
-      setError("Şablon silinemedi.");
+    } catch (deleteError) {
+      setError(apiErrorMessage(deleteError, "Şablon silinemedi."));
     }
   }
 
@@ -187,8 +187,8 @@ export function MessageTemplatesPage() {
       });
       setDeliveryReportJobId(result.jobId);
       setSendStatus(`${result.recipientCount} alıcı kuyruğa alındı.`);
-    } catch {
-      setError("SMS gönderimi başlatılamadı.");
+    } catch (sendError) {
+      setError(apiErrorMessage(sendError, "SMS gönderimi başlatılamadı."));
     }
   }
 
@@ -213,8 +213,8 @@ export function MessageTemplatesPage() {
         recipients: result.recipients.map((recipient) => recipient.to).join("\n"),
       }));
       setSendStatus(`${result.recipientCount} izinli veli alıcısı hazırlandı.`);
-    } catch {
-      setError("SMS alıcıları getirilemedi.");
+    } catch (previewError) {
+      setError(apiErrorMessage(previewError, "SMS alıcıları getirilemedi."));
     }
   }
 
@@ -260,7 +260,7 @@ export function MessageTemplatesPage() {
           />
         }
         emptyText="Şablon kaydı yok"
-        error={error || (templatesQuery.isError ? "Şablonlar alınamadı." : undefined)}
+        error={error || (templatesQuery.isError ? apiErrorMessage(templatesQuery.error, "Şablonlar alınamadı.") : undefined)}
         getRowKey={(template) => template.id}
         loading={templatesQuery.isPending}
         rows={rows}

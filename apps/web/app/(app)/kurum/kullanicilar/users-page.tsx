@@ -7,7 +7,7 @@ import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } 
 import type { GuardianRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
 import { Plus, RotateCcw, Save, Send } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import {
   firstFormError,
   identityInvitationFormSchema,
@@ -289,8 +289,8 @@ export function UsersPage() {
         delete next[user.id];
         return next;
       });
-    } catch {
-      setError("Roller kaydedilemedi.");
+    } catch (rolesError) {
+      setError(apiErrorMessage(rolesError, "Roller kaydedilemedi."));
     }
   }
 
@@ -309,8 +309,8 @@ export function UsersPage() {
       void queryClient.invalidateQueries({ queryKey: usersListQueryKey });
       setIsUserFormOpen(false);
       setUserForm(emptyUserForm);
-    } catch {
-      setError("Kullanıcı oluşturulamadı.");
+    } catch (userError) {
+      setError(apiErrorMessage(userError, "Kullanıcı oluşturulamadı."));
     }
   }
 
@@ -330,8 +330,8 @@ export function UsersPage() {
       setIssuedToken({ email: issued.invitation.email, token: issued.activationToken });
       setIsInvitationFormOpen(false);
       setInvitationForm(emptyInvitationForm);
-    } catch {
-      setError("Davet oluşturulamadı.");
+    } catch (invitationError) {
+      setError(apiErrorMessage(invitationError, "Davet oluşturulamadı."));
     }
   }
 
@@ -343,8 +343,8 @@ export function UsersPage() {
       const issued = await resendIdentityInvitation(auth.accessToken, invitation.id);
       void queryClient.invalidateQueries({ queryKey: invitationsListQueryKey });
       setIssuedToken({ email: issued.invitation.email, token: issued.activationToken });
-    } catch {
-      setError("Davet yenilenemedi.");
+    } catch (resendError) {
+      setError(apiErrorMessage(resendError, "Davet yenilenemedi."));
     }
   }
 
@@ -382,7 +382,7 @@ export function UsersPage() {
           />
         }
         emptyText="Kullanıcı kaydı yok"
-        error={error || (usersQuery.isError ? "Kullanıcılar alınamadı." : undefined)}
+        error={error || (usersQuery.isError ? apiErrorMessage(usersQuery.error, "Kullanıcılar alınamadı.") : undefined)}
         getRowKey={(user) => user.id}
         loading={usersQuery.isPending}
         rows={users}
@@ -415,7 +415,7 @@ export function UsersPage() {
           />
         }
         emptyText="Davet kaydı yok"
-        error={invitationsQuery.isError ? "Davetler alınamadı." : undefined}
+        error={invitationsQuery.isError ? apiErrorMessage(invitationsQuery.error, "Davetler alınamadı.") : undefined}
         getRowKey={(invitation) => invitation.id}
         loading={invitationsQuery.isPending}
         rows={invitations}

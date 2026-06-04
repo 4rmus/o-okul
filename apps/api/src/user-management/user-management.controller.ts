@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
-import { Roles } from "../rbac/roles.decorator.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
   type CreateTenantUserBody,
@@ -16,19 +16,19 @@ export class UserManagementController {
   constructor(private readonly users: UserManagementService) {}
 
   @Get()
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("user:manage")
   async list(@Query() query: ListQuery): Promise<TenantUserRecord[]> {
     return applyListQuery(await this.users.list(getRequestContext()), query, tenantUserListFields);
   }
 
   @Post()
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("user:manage")
   create(@Body() body: CreateTenantUserBody): Promise<TenantUserRecord> {
     return this.users.create(getRequestContext(), body);
   }
 
   @Patch(":userId/roles")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("user:manage")
   setRoles(@Param("userId") userId: string, @Body() body: SetTenantUserRolesBody): Promise<TenantUserRecord> {
     return this.users.setRoles(getRequestContext(), userId, body);
   }

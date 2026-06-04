@@ -15,7 +15,7 @@ import type {
 } from "@uzman-hocam/shared-types";
 import { Plus, Send } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import {
   announcementFormSchema,
   firstFormError,
@@ -163,8 +163,8 @@ export function AnnouncementsPage() {
       await createAnnouncement(auth.accessToken, parsedForm.data);
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
-    } catch {
-      setError("Duyuru yayınlanamadı.");
+    } catch (submitError) {
+      setError(apiErrorMessage(submitError, "Duyuru yayınlanamadı."));
     }
   }
 
@@ -195,8 +195,8 @@ export function AnnouncementsPage() {
       });
       setSmsDeliveryReportJobId(result.jobId);
       setSmsStatus(`${result.recipientCount} alıcı kuyruğa alındı.`);
-    } catch {
-      setSmsError("Duyuru SMS gönderimi başlatılamadı.");
+    } catch (smsError) {
+      setSmsError(apiErrorMessage(smsError, "Duyuru SMS gönderimi başlatılamadı."));
     }
   }
 
@@ -229,7 +229,7 @@ export function AnnouncementsPage() {
           />
         }
         emptyText="Duyuru kaydı yok"
-        error={error || (announcementsQuery.isError ? "Duyurular alınamadı." : undefined)}
+        error={error || (announcementsQuery.isError ? apiErrorMessage(announcementsQuery.error, "Duyurular alınamadı.") : undefined)}
         getRowKey={(announcement) => announcement.id}
         loading={announcementsQuery.isPending}
         rows={rows}
@@ -249,7 +249,7 @@ export function AnnouncementsPage() {
           {reportDataQuery.isPending ? (
             <p>Rapor yükleniyor...</p>
           ) : reportDataQuery.isError ? (
-            <p>Alıcı raporu alınamadı.</p>
+            <p>{apiErrorMessage(reportDataQuery.error, "Alıcı raporu alınamadı.")}</p>
           ) : reportDataQuery.data?.recipientReport ? (
             <AnnouncementRecipientReportPanel report={reportDataQuery.data.recipientReport} />
           ) : null}

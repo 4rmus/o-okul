@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
-import { Roles } from "../rbac/roles.decorator.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
   SmsBatchService,
@@ -17,19 +17,19 @@ export class SmsBatchController {
   constructor(private readonly batches: SmsBatchService) {}
 
   @Post()
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("announcement:manage")
   create(@Body() body: CreateSmsBatchInput): Promise<SmsBatchQueueResult> {
     return this.batches.enqueue(getRequestContext(), body);
   }
 
   @Post("recipients/preview")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("announcement:manage")
   previewRecipients(@Body() body: SmsBatchRecipientPreviewInput): Promise<SmsBatchRecipientPreviewResult> {
     return this.batches.previewRecipients(getRequestContext(), body);
   }
 
   @Get(":jobId")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("announcement:manage")
   findDeliveryReport(@Param("jobId") jobId: string): Promise<SmsBatchDeliveryReportRecord> {
     return this.batches.findDeliveryReport(getRequestContext(), jobId);
   }

@@ -138,6 +138,26 @@ describe("TenantService", () => {
     );
   });
 
+  it("slug çakışmasını anlaşılır tenant hatasına çevirir", async () => {
+    const store = {
+      createWithFirstAdmin: async () => {
+        throw { code: "23505", constraint: "Tenant_slug_key" };
+      },
+    };
+    const service = new TenantService(store as never);
+
+    await expect(service.create(systemContext, {
+      name: "Çakışan Kurum",
+      slug: "demo",
+      firstAdmin: {
+        name: "Demo Admin",
+        email: "demo-admin@example.test",
+        mode: "password",
+        password: "password1",
+      },
+    })).rejects.toThrow("TENANT_SLUG_ALREADY_EXISTS");
+  });
+
   it("tenant admin kurum yönetimi yapamaz", async () => {
     const service = new TenantService(new InMemoryTenantStore());
 

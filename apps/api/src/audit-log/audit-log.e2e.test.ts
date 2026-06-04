@@ -285,7 +285,7 @@ describe("Audit log API", () => {
         entityType: "Student",
         entityId: studentId,
         action: "student.created",
-        diff: { fieldsSet: ["firstName", "lastName", "status"] },
+        diff: { fieldsSet: ["studentNo", "firstName", "lastName", "status"] },
       }),
       expect.objectContaining({
         entityType: "Student",

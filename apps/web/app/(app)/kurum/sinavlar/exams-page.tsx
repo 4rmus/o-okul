@@ -6,7 +6,7 @@ import type { ClassRecord, ExamParticipantRecord, ExamRecord, StudentRecord } fr
 import { Button, EmptyState, FormModal, Input } from "@uzman-hocam/ui";
 import { CheckCircle2, Plus, Users } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import {
   examParticipantFormSchema,
   examFormSchema,
@@ -109,8 +109,8 @@ export function ExamsPage() {
       await createExam(auth.accessToken, parsedForm.data);
       void queryClient.invalidateQueries({ queryKey });
       closeForm();
-    } catch {
-      setError("Sınav kaydedilemedi.");
+    } catch (submitError) {
+      setError(apiErrorMessage(submitError, "Sınav kaydedilemedi."));
     }
   }
 
@@ -121,8 +121,8 @@ export function ExamsPage() {
     try {
       await publishExam(auth.accessToken, exam.id);
       void queryClient.invalidateQueries({ queryKey });
-    } catch {
-      setError("Sınav yayınlanamadı.");
+    } catch (publishError) {
+      setError(apiErrorMessage(publishError, "Sınav yayınlanamadı."));
     }
   }
 
@@ -141,8 +141,8 @@ export function ExamsPage() {
       await addParticipant(auth.accessToken, activeExamId, parsedForm.data);
       void queryClient.invalidateQueries({ queryKey: participantsQueryKey });
       setParticipantForm(emptyParticipantForm);
-    } catch {
-      setError("Katılımcı eklenemedi.");
+    } catch (participantError) {
+      setError(apiErrorMessage(participantError, "Katılımcı eklenemedi."));
     }
   }
 
@@ -175,8 +175,8 @@ export function ExamsPage() {
       );
       void queryClient.invalidateQueries({ queryKey: participantsQueryKey });
       setBulkParticipantForm(emptyBulkParticipantForm);
-    } catch {
-      setError("Toplu katılımcı eklenemedi.");
+    } catch (bulkParticipantError) {
+      setError(apiErrorMessage(bulkParticipantError, "Toplu katılımcı eklenemedi."));
     }
   }
 
@@ -193,7 +193,9 @@ export function ExamsPage() {
     >
       <section className="next-list-panel" aria-label="Sınav yönetimi">
         <h2>Sınav yönetimi</h2>
-        {error || examsQuery.isError ? <p className="uh-crud-page__error">{error || "Sınavlar alınamadı."}</p> : null}
+        {error || examsQuery.isError ? (
+          <p className="uh-crud-page__error">{error || apiErrorMessage(examsQuery.error, "Sınavlar alınamadı.")}</p>
+        ) : null}
         <table className="uh-data-table">
           <thead>
             <tr>

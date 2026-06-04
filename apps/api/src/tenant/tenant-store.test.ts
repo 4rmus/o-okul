@@ -137,7 +137,10 @@ describe("PostgresTenantStore", () => {
     expect(queries[0]?.sql).toBe("BEGIN");
     expect(queries.some((query) => query.sql.includes("set_config('app.bypass_rls'") && query.values?.[0] === "true")).toBe(true);
     expect(queries.some((query) => query.sql.includes('INSERT INTO "Tenant"'))).toBe(true);
-    expect(queries.some((query) => query.sql.includes('INSERT INTO "User"'))).toBe(true);
+    const insertUser = queries.find((query) => query.sql.includes('INSERT INTO "User"'));
+    expect(insertUser?.sql).toContain('ON CONFLICT ("email") DO UPDATE');
+    expect(insertUser?.sql).toContain('CASE WHEN $5::boolean');
+    expect(insertUser?.values?.[4]).toBe(true);
     expect(queries.some((query) => query.sql.includes('INSERT INTO "TenantMembership"'))).toBe(true);
     expect(queries.at(-1)?.sql).toBe("COMMIT");
   });

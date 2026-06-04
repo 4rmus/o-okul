@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import type { AnnouncementDeliveryReportRecord, AnnouncementRecipientReport } from "@uzman-hocam/shared-types";
@@ -30,31 +31,31 @@ export class AnnouncementController {
   }
 
   @Get(":id/recipients")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("announcement:manage")
   recipients(@Param("id") id: string): Promise<AnnouncementRecipientReport> {
     return this.announcements.recipientReport(getRequestContext(), id);
   }
 
   @Get(":id/delivery-reports")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("announcement:manage")
   deliveryReports(@Param("id") id: string): Promise<AnnouncementDeliveryReportRecord[]> {
     return this.announcements.deliveryReports(getRequestContext(), id);
   }
 
   @Post(":id/delivery-results")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("announcement:manage")
   deliveryResult(@Param("id") id: string, @Body() body: AnnouncementDeliveryResultInput): Promise<AnnouncementDeliveryQueueResult> {
     return this.announcements.enqueueDeliveryResult(getRequestContext(), id, body);
   }
 
   @Post(":id/deliveries")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("announcement:manage")
   sendDelivery(@Param("id") id: string, @Body() body: AnnouncementDeliverySendInput): Promise<AnnouncementDeliveryQueueResult> {
     return this.announcements.sendExternalDelivery(getRequestContext(), id, body);
   }
 
   @Post()
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("announcement:manage")
   create(@Body() body: Partial<AnnouncementRecord>): Promise<AnnouncementRecord> {
     return this.announcements.create(getRequestContext(), body);
   }

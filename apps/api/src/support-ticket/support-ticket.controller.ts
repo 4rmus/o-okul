@@ -7,6 +7,7 @@ import type {
 } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
@@ -42,7 +43,7 @@ export class SupportTicketController {
   }
 
   @Patch(":id")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("support:manage")
   update(
     @Param("id") id: string,
     @Body() body: Partial<Pick<SupportTicketRecord, "priority" | "status">>,

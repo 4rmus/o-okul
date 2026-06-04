@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { MessageTemplateService, type MessageTemplateRecord } from "./message-template.service.js";
@@ -23,20 +24,20 @@ export class MessageTemplateController {
   }
 
   @Post()
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("announcement:manage")
   create(@Body() body: Partial<MessageTemplateRecord>): Promise<MessageTemplateRecord> {
     return this.templates.create(getRequestContext(), body);
   }
 
   @Patch(":id")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("announcement:manage")
   update(@Param("id") id: string, @Body() body: Partial<MessageTemplateRecord>): Promise<MessageTemplateRecord> {
     return this.templates.update(getRequestContext(), id, body);
   }
 
   @Delete(":id")
   @HttpCode(204)
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("announcement:manage")
   delete(@Param("id") id: string): Promise<void> {
     return this.templates.delete(getRequestContext(), id);
   }

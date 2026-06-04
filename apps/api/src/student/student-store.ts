@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
-import { type TenantQueryable, withExplicitTenantQuery, withTenantQuery } from "../db/tenant-query.js";
+import { type Queryable, type TenantQueryable, withExplicitTenantQuery, withTenantQuery } from "../db/tenant-query.js";
 import type { StudentRecord } from "./student.service.js";
 
-type StudentInput = Omit<StudentRecord, "id" | "status"> & Partial<Pick<StudentRecord, "status">>;
+type StudentInput = Omit<StudentRecord, "id" | "status"> & Partial<Pick<StudentRecord, "status" | "studentNo">>;
+const studentNoStart = 100;
 
 export interface StudentProfileStorageRecord extends StudentRecord {
   nationalIdEncrypted?: string;
@@ -48,12 +49,13 @@ const demoStudents: StudentProfileStorageRecord[] = [
     tenantId: "tenant-a",
     firstName: "Ada",
     lastName: "A",
+    studentNo: "100",
     userId: "student-tenant-a",
     classId: "class-a",
     responsibleTeacherId: "teacher-a",
     status: "ACTIVE",
   },
-  { id: "student-b", tenantId: "tenant-b", firstName: "Bora", lastName: "B", status: "ACTIVE" },
+  { id: "student-b", tenantId: "tenant-b", firstName: "Bora", lastName: "B", studentNo: "100", status: "ACTIVE" },
 ];
 
 export class InMemoryStudentStore implements StudentStore {
@@ -80,23 +82,45 @@ export class InMemoryStudentStore implements StudentStore {
   }
 
   async create(input: StudentInput): Promise<StudentRecord> {
+    const studentNo = normalizeStudentNo(input.studentNo) ?? this.nextStudentNo(input.tenantId);
     const student = {
       id: `student-${this.students.length + 1}`,
       status: "ACTIVE" as const,
       ...input,
+      studentNo,
     };
     this.students.push(student);
     return student;
   }
 
   async createMany(inputs: StudentInput[]): Promise<StudentRecord[]> {
-    const created = inputs.map((input, index) => ({
-      id: `student-${this.students.length + index + 1}`,
-      status: "ACTIVE" as const,
-      ...input,
-    }));
+    const created: StudentRecord[] = [];
+    for (const input of inputs) {
+      const studentNo = normalizeStudentNo(input.studentNo) ?? this.nextStudentNo(input.tenantId, created);
+      const student = {
+        id: `student-${this.students.length + created.length + 1}`,
+        status: "ACTIVE" as const,
+        ...input,
+        studentNo,
+      };
+      created.push(student);
+    }
     this.students.push(...created);
     return created;
+  }
+
+  private nextStudentNo(tenantId: string, pending: StudentRecord[] = []): string {
+    const activeNumbers = new Set(
+      [...this.students, ...pending]
+        .filter((student) => student.tenantId === tenantId && !student.deletedAt)
+        .map((student) => Number(student.studentNo))
+        .filter((studentNo) => Number.isInteger(studentNo) && studentNo >= studentNoStart),
+    );
+    let candidate = studentNoStart;
+    while (activeNumbers.has(candidate)) {
+      candidate += 1;
+    }
+    return String(candidate);
   }
 
   async update(
@@ -217,13 +241,16 @@ export class PostgresStudentStore implements StudentStore {
 
   async create(input: StudentInput): Promise<StudentRecord> {
     return withTenantQuery(this.pool, async (client) => {
+      await lockStudentNoAllocation(client, input.tenantId);
+      const studentNo = normalizeStudentNo(input.studentNo) ?? await nextStudentNo(client, input.tenantId);
       const result = await client.query<StudentRow>(
-        `INSERT INTO "Student" ("id", "tenantId", "firstName", "lastName", "classId", "responsibleTeacherId", "status", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+        `INSERT INTO "Student" ("id", "tenantId", "studentNo", "firstName", "lastName", "classId", "responsibleTeacherId", "status", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
          RETURNING *`,
         [
           randomUUID(),
           input.tenantId,
+          studentNo,
           input.firstName,
           input.lastName,
           input.classId ?? null,
@@ -243,19 +270,22 @@ export class PostgresStudentStore implements StudentStore {
     if (inputs.length === 0) return [];
 
     return withTenantQuery(this.pool, async (client) => {
-      const values: unknown[] = [];
-      const placeholders = inputs.map((input, index) => {
-        values.push(randomUUID(), input.tenantId, input.firstName, input.lastName, input.status ?? "ACTIVE");
-        const offset = index * 5;
-        return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, now())`;
-      });
-      const result = await client.query<StudentRow>(
-        `INSERT INTO "Student" ("id", "tenantId", "firstName", "lastName", "status", "updatedAt")
-         VALUES ${placeholders.join(", ")}
-         RETURNING *`,
-        values,
-      );
-      return result.rows.map(toStudentRecord);
+      const created: StudentRecord[] = [];
+      for (const input of inputs) {
+        await lockStudentNoAllocation(client, input.tenantId);
+        const studentNo = normalizeStudentNo(input.studentNo) ?? await nextStudentNo(client, input.tenantId);
+        const result = await client.query<StudentRow>(
+          `INSERT INTO "Student" ("id", "tenantId", "studentNo", "firstName", "lastName", "classId", "status", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+           RETURNING *`,
+          [randomUUID(), input.tenantId, studentNo, input.firstName, input.lastName, input.classId ?? null, input.status ?? "ACTIVE"],
+        );
+        if (!result.rows[0]) {
+          throw new Error("STUDENT_CREATE_FAILED");
+        }
+        created.push(toStudentRecord(result.rows[0]));
+      }
+      return created;
     });
   }
 
@@ -401,11 +431,63 @@ export function createStudentStore(): StudentStore {
   return resolvePersistenceDriver(process.env.STUDENT_STORE) === "postgres" ? new PostgresStudentStore() : new InMemoryStudentStore();
 }
 
+async function lockStudentNoAllocation(client: Queryable, tenantId: string): Promise<void> {
+  await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [tenantId]);
+}
+
+async function nextStudentNo(client: Queryable, tenantId: string): Promise<string> {
+  const result = await client.query<{ studentNo: string }>(
+    `SELECT candidate::text AS "studentNo"
+     FROM generate_series(
+       ${studentNoStart},
+       (
+         SELECT GREATEST(
+           COALESCE(
+             MAX(
+               CASE
+                 WHEN "studentNo" ~ '^[0-9]+$' AND "studentNo"::integer >= ${studentNoStart}
+                   THEN "studentNo"::integer
+                 ELSE NULL
+               END
+             ),
+             0
+           ) + 1,
+           ${studentNoStart}
+         )
+         FROM "Student"
+         WHERE "tenantId" = $1
+           AND "deletedAt" IS NULL
+       )
+     ) AS candidate
+     WHERE NOT EXISTS (
+       SELECT 1
+       FROM "Student"
+       WHERE "tenantId" = $1
+         AND "deletedAt" IS NULL
+         AND "studentNo" = candidate::text
+     )
+     ORDER BY candidate
+     LIMIT 1`,
+    [tenantId],
+  );
+  const studentNo = result.rows[0]?.studentNo;
+  if (!studentNo) {
+    throw new Error("STUDENT_NO_ALLOCATION_FAILED");
+  }
+  return studentNo;
+}
+
+function normalizeStudentNo(value: string | undefined): string | undefined {
+  const studentNo = value?.trim();
+  return studentNo ? studentNo : undefined;
+}
+
 interface StudentRow {
   id: string;
   tenantId: string;
   firstName: string;
   lastName: string;
+  studentNo: string | null;
   classId: string | null;
   responsibleTeacherId: string | null;
   status: StudentRecord["status"];
@@ -423,6 +505,7 @@ function toStudentRecord(row: StudentRow): StudentRecord {
   return {
     id: row.id,
     tenantId: row.tenantId,
+    studentNo: row.studentNo ?? undefined,
     firstName: row.firstName,
     lastName: row.lastName,
     classId: row.classId ?? undefined,

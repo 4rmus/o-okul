@@ -193,6 +193,8 @@ export class PostgresAuthUserStore implements AuthUserStore {
   async findByEmail(email: string): Promise<AuthUser | undefined> {
     const result = await this.queryAuthUsers(
       `WHERE lower(u."email") = lower($1)
+         AND t."status" = 'ACTIVE'
+         AND (t."licenseEndsAt" IS NULL OR t."licenseEndsAt" >= now())
        GROUP BY u."id", u."email", u."name", u."passwordHash", m."tenantId"
        ORDER BY min(m."createdAt") ASC
        LIMIT 1`,
@@ -204,6 +206,8 @@ export class PostgresAuthUserStore implements AuthUserStore {
   async findById(id: string): Promise<AuthUser | undefined> {
     const result = await this.queryAuthUsers(
       `WHERE u."id" = $1
+         AND t."status" = 'ACTIVE'
+         AND (t."licenseEndsAt" IS NULL OR t."licenseEndsAt" >= now())
        GROUP BY u."id", u."email", u."name", u."passwordHash", m."tenantId"
        ORDER BY min(m."createdAt") ASC
        LIMIT 1`,
@@ -253,6 +257,7 @@ export class PostgresAuthUserStore implements AuthUserStore {
            array_agg(m."role"::text ORDER BY m."role"::text) AS roles
          FROM "User" u
          JOIN "TenantMembership" m ON m."userId" = u."id"
+         JOIN "Tenant" t ON t."id" = m."tenantId"
          ${whereSql}`,
         values,
       );

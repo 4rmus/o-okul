@@ -4,7 +4,7 @@ import { type FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@uzman-hocam/ui";
-import type { GuardianRecord, GuardianStudentRecord, StudentRecord } from "@uzman-hocam/shared-types";
+import type { ClassRecord, GuardianRecord, GuardianStudentRecord, StudentRecord } from "@uzman-hocam/shared-types";
 import { ArrowLeft, Link2, Send } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
@@ -70,18 +70,56 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
               metrics={[
                 { label: "Telefon", value: detail.guardian.phone ?? "-" },
                 { label: "Öğrenci bağlantısı", value: detail.links.length },
+                { label: "Aktif öğrenci", value: activeGuardianStudentCount(detail.links, detail.studentById) },
                 { label: "Portal", value: detail.guardian.userId ? "Bağlı" : "Yok" },
               ]}
             />
             <section className="next-report-list" aria-label="Veli öğrenci bağlantıları">
               <h2>Öğrenciler</h2>
               {detail.links.length > 0 ? (
-                detail.links.map((link) => (
-                  <p key={link.id}>
-                    {detail.studentNameById.get(link.studentId) ?? link.studentId} - {formatRelationship(link.relationshipType)}
-                    {link.isPrimary ? " / Birincil" : ""}
-                  </p>
-                ))
+                <div className="next-relationship-list">
+                  {detail.links.map((link) => {
+                    const student = detail.studentById.get(link.studentId);
+                    const studentName = detail.studentNameById.get(link.studentId) ?? link.studentId;
+                    const className = student?.classId ? detail.classNameById.get(student.classId) ?? student.classId : "-";
+                    const relationshipText = `${studentName} - ${formatRelationship(link.relationshipType)}${link.isPrimary ? " / Birincil" : ""}`;
+                    return (
+                      <article className="next-relationship-item" key={link.id}>
+                        <header>
+                          <div>
+                            <h3>{relationshipText}</h3>
+                            <p>{student?.studentNo ? `Öğrenci no ${student.studentNo}` : "Öğrenci no yok"}</p>
+                          </div>
+                          <span className="next-reference-badge">{link.isPrimary ? "Birincil" : "Ek bağlantı"}</span>
+                        </header>
+                        <dl className="next-definition-list">
+                          <div>
+                            <dt>Sınıf</dt>
+                            <dd>{className}</dd>
+                          </div>
+                          <div>
+                            <dt>Durum</dt>
+                            <dd>{student ? formatStudentStatus(student.status) : "-"}</dd>
+                          </div>
+                          <div>
+                            <dt>Portal</dt>
+                            <dd>{student?.userId ? "Bağlı" : "Yok"}</dd>
+                          </div>
+                        </dl>
+                        <div className="next-permission-row" aria-label={`${studentName} izinleri`}>
+                          {permissionBadges(link).map((permission) => (
+                            <span
+                              className={permission.enabled ? "next-permission-badge next-permission-badge--enabled" : "next-permission-badge"}
+                              key={permission.label}
+                            >
+                              {permission.label}
+                            </span>
+                          ))}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
               ) : (
                 <p>Öğrenci bağlantısı yok</p>
               )}
@@ -152,16 +190,19 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
 }
 
 async function loadGuardianDetail(accessToken: string, guardianId: string) {
-  const [guardian, links, students] = await Promise.all([
+  const [guardian, links, students, classes] = await Promise.all([
     apiRequest<GuardianRecord>(accessToken, `${apiBaseUrl}/guardians/${encodeURIComponent(guardianId)}`),
     apiRequest<GuardianStudentRecord[]>(accessToken, `${apiBaseUrl}/guardians/${encodeURIComponent(guardianId)}/students`),
     apiListRequest<StudentRecord>(accessToken, `${apiBaseUrl}/students`),
+    apiListRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes`),
   ]);
 
   return {
+    classNameById: new Map(classes.data.map((record) => [record.id, record.name])),
     guardian,
     links,
     students: students.data,
+    studentById: new Map(students.data.map((record) => [record.id, record])),
     studentNameById: new Map(students.data.map((record) => [record.id, `${record.firstName} ${record.lastName}`])),
   };
 }
@@ -192,4 +233,30 @@ function formatRelationship(value: GuardianStudentRecord["relationshipType"]) {
   if (value === "GUARDIAN") return "Vasi";
   if (value === "EMERGENCY_CONTACT") return "Acil kişi";
   return "Diğer";
+}
+
+function formatStudentStatus(status: StudentRecord["status"]) {
+  const labels: Record<StudentRecord["status"], string> = {
+    ACTIVE: "Aktif",
+    GRADUATED: "Mezun",
+    PASSIVE: "Pasif",
+    TRANSFERRED: "Nakil",
+  };
+  return labels[status] ?? status;
+}
+
+function activeGuardianStudentCount(
+  links: GuardianStudentRecord[],
+  studentById: ReadonlyMap<string, StudentRecord>,
+) {
+  return links.filter((link) => studentById.get(link.studentId)?.status === "ACTIVE").length;
+}
+
+function permissionBadges(link: GuardianStudentRecord) {
+  return [
+    { enabled: link.canViewFinance, label: "Ödeme" },
+    { enabled: link.canReceiveSms, label: "SMS" },
+    { enabled: link.canReceiveAnnouncements, label: "Duyuru" },
+    { enabled: link.canOpenSupportTickets, label: "Destek" },
+  ];
 }

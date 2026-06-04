@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
-import { Roles } from "../rbac/roles.decorator.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
   type AcceptIdentityInvitationBody,
@@ -17,13 +17,13 @@ export class IdentityInvitationController {
   constructor(private readonly invitations: IdentityInvitationService) {}
 
   @Get()
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("user:manage")
   async list(@Query() query: ListQuery): Promise<IdentityInvitationRecord[]> {
     return applyListQuery(await this.invitations.list(getRequestContext()), query, identityInvitationListFields);
   }
 
   @Post()
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("user:manage")
   create(@Body() body: CreateIdentityInvitationBody): Promise<IdentityInvitationIssueResult> {
     return this.invitations.create(getRequestContext(), body);
   }
@@ -34,7 +34,7 @@ export class IdentityInvitationController {
   }
 
   @Post(":id/resend")
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("user:manage")
   resend(@Param("id") id: string): Promise<IdentityInvitationIssueResult> {
     return this.invitations.resend(getRequestContext(), id);
   }

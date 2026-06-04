@@ -3,7 +3,7 @@
 import { type FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, EmptyState, Input } from "@uzman-hocam/ui";
-import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import { useAuth } from "../../../providers.js";
 import { EvidenceGateSection, EvidenceListSection, OperationDecisionNotice, ReferenceBadge } from "../_shared/evidence-panels.js";
 import { PageFrame } from "../_shared/page-frame.js";
@@ -92,7 +92,7 @@ export function BackupRestorePage() {
       setError("");
       void queryClient.invalidateQueries({ queryKey });
     },
-    onError: () => setError("Yedek restore işi başlatılamadı. Onay metnini ve hedefi kontrol et."),
+    onError: (jobError) => setError(apiErrorMessage(jobError, "Yedek restore işi başlatılamadı. Onay metnini ve hedefi kontrol et.")),
   });
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -168,7 +168,7 @@ export function BackupRestorePage() {
       </section>
       <section className="next-report-list" aria-label="Yedek restore işleri">
         <h2>Son İşler</h2>
-        {jobsQuery.isError ? <p className="next-form-error">Yedek restore işleri alınamadı.</p> : null}
+        {jobsQuery.isError ? <p className="next-form-error">{apiErrorMessage(jobsQuery.error, "Yedek restore işleri alınamadı.")}</p> : null}
         {jobs.length === 0 ? (
           <EmptyState
             title="Henüz panelden başlatılmış iş yok."

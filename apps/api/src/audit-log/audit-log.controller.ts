@@ -1,7 +1,7 @@
 import { Controller, Get, Query, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
-import { Roles } from "../rbac/roles.decorator.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { AuditLogService, type AuditLogRecord } from "./audit-log.service.js";
 
@@ -11,7 +11,7 @@ export class AuditLogController {
   constructor(private readonly auditLogs: AuditLogService) {}
 
   @Get()
-  @Roles("TENANT_ADMIN")
+  @RequireCapability("audit:read")
   async list(@Query() query: ListQuery): Promise<AuditLogRecord[]> {
     return applyListQuery(await this.auditLogs.list(getRequestContext()), query, auditLogListFields);
   }

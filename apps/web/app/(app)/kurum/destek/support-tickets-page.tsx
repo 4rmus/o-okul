@@ -16,7 +16,7 @@ import type {
 } from "@uzman-hocam/shared-types";
 import { CheckCircle2, CirclePlay, Download, Plus, Upload } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest, type ListMeta } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, type ListMeta } from "../../../../src/api-client.js";
 import {
   firstFormError,
   supportTicketAttachmentFormSchema,
@@ -214,8 +214,8 @@ export function SupportTicketsPage() {
       setAttachmentTicketId(savedTicket.id);
       setCommentTicketId(savedTicket.id);
       closeForm();
-    } catch {
-      setError("Destek bildirimi açılamadı.");
+    } catch (submitError) {
+      setError(apiErrorMessage(submitError, "Destek bildirimi açılamadı."));
     }
   }
 
@@ -232,8 +232,8 @@ export function SupportTicketsPage() {
         ...current,
         tickets: current.tickets.map((candidate) => (candidate.id === savedTicket.id ? savedTicket : candidate)),
       }));
-    } catch {
-      setError("Destek bildirimi güncellenemedi.");
+    } catch (updateError) {
+      setError(apiErrorMessage(updateError, "Destek bildirimi güncellenemedi."));
     }
   }
 
@@ -290,8 +290,8 @@ export function SupportTicketsPage() {
       setAttachmentFileName("");
       setAttachmentFileBase64("");
       setAttachmentContentType("text/plain");
-    } catch {
-      setError("Destek eki yüklenemedi.");
+    } catch (attachmentError) {
+      setError(apiErrorMessage(attachmentError, "Destek eki yüklenemedi."));
     }
   }
 
@@ -302,8 +302,8 @@ export function SupportTicketsPage() {
     setDownloadingAttachmentId(attachment.id);
     try {
       downloadBase64File(await downloadSupportTicketAttachment(auth.accessToken, ticketId, attachment.id));
-    } catch {
-      setError("Destek eki indirilemedi.");
+    } catch (downloadError) {
+      setError(apiErrorMessage(downloadError, "Destek eki indirilemedi."));
     } finally {
       setDownloadingAttachmentId("");
     }
@@ -329,8 +329,8 @@ export function SupportTicketsPage() {
         },
       }));
       setCommentBody("");
-    } catch {
-      setError("Destek yorumu eklenemedi.");
+    } catch (commentError) {
+      setError(apiErrorMessage(commentError, "Destek yorumu eklenemedi."));
     }
   }
 
@@ -435,7 +435,7 @@ export function SupportTicketsPage() {
           />
         }
         emptyText="Destek bildirimi yok"
-        error={error || (ticketsQuery.isError ? "Destek bildirimleri alınamadı." : undefined)}
+        error={error || (ticketsQuery.isError ? apiErrorMessage(ticketsQuery.error, "Destek bildirimleri alınamadı.") : undefined)}
         getRowKey={(ticket) => ticket.id}
         loading={ticketsQuery.isPending}
         rows={rows}

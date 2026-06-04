@@ -12,6 +12,9 @@ export interface TenantRecord {
   plan: string;
   licenseStartsAt?: string;
   licenseEndsAt?: string;
+  institutionType?: string;
+  contactEmail?: string;
+  logoUrl?: string;
   seatLimit?: number;
   activeSeatCount?: number;
   status: string;
@@ -69,6 +72,9 @@ export class InMemoryTenantStore implements TenantStore {
       plan: input.plan ?? "TRIAL",
       licenseStartsAt: input.licenseStartsAt,
       licenseEndsAt: input.licenseEndsAt,
+      institutionType: input.institutionType,
+      contactEmail: input.contactEmail,
+      logoUrl: input.logoUrl,
       seatLimit: input.seatLimit,
       activeSeatCount: 0,
       status: input.status ?? "ACTIVE",
@@ -132,13 +138,16 @@ export class PostgresTenantStore implements TenantStore {
            t."plan",
            t."licenseStartsAt",
            t."licenseEndsAt",
+           t."institutionType",
+           t."contactEmail",
+           t."logoUrl",
            t."seatLimit",
            COUNT(DISTINCT m."userId")::int AS "activeSeatCount",
            t."status"
          FROM "Tenant" t
          LEFT JOIN "TenantMembership" m ON m."tenantId" = t."id"
          WHERE t."id" <> 'system' AND t."status" <> 'DELETED'
-         GROUP BY t."id", t."name", t."slug", t."plan", t."licenseStartsAt", t."licenseEndsAt", t."seatLimit", t."status", t."createdAt"
+         GROUP BY t."id", t."name", t."slug", t."plan", t."licenseStartsAt", t."licenseEndsAt", t."institutionType", t."contactEmail", t."logoUrl", t."seatLimit", t."status", t."createdAt"
          ORDER BY t."createdAt" DESC`,
       );
       return result.rows.map(mapTenantRow);
@@ -155,6 +164,9 @@ export class PostgresTenantStore implements TenantStore {
            t."plan",
            t."licenseStartsAt",
            t."licenseEndsAt",
+           t."institutionType",
+           t."contactEmail",
+           t."logoUrl",
            t."seatLimit",
            COUNT(DISTINCT m."userId")::int AS "activeSeatCount",
            t."status"
@@ -162,7 +174,7 @@ export class PostgresTenantStore implements TenantStore {
          LEFT JOIN "TenantMembership" m ON m."tenantId" = t."id"
          WHERE t."id" = $1 AND t."status" = 'ACTIVE'
            AND (t."licenseEndsAt" IS NULL OR t."licenseEndsAt" >= now())
-         GROUP BY t."id", t."name", t."slug", t."plan", t."licenseStartsAt", t."licenseEndsAt", t."seatLimit", t."status"
+         GROUP BY t."id", t."name", t."slug", t."plan", t."licenseStartsAt", t."licenseEndsAt", t."institutionType", t."contactEmail", t."logoUrl", t."seatLimit", t."status"
          LIMIT 1`,
         [id],
       );
@@ -181,13 +193,16 @@ export class PostgresTenantStore implements TenantStore {
            t."plan",
            t."licenseStartsAt",
            t."licenseEndsAt",
+           t."institutionType",
+           t."contactEmail",
+           t."logoUrl",
            t."seatLimit",
            COUNT(DISTINCT m."userId")::int AS "activeSeatCount",
            t."status"
          FROM "Tenant" t
          LEFT JOIN "TenantMembership" m ON m."tenantId" = t."id"
          WHERE t."id" = $1 AND t."status" <> 'DELETED'
-         GROUP BY t."id", t."name", t."slug", t."plan", t."licenseStartsAt", t."licenseEndsAt", t."seatLimit", t."status"
+         GROUP BY t."id", t."name", t."slug", t."plan", t."licenseStartsAt", t."licenseEndsAt", t."institutionType", t."contactEmail", t."logoUrl", t."seatLimit", t."status"
          LIMIT 1`,
         [id],
       );
@@ -199,9 +214,9 @@ export class PostgresTenantStore implements TenantStore {
   async create(input: CreateTenantInput): Promise<TenantRecord> {
     return withBypassRlsQuery(this.pool, async (client) => {
       const result = await client.query<TenantRow>(
-        `INSERT INTO "Tenant" ("id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", "status", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
-         RETURNING "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", 0::int AS "activeSeatCount", "status"`,
+        `INSERT INTO "Tenant" ("id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "institutionType", "contactEmail", "logoUrl", "seatLimit", "status", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+         RETURNING "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "institutionType", "contactEmail", "logoUrl", "seatLimit", 0::int AS "activeSeatCount", "status"`,
         [
           input.id ?? randomUUID(),
           input.name,
@@ -209,6 +224,9 @@ export class PostgresTenantStore implements TenantStore {
           input.plan ?? "TRIAL",
           input.licenseStartsAt ?? null,
           input.licenseEndsAt ?? null,
+          input.institutionType ?? null,
+          input.contactEmail ?? null,
+          input.logoUrl ?? null,
           input.seatLimit ?? null,
           input.status ?? "ACTIVE",
         ],
@@ -220,9 +238,9 @@ export class PostgresTenantStore implements TenantStore {
   async createWithFirstAdmin(input: CreateTenantInput, firstAdmin: CreateTenantFirstAdminInput): Promise<TenantCreateWithAdminResult> {
     return withBypassRlsQuery(this.pool, async (client) => {
       const tenantResult = await client.query<TenantRow>(
-        `INSERT INTO "Tenant" ("id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", "status", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
-         RETURNING "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", 0::int AS "activeSeatCount", "status"`,
+        `INSERT INTO "Tenant" ("id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "institutionType", "contactEmail", "logoUrl", "seatLimit", "status", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+         RETURNING "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "institutionType", "contactEmail", "logoUrl", "seatLimit", 0::int AS "activeSeatCount", "status"`,
         [
           input.id ?? randomUUID(),
           input.name,
@@ -230,6 +248,9 @@ export class PostgresTenantStore implements TenantStore {
           input.plan ?? "TRIAL",
           input.licenseStartsAt ?? null,
           input.licenseEndsAt ?? null,
+          input.institutionType ?? null,
+          input.contactEmail ?? null,
+          input.logoUrl ?? null,
           input.seatLimit ?? null,
           input.status ?? "ACTIVE",
         ],
@@ -237,12 +258,16 @@ export class PostgresTenantStore implements TenantStore {
       const tenant = mapTenantRow(tenantResult.rows[0]!);
       const normalizedEmail = firstAdmin.email.toLowerCase();
       const passwordHash = firstAdmin.mode === "invitation" ? "" : hashPassword(firstAdmin.password ?? "", randomUUID());
+      const shouldUpdatePassword = firstAdmin.mode === "password";
       const createdUser = await client.query<{ id: string }>(
         `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
          VALUES ($1, $2, $3, $4, now())
-         ON CONFLICT ("email") DO NOTHING
+         ON CONFLICT ("email") DO UPDATE
+         SET "name" = EXCLUDED."name",
+             "passwordHash" = CASE WHEN $5::boolean THEN EXCLUDED."passwordHash" ELSE "User"."passwordHash" END,
+             "updatedAt" = now()
          RETURNING "id"`,
-        [randomUUID(), normalizedEmail, firstAdmin.name, passwordHash],
+        [randomUUID(), normalizedEmail, firstAdmin.name, passwordHash, shouldUpdatePassword],
       );
       const userId =
         createdUser.rows[0]?.id ??
@@ -288,7 +313,7 @@ export class PostgresTenantStore implements TenantStore {
   async update(id: string, input: UpdateTenantInput): Promise<TenantRecord | undefined> {
     return withBypassRlsQuery(this.pool, async (client) => {
       const currentResult = await client.query<TenantRow>(
-        `SELECT "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", 0::int AS "activeSeatCount", "status" FROM "Tenant"
+        `SELECT "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "institutionType", "contactEmail", "logoUrl", "seatLimit", 0::int AS "activeSeatCount", "status" FROM "Tenant"
          WHERE "id" = $1
          LIMIT 1`,
         [id],
@@ -303,8 +328,11 @@ export class PostgresTenantStore implements TenantStore {
              "plan" = $4,
              "licenseStartsAt" = $5,
              "licenseEndsAt" = $6,
-             "seatLimit" = $7,
-             "status" = $8,
+             "institutionType" = $7,
+             "contactEmail" = $8,
+             "logoUrl" = $9,
+             "seatLimit" = $10,
+             "status" = $11,
              "updatedAt" = now()
          WHERE "id" = $1
          RETURNING
@@ -314,6 +342,9 @@ export class PostgresTenantStore implements TenantStore {
            "plan",
            "licenseStartsAt",
            "licenseEndsAt",
+           "institutionType",
+           "contactEmail",
+           "logoUrl",
            "seatLimit",
            (
              SELECT COUNT(DISTINCT "userId")::int
@@ -328,6 +359,9 @@ export class PostgresTenantStore implements TenantStore {
           next.plan,
           next.licenseStartsAt ?? null,
           next.licenseEndsAt ?? null,
+          next.institutionType ?? null,
+          next.contactEmail ?? null,
+          next.logoUrl ?? null,
           next.seatLimit ?? null,
           next.status,
         ],
@@ -348,6 +382,9 @@ interface TenantRow {
   plan: string;
   licenseStartsAt: Date | string | null;
   licenseEndsAt: Date | string | null;
+  institutionType: string | null;
+  contactEmail: string | null;
+  logoUrl: string | null;
   seatLimit: number | null;
   activeSeatCount?: number | string | null;
   status: string;
@@ -370,6 +407,9 @@ export interface CreateTenantInput {
   plan?: string;
   licenseStartsAt?: string;
   licenseEndsAt?: string;
+  institutionType?: string;
+  contactEmail?: string;
+  logoUrl?: string;
   seatLimit?: number;
   status?: string;
 }
@@ -396,6 +436,9 @@ function mapTenantRow(row: TenantRow): TenantRecord {
     plan: row.plan,
     licenseStartsAt: optionalDateString(row.licenseStartsAt),
     licenseEndsAt: optionalDateString(row.licenseEndsAt),
+    institutionType: row.institutionType ?? undefined,
+    contactEmail: row.contactEmail ?? undefined,
+    logoUrl: row.logoUrl ?? undefined,
     seatLimit: row.seatLimit ?? undefined,
     activeSeatCount: optionalNumber(row.activeSeatCount),
     status: row.status,

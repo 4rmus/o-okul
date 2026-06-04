@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import type { ClassRecord, CourseRecord } from "@uzman-hocam/shared-types";
+import { useQuery } from "@tanstack/react-query";
+import type { AcademicTermRecord, AcademicYearRecord, ClassRecord, CourseRecord } from "@uzman-hocam/shared-types";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, queryClient } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
@@ -12,8 +13,7 @@ type StageId = "7" | "8-LGS" | "10" | "11" | "12" | "TYT/AYT";
 
 interface OnboardingDraft {
   classes: {
-    stage: StageId;
-    classCount: string;
+    classCounts: Record<StageId, string>;
   };
   courses: {
     selectedCourseIds: string[];
@@ -44,6 +44,36 @@ interface OnboardingDraft {
 }
 
 type StepErrors = Record<string, string>;
+
+interface StudentImportDryRunResult {
+  dryRun: true;
+  errors: Array<{
+    code: "CLASS_NOT_FOUND" | "REQUIRED" | "STUDENT_NO_DUPLICATE" | "STUDENT_QUOTA_EXCEEDED";
+    field: "className" | "firstName" | "lastName" | "quota" | "studentNo";
+    row: number;
+    value?: string;
+  }>;
+  quota?: {
+    current: number;
+    incoming: number;
+    limit: number;
+    wouldExceed: boolean;
+  };
+  totalRows: number;
+  wouldImport: boolean;
+}
+
+interface StudentImportResult {
+  importedRows: number;
+}
+
+interface TenantProfileRecord {
+  contactEmail?: string;
+  id: string;
+  institutionType?: string;
+  logoUrl?: string;
+  name: string;
+}
 
 const steps: Array<{ id: StepId; kicker: string; title: string; description: string }> = [
   {
@@ -80,8 +110,14 @@ const steps: Array<{ id: StepId; kicker: string; title: string; description: str
 
 const initialDraft: OnboardingDraft = {
   classes: {
-    stage: "8-LGS",
-    classCount: "2",
+    classCounts: {
+      "7": "0",
+      "8-LGS": "2",
+      "10": "0",
+      "11": "0",
+      "12": "0",
+      "TYT/AYT": "0",
+    },
   },
   courses: {
     selectedCourseIds: ["8-lgs-turkce", "8-lgs-matematik", "8-lgs-fen"],
@@ -197,6 +233,13 @@ export function SetupWizard() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [savedSummary, setSavedSummary] = useState("");
+  const [studentImportFileBase64, setStudentImportFileBase64] = useState("");
+  const [loadedDraftKey, setLoadedDraftKey] = useState("");
+  const tenantProfileQuery = useQuery({
+    queryKey: ["next-current-tenant", tenantId],
+    queryFn: () => loadCurrentTenant(auth?.accessToken ?? ""),
+    enabled: Boolean(auth?.accessToken),
+  });
   const activeStepIndex = Math.max(0, steps.findIndex((step) => step.id === activeStepId));
   const activeStep = steps[activeStepIndex]!;
   const stepValidation = useMemo(
@@ -206,23 +249,31 @@ export function SetupWizard() {
   const completedStepCount = steps.filter((step) => Object.keys(stepValidation.get(step.id) ?? {}).length === 0).length;
   const progressPercent = Math.round((completedStepCount / steps.length) * 100);
   const selectedCourses = selectedCourseOptions(draft.courses.selectedCourseIds);
-  const generatedClasses = generateClasses(draft.classes.stage, draft.classes.classCount);
+  const generatedClasses = generateClasses(draft.classes.classCounts);
   const courseCount = selectedCourses.length;
   const classCount = generatedClasses.length;
 
   useEffect(() => {
     if (!auth || typeof window === "undefined") return;
-    const storedDraft = window.localStorage.getItem(draftStorageKey);
+    const storedDraft = readCookie(draftStorageKey);
     if (storedDraft) {
       setDraft(mergeDraft(storedDraft));
+    } else {
+      setDraft(initialDraft);
     }
     setIsFinished(readCookie(completedCookieName) === "true");
+    setLoadedDraftKey(draftStorageKey);
   }, [auth, completedCookieName, draftStorageKey]);
 
   useEffect(() => {
-    if (!auth || typeof window === "undefined") return;
-    window.localStorage.setItem(draftStorageKey, JSON.stringify(draft));
-  }, [auth, draft, draftStorageKey]);
+    if (!auth || loadedDraftKey !== draftStorageKey || typeof window === "undefined") return;
+    writeCookie(draftStorageKey, JSON.stringify(draft));
+  }, [auth, draft, draftStorageKey, loadedDraftKey]);
+
+  useEffect(() => {
+    if (loadedDraftKey !== draftStorageKey || !tenantProfileQuery.data) return;
+    setDraft((current) => mergeTenantProfileDraft(current, tenantProfileQuery.data!));
+  }, [draftStorageKey, loadedDraftKey, tenantProfileQuery.data]);
 
   function updateDraft(section: keyof OnboardingDraft, nextValue: Partial<OnboardingDraft[typeof section]>) {
     setDraft((current) => ({
@@ -257,6 +308,19 @@ export function SetupWizard() {
     setErrors({});
   }
 
+  async function changeStudentImportFile(file: File | undefined) {
+    updateDraft("people", { studentImportFileName: file?.name ?? "" });
+    setStudentImportFileBase64("");
+    setSaveError("");
+    if (!file) return;
+
+    try {
+      setStudentImportFileBase64(await readFileAsBase64(file));
+    } catch {
+      setSaveError("Öğrenci aktarım dosyası okunamadı.");
+    }
+  }
+
   async function finishSetup() {
     const allErrors = Object.fromEntries(
       steps.flatMap((step) =>
@@ -277,15 +341,25 @@ export function SetupWizard() {
     setSaveError("");
     setSavedSummary("");
     try {
-      const result = await saveSetup(auth.accessToken, draft);
+      const result = await saveSetup(auth.accessToken, draft, studentImportFileBase64);
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["next-academic-years", tenantId] }),
+        queryClient.invalidateQueries({ queryKey: ["next-academic-terms", tenantId] }),
         queryClient.invalidateQueries({ queryKey: ["next-courses", tenantId] }),
         queryClient.invalidateQueries({ queryKey: ["next-classes", tenantId] }),
+        queryClient.invalidateQueries({ queryKey: ["next-students", tenantId] }),
         queryClient.invalidateQueries({ queryKey: ["next-setup-progress", tenantId] }),
+        queryClient.invalidateQueries({ queryKey: ["next-current-tenant", tenantId] }),
       ]);
-      setSavedSummary(`${result.createdClasses} sınıf, ${result.createdCourses} ders eklendi. Mevcut kayıtlar tekrar eklenmedi.`);
-    } catch {
-      setSaveError("Kurulum kayıtları sisteme eklenemedi. Lütfen tekrar deneyin.");
+      setSavedSummary(
+        `${result.createdClasses} sınıf, ${result.createdCourses} ders, ${result.createdAcademicYears} akademik yıl, ${result.createdAcademicTerms} dönem, ${result.importedStudents} öğrenci eklendi. Mevcut kayıtlar tekrar eklenmedi.`,
+      );
+    } catch (error) {
+      setSaveError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Kurulum kayıtları sisteme eklenemedi. Lütfen tekrar deneyin.",
+      );
       return;
     } finally {
       setIsSaving(false);
@@ -354,7 +428,12 @@ export function SetupWizard() {
             <CoursesStep draft={draft} errors={errors} updateDraft={updateDraft} />
           ) : null}
           {activeStep.id === "people" ? (
-            <PeopleStep draft={draft} errors={errors} updateDraft={updateDraft} />
+            <PeopleStep
+              draft={draft}
+              errors={errors}
+              onStudentImportFileChange={(file) => void changeStudentImportFile(file)}
+              updateDraft={updateDraft}
+            />
           ) : null}
           <footer className="next-onboarding-actions">
             <button className="uh-button uh-button--secondary uh-button--md" type="button" onClick={goBack} disabled={activeStepIndex === 0}>
@@ -391,7 +470,7 @@ export function SetupWizard() {
             </div>
             <div>
               <dt>Sınıf</dt>
-              <dd>{draft.classes.stage} için {classCount} şube</dd>
+              <dd>{classCount} şube</dd>
             </div>
             <div>
               <dt>Veri modeli</dt>
@@ -601,36 +680,38 @@ function ClassesStep({
   errors: StepErrors;
   updateDraft: (section: "classes", nextValue: Partial<OnboardingDraft["classes"]>) => void;
 }) {
-  const generatedClasses = generateClasses(draft.classes.stage, draft.classes.classCount);
+  const generatedClasses = generateClasses(draft.classes.classCounts);
 
   return (
     <div className="next-onboarding-fields">
-      <fieldset className="next-onboarding-choice">
-        <legend>Kademe</legend>
+      <fieldset className="next-onboarding-class-counts">
+        <legend>Kademeye göre sınıf sayısı</legend>
         {stageOptions.map((stage) => (
-          <ChoiceButton
-            key={stage.id}
-            active={draft.classes.stage === stage.id}
-            label={stage.label}
-            onClick={() => updateDraft("classes", { stage: stage.id })}
-          />
+          <label key={stage.id}>
+            {stage.label}
+            <input
+              inputMode="numeric"
+              value={draft.classes.classCounts[stage.id]}
+              onChange={(event) =>
+                updateDraft("classes", {
+                  classCounts: {
+                    ...draft.classes.classCounts,
+                    [stage.id]: event.target.value,
+                  },
+                })
+              }
+              placeholder="0"
+            />
+            <FieldError message={errors[`classCounts.${stage.id}`] ?? errors[`classes.classCounts.${stage.id}`]} />
+          </label>
         ))}
       </fieldset>
-      <label>
-        Bu kademedeki sınıf sayısı
-        <input
-          inputMode="numeric"
-          value={draft.classes.classCount}
-          onChange={(event) => updateDraft("classes", { classCount: event.target.value })}
-          placeholder="2"
-        />
-        <FieldError message={errors.classCount ?? errors["classes.classCount"]} />
-      </label>
+      <FieldError message={errors.classCounts ?? errors["classes.classCounts"]} />
       <section className="next-onboarding-auto-classes" aria-label="Otomatik atanacak sınıflar">
         <h3>Otomatik atanacak şubeler</h3>
         <div>
           {generatedClasses.map((classRecord) => (
-            <span key={classRecord.section}>{classRecord.name}</span>
+            <span key={`${classRecord.level}-${classRecord.section}`}>{classRecord.name}</span>
           ))}
         </div>
       </section>
@@ -641,14 +722,16 @@ function ClassesStep({
 function PeopleStep({
   draft,
   errors,
+  onStudentImportFileChange,
   updateDraft,
 }: {
   draft: OnboardingDraft;
   errors: StepErrors;
+  onStudentImportFileChange(file: File | undefined): void;
   updateDraft: (section: "people", nextValue: Partial<OnboardingDraft["people"]>) => void;
 }) {
   function downloadTeacherTemplate() {
-    const sampleClassName = `${stageClassPrefix(draft.classes.stage)} A`;
+    const sampleClassName = sampleClassNameFromDraft(draft);
     downloadExcelLikeFile(
       "ogretmen-aktarim-sablonu.xls",
       [
@@ -659,12 +742,12 @@ function PeopleStep({
   }
 
   function downloadStudentTemplate() {
-    const sampleClassName = `${stageClassPrefix(draft.classes.stage)} A`;
+    const sampleClassName = sampleClassNameFromDraft(draft);
     downloadExcelLikeFile(
       "ogrenci-aktarim-sablonu.xls",
       [
-        ["ad", "soyad", "email", "telefon", "sinif", "veli_ad", "veli_soyad", "veli_telefon"],
-        ["Mehmet", "Demir", "mehmet@example.test", "5552223344", sampleClassName, "Fatma", "Demir", "5553334455"],
+        ["okul_no", "ad", "soyad", "email", "telefon", "sinif", "veli_ad", "veli_soyad", "veli_telefon"],
+        ["100", "Mehmet", "Demir", "mehmet@example.test", "5552223344", sampleClassName, "Fatma", "Demir", "5553334455"],
       ],
     );
   }
@@ -738,7 +821,7 @@ function PeopleStep({
         <input
           type="file"
           accept=".xls,.xlsx,.csv"
-          onChange={(event) => updateDraft("people", { studentImportFileName: event.target.files?.[0]?.name ?? "" })}
+          onChange={(event) => onStudentImportFileChange(event.target.files?.[0])}
         />
         <span className="next-field-help">{draft.people.studentImportFileName || "Öğrenci Excel veya CSV dosyası seçilebilir."}</span>
       </label>
@@ -820,12 +903,20 @@ function validateCourses(courses: OnboardingDraft["courses"]): StepErrors {
 
 function validateClasses(classes: OnboardingDraft["classes"]): StepErrors {
   const errors: StepErrors = {};
-  const classCount = Number(classes.classCount);
-  if (!Number.isInteger(classCount) || classCount <= 0) {
-    errors.classCount = "Sınıf sayısı pozitif tam sayı olmalıdır.";
+  let totalClassCount = 0;
+  for (const stage of stageOptions) {
+    const classCount = Number(classes.classCounts[stage.id]);
+    if (!Number.isInteger(classCount) || classCount < 0) {
+      errors[`classCounts.${stage.id}`] = "Sınıf sayısı 0 veya pozitif tam sayı olmalıdır.";
+      continue;
+    }
+    if (classCount > 26) {
+      errors[`classCounts.${stage.id}`] = "Bir kademe için en fazla 26 şube oluşturulabilir.";
+    }
+    totalClassCount += classCount;
   }
-  if (classCount > 26) {
-    errors.classCount = "Tek seferde en fazla 26 şube oluşturulabilir.";
+  if (totalClassCount <= 0) {
+    errors.classCounts = "En az bir kademe için sınıf sayısı girilmelidir.";
   }
   return errors;
 }
@@ -858,16 +949,18 @@ function selectedCourseOptions(selectedCourseIds: string[]) {
   return [...uniqueByName.values()];
 }
 
-function generateClasses(stage: StageId, classCountValue: string) {
-  const classCount = Number(classCountValue);
-  if (!Number.isInteger(classCount) || classCount <= 0) return [];
-  return Array.from({ length: Math.min(classCount, 26) }, (_item, index) => {
-    const section = String.fromCharCode(65 + index);
-    return {
-      level: stage,
-      name: `${stageClassPrefix(stage)} ${section}`,
-      section,
-    };
+function generateClasses(classCounts: Record<StageId, string>) {
+  return stageOptions.flatMap((stage) => {
+    const classCount = Number(classCounts[stage.id]);
+    if (!Number.isInteger(classCount) || classCount <= 0) return [];
+    return Array.from({ length: Math.min(classCount, 26) }, (_item, index) => {
+      const section = String.fromCharCode(65 + index);
+      return {
+        level: stage.id,
+        name: `${stageClassPrefix(stage.id)} ${section}`,
+        section,
+      };
+    });
   });
 }
 
@@ -876,15 +969,66 @@ function stageClassPrefix(stage: StageId) {
   return stage;
 }
 
-async function saveSetup(accessToken: string, draft: OnboardingDraft) {
-  const [existingCourses, existingClasses] = await Promise.all([
+function sampleClassNameFromDraft(draft: OnboardingDraft) {
+  return generateClasses(draft.classes.classCounts)[0]?.name ?? `${stageClassPrefix("8-LGS")} A`;
+}
+
+async function saveSetup(accessToken: string, draft: OnboardingDraft, studentImportFileBase64: string) {
+  await apiRequest<TenantProfileRecord>(accessToken, `${apiBaseUrl}/me/tenant`, {
+    body: JSON.stringify({
+      name: draft.general.institutionName,
+      institutionType: draft.general.institutionType,
+      contactEmail: draft.general.contactEmail || undefined,
+      logoUrl: draft.general.logoUrl || undefined,
+    }),
+    headers: { "content-type": "application/json" },
+    method: "PATCH",
+  });
+
+  const [existingCourses, existingClasses, existingYears, existingTerms] = await Promise.all([
     apiListRequest<CourseRecord>(accessToken, `${apiBaseUrl}/courses?limit=200`),
     apiListRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes?limit=200`),
+    apiListRequest<AcademicYearRecord>(accessToken, `${apiBaseUrl}/academic-years?limit=200`),
+    apiListRequest<AcademicTermRecord>(accessToken, `${apiBaseUrl}/academic-terms?limit=200`),
   ]);
   const existingCourseNames = new Set(existingCourses.data.map((course) => normalizeValue(course.name)));
   const existingClassNames = new Set(existingClasses.data.map((classRecord) => normalizeValue(classRecord.name)));
+  const existingYear = existingYears.data.find((year) => normalizeValue(year.name) === normalizeValue(draft.term.academicYearName));
   let createdCourses = 0;
   let createdClasses = 0;
+  let createdAcademicYears = 0;
+  let createdAcademicTerms = 0;
+  let importedStudents = 0;
+
+  const academicYear = existingYear ?? await apiRequest<AcademicYearRecord>(accessToken, `${apiBaseUrl}/academic-years`, {
+    body: JSON.stringify({
+      endsAt: draft.term.endsAt,
+      isActive: true,
+      name: draft.term.academicYearName,
+      startsAt: draft.term.startsAt,
+    }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  if (!existingYear) createdAcademicYears += 1;
+
+  const existingTerm = existingTerms.data.find(
+    (term) => term.academicYearId === academicYear.id && normalizeValue(term.name) === normalizeValue(draft.term.termName),
+  );
+  if (!existingTerm) {
+    await apiRequest<AcademicTermRecord>(accessToken, `${apiBaseUrl}/academic-terms`, {
+      body: JSON.stringify({
+        academicYearId: academicYear.id,
+        endsAt: draft.term.termEndsAt,
+        isActive: true,
+        name: draft.term.termName,
+        startsAt: draft.term.termStartsAt,
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    createdAcademicTerms += 1;
+  }
 
   for (const course of selectedCourseOptions(draft.courses.selectedCourseIds)) {
     if (existingCourseNames.has(normalizeValue(course.name))) continue;
@@ -896,7 +1040,7 @@ async function saveSetup(accessToken: string, draft: OnboardingDraft) {
     createdCourses += 1;
   }
 
-  for (const classRecord of generateClasses(draft.classes.stage, draft.classes.classCount)) {
+  for (const classRecord of generateClasses(draft.classes.classCounts)) {
     if (existingClassNames.has(normalizeValue(classRecord.name))) continue;
     await apiRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes`, {
       body: JSON.stringify(classRecord),
@@ -906,11 +1050,82 @@ async function saveSetup(accessToken: string, draft: OnboardingDraft) {
     createdClasses += 1;
   }
 
-  return { createdClasses, createdCourses };
+  if (draft.people.studentModel === "excel" && studentImportFileBase64) {
+    const dryRun = await apiRequest<StudentImportDryRunResult>(accessToken, `${apiBaseUrl}/students/imports/dry-run`, {
+      body: JSON.stringify({ fileBase64: studentImportFileBase64 }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    if (!dryRun.wouldImport) {
+      throw new Error(studentImportErrorMessage(dryRun));
+    }
+    const imported = await apiRequest<StudentImportResult>(accessToken, `${apiBaseUrl}/students/imports`, {
+      body: JSON.stringify({ fileBase64: studentImportFileBase64 }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    importedStudents = imported.importedRows;
+  }
+
+  return { createdAcademicTerms, createdAcademicYears, createdClasses, createdCourses, importedStudents };
+}
+
+function studentImportErrorMessage(dryRun: StudentImportDryRunResult) {
+  const quotaError = dryRun.errors.find((error) => error.code === "STUDENT_QUOTA_EXCEEDED");
+  if (quotaError && dryRun.quota) {
+    return `Öğrenci dosyası kota sınırını aşıyor. Sınır: ${dryRun.quota.limit}, mevcut: ${dryRun.quota.current}, dosyada: ${dryRun.quota.incoming}.`;
+  }
+
+  const classError = dryRun.errors.find((error) => error.code === "CLASS_NOT_FOUND");
+  if (classError) {
+    const className = classError.value ? ` (${classError.value})` : "";
+    return `Öğrenci dosyasında sistemde olmayan sınıf var${className}. Satır: ${classError.row}.`;
+  }
+
+  const requiredError = dryRun.errors.find((error) => error.code === "REQUIRED");
+  if (requiredError) {
+    const fieldName = requiredError.field === "firstName" ? "ad" : "soyad";
+    return `Öğrenci dosyasında zorunlu ${fieldName} alanı eksik. Satır: ${requiredError.row}.`;
+  }
+
+  const duplicateStudentNo = dryRun.errors.find((error) => error.code === "STUDENT_NO_DUPLICATE");
+  if (duplicateStudentNo) {
+    const studentNo = duplicateStudentNo.value ? ` (${duplicateStudentNo.value})` : "";
+    return `Öğrenci dosyasında tekrar eden veya sistemde zaten kayıtlı okul no var${studentNo}. Satır: ${duplicateStudentNo.row}.`;
+  }
+
+  return "Öğrenci aktarım dosyası içe aktarılamadı. Dosyayı kontrol edip tekrar deneyin.";
 }
 
 function normalizeValue(value: string) {
   return value.trim().toLocaleLowerCase("tr-TR");
+}
+
+function loadCurrentTenant(accessToken: string) {
+  return apiRequest<TenantProfileRecord>(accessToken, `${apiBaseUrl}/me/tenant`);
+}
+
+function mergeTenantProfileDraft(draft: OnboardingDraft, tenant: TenantProfileRecord): OnboardingDraft {
+  if (draft.general.institutionName.trim()) return draft;
+  return {
+    ...draft,
+    general: {
+      ...draft.general,
+      contactEmail: tenant.contactEmail ?? "",
+      institutionName: tenant.name,
+      institutionType: normalizeInstitutionType(tenant.institutionType),
+      logoUrl: tenant.logoUrl ?? "",
+    },
+  };
+}
+
+async function readFileAsBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
 }
 
 function isDate(value: string) {
@@ -930,13 +1145,15 @@ function mergeDraft(rawDraft: string): OnboardingDraft {
   try {
     const parsed = JSON.parse(rawDraft) as Partial<OnboardingDraft>;
     const parsedPeople: Partial<OnboardingDraft["people"]> = parsed.people ?? {};
-    const parsedClasses: Partial<OnboardingDraft["classes"]> = parsed.classes ?? {};
+    const parsedClasses = parsed.classes as (Partial<OnboardingDraft["classes"]> & {
+      classCount?: unknown;
+      stage?: unknown;
+    }) | undefined;
     const parsedCourses: Partial<OnboardingDraft["courses"]> = parsed.courses ?? {};
     return {
       classes: {
         ...initialDraft.classes,
-        ...parsedClasses,
-        stage: normalizeStageId(parsedClasses.stage),
+        classCounts: normalizeClassCounts(parsedClasses),
       },
       courses: {
         ...initialDraft.courses,
@@ -945,7 +1162,11 @@ function mergeDraft(rawDraft: string): OnboardingDraft {
           ? normalizeCourseIds(parsedCourses.selectedCourseIds)
           : initialDraft.courses.selectedCourseIds,
       },
-      general: { ...initialDraft.general, ...parsed.general },
+      general: {
+        ...initialDraft.general,
+        ...parsed.general,
+        institutionType: normalizeInstitutionType(parsed.general?.institutionType),
+      },
       people: {
         ...initialDraft.people,
         ...parsedPeople,
@@ -959,13 +1180,35 @@ function mergeDraft(rawDraft: string): OnboardingDraft {
   }
 }
 
+function normalizeInstitutionType(value: unknown): OnboardingDraft["general"]["institutionType"] {
+  if (value === "school" || value === "study-center" || value === "course-center") return value;
+  return initialDraft.general.institutionType;
+}
+
 function isStageId(value: unknown): value is StageId {
   return typeof value === "string" && stageOptions.some((stage) => stage.id === value);
 }
 
 function normalizeStageId(value: unknown): StageId {
   if (value === "LGS") return "8-LGS";
-  return isStageId(value) ? value : initialDraft.classes.stage;
+  return isStageId(value) ? value : "8-LGS";
+}
+
+function normalizeClassCounts(
+  value: (Partial<OnboardingDraft["classes"]> & { classCount?: unknown; stage?: unknown }) | undefined,
+) {
+  const classCounts = { ...initialDraft.classes.classCounts };
+  if (value?.classCounts && typeof value.classCounts === "object") {
+    for (const stage of stageOptions) {
+      const count = value.classCounts[stage.id];
+      if (typeof count === "string") classCounts[stage.id] = count;
+    }
+  }
+  if (value?.classCount !== undefined) {
+    const legacyStage = normalizeStageId(value.stage);
+    classCounts[legacyStage] = String(value.classCount);
+  }
+  return classCounts;
 }
 
 function normalizeCourseIds(values: unknown[]) {

@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { AuthResponse } from "@uzman-hocam/shared-types";
 import { useAuth } from "../../providers.js";
 
 const demoAccounts = [
+  { label: "Sistem yöneticisi", email: "system@example.test", path: "/sistem" },
   { label: "Kurum yöneticisi", email: "admin@demo.local", path: "/kurum" },
   { label: "Öğretmen", email: "teacher@demo.local", path: "/ogretmen" },
   { label: "Öğrenci", email: "student@demo.local", path: "/ogrenci" },
@@ -21,7 +23,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!isBootstrapping && auth) {
-      router.replace("/kurum");
+      router.replace(getAuthHomePath(auth));
     }
   }, [auth, isBootstrapping, router]);
 
@@ -29,10 +31,12 @@ export default function LoginPage() {
     event.preventDefault();
     setError("");
     setIsSubmitting(true);
+    const formData = new FormData(event.currentTarget);
+    const formEmail = String(formData.get("email") ?? "").trim();
+    const formPassword = String(formData.get("password") ?? "");
 
     try {
-      await login(email, password);
-      router.replace("/kurum");
+      await login(formEmail, formPassword);
     } catch {
       setError("E-posta veya şifre hatalı.");
     } finally {
@@ -105,4 +109,14 @@ export default function LoginPage() {
       </div>
     </section>
   );
+}
+
+function getAuthHomePath(auth: AuthResponse) {
+  const { roles, subjectType } = auth.session;
+  if (roles.includes("SYSTEM_ADMIN")) return "/sistem";
+  if (roles.includes("TENANT_ADMIN") || roles.includes("ASSISTANT_ADMIN")) return "/kurum";
+  if (roles.includes("TEACHER") && subjectType === "TEACHER") return "/ogretmen";
+  if (roles.includes("STUDENT") && subjectType === "STUDENT") return "/ogrenci";
+  if (roles.includes("GUARDIAN") && subjectType === "GUARDIAN") return "/veli";
+  return "/login";
 }

@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
-import { Pencil, Plus, Send, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, Send, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import {
@@ -115,6 +115,9 @@ export function TeachersPage() {
       header: "İşlem",
       render: (teacher) => (
         <span className="next-row-actions">
+          <Link href={`/kurum/ogretmenler/${encodeURIComponent(teacher.id)}`} aria-label={`${teacher.firstName} detay`}>
+            <Eye size={17} aria-hidden="true" />
+          </Link>
           <Link href={`/kurum/kullanicilar?invite=teacher&subjectId=${encodeURIComponent(teacher.id)}`} aria-label={`${teacher.firstName} portal daveti gönder`}>
             <Send size={17} aria-hidden="true" />
           </Link>

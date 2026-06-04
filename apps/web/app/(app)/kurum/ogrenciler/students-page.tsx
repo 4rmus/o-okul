@@ -79,6 +79,28 @@ interface BulkEnrollmentActionState extends EnrollmentActionState {
   useAutomaticClassMapping: boolean;
 }
 
+const studentColumnKeys = ["studentNo", "name", "class", "responsibleTeacher", "status", "actions"] as const;
+
+type StudentColumnKey = typeof studentColumnKeys[number];
+type StudentTableDensity = "comfortable" | "compact";
+
+interface QueryParamReader {
+  get(name: string): string | null;
+}
+
+const requiredStudentColumnKeys = new Set<StudentColumnKey>(["name", "actions"]);
+const defaultVisibleStudentColumnKeys = [...studentColumnKeys];
+const studentPageLimits = [5, 10, 20];
+
+const studentColumnOptions: Array<{ key: StudentColumnKey; label: string }> = [
+  { key: "studentNo", label: "Okul No" },
+  { key: "name", label: "Ad Soyad" },
+  { key: "class", label: "Sınıf" },
+  { key: "responsibleTeacher", label: "Sorumlu" },
+  { key: "status", label: "Durum" },
+  { key: "actions", label: "İşlem" },
+];
+
 const emptyForm: StudentFormState = {
   firstName: "",
   lastName: "",
@@ -119,8 +141,10 @@ export function StudentsPage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
-  const [filters, setFilters] = useState<StudentListFilters>(emptyFilters);
+  const [listQuery, setListQuery] = useState<ListQueryState>(() => readStudentListQuery(searchParams));
+  const [filters, setFilters] = useState<StudentListFilters>(() => readStudentFilters(searchParams));
+  const [tableDensity, setTableDensity] = useState<StudentTableDensity>(() => readStudentTableDensity(searchParams));
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState<StudentColumnKey[]>(() => readVisibleStudentColumnKeys(searchParams));
   const queryKey = ["next-students", auth?.session.tenantId ?? "anonymous", listQuery, filters];
   const listQueryKey = ["next-students", auth?.session.tenantId ?? "anonymous"];
   const studentsQuery = useQuery({
@@ -169,7 +193,16 @@ export function StudentsPage() {
     if (searchParams.get("new") === "1") openCreateForm();
   }, [searchParams]);
 
-  const columns: Array<DataTableColumn<StudentRecord>> = [
+  useEffect(() => {
+    writeStudentListQuery({ filters, listQuery, tableDensity, visibleColumnKeys });
+  }, [filters, listQuery, tableDensity, visibleColumnKeys]);
+
+  const columns: Array<DataTableColumn<StudentRecord> & { key: StudentColumnKey }> = [
+    {
+      key: "studentNo",
+      header: "Okul No",
+      render: (student) => student.studentNo ?? "—",
+    },
     {
       key: "name",
       header: "Ad Soyad",
@@ -209,12 +242,19 @@ export function StudentsPage() {
       ),
     },
   ];
+  const visibleColumns = columns.filter((column) => visibleColumnKeys.includes(column.key));
+  const pageClassName = tableDensity === "compact" ? "next-students-page next-students-page--compact" : "next-students-page";
 
   function openCreateForm() {
     setEditingStudent(null);
     setForm(emptyForm);
     setError("");
     setIsFormOpen(true);
+  }
+
+  function toggleColumn(key: StudentColumnKey, checked: boolean) {
+    if (requiredStudentColumnKeys.has(key)) return;
+    setVisibleColumnKeys((current) => sortStudentColumnKeys(checked ? [...current, key] : current.filter((columnKey) => columnKey !== key)));
   }
 
   function updateFilters(nextFilters: StudentListFilters) {
@@ -474,6 +514,29 @@ export function StudentsPage() {
                 </select>
               </label>
             </div>
+            <div className="next-list-controls" aria-label="Öğrenci tablo görünümü">
+              <fieldset className="next-column-picker">
+                <legend>Kolonlar</legend>
+                {studentColumnOptions.map((option) => (
+                  <label key={option.key}>
+                    <input
+                      type="checkbox"
+                      checked={visibleColumnKeys.includes(option.key)}
+                      disabled={requiredStudentColumnKeys.has(option.key)}
+                      onChange={(event) => toggleColumn(option.key, event.target.checked)}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </fieldset>
+              <label>
+                Görünüm
+                <select value={tableDensity} onChange={(event) => setTableDensity(event.target.value as StudentTableDensity)}>
+                  <option value="comfortable">Rahat</option>
+                  <option value="compact">Yoğun</option>
+                </select>
+              </label>
+            </div>
             <div className="next-list-controls" aria-label="Toplu dönem geçişi">
               <label>
                 Geçiş tarihi
@@ -538,7 +601,8 @@ export function StudentsPage() {
           </>
         }
         aria-label="Öğrenci yönetimi"
-        columns={columns}
+        className={pageClassName}
+        columns={visibleColumns}
         description="Kurum öğrencilerini listele; ad-soyad, TC, iletişim ve veli bilgileriyle ekle veya düzenle."
         emptyState={
           <EmptyState
@@ -839,6 +903,8 @@ function buildProfilePayload(form: StudentFormPayload): StudentProfilePayload | 
 }
 
 const studentSortOptions = [
+  { label: "Okul No artan", value: "studentNo" },
+  { label: "Okul No azalan", value: "-studentNo" },
   { label: "Ad A-Z", value: "firstName" },
   { label: "Ad Z-A", value: "-firstName" },
   { label: "Soyad A-Z", value: "lastName" },
@@ -846,6 +912,109 @@ const studentSortOptions = [
   { label: "Sınıf A-Z", value: "classId" },
   { label: "Sınıf Z-A", value: "-classId" },
 ];
+
+function readStudentListQuery(searchParams: QueryParamReader): ListQueryState {
+  const page = Number(searchParams.get("page"));
+  const limit = Number(searchParams.get("limit"));
+  return {
+    page: Number.isFinite(page) && page > 0 ? page : initialListQuery.page,
+    limit: studentPageLimits.includes(limit) ? limit : initialListQuery.limit,
+    q: searchParams.get("q") ?? initialListQuery.q,
+    sort: readStudentSort(searchParams.get("sort")),
+  };
+}
+
+function readStudentSort(value: string | null): string {
+  return value && studentSortOptions.some((option) => option.value === value) ? value : initialListQuery.sort;
+}
+
+function readStudentFilters(searchParams: QueryParamReader): StudentListFilters {
+  return {
+    classId: searchParams.get("classId") ?? emptyFilters.classId,
+    level: searchParams.get("level") ?? emptyFilters.level,
+    responsibleTeacherId: searchParams.get("responsibleTeacherId") ?? emptyFilters.responsibleTeacherId,
+    status: readStudentStatusFilter(searchParams.get("status")),
+    guardianLinked: readGuardianLinkedFilter(searchParams.get("guardianLinked")),
+  };
+}
+
+function readStudentStatusFilter(value: string | null): StudentListFilters["status"] {
+  return value === "ACTIVE" || value === "PASSIVE" || value === "GRADUATED" || value === "TRANSFERRED" ? value : "";
+}
+
+function readGuardianLinkedFilter(value: string | null): StudentListFilters["guardianLinked"] {
+  return value === "true" || value === "false" ? value : "";
+}
+
+function readStudentTableDensity(searchParams: QueryParamReader): StudentTableDensity {
+  return searchParams.get("density") === "compact" ? "compact" : "comfortable";
+}
+
+function readVisibleStudentColumnKeys(searchParams: QueryParamReader): StudentColumnKey[] {
+  const rawValue = searchParams.get("columns");
+  if (!rawValue) return [...defaultVisibleStudentColumnKeys];
+  const requestedKeys = rawValue.split(",").filter(isStudentColumnKey);
+  return sortStudentColumnKeys([...new Set([...requestedKeys, ...requiredStudentColumnKeys])]);
+}
+
+function isStudentColumnKey(value: string): value is StudentColumnKey {
+  return studentColumnKeys.includes(value as StudentColumnKey);
+}
+
+function sortStudentColumnKeys(keys: StudentColumnKey[]): StudentColumnKey[] {
+  const uniqueKeys = new Set(keys);
+  return studentColumnKeys.filter((key) => uniqueKeys.has(key));
+}
+
+function writeStudentListQuery({
+  filters,
+  listQuery,
+  tableDensity,
+  visibleColumnKeys,
+}: {
+  filters: StudentListFilters;
+  listQuery: ListQueryState;
+  tableDensity: StudentTableDensity;
+  visibleColumnKeys: StudentColumnKey[];
+}) {
+  if (typeof window === "undefined") return;
+
+  const params = new URLSearchParams(window.location.search);
+  setQueryParam(params, "page", listQuery.page === initialListQuery.page ? "" : String(listQuery.page));
+  setQueryParam(params, "limit", listQuery.limit === initialListQuery.limit ? "" : String(listQuery.limit));
+  setQueryParam(params, "q", listQuery.q.trim());
+  setQueryParam(params, "sort", listQuery.sort);
+  setQueryParam(params, "classId", filters.classId);
+  setQueryParam(params, "level", filters.level);
+  setQueryParam(params, "responsibleTeacherId", filters.responsibleTeacherId);
+  setQueryParam(params, "status", filters.status);
+  setQueryParam(params, "guardianLinked", filters.guardianLinked);
+  setQueryParam(params, "density", tableDensity === "compact" ? tableDensity : "");
+  setQueryParam(
+    params,
+    "columns",
+    isDefaultStudentColumnSet(visibleColumnKeys) ? "" : visibleColumnKeys.join(","),
+  );
+
+  const queryString = params.toString();
+  const nextPath = `${window.location.pathname}${queryString ? `?${queryString}` : ""}`;
+  const currentPath = `${window.location.pathname}${window.location.search}`;
+  if (nextPath !== currentPath) {
+    window.history.replaceState(null, "", nextPath);
+  }
+}
+
+function setQueryParam(params: URLSearchParams, key: string, value: string) {
+  if (value) {
+    params.set(key, value);
+    return;
+  }
+  params.delete(key);
+}
+
+function isDefaultStudentColumnSet(keys: StudentColumnKey[]) {
+  return keys.length === defaultVisibleStudentColumnKeys.length && defaultVisibleStudentColumnKeys.every((key) => keys.includes(key));
+}
 
 async function loadStudents(accessToken: string, listQuery: ListQueryState, filters: StudentListFilters) {
   return apiListRequest<StudentRecord>(accessToken, buildStudentListUrl(`${apiBaseUrl}/students`, listQuery, filters));

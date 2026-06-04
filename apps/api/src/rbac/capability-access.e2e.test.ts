@@ -4,7 +4,7 @@ import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { ExamParticipantRecord, ExamRecord } from "@uzman-hocam/shared-types";
 import request from "supertest";
-import { afterAll, beforeAll, describe, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 import {
   type CreateExamParticipantRepositoryInput,
@@ -18,6 +18,7 @@ import {
 describe("Capability access matrix", () => {
   let app: INestApplication;
   let server: Parameters<typeof request>[0];
+  let tenantAdminToken: string;
   let assistantToken: string;
   let teacherToken: string;
 
@@ -35,6 +36,7 @@ describe("Capability access matrix", () => {
     await app.init();
     server = app.getHttpServer() as Parameters<typeof request>[0];
 
+    tenantAdminToken = await login("admin-a@example.test");
     assistantToken = await login("assistant-a@example.test");
     teacherToken = await login("teacher-a@example.test");
   });
@@ -53,6 +55,88 @@ describe("Capability access matrix", () => {
       .get("/payment-plans")
       .set("Authorization", `Bearer ${assistantToken}`)
       .expect(403);
+  });
+
+  it("ASSISTANT_ADMIN operasyon, kullanıcı ve KVKK endpoint'lerine giremez", async () => {
+    await request(server)
+      .get("/tenant-users")
+      .set("Authorization", `Bearer ${assistantToken}`)
+      .expect(403);
+
+    await request(server)
+      .get("/audit-logs")
+      .set("Authorization", `Bearer ${assistantToken}`)
+      .expect(403);
+
+    await request(server)
+      .post("/students/student-a/purge-pii")
+      .set("Authorization", `Bearer ${assistantToken}`)
+      .expect(403);
+  });
+
+  it("TENANT_ADMIN menüdeki operasyon yetkili alanları açar", async () => {
+    await request(server)
+      .get("/tenant-users")
+      .set("Authorization", `Bearer ${tenantAdminToken}`)
+      .expect(200);
+
+    await request(server)
+      .get("/audit-logs")
+      .set("Authorization", `Bearer ${tenantAdminToken}`)
+      .expect(200);
+
+    await request(server)
+      .get("/backup-restore-jobs")
+      .set("Authorization", `Bearer ${tenantAdminToken}`)
+      .expect(200);
+  });
+
+  it("ASSISTANT_ADMIN menüde görünen akademik ve destek işlemlerini yapar", async () => {
+    await request(server)
+      .post("/schedule-lessons")
+      .set("Authorization", `Bearer ${assistantToken}`)
+      .send({
+        classId: "class-a",
+        teacherId: "teacher-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
+        title: "Md.Yrd Ders Programı",
+        startsAt: "2026-06-01T12:00:00.000Z",
+        endsAt: "2026-06-01T13:00:00.000Z",
+      })
+      .expect(201);
+
+    await request(server)
+      .patch("/support-tickets/support-ticket-a")
+      .set("Authorization", `Bearer ${assistantToken}`)
+      .send({ status: "IN_PROGRESS", priority: "HIGH" })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({ id: "support-ticket-a", status: "IN_PROGRESS", priority: "HIGH" });
+      });
+
+    await request(server)
+      .post("/announcements")
+      .set("Authorization", `Bearer ${assistantToken}`)
+      .send({
+        title: "Md.Yrd Duyuru",
+        body: "Veli bilgilendirme duyurusu.",
+        audience: "GUARDIANS",
+        classId: "class-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
+      })
+      .expect(201);
+
+    await request(server)
+      .post("/message-templates")
+      .set("Authorization", `Bearer ${assistantToken}`)
+      .send({
+        name: "Md.Yrd SMS Şablonu",
+        channel: "SMS",
+        body: "Sayın veli, öğrencimiz için bilgilendirme mesajıdır.",
+      })
+      .expect(201);
   });
 
   it("ASSISTANT_ADMIN akademik yönetim yapar, TEACHER yapamaz", async () => {

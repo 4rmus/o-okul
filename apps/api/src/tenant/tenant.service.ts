@@ -24,6 +24,9 @@ export interface TenantWriteBody {
   plan?: string;
   licenseStartsAt?: string;
   licenseEndsAt?: string;
+  institutionType?: string;
+  contactEmail?: string;
+  logoUrl?: string;
   seatLimit?: number;
   status?: string;
   firstAdmin?: TenantFirstAdminBody;
@@ -70,13 +73,22 @@ export class TenantService {
     return tenant;
   }
 
+  async findCurrent(context: RequestContext): Promise<TenantRecord> {
+    const tenantId = requireTenantId(context);
+    const tenant = await this.tenants.findById(tenantId);
+    if (!tenant) {
+      throw new NotFoundException("TENANT_NOT_FOUND");
+    }
+    return tenant;
+  }
+
   async create(context: RequestContext, body: TenantWriteBody): Promise<TenantCreateResponse> {
     this.assertSystemAdmin(context);
     const tenantInput = parseCreateTenant(body);
     const firstAdmin = parseFirstAdmin(body.firstAdmin);
     const users = this.users;
     if (firstAdmin && this.tenants.createWithFirstAdmin) {
-      const result = await this.tenants.createWithFirstAdmin(tenantInput, firstAdmin);
+      const result = await createTenantOrThrow(() => this.tenants.createWithFirstAdmin!(tenantInput, firstAdmin));
       await this.recordTenantCreated(context, result.tenant);
       await this.recordFirstAdminCreated(context, result.tenant.id, result.admin);
       const activationToken = await this.issueFirstAdminActivationToken(result.admin, firstAdmin.mode);
@@ -88,7 +100,7 @@ export class TenantService {
     if (firstAdmin && !users) {
       throw new BadRequestException("TENANT_USER_STORE_REQUIRED");
     }
-    const tenant = await this.tenants.create(tenantInput);
+    const tenant = await createTenantOrThrow(() => this.tenants.create(tenantInput));
     await this.recordTenantCreated(context, tenant);
     if (!firstAdmin) return tenant;
     if (!users) {
@@ -123,6 +135,28 @@ export class TenantService {
         licenseEndsAt: tenant.licenseEndsAt,
         seatLimit: tenant.seatLimit,
         status: tenant.status,
+      },
+    });
+    return tenant;
+  }
+
+  async updateCurrent(context: RequestContext, body: TenantWriteBody): Promise<TenantRecord> {
+    const tenantId = requireTenantId(context);
+    const tenant = await this.tenants.update(tenantId, parseCurrentTenantProfileUpdate(body));
+    if (!tenant) {
+      throw new NotFoundException("TENANT_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId: tenant.id,
+      actorUserId: context.userId,
+      entityType: "Tenant",
+      entityId: tenant.id,
+      action: "tenant.profile_updated",
+      diff: {
+        name: tenant.name,
+        institutionType: tenant.institutionType,
+        contactEmail: tenant.contactEmail,
+        logoUrl: tenant.logoUrl,
       },
     });
     return tenant;
@@ -206,6 +240,9 @@ function parseCreateTenant(body: TenantWriteBody): CreateTenantInput {
     plan: optionalText(body.plan) ?? "TRIAL",
     licenseStartsAt: optionalDate(body.licenseStartsAt, "TENANT_LICENSE_START_INVALID"),
     licenseEndsAt: optionalDate(body.licenseEndsAt, "TENANT_LICENSE_END_INVALID"),
+    institutionType: optionalText(body.institutionType),
+    contactEmail: optionalEmail(body.contactEmail, "TENANT_CONTACT_EMAIL_INVALID"),
+    logoUrl: optionalUrl(body.logoUrl, "TENANT_LOGO_URL_INVALID"),
     seatLimit: optionalPositiveInt(body.seatLimit, "TENANT_SEAT_LIMIT_INVALID"),
     status: optionalText(body.status) ?? "ACTIVE",
   };
@@ -218,8 +255,20 @@ function parseUpdateTenant(body: TenantWriteBody): UpdateTenantInput {
     plan: optionalText(body.plan),
     licenseStartsAt: optionalDate(body.licenseStartsAt, "TENANT_LICENSE_START_INVALID"),
     licenseEndsAt: optionalDate(body.licenseEndsAt, "TENANT_LICENSE_END_INVALID"),
+    institutionType: optionalText(body.institutionType),
+    contactEmail: optionalEmail(body.contactEmail, "TENANT_CONTACT_EMAIL_INVALID"),
+    logoUrl: optionalUrl(body.logoUrl, "TENANT_LOGO_URL_INVALID"),
     seatLimit: optionalPositiveInt(body.seatLimit, "TENANT_SEAT_LIMIT_INVALID"),
     status: optionalText(body.status),
+  };
+}
+
+function parseCurrentTenantProfileUpdate(body: TenantWriteBody): UpdateTenantInput {
+  return {
+    name: optionalText(body.name),
+    institutionType: optionalText(body.institutionType),
+    contactEmail: optionalEmail(body.contactEmail, "TENANT_CONTACT_EMAIL_INVALID"),
+    logoUrl: optionalUrl(body.logoUrl, "TENANT_LOGO_URL_INVALID"),
   };
 }
 
@@ -266,6 +315,29 @@ function requiredEmail(value: string | undefined, errorCode: string): string {
   return email;
 }
 
+function optionalEmail(value: string | undefined, errorCode: string): string | undefined {
+  const email = optionalText(value);
+  if (!email) return undefined;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new BadRequestException(errorCode);
+  }
+  return email.toLowerCase();
+}
+
+function optionalUrl(value: string | undefined, errorCode: string): string | undefined {
+  const text = optionalText(value);
+  if (!text) return undefined;
+  try {
+    const url = new URL(text);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new Error("INVALID_PROTOCOL");
+    }
+    return text;
+  } catch {
+    throw new BadRequestException(errorCode);
+  }
+}
+
 function optionalDate(value: string | undefined, errorCode: string): string | undefined {
   if (value === undefined || value === "") return undefined;
   const timestamp = Date.parse(value);
@@ -287,4 +359,28 @@ function nextActivationExpiry(): string {
   const expiresAt = new Date();
   expiresAt.setHours(expiresAt.getHours() + 1);
   return expiresAt.toISOString();
+}
+
+async function createTenantOrThrow<T>(createTenant: () => Promise<T>): Promise<T> {
+  try {
+    return await createTenant();
+  } catch (error) {
+    if (isUniqueConstraintError(error, "Tenant_slug_key")) {
+      throw new BadRequestException("TENANT_SLUG_ALREADY_EXISTS");
+    }
+    throw error;
+  }
+}
+
+function isUniqueConstraintError(error: unknown, constraint: string): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; constraint?: unknown };
+  return candidate.code === "23505" && candidate.constraint === constraint;
+}
+
+function requireTenantId(context: RequestContext): string {
+  if (!context.tenantId) {
+    throw new BadRequestException("TENANT_CONTEXT_REQUIRED");
+  }
+  return context.tenantId;
 }

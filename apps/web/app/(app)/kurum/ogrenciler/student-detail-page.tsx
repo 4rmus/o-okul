@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import type {
@@ -29,14 +29,9 @@ import type {
 import { ArrowLeft } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
-import {
-  ClassCompareBar,
-  ExamResultDonut,
-  ProgressLineChart,
-  TopicRadarChart,
-} from "@uzman-hocam/ui";
 import { PageFrame } from "../_shared/page-frame.js";
 import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
+import { ClassCompareBar, ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 
 interface StudentBaseDetail {
@@ -74,7 +69,7 @@ const defaultExamId = "exam-demo-isem-lgs-1";
 
 export function StudentDetailPage({ studentId }: { studentId: string }) {
   const { auth } = useAuth();
-  const [selectedExamId, setSelectedExamId] = useState(defaultExamId);
+  const [selectedExamId, setSelectedExamId] = useState("");
   const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
 
   const pageDataQuery = useQuery({
@@ -124,6 +119,12 @@ export function StudentDetailPage({ studentId }: { studentId: string }) {
   const branchRadar = toStudentBranchRadar(report);
   const outcomeBars = toStudentOutcomeBars(report);
   const progressPoints = toProgressPoints(progress);
+
+  useEffect(() => {
+    if (exams.length === 0 || exams.some((exam) => exam.id === selectedExamId)) return;
+    setSelectedExamId(exams[0]?.id ?? "");
+    setSelectedSnapshotId("");
+  }, [exams, selectedExamId]);
 
   return (
     <PageFrame
