@@ -9,6 +9,7 @@ import type {
   GuardianRecord as SharedGuardianRecord,
   GuardianRelationshipType,
   GuardianStudentRecord,
+  LearningOutcomeRecord as SharedLearningOutcomeRecord,
   StudentRecord as SharedStudentRecord,
   TeacherAssignmentRecord,
   TeacherAssignmentRole,
@@ -24,6 +25,7 @@ import { type CourseStore, courseStoreToken } from "./course-store.js";
 import { type GradeLevelStore, gradeLevelStoreToken } from "./grade-level-store.js";
 import { type GuardianStudentStore, guardianStudentStoreToken } from "./guardian-student-store.js";
 import { type GuardianStore, guardianStoreToken } from "./guardian-store.js";
+import { type LearningOutcomeStore, learningOutcomeStoreToken } from "./learning-outcome-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
 import {
   type TeacherAssignmentInput,
@@ -56,6 +58,10 @@ export interface CourseRecord extends SharedCourseRecord {
   deletedAt?: string;
 }
 
+export interface LearningOutcomeRecord extends SharedLearningOutcomeRecord {
+  deletedAt?: string;
+}
+
 export interface TeacherRecord extends SharedTeacherRecord {
   deletedAt?: string;
 }
@@ -64,7 +70,16 @@ export interface GuardianRecord extends SharedGuardianRecord {
   deletedAt?: string;
 }
 
-type SchoolRecord = AcademicYearRecord | AcademicTermRecord | CampusRecord | ClassRecord | CourseRecord | GradeLevelRecord | TeacherRecord | GuardianRecord;
+type SchoolRecord =
+  | AcademicYearRecord
+  | AcademicTermRecord
+  | CampusRecord
+  | ClassRecord
+  | CourseRecord
+  | GradeLevelRecord
+  | GuardianRecord
+  | LearningOutcomeRecord
+  | TeacherRecord;
 
 export type GuardianStudentRelationInput = Partial<Pick<
   GuardianStudentRecord,
@@ -92,6 +107,7 @@ export class SchoolService {
     @Inject(classStoreToken) private readonly classStore: ClassStore,
     @Inject(courseStoreToken) private readonly courseStore: CourseStore,
     @Inject(gradeLevelStoreToken) private readonly gradeLevelStore: GradeLevelStore,
+    @Inject(learningOutcomeStoreToken) private readonly learningOutcomeStore: LearningOutcomeStore,
     @Inject(teacherStoreToken) private readonly teacherStore: TeacherStore,
     @Inject(guardianStoreToken) private readonly guardianStore: GuardianStore,
     @Inject(guardianStudentStoreToken) private readonly guardianStudentStore: GuardianStudentStore,
@@ -524,6 +540,77 @@ export class SchoolService {
       entityId: record.id,
       action: "course.deleted",
       diff: { name: existing.name, deletedAt: record.deletedAt },
+    });
+  }
+
+  async listLearningOutcomes(context: RequestContext): Promise<LearningOutcomeRecord[]> {
+    return this.list(context, await this.learningOutcomeStore.list());
+  }
+
+  async findLearningOutcome(context: RequestContext, id: string): Promise<LearningOutcomeRecord> {
+    return this.findRecord(context, await this.learningOutcomeStore.findById(id), "LEARNING_OUTCOME_NOT_FOUND");
+  }
+
+  async createLearningOutcome(context: RequestContext, input: Partial<LearningOutcomeRecord>): Promise<LearningOutcomeRecord> {
+    const tenantId = this.resolveTenantId(context, input.tenantId);
+    const record = await this.learningOutcomeStore.create({
+      tenantId,
+      code: input.code ?? "",
+      branch: input.branch ?? "",
+      title: input.title ?? "",
+      level: optionalText(input.level),
+    });
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "LearningOutcome",
+      entityId: record.id,
+      action: "learning_outcome.created",
+      diff: { fieldsSet: presentFields(record, ["code", "branch", "title", "level"]) },
+    });
+    return record;
+  }
+
+  async updateLearningOutcome(
+    context: RequestContext,
+    id: string,
+    input: Partial<LearningOutcomeRecord>,
+  ): Promise<LearningOutcomeRecord> {
+    await this.findLearningOutcome(context, id);
+    const changedFields = changedInputFields(input, ["code", "branch", "title", "level"]);
+    const record = await this.learningOutcomeStore.update(id, {
+      code: input.code,
+      branch: input.branch,
+      title: input.title,
+      level: input.level !== undefined ? optionalText(input.level) : undefined,
+    });
+    if (!record) {
+      throw new NotFoundException("LEARNING_OUTCOME_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "LearningOutcome",
+      entityId: record.id,
+      action: "learning_outcome.updated",
+      diff: { fieldsChanged: changedFields },
+    });
+    return record;
+  }
+
+  async deleteLearningOutcome(context: RequestContext, id: string): Promise<void> {
+    const existing = await this.findLearningOutcome(context, id);
+    const record = await this.learningOutcomeStore.softDelete(id, new Date().toISOString());
+    if (!record) {
+      throw new NotFoundException("LEARNING_OUTCOME_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "LearningOutcome",
+      entityId: record.id,
+      action: "learning_outcome.deleted",
+      diff: { code: existing.code, deletedAt: record.deletedAt },
     });
   }
 

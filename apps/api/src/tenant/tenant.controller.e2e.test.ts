@@ -77,6 +77,25 @@ describe("TenantController", () => {
           status: "SUSPENDED",
         });
       });
+
+    await request(server)
+      .delete("/tenants/tenant-e2e")
+      .set("Authorization", `Bearer ${systemToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          id: "tenant-e2e",
+          status: "DELETED",
+        });
+      });
+
+    await request(server)
+      .get("/tenants")
+      .set("Authorization", `Bearer ${systemToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: "tenant-e2e" })]));
+      });
   });
 
   it("TENANT_ADMIN tenant yönetim endpoint'lerine giremez", async () => {
@@ -84,6 +103,18 @@ describe("TenantController", () => {
       .get("/tenants")
       .set("Authorization", `Bearer ${adminToken}`)
       .expect(403);
+  });
+
+  it("SYSTEM_ADMIN tenant listesini arama, sıralama ve sayfalama ile alır", async () => {
+    await request(server)
+      .get("/tenants")
+      .query({ q: "demo", sort: "slug", page: "1", limit: "1" })
+      .set("Authorization", `Bearer ${systemToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toHaveLength(1);
+        expect(body[0]).toMatchObject({ slug: "demo-kurum-b" });
+      });
   });
 
   it("expired tenant bearer token ile normal request başlatamaz", async () => {

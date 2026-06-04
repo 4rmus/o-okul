@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, type DataTableColumn } from "@uzman-hocam/ui";
 import type { GuardianRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
 import { ShieldCheck } from "lucide-react";
 import { useState } from "react";
@@ -109,6 +109,13 @@ export function KvkkPage() {
       aria-label="KVKK yönetimi"
       columns={columns}
       description="Öğrenci, öğretmen ve veli PII temizleme işlemlerini tek ekrandan yönet."
+      emptyState={
+        <EmptyState
+          title="Temizlenecek kayıt yok"
+          description="Öğrenci, öğretmen veya veli kaydı oluştuğunda PII temizleme seçenekleri burada görünür."
+          hint="PII temizleme işlemleri geri alınamaz; kayıt oluşmadan aksiyon gösterilmez."
+        />
+      }
       emptyText="Temizlenecek kayıt yok"
       error={
         error ||

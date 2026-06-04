@@ -6,6 +6,9 @@ const databaseUrl =
   process.env.DATABASE_URL ??
   "postgresql://migration:migration@localhost:5432/uzman_hocam";
 
+type SeedMode = "demo" | "minimal";
+
+const seedMode = parseSeedMode(process.env.SEED_MODE);
 const pool = new pg.Pool({ connectionString: databaseUrl });
 const demoPasswordHash = "scrypt:demo-auth-salt:uG-yNMDIMmz8JL5XDnE2Eoc939a2mw8PcRPoJb8CXac";
 
@@ -125,6 +128,33 @@ async function main() {
   try {
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
+
+    await client.query(
+      `INSERT INTO "Tenant" ("id", "name", "slug", "status", "updatedAt")
+       VALUES ('system', 'System', 'system', 'ACTIVE', now())
+       ON CONFLICT ("slug") DO UPDATE SET "updatedAt" = now()`,
+    );
+
+    const systemUser = await client.query<{ id: string }>(
+      `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
+       VALUES ('user-system', 'system@example.test', 'System Admin', $1, now())
+       ON CONFLICT ("email") DO UPDATE SET "passwordHash" = EXCLUDED."passwordHash", "updatedAt" = now()
+       RETURNING "id"`,
+      [demoPasswordHash],
+    );
+
+    await client.query(
+      `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
+       VALUES ('membership-system-admin', 'system', $1, 'SYSTEM_ADMIN', now())
+       ON CONFLICT ("tenantId", "userId", "role") DO UPDATE SET "updatedAt" = now()`,
+      [systemUser.rows[0]?.id],
+    );
+
+    if (seedMode === "minimal") {
+      await client.query("COMMIT");
+      console.log("Seeded minimal system tenant and SYSTEM_ADMIN");
+      return;
+    }
 
     const tenant = await client.query<{ id: string }>(
       `INSERT INTO "Tenant" ("id", "name", "slug", "status", "updatedAt")
@@ -320,6 +350,12 @@ async function main() {
   } finally {
     client.release();
   }
+}
+
+function parseSeedMode(value: string | undefined): SeedMode {
+  if (!value || value === "demo") return "demo";
+  if (value === "minimal") return "minimal";
+  throw new Error("SEED_MODE must be demo or minimal");
 }
 
 main()

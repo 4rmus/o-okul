@@ -3,7 +3,7 @@
 import { type FormEvent, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherNoteRecord, TeacherRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -192,6 +192,14 @@ export function TeacherNotesPage() {
         aria-label="Öğretmen notu yönetimi"
         columns={columns}
         description="Öğretmen notlarını öğrenci, öğretmen, ders ve dönem bağlamıyla yönet."
+        emptyState={
+          <EmptyState
+            title="Öğretmen notu yok"
+            description="Öğrenci gelişimini izlemek için ilk öğretmen notunu ekle."
+            hint="Notlar iç kullanım veya veli/öğrenci görünümü olarak ayrılabilir."
+            primaryAction={{ label: "Not ekle", onClick: openCreateForm }}
+          />
+        }
         emptyText="Öğretmen notu yok"
         error={error || (notesQuery.isError ? "Öğretmen notları alınamadı." : referencesQuery.isError ? "Seçim listeleri alınamadı." : undefined)}
         getRowKey={(record) => record.id}

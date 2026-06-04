@@ -23,6 +23,10 @@ export interface ResolvedImportQuarantineResult extends ImportQuarantineRecord {
   };
 }
 
+export interface ImportQuarantineSummary {
+  openCount: number;
+}
+
 export interface ResolveImportQuarantineInput {
   examId?: string;
   rawImportId?: string;
@@ -50,6 +54,11 @@ export class RawImportQuarantineService {
       required(examId, "IMPORT_QUARANTINE_EXAM_REQUIRED"),
       required(rawImportId, "IMPORT_QUARANTINE_RAW_IMPORT_REQUIRED"),
     );
+  }
+
+  async summary(context: RequestContext): Promise<ImportQuarantineSummary> {
+    const tenantId = requireTenant(context);
+    return { openCount: await this.store.countOpenByTenant(tenantId) };
   }
 
   async resolve(

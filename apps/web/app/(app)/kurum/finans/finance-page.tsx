@@ -13,7 +13,7 @@ import type {
   PaymentPlanWithInstallmentsRecord,
   StudentRecord,
 } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import { CheckCircle2, Clock, Pencil, RotateCcw, TriangleAlert } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, type ListMeta } from "../../../../src/api-client.js";
@@ -239,6 +239,13 @@ export function FinancePage() {
         aria-label="Finans yönetimi"
         columns={columns}
         description="Ödeme planlarını öğrenci ve akademik bağlama göre izle, taksit durumlarını güncelle."
+        emptyState={
+          <EmptyState
+            title="Ödeme taksiti yok"
+            description="Ödeme planları oluştuğunda bekleyen, geciken ve ödenen taksitler burada görünür."
+            hint="Finans sinyalleri dashboard karar kartlarına da yansır."
+          />
+        }
         emptyText="Ödeme taksiti yok"
         error={error || (plansQuery.isError ? "Ödeme planları alınamadı." : referencesQuery.isError ? "Seçim listeleri alınamadı." : undefined)}
         getRowKey={(row) => row.id}

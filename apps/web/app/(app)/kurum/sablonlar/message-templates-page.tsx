@@ -2,7 +2,7 @@
 
 import { type FormEvent, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import type {
   AcademicTermRecord,
   AnnouncementRecord,
@@ -251,6 +251,14 @@ export function MessageTemplatesPage() {
         aria-label="Şablon yönetimi"
         columns={columns}
         description="SMS mesaj şablonlarını aynı CRUD kalıbıyla yönet."
+        emptyState={
+          <EmptyState
+            title="Şablon yok"
+            description="SMS gönderimlerinde kullanmak için ilk mesaj şablonunu oluştur."
+            hint="Şablonlar duyuru SMS akışında tekrar kullanılabilir."
+            primaryAction={{ label: "Şablon ekle", onClick: openCreateForm }}
+          />
+        }
         emptyText="Şablon kaydı yok"
         error={error || (templatesQuery.isError ? "Şablonlar alınamadı." : undefined)}
         getRowKey={(template) => template.id}

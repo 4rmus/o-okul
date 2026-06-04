@@ -1,9 +1,10 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import type {
   AttendanceSummaryRecord,
   ClassRecord,
@@ -62,6 +63,11 @@ interface StudentListFilters {
   guardianLinked: "" | "true" | "false";
 }
 
+interface StudentReferences {
+  classes: ClassRecord[];
+  teachers: TeacherRecord[];
+}
+
 interface EnrollmentActionState {
   startsAt: string;
   classId: string;
@@ -111,6 +117,7 @@ const emptyBulkEnrollmentAction: BulkEnrollmentActionState = {
 
 export function StudentsPage() {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
   const [filters, setFilters] = useState<StudentListFilters>(emptyFilters);
@@ -145,24 +152,22 @@ export function StudentsPage() {
   });
   const detail = editingStudent ? detailQuery.data : undefined;
 
-  const classesQuery = useQuery({
-    queryKey: ["next-classes", auth?.session.tenantId ?? "anonymous"],
-    queryFn: () => loadClasses(auth?.accessToken ?? ""),
+  const referencesQuery = useQuery({
+    queryKey: ["next-student-refs", auth?.session.tenantId ?? "anonymous"],
+    queryFn: () => loadStudentReferences(auth?.accessToken ?? ""),
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
-  const classes = classesQuery.data ?? [];
+  const classes = referencesQuery.data?.classes ?? [];
   const classNameById = new Map(classes.map((klass) => [klass.id, klass.name]));
   const levels = [...new Set(classes.map((klass) => klass.level).filter((level): level is string => Boolean(level)))].sort();
 
-  const teachersQuery = useQuery({
-    queryKey: ["next-teachers", auth?.session.tenantId ?? "anonymous"],
-    queryFn: () => loadTeachers(auth?.accessToken ?? ""),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const teachers = teachersQuery.data ?? [];
+  const teachers = referencesQuery.data?.teachers ?? [];
   const teacherNameById = new Map(teachers.map((teacher) => [teacher.id, `${teacher.firstName} ${teacher.lastName}`]));
+
+  useEffect(() => {
+    if (searchParams.get("new") === "1") openCreateForm();
+  }, [searchParams]);
 
   const columns: Array<DataTableColumn<StudentRecord>> = [
     {
@@ -535,6 +540,15 @@ export function StudentsPage() {
         aria-label="Öğrenci yönetimi"
         columns={columns}
         description="Kurum öğrencilerini listele; ad-soyad, TC, iletişim ve veli bilgileriyle ekle veya düzenle."
+        emptyState={
+          <EmptyState
+            title="Henüz öğrenci yok"
+            description="İlk öğrenciyi ekleyerek kurum kurulumunun çekirdek akışını tamamla."
+            hint={classes.length === 0 ? "Öğrenciyi sınıfsız ekleyebilir veya önce sınıf oluşturabilirsin." : undefined}
+            primaryAction={{ label: "Öğrenci ekle", onClick: openCreateForm }}
+            secondaryAction={{ label: "Kuruluma dön", href: "/kurum/kurulum" }}
+          />
+        }
         emptyText="Öğrenci kaydı yok"
         error={error || (studentsQuery.isError ? "Öğrenciler alınamadı." : undefined)}
         getRowKey={(student) => student.id}
@@ -847,12 +861,12 @@ function buildStudentListUrl(baseUrl: string, state: ListQueryState, filters: St
   return url.toString();
 }
 
-async function loadClasses(accessToken: string) {
-  return apiRequest<ClassRecord[]>(accessToken, `${apiBaseUrl}/classes`);
-}
-
-async function loadTeachers(accessToken: string) {
-  return apiRequest<TeacherRecord[]>(accessToken, `${apiBaseUrl}/teachers`);
+async function loadStudentReferences(accessToken: string): Promise<StudentReferences> {
+  const [classes, teachers] = await Promise.all([
+    apiRequest<ClassRecord[]>(accessToken, `${apiBaseUrl}/classes`),
+    apiRequest<TeacherRecord[]>(accessToken, `${apiBaseUrl}/teachers`),
+  ]);
+  return { classes, teachers };
 }
 
 async function loadStudentDetail(accessToken: string, id: string): Promise<StudentDetail> {

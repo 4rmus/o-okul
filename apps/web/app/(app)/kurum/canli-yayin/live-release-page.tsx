@@ -1,6 +1,6 @@
 "use client";
 
-import { EvidenceGateSection, EvidenceListSection } from "../_shared/evidence-panels.js";
+import { EvidenceGateSection, EvidenceListSection, OperationDecisionNotice, ReferenceBadge } from "../_shared/evidence-panels.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
 
@@ -69,6 +69,7 @@ const openExternalEvidence = [
 export function LiveReleasePage() {
   return (
     <PageFrame
+      actions={<ReferenceBadge />}
       title="Canlı Yayın"
       subtitle="Release öncesi production kanıt zincirini, özet dosyasını ve dış ortam gereksinimlerini izle."
     >
@@ -79,6 +80,11 @@ export function LiveReleasePage() {
           { label: "Release özeti", value: "PASS gerekir" },
           { label: "Dış ortam", value: "Kanıt bekler" },
         ]}
+      />
+      <OperationDecisionNotice
+        decision="Karar: panel şu an CLI-only release rehberidir."
+        reason="Canlı yayın üretim ortamını etkiler; prod evidence zinciri geçmeden panelde tek tık yayın aksiyonu gösterilmez."
+        nextStep="Panel aksiyonu ancak C1/D1 kapıları, audit log ve çift onay modeli tamamlanınca değerlendirilir."
       />
       <EvidenceGateSection title="Kanıt Kapıları" ariaLabel="Canlı yayın kapıları" gates={releaseGates} />
       <EvidenceListSection title="Production Evidence Adımları" ariaLabel="Production evidence adımları" items={productionEvidenceSteps} />

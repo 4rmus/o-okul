@@ -8,6 +8,12 @@ export interface RequestContext {
   bypassRls: boolean;
   subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER";
   subjectId?: string;
+  rolePreview?: {
+    id: string;
+    actorUserId: string;
+    mode: "READ_ONLY";
+    expiresAt: string;
+  };
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();

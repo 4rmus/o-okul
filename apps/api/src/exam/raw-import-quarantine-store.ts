@@ -21,6 +21,7 @@ export interface ImportQuarantineRecord {
 }
 
 export interface RawImportQuarantineStore {
+  countOpenByTenant(tenantId: string): Promise<number>;
   listByRawImport(tenantId: string, examId: string, rawImportId: string): Promise<ImportQuarantineRecord[]>;
   resolve(input: {
     tenantId: string;
@@ -33,6 +34,20 @@ export interface RawImportQuarantineStore {
 
 export class PostgresRawImportQuarantineStore implements RawImportQuarantineStore {
   constructor(private readonly pool: TenantQueryable = new pg.Pool({ connectionString: process.env.DATABASE_URL })) {}
+
+  async countOpenByTenant(tenantId: string): Promise<number> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<{ count: string }>(
+        `SELECT COUNT(*)::text AS count
+         FROM "ImportQuarantine"
+         WHERE "tenantId" = $1
+           AND "status" = 'OPEN'
+           AND "deletedAt" IS NULL`,
+        [tenantId],
+      );
+      return Number(result.rows[0]?.count ?? 0);
+    });
+  }
 
   async listByRawImport(tenantId: string, examId: string, rawImportId: string): Promise<ImportQuarantineRecord[]> {
     return withTenantQuery(this.pool, async (client) => {

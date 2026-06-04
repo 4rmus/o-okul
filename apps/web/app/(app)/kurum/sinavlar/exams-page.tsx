@@ -3,7 +3,7 @@
 import { type FormEvent, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ClassRecord, ExamParticipantRecord, ExamRecord, StudentRecord } from "@uzman-hocam/shared-types";
-import { Button, FormModal, Input } from "@uzman-hocam/ui";
+import { Button, EmptyState, FormModal, Input } from "@uzman-hocam/ui";
 import { CheckCircle2, Plus, Users } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
@@ -36,6 +36,11 @@ const emptyBulkParticipantForm = {
   bookletType: "",
 };
 
+interface ExamPageReferences {
+  classes: ClassRecord[];
+  students: StudentRecord[];
+}
+
 export function ExamsPage() {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
@@ -46,15 +51,9 @@ export function ExamsPage() {
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
-  const studentsQuery = useQuery({
-    queryKey: ["next-exam-students", auth?.session.tenantId ?? "anonymous"],
-    queryFn: () => loadStudents(auth?.accessToken ?? ""),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const classesQuery = useQuery({
-    queryKey: ["next-exam-classes", auth?.session.tenantId ?? "anonymous"],
-    queryFn: () => loadClasses(auth?.accessToken ?? ""),
+  const referencesQuery = useQuery({
+    queryKey: ["next-exam-refs", auth?.session.tenantId ?? "anonymous"],
+    queryFn: () => loadExamReferences(auth?.accessToken ?? ""),
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
@@ -75,10 +74,11 @@ export function ExamsPage() {
     refetchOnWindowFocus: false,
   });
   const participants = participantsQuery.data ?? [];
-  const studentById = new Map((studentsQuery.data ?? []).map((student) => [student.id, student]));
-  const classes = classesQuery.data ?? [];
+  const students = referencesQuery.data?.students ?? [];
+  const studentById = new Map(students.map((student) => [student.id, student]));
+  const classes = referencesQuery.data?.classes ?? [];
   const participantStudentIds = new Set(participants.map((participant) => participant.studentId));
-  const availableStudents = (studentsQuery.data ?? []).filter((student) => !participantStudentIds.has(student.id));
+  const availableStudents = students.filter((student) => !participantStudentIds.has(student.id));
   const bulkStudents = availableStudents.filter(
     (student) => !bulkParticipantForm.classId || student.classId === bulkParticipantForm.classId,
   );
@@ -226,7 +226,13 @@ export function ExamsPage() {
             ))}
             {rows.length === 0 && !examsQuery.isPending ? (
               <tr>
-                <td colSpan={4}>Sınav kaydı yok</td>
+                <td colSpan={4}>
+                  <EmptyState
+                    title="Henüz sınav yok"
+                    description="İlk deneme sınavını ekleyerek katılımcı ve rapor hazırlığını başlat."
+                    primaryAction={{ label: "Sınav ekle", onClick: openCreateForm }}
+                  />
+                </td>
               </tr>
             ) : null}
           </tbody>
@@ -351,13 +357,18 @@ export function ExamsPage() {
               ))}
               {participants.length === 0 && !participantsQuery.isPending ? (
                 <tr>
-                  <td colSpan={4}>Katılımcı yok</td>
+                  <td colSpan={4}>
+                    <EmptyState
+                      title="Katılımcı yok"
+                      description="Bu sınava öğrenci eklemek için tekil veya toplu katılımcı formunu kullan."
+                    />
+                  </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
           {participantsQuery.isPending ? <p className="next-status-note">Katılımcılar yükleniyor</p> : null}
-          {studentsQuery.isError || classesQuery.isError || participantsQuery.isError ? <p className="uh-crud-page__error">Katılımcı verisi alınamadı.</p> : null}
+          {referencesQuery.isError || participantsQuery.isError ? <p className="uh-crud-page__error">Katılımcı verisi alınamadı.</p> : null}
         </section>
       ) : null}
       <FormModal
@@ -407,12 +418,12 @@ async function publishExam(accessToken: string, id: string) {
   });
 }
 
-async function loadStudents(accessToken: string) {
-  return apiRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/students`);
-}
-
-async function loadClasses(accessToken: string) {
-  return apiRequest<ClassRecord[]>(accessToken, `${apiBaseUrl}/classes`);
+async function loadExamReferences(accessToken: string): Promise<ExamPageReferences> {
+  const [classes, students] = await Promise.all([
+    apiRequest<ClassRecord[]>(accessToken, `${apiBaseUrl}/classes`),
+    apiRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/students`),
+  ]);
+  return { classes, students };
 }
 
 async function loadParticipants(accessToken: string, examId: string) {

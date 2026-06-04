@@ -1,5 +1,7 @@
 import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
+import { hashResetToken } from "../auth/auth.service.js";
+import { InMemoryPasswordResetStore } from "../auth/password-reset-store.js";
 import type { RequestContext } from "../context/request-context.js";
 import { InMemoryTenantStore } from "./tenant-store.js";
 import { TenantService } from "./tenant.service.js";
@@ -26,7 +28,7 @@ describe("TenantService", () => {
     await expect(service.list(systemContext)).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ id: "tenant-new" })]));
   });
 
-  it("tenant oluşturma ve lisans güncellemesini audit log'a yazar", async () => {
+  it("tenant oluşturma, lisans güncelleme ve silmeyi audit log'a yazar", async () => {
     const records: unknown[] = [];
     const auditLogs = {
       record: async (input: unknown) => {
@@ -46,6 +48,7 @@ describe("TenantService", () => {
       licenseEndsAt: "2030-01-01T00:00:00.000Z",
       seatLimit: 120,
     });
+    await service.delete(systemContext, "tenant-audit");
 
     expect(records).toEqual([
       expect.objectContaining({
@@ -66,7 +69,73 @@ describe("TenantService", () => {
           seatLimit: 120,
         }),
       }),
+      expect.objectContaining({
+        tenantId: "tenant-audit",
+        actorUserId: "user-system",
+        entityType: "Tenant",
+        entityId: "tenant-audit",
+        action: "tenant.deleted",
+        diff: expect.objectContaining({ status: "DELETED" }),
+      }),
     ]);
+  });
+
+  it("SystemAdmin kurum oluştururken ilk tenant admin üyeliğini provision eder", async () => {
+    const service = new TenantService(new InMemoryTenantStore());
+
+    const result = await service.create(systemContext, {
+      id: "tenant-first-admin",
+      name: "İlk Adminli Kurum",
+      slug: "ilk-adminli-kurum",
+      firstAdmin: {
+        name: "İlk Yönetici",
+        email: "FIRST.ADMIN@example.test",
+        mode: "password",
+        password: "password1",
+      },
+    });
+
+    expect(result).toEqual({
+      tenant: expect.objectContaining({ id: "tenant-first-admin" }),
+      admin: expect.objectContaining({
+        email: "first.admin@example.test",
+        name: "İlk Yönetici",
+        roles: ["TENANT_ADMIN"],
+        tenantId: "tenant-first-admin",
+      }),
+    });
+  });
+
+  it("SystemAdmin ilk tenant admin için davet tokenı üretebilir", async () => {
+    const passwordResets = new InMemoryPasswordResetStore();
+    const service = new TenantService(new InMemoryTenantStore(), undefined, undefined, passwordResets);
+
+    const result = await service.create(systemContext, {
+      id: "tenant-invited-admin",
+      name: "Davetli Admin Kurum",
+      slug: "davetli-admin-kurum",
+      firstAdmin: {
+        name: "Davetli Yönetici",
+        email: "INVITED.ADMIN@example.test",
+        mode: "invitation",
+      },
+    });
+
+    expect(result).toEqual({
+      tenant: expect.objectContaining({ id: "tenant-invited-admin" }),
+      admin: expect.objectContaining({
+        activationToken: expect.any(String),
+        email: "invited.admin@example.test",
+        roles: ["TENANT_ADMIN"],
+        tenantId: "tenant-invited-admin",
+      }),
+    });
+    if (!("admin" in result) || !result.admin.activationToken) {
+      throw new Error("ACTIVATION_TOKEN_MISSING");
+    }
+    await expect(passwordResets.findByTokenHash(hashResetToken(result.admin.activationToken))).resolves.toEqual(
+      expect.objectContaining({ userId: result.admin.id, status: "PENDING" }),
+    );
   });
 
   it("tenant admin kurum yönetimi yapamaz", async () => {

@@ -1,10 +1,12 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import Link from "next/link";
+import { type FormEvent, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import type { GuardianRecord } from "@uzman-hocam/shared-types";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import {
@@ -23,6 +25,7 @@ const emptyForm: GuardianFormState = {
 
 export function GuardiansPage() {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
   const queryKey = ["next-guardians", auth?.session.tenantId ?? "anonymous", listQuery];
@@ -38,6 +41,10 @@ export function GuardiansPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
   const rows = guardiansQuery.data?.data ?? [];
+
+  useEffect(() => {
+    if (searchParams.get("new") === "1") openCreateForm();
+  }, [searchParams]);
 
   const columns: Array<DataTableColumn<GuardianRecord>> = [
     {
@@ -55,6 +62,9 @@ export function GuardiansPage() {
       header: "İşlem",
       render: (guardian) => (
         <span className="next-row-actions">
+          <Link href={`/kurum/veliler/${encodeURIComponent(guardian.id)}`} aria-label={`${guardian.firstName} detay`}>
+            <Eye size={17} aria-hidden="true" />
+          </Link>
           <button type="button" onClick={() => openEditForm(guardian)} aria-label={`${guardian.firstName} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
           </button>
@@ -146,6 +156,14 @@ export function GuardiansPage() {
         aria-label="Veli yönetimi"
         columns={columns}
         description="Kurum velilerini aynı CRUD kalıbıyla yönet."
+        emptyState={
+          <EmptyState
+            title="Veli kaydı yok"
+            description="Öğrenci iletişimi ve portal davetleri için ilk veli kaydını oluştur."
+            hint="Veli eklendikten sonra öğrenci bağlantısı ve portal daveti akışına geçebilirsin."
+            primaryAction={{ label: "Veli ekle", onClick: openCreateForm }}
+          />
+        }
         emptyText="Veli kaydı yok"
         error={error || (guardiansQuery.isError ? "Veliler alınamadı." : undefined)}
         getRowKey={(guardian) => guardian.id}

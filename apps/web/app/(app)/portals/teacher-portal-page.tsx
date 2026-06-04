@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Input } from "@uzman-hocam/ui";
 import type {
@@ -104,12 +105,16 @@ interface ReportContext {
 
 export function TeacherPortalPage() {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const queryKey = ["next-teacher-portal", auth?.session.userId ?? "anonymous"];
+  const rolePreviewToken = searchParams.get("rolePreviewToken")?.trim() ?? "";
+  const isRolePreview = Boolean(rolePreviewToken);
+  const canReadPortal = Boolean(auth && (auth.session.subjectType === "TEACHER" || isRolePreview));
+  const queryKey = ["next-teacher-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session"];
   const query = useQuery({
     queryKey,
-    queryFn: () => loadTeacherPortal(auth?.accessToken ?? ""),
-    enabled: Boolean(auth && auth.session.subjectType === "TEACHER"),
+    queryFn: () => loadTeacherPortal(auth?.accessToken ?? "", rolePreviewToken),
+    enabled: canReadPortal,
     refetchOnWindowFocus: false,
   });
   const today = todayInputValue();
@@ -193,19 +198,19 @@ export function TeacherPortalPage() {
   const todayLessons = useMemo(() => selectTodayLessons(data?.schedule ?? []), [data?.schedule]);
   const nextLesson = useMemo(() => selectNextLesson(data?.schedule ?? []), [data?.schedule]);
   const reportQuery = useQuery({
-    queryKey: ["next-teacher-student-report", auth?.session.userId ?? "anonymous", selectedStudentId ?? "none"],
-    queryFn: () => loadTeacherStudentReport(auth?.accessToken ?? "", selectedStudentId ?? ""),
-    enabled: Boolean(auth && auth.session.subjectType === "TEACHER" && selectedStudentId),
+    queryKey: ["next-teacher-student-report", auth?.session.userId ?? "anonymous", selectedStudentId ?? "none", rolePreviewToken || "session"],
+    queryFn: () => loadTeacherStudentReport(auth?.accessToken ?? "", selectedStudentId ?? "", rolePreviewToken),
+    enabled: Boolean(canReadPortal && selectedStudentId),
     refetchOnWindowFocus: false,
   });
   const historyQuery = useQuery({
-    queryKey: ["next-teacher-student-history", auth?.session.userId ?? "anonymous", selectedStudentId ?? "none"],
-    queryFn: () => loadTeacherStudentHistory(auth?.accessToken ?? "", selectedStudentId ?? ""),
-    enabled: Boolean(auth && auth.session.subjectType === "TEACHER" && selectedStudentId),
+    queryKey: ["next-teacher-student-history", auth?.session.userId ?? "anonymous", selectedStudentId ?? "none", rolePreviewToken || "session"],
+    queryFn: () => loadTeacherStudentHistory(auth?.accessToken ?? "", selectedStudentId ?? "", rolePreviewToken),
+    enabled: Boolean(canReadPortal && selectedStudentId),
     refetchOnWindowFocus: false,
   });
 
-  if (auth?.session.subjectType !== "TEACHER") {
+  if (!canReadPortal) {
     return <AccessPanel title="Öğretmen Portalı" demoEmail="teacher-a@example.test" demoLabel="Demo öğretmen" />;
   }
 
@@ -218,6 +223,10 @@ export function TeacherPortalPage() {
   async function submitAttendance(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!auth) return;
+    if (isRolePreview) {
+      setActionError("Rol önizleme salt-okuma modundadır.");
+      return;
+    }
 
     setActionError("");
     const parsedForm = attendanceFormSchema.safeParse(attendanceForm);
@@ -239,6 +248,10 @@ export function TeacherPortalPage() {
   async function submitTeacherNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!auth) return;
+    if (isRolePreview) {
+      setActionError("Rol önizleme salt-okuma modundadır.");
+      return;
+    }
 
     setActionError("");
     const parsedForm = teacherNoteFormSchema.safeParse(noteForm);
@@ -260,6 +273,10 @@ export function TeacherPortalPage() {
 
   async function toggleHomeworkCheck(homework: HomeworkRecord) {
     if (!auth) return;
+    if (isRolePreview) {
+      setActionError("Rol önizleme salt-okuma modundadır.");
+      return;
+    }
 
     setActionError("");
     try {
@@ -280,6 +297,10 @@ export function TeacherPortalPage() {
   async function submitMaterialAssignment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!auth) return;
+    if (isRolePreview) {
+      setActionError("Rol önizleme salt-okuma modundadır.");
+      return;
+    }
 
     setActionError("");
     const parsedForm = materialAssignmentFormSchema.safeParse(materialForm);
@@ -316,6 +337,12 @@ export function TeacherPortalPage() {
           { label: "Destek", value: data?.supportTickets.length ?? 0 },
         ]}
       />
+      {isRolePreview ? (
+        <section className="next-list-panel" aria-label="Rol önizleme modu">
+          <h2>Salt-okuma Önizleme</h2>
+          <p>Bu ekran kurum yöneticisi için geçici rol önizleme modunda açıldı.</p>
+        </section>
+      ) : null}
       <TeacherProfileSummaryPanel
         campusNames={campusNameById}
         classes={classById}
@@ -349,6 +376,7 @@ export function TeacherPortalPage() {
           ))}
         </div>
       </section>
+      {!isRolePreview ? (
       <section className="next-support-tools" aria-label="Öğretmen günlük işlemleri">
         <form className="next-support-tool" onSubmit={(event) => void submitAttendance(event)}>
           <h2>Yoklama</h2>
@@ -571,17 +599,20 @@ export function TeacherPortalPage() {
           <Button disabled={!materialForm.studentId || !materialForm.materialId} type="submit">Materyal ata</Button>
         </form>
       </section>
+      ) : null}
       {actionError ? <p className="next-form-error">{actionError}</p> : null}
       <AnnouncementsPanel
         announcements={data?.announcements ?? []}
+        readOnly={isRolePreview}
         onMarkRead={(announcement) =>
-          auth ? markAnnouncementRead(auth.accessToken, `me/teacher/announcements/${encodeURIComponent(announcement.id)}/read`).then(() => query.refetch()) : undefined
+          auth && !isRolePreview ? markAnnouncementRead(auth.accessToken, `me/teacher/announcements/${encodeURIComponent(announcement.id)}/read`).then(() => query.refetch()) : undefined
         }
       />
       <SupportTicketsPanel
+        readOnly={isRolePreview}
         tickets={data?.supportTickets ?? []}
         onCreate={(input) =>
-          auth
+          auth && !isRolePreview
             ? createPortalSupportTicket(auth.accessToken, "me/teacher/support-tickets", {
                 ...input,
                 studentId: selectedStudent?.id ?? "",
@@ -594,7 +625,7 @@ export function TeacherPortalPage() {
             : undefined
         }
       />
-      <TeacherHomeworkPanel homework={data?.homework ?? []} onToggle={(homework) => void toggleHomeworkCheck(homework)} />
+      <TeacherHomeworkPanel homework={data?.homework ?? []} onToggle={(homework) => void toggleHomeworkCheck(homework)} readOnly={isRolePreview} />
       <TeacherMaterialAssignmentsPanel
         assignments={(data?.materialAssignments ?? []).filter((assignment) => assignment.studentId === selectedStudentId)}
         courseNames={courseNameById}
@@ -656,37 +687,38 @@ export function TeacherPortalPage() {
   );
 }
 
-async function apiRequestOrNull<T>(accessToken: string, input: RequestInfo | URL): Promise<T | null> {
-  const response = await authenticatedFetch(accessToken, input);
+async function apiRequestOrNull<T>(accessToken: string, input: RequestInfo | URL, rolePreviewToken = ""): Promise<T | null> {
+  const response = await authenticatedFetch(accessToken, input, withRolePreview({}, rolePreviewToken));
   if (response.status === 404) return null;
   if (!response.ok) throw new Error("API_REQUEST_FAILED");
   return readData<T>(response);
 }
 
-async function loadTeacherPortal(accessToken: string): Promise<TeacherPortalData> {
+async function loadTeacherPortal(accessToken: string, rolePreviewToken = ""): Promise<TeacherPortalData> {
   const [teacher, announcements, schedule, students, attendance, homework, materials, teacherNotes, supportTickets, snapshots, campuses, classes, courses, gradeLevels, terms] = await Promise.all([
-    apiRequest<TeacherRecord>(accessToken, `${apiBaseUrl}/me/teacher`),
-    apiRequest<AnnouncementRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/announcements`),
-    apiRequest<ScheduleLessonRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/schedule`),
-    apiRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/students`),
-    apiRequest<AttendanceRecord[]>(accessToken, `${apiBaseUrl}/attendance`),
-    apiRequest<HomeworkRecord[]>(accessToken, `${apiBaseUrl}/homework`),
-    apiRequest<HomeworkMaterialRecord[]>(accessToken, `${apiBaseUrl}/homework/materials`),
-    apiRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/teacher-notes`),
-    apiRequest<SupportTicketRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/support-tickets`),
-    apiRequest<ReportSnapshotRecord[]>(accessToken, `${apiBaseUrl}/exams/${portalExamId}/reports/snapshots`),
-    apiRequest<CampusRecord[]>(accessToken, `${apiBaseUrl}/campuses`),
-    apiRequest<ClassRecord[]>(accessToken, `${apiBaseUrl}/classes`),
-    apiRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`),
-    apiRequest<GradeLevelRecord[]>(accessToken, `${apiBaseUrl}/grade-levels`),
-    apiRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`),
+    readOnlyRequest<TeacherRecord>(accessToken, `${apiBaseUrl}/me/teacher`, rolePreviewToken),
+    readOnlyRequest<AnnouncementRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/announcements`, rolePreviewToken),
+    readOnlyRequest<ScheduleLessonRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/schedule`, rolePreviewToken),
+    readOnlyRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/students`, rolePreviewToken),
+    readOnlyRequest<AttendanceRecord[]>(accessToken, `${apiBaseUrl}/attendance`, rolePreviewToken),
+    readOnlyRequest<HomeworkRecord[]>(accessToken, `${apiBaseUrl}/homework`, rolePreviewToken),
+    readOnlyRequest<HomeworkMaterialRecord[]>(accessToken, `${apiBaseUrl}/homework/materials`, rolePreviewToken),
+    readOnlyRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/teacher-notes`, rolePreviewToken),
+    readOnlyRequest<SupportTicketRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/support-tickets`, rolePreviewToken),
+    readOnlyRequest<ReportSnapshotRecord[]>(accessToken, `${apiBaseUrl}/exams/${portalExamId}/reports/snapshots`, rolePreviewToken),
+    readOnlyRequest<CampusRecord[]>(accessToken, `${apiBaseUrl}/campuses`, rolePreviewToken),
+    readOnlyRequest<ClassRecord[]>(accessToken, `${apiBaseUrl}/classes`, rolePreviewToken),
+    readOnlyRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`, rolePreviewToken),
+    readOnlyRequest<GradeLevelRecord[]>(accessToken, `${apiBaseUrl}/grade-levels`, rolePreviewToken),
+    readOnlyRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`, rolePreviewToken),
   ]);
   const materialAssignments = (
     await Promise.all(
       materials.map((material) =>
-        apiRequest<HomeworkMaterialAssignmentRecord[]>(
+        readOnlyRequest<HomeworkMaterialAssignmentRecord[]>(
           accessToken,
           `${apiBaseUrl}/homework/materials/${encodeURIComponent(material.id)}/assignments`,
+          rolePreviewToken,
         ),
       ),
     )
@@ -769,10 +801,11 @@ async function createPortalSupportTicket(accessToken: string, path: string, inpu
   });
 }
 
-async function loadTeacherStudentReport(accessToken: string, studentId: string): Promise<TeacherStudentReportData> {
-  const snapshots = await apiRequest<ReportSnapshotRecord[]>(
+async function loadTeacherStudentReport(accessToken: string, studentId: string, rolePreviewToken = ""): Promise<TeacherStudentReportData> {
+  const snapshots = await readOnlyRequest<ReportSnapshotRecord[]>(
     accessToken,
     `${apiBaseUrl}/exams/${portalExamId}/reports/snapshots`,
+    rolePreviewToken,
   );
   const snapshot = selectLatestReadySnapshot(snapshots);
   if (!snapshot) {
@@ -783,14 +816,17 @@ async function loadTeacherStudentReport(accessToken: string, studentId: string):
     apiRequestOrNull<ReportStudentSnapshot>(
       accessToken,
       `${apiBaseUrl}/exams/${portalExamId}/reports/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}`,
+      rolePreviewToken,
     ),
     apiRequestOrNull<ReportErrorBooklet>(
       accessToken,
       `${apiBaseUrl}/exams/${portalExamId}/reports/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}/error-booklet`,
+      rolePreviewToken,
     ),
     apiRequestOrNull<ReportStudentProgress>(
       accessToken,
       `${apiBaseUrl}/exams/${portalExamId}/reports/students/${encodeURIComponent(studentId)}/progress`,
+      rolePreviewToken,
     ),
   ]);
 
@@ -805,12 +841,34 @@ async function loadTeacherStudentReport(accessToken: string, studentId: string):
   };
 }
 
-async function loadTeacherStudentHistory(accessToken: string, studentId: string): Promise<TeacherStudentHistoryData> {
+async function loadTeacherStudentHistory(accessToken: string, studentId: string, rolePreviewToken = ""): Promise<TeacherStudentHistoryData> {
   const [classHistory, enrollments] = await Promise.all([
-    apiRequest<StudentClassHistoryRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(studentId)}/class-history`),
-    apiRequest<StudentEnrollmentRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(studentId)}/enrollments`),
+    readOnlyRequest<StudentClassHistoryRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(studentId)}/class-history`, rolePreviewToken),
+    readOnlyRequest<StudentEnrollmentRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(studentId)}/enrollments`, rolePreviewToken),
   ]);
   return { classHistory, enrollments };
+}
+
+function readOnlyRequest<T>(accessToken: string, input: RequestInfo | URL, rolePreviewToken = ""): Promise<T> {
+  return apiRequest<T>(accessToken, input, withRolePreview({}, rolePreviewToken));
+}
+
+function withRolePreview(init: RequestInit, rolePreviewToken: string): RequestInit {
+  if (!rolePreviewToken) return init;
+  return {
+    ...init,
+    headers: {
+      ...toHeaderRecord(init.headers),
+      "x-role-preview-token": rolePreviewToken,
+    },
+  };
+}
+
+function toHeaderRecord(headers: HeadersInit | undefined): Record<string, string> {
+  if (!headers) return {};
+  if (headers instanceof Headers) return Object.fromEntries(headers.entries());
+  if (Array.isArray(headers)) return Object.fromEntries(headers);
+  return headers;
 }
 
 function selectTeacherClassReports(

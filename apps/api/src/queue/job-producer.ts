@@ -1,4 +1,10 @@
-export type TenantQueueName = "announcement-delivery" | "exam-evaluation" | "excel-import" | "report-generation" | "sms-batch";
+export type TenantQueueName =
+  | "announcement-delivery"
+  | "backup-restore"
+  | "exam-evaluation"
+  | "excel-import"
+  | "report-generation"
+  | "sms-batch";
 
 interface BaseTenantQueueJobInput {
   queueName: TenantQueueName;
@@ -42,12 +48,22 @@ export interface AnnouncementDeliveryQueueJobInput extends BaseTenantQueueJobInp
   providerErrorCode?: string;
 }
 
+export interface BackupRestoreQueueJobInput extends BaseTenantQueueJobInput {
+  queueName: "backup-restore";
+  operationType: "BACKUP" | "RESTORE_DRILL";
+  targetReference: string;
+  reason?: string;
+}
+
 export type TenantQueueJobInput =
   | AnnouncementDeliveryQueueJobInput
+  | BackupRestoreQueueJobInput
   | ExamEvaluationQueueJobInput
   | ReportGenerationQueueJobInput
   | SmsBatchQueueJobInput
-  | (BaseTenantQueueJobInput & { queueName: Exclude<TenantQueueName, "announcement-delivery" | "exam-evaluation" | "report-generation" | "sms-batch"> });
+  | (BaseTenantQueueJobInput & {
+      queueName: Exclude<TenantQueueName, "announcement-delivery" | "backup-restore" | "exam-evaluation" | "report-generation" | "sms-batch">;
+    });
 
 export interface ProducedJob<TInput extends TenantQueueJobInput = TenantQueueJobInput> {
   queueName: TInput["queueName"];
@@ -86,6 +102,9 @@ export function createTenantQueueJob(input: TenantQueueJobInput): ProducedJob {
   if (input.queueName === "announcement-delivery" && !isAnnouncementDeliveryInputValid(input)) {
     throw new Error("ANNOUNCEMENT_DELIVERY_JOB_PAYLOAD_INVALID");
   }
+  if (input.queueName === "backup-restore" && !isBackupRestoreInputValid(input)) {
+    throw new Error("BACKUP_RESTORE_JOB_PAYLOAD_INVALID");
+  }
 
   return {
     queueName: input.queueName,
@@ -109,6 +128,11 @@ function isAnnouncementDeliveryInputValid(input: AnnouncementDeliveryQueueJobInp
   const counts = [input.recipientCount, input.deliveredCount, input.failedCount];
   if (counts.some((value) => !Number.isInteger(value) || value < 0)) return false;
   return input.deliveredCount + input.failedCount <= input.recipientCount;
+}
+
+function isBackupRestoreInputValid(input: BackupRestoreQueueJobInput): boolean {
+  if (input.operationType !== "BACKUP" && input.operationType !== "RESTORE_DRILL") return false;
+  return Boolean(input.targetReference.trim());
 }
 
 function createPayload<TInput extends TenantQueueJobInput>(input: TInput): Omit<TInput, "queueName"> {

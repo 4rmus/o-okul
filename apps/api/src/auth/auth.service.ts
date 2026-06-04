@@ -197,7 +197,7 @@ export class AuthService {
   }
 }
 
-function createResetToken(): string {
+export function createResetToken(): string {
   return randomBytes(32).toString("base64url");
 }
 

@@ -3,7 +3,7 @@
 import { type FormEvent, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AcademicTermRecord, AcademicYearRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -256,6 +256,14 @@ export function AcademicCalendarPage() {
         aria-label="Akademik yıl yönetimi"
         columns={yearColumns}
         description="Kurumun eğitim yıllarını tarih aralıklarıyla yönet."
+        emptyState={
+          <EmptyState
+            title="Akademik yıl yok"
+            description="Yeni dönemi planlamak için ilk akademik yılı oluştur."
+            hint="Akademik yıl, dönem ve ders programı kayıtlarının temelidir."
+            primaryAction={{ label: "Akademik yıl ekle", onClick: openYearCreateForm }}
+          />
+        }
         emptyText="Akademik yıl kaydı yok"
         error={error || (yearsQuery.isError ? "Akademik yıllar alınamadı." : undefined)}
         getRowKey={(record) => record.id}
@@ -281,6 +289,14 @@ export function AcademicCalendarPage() {
         aria-label="Akademik dönem yönetimi"
         columns={termColumns}
         description="Akademik yıllara bağlı dönemleri yönet."
+        emptyState={
+          <EmptyState
+            title="Dönem yok"
+            description="Akademik yıl oluşturduktan sonra ilk dönemi ekle."
+            hint="Dönemler ders programı, not ve rapor akışlarını bağlar."
+            primaryAction={{ label: "Dönem ekle", onClick: openTermCreateForm }}
+          />
+        }
         emptyText="Dönem kaydı yok"
         error={termsQuery.isError ? "Akademik dönemler alınamadı." : undefined}
         getRowKey={(record) => record.id}

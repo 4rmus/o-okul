@@ -116,11 +116,49 @@ const demoUsers: AuthUser[] = [
   },
 ];
 
+const inMemoryUsers = demoUsers.map((user) => ({ ...user, roles: [...user.roles] }));
+
+export function upsertInMemoryAuthUser(input: {
+  id: string;
+  email: string;
+  name: string;
+  password?: string;
+  passwordHash?: string;
+  tenantId: string;
+  roles: string[];
+}): AuthUser {
+  const email = input.email.toLowerCase();
+  const existing = inMemoryUsers.find((candidate) => candidate.email.toLowerCase() === email);
+  if (existing) {
+    existing.name = input.name;
+    existing.tenantId = input.tenantId;
+    existing.roles = [...input.roles];
+    existing.membershipVersion += 1;
+    if (input.password !== undefined || input.passwordHash !== undefined) {
+      existing.passwordHash = input.passwordHash ?? hashPassword(input.password ?? "");
+    }
+    return cloneRequiredUser(existing);
+  }
+
+  const user: AuthUser = {
+    id: input.id,
+    email,
+    name: input.name,
+    passwordHash: input.passwordHash ?? (input.password === undefined ? "" : hashPassword(input.password)),
+    tenantId: input.tenantId,
+    roles: [...input.roles],
+    membershipVersion: 1,
+  };
+  inMemoryUsers.push(user);
+  return cloneRequiredUser(user);
+}
+
 export class InMemoryAuthUserStore implements AuthUserStore {
-  private readonly users = demoUsers.map((user) => ({ ...user, roles: [...user.roles] }));
+  private readonly users = inMemoryUsers;
 
   async findByEmail(email: string): Promise<AuthUser | undefined> {
-    return cloneUser(this.users.find((candidate) => candidate.email === email));
+    const normalizedEmail = email.toLowerCase();
+    return cloneUser(this.users.find((candidate) => candidate.email.toLowerCase() === normalizedEmail));
   }
 
   async findById(id: string): Promise<AuthUser | undefined> {
@@ -263,6 +301,10 @@ function toAuthUser(row: AuthUserRow): AuthUser {
   };
 }
 
+function cloneRequiredUser(user: AuthUser): AuthUser {
+  return { ...user, roles: [...user.roles] };
+}
+
 function cloneUser(user: AuthUser | undefined): AuthUser | undefined {
-  return user ? { ...user, roles: [...user.roles] } : undefined;
+  return user ? cloneRequiredUser(user) : undefined;
 }

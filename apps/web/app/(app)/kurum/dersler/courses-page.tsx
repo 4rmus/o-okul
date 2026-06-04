@@ -1,9 +1,10 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CourseRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -22,6 +23,7 @@ const emptyForm: CourseFormState = {
 
 export function CoursesPage() {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
   const queryKey = ["next-courses", auth?.session.tenantId ?? "anonymous", listQuery];
@@ -37,6 +39,10 @@ export function CoursesPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
   const rows = coursesQuery.data?.data ?? [];
+
+  useEffect(() => {
+    if (searchParams.get("new") === "1") openCreateForm();
+  }, [searchParams]);
 
   const columns: Array<DataTableColumn<CourseRecord>> = [
     {
@@ -141,6 +147,14 @@ export function CoursesPage() {
         aria-label="Ders yönetimi"
         columns={columns}
         description="Kurum derslerini aynı CRUD kalıbıyla yönet."
+        emptyState={
+          <EmptyState
+            title="Henüz ders yok"
+            description="Ders ekleyerek öğretmen, program ve sınav akışlarını hazırlamaya başla."
+            primaryAction={{ label: "Ders ekle", onClick: openCreateForm }}
+            secondaryAction={{ label: "Kuruluma dön", href: "/kurum/kurulum" }}
+          />
+        }
         emptyText="Ders kaydı yok"
         error={error || (coursesQuery.isError ? "Dersler alınamadı." : undefined)}
         getRowKey={(record) => record.id}

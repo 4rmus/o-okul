@@ -8,6 +8,14 @@ import {
   type AnnouncementDeliveryJobResult,
 } from "../jobs/announcement-delivery-job.js";
 import {
+  type BackupRestoreJobPayload,
+  type BackupRestoreJobResult,
+} from "../jobs/backup-restore-job.js";
+import {
+  createBackupRestoreProcessor,
+  type BackupRestoreProcessor,
+} from "../jobs/backup-restore-processor.js";
+import {
   createExamEvaluationProcessor,
   type ExamEvaluationProcessor,
 } from "../jobs/exam-evaluation-processor.js";
@@ -43,6 +51,7 @@ const excelImportQueueName = "excel-import";
 const reportGenerationQueueName = "report-generation";
 const smsBatchQueueName = "sms-batch";
 const announcementDeliveryQueueName = "announcement-delivery";
+const backupRestoreQueueName = "backup-restore";
 
 export interface BullExamEvaluationJob {
   id?: string | number;
@@ -72,6 +81,12 @@ export interface BullAnnouncementDeliveryJob {
   id?: string | number;
   name: string;
   data: AnnouncementDeliveryJobPayload;
+}
+
+export interface BullBackupRestoreJob {
+  id?: string | number;
+  name: string;
+  data: BackupRestoreJobPayload;
 }
 
 export interface BullWorkerInstance {
@@ -120,6 +135,13 @@ export interface AnnouncementDeliveryBullWorkerOptions {
   processor?: AnnouncementDeliveryProcessor;
   workerOptions?: Omit<WorkerOptions, "connection">;
   createWorker?: BullWorkerFactory<BullAnnouncementDeliveryJob, AnnouncementDeliveryJobResult>;
+}
+
+export interface BackupRestoreBullWorkerOptions {
+  connection: ConnectionOptions;
+  processor?: BackupRestoreProcessor;
+  workerOptions?: Omit<WorkerOptions, "connection">;
+  createWorker?: BullWorkerFactory<BullBackupRestoreJob, BackupRestoreJobResult>;
 }
 
 export function createExamEvaluationBullWorker(
@@ -195,6 +217,22 @@ export function createAnnouncementDeliveryBullWorker(
   return createWorker(
     announcementDeliveryQueueName,
     async (job) => processor(toAnnouncementDeliveryQueueJob(job)),
+    {
+      ...options.workerOptions,
+      connection: options.connection,
+    },
+  );
+}
+
+export function createBackupRestoreBullWorker(
+  options: BackupRestoreBullWorkerOptions,
+): BullWorkerInstance {
+  const processor = options.processor ?? createBackupRestoreProcessor();
+  const createWorker = options.createWorker ?? createDefaultBackupRestoreWorker;
+
+  return createWorker(
+    backupRestoreQueueName,
+    async (job) => processor(toBackupRestoreQueueJob(job)),
     {
       ...options.workerOptions,
       connection: options.connection,
@@ -306,6 +344,23 @@ function toAnnouncementDeliveryQueueJob(
   };
 }
 
+function toBackupRestoreQueueJob(
+  job: BullBackupRestoreJob,
+): QueueJob<BackupRestoreJobPayload> {
+  if (job.id === undefined || job.id === null || job.id === "") {
+    throw new Error("BULLMQ_JOB_ID_MISSING");
+  }
+  if (job.name !== backupRestoreQueueName) {
+    throw new Error("BULLMQ_BACKUP_RESTORE_JOB_NAME_INVALID");
+  }
+
+  return {
+    id: String(job.id),
+    name: backupRestoreQueueName,
+    payload: job.data,
+  };
+}
+
 function parseRedisDb(pathname: string): number | undefined {
   if (!pathname || pathname === "/") {
     return undefined;
@@ -372,6 +427,18 @@ function createDefaultAnnouncementDeliveryWorker(
   options: WorkerOptions,
 ): BullWorkerInstance {
   return new Worker<AnnouncementDeliveryJobPayload, AnnouncementDeliveryJobResult>(
+    name,
+    processor,
+    options,
+  );
+}
+
+function createDefaultBackupRestoreWorker(
+  name: string,
+  processor: (job: BullBackupRestoreJob) => Promise<BackupRestoreJobResult>,
+  options: WorkerOptions,
+): BullWorkerInstance {
+  return new Worker<BackupRestoreJobPayload, BackupRestoreJobResult>(
     name,
     processor,
     options,

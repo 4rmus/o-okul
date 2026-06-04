@@ -3,7 +3,7 @@
 import { type FormEvent, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, StudySessionRecord, TeacherRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -180,6 +180,14 @@ export function StudySessionsPage() {
         aria-label="Etüt yönetimi"
         columns={columns}
         description="Kurum etütlerini sınıf, öğretmen, ders ve öğrenci bağlantısıyla yönet."
+        emptyState={
+          <EmptyState
+            title="Etüt planı boş"
+            description="Öğrenciler için ilk etüt oturumunu oluşturarak başla."
+            hint="Etüt oluşturmak için sınıf, öğretmen, ders ve öğrenci kayıtları gerekir."
+            primaryAction={{ label: "Etüt ekle", onClick: openCreateForm }}
+          />
+        }
         emptyText="Etüt kaydı yok"
         error={error || (sessionsQuery.isError ? "Etütler alınamadı." : referenceQuery.isError ? "Seçim listeleri alınamadı." : undefined)}
         getRowKey={(record) => record.id}

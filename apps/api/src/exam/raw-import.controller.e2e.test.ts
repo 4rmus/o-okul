@@ -153,6 +153,18 @@ describe("RawImportController", () => {
     ]);
   });
 
+  it("TENANT_ADMIN açık karantina özetini görür", async () => {
+    const issued = await login("admin-a@example.test");
+
+    const response = await request(server)
+      .get("/import-quarantines/summary")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200);
+
+    expect(quarantineStore.counts).toEqual(["tenant-a"]);
+    expect(response.body).toEqual({ openCount: 1 });
+  });
+
   it("TENANT_ADMIN karantina satırını öğrenciye bağlayıp çözer", async () => {
     const issued = await login("admin-a@example.test");
 
@@ -298,6 +310,7 @@ class FakeProducer implements RawImportQueueProducer {
 
 class FakeQuarantineStore implements RawImportQuarantineStore {
   records: ImportQuarantineRecord[] = [];
+  counts: string[] = [];
   lists: Array<{ tenantId: string; examId: string; rawImportId: string }> = [];
   resolves: Array<{
     tenantId: string;
@@ -309,8 +322,14 @@ class FakeQuarantineStore implements RawImportQuarantineStore {
 
   reset(): void {
     this.records = [createQuarantine()];
+    this.counts = [];
     this.lists = [];
     this.resolves = [];
+  }
+
+  async countOpenByTenant(tenantId: string): Promise<number> {
+    this.counts.push(tenantId);
+    return this.records.filter((record) => record.tenantId === tenantId && record.status === "OPEN").length;
   }
 
   async listByRawImport(tenantId: string, examId: string, rawImportId: string): Promise<ImportQuarantineRecord[]> {

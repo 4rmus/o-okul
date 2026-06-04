@@ -34,6 +34,7 @@ import { AnswerKeyExcelImportService } from "./exam/answer-key-excel-import.serv
 import { AnswerKeyService, answerKeyRepositoryToken } from "./exam/answer-key.service.js";
 import { ExamController } from "./exam/exam.controller.js";
 import { ExamService, examParticipantRepositoryToken, examRepositoryToken } from "./exam/exam.service.js";
+import { ImportQuarantineController } from "./exam/import-quarantine.controller.js";
 import { PostgresAnswerKeyRepository } from "./exam/postgres-answer-key-repository.js";
 import { PostgresExamParticipantRepository } from "./exam/postgres-exam-participant-repository.js";
 import { PostgresExamRepository } from "./exam/postgres-exam-repository.js";
@@ -79,6 +80,15 @@ import {
   notificationDeviceTokenStoreToken,
 } from "./notification-device/notification-device-store.js";
 import { NotificationDeviceService } from "./notification-device/notification-device.service.js";
+import { BackupRestoreController } from "./operations/backup-restore.controller.js";
+import {
+  backupRestoreJobStoreToken,
+  createBackupRestoreJobStore,
+} from "./operations/backup-restore-store.js";
+import {
+  BackupRestoreService,
+  backupRestoreQueueProducerToken,
+} from "./operations/backup-restore.service.js";
 import { PaymentController } from "./payment/payment.controller.js";
 import { createPaymentPlanStore, paymentPlanStoreToken } from "./payment/payment-store.js";
 import { PaymentService } from "./payment/payment.service.js";
@@ -100,6 +110,8 @@ import {
   reportPdfRendererToken,
 } from "./report/report-generation.service.js";
 import { createReportSnapshotStore, reportSnapshotStoreToken } from "./report/report-snapshot-store.js";
+import { RolePreviewController } from "./role-preview/role-preview.controller.js";
+import { RolePreviewService } from "./role-preview/role-preview.service.js";
 import { AcademicCalendarController } from "./school/academic-calendar.controller.js";
 import { academicCalendarStoreToken, createAcademicCalendarStore } from "./school/academic-calendar-store.js";
 import { campusStoreToken, createCampusStore } from "./school/campus-store.js";
@@ -113,6 +125,8 @@ import { createGuardianStore, guardianStoreToken } from "./school/guardian-store
 import { GuardiansController } from "./school/guardians.controller.js";
 import { gradeLevelStoreToken, createGradeLevelStore } from "./school/grade-level-store.js";
 import { GradeLevelsController } from "./school/grade-levels.controller.js";
+import { createLearningOutcomeStore, learningOutcomeStoreToken } from "./school/learning-outcome-store.js";
+import { LearningOutcomesController } from "./school/learning-outcomes.controller.js";
 import { SchoolService } from "./school/school.service.js";
 import { createTeacherAssignmentStore, teacherAssignmentStoreToken } from "./school/teacher-assignment-store.js";
 import { createTeacherStore, teacherStoreToken } from "./school/teacher-store.js";
@@ -155,6 +169,7 @@ import { UserManagementService } from "./user-management/user-management.service
     AnswerKeyController,
     AttendanceController,
     AuthController,
+    BackupRestoreController,
     CampusesController,
     ClassesController,
     CoursesController,
@@ -164,6 +179,8 @@ import { UserManagementService } from "./user-management/user-management.service
     HealthController,
     HomeworkController,
     IdentityInvitationController,
+    ImportQuarantineController,
+    LearningOutcomesController,
     MeController,
     MessageTemplateController,
     MetricsController,
@@ -173,6 +190,7 @@ import { UserManagementService } from "./user-management/user-management.service
     PrivacyController,
     RawImportController,
     ReportGenerationController,
+    RolePreviewController,
     ScheduleController,
     SmsBatchController,
     StudySessionController,
@@ -216,6 +234,7 @@ import { UserManagementService } from "./user-management/user-management.service
       useFactory: () => createNotificationAdapterFromEnv(process.env),
     },
     AuthService,
+    BackupRestoreService,
     DevelopmentService,
     {
       provide: authUserStoreToken,
@@ -224,6 +243,14 @@ import { UserManagementService } from "./user-management/user-management.service
     {
       provide: authSessionStoreToken,
       useFactory: createSessionStore,
+    },
+    {
+      provide: backupRestoreJobStoreToken,
+      useFactory: createBackupRestoreJobStore,
+    },
+    {
+      provide: backupRestoreQueueProducerToken,
+      useFactory: createBullTenantQueueProducer,
     },
     {
       provide: passwordResetStoreToken,
@@ -267,6 +294,10 @@ import { UserManagementService } from "./user-management/user-management.service
     {
       provide: gradeLevelStoreToken,
       useFactory: createGradeLevelStore,
+    },
+    {
+      provide: learningOutcomeStoreToken,
+      useFactory: createLearningOutcomeStore,
     },
     {
       provide: teacherStoreToken,
@@ -354,6 +385,7 @@ import { UserManagementService } from "./user-management/user-management.service
       provide: reportPdfRendererToken,
       useFactory: createReportPdfRenderer,
     },
+    RolePreviewService,
     {
       provide: scheduleStoreToken,
       useFactory: createScheduleStore,

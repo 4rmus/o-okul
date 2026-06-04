@@ -47,9 +47,11 @@ export function HomeworkAssignmentsPanel({
 export function TeacherHomeworkPanel({
   homework,
   onToggle,
+  readOnly = false,
 }: {
   homework: HomeworkRecord[];
   onToggle(homework: HomeworkRecord): void;
+  readOnly?: boolean;
 }) {
   return (
     <section className="next-list-panel" aria-label="Öğretmen ödev kontrolü">
@@ -72,9 +74,13 @@ export function TeacherHomeworkPanel({
               <td>{record.dueAt ? formatDateTime(record.dueAt) : "-"}</td>
               <td>{record.checkedAt ? "Kontrol edildi" : "Bekliyor"}</td>
               <td>
-                <Button onClick={() => onToggle(record)} variant="secondary">
-                  {record.checkedAt ? "Bekliyor yap" : "Kontrol et"}
-                </Button>
+                {readOnly ? (
+                  "Salt-okuma"
+                ) : (
+                  <Button onClick={() => onToggle(record)} variant="secondary">
+                    {record.checkedAt ? "Bekliyor yap" : "Kontrol et"}
+                  </Button>
+                )}
               </td>
             </tr>
           ))}

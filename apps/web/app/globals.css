@@ -227,6 +227,15 @@ a {
   gap: 16px;
 }
 
+.next-command-open {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+  padding: 9px 12px;
+  text-align: left;
+}
+
 .next-sidebar-nav {
   display: grid;
   gap: 14px;
@@ -306,6 +315,11 @@ a {
   gap: 4px;
 }
 
+.next-sidebar-recent {
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 12px;
+}
+
 .next-sidebar-group-title {
   margin: 0;
   padding: 0 12px;
@@ -366,7 +380,101 @@ a {
   width: min(100%, var(--workspace-max-width));
   margin: 0 auto;
   display: grid;
+  align-content: start;
   gap: 16px;
+}
+
+.next-command-palette {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: start center;
+  background: rgba(15, 23, 42, 0.42);
+  padding: 72px 18px 18px;
+}
+
+.next-command-panel {
+  display: grid;
+  width: min(640px, 100%);
+  gap: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-modal);
+  padding: 16px;
+}
+
+.next-command-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.next-command-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.next-command-header button {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-weight: 800;
+}
+
+.next-command-panel label {
+  display: grid;
+  gap: 6px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.next-command-panel input {
+  border: 1px solid var(--color-border-input);
+  border-radius: var(--radius);
+  padding: 11px 12px;
+  color: var(--color-text);
+  font: inherit;
+}
+
+.next-command-results {
+  display: grid;
+  gap: 6px;
+}
+
+.next-command-results h3 {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.next-command-results button,
+.next-command-results p {
+  border-radius: var(--radius);
+  padding: 10px;
+}
+
+.next-command-results button {
+  display: grid;
+  gap: 3px;
+  border: 1px solid transparent;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  text-align: left;
+}
+
+.next-command-results button:hover,
+.next-command-results button:focus-visible {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.next-command-results small,
+.next-command-results p {
+  color: var(--color-text-muted);
 }
 
 .next-breadcrumb {
@@ -832,6 +940,37 @@ a {
   gap: 8px;
 }
 
+.next-reference-badge {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-muted);
+  padding: 0 10px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.next-operation-decision {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-muted);
+  padding: 14px 16px;
+}
+
+.next-operation-decision strong,
+.next-operation-decision p {
+  margin: 0;
+}
+
+.next-operation-decision p {
+  color: var(--color-text-secondary);
+}
+
 .next-page-frame__body {
   display: grid;
   gap: 16px;
@@ -902,6 +1041,127 @@ a {
   color: #067647;
   font-size: 14px;
   font-weight: 700;
+}
+
+.uh-empty-state {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-muted);
+  padding: 18px;
+}
+
+.uh-empty-state__content {
+  display: grid;
+  gap: 6px;
+}
+
+.uh-empty-state h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.uh-empty-state p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.uh-empty-state__hint {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.uh-empty-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.next-dashboard-onboarding {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-muted);
+  padding: 16px;
+}
+
+.next-dashboard-onboarding h2,
+.next-dashboard-onboarding p {
+  margin: 0;
+}
+
+.next-dashboard-onboarding div {
+  display: grid;
+  gap: 4px;
+}
+
+.next-dashboard-onboarding .next-dashboard-onboarding__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.next-dashboard-onboarding p {
+  color: var(--color-text-muted);
+}
+
+.next-decision-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.next-decision-card {
+  display: grid;
+  gap: 5px;
+  min-height: 104px;
+  align-content: start;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: inherit;
+  padding: 14px;
+  text-decoration: none;
+}
+
+.next-decision-card:hover {
+  border-color: var(--color-primary);
+}
+
+.next-decision-card span,
+.next-decision-card small {
+  color: var(--color-text-muted);
+}
+
+.next-decision-card span {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.next-decision-card strong {
+  font-size: 26px;
+}
+
+.next-decision-card small {
+  line-height: 1.35;
+}
+
+@media (max-width: 900px) {
+  .next-decision-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .next-decision-strip {
+    grid-template-columns: 1fr;
+  }
 }
 
 .next-onboarding-hero {
@@ -2605,7 +2865,21 @@ a {
     border-right: 0;
     border-bottom: 1px solid var(--color-border);
     min-height: auto;
+    max-height: 48vh;
     box-shadow: none;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 16px;
+  }
+
+  .next-sidebar-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: -16px -16px 0;
+    padding: 16px;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border-faint);
   }
 
   .next-dashboard-grid {
@@ -2680,6 +2954,11 @@ a {
   .next-list-controls {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .uh-data-table {
+    display: block;
+    overflow-x: auto;
   }
 
   .next-detail-header,

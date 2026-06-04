@@ -1,5 +1,6 @@
 export const queueNames = [
   "announcement-delivery",
+  "backup-restore",
   "exam-evaluation",
   "excel-import",
   "report-generation",

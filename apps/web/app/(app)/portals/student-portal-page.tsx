@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 import type {
   AcademicTermRecord,
   AnnouncementRecord,
@@ -35,15 +36,19 @@ const portalExamId = "exam-demo-isem-lgs-1";
 
 export function StudentPortalPage() {
   const { auth } = useAuth();
-  const queryKey = ["next-student-portal", auth?.session.userId ?? "anonymous"];
+  const searchParams = useSearchParams();
+  const rolePreviewToken = searchParams.get("rolePreviewToken")?.trim() ?? "";
+  const isRolePreview = Boolean(rolePreviewToken);
+  const canReadPortal = Boolean(auth && (auth.session.subjectType === "STUDENT" || isRolePreview));
+  const queryKey = ["next-student-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session"];
   const query = useQuery({
     queryKey,
-    queryFn: () => loadStudentPortal(auth?.accessToken ?? ""),
-    enabled: Boolean(auth && auth.session.subjectType === "STUDENT"),
+    queryFn: () => loadStudentPortal(auth?.accessToken ?? "", rolePreviewToken),
+    enabled: canReadPortal,
     refetchOnWindowFocus: false,
   });
 
-  if (auth?.session.subjectType !== "STUDENT") {
+  if (!canReadPortal) {
     return <AccessPanel title="Öğrenci Portalı" demoEmail="student-a@example.test" demoLabel="Demo öğrenci" />;
   }
 
@@ -62,6 +67,12 @@ export function StudentPortalPage() {
           { label: "Net", value: formatNumber(data?.report?.total.net) },
         ]}
       />
+      {isRolePreview ? (
+        <section className="next-list-panel" aria-label="Rol önizleme modu">
+          <h2>Salt-okuma Önizleme</h2>
+          <p>Bu ekran kurum yöneticisi için geçici rol önizleme modunda açıldı.</p>
+        </section>
+      ) : null}
       <ProfilePanel profile={data?.profile} />
       <GuardianRelationsPanel guardians={data?.guardians ?? []} links={data?.guardianLinks ?? []} />
       <StudentHistoryPanel
@@ -71,8 +82,9 @@ export function StudentPortalPage() {
       />
       <AnnouncementsPanel
         announcements={data?.announcements ?? []}
+        readOnly={isRolePreview}
         onMarkRead={(announcement) =>
-          auth ? markAnnouncementRead(auth.accessToken, `me/student/announcements/${encodeURIComponent(announcement.id)}/read`).then(() => query.refetch()) : undefined
+          auth && !isRolePreview ? markAnnouncementRead(auth.accessToken, `me/student/announcements/${encodeURIComponent(announcement.id)}/read`).then(() => query.refetch()) : undefined
         }
       />
       <HomeworkAssignmentsPanel
@@ -81,9 +93,10 @@ export function StudentPortalPage() {
         termNames={termNameById}
       />
       <SupportTicketsPanel
+        readOnly={isRolePreview}
         tickets={data?.supportTickets ?? []}
         onCreate={(input) =>
-          auth ? createPortalSupportTicket(auth.accessToken, "me/student/support-tickets", input).then(() => query.refetch()) : undefined
+          auth && !isRolePreview ? createPortalSupportTicket(auth.accessToken, "me/student/support-tickets", input).then(() => query.refetch()) : undefined
         }
       />
       <ReportPanel
@@ -102,31 +115,33 @@ export function StudentPortalPage() {
   );
 }
 
-async function loadStudentPortal(accessToken: string) {
+async function loadStudentPortal(accessToken: string, rolePreviewToken = "") {
   const [profile, guardians, guardianLinks, classHistory, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, report, errorBooklet, progress, courses, terms] = await Promise.all([
-    apiRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/student/profile`),
-    apiRequest<GuardianRecord[]>(accessToken, `${apiBaseUrl}/me/student/guardians`),
-    apiRequest<GuardianStudentRecord[]>(accessToken, `${apiBaseUrl}/me/student/guardian-links`),
-    apiRequest<StudentClassHistoryRecord[]>(accessToken, `${apiBaseUrl}/me/student/class-history`),
-    apiRequest<StudentEnrollmentRecord[]>(accessToken, `${apiBaseUrl}/me/student/enrollments`),
-    apiRequest<AnnouncementRecord[]>(accessToken, `${apiBaseUrl}/me/student/announcements`),
-    apiRequest<HomeworkMaterialAssignmentRecord[]>(
+    readOnlyRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/student/profile`, rolePreviewToken),
+    readOnlyRequest<GuardianRecord[]>(accessToken, `${apiBaseUrl}/me/student/guardians`, rolePreviewToken),
+    readOnlyRequest<GuardianStudentRecord[]>(accessToken, `${apiBaseUrl}/me/student/guardian-links`, rolePreviewToken),
+    readOnlyRequest<StudentClassHistoryRecord[]>(accessToken, `${apiBaseUrl}/me/student/class-history`, rolePreviewToken),
+    readOnlyRequest<StudentEnrollmentRecord[]>(accessToken, `${apiBaseUrl}/me/student/enrollments`, rolePreviewToken),
+    readOnlyRequest<AnnouncementRecord[]>(accessToken, `${apiBaseUrl}/me/student/announcements`, rolePreviewToken),
+    readOnlyRequest<HomeworkMaterialAssignmentRecord[]>(
       accessToken,
       `${apiBaseUrl}/me/student/homework/material-assignments`,
+      rolePreviewToken,
     ),
-    apiRequest<SupportTicketRecord[]>(accessToken, `${apiBaseUrl}/me/student/support-tickets`),
-    apiRequest<AttendanceRecord[]>(accessToken, `${apiBaseUrl}/me/student/attendance`),
-    apiRequest<AttendanceSummaryRecord>(accessToken, `${apiBaseUrl}/me/student/attendance/summary`),
-    apiRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/me/student/teacher-notes`),
-    apiRequest<DevelopmentTrendItem[]>(accessToken, `${apiBaseUrl}/me/student/development-assessments`),
-    apiRequestOrNull<ReportStudentSnapshot>(accessToken, `${apiBaseUrl}/me/student/reports/${portalExamId}/latest`),
+    readOnlyRequest<SupportTicketRecord[]>(accessToken, `${apiBaseUrl}/me/student/support-tickets`, rolePreviewToken),
+    readOnlyRequest<AttendanceRecord[]>(accessToken, `${apiBaseUrl}/me/student/attendance`, rolePreviewToken),
+    readOnlyRequest<AttendanceSummaryRecord>(accessToken, `${apiBaseUrl}/me/student/attendance/summary`, rolePreviewToken),
+    readOnlyRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/me/student/teacher-notes`, rolePreviewToken),
+    readOnlyRequest<DevelopmentTrendItem[]>(accessToken, `${apiBaseUrl}/me/student/development-assessments`, rolePreviewToken),
+    apiRequestOrNull<ReportStudentSnapshot>(accessToken, `${apiBaseUrl}/me/student/reports/${portalExamId}/latest`, rolePreviewToken),
     apiRequestOrNull<ReportErrorBooklet>(
       accessToken,
       `${apiBaseUrl}/me/student/reports/${portalExamId}/latest/error-booklet`,
+      rolePreviewToken,
     ),
-    apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/me/student/reports/${portalExamId}/progress`),
-    apiRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`),
-    apiRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`),
+    apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/me/student/reports/${portalExamId}/progress`, rolePreviewToken),
+    readOnlyRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`, rolePreviewToken),
+    readOnlyRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`, rolePreviewToken),
   ]);
 
   return { profile, guardians, guardianLinks, classHistory, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, report, errorBooklet, progress, courses, terms };
@@ -147,11 +162,33 @@ async function createPortalSupportTicket(accessToken: string, path: string, inpu
   });
 }
 
-async function apiRequestOrNull<T>(accessToken: string, input: RequestInfo | URL): Promise<T | null> {
-  const response = await authenticatedFetch(accessToken, input);
+async function apiRequestOrNull<T>(accessToken: string, input: RequestInfo | URL, rolePreviewToken = ""): Promise<T | null> {
+  const response = await authenticatedFetch(accessToken, input, withRolePreview({}, rolePreviewToken));
   if (response.status === 404) return null;
   if (!response.ok) throw new Error("API_REQUEST_FAILED");
   return readData<T>(response);
+}
+
+function readOnlyRequest<T>(accessToken: string, input: RequestInfo | URL, rolePreviewToken = ""): Promise<T> {
+  return apiRequest<T>(accessToken, input, withRolePreview({}, rolePreviewToken));
+}
+
+function withRolePreview(init: RequestInit, rolePreviewToken: string): RequestInit {
+  if (!rolePreviewToken) return init;
+  return {
+    ...init,
+    headers: {
+      ...toHeaderRecord(init.headers),
+      "x-role-preview-token": rolePreviewToken,
+    },
+  };
+}
+
+function toHeaderRecord(headers: HeadersInit | undefined): Record<string, string> {
+  if (!headers) return {};
+  if (headers instanceof Headers) return Object.fromEntries(headers.entries());
+  if (Array.isArray(headers)) return Object.fromEntries(headers);
+  return headers;
 }
 
 function formatNumber(value: number | undefined) {

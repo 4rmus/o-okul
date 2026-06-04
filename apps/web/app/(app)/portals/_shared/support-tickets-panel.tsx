@@ -25,9 +25,11 @@ const emptySupportTicketForm: SupportTicketFormState = {
 export function SupportTicketsPanel({
   tickets,
   onCreate,
+  readOnly = false,
 }: {
   tickets: SupportTicketRecord[];
   onCreate?: (input: SupportTicketFormPayload) => void | Promise<unknown>;
+  readOnly?: boolean;
 }) {
   const [form, setForm] = useState<SupportTicketFormState>(emptySupportTicketForm);
   const [error, setError] = useState("");
@@ -54,28 +56,32 @@ export function SupportTicketsPanel({
   return (
     <section className="next-list-panel" aria-label="Destek talepleri">
       <h2>Destek Talepleri</h2>
-      <form className="next-support-tool" onSubmit={(event) => void submit(event)}>
-        <label>
-          Konu
-          <Input value={form.subject} onChange={(event) => setForm((current) => ({ ...current, subject: event.target.value }))} />
-        </label>
-        <label>
-          Mesaj
-          <Input value={form.message} onChange={(event) => setForm((current) => ({ ...current, message: event.target.value }))} />
-        </label>
-        <label>
-          Öncelik
-          <select
-            value={form.priority}
-            onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value as SupportTicketRecord["priority"] }))}
-          >
-            <option value="LOW">Düşük</option>
-            <option value="NORMAL">Normal</option>
-            <option value="HIGH">Yüksek</option>
-          </select>
-        </label>
-        <Button disabled={!onCreate} type="submit">Destek talebi aç</Button>
-      </form>
+      {readOnly ? (
+        <p>Salt-okuma önizlemede destek talebi açılamaz.</p>
+      ) : (
+        <form className="next-support-tool" onSubmit={(event) => void submit(event)}>
+          <label>
+            Konu
+            <Input value={form.subject} onChange={(event) => setForm((current) => ({ ...current, subject: event.target.value }))} />
+          </label>
+          <label>
+            Mesaj
+            <Input value={form.message} onChange={(event) => setForm((current) => ({ ...current, message: event.target.value }))} />
+          </label>
+          <label>
+            Öncelik
+            <select
+              value={form.priority}
+              onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value as SupportTicketRecord["priority"] }))}
+            >
+              <option value="LOW">Düşük</option>
+              <option value="NORMAL">Normal</option>
+              <option value="HIGH">Yüksek</option>
+            </select>
+          </label>
+          <Button disabled={!onCreate} type="submit">Destek talebi aç</Button>
+        </form>
+      )}
       {error ? <p className="next-form-error">{error}</p> : null}
       <table className="uh-data-table">
         <thead>

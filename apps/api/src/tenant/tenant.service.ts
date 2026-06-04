@@ -1,7 +1,14 @@
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
+import { createResetToken, hashResetToken } from "../auth/auth.service.js";
+import { type PasswordResetStore, passwordResetStoreToken } from "../auth/password-reset-store.js";
 import type { RequestContext } from "../context/request-context.js";
 import { isSystemAdmin } from "../rbac/roles.js";
+import {
+  type TenantUserRecord,
+  type UserManagementStore,
+  userManagementStoreToken,
+} from "../user-management/user-management-store.js";
 import {
   type CreateTenantInput,
   type TenantRecord,
@@ -19,13 +26,34 @@ export interface TenantWriteBody {
   licenseEndsAt?: string;
   seatLimit?: number;
   status?: string;
+  firstAdmin?: TenantFirstAdminBody;
 }
+
+export interface TenantFirstAdminBody {
+  mode?: string;
+  name?: string;
+  email?: string;
+  password?: string;
+}
+
+export interface TenantFirstAdminProvisionResult extends TenantUserRecord {
+  activationToken?: string;
+}
+
+export type TenantCreateResponse =
+  | TenantRecord
+  | {
+      tenant: TenantRecord;
+      admin: TenantFirstAdminProvisionResult;
+    };
 
 @Injectable()
 export class TenantService {
   constructor(
     @Inject(tenantStoreToken) private readonly tenants: TenantStore,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() @Inject(userManagementStoreToken) private readonly users?: UserManagementStore,
+    @Optional() @Inject(passwordResetStoreToken) private readonly passwordResets?: PasswordResetStore,
   ) {}
 
   async list(context: RequestContext): Promise<TenantRecord[]> {
@@ -42,26 +70,39 @@ export class TenantService {
     return tenant;
   }
 
-  async create(context: RequestContext, body: TenantWriteBody): Promise<TenantRecord> {
+  async create(context: RequestContext, body: TenantWriteBody): Promise<TenantCreateResponse> {
     this.assertSystemAdmin(context);
-    const tenant = await this.tenants.create(parseCreateTenant(body));
-    await this.auditLogs?.record({
+    const tenantInput = parseCreateTenant(body);
+    const firstAdmin = parseFirstAdmin(body.firstAdmin);
+    const users = this.users;
+    if (firstAdmin && this.tenants.createWithFirstAdmin) {
+      const result = await this.tenants.createWithFirstAdmin(tenantInput, firstAdmin);
+      await this.recordTenantCreated(context, result.tenant);
+      await this.recordFirstAdminCreated(context, result.tenant.id, result.admin);
+      const activationToken = await this.issueFirstAdminActivationToken(result.admin, firstAdmin.mode);
+      return { tenant: result.tenant, admin: { ...result.admin, ...(activationToken ? { activationToken } : {}) } };
+    }
+    if (firstAdmin?.mode === "invitation") {
+      throw new BadRequestException("TENANT_FIRST_ADMIN_INVITATION_REQUIRES_ATOMIC_STORE");
+    }
+    if (firstAdmin && !users) {
+      throw new BadRequestException("TENANT_USER_STORE_REQUIRED");
+    }
+    const tenant = await this.tenants.create(tenantInput);
+    await this.recordTenantCreated(context, tenant);
+    if (!firstAdmin) return tenant;
+    if (!users) {
+      throw new BadRequestException("TENANT_USER_STORE_REQUIRED");
+    }
+    const admin = await users.createOrAttachTenantUser({
       tenantId: tenant.id,
-      actorUserId: context.userId,
-      entityType: "Tenant",
-      entityId: tenant.id,
-      action: "tenant.created",
-      diff: {
-        name: tenant.name,
-        slug: tenant.slug,
-        plan: tenant.plan,
-        licenseStartsAt: tenant.licenseStartsAt,
-        licenseEndsAt: tenant.licenseEndsAt,
-        seatLimit: tenant.seatLimit,
-        status: tenant.status,
-      },
+      email: firstAdmin.email,
+      name: firstAdmin.name,
+      password: firstAdmin.password ?? "",
+      roles: ["TENANT_ADMIN"],
     });
-    return tenant;
+    await this.recordFirstAdminCreated(context, tenant.id, admin);
+    return { tenant, admin };
   }
 
   async update(context: RequestContext, id: string, body: TenantWriteBody): Promise<TenantRecord> {
@@ -87,10 +128,73 @@ export class TenantService {
     return tenant;
   }
 
+  async delete(context: RequestContext, id: string): Promise<TenantRecord> {
+    this.assertSystemAdmin(context);
+    const tenant = await this.tenants.delete(id);
+    if (!tenant) {
+      throw new NotFoundException("TENANT_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId: tenant.id,
+      actorUserId: context.userId,
+      entityType: "Tenant",
+      entityId: tenant.id,
+      action: "tenant.deleted",
+      diff: { status: tenant.status },
+    });
+    return tenant;
+  }
+
   private assertSystemAdmin(context: RequestContext): void {
     if (!context.bypassRls || !isSystemAdmin(context.roles)) {
       throw new BadRequestException("SYSTEM_ADMIN_CONTEXT_REQUIRED");
     }
+  }
+
+  private async recordTenantCreated(context: RequestContext, tenant: TenantRecord): Promise<void> {
+    await this.auditLogs?.record({
+      tenantId: tenant.id,
+      actorUserId: context.userId,
+      entityType: "Tenant",
+      entityId: tenant.id,
+      action: "tenant.created",
+      diff: {
+        name: tenant.name,
+        slug: tenant.slug,
+        plan: tenant.plan,
+        licenseStartsAt: tenant.licenseStartsAt,
+        licenseEndsAt: tenant.licenseEndsAt,
+        seatLimit: tenant.seatLimit,
+        status: tenant.status,
+      },
+    });
+  }
+
+  private async recordFirstAdminCreated(context: RequestContext, tenantId: string, admin: TenantUserRecord): Promise<void> {
+    await this.auditLogs?.record({
+      tenantId,
+      actorUserId: context.userId,
+      entityType: "User",
+      entityId: admin.id,
+      action: "tenant.first_admin_created",
+      diff: { email: admin.email, roles: admin.roles },
+    });
+  }
+
+  private async issueFirstAdminActivationToken(admin: TenantUserRecord, mode: "password" | "invitation"): Promise<string | undefined> {
+    if (mode !== "invitation") return undefined;
+    if (!this.passwordResets) {
+      throw new BadRequestException("TENANT_FIRST_ADMIN_INVITATION_TOKEN_STORE_REQUIRED");
+    }
+
+    await this.passwordResets.revokePendingForUser(admin.id);
+    const activationToken = createResetToken();
+    await this.passwordResets.create({
+      userId: admin.id,
+      tokenHash: hashResetToken(activationToken),
+      expiresAt: nextActivationExpiry(),
+    });
+    return activationToken;
   }
 }
 
@@ -119,6 +223,28 @@ function parseUpdateTenant(body: TenantWriteBody): UpdateTenantInput {
   };
 }
 
+function parseFirstAdmin(body: TenantFirstAdminBody | undefined):
+  | {
+      name: string;
+      email: string;
+      mode: "password" | "invitation";
+      password?: string;
+    }
+  | undefined {
+  if (!body) return undefined;
+  const mode = body.mode === "invitation" ? "invitation" : "password";
+  const password = body.password;
+  if (mode === "password" && (!password || password.length < 8)) {
+    throw new BadRequestException("TENANT_FIRST_ADMIN_PASSWORD_MIN_8_REQUIRED");
+  }
+  return {
+    name: requiredText(body.name, "TENANT_FIRST_ADMIN_NAME_REQUIRED"),
+    email: requiredEmail(body.email, "TENANT_FIRST_ADMIN_EMAIL_REQUIRED"),
+    mode,
+    ...(mode === "password" ? { password } : {}),
+  };
+}
+
 function requiredText(value: string | undefined, errorCode: string): string {
   const text = optionalText(value);
   if (!text) {
@@ -130,6 +256,14 @@ function requiredText(value: string | undefined, errorCode: string): string {
 function optionalText(value: string | undefined): string | undefined {
   const text = value?.trim();
   return text || undefined;
+}
+
+function requiredEmail(value: string | undefined, errorCode: string): string {
+  const email = requiredText(value, errorCode).toLowerCase();
+  if (!email.includes("@")) {
+    throw new BadRequestException(errorCode);
+  }
+  return email;
 }
 
 function optionalDate(value: string | undefined, errorCode: string): string | undefined {
@@ -147,4 +281,10 @@ function optionalPositiveInt(value: number | undefined, errorCode: string): numb
     throw new BadRequestException(errorCode);
   }
   return value;
+}
+
+function nextActivationExpiry(): string {
+  const expiresAt = new Date();
+  expiresAt.setHours(expiresAt.getHours() + 1);
+  return expiresAt.toISOString();
 }

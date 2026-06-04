@@ -3,6 +3,34 @@ import { runWithRequestContext } from "../context/request-context.js";
 import { PostgresRawImportQuarantineStore } from "./raw-import-quarantine-store.js";
 
 describe("PostgresRawImportQuarantineStore", () => {
+  it("tenant içindeki açık karantina sayısını döndürür", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const store = new PostgresRawImportQuarantineStore({
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        if (!sql.includes('FROM "ImportQuarantine"')) {
+          return { rows: [] as T[] };
+        }
+        return { rows: [{ count: "3" }] as T[] };
+      },
+    });
+
+    const result = await runWithRequestContext(
+      { userId: "user-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      () => store.countOpenByTenant("tenant-a"),
+    );
+
+    const businessQueries = queries.filter((query) => !query.sql.includes("set_config") && !["BEGIN", "COMMIT", "ROLLBACK"].includes(query.sql));
+    expect(businessQueries).toHaveLength(1);
+    expect(businessQueries[0]?.sql).toContain('COUNT(*)::text AS count');
+    expect(businessQueries[0]?.sql).toContain('FROM "ImportQuarantine"');
+    expect(businessQueries[0]?.sql).toContain('"tenantId" = $1');
+    expect(businessQueries[0]?.sql).toContain('"status" = \'OPEN\'');
+    expect(businessQueries[0]?.sql).toContain('"deletedAt" IS NULL');
+    expect(businessQueries[0]?.values).toEqual(["tenant-a"]);
+    expect(result).toBe(3);
+  });
+
   it("karantina listesini tenant, sınav ve raw import ile sınırlar", async () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const store = new PostgresRawImportQuarantineStore({

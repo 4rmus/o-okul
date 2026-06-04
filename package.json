@@ -58,6 +58,7 @@
     "typecheck": "turbo run typecheck",
     "uat:check": "node scripts/check-uat-evidence.mjs",
     "web:token-storage:check": "node scripts/check-web-token-storage.mjs",
+    "web:performance:profile": "node scripts/profile-web-performance.mjs",
     "wal:archive:smoke": "node scripts/smoke-wal-archive-target.mjs"
   },
   "devDependencies": {

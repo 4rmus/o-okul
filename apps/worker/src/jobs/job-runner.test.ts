@@ -41,6 +41,6 @@ describe("worker tenant job runner", () => {
   });
 
   it("tenant worker kuyruk adlarını sabit tutar", () => {
-    expect(queueNames).toEqual(["announcement-delivery", "exam-evaluation", "excel-import", "report-generation", "sms-batch"]);
+    expect(queueNames).toEqual(["announcement-delivery", "backup-restore", "exam-evaluation", "excel-import", "report-generation", "sms-batch"]);
   });
 });

@@ -1,9 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { ClassCompareBar, ExamResultDonut, LoadingState, ProgressLineChart, TopicRadarChart } from "@uzman-hocam/ui";
 import type { ReportSnapshotRecord } from "@uzman-hocam/shared-types";
 import { useAuth } from "../../providers.js";
-import { useKurumOverviewQuery, useKurumReportSummaryQuery, useKurumStudentProgressQuery } from "./kurum-dashboard-data.js";
+import {
+  useKurumDashboardDataQuery,
+  useKurumStudentProgressQuery,
+} from "./kurum-dashboard-data.js";
 import { PageFrame } from "./_shared/page-frame.js";
 import { MetricPanelGrid } from "./_shared/metric-panel-grid.js";
 import { ReportChartPanel } from "../_shared/report-chart-panel.js";
@@ -12,21 +17,44 @@ export function KurumDashboard() {
   const { auth } = useAuth();
   const accessToken = auth?.accessToken ?? "";
   const tenantId = auth?.session.tenantId ?? "anonymous";
-  const examId = "exam-demo-isem-lgs-1";
   const roles = auth?.session.roles.join(", ") ?? "-";
-  const overviewQuery = useKurumOverviewQuery(accessToken, tenantId, Boolean(auth));
-  const reportQuery = useKurumReportSummaryQuery(accessToken, tenantId, examId, Boolean(auth));
-  const firstStudentId = reportQuery.data?.snapshotData?.students?.[0]?.studentId;
-  const progressQuery = useKurumStudentProgressQuery(accessToken, tenantId, examId, firstStudentId, Boolean(auth));
-  const overview = overviewQuery.data ?? { classCount: 0, teacherCount: 0, studentCount: 0 };
-  const examResult = toExamResult(reportQuery.data);
-  const classCompare = toClassCompare(reportQuery.data);
-  const topicRadar = toTopicRadar(reportQuery.data);
+  const dashboardQuery = useKurumDashboardDataQuery(accessToken, tenantId, Boolean(auth));
+  const latestExam = dashboardQuery.data?.report.exam ?? null;
+  const latestSnapshot = dashboardQuery.data?.report.snapshot ?? null;
+  const firstStudentId = latestSnapshot?.snapshotData?.students?.[0]?.studentId;
+  const progressQuery = useKurumStudentProgressQuery(accessToken, tenantId, latestSnapshot?.examId ?? "", firstStudentId, Boolean(auth));
+  const overview = dashboardQuery.data?.overview ?? { classCount: 0, teacherCount: 0, studentCount: 0 };
+  const decisionSignals = dashboardQuery.data?.decisionSignals ?? {
+    attendanceAlerts: 0,
+    openImportQuarantines: 0,
+    openSupportTickets: 0,
+    overdueInstallments: 0,
+  };
+  const examResult = toExamResult(latestSnapshot);
+  const classCompare = toClassCompare(latestSnapshot);
+  const topicRadar = toTopicRadar(latestSnapshot);
   const progressPoints = progressQuery.data?.points ?? [];
+  const reportDescription = resolveReportDescription(dashboardQuery.isPending, latestExam?.title, latestSnapshot);
+  const isEmptyInstitution = !dashboardQuery.isPending && overview.classCount === 0 && overview.teacherCount === 0 && overview.studentCount === 0;
+  const [isSetupDismissed, setIsSetupDismissed] = useState(false);
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState(false);
+  const setupDismissedCookieName = `uh_setup_${encodeURIComponent(tenantId)}_dismissed`;
+  const onboardingCompletedCookieName = `uh_onboarding_${encodeURIComponent(tenantId)}_completed`;
+
+  useEffect(() => {
+    if (!auth) return;
+    setIsSetupDismissed(readSetupDismissed(setupDismissedCookieName));
+    setIsOnboardingCompleted(readSetupDismissed(onboardingCompletedCookieName));
+  }, [auth, onboardingCompletedCookieName, setupDismissedCookieName]);
+
+  function dismissSetupCard() {
+    setIsSetupDismissed(true);
+    writeSetupDismissed(setupDismissedCookieName);
+  }
 
   return (
       <PageFrame title="Kurum Paneli" subtitle="Kurumsal özetin ve son sınav analizlerinin tek ekranda görünümü.">
-      {overviewQuery.isPending ? <LoadingState label="Kurum özeti yükleniyor…" /> : null}
+      {dashboardQuery.isPending ? <LoadingState label="Kurum özeti yükleniyor…" /> : null}
       <MetricPanelGrid
         ariaLabel="Kurum özeti"
         metrics={[
@@ -35,6 +63,48 @@ export function KurumDashboard() {
           { label: "Öğrenci", value: overview.studentCount },
         ]}
       />
+      {isEmptyInstitution && !isSetupDismissed && !isOnboardingCompleted ? (
+        <section className="next-dashboard-onboarding" aria-label="Kurum kurulum başlangıcı">
+          <div>
+            <h2>Kurumunu kurmaya başla</h2>
+            <p>Beş adımlı kurulum sihirbazı genel bilgilerden kişi yönetimine kadar ilk düzeni toplar.</p>
+          </div>
+          <div className="next-dashboard-onboarding__actions">
+            <Link className="uh-button uh-button--primary uh-button--md" href="/kurum/kurulum">
+              Sihirbazı aç
+            </Link>
+            <button className="uh-button uh-button--secondary uh-button--md" type="button" onClick={dismissSetupCard}>
+              Daha sonra
+            </button>
+          </div>
+        </section>
+      ) : null}
+      <section className="next-decision-strip" aria-label="Karar sinyalleri">
+        <DecisionSignalCard
+          title="Bekleyen destek"
+          value={decisionSignals.openSupportTickets}
+          description={decisionSignals.openSupportTickets > 0 ? "Yanıt bekleyen talep var" : "Açık talep yok"}
+          href="/kurum/destek"
+        />
+        <DecisionSignalCard
+          title="Geciken ödeme"
+          value={decisionSignals.overdueInstallments}
+          description={decisionSignals.overdueInstallments > 0 ? "Tahsilat kontrolü gerekiyor" : "Geciken taksit yok"}
+          href="/kurum/finans"
+        />
+        <DecisionSignalCard
+          title="Devamsızlık"
+          value={decisionSignals.attendanceAlerts}
+          description={decisionSignals.attendanceAlerts > 0 ? "Yoklama takibi gerekiyor" : "Kritik kayıt yok"}
+          href="/kurum/devamsizlik"
+        />
+        <DecisionSignalCard
+          title="Optik kontrol"
+          value={decisionSignals.openImportQuarantines}
+          description={decisionSignals.openImportQuarantines > 0 ? "Karantina çözümü gerekiyor" : "Açık karantina yok"}
+          href="/kurum/optik"
+        />
+      </section>
       <section className="next-session-panel" aria-label="Oturum özeti">
         <span>{auth?.session.tenantId ?? "-"}</span>
         <span>{auth?.session.userId ?? "-"}</span>
@@ -42,7 +112,7 @@ export function KurumDashboard() {
       </section>
       <div className="next-report-visual-grid">
         <ReportChartPanel
-          description={reportQuery.data ? "İSEM LGS-1 sınav raporu" : "Hazır rapor bekleniyor"}
+          description={reportDescription}
           title="Sınav Sonuç Özeti"
         >
           <ExamResultDonut result={examResult} />
@@ -57,11 +127,59 @@ export function KurumDashboard() {
           <TopicRadarChart branches={topicRadar} />
         </ReportChartPanel>
       </div>
-      {overviewQuery.isError ? <p className="next-form-error">Kurum özeti alınamadı.</p> : null}
-      {reportQuery.isError ? <p className="next-form-error">Rapor özeti alınamadı.</p> : null}
+      {dashboardQuery.isError ? <p className="next-form-error">Dashboard verisi alınamadı.</p> : null}
       {progressQuery.isError ? <p className="next-form-error">Öğrenci gelişimi alınamadı.</p> : null}
     </PageFrame>
   );
+}
+
+function DecisionSignalCard({
+  description,
+  href,
+  title,
+  value,
+}: {
+  description: string;
+  href: string;
+  title: string;
+  value: number | string;
+}) {
+  return (
+    <Link className="next-decision-card" href={href}>
+      <span>{title}</span>
+      <strong>{value}</strong>
+      <small>{description}</small>
+    </Link>
+  );
+}
+
+function resolveReportDescription(isPending: boolean, examTitle: string | undefined, snapshot: ReportSnapshotRecord | null) {
+  if (isPending) return "Rapor aranıyor";
+  if (!examTitle) return "Henüz yayınlanmış sınav yok";
+  if (!snapshot) return "Hazır rapor yok";
+  return `${examTitle} raporu`;
+}
+
+function readSetupDismissed(name: string) {
+  if (typeof window === "undefined") return false;
+  return readCookie(name) === "true";
+}
+
+function writeSetupDismissed(name: string) {
+  if (typeof window === "undefined") return;
+  writeCookie(name, "true");
+}
+
+function readCookie(name: string) {
+  const prefix = `${name}=`;
+  const match = document.cookie
+    .split("; ")
+    .find((cookie) => cookie.startsWith(prefix));
+  return match ? decodeURIComponent(match.slice(prefix.length)) : "";
+}
+
+function writeCookie(name: string, value: string): void {
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=31536000; samesite=lax`;
 }
 
 function toExamResult(snapshot: ReportSnapshotRecord | null | undefined) {

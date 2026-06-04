@@ -133,6 +133,44 @@ describe("Me access matrix", () => {
     }
   });
 
+  it("tenant admin role preview tokenı ile portal sorgularını salt-okuma açar", async () => {
+    const created = await request(server)
+      .post("/role-previews")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ targetRole: "TEACHER", targetSubjectId: "teacher-a" })
+      .expect(201);
+    const previewToken = (created.body as { previewToken: string }).previewToken;
+
+    await request(server).get("/me/teacher").set("Authorization", `Bearer ${adminToken}`).expect(403);
+    await request(server)
+      .get("/me/teacher")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .set("x-role-preview-token", previewToken)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({ id: "teacher-a" });
+      });
+    await request(server)
+      .get("/me/profile")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .set("x-role-preview-token", previewToken)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          userId: "user-tenant-a",
+          roles: ["TEACHER"],
+          subjectType: "TEACHER",
+          subjectId: "teacher-a",
+        });
+      });
+    await request(server)
+      .post("/me/teacher/support-tickets")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .set("x-role-preview-token", previewToken)
+      .send({ subject: "Preview write should fail" })
+      .expect(403);
+  });
+
   it("öğretmen rapor yüzeyleri yanlış rol ve başka tenant öğrenci denemesinde veri sızdırmaz", async () => {
     const teacherReportEndpoints = [
       "/exams/exam-demo/reports/snapshots",

@@ -2,7 +2,7 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import type {
   HomeworkMaterialAssignmentRecord,
   HomeworkMaterialFileRecord,
@@ -323,6 +323,13 @@ export function HomeworkMaterialsPage() {
         aria-label="Ödev kontrolü"
         columns={homeworkColumns}
         description={`${checkedCount}/${data.homework.length} ödev kontrol edildi`}
+        emptyState={
+          <EmptyState
+            title="Ödev kaydı yok"
+            description="Ödevler oluştuğunda kontrol listesi burada görünür."
+            hint="Bu alan öğretmen ve materyal akışından gelen ödevleri izlemek için kullanılır."
+          />
+        }
         emptyText="Ödev kaydı yok"
         error={query.isError ? "Ödev verisi alınamadı." : undefined}
         getRowKey={(homework) => homework.id}
@@ -348,6 +355,14 @@ export function HomeworkMaterialsPage() {
         aria-label="Materyal listesi"
         columns={materialColumns}
         description="Materyal havuzu, dosyalar ve öğrenci atamaları."
+        emptyState={
+          <EmptyState
+            title="Materyal havuzu boş"
+            description="İlk materyali ekleyerek dosya ve öğrenci atama akışını başlat."
+            hint="Materyal eklendikten sonra dosya yükleyebilir ve öğrencilere atayabilirsin."
+            primaryAction={{ label: "Materyal ekle", onClick: openCreateForm }}
+          />
+        }
         emptyText="Materyal yok"
         error={error || undefined}
         getRowKey={(material) => material.id}

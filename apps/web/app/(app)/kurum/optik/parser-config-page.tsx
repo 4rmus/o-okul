@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
-import { Button, Input } from "@uzman-hocam/ui";
+import { Button, EmptyState, Input } from "@uzman-hocam/ui";
 import type { AnswerChoice, AnswerKeyRecord, ParserConfigSuggestion, StudentRecord } from "@uzman-hocam/shared-types";
 import { CheckCircle2, FileSpreadsheet, FileText, RefreshCw, Upload, Wand2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
@@ -776,7 +776,12 @@ export function ParserConfigPage() {
               ))}
               {quarantines.length === 0 ? (
                 <tr>
-                  <td colSpan={5}>Karantina kaydı yok</td>
+                  <td colSpan={5}>
+                    <EmptyState
+                      title="Karantina kaydı yok"
+                      description="Raw import ID ile sorgu yaptığında eşleşmeyen optik satırlar burada listelenir."
+                    />
+                  </td>
                 </tr>
               ) : null}
             </tbody>

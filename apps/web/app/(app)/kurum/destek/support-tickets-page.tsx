@@ -2,7 +2,7 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import type {
   AcademicTermRecord,
   CampusRecord,
@@ -36,6 +36,14 @@ interface SupportTicketData {
   comments: Record<string, SupportTicketCommentRecord[]>;
 }
 
+interface SupportTicketReferences {
+  campuses: CampusRecord[];
+  classes: ClassRecord[];
+  courses: CourseRecord[];
+  gradeLevels: GradeLevelRecord[];
+  terms: AcademicTermRecord[];
+}
+
 const emptyForm: SupportTicketFormState = {
   subject: "",
   message: "",
@@ -54,6 +62,14 @@ const emptyFilters = {
   classId: "",
   courseId: "",
   termId: "",
+};
+
+const emptyReferences: SupportTicketReferences = {
+  campuses: [],
+  classes: [],
+  courses: [],
+  gradeLevels: [],
+  terms: [],
 };
 
 const supportTicketSortOptions = [
@@ -77,33 +93,9 @@ export function SupportTicketsPage() {
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
-  const classesQuery = useQuery({
-    queryKey: ["next-classes", tenantId],
-    queryFn: () => apiListRequest<ClassRecord>(auth?.accessToken ?? "", `${apiBaseUrl}/classes`),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const campusesQuery = useQuery({
-    queryKey: ["next-campuses", tenantId],
-    queryFn: () => apiListRequest<CampusRecord>(auth?.accessToken ?? "", `${apiBaseUrl}/campuses`),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const gradeLevelsQuery = useQuery({
-    queryKey: ["next-grade-levels", tenantId],
-    queryFn: () => apiListRequest<GradeLevelRecord>(auth?.accessToken ?? "", `${apiBaseUrl}/grade-levels`),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const coursesQuery = useQuery({
-    queryKey: ["next-courses", tenantId],
-    queryFn: () => apiListRequest<CourseRecord>(auth?.accessToken ?? "", `${apiBaseUrl}/courses`),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const termsQuery = useQuery({
-    queryKey: ["next-academic-terms", tenantId],
-    queryFn: () => apiListRequest<AcademicTermRecord>(auth?.accessToken ?? "", `${apiBaseUrl}/academic-terms`),
+  const referencesQuery = useQuery({
+    queryKey: ["next-support-ticket-refs", tenantId],
+    queryFn: () => loadSupportTicketReferences(auth?.accessToken ?? ""),
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
@@ -118,12 +110,13 @@ export function SupportTicketsPage() {
   const [downloadingAttachmentId, setDownloadingAttachmentId] = useState("");
   const [error, setError] = useState("");
   const data = ticketsQuery.data ?? emptySupportTicketData();
+  const references = referencesQuery.data ?? emptyReferences;
   const rows = data.tickets;
-  const classes = classesQuery.data?.data ?? [];
-  const campuses = campusesQuery.data?.data ?? [];
-  const gradeLevels = gradeLevelsQuery.data?.data ?? [];
-  const courses = coursesQuery.data?.data ?? [];
-  const terms = termsQuery.data?.data ?? [];
+  const classes = references.classes;
+  const campuses = references.campuses;
+  const gradeLevels = references.gradeLevels;
+  const courses = references.courses;
+  const terms = references.terms;
   const classNameById = new Map(classes.map((klass) => [klass.id, klass.name]));
   const campusNameById = new Map(campuses.map((campus) => [campus.id, campus.name]));
   const gradeLevelNameById = new Map(gradeLevels.map((level) => [level.id, level.name]));
@@ -433,6 +426,14 @@ export function SupportTicketsPage() {
         aria-label="Destek bildirimi yönetimi"
         columns={columns}
         description="Kurum destek bildirimlerini gerçek API çağrılarıyla izle."
+        emptyState={
+          <EmptyState
+            title="Destek bildirimi yok"
+            description="İlk destek bildirimini açarak takip ve yorum akışını başlat."
+            hint="Bildirim oluştuğunda ek, yorum ve durum işlemleri burada görünür."
+            primaryAction={{ label: "Destek bildirimi aç", onClick: openCreateForm }}
+          />
+        }
         emptyText="Destek bildirimi yok"
         error={error || (ticketsQuery.isError ? "Destek bildirimleri alınamadı." : undefined)}
         getRowKey={(ticket) => ticket.id}
@@ -666,6 +667,23 @@ async function loadSupportTickets(accessToken: string, listQuery: ListQueryState
   if (filters.courseId) url.searchParams.set("courseId", filters.courseId);
   if (filters.termId) url.searchParams.set("termId", filters.termId);
   return apiListRequest<SupportTicketRecord>(accessToken, url.toString());
+}
+
+async function loadSupportTicketReferences(accessToken: string): Promise<SupportTicketReferences> {
+  const [campuses, classes, courses, gradeLevels, terms] = await Promise.all([
+    apiListRequest<CampusRecord>(accessToken, `${apiBaseUrl}/campuses`),
+    apiListRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes`),
+    apiListRequest<CourseRecord>(accessToken, `${apiBaseUrl}/courses`),
+    apiListRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels`),
+    apiListRequest<AcademicTermRecord>(accessToken, `${apiBaseUrl}/academic-terms`),
+  ]);
+  return {
+    campuses: campuses.data,
+    classes: classes.data,
+    courses: courses.data,
+    gradeLevels: gradeLevels.data,
+    terms: terms.data,
+  };
 }
 
 async function createSupportTicket(accessToken: string, input: SupportTicketFormPayload) {

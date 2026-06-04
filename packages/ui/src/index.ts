@@ -5,6 +5,7 @@ export { Table } from "./components/table.js";
 export { Dialog, type DialogProps } from "./components/dialog.js";
 export { Toast, type ToastProps, type ToastTone } from "./components/toast.js";
 export { LoadingState, type LoadingStateProps } from "./components/loading-state.js";
+export { EmptyState, type EmptyStateAction, type EmptyStateProps } from "./components/empty-state.js";
 export { DataTable, type DataTableColumn, type DataTableProps } from "./components/data-table.js";
 export { CrudPage, type CrudPageProps } from "./components/crud-page.js";
 export { FormModal, type FormModalProps } from "./components/form-modal.js";

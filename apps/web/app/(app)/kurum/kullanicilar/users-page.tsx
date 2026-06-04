@@ -1,8 +1,9 @@
 "use client";
 
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import type { GuardianRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
 import { Plus, RotateCcw, Save, Send } from "lucide-react";
 import { useAuth } from "../../../providers.js";
@@ -19,7 +20,7 @@ import {
 } from "../../../../src/form-validation.js";
 import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
 
-type Role = "TENANT_ADMIN" | "TEACHER" | "STUDENT" | "GUARDIAN";
+type Role = "TENANT_ADMIN" | "ASSISTANT_ADMIN" | "TEACHER" | "STUDENT" | "GUARDIAN";
 type InvitationSubjectType = "STUDENT" | "GUARDIAN" | "TEACHER";
 type InvitationStatus = "PENDING" | "ACCEPTED";
 
@@ -54,8 +55,15 @@ interface IdentityInvitationIssueResult {
   activationToken: string;
 }
 
+interface UserSubjectReferences {
+  guardians: GuardianRecord[];
+  students: StudentRecord[];
+  teachers: TeacherRecord[];
+}
+
 const roleOptions: Array<{ value: Role; label: string }> = [
   { value: "TENANT_ADMIN", label: "Kurum admin" },
+  { value: "ASSISTANT_ADMIN", label: "Yardımcı yönetici" },
   { value: "TEACHER", label: "Öğretmen" },
   { value: "STUDENT", label: "Öğrenci" },
   { value: "GUARDIAN", label: "Veli" },
@@ -86,8 +94,15 @@ const emptyInvitationForm: IdentityInvitationFormState = {
   name: "",
 };
 
+const emptySubjectReferences: UserSubjectReferences = {
+  guardians: [],
+  students: [],
+  teachers: [],
+};
+
 export function UsersPage() {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const tenantId = auth?.session.tenantId ?? "anonymous";
   const [userListQuery, setUserListQuery] = useState<ListQueryState>(initialListQuery);
@@ -108,21 +123,9 @@ export function UsersPage() {
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
-  const studentsQuery = useQuery({
-    queryKey: ["next-students", tenantId],
-    queryFn: () => loadStudents(auth?.accessToken ?? ""),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const guardiansQuery = useQuery({
-    queryKey: ["next-guardians", tenantId],
-    queryFn: () => loadGuardians(auth?.accessToken ?? ""),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const teachersQuery = useQuery({
-    queryKey: ["next-teachers", tenantId],
-    queryFn: () => loadTeachers(auth?.accessToken ?? ""),
+  const subjectReferencesQuery = useQuery({
+    queryKey: ["next-user-subject-refs", tenantId],
+    queryFn: () => loadUserSubjectReferences(auth?.accessToken ?? ""),
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
@@ -136,10 +139,27 @@ export function UsersPage() {
 
   const users = usersQuery.data?.data ?? [];
   const invitations = invitationsQuery.data?.data ?? [];
+  const subjectReferences = subjectReferencesQuery.data ?? emptySubjectReferences;
   const subjects = useMemo(
-    () => buildSubjects(invitationForm.subjectType, studentsQuery.data ?? [], guardiansQuery.data ?? [], teachersQuery.data ?? []),
-    [guardiansQuery.data, invitationForm.subjectType, studentsQuery.data, teachersQuery.data],
+    () => buildSubjects(invitationForm.subjectType, subjectReferences.students, subjectReferences.guardians, subjectReferences.teachers),
+    [invitationForm.subjectType, subjectReferences.guardians, subjectReferences.students, subjectReferences.teachers],
   );
+
+  useEffect(() => {
+    const subjectType = parseInvitationSubjectType(searchParams.get("invite"));
+    if (!subjectType) return;
+    const subjectId = searchParams.get("subjectId");
+    if (!subjectId) return;
+    setInvitationForm({
+      subjectType,
+      subjectId,
+      email: "",
+      name: findSubjectName(subjectType, subjectId, subjectReferences),
+    });
+    setError("");
+    setIssuedToken(null);
+    setIsInvitationFormOpen(true);
+  }, [searchParams, subjectReferences]);
 
   const userColumns: Array<DataTableColumn<TenantUserRecord>> = [
     {
@@ -351,7 +371,16 @@ export function UsersPage() {
         }
         aria-label="Kullanıcı ve rol yönetimi"
         columns={userColumns}
-        description="Kurum kullanıcılarını ve tenant rollerini yönet."
+        description="Yönetim hesaplarını ve tenant rollerini yönet. Öğretmen, öğrenci ve veli portal erişimi için kişi davetlerini kullan."
+        emptyState={
+          <EmptyState
+            title="Kullanıcı yok"
+            description="Kurum yönetim paneli için ilk yönetim hesabını oluştur."
+            hint="Portal erişimi için kişi davetleri ayrı listeden takip edilir."
+            primaryAction={{ label: "Kullanıcı ekle", onClick: openUserForm }}
+            secondaryAction={{ label: "Davet oluştur", onClick: openInvitationForm }}
+          />
+        }
         emptyText="Kullanıcı kaydı yok"
         error={error || (usersQuery.isError ? "Kullanıcılar alınamadı." : undefined)}
         getRowKey={(user) => user.id}
@@ -376,7 +405,15 @@ export function UsersPage() {
         }
         aria-label="Kimlik davetleri"
         columns={invitationColumns}
-        description="Öğrenci, veli ve öğretmen hesap aktivasyonlarını takip et."
+        description="Mevcut öğretmen, öğrenci ve veli kayıtlarını giriş hesabına bağlayan portal davetlerini takip et."
+        emptyState={
+          <EmptyState
+            title="Davet yok"
+            description="Öğretmen, öğrenci veya veli portalı için ilk daveti oluştur."
+            hint="Davet oluşturulduğunda aktivasyon tokenı ekranda gösterilir."
+            primaryAction={{ label: "Davet oluştur", onClick: openInvitationForm }}
+          />
+        }
         emptyText="Davet kaydı yok"
         error={invitationsQuery.isError ? "Davetler alınamadı." : undefined}
         getRowKey={(invitation) => invitation.id}
@@ -518,6 +555,26 @@ function buildSubjects(
   return teachers.map((teacher) => ({ id: teacher.id, name: `${teacher.firstName} ${teacher.lastName}` }));
 }
 
+function parseInvitationSubjectType(value: string | null): InvitationSubjectType | null {
+  if (value === "guardian") return "GUARDIAN";
+  if (value === "student") return "STUDENT";
+  if (value === "teacher") return "TEACHER";
+  return null;
+}
+
+function findSubjectName(subjectType: InvitationSubjectType, subjectId: string, references: UserSubjectReferences) {
+  if (subjectType === "GUARDIAN") {
+    const guardian = references.guardians.find((candidate) => candidate.id === subjectId);
+    return guardian ? `${guardian.firstName} ${guardian.lastName}` : "";
+  }
+  if (subjectType === "STUDENT") {
+    const student = references.students.find((candidate) => candidate.id === subjectId);
+    return student ? `${student.firstName} ${student.lastName}` : "";
+  }
+  const teacher = references.teachers.find((candidate) => candidate.id === subjectId);
+  return teacher ? `${teacher.firstName} ${teacher.lastName}` : "";
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("tr-TR", { dateStyle: "short" }).format(new Date(value));
 }
@@ -581,14 +638,11 @@ async function resendIdentityInvitation(accessToken: string, id: string) {
   );
 }
 
-async function loadStudents(accessToken: string) {
-  return apiRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/students`);
-}
-
-async function loadGuardians(accessToken: string) {
-  return apiRequest<GuardianRecord[]>(accessToken, `${apiBaseUrl}/guardians`);
-}
-
-async function loadTeachers(accessToken: string) {
-  return apiRequest<TeacherRecord[]>(accessToken, `${apiBaseUrl}/teachers`);
+async function loadUserSubjectReferences(accessToken: string): Promise<UserSubjectReferences> {
+  const [guardians, students, teachers] = await Promise.all([
+    apiRequest<GuardianRecord[]>(accessToken, `${apiBaseUrl}/guardians`),
+    apiRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/students`),
+    apiRequest<TeacherRecord[]>(accessToken, `${apiBaseUrl}/teachers`),
+  ]);
+  return { guardians, students, teachers };
 }

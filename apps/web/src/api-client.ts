@@ -1,7 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import type { AuthResponse } from "@uzman-hocam/shared-types";
 
-declare const process: { env?: Record<string, string | undefined> } | undefined;
+declare const process: { env: Record<string, string | undefined> };
 
 interface ApiEnvelope<T> {
   data: T;
@@ -20,9 +20,7 @@ export interface ListResult<TItem> {
   meta: ListMeta;
 }
 
-const nextEnv = typeof process === "undefined" ? undefined : process.env;
-
-export const apiUrl = nextEnv?.NEXT_PUBLIC_API_URL ?? "http://localhost:3100";
+export const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3100";
 export const apiBaseUrl = `${apiUrl}/api/v1`;
 
 let activeAuth: AuthResponse | null = null;

@@ -1,5 +1,6 @@
 import {
   createAnnouncementDeliveryBullWorker,
+  createBackupRestoreBullWorker,
   createExcelImportBullWorker,
   createExamEvaluationBullWorker,
   createReportGenerationBullWorker,
@@ -11,6 +12,10 @@ const connection = createRedisConnectionOptions();
 const workerOptions = process.env.QUEUE_PREFIX ? { prefix: process.env.QUEUE_PREFIX } : undefined;
 const workers = [
   createAnnouncementDeliveryBullWorker({
+    connection,
+    workerOptions,
+  }),
+  createBackupRestoreBullWorker({
     connection,
     workerOptions,
   }),
@@ -32,7 +37,7 @@ const workers = [
   }),
 ];
 
-console.log("announcement-delivery, exam-evaluation, excel-import, report-generation and sms-batch workers started");
+console.log("announcement-delivery, backup-restore, exam-evaluation, excel-import, report-generation and sms-batch workers started");
 
 async function shutdown(): Promise<void> {
   await Promise.all(workers.map((worker) => worker.close()));

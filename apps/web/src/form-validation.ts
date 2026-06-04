@@ -10,6 +10,7 @@ const optionalNationalId = optionalText().refine((value) => !value || /^\d{11}$/
 const optionalEmail = optionalText().refine((value) => !value || z.string().email().safeParse(value).success, {
   message: "E-posta geçerli olmalıdır.",
 });
+const requiredEmail = (fieldName: string) => requiredText(fieldName).email("E-posta geçerli olmalıdır.");
 
 const optionalDate = optionalText().refine((value) => !value || /^\d{4}-\d{2}-\d{2}$/.test(value), {
   message: "Doğum tarihi geçerli olmalıdır.",
@@ -73,6 +74,13 @@ export const courseFormSchema = z.object({
   code: optionalText(),
 });
 
+export const learningOutcomeFormSchema = z.object({
+  code: requiredText("Kazanım kodu"),
+  branch: requiredText("Branş"),
+  title: requiredText("Kazanım adı"),
+  level: optionalText(),
+});
+
 export const examFormSchema = z.object({
   title: requiredText("Sınav adı"),
   startsAt: optionalText().refine((value) => !value || !Number.isNaN(Date.parse(value)), {
@@ -85,6 +93,57 @@ export const examParticipantFormSchema = z.object({
   participantNo: optionalText(),
   bookletType: optionalText(),
 });
+
+export const tenantFormSchema = z.object({
+  name: requiredText("Kurum adı"),
+  slug: requiredText("Slug"),
+  plan: z.enum(["TRIAL", "PRO", "ENTERPRISE"]),
+  licenseStartsAt: optionalDate,
+  licenseEndsAt: optionalDate,
+  seatLimit: optionalText().transform((value, context) => {
+    if (!value) return undefined;
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Koltuk limiti pozitif tam sayı olmalıdır.",
+      });
+      return z.NEVER;
+    }
+    return parsed;
+  }),
+  status: z.enum(["ACTIVE", "SUSPENDED", "TRIAL"]),
+}).superRefine((value, context) => {
+  if (value.licenseStartsAt && value.licenseEndsAt && Date.parse(value.licenseStartsAt) >= Date.parse(value.licenseEndsAt)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Lisans bitişi başlangıçtan sonra olmalıdır.",
+      path: ["licenseEndsAt"],
+    });
+  }
+});
+
+export const tenantCreateFormSchema = tenantFormSchema.and(z.object({
+  firstAdmin: z.object({
+    name: requiredText("Admin ad soyad"),
+    email: requiredEmail("Admin e-posta"),
+    mode: z.enum(["password", "invitation"]),
+    password: z.string(),
+  }).superRefine((value, context) => {
+    if (value.mode === "password" && value.password.length < 8) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Admin şifresi en az 8 karakter olmalıdır.",
+        path: ["password"],
+      });
+    }
+  }).transform((value) => ({
+    email: value.email,
+    mode: value.mode,
+    name: value.name,
+    ...(value.mode === "password" ? { password: value.password } : {}),
+  })),
+}));
 
 export const scheduleLessonFormSchema = z.object({
   classId: requiredText("Sınıf"),
@@ -224,7 +283,7 @@ export const homeworkMaterialFormSchema = z.object({
   description: optionalText(),
 });
 
-export const userRolesSchema = z.array(z.enum(["TENANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN"])).min(1, "En az bir rol seçilmelidir.");
+export const userRolesSchema = z.array(z.enum(["TENANT_ADMIN", "ASSISTANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN"])).min(1, "En az bir rol seçilmelidir.");
 
 export const tenantUserFormSchema = z.object({
   email: requiredText("E-posta").email("E-posta geçerli olmalıdır."),
@@ -337,10 +396,16 @@ export type AcademicTermFormState = z.input<typeof academicTermFormSchema>;
 export type AcademicTermFormPayload = z.output<typeof academicTermFormSchema>;
 export type CourseFormState = z.input<typeof courseFormSchema>;
 export type CourseFormPayload = z.output<typeof courseFormSchema>;
+export type LearningOutcomeFormState = z.input<typeof learningOutcomeFormSchema>;
+export type LearningOutcomeFormPayload = z.output<typeof learningOutcomeFormSchema>;
 export type ExamFormState = z.input<typeof examFormSchema>;
 export type ExamFormPayload = z.output<typeof examFormSchema>;
 export type ExamParticipantFormState = z.input<typeof examParticipantFormSchema>;
 export type ExamParticipantFormPayload = z.output<typeof examParticipantFormSchema>;
+export type TenantFormState = z.input<typeof tenantFormSchema>;
+export type TenantFormPayload = z.output<typeof tenantFormSchema>;
+export type TenantCreateFormState = z.input<typeof tenantCreateFormSchema>;
+export type TenantCreateFormPayload = z.output<typeof tenantCreateFormSchema>;
 export type ScheduleLessonFormState = z.input<typeof scheduleLessonFormSchema>;
 export type ScheduleLessonFormPayload = z.output<typeof scheduleLessonFormSchema>;
 export type StudySessionFormState = z.input<typeof studySessionFormSchema>;

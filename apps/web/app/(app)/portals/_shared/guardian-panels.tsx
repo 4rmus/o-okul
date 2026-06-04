@@ -6,9 +6,11 @@ import type { GuardianStudentRecord, PaymentPlanWithInstallmentsRecord } from "@
 export function NotificationPreferencesPanel({
   preferences,
   onUpdate,
+  readOnly = false,
 }: {
   preferences?: GuardianStudentRecord;
   onUpdate?: (input: Partial<Pick<GuardianStudentRecord, "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets">>) => void | Promise<unknown>;
+  readOnly?: boolean;
 }) {
   const [error, setError] = useState("");
 
@@ -26,10 +28,11 @@ export function NotificationPreferencesPanel({
   return (
     <section className="next-list-panel" aria-label="Bildirim tercihleri">
       <h2>Bildirim Tercihleri</h2>
+      {readOnly ? <p>Salt-okuma önizlemede bildirim tercihleri değiştirilemez.</p> : null}
       <label className="next-checkbox-row">
         <input
           checked={preferences?.canReceiveSms ?? false}
-          disabled={!preferences || !onUpdate}
+          disabled={readOnly || !preferences || !onUpdate}
           onChange={(event) => void update({ canReceiveSms: event.target.checked })}
           type="checkbox"
         />
@@ -38,7 +41,7 @@ export function NotificationPreferencesPanel({
       <label className="next-checkbox-row">
         <input
           checked={preferences?.canReceiveAnnouncements ?? false}
-          disabled={!preferences || !onUpdate}
+          disabled={readOnly || !preferences || !onUpdate}
           onChange={(event) => void update({ canReceiveAnnouncements: event.target.checked })}
           type="checkbox"
         />
@@ -47,7 +50,7 @@ export function NotificationPreferencesPanel({
       <label className="next-checkbox-row">
         <input
           checked={preferences?.canOpenSupportTickets ?? false}
-          disabled={!preferences || !onUpdate}
+          disabled={readOnly || !preferences || !onUpdate}
           onChange={(event) => void update({ canOpenSupportTickets: event.target.checked })}
           type="checkbox"
         />

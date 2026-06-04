@@ -1,6 +1,6 @@
 "use client";
 
-import { EvidenceGateSection, EvidenceListSection } from "../_shared/evidence-panels.js";
+import { EvidenceGateSection, EvidenceListSection, OperationDecisionNotice, ReferenceBadge } from "../_shared/evidence-panels.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
 
@@ -57,6 +57,7 @@ const rollbackFields = ["releaseCandidate", "rollbackImageTag", "restoreBackupRe
 export function UatRollbackPage() {
   return (
     <PageFrame
+      actions={<ReferenceBadge />}
       title="UAT / Rollback"
       subtitle="Staging/prod UAT, rollback image ve restore backup kanıtlarını izle."
     >
@@ -67,6 +68,11 @@ export function UatRollbackPage() {
           { label: "Rollback", value: "Image tag" },
           { label: "Restore referansı", value: "Backup gerekir" },
         ]}
+      />
+      <OperationDecisionNotice
+        decision="Karar: panel şu an CLI-only rehberdir."
+        reason="Rollback canlı sürümü ve veri bütünlüğünü etkiler; onay zinciri, audit log ve restore referansı olmadan panelden tetiklenmez."
+        nextStep="Panel aksiyonu için release job, çift onay ve geri dönüş kanıtı C1 sonrası gerekir."
       />
       <EvidenceGateSection title="Kanıt Kapıları" ariaLabel="UAT rollback kapıları" gates={uatGates} />
       <EvidenceListSection title="UAT Akışları" ariaLabel="UAT akışları" items={uatFlows} />

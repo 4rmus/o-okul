@@ -1,8 +1,9 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import type { CampusRecord, ClassRecord, GradeLevelRecord } from "@uzman-hocam/shared-types";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
@@ -25,6 +26,7 @@ const emptyForm: ClassFormState = {
 
 export function ClassesPage() {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
   const queryKey = ["next-classes", auth?.session.tenantId ?? "anonymous", listQuery];
@@ -56,6 +58,10 @@ export function ClassesPage() {
   const gradeLevels = gradeLevelsQuery.data?.data ?? [];
   const campusNames = new Map(campuses.map((record) => [record.id, record.name]));
   const gradeLevelNames = new Map(gradeLevels.map((record) => [record.id, record.name]));
+
+  useEffect(() => {
+    if (searchParams.get("new") === "1") openCreateForm();
+  }, [searchParams]);
 
   const columns: Array<DataTableColumn<ClassRecord>> = [
     {
@@ -176,6 +182,15 @@ export function ClassesPage() {
         aria-label="Sınıf yönetimi"
         columns={columns}
         description="Kurum sınıflarını aynı CRUD kalıbıyla yönet."
+        emptyState={
+          <EmptyState
+            title="Henüz sınıf yok"
+            description="Sınıf ekleyerek öğrencileri yerleştireceğin temel yapıyı kur."
+            hint={gradeLevels.length === 0 ? "Önce seviye eklemen önerilir." : undefined}
+            primaryAction={{ label: "Sınıf ekle", onClick: openCreateForm }}
+            secondaryAction={{ label: "Kuruluma dön", href: "/kurum/kurulum" }}
+          />
+        }
         emptyText="Sınıf kaydı yok"
         error={
           error ||

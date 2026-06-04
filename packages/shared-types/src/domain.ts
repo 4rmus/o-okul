@@ -68,6 +68,15 @@ export interface CourseRecord {
   code?: string;
 }
 
+export interface LearningOutcomeRecord {
+  id: string;
+  tenantId: string;
+  code: string;
+  branch: string;
+  title: string;
+  level?: string;
+}
+
 export interface AcademicYearRecord {
   id: string;
   tenantId: string;

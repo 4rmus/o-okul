@@ -3,7 +3,7 @@
 import { type FormEvent, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AcademicTermRecord, AttendanceRecord, ClassRecord, CourseRecord, StudentRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -178,6 +178,14 @@ export function AttendancePage() {
         aria-label="Devamsızlık yönetimi"
         columns={columns}
         description="Devamsızlığı öğrenci, sınıf, ders ve dönem bağlamıyla yönet."
+        emptyState={
+          <EmptyState
+            title="Devamsızlık kaydı yok"
+            description="İlk devamsızlık kaydını ekleyerek yoklama takibini başlat."
+            hint="Kayıtlar öğrenci, ders ve dönem bağlantısıyla izlenir."
+            primaryAction={{ label: "Devamsızlık ekle", onClick: openCreateForm }}
+          />
+        }
         emptyText="Devamsızlık kaydı yok"
         error={error || (attendanceQuery.isError ? "Devamsızlık kayıtları alınamadı." : referencesQuery.isError ? "Seçim listeleri alınamadı." : undefined)}
         getRowKey={(record) => record.id}

@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import type { NotificationDeviceTokenRecord } from "@uzman-hocam/shared-types";
-import { apiBaseUrl, apiRequest } from "../../src/api-client.js";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import type { ClassRecord, GuardianRecord, NotificationDeviceTokenRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
+import { apiBaseUrl, apiListRequest, apiRequest } from "../../src/api-client.js";
 import { useAuth } from "../providers.js";
-import { dynamicDetailParents, institutionNavGroups, rolePortalItems, staticBreadcrumbLabels } from "./_shared/navigation.js";
+import { dynamicDetailParents, institutionNavGroups, rolePortalItems, staticBreadcrumbLabels, systemNavGroups } from "./_shared/navigation.js";
 const allNavigationItems = [
+  ...systemNavGroups.flatMap((group) => group.items),
   ...institutionNavGroups.flatMap((group) => group.items),
   ...rolePortalItems,
 ];
@@ -17,10 +18,53 @@ const breadcrumbLabelByPath = {
   ...staticBreadcrumbLabels,
 };
 
+interface CommandPaletteItem {
+  group: string;
+  href: string;
+  id: string;
+  label: string;
+}
+
+type NavigationItem = {
+  href: string;
+  label: string;
+  requiredCapability?: string;
+};
+
+type NavigationGroup = {
+  label: string;
+  items: readonly NavigationItem[];
+};
+
+const entitySearchLimit = 3;
+
+interface EntitySearchResult {
+  group: string;
+  href: string;
+  id: string;
+  label: string;
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { auth, isBootstrapping, logout } = useAuth();
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState("");
+  const visiblePortalItems = useMemo(
+    () => auth?.session ? rolePortalItems.filter((item) => hasSubjectPortalAccess(auth.session, item.role, item.subjectType)) : [],
+    [auth],
+  );
+  const visibleInstitutionNavGroups = useMemo(() => auth?.session ? getInstitutionNavGroups(auth.session.roles) : [], [auth]);
+  const visibleSystemNavGroups = useMemo(
+    () => auth?.session && hasSystemAccess(auth.session.roles) ? systemNavGroups : [],
+    [auth],
+  );
+  const commandItems = useMemo(
+    () => buildCommandItems(visibleInstitutionNavGroups, visibleSystemNavGroups, visiblePortalItems, auth?.session.roles ?? []),
+    [auth?.session.roles, visibleInstitutionNavGroups, visiblePortalItems, visibleSystemNavGroups],
+  );
 
   useEffect(() => {
     if (!isBootstrapping && !auth) {
@@ -28,10 +72,22 @@ export function AppShell({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (!isBootstrapping && auth && !canAccessPath(auth.session, pathname)) {
+    if (!isBootstrapping && auth && !canAccessPath(auth.session, pathname, searchParams)) {
       router.replace(getHomePath(auth.session));
     }
-  }, [auth, isBootstrapping, pathname, router]);
+  }, [auth, isBootstrapping, pathname, router, searchParams]);
+
+  useEffect(() => {
+    if (!auth) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setIsCommandOpen(true);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [auth]);
 
   if (isBootstrapping) {
     return (
@@ -54,6 +110,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (href === "/kurum") {
       return pathname === "/kurum";
     }
+    if (href === "/sistem") {
+      return pathname === "/sistem";
+    }
     return pathname === href || pathname.startsWith(`${href}/`);
   }
 
@@ -61,7 +120,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     return isActive(href) ? "page" : undefined;
   }
 
-  const visiblePortalItems = rolePortalItems.filter((item) => hasSubjectPortalAccess(auth.session, item.role, item.subjectType));
+  function navigateCommand(href: string) {
+    setIsCommandOpen(false);
+    setCommandQuery("");
+    router.replace(href);
+  }
 
   return (
     <main className="next-app-shell">
@@ -71,10 +134,29 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="next-brand-mark">UH</span>
             <span>Uzman Hocam</span>
           </div>
+          <button className="next-command-open" type="button" onClick={() => setIsCommandOpen(true)}>
+            Komut
+          </button>
         </header>
         <nav className="next-sidebar-nav" aria-label="Ana menü">
           {hasInstitutionAccess(auth.session.roles)
-            ? institutionNavGroups.map((group) => (
+            ? visibleInstitutionNavGroups.map((group) => (
+                <section key={group.label} className="next-sidebar-group">
+                  <p className="next-sidebar-group-title">{group.label}</p>
+                  <ul className="next-sidebar-group-list">
+                    {group.items.map((item) => (
+                      <li key={item.href}>
+                        <Link className="next-sidebar-link" href={item.href} aria-current={navCurrent(item.href)}>
+                          {item.label}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))
+            : null}
+          {visibleSystemNavGroups.length > 0
+            ? visibleSystemNavGroups.map((group) => (
                 <section key={group.label} className="next-sidebar-group">
                   <p className="next-sidebar-group-title">{group.label}</p>
                   <ul className="next-sidebar-group-list">
@@ -113,7 +195,125 @@ export function AppShell({ children }: { children: ReactNode }) {
         <RouteBreadcrumb pathname={pathname} />
         {children}
       </section>
+      <CommandPalette
+        accessToken={auth.accessToken}
+        enableEntitySearch={hasInstitutionAccess(auth.session.roles)}
+        items={commandItems}
+        onClose={() => setIsCommandOpen(false)}
+        onNavigate={navigateCommand}
+        open={isCommandOpen}
+        query={commandQuery}
+        setQuery={setCommandQuery}
+      />
     </main>
+  );
+}
+
+function CommandPalette({
+  accessToken,
+  enableEntitySearch,
+  items,
+  onClose,
+  onNavigate,
+  open,
+  query,
+  setQuery,
+}: {
+  accessToken: string;
+  enableEntitySearch: boolean;
+  items: CommandPaletteItem[];
+  onClose(): void;
+  onNavigate(href: string): void;
+  open: boolean;
+  query: string;
+  setQuery(value: string): void;
+}) {
+  const filteredItems = filterCommandItems(items, query).slice(0, 10);
+  const [entityResults, setEntityResults] = useState<EntitySearchResult[]>([]);
+  const [isEntitySearchLoading, setIsEntitySearchLoading] = useState(false);
+
+  useEffect(() => {
+    const normalizedQuery = normalizeCommandText(query);
+    if (!enableEntitySearch || normalizedQuery.length < 2) {
+      setEntityResults([]);
+      setIsEntitySearchLoading(false);
+      return;
+    }
+
+    let isStale = false;
+    setIsEntitySearchLoading(true);
+    const timeoutId = window.setTimeout(() => {
+      void searchEntities(accessToken, query)
+        .then((results) => {
+          if (!isStale) setEntityResults(results);
+        })
+        .catch(() => {
+          if (!isStale) setEntityResults([]);
+        })
+        .finally(() => {
+          if (!isStale) setIsEntitySearchLoading(false);
+        });
+    }, 180);
+
+    return () => {
+      isStale = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [accessToken, enableEntitySearch, query]);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose, open]);
+
+  if (!open) return null;
+
+  return (
+    <div className="next-command-palette" role="dialog" aria-modal="true" aria-labelledby="next-command-title">
+      <div className="next-command-panel">
+        <div className="next-command-header">
+          <h2 id="next-command-title">Komut paleti</h2>
+          <button type="button" onClick={onClose}>
+            Kapat
+          </button>
+        </div>
+        <label>
+          Komut ara
+          <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} />
+        </label>
+        <div className="next-command-results">
+          {filteredItems.length > 0 ? (
+            filteredItems.map((item) => (
+              <button key={item.id} type="button" onClick={() => onNavigate(item.href)}>
+                <span>{item.label}</span>
+                <small>{item.group}</small>
+              </button>
+            ))
+          ) : (
+            <p>Sonuç yok</p>
+          )}
+        </div>
+        {enableEntitySearch && normalizeCommandText(query).length >= 2 ? (
+          <div className="next-command-results" aria-label="Varlık araması">
+            <h3>Varlık araması</h3>
+            {isEntitySearchLoading ? <p>Aranıyor...</p> : null}
+            {!isEntitySearchLoading && entityResults.length === 0 ? <p>Varlık sonucu yok</p> : null}
+            {entityResults.map((item) => (
+              <button key={item.id} type="button" onClick={() => onNavigate(item.href)}>
+                <span>{item.label}</span>
+                <small>{item.group}</small>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -218,17 +418,29 @@ function PushDevicePanel({ accessToken }: { accessToken: string }) {
 
 type AppSession = NonNullable<ReturnType<typeof useAuth>["auth"]>["session"];
 
-function canAccessPath(session: AppSession, pathname: string) {
+function canAccessPath(session: AppSession, pathname: string, searchParams?: Pick<URLSearchParams, "get">) {
+  if (pathname.startsWith("/sistem")) {
+    return hasSystemAccess(session.roles);
+  }
   if (pathname.startsWith("/kurum")) {
-    return hasInstitutionAccess(session.roles);
+    return hasInstitutionAccess(session.roles) && canAccessInstitutionPath(session.roles, pathname);
   }
   if (pathname.startsWith("/ogretmen")) {
+    if (searchParams?.get("rolePreviewToken") && hasInstitutionAccess(session.roles)) {
+      return true;
+    }
     return hasSubjectPortalAccess(session, "TEACHER", "TEACHER");
   }
   if (pathname.startsWith("/ogrenci")) {
+    if (searchParams?.get("rolePreviewToken") && hasInstitutionAccess(session.roles)) {
+      return true;
+    }
     return hasSubjectPortalAccess(session, "STUDENT", "STUDENT");
   }
   if (pathname.startsWith("/veli")) {
+    if (searchParams?.get("rolePreviewToken") && hasInstitutionAccess(session.roles)) {
+      return true;
+    }
     return hasSubjectPortalAccess(session, "GUARDIAN", "GUARDIAN");
   }
 
@@ -274,6 +486,7 @@ function resolveBreadcrumbLabel(path: string, previousSegment: string | undefine
   }
 
   if (currentSegment === "kurum") return "Kurum";
+  if (currentSegment === "sistem") return "Sistem";
 
   return currentSegment
     .split("-")
@@ -282,6 +495,7 @@ function resolveBreadcrumbLabel(path: string, previousSegment: string | undefine
 }
 
 function getHomePath(session: AppSession) {
+  if (hasSystemAccess(session.roles)) return "/sistem";
   if (hasInstitutionAccess(session.roles)) return "/kurum";
   if (hasSubjectPortalAccess(session, "TEACHER", "TEACHER")) return "/ogretmen";
   if (hasSubjectPortalAccess(session, "STUDENT", "STUDENT")) return "/ogrenci";
@@ -290,7 +504,189 @@ function getHomePath(session: AppSession) {
 }
 
 function hasInstitutionAccess(roles: readonly string[]) {
-  return roles.includes("TENANT_ADMIN") || roles.includes("SYSTEM_ADMIN");
+  return roles.includes("TENANT_ADMIN") || roles.includes("ASSISTANT_ADMIN");
+}
+
+function buildCommandItems(
+  institutionGroups: readonly NavigationGroup[],
+  systemGroups: readonly NavigationGroup[],
+  portalItems: readonly { href: string; label: string }[],
+  roles: readonly string[],
+): CommandPaletteItem[] {
+  const navigationItems = [
+    ...institutionGroups.flatMap((group) => group.items.map((item) => commandItem(item.href, item.label, group.label))),
+    ...systemGroups.flatMap((group) => group.items.map((item) => commandItem(item.href, item.label, group.label))),
+    ...portalItems.map((item) => commandItem(item.href, item.label, "Portal")),
+  ];
+  const actionItems = hasInstitutionAccess(roles)
+    ? [
+        commandItem("/kurum/kurulum", "Yeni dönem açılışı", "İş akışı"),
+        hasCapabilityForRoles(roles, "academic:manage") ? commandItem("/kurum/raporlar", "Sınav sonrası kapanış", "İş akışı") : null,
+        hasCapabilityForRoles(roles, "class:manage") ? commandItem("/kurum/kampusler?new=1", "Kampüs ekle", "Hızlı işlem") : null,
+        hasCapabilityForRoles(roles, "class:manage") ? commandItem("/kurum/seviyeler?new=1", "Seviye ekle", "Hızlı işlem") : null,
+        hasCapabilityForRoles(roles, "class:manage") ? commandItem("/kurum/siniflar?new=1", "Sınıf ekle", "Hızlı işlem") : null,
+        hasCapabilityForRoles(roles, "academic:manage") ? commandItem("/kurum/dersler?new=1", "Ders ekle", "Hızlı işlem") : null,
+        hasCapabilityForRoles(roles, "staff:manage") ? commandItem("/kurum/ogretmenler?new=1", "Öğretmen ekle", "Hızlı işlem") : null,
+        hasCapabilityForRoles(roles, "student:manage") ? commandItem("/kurum/ogrenciler?new=1", "Öğrenci ekle", "Hızlı işlem") : null,
+      ].filter((item): item is CommandPaletteItem => Boolean(item))
+    : [];
+  const systemActions = hasSystemAccess(roles) ? [commandItem("/sistem/kurumlar", "Kurum oluştur", "Hızlı işlem")] : [];
+
+  return dedupeCommandItems([...navigationItems, ...actionItems, ...systemActions]);
+}
+
+function commandItem(href: string, label: string, group: string): CommandPaletteItem {
+  return { group, href, id: `${group}:${label}:${href}`, label };
+}
+
+function dedupeCommandItems(items: CommandPaletteItem[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
+function filterCommandItems(items: CommandPaletteItem[], query: string) {
+  const normalizedQuery = normalizeCommandText(query);
+  if (!normalizedQuery) return items;
+  return items.filter((item) =>
+    normalizeCommandText(`${item.label} ${item.group} ${item.href}`).includes(normalizedQuery),
+  );
+}
+
+async function searchEntities(accessToken: string, query: string): Promise<EntitySearchResult[]> {
+  const [students, teachers, guardians, classes] = await Promise.all([
+    safeEntityList<StudentRecord>(accessToken, "students", query),
+    safeEntityList<TeacherRecord>(accessToken, "teachers", query),
+    safeEntityList<GuardianRecord>(accessToken, "guardians", query),
+    safeEntityList<ClassRecord>(accessToken, "classes", query),
+  ]);
+
+  return [
+    ...students.map((student) => ({
+      group: "Öğrenci",
+      href: `/kurum/ogrenciler/${encodeURIComponent(student.id)}`,
+      id: `student:${student.id}`,
+      label: `${student.firstName} ${student.lastName}`,
+    })),
+    ...teachers.map((teacher) => ({
+      group: "Öğretmen",
+      href: `/kurum/ogretmenler/${encodeURIComponent(teacher.id)}`,
+      id: `teacher:${teacher.id}`,
+      label: `${teacher.firstName} ${teacher.lastName}`,
+    })),
+    ...guardians.map((guardian) => ({
+      group: "Veli",
+      href: `/kurum/veliler/${encodeURIComponent(guardian.id)}`,
+      id: `guardian:${guardian.id}`,
+      label: `${guardian.firstName} ${guardian.lastName}`,
+    })),
+    ...classes.map((record) => ({
+      group: "Sınıf",
+      href: `/kurum/siniflar/${encodeURIComponent(record.id)}`,
+      id: `class:${record.id}`,
+      label: record.name,
+    })),
+  ].slice(0, 12);
+}
+
+async function safeEntityList<TRecord>(accessToken: string, endpoint: string, query: string): Promise<TRecord[]> {
+  try {
+    const url = new URL(`${apiBaseUrl}/${endpoint}`);
+    url.searchParams.set("q", query);
+    url.searchParams.set("limit", String(entitySearchLimit));
+    return (await apiListRequest<TRecord>(accessToken, url.toString())).data;
+  } catch {
+    return [];
+  }
+}
+
+function normalizeCommandText(value: string) {
+  return value
+    .toLocaleLowerCase("tr-TR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ı/g, "i");
+}
+
+function getInstitutionNavGroups(roles: readonly string[]) {
+  return institutionNavGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => canAccessNavigationItem(roles, item)),
+    }))
+    .filter((group) => group.items.length > 0);
+}
+
+function canAccessInstitutionPath(roles: readonly string[], pathname: string) {
+  const item = findInstitutionNavigationItem(pathname);
+  return item ? canAccessNavigationItem(roles, item) : true;
+}
+
+function findInstitutionNavigationItem(pathname: string) {
+  const items = institutionNavGroups.flatMap((group) => group.items);
+  return items
+    .filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
+    .sort((left, right) => right.href.length - left.href.length)[0];
+}
+
+function canAccessNavigationItem(roles: readonly string[], item: NavigationItem) {
+  return !item.requiredCapability || hasCapabilityForRoles(roles, item.requiredCapability);
+}
+
+function hasCapabilityForRoles(roles: readonly string[], requiredCapability: string) {
+  if (roles.includes("SYSTEM_ADMIN") && requiredCapability.startsWith("system:")) {
+    return true;
+  }
+
+  const capabilities = capabilitiesForRoles(roles);
+  return capabilities.some((capability) => capability === requiredCapability || matchesCapabilityWildcard(capability, requiredCapability));
+}
+
+function capabilitiesForRoles(roles: readonly string[]) {
+  const capabilities = new Set<string>();
+  for (const role of roles) {
+    for (const capability of roleCapabilityMap[role] ?? []) {
+      capabilities.add(capability);
+    }
+  }
+  return [...capabilities];
+}
+
+const roleCapabilityMap: Record<string, readonly string[]> = {
+  SYSTEM_ADMIN: ["system:*", "tenant:*"],
+  TENANT_ADMIN: [
+    "academic:*",
+    "announcement:*",
+    "attendance:*",
+    "audit:*",
+    "class:*",
+    "finance:*",
+    "note:*",
+    "observability:*",
+    "operation:*",
+    "privacy:*",
+    "role-preview:*",
+    "security:*",
+    "staff:*",
+    "student:*",
+    "support:*",
+    "user:*",
+  ],
+  ASSISTANT_ADMIN: ["academic:*", "announcement:*", "attendance:*", "class:*", "note:*", "staff:*", "student:*", "support:*"],
+  TEACHER: ["academic:read", "attendance:write-assigned", "homework:write-assigned", "note:write-assigned"],
+  STUDENT: ["self:read"],
+  GUARDIAN: ["ward:read"],
+};
+
+function matchesCapabilityWildcard(capability: string, requiredCapability: string) {
+  return capability.endsWith(":*") && requiredCapability.startsWith(capability.slice(0, -1));
+}
+
+function hasSystemAccess(roles: readonly string[]) {
+  return roles.includes("SYSTEM_ADMIN");
 }
 
 function hasSubjectPortalAccess(session: AppSession, role: string, subjectType: AppSession["subjectType"]) {

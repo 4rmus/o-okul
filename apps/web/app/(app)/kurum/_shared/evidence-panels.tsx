@@ -17,6 +17,12 @@ interface EvidenceListSectionProps {
   title: string;
 }
 
+interface OperationDecisionNoticeProps {
+  decision: string;
+  nextStep: string;
+  reason: string;
+}
+
 export function EvidenceGateSection({ ariaLabel, gates, title }: EvidenceGateSectionProps) {
   return (
     <section className="next-report-list" aria-label={ariaLabel}>
@@ -40,6 +46,20 @@ export function EvidenceListSection({ ariaLabel, items, title }: EvidenceListSec
       {items.map((item) => (
         <p key={item}>{item}</p>
       ))}
+    </section>
+  );
+}
+
+export function ReferenceBadge() {
+  return <span className="next-reference-badge">Rehber / Referans</span>;
+}
+
+export function OperationDecisionNotice({ decision, nextStep, reason }: OperationDecisionNoticeProps) {
+  return (
+    <section className="next-operation-decision" aria-label="Operasyon kararı">
+      <strong>{decision}</strong>
+      <p>{reason}</p>
+      <p>{nextStep}</p>
     </section>
   );
 }

@@ -16,8 +16,13 @@ const FOCUSABLE_SELECTOR =
 
 export function Dialog({ children, className, description, footer, onClose, open, title, ...props }: DialogProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
   const titleId = useId();
   const descriptionId = useId();
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -33,7 +38,7 @@ export function Dialog({ children, className, description, footer, onClose, open
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        onClose?.();
+        onCloseRef.current?.();
         return;
       }
       if (event.key !== "Tab" || !panel) return;
@@ -63,7 +68,7 @@ export function Dialog({ children, className, description, footer, onClose, open
       document.body.style.overflow = previousBodyOverflow;
       previouslyFocused?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

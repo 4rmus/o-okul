@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
+import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import type { TenantRecord } from "./tenant-store.js";
-import { TenantService, type TenantWriteBody } from "./tenant.service.js";
+import { TenantService, type TenantCreateResponse, type TenantWriteBody } from "./tenant.service.js";
 
 @Controller("tenants")
 export class TenantController {
@@ -10,8 +11,8 @@ export class TenantController {
 
   @Get()
   @RequireCapability("tenant:manage")
-  list(): Promise<TenantRecord[]> {
-    return this.tenants.list(getRequestContext());
+  async list(@Query() query: ListQuery): Promise<TenantRecord[]> {
+    return applyListQuery(await this.tenants.list(getRequestContext()), query, tenantListFields);
   }
 
   @Get(":id")
@@ -22,7 +23,7 @@ export class TenantController {
 
   @Post()
   @RequireCapability("tenant:manage")
-  create(@Body() body: TenantWriteBody): Promise<TenantRecord> {
+  create(@Body() body: TenantWriteBody): Promise<TenantCreateResponse> {
     return this.tenants.create(getRequestContext(), body);
   }
 
@@ -31,4 +32,20 @@ export class TenantController {
   update(@Param("id") id: string, @Body() body: TenantWriteBody): Promise<TenantRecord> {
     return this.tenants.update(getRequestContext(), id, body);
   }
+
+  @Delete(":id")
+  @RequireCapability("tenant:manage")
+  delete(@Param("id") id: string): Promise<TenantRecord> {
+    return this.tenants.delete(getRequestContext(), id);
+  }
 }
+
+const tenantListFields = [
+  { name: "name", read: (record: TenantRecord) => record.name },
+  { name: "slug", read: (record: TenantRecord) => record.slug },
+  { name: "plan", read: (record: TenantRecord) => record.plan },
+  { name: "licenseStartsAt", read: (record: TenantRecord) => record.licenseStartsAt },
+  { name: "licenseEndsAt", read: (record: TenantRecord) => record.licenseEndsAt },
+  { name: "seatLimit", read: (record: TenantRecord) => record.seatLimit },
+  { name: "status", read: (record: TenantRecord) => record.status },
+];

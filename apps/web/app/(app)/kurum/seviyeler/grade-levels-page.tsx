@@ -1,9 +1,10 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { GradeLevelRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -22,6 +23,7 @@ const emptyForm: GradeLevelFormState = {
 
 export function GradeLevelsPage() {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
   const queryKey = ["next-grade-levels", auth?.session.tenantId ?? "anonymous", listQuery];
@@ -37,6 +39,10 @@ export function GradeLevelsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
   const rows = gradeLevelsQuery.data?.data ?? [];
+
+  useEffect(() => {
+    if (searchParams.get("new") === "1") openCreateForm();
+  }, [searchParams]);
 
   const columns: Array<DataTableColumn<GradeLevelRecord>> = [
     {
@@ -141,6 +147,14 @@ export function GradeLevelsPage() {
         aria-label="Seviye yönetimi"
         columns={columns}
         description="Kurum seviyelerini sınıf bölümlerine bağlamak için yönet."
+        emptyState={
+          <EmptyState
+            title="Henüz seviye yok"
+            description="Seviye ekleyerek sınıfları daha düzenli kur."
+            primaryAction={{ label: "Seviye ekle", onClick: openCreateForm }}
+            secondaryAction={{ label: "Kuruluma dön", href: "/kurum/kurulum" }}
+          />
+        }
         emptyText="Seviye kaydı yok"
         error={error || (gradeLevelsQuery.isError ? "Seviyeler alınamadı." : undefined)}
         getRowKey={(record) => record.id}

@@ -2,7 +2,7 @@
 
 import { type FormEvent, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import type {
   AcademicTermRecord,
   AnnouncementRecipientReport,
@@ -35,6 +35,16 @@ const emptyForm: AnnouncementFormState = {
   termId: "",
 };
 
+interface AnnouncementPageData {
+  references: typeof emptyReferences;
+  messageTemplates: MessageTemplateRecord[];
+}
+
+interface AnnouncementReportData {
+  recipientReport?: AnnouncementRecipientReport;
+  smsDeliveryReport?: SmsBatchDeliveryReportRecord;
+}
+
 export function AnnouncementsPage() {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
@@ -47,15 +57,9 @@ export function AnnouncementsPage() {
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
-  const referencesQuery = useQuery({
-    queryKey: ["next-announcement-refs", auth?.session.tenantId ?? "anonymous"],
-    queryFn: () => loadReferences(auth?.accessToken ?? ""),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const messageTemplatesQuery = useQuery({
-    queryKey: ["next-announcement-sms-templates", auth?.session.tenantId ?? "anonymous"],
-    queryFn: () => loadMessageTemplates(auth?.accessToken ?? ""),
+  const pageDataQuery = useQuery({
+    queryKey: ["next-announcement-page-data", auth?.session.tenantId ?? "anonymous"],
+    queryFn: () => loadAnnouncementPageData(auth?.accessToken ?? ""),
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
@@ -69,24 +73,18 @@ export function AnnouncementsPage() {
   const [smsError, setSmsError] = useState("");
   const rows = announcementsQuery.data?.data ?? [];
   const selectedAnnouncement = rows.find((announcement) => announcement.id === selectedReportId);
-  const messageTemplates = messageTemplatesQuery.data?.data ?? [];
+  const messageTemplates = pageDataQuery.data?.messageTemplates ?? [];
   const selectedSmsTemplate = useMemo(
     () => messageTemplates.find((template) => template.id === smsTemplateId) ?? messageTemplates[0],
     [messageTemplates, smsTemplateId],
   );
-  const reportQuery = useQuery({
-    queryKey: ["next-announcement-recipient-report", auth?.session.tenantId ?? "anonymous", selectedReportId],
-    queryFn: () => loadRecipientReport(auth?.accessToken ?? "", selectedReportId),
+  const reportDataQuery = useQuery({
+    queryKey: ["next-announcement-report-data", auth?.session.tenantId ?? "anonymous", selectedReportId, smsDeliveryReportJobId],
+    queryFn: () => loadAnnouncementReportData(auth?.accessToken ?? "", selectedReportId, smsDeliveryReportJobId),
     enabled: Boolean(auth && selectedReportId),
     refetchOnWindowFocus: false,
   });
-  const smsDeliveryReportQuery = useQuery({
-    queryKey: ["next-announcement-sms-batch-report", auth?.session.tenantId ?? "anonymous", smsDeliveryReportJobId],
-    queryFn: () => loadSmsBatchDeliveryReport(auth?.accessToken ?? "", smsDeliveryReportJobId),
-    enabled: Boolean(auth && smsDeliveryReportJobId),
-    refetchOnWindowFocus: false,
-  });
-  const references = referencesQuery.data ?? emptyReferences;
+  const references = pageDataQuery.data?.references ?? emptyReferences;
   const campusNames = useMemo(() => new Map(references.campuses.map((record) => [record.id, record.name])), [references.campuses]);
   const gradeLevelNames = useMemo(() => new Map(references.gradeLevels.map((record) => [record.id, record.name])), [references.gradeLevels]);
   const classNames = useMemo(() => new Map(references.classes.map((record) => [record.id, record.name])), [references.classes]);
@@ -222,6 +220,14 @@ export function AnnouncementsPage() {
         aria-label="Duyuru yönetimi"
         columns={columns}
         description="Kurum ve öğretmen duyurularını aynı liste kalıbıyla yayınla."
+        emptyState={
+          <EmptyState
+            title="Duyuru yok"
+            description="Kurum, sınıf veya öğretmen hedefli ilk duyuruyu yayınlayarak başla."
+            hint="SMS gönderimi için duyuru ve mesaj şablonu birlikte kullanılır."
+            primaryAction={{ label: "Duyuru ekle", onClick: openCreateForm }}
+          />
+        }
         emptyText="Duyuru kaydı yok"
         error={error || (announcementsQuery.isError ? "Duyurular alınamadı." : undefined)}
         getRowKey={(announcement) => announcement.id}
@@ -240,12 +246,12 @@ export function AnnouncementsPage() {
               Kapat
             </Button>
           </header>
-          {reportQuery.isPending ? (
+          {reportDataQuery.isPending ? (
             <p>Rapor yükleniyor...</p>
-          ) : reportQuery.isError ? (
+          ) : reportDataQuery.isError ? (
             <p>Alıcı raporu alınamadı.</p>
-          ) : reportQuery.data ? (
-            <AnnouncementRecipientReportPanel report={reportQuery.data} />
+          ) : reportDataQuery.data?.recipientReport ? (
+            <AnnouncementRecipientReportPanel report={reportDataQuery.data.recipientReport} />
           ) : null}
           {selectedAnnouncement && selectedAnnouncement.audience !== "TEACHERS" ? (
             <section aria-label="Duyuru SMS gönderimi" className="next-preview-box">
@@ -276,11 +282,11 @@ export function AnnouncementsPage() {
               {smsError ? <p>{smsError}</p> : null}
               {smsDeliveryReportJobId ? (
                 <SmsDeliveryReportPanel
-                  isError={smsDeliveryReportQuery.isError}
-                  isLoading={smsDeliveryReportQuery.isPending}
+                  isError={reportDataQuery.isError}
+                  isLoading={reportDataQuery.isPending}
                   jobId={smsDeliveryReportJobId}
-                  onRefresh={() => void smsDeliveryReportQuery.refetch()}
-                  report={smsDeliveryReportQuery.data}
+                  onRefresh={() => void reportDataQuery.refetch()}
+                  report={reportDataQuery.data?.smsDeliveryReport}
                 />
               ) : null}
             </section>
@@ -414,10 +420,6 @@ async function loadAnnouncements(accessToken: string, listQuery: ListQueryState)
   return apiListRequest<AnnouncementRecord>(accessToken, buildListUrl(`${apiBaseUrl}/announcements`, listQuery));
 }
 
-async function loadMessageTemplates(accessToken: string) {
-  return apiListRequest<MessageTemplateRecord>(accessToken, buildListUrl(`${apiBaseUrl}/message-templates`, initialListQuery));
-}
-
 async function createAnnouncement(accessToken: string, input: AnnouncementFormPayload) {
   return apiRequest<AnnouncementRecord>(accessToken, `${apiBaseUrl}/announcements`, {
     body: JSON.stringify(input),
@@ -454,6 +456,26 @@ async function createSmsBatch(
 
 async function loadSmsBatchDeliveryReport(accessToken: string, jobId: string) {
   return apiRequest<SmsBatchDeliveryReportRecord>(accessToken, `${apiBaseUrl}/sms-batches/${encodeURIComponent(jobId)}`);
+}
+
+async function loadAnnouncementPageData(accessToken: string): Promise<AnnouncementPageData> {
+  const [references, messageTemplates] = await Promise.all([
+    loadReferences(accessToken),
+    apiListRequest<MessageTemplateRecord>(accessToken, buildListUrl(`${apiBaseUrl}/message-templates`, initialListQuery)),
+  ]);
+  return { references, messageTemplates: messageTemplates.data };
+}
+
+async function loadAnnouncementReportData(
+  accessToken: string,
+  announcementId: string,
+  smsDeliveryReportJobId: string,
+): Promise<AnnouncementReportData> {
+  const [recipientReport, smsDeliveryReport] = await Promise.all([
+    loadRecipientReport(accessToken, announcementId),
+    smsDeliveryReportJobId ? loadSmsBatchDeliveryReport(accessToken, smsDeliveryReportJobId) : Promise.resolve(undefined),
+  ]);
+  return { recipientReport, smsDeliveryReport };
 }
 
 async function loadReferences(accessToken: string) {

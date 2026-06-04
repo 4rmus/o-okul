@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CrudPage, type DataTableColumn } from "@uzman-hocam/ui";
+import { CrudPage, EmptyState, type DataTableColumn } from "@uzman-hocam/ui";
 import type { AuditLogRecord } from "@uzman-hocam/shared-types";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest } from "../../../../src/api-client.js";
@@ -54,6 +54,13 @@ export function AuditLogsPage() {
       aria-label="Denetim kayıtları"
       columns={columns}
       description="Kurum içindeki önemli işlem kayıtlarını salt okunur olarak izle."
+      emptyState={
+        <EmptyState
+          title="Denetim kaydı yok"
+          description="Kayıt oluşturan işlem yapıldığında denetim izi burada görünür."
+          hint="Bu liste salt okunur tutulur."
+        />
+      }
       emptyText="Denetim kaydı yok"
       error={auditLogsQuery.isError ? "Denetim kayıtları alınamadı." : undefined}
       getRowKey={(record) => record.id}

@@ -183,6 +183,14 @@ type ClassFixture = {
   section?: string;
 };
 type CourseFixture = { id: string; tenantId: string; name: string; code?: string };
+type LearningOutcomeFixture = {
+  id: string;
+  tenantId: string;
+  code: string;
+  branch: string;
+  title: string;
+  level?: string;
+};
 type ExamFixture = {
   id: string;
   tenantId: string;
@@ -313,6 +321,20 @@ type TeacherNoteFixture = {
   createdAt: string;
 };
 type GuardianFixture = { id: string; tenantId: string; firstName: string; lastName: string; phone?: string };
+type GuardianStudentFixture = {
+  id: string;
+  tenantId: string;
+  guardianId: string;
+  studentId: string;
+  relationshipType: "MOTHER" | "FATHER" | "GUARDIAN" | "EMERGENCY_CONTACT" | "OTHER";
+  isPrimary: boolean;
+  canViewFinance: boolean;
+  canReceiveSms: boolean;
+  canReceiveAnnouncements: boolean;
+  canOpenSupportTickets: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
 type StudentFixture = {
   id: string;
   tenantId: string;
@@ -498,6 +520,16 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     { id: "course-math", tenantId: "tenant-a", name: "Matematik", code: "MAT" },
     { id: "course-turkish", tenantId: "tenant-a", name: "Turkce", code: "TUR" },
   ];
+  let learningOutcomes: LearningOutcomeFixture[] = [
+    {
+      id: "learning-outcome-a",
+      tenantId: "tenant-a",
+      code: "MAT.8.1.1",
+      branch: "Matematik",
+      title: "Çarpanlar ve katlar",
+      level: "8",
+    },
+  ];
   let academicYears: AcademicYearFixture[] = [
     {
       id: "academic-year-2026",
@@ -639,6 +671,22 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   let guardians: GuardianFixture[] = [
     { id: "guardian-a", tenantId: "tenant-a", firstName: "Zeynep", lastName: "Veli", phone: "5550000000" },
   ];
+  let guardianStudentLinks: GuardianStudentFixture[] = [
+    {
+      id: "guardian-student-a",
+      tenantId: "tenant-a",
+      guardianId: "guardian-a",
+      studentId: "student-a",
+      relationshipType: "MOTHER",
+      isPrimary: true,
+      canViewFinance: true,
+      canReceiveSms: true,
+      canReceiveAnnouncements: true,
+      canOpenSupportTickets: false,
+      createdAt: "2026-06-08T09:30:00.000Z",
+      updatedAt: "2026-06-08T09:30:00.000Z",
+    },
+  ];
   let tenantUsers: TenantUserFixture[] = [
     {
       id: "user-tenant-a",
@@ -665,6 +713,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       updatedAt: "2026-06-08T09:00:00.000Z",
     },
   ];
+  let identityInvitationCreateCount = 0;
   let rolePatchCount = 0;
   let homework = [
     {
@@ -917,7 +966,32 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       diff: { title: "Haftalık toplantı" },
       createdAt: "2026-06-09T09:00:00.000Z",
     },
+    {
+      id: "audit-log-d",
+      tenantId: "tenant-a",
+      actorUserId: "user-tenant-a",
+      entityType: "Auth",
+      entityId: "user-tenant-a",
+      action: "auth.login",
+      createdAt: "2026-06-10T09:00:00.000Z",
+    },
   ];
+  let backupRestoreJobs: Array<{
+    id: string;
+    tenantId: string;
+    requestedByUserId: string;
+    operationType: "BACKUP" | "RESTORE_DRILL";
+    targetReference: string;
+    reason?: string;
+    queueName: "backup-restore";
+    jobId: string;
+    status: "queued";
+    checkedTables: string[];
+    result?: "PASS";
+    errorCode?: string;
+    createdAt: string;
+    updatedAt: string;
+  }> = [];
 
   await page.route("**/*", async (route) => {
     if (route.request().method() === "OPTIONS") {
@@ -1007,6 +1081,211 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       return;
     }
 
+    if (path === "/backup-restore-jobs" && request.method() === "GET") {
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope(backupRestoreJobs, request.url())),
+      });
+      return;
+    }
+
+    if (path === "/backup-restore-jobs" && request.method() === "POST") {
+      const body = request.postDataJSON() as {
+        confirmationText: string;
+        operationType: "BACKUP" | "RESTORE_DRILL";
+        reason?: string;
+        targetReference: string;
+      };
+      expect(body.confirmationText).toBe(body.operationType === "BACKUP" ? "YEDEK AL" : "RESTORE DRILL");
+      const suffix = body.operationType === "BACKUP" ? "backup" : "restore-drill";
+      const created = {
+        id: `backup-restore-job-created-${suffix}`,
+        tenantId: "tenant-a",
+        requestedByUserId: "user-tenant-a",
+        operationType: body.operationType,
+        targetReference: body.targetReference,
+        reason: body.reason,
+        queueName: "backup-restore" as const,
+        jobId: `backup-restore-job-created_${suffix}`,
+        status: "queued" as const,
+        checkedTables: [],
+        createdAt: "2026-06-10T09:00:00.000Z",
+        updatedAt: "2026-06-10T09:00:00.000Z",
+      };
+      backupRestoreJobs = [created, ...backupRestoreJobs];
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope(created)),
+      });
+      return;
+    }
+
+    if (path === "/role-previews" && request.method() === "POST") {
+      const body = request.postDataJSON() as {
+        targetRole: "TEACHER" | "STUDENT" | "GUARDIAN";
+        targetSubjectId: string;
+      };
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope({
+          id: "role-preview-created",
+          tenantId: "tenant-a",
+          actorUserId: "user-tenant-a",
+          targetRole: body.targetRole,
+          targetSubjectType: body.targetRole,
+          targetSubjectId: body.targetSubjectId,
+          mode: "READ_ONLY",
+          createdAt: "2026-06-10T09:00:00.000Z",
+          expiresAt: "2026-06-10T09:15:00.000Z",
+          previewToken: `preview-token-${body.targetRole.toLowerCase()}`,
+        })),
+      });
+      return;
+    }
+
+    if (path === "/me/profile" && request.method() === "GET" && request.headers()["x-role-preview-token"]) {
+      const token = request.headers()["x-role-preview-token"] ?? "";
+      const targetRole = token.includes("student") ? "STUDENT" : token.includes("guardian") ? "GUARDIAN" : "TEACHER";
+      const subjectId = targetRole === "STUDENT" ? "student-a" : targetRole === "GUARDIAN" ? "guardian-a" : "teacher-a";
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope({
+          userId: "user-tenant-a",
+          tenantId: "tenant-a",
+          roles: [targetRole],
+          subjectType: targetRole,
+          subjectId,
+        })),
+      });
+      return;
+    }
+
+    if (path === "/me/teacher" && request.method() === "GET" && request.headers()["x-role-preview-token"]) {
+      expect(request.headers()["x-role-preview-token"]).toBe("preview-token-teacher");
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope({
+          id: "teacher-a",
+          tenantId: "tenant-a",
+          firstName: "Ayse",
+          lastName: "Ogretmen",
+        })),
+      });
+      return;
+    }
+
+    if (path === "/me/teacher/schedule" && request.method() === "GET" && request.headers()["x-role-preview-token"]) {
+      expect(request.headers()["x-role-preview-token"]).toBe("preview-token-teacher");
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope([
+          {
+            id: "schedule-a",
+            tenantId: "tenant-a",
+            classId: "class-a",
+            teacherId: "teacher-a",
+            courseId: "course-math",
+            termId: "term-2026-spring",
+            title: "Matematik",
+            startsAt: "2026-06-10T09:00:00.000Z",
+            endsAt: "2026-06-10T10:00:00.000Z",
+          },
+        ])),
+      });
+      return;
+    }
+
+    if (path === "/me/teacher/announcements" && request.method() === "GET" && request.headers()["x-role-preview-token"]) {
+      expect(request.headers()["x-role-preview-token"]).toBe("preview-token-teacher");
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope([
+          {
+            id: "announcement-teacher-a",
+            tenantId: "tenant-a",
+            title: "Öğretmen duyurusu",
+            body: "Zümre toplantısı salı günü yapılacaktır.",
+            audience: "TEACHERS",
+            publishedAt: "2026-06-09T11:00:00.000Z",
+          },
+        ])),
+      });
+      return;
+    }
+
+    if (path === "/me/teacher/support-tickets" && request.method() === "GET" && request.headers()["x-role-preview-token"]) {
+      expect(request.headers()["x-role-preview-token"]).toBe("preview-token-teacher");
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope([
+          {
+            id: "support-ticket-teacher-a",
+            tenantId: "tenant-a",
+            requesterId: "teacher-tenant-a",
+            subject: "Sınıf raporu",
+            message: "Sınıf raporu hakkında destek.",
+            priority: "NORMAL",
+            status: "OPEN",
+            createdAt: "2026-06-09T11:20:00.000Z",
+          },
+        ])),
+      });
+      return;
+    }
+
+    if (path === "/me/student/profile" && request.method() === "GET" && request.headers()["x-role-preview-token"]) {
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope({
+          id: "student-a",
+          tenantId: "tenant-a",
+          firstName: "Ada",
+          lastName: "A",
+        })),
+      });
+      return;
+    }
+
+    if (path === "/me/guardian/students" && request.method() === "GET" && request.headers()["x-role-preview-token"]) {
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope([{ id: "student-a", tenantId: "tenant-a", firstName: "Ada", lastName: "A" }])),
+      });
+      return;
+    }
+
+    if (request.method() === "GET" && request.headers()["x-role-preview-token"]) {
+      const token = request.headers()["x-role-preview-token"] ?? "";
+      expect(token).toMatch(/^preview-token-(teacher|student|guardian)$/);
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope(readPortalFixture(path), request.url())),
+      });
+      return;
+    }
+
     if (path === "/tenant-users" && request.method() === "GET") {
       await route.fulfill({
         contentType: "application/json",
@@ -1075,8 +1354,9 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
         email: string;
         name?: string;
       };
+      identityInvitationCreateCount += 1;
       const created: IdentityInvitationFixture = {
-        id: "identity-invitation-created",
+        id: `identity-invitation-created-${identityInvitationCreateCount}`,
         tenantId: "tenant-a",
         subjectType: body.subjectType,
         subjectId: body.subjectId,
@@ -1234,6 +1514,17 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       return;
     }
 
+    if (path.startsWith("/classes/") && request.method() === "GET") {
+      const id = path.replace("/classes/", "");
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope(classes.find((record) => record.id === id) ?? null)),
+      });
+      return;
+    }
+
     if (path === "/classes" && request.method() === "POST") {
       const body = request.postDataJSON() as { name: string; level?: string; campusId?: string; gradeLevelId?: string; section?: string };
       const created: ClassFixture = {
@@ -1336,6 +1627,55 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     if (path.startsWith("/courses/") && request.method() === "DELETE") {
       const id = path.replace("/courses/", "");
       courses = courses.filter((record) => record.id !== id);
+      await route.fulfill({ headers: corsHeaders, status: 204 });
+      return;
+    }
+
+    if (path === "/learning-outcomes" && request.method() === "GET") {
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope(learningOutcomes, request.url())),
+      });
+      return;
+    }
+
+    if (path === "/learning-outcomes" && request.method() === "POST") {
+      const body = request.postDataJSON() as Omit<LearningOutcomeFixture, "id" | "tenantId">;
+      const created: LearningOutcomeFixture = {
+        id: "learning-outcome-created",
+        tenantId: "tenant-a",
+        ...body,
+      };
+      learningOutcomes = [...learningOutcomes, created];
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope(created)),
+      });
+      return;
+    }
+
+    if (path.startsWith("/learning-outcomes/") && request.method() === "PATCH") {
+      const id = path.replace("/learning-outcomes/", "");
+      const current = learningOutcomes.find((record) => record.id === id) ?? learningOutcomes[0]!;
+      const body = request.postDataJSON() as Partial<LearningOutcomeFixture>;
+      const updated = { ...current, ...body };
+      learningOutcomes = learningOutcomes.map((record) => (record.id === id ? updated : record));
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope(updated)),
+      });
+      return;
+    }
+
+    if (path.startsWith("/learning-outcomes/") && request.method() === "DELETE") {
+      const id = path.replace("/learning-outcomes/", "");
+      learningOutcomes = learningOutcomes.filter((record) => record.id !== id);
       await route.fulfill({ headers: corsHeaders, status: 204 });
       return;
     }
@@ -1494,6 +1834,18 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
         headers: corsHeaders,
         status: 200,
         body: JSON.stringify(envelope(filterByStudentClass(attendanceRecords, students, classId), request.url())),
+      });
+      return;
+    }
+
+    if (path === "/import-quarantines/summary" && request.method() === "GET") {
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope({
+          openCount: importQuarantines.filter((record) => record.status === "OPEN").length,
+        })),
       });
       return;
     }
@@ -1677,6 +2029,17 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       return;
     }
 
+    if (path.startsWith("/teachers/") && request.method() === "GET") {
+      const id = path.replace("/teachers/", "");
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope(teachers.find((record) => record.id === id) ?? null)),
+      });
+      return;
+    }
+
     if (path.startsWith("/teachers/") && path.endsWith("/assignments") && request.method() === "POST") {
       const teacherId = path.replace("/teachers/", "").replace("/assignments", "");
       const body = request.postDataJSON() as Partial<TeacherAssignmentFixture>;
@@ -1779,6 +2142,55 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
         headers: corsHeaders,
         status: 200,
         body: JSON.stringify(envelope(created)),
+      });
+      return;
+    }
+
+    if (path.startsWith("/guardians/") && path.endsWith("/students") && request.method() === "GET") {
+      const guardianId = path.replace("/guardians/", "").replace("/students", "");
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope(guardianStudentLinks.filter((link) => link.guardianId === guardianId))),
+      });
+      return;
+    }
+
+    if (path.startsWith("/guardians/") && path.endsWith("/students") && request.method() === "POST") {
+      const guardianId = path.replace("/guardians/", "").replace("/students", "");
+      const body = request.postDataJSON() as Partial<GuardianStudentFixture>;
+      const created: GuardianStudentFixture = {
+        id: `guardian-student-created-${guardianStudentLinks.length}`,
+        tenantId: "tenant-a",
+        guardianId,
+        studentId: body.studentId ?? "student-a",
+        relationshipType: body.relationshipType ?? "GUARDIAN",
+        isPrimary: body.isPrimary ?? false,
+        canViewFinance: body.canViewFinance ?? true,
+        canReceiveSms: body.canReceiveSms ?? true,
+        canReceiveAnnouncements: body.canReceiveAnnouncements ?? true,
+        canOpenSupportTickets: body.canOpenSupportTickets ?? true,
+        createdAt: "2026-06-09T09:30:00.000Z",
+        updatedAt: "2026-06-09T09:30:00.000Z",
+      };
+      guardianStudentLinks = [...guardianStudentLinks, created];
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope(created)),
+      });
+      return;
+    }
+
+    if (path.startsWith("/guardians/") && request.method() === "GET") {
+      const id = path.replace("/guardians/", "");
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope(guardians.find((record) => record.id === id) ?? null)),
       });
       return;
     }
@@ -3074,6 +3486,10 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByLabel("Kurum özeti").locator("article").filter({ hasText: "Sınıf" }).getByText("2")).toBeVisible();
   await expect(page.getByLabel("Kurum özeti").locator("article").filter({ hasText: "Öğretmen" }).getByText("1")).toBeVisible();
   await expect(page.getByLabel("Kurum özeti").locator("article").filter({ hasText: "Öğrenci" }).getByText("3")).toBeVisible();
+  await expect(page.getByLabel("Karar sinyalleri").getByRole("link", { name: /Bekleyen destek 1/ })).toBeVisible();
+  await expect(page.getByLabel("Karar sinyalleri").getByRole("link", { name: /Geciken ödeme 1/ })).toBeVisible();
+  await expect(page.getByLabel("Karar sinyalleri").getByRole("link", { name: /Devamsızlık 1/ })).toBeVisible();
+  await expect(page.getByLabel("Karar sinyalleri").getByRole("link", { name: /Optik kontrol 1/ })).toBeVisible();
   await expect(page.getByLabel("Sınav sonuç özeti").getByText("Toplam 20 soru")).toBeVisible();
   await expect(page.getByLabel("Sınav sonuç özeti").locator("canvas")).toBeVisible();
   await expect(page.getByLabel("Sınıf karşılaştırması").getByText("Sınıf net karşılaştırması")).toBeVisible();
@@ -3081,8 +3497,8 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByLabel("Sınıf karşılaştırması").getByText("18.25")).toBeVisible();
   await expect(page.getByLabel("Sınıf karşılaştırması").locator("canvas")).toBeVisible();
   await expect(page.getByLabel("Öğrenci gelişimi").getByText("Öğrenci gelişim grafiği")).toBeVisible();
-  await expect(page.getByLabel("Öğrenci gelişimi").getByText("83.34")).toBeVisible();
-  await expect(page.getByLabel("Öğrenci gelişimi").getByText("435")).toBeVisible();
+  await expect(page.getByLabel("Öğrenci gelişimi").getByText("17.5")).toBeVisible();
+  await expect(page.getByLabel("Öğrenci gelişimi").getByText("420")).toBeVisible();
   await expect(page.getByLabel("Öğrenci gelişimi").locator("canvas")).toBeVisible();
   await expect(page.getByLabel("Branş analizi").getByText("Branş net analizi")).toBeVisible();
   await expect(page.getByLabel("Branş analizi").getByText("Matematik")).toBeVisible();
@@ -3115,6 +3531,58 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByText("tenant-a", { exact: true })).toBeVisible();
   await expect(page.getByText("user-tenant-a", { exact: true })).toBeVisible();
   expect(loginCount).toBe(1);
+  await page.keyboard.press("ControlOrMeta+K");
+  const commandDialog = page.getByRole("dialog", { name: "Komut paleti" });
+  await expect(commandDialog).toBeVisible();
+  await commandDialog.getByLabel("Komut ara").fill("finans");
+  await commandDialog.getByRole("button", { name: /Ödemeler/ }).click();
+  await expect(page).toHaveURL(/\/kurum\/finans$/);
+  await expect(heading(page, { name: "Finans" })).toBeVisible();
+  await expect(page.getByLabel("Son kullanılanlar")).toHaveCount(0);
+  await page.getByRole("link", { name: "Kurum Paneli" }).click();
+  await expect(heading(page, { name: "Kurum Paneli" })).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+K");
+  const workflowDialog = page.getByRole("dialog", { name: "Komut paleti" });
+  await expect(workflowDialog).toBeVisible();
+  await workflowDialog.getByLabel("Komut ara").fill("dönem");
+  await workflowDialog.getByRole("button", { name: /Yeni dönem açılışı/ }).click();
+  await expect(page).toHaveURL(/\/kurum\/kurulum$/);
+  await expect(heading(page, { name: "Kurulum" })).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+K");
+  const examCloseDialog = page.getByRole("dialog", { name: "Komut paleti" });
+  await expect(examCloseDialog).toBeVisible();
+  await examCloseDialog.getByLabel("Komut ara").fill("sınav sonrası");
+  await examCloseDialog.getByRole("button", { name: /Sınav sonrası kapanış/ }).click();
+  await expect(page).toHaveURL(/\/kurum\/raporlar$/);
+  await expect(heading(page, { name: "Sınav Raporu" })).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+K");
+  const entityDialog = page.getByRole("dialog", { name: "Komut paleti" });
+  await entityDialog.getByLabel("Komut ara").fill("Ayse");
+  await entityDialog.getByLabel("Varlık araması").getByRole("button", { name: /Ayse Ogretmen/ }).click();
+  await expect(page).toHaveURL(/\/kurum\/ogretmenler\/teacher-a$/);
+  await expect(heading(page, { name: "Ayse Ogretmen" })).toBeVisible();
+  await expect(page.getByLabel("Öğretmen özeti").getByText("Matematik")).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+K");
+  const studentEntityDialog = page.getByRole("dialog", { name: "Komut paleti" });
+  await studentEntityDialog.getByLabel("Komut ara").fill("Ada");
+  await studentEntityDialog.getByLabel("Varlık araması").getByRole("button", { name: /Ada A/ }).click();
+  await expect(page).toHaveURL(/\/kurum\/ogrenciler\/student-a$/);
+  await expect(heading(page, { name: "Ada A" })).toBeVisible();
+  await expect(page.getByLabel("Öğrenci 360 detay").getByText("Aktif", { exact: true })).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+K");
+  const guardianEntityDialog = page.getByRole("dialog", { name: "Komut paleti" });
+  await guardianEntityDialog.getByLabel("Komut ara").fill("Zeynep");
+  await guardianEntityDialog.getByLabel("Varlık araması").getByRole("button", { name: /Zeynep Veli/ }).click();
+  await expect(page).toHaveURL(/\/kurum\/veliler\/guardian-a$/);
+  await expect(heading(page, { name: "Zeynep Veli" })).toBeVisible();
+  await expect(page.getByLabel("Veli özeti").getByText("5550000000")).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+K");
+  const classEntityDialog = page.getByRole("dialog", { name: "Komut paleti" });
+  await classEntityDialog.getByLabel("Komut ara").fill("8-A");
+  await classEntityDialog.getByLabel("Varlık araması").getByRole("button", { name: /8-A/ }).click();
+  await expect(page).toHaveURL(/\/kurum\/siniflar\/class-a$/);
+  await expect(heading(page, { name: "8-A" })).toBeVisible();
+  await expect(page.getByLabel("Sınıf özeti").getByText("8. Sınıf")).toBeVisible();
 
   await page.getByRole("link", { name: "Kullanıcılar" }).click();
   await expect(page).toHaveURL(/\/kurum\/kullanicilar$/);
@@ -3335,6 +3803,30 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "Fen sil" }).click();
   await expect(page.getByRole("cell", { name: "Fen", exact: true })).toBeHidden();
 
+  await page.getByRole("link", { name: "Kazanımlar" }).click();
+  await expect(page).toHaveURL(/\/kurum\/kazanimlar$/);
+  await expect(heading(page, { name: "Kazanımlar" })).toBeVisible();
+  await expect(page.getByText("Çarpanlar ve katlar")).toBeVisible();
+  await page.getByRole("button", { name: "Kazanım ekle" }).click();
+  let dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Kazanım kodu").fill("TUR.8.1.1");
+  await dialog.getByLabel("Branş").fill("Türkçe");
+  await dialog.getByLabel("Kazanım adı").fill("Sözcükte anlam");
+  await dialog.getByLabel("Seviye").fill("8");
+  await page.getByRole("button", { name: "Ekle", exact: true }).click();
+  await expect(page.getByText("Sözcükte anlam")).toBeVisible();
+
+  await page.getByRole("button", { name: "TUR.8.1.1 düzenle" }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Kazanım adı").fill("Cümlede anlam");
+  await page.getByRole("button", { name: "Kaydet", exact: true }).click();
+  await expect(page.getByRole("cell", { name: "Cümlede anlam", exact: true })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Sözcükte anlam", exact: true })).toBeHidden();
+
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "TUR.8.1.1 sil" }).click();
+  await expect(page.getByRole("cell", { name: "Cümlede anlam", exact: true })).toBeHidden();
+
   await page.getByRole("link", { name: "Ders Programı" }).click();
   await expect(page).toHaveURL(/\/kurum\/program$/);
   await expect(heading(page, { name: "Ders Programı" })).toBeVisible();
@@ -3346,7 +3838,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByLabel("Ara").fill("");
 
   await page.getByRole("button", { name: "Ders ekle" }).click();
-  let dialog = page.getByRole("dialog");
+  dialog = page.getByRole("dialog");
   await dialog.getByLabel("Sınıf").selectOption("class-a");
   await dialog.getByLabel("Öğretmen").selectOption("teacher-a");
   await dialog.getByLabel("Branş").selectOption("course-math");
@@ -3473,6 +3965,21 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(heading(page, { name: "Öğretmenler" })).toBeVisible();
   await expect(page.getByText("Ayse Ogretmen")).toBeVisible();
 
+  await page.getByRole("link", { name: "Ayse portal daveti gönder" }).click();
+  await expect(page).toHaveURL(/\/kurum\/kullanicilar\?invite=teacher&subjectId=teacher-a$/);
+  dialog = page.getByRole("dialog", { name: "Davet oluştur" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel("Kişi türü")).toHaveValue("TEACHER");
+  await expect(dialog.getByRole("combobox").nth(1)).toHaveValue("teacher-a");
+  await expect(dialog.getByLabel("Ad Soyad")).toHaveValue("Ayse Ogretmen");
+  await dialog.getByLabel("E-posta").fill("ayse.portal@example.test");
+  await page.getByRole("button", { name: "Oluştur", exact: true }).click();
+  await expect(page.getByLabel("Son aktivasyon tokenı").getByText("ayse.portal@example.test")).toBeVisible();
+  await expect(page.getByLabel("Son aktivasyon tokenı").getByText("activation-token-created")).toBeVisible();
+
+  await page.getByRole("link", { name: "Öğretmenler" }).click();
+  await expect(page).toHaveURL(/\/kurum\/ogretmenler$/);
+
   await page.getByRole("button", { name: "Ayse düzenle" }).click();
   await expect(page.getByLabel("Öğretmen atamaları").getByText("Sınıf öğretmeni · 8-A · Matematik · 2. Donem")).toBeVisible();
   await page.getByLabel("Atama rolü").selectOption("GUIDANCE_COUNSELOR");
@@ -3503,10 +4010,33 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "Mert sil" }).click();
   await expect(page.getByText("Mert Hoca")).toBeHidden();
 
-  await page.getByRole("link", { name: "Veliler" }).click();
+  await page.getByRole("link", { name: "Veliler", exact: true }).click();
   await expect(page).toHaveURL(/\/kurum\/veliler$/);
   await expect(heading(page, { name: "Veliler" })).toBeVisible();
   await expect(page.getByText("Zeynep Veli")).toBeVisible();
+
+  await page.getByRole("link", { name: "Zeynep detay" }).click();
+  await expect(page).toHaveURL(/\/kurum\/veliler\/guardian-a$/);
+  await expect(heading(page, { name: "Zeynep Veli" })).toBeVisible();
+  await expect(page.getByLabel("Veli öğrenci bağlantıları").getByText("Ada A - Anne / Birincil")).toBeVisible();
+  await page.getByLabel("Veli öğrenci bağı ekle").getByLabel("Öğrenci").selectOption("student-b");
+  await page.getByLabel("Veli öğrenci bağı ekle").getByLabel("İlişki").selectOption("FATHER");
+  await page.getByRole("button", { name: "Bağla" }).click();
+  await expect(page.getByLabel("Veli öğrenci bağlantıları").getByText("Bora B - Baba / Birincil")).toBeVisible();
+
+  await page.getByRole("link", { name: "Portal daveti gönder" }).click();
+  await expect(page).toHaveURL(/\/kurum\/kullanicilar\?invite=guardian&subjectId=guardian-a$/);
+  dialog = page.getByRole("dialog", { name: "Davet oluştur" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel("Kişi türü")).toHaveValue("GUARDIAN");
+  await expect(dialog.getByRole("combobox").nth(1)).toHaveValue("guardian-a");
+  await expect(dialog.getByLabel("Ad Soyad")).toHaveValue("Zeynep Veli");
+  await dialog.getByLabel("E-posta").fill("zeynep.portal@example.test");
+  await page.getByRole("button", { name: "Oluştur", exact: true }).click();
+  await expect(page.getByLabel("Son aktivasyon tokenı").getByText("zeynep.portal@example.test")).toBeVisible();
+
+  await page.getByRole("link", { name: "Veliler", exact: true }).click();
+  await expect(page).toHaveURL(/\/kurum\/veliler$/);
 
   await page.getByRole("button", { name: "Veli ekle" }).click();
   await page.getByLabel("Ad", { exact: true }).fill("Selin");
@@ -4047,47 +4577,116 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page).toHaveURL(/\/kurum\/rol-onizleme$/);
   await expect(heading(page, { name: "Rol Önizleme" })).toBeVisible();
   await expect(page.getByLabel("Rol önizleme özeti").getByText("3 rol")).toBeVisible();
+  const roleViewPreview = page.getByLabel("Rol görünüm önizleme");
+  await expect(roleViewPreview.getByText("Ödemeler")).toBeVisible();
+  await expect(roleViewPreview.getByText("Kullanıcılar")).toBeVisible();
+  await roleViewPreview.getByLabel("Rol").selectOption("ASSISTANT_ADMIN");
+  await expect(roleViewPreview.getByText("Öğrenciler")).toBeVisible();
+  await expect(roleViewPreview.getByText("Ödemeler")).toHaveCount(0);
+  await expect(roleViewPreview.getByText("Kullanıcılar")).toHaveCount(0);
+  await roleViewPreview.getByLabel("Rol").selectOption("TEACHER");
+  await expect(roleViewPreview.getByText("Öğretmen Portalı")).toBeVisible();
+  await expect(roleViewPreview.getByText("/ogretmen")).toBeVisible();
+  await expect(roleViewPreview.getByText("Kurum sol menüsü görünmez")).toBeVisible();
   await expect(page.getByLabel("Rol portal kartları").getByText("TEACHER + subjectType TEACHER")).toBeVisible();
   await expect(page.getByLabel("Rol portal kartları").getByText("student-a@example.test")).toBeVisible();
   await expect(page.getByLabel("Rol portal kartları").getByText("/veli")).toBeVisible();
+  await page.getByLabel("Rol portal kartları").getByRole("button", { name: "Auditli öğretmen önizleme başlat" }).click();
+  await expect(page.getByLabel("Aktif rol önizleme kaydı").getByText("Hedef rol: TEACHER")).toBeVisible();
+  await expect(page.getByLabel("Aktif rol önizleme kaydı").getByText("Kişi kaydı: teacher-a", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Aktif rol önizleme kaydı").getByText("Mod: READ_ONLY")).toBeVisible();
+  await expect(page.getByLabel("Aktif rol önizleme kaydı").getByText("Portal context doğrulandı")).toBeVisible();
+  await expect(page.getByLabel("Aktif rol önizleme kaydı").getByText("Öğretmen portal verisi: teacher-a")).toBeVisible();
+  await page.getByLabel("Aktif rol önizleme kaydı").getByRole("link", { name: "Öğretmen portalını önizle" }).click();
+  await expect(page).toHaveURL(/\/ogretmen\?rolePreviewToken=preview-token-teacher$/);
+  await expect(heading(page, { name: "Öğretmen Portalı" })).toBeVisible();
+  await expect(page.getByLabel("Rol önizleme modu").getByText("Salt-okuma Önizleme")).toBeVisible();
+  await expect(page.getByLabel("Öğretmen öğrenci kapsamı").getByText("Ada A")).toBeVisible();
+  await expect(page.getByLabel("Öğretmen günlük işlemleri")).toHaveCount(0);
+  await expect(page.getByLabel("Destek talepleri").getByText("Salt-okuma önizlemede destek talebi açılamaz.")).toBeVisible();
+  await expect(page.getByLabel("Öğretmen ödev kontrolü").getByText("Salt-okuma")).toBeVisible();
+  await page.getByRole("link", { name: "Rol Önizleme" }).click();
+  await expect(page).toHaveURL(/\/kurum\/rol-onizleme$/);
+  await expect(heading(page, { name: "Rol Önizleme" })).toBeVisible();
+  await page.getByLabel("Rol portal kartları").getByRole("button", { name: "Auditli öğrenci önizleme başlat" }).click();
+  await expect(page.getByLabel("Aktif rol önizleme kaydı").getByText("Hedef rol: STUDENT")).toBeVisible();
+  await expect(page.getByLabel("Aktif rol önizleme kaydı").getByText("Öğrenci portal verisi: student-a")).toBeVisible();
+  await page.getByLabel("Aktif rol önizleme kaydı").getByRole("link", { name: "Öğrenci portalını önizle" }).click();
+  await expect(page).toHaveURL(/\/ogrenci\?rolePreviewToken=preview-token-student$/);
+  await expect(heading(page, { name: "Öğrenci Portalı" })).toBeVisible();
+  await expect(page.getByLabel("Rol önizleme modu").getByText("Salt-okuma Önizleme")).toBeVisible();
+  await expect(page.getByLabel("Profil").getByText("Ada A")).toBeVisible();
+  await expect(page.getByLabel("Destek talepleri").getByText("Salt-okuma önizlemede destek talebi açılamaz.")).toBeVisible();
+  await page.getByRole("link", { name: "Rol Önizleme" }).click();
+  await expect(page).toHaveURL(/\/kurum\/rol-onizleme$/);
+  await page.getByLabel("Rol portal kartları").getByRole("button", { name: "Auditli veli önizleme başlat" }).click();
+  await expect(page.getByLabel("Aktif rol önizleme kaydı").getByText("Hedef rol: GUARDIAN")).toBeVisible();
+  await expect(page.getByLabel("Aktif rol önizleme kaydı").getByText("Veli portal verisi: 1 bağlı öğrenci")).toBeVisible();
+  await page.getByLabel("Aktif rol önizleme kaydı").getByRole("link", { name: "Veli portalını önizle" }).click();
+  await expect(page).toHaveURL(/\/veli\?rolePreviewToken=preview-token-guardian$/);
+  await expect(heading(page, { name: "Veli Portalı" })).toBeVisible();
+  await expect(page.getByLabel("Rol önizleme modu").getByText("Salt-okuma Önizleme")).toBeVisible();
+  await expect(page.getByLabel("Profil").getByText("Ada A")).toBeVisible();
+  await expect(page.getByLabel("Bildirim tercihleri").getByText("Salt-okuma önizlemede bildirim tercihleri değiştirilemez.")).toBeVisible();
+  await expect(page.getByLabel("Destek talepleri").getByText("Salt-okuma önizlemede destek talebi açılamaz.")).toBeVisible();
+  await page.getByRole("link", { name: "Rol Önizleme" }).click();
+  await expect(page).toHaveURL(/\/kurum\/rol-onizleme$/);
+  await expect(page.getByText("Rehber / Referans")).toBeVisible();
+  await expect(page.getByLabel("Rol portal kartları").getByRole("button", { name: "Auditli öğrenci önizleme başlat" })).toBeVisible();
+  await expect(page.getByLabel("Rol portal kartları").getByRole("button", { name: "Auditli veli önizleme başlat" })).toBeVisible();
   await expect(page.getByLabel("Rol erişim kuralları").getByText("Kurum admin portalları normal sol menü rotası olarak görmez.")).toBeVisible();
   await expect(page.getByLabel("Rol erişim kuralları").getByText("Öğretmen yalnız sorumlu öğrenci veya ders programı kapsamını görür.")).toBeVisible();
   await expect(page.getByLabel("Rol önizleme kanıt komutları").getByText("me-access-matrix.e2e.test.ts")).toBeVisible();
+  await expect(page.getByLabel("Operasyon kararı").getByText("Karar: panel audit'li ve süreli rol önizleme kaydı başlatır.")).toBeVisible();
 
   await page.getByRole("link", { name: "Güvenlik Denetimi" }).click();
   await expect(page).toHaveURL(/\/kurum\/guvenlik-denetimi$/);
   await expect(heading(page, { name: "Güvenlik Denetimi", exact: true })).toBeVisible();
+  await expect(page.getByText("Rehber / Referans")).toBeVisible();
   await expect(page.getByLabel("Güvenlik denetimi özeti").getByText("2xx + HSTS")).toBeVisible();
+  await expect(page.getByLabel("Güvenlik denetimi özeti").getByText("auth.login")).toBeVisible();
+  await expect(page.getByLabel("Son güvenlik olayları").getByText("auth.login")).toBeVisible();
+  await expect(page.getByLabel("Son güvenlik olayları").getByText("Auth", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Güvenlik denetimi kapıları").getByText("pnpm security:audit:check")).toBeVisible();
   await expect(page.getByLabel("Güvenlik denetimi kapıları").getByText("pnpm db:rls:check:live")).toBeVisible();
   await expect(page.getByLabel("Header kontrolleri").getByText("Strict-Transport-Security")).toBeVisible();
   await expect(page.getByLabel("Auth kontrolleri").getByText("refresh session revocation")).toBeVisible();
   await expect(page.getByLabel("Veri kontrolleri").getByText("tenant isolation")).toBeVisible();
+  await expect(page.getByLabel("Operasyon kararı").getByText("Karar: son güvenlik olayları canlı okunur.")).toBeVisible();
 
   await page.getByRole("link", { name: "Gözlemlenebilirlik" }).click();
   await expect(page).toHaveURL(/\/kurum\/gozlemlenebilirlik$/);
   await expect(heading(page, { name: "Gözlemlenebilirlik" })).toBeVisible();
-  await expect(page.getByLabel("Gözlemlenebilirlik özeti").getByText("Webhook 2xx")).toBeVisible();
+  await expect(page.getByText("Rehber / Referans")).toBeVisible();
+  await expect(page.getByLabel("Gözlemlenebilirlik özeti").getByText("Çalışıyor")).toBeVisible();
+  await expect(page.getByLabel("Gözlemlenebilirlik özeti").getByText("7")).toBeVisible();
+  await expect(page.getByLabel("Canlı gözlemlenebilirlik detayları").getByText("/health: 200 tamam")).toBeVisible();
+  await expect(page.getByLabel("Canlı gözlemlenebilirlik detayları").getByText("/metrics: 200 tamam")).toBeVisible();
+  await expect(page.getByLabel("Canlı gözlemlenebilirlik detayları").getByText("Uptime: 2 dk 3 sn")).toBeVisible();
   await expect(page.getByLabel("Gözlemlenebilirlik kapıları").getByText("pnpm observability:uat:check")).toBeVisible();
   await expect(page.getByLabel("Gözlemlenebilirlik kapıları").getByText("pnpm alert:webhook:smoke")).toBeVisible();
   await expect(page.getByLabel("Gözlemlenebilirlik kapıları").getByText("pnpm sentry:smoke")).toBeVisible();
   await expect(page.getByLabel("Dashboard panelleri").getByText("Readiness failures")).toBeVisible();
   await expect(page.getByLabel("Alert kuralları").getByText("UzmanHocamHigh5xxRate")).toBeVisible();
   await expect(page.getByLabel("Telemetri kontrolleri").getByText("prometheusScrapeOk")).toBeVisible();
+  await expect(page.getByLabel("Operasyon kararı").getByText("Karar: temel health ve metrics canlıdır.")).toBeVisible();
 
   await page.getByRole("link", { name: "UAT / Rollback" }).click();
   await expect(page).toHaveURL(/\/kurum\/uat-rollback$/);
   await expect(heading(page, { name: "UAT / Rollback" })).toBeVisible();
+  await expect(page.getByText("Rehber / Referans")).toBeVisible();
   await expect(page.getByLabel("UAT rollback özeti").getByText("Image tag")).toBeVisible();
   await expect(page.getByLabel("UAT rollback kapıları").getByText("pnpm uat:check")).toBeVisible();
   await expect(page.getByLabel("UAT rollback kapıları").getByText("pnpm prod:env:check")).toBeVisible();
   await expect(page.getByLabel("UAT akışları").getByText("teacher workflow")).toBeVisible();
   await expect(page.getByLabel("Zorunlu komutlar").getByText("pnpm sms:smoke")).toBeVisible();
   await expect(page.getByLabel("Rollback alanları").getByText("rollbackImageTag")).toBeVisible();
+  await expect(page.getByLabel("Operasyon kararı").getByText("Karar: panel şu an CLI-only rehberdir.")).toBeVisible();
 
   await page.getByRole("link", { name: "Canlı Yayın" }).click();
   await expect(page).toHaveURL(/\/kurum\/canli-yayin$/);
   await expect(heading(page, { name: "Canlı Yayın" })).toBeVisible();
+  await expect(page.getByText("Rehber / Referans")).toBeVisible();
   await expect(page.getByLabel("Canlı yayın özeti").getByText("17 kapı")).toBeVisible();
   await expect(page.getByLabel("Canlı yayın kapıları").getByText("pnpm prod:evidence:check")).toBeVisible();
   await expect(page.getByLabel("Canlı yayın kapıları").getByText("pnpm prod:evidence:templates:check")).toBeVisible();
@@ -4096,6 +4695,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByLabel("Release özeti alanları").getByText("reports.uat.rollbackImageTag")).toBeVisible();
   await expect(page.getByLabel("Dış ortam kanıtları").getByText("SMS provider credential")).toBeVisible();
   await expect(page.getByLabel("Dış ortam kanıtları").getByText("Notification provider credential")).toBeVisible();
+  await expect(page.getByLabel("Operasyon kararı").getByText("Karar: panel şu an CLI-only release rehberidir.")).toBeVisible();
 
   await page.getByRole("link", { name: "Sistem Sağlığı" }).click();
   await expect(page).toHaveURL(/\/kurum\/sistem-sagligi$/);
@@ -4111,12 +4711,32 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("link", { name: "Yedek / Restore" }).click();
   await expect(page).toHaveURL(/\/kurum\/yedek-restore$/);
   await expect(heading(page, { name: "Yedek / Restore" })).toBeVisible();
+  await expect(page.getByText("Rehber / Referans")).toBeVisible();
   await expect(page.getByLabel("Yedek restore özeti").getByText("Hazır")).toBeVisible();
+  await expect(page.getByLabel("Panel restore drill işi").getByText("Panel İş Tetikleme")).toBeVisible();
+  await expect(page.getByLabel("Yedek restore işleri").getByText("Henüz panelden başlatılmış iş yok.")).toBeVisible();
+  await page.getByLabel("Panel restore drill işi").getByLabel("İş tipi").selectOption("BACKUP");
+  await page.getByLabel("Panel restore drill işi").getByLabel("Yedek hedefi").fill("file:///mnt/backups/tenant-a");
+  await page.getByLabel("Panel restore drill işi").getByLabel("Onay metni").fill("YEDEK AL");
+  await page.getByLabel("Panel restore drill işi").getByRole("button", { name: "Yedek alma işi başlat" }).click();
+  await expect(page.getByLabel("Yedek restore işleri").getByRole("heading", { name: "Yedek alma" })).toBeVisible();
+  await expect(page.getByLabel("Yedek restore işleri").getByText("backup-restore-job-created_backup")).toBeVisible();
+  await page.getByLabel("Panel restore drill işi").getByLabel("İş tipi").selectOption("RESTORE_DRILL");
+  await page.getByLabel("Panel restore drill işi").getByLabel("Restore kanıt dosyası").fill("file:///tmp/restore-drill.json");
+  await page.getByLabel("Panel restore drill işi").getByLabel("Onay metni").fill("RESTORE DRILL");
+  await page.getByLabel("Panel restore drill işi").getByRole("button", { name: "Restore drill işi başlat" }).click();
+  const restoreDrillJob = page
+    .getByLabel("Yedek restore işleri")
+    .locator("article")
+    .filter({ hasText: "backup-restore-job-created_restore-drill" });
+  await expect(restoreDrillJob.getByRole("heading", { name: "Restore drill" })).toBeVisible();
+  await expect(restoreDrillJob.getByText("Kuyrukta")).toBeVisible();
   await expect(page.getByLabel("Yedek restore kapıları").getByText("pnpm backup:restore:smoke")).toBeVisible();
   await expect(page.getByLabel("Yedek restore kapıları").getByText("pnpm backup:offsite:smoke")).toBeVisible();
   await expect(page.getByLabel("Yedek restore kapıları").getByText("pnpm wal:archive:smoke")).toBeVisible();
   await expect(page.getByLabel("Restore drill raporu").getByText("result = PASS")).toBeVisible();
   await expect(page.getByLabel("Kritik restore tabloları").getByText("_prisma_migrations")).toBeVisible();
+  await expect(page.getByLabel("Operasyon kararı").getByText("Karar: panel yedek ve restore drill işini çift onayla kuyruğa alır.")).toBeVisible();
 
   await page.getByRole("link", { name: "KVKK" }).click();
   await expect(page).toHaveURL(/\/kurum\/kvkk$/);
@@ -4135,6 +4755,486 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   }), ["local" + "Storage", "session" + "Storage"]);
   expect(storageKeys.first).toEqual([]);
   expect(storageKeys.second).toEqual([]);
+});
+
+test("Next sıfır-veri kurulum adımlarını ve yeni kayıt derin linkini gösterir", async ({ page }) => {
+  let activeEmail = "";
+  let campuses: Array<{ id: string; tenantId: string; name: string; code?: string }> = [];
+  await page.route("**/*", async (route) => {
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({ headers: corsHeaders, status: 204 });
+      return;
+    }
+
+    await route.continue();
+  });
+
+  await page.route("**/auth/refresh", async (route) => {
+    if (!activeEmail) {
+      await route.fulfill({ headers: corsHeaders, status: 401 });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      headers: corsHeaders,
+      status: 200,
+      body: JSON.stringify(envelope(createAuthResponse(activeEmail))),
+    });
+  });
+
+  await page.route("**/auth/login", async (route) => {
+    const body = route.request().postDataJSON() as { email?: string };
+    activeEmail = body.email ?? "";
+    await route.fulfill({
+      contentType: "application/json",
+      headers: corsHeaders,
+      status: 200,
+      body: JSON.stringify(envelope(createAuthResponse(activeEmail))),
+    });
+  });
+
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname.replace("/api/v1", "");
+    if (path.startsWith("/auth/")) {
+      await route.fallback();
+      return;
+    }
+
+    expect(request.headers().authorization).toBe("Bearer next-access-token");
+    if (path === "/campuses" && request.method() === "GET") {
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope(campuses, request.url())),
+      });
+      return;
+    }
+
+    if (path === "/campuses" && request.method() === "POST") {
+      const body = request.postDataJSON() as { name: string; code?: string };
+      const created = {
+        id: "campus-zero-created",
+        tenantId: "tenant-a",
+        name: body.name,
+        code: body.code,
+      };
+      campuses = [...campuses, created];
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope(created)),
+      });
+      return;
+    }
+
+    if (path === "/import-quarantines/summary" && request.method() === "GET") {
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope({ openCount: 0 })),
+      });
+      return;
+    }
+
+    const emptyListPaths = new Set([
+      "/grade-levels",
+      "/classes",
+      "/courses",
+      "/academic-years",
+      "/academic-terms",
+      "/schedule-lessons",
+      "/study-sessions",
+      "/attendance",
+      "/teacher-notes",
+      "/teachers",
+      "/students",
+      "/guardians",
+      "/learning-outcomes",
+      "/announcements",
+      "/message-templates",
+      "/support-tickets",
+      "/tenant-users",
+      "/identity-invitations",
+      "/exams",
+      "/payment-plans",
+      "/audit-logs",
+      "/homework",
+      "/homework/materials",
+      "/me/notification-devices",
+    ]);
+
+    if (emptyListPaths.has(path) && request.method() === "GET") {
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope([], request.url())),
+      });
+      return;
+    }
+
+    await route.fulfill({
+      contentType: "application/json",
+      headers: corsHeaders,
+      status: 200,
+      body: JSON.stringify(envelope([])),
+    });
+  });
+
+  await page.goto("/login");
+  await page.getByLabel("E-posta").fill("admin-a@example.test");
+  await page.getByLabel("Şifre").fill("password");
+  await page.getByRole("button", { name: "Giriş yap" }).click();
+
+  await expect(page).toHaveURL(/\/kurum$/);
+  const setupStart = page.getByLabel("Kurum kurulum başlangıcı");
+  await expect(setupStart.getByText("Kurumunu kurmaya başla")).toBeVisible();
+  await setupStart.getByRole("button", { name: "Daha sonra" }).click();
+  await expect(setupStart).toBeHidden();
+  await expect.poll(() => page.evaluate(() => document.cookie)).toContain("uh_setup_tenant-a_dismissed=true");
+  await page.reload();
+  await expect(setupStart).toBeHidden();
+  await page.evaluate(() => {
+    document.cookie = "uh_setup_tenant-a_dismissed=; path=/; max-age=0; samesite=lax";
+  });
+  await page.reload();
+  await expect(setupStart.getByText("Kurumunu kurmaya başla")).toBeVisible();
+  await setupStart.getByRole("link", { name: "Kuruluma git" }).click();
+  await expect(page).toHaveURL(/\/kurum\/kurulum$/);
+  await expect(heading(page, { name: "Kurulum" })).toBeVisible();
+  await expect(page.getByLabel("Kurulum özeti").getByText("0 / 9 adım tamam")).toBeVisible();
+  await expect(page.getByLabel("Kurulum adımları").getByRole("heading", { name: "Kampüs" })).toBeVisible();
+  await expect(page.getByLabel("Kurulum adımları").getByRole("heading", { name: "Veli-öğrenci bağı" })).toBeVisible();
+  await expect(page.getByLabel("Kurulum adımları").getByRole("heading", { name: "Kazanım" })).toBeVisible();
+  const campusStep = page.getByLabel("Kurulum adımları").locator("article").filter({ hasText: "Kampüs" });
+  await campusStep.getByRole("button", { name: "Atla" }).click();
+  await expect(campusStep.getByText("Atlandı")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.cookie)).toContain("uh_setup_tenant-a_skipped=");
+  await expect.poll(() => page.evaluate(() => decodeURIComponent(document.cookie))).toContain("campuses");
+  await page.reload();
+  await expect(campusStep.getByText("Atlandı")).toBeVisible();
+
+  await page.getByRole("link", { name: "Şimdi ekle" }).first().click();
+  await expect(page).toHaveURL(/\/kurum\/kampusler\?new=1$/);
+  const campusDialog = page.getByRole("dialog", { name: "Kampüs ekle" });
+  await expect(campusDialog).toBeVisible();
+  await campusDialog.getByLabel("Kampüs adı").fill("Merkez");
+  await campusDialog.getByLabel("Kod").fill("MRK");
+  await campusDialog.getByRole("button", { name: "Ekle", exact: true }).click();
+  await expect(page.getByRole("cell", { name: "Merkez", exact: true })).toBeVisible();
+  await page.goto("/kurum/kurulum");
+  await expect(page.getByLabel("Kurulum özeti").getByText("1 / 9 adım tamam")).toBeVisible();
+  await expect(page.getByLabel("Kurulum adımları").locator("article").filter({ hasText: "Kampüs" }).getByText("Tamam")).toBeVisible();
+
+  await page.goto("/kurum/program");
+  await expect(page.getByText("Ders programı boş")).toBeVisible();
+  await page.goto("/kurum/etutler");
+  await expect(page.getByText("Etüt planı boş")).toBeVisible();
+  await page.goto("/kurum/akademik-takvim");
+  await expect(page.getByText("Akademik yıl yok")).toBeVisible();
+  await expect(page.getByText("Dönem yok")).toBeVisible();
+  await page.goto("/kurum/materyaller");
+  await expect(page.getByText("Ödev kaydı yok")).toBeVisible();
+  await expect(page.getByText("Materyal havuzu boş")).toBeVisible();
+  await page.goto("/kurum/kazanimlar");
+  await expect(page.getByText("Kazanım yok")).toBeVisible();
+  await page.goto("/kurum/kazanimlar?new=1");
+  await expect(page.getByRole("dialog", { name: "Kazanım ekle" })).toBeVisible();
+  await page.getByRole("button", { name: "Vazgeç" }).click();
+  await page.goto("/kurum/veliler");
+  await expect(page.getByText("Veli kaydı yok")).toBeVisible();
+  await page.goto("/kurum/veliler?new=1");
+  await expect(page.getByRole("dialog", { name: "Veli ekle" })).toBeVisible();
+  await page.getByRole("button", { name: "Vazgeç" }).click();
+  await page.goto("/kurum/duyurular");
+  await expect(page.getByText("Duyuru yok")).toBeVisible();
+  await page.goto("/kurum/sablonlar");
+  await expect(page.getByText("Şablon yok")).toBeVisible();
+  await page.goto("/kurum/destek");
+  await expect(page.getByText("Destek bildirimi yok")).toBeVisible();
+  await page.goto("/kurum/kullanicilar");
+  await expect(page.getByText("Kullanıcı yok")).toBeVisible();
+  await expect(page.getByText("Davet yok")).toBeVisible();
+  await page.goto("/kurum/devamsizlik");
+  await expect(page.getByText("Devamsızlık kaydı yok")).toBeVisible();
+  await page.goto("/kurum/notlar");
+  await expect(page.getByText("Öğretmen notu yok")).toBeVisible();
+  await page.goto("/kurum/finans");
+  await expect(page.getByText("Ödeme taksiti yok")).toBeVisible();
+  await page.goto("/kurum/denetim");
+  await expect(page.getByText("Denetim kaydı yok")).toBeVisible();
+  await page.goto("/kurum/kvkk");
+  await expect(page.getByText("Temizlenecek kayıt yok")).toBeVisible();
+});
+
+test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page }) => {
+  let activeEmail = "";
+  let tenants: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    plan: string;
+    status: string;
+    seatLimit: number;
+    activeSeatCount?: number;
+  }> = [];
+  let tenantCreateCount = 0;
+
+  await page.route("**/*", async (route) => {
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({ headers: corsHeaders, status: 204 });
+      return;
+    }
+
+    await route.continue();
+  });
+
+  await page.route("**/auth/refresh", async (route) => {
+    if (!activeEmail) {
+      await route.fulfill({ headers: corsHeaders, status: 401 });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      headers: corsHeaders,
+      status: 200,
+      body: JSON.stringify(envelope(createAuthResponse(activeEmail))),
+    });
+  });
+
+  await page.route("**/auth/login", async (route) => {
+    const body = route.request().postDataJSON() as { email?: string };
+    activeEmail = body.email ?? "";
+    await route.fulfill({
+      contentType: "application/json",
+      headers: corsHeaders,
+      status: 200,
+      body: JSON.stringify(envelope(createAuthResponse(body.email))),
+    });
+  });
+
+  await page.route("**/auth/logout", async (route) => {
+    activeEmail = "";
+    await route.fulfill({ headers: corsHeaders, status: 204 });
+  });
+
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname.replace("/api/v1", "");
+    if (path.startsWith("/auth/")) {
+      await route.fallback();
+      return;
+    }
+
+    expect(request.headers().authorization).toBe("Bearer next-access-token");
+
+    if (path === "/me/notification-devices" && request.method() === "GET") {
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope([])),
+      });
+      return;
+    }
+
+    if (path === "/tenants" && request.method() === "GET") {
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope(tenants, request.url())),
+      });
+      return;
+    }
+
+    if (path === "/tenants" && request.method() === "POST") {
+      const body = request.postDataJSON() as typeof tenants[number] & {
+        firstAdmin: { name: string; email: string; mode: "password" | "invitation"; password?: string };
+      };
+      tenantCreateCount += 1;
+      const id = tenantCreateCount === 1 ? "tenant-created" : `tenant-created-${tenantCreateCount}`;
+      const created = {
+        id,
+        name: body.name,
+        slug: body.slug,
+        plan: body.plan,
+        status: body.status,
+        seatLimit: body.seatLimit,
+        activeSeatCount: 1,
+      };
+      tenants = [created, ...tenants];
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope({
+          tenant: created,
+          admin: {
+            id: "user-created-admin",
+            email: body.firstAdmin.email.toLowerCase(),
+            name: body.firstAdmin.name,
+            tenantId: id,
+            roles: ["TENANT_ADMIN"],
+            ...(body.firstAdmin.mode === "invitation" ? { activationToken: "tenant-admin-activation-token" } : {}),
+          },
+        })),
+      });
+      return;
+    }
+
+    if (path.startsWith("/tenants/") && request.method() === "GET") {
+      const id = decodeURIComponent(path.replace("/tenants/", ""));
+      const tenant = tenants.find((candidate) => candidate.id === id);
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: tenant ? 200 : 404,
+        body: JSON.stringify(envelope(tenant ?? null)),
+      });
+      return;
+    }
+
+    if (path.startsWith("/tenants/") && request.method() === "PATCH") {
+      const id = decodeURIComponent(path.replace("/tenants/", ""));
+      const body = request.postDataJSON() as Partial<typeof tenants[number]>;
+      const updated = {
+        ...(tenants.find((candidate) => candidate.id === id) ?? tenants[0]!),
+        ...body,
+        id,
+      };
+      tenants = tenants.map((tenant) => (tenant.id === id ? updated : tenant));
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope(updated)),
+      });
+      return;
+    }
+
+    if (path.startsWith("/tenants/") && request.method() === "DELETE") {
+      const id = decodeURIComponent(path.replace("/tenants/", ""));
+      const deleted = { ...(tenants.find((candidate) => candidate.id === id) ?? tenants[0]!), status: "DELETED" };
+      tenants = tenants.filter((tenant) => tenant.id !== id);
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope(deleted)),
+      });
+      return;
+    }
+
+    await route.fulfill({
+      contentType: "application/json",
+      headers: corsHeaders,
+      status: 200,
+      body: JSON.stringify(envelope([])),
+    });
+  });
+
+  await page.goto("/login");
+  await page.getByLabel("E-posta").fill("system@example.test");
+  await page.getByLabel("Şifre").fill("password");
+  await page.getByRole("button", { name: "Giriş yap" }).click();
+
+  await expect(page).toHaveURL(/\/sistem$/);
+  await expect(heading(page, { name: "Sistem Paneli" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Kurumlar" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sistem Paneli" })).toBeVisible();
+  await expect(page.getByLabel("Sistem başlangıcı").getByText("Henüz kurum yok")).toBeVisible();
+  await expect(page.getByLabel("Sistem başlangıcı").getByRole("link", { name: "Kurum oluştur" })).toBeVisible();
+  await page.goto("/kurum");
+  await expect(page).toHaveURL(/\/sistem$/);
+
+  await page.getByRole("link", { name: "Kurumlar" }).click();
+  await expect(page).toHaveURL(/\/sistem\/kurumlar$/);
+  await expect(heading(page, { name: "Kurumlar" })).toBeVisible();
+  await expect(page.getByLabel("Kurum yönetimi").getByText("Henüz kurum yok")).toBeVisible();
+
+  await page.getByLabel("Kurum yönetimi").locator(".uh-empty-state").getByRole("button", { name: "Kurum oluştur" }).click();
+  const createDialog = page.getByRole("dialog", { name: "Kurum oluştur" });
+  await createDialog.getByLabel("Kurum adı").fill("Yeni Kurum");
+  await createDialog.getByLabel("Slug").fill("");
+  await createDialog.getByLabel("Slug").pressSequentially("yeni-kurum");
+  await createDialog.getByLabel("Plan").selectOption("PRO");
+  await createDialog.getByLabel("Koltuk limiti").pressSequentially("50");
+  await createDialog.getByLabel("Admin ad soyad").pressSequentially("Yeni Yönetici");
+  await createDialog.getByLabel("Admin e-posta").fill("first.admin@example.test");
+  await createDialog.getByLabel("Admin şifre").fill("password1");
+  await expect(createDialog.getByLabel("Kurum adı")).toHaveValue("Yeni Kurum");
+  await expect(createDialog.getByLabel("Slug")).toHaveValue("yeni-kurum");
+  await expect(createDialog.getByLabel("Koltuk limiti")).toHaveValue("50");
+  await expect(createDialog.getByLabel("Admin ad soyad")).toHaveValue("Yeni Yönetici");
+  await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
+  await expect(page.getByText("Yeni Kurum")).toBeVisible();
+  await expect(page.getByText("1 / 50")).toBeVisible();
+
+  await page.getByRole("button", { name: "Kurum oluştur" }).click();
+  await createDialog.getByLabel("Kurum adı").fill("Davetli Kurum");
+  await createDialog.getByLabel("Slug").fill("davetli-kurum");
+  await createDialog.getByLabel("İlk admin modu").selectOption("invitation");
+  await createDialog.getByLabel("Admin ad soyad").fill("Davetli Yönetici");
+  await createDialog.getByLabel("Admin e-posta").fill("invited.admin@example.test");
+  await expect(createDialog.getByLabel("Admin şifre")).toHaveCount(0);
+  await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
+  await expect(page.getByLabel("İlk admin aktivasyon tokenı").getByText("invited.admin@example.test")).toBeVisible();
+  await expect(page.getByLabel("İlk admin aktivasyon tokenı").getByText("tenant-admin-activation-token")).toBeVisible();
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("row", { name: /Davetli Kurum/ }).getByRole("button", { name: "Sil" }).click();
+  await expect(page.getByRole("row", { name: /Davetli Kurum/ })).toHaveCount(0);
+
+  await page.getByRole("row", { name: /Yeni Kurum/ }).getByRole("link", { name: "Detay" }).click();
+  await expect(page).toHaveURL(/\/sistem\/kurumlar\/tenant-created$/);
+  await expect(heading(page, { name: "Yeni Kurum" })).toBeVisible();
+  await page.getByRole("button", { name: "Düzenle" }).click();
+  const editDialog = page.getByRole("dialog", { name: "Kurum düzenle" });
+  await editDialog.getByLabel("Plan").selectOption("ENTERPRISE");
+  await editDialog.getByLabel("Durum").selectOption("SUSPENDED");
+  await page.getByRole("button", { name: "Kaydet" }).click();
+  await expect(page.getByLabel("Kurum detayı").getByText("ENTERPRISE")).toBeVisible();
+  await expect(page.getByLabel("Kurum detayı").getByText("Askıda")).toBeVisible();
+  await expect(page.getByLabel("Kurum detayı").getByText("1 / 50")).toBeVisible();
+
+  await page.getByRole("button", { name: "Çıkış" }).click();
+  await page.getByLabel("E-posta").fill("first.admin@example.test");
+  await page.getByLabel("Şifre").fill("password1");
+  await page.getByRole("button", { name: "Giriş yap" }).click();
+  await expect(page).toHaveURL(/\/kurum$/);
+
+  await page.getByRole("button", { name: "Çıkış" }).click();
+  await page.getByLabel("E-posta").fill("admin-a@example.test");
+  await page.getByLabel("Şifre").fill("password");
+  await page.getByRole("button", { name: "Giriş yap" }).click();
+  await page.goto("/sistem");
+  await expect(page).toHaveURL(/\/kurum$/);
+
+  await page.getByRole("button", { name: "Çıkış" }).click();
+  await page.getByLabel("E-posta").fill("assistant@example.test");
+  await page.getByLabel("Şifre").fill("password");
+  await page.getByRole("button", { name: "Giriş yap" }).click();
+  await expect(page).toHaveURL(/\/kurum$/);
+  await expect(page.getByRole("link", { name: "Ödemeler" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Kullanıcılar" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Rol Önizleme" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Denetim" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Destek", exact: true })).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+K");
+  const assistantCommandDialog = page.getByRole("dialog", { name: "Komut paleti" });
+  await assistantCommandDialog.getByLabel("Komut ara").fill("ödeme");
+  await expect(assistantCommandDialog.getByRole("button", { name: /Ödemeler/ })).toHaveCount(0);
+  await assistantCommandDialog.getByLabel("Komut ara").fill("kullanıcı");
+  await expect(assistantCommandDialog.getByRole("button", { name: /Kullanıcılar/ })).toHaveCount(0);
+  await assistantCommandDialog.getByRole("button", { name: "Kapat" }).click();
+  await page.goto("/kurum/finans");
+  await expect(page).toHaveURL(/\/kurum$/);
+  await page.goto("/kurum/kullanicilar");
+  await expect(page).toHaveURL(/\/kurum$/);
 });
 
 test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) => {
@@ -4887,7 +5987,13 @@ async function loginAs(page: Page, email: string) {
 }
 
 function createAuthResponse(email = "admin-a@example.test") {
-  const profileByEmail: Record<string, { userId: string; roles: string[]; subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER"; subjectId?: string }> = {
+  const profileByEmail: Record<
+    string,
+    { userId: string; roles: string[]; tenantId?: string; subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER"; subjectId?: string }
+  > = {
+    "system@example.test": { userId: "user-system", roles: ["SYSTEM_ADMIN"] },
+    "first.admin@example.test": { userId: "user-created-admin", roles: ["TENANT_ADMIN"], tenantId: "tenant-created" },
+    "assistant@example.test": { userId: "user-assistant", roles: ["ASSISTANT_ADMIN"] },
     "student-a@example.test": { userId: "student-tenant-a", roles: ["STUDENT"], subjectType: "STUDENT", subjectId: "student-a" },
     "teacher-a@example.test": { userId: "teacher-tenant-a", roles: ["TEACHER"], subjectType: "TEACHER", subjectId: "teacher-a" },
     "guardian-a@example.test": { userId: "guardian-tenant-a", roles: ["GUARDIAN"], subjectType: "GUARDIAN", subjectId: "guardian-a" },
@@ -4898,7 +6004,7 @@ function createAuthResponse(email = "admin-a@example.test") {
     session: {
       id: "session-a",
       userId: profile.userId,
-      tenantId: "tenant-a",
+      tenantId: profile.tenantId ?? "tenant-a",
       roles: profile.roles,
       membershipVersion: 1,
       status: "ACTIVE",

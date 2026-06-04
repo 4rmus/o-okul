@@ -5,16 +5,16 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "../../providers.js";
 
 const demoAccounts = [
-  { label: "Kurum yöneticisi", email: "admin-a@example.test", path: "/kurum" },
-  { label: "Öğretmen", email: "teacher-a@example.test", path: "/ogretmen" },
-  { label: "Öğrenci", email: "student-a@example.test", path: "/ogrenci" },
-  { label: "Veli", email: "guardian-a@example.test", path: "/veli" },
+  { label: "Kurum yöneticisi", email: "admin@demo.local", path: "/kurum" },
+  { label: "Öğretmen", email: "teacher@demo.local", path: "/ogretmen" },
+  { label: "Öğrenci", email: "student@demo.local", path: "/ogrenci" },
+  { label: "Veli", email: "guardian@demo.local", path: "/veli" },
 ] as const;
 
 export default function LoginPage() {
   const router = useRouter();
   const { auth, isBootstrapping, login } = useAuth();
-  const [email, setEmail] = useState("admin-a@example.test");
+  const [email, setEmail] = useState("admin@demo.local");
   const [password, setPassword] = useState("password");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);

@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { hashPassword, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withBypassRlsQuery } from "../db/tenant-query.js";
+import type { TenantUserRecord } from "../user-management/user-management-store.js";
 
 export interface TenantRecord {
   id: string;
@@ -11,6 +13,7 @@ export interface TenantRecord {
   licenseStartsAt?: string;
   licenseEndsAt?: string;
   seatLimit?: number;
+  activeSeatCount?: number;
   status: string;
 }
 
@@ -19,29 +22,33 @@ export interface TenantStore {
   findById(id: string): Promise<TenantRecord | undefined>;
   findForAdmin(id: string): Promise<TenantRecord | undefined>;
   create(input: CreateTenantInput): Promise<TenantRecord>;
+  createWithFirstAdmin?(input: CreateTenantInput, firstAdmin: CreateTenantFirstAdminInput): Promise<TenantCreateWithAdminResult>;
   update(id: string, input: UpdateTenantInput): Promise<TenantRecord | undefined>;
+  delete(id: string): Promise<TenantRecord | undefined>;
 }
 
 export const tenantStoreToken = Symbol("TenantStore");
 
 const demoTenants: TenantRecord[] = [
-  { id: "tenant-a", name: "DNA EĞİTİM KURUMU", slug: "dna-egitim", plan: "PRO", status: "ACTIVE" },
-  { id: "tenant-b", name: "Demo Kurum B", slug: "demo-kurum-b", plan: "TRIAL", status: "ACTIVE" },
+  { id: "tenant-a", name: "DNA EĞİTİM KURUMU", slug: "dna-egitim", plan: "PRO", activeSeatCount: 4, status: "ACTIVE" },
+  { id: "tenant-b", name: "Demo Kurum B", slug: "demo-kurum-b", plan: "TRIAL", activeSeatCount: 1, status: "ACTIVE" },
   {
     id: "tenant-expired",
     name: "Demo Süresi Dolmuş Kurum",
     slug: "demo-suresi-dolmus-kurum",
     plan: "TRIAL",
     licenseEndsAt: "2020-01-01T00:00:00.000Z",
+    activeSeatCount: 0,
     status: "ACTIVE",
   },
 ];
 
 export class InMemoryTenantStore implements TenantStore {
   private readonly tenants = demoTenants.map((record) => ({ ...record }));
+  private readonly firstAdmins: TenantUserRecord[] = [];
 
   async list(): Promise<TenantRecord[]> {
-    return this.tenants.map((tenant) => ({ ...tenant }));
+    return this.tenants.filter((tenant) => tenant.status !== "DELETED").map((tenant) => ({ ...tenant }));
   }
 
   async findById(id: string): Promise<TenantRecord | undefined> {
@@ -50,7 +57,7 @@ export class InMemoryTenantStore implements TenantStore {
   }
 
   async findForAdmin(id: string): Promise<TenantRecord | undefined> {
-    const tenant = this.tenants.find((record) => record.id === id);
+    const tenant = this.tenants.find((record) => record.id === id && record.status !== "DELETED");
     return tenant ? { ...tenant } : undefined;
   }
 
@@ -63,10 +70,41 @@ export class InMemoryTenantStore implements TenantStore {
       licenseStartsAt: input.licenseStartsAt,
       licenseEndsAt: input.licenseEndsAt,
       seatLimit: input.seatLimit,
+      activeSeatCount: 0,
       status: input.status ?? "ACTIVE",
     };
     this.tenants.push(tenant);
     return { ...tenant };
+  }
+
+  async createWithFirstAdmin(input: CreateTenantInput, firstAdmin: CreateTenantFirstAdminInput): Promise<TenantCreateWithAdminResult> {
+    const tenant = await this.create(input);
+    const storedTenant = this.tenants.find((record) => record.id === tenant.id);
+    if (storedTenant) {
+      storedTenant.activeSeatCount = 1;
+    }
+    tenant.activeSeatCount = 1;
+    const now = new Date().toISOString();
+    const admin: TenantUserRecord = {
+      id: randomUUID(),
+      email: firstAdmin.email.toLowerCase(),
+      name: firstAdmin.name,
+      tenantId: tenant.id,
+      roles: ["TENANT_ADMIN"],
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.firstAdmins.push(admin);
+    upsertInMemoryAuthUser({
+      id: admin.id,
+      email: admin.email,
+      name: admin.name,
+      password: firstAdmin.mode === "password" ? firstAdmin.password : undefined,
+      passwordHash: firstAdmin.mode === "invitation" ? "" : undefined,
+      tenantId: admin.tenantId,
+      roles: admin.roles,
+    });
+    return { tenant: { ...tenant, activeSeatCount: 1 }, admin: { ...admin } };
   }
 
   async update(id: string, input: UpdateTenantInput): Promise<TenantRecord | undefined> {
@@ -74,6 +112,10 @@ export class InMemoryTenantStore implements TenantStore {
     if (!tenant) return undefined;
     Object.assign(tenant, withoutUndefined(input));
     return { ...tenant };
+  }
+
+  async delete(id: string): Promise<TenantRecord | undefined> {
+    return this.update(id, { status: "DELETED" });
   }
 }
 
@@ -83,9 +125,21 @@ export class PostgresTenantStore implements TenantStore {
   async list(): Promise<TenantRecord[]> {
     return withBypassRlsQuery(this.pool, async (client) => {
       const result = await client.query<TenantRow>(
-        `SELECT "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", "status"
-         FROM "Tenant"
-         ORDER BY "createdAt" DESC`,
+        `SELECT
+           t."id",
+           t."name",
+           t."slug",
+           t."plan",
+           t."licenseStartsAt",
+           t."licenseEndsAt",
+           t."seatLimit",
+           COUNT(DISTINCT m."userId")::int AS "activeSeatCount",
+           t."status"
+         FROM "Tenant" t
+         LEFT JOIN "TenantMembership" m ON m."tenantId" = t."id"
+         WHERE t."id" <> 'system' AND t."status" <> 'DELETED'
+         GROUP BY t."id", t."name", t."slug", t."plan", t."licenseStartsAt", t."licenseEndsAt", t."seatLimit", t."status", t."createdAt"
+         ORDER BY t."createdAt" DESC`,
       );
       return result.rows.map(mapTenantRow);
     });
@@ -94,9 +148,21 @@ export class PostgresTenantStore implements TenantStore {
   async findById(id: string): Promise<TenantRecord | undefined> {
     return withBypassRlsQuery(this.pool, async (client) => {
       const result = await client.query<TenantRow>(
-        `SELECT "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", "status" FROM "Tenant"
-         WHERE "id" = $1 AND "status" = 'ACTIVE'
-           AND ("licenseEndsAt" IS NULL OR "licenseEndsAt" >= now())
+        `SELECT
+           t."id",
+           t."name",
+           t."slug",
+           t."plan",
+           t."licenseStartsAt",
+           t."licenseEndsAt",
+           t."seatLimit",
+           COUNT(DISTINCT m."userId")::int AS "activeSeatCount",
+           t."status"
+         FROM "Tenant" t
+         LEFT JOIN "TenantMembership" m ON m."tenantId" = t."id"
+         WHERE t."id" = $1 AND t."status" = 'ACTIVE'
+           AND (t."licenseEndsAt" IS NULL OR t."licenseEndsAt" >= now())
+         GROUP BY t."id", t."name", t."slug", t."plan", t."licenseStartsAt", t."licenseEndsAt", t."seatLimit", t."status"
          LIMIT 1`,
         [id],
       );
@@ -108,8 +174,20 @@ export class PostgresTenantStore implements TenantStore {
   async findForAdmin(id: string): Promise<TenantRecord | undefined> {
     return withBypassRlsQuery(this.pool, async (client) => {
       const result = await client.query<TenantRow>(
-        `SELECT "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", "status" FROM "Tenant"
-         WHERE "id" = $1
+        `SELECT
+           t."id",
+           t."name",
+           t."slug",
+           t."plan",
+           t."licenseStartsAt",
+           t."licenseEndsAt",
+           t."seatLimit",
+           COUNT(DISTINCT m."userId")::int AS "activeSeatCount",
+           t."status"
+         FROM "Tenant" t
+         LEFT JOIN "TenantMembership" m ON m."tenantId" = t."id"
+         WHERE t."id" = $1 AND t."status" <> 'DELETED'
+         GROUP BY t."id", t."name", t."slug", t."plan", t."licenseStartsAt", t."licenseEndsAt", t."seatLimit", t."status"
          LIMIT 1`,
         [id],
       );
@@ -121,9 +199,9 @@ export class PostgresTenantStore implements TenantStore {
   async create(input: CreateTenantInput): Promise<TenantRecord> {
     return withBypassRlsQuery(this.pool, async (client) => {
       const result = await client.query<TenantRow>(
-        `INSERT INTO "Tenant" ("id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", "status")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", "status"`,
+        `INSERT INTO "Tenant" ("id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", "status", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+         RETURNING "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", 0::int AS "activeSeatCount", "status"`,
         [
           input.id ?? randomUUID(),
           input.name,
@@ -139,10 +217,78 @@ export class PostgresTenantStore implements TenantStore {
     });
   }
 
+  async createWithFirstAdmin(input: CreateTenantInput, firstAdmin: CreateTenantFirstAdminInput): Promise<TenantCreateWithAdminResult> {
+    return withBypassRlsQuery(this.pool, async (client) => {
+      const tenantResult = await client.query<TenantRow>(
+        `INSERT INTO "Tenant" ("id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", "status", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+         RETURNING "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", 0::int AS "activeSeatCount", "status"`,
+        [
+          input.id ?? randomUUID(),
+          input.name,
+          input.slug,
+          input.plan ?? "TRIAL",
+          input.licenseStartsAt ?? null,
+          input.licenseEndsAt ?? null,
+          input.seatLimit ?? null,
+          input.status ?? "ACTIVE",
+        ],
+      );
+      const tenant = mapTenantRow(tenantResult.rows[0]!);
+      const normalizedEmail = firstAdmin.email.toLowerCase();
+      const passwordHash = firstAdmin.mode === "invitation" ? "" : hashPassword(firstAdmin.password ?? "", randomUUID());
+      const createdUser = await client.query<{ id: string }>(
+        `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
+         VALUES ($1, $2, $3, $4, now())
+         ON CONFLICT ("email") DO NOTHING
+         RETURNING "id"`,
+        [randomUUID(), normalizedEmail, firstAdmin.name, passwordHash],
+      );
+      const userId =
+        createdUser.rows[0]?.id ??
+        (
+          await client.query<{ id: string }>(`SELECT "id" FROM "User" WHERE lower("email") = lower($1) LIMIT 1`, [
+            normalizedEmail,
+          ])
+        ).rows[0]?.id;
+      if (!userId) {
+        throw new Error("USER_CREATE_FAILED");
+      }
+
+      await client.query(`DELETE FROM "TenantMembership" WHERE "tenantId" = $1 AND "userId" = $2`, [tenant.id, userId]);
+      await client.query(
+        `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
+         VALUES ($1, $2, $3, 'TENANT_ADMIN', now())`,
+        [randomUUID(), tenant.id, userId],
+      );
+      const adminResult = await client.query<TenantAdminRow>(
+        `SELECT
+           u."id",
+           u."email",
+           u."name",
+           m."tenantId",
+           array_agg(m."role"::text ORDER BY m."role"::text) AS roles,
+           min(u."createdAt") AS "createdAt",
+           max(u."updatedAt") AS "updatedAt"
+         FROM "TenantMembership" m
+         JOIN "User" u ON u."id" = m."userId"
+         WHERE m."tenantId" = $1 AND u."id" = $2
+         GROUP BY u."id", u."email", u."name", m."tenantId"
+         LIMIT 1`,
+        [tenant.id, userId],
+      );
+      const admin = adminResult.rows[0] ? mapTenantAdminRow(adminResult.rows[0]) : undefined;
+      if (!admin) {
+        throw new Error("USER_MEMBERSHIP_CREATE_FAILED");
+      }
+      return { tenant: { ...tenant, activeSeatCount: 1 }, admin };
+    });
+  }
+
   async update(id: string, input: UpdateTenantInput): Promise<TenantRecord | undefined> {
     return withBypassRlsQuery(this.pool, async (client) => {
       const currentResult = await client.query<TenantRow>(
-        `SELECT "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", "status" FROM "Tenant"
+        `SELECT "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", 0::int AS "activeSeatCount", "status" FROM "Tenant"
          WHERE "id" = $1
          LIMIT 1`,
         [id],
@@ -161,7 +307,20 @@ export class PostgresTenantStore implements TenantStore {
              "status" = $8,
              "updatedAt" = now()
          WHERE "id" = $1
-         RETURNING "id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "seatLimit", "status"`,
+         RETURNING
+           "id",
+           "name",
+           "slug",
+           "plan",
+           "licenseStartsAt",
+           "licenseEndsAt",
+           "seatLimit",
+           (
+             SELECT COUNT(DISTINCT "userId")::int
+             FROM "TenantMembership"
+             WHERE "tenantId" = "Tenant"."id"
+           ) AS "activeSeatCount",
+           "status"`,
         [
           id,
           next.name,
@@ -176,6 +335,10 @@ export class PostgresTenantStore implements TenantStore {
       return mapTenantRow(result.rows[0]!);
     });
   }
+
+  async delete(id: string): Promise<TenantRecord | undefined> {
+    return this.update(id, { status: "DELETED" });
+  }
 }
 
 interface TenantRow {
@@ -186,7 +349,18 @@ interface TenantRow {
   licenseStartsAt: Date | string | null;
   licenseEndsAt: Date | string | null;
   seatLimit: number | null;
+  activeSeatCount?: number | string | null;
   status: string;
+}
+
+interface TenantAdminRow {
+  id: string;
+  email: string;
+  name: string;
+  tenantId: string;
+  roles: TenantUserRecord["roles"];
+  createdAt: Date | string;
+  updatedAt: Date | string;
 }
 
 export interface CreateTenantInput {
@@ -200,6 +374,18 @@ export interface CreateTenantInput {
   status?: string;
 }
 
+export interface CreateTenantFirstAdminInput {
+  email: string;
+  mode: "password" | "invitation";
+  name: string;
+  password?: string;
+}
+
+export interface TenantCreateWithAdminResult {
+  tenant: TenantRecord;
+  admin: TenantUserRecord;
+}
+
 export type UpdateTenantInput = Partial<Omit<CreateTenantInput, "id">>;
 
 function mapTenantRow(row: TenantRow): TenantRecord {
@@ -211,6 +397,7 @@ function mapTenantRow(row: TenantRow): TenantRecord {
     licenseStartsAt: optionalDateString(row.licenseStartsAt),
     licenseEndsAt: optionalDateString(row.licenseEndsAt),
     seatLimit: row.seatLimit ?? undefined,
+    activeSeatCount: optionalNumber(row.activeSeatCount),
     status: row.status,
   };
 }
@@ -218,6 +405,28 @@ function mapTenantRow(row: TenantRow): TenantRecord {
 function optionalDateString(value: Date | string | null): string | undefined {
   if (!value) return undefined;
   return value instanceof Date ? value.toISOString() : value;
+}
+
+function mapTenantAdminRow(row: TenantAdminRow): TenantUserRecord {
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    tenantId: row.tenantId,
+    roles: row.roles,
+    createdAt: dateString(row.createdAt),
+    updatedAt: dateString(row.updatedAt),
+  };
+}
+
+function dateString(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+function optionalNumber(value: number | string | null | undefined): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function isUsableTenant(tenant: TenantRecord): boolean {

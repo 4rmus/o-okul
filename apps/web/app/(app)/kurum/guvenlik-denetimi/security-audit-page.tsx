@@ -1,6 +1,10 @@
 "use client";
 
-import { EvidenceGateSection, EvidenceListSection } from "../_shared/evidence-panels.js";
+import { useQuery } from "@tanstack/react-query";
+import type { AuditLogRecord } from "@uzman-hocam/shared-types";
+import { useAuth } from "../../../providers.js";
+import { apiBaseUrl, apiListRequest } from "../../../../src/api-client.js";
+import { EvidenceGateSection, EvidenceListSection, OperationDecisionNotice, ReferenceBadge } from "../_shared/evidence-panels.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
 
@@ -55,23 +59,73 @@ const dataControls = [
 ];
 
 export function SecurityAuditPage() {
+  const { auth } = useAuth();
+  const securityEventsQuery = useQuery({
+    queryKey: ["next-security-audit-events", auth?.session.tenantId ?? "anonymous"],
+    queryFn: () => loadSecurityEvents(auth?.accessToken ?? ""),
+    enabled: Boolean(auth),
+    refetchOnWindowFocus: false,
+  });
+  const securityEvents = securityEventsQuery.data ?? [];
+
   return (
     <PageFrame
+      actions={<ReferenceBadge />}
       title="Güvenlik Denetimi"
       subtitle="Canlıya çıkış öncesi güvenlik kanıt kapılarını ve zorunlu kontrolleri izle."
     >
       <MetricPanelGrid
         ariaLabel="Güvenlik denetimi özeti"
         metrics={[
-          { label: "Denetim raporu", value: "Kanıt gerekir" },
+          { label: "Son olay", value: securityEvents[0]?.action ?? "Yok" },
           { label: "HTTPS", value: "2xx + HSTS" },
-          { label: "RLS", value: "Canlı kontrol" },
+          { label: "Okunan olay", value: String(securityEvents.length) },
         ]}
       />
+      <OperationDecisionNotice
+        decision="Karar: son güvenlik olayları canlı okunur."
+        reason="Panel audit log üzerinden auth, kullanıcı, davet, KVKK ve tenant olaylarını salt-okunur gösterir; gizli production denetimi hâlâ CLI kanıt kapısıdır."
+        nextStep="C3'ün sonraki adımı güvenlik denetim raporundaki uyarıları ayrı, PII içermeyen bir kaynakla bağlamaktır."
+      />
+      <section className="next-report-list" aria-label="Son güvenlik olayları">
+        <h2>Son Güvenlik Olayları</h2>
+        {securityEventsQuery.isPending ? <p>Olaylar alınıyor</p> : null}
+        {securityEventsQuery.isError ? <p>Güvenlik olayları alınamadı.</p> : null}
+        {!securityEventsQuery.isPending && securityEvents.length === 0 ? <p>Güvenlik olayı yok</p> : null}
+        {securityEvents.map((event) => (
+          <article key={event.id}>
+            <h3>{event.action}</h3>
+            <p>{event.entityType}</p>
+            <p>{formatDate(event.createdAt)}</p>
+          </article>
+        ))}
+      </section>
       <EvidenceGateSection title="Kanıt Kapıları" ariaLabel="Güvenlik denetimi kapıları" gates={securityGates} />
       <EvidenceListSection title="Header Kontrolleri" ariaLabel="Header kontrolleri" items={securityHeaders} />
       <EvidenceListSection title="Auth Kontrolleri" ariaLabel="Auth kontrolleri" items={authControls} />
       <EvidenceListSection title="Veri Kontrolleri" ariaLabel="Veri kontrolleri" items={dataControls} />
     </PageFrame>
   );
+}
+
+async function loadSecurityEvents(accessToken: string) {
+  const url = new URL(`${apiBaseUrl}/audit-logs`);
+  url.searchParams.set("sort", "-createdAt");
+  url.searchParams.set("limit", "20");
+  const auditLogs = await apiListRequest<AuditLogRecord>(accessToken, url);
+  return auditLogs.data.filter(isSecurityEvent).slice(0, 5);
+}
+
+function isSecurityEvent(record: AuditLogRecord) {
+  return [
+    "auth.",
+    "identity_invitation.",
+    "kvkk.",
+    "tenant.",
+    "user.",
+  ].some((prefix) => record.action.startsWith(prefix));
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString("tr-TR");
 }

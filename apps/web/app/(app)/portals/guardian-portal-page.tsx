@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import type {
   AcademicTermRecord,
@@ -38,19 +39,23 @@ const portalExamId = "exam-demo-isem-lgs-1";
 
 export function GuardianPortalPage() {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
+  const rolePreviewToken = searchParams.get("rolePreviewToken")?.trim() ?? "";
+  const isRolePreview = Boolean(rolePreviewToken);
+  const canReadPortal = Boolean(auth && (auth.session.subjectType === "GUARDIAN" || isRolePreview));
   const studentsQuery = useQuery({
-    queryKey: ["next-guardian-students", auth?.session.userId ?? "anonymous"],
-    queryFn: () => apiRequest<StudentRecord[]>(auth?.accessToken ?? "", `${apiBaseUrl}/me/guardian/students`),
-    enabled: Boolean(auth && auth.session.subjectType === "GUARDIAN"),
+    queryKey: ["next-guardian-students", auth?.session.userId ?? "anonymous", rolePreviewToken || "session"],
+    queryFn: () => readOnlyRequest<StudentRecord[]>(auth?.accessToken ?? "", `${apiBaseUrl}/me/guardian/students`, rolePreviewToken),
+    enabled: canReadPortal,
     refetchOnWindowFocus: false,
   });
   const students = studentsQuery.data ?? [];
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const resolvedStudentId = selectedStudentId ?? students[0]?.id;
   const studentQuery = useQuery({
-    queryKey: ["next-guardian-portal", auth?.session.userId ?? "anonymous", resolvedStudentId ?? "none"],
-    queryFn: () => loadGuardianStudentPortal(auth?.accessToken ?? "", resolvedStudentId ?? ""),
-    enabled: Boolean(auth && auth.session.subjectType === "GUARDIAN" && resolvedStudentId),
+    queryKey: ["next-guardian-portal", auth?.session.userId ?? "anonymous", resolvedStudentId ?? "none", rolePreviewToken || "session"],
+    queryFn: () => loadGuardianStudentPortal(auth?.accessToken ?? "", resolvedStudentId ?? "", rolePreviewToken),
+    enabled: Boolean(canReadPortal && resolvedStudentId),
     refetchOnWindowFocus: false,
   });
   const selectedStudent = useMemo(
@@ -58,7 +63,7 @@ export function GuardianPortalPage() {
     [resolvedStudentId, students],
   );
 
-  if (auth?.session.subjectType !== "GUARDIAN") {
+  if (!canReadPortal) {
     return <AccessPanel title="Veli Portalı" demoEmail="guardian-a@example.test" demoLabel="Demo veli" />;
   }
 
@@ -90,6 +95,12 @@ export function GuardianPortalPage() {
           { label: "Bekleyen ödeme", value: canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Kapalı" },
         ]}
       />
+      {isRolePreview ? (
+        <section className="next-list-panel" aria-label="Rol önizleme modu">
+          <h2>Salt-okuma Önizleme</h2>
+          <p>Bu ekran kurum yöneticisi için geçici rol önizleme modunda açıldı.</p>
+        </section>
+      ) : null}
       <ProfilePanel profile={data?.profile} />
       <StudentHistoryPanel
         classHistory={data?.classHistory ?? []}
@@ -99,8 +110,9 @@ export function GuardianPortalPage() {
       <GuardianRelationshipSummaryPanel relationship={data?.notificationPreferences} />
       <NotificationPreferencesPanel
         preferences={data?.notificationPreferences}
+        readOnly={isRolePreview}
         onUpdate={(input) =>
-          auth && resolvedStudentId
+          auth && resolvedStudentId && !isRolePreview
             ? updateGuardianNotificationPreferences(
                 auth.accessToken,
                 resolvedStudentId,
@@ -111,8 +123,9 @@ export function GuardianPortalPage() {
       />
       <AnnouncementsPanel
         announcements={data?.announcements ?? []}
+        readOnly={isRolePreview}
         onMarkRead={(announcement) =>
-          auth && resolvedStudentId
+          auth && resolvedStudentId && !isRolePreview
             ? markAnnouncementRead(
                 auth.accessToken,
                 `me/guardian/students/${encodeURIComponent(resolvedStudentId)}/announcements/${encodeURIComponent(announcement.id)}/read`,
@@ -126,9 +139,10 @@ export function GuardianPortalPage() {
         termNames={termNameById}
       />
       <SupportTicketsPanel
+        readOnly={isRolePreview}
         tickets={data?.supportTickets ?? []}
         onCreate={(input) =>
-          auth && resolvedStudentId && data?.notificationPreferences?.canOpenSupportTickets !== false
+          auth && resolvedStudentId && !isRolePreview && data?.notificationPreferences?.canOpenSupportTickets !== false
             ? createPortalSupportTicket(
                 auth.accessToken,
                 `me/guardian/students/${encodeURIComponent(resolvedStudentId)}/support-tickets`,
@@ -154,58 +168,69 @@ export function GuardianPortalPage() {
   );
 }
 
-async function loadGuardianStudentPortal(accessToken: string, studentId: string) {
+async function loadGuardianStudentPortal(accessToken: string, studentId: string, rolePreviewToken = "") {
   const [profile, classHistory, enrollments, notificationPreferences, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, paymentPlans, report, errorBooklet, progress, courses, terms] = await Promise.all([
-    apiRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/profile`),
-    apiRequest<StudentClassHistoryRecord[]>(
+    readOnlyRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/profile`, rolePreviewToken),
+    readOnlyRequest<StudentClassHistoryRecord[]>(
       accessToken,
       `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/class-history`,
+      rolePreviewToken,
     ),
-    apiRequest<StudentEnrollmentRecord[]>(
+    readOnlyRequest<StudentEnrollmentRecord[]>(
       accessToken,
       `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/enrollments`,
+      rolePreviewToken,
     ),
-    apiRequest<GuardianStudentRecord>(
+    readOnlyRequest<GuardianStudentRecord>(
       accessToken,
       `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/notification-preferences`,
+      rolePreviewToken,
     ),
-    apiRequest<AnnouncementRecord[]>(accessToken, `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/announcements`),
-    apiRequest<HomeworkMaterialAssignmentRecord[]>(
+    readOnlyRequest<AnnouncementRecord[]>(accessToken, `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/announcements`, rolePreviewToken),
+    readOnlyRequest<HomeworkMaterialAssignmentRecord[]>(
       accessToken,
       `${apiBaseUrl}/me/guardian/homework/material-assignments`,
+      rolePreviewToken,
     ),
     apiRequestOrEmptySupportTickets(
       accessToken,
       `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/support-tickets`,
+      rolePreviewToken,
     ),
-    apiRequest<AttendanceRecord[]>(accessToken, `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/attendance`),
-    apiRequest<AttendanceSummaryRecord>(
+    readOnlyRequest<AttendanceRecord[]>(accessToken, `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/attendance`, rolePreviewToken),
+    readOnlyRequest<AttendanceSummaryRecord>(
       accessToken,
       `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/attendance/summary`,
+      rolePreviewToken,
     ),
-    apiRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/teacher-notes`),
-    apiRequest<DevelopmentTrendItem[]>(
+    readOnlyRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/teacher-notes`, rolePreviewToken),
+    readOnlyRequest<DevelopmentTrendItem[]>(
       accessToken,
       `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/development-assessments`,
+      rolePreviewToken,
     ),
     apiRequestOrEmptyPaymentPlans(
       accessToken,
       `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/payment-plans`,
+      rolePreviewToken,
     ),
     apiRequestOrNull<ReportStudentSnapshot>(
       accessToken,
       `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${portalExamId}/latest`,
+      rolePreviewToken,
     ),
     apiRequestOrNull<ReportErrorBooklet>(
       accessToken,
       `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${portalExamId}/latest/error-booklet`,
+      rolePreviewToken,
     ),
     apiRequestOrNull<ReportStudentProgress>(
       accessToken,
       `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${portalExamId}/progress`,
+      rolePreviewToken,
     ),
-    apiRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`),
-    apiRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`),
+    readOnlyRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`, rolePreviewToken),
+    readOnlyRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`, rolePreviewToken),
   ]);
 
   return {
@@ -260,25 +285,47 @@ async function updateGuardianNotificationPreferences(
   );
 }
 
-async function apiRequestOrNull<T>(accessToken: string, input: RequestInfo | URL): Promise<T | null> {
-  const response = await authenticatedFetch(accessToken, input);
+async function apiRequestOrNull<T>(accessToken: string, input: RequestInfo | URL, rolePreviewToken = ""): Promise<T | null> {
+  const response = await authenticatedFetch(accessToken, input, withRolePreview({}, rolePreviewToken));
   if (response.status === 404) return null;
   if (!response.ok) throw new Error("API_REQUEST_FAILED");
   return readData<T>(response);
 }
 
-async function apiRequestOrEmptyPaymentPlans(accessToken: string, input: RequestInfo | URL): Promise<PaymentPlanWithInstallmentsRecord[]> {
-  const response = await authenticatedFetch(accessToken, input);
+async function apiRequestOrEmptyPaymentPlans(accessToken: string, input: RequestInfo | URL, rolePreviewToken = ""): Promise<PaymentPlanWithInstallmentsRecord[]> {
+  const response = await authenticatedFetch(accessToken, input, withRolePreview({}, rolePreviewToken));
   if (response.status === 403 || response.status === 404) return [];
   if (!response.ok) throw new Error("API_REQUEST_FAILED");
   return readData<PaymentPlanWithInstallmentsRecord[]>(response);
 }
 
-async function apiRequestOrEmptySupportTickets(accessToken: string, input: RequestInfo | URL): Promise<SupportTicketRecord[]> {
-  const response = await authenticatedFetch(accessToken, input);
+async function apiRequestOrEmptySupportTickets(accessToken: string, input: RequestInfo | URL, rolePreviewToken = ""): Promise<SupportTicketRecord[]> {
+  const response = await authenticatedFetch(accessToken, input, withRolePreview({}, rolePreviewToken));
   if (response.status === 403 || response.status === 404) return [];
   if (!response.ok) throw new Error("API_REQUEST_FAILED");
   return readData<SupportTicketRecord[]>(response);
+}
+
+function readOnlyRequest<T>(accessToken: string, input: RequestInfo | URL, rolePreviewToken = ""): Promise<T> {
+  return apiRequest<T>(accessToken, input, withRolePreview({}, rolePreviewToken));
+}
+
+function withRolePreview(init: RequestInit, rolePreviewToken: string): RequestInit {
+  if (!rolePreviewToken) return init;
+  return {
+    ...init,
+    headers: {
+      ...toHeaderRecord(init.headers),
+      "x-role-preview-token": rolePreviewToken,
+    },
+  };
+}
+
+function toHeaderRecord(headers: HeadersInit | undefined): Record<string, string> {
+  if (!headers) return {};
+  if (headers instanceof Headers) return Object.fromEntries(headers.entries());
+  if (Array.isArray(headers)) return Object.fromEntries(headers);
+  return headers;
 }
 
 function formatMoney(amount: number, currency: string) {

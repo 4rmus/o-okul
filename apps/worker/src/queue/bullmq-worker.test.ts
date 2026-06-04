@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   createAnnouncementDeliveryBullWorker,
+  createBackupRestoreBullWorker,
   createExcelImportBullWorker,
   createExamEvaluationBullWorker,
   createReportGenerationBullWorker,
   createRedisConnectionOptions,
   createSmsBatchBullWorker,
   type BullAnnouncementDeliveryJob,
+  type BullBackupRestoreJob,
   type BullExcelImportJob,
   type BullExamEvaluationJob,
   type BullReportGenerationJob,
@@ -14,6 +16,7 @@ import {
   type BullWorkerFactory,
 } from "./bullmq-worker.js";
 import type { AnnouncementDeliveryJobPayload, AnnouncementDeliveryJobResult } from "../jobs/announcement-delivery-job.js";
+import type { BackupRestoreJobPayload, BackupRestoreJobResult } from "../jobs/backup-restore-job.js";
 import type { ExcelImportJobResult } from "../jobs/excel-import-job.js";
 import type { ExamEvaluationJobPayload, ExamEvaluationJobResult } from "../jobs/exam-evaluation-job.js";
 import { examResultSummaryReportType, type ReportGenerationJobPayload, type ReportGenerationJobResult } from "../jobs/report-generation-job.js";
@@ -336,6 +339,60 @@ describe("BullMQ announcement delivery worker", () => {
   });
 });
 
+describe("BullMQ backup restore worker", () => {
+  it("BullMQ job'unu backup restore processor imzasına çevirir", async () => {
+    const calls: Array<{
+      name: string;
+      processor: (job: BullBackupRestoreJob) => Promise<BackupRestoreJobResult>;
+      options: unknown;
+    }> = [];
+    const createWorker: BullWorkerFactory<BullBackupRestoreJob, BackupRestoreJobResult> = (name, processor, options) => {
+      calls.push({ name, processor, options });
+      return { close: async () => undefined };
+    };
+    const processedJobs: Array<QueueJob<BackupRestoreJobPayload>> = [];
+    const result = createBackupRestoreResult();
+
+    createBackupRestoreBullWorker({
+      connection: { host: "127.0.0.1", port: 6379 },
+      createWorker,
+      workerOptions: { prefix: "uzman-hocam-test" },
+      processor: async (job) => {
+        processedJobs.push(job);
+        return result;
+      },
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.name).toBe("backup-restore");
+    expect(calls[0]?.options).toEqual({
+      connection: { host: "127.0.0.1", port: 6379 },
+      prefix: "uzman-hocam-test",
+    });
+    await expect(calls[0]?.processor(createBackupRestoreBullJob())).resolves.toBe(result);
+    expect(processedJobs).toEqual([{
+      id: "backup-restore-a_hash-a",
+      name: "backup-restore",
+      payload: createBackupRestorePayload(),
+    }]);
+  });
+
+  it("backup-restore BullMQ job adı yanlışsa işi başlatmaz", async () => {
+    let processor: ((job: BullBackupRestoreJob) => Promise<BackupRestoreJobResult>) | undefined;
+    createBackupRestoreBullWorker({
+      connection: { host: "127.0.0.1", port: 6379 },
+      createWorker: (_name, createdProcessor) => {
+        processor = createdProcessor;
+        return { close: async () => undefined };
+      },
+      processor: async () => createBackupRestoreResult(),
+    });
+
+    await expect(processor?.({ ...createBackupRestoreBullJob(), name: "announcement-delivery" }))
+      .rejects.toThrow("BULLMQ_BACKUP_RESTORE_JOB_NAME_INVALID");
+  });
+});
+
 function createBullJob(): BullExamEvaluationJob {
   return {
     id: "raw-import-a_hash-a",
@@ -373,6 +430,14 @@ function createAnnouncementDeliveryBullJob(): BullAnnouncementDeliveryJob {
     id: "announcement-a_email-report-v1",
     name: "announcement-delivery",
     data: createAnnouncementDeliveryPayload(),
+  };
+}
+
+function createBackupRestoreBullJob(): BullBackupRestoreJob {
+  return {
+    id: "backup-restore-a_hash-a",
+    name: "backup-restore",
+    data: createBackupRestorePayload(),
   };
 }
 
@@ -419,6 +484,18 @@ function createAnnouncementDeliveryPayload(): AnnouncementDeliveryJobPayload {
     failedCount: 1,
     status: "completed",
     providerErrorCode: "EMAIL_PROVIDER_RETRY",
+  };
+}
+
+function createBackupRestorePayload(): BackupRestoreJobPayload {
+  return {
+    tenantId: "tenant-a",
+    userId: "user-a",
+    entityId: "backup-restore-a",
+    contentHash: "hash-a",
+    operationType: "RESTORE_DRILL",
+    targetReference: "staging-drill-2026-06",
+    reason: "Aylık restore kanıtı",
   };
 }
 
@@ -533,5 +610,18 @@ function createAnnouncementDeliveryResult(): AnnouncementDeliveryJobResult {
     deliveredCount: 2,
     failedCount: 1,
     status: "completed",
+  };
+}
+
+function createBackupRestoreResult(): BackupRestoreJobResult {
+  return {
+    tenantId: "tenant-a",
+    jobId: "backup-restore-a_hash-a",
+    operationType: "RESTORE_DRILL",
+    targetReference: "staging-drill-2026-06",
+    reason: "Aylık restore kanıtı",
+    result: "PASS",
+    status: "completed",
+    checkedTables: ["Tenant", "AuditLog", "ReportSnapshot", "_prisma_migrations"],
   };
 }

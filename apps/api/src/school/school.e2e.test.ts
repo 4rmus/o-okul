@@ -97,6 +97,24 @@ describe("School management API", () => {
     expect(response.body).toEqual([{ id: "course-math", tenantId: "tenant-a", name: "Matematik", code: "MAT" }]);
   });
 
+  it("tenant A sadece kendi kazanım kayıtlarını listeler", async () => {
+    const response = await request(server)
+      .get("/learning-outcomes")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual([
+      {
+        id: "learning-outcome-demo-math",
+        tenantId: "tenant-a",
+        code: "MAT.8.1.1",
+        branch: "Matematik",
+        title: "Çarpanlar ve katlar",
+        level: "8",
+      },
+    ]);
+  });
+
   it("tenant A sadece kendi akademik yıl ve dönem kayıtlarını listeler", async () => {
     await request(server)
       .get("/academic-years")
@@ -357,6 +375,38 @@ describe("School management API", () => {
 
     await request(server).delete(`/courses/${courseId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
     await request(server).get(`/courses/${courseId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(404);
+  });
+
+  it("kazanım CRUD akışını tenant içinde tamamlar", async () => {
+    const created = await request(server)
+      .post("/learning-outcomes")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ code: "TUR.8.1.1", branch: "Türkçe", title: "Sözcükte anlam", level: "8" })
+      .expect(201);
+
+    const outcomeId = (created.body as { id: string }).id;
+
+    await request(server)
+      .patch(`/learning-outcomes/${outcomeId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ title: "Cümlede anlam" })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.title).toBe("Cümlede anlam");
+        expect(body.code).toBe("TUR.8.1.1");
+      });
+
+    await request(server)
+      .get("/learning-outcomes")
+      .query({ q: "cümlede", sort: "code", page: "1", limit: "1" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: outcomeId, title: "Cümlede anlam" })]);
+      });
+
+    await request(server).delete(`/learning-outcomes/${outcomeId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+    await request(server).get(`/learning-outcomes/${outcomeId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(404);
   });
 
   it("akademik yıl ve dönem CRUD akışını tenant içinde tamamlar", async () => {

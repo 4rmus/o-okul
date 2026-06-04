@@ -1,9 +1,10 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CampusRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -22,6 +23,7 @@ const emptyForm: CampusFormState = {
 
 export function CampusesPage() {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
   const queryKey = ["next-campuses", auth?.session.tenantId ?? "anonymous", listQuery];
@@ -37,6 +39,10 @@ export function CampusesPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
   const rows = campusesQuery.data?.data ?? [];
+
+  useEffect(() => {
+    if (searchParams.get("new") === "1") openCreateForm();
+  }, [searchParams]);
 
   const columns: Array<DataTableColumn<CampusRecord>> = [
     {
@@ -141,6 +147,14 @@ export function CampusesPage() {
         aria-label="Kampüs yönetimi"
         columns={columns}
         description="Kurum kampüslerini aynı CRUD kalıbıyla yönet."
+        emptyState={
+          <EmptyState
+            title="Henüz kampüs yok"
+            description="Kampüs ekleyerek sınıf yapısını kurmaya başla."
+            primaryAction={{ label: "Kampüs ekle", onClick: openCreateForm }}
+            secondaryAction={{ label: "Kuruluma dön", href: "/kurum/kurulum" }}
+          />
+        }
         emptyText="Kampüs kaydı yok"
         error={error || (campusesQuery.isError ? "Kampüsler alınamadı." : undefined)}
         getRowKey={(record) => record.id}

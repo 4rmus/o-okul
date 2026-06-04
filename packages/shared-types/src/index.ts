@@ -37,6 +37,7 @@ export type {
   HomeworkMaterialFileRecord,
   HomeworkMaterialRecord,
   HomeworkRecord,
+  LearningOutcomeRecord,
   MeProfileResponse,
   NotificationDeviceTokenRecord,
   MessageTemplateRecord,

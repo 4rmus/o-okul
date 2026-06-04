@@ -57,6 +57,19 @@ interface StudentBaseDetail {
   terms: AcademicTermRecord[];
 }
 
+interface StudentDetailPageData {
+  detail: StudentBaseDetail;
+  exams: ExamRecord[];
+}
+
+interface StudentReportData {
+  errorBooklet: ReportErrorBooklet | null;
+  progress: ReportStudentProgress | null;
+  report: ReportStudentSnapshot | null;
+  selectedSnapshot: ReportSnapshotRecord | null;
+  snapshots: ReportSnapshotRecord[];
+}
+
 const defaultExamId = "exam-demo-isem-lgs-1";
 
 export function StudentDetailPage({ studentId }: { studentId: string }) {
@@ -64,70 +77,27 @@ export function StudentDetailPage({ studentId }: { studentId: string }) {
   const [selectedExamId, setSelectedExamId] = useState(defaultExamId);
   const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
 
-  const detailQuery = useQuery({
-    queryKey: ["next-student-detail-page", auth?.session.tenantId ?? "anonymous", studentId],
-    queryFn: () => loadStudentBaseDetail(auth?.accessToken ?? "", studentId),
+  const pageDataQuery = useQuery({
+    queryKey: ["next-student-detail-page-data", auth?.session.tenantId ?? "anonymous", studentId],
+    queryFn: () => loadStudentDetailPageData(auth?.accessToken ?? "", studentId),
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
 
-  const examsQuery = useQuery({
-    queryKey: ["next-student-detail-exams", auth?.session.tenantId ?? "anonymous"],
-    queryFn: () => loadExams(auth?.accessToken ?? ""),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-
-  const snapshotsQuery = useQuery({
-    queryKey: ["next-student-detail-snapshots", auth?.session.tenantId ?? "anonymous", selectedExamId, studentId],
-    queryFn: () => loadStudentSnapshots(auth?.accessToken ?? "", selectedExamId, studentId),
+  const reportDataQuery = useQuery({
+    queryKey: [
+      "next-student-detail-report-data",
+      auth?.session.tenantId ?? "anonymous",
+      selectedExamId,
+      selectedSnapshotId || "auto",
+      studentId,
+    ],
+    queryFn: () => loadStudentReportData(auth?.accessToken ?? "", selectedExamId, selectedSnapshotId, studentId),
     enabled: Boolean(auth && selectedExamId),
     refetchOnWindowFocus: false,
   });
 
-  const snapshots = snapshotsQuery.data ?? [];
-  const selectedSnapshot = useMemo(
-    () => snapshots.find((snapshot) => snapshot.id === selectedSnapshotId) ?? snapshots[0] ?? null,
-    [selectedSnapshotId, snapshots],
-  );
-
-  const reportQuery = useQuery({
-    queryKey: [
-      "next-student-detail-report",
-      auth?.session.tenantId ?? "anonymous",
-      selectedExamId,
-      selectedSnapshot?.id ?? "none",
-      studentId,
-    ],
-    queryFn: () => loadStudentReport(auth?.accessToken ?? "", selectedExamId, selectedSnapshot?.id ?? "", studentId),
-    enabled: Boolean(auth && selectedSnapshot),
-    refetchOnWindowFocus: false,
-  });
-
-  const errorBookletQuery = useQuery({
-    queryKey: [
-      "next-student-detail-error-booklet",
-      auth?.session.tenantId ?? "anonymous",
-      selectedExamId,
-      selectedSnapshot?.id ?? "none",
-      studentId,
-    ],
-    queryFn: () => loadStudentErrorBooklet(auth?.accessToken ?? "", selectedExamId, selectedSnapshot?.id ?? "", studentId),
-    enabled: Boolean(auth && selectedSnapshot),
-    refetchOnWindowFocus: false,
-  });
-
-  const progressQuery = useQuery({
-    queryKey: ["next-student-detail-progress", auth?.session.tenantId ?? "anonymous", selectedExamId, studentId],
-    queryFn: () => apiRequestOrNull<ReportStudentProgress>(
-      auth?.accessToken ?? "",
-      `${apiBaseUrl}/exams/${encodeURIComponent(selectedExamId)}/reports/students/${encodeURIComponent(studentId)}/progress`,
-    ),
-    enabled: Boolean(auth && selectedExamId),
-    refetchOnWindowFocus: false,
-  });
-
-  const detail = detailQuery.data;
+  const detail = pageDataQuery.data?.detail;
   const studentAuditLogs = useMemo(
     () => (detail?.auditLogs ?? []).filter((record) => isStudentAuditLog(record, studentId)).slice(0, 5),
     [detail?.auditLogs, studentId],
@@ -143,10 +113,12 @@ export function StudentDetailPage({ studentId }: { studentId: string }) {
   const classNameById = useMemo(() => new Map((detail?.classes ?? []).map((record) => [record.id, record.name])), [detail?.classes]);
   const courseNameById = useMemo(() => new Map((detail?.courses ?? []).map((record) => [record.id, record.name])), [detail?.courses]);
   const termNameById = useMemo(() => new Map((detail?.terms ?? []).map((record) => [record.id, record.name])), [detail?.terms]);
-  const exams = examsQuery.data ?? [];
-  const report = reportQuery.data ?? null;
-  const errorBooklet = errorBookletQuery.data ?? null;
-  const progress = progressQuery.data ?? null;
+  const exams = pageDataQuery.data?.exams ?? [];
+  const snapshots = reportDataQuery.data?.snapshots ?? [];
+  const selectedSnapshot = reportDataQuery.data?.selectedSnapshot ?? null;
+  const report = reportDataQuery.data?.report ?? null;
+  const errorBooklet = reportDataQuery.data?.errorBooklet ?? null;
+  const progress = reportDataQuery.data?.progress ?? null;
   const studentName = detail ? `${detail.profile.firstName} ${detail.profile.lastName}` : "Öğrenci 360";
   const examResult = toStudentExamResult(report);
   const branchRadar = toStudentBranchRadar(report);
@@ -202,9 +174,9 @@ export function StudentDetailPage({ studentId }: { studentId: string }) {
           </label>
         </div>
 
-        {detailQuery.isPending ? (
+        {pageDataQuery.isPending ? (
           <p>Yükleniyor...</p>
-        ) : detailQuery.isError ? (
+        ) : pageDataQuery.isError ? (
           <p className="uh-crud-page__error">Öğrenci detayı alınamadı.</p>
         ) : detail ? (
           <>
@@ -356,6 +328,14 @@ export function StudentDetailPage({ studentId }: { studentId: string }) {
   );
 }
 
+async function loadStudentDetailPageData(accessToken: string, id: string): Promise<StudentDetailPageData> {
+  const [detail, exams] = await Promise.all([
+    loadStudentBaseDetail(accessToken, id),
+    loadExams(accessToken),
+  ]);
+  return { detail, exams };
+}
+
 async function loadStudentBaseDetail(accessToken: string, id: string): Promise<StudentBaseDetail> {
   const [
     attendanceSummary,
@@ -433,18 +413,33 @@ async function loadStudentSnapshots(accessToken: string, examId: string, student
   );
 }
 
-async function loadStudentReport(accessToken: string, examId: string, snapshotId: string, studentId: string) {
-  return apiRequestOrNull<ReportStudentSnapshot>(
-    accessToken,
-    `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots/${encodeURIComponent(snapshotId)}/students/${encodeURIComponent(studentId)}`,
-  );
-}
-
-async function loadStudentErrorBooklet(accessToken: string, examId: string, snapshotId: string, studentId: string) {
-  return apiRequestOrNull<ReportErrorBooklet>(
-    accessToken,
-    `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots/${encodeURIComponent(snapshotId)}/students/${encodeURIComponent(studentId)}/error-booklet`,
-  );
+async function loadStudentReportData(
+  accessToken: string,
+  examId: string,
+  selectedSnapshotId: string,
+  studentId: string,
+): Promise<StudentReportData> {
+  const snapshots = await loadStudentSnapshots(accessToken, examId, studentId);
+  const selectedSnapshot = snapshots.find((snapshot) => snapshot.id === selectedSnapshotId) ?? snapshots[0] ?? null;
+  const [report, errorBooklet, progress] = await Promise.all([
+    selectedSnapshot
+      ? apiRequestOrNull<ReportStudentSnapshot>(
+          accessToken,
+          `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots/${encodeURIComponent(selectedSnapshot.id)}/students/${encodeURIComponent(studentId)}`,
+        )
+      : Promise.resolve(null),
+    selectedSnapshot
+      ? apiRequestOrNull<ReportErrorBooklet>(
+          accessToken,
+          `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots/${encodeURIComponent(selectedSnapshot.id)}/students/${encodeURIComponent(studentId)}/error-booklet`,
+        )
+      : Promise.resolve(null),
+    apiRequestOrNull<ReportStudentProgress>(
+      accessToken,
+      `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/students/${encodeURIComponent(studentId)}/progress`,
+    ),
+  ]);
+  return { errorBooklet, progress, report, selectedSnapshot, snapshots };
 }
 
 async function loadStudentHomeworkAssignments(accessToken: string, studentId: string) {

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Button,
   ClassCompareBar,
+  EmptyState,
   Input,
   ProgressLineChart,
   TopicRadarChart,
@@ -38,12 +39,28 @@ interface ReportData {
   errorBooklet: ReportErrorBooklet | null;
 }
 
+interface ReportReferences {
+  campuses: CampusRecord[];
+  classes: ClassRecord[];
+  courses: CourseRecord[];
+  gradeLevels: GradeLevelRecord[];
+  terms: AcademicTermRecord[];
+}
+
 const emptyFilters = {
   campusId: "",
   gradeLevelId: "",
   classId: "",
   courseId: "",
   termId: "",
+};
+
+const emptyReferences: ReportReferences = {
+  campuses: [],
+  classes: [],
+  courses: [],
+  gradeLevels: [],
+  terms: [],
 };
 
 export function ReportsPage() {
@@ -56,41 +73,18 @@ export function ReportsPage() {
   const [error, setError] = useState("");
   const [queueMessage, setQueueMessage] = useState("");
   const tenantId = auth?.session.tenantId ?? "anonymous";
-  const classesQuery = useQuery({
-    queryKey: ["next-classes", tenantId],
-    queryFn: () => apiListRequest<ClassRecord>(auth?.accessToken ?? "", `${apiBaseUrl}/classes`),
+  const referencesQuery = useQuery({
+    queryKey: ["next-report-refs", tenantId],
+    queryFn: () => loadReportReferences(auth?.accessToken ?? ""),
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
-  const campusesQuery = useQuery({
-    queryKey: ["next-campuses", tenantId],
-    queryFn: () => apiListRequest<CampusRecord>(auth?.accessToken ?? "", `${apiBaseUrl}/campuses`),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const gradeLevelsQuery = useQuery({
-    queryKey: ["next-grade-levels", tenantId],
-    queryFn: () => apiListRequest<GradeLevelRecord>(auth?.accessToken ?? "", `${apiBaseUrl}/grade-levels`),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const coursesQuery = useQuery({
-    queryKey: ["next-courses", tenantId],
-    queryFn: () => apiListRequest<CourseRecord>(auth?.accessToken ?? "", `${apiBaseUrl}/courses`),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const termsQuery = useQuery({
-    queryKey: ["next-academic-terms", tenantId],
-    queryFn: () => apiListRequest<AcademicTermRecord>(auth?.accessToken ?? "", `${apiBaseUrl}/academic-terms`),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const classes = classesQuery.data?.data ?? [];
-  const campuses = campusesQuery.data?.data ?? [];
-  const gradeLevels = gradeLevelsQuery.data?.data ?? [];
-  const courses = coursesQuery.data?.data ?? [];
-  const terms = termsQuery.data?.data ?? [];
+  const references = referencesQuery.data ?? emptyReferences;
+  const classes = references.classes;
+  const campuses = references.campuses;
+  const gradeLevels = references.gradeLevels;
+  const courses = references.courses;
+  const terms = references.terms;
   const classNameById = new Map(classes.map((klass) => [klass.id, klass.name]));
   const campusNameById = new Map(campuses.map((campus) => [campus.id, campus.name]));
   const gradeLevelNameById = new Map(gradeLevels.map((level) => [level.id, level.name]));
@@ -319,7 +313,10 @@ export function ReportsPage() {
             </div>
           </>
         ) : (
-          <p>Hazır rapor yok</p>
+          <EmptyState
+            title="Hazır rapor yok"
+            description="Sınav ID ile raporları getir veya rapor üretimini kuyruğa al."
+          />
         )}
       </section>
     </PageFrame>
@@ -360,6 +357,23 @@ async function loadReportData(accessToken: string, examId: string, filters: type
   ]);
 
   return { snapshots, studentReport, studentProgress, errorBooklet };
+}
+
+async function loadReportReferences(accessToken: string): Promise<ReportReferences> {
+  const [campuses, classes, courses, gradeLevels, terms] = await Promise.all([
+    apiListRequest<CampusRecord>(accessToken, `${apiBaseUrl}/campuses`),
+    apiListRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes`),
+    apiListRequest<CourseRecord>(accessToken, `${apiBaseUrl}/courses`),
+    apiListRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels`),
+    apiListRequest<AcademicTermRecord>(accessToken, `${apiBaseUrl}/academic-terms`),
+  ]);
+  return {
+    campuses: campuses.data,
+    classes: classes.data,
+    courses: courses.data,
+    gradeLevels: gradeLevels.data,
+    terms: terms.data,
+  };
 }
 
 async function enqueueReportGenerationJob(

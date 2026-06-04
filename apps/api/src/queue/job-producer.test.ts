@@ -141,6 +141,36 @@ describe("createTenantQueueJob", () => {
     });
   });
 
+  it("backup-restore job payload'ına operasyon hedefini ekler", () => {
+    const job = createTenantQueueJob({
+      queueName: "backup-restore",
+      tenantId: "tenant-a",
+      userId: "user-a",
+      entityId: "backup-restore-a",
+      contentHash: "backup-hash-a",
+      operationType: "RESTORE_DRILL",
+      targetReference: "staging-drill-2026-06",
+      reason: "Aylık restore kanıtı",
+    });
+
+    expect(job).toMatchObject({
+      queueName: "backup-restore",
+      name: "backup-restore",
+      payload: {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        entityId: "backup-restore-a",
+        contentHash: "backup-hash-a",
+        operationType: "RESTORE_DRILL",
+        targetReference: "staging-drill-2026-06",
+        reason: "Aylık restore kanıtı",
+      },
+      options: {
+        jobId: "backup-restore-a_backup-hash-a",
+      },
+    });
+  });
+
   it("tenant/user bilgisi eksik payload üretmez", () => {
     expect(() =>
       createTenantQueueJob({
@@ -213,4 +243,17 @@ describe("createTenantQueueJob", () => {
     ).toThrow("ANNOUNCEMENT_DELIVERY_JOB_PAYLOAD_INVALID");
   });
 
+  it("backup-restore hedefi eksikse payload üretmez", () => {
+    expect(() =>
+      createTenantQueueJob({
+        queueName: "backup-restore",
+        tenantId: "tenant-a",
+        userId: "user-a",
+        entityId: "backup-restore-a",
+        contentHash: "backup-hash-a",
+        operationType: "BACKUP",
+        targetReference: "",
+      }),
+    ).toThrow("BACKUP_RESTORE_JOB_PAYLOAD_INVALID");
+  });
 });

@@ -1,10 +1,12 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Send, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import {
@@ -17,6 +19,13 @@ import {
   type TeacherFormState,
 } from "../../../../src/form-validation.js";
 import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+
+interface TeacherAssignmentReferences {
+  classes: ClassRecord[];
+  courses: CourseRecord[];
+  students: StudentRecord[];
+  terms: AcademicTermRecord[];
+}
 
 const emptyForm: TeacherFormState = {
   firstName: "",
@@ -34,8 +43,16 @@ const emptyAssignmentForm: TeacherAssignmentFormState = {
   endsAt: "",
 };
 
+const emptyReferences: TeacherAssignmentReferences = {
+  classes: [],
+  courses: [],
+  students: [],
+  terms: [],
+};
+
 export function TeachersPage() {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
   const queryKey = ["next-teachers", auth?.session.tenantId ?? "anonymous", listQuery];
@@ -53,40 +70,20 @@ export function TeachersPage() {
   const [error, setError] = useState("");
   const rows = teachersQuery.data?.data ?? [];
 
-  const classesQuery = useQuery({
-    queryKey: ["next-classes", auth?.session.tenantId ?? "anonymous"],
-    queryFn: () => loadClasses(auth?.accessToken ?? ""),
+  const referencesQuery = useQuery({
+    queryKey: ["next-teacher-assignment-refs", auth?.session.tenantId ?? "anonymous"],
+    queryFn: () => loadTeacherAssignmentReferences(auth?.accessToken ?? ""),
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
-  const classes = classesQuery.data ?? [];
+  const references = referencesQuery.data ?? emptyReferences;
+  const classes = references.classes;
   const classNameById = new Map(classes.map((klass) => [klass.id, klass.name]));
-
-  const coursesQuery = useQuery({
-    queryKey: ["next-courses-for-teacher-assignments", auth?.session.tenantId ?? "anonymous"],
-    queryFn: () => loadCourses(auth?.accessToken ?? ""),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const courses = coursesQuery.data ?? [];
+  const courses = references.courses;
   const courseNameById = new Map(courses.map((course) => [course.id, course.name]));
-
-  const termsQuery = useQuery({
-    queryKey: ["next-terms-for-teacher-assignments", auth?.session.tenantId ?? "anonymous"],
-    queryFn: () => loadTerms(auth?.accessToken ?? ""),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const terms = termsQuery.data ?? [];
+  const terms = references.terms;
   const termNameById = new Map(terms.map((term) => [term.id, term.name]));
-
-  const studentsQuery = useQuery({
-    queryKey: ["next-students-for-teacher-assignments", auth?.session.tenantId ?? "anonymous"],
-    queryFn: () => loadStudents(auth?.accessToken ?? ""),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const students = studentsQuery.data ?? [];
+  const students = references.students;
   const studentNameById = new Map(students.map((student) => [student.id, `${student.firstName} ${student.lastName}`]));
 
   const assignmentsQueryKey = ["next-teacher-assignments", auth?.session.tenantId ?? "anonymous", editingTeacher?.id ?? "none"];
@@ -97,6 +94,10 @@ export function TeachersPage() {
     refetchOnWindowFocus: false,
   });
   const assignments = assignmentsQuery.data ?? [];
+
+  useEffect(() => {
+    if (searchParams.get("new") === "1") openCreateForm();
+  }, [searchParams]);
 
   const columns: Array<DataTableColumn<TeacherRecord>> = [
     {
@@ -114,6 +115,9 @@ export function TeachersPage() {
       header: "İşlem",
       render: (teacher) => (
         <span className="next-row-actions">
+          <Link href={`/kurum/kullanicilar?invite=teacher&subjectId=${encodeURIComponent(teacher.id)}`} aria-label={`${teacher.firstName} portal daveti gönder`}>
+            <Send size={17} aria-hidden="true" />
+          </Link>
           <button type="button" onClick={() => openEditForm(teacher)} aria-label={`${teacher.firstName} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
           </button>
@@ -238,6 +242,14 @@ export function TeachersPage() {
         aria-label="Öğretmen yönetimi"
         columns={columns}
         description="Kurum öğretmenlerini aynı CRUD kalıbıyla yönet."
+        emptyState={
+          <EmptyState
+            title="Henüz öğretmen yok"
+            description="Öğretmen ekleyerek ders programı, yoklama ve öğrenci sorumluluğu akışlarını hazırla."
+            primaryAction={{ label: "Öğretmen ekle", onClick: openCreateForm }}
+            secondaryAction={{ label: "Kuruluma dön", href: "/kurum/kurulum" }}
+          />
+        }
         emptyText="Öğretmen kaydı yok"
         error={error || (teachersQuery.isError ? "Öğretmenler alınamadı." : undefined)}
         getRowKey={(teacher) => teacher.id}
@@ -416,20 +428,14 @@ async function loadTeachers(accessToken: string, listQuery: ListQueryState) {
   return apiListRequest<TeacherRecord>(accessToken, buildListUrl(`${apiBaseUrl}/teachers`, listQuery));
 }
 
-async function loadClasses(accessToken: string) {
-  return apiRequest<ClassRecord[]>(accessToken, `${apiBaseUrl}/classes`);
-}
-
-async function loadStudents(accessToken: string) {
-  return apiRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/students`);
-}
-
-async function loadCourses(accessToken: string) {
-  return apiRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`);
-}
-
-async function loadTerms(accessToken: string) {
-  return apiRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`);
+async function loadTeacherAssignmentReferences(accessToken: string): Promise<TeacherAssignmentReferences> {
+  const [classes, courses, students, terms] = await Promise.all([
+    apiRequest<ClassRecord[]>(accessToken, `${apiBaseUrl}/classes`),
+    apiRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`),
+    apiRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/students`),
+    apiRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`),
+  ]);
+  return { classes, courses, students, terms };
 }
 
 async function loadTeacherAssignments(accessToken: string, teacherId: string) {

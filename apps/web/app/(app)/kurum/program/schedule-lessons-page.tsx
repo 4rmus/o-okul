@@ -3,7 +3,7 @@
 import { type FormEvent, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, ScheduleLessonRecord, TeacherRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -166,6 +166,14 @@ export function ScheduleLessonsPage() {
         aria-label="Ders programı yönetimi"
         columns={columns}
         description="Kurum ders programını sınıf, öğretmen ve ders bağlantısıyla yönet."
+        emptyState={
+          <EmptyState
+            title="Ders programı boş"
+            description="Haftalık ders akışını oluşturmak için ilk dersi ekle."
+            hint="Sınıf, öğretmen ve ders kayıtları hazırsa programı buradan bağlayabilirsin."
+            primaryAction={{ label: "Ders ekle", onClick: openCreateForm }}
+          />
+        }
         emptyText="Ders programı kaydı yok"
         error={error || (lessonsQuery.isError ? "Ders programı alınamadı." : referenceQuery.isError ? "Seçim listeleri alınamadı." : undefined)}
         getRowKey={(record) => record.id}

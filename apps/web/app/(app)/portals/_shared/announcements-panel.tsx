@@ -6,9 +6,11 @@ import type { AnnouncementRecord } from "@uzman-hocam/shared-types";
 export function AnnouncementsPanel({
   announcements,
   onMarkRead,
+  readOnly = false,
 }: {
   announcements: AnnouncementRecord[];
   onMarkRead?: (announcement: AnnouncementRecord) => void | Promise<unknown>;
+  readOnly?: boolean;
 }) {
   return (
     <section className="next-list-panel" aria-label="Duyurular">
@@ -31,6 +33,8 @@ export function AnnouncementsPanel({
               <td>
                 {announcement.readAt ? (
                   `Okundu ${formatDateTime(announcement.readAt)}`
+                ) : readOnly ? (
+                  "Salt-okuma"
                 ) : (
                   <Button onClick={() => void onMarkRead?.(announcement)} disabled={!onMarkRead}>
                     Okundu işaretle

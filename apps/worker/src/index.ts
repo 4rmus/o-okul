@@ -1,5 +1,15 @@
 export { getJobContext, requireJobTenantContext, runWithJobContext } from "./context/job-context.js";
 export { TenantDbAccess } from "./db/tenant-db.js";
+export { createBackupRestoreProcessor } from "./jobs/backup-restore-processor.js";
+export type { BackupRestoreProcessor, BackupRestoreProcessorOptions } from "./jobs/backup-restore-processor.js";
+export { processBackupRestoreJob } from "./jobs/backup-restore-job.js";
+export type {
+  BackupRestoreJobReporter,
+  BackupRestoreJobPayload,
+  BackupRestoreJobResult,
+  BackupRestoreOperationType,
+} from "./jobs/backup-restore-job.js";
+export { PostgresBackupRestoreJobReporter } from "./jobs/postgres-backup-restore-job-reporter.js";
 export { createExamEvaluationProcessor } from "./jobs/exam-evaluation-processor.js";
 export type { ExamEvaluationProcessor, ExamEvaluationProcessorOptions } from "./jobs/exam-evaluation-processor.js";
 export { processExamEvaluationJob } from "./jobs/exam-evaluation-job.js";
@@ -76,6 +86,6 @@ export type {
   ScoringResult,
   StudentAnswer,
 } from "./jobs/scoring-engine.js";
-export { createExcelImportBullWorker, createExamEvaluationBullWorker, createRedisConnectionOptions, createReportGenerationBullWorker, createSmsBatchBullWorker } from "./queue/bullmq-worker.js";
-export type { BullExcelImportJob, BullExamEvaluationJob, BullReportGenerationJob, BullSmsBatchJob, BullWorkerFactory, BullWorkerInstance, ExcelImportBullWorkerOptions, ExamEvaluationBullWorkerOptions, ReportGenerationBullWorkerOptions, SmsBatchBullWorkerOptions } from "./queue/bullmq-worker.js";
+export { createBackupRestoreBullWorker, createExcelImportBullWorker, createExamEvaluationBullWorker, createRedisConnectionOptions, createReportGenerationBullWorker, createSmsBatchBullWorker } from "./queue/bullmq-worker.js";
+export type { BackupRestoreBullWorkerOptions, BullBackupRestoreJob, BullExcelImportJob, BullExamEvaluationJob, BullReportGenerationJob, BullSmsBatchJob, BullWorkerFactory, BullWorkerInstance, ExcelImportBullWorkerOptions, ExamEvaluationBullWorkerOptions, ReportGenerationBullWorkerOptions, SmsBatchBullWorkerOptions } from "./queue/bullmq-worker.js";
 export { assertTenantJobPayload, createJobId, queueNames } from "./queue/queues.js";

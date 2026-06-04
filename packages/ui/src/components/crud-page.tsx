@@ -7,6 +7,7 @@ export interface CrudPageProps<TRow> extends Omit<HTMLAttributes<HTMLElement>, "
   actions?: ReactNode;
   columns: Array<DataTableColumn<TRow>>;
   description?: ReactNode;
+  emptyState?: ReactNode;
   emptyText?: ReactNode;
   error?: ReactNode;
   getRowKey(row: TRow): string;
@@ -20,6 +21,7 @@ export function CrudPage<TRow>({
   className,
   columns,
   description,
+  emptyState,
   emptyText,
   error,
   getRowKey,
@@ -40,6 +42,8 @@ export function CrudPage<TRow>({
       {error ? <p className="uh-crud-page__error">{error}</p> : null}
       {loading && rows.length === 0 ? (
         <LoadingState />
+      ) : rows.length === 0 && emptyState ? (
+        emptyState
       ) : (
         <DataTable<TRow> columns={columns} emptyText={emptyText} getRowKey={getRowKey} rows={rows} />
       )}
