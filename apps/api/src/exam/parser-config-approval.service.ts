@@ -9,6 +9,7 @@ export const parserConfigRepositoryToken = Symbol("ParserConfigRepository");
 export interface ApprovedParserConfigInput {
   tenantId: string;
   examId: string;
+  templateId?: string;
   version: string;
   suggestion: ParserConfigSuggestion;
 }
@@ -16,6 +17,7 @@ export interface ApprovedParserConfigInput {
 export interface SavedParserConfig {
   tenantId: string;
   examId: string;
+  templateId?: string;
   version: string;
   encoding: string;
   delimiter: string;

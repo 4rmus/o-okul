@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import type { AnswerKeyRecord } from "@uzman-hocam/shared-types";
 import type { RequestContext } from "../context/request-context.js";
@@ -60,6 +61,35 @@ describe("AnswerKeyExcelImportService", () => {
     expect(repository.records[0]?.bookletVariants?.[0]?.permutation.slice(0, 5)).toEqual([20, 19, 18, 17, 16]);
     expect(repository.records[0]?.bookletVariants?.[0]?.permutation).toHaveLength(90);
   });
+
+  it("Ders ve yeni başlık adlarıyla cevap anahtarı import eder", async () => {
+    const repository = new FakeAnswerKeyRepository();
+    const service = new AnswerKeyExcelImportService(new AnswerKeyService(repository));
+
+    const result = await service.import(createContext(), {
+      examId: "exam-a",
+      version: "v2",
+      fileBase64: await createWorkbookWithLessonHeader(),
+    });
+
+    expect(result.imported).toBe(true);
+    expect(repository.records[0]?.questions[0]).toEqual({
+      questionNo: 1,
+      correctAnswer: "A",
+      branch: "Türkçe",
+      outcomeCode: "K1",
+      topic: "Sözcük",
+    });
+    expect(repository.records[0]?.questions[30]).toEqual({
+      questionNo: 31,
+      correctAnswer: "B",
+      branch: "Matematik",
+      outcomeCode: "K31",
+      topic: "Sayılar",
+    });
+    expect(repository.records[0]?.bookletVariants?.[0]?.permutation.slice(0, 3)).toEqual([1, 2, 3]);
+    expect(repository.records[0]?.bookletVariants?.[0]?.permutation.slice(30, 33)).toEqual([31, 32, 33]);
+  });
 });
 
 function createContext(): RequestContext {
@@ -97,4 +127,32 @@ class FakeAnswerKeyRepository implements AnswerKeyRepository {
   async publish(): Promise<AnswerKeyRecord | undefined> {
     return undefined;
   }
+}
+
+async function createWorkbookWithLessonHeader(): Promise<string> {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Cevap Anahtarı");
+  worksheet.addRow(["Ders", "Branş", "Kazanım", "Konu", "Soru Numarası", "B Kitapçığı Karşılığı", "Cevap"]);
+  const lessons = [
+    { lesson: "Sözel", branch: "Türkçe", topic: "Sözcük", count: 30, answer: "A" },
+    { lesson: "Sayısal", branch: "Matematik", topic: "Sayılar", count: 30, answer: "B" },
+    { lesson: "Fen", branch: "Fen Bilimleri", topic: "Madde", count: 30, answer: "C" },
+  ];
+  let globalQuestionNo = 1;
+  for (const lesson of lessons) {
+    for (let localQuestionNo = 1; localQuestionNo <= lesson.count; localQuestionNo += 1) {
+      worksheet.addRow([
+        lesson.lesson,
+        lesson.branch,
+        `K${globalQuestionNo}`,
+        lesson.topic,
+        localQuestionNo,
+        localQuestionNo,
+        lesson.answer,
+      ]);
+      globalQuestionNo += 1;
+    }
+  }
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer).toString("base64");
 }

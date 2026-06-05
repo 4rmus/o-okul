@@ -18,6 +18,7 @@ export class PostgresParserConfigRepository implements ParserConfigRepository {
            "id",
            "tenantId",
            "examId",
+           "templateId",
            "version",
            "encoding",
            "delimiter",
@@ -26,13 +27,14 @@ export class PostgresParserConfigRepository implements ParserConfigRepository {
            "status",
            "updatedAt"
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 'APPROVED', now())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, 'APPROVED', now())
          ON CONFLICT ("tenantId", "examId", "version") DO NOTHING
          RETURNING *`,
         [
           randomUUID(),
           input.tenantId,
           input.examId,
+          input.templateId ?? null,
           input.version,
           input.suggestion.encoding,
           input.suggestion.delimiter,
@@ -52,6 +54,7 @@ export class PostgresParserConfigRepository implements ParserConfigRepository {
 interface ParserConfigRow {
   tenantId: string;
   examId: string;
+  templateId: string | null;
   version: string;
   encoding: string;
   delimiter: string;
@@ -68,6 +71,7 @@ function toSavedParserConfig(row: ParserConfigRow): SavedParserConfig {
   return {
     tenantId: row.tenantId,
     examId: row.examId,
+    ...(row.templateId ? { templateId: row.templateId } : {}),
     version: row.version,
     encoding: row.encoding,
     delimiter: row.delimiter,

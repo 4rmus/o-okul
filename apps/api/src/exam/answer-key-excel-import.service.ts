@@ -49,6 +49,7 @@ interface ParsedAnswerKeyWorkbook {
 }
 
 interface ParsedWorkbookRow {
+  lesson: string;
   section: string;
   globalQuestionNo: number;
   localQuestionNo: number;
@@ -147,8 +148,9 @@ export class AnswerKeyExcelImportService {
         throw new BadRequestException("ANSWER_KEY_IMPORT_CORRECT_ANSWER_INVALID");
       }
 
-      const section = this.cellText(row.getCell(headers.section).value);
-      const branch = this.cellText(row.getCell(headers.branch).value) || section;
+      const lesson = headers.lesson ? this.cellText(row.getCell(headers.lesson).value) : "";
+      const section = headers.section ? this.cellText(row.getCell(headers.section).value) : lesson;
+      const branch = this.cellText(row.getCell(headers.branch).value) || lesson || section;
       if (!branch) {
         throw new BadRequestException("ANSWER_KEY_IMPORT_BRANCH_REQUIRED");
       }
@@ -156,6 +158,7 @@ export class AnswerKeyExcelImportService {
       const topic = this.cellText(row.getCell(headers.topic).value);
 
       rows.push({
+        lesson,
         section,
         globalQuestionNo: rows.length + 1,
         localQuestionNo,
@@ -167,7 +170,7 @@ export class AnswerKeyExcelImportService {
       });
     });
 
-    const questions = rows.map(({ bEquivalent: _bEquivalent, globalQuestionNo, localQuestionNo: _localQuestionNo, section: _section, ...question }) => ({
+    const questions = rows.map(({ bEquivalent: _bEquivalent, globalQuestionNo, localQuestionNo: _localQuestionNo, lesson: _lesson, section: _section, ...question }) => ({
       ...question,
       questionNo: globalQuestionNo,
     }));
@@ -209,7 +212,8 @@ export class AnswerKeyExcelImportService {
   }
 
   private readHeaders(row: ExcelJS.Row): {
-    section: number;
+    lesson?: number;
+    section?: number;
     questionNo: number;
     bEquivalent: number;
     correctAnswer: number;
@@ -220,9 +224,10 @@ export class AnswerKeyExcelImportService {
     const headers = new Map<string, number>();
     row.eachCell((cell, colNumber) => headers.set(normalizeHeader(this.cellText(cell.value)), colNumber));
     return {
-      section: requiredHeader(headers, "BÖLÜM"),
-      questionNo: requiredHeader(headers, "SORU NO"),
-      bEquivalent: requiredHeader(headers, "B KARŞILIĞI"),
+      lesson: optionalHeader(headers, "DERS"),
+      section: optionalHeader(headers, "BÖLÜM"),
+      questionNo: requiredAnyHeader(headers, ["SORU NUMARASI", "SORU NO"]),
+      bEquivalent: requiredAnyHeader(headers, ["B KİTAPÇIĞI KARŞILIĞI", "B KITAPCIGI KARSILIGI", "B KARŞILIĞI"]),
       correctAnswer: requiredHeader(headers, "CEVAP"),
       outcomeCode: requiredHeader(headers, "KAZANIM"),
       topic: requiredHeader(headers, "KONU"),
@@ -277,6 +282,25 @@ function requiredHeader(headers: Map<string, number>, name: string): number {
   return index;
 }
 
+function requiredAnyHeader(headers: Map<string, number>, names: string[]): number {
+  for (const name of names) {
+    const index = optionalHeader(headers, name);
+    if (index) {
+      return index;
+    }
+  }
+  throw new BadRequestException("ANSWER_KEY_IMPORT_HEADER_MISSING");
+}
+
+function optionalHeader(headers: Map<string, number>, name: string): number | undefined {
+  return headers.get(normalizeHeader(name));
+}
+
 function normalizeHeader(value: string): string {
-  return value.toLocaleUpperCase("tr-TR").replace(/\s+/g, " ").trim();
+  return value
+    .toLocaleUpperCase("tr-TR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }

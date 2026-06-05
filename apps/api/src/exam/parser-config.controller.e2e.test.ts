@@ -88,6 +88,33 @@ describe("ParserConfigController", () => {
     expect(repository.inputs).toHaveLength(0);
   });
 
+  it("öneri endpointi OPTİK-7108 presetini örnek dosya istemeden kabul eder", async () => {
+    const issued = await login("admin-a@example.test");
+
+    const response = await request(server)
+      .post("/exams/exam-a/parser-configs/suggestions")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ preset: "OPTIK_7108_LGS" })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      examId: "exam-a",
+      status: "suggested",
+      suggestion: {
+        delimiter: "FIXED",
+        skipHeaderLines: 0,
+        confidence: "high",
+        fieldMapping: {
+          nationalId: { kind: "fixed", start: 37, length: 11 },
+          studentNo: { kind: "fixed", start: 11, length: 4 },
+          bookletType: { kind: "fixed", start: 50, length: 1 },
+          answers: { kind: "fixed", estimatedQuestionCount: 90 },
+        },
+      },
+    });
+    expect(repository.inputs).toHaveLength(0);
+  });
+
   it("TEACHER öneri üretemez", async () => {
     const issued = await login("teacher-a@example.test");
 

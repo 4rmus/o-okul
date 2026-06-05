@@ -56,6 +56,7 @@ describe("ParserConfigSuggestionService", () => {
         skipHeaderLines: 0,
         confidence: "high",
         fieldMapping: {
+          nationalId: { kind: "fixed", start: 37, length: 11 },
           studentNo: { kind: "fixed", start: 11, length: 4 },
           bookletType: { kind: "fixed", start: 50, length: 1 },
           answers: {

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ChevronDown, Search, type LucideIcon } from "lucide-react";
 import type { ClassRecord, GuardianRecord, NotificationDeviceTokenRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../src/api-client.js";
 import { useAuth } from "../providers.js";
@@ -35,10 +36,17 @@ interface CommandPaletteItem {
 
 type NavigationGroup = {
   label: string;
-  items: readonly { href: string; label: string }[];
+  items: readonly { href: string; icon?: LucideIcon; label: string }[];
+};
+
+type SidebarItem = {
+  href: string;
+  icon?: LucideIcon;
+  label: string;
 };
 
 const entitySearchLimit = 3;
+const sidebarGroupStorageKey = "des.sidebar.expandedGroups.v2";
 
 interface EntitySearchResult {
   group: string;
@@ -54,6 +62,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { auth, isBootstrapping, logout } = useAuth();
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
+  const [expandedSidebarGroups, setExpandedSidebarGroups] = useState<Record<string, boolean>>({});
   const visiblePortalItems = useMemo(
     () => auth?.session ? rolePortalItems.filter((item) => hasSubjectPortalAccess(auth.session, item.role, item.subjectType)) : [],
     [auth],
@@ -92,6 +101,17 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [auth]);
 
+  useEffect(() => {
+    try {
+      const storedGroups = window.localStorage.getItem(sidebarGroupStorageKey);
+      if (storedGroups) {
+        setExpandedSidebarGroups(JSON.parse(storedGroups) as Record<string, boolean>);
+      }
+    } catch {
+      setExpandedSidebarGroups({});
+    }
+  }, []);
+
   if (isBootstrapping) {
     return (
       <main className="next-auth-layout">
@@ -129,6 +149,27 @@ export function AppShell({ children }: { children: ReactNode }) {
     router.replace(href);
   }
 
+  function isGroupActive(group: NavigationGroup) {
+    return group.items.some((item) => isActive(item.href));
+  }
+
+  function toggleSidebarGroup(groupKey: string) {
+    setExpandedSidebarGroups((current) => {
+      const next = { ...current };
+      if (next[groupKey]) {
+        delete next[groupKey];
+      } else {
+        next[groupKey] = true;
+      }
+
+      try {
+        window.localStorage.setItem(sidebarGroupStorageKey, JSON.stringify(next));
+      } catch {}
+
+      return next;
+    });
+  }
+
   return (
     <main className="next-app-shell">
       <aside className="next-sidebar" aria-label="Ana menü">
@@ -137,56 +178,46 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="next-brand-mark">UH</span>
             <span>Uzman Hocam</span>
           </div>
-          <button className="next-command-open" type="button" onClick={() => setIsCommandOpen(true)}>
-            Komut
+          <button className="next-command-open" type="button" onClick={() => setIsCommandOpen(true)} aria-label="Komut paleti" title="Komut paleti">
+            <Search size={16} aria-hidden="true" />
           </button>
         </header>
         <nav className="next-sidebar-nav" aria-label="Ana menü">
           {hasInstitutionAccess(auth.session.roles)
             ? visibleInstitutionNavGroups.map((group) => (
-                <section key={group.label} className="next-sidebar-group">
-                  <p className="next-sidebar-group-title">{group.label}</p>
-                  <ul className="next-sidebar-group-list">
-                    {group.items.map((item) => (
-                      <li key={item.href}>
-                        <Link className="next-sidebar-link" href={item.href} aria-current={navCurrent(item.href)}>
-                          {item.label}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
+                <SidebarGroup
+                  key={group.label}
+                  expanded={Boolean(expandedSidebarGroups[`institution:${group.label}`])}
+                  group={group}
+                  groupKey={`institution:${group.label}`}
+                  isActive={isGroupActive(group)}
+                  navCurrent={navCurrent}
+                  onToggle={toggleSidebarGroup}
+                />
               ))
             : null}
           {visibleSystemNavGroups.length > 0
             ? visibleSystemNavGroups.map((group) => (
-                <section key={group.label} className="next-sidebar-group">
-                  <p className="next-sidebar-group-title">{group.label}</p>
-                  <ul className="next-sidebar-group-list">
-                    {group.items.map((item) => (
-                      <li key={item.href}>
-                        <Link className="next-sidebar-link" href={item.href} aria-current={navCurrent(item.href)}>
-                          {item.label}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
+                <SidebarGroup
+                  key={group.label}
+                  expanded={Boolean(expandedSidebarGroups[`system:${group.label}`])}
+                  group={group}
+                  groupKey={`system:${group.label}`}
+                  isActive={isGroupActive(group)}
+                  navCurrent={navCurrent}
+                  onToggle={toggleSidebarGroup}
+                />
               ))
             : null}
           {visiblePortalItems.length > 0 ? (
-            <section className="next-sidebar-group">
-              <p className="next-sidebar-group-title">Portal</p>
-              <ul className="next-sidebar-group-list">
-                {visiblePortalItems.map((item) => (
-                  <li key={item.href}>
-                    <Link className="next-sidebar-link" href={item.href} aria-current={navCurrent(item.href)}>
-                      {item.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
+            <SidebarGroup
+              expanded={Boolean(expandedSidebarGroups.portal)}
+              group={{ label: "Portal", items: visiblePortalItems }}
+              groupKey="portal"
+              isActive={visiblePortalItems.some((item) => isActive(item.href))}
+              navCurrent={navCurrent}
+              onToggle={toggleSidebarGroup}
+            />
           ) : null}
           <button className="next-sidebar-logout" type="button" onClick={() => void handleLogout()}>
             Çıkış
@@ -209,6 +240,61 @@ export function AppShell({ children }: { children: ReactNode }) {
         setQuery={setCommandQuery}
       />
     </main>
+  );
+}
+
+function SidebarGroup({
+  expanded,
+  group,
+  groupKey,
+  isActive,
+  navCurrent,
+  onToggle,
+}: {
+  expanded: boolean;
+  group: NavigationGroup;
+  groupKey: string;
+  isActive: boolean;
+  navCurrent(href: string): "page" | undefined;
+  onToggle(groupKey: string): void;
+}) {
+  const listId = `sidebar-group-${groupKey.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+
+  return (
+    <section
+      className="next-sidebar-group"
+      data-active={isActive ? "true" : "false"}
+      data-expanded={expanded ? "true" : "false"}
+    >
+      <button
+        className="next-sidebar-group-toggle"
+        type="button"
+        aria-controls={listId}
+        aria-expanded={expanded}
+        onClick={() => onToggle(groupKey)}
+      >
+        <span>{group.label}</span>
+        <ChevronDown className="next-sidebar-group-toggle-icon" size={14} aria-hidden="true" />
+      </button>
+      <ul className="next-sidebar-group-list" id={listId}>
+        {group.items.map((item) => (
+          <li key={item.href}>
+            <SidebarLink item={item} current={navCurrent(item.href)} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function SidebarLink({ current, item }: { current?: "page"; item: SidebarItem }) {
+  const Icon = item.icon;
+
+  return (
+    <Link className="next-sidebar-link" href={item.href} aria-current={current}>
+      {Icon ? <Icon className="next-sidebar-link-icon" size={16} aria-hidden="true" /> : null}
+      <span>{item.label}</span>
+    </Link>
   );
 }
 

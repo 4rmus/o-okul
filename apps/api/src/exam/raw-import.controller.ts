@@ -3,6 +3,7 @@ import { getRequestContext } from "../context/request-context.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { RawImportQuarantineService } from "./raw-import-quarantine.service.js";
+import { RawImportAnalysisService } from "./raw-import-analysis.service.js";
 import {
   RawImportUploadService,
   type RawImportUploadResult,
@@ -14,6 +15,7 @@ export class RawImportController {
   constructor(
     private readonly rawImports: RawImportUploadService,
     private readonly quarantines: RawImportQuarantineService,
+    private readonly analysis: RawImportAnalysisService,
   ) {}
 
   @Post()
@@ -45,6 +47,29 @@ export class RawImportController {
     @Param("rawImportId") rawImportId: string,
   ) {
     return this.quarantines.list(getRequestContext(), examId, rawImportId);
+  }
+
+  @Get(":rawImportId/summary")
+  @RequireCapability("academic:manage")
+  summary(
+    @Param("examId") examId: string,
+    @Param("rawImportId") rawImportId: string,
+  ) {
+    return this.analysis.summary(getRequestContext(), examId, rawImportId);
+  }
+
+  @Post(":rawImportId/evaluation-jobs")
+  @RequireCapability("academic:manage")
+  enqueueEvaluation(
+    @Param("examId") examId: string,
+    @Param("rawImportId") rawImportId: string,
+    @Body() body: { answerKeyId?: string },
+  ) {
+    return this.analysis.enqueueEvaluation(getRequestContext(), {
+      examId,
+      rawImportId,
+      answerKeyId: body.answerKeyId,
+    });
   }
 
   @Post(":rawImportId/quarantines/:quarantineId/resolve")

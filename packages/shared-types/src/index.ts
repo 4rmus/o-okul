@@ -41,6 +41,7 @@ export type {
   MeProfileResponse,
   NotificationDeviceTokenRecord,
   MessageTemplateRecord,
+  OpticalFormTemplateRecord,
   PaymentInstallmentRecord,
   PaymentInstallmentStatus,
   PaymentPlanRecord,

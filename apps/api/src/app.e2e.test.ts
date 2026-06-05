@@ -703,6 +703,81 @@ describe("API auth + tenant isolation", () => {
     });
   });
 
+  it("student Excel dry-run üst açıklama satırını atlayıp başlıkları doğru çözer", async () => {
+    const issued = await login("admin-a@example.test");
+    const fileBase64 = await createStudentWorkbookBase64(
+      [["320", "Ece", "Baslikli", "8-A"]],
+      ["okul_no", "ad", "soyad", "sinif"],
+      [["ogrenci-aktarim-sablonu (3)"]],
+    );
+
+    const response = await request(server)
+      .post("/students/imports/dry-run")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ fileBase64 })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      dryRun: true,
+      totalRows: 1,
+      validRows: [{ row: 3, studentNo: "320", firstName: "Ece", lastName: "Baslikli", classId: "class-a" }],
+      errors: [],
+      wouldImport: true,
+    });
+  });
+
+  it("student Excel import veli bilgilerini oluşturup öğrenciye bağlar", async () => {
+    const issued = await login("admin-a@example.test");
+    let studentId = "";
+
+    try {
+      const imported = await request(server)
+        .post("/students/imports")
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .send({
+          fileBase64: await createStudentWorkbookBase64(
+            [["321", "Ece", "Velili", "8-A", "Fatma", "Velili", "5553210000"]],
+            ["okul_no", "ad", "soyad", "sinif", "veli_ad", "veli_soyad", "veli_telefon"],
+          ),
+        })
+        .expect(201);
+
+      studentId = imported.body.students[0].id;
+      expect(imported.body).toMatchObject({
+        importedRows: 1,
+        students: [{ tenantId: "tenant-a", studentNo: "321", firstName: "Ece", lastName: "Velili", classId: "class-a" }],
+      });
+
+      await request(server)
+        .get(`/students/${encodeURIComponent(studentId)}/guardians`)
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .expect(200)
+        .expect(({ body }) => {
+          expect(body).toEqual([expect.objectContaining({ firstName: "Fatma", lastName: "Velili", phone: "5553210000" })]);
+        });
+
+      await request(server)
+        .get(`/students/${encodeURIComponent(studentId)}/guardian-links`)
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .expect(200)
+        .expect(({ body }) => {
+          expect(body).toEqual([
+            expect.objectContaining({
+              relationshipType: "GUARDIAN",
+              isPrimary: true,
+              canReceiveSms: true,
+              canReceiveAnnouncements: true,
+              canOpenSupportTickets: true,
+            }),
+          ]);
+        });
+    } finally {
+      if (studentId) {
+        await request(server).delete(`/students/${encodeURIComponent(studentId)}`).set("Authorization", `Bearer ${issued.accessToken}`);
+      }
+    }
+  });
+
   it("student CSV dry-run okul no çakışmasını satır bazında raporlar", async () => {
     const issued = await login("admin-a@example.test");
     const fileBase64 = Buffer.from("\uFEFFokul_no;ad;soyad;sinif\n100;Ece;Csv;8-A\n", "utf8").toString("base64");
@@ -948,9 +1023,12 @@ function readCookieValue(cookie: string, name: string): string {
   return decodeURIComponent(value?.slice(name.length + 1) ?? "");
 }
 
-async function createStudentWorkbookBase64(rows: string[][], headers = ["firstName", "lastName"]): Promise<string> {
+async function createStudentWorkbookBase64(rows: string[][], headers = ["firstName", "lastName"], leadingRows: string[][] = []): Promise<string> {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Students");
+  for (const row of leadingRows) {
+    worksheet.addRow(row);
+  }
   worksheet.addRow(headers);
   for (const row of rows) {
     worksheet.addRow(row);

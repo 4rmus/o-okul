@@ -3,7 +3,7 @@ import ExcelJS from "exceljs";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
-import { StudentService, type StudentRecord } from "./student.service.js";
+import { StudentService, type StudentGuardianProvisionInput, type StudentRecord } from "./student.service.js";
 
 export interface StudentImportError {
   row: number;
@@ -17,6 +17,7 @@ export interface StudentImportPreviewRow {
   classId?: string;
   className?: string;
   firstName: string;
+  guardian?: StudentGuardianProvisionInput;
   lastName: string;
   studentNo?: string;
 }
@@ -185,20 +186,32 @@ export class StudentImportService {
 
   private readMatrixRows(matrix: Array<{ rowNumber: number; cells: string[] }>): StudentImportPreviewRow[] {
     const rows: StudentImportPreviewRow[] = [];
-    const header = matrix[0]?.cells ?? [];
+    const headerRowIndex = findHeaderRowIndex(matrix);
+    const header = matrix[headerRowIndex]?.cells ?? [];
     const studentNoIndex = findHeaderIndex(header, ["studentNo", "schoolNo", "okulNo", "okulNumarasi", "okulNumarası", "ogrenciNo", "öğrenciNo"]);
     const firstNameIndex = findHeaderIndex(header, ["firstName", "ad", "adi", "adı", "isim"]) ?? 0;
     const lastNameIndex = findHeaderIndex(header, ["lastName", "soyad", "soyadi", "soyadı"]) ?? 1;
     const classIndex = findHeaderIndex(header, ["class", "className", "sinif", "sınıf", "sube", "şube", "sinifAdi", "sınıfAdı"]);
+    const guardianFirstNameIndex = findHeaderIndex(header, ["guardianFirstName", "veliAd", "veliAdi", "veliAdı"]);
+    const guardianLastNameIndex = findHeaderIndex(header, ["guardianLastName", "veliSoyad", "veliSoyadi", "veliSoyadı"]);
+    const guardianPhoneIndex = findHeaderIndex(header, ["guardianPhone", "veliTelefon", "veliTel", "veliCep"]);
 
-    for (const row of matrix.slice(1)) {
+    for (const row of matrix.slice(headerRowIndex + 1)) {
       const studentNo = studentNoIndex === undefined ? "" : row.cells[studentNoIndex]?.trim() ?? "";
       const firstName = row.cells[firstNameIndex]?.trim() ?? "";
       const lastName = row.cells[lastNameIndex]?.trim() ?? "";
       const className = classIndex === undefined ? "" : row.cells[classIndex]?.trim() ?? "";
+      const guardian = readGuardian(row.cells, guardianFirstNameIndex, guardianLastNameIndex, guardianPhoneIndex);
       if (!studentNo && !firstName && !lastName) continue;
 
-      rows.push({ row: row.rowNumber, firstName, lastName, ...(studentNo ? { studentNo } : {}), ...(className ? { className } : {}) });
+      rows.push({
+        row: row.rowNumber,
+        firstName,
+        lastName,
+        ...(studentNo ? { studentNo } : {}),
+        ...(className ? { className } : {}),
+        ...(guardian ? { guardian } : {}),
+      });
     }
 
     return rows;
@@ -312,6 +325,38 @@ function findHeaderIndex(header: string[], names: string[]): number | undefined 
   const normalizedNames = new Set(names.map(normalizeHeader));
   const index = header.findIndex((cell) => normalizedNames.has(normalizeHeader(cell)));
   return index === -1 ? undefined : index;
+}
+
+function findHeaderRowIndex(matrix: Array<{ cells: string[] }>): number {
+  const index = matrix.findIndex((row) =>
+    findHeaderIndex(row.cells, ["firstName", "ad", "adi", "adı", "isim"]) !== undefined &&
+    findHeaderIndex(row.cells, ["lastName", "soyad", "soyadi", "soyadı"]) !== undefined,
+  );
+  return index === -1 ? 0 : index;
+}
+
+function readGuardian(
+  cells: string[],
+  firstNameIndex: number | undefined,
+  lastNameIndex: number | undefined,
+  phoneIndex: number | undefined,
+): StudentGuardianProvisionInput | undefined {
+  const firstName = firstNameIndex === undefined ? "" : cells[firstNameIndex]?.trim() ?? "";
+  const lastName = lastNameIndex === undefined ? "" : cells[lastNameIndex]?.trim() ?? "";
+  const phone = phoneIndex === undefined ? "" : cells[phoneIndex]?.trim() ?? "";
+  if (!firstName && !lastName && !phone) return undefined;
+
+  return {
+    firstName: firstName || undefined,
+    lastName: lastName || undefined,
+    phone: phone || undefined,
+    relationshipType: "GUARDIAN",
+    isPrimary: true,
+    canViewFinance: true,
+    canReceiveSms: true,
+    canReceiveAnnouncements: true,
+    canOpenSupportTickets: true,
+  };
 }
 
 function normalizeHeader(value: string): string {

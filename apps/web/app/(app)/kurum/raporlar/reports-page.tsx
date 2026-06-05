@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Button,
@@ -12,6 +12,7 @@ import type {
   CampusRecord,
   ClassRecord,
   CourseRecord,
+  ExamRecord,
   GradeLevelRecord,
   ReportErrorBooklet,
   ReportSnapshotExportResult,
@@ -40,6 +41,7 @@ interface ReportReferences {
   campuses: CampusRecord[];
   classes: ClassRecord[];
   courses: CourseRecord[];
+  exams: ExamRecord[];
   gradeLevels: GradeLevelRecord[];
   terms: AcademicTermRecord[];
 }
@@ -56,14 +58,15 @@ const emptyReferences: ReportReferences = {
   campuses: [],
   classes: [],
   courses: [],
+  exams: [],
   gradeLevels: [],
   terms: [],
 };
 
 export function ReportsPage() {
   const { auth } = useAuth();
-  const [examId, setExamId] = useState("exam-demo-isem-lgs-1");
-  const [loadedExamId, setLoadedExamId] = useState("exam-demo-isem-lgs-1");
+  const [examId, setExamId] = useState("");
+  const [loadedExamId, setLoadedExamId] = useState("");
   const [contentHash, setContentHash] = useState("results-v1");
   const [filters, setFilters] = useState(emptyFilters);
   const [reportData, setReportData] = useState<ReportData | null>(null);
@@ -81,6 +84,7 @@ export function ReportsPage() {
   const campuses = references.campuses;
   const gradeLevels = references.gradeLevels;
   const courses = references.courses;
+  const exams = references.exams;
   const terms = references.terms;
   const classNameById = new Map(classes.map((klass) => [klass.id, klass.name]));
   const campusNameById = new Map(campuses.map((campus) => [campus.id, campus.name]));
@@ -94,6 +98,12 @@ export function ReportsPage() {
   const classBars = toClassBars(latestSnapshot);
   const examResult = toExamResult(latestSnapshot);
   const progressPoints = toProgressPoints(reportData?.studentProgress ?? null);
+
+  useEffect(() => {
+    if (!examId && exams.length > 0) {
+      setExamId(preferredExamId(exams));
+    }
+  }, [examId, exams]);
 
   async function loadReports(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -163,7 +173,17 @@ export function ReportsPage() {
         <h2>Rapor sorgusu</h2>
         <label>
           Rapor sınav ID
-          <Input required value={examId} onChange={(event) => setExamId(event.target.value)} />
+          <Input
+            list="report-exam-options"
+            required
+            value={examId}
+            onChange={(event) => setExamId(event.target.value)}
+          />
+          <datalist id="report-exam-options">
+            {exams.map((exam) => (
+              <option key={exam.id} value={exam.id}>{exam.title}</option>
+            ))}
+          </datalist>
         </label>
         <label>
           Sonuç anahtarı
@@ -357,10 +377,11 @@ async function loadReportData(accessToken: string, examId: string, filters: type
 }
 
 async function loadReportReferences(accessToken: string): Promise<ReportReferences> {
-  const [campuses, classes, courses, gradeLevels, terms] = await Promise.all([
+  const [campuses, classes, courses, exams, gradeLevels, terms] = await Promise.all([
     apiListRequest<CampusRecord>(accessToken, `${apiBaseUrl}/campuses`),
     apiListRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes`),
     apiListRequest<CourseRecord>(accessToken, `${apiBaseUrl}/courses`),
+    apiListRequest<ExamRecord>(accessToken, `${apiBaseUrl}/exams`),
     apiListRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels`),
     apiListRequest<AcademicTermRecord>(accessToken, `${apiBaseUrl}/academic-terms`),
   ]);
@@ -368,9 +389,14 @@ async function loadReportReferences(accessToken: string): Promise<ReportReferenc
     campuses: campuses.data,
     classes: classes.data,
     courses: courses.data,
+    exams: exams.data,
     gradeLevels: gradeLevels.data,
     terms: terms.data,
   };
+}
+
+function preferredExamId(exams: ExamRecord[]) {
+  return exams.find((exam) => exam.status === "PUBLISHED")?.id ?? exams[0]?.id ?? "";
 }
 
 async function enqueueReportGenerationJob(

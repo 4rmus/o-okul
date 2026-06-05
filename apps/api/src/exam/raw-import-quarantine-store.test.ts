@@ -110,7 +110,7 @@ describe("PostgresRawImportQuarantineStore", () => {
     expect(businessQueries[0]?.sql).toContain('INNER JOIN "ExamParticipant" ep');
     expect(businessQueries[0]?.sql).toContain('INNER JOIN "RawImport" ri');
     expect(businessQueries[0]?.sql).toContain('FROM "AnswerKey"');
-    expect(businessQueries[0]?.sql).toContain('"status" = \'PUBLISHED\'');
+    expect(businessQueries[0]?.sql).toContain('"publishedAt" DESC NULLS LAST');
     expect(businessQueries[0]?.values).toEqual([
       "tenant-a",
       "exam-a",

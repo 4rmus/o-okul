@@ -15,11 +15,12 @@ describe("PostgresParserConfigRepository", () => {
           rows: [createRow({
             tenantId: values?.[1] as string,
             examId: values?.[2] as string,
-            version: values?.[3] as string,
-            encoding: values?.[4] as string,
-            delimiter: values?.[5] as string,
-            skipHeaderLines: values?.[6] as number,
-            fieldMapping: JSON.parse(values?.[7] as string) as unknown,
+            templateId: values?.[3] as string | null,
+            version: values?.[4] as string,
+            encoding: values?.[5] as string,
+            delimiter: values?.[6] as string,
+            skipHeaderLines: values?.[7] as number,
+            fieldMapping: JSON.parse(values?.[8] as string) as unknown,
           })] as T[],
         };
       },
@@ -39,6 +40,7 @@ describe("PostgresParserConfigRepository", () => {
       expect.any(String),
       "tenant-a",
       "exam-a",
+      null,
       "parser-v1",
       "UTF-8",
       "TAB",
@@ -99,6 +101,7 @@ function createSuggestion() {
 interface ParserConfigTestRow {
   tenantId: string;
   examId: string;
+  templateId: string | null;
   version: string;
   encoding: string;
   delimiter: string;

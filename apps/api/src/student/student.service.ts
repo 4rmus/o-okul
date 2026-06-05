@@ -311,7 +311,12 @@ export class StudentService {
 
   async createMany(
     context: RequestContext,
-    inputs: Array<Pick<StudentRecord, "firstName" | "lastName"> & Partial<Pick<StudentRecord, "classId" | "studentNo">>>,
+    inputs: Array<
+      Pick<StudentRecord, "firstName" | "lastName"> &
+        Partial<Pick<StudentRecord, "classId" | "studentNo">> & {
+          guardian?: StudentGuardianProvisionInput;
+        }
+    >,
   ): Promise<StudentRecord[]> {
     const tenantId = context.tenantId;
     if (!tenantId) {
@@ -361,6 +366,11 @@ export class StudentService {
         status: student.status,
         reason: "CREATED",
       });
+    }
+    for (const [index, student] of students.entries()) {
+      const guardian = inputs[index]?.guardian;
+      if (!guardian) continue;
+      await this.autoProvisionGuardian(context, student, guardian);
     }
     return students;
   }

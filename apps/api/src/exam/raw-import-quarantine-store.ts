@@ -115,7 +115,6 @@ export class PostgresRawImportQuarantineStore implements RawImportQuarantineStor
            FROM "AnswerKey"
            WHERE "tenantId" = resolved."tenantId"
              AND "examId" = resolved."examId"
-             AND "status" = 'PUBLISHED'
              AND "deletedAt" IS NULL
            ORDER BY "publishedAt" DESC NULLS LAST, "updatedAt" DESC
            LIMIT 1

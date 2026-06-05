@@ -1,14 +1,25 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Button, EmptyState, Input } from "@uzman-hocam/ui";
-import type { AnswerChoice, AnswerKeyRecord, ParserConfigSuggestion, StudentRecord } from "@uzman-hocam/shared-types";
-import { CheckCircle2, FileSpreadsheet, FileText, RefreshCw, Upload, Wand2 } from "lucide-react";
+import type {
+  AnswerChoice,
+  AnswerKeyRecord,
+  ExamRecord,
+  OpticalFormTemplateRecord,
+  ParserConfigPreset,
+  ParserConfigSuggestion,
+  ReportSnapshotExportResult,
+  ReportSnapshotRecord,
+  StudentRecord,
+} from "@uzman-hocam/shared-types";
+import { CheckCircle2, Download, FileSpreadsheet, FileText, Play, RefreshCw, Upload, Wand2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import {
   answerKeyImportFormSchema,
+  examFormSchema,
   firstFormError,
   parserConfigApprovalFormSchema,
   parserConfigSuggestionFormSchema,
@@ -32,6 +43,7 @@ interface ParserConfigSuggestionResult {
 interface SavedParserConfig {
   tenantId: string;
   examId: string;
+  templateId?: string;
   version: string;
   encoding: string;
   delimiter: string;
@@ -92,6 +104,27 @@ interface RawImportUploadResult {
   status: "uploaded";
 }
 
+interface RawImportParseSummary {
+  tenantId: string;
+  examId: string;
+  rawImportId: string;
+  matchedCount: number;
+  quarantinedCount: number;
+  totalRows: number;
+  quarantineReasons: Array<{ reason: string; count: number }>;
+}
+
+interface RawImportEvaluationQueueResult {
+  tenantId: string;
+  examId: string;
+  rawImportId: string;
+  answerKeyId?: string;
+  matchedCount: number;
+  queuedCount: number;
+  queueName: "exam-evaluation";
+  jobs: Array<{ participantId: string; jobId: string; status: "queued" }>;
+}
+
 interface ImportQuarantineRecord {
   id: string;
   examId: string;
@@ -126,16 +159,60 @@ const tabs: Array<{ id: OpticalTab; label: string }> = [
 
 const answerChoices: AnswerChoice[] = ["A", "B", "C", "D", "E"];
 
+interface OpticalFormPreviewRow {
+  section: string;
+  start: string;
+  end: string;
+}
+
+const opticalFormPresets: Array<{
+  preset: ParserConfigPreset;
+  name: string;
+  sourceType: string;
+  rowLength: number;
+  questionCount: number;
+  rows: OpticalFormPreviewRow[];
+}> = [
+  {
+    preset: "OPTIK_7108_LGS",
+    name: "OPTİK FORM-7108",
+    sourceType: "TXT/DAT",
+    rowLength: 171,
+    questionCount: 90,
+    rows: [
+      { section: "TC KİMLİK NO", start: "38", end: "48" },
+      { section: "OKUL NO", start: "12", end: "15" },
+      { section: "KİTAPÇIK TÜRÜ", start: "51", end: "51" },
+      { section: "AD SOYAD", start: "16", end: "35" },
+      { section: "TÜRKÇE", start: "52", end: "71" },
+      { section: "SOSYAL BİLGİLER / T.C. İNKILAP TARİHİ", start: "72", end: "81" },
+      { section: "DİN KÜLTÜRÜ VE AHLAK BİLGİSİ", start: "92", end: "101" },
+      { section: "İNGİLİZCE", start: "112", end: "121" },
+      { section: "MATEMATİK", start: "132", end: "151" },
+      { section: "FEN BİLİMLERİ", start: "152", end: "171" },
+    ],
+  },
+];
+
 export function ParserConfigPage() {
   const { auth } = useAuth();
   const [activeTab, setActiveTab] = useState<OpticalTab>("format");
-  const [examId, setExamId] = useState("exam-demo-isem-lgs-1");
+  const [examId, setExamId] = useState("");
+  const [exams, setExams] = useState<ExamRecord[]>([]);
+  const [newExamTitle, setNewExamTitle] = useState("");
+  const [newExamStartsAt, setNewExamStartsAt] = useState("");
   const [version, setVersion] = useState("parser-v1");
   const [sampleText, setSampleText] = useState("ogrenci_no\tkitapcik\tcevaplar\n12345\tA\tABCDE");
   const [fileName, setFileName] = useState("");
   const [fileBase64, setFileBase64] = useState("");
   const [suggestion, setSuggestion] = useState<ParserConfigSuggestion | null>(null);
   const [savedConfig, setSavedConfig] = useState<SavedParserConfig | null>(null);
+  const [templates, setTemplates] = useState<OpticalFormTemplateRecord[]>([]);
+  const [selectedPreset, setSelectedPreset] = useState<ParserConfigPreset>("OPTIK_7108_LGS");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [templateName, setTemplateName] = useState("");
+  const [templateVersion, setTemplateVersion] = useState("template-v1");
+  const [templateApplyVersion, setTemplateApplyVersion] = useState("parser-v1");
   const [answerKeyFileName, setAnswerKeyFileName] = useState("");
   const [answerKeyFileBase64, setAnswerKeyFileBase64] = useState("");
   const [answerKeyVersion, setAnswerKeyVersion] = useState("answer-key-v1");
@@ -151,13 +228,62 @@ export function ParserConfigPage() {
   const [rawImportFileBase64, setRawImportFileBase64] = useState("");
   const [rawImportParserVersion, setRawImportParserVersion] = useState("parser-v1");
   const [rawImport, setRawImport] = useState<RawImportUploadResult | null>(null);
+  const [rawImportSummary, setRawImportSummary] = useState<RawImportParseSummary | null>(null);
+  const [evaluationJobs, setEvaluationJobs] = useState<RawImportEvaluationQueueResult | null>(null);
   const [quarantineRawImportId, setQuarantineRawImportId] = useState("");
   const [quarantines, setQuarantines] = useState<ImportQuarantineRecord[]>([]);
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [selectedStudentByQuarantine, setSelectedStudentByQuarantine] = useState<Record<string, string>>({});
   const [reportContentHash, setReportContentHash] = useState("");
   const [reportJob, setReportJob] = useState<ReportGenerationQueueResult | null>(null);
+  const [reportSnapshots, setReportSnapshots] = useState<ReportSnapshotRecord[]>([]);
   const [error, setError] = useState("");
+  const selectedExam = exams.find((exam) => exam.id === examId);
+  const selectedPresetForm = opticalFormPresets.find((form) => form.preset === selectedPreset) ?? opticalFormPresets[0]!;
+  const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
+
+  useEffect(() => {
+    if (!auth) return;
+    const accessToken = auth.accessToken;
+
+    async function loadInitialData() {
+      try {
+        const [examRecords, templateRecords] = await Promise.all([
+          loadOpticalExams(accessToken),
+          loadOpticalFormTemplates(accessToken),
+        ]);
+        setExams(examRecords);
+        setTemplates(templateRecords);
+        setExamId((current) => (current || examRecords[0]?.id) ?? "");
+        setSelectedTemplateId((current) => (current || templateRecords[0]?.id) ?? "");
+      } catch {
+        setError("Sınav ve optik şablon listesi alınamadı.");
+      }
+    }
+
+    void loadInitialData();
+  }, [auth]);
+
+  async function submitCreateExam(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!auth) return;
+
+    setError("");
+    const parsedForm = examFormSchema.safeParse({ title: newExamTitle, startsAt: newExamStartsAt });
+    if (!parsedForm.success) {
+      setError(firstFormError(parsedForm.error));
+      return;
+    }
+    try {
+      const created = await createOpticalExam(auth.accessToken, parsedForm.data);
+      setExams((current) => [created, ...current.filter((exam) => exam.id !== created.id)]);
+      setExamId(created.id);
+      setNewExamTitle("");
+      setNewExamStartsAt("");
+    } catch (examError) {
+      setError(apiErrorMessage(examError, "Sınav oluşturulamadı."));
+    }
+  }
 
   async function submitSuggestion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -180,6 +306,28 @@ export function ParserConfigPage() {
       setSuggestion(result.suggestion);
     } catch (suggestionError) {
       setError(apiErrorMessage(suggestionError, "Optik format önerisi alınamadı."));
+    }
+  }
+
+  async function submitPresetSuggestion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!auth) return;
+
+    setError("");
+    setSavedConfig(null);
+    if (!examId.trim()) {
+      setError("Sınav seçilmelidir.");
+      return;
+    }
+    try {
+      const result = await suggestParserConfig(auth.accessToken, examId, { preset: selectedPreset });
+      setExamId(result.examId);
+      setSuggestion(result.suggestion);
+      setSampleText("");
+      setFileName("");
+      setFileBase64("");
+    } catch (presetError) {
+      setError(apiErrorMessage(presetError, "TXT/DAT form yapısı uygulanamadı."));
     }
   }
 
@@ -218,6 +366,67 @@ export function ParserConfigPage() {
       setSavedConfig(await approveParserConfig(auth.accessToken, parsedForm.data.examId, parsedForm.data.version, suggestion));
     } catch (approvalError) {
       setError(apiErrorMessage(approvalError, "Optik format onaylanamadı."));
+    }
+  }
+
+  async function submitTemplateCreate(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    if (!auth || !suggestion) return;
+
+    setError("");
+    const name = templateName.trim();
+    const templateVersionValue = templateVersion.trim();
+    if (!name) {
+      setError("Şablon adı zorunludur.");
+      return;
+    }
+    if (!templateVersionValue) {
+      setError("Şablon versiyonu zorunludur.");
+      return;
+    }
+    try {
+      const created = await createOpticalFormTemplate(auth.accessToken, {
+        name,
+        version: templateVersionValue,
+        suggestion,
+      });
+      setTemplates((current) => [created, ...current.filter((template) => template.id !== created.id)]);
+      setSelectedTemplateId(created.id);
+      setTemplateName("");
+    } catch (templateError) {
+      setError(apiErrorMessage(templateError, "Optik form şablonu kaydedilemedi."));
+    }
+  }
+
+  async function submitTemplateApply(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!auth) return;
+
+    setError("");
+    const templateId = selectedTemplateId.trim();
+    const parserVersion = templateApplyVersion.trim();
+    if (!examId.trim()) {
+      setError("Sınav seçilmelidir.");
+      return;
+    }
+    if (!templateId) {
+      setError("Optik form şablonu seçilmelidir.");
+      return;
+    }
+    if (!parserVersion) {
+      setError("Parser versiyonu zorunludur.");
+      return;
+    }
+    try {
+      const applied = await applyOpticalFormTemplate(auth.accessToken, templateId, {
+        examId,
+        version: parserVersion,
+      });
+      setSavedConfig(applied);
+      setVersion(applied.version);
+      setRawImportParserVersion(applied.version);
+    } catch (templateError) {
+      setError(apiErrorMessage(templateError, "Optik form şablonu sınava uygulanamadı."));
     }
   }
 
@@ -350,12 +559,51 @@ export function ParserConfigPage() {
     try {
       const result = await uploadRawImport(auth.accessToken, parsedForm.data);
       setRawImport(result);
+      setRawImportSummary(null);
+      setEvaluationJobs(null);
       setQuarantineRawImportId(result.rawImport.id);
       setReportContentHash(result.rawImport.sha256);
       setReportJob(null);
       setActiveTab("quarantine");
     } catch (uploadError) {
       setError(apiErrorMessage(uploadError, "Optik cevap dosyası yüklenemedi."));
+    }
+  }
+
+  async function refreshRawImportSummary() {
+    if (!auth) return;
+
+    setError("");
+    const rawImportId = (rawImport?.rawImport.id ?? quarantineRawImportId).trim();
+    if (!examId.trim() || !rawImportId) {
+      setError("Sınav ve raw import ID zorunludur.");
+      return;
+    }
+    try {
+      setRawImportSummary(await loadRawImportSummary(auth.accessToken, examId, rawImportId));
+    } catch (summaryError) {
+      setError(apiErrorMessage(summaryError, "Optik ön kontrol özeti alınamadı."));
+    }
+  }
+
+  async function submitEvaluationJobs() {
+    if (!auth) return;
+
+    setError("");
+    const rawImportId = (rawImport?.rawImport.id ?? quarantineRawImportId).trim();
+    if (!examId.trim() || !rawImportId) {
+      setError("Sınav ve raw import ID zorunludur.");
+      return;
+    }
+    try {
+      const answerKeyId = answerKeyImport?.answerKey.id ?? manualAnswerKey?.id;
+      setEvaluationJobs(await enqueueRawImportEvaluation(auth.accessToken, {
+        examId,
+        rawImportId,
+        answerKeyId,
+      }));
+    } catch (evaluationError) {
+      setError(apiErrorMessage(evaluationError, "Analiz başlatılamadı."));
     }
   }
 
@@ -420,8 +668,37 @@ export function ParserConfigPage() {
     }
     try {
       setReportJob(await enqueueReportGeneration(auth.accessToken, normalizedExamId, normalizedContentHash));
+      await refreshReportSnapshots();
     } catch (reportError) {
       setError(apiErrorMessage(reportError, "Rapor üretimi kuyruğa alınamadı."));
+    }
+  }
+
+  async function refreshReportSnapshots() {
+    if (!auth) return;
+
+    setError("");
+    const normalizedExamId = examId.trim();
+    if (!normalizedExamId) {
+      setError("Sınav ID zorunludur.");
+      return;
+    }
+    try {
+      setReportSnapshots(await loadReportSnapshots(auth.accessToken, normalizedExamId));
+    } catch (snapshotError) {
+      setError(apiErrorMessage(snapshotError, "Rapor listesi alınamadı."));
+    }
+  }
+
+  async function downloadReportSnapshot(snapshot: ReportSnapshotRecord, format: "xlsx" | "pdf") {
+    if (!auth) return;
+
+    setError("");
+    try {
+      const result = await exportReportSnapshot(auth.accessToken, snapshot.examId, snapshot.id, format);
+      downloadBase64File(result);
+    } catch (downloadError) {
+      setError(apiErrorMessage(downloadError, "Rapor indirilemedi."));
     }
   }
 
@@ -430,6 +707,43 @@ export function ParserConfigPage() {
       title="Optik Operasyon"
       subtitle="Cevap anahtarı, format onayı, optik yükleme ve karantina çözümünü aynı akışta yönet."
     >
+      <section className="next-support-tools" aria-label="Sınav seçimi">
+        <form className="next-support-tool" onSubmit={(event) => void submitCreateExam(event)}>
+          <h2>Sınav</h2>
+          <label>
+            Sınav seç
+            <select
+              aria-label="Sınav seç"
+              value={examId}
+              onChange={(event) => {
+                setExamId(event.target.value);
+                setReportSnapshots([]);
+                setReportJob(null);
+              }}
+            >
+              {exams.length === 0 ? <option value="">Sınav yok</option> : null}
+              {exams.map((exam) => (
+                <option key={exam.id} value={exam.id}>
+                  {exam.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p>{selectedExam ? `Seçili sınav ID: ${selectedExam.id}` : "Sınav seçilmedi"}</p>
+          <label>
+            Yeni sınav adı
+            <Input value={newExamTitle} onChange={(event) => setNewExamTitle(event.target.value)} />
+          </label>
+          <label>
+            Başlangıç
+            <Input type="datetime-local" value={newExamStartsAt} onChange={(event) => setNewExamStartsAt(event.target.value)} />
+          </label>
+          <Button type="submit">
+            <CheckCircle2 size={17} aria-hidden="true" />
+            Sınav oluştur
+          </Button>
+        </form>
+      </section>
       <section className="next-list-panel" aria-label="Optik operasyon">
         <div className="next-segmented" role="tablist" aria-label="Optik sekmeleri">
           {tabs.map((tab) => (
@@ -451,6 +765,37 @@ export function ParserConfigPage() {
     return (
       <section className="next-support-tools" aria-label="Optik format">
         {error ? <p className="uh-crud-page__error">{error}</p> : null}
+        <form className="next-support-tool next-support-tool--wide" onSubmit={(event) => void submitPresetSuggestion(event)}>
+          <h2>TXT/DAT Formu</h2>
+          <label>
+            Sınav ID
+            <Input required value={examId} onChange={(event) => setExamId(event.target.value)} />
+          </label>
+          <label>
+            TXT/DAT şablonu
+            <select
+              aria-label="TXT/DAT şablonu"
+              value={selectedPreset}
+              onChange={(event) => setSelectedPreset(event.target.value as ParserConfigPreset)}
+            >
+              {opticalFormPresets.map((form) => (
+                <option key={form.preset} value={form.preset}>
+                  {form.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="next-optical-form-meta" aria-label="Seçili form özeti">
+            <span>{selectedPresetForm.sourceType}</span>
+            <span>{selectedPresetForm.rowLength} karakter</span>
+            <span>{selectedPresetForm.questionCount} soru</span>
+          </div>
+          {renderOpticalFormPreview(selectedPresetForm.rows)}
+          <Button disabled={!examId} type="submit">
+            <CheckCircle2 size={17} aria-hidden="true" />
+            Bu formu kullan
+          </Button>
+        </form>
         <form className="next-support-tool" onSubmit={(event) => void submitSuggestion(event)}>
           <h2>Optik Format</h2>
           <label>
@@ -503,6 +848,47 @@ export function ParserConfigPage() {
             Onayla
           </Button>
           {savedConfig ? <p>{savedConfig.version} onaylandı</p> : null}
+        </form>
+        <form className="next-support-tool" onSubmit={(event) => void submitTemplateApply(event)}>
+          <h2>Form Şablonu</h2>
+          <label>
+            Kayıtlı şablon
+            <select
+              aria-label="Kayıtlı optik form şablonu"
+              value={selectedTemplateId}
+              onChange={(event) => setSelectedTemplateId(event.target.value)}
+            >
+              {templates.length === 0 ? <option value="">Şablon yok</option> : null}
+              {templates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Parser versiyonu
+            <Input required value={templateApplyVersion} onChange={(event) => setTemplateApplyVersion(event.target.value)} />
+          </label>
+          <Button disabled={!selectedTemplateId || !examId} type="submit">
+            <CheckCircle2 size={17} aria-hidden="true" />
+            Sınava uygula
+          </Button>
+          {selectedTemplate ? renderOpticalFormPreview(createTemplatePreviewRows(selectedTemplate)) : null}
+          <div className="next-inline-form">
+            <label>
+              Yeni şablon adı
+              <Input value={templateName} onChange={(event) => setTemplateName(event.target.value)} />
+            </label>
+            <label>
+              Şablon versiyonu
+              <Input value={templateVersion} onChange={(event) => setTemplateVersion(event.target.value)} />
+            </label>
+            <Button disabled={!suggestion} type="button" onClick={() => void submitTemplateCreate()}>
+              <Upload size={17} aria-hidden="true" />
+              Şablon kaydet
+            </Button>
+          </div>
         </form>
       </section>
     );
@@ -703,10 +1089,37 @@ export function ParserConfigPage() {
               <p>Raw import ID: {rawImport.rawImport.id}</p>
               <p>Parse job: {rawImport.parseJob.jobId}</p>
               <p>SHA256: {rawImport.rawImport.sha256.slice(0, 12)}</p>
+              <div className="next-row-actions">
+                <Button type="button" onClick={() => void refreshRawImportSummary()}>
+                  <RefreshCw size={17} aria-hidden="true" />
+                  Özeti yenile
+                </Button>
+                <Button type="button" onClick={() => void submitEvaluationJobs()}>
+                  <Play size={17} aria-hidden="true" />
+                  Analizi başlat
+                </Button>
+              </div>
             </>
           ) : (
             <p>Optik TXT/DAT dosyası bekliyor.</p>
           )}
+          {rawImportSummary ? (
+            <div className="next-parser-summary" aria-live="polite">
+              <span>Toplam</span>
+              <strong>{rawImportSummary.totalRows}</strong>
+              <span>Eşleşen</span>
+              <strong>{rawImportSummary.matchedCount}</strong>
+              <span>Karantina</span>
+              <strong>{rawImportSummary.quarantinedCount}</strong>
+              <span>Sebep</span>
+              <strong>{formatQuarantineReasons(rawImportSummary)}</strong>
+            </div>
+          ) : null}
+          {evaluationJobs ? (
+            <p>
+              {evaluationJobs.queuedCount}/{evaluationJobs.matchedCount} analiz işi kuyruğa alındı.
+            </p>
+          ) : null}
         </section>
       </section>
     );
@@ -801,8 +1214,46 @@ export function ParserConfigPage() {
             <RefreshCw size={17} aria-hidden="true" />
             Rapor üret
           </Button>
+          <Button type="button" onClick={() => void refreshReportSnapshots()}>
+            <FileText size={17} aria-hidden="true" />
+            Raporları getir
+          </Button>
           {reportJob ? <p>{reportJob.jobId} kuyruğa alındı.</p> : null}
         </form>
+        <section className="next-support-tool" aria-label="Rapor listesi">
+          <h2>Rapor listesi</h2>
+          {reportSnapshots.length > 0 ? (
+            <table className="uh-data-table">
+              <thead>
+                <tr>
+                  <th>Durum</th>
+                  <th>Sonuç</th>
+                  <th>İndirme</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reportSnapshots.map((snapshot) => (
+                  <tr key={snapshot.id}>
+                    <td>{snapshot.status}</td>
+                    <td>{snapshot.snapshotData?.resultCount ?? "-"}</td>
+                    <td>
+                      <div className="next-row-actions">
+                        <button type="button" onClick={() => void downloadReportSnapshot(snapshot, "xlsx")} aria-label="Excel indir">
+                          <Download size={17} aria-hidden="true" />
+                        </button>
+                        <button type="button" onClick={() => void downloadReportSnapshot(snapshot, "pdf")} aria-label="PDF indir">
+                          <FileText size={17} aria-hidden="true" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p>Hazır rapor yok</p>
+          )}
+        </section>
       </section>
     );
   }
@@ -811,13 +1262,35 @@ export function ParserConfigPage() {
 async function suggestParserConfig(
   accessToken: string,
   examId: string,
-  input: Pick<ParserConfigSuggestionFormPayload, "sampleText"> | Pick<ParserConfigSuggestionFormPayload, "fileBase64">,
+  input:
+    | Pick<ParserConfigSuggestionFormPayload, "sampleText">
+    | Pick<ParserConfigSuggestionFormPayload, "fileBase64">
+    | { preset: ParserConfigPreset },
 ) {
   return apiRequest<ParserConfigSuggestionResult>(
     accessToken,
     `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/parser-configs/suggestions`,
     {
       body: JSON.stringify(input),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    },
+  );
+}
+
+async function loadOpticalExams(accessToken: string) {
+  return apiRequest<ExamRecord[]>(accessToken, `${apiBaseUrl}/exams`);
+}
+
+async function createOpticalExam(accessToken: string, input: { title: string; startsAt?: string }) {
+  return apiRequest<ExamRecord>(
+    accessToken,
+    `${apiBaseUrl}/exams`,
+    {
+      body: JSON.stringify({
+        title: input.title,
+        ...(input.startsAt ? { startsAt: input.startsAt } : {}),
+      }),
       headers: { "content-type": "application/json" },
       method: "POST",
     },
@@ -835,6 +1308,41 @@ async function approveParserConfig(
     `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/parser-configs/approvals`,
     {
       body: JSON.stringify({ version, suggestion }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    },
+  );
+}
+
+async function loadOpticalFormTemplates(accessToken: string) {
+  return apiRequest<OpticalFormTemplateRecord[]>(accessToken, `${apiBaseUrl}/optical-form-templates`);
+}
+
+async function createOpticalFormTemplate(
+  accessToken: string,
+  input: { name: string; version: string; suggestion: ParserConfigSuggestion },
+) {
+  return apiRequest<OpticalFormTemplateRecord>(
+    accessToken,
+    `${apiBaseUrl}/optical-form-templates`,
+    {
+      body: JSON.stringify(input),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    },
+  );
+}
+
+async function applyOpticalFormTemplate(
+  accessToken: string,
+  templateId: string,
+  input: { examId: string; version: string },
+) {
+  return apiRequest<SavedParserConfig>(
+    accessToken,
+    `${apiBaseUrl}/optical-form-templates/${encodeURIComponent(templateId)}/apply`,
+    {
+      body: JSON.stringify(input),
       headers: { "content-type": "application/json" },
       method: "POST",
     },
@@ -916,6 +1424,28 @@ async function uploadRawImport(accessToken: string, input: RawImportUploadFormPa
   );
 }
 
+async function loadRawImportSummary(accessToken: string, examId: string, rawImportId: string) {
+  return apiRequest<RawImportParseSummary>(
+    accessToken,
+    `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/raw-imports/${encodeURIComponent(rawImportId)}/summary`,
+  );
+}
+
+async function enqueueRawImportEvaluation(
+  accessToken: string,
+  input: { examId: string; rawImportId: string; answerKeyId?: string },
+) {
+  return apiRequest<RawImportEvaluationQueueResult>(
+    accessToken,
+    `${apiBaseUrl}/exams/${encodeURIComponent(input.examId)}/raw-imports/${encodeURIComponent(input.rawImportId)}/evaluation-jobs`,
+    {
+      body: JSON.stringify({ answerKeyId: input.answerKeyId }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    },
+  );
+}
+
 async function loadQuarantines(accessToken: string, input: QuarantineLookupFormPayload) {
   return apiRequest<ImportQuarantineRecord[]>(
     accessToken,
@@ -954,6 +1484,20 @@ async function enqueueReportGeneration(accessToken: string, examId: string, cont
   );
 }
 
+async function loadReportSnapshots(accessToken: string, examId: string) {
+  return apiRequest<ReportSnapshotRecord[]>(
+    accessToken,
+    `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots`,
+  );
+}
+
+async function exportReportSnapshot(accessToken: string, examId: string, snapshotId: string, format: "xlsx" | "pdf") {
+  return apiRequest<ReportSnapshotExportResult>(
+    accessToken,
+    `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots/${encodeURIComponent(snapshotId)}/export.${format}`,
+  );
+}
+
 async function readFileAsBase64(file: File): Promise<string> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   let binary = "";
@@ -961,6 +1505,100 @@ async function readFileAsBase64(file: File): Promise<string> {
     binary += String.fromCharCode(byte);
   }
   return btoa(binary);
+}
+
+function formatQuarantineReasons(summary: RawImportParseSummary): string {
+  return summary.quarantineReasons.length
+    ? summary.quarantineReasons.map((item) => `${item.reason}: ${item.count}`).join(", ")
+    : "-";
+}
+
+function downloadBase64File(file: ReportSnapshotExportResult) {
+  const bytes = Uint8Array.from(atob(file.fileBase64), (char) => char.charCodeAt(0));
+  const blob = new Blob([bytes], { type: file.contentType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = file.fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function renderOpticalFormPreview(rows: OpticalFormPreviewRow[]) {
+  return (
+    <div className="next-optical-form-preview">
+      <table className="uh-data-table">
+        <thead>
+          <tr>
+            <th>Bölüm</th>
+            <th>Başlangıç</th>
+            <th>Bitiş</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={`${row.section}-${row.start}-${row.end}`}>
+              <td>{row.section}</td>
+              <td>{row.start}</td>
+              <td>{row.end}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function createTemplatePreviewRows(template: OpticalFormTemplateRecord): OpticalFormPreviewRow[] {
+  const rows: OpticalFormPreviewRow[] = [];
+  const mapping = template.fieldMapping;
+
+  if (mapping.nationalId) {
+    rows.push(createFieldPreviewRow("TC KİMLİK NO", mapping.nationalId));
+  }
+  rows.push(createFieldPreviewRow("OKUL NO", mapping.studentNo));
+  rows.push(createFieldPreviewRow("KİTAPÇIK TÜRÜ", mapping.bookletType));
+
+  if (mapping.answers.segments?.length) {
+    const labels = ["TÜRKÇE", "SOSYAL BİLGİLER / T.C. İNKILAP TARİHİ", "DİN KÜLTÜRÜ VE AHLAK BİLGİSİ", "İNGİLİZCE", "MATEMATİK", "FEN BİLİMLERİ"];
+    mapping.answers.segments.forEach((segment, index) => {
+      rows.push({
+        section: labels[index] ?? `CEVAP BLOĞU ${index + 1}`,
+        start: String(segment.start + 1),
+        end: String(segment.start + segment.length),
+      });
+    });
+  } else if (mapping.answers.kind === "fixed" && mapping.answers.start !== undefined && mapping.answers.length !== undefined) {
+    rows.push({
+      section: "CEVAPLAR",
+      start: String(mapping.answers.start + 1),
+      end: String(mapping.answers.start + mapping.answers.length),
+    });
+  } else {
+    rows.push({
+      section: "CEVAPLAR",
+      start: mapping.answers.column === undefined ? "-" : `Kolon ${mapping.answers.column + 1}`,
+      end: mapping.answers.column === undefined ? "-" : `Kolon ${mapping.answers.column + 1}`,
+    });
+  }
+
+  return rows;
+}
+
+function createFieldPreviewRow(section: string, field: ParserConfigSuggestion["fieldMapping"]["studentNo"]): OpticalFormPreviewRow {
+  if (field.kind === "fixed") {
+    return {
+      section,
+      start: String(field.start + 1),
+      end: String(field.start + field.length),
+    };
+  }
+
+  return {
+    section,
+    start: `Kolon ${field.column + 1}`,
+    end: `Kolon ${field.column + 1}`,
+  };
 }
 
 function createManualAnswerKeyGrid(): ManualAnswerKeyQuestion[] {

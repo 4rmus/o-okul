@@ -35,6 +35,12 @@ import { AnswerKeyService, answerKeyRepositoryToken } from "./exam/answer-key.se
 import { ExamController } from "./exam/exam.controller.js";
 import { ExamService, examParticipantRepositoryToken, examRepositoryToken } from "./exam/exam.service.js";
 import { ImportQuarantineController } from "./exam/import-quarantine.controller.js";
+import { OpticalFormTemplateController } from "./exam/optical-form-template.controller.js";
+import { OpticalFormTemplateService } from "./exam/optical-form-template.service.js";
+import {
+  createOpticalFormTemplateStore,
+  opticalFormTemplateStoreToken,
+} from "./exam/optical-form-template-store.js";
 import { PostgresAnswerKeyRepository } from "./exam/postgres-answer-key-repository.js";
 import { PostgresExamParticipantRepository } from "./exam/postgres-exam-participant-repository.js";
 import { PostgresExamRepository } from "./exam/postgres-exam-repository.js";
@@ -43,6 +49,11 @@ import { ParserConfigApprovalService, parserConfigRepositoryToken } from "./exam
 import { ParserConfigSuggestionService } from "./exam/parser-config-suggestion.service.js";
 import { PostgresParserConfigRepository } from "./exam/postgres-parser-config-repository.js";
 import { RawImportController } from "./exam/raw-import.controller.js";
+import { RawImportAnalysisService } from "./exam/raw-import-analysis.service.js";
+import {
+  createRawImportAnalysisStore,
+  rawImportAnalysisStoreToken,
+} from "./exam/raw-import-analysis-store.js";
 import {
   createRawImportQuarantineStore,
   rawImportQuarantineStoreToken,
@@ -185,6 +196,7 @@ import { UserManagementService } from "./user-management/user-management.service
     MessageTemplateController,
     MetricsController,
     ExamController,
+    OpticalFormTemplateController,
     ParserConfigController,
     PaymentController,
     PrivacyController,
@@ -335,6 +347,7 @@ import { UserManagementService } from "./user-management/user-management.service
       useFactory: createPaymentPlanStore,
     },
     ExamService,
+    OpticalFormTemplateService,
     {
       provide: examRepositoryToken,
       useFactory: () => new PostgresExamRepository(),
@@ -346,10 +359,15 @@ import { UserManagementService } from "./user-management/user-management.service
     ParserConfigApprovalService,
     ParserConfigSuggestionService,
     {
+      provide: opticalFormTemplateStoreToken,
+      useFactory: createOpticalFormTemplateStore,
+    },
+    {
       provide: parserConfigRepositoryToken,
       useFactory: () => new PostgresParserConfigRepository(),
     },
     RawImportQueueService,
+    RawImportAnalysisService,
     RawImportQuarantineService,
     RawImportUploadService,
     {
@@ -363,6 +381,10 @@ import { UserManagementService } from "./user-management/user-management.service
     {
       provide: rawImportRepositoryToken,
       useFactory: () => new PostgresRawImportRepository(),
+    },
+    {
+      provide: rawImportAnalysisStoreToken,
+      useFactory: createRawImportAnalysisStore,
     },
     {
       provide: rawImportQuarantineStoreToken,

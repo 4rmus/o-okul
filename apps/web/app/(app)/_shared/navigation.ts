@@ -1,5 +1,32 @@
+import type { LucideIcon } from "lucide-react";
+import {
+  Activity,
+  BarChart3,
+  BookOpen,
+  Building2,
+  CalendarDays,
+  ClipboardCheck,
+  ClipboardList,
+  CreditCard,
+  FileText,
+  GraduationCap,
+  LayoutDashboard,
+  Library,
+  LifeBuoy,
+  Megaphone,
+  MessageSquareText,
+  NotebookTabs,
+  ScanLine,
+  School,
+  Settings,
+  ShieldCheck,
+  UserRoundCog,
+  Users,
+} from "lucide-react";
+
 type InstitutionNavigationItem = {
   href: string;
+  icon: LucideIcon;
   label: string;
   requiredCapability?: string;
 };
@@ -11,6 +38,7 @@ type InstitutionNavGroup = {
 
 type SystemNavigationItem = {
   href: string;
+  icon: LucideIcon;
   label: string;
 };
 
@@ -21,6 +49,7 @@ type SystemNavGroup = {
 
 type RolePortalItem = {
   href: string;
+  icon: LucideIcon;
   label: string;
   role: "TEACHER" | "STUDENT" | "GUARDIAN";
   subjectType: "TEACHER" | "STUDENT" | "GUARDIAN";
@@ -28,104 +57,105 @@ type RolePortalItem = {
 
 export const institutionNavGroups: readonly InstitutionNavGroup[] = [
   {
-    label: "Kurum",
+    label: "Başlangıç",
     items: [
-      { href: "/kurum", label: "Kurum Paneli" },
-      { href: "/kurum/kurulum", label: "Kurulum" },
+      { href: "/kurum", icon: LayoutDashboard, label: "Özet" },
+      { href: "/kurum/kurulum", icon: Settings, label: "Kurulum" },
     ],
   },
   {
     label: "Kişiler",
     items: [
-      { href: "/kurum/ogrenciler", label: "Öğrenciler", requiredCapability: "student:manage" },
-      { href: "/kurum/veliler", label: "Veliler", requiredCapability: "student:manage" },
-      { href: "/kurum/ogretmenler", label: "Öğretmenler", requiredCapability: "staff:manage" },
+      { href: "/kurum/ogrenciler", icon: GraduationCap, label: "Öğrenciler", requiredCapability: "student:manage" },
+      { href: "/kurum/veliler", icon: Users, label: "Veliler", requiredCapability: "student:manage" },
+      { href: "/kurum/ogretmenler", icon: UserRoundCog, label: "Öğretmenler", requiredCapability: "staff:manage" },
     ],
   },
   {
-    label: "Akademik",
+    label: "Eğitim",
     items: [
-      { href: "/kurum/kampusler", label: "Kampüsler", requiredCapability: "class:manage" },
-      { href: "/kurum/akademik-takvim", label: "Akademik Takvim", requiredCapability: "academic:manage" },
-      { href: "/kurum/seviyeler", label: "Seviyeler", requiredCapability: "class:manage" },
-      { href: "/kurum/siniflar", label: "Sınıflar", requiredCapability: "class:manage" },
-      { href: "/kurum/dersler", label: "Dersler", requiredCapability: "academic:manage" },
-      { href: "/kurum/program", label: "Ders Programı", requiredCapability: "academic:manage" },
-      { href: "/kurum/etutler", label: "Etütler", requiredCapability: "academic:manage" },
-      { href: "/kurum/devamsizlik", label: "Devamsızlık", requiredCapability: "attendance:manage" },
-      { href: "/kurum/notlar", label: "Öğretmen Notları", requiredCapability: "note:manage" },
-      { href: "/kurum/materyaller", label: "Materyaller", requiredCapability: "academic:manage" },
+      { href: "/kurum/siniflar", icon: School, label: "Sınıflar", requiredCapability: "class:manage" },
+      { href: "/kurum/seviyeler", icon: ClipboardList, label: "Seviyeler", requiredCapability: "class:manage" },
+      { href: "/kurum/kampusler", icon: Building2, label: "Kampüsler", requiredCapability: "class:manage" },
+      { href: "/kurum/dersler", icon: BookOpen, label: "Dersler", requiredCapability: "academic:manage" },
+      { href: "/kurum/program", icon: CalendarDays, label: "Program", requiredCapability: "academic:manage" },
+      { href: "/kurum/etutler", icon: NotebookTabs, label: "Etütler", requiredCapability: "academic:manage" },
+      { href: "/kurum/devamsizlik", icon: ClipboardCheck, label: "Devamsızlık", requiredCapability: "attendance:manage" },
+      { href: "/kurum/akademik-takvim", icon: CalendarDays, label: "Takvim", requiredCapability: "academic:manage" },
     ],
   },
   {
-    label: "Sınav ve Rapor",
+    label: "Sınav ve Analiz",
     items: [
-      { href: "/kurum/kazanimlar", label: "Kazanımlar", requiredCapability: "academic:manage" },
-      { href: "/kurum/sinavlar", label: "Sınavlar", requiredCapability: "academic:manage" },
-      { href: "/kurum/optik", label: "Optik", requiredCapability: "academic:manage" },
-      { href: "/kurum/raporlar", label: "Raporlar", requiredCapability: "academic:manage" },
+      { href: "/kurum/sinavlar", icon: FileText, label: "Sınavlar", requiredCapability: "academic:manage" },
+      { href: "/kurum/kazanimlar", icon: ClipboardList, label: "Kazanımlar", requiredCapability: "academic:manage" },
+      { href: "/kurum/optik", icon: ScanLine, label: "Optik Okuma", requiredCapability: "academic:manage" },
+      { href: "/kurum/raporlar", icon: BarChart3, label: "Raporlar", requiredCapability: "academic:manage" },
     ],
   },
   {
-    label: "Finans",
-    items: [{ href: "/kurum/finans", label: "Ödemeler", requiredCapability: "finance:manage" }],
-  },
-  {
-    label: "İletişim",
+    label: "İçerik",
     items: [
-      { href: "/kurum/duyurular", label: "Duyurular", requiredCapability: "announcement:manage" },
-      { href: "/kurum/sablonlar", label: "Şablonlar", requiredCapability: "announcement:manage" },
-      { href: "/kurum/destek", label: "Destek", requiredCapability: "support:manage" },
+      { href: "/kurum/materyaller", icon: Library, label: "Materyaller", requiredCapability: "academic:manage" },
+      { href: "/kurum/notlar", icon: NotebookTabs, label: "Notlar", requiredCapability: "note:manage" },
+      { href: "/kurum/duyurular", icon: Megaphone, label: "Duyurular", requiredCapability: "announcement:manage" },
+      { href: "/kurum/sablonlar", icon: MessageSquareText, label: "Mesaj Şablonları", requiredCapability: "announcement:manage" },
     ],
   },
   {
-    label: "Operasyon",
+    label: "Finans ve Destek",
     items: [
-      { href: "/kurum/kullanicilar", label: "Kullanıcılar", requiredCapability: "user:manage" },
-      { href: "/kurum/rol-onizleme", label: "Rol Önizleme", requiredCapability: "role-preview:manage" },
-      { href: "/kurum/yedek-restore", label: "Yedek / Restore", requiredCapability: "operation:manage" },
+      { href: "/kurum/finans", icon: CreditCard, label: "Ödemeler", requiredCapability: "finance:manage" },
+      { href: "/kurum/destek", icon: LifeBuoy, label: "Destek", requiredCapability: "support:manage" },
+    ],
+  },
+  {
+    label: "Yönetim",
+    items: [
+      { href: "/kurum/kullanicilar", icon: Users, label: "Kullanıcılar", requiredCapability: "user:manage" },
+      { href: "/kurum/rol-onizleme", icon: ShieldCheck, label: "Rol Önizleme", requiredCapability: "role-preview:manage" },
+      { href: "/kurum/yedek-restore", icon: Activity, label: "Yedekleme", requiredCapability: "operation:manage" },
     ],
   },
 ];
 
 export const systemNavGroups: readonly SystemNavGroup[] = [
   {
-    label: "Sistem",
-    items: [{ href: "/sistem", label: "Sistem Paneli" }],
-  },
-  {
-    label: "Kurumlar",
-    items: [{ href: "/sistem/kurumlar", label: "Kurumlar" }],
+    label: "Başlangıç",
+    items: [
+      { href: "/sistem", icon: LayoutDashboard, label: "Özet" },
+      { href: "/sistem/kurumlar", icon: Building2, label: "Kurumlar" },
+    ],
   },
   {
     label: "İzleme",
     items: [
-      { href: "/sistem/sistem-sagligi", label: "Sistem Sağlığı" },
-      { href: "/sistem/gozlemlenebilirlik", label: "Gözlemlenebilirlik" },
-      { href: "/sistem/denetim", label: "Denetim" },
+      { href: "/sistem/sistem-sagligi", icon: Activity, label: "Sağlık" },
+      { href: "/sistem/gozlemlenebilirlik", icon: BarChart3, label: "Gözlem" },
+      { href: "/sistem/denetim", icon: ClipboardList, label: "Denetim" },
     ],
   },
 ];
 
 export const rolePortalItems: readonly RolePortalItem[] = [
-  { href: "/ogretmen", label: "Öğretmen Portalı", role: "TEACHER", subjectType: "TEACHER" },
-  { href: "/ogrenci", label: "Öğrenci Portalı", role: "STUDENT", subjectType: "STUDENT" },
-  { href: "/veli", label: "Veli Portalı", role: "GUARDIAN", subjectType: "GUARDIAN" },
+  { href: "/ogretmen", icon: UserRoundCog, label: "Öğretmen Portalı", role: "TEACHER", subjectType: "TEACHER" },
+  { href: "/ogrenci", icon: GraduationCap, label: "Öğrenci Portalı", role: "STUDENT", subjectType: "STUDENT" },
+  { href: "/veli", icon: Users, label: "Veli Portalı", role: "GUARDIAN", subjectType: "GUARDIAN" },
 ];
 
 export const staticBreadcrumbLabels: Record<string, string> = {
   "/": "Ana Sayfa",
-  "/sistem": "Sistem",
+  "/sistem": "Sistem Özeti",
   "/sistem/kurumlar": "Kurumlar",
-  "/sistem/sistem-sagligi": "Sistem Sağlığı",
-  "/sistem/gozlemlenebilirlik": "Gözlemlenebilirlik",
+  "/sistem/sistem-sagligi": "Sağlık",
+  "/sistem/gozlemlenebilirlik": "Gözlem",
   "/sistem/denetim": "Denetim",
-  "/kurum": "Kurum",
+  "/kurum": "Kurum Özeti",
   "/kurum/kurulum": "Kurulum",
   "/ogretmen": "Öğretmen Portalı",
   "/ogrenci": "Öğrenci Portalı",
   "/veli": "Veli Portalı",
-  "/kurum/akademik-takvim": "Akademik Takvim",
+  "/kurum/akademik-takvim": "Takvim",
   "/kurum/canli-yayin": "Canlı Yayın",
   "/kurum/denetim": "Denetim",
   "/kurum/dersler": "Dersler",
@@ -134,28 +164,28 @@ export const staticBreadcrumbLabels: Record<string, string> = {
   "/kurum/duyurular": "Duyurular",
   "/kurum/etutler": "Etütler",
   "/kurum/finans": "Finans",
-  "/kurum/gozlemlenebilirlik": "Gözlemlenebilirlik",
+  "/kurum/gozlemlenebilirlik": "Gözlem",
   "/kurum/guvenlik-denetimi": "Güvenlik Denetimi",
   "/kurum/kampusler": "Kampüsler",
   "/kurum/kazanimlar": "Kazanımlar",
   "/kurum/kullanicilar": "Kullanıcılar",
   "/kurum/kvkk": "KVKK",
   "/kurum/materyaller": "Materyaller",
-  "/kurum/notlar": "Öğretmen Notları",
+  "/kurum/notlar": "Notlar",
   "/kurum/ogrenciler": "Öğrenciler",
   "/kurum/ogretmenler": "Öğretmenler",
-  "/kurum/optik": "Optik",
-  "/kurum/program": "Ders Programı",
+  "/kurum/optik": "Optik Okuma",
+  "/kurum/program": "Program",
   "/kurum/raporlar": "Raporlar",
   "/kurum/rol-onizleme": "Rol Önizleme",
   "/kurum/seviyeler": "Seviyeler",
   "/kurum/sinavlar": "Sınavlar",
   "/kurum/siniflar": "Sınıflar",
-  "/kurum/sistem-sagligi": "Sistem Sağlığı",
-  "/kurum/sablonlar": "Şablonlar",
+  "/kurum/sistem-sagligi": "Sağlık",
+  "/kurum/sablonlar": "Mesaj Şablonları",
   "/kurum/uat-rollback": "UAT / Rollback",
   "/kurum/veliler": "Veliler",
-  "/kurum/yedek-restore": "Yedek / Restore",
+  "/kurum/yedek-restore": "Yedekleme",
 };
 
 export const dynamicDetailParents: string[] = ["ogrenciler", "ogretmenler", "veliler", "siniflar", "duyurular"];

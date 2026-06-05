@@ -52,7 +52,7 @@ export function getParserConfigPresetSuggestion(preset: ParserConfigPreset): Par
     delimiter: "FIXED",
     skipHeaderLines: 0,
     fieldMapping: {
-      nationalId: { kind: "fixed", start: 36, length: 11 },
+      nationalId: { kind: "fixed", start: 37, length: 11 },
       studentNo: { kind: "fixed", start: 11, length: 4 },
       bookletType: { kind: "fixed", start: 50, length: 1 },
       answers: {

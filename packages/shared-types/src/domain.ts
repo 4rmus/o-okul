@@ -1,3 +1,5 @@
+import type { ParserConfigSuggestion, ParserDelimiter } from "./format-analyzer.js";
+
 export interface Session {
   id: string;
   userId: string;
@@ -734,6 +736,20 @@ export interface ExamParticipantRecord {
   participantNo?: string;
   bookletType?: string;
   status: ExamParticipantStatus | string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OpticalFormTemplateRecord {
+  id: string;
+  tenantId: string;
+  name: string;
+  version: string;
+  encoding: "UTF-8";
+  delimiter: ParserDelimiter;
+  skipHeaderLines: number;
+  fieldMapping: ParserConfigSuggestion["fieldMapping"];
+  status: "APPROVED" | "DRAFT";
   createdAt: string;
   updatedAt: string;
 }

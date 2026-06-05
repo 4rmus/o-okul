@@ -32,6 +32,7 @@ export class ParserConfigController {
       sampleText: body.sampleText,
       fileBase64: body.fileBase64,
       sampleSize: body.sampleSize,
+      preset: body.preset,
     });
   }
 

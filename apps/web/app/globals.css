@@ -212,33 +212,44 @@ a {
 .next-sidebar {
   border-right: 1px solid var(--color-border);
   background: var(--color-surface);
-  padding: 24px;
+  padding: 20px 24px 24px;
   min-height: 100vh;
   position: sticky;
   top: 0;
   display: grid;
-  gap: 16px;
+  align-content: start;
+  gap: 12px;
   box-shadow: var(--shadow-soft);
   overflow: auto;
 }
 
 .next-sidebar-header {
-  display: grid;
-  gap: 16px;
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.next-sidebar-header .next-brand {
+  margin-bottom: 0;
 }
 
 .next-command-open {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 36px;
+  height: 36px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-surface-muted);
   color: var(--color-text-secondary);
-  padding: 9px 12px;
-  text-align: left;
+  padding: 0;
 }
 
 .next-sidebar-nav {
   display: grid;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -246,8 +257,12 @@ a {
   margin: 0;
   padding: 0;
   list-style: none;
-  display: grid;
+  display: none;
   gap: 6px;
+}
+
+.next-sidebar-group[data-expanded="true"] .next-sidebar-group-list {
+  display: grid;
 }
 
 .next-sidebar-group-list li {
@@ -255,9 +270,22 @@ a {
 }
 
 .next-sidebar-link {
-  display: block;
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
   position: relative;
   transition: background-color 0.15s ease, color 0.15s ease, transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.next-sidebar-link-icon {
+  color: var(--color-text-muted);
+  flex: 0 0 auto;
+}
+
+.next-sidebar-link span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .next-sidebar-link:hover,
@@ -320,14 +348,6 @@ a {
   padding-bottom: 12px;
 }
 
-.next-sidebar-group-title {
-  margin: 0;
-  padding: 0 12px;
-  color: var(--color-text-muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-
 .next-sidebar a,
 .next-sidebar button {
   border-radius: var(--radius);
@@ -341,10 +361,57 @@ a {
   text-align: left;
 }
 
+.next-sidebar-group-toggle {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.next-sidebar button.next-sidebar-group-toggle {
+  color: var(--color-text-secondary);
+  font-size: 15px;
+  font-weight: 800;
+  padding: 8px 12px;
+}
+
+.next-sidebar-group-toggle span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.next-sidebar-group-toggle-icon {
+  color: var(--color-text-muted);
+  flex: 0 0 auto;
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}
+
+.next-sidebar-group[data-expanded="true"] .next-sidebar-group-toggle-icon {
+  transform: rotate(0deg);
+}
+
+.next-sidebar-group[data-active="true"] .next-sidebar-group-toggle {
+  background: var(--color-primary-subtle);
+  color: var(--color-primary);
+}
+
+.next-sidebar-group[data-active="true"] .next-sidebar-group-toggle-icon {
+  color: var(--color-primary);
+}
+
 .next-sidebar a[aria-current="page"] {
   background: var(--color-primary-subtle);
   color: var(--color-primary);
   border-left: 3px solid var(--color-primary);
+  padding-left: 9px;
+}
+
+.next-sidebar a[aria-current="page"] .next-sidebar-link-icon {
+  color: var(--color-primary);
 }
 
 .next-sidebar a:hover,
@@ -2153,6 +2220,30 @@ a {
   overflow-wrap: anywhere;
 }
 
+.next-optical-form-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.next-optical-form-meta span {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.next-optical-form-preview {
+  overflow-x: auto;
+}
+
+.next-optical-form-preview .uh-data-table {
+  min-width: 420px;
+}
+
 .next-report-panel,
 .next-report-list {
   display: grid;
@@ -3210,6 +3301,26 @@ a {
     padding: 16px;
     background: var(--color-surface);
     border-bottom: 1px solid var(--color-border-faint);
+  }
+
+  .next-sidebar-nav {
+    align-items: start;
+    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .next-sidebar a,
+  .next-sidebar button {
+    font-size: 14px;
+    padding: 8px 10px;
+  }
+
+  .next-sidebar a[aria-current="page"] {
+    padding-left: 7px;
+  }
+
+  .next-sidebar-logout {
+    grid-column: 1 / -1;
   }
 
   .next-dashboard-grid {

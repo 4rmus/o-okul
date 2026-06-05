@@ -10,6 +10,12 @@ import {
   type RawImportQuarantineStore,
 } from "./raw-import-quarantine-store.js";
 import {
+  rawImportAnalysisStoreToken,
+  type RawImportAnalysisStore,
+  type RawImportEvaluationInput,
+  type RawImportParseSummary,
+} from "./raw-import-analysis-store.js";
+import {
   rawImportQueueProducerToken,
   type RawImportQueueProducer,
 } from "./raw-import-queue.service.js";
@@ -29,12 +35,14 @@ describe("RawImportController", () => {
   let repository: FakeRepository;
   let producer: FakeProducer;
   let quarantineStore: FakeQuarantineStore;
+  let analysisStore: FakeAnalysisStore;
 
   beforeAll(async () => {
     archiveStore = new FakeArchiveStore();
     repository = new FakeRepository();
     producer = new FakeProducer();
     quarantineStore = new FakeQuarantineStore();
+    analysisStore = new FakeAnalysisStore();
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
@@ -47,6 +55,8 @@ describe("RawImportController", () => {
       .useValue(producer)
       .overrideProvider(rawImportQuarantineStoreToken)
       .useValue(quarantineStore)
+      .overrideProvider(rawImportAnalysisStoreToken)
+      .useValue(analysisStore)
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -59,6 +69,7 @@ describe("RawImportController", () => {
     repository.creates = [];
     producer.inputs = [];
     quarantineStore.reset();
+    analysisStore.reset();
   });
 
   afterAll(async () => {
@@ -151,6 +162,73 @@ describe("RawImportController", () => {
         reason: "STUDENT_NOT_MATCHED",
       }),
     ]);
+  });
+
+  it("TENANT_ADMIN raw import parse özetini görür", async () => {
+    const issued = await login("admin-a@example.test");
+
+    const response = await request(server)
+      .get("/exams/exam-a/raw-imports/raw-import-a/summary")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200);
+
+    expect(analysisStore.summaryCalls).toEqual([
+      { tenantId: "tenant-a", examId: "exam-a", rawImportId: "raw-import-a" },
+    ]);
+    expect(response.body).toEqual({
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      rawImportId: "raw-import-a",
+      matchedCount: 2,
+      quarantinedCount: 1,
+      totalRows: 3,
+      quarantineReasons: [{ reason: "STUDENT_NOT_FOUND", count: 1 }],
+    });
+  });
+
+  it("TENANT_ADMIN matched optik cevaplar için evaluation işleri üretir", async () => {
+    const issued = await login("admin-a@example.test");
+
+    const response = await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/evaluation-jobs")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ answerKeyId: "answer-key-a" })
+      .expect(201);
+
+    expect(analysisStore.evaluationCalls).toEqual([
+      { tenantId: "tenant-a", examId: "exam-a", rawImportId: "raw-import-a", answerKeyId: "answer-key-a" },
+    ]);
+    expect(producer.inputs).toEqual([
+      {
+        queueName: "exam-evaluation",
+        tenantId: "tenant-a",
+        userId: "user-tenant-a",
+        entityId: "parsed-a",
+        contentHash: "raw-sha-a-answer-key-a",
+        participantId: "participant-a",
+        rawImportId: "raw-import-a",
+        answerKeyId: "answer-key-a",
+      },
+      {
+        queueName: "exam-evaluation",
+        tenantId: "tenant-a",
+        userId: "user-tenant-a",
+        entityId: "parsed-b",
+        contentHash: "raw-sha-a-answer-key-a",
+        participantId: "participant-b",
+        rawImportId: "raw-import-a",
+        answerKeyId: "answer-key-a",
+      },
+    ]);
+    expect(response.body).toMatchObject({
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      rawImportId: "raw-import-a",
+      answerKeyId: "answer-key-a",
+      matchedCount: 2,
+      queuedCount: 2,
+      queueName: "exam-evaluation",
+    });
   });
 
   it("TENANT_ADMIN açık karantina özetini görür", async () => {
@@ -360,6 +438,56 @@ class FakeQuarantineStore implements RawImportQuarantineStore {
     const resolved = { ...record, status: "RESOLVED", resolvedStudentId: input.resolvedStudentId };
     this.records = this.records.map((item) => item.id === record.id ? resolved : item);
     return resolved;
+  }
+}
+
+class FakeAnalysisStore implements RawImportAnalysisStore {
+  summaryCalls: Array<{ tenantId: string; examId: string; rawImportId: string }> = [];
+  evaluationCalls: Array<{ tenantId: string; examId: string; rawImportId: string; answerKeyId?: string }> = [];
+  matched: RawImportEvaluationInput[] = [];
+
+  reset(): void {
+    this.summaryCalls = [];
+    this.evaluationCalls = [];
+    this.matched = [
+      {
+        parsedAnswerId: "parsed-a",
+        participantId: "participant-a",
+        rawImportId: "raw-import-a",
+        rawImportSha256: "raw-sha-a",
+        answerKeyId: "answer-key-a",
+      },
+      {
+        parsedAnswerId: "parsed-b",
+        participantId: "participant-b",
+        rawImportId: "raw-import-a",
+        rawImportSha256: "raw-sha-a",
+        answerKeyId: "answer-key-a",
+      },
+    ];
+  }
+
+  async getSummary(tenantId: string, examId: string, rawImportId: string): Promise<RawImportParseSummary | undefined> {
+    this.summaryCalls.push({ tenantId, examId, rawImportId });
+    return {
+      tenantId,
+      examId,
+      rawImportId,
+      matchedCount: 2,
+      quarantinedCount: 1,
+      totalRows: 3,
+      quarantineReasons: [{ reason: "STUDENT_NOT_FOUND", count: 1 }],
+    };
+  }
+
+  async listMatchedForEvaluation(input: {
+    tenantId: string;
+    examId: string;
+    rawImportId: string;
+    answerKeyId?: string;
+  }): Promise<RawImportEvaluationInput[]> {
+    this.evaluationCalls.push(input);
+    return this.matched;
   }
 }
 

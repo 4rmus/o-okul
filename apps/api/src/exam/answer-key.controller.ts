@@ -35,6 +35,7 @@ export class AnswerKeyController {
       version: body.version,
       questions: body.questions,
       scoringConfig: body.scoringConfig,
+      bookletVariants: body.bookletVariants,
       dryRun: body.dryRun,
     });
   }

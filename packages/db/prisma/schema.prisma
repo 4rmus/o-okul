@@ -61,6 +61,7 @@ model Tenant {
   homework    Homework[]
   exams       Exam[]
   parserConfigs ParserConfig[]
+  opticalFormTemplates OpticalFormTemplate[]
   learningOutcomes LearningOutcome[]
   examParticipants ExamParticipant[]
   rawImports  RawImport[]
@@ -873,6 +874,7 @@ model ParserConfig {
   id              String    @id @default(uuid())
   tenantId        String
   examId          String
+  templateId      String?
   version         String
   encoding        String
   delimiter       String
@@ -888,6 +890,28 @@ model ParserConfig {
   @@unique([tenantId, id])
   @@unique([tenantId, examId, version])
   @@index([tenantId, examId])
+  @@index([tenantId, templateId])
+  @@index([tenantId, deletedAt])
+}
+
+model OpticalFormTemplate {
+  id              String    @id @default(uuid())
+  tenantId        String
+  name            String
+  version         String
+  encoding        String
+  delimiter       String
+  skipHeaderLines Int       @default(0)
+  fieldMapping    Json
+  status          String    @default("APPROVED")
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, name])
+  @@index([tenantId, status, deletedAt])
   @@index([tenantId, deletedAt])
 }
 
