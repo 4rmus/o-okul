@@ -3598,7 +3598,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await studentEntityDialog.getByLabel("Varlık araması").getByRole("button", { name: /Ada A/ }).click();
   await expect(page).toHaveURL(/\/kurum\/ogrenciler\/student-a$/);
   await expect(heading(page, { name: "Ada A" })).toBeVisible();
-  await expect(page.getByLabel("Öğrenci 360 detay").getByText("Aktif", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Öğrenci dashboard", { exact: true }).getByText("Aktif", { exact: true })).toBeVisible();
   await page.keyboard.press("ControlOrMeta+K");
   const guardianEntityDialog = page.getByRole("dialog", { name: "Komut paleti" });
   await guardianEntityDialog.getByLabel("Komut ara").fill("Zeynep");
@@ -4147,12 +4147,13 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByLabel("Kayıt durumu").selectOption("ACTIVE");
   await page.getByRole("button", { name: "Kaydet", exact: true }).click();
 
-  await page.getByRole("link", { name: "Ada 360 detay" }).click();
+  await page.getByRole("link", { name: "Ada öğrenci dashboard" }).click();
   await expect(page).toHaveURL(/\/kurum\/ogrenciler\/student-a$/);
   await expect(heading(page, { name: "Ada A" })).toBeVisible();
-  await expect(page.getByLabel("Öğrenci 360 detay").getByText("Aktif", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Öğrenci 360 detay").getByText("17,5", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Öğrenci 360 detay").getByText("2 soru", { exact: true })).toBeVisible();
+  const studentDashboard = page.getByLabel("Öğrenci dashboard", { exact: true });
+  await expect(studentDashboard.getByText("Aktif", { exact: true })).toBeVisible();
+  await expect(studentDashboard.getByText("17,5", { exact: true })).toBeVisible();
+  await expect(studentDashboard.getByText("2 soru", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Öğretmen notları").getByText("Problem çözme rutini güçleniyor.")).toBeVisible();
   await expect(page.getByLabel("İlişki geçmişi").getByText("Zeynep Veli")).toBeVisible();
   await expect(page.getByLabel("İlişki geçmişi").getByText("Anne - Birincil")).toBeVisible();
@@ -4171,9 +4172,12 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByLabel("Kayıt geçmişi").getByText("academic-year-2026 / term-2026-spring").first()).toBeVisible();
   await expect(page.getByLabel("Denetim özeti").getByText("Öğrenci oluşturuldu")).toBeVisible();
   await expect(page.getByLabel("Denetim özeti").getByText("Veli ilişkisi kuruldu")).toBeVisible();
-  await page.getByLabel("Sınav raporu").selectOption("snapshot-b");
-  await expect(page.getByLabel("Öğrenci 360 detay").getByText("19,25", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Öğrenci 360 detay").getByText("1 soru", { exact: true })).toBeVisible();
+  await studentDashboard.getByRole("link", { name: "Sınav detayları" }).click();
+  await expect(page).toHaveURL(/\/kurum\/ogrenciler\/student-a\/sinavlar$/);
+  const studentExamDetails = page.getByLabel("Öğrenci sınav detayları", { exact: true });
+  await studentExamDetails.getByLabel("Sınav raporu", { exact: true }).selectOption("snapshot-b");
+  await expect(page.getByLabel("Sınav rapor özeti").getByText("19,25", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Sınav rapor özeti").getByText("1 soru", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Öğrencilere dön" }).click();
   await expect(page).toHaveURL(/\/kurum\/ogrenciler$/);
   await page.getByLabel("Toplu dönem geçişi").getByLabel("Geçiş tarihi").fill("2026-06-08");

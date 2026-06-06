@@ -229,7 +229,7 @@ export function StudentsPage() {
       header: "İşlem",
       render: (student) => (
         <span className="next-row-actions">
-          <Link href={`/kurum/ogrenciler/${encodeURIComponent(student.id)}`} aria-label={`${student.firstName} 360 detay`}>
+          <Link href={`/kurum/ogrenciler/${encodeURIComponent(student.id)}`} aria-label={`${student.firstName} öğrenci dashboard`}>
             <Eye size={17} aria-hidden="true" />
           </Link>
           <button type="button" onClick={() => openEditForm(student)} aria-label={`${student.firstName} düzenle`}>

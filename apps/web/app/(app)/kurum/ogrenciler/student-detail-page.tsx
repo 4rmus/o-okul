@@ -26,7 +26,7 @@ import type {
   TeacherNoteRecord,
   TeacherRecord,
 } from "@uzman-hocam/shared-types";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, BarChart3, ChevronRight, LayoutDashboard } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
@@ -67,7 +67,9 @@ interface StudentReportData {
 
 const defaultExamId = "exam-demo-isem-lgs-1";
 
-export function StudentDetailPage({ studentId }: { studentId: string }) {
+type StudentDetailMode = "dashboard" | "exams";
+
+export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: StudentDetailMode; studentId: string }) {
   const { auth } = useAuth();
   const [selectedExamId, setSelectedExamId] = useState("");
   const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
@@ -76,19 +78,6 @@ export function StudentDetailPage({ studentId }: { studentId: string }) {
     queryKey: ["next-student-detail-page-data", auth?.session.tenantId ?? "anonymous", studentId],
     queryFn: () => loadStudentDetailPageData(auth?.accessToken ?? "", studentId),
     enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-
-  const reportDataQuery = useQuery({
-    queryKey: [
-      "next-student-detail-report-data",
-      auth?.session.tenantId ?? "anonymous",
-      selectedExamId,
-      selectedSnapshotId || "auto",
-      studentId,
-    ],
-    queryFn: () => loadStudentReportData(auth?.accessToken ?? "", selectedExamId, selectedSnapshotId, studentId),
-    enabled: Boolean(auth && selectedExamId),
     refetchOnWindowFocus: false,
   });
 
@@ -109,6 +98,19 @@ export function StudentDetailPage({ studentId }: { studentId: string }) {
   const courseNameById = useMemo(() => new Map((detail?.courses ?? []).map((record) => [record.id, record.name])), [detail?.courses]);
   const termNameById = useMemo(() => new Map((detail?.terms ?? []).map((record) => [record.id, record.name])), [detail?.terms]);
   const exams = pageDataQuery.data?.exams ?? [];
+  const activeExamId = selectedExamId || preferredExamId(exams);
+  const reportDataQuery = useQuery({
+    queryKey: [
+      "next-student-detail-report-data",
+      auth?.session.tenantId ?? "anonymous",
+      activeExamId,
+      selectedSnapshotId || "auto",
+      studentId,
+    ],
+    queryFn: () => loadStudentReportData(auth?.accessToken ?? "", activeExamId, selectedSnapshotId, studentId),
+    enabled: Boolean(auth && activeExamId),
+    refetchOnWindowFocus: false,
+  });
   const snapshots = reportDataQuery.data?.snapshots ?? [];
   const selectedSnapshot = reportDataQuery.data?.selectedSnapshot ?? null;
   const report = reportDataQuery.data?.report ?? null;
@@ -119,214 +121,392 @@ export function StudentDetailPage({ studentId }: { studentId: string }) {
   const branchRadar = toStudentBranchRadar(report);
   const outcomeBars = toStudentOutcomeBars(report);
   const progressPoints = toProgressPoints(progress);
+  const studentDashboardHref = `/kurum/ogrenciler/${encodeURIComponent(studentId)}`;
+  const studentExamsHref = `${studentDashboardHref}/sinavlar`;
 
   useEffect(() => {
-    if (exams.length === 0 || exams.some((exam) => exam.id === selectedExamId)) return;
-    setSelectedExamId(exams[0]?.id ?? "");
+    if (!selectedExamId || exams.some((exam) => exam.id === selectedExamId)) return;
+    setSelectedExamId("");
     setSelectedSnapshotId("");
   }, [exams, selectedExamId]);
 
   return (
     <PageFrame
       title={studentName}
-      subtitle="Öğrenci 360"
+      subtitle={mode === "exams" ? "Sınav detayları" : "Öğrenci dashboard"}
       actions={
-        <Link className="uh-button uh-button--secondary" href="/kurum/ogrenciler">
-          <ArrowLeft size={17} aria-hidden="true" />
-          Öğrencilere dön
-        </Link>
+        <div className="next-student-detail-actions">
+          <Link className="uh-button uh-button--secondary" href="/kurum/ogrenciler">
+            <ArrowLeft size={17} aria-hidden="true" />
+            Öğrencilere dön
+          </Link>
+          {mode === "exams" ? (
+            <Link className="uh-button uh-button--secondary" href={studentDashboardHref}>
+              <LayoutDashboard size={17} aria-hidden="true" />
+              Dashboard'a dön
+            </Link>
+          ) : (
+            <Link className="uh-button" href={studentExamsHref}>
+              <BarChart3 size={17} aria-hidden="true" />
+              Sınav detayları
+            </Link>
+          )}
+        </div>
       }
     >
-
-      <section className="next-report-panel" aria-label="Öğrenci 360 detay">
-        <div className="next-detail-selects">
-          <label>
-            Sınav
-            <select
-              aria-label="Sınav"
-              value={selectedExamId}
-              onChange={(event) => {
-                setSelectedExamId(event.target.value);
-                setSelectedSnapshotId("");
-              }}
-            >
-              {exams.map((exam) => (
-                <option key={exam.id} value={exam.id}>
-                  {exam.title}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Sınav raporu
-            <select
-              aria-label="Sınav raporu"
-              disabled={snapshots.length === 0}
-              value={selectedSnapshot?.id ?? ""}
-              onChange={(event) => setSelectedSnapshotId(event.target.value)}
-            >
-              {snapshots.length === 0 ? <option value="">Hazır rapor yok</option> : null}
-              {snapshots.map((snapshot) => (
-                <option key={snapshot.id} value={snapshot.id}>
-                  {formatSnapshotLabel(snapshot, studentId)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        {pageDataQuery.isPending ? (
+      {pageDataQuery.isPending ? (
+        <section className="next-report-panel" aria-label={mode === "exams" ? "Öğrenci sınav detayları" : "Öğrenci dashboard"}>
           <p>Yükleniyor...</p>
-        ) : pageDataQuery.isError ? (
+        </section>
+      ) : pageDataQuery.isError ? (
+        <section className="next-report-panel" aria-label={mode === "exams" ? "Öğrenci sınav detayları" : "Öğrenci dashboard"}>
           <p className="uh-crud-page__error">Öğrenci detayı alınamadı.</p>
-        ) : detail ? (
-          <>
-            <MetricPanelGrid
-              ariaLabel="Öğrenci özeti"
-              metrics={[
-                { label: "Devamsızlık", value: detail.attendanceSummary?.total ?? 0 },
-                { label: "Bekleyen ödeme", value: formatPendingPayment(detail.paymentPlans) },
-                { label: "Son net", value: formatNumber(report?.total?.net) },
-                { label: "Hata kitapçığı", value: errorBooklet ? `${errorBooklet.items.length} soru` : "-" },
-                { label: "Kayıt durumu", value: formatStudentStatus(detail.profile.status) },
-                { label: "Net gelişimi", value: formatDelta(progress?.netDelta) },
-                { label: "LGS puanı", value: formatNumber(readLgsScore(report?.total)) },
-                { label: "Standart puan", value: formatNumber(report?.total?.standardScore) },
-              ]}
-            />
-            <div className="next-report-visual-grid">
-              <ReportChartPanel description="Soru bazlı doğruluk grafiği" title="Öğrenci Sonuç Dağılımı">
-                <ExamResultDonut result={examResult} />
-              </ReportChartPanel>
-              <ReportChartPanel description="Rapor bazlı branş netleri" title="Branş Netleri">
-                <TopicRadarChart branches={branchRadar} />
-              </ReportChartPanel>
-              <ReportChartPanel description="Kazanım bazlı net karşılaştırması" title="Kazanım Netleri">
-                <ClassCompareBar classes={outcomeBars} />
-              </ReportChartPanel>
-              <ReportChartPanel description="Net ve standart puan gelişimi" title="Öğrenci Gelişim">
-                <ProgressLineChart points={progressPoints} />
-              </ReportChartPanel>
-            </div>
-
-            <div className="next-student-detail-grid">
-              <section className="next-report-list" aria-label="İletişim ve veli">
-                <h2>İletişim ve veli</h2>
-                <p>Telefon: {detail.profile.phone ?? "-"}</p>
-                <p>E-posta: {detail.profile.email ?? "-"}</p>
-                {detail.guardians.length > 0 ? (
-                  detail.guardians.map((guardian) => (
-                    <p key={guardian.id}>
-                      {guardian.firstName} {guardian.lastName}
-                      {guardian.phone ? ` - ${guardian.phone}` : ""}
-                    </p>
-                  ))
-                ) : (
-                  <p>Bağlı veli yok</p>
-                )}
-              </section>
-
-              <section className="next-report-list" aria-label="İlişki geçmişi">
-                <h2>İlişki geçmişi</h2>
-                {detail.guardianLinks.length > 0 ? (
-                  detail.guardianLinks.map((link) => (
-                    <p key={link.id}>
-                      {guardianNameById.get(link.guardianId) ?? link.guardianId}: {formatRelationshipType(link.relationshipType)}
-                      {link.isPrimary ? " - Birincil" : ""} - {formatGuardianPermissions(link)}
-                      {link.createdAt ? ` - ${formatDateTime(link.createdAt)} tarihinde bağlandı` : ""}
-                    </p>
-                  ))
-                ) : (
-                  <p>Veli ilişkisi yok</p>
-                )}
-              </section>
-
-              <section className="next-report-list" aria-label="Öğretmen notları">
-                <h2>Öğretmen notları</h2>
-                {detail.teacherNotes.length > 0 ? (
-                  detail.teacherNotes.map((note) => <p key={note.id}>{note.body}</p>)
-                ) : (
-                  <p>Not yok</p>
-                )}
-              </section>
-
-              <section className="next-report-list" aria-label="Öğretmen ilişkileri">
-                <h2>Öğretmen ilişkileri</h2>
-                {detail.teacherAssignments.length > 0 ? (
-                  detail.teacherAssignments.map((assignment) => (
-                    <p key={assignment.id}>
-                      {teacherNameById.get(assignment.teacherId) ?? assignment.teacherId}: {formatTeacherAssignmentRole(assignment.role)}
-                      {formatTeacherAssignmentScope(assignment, classNameById, courseNameById, termNameById)}
-                    </p>
-                  ))
-                ) : (
-                  <p>Öğretmen ilişkisi yok</p>
-                )}
-              </section>
-
-              <section className="next-report-list" aria-label="Sınıf geçmişi">
-                <h2>Sınıf geçmişi</h2>
-                {detail.classHistory.length > 0 ? (
-                  detail.classHistory.map((record) => (
-                    <p key={record.id}>
-                      {record.classId ?? "Sınıfsız"} · {formatClassHistoryAcademicContext(record)}: {formatDate(record.startsAt)}
-                      {record.endsAt ? ` - ${formatDate(record.endsAt)}` : " - devam ediyor"}
-                    </p>
-                  ))
-                ) : (
-                  <p>Sınıf geçmişi yok</p>
-                )}
-              </section>
-
-              <section className="next-report-list" aria-label="Kayıt geçmişi">
-                <h2>Kayıt geçmişi</h2>
-                {detail.enrollments.length > 0 ? (
-                  detail.enrollments.map((record) => (
-                    <p key={record.id}>
-                      {formatEnrollmentReason(record.reason)} · {formatStudentStatus(record.status)} · {record.classId ? classNameById.get(record.classId) ?? record.classId : "Sınıfsız"} · {formatClassHistoryAcademicContext(record)}: {formatDate(record.startsAt)}
-                      {record.endsAt ? ` - ${formatDate(record.endsAt)}` : " - devam ediyor"}
-                    </p>
-                  ))
-                ) : (
-                  <p>Kayıt geçmişi yok</p>
-                )}
-              </section>
-
-              <section className="next-report-list" aria-label="Ödevler">
-                <h2>Ödevler</h2>
-                <p>{detail.homeworkAssignments.length} ödev</p>
-              </section>
-
-              <section className="next-report-list" aria-label="Hata kitapçığı">
-                <h2>Hata kitapçığı</h2>
-                {errorBooklet?.items.length ? (
-                  errorBooklet.items.map((item) => (
-                    <p key={`${item.questionNo}-${item.branch}`}>
-                      {item.questionNo}. soru {item.branch}: {item.status === "BLANK" ? "Boş" : `Yanıt ${item.answer}`} / Doğru {item.correctAnswer}
-                    </p>
-                  ))
-                ) : (
-                  <p>Hata kaydı yok</p>
-                )}
-              </section>
-
-              <section className="next-report-list" aria-label="Denetim özeti">
-                <h2>Denetim özeti</h2>
-                {studentAuditLogs.length > 0 ? (
-                  studentAuditLogs.map((record) => (
-                    <p key={record.id}>
-                      {formatDateTime(record.createdAt)} - {formatAuditAction(record.action)}
-                    </p>
-                  ))
-                ) : (
-                  <p>Denetim kaydı yok</p>
-                )}
-              </section>
-            </div>
-          </>
-        ) : null}
-      </section>
+        </section>
+      ) : detail && mode === "exams" ? (
+        <StudentExamDetails
+          branchRadar={branchRadar}
+          errorBooklet={errorBooklet}
+          examResult={examResult}
+          exams={exams}
+          outcomeBars={outcomeBars}
+          progress={progress}
+          progressPoints={progressPoints}
+          report={report}
+          selectedExamId={activeExamId}
+          selectedSnapshot={selectedSnapshot}
+          snapshots={snapshots}
+          studentId={studentId}
+          onExamChange={(nextExamId) => {
+            setSelectedExamId(nextExamId);
+            setSelectedSnapshotId("");
+          }}
+          onSnapshotChange={setSelectedSnapshotId}
+        />
+      ) : detail ? (
+        <StudentDashboard
+          classNameById={classNameById}
+          courseNameById={courseNameById}
+          detail={detail}
+          errorBooklet={errorBooklet}
+          guardianNameById={guardianNameById}
+          progress={progress}
+          report={report}
+          selectedSnapshot={selectedSnapshot}
+          studentAuditLogs={studentAuditLogs}
+          studentExamsHref={studentExamsHref}
+          studentId={studentId}
+          termNameById={termNameById}
+          teacherNameById={teacherNameById}
+        />
+      ) : null}
     </PageFrame>
+  );
+}
+
+function StudentDashboard({
+  classNameById,
+  courseNameById,
+  detail,
+  errorBooklet,
+  guardianNameById,
+  progress,
+  report,
+  selectedSnapshot,
+  studentAuditLogs,
+  studentExamsHref,
+  studentId,
+  teacherNameById,
+  termNameById,
+}: {
+  classNameById: ReadonlyMap<string, string>;
+  courseNameById: ReadonlyMap<string, string>;
+  detail: StudentBaseDetail;
+  errorBooklet: ReportErrorBooklet | null;
+  guardianNameById: ReadonlyMap<string, string>;
+  progress: ReportStudentProgress | null;
+  report: ReportStudentSnapshot | null;
+  selectedSnapshot: ReportSnapshotRecord | null;
+  studentAuditLogs: AuditLogRecord[];
+  studentExamsHref: string;
+  studentId: string;
+  teacherNameById: ReadonlyMap<string, string>;
+  termNameById: ReadonlyMap<string, string>;
+}) {
+  const currentClass = formatCurrentClass(detail.profile.classId, classNameById);
+  const primaryGuardian = detail.guardianLinks.find((link) => link.isPrimary) ?? detail.guardianLinks[0];
+  const primaryGuardianName = primaryGuardian ? guardianNameById.get(primaryGuardian.guardianId) ?? primaryGuardian.guardianId : "Veli bağı yok";
+  const activeEnrollment = resolveActiveEnrollment(detail.enrollments);
+  const latestAudit = studentAuditLogs[0];
+
+  return (
+    <section className="next-report-panel" aria-label="Öğrenci dashboard">
+      <div className="next-student-dashboard-hero">
+        <div>
+          <span>Kurum ilişkisi</span>
+          <h2>{detail.profile.firstName} {detail.profile.lastName}</h2>
+          <p>{currentClass} · {formatStudentStatus(detail.profile.status)} · {primaryGuardianName}</p>
+        </div>
+        <Link className="uh-button" href={studentExamsHref}>
+          <BarChart3 size={17} aria-hidden="true" />
+          Sınav detayları
+        </Link>
+      </div>
+
+      <MetricPanelGrid
+        ariaLabel="Öğrenci dashboard özeti"
+        metrics={[
+          { label: "Kayıt durumu", value: formatStudentStatus(detail.profile.status) },
+          { label: "Kurum sınıfı", value: currentClass },
+          { label: "Veli bağı", value: detail.guardianLinks.length },
+          { label: "Eğitim ekibi", value: detail.teacherAssignments.length },
+          { label: "Devamsızlık", value: detail.attendanceSummary?.total ?? 0 },
+          { label: "Bekleyen ödeme", value: formatPendingPayment(detail.paymentPlans) },
+          { label: "Son net", value: formatNumber(report?.total?.net) },
+          { label: "Net gelişimi", value: formatDelta(progress?.netDelta) },
+        ]}
+      />
+
+      <div className="next-dashboard-summary-grid" aria-label="Öğrenci karar kartları">
+        <Link className="next-dashboard-summary-card" href={studentExamsHref}>
+          <span>Sınav performansı</span>
+          <strong>{formatNumberWithSuffix(report?.total?.net, "net")}</strong>
+          <small>
+            {selectedSnapshot ? formatSnapshotLabel(selectedSnapshot, studentId) : "Hazır rapor bekleniyor"}
+            <ChevronRight size={15} aria-hidden="true" />
+          </small>
+        </Link>
+        <article className="next-dashboard-summary-card">
+          <span>Kurum bağı</span>
+          <strong>{currentClass}</strong>
+          <small>{activeEnrollment ? `${formatEnrollmentReason(activeEnrollment.reason)} · ${formatDate(activeEnrollment.startsAt)}` : "Aktif kayıt bulunamadı"}</small>
+        </article>
+        <article className="next-dashboard-summary-card">
+          <span>Veli erişimi</span>
+          <strong>{primaryGuardianName}</strong>
+          <small>{primaryGuardian ? formatGuardianPermissions(primaryGuardian) : "Veli izinleri tanımlı değil"}</small>
+        </article>
+        <article className="next-dashboard-summary-card">
+          <span>Takip odağı</span>
+          <strong>{errorBooklet ? `${errorBooklet.items.length} soru` : "Hata yok"}</strong>
+          <small>{detail.teacherNotes[0]?.body ?? "Öğretmen notu yok"}</small>
+        </article>
+      </div>
+
+      <div className="next-student-detail-grid">
+        <section className="next-report-list" aria-label="İletişim ve veli">
+          <h2>İletişim ve veli</h2>
+          <p>Telefon: {detail.profile.phone ?? "-"}</p>
+          <p>E-posta: {detail.profile.email ?? "-"}</p>
+          {detail.guardians.length > 0 ? (
+            detail.guardians.map((guardian) => (
+              <p key={guardian.id}>
+                {guardian.firstName} {guardian.lastName}
+                {guardian.phone ? ` - ${guardian.phone}` : ""}
+              </p>
+            ))
+          ) : (
+            <p>Bağlı veli yok</p>
+          )}
+        </section>
+
+        <section className="next-report-list" aria-label="İlişki geçmişi">
+          <h2>İlişki geçmişi</h2>
+          {detail.guardianLinks.length > 0 ? (
+            detail.guardianLinks.map((link) => (
+              <p key={link.id}>
+                {guardianNameById.get(link.guardianId) ?? link.guardianId}: {formatRelationshipType(link.relationshipType)}
+                {link.isPrimary ? " - Birincil" : ""} - {formatGuardianPermissions(link)}
+                {link.createdAt ? ` - ${formatDateTime(link.createdAt)} tarihinde bağlandı` : ""}
+              </p>
+            ))
+          ) : (
+            <p>Veli ilişkisi yok</p>
+          )}
+        </section>
+
+        <section className="next-report-list" aria-label="Öğretmen ilişkileri">
+          <h2>Öğretmen ilişkileri</h2>
+          {detail.teacherAssignments.length > 0 ? (
+            detail.teacherAssignments.map((assignment) => (
+              <p key={assignment.id}>
+                {teacherNameById.get(assignment.teacherId) ?? assignment.teacherId}: {formatTeacherAssignmentRole(assignment.role)}
+                {formatTeacherAssignmentScope(assignment, classNameById, courseNameById, termNameById)}
+              </p>
+            ))
+          ) : (
+            <p>Öğretmen ilişkisi yok</p>
+          )}
+        </section>
+
+        <section className="next-report-list" aria-label="Öğretmen notları">
+          <h2>Öğretmen notları</h2>
+          {detail.teacherNotes.length > 0 ? (
+            detail.teacherNotes.map((note) => <p key={note.id}>{note.body}</p>)
+          ) : (
+            <p>Not yok</p>
+          )}
+        </section>
+
+        <section className="next-report-list" aria-label="Sınıf geçmişi">
+          <h2>Sınıf geçmişi</h2>
+          {detail.classHistory.length > 0 ? (
+            detail.classHistory.map((record) => (
+              <p key={record.id}>
+                {record.classId ?? "Sınıfsız"} · {formatClassHistoryAcademicContext(record)}: {formatDate(record.startsAt)}
+                {record.endsAt ? ` - ${formatDate(record.endsAt)}` : " - devam ediyor"}
+              </p>
+            ))
+          ) : (
+            <p>Sınıf geçmişi yok</p>
+          )}
+        </section>
+
+        <section className="next-report-list" aria-label="Kayıt geçmişi">
+          <h2>Kayıt geçmişi</h2>
+          {detail.enrollments.length > 0 ? (
+            detail.enrollments.map((record) => (
+              <p key={record.id}>
+                {formatEnrollmentReason(record.reason)} · {formatStudentStatus(record.status)} · {record.classId ? classNameById.get(record.classId) ?? record.classId : "Sınıfsız"} · {formatClassHistoryAcademicContext(record)}: {formatDate(record.startsAt)}
+                {record.endsAt ? ` - ${formatDate(record.endsAt)}` : " - devam ediyor"}
+              </p>
+            ))
+          ) : (
+            <p>Kayıt geçmişi yok</p>
+          )}
+        </section>
+
+        <section className="next-report-list" aria-label="Ödevler">
+          <h2>Ödevler</h2>
+          <p>{detail.homeworkAssignments.length} ödev</p>
+        </section>
+
+        <section className="next-report-list" aria-label="Denetim özeti">
+          <h2>Denetim özeti</h2>
+          {latestAudit ? (
+            studentAuditLogs.map((record) => (
+              <p key={record.id}>
+                {formatDateTime(record.createdAt)} - {formatAuditAction(record.action)}
+              </p>
+            ))
+          ) : (
+            <p>Denetim kaydı yok</p>
+          )}
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function StudentExamDetails({
+  branchRadar,
+  errorBooklet,
+  examResult,
+  exams,
+  outcomeBars,
+  progress,
+  progressPoints,
+  report,
+  selectedExamId,
+  selectedSnapshot,
+  snapshots,
+  studentId,
+  onExamChange,
+  onSnapshotChange,
+}: {
+  branchRadar: ReturnType<typeof toStudentBranchRadar>;
+  errorBooklet: ReportErrorBooklet | null;
+  examResult: ReturnType<typeof toStudentExamResult>;
+  exams: ExamRecord[];
+  outcomeBars: ReturnType<typeof toStudentOutcomeBars>;
+  progress: ReportStudentProgress | null;
+  progressPoints: ReturnType<typeof toProgressPoints>;
+  report: ReportStudentSnapshot | null;
+  selectedExamId: string;
+  selectedSnapshot: ReportSnapshotRecord | null;
+  snapshots: ReportSnapshotRecord[];
+  studentId: string;
+  onExamChange: (examId: string) => void;
+  onSnapshotChange: (snapshotId: string) => void;
+}) {
+  return (
+    <section className="next-report-panel" aria-label="Öğrenci sınav detayları">
+      <div className="next-detail-selects">
+        <label>
+          Sınav
+          <select aria-label="Sınav" value={selectedExamId} onChange={(event) => onExamChange(event.target.value)}>
+            {exams.map((exam) => (
+              <option key={exam.id} value={exam.id}>
+                {exam.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Sınav raporu
+          <select
+            aria-label="Sınav raporu"
+            disabled={snapshots.length === 0}
+            value={selectedSnapshot?.id ?? ""}
+            onChange={(event) => onSnapshotChange(event.target.value)}
+          >
+            {snapshots.length === 0 ? <option value="">Hazır rapor yok</option> : null}
+            {snapshots.map((snapshot) => (
+              <option key={snapshot.id} value={snapshot.id}>
+                {formatSnapshotLabel(snapshot, studentId)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <MetricPanelGrid
+        ariaLabel="Sınav rapor özeti"
+        metrics={[
+          { label: "Son net", value: formatNumber(report?.total?.net) },
+          { label: "Hata kitapçığı", value: errorBooklet ? `${errorBooklet.items.length} soru` : "-" },
+          { label: "Net gelişimi", value: formatDelta(progress?.netDelta) },
+          { label: "LGS puanı", value: formatNumber(readLgsScore(report?.total)) },
+          { label: "Standart puan", value: formatNumber(report?.total?.standardScore) },
+        ]}
+      />
+
+      {report ? (
+        <>
+          <div className="next-report-visual-grid">
+            <ReportChartPanel description="Soru bazlı doğruluk grafiği" title="Öğrenci Sonuç Dağılımı">
+              <ExamResultDonut result={examResult} />
+            </ReportChartPanel>
+            <ReportChartPanel description="Rapor bazlı branş netleri" title="Branş Netleri">
+              <TopicRadarChart branches={branchRadar} />
+            </ReportChartPanel>
+            <ReportChartPanel description="Kazanım bazlı net karşılaştırması" title="Kazanım Netleri">
+              <ClassCompareBar classes={outcomeBars} />
+            </ReportChartPanel>
+            <ReportChartPanel description="Net ve standart puan gelişimi" title="Öğrenci Gelişim">
+              <ProgressLineChart points={progressPoints} />
+            </ReportChartPanel>
+          </div>
+
+          <section className="next-report-list" aria-label="Hata kitapçığı">
+            <h2>Hata kitapçığı</h2>
+            {errorBooklet?.items.length ? (
+              errorBooklet.items.map((item) => (
+                <p key={`${item.questionNo}-${item.branch}`}>
+                  {item.questionNo}. soru {item.branch}: {item.status === "BLANK" ? "Boş" : `Yanıt ${item.answer}`} / Doğru {item.correctAnswer}
+                </p>
+              ))
+            ) : (
+              <p>Hata kaydı yok</p>
+            )}
+          </section>
+        </>
+      ) : (
+        <section className="next-report-list" aria-label="Hazır rapor durumu">
+          <h2>Hazır rapor yok</h2>
+          <p>Bu öğrenci için seçili sınava ait hazır rapor bulunamadı.</p>
+        </section>
+      )}
+    </section>
   );
 }
 
@@ -403,6 +583,10 @@ async function loadExams(accessToken: string): Promise<ExamRecord[]> {
         createdAt: "",
         updatedAt: "",
       }];
+}
+
+function preferredExamId(exams: ExamRecord[]) {
+  return exams.find((exam) => exam.status === "PUBLISHED")?.id ?? exams[0]?.id ?? "";
 }
 
 async function loadStudentSnapshots(accessToken: string, examId: string, studentId: string) {
@@ -491,6 +675,10 @@ function formatNumber(value: number | undefined) {
   return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
 }
 
+function formatNumberWithSuffix(value: number | undefined, suffix: string) {
+  return value === undefined ? "-" : `${formatNumber(value)} ${suffix}`;
+}
+
 function readLgsScore(total: { estimatedRawScore?: number; standardScore?: number } | undefined) {
   return total?.estimatedRawScore ?? total?.standardScore;
 }
@@ -564,6 +752,14 @@ function formatStudentStatus(status: StudentProfileRecord["status"]) {
     TRANSFERRED: "Nakil",
   };
   return labels[status] ?? status;
+}
+
+function formatCurrentClass(classId: string | undefined, classNameById: ReadonlyMap<string, string>) {
+  return classId ? classNameById.get(classId) ?? classId : "Sınıfsız";
+}
+
+function resolveActiveEnrollment(records: StudentEnrollmentRecord[]) {
+  return records.find((record) => !record.endsAt) ?? records[0];
 }
 
 function formatClassHistoryAcademicContext(record: { academicYearId?: string; termId?: string }) {
