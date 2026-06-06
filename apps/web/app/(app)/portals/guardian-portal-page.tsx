@@ -41,6 +41,7 @@ export function GuardianPortalPage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const rolePreviewToken = searchParams.get("rolePreviewToken")?.trim() ?? "";
+  const reportExamId = searchParams.get("examId")?.trim() || portalExamId;
   const isRolePreview = Boolean(rolePreviewToken);
   const canReadPortal = Boolean(auth && (auth.session.subjectType === "GUARDIAN" || isRolePreview));
   const studentsQuery = useQuery({
@@ -53,8 +54,14 @@ export function GuardianPortalPage() {
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const resolvedStudentId = selectedStudentId ?? students[0]?.id;
   const studentQuery = useQuery({
-    queryKey: ["next-guardian-portal", auth?.session.userId ?? "anonymous", resolvedStudentId ?? "none", rolePreviewToken || "session"],
-    queryFn: () => loadGuardianStudentPortal(auth?.accessToken ?? "", resolvedStudentId ?? "", rolePreviewToken),
+    queryKey: [
+      "next-guardian-portal",
+      auth?.session.userId ?? "anonymous",
+      resolvedStudentId ?? "none",
+      rolePreviewToken || "session",
+      reportExamId,
+    ],
+    queryFn: () => loadGuardianStudentPortal(auth?.accessToken ?? "", resolvedStudentId ?? "", rolePreviewToken, reportExamId),
     enabled: Boolean(canReadPortal && resolvedStudentId),
     refetchOnWindowFocus: false,
   });
@@ -168,7 +175,7 @@ export function GuardianPortalPage() {
   );
 }
 
-async function loadGuardianStudentPortal(accessToken: string, studentId: string, rolePreviewToken = "") {
+async function loadGuardianStudentPortal(accessToken: string, studentId: string, rolePreviewToken = "", reportExamId = portalExamId) {
   const [profile, classHistory, enrollments, notificationPreferences, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, paymentPlans, report, errorBooklet, progress, courses, terms] = await Promise.all([
     readOnlyRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/profile`, rolePreviewToken),
     readOnlyRequest<StudentClassHistoryRecord[]>(
@@ -216,17 +223,17 @@ async function loadGuardianStudentPortal(accessToken: string, studentId: string,
     ),
     apiRequestOrNull<ReportStudentSnapshot>(
       accessToken,
-      `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${portalExamId}/latest`,
+      `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${encodeURIComponent(reportExamId)}/latest`,
       rolePreviewToken,
     ),
     apiRequestOrNull<ReportErrorBooklet>(
       accessToken,
-      `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${portalExamId}/latest/error-booklet`,
+      `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${encodeURIComponent(reportExamId)}/latest/error-booklet`,
       rolePreviewToken,
     ),
     apiRequestOrNull<ReportStudentProgress>(
       accessToken,
-      `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${portalExamId}/progress`,
+      `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${encodeURIComponent(reportExamId)}/progress`,
       rolePreviewToken,
     ),
     readOnlyRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`, rolePreviewToken),

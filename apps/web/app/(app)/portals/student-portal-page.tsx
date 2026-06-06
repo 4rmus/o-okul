@@ -38,12 +38,13 @@ export function StudentPortalPage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const rolePreviewToken = searchParams.get("rolePreviewToken")?.trim() ?? "";
+  const reportExamId = searchParams.get("examId")?.trim() || portalExamId;
   const isRolePreview = Boolean(rolePreviewToken);
   const canReadPortal = Boolean(auth && (auth.session.subjectType === "STUDENT" || isRolePreview));
-  const queryKey = ["next-student-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session"];
+  const queryKey = ["next-student-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", reportExamId];
   const query = useQuery({
     queryKey,
-    queryFn: () => loadStudentPortal(auth?.accessToken ?? "", rolePreviewToken),
+    queryFn: () => loadStudentPortal(auth?.accessToken ?? "", rolePreviewToken, reportExamId),
     enabled: canReadPortal,
     refetchOnWindowFocus: false,
   });
@@ -115,7 +116,7 @@ export function StudentPortalPage() {
   );
 }
 
-async function loadStudentPortal(accessToken: string, rolePreviewToken = "") {
+async function loadStudentPortal(accessToken: string, rolePreviewToken = "", reportExamId = portalExamId) {
   const [profile, guardians, guardianLinks, classHistory, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, report, errorBooklet, progress, courses, terms] = await Promise.all([
     readOnlyRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/student/profile`, rolePreviewToken),
     readOnlyRequest<GuardianRecord[]>(accessToken, `${apiBaseUrl}/me/student/guardians`, rolePreviewToken),
@@ -133,13 +134,13 @@ async function loadStudentPortal(accessToken: string, rolePreviewToken = "") {
     readOnlyRequest<AttendanceSummaryRecord>(accessToken, `${apiBaseUrl}/me/student/attendance/summary`, rolePreviewToken),
     readOnlyRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/me/student/teacher-notes`, rolePreviewToken),
     readOnlyRequest<DevelopmentTrendItem[]>(accessToken, `${apiBaseUrl}/me/student/development-assessments`, rolePreviewToken),
-    apiRequestOrNull<ReportStudentSnapshot>(accessToken, `${apiBaseUrl}/me/student/reports/${portalExamId}/latest`, rolePreviewToken),
+    apiRequestOrNull<ReportStudentSnapshot>(accessToken, `${apiBaseUrl}/me/student/reports/${encodeURIComponent(reportExamId)}/latest`, rolePreviewToken),
     apiRequestOrNull<ReportErrorBooklet>(
       accessToken,
-      `${apiBaseUrl}/me/student/reports/${portalExamId}/latest/error-booklet`,
+      `${apiBaseUrl}/me/student/reports/${encodeURIComponent(reportExamId)}/latest/error-booklet`,
       rolePreviewToken,
     ),
-    apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/me/student/reports/${portalExamId}/progress`, rolePreviewToken),
+    apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/me/student/reports/${encodeURIComponent(reportExamId)}/progress`, rolePreviewToken),
     readOnlyRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`, rolePreviewToken),
     readOnlyRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`, rolePreviewToken),
   ]);

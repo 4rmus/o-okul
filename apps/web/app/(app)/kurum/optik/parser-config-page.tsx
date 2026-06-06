@@ -119,6 +119,7 @@ interface RawImportEvaluationQueueResult {
   examId: string;
   rawImportId: string;
   answerKeyId?: string;
+  rawImportSha256?: string;
   matchedCount: number;
   queuedCount: number;
   queueName: "exam-evaluation";
@@ -134,6 +135,8 @@ interface ImportQuarantineRecord {
   reason: string;
   status: string;
   resolvedStudentId?: string;
+  answerKeyId?: string;
+  rawImportSha256?: string;
   evaluationJob?: {
     queueName: "exam-evaluation";
     jobId: string;
@@ -151,10 +154,10 @@ interface ReportGenerationQueueResult {
 }
 
 const tabs: Array<{ id: OpticalTab; label: string }> = [
-  { id: "format", label: "Format öneri-onay" },
-  { id: "answer-key", label: "Cevap anahtarı" },
-  { id: "upload", label: "Optik yükleme" },
-  { id: "quarantine", label: "Karantina çözümü" },
+  { id: "format", label: "1. Format" },
+  { id: "answer-key", label: "2. Cevap anahtarı" },
+  { id: "upload", label: "3. Optik yükleme" },
+  { id: "quarantine", label: "4. Eşleşmeyen satırlar" },
 ];
 
 const answerChoices: AnswerChoice[] = ["A", "B", "C", "D", "E"];
@@ -194,6 +197,46 @@ const opticalFormPresets: Array<{
   },
 ];
 
+type OpticalFormPreset = (typeof opticalFormPresets)[number];
+const defaultParserConfigVersion = createPresetParserVersion(opticalFormPresets[0]!);
+
+function createPresetParserVersion(form: OpticalFormPreset) {
+  const slug = slugifyVersionPart(form.name);
+  return `${slug}-v1`;
+}
+
+function createAnswerKeyVersion(examTitle: string | undefined, uploadedAt: Date) {
+  return `${slugifyVersionPart(examTitle || "cevap-anahtari")}-${formatLocalDate(uploadedAt)}`;
+}
+
+function slugifyVersionPart(value: string) {
+  return value
+    .replace(/ı/g, "i")
+    .replace(/İ/g, "I")
+    .replace(/ğ/g, "g")
+    .replace(/Ğ/g, "G")
+    .replace(/ü/g, "u")
+    .replace(/Ü/g, "U")
+    .replace(/ş/g, "s")
+    .replace(/Ş/g, "S")
+    .replace(/ö/g, "o")
+    .replace(/Ö/g, "O")
+    .replace(/ç/g, "c")
+    .replace(/Ç/g, "C")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "cevap-anahtari";
+}
+
+function formatLocalDate(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function ParserConfigPage() {
   const { auth } = useAuth();
   const [activeTab, setActiveTab] = useState<OpticalTab>("format");
@@ -201,8 +244,7 @@ export function ParserConfigPage() {
   const [exams, setExams] = useState<ExamRecord[]>([]);
   const [newExamTitle, setNewExamTitle] = useState("");
   const [newExamStartsAt, setNewExamStartsAt] = useState("");
-  const [version, setVersion] = useState("parser-v1");
-  const [sampleText, setSampleText] = useState("ogrenci_no\tkitapcik\tcevaplar\n12345\tA\tABCDE");
+  const [version, setVersion] = useState(defaultParserConfigVersion);
   const [fileName, setFileName] = useState("");
   const [fileBase64, setFileBase64] = useState("");
   const [suggestion, setSuggestion] = useState<ParserConfigSuggestion | null>(null);
@@ -212,10 +254,12 @@ export function ParserConfigPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [templateName, setTemplateName] = useState("");
   const [templateVersion, setTemplateVersion] = useState("template-v1");
-  const [templateApplyVersion, setTemplateApplyVersion] = useState("parser-v1");
+  const [templateApplyVersion, setTemplateApplyVersion] = useState(defaultParserConfigVersion);
   const [answerKeyFileName, setAnswerKeyFileName] = useState("");
   const [answerKeyFileBase64, setAnswerKeyFileBase64] = useState("");
-  const [answerKeyVersion, setAnswerKeyVersion] = useState("answer-key-v1");
+  const [answerKeyUploadedAt, setAnswerKeyUploadedAt] = useState(() => new Date());
+  const [answerKeyVersionTouched, setAnswerKeyVersionTouched] = useState(false);
+  const [answerKeyVersion, setAnswerKeyVersion] = useState(() => createAnswerKeyVersion(undefined, new Date()));
   const [answerKeyDryRun, setAnswerKeyDryRun] = useState<AnswerKeyImportDryRunResult | null>(null);
   const [answerKeyImport, setAnswerKeyImport] = useState<AnswerKeyImportResult | null>(null);
   const [manualAnswerKeyVersion, setManualAnswerKeyVersion] = useState("manual-key-v1");
@@ -226,7 +270,7 @@ export function ParserConfigPage() {
   const [manualAnswerKey, setManualAnswerKey] = useState<AnswerKeyRecord | null>(null);
   const [rawImportFileName, setRawImportFileName] = useState("");
   const [rawImportFileBase64, setRawImportFileBase64] = useState("");
-  const [rawImportParserVersion, setRawImportParserVersion] = useState("parser-v1");
+  const [rawImportParserVersion, setRawImportParserVersion] = useState(defaultParserConfigVersion);
   const [rawImport, setRawImport] = useState<RawImportUploadResult | null>(null);
   const [rawImportSummary, setRawImportSummary] = useState<RawImportParseSummary | null>(null);
   const [evaluationJobs, setEvaluationJobs] = useState<RawImportEvaluationQueueResult | null>(null);
@@ -240,6 +284,7 @@ export function ParserConfigPage() {
   const [error, setError] = useState("");
   const selectedExam = exams.find((exam) => exam.id === examId);
   const selectedPresetForm = opticalFormPresets.find((form) => form.preset === selectedPreset) ?? opticalFormPresets[0]!;
+  const selectedPresetVersion = createPresetParserVersion(selectedPresetForm);
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
 
   useEffect(() => {
@@ -264,11 +309,20 @@ export function ParserConfigPage() {
     void loadInitialData();
   }, [auth]);
 
+  useEffect(() => {
+    if (answerKeyVersionTouched) return;
+    setAnswerKeyVersion(createAnswerKeyVersion(selectedExam?.title, answerKeyUploadedAt));
+  }, [answerKeyUploadedAt, answerKeyVersionTouched, selectedExam?.title]);
+
   async function submitCreateExam(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!auth) return;
 
     setError("");
+    if (!newExamStartsAt.trim()) {
+      setError("Başlangıç zorunludur.");
+      return;
+    }
     const parsedForm = examFormSchema.safeParse({ title: newExamTitle, startsAt: newExamStartsAt });
     if (!parsedForm.success) {
       setError(firstFormError(parsedForm.error));
@@ -291,21 +345,33 @@ export function ParserConfigPage() {
 
     setError("");
     setSavedConfig(null);
-    const parsedForm = parserConfigSuggestionFormSchema.safeParse({ examId, sampleText, fileBase64 });
-    if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
+    const parsedSuggestionForm = parserConfigSuggestionFormSchema.safeParse({ examId, fileBase64 });
+    const parsedApprovalForm = parserConfigApprovalFormSchema.safeParse({ examId, version });
+    if (!parsedSuggestionForm.success) {
+      setError(firstFormError(parsedSuggestionForm.error));
+      return;
+    }
+    if (!parsedApprovalForm.success) {
+      setError(firstFormError(parsedApprovalForm.error));
       return;
     }
     try {
-      const result = await suggestParserConfig(
-        auth.accessToken,
-        parsedForm.data.examId,
-        parsedForm.data.fileBase64 ? { fileBase64: parsedForm.data.fileBase64 } : { sampleText: parsedForm.data.sampleText },
-      );
+      const selectedFileBase64 = parsedSuggestionForm.data.fileBase64;
+      if (!selectedFileBase64) {
+        setError("Dosya seçilmelidir.");
+        return;
+      }
+      const result = await suggestParserConfig(auth.accessToken, parsedSuggestionForm.data.examId, { fileBase64: selectedFileBase64 });
+      const approved = await approveParserConfig(auth.accessToken, result.examId, parsedApprovalForm.data.version, result.suggestion);
       setExamId(result.examId);
       setSuggestion(result.suggestion);
+      setSavedConfig(approved);
+      setVersion(approved.version);
+      setRawImportParserVersion(approved.version);
+      setTemplateApplyVersion(approved.version);
+      setActiveTab("answer-key");
     } catch (suggestionError) {
-      setError(apiErrorMessage(suggestionError, "Optik format önerisi alınamadı."));
+      setError(apiErrorMessage(suggestionError, "Optik dosya formatı kaydedilemedi."));
     }
   }
 
@@ -315,19 +381,25 @@ export function ParserConfigPage() {
 
     setError("");
     setSavedConfig(null);
-    if (!examId.trim()) {
-      setError("Sınav seçilmelidir.");
+    const normalizedExamId = examId.trim();
+    if (!normalizedExamId) {
+      setError("Sınav seçilmeli veya yeni sınav oluşturulmalıdır.");
       return;
     }
     try {
-      const result = await suggestParserConfig(auth.accessToken, examId, { preset: selectedPreset });
+      const result = await suggestParserConfig(auth.accessToken, normalizedExamId, { preset: selectedPreset });
+      const approved = await approveParserConfig(auth.accessToken, result.examId, selectedPresetVersion, result.suggestion);
       setExamId(result.examId);
       setSuggestion(result.suggestion);
-      setSampleText("");
+      setSavedConfig(approved);
+      setVersion(approved.version);
       setFileName("");
       setFileBase64("");
+      setRawImportParserVersion(approved.version);
+      setTemplateApplyVersion(approved.version);
+      setActiveTab("answer-key");
     } catch (presetError) {
-      setError(apiErrorMessage(presetError, "TXT/DAT form yapısı uygulanamadı."));
+      setError(apiErrorMessage(presetError, "TXT/DAT form yapısı seçilemedi."));
     }
   }
 
@@ -349,23 +421,6 @@ export function ParserConfigPage() {
       setFileName("");
       setFileBase64("");
       setError("Optik dosya okunamadı.");
-    }
-  }
-
-  async function submitApproval(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!auth || !suggestion) return;
-
-    setError("");
-    const parsedForm = parserConfigApprovalFormSchema.safeParse({ examId, version });
-    if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
-      return;
-    }
-    try {
-      setSavedConfig(await approveParserConfig(auth.accessToken, parsedForm.data.examId, parsedForm.data.version, suggestion));
-    } catch (approvalError) {
-      setError(apiErrorMessage(approvalError, "Optik format onaylanamadı."));
     }
   }
 
@@ -414,7 +469,7 @@ export function ParserConfigPage() {
       return;
     }
     if (!parserVersion) {
-      setError("Parser versiyonu zorunludur.");
+      setError("Format sürümü zorunludur.");
       return;
     }
     try {
@@ -435,7 +490,17 @@ export function ParserConfigPage() {
     setAnswerKeyDryRun(null);
     setAnswerKeyImport(null);
     setAnswerKeyFileName(file?.name ?? "");
-    setAnswerKeyFileBase64(file ? await readFileAsBase64(file) : "");
+    if (!file) {
+      setAnswerKeyFileBase64("");
+      return;
+    }
+
+    const uploadedAt = new Date();
+    setAnswerKeyUploadedAt(uploadedAt);
+    if (!answerKeyVersionTouched || !answerKeyVersion.trim()) {
+      setAnswerKeyVersion(createAnswerKeyVersion(selectedExam?.title, uploadedAt));
+    }
+    setAnswerKeyFileBase64(await readFileAsBase64(file));
   }
 
   async function submitAnswerKeyDryRun(event: FormEvent<HTMLFormElement>) {
@@ -556,17 +621,32 @@ export function ParserConfigPage() {
       setError(firstFormError(parsedForm.error));
       return;
     }
+    let result: RawImportUploadResult;
     try {
-      const result = await uploadRawImport(auth.accessToken, parsedForm.data);
-      setRawImport(result);
-      setRawImportSummary(null);
-      setEvaluationJobs(null);
-      setQuarantineRawImportId(result.rawImport.id);
-      setReportContentHash(result.rawImport.sha256);
-      setReportJob(null);
-      setActiveTab("quarantine");
+      result = await uploadRawImport(auth.accessToken, parsedForm.data);
     } catch (uploadError) {
       setError(apiErrorMessage(uploadError, "Optik cevap dosyası yüklenemedi."));
+      return;
+    }
+
+    setRawImport(result);
+    setRawImportSummary(null);
+    setEvaluationJobs(null);
+    setQuarantineRawImportId(result.rawImport.id);
+    setReportContentHash("");
+    setReportJob(null);
+    setActiveTab("quarantine");
+
+    try {
+      setRawImportSummary(await waitForRawImportSummary(auth.accessToken, examId, result.rawImport.id));
+      const [records, studentRecords] = await Promise.all([
+        loadQuarantines(auth.accessToken, { examId, rawImportId: result.rawImport.id }),
+        loadStudents(auth.accessToken),
+      ]);
+      setQuarantines(records);
+      setStudents(studentRecords);
+    } catch (analysisError) {
+      setError(apiErrorMessage(analysisError, "Optik analizi henüz tamamlanmadı. Özeti veya eşleşmeyen satırları yeniden getirin."));
     }
   }
 
@@ -597,11 +677,16 @@ export function ParserConfigPage() {
     }
     try {
       const answerKeyId = answerKeyImport?.answerKey.id ?? manualAnswerKey?.id;
-      setEvaluationJobs(await enqueueRawImportEvaluation(auth.accessToken, {
+      const jobs = await enqueueRawImportEvaluation(auth.accessToken, {
         examId,
         rawImportId,
         answerKeyId,
-      }));
+      });
+      setEvaluationJobs(jobs);
+      const rawImportSha = jobs.rawImportSha256 ?? rawImport?.rawImport.sha256;
+      if (rawImportSha && jobs.answerKeyId) {
+        setReportContentHash(`${rawImportSha}-${jobs.answerKeyId}`);
+      }
     } catch (evaluationError) {
       setError(apiErrorMessage(evaluationError, "Analiz başlatılamadı."));
     }
@@ -646,6 +731,9 @@ export function ParserConfigPage() {
         resolvedStudentId: parsedForm.data.resolvedStudentId,
       });
       setQuarantines((current) => current.map((item) => (item.id === resolved.id ? resolved : item)));
+      if (resolved.rawImportSha256 && resolved.answerKeyId) {
+        setReportContentHash(`${resolved.rawImportSha256}-${resolved.answerKeyId}`);
+      }
     } catch (resolveError) {
       setError(apiErrorMessage(resolveError, "Karantina kaydı çözülemedi."));
     }
@@ -659,16 +747,16 @@ export function ParserConfigPage() {
     const normalizedExamId = examId.trim();
     const normalizedContentHash = reportContentHash.trim();
     if (!normalizedExamId) {
-      setError("Sınav ID zorunludur.");
+      setError("Sınav seçilmelidir.");
       return;
     }
     if (!normalizedContentHash) {
-      setError("Sonuç hash zorunludur.");
+      setError("Rapor üretmeden önce eşleşen satırlar için analizi başlatın.");
       return;
     }
     try {
       setReportJob(await enqueueReportGeneration(auth.accessToken, normalizedExamId, normalizedContentHash));
-      await refreshReportSnapshots();
+      setReportSnapshots(await waitForReportSnapshots(auth.accessToken, normalizedExamId));
     } catch (reportError) {
       setError(apiErrorMessage(reportError, "Rapor üretimi kuyruğa alınamadı."));
     }
@@ -680,7 +768,7 @@ export function ParserConfigPage() {
     setError("");
     const normalizedExamId = examId.trim();
     if (!normalizedExamId) {
-      setError("Sınav ID zorunludur.");
+      setError("Sınav seçilmelidir.");
       return;
     }
     try {
@@ -704,46 +792,26 @@ export function ParserConfigPage() {
 
   return (
     <PageFrame
-      title="Optik Operasyon"
-      subtitle="Cevap anahtarı, format onayı, optik yükleme ve karantina çözümünü aynı akışta yönet."
+      title="Optik İşlemleri"
+      subtitle="Sınavı seç, optik formatı kaydet, cevap anahtarını hazırla ve yüklenen satırları tek akışta kontrol et."
     >
-      <section className="next-support-tools" aria-label="Sınav seçimi">
-        <form className="next-support-tool" onSubmit={(event) => void submitCreateExam(event)}>
-          <h2>Sınav</h2>
-          <label>
-            Sınav seç
-            <select
-              aria-label="Sınav seç"
-              value={examId}
-              onChange={(event) => {
-                setExamId(event.target.value);
-                setReportSnapshots([]);
-                setReportJob(null);
-              }}
-            >
-              {exams.length === 0 ? <option value="">Sınav yok</option> : null}
-              {exams.map((exam) => (
-                <option key={exam.id} value={exam.id}>
-                  {exam.title}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p>{selectedExam ? `Seçili sınav ID: ${selectedExam.id}` : "Sınav seçilmedi"}</p>
-          <label>
-            Yeni sınav adı
-            <Input value={newExamTitle} onChange={(event) => setNewExamTitle(event.target.value)} />
-          </label>
-          <label>
-            Başlangıç
-            <Input type="datetime-local" value={newExamStartsAt} onChange={(event) => setNewExamStartsAt(event.target.value)} />
-          </label>
-          <Button type="submit">
-            <CheckCircle2 size={17} aria-hidden="true" />
-            Sınav oluştur
-          </Button>
-        </form>
-      </section>
+      <OpticalExamSelector
+        examId={examId}
+        exams={exams}
+        newExamStartsAt={newExamStartsAt}
+        newExamTitle={newExamTitle}
+        selectedExam={selectedExam}
+        onExamChange={(value) => {
+          setExamId(value);
+          setReportSnapshots([]);
+          setReportJob(null);
+          setSuggestion(null);
+          setSavedConfig(null);
+        }}
+        onNewExamStartsAtChange={setNewExamStartsAt}
+        onNewExamTitleChange={setNewExamTitle}
+        onSubmit={submitCreateExam}
+      />
       <section className="next-list-panel" aria-label="Optik operasyon">
         <div className="next-segmented" role="tablist" aria-label="Optik sekmeleri">
           {tabs.map((tab) => (
@@ -753,110 +821,309 @@ export function ParserConfigPage() {
           ))}
         </div>
         {error ? <p className="uh-crud-page__error">{error}</p> : null}
-        {activeTab === "format" ? renderFormatTab() : null}
-        {activeTab === "answer-key" ? renderAnswerKeyTab() : null}
-        {activeTab === "upload" ? renderUploadTab() : null}
-        {activeTab === "quarantine" ? renderQuarantineTab() : null}
+        {activeTab === "format" ? (
+          <OpticalFormatSetup
+            examId={examId}
+            fileName={fileName}
+            savedConfig={savedConfig}
+            selectedPreset={selectedPreset}
+            selectedPresetForm={selectedPresetForm}
+            selectedPresetVersion={selectedPresetVersion}
+            selectedTemplate={selectedTemplate}
+            selectedTemplateId={selectedTemplateId}
+            suggestion={suggestion}
+            templateApplyVersion={templateApplyVersion}
+            templateName={templateName}
+            templateVersion={templateVersion}
+            templates={templates}
+            version={version}
+            onFileChange={changeFile}
+            onPresetChange={(value) => {
+              const nextForm = opticalFormPresets.find((form) => form.preset === value) ?? opticalFormPresets[0]!;
+              setSelectedPreset(value);
+              setVersion(createPresetParserVersion(nextForm));
+              setTemplateApplyVersion(createPresetParserVersion(nextForm));
+              setSuggestion(null);
+              setSavedConfig(null);
+            }}
+            onPresetSubmit={submitPresetSuggestion}
+            onSuggestionSubmit={submitSuggestion}
+            onTemplateApplySubmit={submitTemplateApply}
+            onTemplateApplyVersionChange={setTemplateApplyVersion}
+            onTemplateCreate={submitTemplateCreate}
+            onTemplateIdChange={setSelectedTemplateId}
+            onTemplateNameChange={setTemplateName}
+            onTemplateVersionChange={setTemplateVersion}
+            onVersionChange={setVersion}
+          />
+        ) : null}
+        {activeTab === "answer-key" ? (
+          <AnswerKeySetup
+            answerKeyDryRun={answerKeyDryRun}
+            answerKeyFileName={answerKeyFileName}
+            answerKeyImport={answerKeyImport}
+            answerKeyVersion={answerKeyVersion}
+            manualAnswerKey={manualAnswerKey}
+            manualAnswerKeyVersion={manualAnswerKeyVersion}
+            manualAnswerText={manualAnswerText}
+            manualBPermutationText={manualBPermutationText}
+            manualDryRun={manualDryRun}
+            manualQuestions={manualQuestions}
+            onAnswerKeyDryRunSubmit={submitAnswerKeyDryRun}
+            onAnswerKeyFileChange={changeAnswerKeyFile}
+            onAnswerKeyImport={submitAnswerKeyImport}
+            onAnswerKeyVersionChange={(value) => {
+              setAnswerKeyVersionTouched(true);
+              setAnswerKeyVersion(value);
+            }}
+            onManualAnswerKeyVersionChange={setManualAnswerKeyVersion}
+            onManualAnswerTextApply={applyManualAnswerText}
+            onManualAnswerTextChange={setManualAnswerText}
+            onManualBPermutationTextChange={setManualBPermutationText}
+            onManualQuestionChange={updateManualQuestion}
+            onManualSave={submitManualAnswerKey}
+          />
+        ) : null}
+        {activeTab === "upload" ? (
+          <OpticalUploadPanel
+            evaluationJobs={evaluationJobs}
+            rawImport={rawImport}
+            rawImportFileName={rawImportFileName}
+            rawImportParserVersion={rawImportParserVersion}
+            rawImportSummary={rawImportSummary}
+            onEvaluationStart={submitEvaluationJobs}
+            onFileChange={changeRawImportFile}
+            onParserVersionChange={setRawImportParserVersion}
+            onRefreshSummary={refreshRawImportSummary}
+            onSubmit={submitRawImport}
+          />
+        ) : null}
+        {activeTab === "quarantine" ? (
+          <section className="next-support-tools" aria-label="Eşleşmeyen satırlar ve rapor">
+            <QuarantineResolutionPanel
+              quarantineRawImportId={quarantineRawImportId}
+              quarantines={quarantines}
+              selectedStudentByQuarantine={selectedStudentByQuarantine}
+              students={students}
+              onLookupSubmit={submitQuarantineLookup}
+              onQuarantineRawImportIdChange={setQuarantineRawImportId}
+              onResolve={resolveQuarantine}
+              onSelectedStudentChange={setSelectedStudentByQuarantine}
+            />
+            <OpticalReportPanel
+              reportContentHash={reportContentHash}
+              reportJob={reportJob}
+              reportSnapshots={reportSnapshots}
+              onContentHashChange={setReportContentHash}
+              onDownload={downloadReportSnapshot}
+              onRefreshSnapshots={refreshReportSnapshots}
+              onSubmit={submitReportGeneration}
+            />
+          </section>
+        ) : null}
       </section>
     </PageFrame>
   );
+}
 
-  function renderFormatTab() {
-    return (
-      <section className="next-support-tools" aria-label="Optik format">
-        {error ? <p className="uh-crud-page__error">{error}</p> : null}
-        <form className="next-support-tool next-support-tool--wide" onSubmit={(event) => void submitPresetSuggestion(event)}>
-          <h2>TXT/DAT Formu</h2>
+interface OpticalExamSelectorProps {
+  examId: string;
+  exams: ExamRecord[];
+  newExamStartsAt: string;
+  newExamTitle: string;
+  selectedExam?: ExamRecord;
+  onExamChange: (value: string) => void;
+  onNewExamStartsAtChange: (value: string) => void;
+  onNewExamTitleChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}
+
+function OpticalExamSelector({
+  examId,
+  exams,
+  newExamStartsAt,
+  newExamTitle,
+  selectedExam,
+  onExamChange,
+  onNewExamStartsAtChange,
+  onNewExamTitleChange,
+  onSubmit,
+}: OpticalExamSelectorProps) {
+  const showCreateExamFields = !selectedExam;
+
+  return (
+    <section className="next-support-tools" aria-label="Sınav seçimi">
+      <form className="next-support-tool" onSubmit={(event) => void onSubmit(event)}>
+        <h2>Sınav seç veya oluştur</h2>
+        <label>
+          Sınav seç
+          <select aria-label="Sınav seç" value={examId} onChange={(event) => onExamChange(event.target.value)}>
+            <option value="">Yeni sınav oluştur</option>
+            {exams.map((exam) => (
+              <option key={exam.id} value={exam.id}>
+                {exam.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        {selectedExam ? <p>{`Seçili sınav: ${selectedExam.title}`}</p> : null}
+        {showCreateExamFields ? (
+          <>
+            <p>Yeni sınav için ad ve başlangıç tarihi gir.</p>
+            <label>
+              Yeni sınav adı
+              <Input required value={newExamTitle} onChange={(event) => onNewExamTitleChange(event.target.value)} />
+            </label>
+            <label>
+              Başlangıç
+              <Input
+                required
+                type="datetime-local"
+                value={newExamStartsAt}
+                onChange={(event) => onNewExamStartsAtChange(event.target.value)}
+              />
+            </label>
+            <Button type="submit">
+              <CheckCircle2 size={17} aria-hidden="true" />
+              Sınav oluştur
+            </Button>
+          </>
+        ) : null}
+      </form>
+    </section>
+  );
+}
+
+interface OpticalFormatSetupProps {
+  examId: string;
+  fileName: string;
+  savedConfig: SavedParserConfig | null;
+  selectedPreset: ParserConfigPreset;
+  selectedPresetForm: OpticalFormPreset;
+  selectedPresetVersion: string;
+  selectedTemplate?: OpticalFormTemplateRecord;
+  selectedTemplateId: string;
+  suggestion: ParserConfigSuggestion | null;
+  templateApplyVersion: string;
+  templateName: string;
+  templateVersion: string;
+  templates: OpticalFormTemplateRecord[];
+  version: string;
+  onFileChange: (file: File | undefined) => void | Promise<void>;
+  onPresetChange: (value: ParserConfigPreset) => void;
+  onPresetSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onSuggestionSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onTemplateApplySubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onTemplateApplyVersionChange: (value: string) => void;
+  onTemplateCreate: () => void | Promise<void>;
+  onTemplateIdChange: (value: string) => void;
+  onTemplateNameChange: (value: string) => void;
+  onTemplateVersionChange: (value: string) => void;
+  onVersionChange: (value: string) => void;
+}
+
+function OpticalFormatSetup({
+  examId,
+  fileName,
+  savedConfig,
+  selectedPreset,
+  selectedPresetForm,
+  selectedPresetVersion,
+  selectedTemplate,
+  selectedTemplateId,
+  suggestion,
+  templateApplyVersion,
+  templateName,
+  templateVersion,
+  templates,
+  version,
+  onFileChange,
+  onPresetChange,
+  onPresetSubmit,
+  onSuggestionSubmit,
+  onTemplateApplySubmit,
+  onTemplateApplyVersionChange,
+  onTemplateCreate,
+  onTemplateIdChange,
+  onTemplateNameChange,
+  onTemplateVersionChange,
+  onVersionChange,
+}: OpticalFormatSetupProps) {
+  return (
+    <section className="next-support-tools" aria-label="Format seç ve ilerle">
+      <form className="next-support-tool next-support-tool--wide" onSubmit={(event) => void onPresetSubmit(event)}>
+        <h2>Format seç ve ilerle</h2>
+        <p>
+          Kayıtlı TXT/DAT formu seçili sınav için kullanılacak. Sürüm form yapısından otomatik türetilir.
+        </p>
+        <label>
+          Kayıtlı TXT/DAT formu
+          <select
+            aria-label="Kayıtlı TXT/DAT formu"
+            value={selectedPreset}
+            onChange={(event) => onPresetChange(event.target.value as ParserConfigPreset)}
+          >
+            {opticalFormPresets.map((form) => (
+              <option key={form.preset} value={form.preset}>
+                {form.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="next-optical-form-meta" aria-label="Seçili form özeti">
+          <span>{selectedPresetForm.sourceType}</span>
+          <span>{selectedPresetForm.rowLength} karakter</span>
+          <span>{selectedPresetForm.questionCount} soru</span>
+          <span>Sürüm: {selectedPresetVersion}</span>
+        </div>
+        {renderOpticalFormPreview(selectedPresetForm.rows)}
+        <div className="next-parser-summary" aria-live="polite">
+          {suggestion ? (
+            <>
+              <span>Ayraç</span>
+              <strong>{suggestion.delimiter}</strong>
+              <span>Başlık satırı</span>
+              <strong>{suggestion.skipHeaderLines}</strong>
+              <span>Güven</span>
+              <strong>{suggestion.confidence}</strong>
+              <span>Soru tahmini</span>
+              <strong>{suggestion.fieldMapping.answers.estimatedQuestionCount}</strong>
+            </>
+          ) : (
+            <strong>Format seçimi bekliyor</strong>
+          )}
+        </div>
+        <Button disabled={!examId} type="submit">
+          <CheckCircle2 size={17} aria-hidden="true" />
+          Seç ve ilerle
+        </Button>
+        {savedConfig ? <p>{savedConfig.version} seçildi. Optik yükleme adımında bu sürüm kullanılacak.</p> : null}
+      </form>
+
+      <details className="next-support-tool next-advanced-details">
+        <summary>Farklı dosya formatı ve kurum şablonları</summary>
+        <form className="next-inline-form" onSubmit={(event) => void onSuggestionSubmit(event)}>
           <label>
-            Sınav ID
-            <Input required value={examId} onChange={(event) => setExamId(event.target.value)} />
+            Dosyadan format tanı
+            <Input accept=".txt,.dat,text/plain" type="file" onChange={(event) => void onFileChange(event.target.files?.[0])} />
           </label>
           <label>
-            TXT/DAT şablonu
-            <select
-              aria-label="TXT/DAT şablonu"
-              value={selectedPreset}
-              onChange={(event) => setSelectedPreset(event.target.value as ParserConfigPreset)}
-            >
-              {opticalFormPresets.map((form) => (
-                <option key={form.preset} value={form.preset}>
-                  {form.name}
-                </option>
-              ))}
-            </select>
+            Dosya format sürümü
+            <Input required value={version} onChange={(event) => onVersionChange(event.target.value)} />
           </label>
-          <div className="next-optical-form-meta" aria-label="Seçili form özeti">
-            <span>{selectedPresetForm.sourceType}</span>
-            <span>{selectedPresetForm.rowLength} karakter</span>
-            <span>{selectedPresetForm.questionCount} soru</span>
-          </div>
-          {renderOpticalFormPreview(selectedPresetForm.rows)}
           <Button disabled={!examId} type="submit">
-            <CheckCircle2 size={17} aria-hidden="true" />
-            Bu formu kullan
-          </Button>
-        </form>
-        <form className="next-support-tool" onSubmit={(event) => void submitSuggestion(event)}>
-          <h2>Optik Format</h2>
-          <label>
-            Sınav ID
-            <Input required value={examId} onChange={(event) => setExamId(event.target.value)} />
-          </label>
-          <label>
-            Örnek içerik
-            <textarea
-              required={!fileBase64}
-              rows={5}
-              value={sampleText}
-              onChange={(event) => setSampleText(event.target.value)}
-            />
-          </label>
-          <label>
-            Dosya
-            <Input accept=".txt,.dat,text/plain" type="file" onChange={(event) => void changeFile(event.target.files?.[0])} />
-          </label>
-          {fileName ? <p>{fileName}</p> : null}
-          <Button type="submit">
             <FileText size={17} aria-hidden="true" />
-            Analiz et
+            Dosyayı analiz edip kaydet
           </Button>
         </form>
-        <form className="next-support-tool" onSubmit={(event) => void submitApproval(event)}>
-          <h2>Parser Onayı</h2>
-          <div className="next-parser-summary" aria-live="polite">
-            {suggestion ? (
-              <>
-                <span>Ayraç</span>
-                <strong>{suggestion.delimiter}</strong>
-                <span>Başlık satırı</span>
-                <strong>{suggestion.skipHeaderLines}</strong>
-                <span>Güven</span>
-                <strong>{suggestion.confidence}</strong>
-                <span>Soru tahmini</span>
-                <strong>{suggestion.fieldMapping.answers.estimatedQuestionCount}</strong>
-              </>
-            ) : (
-              <strong>Bekliyor</strong>
-            )}
-          </div>
+        {fileName ? <p>{fileName}</p> : null}
+        <form className="next-inline-form" onSubmit={(event) => void onTemplateApplySubmit(event)}>
           <label>
-            Versiyon
-            <Input required value={version} onChange={(event) => setVersion(event.target.value)} />
-          </label>
-          <Button disabled={!suggestion} type="submit">
-            <CheckCircle2 size={17} aria-hidden="true" />
-            Onayla
-          </Button>
-          {savedConfig ? <p>{savedConfig.version} onaylandı</p> : null}
-        </form>
-        <form className="next-support-tool" onSubmit={(event) => void submitTemplateApply(event)}>
-          <h2>Form Şablonu</h2>
-          <label>
-            Kayıtlı şablon
+            Kayıtlı kurum formu
             <select
-              aria-label="Kayıtlı optik form şablonu"
+              aria-label="Kayıtlı kurum formu"
               value={selectedTemplateId}
-              onChange={(event) => setSelectedTemplateId(event.target.value)}
+              onChange={(event) => onTemplateIdChange(event.target.value)}
             >
               {templates.length === 0 ? <option value="">Şablon yok</option> : null}
               {templates.map((template) => (
@@ -867,284 +1134,372 @@ export function ParserConfigPage() {
             </select>
           </label>
           <label>
-            Parser versiyonu
-            <Input required value={templateApplyVersion} onChange={(event) => setTemplateApplyVersion(event.target.value)} />
+            Kurum formu sürümü
+            <Input required value={templateApplyVersion} onChange={(event) => onTemplateApplyVersionChange(event.target.value)} />
           </label>
           <Button disabled={!selectedTemplateId || !examId} type="submit">
             <CheckCircle2 size={17} aria-hidden="true" />
             Sınava uygula
           </Button>
-          {selectedTemplate ? renderOpticalFormPreview(createTemplatePreviewRows(selectedTemplate)) : null}
-          <div className="next-inline-form">
-            <label>
-              Yeni şablon adı
-              <Input value={templateName} onChange={(event) => setTemplateName(event.target.value)} />
-            </label>
-            <label>
-              Şablon versiyonu
-              <Input value={templateVersion} onChange={(event) => setTemplateVersion(event.target.value)} />
-            </label>
-            <Button disabled={!suggestion} type="button" onClick={() => void submitTemplateCreate()}>
-              <Upload size={17} aria-hidden="true" />
-              Şablon kaydet
-            </Button>
-          </div>
         </form>
-      </section>
-    );
-  }
-
-  function renderAnswerKeyTab() {
-    return (
-      <section className="next-support-tools next-support-tools--wide" aria-label="Cevap anahtarı">
-        <form className="next-support-tool" aria-label="Cevap anahtarı Excel import" onSubmit={(event) => void submitAnswerKeyDryRun(event)}>
-          <h2>Cevap Anahtarı</h2>
+        {selectedTemplate ? renderOpticalFormPreview(createTemplatePreviewRows(selectedTemplate)) : null}
+        <div className="next-inline-form">
           <label>
-            Sınav ID
-            <Input required value={examId} onChange={(event) => setExamId(event.target.value)} />
+            Yeni kurum formu adı
+            <Input value={templateName} onChange={(event) => onTemplateNameChange(event.target.value)} />
           </label>
           <label>
-            Anahtar versiyonu
-            <Input required value={answerKeyVersion} onChange={(event) => setAnswerKeyVersion(event.target.value)} />
+            Şablon sürümü
+            <Input value={templateVersion} onChange={(event) => onTemplateVersionChange(event.target.value)} />
           </label>
-          <label>
-            Cevap anahtarı dosyası
-            <Input accept=".xlsx" type="file" onChange={(event) => void changeAnswerKeyFile(event.target.files?.[0])} />
-          </label>
-          {answerKeyFileName ? <p>{answerKeyFileName}</p> : null}
-          <Button type="submit">
-            <FileSpreadsheet size={17} aria-hidden="true" />
-            Ön kontrol
-          </Button>
-          <Button disabled={!answerKeyDryRun} type="button" onClick={() => void submitAnswerKeyImport()}>
+          <Button disabled={!suggestion} type="button" onClick={() => void onTemplateCreate()}>
             <Upload size={17} aria-hidden="true" />
-            İçe aktar
+            Kurum formu olarak kaydet
           </Button>
-        </form>
-        <section className="next-support-tool" aria-label="Cevap anahtarı özeti">
-          <h2>Anahtar özeti</h2>
-          {answerKeyDryRun ? (
-            <>
-              <p>{answerKeyDryRun.questionCount} soru doğrulandı.</p>
-              <p>{answerKeyDryRun.bookletVariants.map((variant) => `${variant.code}: ${variant.questionCount} soru`).join(", ")}</p>
-              <table className="uh-data-table">
-                <thead>
-                  <tr>
-                    <th>Branş</th>
-                    <th>Soru</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {answerKeyDryRun.branches.map((branch) => (
-                    <tr key={branch.branch}>
-                      <td>{branch.branch}</td>
-                      <td>{branch.questionCount}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          ) : (
-            <p>Excel dosyası ön kontrol bekliyor.</p>
-          )}
-          {answerKeyImport ? <p>{answerKeyImport.answerKey.version} içe aktarıldı.</p> : null}
-        </section>
-        <section className="next-support-tool next-support-tool--wide" aria-label="Manuel cevap anahtarı">
-          <h2>Manuel 90 Satır Grid</h2>
-          <div className="next-inline-form">
-            <label>
-              Sınav ID
-              <Input required value={examId} onChange={(event) => setExamId(event.target.value)} />
-            </label>
-            <label>
-              Manuel versiyon
-              <Input required value={manualAnswerKeyVersion} onChange={(event) => setManualAnswerKeyVersion(event.target.value)} />
-            </label>
-            <label>
-              Şık dizisi
-              <Input
-                aria-label="90 şık dizisi"
-                value={manualAnswerText}
-                onChange={(event) => setManualAnswerText(event.target.value)}
-                placeholder="ABCDE..."
-              />
-            </label>
-            <label>
-              B kitapçık sırası
-              <Input
-                aria-label="B kitapçık sırası"
-                value={manualBPermutationText}
-                onChange={(event) => setManualBPermutationText(event.target.value)}
-                placeholder="90 89 ... 1"
-              />
-            </label>
-            <Button type="button" onClick={applyManualAnswerText}>
-              Gridi doldur
-            </Button>
-          </div>
-          <div className="next-grid-scroll">
+        </div>
+      </details>
+    </section>
+  );
+}
+
+interface AnswerKeySetupProps {
+  answerKeyDryRun: AnswerKeyImportDryRunResult | null;
+  answerKeyFileName: string;
+  answerKeyImport: AnswerKeyImportResult | null;
+  answerKeyVersion: string;
+  manualAnswerKey: AnswerKeyRecord | null;
+  manualAnswerKeyVersion: string;
+  manualAnswerText: string;
+  manualBPermutationText: string;
+  manualDryRun: ManualAnswerKeyDryRunResult | null;
+  manualQuestions: ManualAnswerKeyQuestion[];
+  onAnswerKeyDryRunSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onAnswerKeyFileChange: (file: File | undefined) => void | Promise<void>;
+  onAnswerKeyImport: () => void | Promise<void>;
+  onAnswerKeyVersionChange: (value: string) => void;
+  onManualAnswerKeyVersionChange: (value: string) => void;
+  onManualAnswerTextApply: () => void;
+  onManualAnswerTextChange: (value: string) => void;
+  onManualBPermutationTextChange: (value: string) => void;
+  onManualQuestionChange: (questionNo: number, patch: Partial<ManualAnswerKeyQuestion>) => void;
+  onManualSave: (dryRun: boolean) => void | Promise<void>;
+}
+
+function AnswerKeySetup({
+  answerKeyDryRun,
+  answerKeyFileName,
+  answerKeyImport,
+  answerKeyVersion,
+  manualAnswerKey,
+  manualAnswerKeyVersion,
+  manualAnswerText,
+  manualBPermutationText,
+  manualDryRun,
+  manualQuestions,
+  onAnswerKeyDryRunSubmit,
+  onAnswerKeyFileChange,
+  onAnswerKeyImport,
+  onAnswerKeyVersionChange,
+  onManualAnswerKeyVersionChange,
+  onManualAnswerTextApply,
+  onManualAnswerTextChange,
+  onManualBPermutationTextChange,
+  onManualQuestionChange,
+  onManualSave,
+}: AnswerKeySetupProps) {
+  return (
+    <section className="next-support-tools next-support-tools--wide" aria-label="Cevap anahtarı">
+      <form className="next-support-tool" aria-label="Cevap anahtarı Excel import" onSubmit={(event) => void onAnswerKeyDryRunSubmit(event)}>
+        <h2>Excel ile hazırla</h2>
+        <label>
+          Anahtar sürümü
+          <Input required value={answerKeyVersion} onChange={(event) => onAnswerKeyVersionChange(event.target.value)} />
+        </label>
+        <label>
+          Cevap anahtarı dosyası
+          <Input accept=".xlsx" type="file" onChange={(event) => void onAnswerKeyFileChange(event.target.files?.[0])} />
+        </label>
+        {answerKeyFileName ? <p>{answerKeyFileName}</p> : null}
+        <Button type="submit">
+          <FileSpreadsheet size={17} aria-hidden="true" />
+          Ön kontrol
+        </Button>
+        <Button disabled={!answerKeyDryRun} type="button" onClick={() => void onAnswerKeyImport()}>
+          <Upload size={17} aria-hidden="true" />
+          İçe aktar
+        </Button>
+      </form>
+      <section className="next-support-tool" aria-label="Cevap anahtarı özeti">
+        <h2>Anahtar özeti</h2>
+        {answerKeyDryRun ? (
+          <>
+            <p>{answerKeyDryRun.questionCount} soru doğrulandı.</p>
+            <p>{answerKeyDryRun.bookletVariants.map((variant) => `${variant.code}: ${variant.questionCount} soru`).join(", ")}</p>
             <table className="uh-data-table">
               <thead>
                 <tr>
-                  <th>Soru</th>
-                  <th>Şık</th>
                   <th>Branş</th>
-                  <th>Kazanım</th>
-                  <th>Konu</th>
+                  <th>Soru</th>
                 </tr>
               </thead>
               <tbody>
-                {manualQuestions.map((question) => (
-                  <tr key={question.questionNo}>
-                    <td>{question.questionNo}</td>
-                    <td>
-                      <select
-                        aria-label={`${question.questionNo}. soru şıkkı`}
-                        value={question.correctAnswer}
-                        onChange={(event) =>
-                          updateManualQuestion(question.questionNo, { correctAnswer: event.target.value as ManualAnswerChoice })
-                        }
-                      >
-                        <option value="">Seç</option>
-                        {answerChoices.map((choice) => (
-                          <option key={choice} value={choice}>
-                            {choice}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <Input
-                        aria-label={`${question.questionNo}. soru branşı`}
-                        value={question.branch}
-                        onChange={(event) => updateManualQuestion(question.questionNo, { branch: event.target.value })}
-                      />
-                    </td>
-                    <td>
-                      <Input
-                        aria-label={`${question.questionNo}. soru kazanımı`}
-                        value={question.outcomeCode}
-                        onChange={(event) => updateManualQuestion(question.questionNo, { outcomeCode: event.target.value })}
-                      />
-                    </td>
-                    <td>
-                      <Input
-                        aria-label={`${question.questionNo}. soru konusu`}
-                        value={question.topic}
-                        onChange={(event) => updateManualQuestion(question.questionNo, { topic: event.target.value })}
-                      />
-                    </td>
+                {answerKeyDryRun.branches.map((branch) => (
+                  <tr key={branch.branch}>
+                    <td>{branch.branch}</td>
+                    <td>{branch.questionCount}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
-          <div className="next-row-actions">
-            <Button type="button" onClick={() => void submitManualAnswerKey(true)}>
-              Ön kontrol
-            </Button>
-            <Button disabled={!manualDryRun} type="button" onClick={() => void submitManualAnswerKey(false)}>
-              Kaydet
-            </Button>
-          </div>
-          {manualDryRun ? (
-            <p>
-              {manualDryRun.questionCount} manuel soru doğrulandı.
-              {manualDryRun.bookletVariants.length ? ` ${manualDryRun.bookletVariants.map((variant) => `${variant.code}: ${variant.questionCount} soru`).join(", ")}` : ""}
-            </p>
-          ) : null}
-          {manualAnswerKey ? <p>{manualAnswerKey.version} manuel kaydedildi.</p> : null}
-        </section>
+          </>
+        ) : (
+          <p>Excel dosyası ön kontrol bekliyor.</p>
+        )}
+        {answerKeyImport ? <p>{answerKeyImport.answerKey.version} içe aktarıldı.</p> : null}
       </section>
-    );
-  }
-
-  function renderUploadTab() {
-    return (
-      <section className="next-support-tools" aria-label="Optik yükleme">
-        <form className="next-support-tool" onSubmit={(event) => void submitRawImport(event)}>
-          <h2>Optik Yükleme</h2>
+      <section className="next-support-tool next-support-tool--wide" aria-label="Manuel cevap anahtarı">
+        <h2>Manuel giriş</h2>
+        <div className="next-inline-form">
           <label>
-            Sınav ID
-            <Input required value={examId} onChange={(event) => setExamId(event.target.value)} />
+            Manuel sürüm
+            <Input required value={manualAnswerKeyVersion} onChange={(event) => onManualAnswerKeyVersionChange(event.target.value)} />
           </label>
           <label>
-            Parser versiyonu
-            <Input required value={rawImportParserVersion} onChange={(event) => setRawImportParserVersion(event.target.value)} />
+            Şık dizisi
+            <Input
+              aria-label="90 şık dizisi"
+              value={manualAnswerText}
+              onChange={(event) => onManualAnswerTextChange(event.target.value)}
+              placeholder="ABCDE..."
+            />
           </label>
           <label>
-            Optik cevap dosyası
-            <Input accept=".txt,.dat,text/plain" type="file" onChange={(event) => void changeRawImportFile(event.target.files?.[0])} />
+            B kitapçık sırası
+            <Input
+              aria-label="B kitapçık sırası"
+              value={manualBPermutationText}
+              onChange={(event) => onManualBPermutationTextChange(event.target.value)}
+              placeholder="90 89 ... 1"
+            />
           </label>
-          {rawImportFileName ? <p>{rawImportFileName}</p> : null}
-          <Button type="submit">
-            <Upload size={17} aria-hidden="true" />
-            Yükle ve parse kuyruğa al
+          <Button type="button" onClick={onManualAnswerTextApply}>
+            Gridi doldur
           </Button>
-        </form>
-        <section className="next-support-tool" aria-label="Optik yükleme sonucu">
-          <h2>Yükleme sonucu</h2>
-          {rawImport ? (
-            <>
-              <p>Raw import ID: {rawImport.rawImport.id}</p>
-              <p>Parse job: {rawImport.parseJob.jobId}</p>
-              <p>SHA256: {rawImport.rawImport.sha256.slice(0, 12)}</p>
-              <div className="next-row-actions">
-                <Button type="button" onClick={() => void refreshRawImportSummary()}>
-                  <RefreshCw size={17} aria-hidden="true" />
-                  Özeti yenile
-                </Button>
-                <Button type="button" onClick={() => void submitEvaluationJobs()}>
-                  <Play size={17} aria-hidden="true" />
-                  Analizi başlat
-                </Button>
-              </div>
-            </>
-          ) : (
-            <p>Optik TXT/DAT dosyası bekliyor.</p>
-          )}
-          {rawImportSummary ? (
-            <div className="next-parser-summary" aria-live="polite">
-              <span>Toplam</span>
-              <strong>{rawImportSummary.totalRows}</strong>
-              <span>Eşleşen</span>
-              <strong>{rawImportSummary.matchedCount}</strong>
-              <span>Karantina</span>
-              <strong>{rawImportSummary.quarantinedCount}</strong>
-              <span>Sebep</span>
-              <strong>{formatQuarantineReasons(rawImportSummary)}</strong>
+        </div>
+        <div className="next-grid-scroll">
+          <table className="uh-data-table">
+            <thead>
+              <tr>
+                <th>Soru</th>
+                <th>Şık</th>
+                <th>Branş</th>
+                <th>Kazanım</th>
+                <th>Konu</th>
+              </tr>
+            </thead>
+            <tbody>
+              {manualQuestions.map((question) => (
+                <tr key={question.questionNo}>
+                  <td>{question.questionNo}</td>
+                  <td>
+                    <select
+                      aria-label={`${question.questionNo}. soru şıkkı`}
+                      value={question.correctAnswer}
+                      onChange={(event) =>
+                        onManualQuestionChange(question.questionNo, { correctAnswer: event.target.value as ManualAnswerChoice })
+                      }
+                    >
+                      <option value="">Seç</option>
+                      {answerChoices.map((choice) => (
+                        <option key={choice} value={choice}>
+                          {choice}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <Input
+                      aria-label={`${question.questionNo}. soru branşı`}
+                      value={question.branch}
+                      onChange={(event) => onManualQuestionChange(question.questionNo, { branch: event.target.value })}
+                    />
+                  </td>
+                  <td>
+                    <Input
+                      aria-label={`${question.questionNo}. soru kazanımı`}
+                      value={question.outcomeCode}
+                      onChange={(event) => onManualQuestionChange(question.questionNo, { outcomeCode: event.target.value })}
+                    />
+                  </td>
+                  <td>
+                    <Input
+                      aria-label={`${question.questionNo}. soru konusu`}
+                      value={question.topic}
+                      onChange={(event) => onManualQuestionChange(question.questionNo, { topic: event.target.value })}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="next-row-actions">
+          <Button type="button" onClick={() => void onManualSave(true)}>
+            Ön kontrol
+          </Button>
+          <Button disabled={!manualDryRun} type="button" onClick={() => void onManualSave(false)}>
+            Kaydet
+          </Button>
+        </div>
+        {manualDryRun ? (
+          <p>
+            {manualDryRun.questionCount} manuel soru doğrulandı.
+            {manualDryRun.bookletVariants.length
+              ? ` ${manualDryRun.bookletVariants.map((variant) => `${variant.code}: ${variant.questionCount} soru`).join(", ")}`
+              : ""}
+          </p>
+        ) : null}
+        {manualAnswerKey ? <p>{manualAnswerKey.version} manuel kaydedildi.</p> : null}
+      </section>
+    </section>
+  );
+}
+
+interface OpticalUploadPanelProps {
+  evaluationJobs: RawImportEvaluationQueueResult | null;
+  rawImport: RawImportUploadResult | null;
+  rawImportFileName: string;
+  rawImportParserVersion: string;
+  rawImportSummary: RawImportParseSummary | null;
+  onEvaluationStart: () => void | Promise<void>;
+  onFileChange: (file: File | undefined) => void | Promise<void>;
+  onParserVersionChange: (value: string) => void;
+  onRefreshSummary: () => void | Promise<void>;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}
+
+function OpticalUploadPanel({
+  evaluationJobs,
+  rawImport,
+  rawImportFileName,
+  rawImportParserVersion,
+  rawImportSummary,
+  onEvaluationStart,
+  onFileChange,
+  onParserVersionChange,
+  onRefreshSummary,
+  onSubmit,
+}: OpticalUploadPanelProps) {
+  return (
+    <section className="next-support-tools" aria-label="Optik yükleme">
+      <form className="next-support-tool" onSubmit={(event) => void onSubmit(event)}>
+        <h2>Optik dosyayı yükle</h2>
+        <p>Seçili format sürümü: {rawImportParserVersion}</p>
+        <details className="next-advanced-details">
+          <summary>Gelişmiş format sürümü</summary>
+          <label>
+            Teknik format sürümü
+            <Input required value={rawImportParserVersion} onChange={(event) => onParserVersionChange(event.target.value)} />
+          </label>
+        </details>
+        <label>
+          Optik cevap dosyası
+          <Input accept=".txt,.dat,text/plain" type="file" onChange={(event) => void onFileChange(event.target.files?.[0])} />
+        </label>
+        {rawImportFileName ? <p>{rawImportFileName}</p> : null}
+        <Button type="submit">
+          <Upload size={17} aria-hidden="true" />
+          Yükle ve kontrol et
+        </Button>
+      </form>
+      <section className="next-support-tool" aria-label="Optik yükleme sonucu">
+        <h2>Yükleme sonucu</h2>
+        {rawImport ? (
+          <>
+            <p>Yüklenen optik dosya alındı.</p>
+            <details className="next-advanced-details">
+              <summary>Teknik yükleme bilgisi</summary>
+              <p>Yüklenen dosya kaydı: {rawImport.rawImport.id}</p>
+              <p>İş kuyruğu: {rawImport.parseJob.jobId}</p>
+              <p>Dosya izi: {rawImport.rawImport.sha256.slice(0, 12)}</p>
+            </details>
+            <div className="next-row-actions">
+              <Button type="button" onClick={() => void onRefreshSummary()}>
+                <RefreshCw size={17} aria-hidden="true" />
+                Özeti yenile
+              </Button>
+              <Button type="button" onClick={() => void onEvaluationStart()}>
+                <Play size={17} aria-hidden="true" />
+                Analizi başlat
+              </Button>
             </div>
-          ) : null}
-          {evaluationJobs ? (
-            <p>
-              {evaluationJobs.queuedCount}/{evaluationJobs.matchedCount} analiz işi kuyruğa alındı.
-            </p>
-          ) : null}
-        </section>
+          </>
+        ) : (
+          <p>Optik TXT/DAT dosyası bekliyor.</p>
+        )}
+        {rawImportSummary ? (
+          <div className="next-parser-summary" aria-live="polite">
+            <span>Toplam</span>
+            <strong>{rawImportSummary.totalRows}</strong>
+            <span>Eşleşen</span>
+            <strong>{rawImportSummary.matchedCount}</strong>
+            <span>Eşleşmeyen</span>
+            <strong>{rawImportSummary.quarantinedCount}</strong>
+            <span>Sebep</span>
+            <strong>{formatQuarantineReasons(rawImportSummary)}</strong>
+          </div>
+        ) : null}
+        {evaluationJobs ? (
+          <p>
+            {evaluationJobs.queuedCount}/{evaluationJobs.matchedCount} analiz işi kuyruğa alındı.
+          </p>
+        ) : null}
       </section>
-    );
-  }
+    </section>
+  );
+}
 
-  function renderQuarantineTab() {
-    return (
-      <section className="next-support-tools" aria-label="Karantina çözümü">
-        <form className="next-support-tool" onSubmit={(event) => void submitQuarantineLookup(event)}>
-          <h2>Karantina Çözümü</h2>
+interface QuarantineResolutionPanelProps {
+  quarantineRawImportId: string;
+  quarantines: ImportQuarantineRecord[];
+  selectedStudentByQuarantine: Record<string, string>;
+  students: StudentRecord[];
+  onLookupSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onQuarantineRawImportIdChange: (value: string) => void;
+  onResolve: (record: ImportQuarantineRecord) => void | Promise<void>;
+  onSelectedStudentChange: (updater: (current: Record<string, string>) => Record<string, string>) => void;
+}
+
+function QuarantineResolutionPanel({
+  quarantineRawImportId,
+  quarantines,
+  selectedStudentByQuarantine,
+  students,
+  onLookupSubmit,
+  onQuarantineRawImportIdChange,
+  onResolve,
+  onSelectedStudentChange,
+}: QuarantineResolutionPanelProps) {
+  return (
+    <>
+      <form className="next-support-tool" onSubmit={(event) => void onLookupSubmit(event)}>
+        <h2>Eşleşmeyen satırları çöz</h2>
+        <p>{quarantineRawImportId ? "Yüklenen optik dosya seçili." : "Önce optik dosya yükleyin."}</p>
+        <details className="next-advanced-details">
+          <summary>Yüklenen dosya kaydı</summary>
           <label>
-            Sınav ID
-            <Input required value={examId} onChange={(event) => setExamId(event.target.value)} />
+            Yüklenen optik dosya
+            <Input required value={quarantineRawImportId} onChange={(event) => onQuarantineRawImportIdChange(event.target.value)} />
           </label>
-          <label>
-            Raw import ID
-            <Input required value={quarantineRawImportId} onChange={(event) => setQuarantineRawImportId(event.target.value)} />
-          </label>
-          <Button type="submit">
-            <Wand2 size={17} aria-hidden="true" />
-            Karantinaları getir
-          </Button>
-        </form>
-        <section className="next-support-tool" aria-label="Karantina listesi">
-          <h2>Karantina listesi</h2>
+        </details>
+        <Button type="submit">
+          <Wand2 size={17} aria-hidden="true" />
+          Eşleşmeyen satırları getir
+        </Button>
+      </form>
+      <section className="next-support-tool next-support-tool--full" aria-label="Eşleşmeyen satır listesi">
+        <h2>Eşleşmeyen satırlar</h2>
+        <div className="next-grid-scroll">
           <table className="uh-data-table">
             <thead>
               <tr>
@@ -1165,7 +1520,7 @@ export function ParserConfigPage() {
                     <select
                       value={selectedStudentByQuarantine[record.id] ?? record.resolvedStudentId ?? ""}
                       onChange={(event) =>
-                        setSelectedStudentByQuarantine((current) => ({ ...current, [record.id]: event.target.value }))
+                        onSelectedStudentChange((current) => ({ ...current, [record.id]: event.target.value }))
                       }
                     >
                       <option value="">Seçiniz</option>
@@ -1180,7 +1535,7 @@ export function ParserConfigPage() {
                     {record.status === "RESOLVED" ? (
                       record.evaluationJob ? `Kuyruk: ${record.evaluationJob.jobId}` : "Çözüldü"
                     ) : (
-                      <button type="button" onClick={() => void resolveQuarantine(record)} aria-label={`${record.rowNumber}. satırı çöz`}>
+                      <button type="button" onClick={() => void onResolve(record)} aria-label={`${record.rowNumber}. satırı çöz`}>
                         <CheckCircle2 size={17} aria-hidden="true" />
                       </button>
                     )}
@@ -1191,72 +1546,97 @@ export function ParserConfigPage() {
                 <tr>
                   <td colSpan={5}>
                     <EmptyState
-                      title="Karantina kaydı yok"
-                      description="Raw import ID ile sorgu yaptığında eşleşmeyen optik satırlar burada listelenir."
+                      title="Eşleşmeyen satır yok"
+                      description="Yüklenen dosya için öğrenciyle eşleşmeyen satırlar burada listelenir."
                     />
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
-        </section>
-        <form className="next-support-tool" aria-label="Optik rapor üretimi" onSubmit={(event) => void submitReportGeneration(event)}>
-          <h2>Rapor Üretimi</h2>
-          <label>
-            Sınav ID
-            <Input required value={examId} onChange={(event) => setExamId(event.target.value)} />
-          </label>
-          <label>
-            Sonuç hash
-            <Input required value={reportContentHash} onChange={(event) => setReportContentHash(event.target.value)} />
-          </label>
-          <Button type="submit">
-            <RefreshCw size={17} aria-hidden="true" />
-            Rapor üret
-          </Button>
-          <Button type="button" onClick={() => void refreshReportSnapshots()}>
-            <FileText size={17} aria-hidden="true" />
-            Raporları getir
-          </Button>
-          {reportJob ? <p>{reportJob.jobId} kuyruğa alındı.</p> : null}
-        </form>
-        <section className="next-support-tool" aria-label="Rapor listesi">
-          <h2>Rapor listesi</h2>
-          {reportSnapshots.length > 0 ? (
-            <table className="uh-data-table">
-              <thead>
-                <tr>
-                  <th>Durum</th>
-                  <th>Sonuç</th>
-                  <th>İndirme</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reportSnapshots.map((snapshot) => (
-                  <tr key={snapshot.id}>
-                    <td>{snapshot.status}</td>
-                    <td>{snapshot.snapshotData?.resultCount ?? "-"}</td>
-                    <td>
-                      <div className="next-row-actions">
-                        <button type="button" onClick={() => void downloadReportSnapshot(snapshot, "xlsx")} aria-label="Excel indir">
-                          <Download size={17} aria-hidden="true" />
-                        </button>
-                        <button type="button" onClick={() => void downloadReportSnapshot(snapshot, "pdf")} aria-label="PDF indir">
-                          <FileText size={17} aria-hidden="true" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <p>Hazır rapor yok</p>
-          )}
-        </section>
+        </div>
       </section>
-    );
-  }
+    </>
+  );
+}
+
+interface OpticalReportPanelProps {
+  reportContentHash: string;
+  reportJob: ReportGenerationQueueResult | null;
+  reportSnapshots: ReportSnapshotRecord[];
+  onContentHashChange: (value: string) => void;
+  onDownload: (snapshot: ReportSnapshotRecord, format: "xlsx" | "pdf") => void | Promise<void>;
+  onRefreshSnapshots: () => void | Promise<void>;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}
+
+function OpticalReportPanel({
+  reportContentHash,
+  reportJob,
+  reportSnapshots,
+  onContentHashChange,
+  onDownload,
+  onRefreshSnapshots,
+  onSubmit,
+}: OpticalReportPanelProps) {
+  return (
+    <>
+      <form className="next-support-tool" aria-label="Optik rapor üretimi" onSubmit={(event) => void onSubmit(event)}>
+        <h2>Analiz ve rapor</h2>
+        <p>Optik satırları kontrol ettikten sonra raporu oluşturun.</p>
+        <details className="next-advanced-details">
+          <summary>Gelişmiş rapor bilgisi</summary>
+          <label>
+            Teknik sonuç hash
+            <Input required value={reportContentHash} onChange={(event) => onContentHashChange(event.target.value)} />
+          </label>
+        </details>
+        <Button disabled={!reportContentHash} type="submit">
+          <RefreshCw size={17} aria-hidden="true" />
+          Rapor üret
+        </Button>
+        <Button type="button" onClick={() => void onRefreshSnapshots()}>
+          <FileText size={17} aria-hidden="true" />
+          Raporları getir
+        </Button>
+        {reportJob ? <p>{reportJob.jobId} kuyruğa alındı.</p> : null}
+      </form>
+      <section className="next-support-tool" aria-label="Rapor listesi">
+        <h2>Rapor listesi</h2>
+        {reportSnapshots.length > 0 ? (
+          <table className="uh-data-table">
+            <thead>
+              <tr>
+                <th>Durum</th>
+                <th>Sonuç</th>
+                <th>İndirme</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reportSnapshots.map((snapshot) => (
+                <tr key={snapshot.id}>
+                  <td>{snapshot.status}</td>
+                  <td>{snapshot.snapshotData?.resultCount ?? "-"}</td>
+                  <td>
+                    <div className="next-row-actions">
+                      <button type="button" onClick={() => void onDownload(snapshot, "xlsx")} aria-label="Excel indir">
+                        <Download size={17} aria-hidden="true" />
+                      </button>
+                      <button type="button" onClick={() => void onDownload(snapshot, "pdf")} aria-label="PDF indir">
+                        <FileText size={17} aria-hidden="true" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p>Hazır rapor yok</p>
+        )}
+      </section>
+    </>
+  );
 }
 
 async function suggestParserConfig(
@@ -1431,6 +1811,10 @@ async function loadRawImportSummary(accessToken: string, examId: string, rawImpo
   );
 }
 
+async function waitForRawImportSummary(accessToken: string, examId: string, rawImportId: string) {
+  return retryUntilReady(() => loadRawImportSummary(accessToken, examId, rawImportId), (summary) => summary.totalRows > 0);
+}
+
 async function enqueueRawImportEvaluation(
   accessToken: string,
   input: { examId: string; rawImportId: string; answerKeyId?: string },
@@ -1491,6 +1875,12 @@ async function loadReportSnapshots(accessToken: string, examId: string) {
   );
 }
 
+async function waitForReportSnapshots(accessToken: string, examId: string) {
+  return retryUntilReady(() => loadReportSnapshots(accessToken, examId), (snapshots) =>
+    snapshots.some((snapshot) => snapshot.status === "READY"),
+  );
+}
+
 async function exportReportSnapshot(accessToken: string, examId: string, snapshotId: string, format: "xlsx" | "pdf") {
   return apiRequest<ReportSnapshotExportResult>(
     accessToken,
@@ -1505,6 +1895,30 @@ async function readFileAsBase64(file: File): Promise<string> {
     binary += String.fromCharCode(byte);
   }
   return btoa(binary);
+}
+
+async function retryUntilReady<T>(load: () => Promise<T>, isReady: (value: T) => boolean): Promise<T> {
+  let latest: T | undefined;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      latest = await load();
+      if (isReady(latest)) {
+        return latest;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    await sleep(500);
+  }
+  if (latest !== undefined) {
+    return latest;
+  }
+  throw lastError ?? new Error("POLL_TIMEOUT");
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function formatQuarantineReasons(summary: RawImportParseSummary): string {

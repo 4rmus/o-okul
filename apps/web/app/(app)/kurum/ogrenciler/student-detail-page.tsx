@@ -190,6 +190,7 @@ export function StudentDetailPage({ studentId }: { studentId: string }) {
                 { label: "Hata kitapçığı", value: errorBooklet ? `${errorBooklet.items.length} soru` : "-" },
                 { label: "Kayıt durumu", value: formatStudentStatus(detail.profile.status) },
                 { label: "Net gelişimi", value: formatDelta(progress?.netDelta) },
+                { label: "LGS puanı", value: formatNumber(readLgsScore(report?.total)) },
                 { label: "Standart puan", value: formatNumber(report?.total?.standardScore) },
               ]}
             />
@@ -488,6 +489,10 @@ function formatPendingPayment(plans: PaymentPlanWithInstallmentsRecord[]) {
 
 function formatNumber(value: number | undefined) {
   return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+}
+
+function readLgsScore(total: { estimatedRawScore?: number; standardScore?: number } | undefined) {
+  return total?.estimatedRawScore ?? total?.standardScore;
 }
 
 function formatDelta(value: number | undefined) {

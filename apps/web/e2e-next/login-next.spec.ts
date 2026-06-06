@@ -12,6 +12,13 @@ function heading(page: Page, options: Parameters<Page["getByRole"]>[1]) {
   return page.getByRole("heading", options).first();
 }
 
+async function expandSidebarGroup(page: Page, name: string) {
+  const groupButton = page.getByRole("button", { name, exact: true });
+  if ((await groupButton.getAttribute("aria-expanded")) !== "true") {
+    await groupButton.click();
+  }
+}
+
 function envelope<T>(data: T, requestUrl?: string) {
   if (Array.isArray(data)) return listEnvelope(data, requestUrl);
   return { data };
@@ -788,6 +795,8 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     ],
   };
   const parserFileContent = "ogrenci_no\tkitapcik\tcevaplar\n12345\tA\tABCDE";
+  const parserConfigVersion = "optik-form-7108-v1";
+  let observedAnswerKeyVersion = "";
   const parserSuggestion = {
     encoding: "UTF-8",
     delimiter: "TAB",
@@ -1003,7 +1012,16 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   });
 
   await page.route("**/auth/refresh", async (route) => {
-    await route.fulfill({ headers: corsHeaders, status: 401 });
+    if (loginCount === 0) {
+      await route.fulfill({ headers: corsHeaders, status: 401 });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      headers: corsHeaders,
+      status: 200,
+      body: JSON.stringify(envelope(createAuthResponse())),
+    });
   });
 
   await page.route("**/auth/login", async (route) => {
@@ -2789,8 +2807,8 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     }
 
     if (path === "/exams/exam-a/parser-configs/suggestions" && request.method() === "POST") {
-      const body = request.postDataJSON() as { fileBase64: string };
-      expect(body).toEqual({ fileBase64: Buffer.from(parserFileContent).toString("base64") });
+      const body = request.postDataJSON() as { fileBase64?: string; preset?: string };
+      expect(body).toEqual({ preset: "OPTIK_7108_LGS" });
       await route.fulfill({
         contentType: "application/json",
         headers: corsHeaders,
@@ -2806,7 +2824,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
 
     if (path === "/exams/exam-a/parser-configs/approvals" && request.method() === "POST") {
       const body = request.postDataJSON() as { version: string; suggestion: typeof parserSuggestion };
-      expect(body).toEqual({ version: "parser-v1", suggestion: parserSuggestion });
+      expect(body).toEqual({ version: parserConfigVersion, suggestion: parserSuggestion });
       await route.fulfill({
         contentType: "application/json",
         headers: corsHeaders,
@@ -2814,7 +2832,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
         body: JSON.stringify(envelope({
           tenantId: "tenant-a",
           examId: "exam-a",
-          version: "parser-v1",
+          version: parserConfigVersion,
           encoding: parserSuggestion.encoding,
           delimiter: parserSuggestion.delimiter,
           skipHeaderLines: parserSuggestion.skipHeaderLines,
@@ -2827,8 +2845,9 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
 
     if (path === "/exams/exam-a/answer-keys/imports/dry-run" && request.method() === "POST") {
       const body = request.postDataJSON() as { version: string; fileBase64: string };
-      expect(body.version).toBe("answer-key-v1");
+      expect(body.version).toMatch(/^haziran-genel-deneme-\d{4}-\d{2}-\d{2}$/);
       expect(body.fileBase64).toBe(Buffer.from("answer-key").toString("base64"));
+      observedAnswerKeyVersion = body.version;
       await route.fulfill({
         contentType: "application/json",
         headers: corsHeaders,
@@ -2837,7 +2856,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
           dryRun: true,
           tenantId: "tenant-a",
           examId: "exam-a",
-          version: "answer-key-v1",
+          version: body.version,
           questionCount: 90,
           branches: [{ branch: "LGS TÜRKÇE", questionCount: 20 }],
           scoringConfig: { wrongPenalty: 1 / 3 },
@@ -2891,6 +2910,8 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     }
 
     if (path === "/exams/exam-a/answer-keys/imports" && request.method() === "POST") {
+      const body = request.postDataJSON() as { version: string; fileBase64: string };
+      expect(body.version).toBe(observedAnswerKeyVersion);
       await route.fulfill({
         contentType: "application/json",
         headers: corsHeaders,
@@ -2901,7 +2922,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
             id: "answer-key-a",
             tenantId: "tenant-a",
             examId: "exam-a",
-            version: "answer-key-v1",
+            version: body.version,
             questionCount: 90,
             branches: [{ branch: "LGS TÜRKÇE", questionCount: 20 }],
             scoringConfig: { wrongPenalty: 1 / 3 },
@@ -2921,7 +2942,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
         sourceType: "OPTICAL_ANSWER_TXT",
         fileName: "optik-a.txt",
         fileBase64: Buffer.from(parserFileContent).toString("base64"),
-        parserConfigVersion: "parser-v1",
+        parserConfigVersion,
       });
       await route.fulfill({
         contentType: "application/json",
@@ -2934,9 +2955,9 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
             examId: "exam-a",
             sourceType: "OPTICAL_ANSWER_TXT",
             fileName: "optik-a.txt",
-            s3Key: "raw-imports/tenant-a/exam-a/parser-v1/hash/optik-a.txt",
+            s3Key: `raw-imports/tenant-a/exam-a/${parserConfigVersion}/hash/optik-a.txt`,
             sha256: "abcdef1234567890",
-            parserConfigVersion: "parser-v1",
+            parserConfigVersion,
           },
           parseJob: { queueName: "optical-parse", jobId: "parse-job-a", status: "queued" },
           status: "uploaded",
@@ -3011,7 +3032,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     if (path === "/exams" && request.method() === "POST") {
       const body = request.postDataJSON() as { title: string; startsAt?: string };
       const created: ExamFixture = {
-        id: `exam-created-${exams.length + 1}`,
+        id: exams.some((exam) => exam.id === "exam-a") ? `exam-created-${exams.length + 1}` : "exam-a",
         tenantId: "tenant-a",
         title: body.title.trim(),
         status: "DRAFT",
@@ -3482,7 +3503,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "Giriş yap" }).click();
 
   await expect(page).toHaveURL(/\/kurum$/);
-  await expect(heading(page, { name: "Kurum Paneli" })).toBeVisible();
+  await expect(heading(page, { name: "DNA EĞİTİM KURUMU" })).toBeVisible();
   await expect(page.getByLabel("Kurum özeti").locator("article").filter({ hasText: "Sınıf" }).getByText("2")).toBeVisible();
   await expect(page.getByLabel("Kurum özeti").locator("article").filter({ hasText: "Öğretmen" }).getByText("1")).toBeVisible();
   await expect(page.getByLabel("Kurum özeti").locator("article").filter({ hasText: "Öğrenci" }).getByText("3")).toBeVisible();
@@ -3505,11 +3526,11 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByLabel("Branş analizi").getByText("11.5")).toBeVisible();
   await expect(page.getByLabel("Branş analizi").locator("canvas")).toBeVisible();
   await expect(page.getByText("Kişiler", { exact: true })).toBeVisible();
-  await expect(page.getByText("Akademik", { exact: true })).toBeVisible();
-  await expect(page.getByText("Sınav ve Rapor", { exact: true })).toBeVisible();
-  await expect(page.getByText("Finans", { exact: true })).toBeVisible();
-  await expect(page.getByText("İletişim", { exact: true })).toBeVisible();
-  await expect(page.getByText("Operasyon", { exact: true })).toBeVisible();
+  await expect(page.getByText("Eğitim", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sınav ve Analiz", { exact: true })).toBeVisible();
+  await expect(page.getByText("İçerik", { exact: true })).toBeVisible();
+  await expect(page.getByText("Finans ve Destek", { exact: true })).toBeVisible();
+  await expect(page.getByText("Yönetim", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Denetim", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "KVKK" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Güvenlik Denetimi" })).toHaveCount(0);
@@ -3517,16 +3538,22 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByRole("link", { name: "UAT / Rollback" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Canlı Yayın" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Sistem Sağlığı" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Yedek / Restore" })).toBeVisible();
+  await expandSidebarGroup(page, "Kişiler");
+  await expandSidebarGroup(page, "Yönetim");
+  await expect(page.getByRole("link", { name: "Yedekleme" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Kullanıcılar" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Rol Önizleme" })).toBeVisible();
+  await expandSidebarGroup(page, "Eğitim");
   await expect(page.getByRole("link", { name: "Kampüsler" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Akademik Takvim" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Takvim" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Seviyeler" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Sınıflar" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Dersler" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Ders Programı" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Program" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Etütler" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Kullanıcılar" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Rol Önizleme" })).toBeVisible();
+  await expandSidebarGroup(page, "Sınav ve Analiz");
+  await expandSidebarGroup(page, "İçerik");
+  await expandSidebarGroup(page, "Finans ve Destek");
   await expect(page.getByRole("link", { name: "Öğretmen Portalı" })).toBeHidden();
   await expect(page.getByRole("link", { name: "Öğrenci Portalı" })).toBeHidden();
   await expect(page.getByRole("link", { name: "Veli Portalı" })).toBeHidden();
@@ -3541,8 +3568,9 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page).toHaveURL(/\/kurum\/finans$/);
   await expect(heading(page, { name: "Finans" })).toBeVisible();
   await expect(page.getByLabel("Son kullanılanlar")).toHaveCount(0);
-  await page.getByRole("link", { name: "Kurum Paneli" }).click();
-  await expect(heading(page, { name: "Kurum Paneli" })).toBeVisible();
+  await expandSidebarGroup(page, "Başlangıç");
+  await page.getByRole("link", { name: "Özet", exact: true }).click();
+  await expect(heading(page, { name: "DNA EĞİTİM KURUMU" })).toBeVisible();
   await page.keyboard.press("ControlOrMeta+K");
   const workflowDialog = page.getByRole("dialog", { name: "Komut paleti" });
   await expect(workflowDialog).toBeVisible();
@@ -3659,7 +3687,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "Kuzey Şube sil" }).click();
   await expect(page.getByText("Kuzey Şube")).toBeHidden();
 
-  await page.getByRole("link", { name: "Akademik Takvim" }).click();
+  await page.getByRole("link", { name: "Takvim" }).click();
   await expect(page).toHaveURL(/\/kurum\/akademik-takvim$/);
   await expect(heading(page, { name: "Akademik Takvim" })).toBeVisible();
   await expect(heading(page, { name: "Dönemler" })).toBeVisible();
@@ -3829,7 +3857,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "TUR.8.1.1 sil" }).click();
   await expect(page.getByRole("cell", { name: "Cümlede anlam", exact: true })).toBeHidden();
 
-  await page.getByRole("link", { name: "Ders Programı" }).click();
+  await page.getByRole("link", { name: "Program" }).click();
   await expect(page).toHaveURL(/\/kurum\/program$/);
   await expect(heading(page, { name: "Ders Programı" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Matematik", exact: true }).first()).toBeVisible();
@@ -3927,7 +3955,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "Bora B devamsızlığını sil" }).click();
   await expect(page.getByRole("cell", { name: "Bora B", exact: true })).toBeHidden();
 
-  await page.getByRole("link", { name: "Öğretmen Notları" }).click();
+  await page.getByRole("link", { name: "Notlar" }).click();
   await expect(page).toHaveURL(/\/kurum\/notlar$/);
   await expect(heading(page, { name: "Öğretmen Notları" })).toBeVisible();
   await expect(page.getByText("Dikkat takibi iç notu")).toBeVisible();
@@ -4123,7 +4151,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page).toHaveURL(/\/kurum\/ogrenciler\/student-a$/);
   await expect(heading(page, { name: "Ada A" })).toBeVisible();
   await expect(page.getByLabel("Öğrenci 360 detay").getByText("Aktif", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Öğrenci 360 detay").getByText("76,67", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Öğrenci 360 detay").getByText("17,5", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Öğrenci 360 detay").getByText("2 soru", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Öğretmen notları").getByText("Problem çözme rutini güçleniyor.")).toBeVisible();
   await expect(page.getByLabel("İlişki geçmişi").getByText("Zeynep Veli")).toBeVisible();
@@ -4320,29 +4348,20 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
 
   await page.getByRole("link", { name: "Optik" }).click();
   await expect(page).toHaveURL(/\/kurum\/optik$/);
-  await expect(heading(page, { name: "Optik Format" })).toBeVisible();
-  await page.getByLabel("Sınav ID", { exact: true }).fill("exam-a");
-  await page.locator("textarea").fill("   ");
-  await page.getByRole("button", { name: "Analiz et" }).click();
-  await expect(page.getByLabel("Optik format").getByText("Örnek içerik veya dosya zorunludur.")).toBeVisible();
-  await page.getByLabel("Dosya", { exact: true }).setInputFiles({
-    name: "ornek.dat",
-    mimeType: "text/plain",
-    buffer: Buffer.from(parserFileContent),
-  });
-  await expect(page.getByText("ornek.dat")).toBeVisible();
-  await page.getByRole("button", { name: "Analiz et" }).click();
-  await expect(page.getByLabel("Optik format").getByText("TAB")).toBeVisible();
-  await expect(page.getByLabel("Optik format").getByText("1", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Optik format").getByText("5", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Optik format").getByText("high")).toBeVisible();
-  await page.getByLabel("Versiyon", { exact: true }).fill("   ");
-  await page.getByRole("button", { name: "Onayla" }).click();
-  await expect(page.getByLabel("Optik format").getByText("Versiyon zorunludur.")).toBeVisible();
-  await page.getByLabel("Versiyon", { exact: true }).fill("parser-v1");
-  await page.getByRole("button", { name: "Onayla" }).click();
-  await expect(page.getByText("parser-v1 onaylandı")).toBeVisible();
-  await page.getByRole("button", { name: "Cevap anahtarı" }).click();
+  await expect(heading(page, { name: "Format seç ve ilerle" })).toBeVisible();
+  const opticalExamSelector = page.getByLabel("Sınav seçimi");
+  await opticalExamSelector.getByLabel("Sınav seç", { exact: true }).selectOption("");
+  await opticalExamSelector.getByLabel("Yeni sınav adı", { exact: true }).fill("Optik Yeni Deneme");
+  await opticalExamSelector.getByLabel("Başlangıç", { exact: true }).fill("2026-06-13T09:00");
+  await opticalExamSelector.getByRole("button", { name: "Sınav oluştur" }).click();
+  await expect(opticalExamSelector.getByText("Seçili sınav: Optik Yeni Deneme")).toBeVisible();
+  await expect(opticalExamSelector.getByLabel("Yeni sınav adı")).toHaveCount(0);
+  await expect(opticalExamSelector.getByRole("button", { name: "Sınav oluştur" })).toHaveCount(0);
+  await opticalExamSelector.getByLabel("Sınav seç", { exact: true }).selectOption("exam-a");
+  await expect(opticalExamSelector.getByLabel("Yeni sınav adı")).toHaveCount(0);
+  await expect(opticalExamSelector.getByRole("button", { name: "Sınav oluştur" })).toHaveCount(0);
+  await expect(page.getByLabel("Format seç ve ilerle").getByText(`Sürüm: ${parserConfigVersion}`)).toBeVisible();
+  await page.getByRole("button", { name: "Seç ve ilerle" }).click();
   const answerKeyImportPanel = page.getByLabel("Cevap anahtarı Excel import");
   await answerKeyImportPanel.getByLabel("Cevap anahtarı dosyası").setInputFiles({
     name: "cevap-anahtari.xlsx",
@@ -4353,7 +4372,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByLabel("Cevap anahtarı özeti").getByText("90 soru doğrulandı.")).toBeVisible();
   await expect(page.getByLabel("Cevap anahtarı özeti").getByText("B: 90 soru")).toBeVisible();
   await page.getByRole("button", { name: "İçe aktar" }).click();
-  await expect(page.getByLabel("Cevap anahtarı özeti").getByText("answer-key-v1 içe aktarıldı.")).toBeVisible();
+  await expect(page.getByLabel("Cevap anahtarı özeti").getByText(/haziran-genel-deneme-\d{4}-\d{2}-\d{2} içe aktarıldı\./)).toBeVisible();
   const manualAnswerKeyPanel = page.getByLabel("Manuel cevap anahtarı");
   await manualAnswerKeyPanel.getByLabel("90 şık dizisi").fill("A".repeat(90));
   await manualAnswerKeyPanel.getByLabel("B kitapçık sırası").fill(Array.from({ length: 90 }, (_unused, index) => String(90 - index)).join(" "));
@@ -4370,18 +4389,20 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     mimeType: "text/plain",
     buffer: Buffer.from(parserFileContent),
   });
-  await page.getByRole("button", { name: "Yükle ve parse kuyruğa al" }).click();
-  await expect(page.getByLabel("Karantina çözümü").getByRole("heading", { name: "Karantina Çözümü" })).toBeVisible();
-  await page.getByRole("button", { name: "Karantinaları getir" }).click();
+  await page.getByRole("button", { name: "Yükle ve kontrol et" }).click();
+  await expect(page.getByLabel("Eşleşmeyen satırlar ve rapor").getByRole("heading", { name: "Eşleşmeyen satırları çöz" })).toBeVisible();
+  await page.getByRole("button", { name: "Eşleşmeyen satırları getir" }).click();
   const quarantineRow = page.getByRole("row", { name: /STUDENT_NOT_MATCHED/ });
   await expect(quarantineRow.getByText("OPEN")).toBeVisible();
   await quarantineRow.getByRole("combobox").selectOption("student-a");
-  await quarantineRow.getByRole("button", { name: "7. satırı çöz" }).dispatchEvent("click");
+  await quarantineRow.getByRole("button", { name: "7. satırı çöz" }).click();
   await expect(quarantineRow.getByText("OPEN")).not.toBeVisible();
   await expect(quarantineRow.getByText(/Kuyruk: evaluation-job-a|Çözüldü/)).toBeVisible();
-  await expect(page.getByLabel("Optik rapor üretimi").getByLabel("Sonuç hash")).toHaveValue("abcdef1234567890");
-  await page.getByLabel("Optik rapor üretimi").getByRole("button", { name: "Rapor üret" }).click();
-  await expect(page.getByLabel("Optik rapor üretimi").getByText("report-job-a kuyruğa alındı.")).toBeVisible();
+  const opticalReportPanel = page.getByLabel("Optik rapor üretimi");
+  await opticalReportPanel.getByText("Gelişmiş rapor bilgisi").click();
+  await expect(opticalReportPanel.getByLabel("Teknik sonuç hash")).toHaveValue("abcdef1234567890");
+  await opticalReportPanel.getByRole("button", { name: "Rapor üret" }).click();
+  await expect(opticalReportPanel.getByText("report-job-a kuyruğa alındı.")).toBeVisible();
 
   await page.getByRole("link", { name: "Raporlar" }).click();
   await expect(page).toHaveURL(/\/kurum\/raporlar$/);
@@ -4652,7 +4673,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     await expect(page).toHaveURL(/\/kurum$/);
   }
 
-  await page.getByRole("link", { name: "Yedek / Restore" }).click();
+  await page.getByRole("link", { name: "Yedekleme" }).click();
   await expect(page).toHaveURL(/\/kurum\/yedek-restore$/);
   await expect(heading(page, { name: "Yedek / Restore" })).toBeVisible();
   await expect(page.getByText("Rehber / Referans")).toBeVisible();
@@ -4689,7 +4710,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     first: Object.keys(window[first as keyof Window] as Storage),
     second: Object.keys(window[second as keyof Window] as Storage),
   }), ["local" + "Storage", "session" + "Storage"]);
-  expect(storageKeys.first).toEqual([]);
+  expect(storageKeys.first.filter((key) => key !== "des.sidebar.expandedGroups.v2")).toEqual([]);
   expect(storageKeys.second).toEqual([]);
 });
 
@@ -5160,7 +5181,7 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   await expect(page.getByRole("link", { name: "Rol Önizleme" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Denetim" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "KVKK" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Yedek / Restore" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Yedekleme" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Destek", exact: true })).toBeVisible();
   await expect(page.getByLabel("Karar sinyalleri").getByRole("link", { name: /Geciken ödeme/ })).toHaveCount(0);
   await expect(page.getByLabel("Karar sinyalleri").getByRole("link", { name: /Bekleyen destek/ })).toBeVisible();
@@ -5715,6 +5736,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
 
   await loginAs(page, "student-a@example.test");
   await expect(page).toHaveURL(/\/ogrenci$/);
+  await expandSidebarGroup(page, "Portal");
   await expect(page.getByRole("link", { name: "Öğrenci Portalı" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Kurum", exact: true })).toBeHidden();
   await expect(page.getByRole("link", { name: "Öğretmen Portalı" })).toBeHidden();
@@ -5763,6 +5785,11 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page.getByLabel("Son sınav branş netleri").getByRole("row", { name: /MATEMATİK 18,67 20 17,33 18,67 18,67/ })).toBeVisible();
   await expect(page.getByLabel("Sınav raporu").getByText("1 soru").first()).toBeVisible();
   await capturePortalKarneVisualEvidence(page, test.info(), "portal-ogrenci-sinav-raporu");
+  await page.evaluate(() => {
+    window.history.pushState(null, "", "/ogrenci?examId=exam-demo");
+  });
+  await expect(page).toHaveURL(/\/ogrenci\?examId=exam-demo$/);
+  await expect(page.getByLabel("Sınav raporu").getByText("17,5").first()).toBeVisible();
   await expect(page.getByLabel("Devamsızlık").getByRole("cell", { name: "Yok", exact: true })).toBeVisible();
   await expect(page.getByLabel("Öğretmen notları").getByText("Problem çözme rutini güçleniyor.")).toBeVisible();
 
@@ -5770,6 +5797,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page).toHaveURL(/\/login$/);
   await loginAs(page, "teacher-a@example.test");
   await expect(page).toHaveURL(/\/ogretmen$/);
+  await expandSidebarGroup(page, "Portal");
   await expect(page.getByRole("link", { name: "Öğretmen Portalı" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Kurum", exact: true })).toBeHidden();
   await expect(page.getByRole("link", { name: "Öğrenci Portalı" })).toBeHidden();
@@ -5861,6 +5889,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page).toHaveURL(/\/login$/);
   await loginAs(page, "guardian-a@example.test");
   await expect(page).toHaveURL(/\/veli$/);
+  await expandSidebarGroup(page, "Portal");
   await expect(page.getByRole("link", { name: "Veli Portalı" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Kurum", exact: true })).toBeHidden();
   await expect(page.getByRole("link", { name: "Öğretmen Portalı" })).toBeHidden();
@@ -5892,6 +5921,11 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page.getByLabel("Sınav raporu").getByRole("row", { name: /MATEMATİK 20 20 0 0 20 19,92 9,46 9,39/ })).toBeVisible();
   await expect(page.getByLabel("Son sınav branş netleri").getByRole("row", { name: /MATEMATİK 18,67 20 17,33 18,67 18,67/ })).toBeVisible();
   await capturePortalKarneVisualEvidence(page, test.info(), "portal-veli-sinav-raporu");
+  await page.evaluate(() => {
+    window.history.pushState(null, "", "/veli?examId=exam-demo");
+  });
+  await expect(page).toHaveURL(/\/veli\?examId=exam-demo$/);
+  await expect(page.getByLabel("Sınav raporu").getByText("17,5").first()).toBeVisible();
   await expect(page.getByLabel("Portal özeti").getByText("500,00 TRY")).toBeVisible();
   await expect(page.getByLabel("Ödeme planları").getByText("2026 Haziran ödeme planı")).toBeVisible();
   await expect(page.getByLabel("Ödeme planları").getByText("1. taksit / 500,00 TRY")).toBeVisible();
@@ -6409,6 +6443,18 @@ function readPortalFixture(path: string) {
 }
 
 function readFixture(path: string) {
+  if (path === "/me/tenant") {
+    return {
+      id: "tenant-a",
+      name: "DNA EĞİTİM KURUMU",
+      slug: "dna-egitim",
+      plan: "PRO",
+      status: "ACTIVE",
+      institutionType: "study-center",
+      contactEmail: "info@dna.test",
+    };
+  }
+
   if (path === "/exams") {
     return [
       {
