@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import type { ExamParticipantRecord, ExamRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
@@ -13,8 +13,13 @@ export class ExamController {
 
   @Post()
   @RequireCapability("academic:manage")
-  create(@Body() body: { title?: string; startsAt?: string }): Promise<ExamRecord> {
-    return this.exams.create(getRequestContext(), { title: body.title, startsAt: body.startsAt });
+  create(@Body() body: { title?: string; startsAt?: string; classId?: string; classIds?: string[] }): Promise<ExamRecord> {
+    return this.exams.create(getRequestContext(), {
+      title: body.title,
+      startsAt: body.startsAt,
+      classId: body.classId,
+      classIds: body.classIds,
+    });
   }
 
   @Get()
@@ -29,10 +34,31 @@ export class ExamController {
     return this.exams.get(getRequestContext(), examId);
   }
 
+  @Patch(":examId")
+  @RequireCapability("academic:manage")
+  update(
+    @Param("examId") examId: string,
+    @Body() body: { title?: string; startsAt?: string; classId?: string; classIds?: string[] },
+  ): Promise<ExamRecord> {
+    return this.exams.update(getRequestContext(), examId, {
+      title: body.title,
+      startsAt: body.startsAt,
+      classId: body.classId,
+      classIds: body.classIds,
+    });
+  }
+
   @Post(":examId/publish")
   @RequireCapability("academic:manage")
   publish(@Param("examId") examId: string): Promise<ExamRecord> {
     return this.exams.publish(getRequestContext(), examId);
+  }
+
+  @Delete(":examId")
+  @HttpCode(204)
+  @RequireCapability("academic:manage")
+  async delete(@Param("examId") examId: string): Promise<void> {
+    await this.exams.delete(getRequestContext(), examId);
   }
 
   @Get(":examId/participants")

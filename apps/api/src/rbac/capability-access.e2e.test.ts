@@ -13,6 +13,7 @@ import {
   examParticipantRepositoryToken,
   type ExamRepository,
   examRepositoryToken,
+  type UpdateExamRepositoryInput,
 } from "../exam/exam.service.js";
 
 describe("Capability access matrix", () => {
@@ -189,6 +190,30 @@ class FakeExamRepository implements ExamRepository {
     const updated: ExamRecord = { ...exam, status: "PUBLISHED" };
     this.exams.set(examId, updated);
     return updated;
+  }
+
+  async update(tenantId: string, examId: string, input: UpdateExamRepositoryInput): Promise<ExamRecord | undefined> {
+    const exam = this.exams.get(examId);
+    if (!exam || exam.tenantId !== tenantId) {
+      return undefined;
+    }
+    const updated: ExamRecord = {
+      ...exam,
+      title: input.title,
+      ...(input.startsAt ? { startsAt: input.startsAt } : {}),
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    };
+    this.exams.set(examId, updated);
+    return updated;
+  }
+
+  async delete(tenantId: string, examId: string): Promise<ExamRecord | undefined> {
+    const exam = this.exams.get(examId);
+    if (!exam || exam.tenantId !== tenantId) {
+      return undefined;
+    }
+    this.exams.delete(examId);
+    return exam;
   }
 }
 

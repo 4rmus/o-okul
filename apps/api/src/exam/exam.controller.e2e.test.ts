@@ -13,6 +13,7 @@ import {
   type CreateExamRepositoryInput,
   type ExamParticipantRepository,
   type ExamRepository,
+  type UpdateExamRepositoryInput,
 } from "./exam.service.js";
 
 describe("ExamController", () => {
@@ -62,6 +63,79 @@ describe("ExamController", () => {
     });
     expect(typeof response.body.id).toBe("string");
     expect(repository.exams.size).toBe(1);
+  });
+
+  it("TENANT_ADMIN sınıflarla sınav oluşturunca sınıf öğrencilerini katılımcı yapar", async () => {
+    const issued = await login("admin-a@example.test");
+    const extraClass = await request(server)
+      .post("/classes")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ name: "8-B", level: "8" })
+      .expect(201);
+    const extraStudent = await request(server)
+      .post("/students")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ firstName: "Ece", lastName: "B", classId: extraClass.body.id, status: "ACTIVE" })
+      .expect(201);
+
+    const created = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ title: "8. Sınıflar Genel Deneme", startsAt: "2026-03-15T09:00:00.000Z", classIds: ["class-a", extraClass.body.id] })
+      .expect(201);
+
+    const list = await request(server)
+      .get(`/exams/${created.body.id}/participants`)
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200);
+
+    expect(list.body).toHaveLength(2);
+    expect(list.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tenantId: "tenant-a",
+          examId: created.body.id,
+          studentId: "student-a",
+          status: "REGISTERED",
+        }),
+        expect.objectContaining({
+          tenantId: "tenant-a",
+          examId: created.body.id,
+          studentId: extraStudent.body.id,
+          status: "REGISTERED",
+        }),
+      ]),
+    );
+  });
+
+  it("TENANT_ADMIN sınavı düzenler ve seçilen sınıf öğrencilerini ekler", async () => {
+    const issued = await login("admin-a@example.test");
+    const created = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ title: "Düzeltilecek Deneme" })
+      .expect(201);
+
+    const updated = await request(server)
+      .patch(`/exams/${created.body.id}`)
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ title: "Düzeltilmiş Deneme", startsAt: "2026-04-01T10:30:00.000Z", classIds: ["class-a"] })
+      .expect(200);
+
+    expect(updated.body).toMatchObject({
+      id: created.body.id,
+      tenantId: "tenant-a",
+      title: "Düzeltilmiş Deneme",
+      startsAt: "2026-04-01T10:30:00.000Z",
+    });
+
+    const list = await request(server)
+      .get(`/exams/${created.body.id}/participants`)
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200);
+
+    expect(list.body).toHaveLength(1);
+    expect(list.body[0]).toMatchObject({ studentId: "student-a", status: "REGISTERED" });
   });
 
   it("başlık yoksa 400 döner ve yazmaz", async () => {
@@ -126,6 +200,43 @@ describe("ExamController", () => {
       .expect(201);
 
     expect(published.body).toMatchObject({ id: created.body.id, status: "PUBLISHED" });
+  });
+
+  it("TENANT_ADMIN sınavı siler ve listeden kaldırır", async () => {
+    const issued = await login("admin-a@example.test");
+    const created = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ title: "Silinecek Deneme" })
+      .expect(201);
+
+    await request(server)
+      .delete(`/exams/${created.body.id}`)
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(204);
+
+    expect(repository.exams.has(created.body.id)).toBe(false);
+    await request(server)
+      .get(`/exams/${created.body.id}`)
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(404);
+  });
+
+  it("TEACHER sınav silemez", async () => {
+    const admin = await login("admin-a@example.test");
+    const created = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ title: "Yetkisiz Silme Denemesi" })
+      .expect(201);
+
+    const teacher = await login("teacher-a@example.test");
+    await request(server)
+      .delete(`/exams/${created.body.id}`)
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .expect(403);
+
+    expect(repository.exams.has(created.body.id)).toBe(true);
   });
 
   it("TENANT_ADMIN sınava katılımcı ekler, TEACHER listeleyebilir", async () => {
@@ -239,6 +350,30 @@ class FakeExamRepository implements ExamRepository {
     const updated: ExamRecord = { ...exam, status: "PUBLISHED" };
     this.exams.set(examId, updated);
     return updated;
+  }
+
+  async update(tenantId: string, examId: string, input: UpdateExamRepositoryInput): Promise<ExamRecord | undefined> {
+    const exam = this.exams.get(examId);
+    if (!exam || exam.tenantId !== tenantId) {
+      return undefined;
+    }
+    const updated: ExamRecord = {
+      ...exam,
+      title: input.title,
+      ...(input.startsAt ? { startsAt: input.startsAt } : {}),
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    };
+    this.exams.set(examId, updated);
+    return updated;
+  }
+
+  async delete(tenantId: string, examId: string): Promise<ExamRecord | undefined> {
+    const exam = this.exams.get(examId);
+    if (!exam || exam.tenantId !== tenantId) {
+      return undefined;
+    }
+    this.exams.delete(examId);
+    return exam;
   }
 }
 
