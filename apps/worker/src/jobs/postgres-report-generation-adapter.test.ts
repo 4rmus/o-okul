@@ -59,6 +59,8 @@ describe("postgres report generation adapter", () => {
       values: ["tenant-a"],
     });
     const select = client.queries.find((query) => query.sql.includes('FROM "ExamResult"'));
+    expect(select?.sql).toContain('DISTINCT ON (er."studentId")');
+    expect(select?.sql).toContain('er."computedAt" DESC');
     expect(select?.sql).toContain('LEFT JOIN "Student"');
     expect(select?.sql).toContain('LEFT JOIN "Class"');
     expect(select?.sql).toContain('AND er."deletedAt" IS NULL');

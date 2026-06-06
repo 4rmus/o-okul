@@ -327,7 +327,17 @@ describe("ReportGenerationService", () => {
     const producer = new FakeProducer();
     const store = new FakeReportSnapshotStore();
     const pdfRenderer = new FakePdfRenderer();
-    const service = new ReportGenerationService(producer, store, pdfRenderer);
+    const service = new ReportGenerationService(
+      producer,
+      store,
+      pdfRenderer,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      new FakeTenantStore() as unknown as TenantStore,
+    );
 
     const result = await service.exportSnapshotPdf(
       {
@@ -357,18 +367,24 @@ describe("ReportGenerationService", () => {
     expect(pdfRenderer.inputs[0]?.html).toContain("Soru sayısı");
     expect(pdfRenderer.inputs[0]?.html).toContain("Sınıf net ort");
     expect(pdfRenderer.inputs[0]?.html).toContain("PUAN - SIRA ANALİZİ");
-    expect(pdfRenderer.inputs[0]?.html).toContain("Tahmini ham puan");
+    expect(pdfRenderer.inputs[0]?.html).toContain("LGS puanı");
     expect(pdfRenderer.inputs[0]?.html).toContain("BÖLÜM BAŞARI YÜZDELERİ");
     expect(pdfRenderer.inputs[0]?.html).toContain("SON SINAV NETLERİ");
+    expect(pdfRenderer.inputs[0]?.html).toContain("Detaylı Deneme Analizi");
+    expect(pdfRenderer.inputs[0]?.html).toContain("KAZANIM DETAYI");
+    expect(pdfRenderer.inputs[0]?.html).toContain("SORU CEVAP ANALİZİ");
+    expect(pdfRenderer.inputs[0]?.html).toContain("Öğrenci cevabı");
+    expect(pdfRenderer.inputs[0]?.html).toContain("Yanlış");
     expect(pdfRenderer.inputs[0]?.html).toContain("Matematik");
     expect(pdfRenderer.inputs[0]?.html).toContain("student-a");
     expect(pdfRenderer.inputs[0]?.html).toContain("Genel sıra");
     expect(pdfRenderer.inputs[0]?.html).toContain("3/40 (%92.5)");
     expect(pdfRenderer.inputs[0]?.html).toContain("Sınıf sıra");
     expect(pdfRenderer.inputs[0]?.html).toContain("1/20 (%97.5)");
-    expect(pdfRenderer.inputs[0]?.fallbackLines).toContain("Uzman Hocam - Sinav Raporu");
+    expect(pdfRenderer.inputs[0]?.html).toContain("https://cdn.example.test/dna-logo.png");
+    expect(pdfRenderer.inputs[0]?.fallbackLines).toContain("DNA EĞİTİM KURUMU - Sinav Raporu");
     expect(pdfRenderer.inputs[0]?.fallbackLines).toContain("Ogrenci Karnesi");
-    expect(pdfRenderer.inputs[0]?.fallbackLines).toContain("student-a 8-A: 17.5 net, genel 3/40 (%92.5), sinif 1/20 (%97.5)");
+    expect(pdfRenderer.inputs[0]?.fallbackLines).toContain("student-a 8-A: 17.5 net, 123.4 LGS puani, genel 3/40 (%92.5), sinif 1/20 (%97.5)");
   });
 
   it("hazır snapshot içinden öğrenci sınav raporu döner", async () => {
@@ -402,6 +418,7 @@ describe("ReportGenerationService", () => {
     expect(result).toEqual({
       tenantId: "tenant-a",
       institutionName: "DNA EĞİTİM KURUMU",
+      institutionLogoUrl: "https://cdn.example.test/dna-logo.png",
       examId: "exam-a",
       examTitle: "İSEM - LGS - 1",
       examStartsAt: "2026-06-06T09:00:00.000Z",
@@ -444,6 +461,25 @@ describe("ReportGenerationService", () => {
           wrong: 2,
           blank: 0,
           net: 17.5,
+        },
+      ],
+      questions: [
+        { questionNo: 1, branch: "Matematik", answer: "A", correctAnswer: "A", status: "CORRECT" },
+        {
+          questionNo: 2,
+          branch: "Matematik",
+          outcomeCode: "MAT.8.1.1",
+          answer: "C",
+          correctAnswer: "B",
+          status: "WRONG",
+        },
+        {
+          questionNo: 3,
+          branch: "Matematik",
+          outcomeCode: "MAT.8.1.1",
+          answer: "",
+          correctAnswer: "D",
+          status: "BLANK",
         },
       ],
       statistics: {
@@ -605,6 +641,31 @@ describe("ReportGenerationService", () => {
       standardScoreDelta: 7.5,
     });
   });
+
+  it("öğrenciye ait hazır snapshot yoksa gelişim raporunu boş döner", async () => {
+    const producer = new FakeProducer();
+    const store = new FakeReportSnapshotStore();
+    const service = new ReportGenerationService(producer, store);
+
+    const result = await service.getStudentProgress(
+      {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        roles: ["TENANT_ADMIN"],
+        bypassRls: false,
+      },
+      "exam-a",
+      "student-c",
+    );
+
+    expect(store.inputs).toEqual([{ tenantId: "tenant-a", examId: "exam-a" }]);
+    expect(result).toEqual({
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      studentId: "student-c",
+      points: [],
+    });
+  });
 });
 
 class FakeProducer implements ReportGenerationQueueProducer {
@@ -695,7 +756,7 @@ class FakeExamParticipantRepository {
 class FakeTenantStore {
   async findById(id: string) {
     if (id !== "tenant-a") return undefined;
-    return { id, name: "DNA EĞİTİM KURUMU" };
+    return { id, name: "DNA EĞİTİM KURUMU", logoUrl: "https://cdn.example.test/dna-logo.png" };
   }
 }
 

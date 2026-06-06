@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { type TenantQueryable, withTenantDb } from "@uzman-hocam/db";
 import { type OpticalAnswerParseResult } from "./optical-answer-parser.js";
 
@@ -24,6 +25,7 @@ export class PostgresOpticalParseAdapter {
       for (const item of input.result.matched) {
         const inserted = await client.query<{ id: string }>(
           `INSERT INTO "ParsedAnswer" (
+             "id",
              "tenantId",
              "examId",
              "rawImportId",
@@ -34,7 +36,7 @@ export class PostgresOpticalParseAdapter {
              "status",
              "updatedAt"
            )
-           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, 'MATCHED', now())
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 'MATCHED', now())
            ON CONFLICT ("tenantId", "rawImportId", "participantId", "parserConfigVersion")
            DO UPDATE SET
              "rowNumber" = EXCLUDED."rowNumber",
@@ -44,6 +46,7 @@ export class PostgresOpticalParseAdapter {
              "updatedAt" = now()
            RETURNING "id"`,
           [
+            randomUUID(),
             item.tenantId,
             item.examId,
             item.rawImportId,
@@ -54,11 +57,35 @@ export class PostgresOpticalParseAdapter {
           ],
         );
         matchedSaved += inserted.rows.length;
+        if (item.bookletType) {
+          await client.query(
+            `UPDATE "ExamParticipant"
+             SET "bookletType" = $3,
+                 "updatedAt" = now()
+             WHERE "tenantId" = $1
+               AND "id" = $2
+               AND ("bookletType" IS NULL OR btrim("bookletType") = '')
+               AND "deletedAt" IS NULL`,
+            [item.tenantId, item.participantId, item.bookletType],
+          );
+        }
+        await client.query(
+          `UPDATE "ImportQuarantine"
+           SET "deletedAt" = now(),
+               "updatedAt" = now()
+           WHERE "tenantId" = $1
+             AND "rawImportId" = $2
+             AND "rowNumber" = $3
+             AND "status" = 'OPEN'
+             AND "deletedAt" IS NULL`,
+          [item.tenantId, item.rawImportId, item.rowNumber],
+        );
       }
 
       for (const item of input.result.unmatched) {
         const inserted = await client.query<{ id: string }>(
           `INSERT INTO "ImportQuarantine" (
+             "id",
              "tenantId",
              "examId",
              "rawImportId",
@@ -68,7 +95,7 @@ export class PostgresOpticalParseAdapter {
              "status",
              "updatedAt"
            )
-           VALUES ($1, $2, $3, $4, $5::jsonb, $6, 'OPEN', now())
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, 'OPEN', now())
            ON CONFLICT ("tenantId", "rawImportId", "rowNumber")
            DO UPDATE SET
              "rawRow" = EXCLUDED."rawRow",
@@ -77,6 +104,7 @@ export class PostgresOpticalParseAdapter {
            WHERE "ImportQuarantine"."status" = 'OPEN'
            RETURNING "id"`,
           [
+            randomUUID(),
             item.tenantId,
             item.examId,
             item.rawImportId,

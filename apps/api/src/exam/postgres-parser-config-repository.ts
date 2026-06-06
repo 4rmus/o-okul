@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import pg from "pg";
 import type { ParserConfigSuggestion } from "@uzman-hocam/shared-types";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
@@ -44,6 +45,29 @@ export class PostgresParserConfigRepository implements ParserConfigRepository {
       );
       const row = inserted.rows[0];
       if (!row) {
+        const existing = await client.query<ParserConfigRow>(
+          `SELECT
+             "tenantId",
+             "examId",
+             "templateId",
+             "version",
+             "encoding",
+             "delimiter",
+             "skipHeaderLines",
+             "fieldMapping",
+             "status"
+           FROM "ParserConfig"
+           WHERE "tenantId" = $1
+             AND "examId" = $2
+             AND "version" = $3
+             AND "deletedAt" IS NULL
+           LIMIT 1`,
+          [input.tenantId, input.examId, input.version],
+        );
+        const existingRow = existing.rows[0];
+        if (existingRow && matchesApprovedConfig(existingRow, input)) {
+          return toSavedParserConfig(existingRow);
+        }
         throw new Error("PARSER_CONFIG_VERSION_CONFLICT");
       }
       return toSavedParserConfig(row);
@@ -79,6 +103,21 @@ function toSavedParserConfig(row: ParserConfigRow): SavedParserConfig {
     fieldMapping: parseFieldMapping(row.fieldMapping),
     status: "APPROVED",
   };
+}
+
+function matchesApprovedConfig(row: ParserConfigRow, input: ApprovedParserConfigInput): boolean {
+  try {
+    return (
+      row.status === "APPROVED" &&
+      row.templateId === (input.templateId ?? null) &&
+      row.encoding === input.suggestion.encoding &&
+      row.delimiter === input.suggestion.delimiter &&
+      row.skipHeaderLines === input.suggestion.skipHeaderLines &&
+      isDeepStrictEqual(parseFieldMapping(row.fieldMapping), input.suggestion.fieldMapping)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function parseFieldMapping(value: unknown): ParserConfigSuggestion["fieldMapping"] {

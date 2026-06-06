@@ -16,6 +16,7 @@ describe("createTenantQueueJob", () => {
       backoff: { type: "exponential", delay: 1000 },
       jobId: "import-1_hash-1",
       removeOnFail: false,
+      removeOnComplete: true,
     });
   });
 

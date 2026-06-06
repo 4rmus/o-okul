@@ -77,6 +77,7 @@ export interface ProducedJob<TInput extends TenantQueueJobInput = TenantQueueJob
     };
     jobId: string;
     removeOnFail: false;
+    removeOnComplete?: true;
   };
 }
 
@@ -118,6 +119,7 @@ export function createTenantQueueJob(input: TenantQueueJobInput): ProducedJob {
       },
       jobId: `${input.entityId}_${input.contentHash}`,
       removeOnFail: false,
+      removeOnComplete: true,
     },
   };
 }

@@ -85,7 +85,7 @@ export class RawImportQuarantineService {
       tenantId,
       userId: context.userId,
       entityId: record.id,
-      contentHash: record.rawImportSha256,
+      contentHash: `${record.rawImportSha256}-${record.answerKeyId}`,
       participantId: record.resolvedParticipantId,
       rawImportId: record.rawImportId,
       answerKeyId: record.answerKeyId,

@@ -166,6 +166,7 @@ describe("postgres exam evaluation adapter", () => {
     expect(quarantineSelect?.values).toEqual(["tenant-a", "raw-import-a", "participant-a"]);
     expect(parsedInsert?.sql).toContain('ON CONFLICT ("tenantId", "rawImportId", "participantId", "parserConfigVersion")');
     expect(parsedInsert?.values).toEqual([
+      expect.any(String),
       "tenant-a",
       "exam-a",
       "raw-import-a",
@@ -210,8 +211,11 @@ describe("postgres exam evaluation adapter", () => {
 
     expect(saved).toEqual(result);
     const insert = client.queries.find((query) => query.sql.includes('INSERT INTO "ExamResult"'));
-    expect(insert?.sql).toContain('ON CONFLICT ("tenantId", "resultKey") DO NOTHING');
-    expect(insert?.values?.slice(0, 10)).toEqual([
+    expect(insert?.sql).toContain('ON CONFLICT ("tenantId", "resultKey")');
+    expect(insert?.sql).toContain('"scoreData" = EXCLUDED."scoreData"');
+    expect(insert?.sql).toContain('"deletedAt" = NULL');
+    expect(insert?.values?.slice(0, 11)).toEqual([
+      expect.any(String),
       "tenant-a",
       "exam-a",
       "student-a",
@@ -223,8 +227,8 @@ describe("postgres exam evaluation adapter", () => {
       scoringEngineVersion,
       `participant-a_answer-key-v1_parser-v1_${scoringEngineVersion}`,
     ]);
-    expect(JSON.parse(insert?.values?.[10] as string)).toEqual(result.score);
-    expect(insert?.values?.[11]).toBe("2026-05-30T03:00:00.000Z");
+    expect(JSON.parse(insert?.values?.[11] as string)).toEqual(result.score);
+    expect(insert?.values?.[12]).toBe("2026-05-30T03:00:00.000Z");
   });
 
   it("insert conflict durumunda mevcut sonucu okuyup döner", async () => {
@@ -248,7 +252,6 @@ describe("postgres exam evaluation adapter", () => {
       "tenant-a",
       `participant-a_answer-key-v1_parser-v1_${scoringEngineVersion}`,
     ]);
-    expect(client.queries.some((query) => query.sql.includes("DO UPDATE"))).toBe(false);
   });
 });
 

@@ -226,7 +226,11 @@ export class ReportGenerationService {
       throw new BadRequestException("REPORT_SNAPSHOT_NOT_READY");
     }
 
-    return createSnapshotPdf(await this.scopeSnapshotForTeacher(context, snapshot), this.pdfRenderer);
+    return createSnapshotPdf(
+      await this.scopeSnapshotForTeacher(context, snapshot),
+      this.pdfRenderer,
+      await this.findInstitutionProfile(context),
+    );
   }
 
   async getStudentReport(
@@ -261,15 +265,16 @@ export class ReportGenerationService {
     const classId = readText(student.classId);
     const className = readText(student.className);
     const outcomes = readRecords(student.outcomes).map(readOutcomeSummary);
+    const questions = readRecords(student.questions).map(readQuestionSummary);
     const statistics = readStudentStatistics(student.statistics);
     const branchAverages = createStudentBranchAverageLookup(snapshot.snapshotData, classId);
-    const institutionName = await this.findInstitutionName(context);
+    const institution = await this.findInstitutionProfile(context);
     const examMeta = await this.findExamMeta(context, resolvedExamId);
     const participantMeta = await this.findParticipantMeta(context, resolvedExamId, resolvedStudentId);
     const studentName = await this.findStudentDisplayName(context, resolvedStudentId);
     return {
       tenantId: context.tenantId,
-      ...(institutionName ? { institutionName } : {}),
+      ...institution,
       examId: resolvedExamId,
       ...examMeta,
       snapshotId: resolvedSnapshotId,
@@ -284,6 +289,7 @@ export class ReportGenerationService {
       total: readScoreSummary(student.total),
       branches: readRecords(student.branches).map((branch) => readBranchSummary(branch, branchAverages)),
       ...(outcomes.length > 0 ? { outcomes } : {}),
+      ...(questions.length > 0 ? { questions } : {}),
       ...(statistics ? { statistics } : {}),
       generatedAt: snapshot.generatedAt,
     };
@@ -389,17 +395,16 @@ export class ReportGenerationService {
 
     points.sort((a, b) => toTime(a.generatedAt) - toTime(b.generatedAt));
 
-    if (points.length === 0) {
-      throw new NotFoundException("REPORT_STUDENT_PROGRESS_NOT_FOUND");
-    }
+    const netDelta = delta(points, (point) => point.total.net);
+    const standardScoreDelta = delta(points, (point) => point.total.standardScore);
 
     return {
       tenantId: context.tenantId,
       examId: resolvedExamId,
       studentId: resolvedStudentId,
       points,
-      netDelta: delta(points, (point) => point.total.net),
-      standardScoreDelta: delta(points, (point) => point.total.standardScore),
+      ...(netDelta !== undefined ? { netDelta } : {}),
+      ...(standardScoreDelta !== undefined ? { standardScoreDelta } : {}),
     };
   }
 
@@ -450,14 +455,19 @@ export class ReportGenerationService {
     return `${student.firstName} ${student.lastName}`.trim() || undefined;
   }
 
-  private async findInstitutionName(context: RequestContext): Promise<string | undefined> {
-    if (!this.tenantStore || !context.tenantId) return undefined;
+  private async findInstitutionProfile(
+    context: RequestContext,
+  ): Promise<Pick<ReportStudentSnapshot, "institutionLogoUrl" | "institutionName">> {
+    if (!this.tenantStore || !context.tenantId) return {};
 
     try {
       const tenant = await this.tenantStore.findById(context.tenantId);
-      return tenant?.name.trim() || undefined;
+      return {
+        ...(tenant?.name.trim() ? { institutionName: tenant.name.trim() } : {}),
+        ...(tenant?.logoUrl?.trim() ? { institutionLogoUrl: tenant.logoUrl.trim() } : {}),
+      };
     } catch {
-      return undefined;
+      return {};
     }
   }
 
@@ -836,11 +846,12 @@ class SimpleReportPdfRenderer implements ReportPdfRenderer {
 async function createSnapshotPdf(
   snapshot: ReportSnapshotRecord,
   renderer: ReportPdfRenderer,
+  institution: Pick<ReportStudentSnapshot, "institutionLogoUrl" | "institutionName"> = {},
 ): Promise<ReportSnapshotPdfResult> {
-  const lines = createSnapshotPdfLines(snapshot);
+  const lines = createSnapshotPdfLines(snapshot, institution);
   const pdf = await renderer.render({
     fallbackLines: lines,
-    html: createSnapshotPdfHtml(snapshot),
+    html: createSnapshotPdfHtml(snapshot, institution),
   });
 
   return {
@@ -851,11 +862,14 @@ async function createSnapshotPdf(
   };
 }
 
-function createSnapshotPdfLines(snapshot: ReportSnapshotRecord): string[] {
+function createSnapshotPdfLines(
+  snapshot: ReportSnapshotRecord,
+  institution: Pick<ReportStudentSnapshot, "institutionName"> = {},
+): string[] {
   const snapshotData = snapshot.snapshotData ?? {};
   const averages = readRecord(snapshotData.averages);
   return [
-    "Uzman Hocam - Sinav Raporu",
+    `${institution.institutionName ?? "Uzman Hocam"} - Sinav Raporu`,
     `Sinav: ${snapshot.examId}`,
     `Snapshot: ${snapshot.id}`,
     `Durum: ${snapshot.status}`,
@@ -864,8 +878,8 @@ function createSnapshotPdfLines(snapshot: ReportSnapshotRecord): string[] {
     "Genel Ozet",
     `Sonuc sayisi: ${readNumber(snapshotData.resultCount) || "-"}`,
     `Ortalama net: ${readNumber(averages.net) || "-"}`,
+    `Ortalama LGS puani: ${readLgsScore(averages) || "-"}`,
     `Standart puan: ${readNumber(averages.standardScore) || "-"}`,
-    `Ortalama tahmini ham puan: ${readNumber(averages.estimatedRawScore) || "-"}`,
     "",
     "Branslar",
     ...readRecords(snapshotData.branches).slice(0, 8).map((branch) =>
@@ -882,7 +896,7 @@ function createSnapshotPdfLines(snapshot: ReportSnapshotRecord): string[] {
     ...readRecords(snapshotData.students).slice(0, 12).map((student) => {
       const total = readRecord(student.total);
       const statistics = readStudentStatistics(student.statistics);
-      return `${readText(student.studentId) || "-"} ${readText(student.className) || ""}: ${readNumber(total.net) || "-"} net, genel ${formatPdfRank(statistics?.general)}, sinif ${formatPdfRank(statistics?.class)}`;
+      return `${readText(student.studentId) || "-"} ${readText(student.className) || ""}: ${readNumber(total.net) || "-"} net, ${readLgsScore(total) || "-"} LGS puani, genel ${formatPdfRank(statistics?.general)}, sinif ${formatPdfRank(statistics?.class)}`;
     }),
     "",
     "Ogrenci Karnesi",
@@ -893,12 +907,17 @@ function createSnapshotPdfLines(snapshot: ReportSnapshotRecord): string[] {
   ];
 }
 
-function createSnapshotPdfHtml(snapshot: ReportSnapshotRecord): string {
+function createSnapshotPdfHtml(
+  snapshot: ReportSnapshotRecord,
+  institution: Pick<ReportStudentSnapshot, "institutionLogoUrl" | "institutionName"> = {},
+): string {
   const snapshotData = snapshot.snapshotData ?? {};
   const averages = readRecord(snapshotData.averages);
+  const averageLgsScore = readLgsScore(averages);
   const branches = readRecords(snapshotData.branches).slice(0, 8);
   const classes = readRecords(snapshotData.classes).slice(0, 8);
   const students = readRecords(snapshotData.students).slice(0, 14);
+  const institutionName = institution.institutionName ?? "Uzman Hocam";
 
   return `<!doctype html>
 <html lang="tr">
@@ -915,12 +934,14 @@ function createSnapshotPdfHtml(snapshot: ReportSnapshotRecord): string {
     .card span { color: #66758a; display: block; font-size: 11px; margin-bottom: 7px; }
     .card strong { font-size: 18px; }
     .karne { border: 3px solid #d9a428; margin: 0 0 24px; padding: 14px; }
+    .karne-detail { page-break-before: always; }
     .karne-header { display: grid; grid-template-columns: 1fr 160px; border: 1px solid #d9a428; }
     .karne-header div { padding: 10px 12px; }
     .karne-header h2 { margin: 0 0 6px; }
     .karne-header strong { display: block; font-size: 20px; }
-    .karne-brand { align-items: center; border-left: 1px solid #d9a428; color: #0f766e; display: grid; font-weight: 800; text-align: center; }
-    .karne-summary { display: grid; grid-template-columns: repeat(4, 1fr); margin: 10px 0; }
+    .karne-brand { align-items: center; border-left: 1px solid #d9a428; color: #0f766e; display: grid; font-weight: 800; justify-items: center; padding: 10px; text-align: center; }
+    .karne-brand img { display: block; max-height: 66px; max-width: 116px; object-fit: contain; }
+    .karne-summary { display: grid; grid-template-columns: repeat(5, 1fr); margin: 10px 0; }
     .karne-summary span { border: 1px solid #d9a428; font-size: 11px; font-weight: 700; padding: 7px; text-align: center; }
     .karne-grid { display: grid; gap: 12px; grid-template-columns: 1.3fr .7fr; }
     h2 { color: #16324f; font-size: 16px; margin: 22px 0 10px; }
@@ -932,7 +953,7 @@ function createSnapshotPdfHtml(snapshot: ReportSnapshotRecord): string {
 </head>
 <body>
   <section class="hero">
-    <p>Uzman Hocam</p>
+    <p>${escapeHtml(institutionName)}</p>
     <h1>Sınav Raporu</h1>
   </section>
   <main class="content">
@@ -941,37 +962,37 @@ function createSnapshotPdfHtml(snapshot: ReportSnapshotRecord): string {
     ${renderPdfCard("Snapshot", snapshot.id)}
     ${renderPdfCard("Sonuç", readNumber(snapshotData.resultCount) || "-")}
     ${renderPdfCard("Ortalama net", readNumber(averages.net) || "-")}
+    ${renderPdfCard("Ortalama LGS puanı", averageLgsScore || "-")}
     ${renderPdfCard("Standart puan", readNumber(averages.standardScore) || "-")}
-    ${renderPdfCard("Tahmini ham puan", readNumber(averages.estimatedRawScore) || "-")}
     ${renderPdfCard("Durum", snapshot.status)}
     ${renderPdfCard("Üretim", snapshot.generatedAt ?? "-")}
     ${renderPdfCard("Rapor tipi", snapshot.reportType)}
     </section>
-    ${renderPdfStudentKarne(students[0], createStudentBranchAverageLookup(snapshotData, readText(students[0]?.classId)))}
+    ${renderPdfStudentKarne(students[0], createStudentBranchAverageLookup(snapshotData, readText(students[0]?.classId)), institution)}
     ${renderPdfTable("Branş Başarı", ["Branş", "Sonuç", "Net"], branches, (branch) => [
       readText(branch.branch) || "-",
       readNumber(branch.resultCount) || "-",
       readNumber(branch.net) || "-",
     ])}
-    ${renderPdfTable("Sınıf Başarı", ["Sınıf", "Sonuç", "Net", "Standart puan", "Tahmini ham puan"], classes, (classSummary) => {
+    ${renderPdfTable("Sınıf Başarı", ["Sınıf", "Sonuç", "Net", "LGS puanı", "Standart puan"], classes, (classSummary) => {
       const classAverages = readRecord(classSummary.averages);
       return [
         readText(classSummary.className) || "Sınıfsız",
         readNumber(classSummary.resultCount) || "-",
         readNumber(classAverages.net) || "-",
+        readLgsScore(classAverages) || "-",
         readNumber(classAverages.standardScore) || "-",
-        readNumber(classAverages.estimatedRawScore) || "-",
       ];
     })}
-    ${renderPdfTable("Öğrenci Özeti", ["Öğrenci", "Sınıf", "Net", "Standart puan", "Tahmini ham puan", "Genel sıra", "Sınıf sıra"], students, (student) => {
+    ${renderPdfTable("Öğrenci Özeti", ["Öğrenci", "Sınıf", "Net", "LGS puanı", "Standart puan", "Genel sıra", "Sınıf sıra"], students, (student) => {
       const total = readRecord(student.total);
       const statistics = readStudentStatistics(student.statistics);
       return [
         readText(student.studentId) || "-",
         readText(student.className) || "-",
         readNumber(total.net) || "-",
+        readLgsScore(total) || "-",
         readNumber(total.standardScore) || "-",
-        readNumber(total.estimatedRawScore) || "-",
         formatPdfRank(statistics?.general),
         formatPdfRank(statistics?.class),
       ];
@@ -985,13 +1006,21 @@ function createSnapshotPdfHtml(snapshot: ReportSnapshotRecord): string {
 function renderPdfStudentKarne(
   student: Record<string, unknown> | undefined,
   branchAverages = new Map<string, Pick<ReportStudentBranchSummary, "classNetAverage" | "generalNetAverage" | "schoolNetAverage">>(),
+  institution: Pick<ReportStudentSnapshot, "institutionLogoUrl" | "institutionName"> = {},
 ): string {
   if (!student) return "";
 
   const total = readRecord(student.total);
+  const lgsScore = readLgsScore(total);
   const statistics = readStudentStatistics(student.statistics);
   const branches = readRecords(student.branches);
-  const outcomes = readRecords(student.outcomes).slice(0, 6);
+  const outcomes = readRecords(student.outcomes);
+  const summaryOutcomes = outcomes.slice(0, 6);
+  const questions = readRecords(student.questions).sort((left, right) => {
+    const leftNo = readNumber(left.questionNo) || 0;
+    const rightNo = readNumber(right.questionNo) || 0;
+    return leftNo - rightNo;
+  });
 
   return `<section class="karne">
       <div class="karne-header">
@@ -1000,10 +1029,11 @@ function renderPdfStudentKarne(
           <strong>${escapeHtml(readText(student.studentId) || "-")}</strong>
           <span>${escapeHtml(readText(student.className) || readText(student.classId) || "-")}</span>
         </div>
-        <div class="karne-brand">UZMAN HOCAM</div>
+        <div class="karne-brand">${renderPdfInstitutionBrand(institution)}</div>
       </div>
       <div class="karne-summary">
         <span>Net ${escapeHtml(formatPdfValue(readNumber(total.net)))}</span>
+        <span>LGS puanı ${escapeHtml(formatPdfValue(lgsScore))}</span>
         <span>Standart puan ${escapeHtml(formatPdfValue(readNumber(total.standardScore)))}</span>
         <span>Genel sıra ${escapeHtml(formatPdfRank(statistics?.general))}</span>
         <span>Sınıf sıra ${escapeHtml(formatPdfRank(statistics?.class))}</span>
@@ -1025,29 +1055,66 @@ function renderPdfStudentKarne(
           <h2>PUAN - SIRA ANALİZİ</h2>
           <table>
             <tbody>
-        <tr><th>PUAN</th><td>${escapeHtml(formatPdfValue(readNumber(total.standardScore)))}</td></tr>
-        <tr><th>Tahmini ham puan</th><td>${escapeHtml(formatPdfValue(readNumber(total.estimatedRawScore)))}</td></tr>
+        <tr><th>LGS puanı</th><td>${escapeHtml(formatPdfValue(lgsScore))}</td></tr>
+        <tr><th>Standart puan</th><td>${escapeHtml(formatPdfValue(readNumber(total.standardScore)))}</td></tr>
         <tr><th>SIRA</th><td>${escapeHtml(formatPdfRank(statistics?.general))}</td></tr>
         <tr><th>SINIF</th><td>${escapeHtml(formatPdfRank(statistics?.class))}</td></tr>
       </tbody>
     </table>
         </section>
       </div>
-      ${renderPdfTable("BÖLÜM BAŞARI YÜZDELERİ", ["Kazanım", "Branş", "Net"], outcomes, (outcome) => [
+      ${renderPdfTable("BÖLÜM BAŞARI YÜZDELERİ", ["Kazanım", "Branş", "Doğru", "Yanlış", "Boş", "Net"], summaryOutcomes, (outcome) => [
         readText(outcome.outcomeCode) || "-",
         readText(outcome.branch) || "-",
+        formatPdfValue(readNumber(outcome.correct)),
+        formatPdfValue(readNumber(outcome.wrong)),
+        formatPdfValue(readNumber(outcome.blank)),
         formatPdfValue(readNumber(outcome.net)),
       ])}
-      ${renderPdfTable("SON SINAV NETLERİ", ["Öğrenci", "Net", "Puan", "Tahmini ham puan"], [student], (row) => {
+      ${renderPdfTable("SON SINAV NETLERİ", ["Öğrenci", "Net", "LGS puanı", "Standart puan"], [student], (row) => {
         const rowTotal = readRecord(row.total);
         return [
           readText(row.studentId) || "-",
           formatPdfValue(readNumber(rowTotal.net)),
+          formatPdfValue(readLgsScore(rowTotal)),
           formatPdfValue(readNumber(rowTotal.standardScore)),
-          formatPdfValue(readNumber(rowTotal.estimatedRawScore)),
         ];
       })}
+    </section>
+    <section class="karne karne-detail">
+      <div class="karne-header">
+        <div>
+          <h2>Detaylı Deneme Analizi</h2>
+          <strong>${escapeHtml(readText(student.studentId) || "-")}</strong>
+          <span>${escapeHtml(readText(student.className) || readText(student.classId) || "-")}</span>
+        </div>
+        <div class="karne-brand">${renderPdfInstitutionBrand(institution)}</div>
+      </div>
+      ${renderPdfTable("KAZANIM DETAYI", ["Kazanım", "Ders", "Doğru", "Yanlış", "Boş", "Net"], outcomes, (outcome) => [
+        readText(outcome.outcomeCode) || "-",
+        readText(outcome.branch) || "-",
+        formatPdfValue(readNumber(outcome.correct)),
+        formatPdfValue(readNumber(outcome.wrong)),
+        formatPdfValue(readNumber(outcome.blank)),
+        formatPdfValue(readNumber(outcome.net)),
+      ])}
+      ${renderPdfTable("SORU CEVAP ANALİZİ", ["Soru", "Ders", "Kazanım", "Öğrenci cevabı", "Doğru cevap", "Durum"], questions, (question) => [
+        formatPdfValue(readNumber(question.questionNo)),
+        readText(question.branch) || "-",
+        readText(question.outcomeCode) || "-",
+        readText(question.answer) || "-",
+        readText(question.correctAnswer) || "-",
+        formatPdfQuestionStatus(question.status),
+      ])}
     </section>`;
+}
+
+function renderPdfInstitutionBrand(institution: Pick<ReportStudentSnapshot, "institutionLogoUrl" | "institutionName">): string {
+  const name = institution.institutionName ?? "Uzman Hocam";
+  if (institution.institutionLogoUrl) {
+    return `<img src="${escapeHtml(institution.institutionLogoUrl)}" alt="${escapeHtml(name)} logosu" />`;
+  }
+  return escapeHtml(name);
 }
 
 function renderPdfCard(label: string, value: string | number): string {
@@ -1061,6 +1128,13 @@ function formatPdfValue(value: string | number): string {
 function formatPdfRank(rank: ReportScopeRank | undefined): string {
   if (!rank) return "-";
   return `${rank.rank}/${rank.outOf} (%${rank.percentile})`;
+}
+
+function formatPdfQuestionStatus(value: unknown): string {
+  const status = readQuestionStatus(value);
+  if (status === "WRONG") return "Yanlış";
+  if (status === "BLANK") return "Boş";
+  return "Doğru";
 }
 
 function renderPdfTable(
@@ -1161,6 +1235,12 @@ function readRecords(value: unknown): Record<string, unknown>[] {
 
 function readNumber(value: unknown): number | "" {
   return typeof value === "number" && Number.isFinite(value) ? value : "";
+}
+
+function readLgsScore(value: unknown): number | "" {
+  const record = readRecord(value);
+  const estimatedRawScore = readNumber(record.estimatedRawScore);
+  return estimatedRawScore === "" ? readNumber(record.standardScore) : estimatedRawScore;
 }
 
 function readOptionalNumber(value: unknown): number | undefined {

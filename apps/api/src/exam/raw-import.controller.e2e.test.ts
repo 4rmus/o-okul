@@ -113,7 +113,9 @@ describe("RawImportController", () => {
       },
       status: "uploaded",
     });
-    expect(repository.creates[0]?.sha256).toBe(producer.inputs[0]?.contentHash);
+    expect(producer.inputs[0]?.contentHash).toEqual(expect.stringMatching(
+      new RegExp(`^${repository.creates[0]?.sha256}-[0-9a-f-]{36}$`),
+    ));
     expect(producer.inputs[0]).toMatchObject({
       queueName: "excel-import",
       tenantId: "tenant-a",
@@ -225,6 +227,7 @@ describe("RawImportController", () => {
       examId: "exam-a",
       rawImportId: "raw-import-a",
       answerKeyId: "answer-key-a",
+      rawImportSha256: "raw-sha-a",
       matchedCount: 2,
       queuedCount: 2,
       queueName: "exam-evaluation",
@@ -272,7 +275,7 @@ describe("RawImportController", () => {
         participantId: "participant-a",
         answerKeyId: "answer-key-a",
         queueName: "exam-evaluation",
-        jobId: "quarantine-a_raw-sha-a",
+        jobId: "quarantine-a_raw-sha-a-answer-key-a",
         status: "queued",
       },
     });
@@ -282,7 +285,7 @@ describe("RawImportController", () => {
         tenantId: "tenant-a",
         userId: "user-tenant-a",
         entityId: "quarantine-a",
-        contentHash: "raw-sha-a",
+        contentHash: "raw-sha-a-answer-key-a",
         participantId: "participant-a",
         rawImportId: "raw-import-a",
         answerKeyId: "answer-key-a",

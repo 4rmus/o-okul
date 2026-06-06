@@ -27,6 +27,7 @@ describe("OpticalAnswerParser", () => {
         participantId: "participant-a",
         parserConfigVersion: "parser-v1",
         rowNumber: 2,
+        bookletType: "A",
         answers: [
           { questionNo: 1, answer: "A" },
           { questionNo: 2, answer: "B" },
@@ -236,6 +237,47 @@ describe("OpticalAnswerParser", () => {
     expect(result.matched[0]?.participantId).toBe("participant-right");
   });
 
+  it("öğrenci no alanına TC geldiyse TC hash eşleşmesiyle participante bağlar", () => {
+    const parser = new OpticalAnswerParser();
+
+    const result = parser.parse({
+      ...createBaseInput(),
+      content: "ogrenci_no\tkitapcik\tcevaplar\n10000000146\tA\tABCDE",
+      parserConfig: createDelimitedConfig(),
+      participants: [
+        { participantId: "participant-right", studentNo: "98765", nationalIdHash: hashNationalId("10000000146"), bookletType: "A" },
+      ],
+    });
+
+    expect(result.unmatched).toEqual([]);
+    expect(result.matched[0]).toMatchObject({
+      participantId: "participant-right",
+      bookletType: "A",
+    });
+  });
+
+  it("öğrenci no alanındaki TC eşleşmezse karantinada TC değerini maskeler", () => {
+    const parser = new OpticalAnswerParser();
+
+    const result = parser.parse({
+      ...createBaseInput(),
+      content: "ogrenci_no\tkitapcik\tcevaplar\n10000000146\tA\tABCDE",
+      parserConfig: createDelimitedConfig(),
+      participants: [],
+    });
+
+    expect(result.matched).toEqual([]);
+    expect(result.unmatched[0]).toMatchObject({
+      reason: "STUDENT_NOT_FOUND",
+      rawRow: {
+        line: "*******0146\tA\tABCDE",
+        studentNo: "*******0146",
+      },
+    });
+    expect(result.unmatched[0]?.rawRow.line).not.toContain("10000000146");
+    expect(result.unmatched[0]?.rawRow.studentNo).not.toContain("10000000146");
+  });
+
   it("karantina raw satırında TC kimlik değerini maskeler", () => {
     const parser = new OpticalAnswerParser();
 
@@ -283,6 +325,7 @@ describe("OpticalAnswerParser", () => {
       participantId: "participant-resolved",
       parserConfigVersion: "parser-v1",
       rowNumber: 8,
+      bookletType: "A",
       answers: [
         { questionNo: 1, answer: "A" },
         { questionNo: 2, answer: "B" },

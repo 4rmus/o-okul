@@ -1,4 +1,4 @@
-export const scoringEngineVersion = "2026.05.scaled-net";
+export const scoringEngineVersion = "2026.06.lgs-prefixed-scaled-net";
 
 export type Choice = "A" | "B" | "C" | "D" | "E" | "";
 
@@ -196,9 +196,10 @@ function normalizeBranchName(branch: string): string {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toUpperCase()
-    .replace(/[^A-Z0-9 ]/gu, "")
+    .replace(/[^A-Z0-9]+/gu, " ")
     .replace(/\s+/g, " ")
-    .trim();
+    .trim()
+    .replace(/^LGS\s+/u, "");
 }
 
 function calculateStandardScore(rawScore: number, config: ScoringConfig): number {
