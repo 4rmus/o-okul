@@ -68,6 +68,81 @@ describe("PostgresAnswerKeyRepository", () => {
     )).rejects.toThrow("ANSWER_KEY_VERSION_CONFLICT");
   });
 
+  it("aynı cevap anahtarı zaten varsa mevcut kaydı döndürür", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const repository = new PostgresAnswerKeyRepository({
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        if (sql.includes('INSERT INTO "AnswerKey"')) {
+          return { rows: [] as T[] };
+        }
+        if (sql.includes('FROM "AnswerKey"')) {
+          return { rows: [createRow()] as T[] };
+        }
+        if (sql.includes('FROM "ExamBookletVariant"')) {
+          return { rows: [] as T[] };
+        }
+        return { rows: [] as T[] };
+      },
+    });
+
+    const result = await runWithRequestContext(
+      { userId: "user-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      () => repository.create(createInput()),
+    );
+
+    expect(queries.some((query) => query.sql.includes('FROM "AnswerKey"'))).toBe(true);
+    expect(result).toMatchObject({
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      version: "v1",
+      questionCount: 2,
+      status: "DRAFT",
+    });
+  });
+
+  it("aynı version farklı cevap anahtarıyla gelirse conflict döner", async () => {
+    const repository = new PostgresAnswerKeyRepository({
+      async query<T>(sql: string) {
+        if (sql.includes('FROM "AnswerKey"')) {
+          return {
+            rows: [createRow({
+              keyData: { questions: [{ ...createInput().questions[0], correctAnswer: "B" }] },
+            })] as T[],
+          };
+        }
+        return { rows: [] as T[] };
+      },
+    });
+
+    await expect(runWithRequestContext(
+      { userId: "user-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      () => repository.create(createInput()),
+    )).rejects.toThrow("ANSWER_KEY_VERSION_CONFLICT");
+  });
+
+  it("aynı version farklı kitapçık permütasyonuyla gelirse conflict döner", async () => {
+    const repository = new PostgresAnswerKeyRepository({
+      async query<T>(sql: string) {
+        if (sql.includes('FROM "AnswerKey"')) {
+          return { rows: [createRow()] as T[] };
+        }
+        if (sql.includes('FROM "ExamBookletVariant"')) {
+          return { rows: [{ code: "B", permutation: [1, 2] }] as T[] };
+        }
+        return { rows: [] as T[] };
+      },
+    });
+
+    await expect(runWithRequestContext(
+      { userId: "user-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      () => repository.create({
+        ...createInput(),
+        bookletVariants: [{ code: "B", permutation: [2, 1] }],
+      }),
+    )).rejects.toThrow("ANSWER_KEY_VERSION_CONFLICT");
+  });
+
   it("cevap anahtarıyla birlikte kitapçık variant permütasyonunu upsert eder", async () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const repository = new PostgresAnswerKeyRepository({

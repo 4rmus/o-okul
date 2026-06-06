@@ -105,7 +105,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     try {
       const storedGroups = window.localStorage.getItem(sidebarGroupStorageKey);
       if (storedGroups) {
-        setExpandedSidebarGroups(JSON.parse(storedGroups) as Record<string, boolean>);
+        const parsedGroups = JSON.parse(storedGroups) as Record<string, boolean>;
+        const expandedGroupKey = Object.keys(parsedGroups).find((key) => parsedGroups[key]);
+        setExpandedSidebarGroups(expandedGroupKey ? { [expandedGroupKey]: true } : {});
       }
     } catch {
       setExpandedSidebarGroups({});
@@ -155,12 +157,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   function toggleSidebarGroup(groupKey: string) {
     setExpandedSidebarGroups((current) => {
-      const next = { ...current };
-      if (next[groupKey]) {
-        delete next[groupKey];
-      } else {
-        next[groupKey] = true;
-      }
+      const next = current[groupKey] ? {} : { [groupKey]: true };
 
       try {
         window.localStorage.setItem(sidebarGroupStorageKey, JSON.stringify(next));

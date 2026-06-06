@@ -11,6 +11,7 @@ import type { ExamParticipantRecord, ExamRecord } from "@uzman-hocam/shared-type
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";
+import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import {
   type TeacherAssignmentStore,
   teacherAssignmentStoreToken,
@@ -26,11 +27,18 @@ export interface CreateExamRepositoryInput {
   startsAt?: string;
 }
 
+export interface UpdateExamRepositoryInput {
+  title: string;
+  startsAt?: string;
+}
+
 export interface ExamRepository {
   create(input: CreateExamRepositoryInput): Promise<ExamRecord>;
   list(tenantId: string): Promise<ExamRecord[]>;
   findById(tenantId: string, examId: string): Promise<ExamRecord | undefined>;
+  update(tenantId: string, examId: string, input: UpdateExamRepositoryInput): Promise<ExamRecord | undefined>;
   publish(tenantId: string, examId: string): Promise<ExamRecord | undefined>;
+  delete(tenantId: string, examId: string): Promise<ExamRecord | undefined>;
 }
 
 export interface CreateExamParticipantRepositoryInput {
@@ -49,7 +57,11 @@ export interface ExamParticipantRepository {
 export interface CreateExamInput {
   title?: string;
   startsAt?: string;
+  classId?: string;
+  classIds?: string[];
 }
+
+export interface UpdateExamInput extends CreateExamInput {}
 
 export interface CreateExamParticipantInput {
   studentId?: string;
@@ -66,6 +78,8 @@ export class ExamService {
     private readonly participants: ExamParticipantRepository,
     @Inject(studentStoreToken)
     private readonly students: StudentStore,
+    @Inject(classStoreToken)
+    private readonly classes: ClassStore,
     @Inject(teacherAssignmentStoreToken)
     private readonly teacherAssignments: TeacherAssignmentStore,
     @Optional() private readonly auditLogs?: AuditLogService,
@@ -75,6 +89,11 @@ export class ExamService {
     const tenantId = requireTenant(context);
     const title = requiredString(input.title, "EXAM_TITLE_REQUIRED");
     const startsAt = optionalIso(input.startsAt, "EXAM_STARTS_AT_INVALID");
+    const classIds = normalizeClassIds(input);
+
+    for (const classId of classIds) {
+      await this.requireClass(tenantId, classId);
+    }
 
     const exam = await this.repository.create({ tenantId, title, ...(startsAt ? { startsAt } : {}) });
     await this.auditLogs?.record({
@@ -85,6 +104,9 @@ export class ExamService {
       action: "exam.created",
       diff: { title: exam.title, status: exam.status },
     });
+    for (const classId of classIds) {
+      await this.addClassParticipants(context, tenantId, exam.id, classId);
+    }
     return exam;
   }
 
@@ -97,6 +119,35 @@ export class ExamService {
     const tenantId = requireTenant(context);
     const id = requiredString(examId, "EXAM_ID_REQUIRED");
     return this.requireExam(tenantId, id);
+  }
+
+  async update(context: RequestContext, examId: string | undefined, input: UpdateExamInput): Promise<ExamRecord> {
+    const tenantId = requireTenant(context);
+    const id = requiredString(examId, "EXAM_ID_REQUIRED");
+    const title = requiredString(input.title, "EXAM_TITLE_REQUIRED");
+    const startsAt = optionalIso(input.startsAt, "EXAM_STARTS_AT_INVALID");
+    const classIds = normalizeClassIds(input);
+
+    for (const classId of classIds) {
+      await this.requireClass(tenantId, classId);
+    }
+
+    const exam = await this.repository.update(tenantId, id, { title, ...(startsAt ? { startsAt } : {}) });
+    if (!exam) {
+      throw new NotFoundException("EXAM_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId,
+      actorUserId: context.userId,
+      entityType: "Exam",
+      entityId: exam.id,
+      action: "exam.updated",
+      diff: { title: exam.title, startsAt: exam.startsAt },
+    });
+    for (const classId of classIds) {
+      await this.addClassParticipants(context, tenantId, exam.id, classId);
+    }
+    return exam;
   }
 
   async publish(context: RequestContext, examId: string | undefined): Promise<ExamRecord> {
@@ -115,6 +166,23 @@ export class ExamService {
       diff: { status: exam.status },
     });
     return exam;
+  }
+
+  async delete(context: RequestContext, examId: string | undefined): Promise<void> {
+    const tenantId = requireTenant(context);
+    const id = requiredString(examId, "EXAM_ID_REQUIRED");
+    const exam = await this.repository.delete(tenantId, id);
+    if (!exam) {
+      throw new NotFoundException("EXAM_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId,
+      actorUserId: context.userId,
+      entityType: "Exam",
+      entityId: exam.id,
+      action: "exam.deleted",
+      diff: { title: exam.title, status: exam.status },
+    });
   }
 
   async listParticipants(context: RequestContext, examId: string | undefined): Promise<ExamParticipantRecord[]> {
@@ -145,10 +213,49 @@ export class ExamService {
       classId: student.classId,
     });
 
+    return this.createParticipant(context, tenantId, id, studentId, participantNo, bookletType);
+  }
+
+  private async requireExam(tenantId: string, examId: string): Promise<ExamRecord> {
+    const exam = await this.repository.findById(tenantId, examId);
+    if (!exam) {
+      throw new NotFoundException("EXAM_NOT_FOUND");
+    }
+    return exam;
+  }
+
+  private async requireClass(tenantId: string, classId: string): Promise<void> {
+    const schoolClass = await this.classes.findById(classId);
+    if (!schoolClass || schoolClass.tenantId !== tenantId || schoolClass.deletedAt) {
+      throw new NotFoundException("CLASS_NOT_FOUND");
+    }
+  }
+
+  private async addClassParticipants(context: RequestContext, tenantId: string, examId: string, classId: string): Promise<void> {
+    await assertTeacherAssigned(context, this.teacherAssignments, { tenantId, classId });
+    const existingStudentIds = new Set((await this.participants.list(tenantId, examId)).map((participant) => participant.studentId));
+    const students = (await this.students.list()).filter(
+      (student) => student.tenantId === tenantId && student.classId === classId && !student.deletedAt,
+    );
+    for (const student of students) {
+      if (existingStudentIds.has(student.id)) continue;
+      await this.createParticipant(context, tenantId, examId, student.id);
+      existingStudentIds.add(student.id);
+    }
+  }
+
+  private async createParticipant(
+    context: RequestContext,
+    tenantId: string,
+    examId: string,
+    studentId: string,
+    participantNo?: string,
+    bookletType?: string,
+  ): Promise<ExamParticipantRecord> {
     try {
       const participant = await this.participants.create({
         tenantId,
-        examId: id,
+        examId,
         studentId,
         ...(participantNo ? { participantNo } : {}),
         ...(bookletType ? { bookletType } : {}),
@@ -159,7 +266,7 @@ export class ExamService {
         entityType: "ExamParticipant",
         entityId: participant.id,
         action: "exam_participant.created",
-        diff: { examId: id, studentId },
+        diff: { examId, studentId },
       });
       return participant;
     } catch (error) {
@@ -168,14 +275,6 @@ export class ExamService {
       }
       throw error;
     }
-  }
-
-  private async requireExam(tenantId: string, examId: string): Promise<ExamRecord> {
-    const exam = await this.repository.findById(tenantId, examId);
-    if (!exam) {
-      throw new NotFoundException("EXAM_NOT_FOUND");
-    }
-    return exam;
   }
 }
 
@@ -208,6 +307,11 @@ function optionalIso(value: string | undefined, errorCode: string): string | und
 function optionalString(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
+}
+
+function normalizeClassIds(input: CreateExamInput): string[] {
+  const values = input.classIds ?? (input.classId ? [input.classId] : []);
+  return [...new Set(values.map((value) => optionalString(value)).filter((value): value is string => Boolean(value)))];
 }
 
 function isUniqueViolation(error: unknown): boolean {

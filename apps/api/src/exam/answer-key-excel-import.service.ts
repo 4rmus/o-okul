@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, Optional } from "@nestjs/common";
 import ExcelJS from "exceljs";
 import type {
   AnswerKeyBranchSummary,
@@ -6,6 +6,7 @@ import type {
   AnswerKeyScoringConfig,
 } from "@uzman-hocam/shared-types";
 import type { RequestContext } from "../context/request-context.js";
+import { learningOutcomeStoreToken, type LearningOutcomeStore } from "../school/learning-outcome-store.js";
 import {
   AnswerKeyService,
   type AnswerKeyBookletVariantSummary,
@@ -65,7 +66,12 @@ const answerChoices = new Set(["A", "B", "C", "D", "E"]);
 
 @Injectable()
 export class AnswerKeyExcelImportService {
-  constructor(private readonly answerKeys: AnswerKeyService) {}
+  constructor(
+    private readonly answerKeys: AnswerKeyService,
+    @Optional()
+    @Inject(learningOutcomeStoreToken)
+    private readonly learningOutcomes?: LearningOutcomeStore,
+  ) {}
 
   async dryRun(context: RequestContext, input: AnswerKeyExcelImportInput): Promise<AnswerKeyExcelImportDryRunResult> {
     const parsed = await this.parseWorkbook(input.fileBase64);
@@ -105,6 +111,7 @@ export class AnswerKeyExcelImportService {
     if (answerKey.status === "DRY_RUN") {
       throw new Error("ANSWER_KEY_IMPORT_RESULT_INVALID");
     }
+    await this.syncLearningOutcomes(context, parsed.questions);
     return {
       imported: true,
       answerKey,
@@ -271,6 +278,52 @@ export class AnswerKeyExcelImportService {
     }
 
     return String(value).trim();
+  }
+
+  private async syncLearningOutcomes(context: RequestContext, questions: ParsedAnswerKeyWorkbook["questions"]): Promise<void> {
+    if (!this.learningOutcomes || !context.tenantId) {
+      return;
+    }
+
+    const incoming = new Map<string, { branch: string; title: string }>();
+    for (const question of questions) {
+      const code = question.outcomeCode?.trim();
+      if (!code || incoming.has(code)) continue;
+
+      incoming.set(code, {
+        branch: question.branch,
+        title: question.topic?.trim() || code,
+      });
+    }
+    if (incoming.size === 0) {
+      return;
+    }
+
+    const existingByCode = new Map(
+      (await this.learningOutcomes.list())
+        .filter((outcome) => outcome.tenantId === context.tenantId && !outcome.deletedAt)
+        .map((outcome) => [outcome.code, outcome]),
+    );
+
+    for (const [code, outcome] of incoming) {
+      const existing = existingByCode.get(code);
+      if (!existing) {
+        await this.learningOutcomes.create({
+          tenantId: context.tenantId,
+          code,
+          branch: outcome.branch,
+          title: outcome.title,
+        });
+        continue;
+      }
+
+      if (existing.branch !== outcome.branch || existing.title !== outcome.title) {
+        await this.learningOutcomes.update(existing.id, {
+          branch: outcome.branch,
+          title: outcome.title,
+        });
+      }
+    }
   }
 }
 

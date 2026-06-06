@@ -98,7 +98,8 @@ export function ClassDetailPage({ classId }: { classId: string }) {
                 { label: "Kampüs", value: detail.campusName ?? "-" },
                 { label: "Öğrenci", value: detail.students.length },
                 { label: "Sınav net", value: formatNumber(classReport?.averages.net) },
-                { label: "Sınav puanı", value: formatNumber(classReport?.averages.standardScore) },
+                { label: "LGS puanı", value: formatNumber(readLgsScore(classReport?.averages)) },
+                { label: "Standart puan", value: formatNumber(classReport?.averages.standardScore) },
               ]}
             />
             <section className="next-report-list" aria-label="Sınıf öğrencileri">
@@ -120,7 +121,7 @@ export function ClassDetailPage({ classId }: { classId: string }) {
               {toClassStudentResults(selectedSnapshot, classId).length > 0 ? (
                 toClassStudentResults(selectedSnapshot, classId).map((student) => (
                   <p key={student.studentId}>
-                    {studentNameById.get(student.studentId) ?? student.studentId}: {formatNumber(student.net)} net · {formatNumber(student.standardScore)} puan
+                    {studentNameById.get(student.studentId) ?? student.studentId}: {formatNumber(student.net)} net · {formatNumber(student.lgsScore)} LGS puanı
                   </p>
                 ))
               ) : (
@@ -194,7 +195,7 @@ function toClassStudentResults(snapshot: ReportSnapshotRecord | null, classId: s
     .map((student) => ({
       studentId: student.studentId,
       net: student.total?.net,
-      standardScore: student.total?.standardScore,
+      lgsScore: readLgsScore(student.total),
     }));
 }
 
@@ -223,4 +224,8 @@ function formatSnapshotLabel(snapshot: ReportSnapshotRecord) {
 
 function formatNumber(value: number | undefined) {
   return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+}
+
+function readLgsScore(total: { estimatedRawScore?: number; standardScore?: number } | undefined) {
+  return total?.estimatedRawScore ?? total?.standardScore;
 }

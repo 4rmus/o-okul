@@ -847,6 +847,10 @@ function StudentDetailPanel({ detail, loading }: { detail?: StudentDetail; loadi
           <dd>{formatNumber(detail?.report?.total?.net)}</dd>
         </div>
         <div>
+          <dt>LGS puanı</dt>
+          <dd>{formatNumber(readLgsScore(detail?.report?.total))}</dd>
+        </div>
+        <div>
           <dt>Hata kitapçığı</dt>
           <dd>{detail?.errorBooklet?.items ? `${detail.errorBooklet.items.length} soru` : "-"}</dd>
         </div>
@@ -1226,6 +1230,10 @@ function formatPendingPayment(plans: PaymentPlanWithInstallmentsRecord[]) {
 
 function formatNumber(value: number | undefined) {
   return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+}
+
+function readLgsScore(total: { estimatedRawScore?: number; standardScore?: number } | undefined) {
+  return total?.estimatedRawScore ?? total?.standardScore;
 }
 
 function formatDelta(value: number | undefined) {

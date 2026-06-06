@@ -173,6 +173,7 @@ export function TeacherClassReportsPanel({
             <th>Bağlam</th>
             <th>Sonuç</th>
             <th>Net</th>
+            <th>LGS puanı</th>
             <th>Standart puan</th>
           </tr>
         </thead>
@@ -183,6 +184,7 @@ export function TeacherClassReportsPanel({
               <td>{formatReportContext(report, courseNames, termNames)}</td>
               <td>{report.resultCount}</td>
               <td>{formatNumber(report.averages.net)}</td>
+              <td>{formatNumber(readLgsScore(report.averages))}</td>
               <td>{formatNumber(report.averages.standardScore)}</td>
             </tr>
           ))}
@@ -194,6 +196,10 @@ export function TeacherClassReportsPanel({
 
 function formatCount(value: number, label: string) {
   return `${value.toLocaleString("tr-TR")} ${label}`;
+}
+
+function readLgsScore(total: { estimatedRawScore?: number; standardScore?: number } | undefined) {
+  return total?.estimatedRawScore ?? total?.standardScore;
 }
 
 function formatUniqueLabels(values: Array<string | undefined>) {

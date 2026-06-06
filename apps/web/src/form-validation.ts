@@ -88,6 +88,10 @@ export const examFormSchema = z.object({
   }),
 });
 
+export const examWithClassFormSchema = examFormSchema.extend({
+  classIds: z.array(z.string()).min(1, "En az bir sınıf seçilmelidir."),
+});
+
 export const examParticipantFormSchema = z.object({
   studentId: requiredText("Öğrenci"),
   participantNo: optionalText(),
@@ -307,15 +311,15 @@ export const parserConfigSuggestionFormSchema = z.object({
   if (!value.sampleText && !value.fileBase64) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Örnek içerik veya dosya zorunludur.",
-      path: ["sampleText"],
+      message: "Dosya seçilmelidir.",
+      path: ["fileBase64"],
     });
   }
 });
 
 export const parserConfigApprovalFormSchema = z.object({
   examId: requiredText("Sınav ID"),
-  version: requiredText("Versiyon"),
+  version: requiredText("Format sürümü"),
 });
 
 export const answerKeyImportFormSchema = z.object({
@@ -326,7 +330,7 @@ export const answerKeyImportFormSchema = z.object({
 
 export const rawImportUploadFormSchema = z.object({
   examId: requiredText("Sınav ID"),
-  parserConfigVersion: requiredText("Parser versiyonu"),
+  parserConfigVersion: requiredText("Format sürümü"),
   sourceType: requiredText("Kaynak tipi"),
   fileName: requiredText("Optik dosya"),
   fileBase64: requiredText("Optik dosya"),
@@ -334,7 +338,7 @@ export const rawImportUploadFormSchema = z.object({
 
 export const quarantineLookupFormSchema = z.object({
   examId: requiredText("Sınav ID"),
-  rawImportId: requiredText("Raw import ID"),
+  rawImportId: requiredText("Yüklenen optik dosya"),
 });
 
 export const quarantineResolveFormSchema = z.object({
@@ -400,6 +404,8 @@ export type LearningOutcomeFormState = z.input<typeof learningOutcomeFormSchema>
 export type LearningOutcomeFormPayload = z.output<typeof learningOutcomeFormSchema>;
 export type ExamFormState = z.input<typeof examFormSchema>;
 export type ExamFormPayload = z.output<typeof examFormSchema>;
+export type ExamWithClassFormState = z.input<typeof examWithClassFormSchema>;
+export type ExamWithClassFormPayload = z.output<typeof examWithClassFormSchema>;
 export type ExamParticipantFormState = z.input<typeof examParticipantFormSchema>;
 export type ExamParticipantFormPayload = z.output<typeof examParticipantFormSchema>;
 export type TenantFormState = z.input<typeof tenantFormSchema>;

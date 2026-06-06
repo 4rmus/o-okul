@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { type Queryable, type TenantQueryable, withTenantDb } from "@uzman-hocam/db";
 import type { ParserConfigSuggestion, ParserDelimiter } from "./format-analyzer-service.js";
 import {
@@ -56,6 +57,7 @@ export class PostgresExamEvaluationAdapter implements ExamEvaluationJobAdapter {
     return withTenantDb(this.pool, { tenantId: result.tenantId }, async (client) => {
       const inserted = await client.query<ExamResultRow>(
         `INSERT INTO "ExamResult" (
+           "id",
            "tenantId",
            "examId",
            "studentId",
@@ -70,8 +72,21 @@ export class PostgresExamEvaluationAdapter implements ExamEvaluationJobAdapter {
            "computedAt",
            "updatedAt"
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, now())
-         ON CONFLICT ("tenantId", "resultKey") DO NOTHING
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, now())
+         ON CONFLICT ("tenantId", "resultKey")
+         DO UPDATE SET
+           "examId" = EXCLUDED."examId",
+           "studentId" = EXCLUDED."studentId",
+           "participantId" = EXCLUDED."participantId",
+           "rawImportId" = EXCLUDED."rawImportId",
+           "answerKeyId" = EXCLUDED."answerKeyId",
+           "answerKeyVersion" = EXCLUDED."answerKeyVersion",
+           "parserConfigVersion" = EXCLUDED."parserConfigVersion",
+           "engineVersion" = EXCLUDED."engineVersion",
+           "scoreData" = EXCLUDED."scoreData",
+           "computedAt" = EXCLUDED."computedAt",
+           "deletedAt" = NULL,
+           "updatedAt" = now()
          RETURNING *`,
         toInsertValues(result),
       );
@@ -194,6 +209,7 @@ async function materializeResolvedQuarantineParsedAnswer(
 
   await client.query(
     `INSERT INTO "ParsedAnswer" (
+       "id",
        "tenantId",
        "examId",
        "rawImportId",
@@ -204,7 +220,7 @@ async function materializeResolvedQuarantineParsedAnswer(
        "status",
        "updatedAt"
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, 'MATCHED', now())
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 'MATCHED', now())
      ON CONFLICT ("tenantId", "rawImportId", "participantId", "parserConfigVersion")
      DO UPDATE SET
        "rowNumber" = EXCLUDED."rowNumber",
@@ -213,6 +229,7 @@ async function materializeResolvedQuarantineParsedAnswer(
        "deletedAt" = NULL,
        "updatedAt" = now()`,
     [
+      randomUUID(),
       parsed.tenantId,
       parsed.examId,
       parsed.rawImportId,
@@ -285,6 +302,7 @@ async function findExistingResult(
 
 function toInsertValues(result: ExamEvaluationJobResult): unknown[] {
   return [
+    randomUUID(),
     result.tenantId,
     result.examId,
     result.studentId,

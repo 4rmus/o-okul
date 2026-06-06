@@ -15,6 +15,7 @@ export interface RawImportEvaluationQueueResult {
   examId: string;
   rawImportId: string;
   answerKeyId?: string;
+  rawImportSha256?: string;
   matchedCount: number;
   queuedCount: number;
   queueName: "exam-evaluation";
@@ -95,6 +96,7 @@ export class RawImportAnalysisService {
       examId,
       rawImportId,
       answerKeyId: matched[0]?.answerKeyId,
+      rawImportSha256: matched[0]?.rawImportSha256,
       matchedCount: matched.length,
       queuedCount: jobs.length,
       queueName: "exam-evaluation",

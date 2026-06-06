@@ -94,6 +94,7 @@ interface TeacherClassReportSummary {
     wrong?: number;
     blank?: number;
     net?: number;
+    estimatedRawScore?: number;
     standardScore?: number;
   };
 }

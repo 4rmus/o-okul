@@ -16,32 +16,37 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
   async loadResults(input: ReportGenerationJobInput): Promise<ExamResultForReport[]> {
     return withTenantDb(this.pool, { tenantId: input.tenantId }, async (client) => {
       const result = await client.query<ExamResultReportRow>(
-        `SELECT
-           er."studentId",
-           s."classId",
-           c."name" AS "className",
-           er."resultKey",
-           er."answerKeyVersion",
-           er."parserConfigVersion",
-           er."engineVersion",
-           er."scoreData",
-           er."computedAt"
-         FROM "ExamResult" er
-         LEFT JOIN "Student" s
-           ON s."tenantId" = er."tenantId"
-          AND s."id" = er."studentId"
-          AND s."deletedAt" IS NULL
-         LEFT JOIN "Class" c
-           ON c."tenantId" = er."tenantId"
-          AND c."id" = s."classId"
-          AND c."deletedAt" IS NULL
-         WHERE er."tenantId" = $1
-           AND er."examId" = $2
-           AND er."deletedAt" IS NULL
-           AND ($3::text IS NULL OR c."campusId" = $3)
-           AND ($4::text IS NULL OR c."gradeLevelId" = $4)
-           AND ($5::text IS NULL OR s."classId" = $5)
-         ORDER BY er."studentId" ASC, er."resultKey" ASC`,
+        `WITH latest_results AS (
+           SELECT DISTINCT ON (er."studentId")
+             er."studentId",
+             s."classId",
+             c."name" AS "className",
+             er."resultKey",
+             er."answerKeyVersion",
+             er."parserConfigVersion",
+             er."engineVersion",
+             er."scoreData",
+             er."computedAt"
+           FROM "ExamResult" er
+           LEFT JOIN "Student" s
+             ON s."tenantId" = er."tenantId"
+            AND s."id" = er."studentId"
+            AND s."deletedAt" IS NULL
+           LEFT JOIN "Class" c
+             ON c."tenantId" = er."tenantId"
+            AND c."id" = s."classId"
+            AND c."deletedAt" IS NULL
+           WHERE er."tenantId" = $1
+             AND er."examId" = $2
+             AND er."deletedAt" IS NULL
+             AND ($3::text IS NULL OR c."campusId" = $3)
+             AND ($4::text IS NULL OR c."gradeLevelId" = $4)
+             AND ($5::text IS NULL OR s."classId" = $5)
+           ORDER BY er."studentId" ASC, er."computedAt" DESC, er."updatedAt" DESC, er."resultKey" DESC
+         )
+         SELECT *
+         FROM latest_results
+         ORDER BY "studentId" ASC, "resultKey" ASC`,
         [
           input.tenantId,
           input.examId,

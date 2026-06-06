@@ -666,6 +666,7 @@ export interface ReportStudentStatistics {
 export interface ReportStudentSnapshot {
   tenantId: string;
   institutionName?: string;
+  institutionLogoUrl?: string;
   examId: string;
   examTitle?: string;
   examStartsAt?: string;
@@ -682,6 +683,7 @@ export interface ReportStudentSnapshot {
   total: ReportStudentScoreSummary;
   branches: ReportStudentBranchSummary[];
   outcomes?: ReportStudentOutcomeSummary[];
+  questions?: ReportStudentQuestionSummary[];
   statistics?: ReportStudentStatistics;
   generatedAt?: string;
 }

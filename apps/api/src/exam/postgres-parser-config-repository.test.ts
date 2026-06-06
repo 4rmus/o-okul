@@ -71,6 +71,55 @@ describe("PostgresParserConfigRepository", () => {
       () => repository.saveApproved(createInput()),
     )).rejects.toThrow("PARSER_CONFIG_VERSION_CONFLICT");
   });
+
+  it("aynı onaylı config zaten varsa mevcut kaydı döndürür", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const repository = new PostgresParserConfigRepository({
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        if (sql.includes('INSERT INTO "ParserConfig"')) {
+          return { rows: [] as T[] };
+        }
+        if (sql.includes('FROM "ParserConfig"')) {
+          return { rows: [createRow()] as T[] };
+        }
+        return { rows: [] as T[] };
+      },
+    });
+
+    const result = await runWithRequestContext(
+      { userId: "user-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      () => repository.saveApproved(createInput()),
+    );
+
+    expect(queries.some((query) => query.sql.includes('FROM "ParserConfig"'))).toBe(true);
+    expect(result).toEqual({
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      version: "parser-v1",
+      encoding: "UTF-8",
+      delimiter: "TAB",
+      skipHeaderLines: 1,
+      fieldMapping: createSuggestion().fieldMapping,
+      status: "APPROVED",
+    });
+  });
+
+  it("aynı version farklı config ile gelirse conflict döner", async () => {
+    const repository = new PostgresParserConfigRepository({
+      async query<T>(sql: string) {
+        if (sql.includes('FROM "ParserConfig"')) {
+          return { rows: [createRow({ delimiter: "PIPE" })] as T[] };
+        }
+        return { rows: [] as T[] };
+      },
+    });
+
+    await expect(runWithRequestContext(
+      { userId: "user-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      () => repository.saveApproved(createInput()),
+    )).rejects.toThrow("PARSER_CONFIG_VERSION_CONFLICT");
+  });
 });
 
 function createInput() {
@@ -114,6 +163,7 @@ function createRow(overrides: Partial<ParserConfigTestRow> = {}) {
   return {
     tenantId: "tenant-a",
     examId: "exam-a",
+    templateId: null,
     version: "parser-v1",
     encoding: "UTF-8",
     delimiter: "TAB",

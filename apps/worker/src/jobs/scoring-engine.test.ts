@@ -192,4 +192,25 @@ describe("ScoringEngine", () => {
     expect(result.total.rawScore).toBe(3);
     expect(result.total.estimatedRawScore).toBe(13.044);
   });
+
+  it("LGS önekli ana derslerde yüksek katsayıyı uygular", () => {
+    const result = scoreExam(
+      [
+        { questionNo: 1, answer: "A" },
+        { questionNo: 2, answer: "B" },
+        { questionNo: 3, answer: "C" },
+        { questionNo: 4, answer: "D" },
+      ],
+      [
+        { questionNo: 1, correctAnswer: "A", branch: "LGS TÜRKÇE" },
+        { questionNo: 2, correctAnswer: "B", branch: "LGS MATEMATİK" },
+        { questionNo: 3, correctAnswer: "C", branch: "LGS FEN BİLİMLERİ" },
+        { questionNo: 4, correctAnswer: "D", branch: "LGS İNGİLİZCE" },
+      ],
+      config,
+    );
+
+    expect(result.total.rawScore).toBe(4);
+    expect(result.total.estimatedRawScore).toBe(14.124);
+  });
 });

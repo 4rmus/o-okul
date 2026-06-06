@@ -43,6 +43,7 @@ export interface MatchedParsedAnswer {
   participantId: string;
   parserConfigVersion: string;
   rowNumber: number;
+  bookletType: string;
   answers: StudentAnswer[];
   status: "MATCHED";
 }
@@ -122,6 +123,7 @@ export class OpticalAnswerParser {
         participantId: candidates[0]!.participantId,
         parserConfigVersion: input.parserConfigVersion,
         rowNumber: row.rowNumber,
+        bookletType: row.bookletType,
         answers: row.answers,
         status: "MATCHED",
       });
@@ -146,6 +148,7 @@ export class OpticalAnswerParser {
       participantId: input.participantId,
       parserConfigVersion: input.parserConfigVersion,
       rowNumber: row.rowNumber,
+      bookletType: row.bookletType,
       answers: row.answers,
       status: "MATCHED",
     };
@@ -184,6 +187,7 @@ function parseLine(
   const studentNo = extractField(line, parserConfig.delimiter, parserConfig.fieldMapping.studentNo).trim();
   const bookletType = extractField(line, parserConfig.delimiter, parserConfig.fieldMapping.bookletType).trim();
   const rawAnswers = extractAnswerField(line, parserConfig.delimiter, parserConfig.fieldMapping.answers);
+  const maskedLine = maskSensitiveFields(line, parserConfig, studentNo);
 
   if (!studentNo) {
     warnings.push("STUDENT_NO_MISSING");
@@ -195,9 +199,7 @@ function parseLine(
   return {
     rowNumber,
     line,
-    maskedLine: parserConfig.fieldMapping.nationalId
-      ? maskField(line, parserConfig.delimiter, parserConfig.fieldMapping.nationalId)
-      : line,
+    maskedLine,
     studentNo,
     ...(nationalId ? { nationalIdHash: toNationalIdHash(nationalId, warnings) } : {}),
     bookletType,
@@ -205,6 +207,20 @@ function parseLine(
     answers: toStudentAnswers(rawAnswers, parserConfig.fieldMapping.answers, warnings),
     warnings,
   };
+}
+
+function maskSensitiveFields(
+  line: string,
+  parserConfig: OpticalAnswerParserInput["parserConfig"],
+  studentNo: string,
+): string {
+  if (parserConfig.fieldMapping.nationalId) {
+    return maskField(line, parserConfig.delimiter, parserConfig.fieldMapping.nationalId);
+  }
+  if (isNationalIdCandidate(studentNo)) {
+    return maskField(line, parserConfig.delimiter, parserConfig.fieldMapping.studentNo);
+  }
+  return line;
 }
 
 function normalizeLines(content: string | Buffer): string[] {
@@ -293,11 +309,14 @@ function findParticipants(
   row: ParsedOpticalRow,
   participants: OpticalAnswerParticipant[],
 ): OpticalAnswerParticipant[] {
-  if (row.nationalIdHash) {
-    const nationalIdCandidates = participants.filter((participant) => participant.nationalIdHash === row.nationalIdHash);
-    if (nationalIdCandidates.length > 0) {
-      return preferBookletMatch(row, nationalIdCandidates);
-    }
+  const nationalIdHashes = [row.nationalIdHash, toNationalIdHashCandidate(row.studentNo)].filter(
+    (value): value is string => Boolean(value),
+  );
+  const nationalIdCandidates = participants.filter((participant) =>
+    participant.nationalIdHash && nationalIdHashes.includes(participant.nationalIdHash),
+  );
+  if (nationalIdCandidates.length > 0) {
+    return preferBookletMatch(row, nationalIdCandidates);
   }
 
   const candidates = participants.filter((participant) =>
@@ -328,7 +347,7 @@ function toUnmatched(
     rowNumber: row.rowNumber,
     rawRow: {
       line: row.maskedLine,
-      studentNo: row.studentNo,
+      studentNo: isNationalIdCandidate(row.studentNo) ? maskNationalId(row.studentNo) : row.studentNo,
       bookletType: row.bookletType,
       warnings: row.warnings,
     },
@@ -343,6 +362,18 @@ function toNationalIdHash(value: string, warnings: string[]): string | undefined
     return undefined;
   }
   return createHmac("sha256", getNationalIdHashKey()).update(normalized).digest("hex");
+}
+
+function toNationalIdHashCandidate(value: string): string | undefined {
+  const normalized = value.replace(/\D/g, "");
+  if (!isNationalIdCandidate(normalized)) {
+    return undefined;
+  }
+  return createHmac("sha256", getNationalIdHashKey()).update(normalized).digest("hex");
+}
+
+function isNationalIdCandidate(value: string): boolean {
+  return /^\d{11}$/.test(value.replace(/\D/g, ""));
 }
 
 function maskField(line: string, delimiter: ParserDelimiter, spec: FieldSpec): string {

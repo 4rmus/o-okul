@@ -3,6 +3,7 @@ import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import type { AnswerKeyRecord } from "@uzman-hocam/shared-types";
 import type { RequestContext } from "../context/request-context.js";
+import type { LearningOutcomeRecord, LearningOutcomeStore } from "../school/learning-outcome-store.js";
 import { AnswerKeyExcelImportService } from "./answer-key-excel-import.service.js";
 import { AnswerKeyService, type AnswerKeyRepository, type SaveAnswerKeyInput } from "./answer-key.service.js";
 
@@ -64,7 +65,8 @@ describe("AnswerKeyExcelImportService", () => {
 
   it("Ders ve yeni başlık adlarıyla cevap anahtarı import eder", async () => {
     const repository = new FakeAnswerKeyRepository();
-    const service = new AnswerKeyExcelImportService(new AnswerKeyService(repository));
+    const learningOutcomes = new FakeLearningOutcomeStore();
+    const service = new AnswerKeyExcelImportService(new AnswerKeyService(repository), learningOutcomes);
 
     const result = await service.import(createContext(), {
       examId: "exam-a",
@@ -89,6 +91,40 @@ describe("AnswerKeyExcelImportService", () => {
     });
     expect(repository.records[0]?.bookletVariants?.[0]?.permutation.slice(0, 3)).toEqual([1, 2, 3]);
     expect(repository.records[0]?.bookletVariants?.[0]?.permutation.slice(30, 33)).toEqual([31, 32, 33]);
+    expect(learningOutcomes.records).toHaveLength(90);
+    expect(learningOutcomes.records[0]).toMatchObject({
+      tenantId: "tenant-a",
+      code: "K1",
+      branch: "Türkçe",
+      title: "Sözcük",
+    });
+    expect(learningOutcomes.records[30]).toMatchObject({
+      tenantId: "tenant-a",
+      code: "K31",
+      branch: "Matematik",
+      title: "Sayılar",
+    });
+    expect(learningOutcomes.records[60]).toMatchObject({
+      tenantId: "tenant-a",
+      code: "K61",
+      branch: "Fen Bilimleri",
+      title: "Madde",
+    });
+  });
+
+  it("dry-run cevap anahtarı importunda kazanım tablosuna yazmaz", async () => {
+    const repository = new FakeAnswerKeyRepository();
+    const learningOutcomes = new FakeLearningOutcomeStore();
+    const service = new AnswerKeyExcelImportService(new AnswerKeyService(repository), learningOutcomes);
+
+    await service.dryRun(createContext(), {
+      examId: "exam-a",
+      version: "v2",
+      fileBase64: await createWorkbookWithLessonHeader(),
+    });
+
+    expect(repository.records).toHaveLength(0);
+    expect(learningOutcomes.records).toEqual([]);
   });
 });
 
@@ -126,6 +162,41 @@ class FakeAnswerKeyRepository implements AnswerKeyRepository {
 
   async publish(): Promise<AnswerKeyRecord | undefined> {
     return undefined;
+  }
+}
+
+class FakeLearningOutcomeStore implements LearningOutcomeStore {
+  records: LearningOutcomeRecord[] = [];
+
+  async list(): Promise<LearningOutcomeRecord[]> {
+    return this.records;
+  }
+
+  async findById(id: string): Promise<LearningOutcomeRecord | undefined> {
+    return this.records.find((record) => record.id === id);
+  }
+
+  async create(input: Omit<LearningOutcomeRecord, "id">): Promise<LearningOutcomeRecord> {
+    const record = { id: `learning-outcome-${this.records.length + 1}`, ...input };
+    this.records.push(record);
+    return record;
+  }
+
+  async update(
+    id: string,
+    input: Partial<Pick<LearningOutcomeRecord, "code" | "branch" | "title" | "level">>,
+  ): Promise<LearningOutcomeRecord | undefined> {
+    const record = await this.findById(id);
+    if (!record) return undefined;
+    Object.assign(record, input);
+    return record;
+  }
+
+  async softDelete(id: string, deletedAt: string): Promise<LearningOutcomeRecord | undefined> {
+    const record = await this.findById(id);
+    if (!record) return undefined;
+    record.deletedAt = deletedAt;
+    return record;
   }
 }
 

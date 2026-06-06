@@ -73,24 +73,22 @@ export function KarneSheet({
     ? `${report.bookletType.toLocaleUpperCase("tr-TR")} KİTAPÇIĞI${reportDate ? ` / ${reportDate}` : ""}`
     : reportDate ? `TARİH : ${reportDate}` : reportLabel;
   const scoreExtra = showProgressHistory ? "" : summaryExtra.replace(/^Gelişim\s+/u, "");
+  const institutionName = report.institutionName ?? reportLabel;
+  const lgsScore = report.total.estimatedRawScore ?? report.total.standardScore;
+  const outcomeRows = (report.outcomes ?? []).filter((outcome) => outcome.outcomeCode || outcome.branch);
+  const questionRows = [...(report.questions ?? [])].sort((left, right) => left.questionNo - right.questionNo);
 
   return (
-    <section className={sheetClassName} aria-label={ariaLabel}>
-      <header className="next-karne-header">
-        <div>
-          <KarneHeading level={titleLevel}>{report.examTitle ?? "İSEM - LGS - 1"}</KarneHeading>
-          <p>{report.studentName ?? report.studentId}</p>
-          <span>{report.institutionName ?? reportLabel}</span>
-          <span>{participantLine}</span>
-          <span>{bookletLine}</span>
-        </div>
-        <div className="next-karne-brand">
-          <span>DNA</span>
-          <strong>EĞİTİM</strong>
-          <small>KİŞİSEL GELİŞİM KURSU</small>
-        </div>
-      </header>
-      <div className="next-karne-grid">
+    <section className="next-karne-document" aria-label={ariaLabel}>
+      <section className={sheetClassName} aria-label={`${ariaLabel} özet sayfası`}>
+        <KarneReportHeader
+          bookletLine={bookletLine}
+          institutionName={institutionName}
+          participantLine={participantLine}
+          report={report}
+          titleLevel={titleLevel}
+        />
+        <div className="next-karne-grid">
         <section className="next-karne-block next-karne-block--wide">
           <h4>BÖLÜM ANALİZİ</h4>
           <table className="next-karne-table">
@@ -150,8 +148,8 @@ export function KarneSheet({
             </thead>
             <tbody>
               <tr>
-                <th>PUAN</th>
-                <td colSpan={2}>{formatNumber(report.total.standardScore)}</td>
+                <th>LGS PUANI</th>
+                <td colSpan={2}>{formatNumber(lgsScore)}</td>
               </tr>
               <tr>
                 <th className="next-karne-score-scope" rowSpan={2}>{scoreGeneralLabel === "SIRA" ? "GENEL" : scoreGeneralLabel}</th>
@@ -250,7 +248,110 @@ export function KarneSheet({
           </table>
         </div>
       </section>
-      <p>{errorBooklet ? `${errorBooklet.items.length} soru inceleme gerektiriyor.` : "Hata kitapçığı bekleniyor."}</p>
+        <p>{errorBooklet ? `${errorBooklet.items.length} soru inceleme gerektiriyor.` : "Hata kitapçığı bekleniyor."}</p>
+      </section>
+      <section className={`${sheetClassName} next-karne-sheet--analysis`} aria-label={`${ariaLabel} detaylı deneme analizi`}>
+        <KarneReportHeader
+          bookletLine={bookletLine}
+          institutionName={institutionName}
+          isAnalysisPage
+          participantLine={participantLine}
+          report={report}
+          titleLevel={titleLevel}
+        />
+        <section className="next-karne-block next-karne-block--wide">
+          <h4>DETAYLI DENEME ANALİZİ</h4>
+          <table className="next-karne-table next-karne-detail-table">
+            <caption>Kazanım ve soru cevap özeti</caption>
+            <thead>
+              <tr>
+                <th>Toplam soru</th>
+                <th>Doğru</th>
+                <th>Yanlış</th>
+                <th>Boş</th>
+                <th>Net</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>{formatNumber(branchQuestionCount(report.total))}</td>
+                <td>{formatNumber(report.total.correct)}</td>
+                <td>{formatNumber(report.total.wrong)}</td>
+                <td>{formatNumber(report.total.blank)}</td>
+                <td>{formatNumber(report.total.net)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+        <section className="next-karne-block next-karne-block--wide">
+          <h4>KAZANIM DETAYI</h4>
+          {outcomeRows.length ? (
+            <table className="next-karne-table next-karne-detail-table">
+              <caption>Deneme kazanımları</caption>
+              <thead>
+                <tr>
+                  <th>Kazanım</th>
+                  <th>Ders</th>
+                  <th>Doğru</th>
+                  <th>Yanlış</th>
+                  <th>Boş</th>
+                  <th>Net</th>
+                </tr>
+              </thead>
+              <tbody>
+                {outcomeRows.map((outcome, index) => (
+                  <tr key={`${outcome.outcomeCode}-${outcome.branch}-${index}`}>
+                    <td>{outcome.outcomeCode || "-"}</td>
+                    <td>{outcome.branch || "-"}</td>
+                    <td>{formatNumber(outcome.correct)}</td>
+                    <td>{formatNumber(outcome.wrong)}</td>
+                    <td>{formatNumber(outcome.blank)}</td>
+                    <td>{formatNumber(outcome.net)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="next-karne-empty-note">Kazanım verisi bekleniyor.</p>
+          )}
+        </section>
+        <section className="next-karne-block next-karne-block--wide">
+          <h4>SORU CEVAP ANALİZİ</h4>
+          {questionRows.length ? (
+            <table className="next-karne-table next-karne-detail-table">
+              <caption>Öğrencinin cevap durumu</caption>
+              <thead>
+                <tr>
+                  <th>Soru</th>
+                  <th>Ders</th>
+                  <th>Kazanım</th>
+                  <th>Öğrenci cevabı</th>
+                  <th>Doğru cevap</th>
+                  <th>Durum</th>
+                </tr>
+              </thead>
+              <tbody>
+                {questionRows.map((question, index) => (
+                  <tr key={`${question.questionNo}-${question.branch}-${index}`}>
+                    <td>{formatNumber(question.questionNo)}</td>
+                    <td>{question.branch || "-"}</td>
+                    <td>{question.outcomeCode || "-"}</td>
+                    <td>{formatAnswer(question.answer)}</td>
+                    <td>{formatAnswer(question.correctAnswer)}</td>
+                    <td>
+                      <span className={`next-karne-status ${questionStatusClassName(question.status)}`}>
+                        {formatQuestionStatus(question.status)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="next-karne-empty-note">Soru cevap analizi bekleniyor.</p>
+          )}
+        </section>
+      </section>
     </section>
   );
 }
@@ -323,7 +424,7 @@ function KarneOutcomeRadar({
                 <i className="next-outcome-bar next-outcome-bar--class" style={{ height: `${percentFromNet(branch.classNetAverage, questionCount)}%` }} />
                 <i className="next-outcome-bar next-outcome-bar--school" style={{ height: `${percentFromNet(branch.schoolNetAverage, questionCount)}%` }} />
                 <i className="next-outcome-bar next-outcome-bar--general" style={{ height: `${percentFromNet(branch.generalNetAverage, questionCount)}%` }} />
-                <span>{index + 1}</span>
+                <span title={branch.branch}>{shortBranchLabel(branch.branch)}</span>
               </div>
             );
           })}
@@ -334,6 +435,9 @@ function KarneOutcomeRadar({
             <tr>
               <th>Kazanım</th>
               <th>Branş</th>
+              <th>Doğru</th>
+              <th>Yanlış</th>
+              <th>Boş</th>
               <th>Net</th>
             </tr>
           </thead>
@@ -342,6 +446,9 @@ function KarneOutcomeRadar({
               <tr key={outcome.outcomeCode}>
                 <td>{outcome.outcomeCode}</td>
                 <td>{outcome.branch}</td>
+                <td>{formatNumber(outcome.correct)}</td>
+                <td>{formatNumber(outcome.wrong)}</td>
+                <td>{formatNumber(outcome.blank)}</td>
                 <td>{formatNumber(outcome.net)}</td>
               </tr>
             ))}
@@ -352,6 +459,53 @@ function KarneOutcomeRadar({
   );
 }
 
+function KarneReportHeader({
+  bookletLine,
+  institutionName,
+  isAnalysisPage = false,
+  participantLine,
+  report,
+  titleLevel,
+}: {
+  bookletLine: string;
+  institutionName: string;
+  isAnalysisPage?: boolean;
+  participantLine: string;
+  report: ReportStudentSnapshot;
+  titleLevel: KarneHeadingLevel;
+}) {
+  return (
+    <header className="next-karne-header">
+      <div>
+        <KarneHeading level={titleLevel}>{report.examTitle ?? "İSEM - LGS - 1"}</KarneHeading>
+        <p>{isAnalysisPage ? "DETAYLI DENEME ANALİZİ" : report.studentName ?? report.studentId}</p>
+        <span>{institutionName}</span>
+        <span>{isAnalysisPage ? report.studentName ?? report.studentId : participantLine}</span>
+        <span>{bookletLine}</span>
+      </div>
+      <InstitutionBrand logoUrl={report.institutionLogoUrl} name={institutionName} />
+    </header>
+  );
+}
+
+function InstitutionBrand({ logoUrl, name }: { logoUrl: string | undefined; name: string }) {
+  if (logoUrl) {
+    return (
+      <div className="next-karne-brand next-karne-brand--logo">
+        <img src={logoUrl} alt={`${name} logosu`} />
+      </div>
+    );
+  }
+
+  const [primary, secondary] = splitInstitutionName(name);
+  return (
+    <div className="next-karne-brand">
+      <span>{primary}</span>
+      {secondary ? <strong>{secondary}</strong> : null}
+    </div>
+  );
+}
+
 function KarneHeading({ children, level }: { children: string; level: KarneHeadingLevel }) {
   if (level === "h4") return <h4>{children}</h4>;
   return level === "h2" ? <h2>{children}</h2> : <h3>{children}</h3>;
@@ -359,6 +513,22 @@ function KarneHeading({ children, level }: { children: string; level: KarneHeadi
 
 function formatNumber(value: number | undefined) {
   return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+}
+
+function formatAnswer(value: string) {
+  return value ? value : "-";
+}
+
+function formatQuestionStatus(status: NonNullable<ReportStudentSnapshot["questions"]>[number]["status"]) {
+  if (status === "WRONG") return "Yanlış";
+  if (status === "BLANK") return "Boş";
+  return "Doğru";
+}
+
+function questionStatusClassName(status: NonNullable<ReportStudentSnapshot["questions"]>[number]["status"]) {
+  if (status === "WRONG") return "next-karne-status--wrong";
+  if (status === "BLANK") return "next-karne-status--blank";
+  return "next-karne-status--correct";
 }
 
 function formatRank(rank: ReportScopeRank | undefined, rankFormat: "simple" | "percentile") {
@@ -416,4 +586,33 @@ function radarPoint(index: number, total: number, value: number, maxValue: numbe
 
 function shortOutcomeLabel(value: string) {
   return value.length > 8 ? `${value.slice(0, 8)}.` : value;
+}
+
+function shortBranchLabel(value: string) {
+  const upper = value.toLocaleUpperCase("tr-TR");
+  if (upper.includes("TÜRKÇE")) return "Türkçe";
+  if (upper.includes("İNKILAP") || upper.includes("ATATÜRK")) return "İnkılap";
+  if (upper.includes("DİN")) return "Din";
+  if (upper.includes("İNGİLİZCE")) return "İng.";
+  if (upper.includes("MATEMATİK")) return "Mat.";
+  if (upper.includes("FEN")) return "Fen";
+
+  const cleaned = value.replace(/^LGS\s+/iu, "").trim();
+  return cleaned.length > 10 ? `${cleaned.slice(0, 10)}.` : cleaned || "-";
+}
+
+function splitInstitutionName(name: string) {
+  const words = name
+    .trim()
+    .split(/\s+/u)
+    .filter(Boolean);
+  if (words.length === 0) return ["KURUM", ""] as const;
+  if (words.length === 1) return [words[0]!, ""] as const;
+
+  const initials = words
+    .slice(0, 3)
+    .map((word) => word.charAt(0))
+    .join("")
+    .toLocaleUpperCase("tr-TR");
+  return [initials, words.join(" ")] as const;
 }

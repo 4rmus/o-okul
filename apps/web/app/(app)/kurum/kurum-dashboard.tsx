@@ -31,7 +31,7 @@ interface TenantProfileRecord {
   id: string;
   institutionType?: string;
   logoUrl?: string;
-  name: string;
+  name?: string;
 }
 
 export function KurumDashboard() {
@@ -46,6 +46,7 @@ export function KurumDashboard() {
     enabled: Boolean(auth),
   });
   const tenantProfile = tenantProfileQuery.data ?? null;
+  const tenantDisplayName = tenantProfile ? tenantNameOrFallback(tenantProfile) : "Kurum Paneli";
   const latestExam = dashboardQuery.data?.report.exam ?? null;
   const latestSnapshot = dashboardQuery.data?.report.snapshot ?? null;
   const firstStudentId = latestSnapshot?.snapshotData?.students?.[0]?.studentId;
@@ -96,7 +97,7 @@ export function KurumDashboard() {
 
   return (
       <PageFrame
-        title={tenantProfile?.name ?? "Kurum Paneli"}
+        title={tenantDisplayName}
         subtitle="Kurumsal özetin ve son sınav analizlerinin tek ekranda görünümü."
       >
       {dashboardQuery.isPending ? <LoadingState label="Kurum özeti yükleniyor…" /> : null}
@@ -228,17 +229,19 @@ function DecisionSignalCard({
 }
 
 function TenantProfileSummary({ tenant }: { tenant: TenantProfileRecord }) {
+  const tenantDisplayName = tenantNameOrFallback(tenant);
+
   return (
     <section className="next-tenant-profile" aria-label="Kurum bilgileri">
       {tenant.logoUrl ? (
-        <img src={tenant.logoUrl} alt={`${tenant.name} logosu`} />
+        <img src={tenant.logoUrl} alt={`${tenantDisplayName} logosu`} />
       ) : (
         <span className="next-tenant-profile__placeholder" aria-hidden="true">
-          {tenant.name.slice(0, 1).toLocaleUpperCase("tr-TR")}
+          {tenantDisplayName.slice(0, 1).toLocaleUpperCase("tr-TR")}
         </span>
       )}
       <div>
-        <h2>{tenant.name}</h2>
+        <h2>{tenantDisplayName}</h2>
         <p>{institutionTypeLabel(tenant.institutionType)}</p>
       </div>
       {tenant.contactEmail ? <a href={`mailto:${tenant.contactEmail}`}>{tenant.contactEmail}</a> : null}
@@ -248,6 +251,10 @@ function TenantProfileSummary({ tenant }: { tenant: TenantProfileRecord }) {
 
 function loadCurrentTenant(accessToken: string) {
   return apiRequest<TenantProfileRecord>(accessToken, `${apiBaseUrl}/me/tenant`);
+}
+
+function tenantNameOrFallback(tenant: TenantProfileRecord) {
+  return tenant.name?.trim() || "Kurum Paneli";
 }
 
 function institutionTypeLabel(value: string | undefined) {

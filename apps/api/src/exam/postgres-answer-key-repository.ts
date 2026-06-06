@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import pg from "pg";
 import type {
   AnswerKeyItemInput,
   AnswerKeyRecord,
   AnswerKeyScoringConfig,
 } from "@uzman-hocam/shared-types";
-import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
+import { type Queryable, type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 import {
   summarizeAnswerKeyQuestions,
   type AnswerKeyRepository,
@@ -41,30 +42,28 @@ export class PostgresAnswerKeyRepository implements AnswerKeyRepository {
       );
       const row = inserted.rows[0];
       if (!row) {
+        const existing = await client.query<AnswerKeyRow>(
+          `SELECT *
+           FROM "AnswerKey"
+           WHERE "tenantId" = $1
+             AND "examId" = $2
+             AND "version" = $3
+             AND "deletedAt" IS NULL
+           LIMIT 1`,
+          [input.tenantId, input.examId, input.version],
+        );
+        const existingRow = existing.rows[0];
+        if (
+          existingRow &&
+          matchesAnswerKey(existingRow, input) &&
+          await existingBookletVariantsCompatible(client, input)
+        ) {
+          await upsertBookletVariants(client, input);
+          return toAnswerKeyRecord(existingRow);
+        }
         throw new Error("ANSWER_KEY_VERSION_CONFLICT");
       }
-      for (const variant of input.bookletVariants ?? []) {
-        await client.query(
-          `INSERT INTO "ExamBookletVariant" (
-             "id",
-             "tenantId",
-             "examId",
-             "code",
-             "permutation",
-             "updatedAt"
-           )
-           VALUES ($1, $2, $3, $4, $5::jsonb, now())
-           ON CONFLICT ("tenantId", "examId", "code")
-           DO UPDATE SET "permutation" = EXCLUDED."permutation", "deletedAt" = NULL, "updatedAt" = now()`,
-          [
-            randomUUID(),
-            input.tenantId,
-            input.examId,
-            variant.code,
-            JSON.stringify(variant.permutation),
-          ],
-        );
-      }
+      await upsertBookletVariants(client, input);
       return toAnswerKeyRecord(row);
     });
   }
@@ -114,6 +113,69 @@ interface AnswerKeyRow {
   updatedAt: Date | string;
 }
 
+interface ExamBookletVariantRow {
+  code: string;
+  permutation: unknown;
+}
+
+async function existingBookletVariantsCompatible(client: Queryable, input: SaveAnswerKeyInput): Promise<boolean> {
+  const variants = input.bookletVariants ?? [];
+  if (variants.length === 0) {
+    return true;
+  }
+
+  const result = await client.query<ExamBookletVariantRow>(
+    `SELECT "code", "permutation"
+     FROM "ExamBookletVariant"
+     WHERE "tenantId" = $1
+       AND "examId" = $2
+       AND "code" = ANY($3::text[])
+       AND "deletedAt" IS NULL`,
+    [input.tenantId, input.examId, variants.map((variant) => variant.code)],
+  );
+  const existingByCode = new Map(result.rows.map((row) => [row.code, row]));
+  return variants.every((variant) => {
+    const existing = existingByCode.get(variant.code);
+    return !existing || isDeepStrictEqual(parseJson(existing.permutation), variant.permutation);
+  });
+}
+
+async function upsertBookletVariants(client: Queryable, input: SaveAnswerKeyInput): Promise<void> {
+  for (const variant of input.bookletVariants ?? []) {
+    await client.query(
+      `INSERT INTO "ExamBookletVariant" (
+         "id",
+         "tenantId",
+         "examId",
+         "code",
+         "permutation",
+         "updatedAt"
+       )
+       VALUES ($1, $2, $3, $4, $5::jsonb, now())
+       ON CONFLICT ("tenantId", "examId", "code")
+       DO UPDATE SET "permutation" = EXCLUDED."permutation", "deletedAt" = NULL, "updatedAt" = now()`,
+      [
+        randomUUID(),
+        input.tenantId,
+        input.examId,
+        variant.code,
+        JSON.stringify(variant.permutation),
+      ],
+    );
+  }
+}
+
+function matchesAnswerKey(row: AnswerKeyRow, input: SaveAnswerKeyInput): boolean {
+  try {
+    return (
+      isDeepStrictEqual(parseQuestions(row.keyData), input.questions) &&
+      isDeepStrictEqual(parseScoringConfig(row.scoringConfig), input.scoringConfig)
+    );
+  } catch {
+    return false;
+  }
+}
+
 function toAnswerKeyRecord(row: AnswerKeyRow): AnswerKeyRecord {
   const questions = parseQuestions(row.keyData);
   const summary = summarizeAnswerKeyQuestions(questions);
@@ -143,7 +205,7 @@ function parseQuestions(value: unknown): AnswerKeyItemInput[] {
 }
 
 function parseScoringConfig(value: unknown): AnswerKeyScoringConfig {
-  const parsed = typeof value === "string" ? JSON.parse(value) as unknown : value;
+  const parsed = parseJson(value);
   const record = parsed === null || parsed === undefined ? {} : asRecord(parsed);
   return {
     wrongPenalty: typeof record.wrongPenalty === "number" ? record.wrongPenalty : 0.25,
@@ -151,6 +213,10 @@ function parseScoringConfig(value: unknown): AnswerKeyScoringConfig {
     ...(typeof record.standardScoreBase === "number" ? { standardScoreBase: record.standardScoreBase } : {}),
     ...(typeof record.standardScoreMultiplier === "number" ? { standardScoreMultiplier: record.standardScoreMultiplier } : {}),
   };
+}
+
+function parseJson(value: unknown): unknown {
+  return typeof value === "string" ? JSON.parse(value) as unknown : value;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

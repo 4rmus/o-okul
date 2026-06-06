@@ -31,6 +31,7 @@ describe("PostgresOpticalParseAdapter", () => {
     expect(parsedInsert?.sql).toContain('ON CONFLICT ("tenantId", "rawImportId", "participantId", "parserConfigVersion")');
     expect(parsedInsert?.sql).toContain('"deletedAt" = NULL');
     expect(parsedInsert?.values).toEqual([
+      expect.any(String),
       "tenant-a",
       "exam-a",
       "raw-import-a",
@@ -39,9 +40,17 @@ describe("PostgresOpticalParseAdapter", () => {
       2,
       JSON.stringify([{ questionNo: 1, answer: "A" }]),
     ]);
+    const participantUpdate = client.queries.find((query) => query.sql.includes('UPDATE "ExamParticipant"'));
+    expect(participantUpdate?.sql).toContain('"bookletType" IS NULL OR btrim("bookletType") = \'\'');
+    expect(participantUpdate?.values).toEqual(["tenant-a", "participant-a", "B"]);
+    const staleQuarantineCleanup = client.queries.find((query) => query.sql.includes('UPDATE "ImportQuarantine"'));
+    expect(staleQuarantineCleanup?.sql).toContain('"status" = \'OPEN\'');
+    expect(staleQuarantineCleanup?.sql).toContain('"deletedAt" IS NULL');
+    expect(staleQuarantineCleanup?.values).toEqual(["tenant-a", "raw-import-a", 2]);
     const quarantineInsert = client.queries.find((query) => query.sql.includes('INSERT INTO "ImportQuarantine"'));
     expect(quarantineInsert?.sql).toContain('WHERE "ImportQuarantine"."status" = \'OPEN\'');
     expect(quarantineInsert?.values).toEqual([
+      expect.any(String),
       "tenant-a",
       "exam-a",
       "raw-import-a",
@@ -91,6 +100,7 @@ function createParseResult(): OpticalAnswerParseResult {
       participantId: "participant-a",
       parserConfigVersion: "parser-v1",
       rowNumber: 2,
+      bookletType: "B",
       answers: [{ questionNo: 1, answer: "A" }],
       status: "MATCHED",
     }],

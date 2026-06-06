@@ -272,6 +272,7 @@ export function ReportsPage() {
                 { label: "Durum", value: latestSnapshot.status },
                 { label: "Sonuç", value: latestSnapshot.snapshotData?.resultCount ?? "-" },
                 { label: "Ortalama net", value: formatNumber(latestSnapshot.snapshotData?.averages?.net) },
+                { label: "LGS puanı", value: formatNumber(readLgsScore(latestSnapshot.snapshotData?.averages)) },
                 { label: "Standart puan", value: formatNumber(latestSnapshot.snapshotData?.averages?.standardScore) },
                 {
                   label: "Bağlam",
@@ -439,6 +440,10 @@ async function exportReportSnapshotPdf(accessToken: string, examId: string, snap
 
 function formatNumber(value: number | undefined) {
   return value === undefined ? "-" : new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }).format(value);
+}
+
+function readLgsScore(total: { estimatedRawScore?: number; standardScore?: number } | undefined) {
+  return total?.estimatedRawScore ?? total?.standardScore;
 }
 
 function formatTrend(progress: ReportStudentProgress | null | undefined) {
