@@ -523,6 +523,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     { id: "grade-8", tenantId: "tenant-a", name: "8. Sınıf", code: "8" },
   ];
   const reportGenerationRequests: ReportGenerationRequestFixture[] = [];
+  let evaluationStatusRequests = 0;
   let courses: CourseFixture[] = [
     { id: "course-math", tenantId: "tenant-a", name: "Matematik", code: "MAT" },
     { id: "course-turkish", tenantId: "tenant-a", name: "Turkce", code: "TUR" },
@@ -2966,6 +2967,70 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       return;
     }
 
+    if (path === "/exams/exam-a/raw-imports/raw-import-a/summary" && request.method() === "GET") {
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope({
+          tenantId: "tenant-a",
+          examId: "exam-a",
+          rawImportId: "raw-import-a",
+          matchedCount: 2,
+          quarantinedCount: 1,
+          totalRows: 3,
+          quarantineReasons: [{ reason: "STUDENT_NOT_MATCHED", count: 1 }],
+        }, request.url())),
+      });
+      return;
+    }
+
+    if (path === "/exams/exam-a/raw-imports/raw-import-a/evaluation-jobs" && request.method() === "POST") {
+      const body = request.postDataJSON() as { answerKeyId?: string };
+      expect(body.answerKeyId).toBe("answer-key-a");
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 201,
+        body: JSON.stringify(envelope({
+          tenantId: "tenant-a",
+          examId: "exam-a",
+          rawImportId: "raw-import-a",
+          answerKeyId: "answer-key-a",
+          rawImportSha256: "abcdef1234567890",
+          matchedCount: 2,
+          queuedCount: 2,
+          queueName: "exam-evaluation",
+          jobs: [
+            { participantId: "participant-a", jobId: "evaluation-job-a", status: "queued" },
+            { participantId: "participant-b", jobId: "evaluation-job-b", status: "queued" },
+          ],
+        })),
+      });
+      return;
+    }
+
+    if (path === "/exams/exam-a/raw-imports/raw-import-a/evaluation-status" && request.method() === "GET") {
+      evaluationStatusRequests += 1;
+      expect(new URL(request.url()).searchParams.get("answerKeyId")).toBe("answer-key-a");
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope({
+          tenantId: "tenant-a",
+          examId: "exam-a",
+          rawImportId: "raw-import-a",
+          answerKeyId: "answer-key-a",
+          matchedCount: 2,
+          evaluatedCount: 2,
+          pendingCount: 0,
+          status: "COMPLETED",
+        }, request.url())),
+      });
+      return;
+    }
+
     if (path === "/exams/exam-a/raw-imports/raw-import-a/quarantines" && request.method() === "GET") {
       await route.fulfill({
         contentType: "application/json",
@@ -4394,7 +4459,11 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     buffer: Buffer.from(parserFileContent),
   });
   await page.getByRole("button", { name: "Yükle ve kontrol et" }).click();
+  await expect(page.getByLabel("Optik yükleme sonucu").getByText("Kontrol tamamlandı")).toBeVisible();
+  await expect(page.getByLabel("Optik yükleme sonucu").getByText("Eşleşmeyen")).toBeVisible();
+  await page.getByRole("button", { name: "Analizi başlat" }).click();
   await expect(page.getByLabel("Eşleşmeyen satırlar ve rapor").getByRole("heading", { name: "Eşleşmeyen satırları çöz" })).toBeVisible();
+  expect(evaluationStatusRequests).toBeGreaterThan(0);
   await page.getByRole("button", { name: "Eşleşmeyen satırları getir" }).click();
   const quarantineRow = page.getByRole("row", { name: /STUDENT_NOT_MATCHED/ });
   await expect(quarantineRow.getByText("OPEN")).toBeVisible();
@@ -4403,10 +4472,10 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(quarantineRow.getByText("OPEN")).not.toBeVisible();
   await expect(quarantineRow.getByText(/Kuyruk: evaluation-job-a|Çözüldü/)).toBeVisible();
   const opticalReportPanel = page.getByLabel("Optik rapor üretimi");
-  await opticalReportPanel.getByText("Gelişmiş rapor bilgisi").click();
-  await expect(opticalReportPanel.getByLabel("Teknik sonuç hash")).toHaveValue("abcdef1234567890");
+  await expect(opticalReportPanel.getByText("2 öğrenci için rapor hazır.")).toBeVisible();
+  await expect(opticalReportPanel.getByLabel("Rapor üretim durumu").getByText("Tamamlandı")).toBeVisible();
   await opticalReportPanel.getByRole("button", { name: "Rapor üret" }).click();
-  await expect(opticalReportPanel.getByText("report-job-a kuyruğa alındı.")).toBeVisible();
+  await expect(opticalReportPanel.getByText("Rapor işi kuyruğa alındı.")).toBeVisible();
 
   await page.getByRole("link", { name: "Raporlar" }).click();
   await expect(page).toHaveURL(/\/kurum\/raporlar$/);

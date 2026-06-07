@@ -6,20 +6,29 @@ import type { AuthResponse } from "@uzman-hocam/shared-types";
 import { useAuth } from "../../providers.js";
 
 const demoAccounts = [
-  { label: "Sistem yöneticisi", email: "system@example.test", path: "/sistem" },
   { label: "Kurum yöneticisi", email: "admin@demo.local", path: "/kurum" },
   { label: "Öğretmen", email: "teacher@demo.local", path: "/ogretmen" },
   { label: "Öğrenci", email: "student@demo.local", path: "/ogrenci" },
   { label: "Veli", email: "guardian@demo.local", path: "/veli" },
 ] as const;
 
+const rememberedEmailStorageKey = "des.rememberedLoginEmail";
+
 export default function LoginPage() {
   const router = useRouter();
   const { auth, isBootstrapping, login } = useAuth();
   const [email, setEmail] = useState("admin@demo.local");
   const [password, setPassword] = useState("password");
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const rememberedEmail = readRememberedEmail();
+    if (!rememberedEmail) return;
+    setEmail(rememberedEmail);
+    setRememberMe(true);
+  }, []);
 
   useEffect(() => {
     if (!isBootstrapping && auth) {
@@ -37,6 +46,7 @@ export default function LoginPage() {
 
     try {
       await login(formEmail, formPassword);
+      saveRememberedEmail(formEmail, rememberMe);
     } catch {
       setError("E-posta veya şifre hatalı.");
     } finally {
@@ -50,6 +60,7 @@ export default function LoginPage() {
 
     try {
       await login(demoEmail, "password");
+      saveRememberedEmail(demoEmail, rememberMe);
       router.replace(path);
     } catch {
       setError("E-posta veya şifre hatalı.");
@@ -86,6 +97,15 @@ export default function LoginPage() {
             autoComplete="current-password"
           />
         </label>
+        <label className="next-checkbox-row">
+          <input
+            name="rememberMe"
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(event) => setRememberMe(event.target.checked)}
+          />
+          Beni hatırla
+        </label>
         {error ? <p className="next-form-error">{error}</p> : null}
         <button className="next-button" type="submit" disabled={isSubmitting || isBootstrapping}>
           {isSubmitting ? "Giriş yapılıyor" : "Giriş yap"}
@@ -119,4 +139,24 @@ function getAuthHomePath(auth: AuthResponse) {
   if (roles.includes("STUDENT") && subjectType === "STUDENT") return "/ogrenci";
   if (roles.includes("GUARDIAN") && subjectType === "GUARDIAN") return "/veli";
   return "/login";
+}
+
+function readRememberedEmail() {
+  try {
+    return window.localStorage.getItem(rememberedEmailStorageKey) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function saveRememberedEmail(email: string, remember: boolean) {
+  try {
+    if (remember) {
+      window.localStorage.setItem(rememberedEmailStorageKey, email);
+    } else {
+      window.localStorage.removeItem(rememberedEmailStorageKey);
+    }
+  } catch {
+    // Local storage kapalıysa giriş akışı etkilenmemeli.
+  }
 }
