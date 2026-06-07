@@ -233,7 +233,7 @@ async function loadGuardianStudentPortal(accessToken: string, studentId: string,
     ),
     apiRequestOrNull<ReportStudentProgress>(
       accessToken,
-      `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${encodeURIComponent(reportExamId)}/progress`,
+      `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${encodeURIComponent(reportExamId)}/progress?scope=all`,
       rolePreviewToken,
     ),
     readOnlyRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`, rolePreviewToken),

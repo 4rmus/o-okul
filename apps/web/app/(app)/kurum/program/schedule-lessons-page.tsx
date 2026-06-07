@@ -7,6 +7,7 @@ import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } 
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { formatCourseName } from "../../_shared/academic-labels.js";
 import {
   firstFormError,
   scheduleLessonFormSchema,
@@ -50,7 +51,7 @@ export function ScheduleLessonsPage() {
   const rows = lessonsQuery.data?.data ?? [];
   const references = referenceQuery.data ?? emptyReferences;
   const classNames = useMemo(() => new Map(references.classes.map((record) => [record.id, record.name])), [references.classes]);
-  const courseNames = useMemo(() => new Map(references.courses.map((record) => [record.id, record.name])), [references.courses]);
+  const courseNames = useMemo(() => new Map(references.courses.map((record) => [record.id, formatCourseName(record.name)])), [references.courses]);
   const termNames = useMemo(() => new Map(references.terms.map((record) => [record.id, record.name])), [references.terms]);
   const teacherNames = useMemo(
     () => new Map(references.teachers.map((record) => [record.id, `${record.firstName} ${record.lastName}`])),
@@ -224,7 +225,7 @@ export function ScheduleLessonsPage() {
             <option value="">Seçiniz</option>
             {references.courses.map((record) => (
               <option key={record.id} value={record.id}>
-                {record.name}
+                {formatCourseName(record.name)}
               </option>
             ))}
           </select>

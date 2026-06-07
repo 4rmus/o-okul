@@ -16,6 +16,7 @@ import {
 import { PageFrame } from "./_shared/page-frame.js";
 import { MetricPanelGrid } from "./_shared/metric-panel-grid.js";
 import { canAccessHref } from "../_shared/access.js";
+import { formatCourseName, shortCourseName } from "../_shared/academic-labels.js";
 import { ClassCompareBar, ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../_shared/lazy-report-charts.js";
 import { ReportChartPanel } from "../_shared/report-chart-panel.js";
 
@@ -398,7 +399,8 @@ function toClassCompare(snapshot: ReportSnapshotRecord | null | undefined) {
 
 function toTopicRadar(snapshot: ReportSnapshotRecord | null | undefined) {
   return (snapshot?.snapshotData?.branches ?? []).map((record) => ({
-    branch: record.branch,
+    branch: formatCourseName(record.branch),
+    chartLabel: shortCourseName(record.branch),
     net: record.net,
     resultCount: record.resultCount,
   }));

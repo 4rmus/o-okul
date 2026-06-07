@@ -144,6 +144,7 @@ export function GuardiansPage() {
             <ListControls
               meta={guardiansQuery.data?.meta}
               onChange={setListQuery}
+              searchPlaceholder="Ad, soyad veya telefon ara"
               sortOptions={guardianSortOptions}
               state={listQuery}
             />
@@ -155,7 +156,6 @@ export function GuardiansPage() {
         }
         aria-label="Veli yönetimi"
         columns={columns}
-        description="Kurum velilerini aynı CRUD kalıbıyla yönet."
         emptyState={
           <EmptyState
             title="Veli kaydı yok"

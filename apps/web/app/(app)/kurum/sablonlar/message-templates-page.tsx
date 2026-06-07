@@ -16,6 +16,7 @@ import type {
 import { Pencil, Plus, Search, Send, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { formatCourseName } from "../../_shared/academic-labels.js";
 import {
   firstFormError,
   messageTemplateFormSchema,
@@ -349,7 +350,7 @@ export function MessageTemplatesPage() {
               <option value="">Tüm dersler</option>
               {references.courses.map((course) => (
                 <option key={course.id} value={course.id}>
-                  {course.name}
+                  {formatCourseName(course.name)}
                 </option>
               ))}
             </select>

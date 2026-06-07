@@ -31,7 +31,9 @@ import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
-import { ClassCompareBar, ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
+import { formatCourseName, formatOutcomeCode, shortCourseName } from "../../_shared/academic-labels.js";
+import { ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
+import { formatNetNumber, OutcomeNetTable } from "../../_shared/outcome-net-table.js";
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 
 interface StudentBaseDetail {
@@ -95,7 +97,7 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
     [detail?.teachers],
   );
   const classNameById = useMemo(() => new Map((detail?.classes ?? []).map((record) => [record.id, record.name])), [detail?.classes]);
-  const courseNameById = useMemo(() => new Map((detail?.courses ?? []).map((record) => [record.id, record.name])), [detail?.courses]);
+  const courseNameById = useMemo(() => new Map((detail?.courses ?? []).map((record) => [record.id, formatCourseName(record.name)])), [detail?.courses]);
   const termNameById = useMemo(() => new Map((detail?.terms ?? []).map((record) => [record.id, record.name])), [detail?.terms]);
   const exams = pageDataQuery.data?.exams ?? [];
   const activeExamId = selectedExamId || preferredExamId(exams);
@@ -119,7 +121,7 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
   const studentName = detail ? `${detail.profile.firstName} ${detail.profile.lastName}` : "Öğrenci 360";
   const examResult = toStudentExamResult(report);
   const branchRadar = toStudentBranchRadar(report);
-  const outcomeBars = toStudentOutcomeBars(report);
+  const outcomeRows = toStudentOutcomeRows(report);
   const progressPoints = toProgressPoints(progress);
   const studentDashboardHref = `/kurum/ogrenciler/${encodeURIComponent(studentId)}`;
   const studentExamsHref = `${studentDashboardHref}/sinavlar`;
@@ -168,7 +170,7 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
           errorBooklet={errorBooklet}
           examResult={examResult}
           exams={exams}
-          outcomeBars={outcomeBars}
+          outcomeRows={outcomeRows}
           progress={progress}
           progressPoints={progressPoints}
           report={report}
@@ -190,6 +192,7 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
           errorBooklet={errorBooklet}
           guardianNameById={guardianNameById}
           progress={progress}
+          progressPoints={progressPoints}
           report={report}
           selectedSnapshot={selectedSnapshot}
           studentAuditLogs={studentAuditLogs}
@@ -210,6 +213,7 @@ function StudentDashboard({
   errorBooklet,
   guardianNameById,
   progress,
+  progressPoints,
   report,
   selectedSnapshot,
   studentAuditLogs,
@@ -224,6 +228,7 @@ function StudentDashboard({
   errorBooklet: ReportErrorBooklet | null;
   guardianNameById: ReadonlyMap<string, string>;
   progress: ReportStudentProgress | null;
+  progressPoints: ReturnType<typeof toProgressPoints>;
   report: ReportStudentSnapshot | null;
   selectedSnapshot: ReportSnapshotRecord | null;
   studentAuditLogs: AuditLogRecord[];
@@ -261,15 +266,19 @@ function StudentDashboard({
           { label: "Eğitim ekibi", value: detail.teacherAssignments.length },
           { label: "Devamsızlık", value: detail.attendanceSummary?.total ?? 0 },
           { label: "Bekleyen ödeme", value: formatPendingPayment(detail.paymentPlans) },
-          { label: "Son net", value: formatNumber(report?.total?.net) },
+          { label: "Son net", value: formatNetNumber(report?.total?.net) },
           { label: "Net gelişimi", value: formatDelta(progress?.netDelta) },
         ]}
       />
 
+      <ReportChartPanel description="Hazır raporu olan tüm sınavlardaki net ve standart puan gelişimi" title="Öğrenci Gelişim Grafiği">
+        <ProgressLineChart caption="Tüm sınav net gelişimi" points={progressPoints} />
+      </ReportChartPanel>
+
       <div className="next-dashboard-summary-grid" aria-label="Öğrenci karar kartları">
         <Link className="next-dashboard-summary-card" href={studentExamsHref}>
           <span>Sınav performansı</span>
-          <strong>{formatNumberWithSuffix(report?.total?.net, "net")}</strong>
+          <strong>{formatNetNumberWithSuffix(report?.total?.net, "net")}</strong>
           <small>
             {selectedSnapshot ? formatSnapshotLabel(selectedSnapshot, studentId) : "Hazır rapor bekleniyor"}
             <ChevronRight size={15} aria-hidden="true" />
@@ -402,7 +411,7 @@ function StudentExamDetails({
   errorBooklet,
   examResult,
   exams,
-  outcomeBars,
+  outcomeRows,
   progress,
   progressPoints,
   report,
@@ -417,7 +426,7 @@ function StudentExamDetails({
   errorBooklet: ReportErrorBooklet | null;
   examResult: ReturnType<typeof toStudentExamResult>;
   exams: ExamRecord[];
-  outcomeBars: ReturnType<typeof toStudentOutcomeBars>;
+  outcomeRows: ReturnType<typeof toStudentOutcomeRows>;
   progress: ReportStudentProgress | null;
   progressPoints: ReturnType<typeof toProgressPoints>;
   report: ReportStudentSnapshot | null;
@@ -462,7 +471,7 @@ function StudentExamDetails({
       <MetricPanelGrid
         ariaLabel="Sınav rapor özeti"
         metrics={[
-          { label: "Son net", value: formatNumber(report?.total?.net) },
+          { label: "Son net", value: formatNetNumber(report?.total?.net) },
           { label: "Hata kitapçığı", value: errorBooklet ? `${errorBooklet.items.length} soru` : "-" },
           { label: "Net gelişimi", value: formatDelta(progress?.netDelta) },
           { label: "LGS puanı", value: formatNumber(readLgsScore(report?.total)) },
@@ -477,13 +486,13 @@ function StudentExamDetails({
               <ExamResultDonut result={examResult} />
             </ReportChartPanel>
             <ReportChartPanel description="Rapor bazlı branş netleri" title="Branş Netleri">
-              <TopicRadarChart branches={branchRadar} />
+              <TopicRadarChart branches={branchRadar} caption="Öğrenci branş netleri" />
             </ReportChartPanel>
             <ReportChartPanel description="Kazanım bazlı net karşılaştırması" title="Kazanım Netleri">
-              <ClassCompareBar classes={outcomeBars} />
+              <OutcomeNetTable caption="Öğrenci kazanım netleri" rows={outcomeRows} />
             </ReportChartPanel>
             <ReportChartPanel description="Net ve standart puan gelişimi" title="Öğrenci Gelişim">
-              <ProgressLineChart points={progressPoints} />
+              <ProgressLineChart caption="Öğrenci net gelişimi" points={progressPoints} />
             </ReportChartPanel>
           </div>
 
@@ -492,7 +501,7 @@ function StudentExamDetails({
             {errorBooklet?.items.length ? (
               errorBooklet.items.map((item) => (
                 <p key={`${item.questionNo}-${item.branch}`}>
-                  {item.questionNo}. soru {item.branch}: {item.status === "BLANK" ? "Boş" : `Yanıt ${item.answer}`} / Doğru {item.correctAnswer}
+                  {item.questionNo}. soru {formatCourseName(item.branch)}: {item.status === "BLANK" ? "Boş" : `Yanıt ${item.answer}`} / Doğru {item.correctAnswer}
                 </p>
               ))
             ) : (
@@ -622,7 +631,7 @@ async function loadStudentReportData(
       : Promise.resolve(null),
     apiRequestOrNull<ReportStudentProgress>(
       accessToken,
-      `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/students/${encodeURIComponent(studentId)}/progress`,
+      `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/students/${encodeURIComponent(studentId)}/progress?scope=all`,
     ),
   ]);
   return { errorBooklet, progress, report, selectedSnapshot, snapshots };
@@ -653,7 +662,7 @@ function formatSnapshotLabel(snapshot: ReportSnapshotRecord, studentId: string) 
   const date = snapshot.generatedAt ?? snapshot.snapshotData?.generatedAt ?? snapshot.createdAt;
   const prefix = date ? new Date(date).toLocaleDateString("tr-TR") : snapshot.id;
   const student = snapshot.snapshotData?.students?.find((record) => record.studentId === studentId);
-  return `${prefix} - ${formatNumber(student?.total?.net)} net`;
+  return `${prefix} - ${formatNetNumber(student?.total?.net)} net`;
 }
 
 function formatMoney(amount: number, currency: string) {
@@ -675,8 +684,8 @@ function formatNumber(value: number | undefined) {
   return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
 }
 
-function formatNumberWithSuffix(value: number | undefined, suffix: string) {
-  return value === undefined ? "-" : `${formatNumber(value)} ${suffix}`;
+function formatNetNumberWithSuffix(value: number | undefined, suffix: string) {
+  return value === undefined ? "-" : `${formatNetNumber(value)} ${suffix}`;
 }
 
 function readLgsScore(total: { estimatedRawScore?: number; standardScore?: number } | undefined) {
@@ -685,7 +694,7 @@ function readLgsScore(total: { estimatedRawScore?: number; standardScore?: numbe
 
 function formatDelta(value: number | undefined) {
   if (value === undefined) return "-";
-  return value > 0 ? `+${formatNumber(value)}` : formatNumber(value);
+  return value > 0 ? `+${formatNetNumber(value)}` : formatNetNumber(value);
 }
 
 function isStudentAuditLog(record: AuditLogRecord, studentId: string) {
@@ -810,18 +819,21 @@ function toStudentExamResult(report: ReportStudentSnapshot | null) {
 
 function toStudentBranchRadar(report: ReportStudentSnapshot | null) {
   return (report?.branches ?? []).map((branch) => ({
-    branch: branch.branch,
+    branch: formatCourseName(branch.branch),
+    chartLabel: shortCourseName(branch.branch),
     net: branch.net ?? 0,
   }));
 }
 
-function toStudentOutcomeBars(report: ReportStudentSnapshot | null) {
+function toStudentOutcomeRows(report: ReportStudentSnapshot | null) {
   return [...(report?.outcomes ?? [])]
-    .sort((first, second) => (second.net ?? 0) - (first.net ?? 0))
+    .sort((first, second) => (second.net ?? Number.NEGATIVE_INFINITY) - (first.net ?? Number.NEGATIVE_INFINITY))
     .slice(0, 12)
-    .map((outcome) => ({
-      className: `${outcome.branch} / ${outcome.outcomeCode}`,
-      net: outcome.net ?? 0,
+    .map((outcome, index) => ({
+      courseName: formatCourseName(outcome.branch),
+      id: `${outcome.branch}-${outcome.outcomeCode}-${index}`,
+      net: outcome.net,
+      outcomeCode: formatOutcomeCode(outcome.outcomeCode),
     }));
 }
 

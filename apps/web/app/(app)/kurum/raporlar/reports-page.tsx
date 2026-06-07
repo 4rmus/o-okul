@@ -27,7 +27,9 @@ import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest } from "../../.
 import { firstFormError, reportQueryFormSchema } from "../../../../src/form-validation.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
+import { formatCourseName, formatOutcomeCode, shortCourseName } from "../../_shared/academic-labels.js";
 import { ClassCompareBar, ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
+import { formatNetNumber, OutcomeNetTable } from "../../_shared/outcome-net-table.js";
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 
 interface ReportData {
@@ -89,12 +91,12 @@ export function ReportsPage() {
   const classNameById = new Map(classes.map((klass) => [klass.id, klass.name]));
   const campusNameById = new Map(campuses.map((campus) => [campus.id, campus.name]));
   const gradeLevelNameById = new Map(gradeLevels.map((level) => [level.id, level.name]));
-  const courseNameById = new Map(courses.map((course) => [course.id, course.name]));
+  const courseNameById = new Map(courses.map((course) => [course.id, formatCourseName(course.name)]));
   const termNameById = new Map(terms.map((term) => [term.id, term.name]));
   const latestSnapshot = reportData?.snapshots[0] ?? null;
   const studentReport = reportData?.studentReport ?? null;
   const branchRadar = toBranchRadar(latestSnapshot);
-  const outcomeBars = toOutcomeBars(latestSnapshot);
+  const outcomeRows = toOutcomeRows(latestSnapshot);
   const classBars = toClassBars(latestSnapshot);
   const examResult = toExamResult(latestSnapshot);
   const progressPoints = toProgressPoints(reportData?.studentProgress ?? null);
@@ -234,7 +236,7 @@ export function ReportsPage() {
             >
               <option value="">Tümü</option>
               {courses.map((course) => (
-                <option key={course.id} value={course.id}>{course.name}</option>
+                <option key={course.id} value={course.id}>{formatCourseName(course.name)}</option>
               ))}
             </select>
           </label>
@@ -271,7 +273,7 @@ export function ReportsPage() {
               metrics={[
                 { label: "Durum", value: latestSnapshot.status },
                 { label: "Sonuç", value: latestSnapshot.snapshotData?.resultCount ?? "-" },
-                { label: "Ortalama net", value: formatNumber(latestSnapshot.snapshotData?.averages?.net) },
+                { label: "Ortalama net", value: formatNetNumber(latestSnapshot.snapshotData?.averages?.net) },
                 { label: "LGS puanı", value: formatNumber(readLgsScore(latestSnapshot.snapshotData?.averages)) },
                 { label: "Standart puan", value: formatNumber(latestSnapshot.snapshotData?.averages?.standardScore) },
                 {
@@ -291,16 +293,16 @@ export function ReportsPage() {
                 <ExamResultDonut result={examResult} />
               </ReportChartPanel>
               <ReportChartPanel description="Branş ortalaması" title="Branş Netleri">
-                <TopicRadarChart branches={branchRadar} />
+                <TopicRadarChart branches={branchRadar} caption="Rapor branş netleri" />
               </ReportChartPanel>
               <ReportChartPanel description="Kazanım bazlı net karşılaştırması" title="Kazanım Netleri">
-                <ClassCompareBar classes={outcomeBars} />
+                <OutcomeNetTable caption="Rapor kazanım netleri" rows={outcomeRows} />
               </ReportChartPanel>
               <ReportChartPanel description="Sınıf ortalama netleri" title="Sınıf Karşılaştırması">
-                <ClassCompareBar classes={classBars} />
+                <ClassCompareBar caption="Sınıf ortalama netleri" classes={classBars} />
               </ReportChartPanel>
               <ReportChartPanel description="Net ve standart puan gelişimi" title="Öğrenci Gelişim Eğrisi">
-                <ProgressLineChart points={progressPoints} />
+                <ProgressLineChart caption="Öğrenci net gelişimi" points={progressPoints} />
               </ReportChartPanel>
             </div>
             <StudentReportCard
@@ -366,7 +368,7 @@ async function loadReportData(accessToken: string, examId: string, filters: type
     ).catch(() => null),
     apiRequest<ReportStudentProgress>(
       accessToken,
-      `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/students/${encodeURIComponent(studentId)}/progress`,
+      `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/students/${encodeURIComponent(studentId)}/progress?scope=all`,
     ).catch(() => null),
     apiRequest<ReportErrorBooklet>(
       accessToken,
@@ -448,7 +450,7 @@ function readLgsScore(total: { estimatedRawScore?: number; standardScore?: numbe
 
 function formatTrend(progress: ReportStudentProgress | null | undefined) {
   if (!progress) return "-";
-  const net = progress.netDelta === undefined ? "-" : `${progress.netDelta > 0 ? "+" : ""}${formatNumber(progress.netDelta)} net`;
+  const net = progress.netDelta === undefined ? "-" : `${progress.netDelta > 0 ? "+" : ""}${formatNetNumber(progress.netDelta)} net`;
   const score = progress.standardScoreDelta === undefined
     ? "-"
     : `${progress.standardScoreDelta > 0 ? "+" : ""}${formatNumber(progress.standardScoreDelta)} puan`;
@@ -479,19 +481,22 @@ function formatReportContext(
 
 function toBranchRadar(snapshot: ReportSnapshotRecord | null) {
   return (snapshot?.snapshotData?.branches ?? []).map((branch) => ({
-    branch: branch.branch,
+    branch: formatCourseName(branch.branch),
+    chartLabel: shortCourseName(branch.branch),
     net: branch.net,
     resultCount: branch.resultCount,
   }));
 }
 
-function toOutcomeBars(snapshot: ReportSnapshotRecord | null) {
+function toOutcomeRows(snapshot: ReportSnapshotRecord | null) {
   return [...(snapshot?.snapshotData?.outcomes ?? [])]
-    .sort((first, second) => second.net - first.net)
+    .sort((first, second) => (second.net ?? Number.NEGATIVE_INFINITY) - (first.net ?? Number.NEGATIVE_INFINITY))
     .slice(0, 12)
-    .map((outcome) => ({
-      className: `${outcome.branch} / ${outcome.outcomeCode}`,
+    .map((outcome, index) => ({
+      courseName: formatCourseName(outcome.branch),
+      id: `${outcome.branch}-${outcome.outcomeCode}-${index}`,
       net: outcome.net,
+      outcomeCode: formatOutcomeCode(outcome.outcomeCode),
     }));
 }
 

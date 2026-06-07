@@ -16,6 +16,7 @@ import type {
 import { Plus, Send } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { formatCourseName } from "../../_shared/academic-labels.js";
 import {
   announcementFormSchema,
   firstFormError,
@@ -88,7 +89,7 @@ export function AnnouncementsPage() {
   const campusNames = useMemo(() => new Map(references.campuses.map((record) => [record.id, record.name])), [references.campuses]);
   const gradeLevelNames = useMemo(() => new Map(references.gradeLevels.map((record) => [record.id, record.name])), [references.gradeLevels]);
   const classNames = useMemo(() => new Map(references.classes.map((record) => [record.id, record.name])), [references.classes]);
-  const courseNames = useMemo(() => new Map(references.courses.map((record) => [record.id, record.name])), [references.courses]);
+  const courseNames = useMemo(() => new Map(references.courses.map((record) => [record.id, formatCourseName(record.name)])), [references.courses]);
   const termNames = useMemo(() => new Map(references.terms.map((record) => [record.id, record.name])), [references.terms]);
 
   const columns: Array<DataTableColumn<AnnouncementRecord>> = [
@@ -385,7 +386,7 @@ export function AnnouncementsPage() {
             <option value="">Tüm dersler</option>
             {references.courses.map((course) => (
               <option key={course.id} value={course.id}>
-                {course.name}
+                {formatCourseName(course.name)}
               </option>
             ))}
           </select>

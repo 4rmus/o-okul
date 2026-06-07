@@ -9,6 +9,7 @@ import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, Teac
 import { Eye, Pencil, Plus, Send, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { formatCourseName } from "../../_shared/academic-labels.js";
 import {
   firstFormError,
   teacherAssignmentFormSchema,
@@ -80,7 +81,7 @@ export function TeachersPage() {
   const classes = references.classes;
   const classNameById = new Map(classes.map((klass) => [klass.id, klass.name]));
   const courses = references.courses;
-  const courseNameById = new Map(courses.map((course) => [course.id, course.name]));
+  const courseNameById = new Map(courses.map((course) => [course.id, formatCourseName(course.name)]));
   const terms = references.terms;
   const termNameById = new Map(terms.map((term) => [term.id, term.name]));
   const students = references.students;
@@ -233,6 +234,7 @@ export function TeachersPage() {
             <ListControls
               meta={teachersQuery.data?.meta}
               onChange={setListQuery}
+              searchPlaceholder="Ad, soyad veya branş ara"
               sortOptions={teacherSortOptions}
               state={listQuery}
             />
@@ -244,7 +246,6 @@ export function TeachersPage() {
         }
         aria-label="Öğretmen yönetimi"
         columns={columns}
-        description="Kurum öğretmenlerini aynı CRUD kalıbıyla yönet."
         emptyState={
           <EmptyState
             title="Henüz öğretmen yok"
@@ -372,7 +373,7 @@ export function TeachersPage() {
                 <option value="">Branş seçilmedi</option>
                 {courses.map((course) => (
                   <option key={course.id} value={course.id}>
-                    {course.name}
+                    {formatCourseName(course.name)}
                   </option>
                 ))}
               </select>

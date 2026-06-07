@@ -17,6 +17,7 @@ import type {
 import { CheckCircle2, CirclePlay, Download, Plus, Upload } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, type ListMeta } from "../../../../src/api-client.js";
+import { formatCourseName } from "../../_shared/academic-labels.js";
 import {
   firstFormError,
   supportTicketAttachmentFormSchema,
@@ -120,7 +121,7 @@ export function SupportTicketsPage() {
   const classNameById = new Map(classes.map((klass) => [klass.id, klass.name]));
   const campusNameById = new Map(campuses.map((campus) => [campus.id, campus.name]));
   const gradeLevelNameById = new Map(gradeLevels.map((level) => [level.id, level.name]));
-  const courseNameById = new Map(courses.map((course) => [course.id, course.name]));
+  const courseNameById = new Map(courses.map((course) => [course.id, formatCourseName(course.name)]));
   const termNameById = new Map(terms.map((term) => [term.id, term.name]));
 
   useEffect(() => {
@@ -397,7 +398,7 @@ export function SupportTicketsPage() {
                   <option value="">Tümü</option>
                   {courses.map((course) => (
                     <option key={course.id} value={course.id}>
-                      {course.name}
+                      {formatCourseName(course.name)}
                     </option>
                   ))}
                 </select>
@@ -611,7 +612,7 @@ export function SupportTicketsPage() {
             <option value="">Bağlam yok</option>
             {courses.map((course) => (
               <option key={course.id} value={course.id}>
-                {course.name}
+                {formatCourseName(course.name)}
               </option>
             ))}
           </select>

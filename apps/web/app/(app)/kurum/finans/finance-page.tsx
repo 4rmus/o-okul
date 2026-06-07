@@ -19,6 +19,7 @@ import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, type ListMeta } from "../../../../src/api-client.js";
 import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
 import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
+import { formatCourseName } from "../../_shared/academic-labels.js";
 
 interface FinanceFilters {
   campusId: string;
@@ -103,7 +104,7 @@ export function FinancePage() {
   const campusNameById = useMemo(() => new Map(references.campuses.map((campus) => [campus.id, campus.name])), [references.campuses]);
   const gradeLevelNameById = useMemo(() => new Map(references.gradeLevels.map((level) => [level.id, level.name])), [references.gradeLevels]);
   const classNameById = useMemo(() => new Map(references.classes.map((klass) => [klass.id, klass.name])), [references.classes]);
-  const courseNameById = useMemo(() => new Map(references.courses.map((course) => [course.id, course.name])), [references.courses]);
+  const courseNameById = useMemo(() => new Map(references.courses.map((course) => [course.id, formatCourseName(course.name)])), [references.courses]);
   const termNameById = useMemo(() => new Map(references.terms.map((term) => [term.id, term.name])), [references.terms]);
 
   const columns: Array<DataTableColumn<InstallmentRow>> = [
@@ -318,7 +319,7 @@ function FinanceFiltersPanel({
         <select value={filters.courseId} onChange={(event) => onChange({ ...filters, courseId: event.target.value })}>
           <option value="">Tümü</option>
           {references.courses.map((course) => (
-            <option key={course.id} value={course.id}>{course.name}</option>
+            <option key={course.id} value={course.id}>{formatCourseName(course.name)}</option>
           ))}
         </select>
       </label>

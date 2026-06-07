@@ -180,7 +180,7 @@ async function loadLatestReadyReportSnapshot(accessToken: string, examId: string
 async function loadReportStudentProgress(accessToken: string, examId: string, studentId: string) {
   return apiRequest<ReportStudentProgress>(
     accessToken,
-    `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/students/${encodeURIComponent(studentId)}/progress`,
+    `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/students/${encodeURIComponent(studentId)}/progress?scope=all`,
   );
 }
 

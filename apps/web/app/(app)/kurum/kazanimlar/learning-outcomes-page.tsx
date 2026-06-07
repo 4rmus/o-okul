@@ -8,6 +8,7 @@ import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } 
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { formatCourseName, formatOutcomeCode, formatOutcomeTitle } from "../../_shared/academic-labels.js";
 import {
   firstFormError,
   learningOutcomeFormSchema,
@@ -51,17 +52,17 @@ export function LearningOutcomesPage() {
     {
       key: "code",
       header: "Kod",
-      render: (record) => record.code,
+      render: (record) => formatOutcomeCode(record.code),
     },
     {
       key: "branch",
       header: "Branş",
-      render: (record) => record.branch,
+      render: (record) => formatCourseName(record.branch),
     },
     {
       key: "title",
       header: "Kazanım",
-      render: (record) => record.title,
+      render: (record) => formatOutcomeTitle(record.title),
     },
     {
       key: "level",
@@ -73,10 +74,10 @@ export function LearningOutcomesPage() {
       header: "İşlem",
       render: (record) => (
         <span className="next-row-actions">
-          <button type="button" onClick={() => openEditForm(record)} aria-label={`${record.code} düzenle`}>
+          <button type="button" onClick={() => openEditForm(record)} aria-label={`${formatOutcomeCode(record.code)} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
           </button>
-          <button type="button" onClick={() => void handleDelete(record)} aria-label={`${record.code} sil`}>
+          <button type="button" onClick={() => void handleDelete(record)} aria-label={`${formatOutcomeCode(record.code)} sil`}>
             <Trash2 size={17} aria-hidden="true" />
           </button>
         </span>
@@ -94,10 +95,10 @@ export function LearningOutcomesPage() {
   function openEditForm(record: LearningOutcomeRecord) {
     setEditingOutcome(record);
     setForm({
-      branch: record.branch,
-      code: record.code,
+      branch: formatCourseName(record.branch),
+      code: formatOutcomeCode(record.code),
       level: record.level ?? "",
-      title: record.title,
+      title: formatOutcomeTitle(record.title),
     });
     setError("");
     setIsFormOpen(true);
@@ -135,7 +136,7 @@ export function LearningOutcomesPage() {
 
   async function handleDelete(record: LearningOutcomeRecord) {
     if (!auth) return;
-    if (!window.confirm(`${record.code} silinsin mi?`)) return;
+    if (!window.confirm(`${formatOutcomeCode(record.code)} silinsin mi?`)) return;
 
     setError("");
     try {

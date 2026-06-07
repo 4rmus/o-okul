@@ -37,11 +37,13 @@ export function buildListUrl(baseUrl: string, state: ListQueryState): string {
 export function ListControls({
   meta,
   onChange,
+  searchPlaceholder = "Ara",
   sortOptions,
   state,
 }: {
   meta?: ListMeta;
   onChange(state: ListQueryState): void;
+  searchPlaceholder?: string;
   sortOptions: SortOption[];
   state: ListQueryState;
 }) {
@@ -57,6 +59,7 @@ export function ListControls({
         <Search size={17} aria-hidden="true" />
         <Input
           aria-label="Ara"
+          placeholder={searchPlaceholder}
           value={state.q}
           onChange={(event) => onChange({ ...state, page: 1, q: event.target.value })}
         />

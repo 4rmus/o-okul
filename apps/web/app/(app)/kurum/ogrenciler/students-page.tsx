@@ -437,6 +437,7 @@ export function StudentsPage() {
             <ListControls
               meta={studentsQuery.data?.meta}
               onChange={setListQuery}
+              searchPlaceholder="Ad, okul no, TC veya veli ara"
               sortOptions={studentSortOptions}
               state={listQuery}
             />
@@ -603,7 +604,6 @@ export function StudentsPage() {
         aria-label="Öğrenci yönetimi"
         className={pageClassName}
         columns={visibleColumns}
-        description="Kurum öğrencilerini listele; ad-soyad, TC, iletişim ve veli bilgileriyle ekle veya düzenle."
         emptyState={
           <EmptyState
             title="Henüz öğrenci yok"
@@ -1062,7 +1062,7 @@ async function loadStudentDetail(accessToken: string, id: string): Promise<Stude
     apiRequest<GuardianRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/guardians`),
     loadStudentHomeworkAssignments(accessToken, id),
     apiRequest<PaymentPlanWithInstallmentsRecord[]>(accessToken, `${apiBaseUrl}/payment-plans?studentId=${encodeURIComponent(id)}`),
-    apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/exams/exam-demo-isem-lgs-1/reports/students/${encodeURIComponent(id)}/progress`),
+    apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/exams/exam-demo-isem-lgs-1/reports/students/${encodeURIComponent(id)}/progress?scope=all`),
     loadLatestStudentReport(accessToken, id),
     apiRequest<StudentClassHistoryRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/class-history`),
     apiRequest<StudentEnrollmentRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/enrollments`),

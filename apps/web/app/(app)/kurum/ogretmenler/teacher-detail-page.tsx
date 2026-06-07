@@ -8,6 +8,7 @@ import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
+import { formatCourseName } from "../../_shared/academic-labels.js";
 
 export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
   const { auth } = useAuth();
@@ -125,7 +126,7 @@ async function loadTeacherDetail(accessToken: string, teacherId: string) {
   return {
     assignments,
     classNameById: new Map(classes.data.map((record) => [record.id, record.name])),
-    courseNameById: new Map(courses.data.map((record) => [record.id, record.name])),
+    courseNameById: new Map(courses.data.map((record) => [record.id, formatCourseName(record.name)])),
     studentNameById: new Map(students.data.map((record) => [record.id, `${record.firstName} ${record.lastName}`])),
     teacher,
     termNameById: new Map(terms.data.map((record) => [record.id, record.name])),

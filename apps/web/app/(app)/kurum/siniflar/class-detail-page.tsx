@@ -9,6 +9,7 @@ import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
+import { formatCourseName, formatOutcomeCode } from "../../_shared/academic-labels.js";
 
 export function ClassDetailPage({ classId }: { classId: string }) {
   const { auth } = useAuth();
@@ -133,7 +134,7 @@ export function ClassDetailPage({ classId }: { classId: string }) {
               {toClassOutcomeRows(selectedSnapshot, classId).length > 0 ? (
                 toClassOutcomeRows(selectedSnapshot, classId).map((outcome) => (
                   <p key={`${outcome.branch}-${outcome.outcomeCode}`}>
-                    {outcome.branch} / {outcome.outcomeCode}: {formatNumber(outcome.net)} net
+                    {formatCourseName(outcome.branch)} / {formatOutcomeCode(outcome.outcomeCode)}: {formatNumber(outcome.net)} net
                   </p>
                 ))
               ) : (

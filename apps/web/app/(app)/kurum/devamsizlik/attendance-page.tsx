@@ -7,6 +7,7 @@ import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } 
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { formatCourseName } from "../../_shared/academic-labels.js";
 import {
   attendanceFormSchema,
   firstFormError,
@@ -53,7 +54,7 @@ export function AttendancePage() {
     [references.students],
   );
   const classNames = useMemo(() => new Map(references.classes.map((record) => [record.id, record.name])), [references.classes]);
-  const courseNames = useMemo(() => new Map(references.courses.map((record) => [record.id, record.name])), [references.courses]);
+  const courseNames = useMemo(() => new Map(references.courses.map((record) => [record.id, formatCourseName(record.name)])), [references.courses]);
   const termNames = useMemo(() => new Map(references.terms.map((record) => [record.id, record.name])), [references.terms]);
 
   const columns: Array<DataTableColumn<AttendanceRecord>> = [
@@ -249,7 +250,7 @@ function AttendanceFormModal({
           <option value="">Seçiniz</option>
           {references.courses.map((record) => (
             <option key={record.id} value={record.id}>
-              {record.name}
+              {formatCourseName(record.name)}
             </option>
           ))}
         </select>

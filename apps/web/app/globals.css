@@ -131,6 +131,21 @@ a {
   font: inherit;
 }
 
+.next-form .next-checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-secondary);
+}
+
+.next-form .next-checkbox-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
+
 .next-form textarea {
   min-height: 112px;
   padding: 10px 12px;
@@ -841,10 +856,10 @@ a {
 
 .next-chart-panel {
   display: grid;
-  grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
   align-items: start;
   gap: 24px;
-  min-height: 340px;
+  min-height: 360px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
@@ -867,7 +882,7 @@ a {
   min-width: 0;
   display: grid;
   gap: 12px;
-  align-content: start;
+  align-content: stretch;
 }
 
 .next-chart-panel__body > :first-child {
@@ -899,6 +914,7 @@ a {
 .next-chart-panel p {
   margin: 6px 0 0;
   color: var(--color-text-muted);
+  line-height: 1.5;
 }
 
 .uh-button {
@@ -1010,8 +1026,14 @@ a {
 .uh-crud-page__header {
   display: flex;
   align-items: flex-start;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 16px;
+}
+
+.uh-crud-page__header > div:first-child {
+  flex: 1 1 220px;
+  min-width: min(220px, 100%);
 }
 
 .uh-crud-page__header h1 {
@@ -1056,6 +1078,12 @@ a {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.uh-crud-page__actions {
+  flex: 1 1 520px;
+  justify-content: flex-end;
+  min-width: min(360px, 100%);
 }
 
 .next-reference-badge {
@@ -1123,7 +1151,8 @@ a {
 }
 
 .next-list-search {
-  min-width: 180px;
+  flex: 1 1 260px;
+  min-width: min(260px, 100%);
   position: relative;
 }
 
@@ -1135,6 +1164,7 @@ a {
 }
 
 .next-list-search input {
+  width: 100%;
   padding-left: 34px;
 }
 
@@ -2202,6 +2232,47 @@ a {
   line-height: 1.15;
 }
 
+.next-optical-result-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.next-optical-step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.next-report-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.next-report-status-grid div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.next-report-status-grid span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.next-report-status-grid strong {
+  color: var(--color-text);
+  font-size: 16px;
+}
+
 .next-support-tool label {
   display: grid;
   gap: 6px;
@@ -3001,7 +3072,7 @@ a {
 }
 
 .next-report-visual-grid .next-chart-panel {
-  min-height: 340px;
+  min-height: 360px;
 }
 
 .next-chart-panel__body > :first-child {
@@ -3520,7 +3591,7 @@ a {
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   padding: 10px;
-  min-height: 240px;
+  min-height: 260px;
   box-shadow: var(--shadow-card);
 }
 
@@ -3529,15 +3600,15 @@ a {
 .uh-progress-line-chart > canvas,
 .uh-topic-radar-chart > canvas {
   width: 100% !important;
-  height: 240px !important;
-  min-height: 240px;
+  height: 260px !important;
+  min-height: 260px;
 }
 
 .uh-chart-empty-state,
 .uh-chart-loading {
   display: grid;
   place-items: center;
-  min-height: 240px;
+  min-height: 260px;
   border: 1px dashed var(--color-border);
   border-radius: var(--radius);
   background: var(--color-bg);
@@ -3554,6 +3625,7 @@ a {
   overflow-x: auto;
   margin-top: 12px;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: 13px;
   color: var(--color-text);
 }
@@ -3568,7 +3640,37 @@ a {
 .uh-chart-table th,
 .uh-chart-table td {
   border-top: 1px solid var(--color-border-faint);
-  padding: 6px 0;
+  padding: 7px 0;
+  text-align: left;
+  vertical-align: top;
+}
+
+.uh-chart-table thead th {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.uh-chart-table tbody th {
+  padding-right: 12px;
+  color: var(--color-text-secondary);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.uh-chart-table td {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.uh-outcome-net-table td:nth-child(2) {
+  text-align: left;
+  white-space: normal;
+}
+
+.uh-outcome-net-table td[colspan] {
   text-align: left;
 }
 
@@ -3738,5 +3840,22 @@ a {
   .uh-progress-line-chart,
   .uh-topic-radar-chart {
     padding: 8px;
+  }
+}
+
+@media (max-width: 520px) {
+  .uh-exam-result-donut > canvas,
+  .uh-class-compare-bar > canvas,
+  .uh-progress-line-chart > canvas,
+  .uh-topic-radar-chart > canvas {
+    justify-self: center;
+    width: min(100%, calc(100vw - 96px)) !important;
+    height: 220px !important;
+    min-height: 220px;
+  }
+
+  .next-chart-panel .uh-chart-table {
+    justify-self: center;
+    width: min(100%, calc(100vw - 96px));
   }
 }

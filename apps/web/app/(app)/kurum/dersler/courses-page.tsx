@@ -8,6 +8,7 @@ import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } 
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { formatCourseName, formatOutcomeCode } from "../../_shared/academic-labels.js";
 import {
   courseFormSchema,
   firstFormError,
@@ -48,22 +49,22 @@ export function CoursesPage() {
     {
       key: "name",
       header: "Ders",
-      render: (record) => record.name,
+      render: (record) => formatCourseName(record.name),
     },
     {
       key: "code",
       header: "Kod",
-      render: (record) => record.code ?? "-",
+      render: (record) => formatOutcomeCode(record.code),
     },
     {
       key: "actions",
       header: "İşlem",
       render: (record) => (
         <span className="next-row-actions">
-          <button type="button" onClick={() => openEditForm(record)} aria-label={`${record.name} düzenle`}>
+          <button type="button" onClick={() => openEditForm(record)} aria-label={`${formatCourseName(record.name)} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
           </button>
-          <button type="button" onClick={() => void handleDelete(record)} aria-label={`${record.name} sil`}>
+          <button type="button" onClick={() => void handleDelete(record)} aria-label={`${formatCourseName(record.name)} sil`}>
             <Trash2 size={17} aria-hidden="true" />
           </button>
         </span>
@@ -80,7 +81,10 @@ export function CoursesPage() {
 
   function openEditForm(record: CourseRecord) {
     setEditingCourse(record);
-    setForm({ name: record.name, code: record.code ?? "" });
+    setForm({
+      name: formatCourseName(record.name),
+      code: record.code ? formatOutcomeCode(record.code) : "",
+    });
     setError("");
     setIsFormOpen(true);
   }
@@ -116,7 +120,7 @@ export function CoursesPage() {
 
   async function handleDelete(record: CourseRecord) {
     if (!auth) return;
-    if (!window.confirm(`${record.name} silinsin mi?`)) return;
+    if (!window.confirm(`${formatCourseName(record.name)} silinsin mi?`)) return;
 
     setError("");
     try {

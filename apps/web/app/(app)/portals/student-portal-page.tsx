@@ -140,7 +140,7 @@ async function loadStudentPortal(accessToken: string, rolePreviewToken = "", rep
       `${apiBaseUrl}/me/student/reports/${encodeURIComponent(reportExamId)}/latest/error-booklet`,
       rolePreviewToken,
     ),
-    apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/me/student/reports/${encodeURIComponent(reportExamId)}/progress`, rolePreviewToken),
+    apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/me/student/reports/${encodeURIComponent(reportExamId)}/progress?scope=all`, rolePreviewToken),
     readOnlyRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`, rolePreviewToken),
     readOnlyRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`, rolePreviewToken),
   ]);

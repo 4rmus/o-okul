@@ -6,6 +6,7 @@ import type {
   ReportStudentProgress,
   ReportStudentSnapshot,
 } from "@uzman-hocam/shared-types";
+import { formatCourseName, formatOutcomeCode } from "./academic-labels.js";
 
 type KarneHeadingLevel = "h2" | "h3" | "h4";
 
@@ -111,15 +112,15 @@ export function KarneSheet({
               {report.branches.map((branch, index) => (
                 <tr key={branch.branch}>
                   <td>{index + 1}</td>
-                  <td>{branch.branch}</td>
+                  <td>{formatCourseName(branch.branch)}</td>
                   <td>{formatNumber(branchQuestionCount(branch))}</td>
                   <td>{formatNumber(branch.correct)}</td>
                   <td>{formatNumber(branch.wrong)}</td>
                   <td>{formatNumber(branch.blank)}</td>
-                  <td>{formatNumber(branch.net)}</td>
-                  <td>{formatNumber(branch.classNetAverage)}</td>
-                  <td>{formatNumber(branch.schoolNetAverage)}</td>
-                  <td>{formatNumber(branch.generalNetAverage)}</td>
+                  <td>{formatNetNumber(branch.net)}</td>
+                  <td>{formatNetNumber(branch.classNetAverage)}</td>
+                  <td>{formatNetNumber(branch.schoolNetAverage)}</td>
+                  <td>{formatNetNumber(branch.generalNetAverage)}</td>
                 </tr>
               ))}
               <tr>
@@ -129,7 +130,7 @@ export function KarneSheet({
                 <td>{formatNumber(report.total.correct)}</td>
                 <td>{formatNumber(report.total.wrong)}</td>
                 <td>{formatNumber(report.total.blank)}</td>
-                <td>{formatNumber(report.total.net)}</td>
+                <td>{formatNetNumber(report.total.net)}</td>
                 <td>-</td>
                 <td>-</td>
                 <td>-</td>
@@ -179,7 +180,6 @@ export function KarneSheet({
       </div>
       <KarneOutcomeRadar
         ariaLabel={outcomeAriaLabel}
-        branches={report.branches}
         caption={outcomeCaption}
         headingLevel={outcomeHeadingLevel}
         outcomes={report.outcomes ?? []}
@@ -209,7 +209,7 @@ export function KarneSheet({
                   <tr key={point.snapshotId ?? point.generatedAt ?? index}>
                     <td>{index + 1}</td>
                     <td>{point.examTitle ?? (recentProgressPoints.length ? `Deneme ${index + 1}` : "Son rapor")}</td>
-                    <td>{formatNumber(point.total.net)}</td>
+                    <td>{formatNetNumber(point.total.net)}</td>
                     <td>{formatProgressDate(point.generatedAt, index)}</td>
                   </tr>
                 ))}
@@ -232,15 +232,15 @@ export function KarneSheet({
             <tbody>
               {report.branches.map((branch) => (
                 <tr key={branch.branch}>
-                  <td>{branch.branch}</td>
+                  <td>{formatCourseName(branch.branch)}</td>
                   {branchProgressPoints.length > 0 ? (
                     branchProgressPoints.map((point, index) => (
                       <td key={`${point.snapshotId ?? point.generatedAt ?? index}-${branch.branch}`}>
-                        {formatNumber(findBranchNet(point, branch.branch))}
+                        {formatNetNumber(findBranchNet(point, branch.branch))}
                       </td>
                     ))
                   ) : (
-                    <td>{formatNumber(branch.net)}</td>
+                    <td>{formatNetNumber(branch.net)}</td>
                   )}
                 </tr>
               ))}
@@ -278,7 +278,7 @@ export function KarneSheet({
                 <td>{formatNumber(report.total.correct)}</td>
                 <td>{formatNumber(report.total.wrong)}</td>
                 <td>{formatNumber(report.total.blank)}</td>
-                <td>{formatNumber(report.total.net)}</td>
+                <td>{formatNetNumber(report.total.net)}</td>
               </tr>
             </tbody>
           </table>
@@ -301,12 +301,12 @@ export function KarneSheet({
               <tbody>
                 {outcomeRows.map((outcome, index) => (
                   <tr key={`${outcome.outcomeCode}-${outcome.branch}-${index}`}>
-                    <td>{outcome.outcomeCode || "-"}</td>
-                    <td>{outcome.branch || "-"}</td>
+                    <td>{formatOutcomeCode(outcome.outcomeCode)}</td>
+                    <td>{formatCourseName(outcome.branch)}</td>
                     <td>{formatNumber(outcome.correct)}</td>
                     <td>{formatNumber(outcome.wrong)}</td>
                     <td>{formatNumber(outcome.blank)}</td>
-                    <td>{formatNumber(outcome.net)}</td>
+                    <td>{formatNetNumber(outcome.net)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -334,8 +334,8 @@ export function KarneSheet({
                 {questionRows.map((question, index) => (
                   <tr key={`${question.questionNo}-${question.branch}-${index}`}>
                     <td>{formatNumber(question.questionNo)}</td>
-                    <td>{question.branch || "-"}</td>
-                    <td>{question.outcomeCode || "-"}</td>
+                    <td>{formatCourseName(question.branch)}</td>
+                    <td>{formatOutcomeCode(question.outcomeCode)}</td>
                     <td>{formatAnswer(question.answer)}</td>
                     <td>{formatAnswer(question.correctAnswer)}</td>
                     <td>
@@ -358,7 +358,6 @@ export function KarneSheet({
 
 function KarneOutcomeRadar({
   ariaLabel,
-  branches,
   caption,
   headingLevel,
   outcomes,
@@ -366,7 +365,6 @@ function KarneOutcomeRadar({
   showEmpty,
 }: {
   ariaLabel: string;
-  branches: ReportStudentSnapshot["branches"];
   caption: string;
   headingLevel: KarneHeadingLevel;
   outcomes: NonNullable<ReportStudentSnapshot["outcomes"]>;
@@ -374,7 +372,6 @@ function KarneOutcomeRadar({
   showEmpty: boolean;
 }) {
   const rows = outcomes.filter((outcome) => outcome.outcomeCode).slice(0, 6);
-  const chartBranches = branches.slice(0, 6);
   if (rows.length === 0 && !showEmpty) return null;
 
   if (rows.length === 0) {
@@ -386,75 +383,34 @@ function KarneOutcomeRadar({
     );
   }
 
-  const maxNet = Math.max(1, ...rows.map((outcome) => Math.max(0, outcome.net ?? 0)));
-  const axisPoints = rows.map((_outcome, index) => radarPoint(index, rows.length, maxNet, maxNet));
-  const polygonPoints = rows.map((outcome, index) => radarPoint(index, rows.length, Math.max(0, outcome.net ?? 0), maxNet)).join(" ");
-
   return (
     <section className={sectionClassName} aria-label={ariaLabel}>
       <KarneHeading level={headingLevel}>BÖLÜM BAŞARI YÜZDELERİ</KarneHeading>
-      <div className="next-outcome-radar">
-        <svg viewBox="0 0 220 220" role="img" aria-label={`${caption} grafiği`}>
-          <polygon className="next-outcome-radar__grid" points={axisPoints.join(" ")} />
-          {axisPoints.map((point, index) => (
-            <line key={rows[index]?.outcomeCode} className="next-outcome-radar__axis" x1="110" y1="110" x2={point.split(",")[0]} y2={point.split(",")[1]} />
-          ))}
-          <polygon className="next-outcome-radar__shape" points={polygonPoints} />
-          {rows.map((outcome, index) => {
-            const [x, y] = radarPoint(index, rows.length, maxNet, maxNet, 100).split(",");
-            return (
-              <text key={outcome.outcomeCode} x={x} y={y} textAnchor="middle">
-                {shortOutcomeLabel(outcome.outcomeCode)}
-              </text>
-            );
-          })}
-        </svg>
-        <div className="next-outcome-legend" aria-hidden="true">
-          <span className="next-outcome-legend__student">ÖĞRENCİ</span>
-          <span className="next-outcome-legend__class">SINIF</span>
-          <span className="next-outcome-legend__school">OKUL</span>
-          <span className="next-outcome-legend__general">GENEL</span>
-        </div>
-        <div className="next-outcome-bar-chart" aria-hidden="true">
-          {chartBranches.map((branch, index) => {
-            const questionCount = Math.max(1, branchQuestionCount(branch));
-            return (
-              <div key={branch.branch} className="next-outcome-bar-group">
-                <i className="next-outcome-bar next-outcome-bar--student" style={{ height: `${percentFromNet(branch.net, questionCount)}%` }} />
-                <i className="next-outcome-bar next-outcome-bar--class" style={{ height: `${percentFromNet(branch.classNetAverage, questionCount)}%` }} />
-                <i className="next-outcome-bar next-outcome-bar--school" style={{ height: `${percentFromNet(branch.schoolNetAverage, questionCount)}%` }} />
-                <i className="next-outcome-bar next-outcome-bar--general" style={{ height: `${percentFromNet(branch.generalNetAverage, questionCount)}%` }} />
-                <span title={branch.branch}>{shortBranchLabel(branch.branch)}</span>
-              </div>
-            );
-          })}
-        </div>
-        <table className="uh-chart-table">
-          <caption>{caption}</caption>
-          <thead>
-            <tr>
-              <th>Kazanım</th>
-              <th>Branş</th>
-              <th>Doğru</th>
-              <th>Yanlış</th>
-              <th>Boş</th>
-              <th>Net</th>
+      <table className="uh-chart-table uh-outcome-net-table">
+        <caption>{caption}</caption>
+        <thead>
+          <tr>
+            <th>Kazanım</th>
+            <th>Branş</th>
+            <th>Doğru</th>
+            <th>Yanlış</th>
+            <th>Boş</th>
+            <th>Net</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((outcome) => (
+            <tr key={outcome.outcomeCode}>
+              <th scope="row">{formatOutcomeCode(outcome.outcomeCode)}</th>
+              <td>{formatCourseName(outcome.branch)}</td>
+              <td>{formatNumber(outcome.correct)}</td>
+              <td>{formatNumber(outcome.wrong)}</td>
+              <td>{formatNumber(outcome.blank)}</td>
+              <td>{formatNetNumber(outcome.net)}</td>
             </tr>
-          </thead>
-          <tbody>
-            {rows.map((outcome) => (
-              <tr key={outcome.outcomeCode}>
-                <td>{outcome.outcomeCode}</td>
-                <td>{outcome.branch}</td>
-                <td>{formatNumber(outcome.correct)}</td>
-                <td>{formatNumber(outcome.wrong)}</td>
-                <td>{formatNumber(outcome.blank)}</td>
-                <td>{formatNumber(outcome.net)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </table>
     </section>
   );
 }
@@ -515,6 +471,10 @@ function formatNumber(value: number | undefined) {
   return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
 }
 
+function formatNetNumber(value: number | undefined) {
+  return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+}
+
 function formatAnswer(value: string) {
   return value ? value : "-";
 }
@@ -543,7 +503,7 @@ function formatRankOutOf(rank: ReportScopeRank | undefined) {
 
 function formatDelta(value: number | undefined) {
   if (value === undefined) return "-";
-  return `${value > 0 ? "+" : ""}${formatNumber(value)}`;
+  return `${value > 0 ? "+" : ""}${formatNetNumber(value)}`;
 }
 
 function formatProgressDate(value: string | undefined, index: number) {
@@ -567,38 +527,8 @@ function branchQuestionCount(value: { blank?: number; correct?: number; wrong?: 
   return (value.correct ?? 0) + (value.wrong ?? 0) + (value.blank ?? 0);
 }
 
-function percentFromNet(value: number | undefined, questionCount: number) {
-  if (value === undefined) return 0;
-  return Math.max(0, Math.min(100, value / questionCount * 100));
-}
-
 function findBranchNet(point: ReportStudentProgress["points"][number], branchName: string) {
   return point.branches?.find((branch) => branch.branch === branchName)?.net;
-}
-
-function radarPoint(index: number, total: number, value: number, maxValue: number, radius = 78) {
-  const angle = -Math.PI / 2 + (index / total) * Math.PI * 2;
-  const distance = maxValue === 0 ? 0 : (value / maxValue) * radius;
-  const x = 110 + Math.cos(angle) * distance;
-  const y = 110 + Math.sin(angle) * distance;
-  return `${Math.round(x)},${Math.round(y)}`;
-}
-
-function shortOutcomeLabel(value: string) {
-  return value.length > 8 ? `${value.slice(0, 8)}.` : value;
-}
-
-function shortBranchLabel(value: string) {
-  const upper = value.toLocaleUpperCase("tr-TR");
-  if (upper.includes("TÜRKÇE")) return "Türkçe";
-  if (upper.includes("İNKILAP") || upper.includes("ATATÜRK")) return "İnkılap";
-  if (upper.includes("DİN")) return "Din";
-  if (upper.includes("İNGİLİZCE")) return "İng.";
-  if (upper.includes("MATEMATİK")) return "Mat.";
-  if (upper.includes("FEN")) return "Fen";
-
-  const cleaned = value.replace(/^LGS\s+/iu, "").trim();
-  return cleaned.length > 10 ? `${cleaned.slice(0, 10)}.` : cleaned || "-";
 }
 
 function splitInstitutionName(name: string) {
