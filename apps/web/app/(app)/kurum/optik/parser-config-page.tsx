@@ -17,6 +17,7 @@ import { CheckCircle2, Download, FileSpreadsheet, FileText, Play, RefreshCw, Upl
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
+import { formatCourseName } from "../../_shared/academic-labels.js";
 import {
   answerKeyImportFormSchema,
   examFormSchema,
@@ -124,6 +125,17 @@ interface RawImportEvaluationQueueResult {
   queuedCount: number;
   queueName: "exam-evaluation";
   jobs: Array<{ participantId: string; jobId: string; status: "queued" }>;
+}
+
+interface RawImportEvaluationStatus {
+  tenantId: string;
+  examId: string;
+  rawImportId: string;
+  answerKeyId?: string;
+  matchedCount: number;
+  evaluatedCount: number;
+  pendingCount: number;
+  status: "COMPLETED" | "RUNNING";
 }
 
 interface ImportQuarantineRecord {
@@ -274,6 +286,10 @@ export function ParserConfigPage() {
   const [rawImport, setRawImport] = useState<RawImportUploadResult | null>(null);
   const [rawImportSummary, setRawImportSummary] = useState<RawImportParseSummary | null>(null);
   const [evaluationJobs, setEvaluationJobs] = useState<RawImportEvaluationQueueResult | null>(null);
+  const [evaluationStatus, setEvaluationStatus] = useState<RawImportEvaluationStatus | null>(null);
+  const [isRawImportSubmitting, setIsRawImportSubmitting] = useState(false);
+  const [isRawImportChecking, setIsRawImportChecking] = useState(false);
+  const [isEvaluationSubmitting, setIsEvaluationSubmitting] = useState(false);
   const [quarantineRawImportId, setQuarantineRawImportId] = useState("");
   const [quarantines, setQuarantines] = useState<ImportQuarantineRecord[]>([]);
   const [students, setStudents] = useState<StudentRecord[]>([]);
@@ -281,6 +297,7 @@ export function ParserConfigPage() {
   const [reportContentHash, setReportContentHash] = useState("");
   const [reportJob, setReportJob] = useState<ReportGenerationQueueResult | null>(null);
   const [reportSnapshots, setReportSnapshots] = useState<ReportSnapshotRecord[]>([]);
+  const [isReportSubmitting, setIsReportSubmitting] = useState(false);
   const [error, setError] = useState("");
   const selectedExam = exams.find((exam) => exam.id === examId);
   const selectedPresetForm = opticalFormPresets.find((form) => form.preset === selectedPreset) ?? opticalFormPresets[0]!;
@@ -601,6 +618,10 @@ export function ParserConfigPage() {
   async function changeRawImportFile(file: File | undefined) {
     setError("");
     setRawImport(null);
+    setRawImportSummary(null);
+    setEvaluationJobs(null);
+    setEvaluationStatus(null);
+    setQuarantines([]);
     setRawImportFileName(file?.name ?? "");
     setRawImportFileBase64(file ? await readFileAsBase64(file) : "");
   }
@@ -622,21 +643,27 @@ export function ParserConfigPage() {
       return;
     }
     let result: RawImportUploadResult;
+    setIsRawImportSubmitting(true);
     try {
       result = await uploadRawImport(auth.accessToken, parsedForm.data);
     } catch (uploadError) {
       setError(apiErrorMessage(uploadError, "Optik cevap dosyası yüklenemedi."));
       return;
+    } finally {
+      setIsRawImportSubmitting(false);
     }
 
     setRawImport(result);
     setRawImportSummary(null);
     setEvaluationJobs(null);
+    setEvaluationStatus(null);
     setQuarantineRawImportId(result.rawImport.id);
+    setQuarantines([]);
     setReportContentHash("");
     setReportJob(null);
-    setActiveTab("quarantine");
+    setIsReportSubmitting(false);
 
+    setIsRawImportChecking(true);
     try {
       setRawImportSummary(await waitForRawImportSummary(auth.accessToken, examId, result.rawImport.id));
       const [records, studentRecords] = await Promise.all([
@@ -647,6 +674,8 @@ export function ParserConfigPage() {
       setStudents(studentRecords);
     } catch (analysisError) {
       setError(apiErrorMessage(analysisError, "Optik analizi henüz tamamlanmadı. Özeti veya eşleşmeyen satırları yeniden getirin."));
+    } finally {
+      setIsRawImportChecking(false);
     }
   }
 
@@ -659,10 +688,13 @@ export function ParserConfigPage() {
       setError("Sınav ve raw import ID zorunludur.");
       return;
     }
+    setIsRawImportChecking(true);
     try {
       setRawImportSummary(await loadRawImportSummary(auth.accessToken, examId, rawImportId));
     } catch (summaryError) {
       setError(apiErrorMessage(summaryError, "Optik ön kontrol özeti alınamadı."));
+    } finally {
+      setIsRawImportChecking(false);
     }
   }
 
@@ -675,6 +707,11 @@ export function ParserConfigPage() {
       setError("Sınav ve raw import ID zorunludur.");
       return;
     }
+    if (!rawImportSummary) {
+      setError("Önce yükleme özetinin tamamlanmasını bekleyin.");
+      return;
+    }
+    setIsEvaluationSubmitting(true);
     try {
       const answerKeyId = answerKeyImport?.answerKey.id ?? manualAnswerKey?.id;
       const jobs = await enqueueRawImportEvaluation(auth.accessToken, {
@@ -687,8 +724,18 @@ export function ParserConfigPage() {
       if (rawImportSha && jobs.answerKeyId) {
         setReportContentHash(`${rawImportSha}-${jobs.answerKeyId}`);
       }
+      const status = await waitForRawImportEvaluationStatus(auth.accessToken, {
+        examId,
+        rawImportId,
+        answerKeyId: jobs.answerKeyId,
+        expectedCount: jobs.queuedCount,
+      });
+      setEvaluationStatus(status);
+      setActiveTab("quarantine");
     } catch (evaluationError) {
-      setError(apiErrorMessage(evaluationError, "Analiz başlatılamadı."));
+      setError(apiErrorMessage(evaluationError, "Analiz işleri kuyruğa alındı ancak tamamlanma sonucu alınamadı. Birazdan tekrar deneyin."));
+    } finally {
+      setIsEvaluationSubmitting(false);
     }
   }
 
@@ -754,11 +801,19 @@ export function ParserConfigPage() {
       setError("Rapor üretmeden önce eşleşen satırlar için analizi başlatın.");
       return;
     }
+    if (evaluationStatus?.status !== "COMPLETED" || evaluationStatus.evaluatedCount <= 0) {
+      setError("Rapor üretmeden önce analiz tamamlanmalıdır.");
+      return;
+    }
+    setIsReportSubmitting(true);
     try {
+      const currentReadyCount = countReadyReportSnapshots(reportSnapshots);
       setReportJob(await enqueueReportGeneration(auth.accessToken, normalizedExamId, normalizedContentHash));
-      setReportSnapshots(await waitForReportSnapshots(auth.accessToken, normalizedExamId));
+      setReportSnapshots(await waitForReportSnapshots(auth.accessToken, normalizedExamId, currentReadyCount));
     } catch (reportError) {
       setError(apiErrorMessage(reportError, "Rapor üretimi kuyruğa alınamadı."));
+    } finally {
+      setIsReportSubmitting(false);
     }
   }
 
@@ -887,6 +942,10 @@ export function ParserConfigPage() {
         {activeTab === "upload" ? (
           <OpticalUploadPanel
             evaluationJobs={evaluationJobs}
+            evaluationStatus={evaluationStatus}
+            isEvaluationSubmitting={isEvaluationSubmitting}
+            isRawImportChecking={isRawImportChecking}
+            isRawImportSubmitting={isRawImportSubmitting}
             rawImport={rawImport}
             rawImportFileName={rawImportFileName}
             rawImportParserVersion={rawImportParserVersion}
@@ -911,10 +970,11 @@ export function ParserConfigPage() {
               onSelectedStudentChange={setSelectedStudentByQuarantine}
             />
             <OpticalReportPanel
+              evaluationStatus={evaluationStatus}
+              isReportSubmitting={isReportSubmitting}
               reportContentHash={reportContentHash}
               reportJob={reportJob}
               reportSnapshots={reportSnapshots}
-              onContentHashChange={setReportContentHash}
               onDownload={downloadReportSnapshot}
               onRefreshSnapshots={refreshReportSnapshots}
               onSubmit={submitReportGeneration}
@@ -1245,7 +1305,7 @@ function AnswerKeySetup({
               <tbody>
                 {answerKeyDryRun.branches.map((branch) => (
                   <tr key={branch.branch}>
-                    <td>{branch.branch}</td>
+                    <td>{formatCourseName(branch.branch)}</td>
                     <td>{branch.questionCount}</td>
                   </tr>
                 ))}
@@ -1367,6 +1427,10 @@ function AnswerKeySetup({
 
 interface OpticalUploadPanelProps {
   evaluationJobs: RawImportEvaluationQueueResult | null;
+  evaluationStatus: RawImportEvaluationStatus | null;
+  isEvaluationSubmitting: boolean;
+  isRawImportChecking: boolean;
+  isRawImportSubmitting: boolean;
   rawImport: RawImportUploadResult | null;
   rawImportFileName: string;
   rawImportParserVersion: string;
@@ -1380,6 +1444,10 @@ interface OpticalUploadPanelProps {
 
 function OpticalUploadPanel({
   evaluationJobs,
+  evaluationStatus,
+  isEvaluationSubmitting,
+  isRawImportChecking,
+  isRawImportSubmitting,
   rawImport,
   rawImportFileName,
   rawImportParserVersion,
@@ -1390,8 +1458,11 @@ function OpticalUploadPanel({
   onRefreshSummary,
   onSubmit,
 }: OpticalUploadPanelProps) {
+  const uploadButtonLabel = isRawImportSubmitting ? "Yükleniyor" : isRawImportChecking ? "Kontrol ediliyor" : "Yükle ve kontrol et";
+  const resultStatus = rawImportSummary ? "Kontrol tamamlandı" : rawImport ? "Kontrol bekleniyor" : "Dosya bekleniyor";
+
   return (
-    <section className="next-support-tools" aria-label="Optik yükleme">
+    <section className="next-support-tools next-support-tools--wide" aria-label="Optik yükleme">
       <form className="next-support-tool" onSubmit={(event) => void onSubmit(event)}>
         <h2>Optik dosyayı yükle</h2>
         <p>Seçili format sürümü: {rawImportParserVersion}</p>
@@ -1407,35 +1478,38 @@ function OpticalUploadPanel({
           <Input accept=".txt,.dat,text/plain" type="file" onChange={(event) => void onFileChange(event.target.files?.[0])} />
         </label>
         {rawImportFileName ? <p>{rawImportFileName}</p> : null}
-        <Button type="submit">
+        <Button type="submit" disabled={isRawImportSubmitting || isRawImportChecking}>
           <Upload size={17} aria-hidden="true" />
-          Yükle ve kontrol et
+          {uploadButtonLabel}
         </Button>
       </form>
-      <section className="next-support-tool" aria-label="Optik yükleme sonucu">
-        <h2>Yükleme sonucu</h2>
+      <section className="next-support-tool next-support-tool--wide" aria-label="Optik yükleme sonucu">
+        <div className="next-optical-result-header">
+          <h2>Yükleme sonucu</h2>
+          <span className="next-reference-badge">{resultStatus}</span>
+        </div>
         {rawImport ? (
           <>
-            <p>Yüklenen optik dosya alındı.</p>
+            <p>{isRawImportChecking ? "Dosya alındı, satırlar kontrol ediliyor." : "Yüklenen optik dosya alındı."}</p>
             <details className="next-advanced-details">
               <summary>Teknik yükleme bilgisi</summary>
               <p>Yüklenen dosya kaydı: {rawImport.rawImport.id}</p>
               <p>İş kuyruğu: {rawImport.parseJob.jobId}</p>
               <p>Dosya izi: {rawImport.rawImport.sha256.slice(0, 12)}</p>
             </details>
-            <div className="next-row-actions">
-              <Button type="button" onClick={() => void onRefreshSummary()}>
+            <div className="next-optical-step-actions">
+              <Button type="button" variant="secondary" onClick={() => void onRefreshSummary()} disabled={isRawImportChecking}>
                 <RefreshCw size={17} aria-hidden="true" />
-                Özeti yenile
+                {isRawImportChecking ? "Özet alınıyor" : "Özeti yenile"}
               </Button>
-              <Button type="button" onClick={() => void onEvaluationStart()}>
+              <Button type="button" onClick={() => void onEvaluationStart()} disabled={!rawImportSummary || isEvaluationSubmitting}>
                 <Play size={17} aria-hidden="true" />
-                Analizi başlat
+                {isEvaluationSubmitting ? "Analiz bekleniyor" : "Analizi başlat"}
               </Button>
             </div>
           </>
         ) : (
-          <p>Optik TXT/DAT dosyası bekliyor.</p>
+          <p>TXT/DAT dosyasını seçip yükleyin; kontrol sonucu burada görünecek.</p>
         )}
         {rawImportSummary ? (
           <div className="next-parser-summary" aria-live="polite">
@@ -1452,6 +1526,12 @@ function OpticalUploadPanel({
         {evaluationJobs ? (
           <p>
             {evaluationJobs.queuedCount}/{evaluationJobs.matchedCount} analiz işi kuyruğa alındı.
+            {isEvaluationSubmitting ? " Sonuçlar bekleniyor." : ""}
+          </p>
+        ) : null}
+        {evaluationStatus ? (
+          <p>
+            {evaluationStatus.evaluatedCount}/{evaluationStatus.matchedCount} analiz sonucu tamamlandı.
           </p>
         ) : null}
       </section>
@@ -1561,68 +1641,91 @@ function QuarantineResolutionPanel({
 }
 
 interface OpticalReportPanelProps {
+  evaluationStatus: RawImportEvaluationStatus | null;
+  isReportSubmitting: boolean;
   reportContentHash: string;
   reportJob: ReportGenerationQueueResult | null;
   reportSnapshots: ReportSnapshotRecord[];
-  onContentHashChange: (value: string) => void;
   onDownload: (snapshot: ReportSnapshotRecord, format: "xlsx" | "pdf") => void | Promise<void>;
   onRefreshSnapshots: () => void | Promise<void>;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }
 
 function OpticalReportPanel({
+  evaluationStatus,
+  isReportSubmitting,
   reportContentHash,
   reportJob,
   reportSnapshots,
-  onContentHashChange,
   onDownload,
   onRefreshSnapshots,
   onSubmit,
 }: OpticalReportPanelProps) {
+  const hasReportInput = Boolean(reportContentHash.trim());
+  const isAnalysisComplete = evaluationStatus?.status === "COMPLETED" && evaluationStatus.evaluatedCount > 0;
+  const canGenerateReport = hasReportInput && isAnalysisComplete && !isReportSubmitting;
+  const reportMessage = getReportReadinessMessage(evaluationStatus, hasReportInput, isReportSubmitting);
+
   return (
     <>
       <form className="next-support-tool" aria-label="Optik rapor üretimi" onSubmit={(event) => void onSubmit(event)}>
-        <h2>Analiz ve rapor</h2>
-        <p>Optik satırları kontrol ettikten sonra raporu oluşturun.</p>
-        <details className="next-advanced-details">
-          <summary>Gelişmiş rapor bilgisi</summary>
-          <label>
-            Teknik sonuç hash
-            <Input required value={reportContentHash} onChange={(event) => onContentHashChange(event.target.value)} />
-          </label>
-        </details>
-        <Button disabled={!reportContentHash} type="submit">
-          <RefreshCw size={17} aria-hidden="true" />
-          Rapor üret
-        </Button>
-        <Button type="button" onClick={() => void onRefreshSnapshots()}>
-          <FileText size={17} aria-hidden="true" />
-          Raporları getir
-        </Button>
-        {reportJob ? <p>{reportJob.jobId} kuyruğa alındı.</p> : null}
+        <h2>Rapor üretimi</h2>
+        <p>{reportMessage}</p>
+        <div className="next-report-status-grid" aria-label="Rapor üretim durumu">
+          <div>
+            <span>Analiz</span>
+            <strong>{evaluationStatus?.status === "COMPLETED" ? "Tamamlandı" : "Bekleniyor"}</strong>
+          </div>
+          <div>
+            <span>Sonuç</span>
+            <strong>{evaluationStatus ? `${evaluationStatus.evaluatedCount}/${evaluationStatus.matchedCount}` : "-"}</strong>
+          </div>
+          <div>
+            <span>Hazır rapor</span>
+            <strong>{reportSnapshots.length}</strong>
+          </div>
+        </div>
+        <div className="next-optical-step-actions">
+          <Button disabled={!canGenerateReport} type="submit">
+            <RefreshCw size={17} aria-hidden="true" />
+            {isReportSubmitting ? "Hazırlanıyor" : "Rapor üret"}
+          </Button>
+          <Button type="button" onClick={() => void onRefreshSnapshots()}>
+            <FileText size={17} aria-hidden="true" />
+            Raporları getir
+          </Button>
+        </div>
+        {reportJob ? (
+          <details className="next-advanced-details">
+            <summary>Rapor işi kuyruğa alındı.</summary>
+            <p>{reportJob.jobId}</p>
+          </details>
+        ) : null}
       </form>
-      <section className="next-support-tool" aria-label="Rapor listesi">
-        <h2>Rapor listesi</h2>
+      <section className="next-support-tool next-support-tool--full" aria-label="Rapor listesi">
+        <h2>Hazır raporlar</h2>
         {reportSnapshots.length > 0 ? (
           <table className="uh-data-table">
             <thead>
               <tr>
                 <th>Durum</th>
                 <th>Sonuç</th>
+                <th>Oluşturulma</th>
                 <th>İndirme</th>
               </tr>
             </thead>
             <tbody>
               {reportSnapshots.map((snapshot) => (
                 <tr key={snapshot.id}>
-                  <td>{snapshot.status}</td>
-                  <td>{snapshot.snapshotData?.resultCount ?? "-"}</td>
+                  <td>{formatReportStatus(snapshot.status)}</td>
+                  <td>{formatReportResultCount(snapshot)}</td>
+                  <td>{formatReportGeneratedAt(snapshot)}</td>
                   <td>
                     <div className="next-row-actions">
-                      <button type="button" onClick={() => void onDownload(snapshot, "xlsx")} aria-label="Excel indir">
+                      <button type="button" onClick={() => void onDownload(snapshot, "xlsx")} aria-label="Excel indir" title="Excel indir">
                         <Download size={17} aria-hidden="true" />
                       </button>
-                      <button type="button" onClick={() => void onDownload(snapshot, "pdf")} aria-label="PDF indir">
+                      <button type="button" onClick={() => void onDownload(snapshot, "pdf")} aria-label="PDF indir" title="PDF indir">
                         <FileText size={17} aria-hidden="true" />
                       </button>
                     </div>
@@ -1632,11 +1735,40 @@ function OpticalReportPanel({
             </tbody>
           </table>
         ) : (
-          <p>Hazır rapor yok</p>
+          <EmptyState title="Hazır rapor yok" description="Rapor ürettiğinizde Excel ve PDF indirme seçenekleri burada görünür." />
         )}
       </section>
     </>
   );
+}
+
+function getReportReadinessMessage(
+  evaluationStatus: RawImportEvaluationStatus | null,
+  hasReportInput: boolean,
+  isReportSubmitting: boolean,
+): string {
+  if (isReportSubmitting) return "Rapor hazırlanıyor.";
+  if (!hasReportInput) return "Rapor üretmek için önce optik analizini tamamlayın.";
+  if (evaluationStatus?.status !== "COMPLETED") return "Analiz tamamlanınca rapor üretilebilir.";
+  if (evaluationStatus.evaluatedCount <= 0) return "Rapor için değerlendirilmiş öğrenci yok.";
+  return `${evaluationStatus.evaluatedCount} öğrenci için rapor hazır.`;
+}
+
+function formatReportStatus(status: string): string {
+  return status === "READY" ? "Hazır" : status;
+}
+
+function formatReportResultCount(snapshot: ReportSnapshotRecord): string {
+  const resultCount = snapshot.snapshotData?.resultCount;
+  return typeof resultCount === "number" || typeof resultCount === "string" ? String(resultCount) : "-";
+}
+
+function formatReportGeneratedAt(snapshot: ReportSnapshotRecord): string {
+  if (!snapshot.generatedAt) return "-";
+  return new Date(snapshot.generatedAt).toLocaleString("tr-TR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
 }
 
 async function suggestParserConfig(
@@ -1830,6 +1962,34 @@ async function enqueueRawImportEvaluation(
   );
 }
 
+async function loadRawImportEvaluationStatus(
+  accessToken: string,
+  input: { examId: string; rawImportId: string; answerKeyId?: string },
+) {
+  const query = new URLSearchParams();
+  if (input.answerKeyId) query.set("answerKeyId", input.answerKeyId);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiRequest<RawImportEvaluationStatus>(
+    accessToken,
+    `${apiBaseUrl}/exams/${encodeURIComponent(input.examId)}/raw-imports/${encodeURIComponent(input.rawImportId)}/evaluation-status${suffix}`,
+  );
+}
+
+async function waitForRawImportEvaluationStatus(
+  accessToken: string,
+  input: { examId: string; rawImportId: string; answerKeyId?: string; expectedCount: number },
+) {
+  let latest: RawImportEvaluationStatus | undefined;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    latest = await loadRawImportEvaluationStatus(accessToken, input);
+    if (latest.status === "COMPLETED" && latest.evaluatedCount >= input.expectedCount) {
+      return latest;
+    }
+    await sleep(500);
+  }
+  throw new Error(`EVALUATION_TIMEOUT:${latest?.evaluatedCount ?? 0}/${input.expectedCount}`);
+}
+
 async function loadQuarantines(accessToken: string, input: QuarantineLookupFormPayload) {
   return apiRequest<ImportQuarantineRecord[]>(
     accessToken,
@@ -1875,10 +2035,25 @@ async function loadReportSnapshots(accessToken: string, examId: string) {
   );
 }
 
-async function waitForReportSnapshots(accessToken: string, examId: string) {
-  return retryUntilReady(() => loadReportSnapshots(accessToken, examId), (snapshots) =>
-    snapshots.some((snapshot) => snapshot.status === "READY"),
-  );
+async function waitForReportSnapshots(accessToken: string, examId: string, previousReadyCount: number) {
+  let latest: ReportSnapshotRecord[] | undefined;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      latest = await loadReportSnapshots(accessToken, examId);
+      if (countReadyReportSnapshots(latest) > previousReadyCount) {
+        return latest;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    await sleep(500);
+  }
+  throw lastError ?? new Error("Rapor belirlenen sürede hazır olmadı. Biraz sonra Raporları getir ile tekrar deneyin.");
+}
+
+function countReadyReportSnapshots(snapshots: ReportSnapshotRecord[]) {
+  return snapshots.filter((snapshot) => snapshot.status === "READY").length;
 }
 
 async function exportReportSnapshot(accessToken: string, examId: string, snapshotId: string, format: "xlsx" | "pdf") {
@@ -2021,20 +2196,20 @@ function createManualAnswerKeyGrid(): ManualAnswerKeyQuestion[] {
     return {
       questionNo,
       correctAnswer: "",
-      branch: defaultLgsBranch(questionNo),
+      branch: defaultCourseBranch(questionNo),
       outcomeCode: "",
       topic: "",
     };
   });
 }
 
-function defaultLgsBranch(questionNo: number): string {
-  if (questionNo <= 20) return "LGS TÜRKÇE";
-  if (questionNo <= 30) return "LGS İNKILAP";
-  if (questionNo <= 40) return "LGS DİN";
-  if (questionNo <= 50) return "LGS İNGİLİZCE";
-  if (questionNo <= 70) return "LGS MATEMATİK";
-  return "LGS FEN";
+function defaultCourseBranch(questionNo: number): string {
+  if (questionNo <= 20) return "Türkçe";
+  if (questionNo <= 30) return "İnkılap";
+  if (questionNo <= 40) return "Din";
+  if (questionNo <= 50) return "İngilizce";
+  if (questionNo <= 70) return "Matematik";
+  return "Fen";
 }
 
 function parseManualBPermutation(value: string, questionCount: number): Array<{ code: string; permutation: number[] }> {

@@ -26,6 +26,17 @@ export interface RawImportEvaluationQueueResult {
   }>;
 }
 
+export interface RawImportEvaluationStatus {
+  tenantId: string;
+  examId: string;
+  rawImportId: string;
+  answerKeyId?: string;
+  matchedCount: number;
+  evaluatedCount: number;
+  pendingCount: number;
+  status: "COMPLETED" | "RUNNING";
+}
+
 @Injectable()
 export class RawImportAnalysisService {
   constructor(
@@ -101,6 +112,32 @@ export class RawImportAnalysisService {
       queuedCount: jobs.length,
       queueName: "exam-evaluation",
       jobs,
+    };
+  }
+
+  async evaluationStatus(
+    context: RequestContext,
+    input: { examId?: string; rawImportId?: string; answerKeyId?: string },
+  ): Promise<RawImportEvaluationStatus> {
+    const tenantId = requireTenant(context);
+    const examId = required(input.examId, "RAW_IMPORT_EXAM_REQUIRED");
+    const rawImportId = required(input.rawImportId, "RAW_IMPORT_ID_REQUIRED");
+    const answerKeyId = optional(input.answerKeyId);
+    const matched = await this.store.listMatchedForEvaluation({ tenantId, examId, rawImportId, answerKeyId });
+    const resolvedAnswerKeyId = answerKeyId ?? matched[0]?.answerKeyId;
+    const evaluatedCount = resolvedAnswerKeyId
+      ? await this.store.countEvaluatedForEvaluation({ tenantId, examId, rawImportId, answerKeyId: resolvedAnswerKeyId })
+      : 0;
+    const pendingCount = Math.max(matched.length - evaluatedCount, 0);
+    return {
+      tenantId,
+      examId,
+      rawImportId,
+      ...(resolvedAnswerKeyId ? { answerKeyId: resolvedAnswerKeyId } : {}),
+      matchedCount: matched.length,
+      evaluatedCount,
+      pendingCount,
+      status: pendingCount === 0 ? "COMPLETED" : "RUNNING",
     };
   }
 }

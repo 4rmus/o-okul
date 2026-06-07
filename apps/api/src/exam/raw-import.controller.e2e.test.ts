@@ -234,6 +234,33 @@ describe("RawImportController", () => {
     });
   });
 
+  it("TENANT_ADMIN evaluation tamamlanma durumunu görür", async () => {
+    const issued = await login("admin-a@example.test");
+    analysisStore.evaluatedCount = 2;
+
+    const response = await request(server)
+      .get("/exams/exam-a/raw-imports/raw-import-a/evaluation-status?answerKeyId=answer-key-a")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200);
+
+    expect(analysisStore.evaluationCalls).toEqual([
+      { tenantId: "tenant-a", examId: "exam-a", rawImportId: "raw-import-a", answerKeyId: "answer-key-a" },
+    ]);
+    expect(analysisStore.evaluatedCalls).toEqual([
+      { tenantId: "tenant-a", examId: "exam-a", rawImportId: "raw-import-a", answerKeyId: "answer-key-a" },
+    ]);
+    expect(response.body).toEqual({
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      rawImportId: "raw-import-a",
+      answerKeyId: "answer-key-a",
+      matchedCount: 2,
+      evaluatedCount: 2,
+      pendingCount: 0,
+      status: "COMPLETED",
+    });
+  });
+
   it("TENANT_ADMIN açık karantina özetini görür", async () => {
     const issued = await login("admin-a@example.test");
 
@@ -447,11 +474,15 @@ class FakeQuarantineStore implements RawImportQuarantineStore {
 class FakeAnalysisStore implements RawImportAnalysisStore {
   summaryCalls: Array<{ tenantId: string; examId: string; rawImportId: string }> = [];
   evaluationCalls: Array<{ tenantId: string; examId: string; rawImportId: string; answerKeyId?: string }> = [];
+  evaluatedCalls: Array<{ tenantId: string; examId: string; rawImportId: string; answerKeyId?: string }> = [];
+  evaluatedCount = 0;
   matched: RawImportEvaluationInput[] = [];
 
   reset(): void {
     this.summaryCalls = [];
     this.evaluationCalls = [];
+    this.evaluatedCalls = [];
+    this.evaluatedCount = 0;
     this.matched = [
       {
         parsedAnswerId: "parsed-a",
@@ -481,6 +512,16 @@ class FakeAnalysisStore implements RawImportAnalysisStore {
       totalRows: 3,
       quarantineReasons: [{ reason: "STUDENT_NOT_FOUND", count: 1 }],
     };
+  }
+
+  async countEvaluatedForEvaluation(input: {
+    tenantId: string;
+    examId: string;
+    rawImportId: string;
+    answerKeyId?: string;
+  }): Promise<number> {
+    this.evaluatedCalls.push(input);
+    return this.evaluatedCount;
   }
 
   async listMatchedForEvaluation(input: {

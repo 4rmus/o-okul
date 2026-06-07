@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
@@ -69,6 +69,20 @@ export class RawImportController {
       examId,
       rawImportId,
       answerKeyId: body.answerKeyId,
+    });
+  }
+
+  @Get(":rawImportId/evaluation-status")
+  @RequireCapability("academic:manage")
+  evaluationStatus(
+    @Param("examId") examId: string,
+    @Param("rawImportId") rawImportId: string,
+    @Query("answerKeyId") answerKeyId?: string,
+  ) {
+    return this.analysis.evaluationStatus(getRequestContext(), {
+      examId,
+      rawImportId,
+      answerKeyId,
     });
   }
 

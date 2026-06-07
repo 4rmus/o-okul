@@ -23,6 +23,12 @@ export interface RawImportEvaluationInput {
 
 export interface RawImportAnalysisStore {
   getSummary(tenantId: string, examId: string, rawImportId: string): Promise<RawImportParseSummary | undefined>;
+  countEvaluatedForEvaluation(input: {
+    tenantId: string;
+    examId: string;
+    rawImportId: string;
+    answerKeyId?: string;
+  }): Promise<number>;
   listMatchedForEvaluation(input: {
     tenantId: string;
     examId: string;
@@ -74,6 +80,27 @@ export class PostgresRawImportAnalysisStore implements RawImportAnalysisStore {
         [tenantId, examId, rawImportId],
       );
       return result.rows[0] ? toSummary(result.rows[0]) : undefined;
+    });
+  }
+
+  async countEvaluatedForEvaluation(input: {
+    tenantId: string;
+    examId: string;
+    rawImportId: string;
+    answerKeyId?: string;
+  }): Promise<number> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<{ count: number }>(
+        `SELECT COUNT(*)::int AS count
+         FROM "ExamResult"
+         WHERE "tenantId" = $1
+           AND "examId" = $2
+           AND "rawImportId" = $3
+           AND ($4::text IS NULL OR "answerKeyId" = $4)
+           AND "deletedAt" IS NULL`,
+        [input.tenantId, input.examId, input.rawImportId, input.answerKeyId ?? null],
+      );
+      return result.rows[0]?.count ?? 0;
     });
   }
 
