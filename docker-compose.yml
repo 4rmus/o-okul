@@ -169,6 +169,20 @@ services:
     networks:
       - backend_net
 
+  minio-setup:
+    image: minio/minio:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${S3_ACCESS_KEY_ID} ${S3_SECRET_ACCESS_KEY} &&
+      mc mb -p local/${S3_BUCKET} &&
+      mc ls local"
+    restart: "no"
+    networks:
+      - backend_net
+
 networks:
   frontend_net:
   backend_net:
