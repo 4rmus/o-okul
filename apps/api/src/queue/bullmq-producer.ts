@@ -12,6 +12,11 @@ export interface BullQueueClient {
   close(): Promise<void>;
 }
 
+interface RetryableQueueJob {
+  getState(): Promise<string>;
+  retry(state?: "failed"): Promise<unknown>;
+}
+
 export type BullQueueFactory = (
   name: TenantQueueName,
   options: QueueOptions,
@@ -42,7 +47,10 @@ export function createBullTenantQueueProducer(
     async enqueue(input) {
       const job = createTenantQueueJob(input);
       const queue = getQueue(job.queueName, queues, createQueue, queueOptions);
-      await queue.add(job.name, job.payload, job.options);
+      const queueJob = await queue.add(job.name, job.payload, job.options);
+      if (job.queueName === "report-generation") {
+        await retryFailedQueueJob(queueJob);
+      }
       return job;
     },
 
@@ -73,4 +81,17 @@ function createDefaultQueue(
   options: QueueOptions,
 ): BullQueueClient {
   return new Queue(name, options);
+}
+
+async function retryFailedQueueJob(queueJob: unknown): Promise<void> {
+  if (!isRetryableQueueJob(queueJob)) return;
+  if (await queueJob.getState() === "failed") {
+    await queueJob.retry("failed");
+  }
+}
+
+function isRetryableQueueJob(value: unknown): value is RetryableQueueJob {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<RetryableQueueJob>;
+  return typeof candidate.getState === "function" && typeof candidate.retry === "function";
 }

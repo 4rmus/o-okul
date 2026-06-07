@@ -123,6 +123,29 @@ describe("BullMQ tenant queue producer", () => {
     }]);
   });
 
+  it("failed kalmış report-generation job'unu yeniden dener", async () => {
+    const queues: FakeQueue[] = [];
+    const producer = createBullTenantQueueProducer({
+      connection: { host: "127.0.0.1", port: 6379 },
+      createQueue: (name, options) => {
+        const queue = new FakeQueue(name, options, new FakeQueueJob("failed"));
+        queues.push(queue);
+        return queue;
+      },
+    });
+
+    await producer.enqueue({
+      queueName: "report-generation",
+      tenantId: "tenant-a",
+      userId: "user-a",
+      entityId: "exam-a",
+      contentHash: "results-v1",
+      reportType: "EXAM_RESULT_SUMMARY",
+    });
+
+    expect(queues[0]?.job?.retries).toEqual(["failed"]);
+  });
+
   it("sms-batch job'unu BullMQ add çağrısına şablon ve alıcılarla verir", async () => {
     const queues: FakeQueue[] = [];
     const producer = createBullTenantQueueProducer({
@@ -228,13 +251,29 @@ class FakeQueue {
   constructor(
     readonly name: string,
     readonly options: unknown,
+    readonly job?: FakeQueueJob,
   ) {}
 
-  async add(name: string, data: unknown, options: unknown): Promise<void> {
+  async add(name: string, data: unknown, options: unknown): Promise<FakeQueueJob | undefined> {
     this.adds.push({ name, data, options });
+    return this.job;
   }
 
   async close(): Promise<void> {
     this.closed = true;
+  }
+}
+
+class FakeQueueJob {
+  readonly retries: string[] = [];
+
+  constructor(private readonly state: string) {}
+
+  async getState(): Promise<string> {
+    return this.state;
+  }
+
+  async retry(state?: "failed"): Promise<void> {
+    this.retries.push(state ?? "");
   }
 }
