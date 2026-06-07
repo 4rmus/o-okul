@@ -127,6 +127,16 @@ for (const [file, tokens] of Object.entries(expectations)) {
   }
 }
 
+const queuePrefixOccurrences = compose.match(/QUEUE_PREFIX: \${QUEUE_PREFIX}/g)?.length ?? 0;
+if (queuePrefixOccurrences < 2) {
+  failures.push("docker-compose.yml eksik: api ve worker aynı QUEUE_PREFIX değerini almalı");
+}
+
+const studentPiiHashKeyOccurrences = compose.match(/STUDENT_PII_HASH_KEY: \${STUDENT_PII_HASH_KEY}/g)?.length ?? 0;
+if (studentPiiHashKeyOccurrences < 2) {
+  failures.push("docker-compose.yml eksik: STUDENT_PII_HASH_KEY api ve worker içinde olmalı");
+}
+
 if (failures.length > 0) {
   console.error("Docker/CI statik kontrolü başarısız:");
   for (const failure of failures) console.error(`- ${failure}`);
