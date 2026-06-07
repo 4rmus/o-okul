@@ -158,6 +158,10 @@ class FakeReportSnapshotStore implements ReportSnapshotStore {
     return [];
   }
 
+  async listByTenant() {
+    return [];
+  }
+
   async findById() {
     return undefined;
   }

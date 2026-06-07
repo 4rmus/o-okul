@@ -80,6 +80,10 @@ export interface ReportSnapshotListFilters {
   termId?: string;
 }
 
+export interface ReportStudentProgressOptions {
+  scope?: "all" | "exam";
+}
+
 export interface ReportSnapshotExportResult {
   fileName: string;
   contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -362,6 +366,7 @@ export class ReportGenerationService {
     context: RequestContext,
     examId: string | undefined,
     studentId: string | undefined,
+    options: ReportStudentProgressOptions = {},
   ): Promise<ReportStudentProgress> {
     if (!context.tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
@@ -370,7 +375,9 @@ export class ReportGenerationService {
     const resolvedExamId = required(examId, "REPORT_EXAM_REQUIRED");
     const resolvedStudentId = required(studentId, "REPORT_STUDENT_REQUIRED");
     await this.assertTeacherStudentReportScope(context, resolvedStudentId);
-    const snapshots = await this.snapshots.listByExam(context.tenantId, resolvedExamId);
+    const snapshots = options.scope === "all"
+      ? await this.snapshots.listByTenant(context.tenantId)
+      : await this.snapshots.listByExam(context.tenantId, resolvedExamId);
     const points: ReportStudentProgressPoint[] = [];
 
     for (const snapshot of snapshots) {

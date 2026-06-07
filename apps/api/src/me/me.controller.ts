@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type {
   DevelopmentTrendItem,
   HomeworkMaterialAssignmentRecord,
@@ -239,10 +239,12 @@ export class MeController {
 
   @Get("student/reports/:examId/progress")
   @Roles("STUDENT")
-  async studentProgress(@Param("examId") examId: string): Promise<ReportStudentProgress> {
+  async studentProgress(@Param("examId") examId: string, @Query("scope") scope?: string): Promise<ReportStudentProgress> {
     const context = getRequestContext();
     const student = await this.students.findCurrentStudent(context);
-    return this.reports.getStudentProgress(context, examId, student.id);
+    return this.reports.getStudentProgress(context, examId, student.id, {
+      scope: scope === "all" ? "all" : "exam",
+    });
   }
 
   @Get("guardian/students")
@@ -423,11 +425,14 @@ export class MeController {
   async guardianStudentProgress(
     @Param("studentId") studentId: string,
     @Param("examId") examId: string,
+    @Query("scope") scope?: string,
   ): Promise<ReportStudentProgress> {
     const context = getRequestContext();
     assertGuardianContext(context);
     const student = await this.students.findOneForViewer(context, studentId);
-    return this.reports.getStudentProgress(context, examId, student.id);
+    return this.reports.getStudentProgress(context, examId, student.id, {
+      scope: scope === "all" ? "all" : "exam",
+    });
   }
 
   @Get("teacher")

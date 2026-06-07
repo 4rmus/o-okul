@@ -642,6 +642,32 @@ describe("ReportGenerationService", () => {
     });
   });
 
+  it("öğrenci gelişim raporunu tüm sınav snapshotları üzerinden döner", async () => {
+    const producer = new FakeProducer();
+    const store = new FakeReportSnapshotStore([fakeSnapshot, fakeOtherExamSnapshot, fakePreviousSnapshot]);
+    const service = new ReportGenerationService(producer, store);
+
+    const result = await service.getStudentProgress(
+      {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        roles: ["TENANT_ADMIN"],
+        bypassRls: false,
+      },
+      "exam-a",
+      "student-a",
+      { scope: "all" },
+    );
+
+    expect(store.inputs).toEqual([]);
+    expect(store.tenantInputs).toEqual(["tenant-a"]);
+    expect(result.examId).toBe("exam-a");
+    expect(result.points.map((point) => point.snapshotId)).toEqual(["snapshot-previous", "snapshot-a", "snapshot-other-exam"]);
+    expect(result.points.map((point) => point.total.net)).toEqual([14, 17.5, 20]);
+    expect(result.netDelta).toBe(6);
+    expect(result.standardScoreDelta).toBe(10);
+  });
+
   it("öğrenciye ait hazır snapshot yoksa gelişim raporunu boş döner", async () => {
     const producer = new FakeProducer();
     const store = new FakeReportSnapshotStore();
@@ -969,8 +995,53 @@ const fakePreviousSnapshot: ReportSnapshotRecord = {
   updatedAt: "2026-06-05T09:00:00.000Z",
 };
 
+const fakeOtherExamSnapshot: ReportSnapshotRecord = {
+  ...fakeSnapshot,
+  id: "snapshot-other-exam",
+  examId: "exam-b",
+  courseId: "course-fen",
+  inputRefs: { resultKeys: ["result-other-exam"] },
+  snapshotData: {
+    resultCount: 1,
+    averages: {
+      net: 20,
+      rawScore: 100,
+      standardScore: 90,
+    },
+    students: [
+      {
+        studentId: "student-a",
+        classId: "class-a",
+        className: "8-A",
+        resultKey: "result-other-exam",
+        total: {
+          correct: 20,
+          wrong: 0,
+          blank: 0,
+          net: 20,
+          rawScore: 100,
+          standardScore: 90,
+        },
+        branches: [
+          {
+            branch: "Fen",
+            correct: 20,
+            wrong: 0,
+            blank: 0,
+            net: 20,
+          },
+        ],
+      },
+    ],
+  },
+  generatedAt: "2026-06-07T09:00:00.000Z",
+  createdAt: "2026-06-07T09:00:00.000Z",
+  updatedAt: "2026-06-07T09:00:00.000Z",
+};
+
 class FakeReportSnapshotStore implements ReportSnapshotStore {
   readonly inputs: Array<{ tenantId: string; examId: string }> = [];
+  readonly tenantInputs: string[] = [];
   readonly findInputs: Array<{ tenantId: string; examId: string; snapshotId: string }> = [];
 
   constructor(private readonly records: ReportSnapshotRecord[] = [fakeSnapshot, fakePreviousSnapshot]) {}
@@ -978,6 +1049,11 @@ class FakeReportSnapshotStore implements ReportSnapshotStore {
   async listByExam(tenantId: string, examId: string): Promise<ReportSnapshotRecord[]> {
     this.inputs.push({ tenantId, examId });
     return this.records.filter((snapshot) => snapshot.tenantId === tenantId && snapshot.examId === examId);
+  }
+
+  async listByTenant(tenantId: string): Promise<ReportSnapshotRecord[]> {
+    this.tenantInputs.push(tenantId);
+    return this.records.filter((snapshot) => snapshot.tenantId === tenantId);
   }
 
   async findById(tenantId: string, examId: string, snapshotId: string): Promise<ReportSnapshotRecord | undefined> {

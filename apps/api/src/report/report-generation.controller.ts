@@ -69,8 +69,11 @@ export class ReportGenerationController {
   getStudentProgress(
     @Param("examId") examId: string,
     @Param("studentId") studentId: string,
+    @Query("scope") scope?: string,
   ): Promise<ReportStudentProgress> {
-    return this.reports.getStudentProgress(getRequestContext(), examId, studentId);
+    return this.reports.getStudentProgress(getRequestContext(), examId, studentId, {
+      scope: scope === "all" ? "all" : "exam",
+    });
   }
 
   @Post("generation-jobs")

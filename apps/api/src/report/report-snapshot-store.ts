@@ -5,6 +5,7 @@ import type { ReportSnapshotRecord } from "./report-generation.service.js";
 
 export interface ReportSnapshotStore {
   listByExam(tenantId: string, examId: string): Promise<ReportSnapshotRecord[]>;
+  listByTenant(tenantId: string): Promise<ReportSnapshotRecord[]>;
   findById(tenantId: string, examId: string, snapshotId: string): Promise<ReportSnapshotRecord | undefined>;
   markStaleByExam(tenantId: string, examId: string, reason: string): Promise<number>;
 }
@@ -107,6 +108,10 @@ export class InMemoryReportSnapshotStore implements ReportSnapshotStore {
     );
   }
 
+  async listByTenant(tenantId: string): Promise<ReportSnapshotRecord[]> {
+    return this.snapshots.filter((snapshot) => snapshot.tenantId === tenantId && !snapshot.deletedAt);
+  }
+
   async findById(tenantId: string, examId: string, snapshotId: string): Promise<ReportSnapshotRecord | undefined> {
     return this.snapshots.find(
       (snapshot) =>
@@ -176,6 +181,37 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
            AND "deletedAt" IS NULL
          ORDER BY "generatedAt" DESC NULLS LAST, "createdAt" DESC`,
         [tenantId, examId],
+      );
+      return result.rows.map(toReportSnapshotRecord);
+    });
+  }
+
+  async listByTenant(tenantId: string): Promise<ReportSnapshotRecord[]> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<ReportSnapshotRow>(
+        `SELECT
+           "id",
+           "tenantId",
+           "examId",
+           "campusId",
+           "gradeLevelId",
+           "classId",
+           "courseId",
+           "termId",
+           "reportType",
+           "status",
+           "inputRefs",
+           "snapshotData",
+           "generatedAt",
+           "staleAt",
+           "deletedAt",
+           "createdAt",
+           "updatedAt"
+         FROM "ReportSnapshot"
+         WHERE "tenantId" = $1
+           AND "deletedAt" IS NULL
+         ORDER BY "generatedAt" DESC NULLS LAST, "createdAt" DESC`,
+        [tenantId],
       );
       return result.rows.map(toReportSnapshotRecord);
     });

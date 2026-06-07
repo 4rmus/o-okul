@@ -213,6 +213,11 @@ describe("ReportGenerationController", () => {
           schoolNetAverage: 17.5,
         },
       ],
+      questions: [
+        { questionNo: 1, branch: "Matematik", answer: "A", correctAnswer: "A", status: "CORRECT" },
+        { questionNo: 2, branch: "Matematik", answer: "C", correctAnswer: "B", status: "WRONG" },
+        { questionNo: 3, branch: "Matematik", answer: "", correctAnswer: "D", status: "BLANK" },
+      ],
       statistics: {
         standardScore: 72.5,
         general: { rank: 3, outOf: 40, percentile: 92.5 },
@@ -315,6 +320,24 @@ describe("ReportGenerationController", () => {
       netDelta: 3.5,
       standardScoreDelta: 7.5,
     });
+  });
+
+  it("TEACHER öğrenci gelişim raporunu tüm sınav snapshotlarıyla okuyabilir", async () => {
+    const issued = await login("teacher-a@example.test");
+
+    const response = await request(server)
+      .get("/exams/exam-a/reports/students/student-a/progress?scope=all")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200);
+
+    expect(snapshotStore.tenantInputs).toContain("tenant-a");
+    expect(response.body.points.map((point: { snapshotId: string }) => point.snapshotId)).toEqual([
+      "snapshot-previous",
+      "snapshot-a",
+      "snapshot-other-exam",
+    ]);
+    expect(response.body.netDelta).toBe(6);
+    expect(response.body.standardScoreDelta).toBe(10);
   });
 
   it("başka tenant snapshot export edemez", async () => {
@@ -522,20 +545,69 @@ const fakePreviousSnapshot: ReportSnapshotRecord = {
   updatedAt: "2026-06-05T09:00:00.000Z",
 };
 
+const fakeOtherExamSnapshot: ReportSnapshotRecord = {
+  ...fakeSnapshot,
+  id: "snapshot-other-exam",
+  examId: "exam-b",
+  courseId: "course-fen",
+  inputRefs: { resultKeys: ["result-other-exam"] },
+  snapshotData: {
+    resultCount: 1,
+    averages: {
+      net: 20,
+      rawScore: 100,
+      standardScore: 90,
+    },
+    students: [
+      {
+        studentId: "student-a",
+        classId: "class-a",
+        className: "8-A",
+        resultKey: "result-other-exam",
+        total: {
+          correct: 20,
+          wrong: 0,
+          blank: 0,
+          net: 20,
+          rawScore: 100,
+          standardScore: 90,
+        },
+        branches: [
+          {
+            branch: "Fen",
+            correct: 20,
+            wrong: 0,
+            blank: 0,
+            net: 20,
+          },
+        ],
+      },
+    ],
+  },
+  generatedAt: "2026-06-07T09:00:00.000Z",
+  createdAt: "2026-06-07T09:00:00.000Z",
+  updatedAt: "2026-06-07T09:00:00.000Z",
+};
+
 class FakeReportSnapshotStore implements ReportSnapshotStore {
   readonly inputs: Array<{ tenantId: string; examId: string }> = [];
+  readonly tenantInputs: string[] = [];
   readonly findInputs: Array<{ tenantId: string; examId: string; snapshotId: string }> = [];
+  private readonly records = [fakeSnapshot, fakePreviousSnapshot, fakeOtherExamSnapshot];
 
   async listByExam(tenantId: string, examId: string): Promise<ReportSnapshotRecord[]> {
     this.inputs.push({ tenantId, examId });
-    return tenantId === fakeSnapshot.tenantId && examId === fakeSnapshot.examId ? [fakeSnapshot, fakePreviousSnapshot] : [];
+    return this.records.filter((snapshot) => snapshot.tenantId === tenantId && snapshot.examId === examId);
+  }
+
+  async listByTenant(tenantId: string): Promise<ReportSnapshotRecord[]> {
+    this.tenantInputs.push(tenantId);
+    return this.records.filter((snapshot) => snapshot.tenantId === tenantId);
   }
 
   async findById(tenantId: string, examId: string, snapshotId: string): Promise<ReportSnapshotRecord | undefined> {
     this.findInputs.push({ tenantId, examId, snapshotId });
-    return [fakeSnapshot, fakePreviousSnapshot].find(
-      (snapshot) => snapshot.tenantId === tenantId && snapshot.examId === examId && snapshot.id === snapshotId,
-    );
+    return this.records.find((snapshot) => snapshot.tenantId === tenantId && snapshot.examId === examId && snapshot.id === snapshotId);
   }
 
   async markStaleByExam(): Promise<number> {
