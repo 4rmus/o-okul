@@ -23,6 +23,7 @@ const tenantTables = [
   "StudentEnrollment",
   "Attendance",
   "TeacherNote",
+  "TeacherAssignment",
   "PaymentPlan",
   "PaymentInstallment",
   "Teacher",

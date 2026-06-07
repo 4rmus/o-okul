@@ -414,9 +414,19 @@ function getNationalIdHashKey(): Buffer {
     return Buffer.from("22222222222222222222222222222222");
   }
 
-  const key = value.startsWith("base64:") ? Buffer.from(value.slice("base64:".length), "base64") : Buffer.from(value);
+  const key = decodeNationalIdHashKey(value);
   if (key.length !== 32) {
     throw new Error("STUDENT_PII_HASH_KEY_INVALID_LENGTH");
   }
   return key;
+}
+
+function decodeNationalIdHashKey(value: string): Buffer {
+  if (value.startsWith("base64:")) {
+    return Buffer.from(value.slice("base64:".length), "base64");
+  }
+  if (/^[0-9a-f]{64}$/i.test(value)) {
+    return Buffer.from(value, "hex");
+  }
+  return Buffer.from(value);
 }

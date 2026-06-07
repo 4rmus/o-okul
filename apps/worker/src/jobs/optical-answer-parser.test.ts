@@ -307,6 +307,39 @@ describe("OpticalAnswerParser", () => {
     expect(result.unmatched[0]?.rawRow.line).not.toContain("10000000146");
   });
 
+  it("64 karakter hex STUDENT_PII_HASH_KEY ile TC alanını parse eder", () => {
+    const previous = process.env.STUDENT_PII_HASH_KEY;
+    process.env.STUDENT_PII_HASH_KEY = "a".repeat(64);
+    const parser = new OpticalAnswerParser();
+
+    try {
+      const result = parser.parse({
+        ...createBaseInput(),
+        content: "tc\togrenci_no\tkitapcik\tcevaplar\n10000000146\t99999\tA\tABCDE",
+        parserConfig: {
+          delimiter: "TAB",
+          skipHeaderLines: 1,
+          fieldMapping: {
+            nationalId: { kind: "delimited", column: 0 },
+            studentNo: { kind: "delimited", column: 1 },
+            bookletType: { kind: "delimited", column: 2 },
+            answers: { kind: "delimited", column: 3, estimatedQuestionCount: 5 },
+          },
+        },
+        participants: [{ participantId: "participant-a", studentNo: "99999", bookletType: "A" }],
+      });
+
+      expect(result.unmatched).toEqual([]);
+      expect(result.matched[0]?.participantId).toBe("participant-a");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.STUDENT_PII_HASH_KEY;
+      } else {
+        process.env.STUDENT_PII_HASH_KEY = previous;
+      }
+    }
+  });
+
   it("çözülmüş karantina satırını verilen participante MATCHED ParsedAnswer yapar", () => {
     const parser = new OpticalAnswerParser();
 

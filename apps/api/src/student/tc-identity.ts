@@ -69,9 +69,19 @@ function keyFromEnv(name: string, fallback: string): Buffer {
     return Buffer.from(fallback);
   }
 
-  const key = value.startsWith("base64:") ? Buffer.from(value.slice("base64:".length), "base64") : Buffer.from(value);
+  const key = decodeKey(value);
   if (key.length !== 32) {
     throw new Error(`${name}_INVALID_LENGTH`);
   }
   return key;
+}
+
+function decodeKey(value: string): Buffer {
+  if (value.startsWith("base64:")) {
+    return Buffer.from(value.slice("base64:".length), "base64");
+  }
+  if (/^[0-9a-f]{64}$/i.test(value)) {
+    return Buffer.from(value, "hex");
+  }
+  return Buffer.from(value);
 }

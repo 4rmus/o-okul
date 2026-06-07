@@ -19,4 +19,19 @@ describe("TC kimlik helper", () => {
     expect(hashTcIdentity(nationalId)).toBe(hashTcIdentity(nationalId));
     expect(maskTcIdentity(nationalId)).toBe("*******0146");
   });
+
+  it("64 karakter hex PII hash key değerini kabul eder", () => {
+    const previous = process.env.STUDENT_PII_HASH_KEY;
+    process.env.STUDENT_PII_HASH_KEY = "a".repeat(64);
+
+    try {
+      expect(hashTcIdentity("10000000146")).toBe(hashTcIdentity("10000000146"));
+    } finally {
+      if (previous === undefined) {
+        delete process.env.STUDENT_PII_HASH_KEY;
+      } else {
+        process.env.STUDENT_PII_HASH_KEY = previous;
+      }
+    }
+  });
 });
