@@ -31,6 +31,12 @@ export function Providers({ children }: { children: ReactNode }) {
   const [isBootstrapping, setIsBootstrapping] = useState(true);
 
   useEffect(() => {
+    if (!hasCookie("csrfToken")) {
+      setAuth(null);
+      setIsBootstrapping(false);
+      return;
+    }
+
     refreshSession()
       .then(setAuth)
       .catch(() => setAuth(null))
@@ -66,4 +72,8 @@ export function useAuth() {
   }
 
   return store;
+}
+
+function hasCookie(name: string): boolean {
+  return document.cookie.split(";").some((part) => part.trim().startsWith(`${name}=`));
 }

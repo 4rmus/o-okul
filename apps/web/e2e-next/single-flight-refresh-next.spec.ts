@@ -12,6 +12,20 @@ function envelope<T>(data: T) {
   return { data };
 }
 
+test("Next csrf cookie yokken açılışta refresh çağrısı yapmaz", async ({ page }) => {
+  let refreshCount = 0;
+
+  await page.route("**/auth/refresh", async (route) => {
+    refreshCount += 1;
+    await route.fulfill({ headers: corsHeaders, status: 403 });
+  });
+
+  await page.goto("/login");
+
+  await expect(page.getByRole("button", { name: "Giriş yap" })).toBeVisible();
+  expect(refreshCount).toBe(0);
+});
+
 test("Next eşzamanlı 401 yanıtlarında tek refresh çağrısı yapar", async ({ page }) => {
   let didLogin = false;
   let refreshCount = 0;
