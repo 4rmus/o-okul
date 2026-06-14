@@ -97,6 +97,7 @@ function validateReport(report) {
   requireJobs(report.jobs, failures);
   requireCommands(report, failures);
   requireEvidenceReferences(report.evidenceReferences, failures);
+  requireGithubActionsRunBindings(report, failures);
   requireEmptyArray(report, failures, "gaps");
 
   return failures;
@@ -242,6 +243,99 @@ function requireEvidenceReferences(references, failures) {
       failures.push(`evidenceReferences.${index} production kaniti icin placeholder/redacted deger olmamali.`);
     }
   }
+}
+
+function requireGithubActionsRunBindings(report, failures) {
+  const repository = report?.repository;
+  const runId = report?.workflow?.runId;
+  if (typeof repository !== "string" || repository.trim() === "" || typeof runId !== "string" || runId.trim() === "") {
+    return;
+  }
+
+  const workflowRun = parseGithubActionsUrl(report?.workflow?.runUrl, "run");
+  requireGithubActionsMatch(workflowRun, failures, "workflow.runUrl", repository, runId);
+
+  if (Array.isArray(report?.jobs)) {
+    for (const [index, job] of report.jobs.entries()) {
+      const jobRun = parseGithubActionsUrl(job?.logUrl, "job");
+      requireGithubActionsMatch(jobRun, failures, `jobs.${index}.logUrl`, repository, runId);
+    }
+  }
+
+  if (!Array.isArray(report?.evidenceReferences)) return;
+
+  let matchingRunReferenceSeen = false;
+  for (const [index, reference] of report.evidenceReferences.entries()) {
+    const referenceRun = parseGithubActionsUrl(reference, "run");
+    if (!referenceRun) continue;
+
+    if (
+      referenceRun.repository.toLowerCase() === repository.toLowerCase() &&
+      referenceRun.runId === runId
+    ) {
+      matchingRunReferenceSeen = true;
+    } else {
+      requireGithubActionsMatch(referenceRun, failures, `evidenceReferences.${index}`, repository, runId);
+    }
+  }
+
+  if (!matchingRunReferenceSeen) {
+    failures.push("evidenceReferences GitHub Actions run URL'i workflow.runUrl ile eslesmeli.");
+  }
+}
+
+function requireGithubActionsMatch(parsed, failures, label, repository, runId) {
+  if (!parsed) {
+    failures.push(`${label} GitHub Actions run URL'i olmali.`);
+    return;
+  }
+  if (parsed.repository.toLowerCase() !== repository.toLowerCase()) {
+    failures.push(githubActionsRepositoryMismatchMessage(label));
+  }
+  if (parsed.runId !== runId) {
+    failures.push(githubActionsRunIdMismatchMessage(label));
+  }
+}
+
+function githubActionsRepositoryMismatchMessage(label) {
+  if (label === "workflow.runUrl") return "workflow.runUrl repository ile eslesmeli.";
+  return `${label} repository ile eslesmeli.`;
+}
+
+function githubActionsRunIdMismatchMessage(label) {
+  if (label === "workflow.runUrl") return "workflow.runUrl runId ile eslesmeli.";
+  return `${label} runId ile eslesmeli.`;
+}
+
+function parseGithubActionsUrl(value, expectedKind) {
+  if (typeof value !== "string" || value.trim() === "") return null;
+
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+
+  if (url.protocol !== "https:" || url.hostname !== "github.com") return null;
+
+  const segments = url.pathname.split("/").filter(Boolean);
+  const actionsIndex = segments.indexOf("actions");
+  if (actionsIndex < 2) return null;
+  if (segments[actionsIndex + 1] !== "runs" || typeof segments[actionsIndex + 2] !== "string") return null;
+
+  if (expectedKind === "run" && segments[actionsIndex + 3] === "job") return null;
+  if (
+    expectedKind === "job" &&
+    (segments[actionsIndex + 3] !== "job" || typeof segments[actionsIndex + 4] !== "string")
+  ) {
+    return null;
+  }
+
+  return {
+    repository: segments.slice(0, actionsIndex).join("/"),
+    runId: segments[actionsIndex + 2],
+  };
 }
 
 function requireEqual(report, failures, key, expected) {

@@ -906,6 +906,32 @@ runGithubCiNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runGithubCiNegativeCheck({
+  label: "GitHub CI workflow run URL repository mismatch negative",
+  path: "docs/evidence-templates/github-ci.run-url-repository-mismatch.tmp.json",
+  expectedFailure: "workflow.runUrl repository ile eslesmeli.",
+  mutate: (fixture) => {
+    fixture.workflow.runUrl = "https://github.com/other/uzman-hocam/actions/runs/1234567890";
+    fixture.evidenceReferences[0] = fixture.workflow.runUrl;
+  },
+});
+runGithubCiNegativeCheck({
+  label: "GitHub CI workflow run URL runId mismatch negative",
+  path: "docs/evidence-templates/github-ci.run-url-runid-mismatch.tmp.json",
+  expectedFailure: "workflow.runUrl runId ile eslesmeli.",
+  mutate: (fixture) => {
+    fixture.workflow.runUrl = "https://github.com/example/uzman-hocam/actions/runs/1234567891";
+    fixture.evidenceReferences[0] = fixture.workflow.runUrl;
+  },
+});
+runGithubCiNegativeCheck({
+  label: "GitHub CI evidence reference run mismatch negative",
+  path: "docs/evidence-templates/github-ci.evidence-reference-run-mismatch.tmp.json",
+  expectedFailure: "evidenceReferences.0 runId ile eslesmeli.",
+  mutate: (fixture) => {
+    fixture.evidenceReferences[0] = "https://github.com/example/uzman-hocam/actions/runs/1234567891";
+  },
+});
 runLiveExamCycleNegativeCheck({
   label: "Live exam cycle extra top-level key negative",
   path: "docs/evidence-templates/live-exam-cycle.extra-top-level.tmp.json",

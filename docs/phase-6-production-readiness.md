@@ -137,11 +137,14 @@ pnpm backup:restore:smoke
   `artifacts/staging/reports/github-ci.json` olarak üretir. Rapor `repository`, 40 karakter `commitSha`, `.github/workflows/ci.yml` workflow path'i,
   GitHub Actions `runUrl`, `conclusion=success`, `command.command=pnpm run ci`,
   `workflowUsesSingleCiCommand=true` ve başarılı job `stepsPassed` içinde `pnpm run ci` kanıtını
-  taşır. Gerçek kanıtta run URL, repo, branch ve artifact referansları `redacted`, `example`,
+  taşır. `workflow.runUrl`, job `logUrl` değerleri ve GitHub Actions `evidenceReferences` run URL'i
+  rapordaki `repository` ve `workflow.runId` ile eşleşmelidir; böylece başka repo veya run'a ait
+  başarılı CI kanıtı release adayına iliştirilemez. Gerçek kanıtta run URL, repo, branch ve artifact referansları `redacted`, `example`,
   `.test`, `localhost`, `__SET` veya placeholder değer içeremez; bu gevşetme yalnız template
   kontrolünde `GITHUB_CI_ALLOW_EXAMPLE_EVIDENCE=1` ile açılır. GitHub CI raporu top-level 12
   alanı, `workflow`/`command`/`jobs[]` item shape'leri, tam `commandsPassed` seti ve boş
-  `gaps` listesi `prod:evidence:templates:check` içindeki fazla alan/komut ve invalid/non-empty gaps
+  `gaps` listesi `prod:evidence:templates:check` içindeki fazla alan/komut, GitHub run URL
+  repo/runId mismatch ve invalid/non-empty gaps
   negatifleriyle korunur; aynı harness mock GitHub API üstünden `github-ci.json` generator
   çıktısını üretip checker sözleşmesine sokar.
 - Pilot kapanışı `PILOT_EVIDENCE_TARGET` ve `pnpm pilot:check` ile doğrulanır; bu rapor

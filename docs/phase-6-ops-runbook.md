@@ -354,12 +354,16 @@ Minimum kanıt içeriği:
   `runUrl` bulunur.
 - `commitSha` release adayı commit'inin 40 karakter SHA değeridir; `branch` ve `repository`
   gerçek değer taşır.
+- `workflow.runUrl`, job `logUrl` değerleri ve GitHub Actions `evidenceReferences` run URL'i
+  rapordaki `repository` ve `workflow.runId` ile eşleşir; başka repo veya run'a ait başarılı CI
+  kanıtı release adayına bağlanamaz.
 - `command.command=pnpm run ci`, `workflowUsesSingleCiCommand=true` ve `localCiParity=true`
   olmalıdır.
 - En az bir job `conclusion=success` olmalı ve `stepsPassed` içinde `pnpm run ci` görünmelidir.
 - Rapor top-level 12 alanı, `workflow`/`command`/`jobs[]` item shape'leri, tam
   `commandsPassed` seti ve boş `gaps` listesini taşır; `prod:evidence:templates:check`
-  GitHub CI fazla alan/komut ve invalid/non-empty gaps negatiflerini kırmızıya düşürür.
+  GitHub CI fazla alan/komut, run URL repo/runId mismatch ve invalid/non-empty gaps negatiflerini
+  kırmızıya düşürür.
 - `prod:evidence:templates:check`, mock GitHub API ile `github-ci.json` generator çıktısını
   üretir ve aynı checker sözleşmesine sokar; staging deploy'daki üretim adımı bu kontratla korunur.
 - Gerçek kanıtta run URL, repo, branch, log URL ve artifact referansları `example`, `.test`,
