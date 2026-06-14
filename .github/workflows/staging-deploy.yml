@@ -17,10 +17,15 @@ permissions:
   packages: write
   actions: read
 
+concurrency:
+  group: staging-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   preflight:
     runs-on: ubuntu-latest
     environment: staging
+    timeout-minutes: 10
     steps:
       - name: Validate staging dispatch inputs and environment
         shell: bash
@@ -112,6 +117,7 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
 
@@ -130,6 +136,7 @@ jobs:
   github-ci-evidence:
     needs: preflight
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -142,6 +149,7 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
 
@@ -163,6 +171,7 @@ jobs:
     needs: github-ci-evidence
     runs-on: ubuntu-latest
     environment: staging
+    timeout-minutes: 75
     outputs:
       image-prefix: ${{ steps.meta.outputs.image-prefix }}
       image-tag: ${{ steps.meta.outputs.image-tag }}
@@ -178,10 +187,13 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @uzman-hocam/web exec playwright install --with-deps chromium
       - run: pnpm run ci
+
+      - uses: docker/setup-buildx-action@v3
 
       - id: meta
         shell: bash
@@ -207,14 +219,15 @@ jobs:
           IMAGE_TAG: ${{ steps.meta.outputs.image-tag }}
           NEXT_PUBLIC_API_URL: ${{ vars.STAGING_NEXT_PUBLIC_API_URL }}
         run: |
-          docker build \
+          docker buildx build \
+            --push \
+            --cache-from type=gha,scope=web \
+            --cache-to type=gha,mode=max,scope=web \
             --target web \
             --build-arg NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL" \
             --tag "$IMAGE_PREFIX/web:$IMAGE_TAG" \
             --tag "$IMAGE_PREFIX/web:staging-latest" \
             .
-          docker push "$IMAGE_PREFIX/web:$IMAGE_TAG"
-          docker push "$IMAGE_PREFIX/web:staging-latest"
 
       - name: Build and push api image
         shell: bash
@@ -223,14 +236,15 @@ jobs:
           IMAGE_TAG: ${{ steps.meta.outputs.image-tag }}
           NEXT_PUBLIC_API_URL: ${{ vars.STAGING_NEXT_PUBLIC_API_URL }}
         run: |
-          docker build \
+          docker buildx build \
+            --push \
+            --cache-from type=gha,scope=api \
+            --cache-to type=gha,mode=max,scope=api \
             --target api \
             --build-arg NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL" \
             --tag "$IMAGE_PREFIX/api:$IMAGE_TAG" \
             --tag "$IMAGE_PREFIX/api:staging-latest" \
             .
-          docker push "$IMAGE_PREFIX/api:$IMAGE_TAG"
-          docker push "$IMAGE_PREFIX/api:staging-latest"
 
       - name: Build and push worker image
         shell: bash
@@ -239,14 +253,15 @@ jobs:
           IMAGE_TAG: ${{ steps.meta.outputs.image-tag }}
           NEXT_PUBLIC_API_URL: ${{ vars.STAGING_NEXT_PUBLIC_API_URL }}
         run: |
-          docker build \
+          docker buildx build \
+            --push \
+            --cache-from type=gha,scope=worker \
+            --cache-to type=gha,mode=max,scope=worker \
             --target worker \
             --build-arg NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL" \
             --tag "$IMAGE_PREFIX/worker:$IMAGE_TAG" \
             --tag "$IMAGE_PREFIX/worker:staging-latest" \
             .
-          docker push "$IMAGE_PREFIX/worker:$IMAGE_TAG"
-          docker push "$IMAGE_PREFIX/worker:staging-latest"
 
       - name: Build and push queue-board image
         shell: bash
@@ -254,18 +269,20 @@ jobs:
           IMAGE_PREFIX: ${{ steps.meta.outputs.image-prefix }}
           IMAGE_TAG: ${{ steps.meta.outputs.image-tag }}
         run: |
-          docker build \
+          docker buildx build \
+            --push \
+            --cache-from type=gha,scope=queue-board \
+            --cache-to type=gha,mode=max,scope=queue-board \
             --target queue-board \
             --tag "$IMAGE_PREFIX/queue-board:$IMAGE_TAG" \
             --tag "$IMAGE_PREFIX/queue-board:staging-latest" \
             .
-          docker push "$IMAGE_PREFIX/queue-board:$IMAGE_TAG"
-          docker push "$IMAGE_PREFIX/queue-board:staging-latest"
 
   deploy:
     needs: build-images
     runs-on: ubuntu-latest
     environment: staging
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -430,6 +447,7 @@ jobs:
       - github-ci-evidence
     runs-on: ubuntu-latest
     environment: staging
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -442,6 +460,7 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
 

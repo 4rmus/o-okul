@@ -7,15 +7,22 @@ import {
   BackupRestoreService,
   backupRestoreQueueProducerToken,
 } from "./backup-restore.service.js";
+import { TenantDataExportService } from "./tenant-data-export.service.js";
+import { createTenantDataExportStore, tenantDataExportStoreToken } from "./tenant-data-export-store.js";
 
 @Module({
   imports: [AuditLogModule],
   controllers: [BackupRestoreController],
   providers: [
     BackupRestoreService,
+    TenantDataExportService,
     {
       provide: backupRestoreJobStoreToken,
       useFactory: createBackupRestoreJobStore,
+    },
+    {
+      provide: tenantDataExportStoreToken,
+      useFactory: createTenantDataExportStore,
     },
     {
       provide: backupRestoreQueueProducerToken,

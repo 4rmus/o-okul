@@ -3,7 +3,7 @@
 import { type FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, EmptyState, Input } from "@uzman-hocam/ui";
-import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiErrorMessage, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import { useAuth } from "../../../providers.js";
 import { EvidenceGateSection, EvidenceListSection, OperationDecisionNotice, ReferenceBadge } from "../_shared/evidence-panels.js";
 import { PageFrame } from "../_shared/page-frame.js";
@@ -17,10 +17,16 @@ const backupGates = [
     detail: "Dump alınır, geçici veritabanına restore edilir ve kritik tablolar okunur.",
   },
   {
-    title: "Off-host backup hedefi",
+    title: "Kurum veri export",
+    command: "GET /api/v1/backup-restore-jobs/tenant-export",
+    status: "Panel indirir",
+    detail: "Kurumun kendi eklediği kayıtlar JSON olarak kullanıcının bilgisayarına indirilir.",
+  },
+  {
+    title: "Teknik off-host backup smoke",
     command: "BACKUP_OFFSITE_TARGET=file:///mnt/backups pnpm backup:offsite:smoke",
-    status: "Hedef gerekir",
-    detail: "Off-host file veya S3 hedefinde yaz/oku/sil döngüsü hash ile doğrulanır.",
+    status: "Ops hedefi gerekir",
+    detail: "Ops ortamında file veya S3 hedefinde yaz/oku/sil döngüsü hash ile doğrulanır.",
   },
   {
     title: "WAL arşiv hedefi",
@@ -71,6 +77,8 @@ export function BackupRestorePage() {
   const [reason, setReason] = useState("Aylık restore kanıtı");
   const [confirmationText, setConfirmationText] = useState("");
   const [error, setError] = useState("");
+  const [exportError, setExportError] = useState("");
+  const [exportPending, setExportPending] = useState(false);
   const queryKey = ["next-backup-restore-jobs", auth?.session.tenantId ?? "anonymous"];
   const jobsQuery = useQuery({
     queryKey,
@@ -106,6 +114,20 @@ export function BackupRestorePage() {
     createJobMutation.mutate();
   }
 
+  async function handleTenantExportDownload() {
+    if (!auth) return;
+
+    setExportPending(true);
+    setExportError("");
+    try {
+      await downloadTenantExport(auth.accessToken);
+    } catch (downloadError) {
+      setExportError(apiErrorMessage(downloadError, "Kurum veri yedeği indirilemedi."));
+    } finally {
+      setExportPending(false);
+    }
+  }
+
   return (
     <PageFrame
       actions={<ReferenceBadge />}
@@ -116,15 +138,23 @@ export function BackupRestorePage() {
         ariaLabel="Yedek restore özeti"
         metrics={[
           { label: "Restore smoke", value: "Hazır" },
-          { label: "Off-host hedef", value: "Env gerekir" },
+          { label: "Kurum yedeği", value: "İndirilebilir" },
           { label: "Drill raporu", value: "Kanıt gerekir" },
         ]}
       />
       <OperationDecisionNotice
-        decision="Karar: panel yedek ve restore drill işini çift onayla kuyruğa alır."
-        reason="Gerçek restore hâlâ yıkıcıdır; bu panel C1 kapsamında yalnız TENANT_ADMIN, audit log ve açık onayla denetlenebilir job başlatır."
-        nextStep="Worker sonucu bu job kaydına PASS/failed olarak bağlar; gerçek staging/prod restore kanıtı hâlâ dış ortamda üretilmelidir."
+        decision="Karar: kurum kullanıcısı kendi eklediği veriyi bilgisayarına JSON yedek olarak indirir."
+        reason="Bu ilk model dış provider veya S3 şartı koymadan kurum verisinin sunucu dışına alınmasını sağlar; teknik backup/restore işleri ayrı kalır."
+        nextStep="Worker sonucu bu job kaydına PASS/failed olarak bağlar; restore drill hâlâ ops kanıtıdır ve teknik iş tetikleme yalnız çift onay ve audit log ile kullanılır."
       />
+      <section className="next-report-list" aria-label="Kurum veri yedeği">
+        <h2>Kurum Veri Yedeği</h2>
+        <p>Öğrenci, veli, öğretmen, sınıf, finans, sınav, rapor, duyuru ve destek kayıtlarını JSON dosyası olarak indir.</p>
+        {exportError ? <p className="next-form-error">{exportError}</p> : null}
+        <Button disabled={exportPending || !auth} type="button" onClick={handleTenantExportDownload}>
+          {exportPending ? "Yedek hazırlanıyor" : "Kurum verisini indir"}
+        </Button>
+      </section>
       <section className="next-report-list" aria-label="Panel restore drill işi">
         <h2>Panel İş Tetikleme</h2>
         <form onSubmit={handleSubmit}>
@@ -216,6 +246,28 @@ function createBackupRestoreJob(
     headers: { "content-type": "application/json" },
     method: "POST",
   });
+}
+
+async function downloadTenantExport(accessToken: string): Promise<void> {
+  const response = await authenticatedFetch(accessToken, `${apiBaseUrl}/backup-restore-jobs/tenant-export`);
+  if (!response.ok) {
+    throw new Error("TENANT_EXPORT_DOWNLOAD_FAILED");
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = readContentDispositionFileName(response.headers.get("content-disposition")) ?? `uzman-hocam-kurum-yedegi-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function readContentDispositionFileName(value: string | null): string | undefined {
+  const match = value?.match(/filename="([^"]+)"/);
+  return match?.[1];
 }
 
 function confirmationFor(operationType: BackupRestoreOperationType) {

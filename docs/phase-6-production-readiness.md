@@ -408,11 +408,12 @@ pnpm backup:restore:smoke
 - Canlı bakım dry-run olarak `AUDIT_LOG_PARTITION_EVIDENCE_FILE=artifacts/staging/audit-log-partition.json pnpm audit-log-partition:maintain`
   ile planlanır; gerçek uygulama yalnız `AUDIT_LOG_PARTITION_APPLY=1` ve `DIRECT_DATABASE_URL`
   ile yapılır. Evidence output lokal temp path, symlink dosya veya symlink parent dizin olamaz.
-- Off-host hedef `pnpm backup:offsite:smoke` ile yaz/oku/sil olarak doğrulanır.
-- Bu cihazdaki ilk pilotta kurum kullanıcısı off-site kopyayı kendi cihazında saklar: sunucuda üretilen
-  yedek artifact'i kurum yetkilisi tarafından indirildikten sonra sunucu dışındaki cihazda korunur.
-  Bu geçici model S3/provider off-site smoke yerine geçmez; gerçek prod go-live için hâlâ off-host
-  hedef veya kullanıcı indirme kanıtı ayrı artifact olarak tutulmalıdır.
+- İlk pilotta off-host hedef basit tutulur: kurum kullanıcısı `/kurum/yedek-restore` ekranından
+  kendi eklediği kurum verilerini JSON olarak bilgisayarına indirir ve sunucu dışındaki kopyayı orada
+  saklar. Bu kullanıcı export modeli pilot için yeterlidir; S3/provider off-host hedefi bu turda
+  blokaj değildir.
+- Ops seviyesinde kalıcı off-host hedef istenirse `pnpm backup:offsite:smoke` ile yaz/oku/sil olarak
+  doğrulanır; bu smoke release checker zincirinde desteklenmeye devam eder.
 - Staging kanıt dosyası için `BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE=artifacts/staging/backup-offsite.json`
   verilir; dosya hedef protokolünü, marker hash'ini, `checkedAt`, tek
   `commandsPassed=["pnpm backup:offsite:smoke"]` ve boş `gaps` listesini secret içermeden yazar.

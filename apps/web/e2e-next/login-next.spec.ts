@@ -4791,7 +4791,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByLabel("Yedek restore kapıları").getByText("pnpm wal:archive:smoke")).toBeVisible();
   await expect(page.getByLabel("Restore drill raporu").getByText("result = PASS")).toBeVisible();
   await expect(page.getByLabel("Kritik restore tabloları").getByText("_prisma_migrations")).toBeVisible();
-  await expect(page.getByLabel("Operasyon kararı").getByText("Karar: panel yedek ve restore drill işini çift onayla kuyruğa alır.")).toBeVisible();
+  await expect(page.getByLabel("Operasyon kararı").getByText("Karar: kurum kullanıcısı kendi eklediği veriyi bilgisayarına JSON yedek olarak indirir.")).toBeVisible();
 
   await page.goto("/kurum/kvkk");
   await expect(page).toHaveURL(/\/kurum$/);

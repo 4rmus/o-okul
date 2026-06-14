@@ -429,6 +429,10 @@ sözleşmesinden üretilir. Gerçek değerlerle doldurulan özel env dosyası Gi
 node scripts/check-staging-evidence-env.mjs --env-file /path/to/staging-evidence.env
 ```
 
+Workflow aynı branch için tek staging deploy'u sıraya alır, job timeout'ları tanımlıdır ve Docker
+imaj build'leri buildx `type=gha` cache kullanır. Bu yüzden tekrar deploy'da bağımlılık ve layer
+cache'i korunur; evidence job'u yine ayrı artifact üretmeye devam eder.
+
 Linux runner için base64 değeri:
 
 ```sh
@@ -888,10 +892,15 @@ Minimum kanıt içeriği:
 - `SUSPENDED` veya `DELETED` tenant'lar read-only moda alınmaz; request context kurulmadan
   `TENANT_INACTIVE_OR_EXPIRED` ile reddedilir.
 
-## Off-host Backup Hedef Smoke
+## Kurum Veri Export ve Off-host Backup Smoke
 
-Amaç: `BACKUP_OFFSITE_TARGET` hedefinin yalnız yazılı değil, gerçekten yaz/oku/sil döngüsünü
-tamamladığını kanıtlamak.
+İlk pilotta off-host yedek hedefi basit tutulur: kurum yetkilisi `/kurum/yedek-restore`
+ekranındaki "Kurum verisini indir" aksiyonuyla kendi eklediği öğrenci, veli, öğretmen, sınıf,
+finans, sınav, rapor, duyuru ve destek kayıtlarını JSON olarak bilgisayarına indirir. Bu dosyanın
+sunucu dışındaki kurum cihazında saklanması pilot yedek kanıtıdır.
+
+Ops seviyesinde kalıcı `BACKUP_OFFSITE_TARGET` hedefi açılırsa hedefin yalnız yazılı değil,
+gerçekten yaz/oku/sil döngüsünü tamamladığı ayrıca kanıtlanır.
 
 Komut:
 

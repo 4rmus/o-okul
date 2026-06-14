@@ -90,6 +90,31 @@ describe("BackupRestoreController", () => {
       });
   });
 
+  it("tenant admin kendi kurum verisini JSON olarak indirebilir", async () => {
+    await request(server)
+      .get("/backup-restore-jobs/tenant-export")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect("content-type", /application\/json/)
+      .expect("content-disposition", /attachment; filename="uzman-hocam-tenant-a-\d{4}-\d{2}-\d{2}\.json"/)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          formatVersion: "tenant-export-v1",
+          tenantId: "tenant-a",
+          generatedByUserId: "user-tenant-a",
+          scope: "tenant-user-entered-data",
+          rowLimitPerTable: 5000,
+        });
+        expect(body.tables).toMatchObject({
+          students: [],
+          classes: [],
+          guardians: [],
+          paymentPlans: [],
+        });
+        expect(body.warnings).toContain("MEMORY_STORE_EXPORT_CONTAINS_NO_DURABLE_POSTGRES_ROWS");
+      });
+  });
+
   it("tenant admin backup restore job başlatmayı Idempotency-Key ile tekilleştirir", async () => {
     const key = "backup-restore-idempotency-a";
     const body = {

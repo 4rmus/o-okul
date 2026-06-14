@@ -15,5 +15,6 @@ export function configureApiApp(app: INestApplication): void {
   app.enableCors({
     origin: process.env.WEB_URL ?? "http://localhost:3000",
     credentials: true,
+    exposedHeaders: ["content-disposition"],
   });
 }

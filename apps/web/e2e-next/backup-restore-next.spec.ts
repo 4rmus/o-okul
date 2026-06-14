@@ -1,10 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 
+const webOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
+
 const corsHeaders = {
   "access-control-allow-credentials": "true",
   "access-control-allow-headers": "authorization,content-type,x-csrf-token",
   "access-control-allow-methods": "DELETE,GET,PATCH,POST,OPTIONS",
-  "access-control-allow-origin": "http://localhost:3001",
+  "access-control-allow-origin": webOrigin,
+  "access-control-expose-headers": "content-disposition",
 };
 
 async function expandSidebarGroup(page: Page, name: string) {
@@ -34,6 +37,7 @@ interface BackupRestoreJobFixture {
 test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğrular", async ({ page }) => {
   let activeEmail = "";
   let backupRestorePostCount = 0;
+  let tenantExportGetCount = 0;
   const backupRestoreJobs: BackupRestoreJobFixture[] = [];
 
   await page.route("**/*", async (route) => {
@@ -99,6 +103,29 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
       return;
     }
 
+    if (path === "/backup-restore-jobs/tenant-export" && request.method() === "GET") {
+      tenantExportGetCount += 1;
+      await route.fulfill({
+        body: JSON.stringify({
+          formatVersion: "tenant-export-v1",
+          tenantId: "tenant-a",
+          generatedByUserId: "user-tenant-a",
+          exportedAt: "2026-06-14T10:00:00.000Z",
+          scope: "tenant-user-entered-data",
+          rowLimitPerTable: 5000,
+          tables: { students: [], classes: [], guardians: [], paymentPlans: [] },
+          warnings: [],
+        }),
+        contentType: "application/json",
+        headers: {
+          ...corsHeaders,
+          "content-disposition": 'attachment; filename="uzman-hocam-tenant-a-2026-06-14.json"',
+        },
+        status: 200,
+      });
+      return;
+    }
+
     if (path === "/backup-restore-jobs" && request.method() === "POST") {
       backupRestorePostCount += 1;
       const body = request.postDataJSON() as {
@@ -146,6 +173,12 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
   await page.getByRole("link", { name: "Yedekleme" }).click();
   await expect(page).toHaveURL(/\/kurum\/yedek-restore$/);
   await expect(page.getByRole("heading", { name: "Yedek / Restore" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Kurum Veri Yedeği" })).toBeVisible();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Kurum verisini indir" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("uzman-hocam-tenant-a-2026-06-14.json");
+  expect(tenantExportGetCount).toBe(1);
   await expect(page.getByLabel("Panel restore drill işi").getByText("Panel İş Tetikleme")).toBeVisible();
 
   await page.getByLabel("Panel restore drill işi").getByLabel("İş tipi").selectOption("BACKUP");

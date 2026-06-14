@@ -1,14 +1,17 @@
 import { defineConfig } from "@playwright/test";
 
+const port = process.env.NEXT_E2E_PORT ?? "3001";
+const baseURL = `http://localhost:${port}`;
+
 export default defineConfig({
   testDir: "./e2e-next",
   use: {
-    baseURL: "http://localhost:3001",
+    baseURL,
   },
   webServer: {
-    command: "pnpm --filter @uzman-hocam/ui build && pnpm --filter @uzman-hocam/web next:dev",
-    reuseExistingServer: !process.env.CI,
+    command: `pnpm --filter @uzman-hocam/ui build && pnpm --filter @uzman-hocam/web exec next dev --hostname 0.0.0.0 --port ${port}`,
+    reuseExistingServer: !process.env.CI && !process.env.NEXT_E2E_PORT,
     timeout: 120_000,
-    url: "http://localhost:3001",
+    url: baseURL,
   },
 });
