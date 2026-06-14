@@ -1,4 +1,5 @@
 import { lstat, readFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const target = process.env.DEPLOYMENT_ROLLBACK_TARGET;
@@ -83,7 +84,22 @@ async function readEvidenceFile(url) {
     fail(["DEPLOYMENT_ROLLBACK_TARGET symlink olmayan file:// artifact olmali."]);
   }
 
+  await assertParentPathAllowed(dirname(filePath));
+
   return readFile(filePath, "utf8");
+}
+
+async function assertParentPathAllowed(parentPath) {
+  let stat;
+  try {
+    stat = await lstat(parentPath);
+  } catch {
+    fail(["DEPLOYMENT_ROLLBACK_TARGET parent dizini okunabilir olmali."]);
+  }
+
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    fail(["DEPLOYMENT_ROLLBACK_TARGET parent dizini symlink olmayan dizin olmali."]);
+  }
 }
 
 function requireAllowedEvidenceTargetUrl(url) {

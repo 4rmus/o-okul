@@ -1397,6 +1397,7 @@ runDeploymentRegionNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runDeploymentRegionSymlinkParentTargetNegativeCheck();
 runDeploymentRollbackNegativeCheck({
   label: "Deployment rollback extra top-level key negative",
   path: "docs/evidence-templates/deployment-rollback.extra-top-level.tmp.json",
@@ -1466,6 +1467,7 @@ runDeploymentRollbackNegativeCheck({
     fixture.rollbackImageTag = fixture.releaseCandidate;
   },
 });
+runDeploymentRollbackSymlinkParentTargetNegativeCheck();
 runProductionSummaryHttpTargetNegativeCheck();
 runProductionSummarySymlinkParentTargetNegativeCheck();
 runProductionSummaryNegativeCheck({
@@ -2519,6 +2521,41 @@ function runDeploymentRegionNegativeCheck({ label, path, expectedFailure, mutate
   }
 }
 
+function runDeploymentRegionSymlinkParentTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "deployment-region-parent-symlink-"));
+  const realDirectory = join(root, "real-dir");
+  const symlinkDirectory = join(root, "symlink-dir");
+  mkdirSync(realDirectory, { recursive: true });
+  writeFileSync(join(realDirectory, "deployment-region.json"), `${JSON.stringify(deploymentRegionFixture, null, 2)}\n`);
+  symlinkSync(realDirectory, symlinkDirectory, "dir");
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-deployment-region-evidence.mjs"], {
+      env: {
+        ...process.env,
+        DEPLOYMENT_REGION_ALLOW_EXAMPLE_EVIDENCE: "1",
+        DEPLOYMENT_REGION_TARGET: pathToFileURL(join(symlinkDirectory, "deployment-region.json")).href,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: deployment region symlink parent target negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!output.includes("DEPLOYMENT_REGION_TARGET parent dizini symlink olmayan dizin olmali.")) {
+      console.error("Production evidence template kontrolü başarısız: deployment region symlink parent target negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function runGithubCiNegativeCheck({ label, path, expectedFailure, mutate }) {
   const fixture = structuredClone(githubCiFixture);
   mutate(fixture);
@@ -3127,6 +3164,41 @@ function runDeploymentRollbackNegativeCheck({ label, path, expectedFailure, muta
     } catch {
       // Ignore cleanup errors; the negative-check failure above is the actionable signal.
     }
+  }
+}
+
+function runDeploymentRollbackSymlinkParentTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "deployment-rollback-parent-symlink-"));
+  const realDirectory = join(root, "real-dir");
+  const symlinkDirectory = join(root, "symlink-dir");
+  mkdirSync(realDirectory, { recursive: true });
+  writeFileSync(join(realDirectory, "deployment-rollback.json"), `${JSON.stringify(deploymentRollbackFixture, null, 2)}\n`);
+  symlinkSync(realDirectory, symlinkDirectory, "dir");
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-deployment-rollback-evidence.mjs"], {
+      env: {
+        ...process.env,
+        DEPLOYMENT_ROLLBACK_ALLOW_EXAMPLE_EVIDENCE: "1",
+        DEPLOYMENT_ROLLBACK_TARGET: pathToFileURL(join(symlinkDirectory, "deployment-rollback.json")).href,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: deployment rollback symlink parent target negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!output.includes("DEPLOYMENT_ROLLBACK_TARGET parent dizini symlink olmayan dizin olmali.")) {
+      console.error("Production evidence template kontrolü başarısız: deployment rollback symlink parent target negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 }
 
