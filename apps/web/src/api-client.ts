@@ -1,5 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
-import type { AuthResponse } from "@uzman-hocam/shared-types";
+import type { AuthResponse, LoginResponse, MfaChallengeResponse } from "@uzman-hocam/shared-types";
 
 declare const process: { env: Record<string, string | undefined> };
 
@@ -30,6 +30,12 @@ export class ApiRequestError extends Error {
   }
 }
 
+export class MfaRequiredError extends Error {
+  constructor(readonly challenge: MfaChallengeResponse) {
+    super("MFA_REQUIRED");
+  }
+}
+
 export const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3100";
 export const apiBaseUrl = `${apiUrl}/api/v1`;
 
@@ -54,6 +60,30 @@ export async function login(email: string, password: string): Promise<AuthRespon
 
   if (!response.ok) {
     throw new Error("LOGIN_FAILED");
+  }
+
+  const result = await readData<LoginResponse>(response);
+  if (isMfaChallengeResponse(result)) {
+    throw new MfaRequiredError(result);
+  }
+
+  return rememberAuth(result);
+}
+
+export async function verifyMfa(challengeToken: string, input: { totpCode?: string; recoveryCode?: string }): Promise<AuthResponse> {
+  const response = await fetch(`${apiBaseUrl}/auth/totp/verify`, {
+    body: JSON.stringify({
+      challengeToken,
+      totpCode: input.totpCode,
+      recoveryCode: input.recoveryCode,
+    }),
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error("MFA_VERIFY_FAILED");
   }
 
   return rememberAuth(await readData<AuthResponse>(response));
@@ -160,6 +190,10 @@ function toHeaderRecord(headers: HeadersInit | undefined): Record<string, string
 function rememberAuth(auth: AuthResponse): AuthResponse {
   activeAuth = auth;
   return auth;
+}
+
+function isMfaChallengeResponse(value: LoginResponse): value is MfaChallengeResponse {
+  return "status" in value && value.status === "MFA_REQUIRED";
 }
 
 function readCookie(name: string): string {

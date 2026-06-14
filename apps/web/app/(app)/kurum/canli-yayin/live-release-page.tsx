@@ -23,6 +23,18 @@ const releaseGates = [
     status: "Canlı DB gerekir",
     detail: "RLS, Postgres store yolları ve lokal restore davranışı canlı bağlantıyla kontrol edilir.",
   },
+  {
+    title: "Pilot kapanış",
+    command: "PILOT_EVIDENCE_TARGET=file:///path/to/pilot.json pnpm pilot:check",
+    status: "Production pilot kanıtı gerekir",
+    detail: "14+ gün pilot, gerçek optik-karne-veli döngüsü, k6/RLS eşikleri, olay tatbikatı ve kritik hata 0 onaylanır.",
+  },
+  {
+    title: "Go-live karar paketi",
+    command: "GO_LIVE_EVIDENCE_TARGET=file:///path/to/go-live.json pnpm go-live:check",
+    status: "İmzalı final karar gerekir",
+    detail: "Production evidence summary, UAT, pilot, KVKK/DPA, rollback, operasyon sahipliği, cutover ve onaylar tek pakette kapanır.",
+  },
 ] as const;
 
 const productionEvidenceSteps = [
@@ -35,6 +47,7 @@ const productionEvidenceSteps = [
   "Off-host backup target",
   "WAL archive target",
   "Deployment region evidence",
+  "Deployment rollback evidence",
   "Restore drill evidence",
   "KVKK inventory evidence",
   "Identity migration evidence",
@@ -52,8 +65,23 @@ const summaryFields = [
   "appUrl / apiUrl / webUrl",
   "checks status = PASS",
   "reports.uat.rollbackImageTag",
+  "reports.uat.journeyScenariosVerified",
   "reports.restoreDrill.sourceBackup",
   "reports.deploymentRegion.datacenterCountryCode",
+  "reports.deploymentRollback.rollbackImageTag",
+] as const;
+
+const finalDecisionFields = [
+  "productionEvidenceSummary.summaryTarget",
+  "productionEvidenceSummary.result = PASS",
+  "pilot.pilotDurationDays >= 14",
+  "pilot.criticalDefectsOpen = 0",
+  "pilot.goLiveDecision = APPROVED",
+  "legal.dataProcessingAgreementSigned = true",
+  "operations.alertChannelReady = true",
+  "cutover.monitoringWindowHours >= 24",
+  "approvals: product / technical / operations / dataProtection",
+  "goLiveDecision = APPROVED",
 ] as const;
 
 const openExternalEvidence = [
@@ -63,7 +91,10 @@ const openExternalEvidence = [
   "Notification provider credential",
   "Sentry DSN ve alert webhook",
   "Off-host backup ve WAL hedefi",
+  "Deployment rollback tatbikatı",
   "Staging/prod UAT raporu",
+  "Pilot kapanış kanıtı",
+  "Go-live karar paketi",
 ] as const;
 
 export function LiveReleasePage() {
@@ -76,7 +107,8 @@ export function LiveReleasePage() {
       <MetricPanelGrid
         ariaLabel="Canlı yayın özeti"
         metrics={[
-          { label: "Kanıt zinciri", value: "17 kapı" },
+          { label: "Kanıt zinciri", value: "18 kapı" },
+          { label: "Final karar", value: "Ayrı kapı" },
           { label: "Release özeti", value: "PASS gerekir" },
           { label: "Dış ortam", value: "Kanıt bekler" },
         ]}
@@ -89,6 +121,7 @@ export function LiveReleasePage() {
       <EvidenceGateSection title="Kanıt Kapıları" ariaLabel="Canlı yayın kapıları" gates={releaseGates} />
       <EvidenceListSection title="Production Evidence Adımları" ariaLabel="Production evidence adımları" items={productionEvidenceSteps} />
       <EvidenceListSection title="Release Özeti Alanları" ariaLabel="Release özeti alanları" items={summaryFields} />
+      <EvidenceListSection title="Go-live Karar Alanları" ariaLabel="Go-live karar alanları" items={finalDecisionFields} />
       <EvidenceListSection title="Dış Ortam Kanıtları" ariaLabel="Dış ortam kanıtları" items={openExternalEvidence} />
     </PageFrame>
   );

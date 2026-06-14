@@ -57,6 +57,248 @@ a {
   padding: 24px 16px;
 }
 
+.next-marketing {
+  min-height: 100vh;
+  background: #f6f8fb;
+  color: var(--color-text);
+}
+
+.next-marketing-hero {
+  position: relative;
+  min-height: min(760px, 78svh);
+  overflow: hidden;
+  display: grid;
+  align-content: start;
+  isolation: isolate;
+  color: #ffffff;
+}
+
+.next-marketing-hero__image {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.next-marketing-hero__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: rgba(14, 23, 38, 0.58);
+}
+
+.next-marketing-nav,
+.next-marketing-hero__content,
+.next-marketing-section {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+}
+
+.next-marketing-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 0;
+}
+
+.next-marketing-nav .next-brand {
+  margin-bottom: 0;
+  color: #ffffff;
+}
+
+.next-marketing-hero__content {
+  display: grid;
+  gap: 18px;
+  max-width: 680px;
+  margin-top: clamp(44px, 9svh, 120px);
+  margin-left: max(16px, calc((100% - 1180px) / 2));
+}
+
+.next-marketing-kicker,
+.next-marketing-section__header span,
+.next-marketing-section--contact span {
+  margin: 0;
+  color: #7dd3c7;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.next-marketing-hero h1 {
+  margin: 0;
+  font-size: clamp(42px, 6vw, 78px);
+  line-height: 0.98;
+  letter-spacing: 0;
+}
+
+.next-marketing-hero__content > p:not(.next-marketing-kicker) {
+  margin: 0;
+  max-width: 620px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: clamp(18px, 2vw, 22px);
+  line-height: 1.55;
+}
+
+.next-marketing-actions,
+.next-marketing-contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.uh-button--lg {
+  min-height: 48px;
+  padding: 0 18px;
+}
+
+.next-marketing-band {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--color-border);
+  border-block: 1px solid var(--color-border);
+}
+
+.next-marketing-band div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 22px clamp(16px, 3vw, 32px);
+  background: #ffffff;
+}
+
+.next-marketing-band strong {
+  color: #155eef;
+  font-size: clamp(26px, 4vw, 42px);
+  line-height: 1;
+}
+
+.next-marketing-band span {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.next-marketing-section {
+  display: grid;
+  gap: 24px;
+  padding: clamp(48px, 7vw, 86px) 0;
+}
+
+.next-marketing-section__header {
+  display: grid;
+  gap: 10px;
+  max-width: 760px;
+}
+
+.next-marketing-section__header h2,
+.next-marketing-section--contact h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: clamp(28px, 4vw, 48px);
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.next-marketing-workflow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.next-marketing-card,
+.next-marketing-proof {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+}
+
+.next-marketing-card {
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+}
+
+.next-marketing-card svg,
+.next-marketing-proof svg {
+  color: #0f766e;
+}
+
+.next-marketing-card h3,
+.next-marketing-proof h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.next-marketing-card p,
+.next-marketing-proof p,
+.next-marketing-section--contact p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.next-marketing-section--split {
+  width: 100%;
+  max-width: none;
+  padding-inline: max(16px, calc((100% - 1180px) / 2));
+  background: #eef7f5;
+}
+
+.next-marketing-proof {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+  gap: 24px;
+  padding: 24px;
+}
+
+.next-marketing-proof > div {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.next-marketing-proof ul {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.next-marketing-proof li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-weight: 800;
+}
+
+.next-marketing-proof li span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.next-marketing-section--contact {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 28px;
+}
+
+.next-marketing-section--contact > div:first-child {
+  display: grid;
+  gap: 12px;
+  max-width: 780px;
+}
+
 .next-auth-panel {
   width: min(440px, 100%);
   border-radius: var(--radius-lg);
@@ -2082,6 +2324,23 @@ a {
   font-size: 13px;
 }
 
+.next-material-file-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.next-material-file-row button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
 .next-row-actions a,
 .next-row-actions button {
   display: grid;
@@ -3675,6 +3934,45 @@ a {
 }
 
 @media (max-width: 760px) {
+  .next-marketing-hero {
+    min-height: 82svh;
+  }
+
+  .next-marketing-nav {
+    align-items: flex-start;
+    padding-top: 16px;
+  }
+
+  .next-marketing-hero__content {
+    margin-top: clamp(28px, 7svh, 72px);
+  }
+
+  .next-marketing-actions,
+  .next-marketing-contact-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .next-marketing-actions .uh-button,
+  .next-marketing-contact-actions .uh-button {
+    width: 100%;
+  }
+
+  .next-marketing-band,
+  .next-marketing-workflow,
+  .next-marketing-proof,
+  .next-marketing-section--contact {
+    grid-template-columns: 1fr;
+  }
+
+  .next-marketing-band {
+    gap: 0;
+  }
+
+  .next-marketing-proof {
+    padding: 18px;
+  }
+
   .next-app-shell {
     grid-template-columns: 1fr;
   }

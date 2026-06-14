@@ -52,6 +52,30 @@ const requiredCommands = [
   "pnpm traefik:https:smoke",
 ] as const;
 
+const journeyScenarios = [
+  "UAT-SYS-01",
+  "UAT-SYS-02",
+  "UAT-SYS-03",
+  "UAT-SYS-04",
+  "UAT-KURUM-01",
+  "UAT-KURUM-02",
+  "UAT-KURUM-03",
+  "UAT-KURUM-04",
+  "UAT-KURUM-05",
+  "UAT-KURUM-06",
+  "UAT-KURUM-07",
+  "UAT-KURUM-08",
+  "UAT-TEACHER-01",
+  "UAT-TEACHER-02",
+  "UAT-TEACHER-03",
+  "UAT-STUDENT-01",
+  "UAT-STUDENT-02",
+  "UAT-STUDENT-03",
+  "UAT-GUARDIAN-01",
+  "UAT-GUARDIAN-02",
+  "UAT-GUARDIAN-03",
+] as const;
+
 const rollbackFields = ["releaseCandidate", "rollbackImageTag", "restoreBackupReference", "defects boş"] as const;
 
 export function UatRollbackPage() {
@@ -76,6 +100,7 @@ export function UatRollbackPage() {
       />
       <EvidenceGateSection title="Kanıt Kapıları" ariaLabel="UAT rollback kapıları" gates={uatGates} />
       <EvidenceListSection title="UAT Akışları" ariaLabel="UAT akışları" items={uatFlows} />
+      <EvidenceListSection title="Persona Senaryoları" ariaLabel="Persona UAT senaryoları" items={journeyScenarios} />
       <EvidenceListSection title="Zorunlu Komutlar" ariaLabel="Zorunlu komutlar" items={requiredCommands} />
       <EvidenceListSection title="Rollback Alanları" ariaLabel="Rollback alanları" items={rollbackFields} />
     </PageFrame>

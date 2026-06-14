@@ -14,6 +14,7 @@ import {
   logout as requestLogout,
   queryClient,
   refreshSession,
+  verifyMfa as requestVerifyMfa,
 } from "../src/api-client.js";
 import { QueryClientProvider } from "@tanstack/react-query";
 
@@ -21,6 +22,7 @@ interface AuthStore {
   auth: AuthResponse | null;
   isBootstrapping: boolean;
   login(email: string, password: string): Promise<void>;
+  verifyMfa(challengeToken: string, input: { totpCode?: string; recoveryCode?: string }): Promise<void>;
   logout(): Promise<void>;
 }
 
@@ -49,6 +51,9 @@ export function Providers({ children }: { children: ReactNode }) {
       isBootstrapping,
       async login(email, password) {
         setAuth(await requestLogin(email, password));
+      },
+      async verifyMfa(challengeToken, input) {
+        setAuth(await requestVerifyMfa(challengeToken, input));
       },
       async logout() {
         await requestLogout().catch(() => undefined);

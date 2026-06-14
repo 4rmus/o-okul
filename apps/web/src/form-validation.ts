@@ -12,11 +12,15 @@ const optionalEmail = optionalText().refine((value) => !value || z.string().emai
 });
 const requiredEmail = (fieldName: string) => requiredText(fieldName).email("E-posta geçerli olmalıdır.");
 
-const optionalDate = optionalText().refine((value) => !value || /^\d{4}-\d{2}-\d{2}$/.test(value), {
+const optionalDate = optionalText().refine((value) => !value || isCalendarDateString(value), {
   message: "Doğum tarihi geçerli olmalıdır.",
 });
 
-const requiredDateTime = (fieldName: string) => requiredText(fieldName).refine((value) => !Number.isNaN(Date.parse(value)), {
+const optionalIsoDateTime = optionalText().refine((value) => !value || isIsoDateTimeString(value), {
+  message: "Başlangıç geçerli olmalıdır.",
+});
+
+const requiredDateTime = (fieldName: string) => requiredText(fieldName).refine(isIsoDateTimeString, {
   message: `${fieldName} geçerli olmalıdır.`,
 });
 
@@ -83,9 +87,7 @@ export const learningOutcomeFormSchema = z.object({
 
 export const examFormSchema = z.object({
   title: requiredText("Sınav adı"),
-  startsAt: optionalText().refine((value) => !value || !Number.isNaN(Date.parse(value)), {
-    message: "Başlangıç geçerli olmalıdır.",
-  }),
+  startsAt: optionalIsoDateTime,
 });
 
 export const examWithClassFormSchema = examFormSchema.extend({
@@ -454,4 +456,14 @@ export type MaterialAssignmentFormPayload = z.output<typeof materialAssignmentFo
 
 export function firstFormError(error: z.ZodError): string {
   return error.issues[0]?.message ?? "Form bilgilerini kontrol edin.";
+}
+
+function isIsoDateTimeString(value: string): boolean {
+  const match = /^(\d{4}-\d{2}-\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/.exec(value);
+  return Boolean(match?.[1] && isCalendarDateString(match[1]) && !Number.isNaN(Date.parse(value)));
+}
+
+function isCalendarDateString(value: string): boolean {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }

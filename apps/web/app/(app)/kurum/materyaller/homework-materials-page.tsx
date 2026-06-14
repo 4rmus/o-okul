@@ -5,14 +5,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
 import type {
   HomeworkMaterialAssignmentRecord,
+  HomeworkMaterialFileDownloadResult,
   HomeworkMaterialFileRecord,
   HomeworkMaterialRecord,
   HomeworkRecord,
   StudentRecord,
 } from "@uzman-hocam/shared-types";
-import { CheckCircle2, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { CheckCircle2, Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch, type ListMeta } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch, type ListMeta } from "../../../../src/api-client.js";
 import {
   firstFormError,
   homeworkMaterialFormSchema,
@@ -68,6 +69,7 @@ export function HomeworkMaterialsPage() {
   const [fileName, setFileName] = useState("");
   const [fileBase64, setFileBase64] = useState("");
   const [fileContentType, setFileContentType] = useState<HomeworkMaterialFileRecord["contentType"]>("text/plain");
+  const [downloadingFileId, setDownloadingFileId] = useState("");
   const [assignmentMaterialId, setAssignmentMaterialId] = useState("");
   const [assignmentStudentId, setAssignmentStudentId] = useState("");
   const [assignmentNote, setAssignmentNote] = useState("");
@@ -137,7 +139,17 @@ export function HomeworkMaterialsPage() {
       render: (material) => (
         <span className="next-material-detail">
           {(data.materialFiles[material.id] ?? []).map((file) => (
-            <span key={file.id}>Dosya: {file.fileName}</span>
+            <span className="next-material-file-row" key={file.id}>
+              Dosya: {file.fileName}
+              <button
+                type="button"
+                onClick={() => void downloadMaterialFile(material.id, file)}
+                disabled={downloadingFileId === file.id}
+                aria-label={`${file.fileName} indir`}
+              >
+                <Download size={16} aria-hidden="true" />
+              </button>
+            </span>
           ))}
           {(data.materialAssignments[material.id] ?? []).map((assignment) => (
             <span key={assignment.id}>Atama: {studentNames.get(assignment.studentId) ?? assignment.studentId}</span>
@@ -278,6 +290,22 @@ export function HomeworkMaterialsPage() {
       setFileContentType("text/plain");
     } catch {
       setError("Materyal dosyası yüklenemedi.");
+    }
+  }
+
+  async function downloadMaterialFile(materialId: string, file: HomeworkMaterialFileRecord) {
+    if (!auth) return;
+
+    setError("");
+    setDownloadingFileId(file.id);
+    try {
+      downloadHomeworkMaterialFile(
+        await fetchHomeworkMaterialFileDownload(auth.accessToken, materialId, file.id),
+      );
+    } catch (downloadError) {
+      setError(apiErrorMessage(downloadError, "Materyal dosyası indirilemedi."));
+    } finally {
+      setDownloadingFileId("");
     }
   }
 
@@ -567,6 +595,13 @@ async function addHomeworkMaterialFile(
   );
 }
 
+async function fetchHomeworkMaterialFileDownload(accessToken: string, materialId: string, fileId: string) {
+  return apiRequest<HomeworkMaterialFileDownloadResult>(
+    accessToken,
+    `${apiBaseUrl}/homework/materials/${encodeURIComponent(materialId)}/files/${encodeURIComponent(fileId)}/download`,
+  );
+}
+
 async function addHomeworkMaterialAssignment(
   accessToken: string,
   materialId: string,
@@ -606,4 +641,30 @@ async function readFileAsBase64(file: File): Promise<string> {
     binary += String.fromCharCode(byte);
   }
   return btoa(binary);
+}
+
+function downloadHomeworkMaterialFile(file: HomeworkMaterialFileDownloadResult): void {
+  if (file.downloadUrl) {
+    const link = document.createElement("a");
+    link.href = file.downloadUrl;
+    link.download = file.fileName;
+    link.click();
+    return;
+  }
+
+  if (!file.fileBase64) {
+    throw new Error("HOMEWORK_MATERIAL_FILE_DOWNLOAD_EMPTY");
+  }
+
+  const binary = atob(file.fileBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  const url = URL.createObjectURL(new Blob([bytes], { type: file.contentType }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = file.fileName;
+  link.click();
+  URL.revokeObjectURL(url);
 }

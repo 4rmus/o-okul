@@ -302,7 +302,7 @@ export function SupportTicketsPage() {
     setError("");
     setDownloadingAttachmentId(attachment.id);
     try {
-      downloadBase64File(await downloadSupportTicketAttachment(auth.accessToken, ticketId, attachment.id));
+      downloadAttachmentFile(await downloadSupportTicketAttachment(auth.accessToken, ticketId, attachment.id));
     } catch (downloadError) {
       setError(apiErrorMessage(downloadError, "Destek eki indirilemedi."));
     } finally {
@@ -821,7 +821,19 @@ async function readFileAsBase64(file: File): Promise<string> {
   return btoa(binary);
 }
 
-function downloadBase64File(file: SupportTicketAttachmentDownloadResult): void {
+function downloadAttachmentFile(file: SupportTicketAttachmentDownloadResult): void {
+  if (file.downloadUrl) {
+    const link = document.createElement("a");
+    link.href = file.downloadUrl;
+    link.download = file.fileName;
+    link.click();
+    return;
+  }
+
+  if (!file.fileBase64) {
+    throw new Error("SUPPORT_TICKET_ATTACHMENT_DOWNLOAD_EMPTY");
+  }
+
   const binary = atob(file.fileBase64);
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) {
