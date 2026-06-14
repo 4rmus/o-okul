@@ -441,6 +441,9 @@ pnpm backup:restore:smoke
   altında ve marketing route'unun server/no-query kalmasını doğrular.
 - Landing, login, auth sonrası kurum dashboard shell'i ve kurum dashboard tablet viewport'u axe tabanlı smoke ile taranır.
 - Kritik WCAG 2 A/AA axe ihlali 0 olmalıdır; repo kapısı `pnpm web:a11y:check` ile doğrulanır.
+- GitHub CI ve staging image build job'ları `pnpm run ci` öncesi
+  `pnpm --filter @uzman-hocam/web exec playwright install --with-deps chromium` çalıştırır; bu
+  şart `pnpm docker:check`, `pnpm ops:check` ve `pnpm prod:readiness:check` statik kapılarıyla korunur.
 - Web UX baseline contract `pnpm web:ux-baseline:check` ile a11y spec kapsamını, 768x1024 tablet
   yatay taşma kontrolünü, landing server/no-query performans bütçesini ve hero asset sözleşmesini sabitler.
 - A11y smoke gerçek staging kanıtının yerine geçmez; tablet operatör UAT'i Faz 10 rol bazlı UAT içinde ayrıca yapılır.

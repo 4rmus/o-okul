@@ -5,6 +5,8 @@ const files = {
   "apps/web/package.json": readFileSync("apps/web/package.json", "utf8"),
   "apps/web/app/page.tsx": readFileSync("apps/web/app/page.tsx", "utf8"),
   "claudedocs/prod-plan-2026-06-12.md": readFileSync("claudedocs/prod-plan-2026-06-12.md", "utf8"),
+  ".github/workflows/ci.yml": readFileSync(".github/workflows/ci.yml", "utf8"),
+  ".github/workflows/staging-deploy.yml": readFileSync(".github/workflows/staging-deploy.yml", "utf8"),
   "docs/phase-6-production-readiness.md": readFileSync("docs/phase-6-production-readiness.md", "utf8"),
   "docs/product-journeys-v1.md": readFileSync("docs/product-journeys-v1.md", "utf8"),
   "package.json": readFileSync("package.json", "utf8"),
@@ -65,6 +67,10 @@ requireTokens("apps/web/app/page.tsx", [
 requireTokens("apps/web/playwright.next.config.ts", [
   "pnpm --filter @uzman-hocam/ui build && pnpm --filter @uzman-hocam/web next:dev",
 ]);
+
+for (const workflowPath of [".github/workflows/ci.yml", ".github/workflows/staging-deploy.yml"]) {
+  requireTokens(workflowPath, ["pnpm --filter @uzman-hocam/web exec playwright install --with-deps chromium"]);
+}
 
 requireTokens("docs/phase-6-production-readiness.md", [
   "pnpm web:ux-baseline:check",

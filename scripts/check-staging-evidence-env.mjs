@@ -133,6 +133,7 @@ function checkWorkflowContract(output) {
     "Check staging evidence env before deploy",
     "STAGING_EVIDENCE_ENV_B64",
     "pnpm install --frozen-lockfile",
+    "pnpm --filter @uzman-hocam/web exec playwright install --with-deps chromium",
     "trap 'rm -f .staging-evidence.env' EXIT",
     "pnpm staging:evidence-env:check -- --env-file .staging-evidence.env",
     "base64 -d > .staging-evidence.env",

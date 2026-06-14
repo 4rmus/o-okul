@@ -165,6 +165,7 @@ const expectations = {
   "docker/loki/local-config.yaml": ["auth_enabled: false", "retention_period: 168h"],
   ".github/workflows/ci.yml": [
     "pnpm install",
+    "pnpm --filter @uzman-hocam/web exec playwright install --with-deps chromium",
     "pnpm run ci",
   ],
   ".github/workflows/staging-deploy.yml": [
@@ -180,6 +181,7 @@ const expectations = {
     "Check staging evidence env before deploy",
     "pnpm run ci",
     "pnpm install --frozen-lockfile",
+    "pnpm --filter @uzman-hocam/web exec playwright install --with-deps chromium",
     "docker build",
     "--target web",
     "--target api",
