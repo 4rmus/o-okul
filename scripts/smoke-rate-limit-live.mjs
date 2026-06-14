@@ -1,5 +1,5 @@
 import { createHash, randomInt } from "node:crypto";
-import { redactedUrl, writeSmokeEvidence } from "./smoke-evidence.mjs";
+import { redactedUrl, validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const apiUrl = process.env.API_URL;
 const firstUrl = readUrl("RATE_LIMIT_SMOKE_URL", defaultRateLimitUrl(apiUrl));
@@ -17,6 +17,8 @@ const loginUrl = readUrl("RATE_LIMIT_LOGIN_SMOKE_URL", defaultLoginUrl(apiUrl));
 const secondLoginUrl = readUrl("RATE_LIMIT_LOGIN_SMOKE_SECOND_INSTANCE_URL", defaultLoginUrl(secondUrl?.origin));
 const expectedRateLimitCode = "RATE_LIMITED";
 const expectedLoginLockCode = "LOGIN_LOCKED";
+
+await validateSmokeEvidenceOutputTarget(evidenceFile);
 
 if (!firstUrl) {
   fail("RATE_LIMIT_SMOKE_URL veya API_URL bos birakilamaz.");

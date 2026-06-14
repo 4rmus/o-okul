@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { writeSmokeEvidence } from "./smoke-evidence.mjs";
+import { validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const require = createRequire(import.meta.url);
 const { createSmsAdapterFromEnv } = require("../packages/sms-adapter/dist/index.js");
@@ -9,6 +9,8 @@ const to = process.env.SMS_SMOKE_TO;
 const body = process.env.SMS_SMOKE_BODY ?? "Uzman Hocam SMS smoke";
 const evidenceFile = process.env.SMS_PROVIDER_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
 const checkedAt = new Date().toISOString();
+
+await validateSmokeEvidenceOutputTarget(evidenceFile);
 
 if (!to) {
   fail("SMS_SMOKE_TO boş bırakılamaz.");

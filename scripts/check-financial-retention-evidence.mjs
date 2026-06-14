@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const target = process.env.FINANCIAL_RETENTION_TARGET;
@@ -27,8 +27,10 @@ let targetUrl;
 try {
   targetUrl = new URL(target);
 } catch {
-  fail(["FINANCIAL_RETENTION_TARGET file://, http:// veya https:// URL olmalı."]);
+  fail(["FINANCIAL_RETENTION_TARGET file:// veya https:// URL olmalı."]);
 }
+
+requireAllowedEvidenceTargetUrl(targetUrl);
 
 const report = await readJsonTarget(targetUrl);
 const failures = validateReport(report);
@@ -41,10 +43,10 @@ console.log(`Finansal saklama kanıt kontrolü geçti: ${report.environment} ${r
 
 async function readJsonTarget(url) {
   if (url.protocol === "file:") {
-    return parseJson(await readFile(fileURLToPath(url), "utf8"));
+    return parseJson(await readEvidenceFile(url));
   }
 
-  if (url.protocol === "http:" || url.protocol === "https:") {
+  if (url.protocol === "https:") {
     const response = await fetch(url);
     if (!response.ok) {
       fail([`Finansal saklama raporu okunamadı: HTTP ${response.status}`]);
@@ -52,7 +54,57 @@ async function readJsonTarget(url) {
     return parseJson(await response.text());
   }
 
-  fail(["FINANCIAL_RETENTION_TARGET yalnız file://, http:// veya https:// destekler."]);
+  fail(["FINANCIAL_RETENTION_TARGET yalnız file:// veya https:// destekler."]);
+}
+
+async function readEvidenceFile(url) {
+  const filePath = fileURLToPath(url);
+  let stat;
+  try {
+    stat = await lstat(filePath);
+  } catch {
+    fail(["FINANCIAL_RETENTION_TARGET okunabilir file:// artifact olmali."]);
+  }
+
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    fail(["FINANCIAL_RETENTION_TARGET symlink olmayan file:// artifact olmali."]);
+  }
+
+  return readFile(filePath, "utf8");
+}
+
+function requireAllowedEvidenceTargetUrl(url) {
+  if (url.protocol !== "file:" && url.protocol !== "https:") {
+    fail(["FINANCIAL_RETENTION_TARGET file:// veya https:// URL olmali."]);
+  }
+
+  if (url.protocol === "https:" && isPlaceholderEvidenceTargetHost(url.hostname)) {
+    fail(["FINANCIAL_RETENTION_TARGET production kaniti icin gercek https host olmali."]);
+  }
+
+  if (url.protocol === "file:" && isLocalTempEvidenceTargetUrl(url)) {
+    fail(["FINANCIAL_RETENTION_TARGET production kaniti icin lokal temp path olmamali."]);
+  }
+}
+
+function isPlaceholderEvidenceTargetHost(hostname) {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized.endsWith(".localhost") ||
+    normalized.endsWith(".test") ||
+    normalized === "example.com" ||
+    normalized.endsWith(".example.com") ||
+    normalized.includes("example") ||
+    normalized.includes("__set") ||
+    normalized.includes("placeholder")
+  );
+}
+
+function isLocalTempEvidenceTargetUrl(url) {
+  const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
+  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
 }
 
 function parseJson(value) {

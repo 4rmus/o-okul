@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
+import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getTenantScopedTables } from "../packages/db/scripts/tenant-models.mjs";
 
@@ -328,7 +329,10 @@ let targetUrl;
 try {
   targetUrl = new URL(target);
 } catch {
-  fail(["GO_LIVE_EVIDENCE_TARGET file://, http:// veya https:// URL olmali."]);
+  fail(["GO_LIVE_EVIDENCE_TARGET file:// veya https:// URL olmali."]);
+}
+if (!isAllowedEvidenceTargetUrl(targetUrl)) {
+  fail(["GO_LIVE_EVIDENCE_TARGET file:// veya https:// URL olmali."]);
 }
 
 const report = await readJsonTarget(targetUrl, "Go-live raporu");
@@ -345,10 +349,10 @@ console.log(`Go-live kanit kontrolu gecti: ${report.environment} ${report.releas
 
 async function readJsonTarget(url, label) {
   if (url.protocol === "file:") {
-    return parseJson(await readFile(fileURLToPath(url), "utf8"), label);
+    return parseJson(await readEvidenceFile(url, label), label);
   }
 
-  if (url.protocol === "http:" || url.protocol === "https:") {
+  if (url.protocol === "https:") {
     const response = await fetch(url);
     if (!response.ok) {
       fail([`${label} okunamadi: HTTP ${response.status}`]);
@@ -356,7 +360,63 @@ async function readJsonTarget(url, label) {
     return parseJson(await response.text(), label);
   }
 
-  fail(["GO_LIVE_EVIDENCE_TARGET yalniz file://, http:// veya https:// destekler."]);
+  fail(["GO_LIVE_EVIDENCE_TARGET yalniz file:// veya https:// destekler."]);
+}
+
+async function readEvidenceFile(url, label) {
+  const filePath = fileURLToPath(url);
+  await assertParentPathAllowed(dirname(filePath), label);
+
+  let stat;
+  try {
+    stat = await lstat(filePath);
+  } catch {
+    fail([`${label} okunabilir file:// artifact olmali.`]);
+  }
+
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    fail([`${label} symlink olmayan file:// artifact olmali.`]);
+  }
+
+  return readFile(filePath, "utf8");
+}
+
+async function assertParentPathAllowed(parentPath, label) {
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+
+    let stat;
+    try {
+      stat = await lstat(current);
+    } catch (error) {
+      if (error?.code === "ENOENT") return;
+      throw error;
+    }
+
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      fail([parentPathFailure(label)]);
+    }
+  }
+}
+
+function parentPathFailure(label) {
+  if (label === "Go-live raporu") {
+    return "GO_LIVE_EVIDENCE_TARGET parent dizini symlink olmayan dizin olmali.";
+  }
+  if (label === "Production evidence summary") {
+    return "Production evidence summary parent dizini symlink olmayan dizin olmali.";
+  }
+  if (label === "Pilot evidence") {
+    return "Pilot evidence parent dizini symlink olmayan dizin olmali.";
+  }
+  if (label === "Live status evidence") {
+    return "Live status evidence parent dizini symlink olmayan dizin olmali.";
+  }
+  return `${label} parent dizini symlink olmayan dizin olmali.`;
 }
 
 function parseJson(value, label) {
@@ -377,7 +437,10 @@ async function readLinkedProductionEvidenceSummary(report, baseUrl) {
   try {
     summaryUrl = new URL(value.summaryTarget, baseUrl);
   } catch {
-    fail(["productionEvidenceSummary.summaryTarget file://, http://, https:// veya goreli URL olmali."]);
+    fail(["productionEvidenceSummary.summaryTarget file:// veya https:// URL olmali."]);
+  }
+  if (!isAllowedEvidenceTargetUrl(summaryUrl)) {
+    fail(["productionEvidenceSummary.summaryTarget file:// veya https:// URL olmali."]);
   }
 
   return readJsonTarget(summaryUrl, "Production evidence summary");
@@ -393,7 +456,10 @@ async function readLinkedPilotEvidence(report, baseUrl) {
   try {
     pilotUrl = new URL(value.pilotEvidenceReference, baseUrl);
   } catch {
-    fail(["pilot.pilotEvidenceReference file://, http://, https:// veya goreli URL olmali."]);
+    fail(["pilot.pilotEvidenceReference file:// veya https:// URL olmali."]);
+  }
+  if (!isAllowedEvidenceTargetUrl(pilotUrl)) {
+    fail(["pilot.pilotEvidenceReference file:// veya https:// URL olmali."]);
   }
 
   return readJsonTarget(pilotUrl, "Pilot evidence");
@@ -409,7 +475,10 @@ async function readLinkedLiveStatusEvidence(report, baseUrl) {
   try {
     liveStatusUrl = new URL(value.evidenceTarget, baseUrl);
   } catch {
-    fail(["liveStatusEvidence.evidenceTarget file://, http://, https:// veya goreli URL olmali."]);
+    fail(["liveStatusEvidence.evidenceTarget file:// veya https:// URL olmali."]);
+  }
+  if (!isAllowedEvidenceTargetUrl(liveStatusUrl)) {
+    fail(["liveStatusEvidence.evidenceTarget file:// veya https:// URL olmali."]);
   }
 
   return {
@@ -3351,11 +3420,43 @@ function requireResolvedTargetHref(report, failures, label, key, baseUrl, expect
 function resolveTargetHref(value, baseUrl, failures, label) {
   if (typeof value !== "string" || value.trim() === "") return undefined;
   try {
-    return new URL(value, baseUrl).href;
+    const url = new URL(value, baseUrl);
+    if (!isAllowedEvidenceTargetUrl(url)) {
+      failures.push(`${label} file:// veya https:// URL olmali.`);
+      return undefined;
+    }
+    return url.href;
   } catch {
-    failures.push(`${label} file://, http://, https:// veya goreli URL olmali.`);
+    failures.push(`${label} file:// veya https:// URL olmali.`);
     return undefined;
   }
+}
+
+function isAllowedEvidenceTargetUrl(url) {
+  return (
+    (url.protocol === "file:" && !isLocalTempEvidenceTargetUrl(url)) ||
+    (url.protocol === "https:" && !isPlaceholderEvidenceTargetHost(url.hostname))
+  );
+}
+
+function isPlaceholderEvidenceTargetHost(hostname) {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized.endsWith(".localhost") ||
+    normalized.endsWith(".test") ||
+    normalized === "example.com" ||
+    normalized.endsWith(".example.com") ||
+    normalized.includes("example") ||
+    normalized.includes("__set") ||
+    normalized.includes("placeholder")
+  );
+}
+
+function isLocalTempEvidenceTargetUrl(url) {
+  const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
+  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
 }
 
 function requireString(report, failures, key) {

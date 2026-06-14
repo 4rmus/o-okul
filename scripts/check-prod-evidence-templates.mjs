@@ -1,8 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const templateChecks = [
@@ -201,6 +200,11 @@ for (const [label, envKey, templatePath, script, extraEnv = {}] of templateCheck
   }
 }
 
+runEvidenceTargetProtocolNegativeChecks();
+runEvidenceTargetPlaceholderHostNegativeChecks();
+runEvidenceTargetTempFileNegativeChecks();
+runEvidenceTargetSymlinkFileNegativeChecks();
+
 for (const file of linkedTemplateFiles) {
   try {
     JSON.parse(readFileSync(file, "utf8"));
@@ -210,9 +214,137 @@ for (const file of linkedTemplateFiles) {
   }
 }
 
+function runEvidenceTargetProtocolNegativeChecks() {
+  for (const [label, envKey, , script, extraEnv = {}] of templateChecks) {
+    const result = spawnSync(process.execPath, [script], {
+      env: {
+        ...process.env,
+        ...extraEnv,
+        [envKey]: `http://evidence.uzmanhocam.com/${envKey.toLowerCase().replaceAll("_", "-")}.json`,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error(`Production evidence template kontrolü başarısız: ${label} HTTP target negative beklenen şekilde kırılmadı.`);
+      process.exit(1);
+    }
+    if (!output.includes("file:// veya https://")) {
+      console.error(`Production evidence template kontrolü başarısız: ${label} HTTP target negative beklenen hata yok.`);
+      console.error(output);
+      process.exit(1);
+    }
+  }
+}
+
+function runEvidenceTargetPlaceholderHostNegativeChecks() {
+  for (const [label, envKey, , script, extraEnv = {}] of templateChecks) {
+    const result = spawnSync(process.execPath, [script], {
+      env: {
+        ...process.env,
+        ...extraEnv,
+        [envKey]: `https://localhost/${envKey.toLowerCase().replaceAll("_", "-")}.json`,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error(
+        `Production evidence template kontrolü başarısız: ${label} placeholder host target negative beklenen şekilde kırılmadı.`,
+      );
+      process.exit(1);
+    }
+    if (!output.includes("gercek https host") && !output.includes("file:// veya https://")) {
+      console.error(
+        `Production evidence template kontrolü başarısız: ${label} placeholder host target negative beklenen hata yok.`,
+      );
+      console.error(output);
+      process.exit(1);
+    }
+  }
+}
+
+function runEvidenceTargetTempFileNegativeChecks() {
+  for (const [label, envKey, , script, extraEnv = {}] of templateChecks) {
+    const result = spawnSync(process.execPath, [script], {
+      env: {
+        ...process.env,
+        ...extraEnv,
+        [envKey]: `file:///tmp/${envKey.toLowerCase().replaceAll("_", "-")}.json`,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error(
+        `Production evidence template kontrolü başarısız: ${label} temp file target negative beklenen şekilde kırılmadı.`,
+      );
+      process.exit(1);
+    }
+    if (!output.includes("lokal temp path") && !output.includes("file:// veya https://")) {
+      console.error(
+        `Production evidence template kontrolü başarısız: ${label} temp file target negative beklenen hata yok.`,
+      );
+      console.error(output);
+      process.exit(1);
+    }
+  }
+}
+
+function runEvidenceTargetSymlinkFileNegativeChecks() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "evidence-target-symlink-"));
+
+  try {
+    for (const [label, envKey, templatePath, script, extraEnv = {}] of templateChecks) {
+      const linkPath = join(root, `${envKey.toLowerCase()}.json`);
+      symlinkSync(resolve(templatePath), linkPath);
+      const result = spawnSync(process.execPath, [script], {
+        env: {
+          ...process.env,
+          ...extraEnv,
+          [envKey]: pathToFileURL(linkPath).href,
+        },
+        encoding: "utf8",
+      });
+
+      const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+      if (result.status === 0) {
+        console.error(
+          `Production evidence template kontrolü başarısız: ${label} symlink file target negative beklenen şekilde kırılmadı.`,
+        );
+        process.exit(1);
+      }
+      if (!output.includes("symlink olmayan file:// artifact")) {
+        console.error(
+          `Production evidence template kontrolü başarısız: ${label} symlink file target negative beklenen hata yok.`,
+        );
+        console.error(output);
+        process.exit(1);
+      }
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+runInlineUploadMigrationReportOutputNegativeChecks();
+runGithubCiGeneratorOutputNegativeChecks();
 await runGithubCiGeneratorContractCheck();
 runStagingEvidenceEnvNegativeCheck();
+runStagingFirstGatesOutputDirNegativeCheck();
 runProdEnvHttpEvidenceTargetNegativeCheck();
+runProdEvidenceSummaryOutputNegativeChecks();
+runProdEvidenceSmokeEvidenceFileNegativeChecks();
+runProdEvidenceHttpEvidenceTargetNegativeCheck();
+runProdEvidencePlaceholderEvidenceTargetNegativeCheck();
+runProdEvidenceTempFileEvidenceTargetNegativeCheck();
+runProdEvidenceSymlinkEvidenceTargetNegativeCheck();
+runProdEvidenceSymlinkParentEvidenceTargetNegativeCheck();
 runProdEnvTraefikOriginNegativeCheck();
 runProdEnvMissingAlertWebhookTokenNegativeCheck();
 runProdEnvMissingSmsSmokeConfirmNegativeCheck();
@@ -1334,6 +1466,8 @@ runDeploymentRollbackNegativeCheck({
     fixture.rollbackImageTag = fixture.releaseCandidate;
   },
 });
+runProductionSummaryHttpTargetNegativeCheck();
+runProductionSummarySymlinkParentTargetNegativeCheck();
 runProductionSummaryNegativeCheck({
   label: "Production summary extra check negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-check.tmp.json",
@@ -1562,6 +1696,11 @@ runLiveStatusGenerationNegativeCheck({
     fixture.goLiveDecision = "REJECTED";
   },
 });
+runLiveStatusGeneratorHttpTargetNegativeCheck();
+runLiveStatusGeneratorSymlinkTargetNegativeCheck();
+runLiveStatusGeneratorSymlinkParentTargetNegativeCheck();
+runLiveStatusGeneratorOutputTargetNegativeChecks();
+runLiveStatusEvidenceSymlinkParentTargetNegativeCheck();
 runLiveStatusNegativeCheck({
   label: "Live status duplicate gate negative",
   path: "docs/evidence-templates/live-status.duplicate-gate.tmp.json",
@@ -1658,6 +1797,22 @@ runLiveStatusNegativeCheck({
     "gates.Traefik HTTPS smoke.evidenceReference productionEvidenceSummary.smokeEvidence.traefikHttps kaynak referansı ile eslesmeli.",
   mutate: (fixture) => {
     fixture.gates[0].evidenceReference = "artifacts/example/production/wrong-traefik-reference.json";
+  },
+});
+runLiveStatusNegativeCheck({
+  label: "Live status HTTP summary target negative",
+  path: "docs/evidence-templates/live-status.http-summary-target.tmp.json",
+  expectedFailure: "productionEvidenceSummaryTarget file:// veya https:// URL olmalı.",
+  mutate: (fixture) => {
+    fixture.productionEvidenceSummaryTarget = "http://evidence.uzmanhocam.com/production-summary.json";
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live HTTP live-status target negative",
+  path: "docs/evidence-templates/go-live.http-live-status-target.tmp.json",
+  expectedFailure: "liveStatusEvidence.evidenceTarget file:// veya https:// URL olmali.",
+  mutate: (fixture) => {
+    fixture.liveStatusEvidence.evidenceTarget = "http://evidence.uzmanhocam.com/live-status.json";
   },
 });
 runGoLiveNegativeCheck({
@@ -2168,6 +2323,7 @@ runGoLiveNegativeCheck({
     cleanupPaths.push(linkedPath);
   },
 });
+runGoLiveLinkedLiveStatusSymlinkParentTargetNegativeCheck();
 
 for (const [label, script, scriptArgs, contractPath] of contractChecks) {
   const result = spawnSync(process.execPath, [script, ...scriptArgs], {
@@ -2269,6 +2425,63 @@ function runProductionSummaryNegativeCheck({ label, path, expectedFailure, mutat
     } catch {
       // Ignore cleanup errors; the negative-check failure above is the actionable signal.
     }
+  }
+}
+
+function runProductionSummaryHttpTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-production-evidence-summary.mjs"], {
+    env: {
+      ...process.env,
+      PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE: "1",
+      PRODUCTION_EVIDENCE_SUMMARY_TARGET: "http://evidence.uzmanhocam.com/release-summary.json",
+    },
+    encoding: "utf8",
+  });
+
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: production summary HTTP target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("PRODUCTION_EVIDENCE_SUMMARY_TARGET file:// veya https:// URL olmalı.")) {
+    console.error("Production evidence template kontrolü başarısız: production summary HTTP target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
+function runProductionSummarySymlinkParentTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "production-summary-parent-symlink-"));
+  const realDirectory = join(root, "real-dir");
+  const symlinkDirectory = join(root, "symlink-dir");
+  mkdirSync(realDirectory, { recursive: true });
+  writeFileSync(join(realDirectory, "release-summary.json"), readFileSync(productionSummaryFixturePath, "utf8"));
+  symlinkSync(realDirectory, symlinkDirectory, "dir");
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-production-evidence-summary.mjs"], {
+      env: {
+        ...process.env,
+        PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE: "1",
+        PRODUCTION_EVIDENCE_SUMMARY_TARGET: pathToFileURL(join(symlinkDirectory, "release-summary.json")).href,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: production summary symlink parent target negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!output.includes("PRODUCTION_EVIDENCE_SUMMARY_TARGET parent dizini symlink olmayan dizin olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: production summary symlink parent target negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 }
 
@@ -2978,6 +3191,254 @@ function runLiveStatusGenerationNegativeCheck({ label, sourcePath, outputPath, e
   }
 }
 
+function runLiveStatusGeneratorHttpTargetNegativeCheck() {
+  const outputPath = "docs/evidence-templates/live-status.http-source-target.tmp.json";
+
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/generate-live-status-evidence.mjs",
+        "--summary-target",
+        "http://evidence.uzmanhocam.com/production-summary.json",
+        "--go-live-target",
+        goLiveFixturePath,
+        "--pilot-target",
+        pilotFixturePath,
+        "--output",
+        outputPath,
+        "--readiness-path",
+        liveStatusReadinessPath,
+      ],
+      {
+        env: {
+          ...process.env,
+          LIVE_STATUS_ALLOW_EXAMPLE_EVIDENCE: "1",
+        },
+        encoding: "utf8",
+      },
+    );
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: live status generator HTTP target negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!output.includes("PRODUCTION_EVIDENCE_SUMMARY_TARGET file:// veya https:// URL olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: live status generator HTTP target negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    try {
+      unlinkSync(outputPath);
+    } catch {
+      // Ignore cleanup errors; the negative-check failure above is the actionable signal.
+    }
+  }
+}
+
+function runLiveStatusGeneratorSymlinkTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "live-status-generator-symlink-"));
+  const summaryLinkPath = join(root, "production-summary.json");
+  const outputPath = join(root, "live-status.symlink-source-target.tmp.json");
+  symlinkSync(resolve(productionSummaryFixturePath), summaryLinkPath);
+
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/generate-live-status-evidence.mjs",
+        "--summary-target",
+        pathToFileURL(summaryLinkPath).href,
+        "--go-live-target",
+        goLiveFixturePath,
+        "--pilot-target",
+        pilotFixturePath,
+        "--output",
+        outputPath,
+        "--readiness-path",
+        liveStatusReadinessPath,
+      ],
+      {
+        env: {
+          ...process.env,
+          LIVE_STATUS_ALLOW_EXAMPLE_EVIDENCE: "1",
+        },
+        encoding: "utf8",
+      },
+    );
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: live status generator symlink target negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!output.includes("Production evidence summary symlink olmayan file:// artifact olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: live status generator symlink target negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function runLiveStatusGeneratorSymlinkParentTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "live-status-generator-parent-symlink-"));
+  const realDirectory = join(root, "real-dir");
+  const symlinkDirectory = join(root, "symlink-dir");
+  const outputPath = join(root, "live-status.parent-symlink-source-target.tmp.json");
+  mkdirSync(realDirectory, { recursive: true });
+  writeFileSync(join(realDirectory, "production-summary.json"), readFileSync(productionSummaryFixturePath, "utf8"));
+  symlinkSync(realDirectory, symlinkDirectory, "dir");
+
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/generate-live-status-evidence.mjs",
+        "--summary-target",
+        pathToFileURL(join(symlinkDirectory, "production-summary.json")).href,
+        "--go-live-target",
+        goLiveFixturePath,
+        "--pilot-target",
+        pilotFixturePath,
+        "--output",
+        outputPath,
+        "--readiness-path",
+        liveStatusReadinessPath,
+      ],
+      {
+        env: {
+          ...process.env,
+          LIVE_STATUS_ALLOW_EXAMPLE_EVIDENCE: "1",
+        },
+        encoding: "utf8",
+      },
+    );
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error(
+        "Production evidence template kontrolü başarısız: live status generator symlink parent target negative beklenen şekilde kırılmadı.",
+      );
+      process.exit(1);
+    }
+    if (!output.includes("Production evidence summary parent dizini symlink olmayan dizin olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: live status generator symlink parent target negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function runLiveStatusGeneratorOutputTargetNegativeChecks() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "live-status-generator-output-"));
+  const symlinkTargetPath = join(root, "live-status.real.json");
+  const symlinkOutputPath = join(root, "live-status.symlink.json");
+  writeFileSync(symlinkTargetPath, "{}\n");
+  symlinkSync(symlinkTargetPath, symlinkOutputPath);
+
+  try {
+    const tempResult = runLiveStatusGeneratorForOutput("/tmp/live-status-output-temp-negative.json");
+    const tempOutput = `${tempResult.stdout ?? ""}${tempResult.stderr ?? ""}`;
+    if (tempResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: live status generator output temp path negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!tempOutput.includes("LIVE_STATUS_EVIDENCE_OUTPUT lokal temp path olmamalı.")) {
+      console.error("Production evidence template kontrolü başarısız: live status generator output temp path negative beklenen hata yok.");
+      console.error(tempOutput);
+      process.exit(1);
+    }
+
+    const symlinkResult = runLiveStatusGeneratorForOutput(symlinkOutputPath);
+    const symlinkOutput = `${symlinkResult.stdout ?? ""}${symlinkResult.stderr ?? ""}`;
+    if (symlinkResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: live status generator output symlink negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!symlinkOutput.includes("LIVE_STATUS_EVIDENCE_OUTPUT symlink olmayan file artifact olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: live status generator output symlink negative beklenen hata yok.");
+      console.error(symlinkOutput);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function runLiveStatusEvidenceSymlinkParentTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "live-status-evidence-parent-symlink-"));
+  const realDirectory = join(root, "real-dir");
+  const symlinkDirectory = join(root, "symlink-dir");
+  mkdirSync(realDirectory, { recursive: true });
+  writeFileSync(join(realDirectory, "live-status.json"), readFileSync(liveStatusFixturePath, "utf8"));
+  symlinkSync(realDirectory, symlinkDirectory, "dir");
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-live-status-evidence.mjs"], {
+      env: {
+        ...process.env,
+        LIVE_STATUS_ALLOW_EXAMPLE_EVIDENCE: "1",
+        LIVE_STATUS_READINESS_PATH: liveStatusReadinessPath,
+        LIVE_STATUS_EVIDENCE_TARGET: pathToFileURL(join(symlinkDirectory, "live-status.json")).href,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: live status symlink parent target negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!output.includes("LIVE_STATUS_EVIDENCE_TARGET parent dizini symlink olmayan dizin olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: live status symlink parent target negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function runLiveStatusGeneratorForOutput(outputPath) {
+  return spawnSync(
+    process.execPath,
+    [
+      "scripts/generate-live-status-evidence.mjs",
+      "--summary-target",
+      productionSummaryFixturePath,
+      "--go-live-target",
+      goLiveFixturePath,
+      "--pilot-target",
+      pilotFixturePath,
+      "--output",
+      outputPath,
+      "--readiness-path",
+      liveStatusReadinessPath,
+    ],
+    {
+      env: {
+        ...process.env,
+        LIVE_STATUS_ALLOW_EXAMPLE_EVIDENCE: "1",
+      },
+      encoding: "utf8",
+    },
+  );
+}
+
 function runGoLiveNegativeCheck({ label, path, expectedFailure, mutate }) {
   const fixture = structuredClone(goLiveFixture);
   const cleanupPaths = [path];
@@ -3015,8 +3476,56 @@ function runGoLiveNegativeCheck({ label, path, expectedFailure, mutate }) {
   }
 }
 
+function runGoLiveLinkedLiveStatusSymlinkParentTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "go-live-live-status-parent-symlink-"));
+  const realDirectory = join(root, "real-dir");
+  const symlinkDirectory = join(root, "symlink-dir");
+  const goLivePath = "docs/evidence-templates/go-live.linked-live-status-parent-symlink-target.tmp.json";
+  mkdirSync(realDirectory, { recursive: true });
+  writeFileSync(join(realDirectory, "live-status.json"), readFileSync(liveStatusFixturePath, "utf8"));
+  symlinkSync(realDirectory, symlinkDirectory, "dir");
+
+  const fixture = structuredClone(goLiveFixture);
+  fixture.liveStatusEvidence.evidenceTarget = pathToFileURL(join(symlinkDirectory, "live-status.json")).href;
+  writeFileSync(goLivePath, `${JSON.stringify(fixture, null, 2)}\n`);
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-go-live-evidence.mjs"], {
+      env: {
+        ...process.env,
+        GO_LIVE_ALLOW_EXAMPLE_EVIDENCE: "1",
+        GO_LIVE_EVIDENCE_TARGET: pathToFileURL(goLivePath).href,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error(
+        "Production evidence template kontrolü başarısız: go-live linked live-status symlink parent target negative beklenen şekilde kırılmadı.",
+      );
+      process.exit(1);
+    }
+    if (!output.includes("Live status evidence parent dizini symlink olmayan dizin olmali.")) {
+      console.error("Production evidence template kontrolü başarısız: go-live linked live-status symlink parent target negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    try {
+      unlinkSync(goLivePath);
+    } catch {
+      // Ignore cleanup errors; the negative-check failure above is the actionable signal.
+    }
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function runStagingEvidenceEnvNegativeCheck() {
   const path = "docs/evidence-templates/staging-evidence.empty-required.tmp.env";
+  const workflowPath = "docs/evidence-templates/staging-deploy.bad-order.tmp.yml";
   const contents = readFileSync("docs/evidence-templates/staging-evidence.env.example", "utf8").replace(
     /^NETGSM_USERCODE=.*$/m,
     "NETGSM_USERCODE=",
@@ -3038,17 +3547,265 @@ function runStagingEvidenceEnvNegativeCheck() {
       console.error(output);
       process.exit(1);
     }
+
+    const workflow = readFileSync(".github/workflows/staging-deploy.yml", "utf8");
+    const cleanupBlock = `      - name: Cleanup staging evidence env
+        if: always()
+        shell: bash
+        run: rm -f .staging-evidence.env`;
+    const uploadBlock = `      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staging-production-evidence-\${{ needs.build-images.outputs.image-tag }}
+          path: artifacts/staging
+          if-no-files-found: ignore`;
+    const expectedSequence = `${cleanupBlock}\n\n${uploadBlock}`;
+    if (!workflow.includes(expectedSequence)) {
+      console.error("Production evidence template kontrolü başarısız: staging workflow cleanup/upload fixture bulunamadı.");
+      process.exit(1);
+    }
+    writeFileSync(workflowPath, workflow.replace(expectedSequence, `${uploadBlock}\n\n${cleanupBlock}`));
+    const orderResult = spawnSync(process.execPath, ["scripts/check-staging-evidence-env.mjs"], {
+      env: {
+        ...process.env,
+        STAGING_DEPLOY_WORKFLOW_PATH: workflowPath,
+      },
+      encoding: "utf8",
+    });
+    const orderOutput = `${orderResult.stdout ?? ""}${orderResult.stderr ?? ""}`;
+    if (orderResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging workflow order negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!orderOutput.includes("staging evidence bundle order sırası bozuk veya eksik")) {
+      console.error("Production evidence template kontrolü başarısız: staging workflow order negative beklenen hata yok.");
+      console.error(orderOutput);
+      process.exit(1);
+    }
   } finally {
-    try {
-      unlinkSync(path);
-    } catch {
-      // Ignore cleanup errors; the negative-check failure above is the actionable signal.
+    for (const cleanupPath of [path, workflowPath]) {
+      try {
+        unlinkSync(cleanupPath);
+      } catch {
+        // Ignore cleanup errors; the negative-check failure above is the actionable signal.
+      }
     }
   }
 }
 
+function runStagingFirstGatesOutputDirNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const unexpectedRoot = mkdtempSync(join(rootParent, "staging-first-gates-output-unexpected-"));
+  const symlinkRoot = mkdtempSync(join(rootParent, "staging-first-gates-output-symlink-"));
+
+  try {
+    const tempResult = spawnSync(
+      process.execPath,
+      ["scripts/run-staging-first-gate-smokes.mjs", "--output-dir", "/tmp/staging-first-gates-output-temp-negative"],
+      {
+        env: process.env,
+        encoding: "utf8",
+      },
+    );
+    const tempOutput = `${tempResult.stdout ?? ""}${tempResult.stderr ?? ""}`;
+    if (tempResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates output-dir temp path negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!tempOutput.includes("staging:first-gates:smoke output-dir lokal temp path olmamalı.")) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates output-dir temp path negative beklenen hata yok.");
+      console.error(tempOutput);
+      process.exit(1);
+    }
+
+    writeFileSync(join(unexpectedRoot, "unexpected.json"), "{}\n");
+    const unexpectedResult = spawnSync(
+      process.execPath,
+      ["scripts/run-staging-first-gate-smokes.mjs", "--output-dir", unexpectedRoot],
+      {
+        env: process.env,
+        encoding: "utf8",
+      },
+    );
+    const unexpectedOutput = `${unexpectedResult.stdout ?? ""}${unexpectedResult.stderr ?? ""}`;
+    if (unexpectedResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates output-dir unexpected file negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!unexpectedOutput.includes("staging:first-gates:smoke output-dir beklenmeyen dosya içeriyor: unexpected.json")) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates output-dir unexpected file negative beklenen hata yok.");
+      console.error(unexpectedOutput);
+      process.exit(1);
+    }
+
+    symlinkSync("/dev/null", join(symlinkRoot, "traefik-https.json"));
+    const symlinkResult = spawnSync(
+      process.execPath,
+      ["scripts/run-staging-first-gate-smokes.mjs", "--output-dir", symlinkRoot],
+      {
+        env: process.env,
+        encoding: "utf8",
+      },
+    );
+    const symlinkOutput = `${symlinkResult.stdout ?? ""}${symlinkResult.stderr ?? ""}`;
+    if (symlinkResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates output-dir symlink negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!symlinkOutput.includes("staging:first-gates:smoke output-dir symlink içermemeli: traefik-https.json")) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates output-dir symlink negative beklenen hata yok.");
+      console.error(symlinkOutput);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(unexpectedRoot, { recursive: true, force: true });
+    rmSync(symlinkRoot, { recursive: true, force: true });
+  }
+}
+
+function runGithubCiGeneratorOutputNegativeChecks() {
+  const root = resolve("artifacts/prod-evidence-template-check/github-ci-generator-output-negative");
+  const tempOutputPath = "/tmp/github-ci-evidence-output-temp-negative.json";
+  rmSync(root, { recursive: true, force: true });
+  rmSync(tempOutputPath, { force: true });
+  mkdirSync(root, { recursive: true });
+
+  try {
+    const tempResult = runGithubCiGeneratorOutputNegative(tempOutputPath);
+    const tempOutput = `${tempResult.stdout ?? ""}${tempResult.stderr ?? ""}`;
+    if (tempResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: GitHub CI generator output temp path negative kırılmadı.");
+      process.exit(1);
+    }
+    if (!tempOutput.includes("GITHUB_CI_EVIDENCE_OUTPUT lokal temp path olmamalı.")) {
+      console.error("Production evidence template kontrolü başarısız: GitHub CI generator output temp path negative beklenen hata yok.");
+      console.error(tempOutput);
+      process.exit(1);
+    }
+
+    const realFile = join(root, "real.json");
+    const symlinkFile = join(root, "symlink.json");
+    writeFileSync(realFile, "{}\n");
+    symlinkSync(realFile, symlinkFile);
+    const symlinkFileResult = runGithubCiGeneratorOutputNegative(symlinkFile);
+    const symlinkFileOutput = `${symlinkFileResult.stdout ?? ""}${symlinkFileResult.stderr ?? ""}`;
+    if (symlinkFileResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: GitHub CI generator output symlink file negative kırılmadı.");
+      process.exit(1);
+    }
+    if (!symlinkFileOutput.includes("GITHUB_CI_EVIDENCE_OUTPUT symlink olmayan file artifact olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: GitHub CI generator output symlink file negative beklenen hata yok.");
+      console.error(symlinkFileOutput);
+      process.exit(1);
+    }
+
+    const realDirectory = join(root, "real-dir");
+    const symlinkDirectory = join(root, "symlink-dir");
+    mkdirSync(realDirectory, { recursive: true });
+    symlinkSync(realDirectory, symlinkDirectory, "dir");
+    const symlinkParentResult = runGithubCiGeneratorOutputNegative(join(symlinkDirectory, "github-ci.json"));
+    const symlinkParentOutput = `${symlinkParentResult.stdout ?? ""}${symlinkParentResult.stderr ?? ""}`;
+    if (symlinkParentResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: GitHub CI generator output symlink parent negative kırılmadı.");
+      process.exit(1);
+    }
+    if (!symlinkParentOutput.includes("GITHUB_CI_EVIDENCE_OUTPUT parent dizini symlink olmayan dizin olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: GitHub CI generator output symlink parent negative beklenen hata yok.");
+      console.error(symlinkParentOutput);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(tempOutputPath, { force: true });
+  }
+}
+
+function runGithubCiGeneratorOutputNegative(outputPath) {
+  return spawnSync(process.execPath, ["scripts/generate-github-ci-evidence.mjs"], {
+    env: {
+      ...process.env,
+      GITHUB_API_URL: "http://127.0.0.1:9",
+      GITHUB_TOKEN: "mock-token",
+      GITHUB_REPOSITORY: "owner/repo",
+      GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
+      GITHUB_CI_EVIDENCE_OUTPUT: outputPath,
+    },
+    encoding: "utf8",
+  });
+}
+
+function runInlineUploadMigrationReportOutputNegativeChecks() {
+  const root = resolve("artifacts/prod-evidence-template-check/inline-upload-migration-report-output-negative");
+  const tempOutputPath = "/tmp/inline-upload-migration-report-output-temp-negative.json";
+  rmSync(root, { recursive: true, force: true });
+  rmSync(tempOutputPath, { force: true });
+  mkdirSync(root, { recursive: true });
+
+  try {
+    const tempResult = runInlineUploadMigrationReportOutputNegative(tempOutputPath);
+    const tempOutput = `${tempResult.stdout ?? ""}${tempResult.stderr ?? ""}`;
+    if (tempResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: inline upload migration report output temp path negative kırılmadı.");
+      process.exit(1);
+    }
+    if (!tempOutput.includes("INLINE_UPLOAD_CONTENT_MIGRATION_REPORT_FILE lokal temp path olmamalı.")) {
+      console.error("Production evidence template kontrolü başarısız: inline upload migration report output temp path negative beklenen hata yok.");
+      console.error(tempOutput);
+      process.exit(1);
+    }
+
+    const realFile = join(root, "real.json");
+    const symlinkFile = join(root, "symlink.json");
+    writeFileSync(realFile, "{}\n");
+    symlinkSync(realFile, symlinkFile);
+    const symlinkFileResult = runInlineUploadMigrationReportOutputNegative(symlinkFile);
+    const symlinkFileOutput = `${symlinkFileResult.stdout ?? ""}${symlinkFileResult.stderr ?? ""}`;
+    if (symlinkFileResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: inline upload migration report output symlink file negative kırılmadı.");
+      process.exit(1);
+    }
+    if (!symlinkFileOutput.includes("INLINE_UPLOAD_CONTENT_MIGRATION_REPORT_FILE symlink olmayan file artifact olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: inline upload migration report output symlink file negative beklenen hata yok.");
+      console.error(symlinkFileOutput);
+      process.exit(1);
+    }
+
+    const realDirectory = join(root, "real-dir");
+    const symlinkDirectory = join(root, "symlink-dir");
+    mkdirSync(realDirectory, { recursive: true });
+    symlinkSync(realDirectory, symlinkDirectory, "dir");
+    const symlinkParentResult = runInlineUploadMigrationReportOutputNegative(join(symlinkDirectory, "report.json"));
+    const symlinkParentOutput = `${symlinkParentResult.stdout ?? ""}${symlinkParentResult.stderr ?? ""}`;
+    if (symlinkParentResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: inline upload migration report output symlink parent negative kırılmadı.");
+      process.exit(1);
+    }
+    if (!symlinkParentOutput.includes("INLINE_UPLOAD_CONTENT_MIGRATION_REPORT_FILE parent dizini symlink olmayan dizin olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: inline upload migration report output symlink parent negative beklenen hata yok.");
+      console.error(symlinkParentOutput);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(tempOutputPath, { force: true });
+  }
+}
+
+function runInlineUploadMigrationReportOutputNegative(outputPath) {
+  return spawnSync(process.execPath, ["scripts/migrate-inline-upload-content-to-s3-live.mjs"], {
+    env: {
+      ...process.env,
+      INLINE_UPLOAD_CONTENT_MIGRATION_REPORT_FILE: outputPath,
+    },
+    encoding: "utf8",
+  });
+}
+
 function runStagingReleaseArtifactsBundleCheck() {
-  const root = mkdtempSync(join(tmpdir(), "uzman-hocam-staging-release-artifacts-"));
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "staging-release-artifacts-"));
   const reportsDir = `${root}/reports`;
   const smokeDir = `${root}/smoke`;
   const firstGatesDir = `${root}/first-gates`;
@@ -3066,7 +3823,8 @@ function runStagingReleaseArtifactsBundleCheck() {
     );
     summary.generatedAt = summaryTime;
 
-    writeFileSync(`${root}/release-summary-template.json`, `${JSON.stringify(summary, null, 2)}\n`);
+    const releaseSummaryPath = `${root}/release-summary-2026-06-15.1.json`;
+    writeFileSync(releaseSummaryPath, `${JSON.stringify(summary, null, 2)}\n`);
     for (const [key, file] of Object.entries({
       restoreDrill: "restore-drill.example.json",
       deploymentRegion: "deployment-region.example.json",
@@ -3212,6 +3970,78 @@ function runStagingReleaseArtifactsBundleCheck() {
       process.exit(positive.status ?? 1);
     }
 
+    const wrongReleaseSummaryPath = `${root}/release-summary-wrong-tag.json`;
+    writeFileSync(wrongReleaseSummaryPath, readFileSync(releaseSummaryPath, "utf8"));
+    unlinkSync(releaseSummaryPath);
+    const wrongReleaseSummaryNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
+      env: {
+        ...process.env,
+        STAGING_RELEASE_ARTIFACTS_TARGET: root,
+        STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1",
+      },
+      encoding: "utf8",
+    });
+    const wrongReleaseSummaryOutput = `${wrongReleaseSummaryNegative.stdout ?? ""}${wrongReleaseSummaryNegative.stderr ?? ""}`;
+    if (wrongReleaseSummaryNegative.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging release artifact summary filename negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (
+      !wrongReleaseSummaryOutput.includes(
+        "release summary dosya tag'i summary.reports.deploymentRollback.releaseCandidate ile eşleşmeli.",
+      )
+    ) {
+      console.error("Production evidence template kontrolü başarısız: staging release artifact summary filename negative beklenen hata yok.");
+      console.error(wrongReleaseSummaryOutput);
+      process.exit(1);
+    }
+    writeFileSync(releaseSummaryPath, readFileSync(wrongReleaseSummaryPath, "utf8"));
+    unlinkSync(wrongReleaseSummaryPath);
+
+    const unexpectedReportPath = `${reportsDir}/unexpected.json`;
+    writeFileSync(unexpectedReportPath, `${JSON.stringify({ result: "PASS" }, null, 2)}\n`);
+    const unexpectedReportNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
+      env: {
+        ...process.env,
+        STAGING_RELEASE_ARTIFACTS_TARGET: root,
+        STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1",
+      },
+      encoding: "utf8",
+    });
+    const unexpectedReportOutput = `${unexpectedReportNegative.stdout ?? ""}${unexpectedReportNegative.stderr ?? ""}`;
+    if (unexpectedReportNegative.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging release artifact unexpected file negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!unexpectedReportOutput.includes("reports/unexpected.json beklenmeyen artifact dosyası.")) {
+      console.error("Production evidence template kontrolü başarısız: staging release artifact unexpected file negative beklenen hata yok.");
+      console.error(unexpectedReportOutput);
+      process.exit(1);
+    }
+    unlinkSync(unexpectedReportPath);
+
+    const leakedEnvPath = `${root}/.staging-evidence.env`;
+    writeFileSync(leakedEnvPath, "NETGSM_PASSWORD=secret-value\n");
+    const leakedEnvNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
+      env: {
+        ...process.env,
+        STAGING_RELEASE_ARTIFACTS_TARGET: root,
+        STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1",
+      },
+      encoding: "utf8",
+    });
+    const leakedEnvOutput = `${leakedEnvNegative.stdout ?? ""}${leakedEnvNegative.stderr ?? ""}`;
+    if (leakedEnvNegative.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging release artifact secret/env leak negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!leakedEnvOutput.includes("artifact bundle secret/env dosyası içermemeli: .staging-evidence.env")) {
+      console.error("Production evidence template kontrolü başarısız: staging release artifact secret/env leak negative beklenen hata yok.");
+      console.error(leakedEnvOutput);
+      process.exit(1);
+    }
+    unlinkSync(leakedEnvPath);
+
     const manifestPath = `${firstGatesDir}/first-gates-manifest.json`;
     const originalFirstGatesManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
     const earlyFirstGatesManifest = { ...originalFirstGatesManifest, generatedAt: new Date(Date.parse(evidenceTime) - 60_000).toISOString() };
@@ -3265,6 +4095,52 @@ function runStagingReleaseArtifactsBundleCheck() {
       process.exit(1);
     }
     writeFileSync(`${firstGatesDir}/traefik-https.json`, `${JSON.stringify(originalTraefikFirstGate, null, 2)}\n`);
+
+    const firstGateTraefikPath = `${firstGatesDir}/traefik-https.json`;
+    unlinkSync(firstGateTraefikPath);
+    symlinkSync(`${smokeDir}/traefik-https.json`, firstGateTraefikPath);
+    const firstGatesSymlinkNegative = spawnSync(process.execPath, ["scripts/check-staging-first-gates-evidence.mjs"], {
+      env: {
+        ...process.env,
+        STAGING_FIRST_GATES_TARGET: pathToFileURL(manifestPath).href,
+      },
+      encoding: "utf8",
+    });
+    const firstGatesSymlinkOutput = `${firstGatesSymlinkNegative.stdout ?? ""}${firstGatesSymlinkNegative.stderr ?? ""}`;
+    if (firstGatesSymlinkNegative.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates symlink negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!firstGatesSymlinkOutput.includes("checks.Traefik HTTPS smoke.evidenceFile symlink olmayan dosya olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates symlink negative beklenen hata yok.");
+      console.error(firstGatesSymlinkOutput);
+      process.exit(1);
+    }
+    unlinkSync(firstGateTraefikPath);
+    writeFileSync(firstGateTraefikPath, `${JSON.stringify(originalTraefikFirstGate, null, 2)}\n`);
+
+    unlinkSync(firstGateTraefikPath);
+    symlinkSync(`${smokeDir}/traefik-https.json`, firstGateTraefikPath);
+    const releaseSymlinkNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
+      env: {
+        ...process.env,
+        STAGING_RELEASE_ARTIFACTS_TARGET: root,
+        STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1",
+      },
+      encoding: "utf8",
+    });
+    const releaseSymlinkOutput = `${releaseSymlinkNegative.stdout ?? ""}${releaseSymlinkNegative.stderr ?? ""}`;
+    if (releaseSymlinkNegative.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging release artifact symlink negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!releaseSymlinkOutput.includes("artifact bundle symlink içermemeli: first-gates/traefik-https.json")) {
+      console.error("Production evidence template kontrolü başarısız: staging release artifact symlink negative beklenen hata yok.");
+      console.error(releaseSymlinkOutput);
+      process.exit(1);
+    }
+    unlinkSync(firstGateTraefikPath);
+    writeFileSync(firstGateTraefikPath, `${JSON.stringify(originalTraefikFirstGate, null, 2)}\n`);
 
     const originalDeploymentRegion = JSON.parse(readFileSync(`${reportsDir}/deployment-region.json`, "utf8"));
     const badDeploymentRegion = { ...originalDeploymentRegion, region: "tr-ankara-2" };
@@ -3408,6 +4284,279 @@ function runProdEnvHttpEvidenceTargetNegativeCheck() {
     console.error("Production evidence template kontrolü başarısız: prod env http evidence target negative beklenen hata yok.");
     console.error(result.stderr);
     process.exit(1);
+  }
+}
+
+function runProdEvidenceSummaryOutputNegativeChecks() {
+  const root = resolve("artifacts/prod-evidence-template-check/prod-evidence-summary-output-negative");
+  const tempSummaryPath = "/tmp/prod-evidence-summary-output-negative.json";
+  rmSync(root, { recursive: true, force: true });
+  rmSync(tempSummaryPath, { force: true });
+  mkdirSync(root, { recursive: true });
+
+  try {
+    const tempResult = runProdEvidenceSummaryOutputNegative(tempSummaryPath);
+    const tempOutput = `${tempResult.stdout ?? ""}${tempResult.stderr ?? ""}`;
+    if (tempResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: prod evidence summary output temp path negative kırılmadı.");
+      process.exit(1);
+    }
+    if (!tempOutput.includes("--summary-file lokal temp path olmamalı.")) {
+      console.error("Production evidence template kontrolü başarısız: prod evidence summary output temp path negative beklenen hata yok.");
+      console.error(tempOutput);
+      process.exit(1);
+    }
+
+    const realFile = join(root, "real-summary.json");
+    const symlinkFile = join(root, "symlink-summary.json");
+    writeFileSync(realFile, "{}\n");
+    symlinkSync(realFile, symlinkFile);
+    const symlinkFileResult = runProdEvidenceSummaryOutputNegative(symlinkFile);
+    const symlinkFileOutput = `${symlinkFileResult.stdout ?? ""}${symlinkFileResult.stderr ?? ""}`;
+    if (symlinkFileResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: prod evidence summary output symlink file negative kırılmadı.");
+      process.exit(1);
+    }
+    if (!symlinkFileOutput.includes("--summary-file symlink olmayan file artifact olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: prod evidence summary output symlink file negative beklenen hata yok.");
+      console.error(symlinkFileOutput);
+      process.exit(1);
+    }
+
+    const realDirectory = join(root, "real-dir");
+    const symlinkDirectory = join(root, "symlink-dir");
+    mkdirSync(realDirectory, { recursive: true });
+    symlinkSync(realDirectory, symlinkDirectory, "dir");
+    const symlinkParentResult = runProdEvidenceSummaryOutputNegative(join(symlinkDirectory, "release-summary.json"));
+    const symlinkParentOutput = `${symlinkParentResult.stdout ?? ""}${symlinkParentResult.stderr ?? ""}`;
+    if (symlinkParentResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: prod evidence summary output symlink parent negative kırılmadı.");
+      process.exit(1);
+    }
+    if (!symlinkParentOutput.includes("--summary-file parent dizini symlink olmayan dizin olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: prod evidence summary output symlink parent negative beklenen hata yok.");
+      console.error(symlinkParentOutput);
+      process.exit(1);
+    }
+
+    const reportsRoot = join(root, "reports-negative");
+    const realReportsDirectory = join(root, "real-reports");
+    mkdirSync(reportsRoot, { recursive: true });
+    mkdirSync(realReportsDirectory, { recursive: true });
+    symlinkSync(realReportsDirectory, join(reportsRoot, "reports"), "dir");
+    const reportsResult = runProdEvidenceSummaryOutputNegative(join(reportsRoot, "release-summary.json"));
+    const reportsOutput = `${reportsResult.stdout ?? ""}${reportsResult.stderr ?? ""}`;
+    if (reportsResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: prod evidence summary output reports symlink negative kırılmadı.");
+      process.exit(1);
+    }
+    if (!reportsOutput.includes("--summary-file reports dizini symlink olmayan dizin olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: prod evidence summary output reports symlink negative beklenen hata yok.");
+      console.error(reportsOutput);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(tempSummaryPath, { force: true });
+  }
+}
+
+function runProdEvidenceSummaryOutputNegative(summaryPath) {
+  return spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs", "--summary-file", summaryPath], {
+    env: process.env,
+    encoding: "utf8",
+  });
+}
+
+function runProdEvidenceSmokeEvidenceFileNegativeChecks() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "prod-evidence-smoke-file-"));
+
+  try {
+    const tempEnv = createValidProdEnvForNegativeCheck();
+    tempEnv.TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE = "/tmp/prod-evidence-traefik-smoke.json";
+    runProdEvidenceSmokeEvidenceFileNegative(
+      "prod evidence smoke file temp path negative",
+      tempEnv,
+      "TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE production için lokal temp path olmamalı.",
+    );
+
+    const realFile = join(root, "traefik-https.json");
+    const symlinkFile = join(root, "traefik-https-link.json");
+    writeFileSync(realFile, "{}\n");
+    symlinkSync(realFile, symlinkFile);
+    const symlinkFileEnv = createValidProdEnvForNegativeCheck();
+    symlinkFileEnv.TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE = symlinkFile;
+    runProdEvidenceSmokeEvidenceFileNegative(
+      "prod evidence smoke file symlink negative",
+      symlinkFileEnv,
+      "TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE production için symlink olmayan smoke artifact olmalı.",
+    );
+
+    const realDirectory = join(root, "real-dir");
+    const symlinkDirectory = join(root, "symlink-dir");
+    mkdirSync(realDirectory, { recursive: true });
+    symlinkSync(realDirectory, symlinkDirectory, "dir");
+    const symlinkParentEnv = createValidProdEnvForNegativeCheck();
+    symlinkParentEnv.TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE = join(symlinkDirectory, "traefik-https.json");
+    runProdEvidenceSmokeEvidenceFileNegative(
+      "prod evidence smoke file symlink parent negative",
+      symlinkParentEnv,
+      "TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE parent dizini symlink olmayan dizin olmalı.",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function runProdEvidenceSmokeEvidenceFileNegative(label, env, expectedFailure) {
+  const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
+    env,
+    encoding: "utf8",
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  if (result.status === 0) {
+    console.error(`Production evidence template kontrolü başarısız: ${label} beklenen şekilde kırılmadı.`);
+    process.exit(1);
+  }
+
+  if (!output.includes(expectedFailure)) {
+    console.error(`Production evidence template kontrolü başarısız: ${label} beklenen hata yok.`);
+    console.error(output);
+    process.exit(1);
+  }
+}
+
+function runProdEvidenceHttpEvidenceTargetNegativeCheck() {
+  const env = createValidProdEnvForNegativeCheck();
+  env.DEPLOYMENT_REGION_TARGET = "http://evidence.uzmanhocam.com/deployment-region.json";
+
+  const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
+    env,
+    encoding: "utf8",
+  });
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: prod evidence http evidence target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+
+  if (!String(result.stderr).includes("DEPLOYMENT_REGION_TARGET file:// veya https:// URL olmalı.")) {
+    console.error("Production evidence template kontrolü başarısız: prod evidence http evidence target negative beklenen hata yok.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
+function runProdEvidencePlaceholderEvidenceTargetNegativeCheck() {
+  const env = createValidProdEnvForNegativeCheck();
+  env.DEPLOYMENT_REGION_TARGET = "https://example.test/deployment-region.json";
+
+  const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
+    env,
+    encoding: "utf8",
+  });
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: prod evidence placeholder evidence target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+
+  if (!String(result.stderr).includes("DEPLOYMENT_REGION_TARGET production için gerçek https host olmalı.")) {
+    console.error("Production evidence template kontrolü başarısız: prod evidence placeholder evidence target negative beklenen hata yok.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
+function runProdEvidenceTempFileEvidenceTargetNegativeCheck() {
+  const env = createValidProdEnvForNegativeCheck();
+  env.DEPLOYMENT_REGION_TARGET = "file:///tmp/deployment-region.json";
+
+  const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
+    env,
+    encoding: "utf8",
+  });
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: prod evidence temp file evidence target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+
+  if (!String(result.stderr).includes("DEPLOYMENT_REGION_TARGET production için lokal temp path olmamalı.")) {
+    console.error("Production evidence template kontrolü başarısız: prod evidence temp file evidence target negative beklenen hata yok.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
+function runProdEvidenceSymlinkEvidenceTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "prod-evidence-symlink-"));
+  const linkPath = join(root, "deployment-region.json");
+  symlinkSync(resolve("docs/evidence-templates/deployment-region.example.json"), linkPath);
+
+  try {
+    const env = createValidProdEnvForNegativeCheck();
+    env.DEPLOYMENT_REGION_TARGET = pathToFileURL(linkPath).href;
+
+    const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
+      env,
+      encoding: "utf8",
+    });
+
+    if (result.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: prod evidence symlink evidence target negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+
+    if (!String(result.stderr).includes("DEPLOYMENT_REGION_TARGET production için symlink olmayan file artifact olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: prod evidence symlink evidence target negative beklenen hata yok.");
+      console.error(result.stderr);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function runProdEvidenceSymlinkParentEvidenceTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "prod-evidence-symlink-parent-"));
+  const realDirectory = join(root, "real-dir");
+  const symlinkDirectory = join(root, "symlink-dir");
+  mkdirSync(realDirectory, { recursive: true });
+  writeFileSync(
+    join(realDirectory, "deployment-region.json"),
+    readFileSync("docs/evidence-templates/deployment-region.example.json", "utf8"),
+  );
+  symlinkSync(realDirectory, symlinkDirectory, "dir");
+
+  try {
+    const env = createValidProdEnvForNegativeCheck();
+    env.DEPLOYMENT_REGION_TARGET = pathToFileURL(join(symlinkDirectory, "deployment-region.json")).href;
+
+    const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
+      env,
+      encoding: "utf8",
+    });
+
+    if (result.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: prod evidence symlink parent evidence target negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+
+    if (!String(result.stderr).includes("DEPLOYMENT_REGION_TARGET production için parent dizini symlink olmayan dizin olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: prod evidence symlink parent evidence target negative beklenen hata yok.");
+      console.error(result.stderr);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 }
 
@@ -3636,6 +4785,18 @@ function createValidProdEnvForNegativeCheck() {
     ALERT_WEBHOOK_TOKEN: "alert-webhook-token-123456789012345",
     ROLLBACK_IMAGE_TAG: "ghcr.io/uzman-hocam/uzman-hocam/api:2026-06-14.1",
   };
+
+  for (const key of [
+    "TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE",
+    "SMS_PROVIDER_SMOKE_EVIDENCE_FILE",
+    "NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE",
+    "SENTRY_SMOKE_EVIDENCE_FILE",
+    "ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE",
+    "BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE",
+    "WAL_ARCHIVE_SMOKE_EVIDENCE_FILE",
+  ]) {
+    delete env[key];
+  }
 
   for (const key of [
     "DEPLOYMENT_REGION_TARGET",

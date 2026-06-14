@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
+import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
 
@@ -185,7 +186,11 @@ let targetUrl;
 try {
   targetUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(target) ? new URL(target) : pathToFileURL(target);
 } catch {
-  fail(["PRODUCTION_EVIDENCE_SUMMARY_TARGET file://, http:// veya https:// URL olmalı."]);
+  fail(["PRODUCTION_EVIDENCE_SUMMARY_TARGET file:// veya https:// URL olmalı."]);
+}
+
+if (!isAllowedEvidenceTargetUrl(targetUrl)) {
+  fail(["PRODUCTION_EVIDENCE_SUMMARY_TARGET file:// veya https:// URL olmalı."]);
 }
 
 const summary = await readJsonTarget(targetUrl);
@@ -199,10 +204,10 @@ console.log(`Production evidence summary kontrolü geçti: ${summary.generatedAt
 
 async function readJsonTarget(url) {
   if (url.protocol === "file:") {
-    return parseJson(await readFile(fileURLToPath(url), "utf8"));
+    return parseJson(await readEvidenceFile(url, "PRODUCTION_EVIDENCE_SUMMARY_TARGET"));
   }
 
-  if (url.protocol === "http:" || url.protocol === "https:") {
+  if (url.protocol === "https:") {
     const response = await fetch(url);
     if (!response.ok) {
       fail([`Production evidence summary okunamadı: HTTP ${response.status}`]);
@@ -210,7 +215,78 @@ async function readJsonTarget(url) {
     return parseJson(await response.text());
   }
 
-  fail(["PRODUCTION_EVIDENCE_SUMMARY_TARGET yalnız file://, http:// veya https:// destekler."]);
+  fail(["PRODUCTION_EVIDENCE_SUMMARY_TARGET yalnız file:// veya https:// destekler."]);
+}
+
+async function readEvidenceFile(url, label) {
+  const filePath = fileURLToPath(url);
+  await assertParentPathAllowed(dirname(filePath), label);
+
+  let stat;
+  try {
+    stat = await lstat(filePath);
+  } catch {
+    fail([`${label} okunabilir file:// artifact olmalı.`]);
+  }
+
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    fail([`${label} symlink olmayan file:// artifact olmalı.`]);
+  }
+
+  return readFile(filePath, "utf8");
+}
+
+async function assertParentPathAllowed(parentPath, label) {
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+
+    let stat;
+    try {
+      stat = await lstat(current);
+    } catch (error) {
+      if (error?.code === "ENOENT") return;
+      throw error;
+    }
+
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      const failure =
+        label === "PRODUCTION_EVIDENCE_SUMMARY_TARGET"
+          ? "PRODUCTION_EVIDENCE_SUMMARY_TARGET parent dizini symlink olmayan dizin olmalı."
+          : `${label} parent dizini symlink olmayan dizin olmalı.`;
+      fail([failure]);
+    }
+  }
+}
+
+function isAllowedEvidenceTargetUrl(url) {
+  return (
+    (url.protocol === "file:" && !isLocalTempEvidenceTargetUrl(url)) ||
+    (url.protocol === "https:" && !isPlaceholderEvidenceTargetHost(url.hostname))
+  );
+}
+
+function isPlaceholderEvidenceTargetHost(hostname) {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized.endsWith(".localhost") ||
+    normalized.endsWith(".test") ||
+    normalized === "example.com" ||
+    normalized.endsWith(".example.com") ||
+    normalized.includes("example") ||
+    normalized.includes("__set") ||
+    normalized.includes("placeholder")
+  );
+}
+
+function isLocalTempEvidenceTargetUrl(url) {
+  const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
+  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
 }
 
 function parseJson(value) {

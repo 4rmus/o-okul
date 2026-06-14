@@ -1,10 +1,12 @@
-import { redactedUrl, writeSmokeEvidence } from "./smoke-evidence.mjs";
+import { redactedUrl, validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const webhookUrl = process.env.ALERT_WEBHOOK_URL;
 const token = process.env.ALERT_WEBHOOK_TOKEN;
 const environment = process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown";
 const evidenceFile = process.env.ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
 const checkedAt = new Date().toISOString();
+
+await validateSmokeEvidenceOutputTarget(evidenceFile);
 
 if (!webhookUrl) {
   fail("ALERT_WEBHOOK_URL boş bırakılamaz.");

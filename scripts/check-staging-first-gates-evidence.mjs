@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
+import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
 
@@ -121,9 +121,8 @@ function requireEvidenceFile(item, expected, manifest, manifestPath, failures) {
     return;
   }
 
-  const evidencePath = resolveEvidencePath(item.evidenceFile, manifestPath);
+  const evidencePath = resolveEvidencePath(item.evidenceFile, manifestPath, `checks.${item.label}.evidenceFile`, failures);
   if (!evidencePath) {
-    failures.push(`checks.${item.label}.evidenceFile okunabilir artifact'e bağlanmalı.`);
     return;
   }
 
@@ -171,16 +170,36 @@ function resolveTargetPath(target) {
   return resolve(target);
 }
 
-function resolveEvidencePath(value, manifestPath) {
-  const candidates = [];
-  if (value.startsWith("file://")) {
-    candidates.push(fileURLToPath(new URL(value)));
-  } else {
-    candidates.push(resolve(dirname(manifestPath), value));
-    candidates.push(resolve(value));
+function resolveEvidencePath(value, manifestPath, label, failures) {
+  const manifestDir = dirname(manifestPath);
+  if (value.startsWith("file://") || isAbsolute(value) || value !== basename(value)) {
+    failures.push(`${label} manifest dizini altında relative dosya adı olmalı.`);
+    return undefined;
   }
 
-  return candidates.find((candidate) => existsSync(candidate));
+  const candidate = resolve(manifestDir, value);
+  const manifestRelativePath = relative(manifestDir, candidate);
+  if (manifestRelativePath.startsWith("..") || isAbsolute(manifestRelativePath)) {
+    failures.push(`${label} manifest dizini altında relative dosya adı olmalı.`);
+    return undefined;
+  }
+
+  if (!existsSync(candidate)) {
+    failures.push(`${label} okunabilir artifact'e bağlanmalı.`);
+    return undefined;
+  }
+
+  const stat = lstatSync(candidate);
+  if (stat.isSymbolicLink()) {
+    failures.push(`${label} symlink olmayan dosya olmalı.`);
+    return undefined;
+  }
+  if (!stat.isFile()) {
+    failures.push(`${label} dosya olmalı.`);
+    return undefined;
+  }
+
+  return candidate;
 }
 
 function parseJson(value, label) {

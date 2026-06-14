@@ -1,9 +1,13 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, parse, relative, resolve, sep } from "node:path";
 
 const webAppRoot = "apps/web/app";
 const sourceRoots = ["apps/web/app", "apps/web/src"];
 const outputTarget = process.env.WEB_PERFORMANCE_PROFILE_OUT;
+const outputTempPathError = "WEB_PERFORMANCE_PROFILE_OUT lokal temp path olmamalı.";
+const outputFileSymlinkError = "WEB_PERFORMANCE_PROFILE_OUT symlink olmayan file artifact olmalı.";
+const outputParentSymlinkError = "WEB_PERFORMANCE_PROFILE_OUT parent dizini symlink olmayan dizin olmalı.";
+const outputFile = outputTarget ? validateOutputTarget(outputTarget) : null;
 const enforceBudget = process.env.WEB_PERFORMANCE_BUDGET === "1";
 const landingPageSource = readFileSync("apps/web/app/page.tsx", "utf8");
 
@@ -40,9 +44,12 @@ const profile = {
   routes: routeProfiles,
 };
 
-if (outputTarget) {
-  mkdirSync(dirname(outputTarget), { recursive: true });
-  writeFileSync(outputTarget, `${JSON.stringify(profile, null, 2)}\n`);
+if (outputFile) {
+  mkdirSync(dirname(outputFile), { recursive: true });
+  assertParentPathAllowed(dirname(outputFile));
+  assertExistingFileArtifact(outputFile);
+  writeFileSync(outputFile, `${JSON.stringify(profile, null, 2)}\n`);
+  assertExistingFileArtifact(outputFile);
 }
 
 console.log(JSON.stringify(profile, null, 2));
@@ -210,4 +217,50 @@ function resolveLocalImport(fromFile, specifier) {
   const base = join(dirname(fromFile), specifier).replace(/\.js$/, "");
   const candidates = [`${base}.tsx`, `${base}.ts`, join(base, "index.tsx"), join(base, "index.ts")];
   return candidates.find((candidate) => sourceFileSet.has(candidate));
+}
+
+function validateOutputTarget(target) {
+  const file = resolve(target);
+  if (isLocalTempPath(file)) {
+    fail(outputTempPathError);
+  }
+
+  assertParentPathAllowed(dirname(file));
+  assertExistingFileArtifact(file);
+  return file;
+}
+
+function assertParentPathAllowed(parentPath) {
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+    if (!existsSync(current)) return;
+
+    const stat = lstatSync(current);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      fail(outputParentSymlinkError);
+    }
+  }
+}
+
+function assertExistingFileArtifact(file) {
+  if (!existsSync(file)) return;
+
+  const stat = lstatSync(file);
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    fail(outputFileSymlinkError);
+  }
+}
+
+function isLocalTempPath(path) {
+  const normalized = path.replace(/\/+$/g, "") || "/";
+  return normalized === "/tmp" || normalized.startsWith("/tmp/") || normalized === "/var/tmp" || normalized.startsWith("/var/tmp/");
+}
+
+function fail(message) {
+  console.error(message);
+  process.exit(1);
 }

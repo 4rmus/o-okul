@@ -12,7 +12,7 @@ describe("BackupRestoreService", () => {
     const auditLogs = new FakeAuditLogService();
     const service = new BackupRestoreService(createBackupRestoreJobStore(), producer, auditLogs as unknown as AuditLogService);
 
-    const targetReference = "file:///tmp/staging-drill-2026-06.json";
+    const targetReference = "file:///mnt/restore-drills/staging-drill-2026-06.json";
     const record = await service.enqueue(tenantAdminContext, {
       operationType: "RESTORE_DRILL",
       targetReference,
@@ -99,6 +99,18 @@ describe("BackupRestoreService", () => {
       targetReference: "staging-drill-2026-06",
       confirmationText: "RESTORE DRILL",
     })).rejects.toThrow(BadRequestException);
+    expect(producer.inputs).toHaveLength(0);
+  });
+
+  it("restore drill hedefi lokal temp file URL ise job oluşturmaz", async () => {
+    const producer = new FakeProducer();
+    const service = new BackupRestoreService(createBackupRestoreJobStore(), producer);
+
+    await expect(service.enqueue(tenantAdminContext, {
+      operationType: "RESTORE_DRILL",
+      targetReference: "file:///tmp/staging-drill-2026-06.json",
+      confirmationText: "RESTORE DRILL",
+    })).rejects.toThrow("BACKUP_RESTORE_EVIDENCE_FILE_TEMP_PATH_DISALLOWED");
     expect(producer.inputs).toHaveLength(0);
   });
 

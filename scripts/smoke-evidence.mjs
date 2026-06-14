@@ -1,17 +1,28 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { lstat, mkdir, writeFile } from "node:fs/promises";
+import { dirname, parse, resolve } from "node:path";
 
 export async function writeSmokeEvidence(filePath, payload) {
   if (!filePath) return;
-  await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(
-    filePath,
-    `${JSON.stringify({
-      generatedAt: new Date().toISOString(),
-      ...payload,
-    }, null, 2)}\n`,
-    "utf8",
-  );
+  const resolvedPath = resolve(filePath);
+  const finalPayload = {
+    generatedAt: new Date().toISOString(),
+    ...payload,
+  };
+  const payloadFailures = validateSmokeEvidencePayload(finalPayload, { label: "Smoke evidence output" });
+  if (payloadFailures.length > 0) {
+    throw new Error(`SMOKE_EVIDENCE_PAYLOAD_INVALID: ${payloadFailures.join("; ")}`);
+  }
+  await validateSmokeEvidenceOutputPath(resolvedPath);
+  await mkdir(dirname(resolvedPath), { recursive: true });
+  await assertParentDirectoryAllowed(dirname(resolvedPath));
+  await assertExistingFileArtifact(resolvedPath);
+  await writeFile(resolvedPath, `${JSON.stringify(finalPayload, null, 2)}\n`, "utf8");
+  await assertExistingFileArtifact(resolvedPath);
+}
+
+export async function validateSmokeEvidenceOutputTarget(filePath) {
+  if (!filePath) return;
+  await validateSmokeEvidenceOutputPath(resolve(filePath));
 }
 
 export function validateSmokeEvidencePayload(
@@ -48,6 +59,62 @@ export function redactedUrl(value) {
   url.password = "";
   url.hash = "";
   return url.href;
+}
+
+async function validateSmokeEvidenceOutputPath(filePath) {
+  if (isLocalTempPath(filePath)) {
+    throw new Error("SMOKE_EVIDENCE_FILE lokal temp path olmamalı.");
+  }
+
+  await assertParentPathAllowed(dirname(filePath));
+  await assertExistingFileArtifact(filePath);
+}
+
+async function assertParentPathAllowed(parentPath) {
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+
+    let stat;
+    try {
+      stat = await lstat(current);
+    } catch (error) {
+      if (error?.code === "ENOENT") return;
+      throw error;
+    }
+
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new Error("SMOKE_EVIDENCE_FILE parent directory symlink olmayan dizin olmalı.");
+    }
+  }
+}
+
+async function assertParentDirectoryAllowed(parentPath) {
+  const stat = await lstat(parentPath);
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new Error("SMOKE_EVIDENCE_FILE parent directory symlink olmayan dizin olmalı.");
+  }
+}
+
+async function assertExistingFileArtifact(filePath) {
+  let stat;
+  try {
+    stat = await lstat(filePath);
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    throw error;
+  }
+
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new Error("SMOKE_EVIDENCE_FILE symlink olmayan file artifact olmalı.");
+  }
+}
+
+function isLocalTempPath(filePath) {
+  return filePath === "/tmp" || filePath.startsWith("/tmp/") || filePath === "/var/tmp" || filePath.startsWith("/var/tmp/");
 }
 
 function requireDateNotInFuture(scope, failures, label, key, allowExampleEvidence = false) {
@@ -213,6 +280,9 @@ function validateCheckSpecificPayload(payload, failures, label, allowExampleEvid
       requireSmokeTarget(payload, failures, `${label}.target`, "target", allowExampleEvidence);
       requireSha256(payload, failures, `${label}.markerSha256`, "markerSha256");
       break;
+    case "backup_restore_smoke":
+      requireBackupRestoreSmoke(payload, failures, label, allowExampleEvidence);
+      break;
     case "rate_limit_redis_smoke":
       requireRateLimitRedisSmoke(payload, failures, label, allowExampleEvidence);
       break;
@@ -225,6 +295,46 @@ function validateCheckSpecificPayload(payload, failures, label, allowExampleEvid
     default:
       break;
   }
+}
+
+function requireBackupRestoreSmoke(payload, failures, label, allowExampleEvidence) {
+  requireObjectKeySet(payload, failures, label, "backupRestoreSmoke", [
+    "generatedAt",
+    "result",
+    "check",
+    "environment",
+    "checkedAt",
+    "restoreDatabaseHash",
+    "dumpFormat",
+    "tableCounts",
+    "durationMs",
+    "commandsPassed",
+    "gaps",
+  ]);
+  requireSmokeRunMetadata(payload, failures, label, "pnpm backup:restore:smoke", allowExampleEvidence);
+  requireSha256(payload, failures, `${label}.restoreDatabaseHash`, "restoreDatabaseHash");
+  requireLiteral(payload, failures, `${label}.dumpFormat`, "dumpFormat", "custom");
+  requireIntegerAtLeast(payload, failures, `${label}.durationMs`, "durationMs", 0);
+  requireBackupRestoreTableCounts(payload.tableCounts, failures, `${label}.tableCounts`);
+  requireNoForbiddenKeys(payload, failures, label, ["restoreDb", "databaseUrl", "directDatabaseUrl", "dumpPath", "password"]);
+}
+
+function requireBackupRestoreTableCounts(tableCounts, failures, label) {
+  if (
+    !requireObjectKeySet(tableCounts, failures, label, "tableCounts", [
+      "Tenant",
+      "AuditLog",
+      "ReportSnapshot",
+      "_prisma_migrations",
+    ])
+  ) {
+    return;
+  }
+
+  requireIntegerAtLeast(tableCounts, failures, `${label}.Tenant`, "Tenant", 0);
+  requireIntegerAtLeast(tableCounts, failures, `${label}.AuditLog`, "AuditLog", 0);
+  requireIntegerAtLeast(tableCounts, failures, `${label}.ReportSnapshot`, "ReportSnapshot", 0);
+  requireIntegerAtLeast(tableCounts, failures, `${label}._prisma_migrations`, "_prisma_migrations", 1);
 }
 
 function requireRateLimitRedisSmoke(payload, failures, label, allowExampleEvidence) {

@@ -1,15 +1,48 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, parse, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
 
 const env = { ...process.env, ...readEnvFileArg() };
 const summaryFile = readArgValue("--summary-file");
+const summaryOutputFile = summaryFile ? validateSummaryOutputFile(summaryFile) : undefined;
 const summarySmokeEnvironments = ["staging", "production"];
+const evidenceTargetKeys = [
+  "DEPLOYMENT_REGION_TARGET",
+  "DEPLOYMENT_ROLLBACK_TARGET",
+  "GITHUB_CI_EVIDENCE_TARGET",
+  "RESTORE_DRILL_TARGET",
+  "KVKK_INVENTORY_TARGET",
+  "IDENTITY_MIGRATION_TARGET",
+  "FINANCIAL_RETENTION_TARGET",
+  "UPLOAD_AV_TARGET",
+  "OBSERVABILITY_UAT_TARGET",
+  "EXTERNAL_MONITORING_TARGET",
+  "ADMIN_MFA_EVIDENCE_TARGET",
+  "AI_REPORT_SUMMARY_EVIDENCE_TARGET",
+  "SECURITY_AUDIT_TARGET",
+  "UAT_EVIDENCE_TARGET",
+  "LIVE_EXAM_CYCLE_TARGET",
+  "INLINE_UPLOAD_CONTENT_MIGRATION_TARGET",
+  "RATE_LIMIT_EVIDENCE_TARGET",
+  "RLS_LIVE_EVIDENCE_TARGET",
+  "PILOT_EVIDENCE_TARGET",
+  "GO_LIVE_EVIDENCE_TARGET",
+  "LIVE_STATUS_EVIDENCE_TARGET",
+];
+const smokeEvidenceFileDefaults = {
+  TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE: "traefik-https.json",
+  SMS_PROVIDER_SMOKE_EVIDENCE_FILE: "sms-provider.json",
+  NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE: "notification-provider.json",
+  SENTRY_SMOKE_EVIDENCE_FILE: "sentry-event.json",
+  ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE: "alert-webhook.json",
+  BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE: "backup-offsite.json",
+  WAL_ARCHIVE_SMOKE_EVIDENCE_FILE: "wal-archive.json",
+};
 
-if (summaryFile) {
-  applySmokeEvidenceDefaults(summaryFile);
+if (summaryOutputFile) {
+  applySmokeEvidenceDefaults(summaryOutputFile);
 }
 
 const checks = [
@@ -61,6 +94,9 @@ const reportArtifacts = {
   uat: "uat.json",
 };
 
+requireSmokeEvidenceFileTargets();
+requireEvidenceTargetUrls();
+
 for (const [label, script] of checks) {
   const result = spawnSync(process.execPath, [script], {
     env,
@@ -73,9 +109,9 @@ for (const [label, script] of checks) {
   }
 }
 
-if (summaryFile) {
-  writeSummary(summaryFile);
-  validateSummaryFile(summaryFile);
+if (summaryOutputFile) {
+  writeSummary(summaryOutputFile);
+  validateSummaryFile(summaryOutputFile);
 }
 
 console.log("Production evidence kontrolü geçti.");
@@ -115,7 +151,36 @@ function readArgValue(name) {
   return value;
 }
 
+function requireEvidenceTargetUrls() {
+  const failures = [];
+  for (const key of evidenceTargetKeys) {
+    if (!env[key]) continue;
+    const url = toOptionalEvidenceTargetUrl(env[key]);
+    if (!url || !isAllowedEvidenceTargetUrl(url)) {
+      failures.push(`${key} file:// veya https:// URL olmalı.`);
+      continue;
+    }
+    if (url.protocol === "https:" && isPlaceholderHost(url.hostname)) {
+      failures.push(`${key} production için gerçek https host olmalı.`);
+    }
+    if (url.protocol === "file:" && isLocalTempFileUrl(url)) {
+      failures.push(`${key} production için lokal temp path olmamalı.`);
+    }
+    if (url.protocol === "file:" && !isFileUrlParentPathAllowed(url)) {
+      failures.push(`${key} production için parent dizini symlink olmayan dizin olmalı.`);
+    }
+    if (url.protocol === "file:" && !isRegularNonSymlinkFileUrl(url)) {
+      failures.push(`${key} production için symlink olmayan file artifact olmalı.`);
+    }
+  }
+
+  if (failures.length > 0) {
+    fail(failures);
+  }
+}
+
 function writeSummary(file) {
+  validateSummaryOutputFile(file);
   const smokeEvidence = {
     traefikHttps: readSmokeEvidence("TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE", "traefik_https_smoke"),
     smsProvider: readSmokeEvidence("SMS_PROVIDER_SMOKE_EVIDENCE_FILE", "sms_provider_smoke"),
@@ -330,17 +395,27 @@ function writeSummary(file) {
   };
 
   writeReportArtifacts(file, reports);
+  assertExistingFileArtifact(file, "--summary-file");
   mkdirSync(dirname(file), { recursive: true });
+  validateManagedSiblingDirectory(file, "reports");
+  validateManagedSiblingDirectory(file, "smoke");
+  assertExistingFileArtifact(file, "--summary-file");
   writeFileSync(file, `${JSON.stringify(summary, null, 2)}\n`);
+  assertExistingFileArtifact(file, "--summary-file");
   console.log(`Production evidence summary yazıldı: ${file}`);
 }
 
 function writeReportArtifacts(summaryFilePath, reports) {
   const reportsDir = join(dirname(summaryFilePath), "reports");
+  validateManagedSiblingDirectory(summaryFilePath, "reports");
   mkdirSync(reportsDir, { recursive: true });
+  validateManagedSiblingDirectory(summaryFilePath, "reports");
 
   for (const [key, fileName] of Object.entries(reportArtifacts)) {
-    writeFileSync(join(reportsDir, fileName), `${JSON.stringify(reports[key], null, 2)}\n`);
+    const reportFile = join(reportsDir, fileName);
+    assertExistingFileArtifact(reportFile, `reports/${fileName}`);
+    writeFileSync(reportFile, `${JSON.stringify(reports[key], null, 2)}\n`);
+    assertExistingFileArtifact(reportFile, `reports/${fileName}`);
   }
 }
 
@@ -361,18 +436,103 @@ function validateSummaryFile(file) {
 
 function applySmokeEvidenceDefaults(file) {
   const directory = join(dirname(file), "smoke");
-  const defaults = {
-    TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE: "traefik-https.json",
-    SMS_PROVIDER_SMOKE_EVIDENCE_FILE: "sms-provider.json",
-    NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE: "notification-provider.json",
-    SENTRY_SMOKE_EVIDENCE_FILE: "sentry-event.json",
-    ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE: "alert-webhook.json",
-    BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE: "backup-offsite.json",
-    WAL_ARCHIVE_SMOKE_EVIDENCE_FILE: "wal-archive.json",
-  };
+  validateManagedSiblingDirectory(file, "smoke");
 
-  for (const [key, fileName] of Object.entries(defaults)) {
+  for (const [key, fileName] of Object.entries(smokeEvidenceFileDefaults)) {
     env[key] ||= join(directory, fileName);
+  }
+}
+
+function validateSummaryOutputFile(file) {
+  const resolvedFile = resolve(file);
+  if (isLocalTempPath(resolvedFile)) {
+    fail(["--summary-file lokal temp path olmamalı."]);
+  }
+
+  assertParentPathAllowed(dirname(resolvedFile), "--summary-file parent dizini");
+  assertExistingFileArtifact(resolvedFile, "--summary-file");
+  validateManagedSiblingDirectory(resolvedFile, "reports");
+  validateManagedSiblingDirectory(resolvedFile, "smoke");
+  return resolvedFile;
+}
+
+function validateManagedSiblingDirectory(summaryFilePath, name) {
+  const directory = join(dirname(summaryFilePath), name);
+  if (!existsSync(directory)) return;
+
+  const stat = lstatSync(directory);
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    fail([`--summary-file ${name} dizini symlink olmayan dizin olmalı.`]);
+  }
+}
+
+function assertParentPathAllowed(parentPath, label, failureMessage = `${label} symlink olmayan dizin olmalı.`) {
+  if (!isParentPathAllowed(parentPath)) {
+    fail([failureMessage]);
+  }
+}
+
+function isParentPathAllowed(parentPath) {
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+    if (!existsSync(current)) return;
+
+    const stat = lstatSync(current);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function assertExistingFileArtifact(filePath, label) {
+  if (!existsSync(filePath)) return;
+
+  const stat = lstatSync(filePath);
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    fail([`${label} symlink olmayan file artifact olmalı.`]);
+  }
+}
+
+function requireSmokeEvidenceFileTargets() {
+  for (const key of Object.keys(smokeEvidenceFileDefaults)) {
+    const file = env[key];
+    if (!file) continue;
+    validateSmokeEvidenceFileTarget(key, file);
+  }
+}
+
+function validateSmokeEvidenceFileTarget(key, file, { requireExisting = false } = {}) {
+  const resolvedFile = resolve(file);
+  if (isLocalTempPath(resolvedFile)) {
+    fail([`${key} production için lokal temp path olmamalı.`]);
+  }
+
+  assertParentPathAllowed(
+    dirname(resolvedFile),
+    `${key} parent dizini`,
+    `${key} parent dizini symlink olmayan dizin olmalı.`,
+  );
+  assertSmokeEvidenceFileArtifact(resolvedFile, key, { requireExisting, originalFile: file });
+  return resolvedFile;
+}
+
+function assertSmokeEvidenceFileArtifact(filePath, key, { requireExisting = false, originalFile = filePath } = {}) {
+  if (!existsSync(filePath)) {
+    if (requireExisting) {
+      fail([`Smoke kanıt dosyası eksik: ${key}=${originalFile}`]);
+    }
+    return;
+  }
+
+  const stat = lstatSync(filePath);
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    fail([`${key} production için symlink olmayan smoke artifact olmalı.`]);
   }
 }
 
@@ -381,12 +541,10 @@ function readSmokeEvidence(key, expectedCheck) {
   if (!file) {
     fail([`${key} boş bırakılamaz.`]);
   }
-  if (!existsSync(file)) {
-    fail([`Smoke kanıt dosyası eksik: ${key}=${file}`]);
-  }
+  const resolvedFile = validateSmokeEvidenceFileTarget(key, file, { requireExisting: true });
 
   try {
-    const payload = JSON.parse(readFileSync(file, "utf8"));
+    const payload = JSON.parse(readFileSync(resolvedFile, "utf8"));
     const failures = validateSmokeEvidencePayload(payload, {
       expectedCheck,
       allowedEnvironments: summarySmokeEnvironments,
@@ -402,17 +560,95 @@ function readSmokeEvidence(key, expectedCheck) {
 }
 
 function readJsonTarget(target) {
-  const url = new URL(target);
+  const url = toEvidenceTargetUrl(target, "Evidence target");
   if (url.protocol === "file:") {
-    return JSON.parse(readFileSync(fileURLToPath(url), "utf8"));
+    return JSON.parse(readEvidenceFile(url, "Evidence target"));
   }
 
-  if (url.protocol === "http:" || url.protocol === "https:") {
+  if (url.protocol === "https:") {
     const response = fetchSync(url);
     return JSON.parse(response);
   }
 
   throw new Error(`Desteklenmeyen evidence target: ${target}`);
+}
+
+function readEvidenceFile(url, label) {
+  const filePath = fileURLToPath(url);
+  let stat;
+  try {
+    stat = lstatSync(filePath);
+  } catch {
+    throw new Error(`${label} okunabilir file:// artifact olmalı.`);
+  }
+
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new Error(`${label} symlink olmayan file:// artifact olmalı.`);
+  }
+
+  return readFileSync(filePath, "utf8");
+}
+
+function toEvidenceTargetUrl(value, label) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${label} file:// veya https:// URL olmalı.`);
+  }
+
+  if (!isAllowedEvidenceTargetUrl(url)) {
+    throw new Error(`${label} file:// veya https:// URL olmalı.`);
+  }
+
+  return url;
+}
+
+function toOptionalEvidenceTargetUrl(value) {
+  try {
+    return new URL(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function isAllowedEvidenceTargetUrl(url) {
+  return ["file:", "https:"].includes(url.protocol);
+}
+
+function isLocalTempFileUrl(url) {
+  const path = decodeURIComponent(url.pathname).replace(/\/+$/g, "") || "/";
+  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+}
+
+function isLocalTempPath(path) {
+  const normalized = path.replace(/\/+$/g, "") || "/";
+  return normalized === "/tmp" || normalized.startsWith("/tmp/") || normalized === "/var/tmp" || normalized.startsWith("/var/tmp/");
+}
+
+function isRegularNonSymlinkFileUrl(url) {
+  try {
+    const stat = lstatSync(fileURLToPath(url));
+    return stat.isFile() && !stat.isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+function isFileUrlParentPathAllowed(url) {
+  return isParentPathAllowed(dirname(fileURLToPath(url)));
+}
+
+function isPlaceholderHost(hostname) {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized.endsWith(".localhost") ||
+    normalized.endsWith(".test") ||
+    normalized.includes("example") ||
+    normalized.includes("__set")
+  );
 }
 
 function fetchSync(url) {

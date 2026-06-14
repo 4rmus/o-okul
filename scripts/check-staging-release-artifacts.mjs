@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { basename, dirname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
 
@@ -198,6 +198,15 @@ const githubCiSummaryKeys = [
   "commandsPassed",
   "evidenceReferences",
 ];
+const forbiddenArtifactFileNames = new Set([
+  ".env",
+  ".env.local",
+  ".env.production",
+  ".staging-evidence.env",
+  "staging-evidence.env",
+  ".ghcr_read_token",
+  "ghcr_read_token",
+]);
 
 if (!artifactsTarget) {
   fail(["STAGING_RELEASE_ARTIFACTS_TARGET veya --artifacts-dir zorunlu."]);
@@ -206,6 +215,8 @@ if (!artifactsTarget) {
 const artifactsDir = resolveArtifactsDir(artifactsTarget);
 const failures = [];
 requireDirectory(artifactsDir, failures, "artifactsDir");
+requireNoSymlinks(artifactsDir, failures);
+requireNoForbiddenArtifactFiles(artifactsDir, failures);
 
 const githubCiFile = resolve(artifactsDir, "reports", "github-ci.json");
 const firstGatesManifestFile = resolve(artifactsDir, "first-gates", "first-gates-manifest.json");
@@ -222,6 +233,9 @@ for (const { file } of reportArtifacts.values()) {
 }
 if (releaseSummaryFiles.length !== 1) {
   failures.push(`artifactsDir tam 1 release-summary-*.json içermeli; bulundu: ${releaseSummaryFiles.length}.`);
+}
+if (releaseSummaryFiles.length === 1) {
+  requireExpectedArtifactEntries(artifactsDir, releaseSummaryFiles[0], failures);
 }
 
 if (failures.length === 0) {
@@ -257,12 +271,44 @@ function validateArtifactBundle(summaryFile, githubCiFilePath, manifestFilePath)
   if (!summary || !githubCi || !firstGatesManifest) return output;
 
   requireDateNotAfter(firstGatesManifest, output, "first-gates.generatedAt", "generatedAt", summary, "summary.generatedAt", "generatedAt");
+  requireReleaseSummaryFileNameMatchesSummary(summaryFile, summary, output);
   requireGithubCiMatchesSummary(summary, githubCi, output);
   requireReportFilesMatchSummary(summary, artifactsDir, output);
   requireSmokeFilesMatchSummary(summary, dirname(summaryFile), output);
   requireFirstGatesMatchSummary(summary, firstGatesManifest, manifestFilePath, output);
 
   return output;
+}
+
+function requireReleaseSummaryFileNameMatchesSummary(summaryFile, summary, output) {
+  const summaryFileName = basename(summaryFile);
+  const match = summaryFileName.match(/^release-summary-(.+)\.json$/);
+  if (!match) {
+    output.push("release summary dosya adı release-summary-<tag>.json biçiminde olmalı.");
+    return;
+  }
+
+  const fileTag = match[1];
+  const releaseCandidate = summary?.reports?.deploymentRollback?.releaseCandidate;
+  const releaseCandidateTag = extractImageTag(releaseCandidate);
+  if (!releaseCandidateTag) {
+    output.push("summary.reports.deploymentRollback.releaseCandidate tag içermeli.");
+    return;
+  }
+
+  if (fileTag !== releaseCandidateTag) {
+    output.push("release summary dosya tag'i summary.reports.deploymentRollback.releaseCandidate ile eşleşmeli.");
+  }
+}
+
+function extractImageTag(value) {
+  if (typeof value !== "string" || value.trim() === "") return undefined;
+  const slashIndex = value.lastIndexOf("/");
+  const colonIndex = value.lastIndexOf(":");
+  if (colonIndex > slashIndex) {
+    return value.slice(colonIndex + 1);
+  }
+  return value;
 }
 
 function requireGithubCiMatchesSummary(summary, githubCi, output) {
@@ -418,6 +464,10 @@ function requireDirectory(path, output, label) {
     output.push(`${label} bulunamadı: ${path}`);
     return;
   }
+  if (lstatSync(path).isSymbolicLink()) {
+    output.push(`${label} symlink olmayan dizin olmalı: ${path}`);
+    return;
+  }
   if (!statSync(path).isDirectory()) {
     output.push(`${label} dizin olmalı: ${path}`);
   }
@@ -428,9 +478,95 @@ function requireFile(path, output, label) {
     output.push(`${label} bulunamadı: ${path}`);
     return;
   }
+  if (lstatSync(path).isSymbolicLink()) {
+    output.push(`${label} symlink olmayan dosya olmalı: ${path}`);
+    return;
+  }
   if (!statSync(path).isFile()) {
     output.push(`${label} dosya olmalı: ${path}`);
   }
+}
+
+function requireExpectedArtifactEntries(rootDir, summaryFile, output) {
+  const expectedRootEntries = new Set(["first-gates", "reports", "smoke", basename(summaryFile)]);
+  requireExactDirectoryEntries(rootDir, expectedRootEntries, output);
+
+  requireExactDirectoryEntries(
+    resolve(rootDir, "reports"),
+    new Set([...reportArtifacts.values()].map(({ file }) => file)),
+    output,
+  );
+  requireExactDirectoryEntries(
+    resolve(rootDir, "smoke"),
+    new Set([...smokeArtifacts.values()].map(({ file }) => file)),
+    output,
+  );
+  requireExactDirectoryEntries(
+    resolve(rootDir, "first-gates"),
+    new Set([
+      "first-gates-manifest.json",
+      ...[...firstGateSummaryKeys.values()].map((summaryKey) => smokeArtifacts.get(summaryKey)?.file).filter(Boolean),
+    ]),
+    output,
+  );
+}
+
+function requireExactDirectoryEntries(dir, expectedEntries, output) {
+  if (!existsSync(dir)) return;
+  if (lstatSync(dir).isSymbolicLink()) {
+    output.push(`${relative(artifactsDir, dir) || "artifactsDir"} symlink olmayan dizin olmalı.`);
+    return;
+  }
+  if (!statSync(dir).isDirectory()) return;
+
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!expectedEntries.has(entry.name)) {
+      output.push(`${relative(artifactsDir, resolve(dir, entry.name))} beklenmeyen artifact dosyası.`);
+    }
+  }
+}
+
+function requireNoSymlinks(rootDir, output) {
+  if (!existsSync(rootDir)) return;
+
+  const stat = lstatSync(rootDir);
+  if (stat.isSymbolicLink()) {
+    output.push(`artifact bundle symlink içermemeli: ${relative(artifactsDir, rootDir) || "."}`);
+    return;
+  }
+  if (!stat.isDirectory()) return;
+
+  for (const entry of readdirSync(rootDir, { withFileTypes: true })) {
+    const filePath = resolve(rootDir, entry.name);
+    const artifactPath = relative(artifactsDir, filePath);
+    if (entry.isSymbolicLink()) {
+      output.push(`artifact bundle symlink içermemeli: ${artifactPath}`);
+      continue;
+    }
+    if (entry.isDirectory()) {
+      requireNoSymlinks(filePath, output);
+    }
+  }
+}
+
+function requireNoForbiddenArtifactFiles(rootDir, output) {
+  if (!existsSync(rootDir) || !statSync(rootDir).isDirectory()) return;
+
+  for (const entry of readdirSync(rootDir, { withFileTypes: true })) {
+    const filePath = resolve(rootDir, entry.name);
+    const artifactPath = relative(artifactsDir, filePath);
+    if (isForbiddenArtifactFileName(entry.name)) {
+      output.push(`artifact bundle secret/env dosyası içermemeli: ${artifactPath}`);
+      continue;
+    }
+    if (entry.isDirectory()) {
+      requireNoForbiddenArtifactFiles(filePath, output);
+    }
+  }
+}
+
+function isForbiddenArtifactFileName(fileName) {
+  return forbiddenArtifactFileNames.has(fileName) || /^\.env(?:\..+)?$/.test(fileName) || /\.env(?:\..+)?$/.test(fileName);
 }
 
 function readJsonFile(path, label, output) {

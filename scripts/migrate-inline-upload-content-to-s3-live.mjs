@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { Socket } from "node:net";
-import { writeFile } from "node:fs/promises";
+import { lstat, writeFile } from "node:fs/promises";
+import { dirname, parse, resolve } from "node:path";
 import pg from "pg";
 
 const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/uzman_hocam";
@@ -27,6 +28,7 @@ if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 1000) {
   throw new Error("INLINE_UPLOAD_CONTENT_MIGRATION_BATCH_SIZE must be an integer between 1 and 1000.");
 }
 
+const resolvedReportFile = reportFile ? await validateReportFile(reportFile) : undefined;
 const postgresUrl = new URL(directDatabaseUrl);
 await assertPort("Postgres", postgresUrl.hostname, Number(postgresUrl.port || 5432), "pnpm db:migrate");
 
@@ -223,8 +225,62 @@ function sha256(value) {
 }
 
 async function writeReport(report) {
-  if (!reportFile) return;
-  await writeFile(reportFile, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  if (!resolvedReportFile) return;
+  await assertExistingFileArtifact(resolvedReportFile);
+  await writeFile(resolvedReportFile, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  await assertExistingFileArtifact(resolvedReportFile);
+}
+
+async function validateReportFile(path) {
+  const resolvedPath = resolve(path);
+  if (isLocalTempPath(resolvedPath)) {
+    throw new Error("INLINE_UPLOAD_CONTENT_MIGRATION_REPORT_FILE lokal temp path olmamalı.");
+  }
+
+  await assertParentPathAllowed(dirname(resolvedPath));
+  await assertExistingFileArtifact(resolvedPath);
+  return resolvedPath;
+}
+
+async function assertParentPathAllowed(parentPath) {
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+
+    let stat;
+    try {
+      stat = await lstat(current);
+    } catch (error) {
+      if (error?.code === "ENOENT") return;
+      throw error;
+    }
+
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new Error("INLINE_UPLOAD_CONTENT_MIGRATION_REPORT_FILE parent dizini symlink olmayan dizin olmalı.");
+    }
+  }
+}
+
+async function assertExistingFileArtifact(path) {
+  let stat;
+  try {
+    stat = await lstat(path);
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    throw error;
+  }
+
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new Error("INLINE_UPLOAD_CONTENT_MIGRATION_REPORT_FILE symlink olmayan file artifact olmalı.");
+  }
+}
+
+function isLocalTempPath(path) {
+  const normalized = path.replace(/\/+$/g, "") || "/";
+  return normalized === "/tmp" || normalized.startsWith("/tmp/") || normalized === "/var/tmp" || normalized.startsWith("/var/tmp/");
 }
 
 async function assertPort(label, host, port, hint) {

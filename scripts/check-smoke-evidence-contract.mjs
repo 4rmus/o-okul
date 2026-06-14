@@ -1,5 +1,8 @@
-import { readFileSync } from "node:fs";
-import { validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { validateSmokeEvidenceOutputTarget, validateSmokeEvidencePayload, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const summary = JSON.parse(readFileSync("docs/evidence-templates/production-evidence-summary.example.json", "utf8"));
 
@@ -325,6 +328,41 @@ const negativeCases = [
     },
     "report_generation_smoke",
   ],
+  [
+    "Backup restore migration count reddedilir",
+    {
+      ...backupRestoreSmokePayload(),
+      tableCounts: {
+        ...backupRestoreSmokePayload().tableCounts,
+        _prisma_migrations: 0,
+      },
+    },
+    "backup_restore_smoke",
+  ],
+  [
+    "Backup restore yanlış komut reddedilir",
+    {
+      ...backupRestoreSmokePayload(),
+      commandsPassed: ["pnpm backup:restore"],
+    },
+    "backup_restore_smoke",
+  ],
+  [
+    "Backup restore ham DB adı reddedilir",
+    {
+      ...backupRestoreSmokePayload(),
+      restoreDb: "uzman_hocam_restore_smoke_20260614",
+    },
+    "backup_restore_smoke",
+  ],
+  [
+    "Backup restore beklenmeyen alan reddedilir",
+    {
+      ...backupRestoreSmokePayload(),
+      dumpPath: "/tmp/uzman_hocam_restore_smoke.dump",
+    },
+    "backup_restore_smoke",
+  ],
 ];
 
 failures.push(
@@ -351,6 +389,14 @@ failures.push(
     allowExampleEvidence: true,
   }),
 );
+failures.push(
+  ...validateSmokeEvidencePayload(backupRestoreSmokePayload(), {
+    expectedCheck: "backup_restore_smoke",
+    allowedEnvironments: ["staging", "production"],
+    label: "backupRestoreSmoke",
+    allowExampleEvidence: true,
+  }),
+);
 
 for (const [label, payload, expectedCheck] of negativeCases) {
   const caseFailures = validateSmokeEvidencePayload(payload, {
@@ -363,6 +409,9 @@ for (const [label, payload, expectedCheck] of negativeCases) {
     failures.push(`${label}: negatif senaryo hata üretmedi.`);
   }
 }
+
+await runSmokeEvidenceOutputNegativeChecks(failures);
+runFileTargetNegativeChecks(failures);
 
 if (failures.length > 0) {
   console.error("Smoke evidence contract kontrolü başarısız:");
@@ -485,4 +534,201 @@ function rateLimitRedisSmokePayload() {
     evidenceReferences: ["rate-limit-smoke-output", "redis-shared-window-observation"],
     gaps: [],
   };
+}
+
+function backupRestoreSmokePayload() {
+  return {
+    generatedAt: "2026-05-31T11:30:00.000Z",
+    result: "PASS",
+    check: "backup_restore_smoke",
+    environment: "staging",
+    checkedAt: "2026-05-31T11:30:00.000Z",
+    restoreDatabaseHash: "6".repeat(64),
+    dumpFormat: "custom",
+    tableCounts: {
+      Tenant: 2,
+      AuditLog: 1,
+      ReportSnapshot: 1,
+      _prisma_migrations: 56,
+    },
+    durationMs: 1250,
+    commandsPassed: ["pnpm backup:restore:smoke"],
+    gaps: [],
+  };
+}
+
+async function runSmokeEvidenceOutputNegativeChecks(output) {
+  const fixtureRoot = resolve("artifacts/prod-evidence-template-check/smoke-output-contract");
+  const tempOutputPath = "/tmp/smoke-evidence-output-temp-negative.json";
+  rmSync(fixtureRoot, { recursive: true, force: true });
+  rmSync(tempOutputPath, { force: true });
+  mkdirSync(fixtureRoot, { recursive: true });
+
+  try {
+    await expectValidateSmokeEvidenceOutputTargetFailure(
+      tempOutputPath,
+      "SMOKE_EVIDENCE_FILE lokal temp path olmamalı.",
+      "smoke evidence preflight temp path negative",
+      output,
+    );
+
+    await expectWriteSmokeEvidenceFailure(
+      tempOutputPath,
+      "SMOKE_EVIDENCE_FILE lokal temp path olmamalı.",
+      "smoke evidence output temp path negative",
+      output,
+    );
+
+    const positiveOutput = resolve(fixtureRoot, "positive.json");
+    await writeSmokeEvidence(positiveOutput, { result: "PASS", check: "smoke_output_contract_positive" });
+
+    await expectWriteSmokeEvidenceFailure(
+      resolve(fixtureRoot, "invalid-payload.json"),
+      "SMOKE_EVIDENCE_PAYLOAD_INVALID",
+      "smoke evidence writer invalid payload negative",
+      output,
+      {
+        result: "PASS",
+        check: "sms_provider_smoke",
+        environment: "staging",
+        checkedAt: "2026-05-31T11:30:00.000Z",
+        provider: "noop",
+        recipient: "*******1234",
+        segments: 1,
+        providerMessageId: "sms-provider-message-001",
+        commandsPassed: ["pnpm sms:smoke"],
+        gaps: [],
+      },
+    );
+
+    const realFile = resolve(fixtureRoot, "real.json");
+    const symlinkFile = resolve(fixtureRoot, "symlink.json");
+    writeFileSync(realFile, "{}\n");
+    symlinkSync(realFile, symlinkFile);
+    await expectWriteSmokeEvidenceFailure(
+      symlinkFile,
+      "SMOKE_EVIDENCE_FILE symlink olmayan file artifact olmalı.",
+      "smoke evidence output symlink file negative",
+      output,
+    );
+
+    const realDirectory = resolve(fixtureRoot, "real-dir");
+    const symlinkDirectory = resolve(fixtureRoot, "symlink-dir");
+    mkdirSync(realDirectory, { recursive: true });
+    symlinkSync(realDirectory, symlinkDirectory, "dir");
+    await expectWriteSmokeEvidenceFailure(
+      resolve(symlinkDirectory, "evidence.json"),
+      "SMOKE_EVIDENCE_FILE parent directory symlink olmayan dizin olmalı.",
+      "smoke evidence output symlink parent negative",
+      output,
+    );
+  } finally {
+    rmSync(fixtureRoot, { recursive: true, force: true });
+    rmSync(tempOutputPath, { force: true });
+  }
+}
+
+async function expectValidateSmokeEvidenceOutputTargetFailure(filePath, expectedMessage, label, output) {
+  try {
+    await validateSmokeEvidenceOutputTarget(filePath);
+    output.push(`${label}: negatif senaryo hata üretmedi.`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes(expectedMessage)) {
+      output.push(`${label}: beklenen hata yok (${expectedMessage}); alınan: ${message}`);
+    }
+  }
+}
+
+async function expectWriteSmokeEvidenceFailure(
+  filePath,
+  expectedMessage,
+  label,
+  output,
+  payload = { result: "PASS", check: "smoke_output_contract_negative" },
+) {
+  try {
+    await writeSmokeEvidence(filePath, payload);
+    output.push(`${label}: negatif senaryo hata üretmedi.`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes(expectedMessage)) {
+      output.push(`${label}: beklenen hata yok (${expectedMessage}); alınan: ${message}`);
+    }
+  }
+}
+
+function runFileTargetNegativeChecks(output) {
+  const root = resolve("artifacts/prod-evidence-template-check/smoke-file-target-contract");
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(root, { recursive: true });
+
+  try {
+    for (const smoke of fileTargetSmokeChecks()) {
+      expectSmokeFileTargetFailure(
+        smoke,
+        `file:///tmp/${smoke.envKey.toLowerCase()}-negative`,
+        smoke.tempError,
+        smoke.tempNegativeLabel,
+        output,
+      );
+
+      const realDirectory = join(root, `${smoke.envKey.toLowerCase()}-real`);
+      const symlinkDirectory = join(root, `${smoke.envKey.toLowerCase()}-symlink`);
+      mkdirSync(realDirectory, { recursive: true });
+      symlinkSync(realDirectory, symlinkDirectory, "dir");
+      expectSmokeFileTargetFailure(
+        smoke,
+        pathToFileURL(symlinkDirectory).href,
+        smoke.symlinkError,
+        smoke.symlinkNegativeLabel,
+        output,
+      );
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function fileTargetSmokeChecks() {
+  return [
+    {
+      label: "Backup offsite smoke",
+      tempNegativeLabel: "Backup offsite smoke temp file target negative",
+      symlinkNegativeLabel: "Backup offsite smoke symlink file target negative",
+      script: "scripts/smoke-backup-offsite.mjs",
+      envKey: "BACKUP_OFFSITE_TARGET",
+      tempError: "BACKUP_OFFSITE_TARGET file:// hedefi lokal temp/root path olmamalı.",
+      symlinkError: "BACKUP_OFFSITE_TARGET file:// hedefi symlink olmayan dizin olmalı.",
+    },
+    {
+      label: "WAL archive smoke",
+      tempNegativeLabel: "WAL archive smoke temp file target negative",
+      symlinkNegativeLabel: "WAL archive smoke symlink file target negative",
+      script: "scripts/smoke-wal-archive-target.mjs",
+      envKey: "WAL_ARCHIVE_TARGET",
+      tempError: "WAL_ARCHIVE_TARGET file:// hedefi lokal temp/root path olmamalı.",
+      symlinkError: "WAL_ARCHIVE_TARGET file:// hedefi symlink olmayan dizin olmalı.",
+    },
+  ];
+}
+
+function expectSmokeFileTargetFailure(smoke, target, expectedMessage, label, output) {
+  const result = spawnSync(process.execPath, [smoke.script], {
+    env: {
+      ...process.env,
+      [smoke.envKey]: target,
+    },
+    encoding: "utf8",
+  });
+  const message = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  if (result.status === 0) {
+    output.push(`${label}: negatif senaryo hata üretmedi.`);
+    return;
+  }
+
+  if (!message.includes(expectedMessage)) {
+    output.push(`${label}: beklenen hata yok (${expectedMessage}); alınan: ${message}`);
+  }
 }

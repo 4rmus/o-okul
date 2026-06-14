@@ -1,6 +1,6 @@
+import { existsSync, lstatSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-import { NestFactory } from "@nestjs/core";
+import { dirname, parse, resolve } from "node:path";
 
 process.env.NODE_ENV ??= "test";
 process.env.PERSISTENCE_DRIVER ??= "memory";
@@ -10,11 +10,15 @@ process.env.LOG_ENABLED ??= "false";
 process.env.REPORT_PDF_RENDERER ??= "memory";
 process.env.OPENAPI_UI_ENABLED = "false";
 
-const outputPath = process.env.OPENAPI_OUTPUT || "artifacts/openapi.json";
+const outputTempPathError = "OPENAPI_OUTPUT lokal temp path olmamalı.";
+const outputFileSymlinkError = "OPENAPI_OUTPUT symlink olmayan file artifact olmalı.";
+const outputParentSymlinkError = "OPENAPI_OUTPUT parent dizini symlink olmayan dizin olmalı.";
+const outputPath = validateOutputTarget(process.env.OPENAPI_OUTPUT || "artifacts/openapi.json");
 
 let app;
 try {
-  const [{ AppModule }, { configureApiApp }, { createOpenApiDocument }] = await Promise.all([
+  const [{ NestFactory }, { AppModule }, { configureApiApp }, { createOpenApiDocument }] = await Promise.all([
+    import("@nestjs/core"),
     import("../apps/api/dist/app.module.js"),
     import("../apps/api/dist/http/configure-api-app.js"),
     import("../apps/api/dist/openapi.js"),
@@ -28,7 +32,10 @@ try {
   validateOpenApiDocument(document);
 
   await mkdir(dirname(outputPath), { recursive: true });
+  assertParentPathAllowed(dirname(outputPath));
+  assertExistingFileArtifact(outputPath);
   await writeFile(outputPath, `${JSON.stringify(document, null, 2)}\n`);
+  assertExistingFileArtifact(outputPath);
 
   console.log(`OpenAPI JSON yazıldı: ${outputPath} (${Object.keys(document.paths).length} path).`);
 } catch (error) {
@@ -72,4 +79,50 @@ function validateOpenApiDocument(document) {
   if (failures.length > 0) {
     throw new Error(failures.join("\n"));
   }
+}
+
+function validateOutputTarget(target) {
+  const file = resolve(target);
+  if (isLocalTempPath(file)) {
+    fail(outputTempPathError);
+  }
+
+  assertParentPathAllowed(dirname(file));
+  assertExistingFileArtifact(file);
+  return file;
+}
+
+function assertParentPathAllowed(parentPath) {
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+    if (!existsSync(current)) return;
+
+    const stat = lstatSync(current);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      fail(outputParentSymlinkError);
+    }
+  }
+}
+
+function assertExistingFileArtifact(file) {
+  if (!existsSync(file)) return;
+
+  const stat = lstatSync(file);
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    fail(outputFileSymlinkError);
+  }
+}
+
+function isLocalTempPath(path) {
+  const normalized = path.replace(/\/+$/g, "") || "/";
+  return normalized === "/tmp" || normalized.startsWith("/tmp/") || normalized === "/var/tmp" || normalized.startsWith("/var/tmp/");
+}
+
+function fail(message) {
+  console.error(message);
+  process.exit(1);
 }

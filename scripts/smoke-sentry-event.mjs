@@ -1,11 +1,13 @@
 import * as Sentry from "@sentry/node";
-import { redactedUrl, writeSmokeEvidence } from "./smoke-evidence.mjs";
+import { redactedUrl, validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const dsn = process.env.SENTRY_DSN;
 const environment = process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown";
 const message = process.env.SENTRY_SMOKE_MESSAGE ?? "Uzman Hocam Sentry smoke";
 const evidenceFile = process.env.SENTRY_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
 const checkedAt = new Date().toISOString();
+
+await validateSmokeEvidenceOutputTarget(evidenceFile);
 
 if (!dsn) {
   fail("SENTRY_DSN boş bırakılamaz.");

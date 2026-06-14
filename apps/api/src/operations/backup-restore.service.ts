@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, Optional } from "@nestjs/common";
 import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
@@ -130,13 +131,35 @@ function confirmationFor(operationType: BackupRestoreOperationType): string {
 
 function assertTargetReference(operationType: BackupRestoreOperationType, targetReference: string): void {
   if (operationType === "BACKUP") return;
+  let url: URL;
   try {
-    const url = new URL(targetReference);
-    if (url.protocol === "file:") return;
+    url = new URL(targetReference);
   } catch {
-    // Fall through to the public error below.
+    throw new BadRequestException("BACKUP_RESTORE_EVIDENCE_FILE_URL_REQUIRED");
   }
-  throw new BadRequestException("BACKUP_RESTORE_EVIDENCE_FILE_URL_REQUIRED");
+  if (url.protocol !== "file:") {
+    throw new BadRequestException("BACKUP_RESTORE_EVIDENCE_FILE_URL_REQUIRED");
+  }
+
+  let filePath: string;
+  try {
+    filePath = fileURLToPath(url);
+  } catch {
+    throw new BadRequestException("BACKUP_RESTORE_EVIDENCE_FILE_URL_REQUIRED");
+  }
+  if (isLocalTempEvidencePath(filePath)) {
+    throw new BadRequestException("BACKUP_RESTORE_EVIDENCE_FILE_TEMP_PATH_DISALLOWED");
+  }
+}
+
+function isLocalTempEvidencePath(filePath: string): boolean {
+  const normalizedPath = filePath.replace(/\/+$/g, "") || "/";
+  return (
+    normalizedPath === "/tmp" ||
+    normalizedPath.startsWith("/tmp/") ||
+    normalizedPath === "/var/tmp" ||
+    normalizedPath.startsWith("/var/tmp/")
+  );
 }
 
 function required(value: string | undefined, errorCode: string): string {

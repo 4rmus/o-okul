@@ -1,5 +1,5 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, lstatSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 const outputPath = readOption("--output") ?? process.env.GITHUB_CI_EVIDENCE_OUTPUT;
 const repository = readOption("--repository") ?? process.env.GITHUB_REPOSITORY;
@@ -14,13 +14,17 @@ requireValue(commitSha, "GITHUB_SHA veya --commit-sha", failures);
 requireValue(token, "GITHUB_TOKEN veya GH_TOKEN", failures);
 if (failures.length > 0) fail(failures);
 
+const outputFile = resolve(outputPath);
+validateOutputTarget(outputFile);
 const run = await findSuccessfulCiRun(repository, commitSha);
 const jobs = await readRunJobs(repository, run.id);
 const report = buildReport(run, jobs);
 
-mkdirSync(dirname(outputPath), { recursive: true });
-writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`);
-console.log(`GitHub CI kanıtı yazıldı: ${outputPath}`);
+mkdirSync(dirname(outputFile), { recursive: true });
+validateOutputTarget(outputFile);
+writeFileSync(outputFile, `${JSON.stringify(report, null, 2)}\n`);
+validateOutputTarget(outputFile);
+console.log(`GitHub CI kanıtı yazıldı: ${outputFile}`);
 
 function readOption(name) {
   const index = process.argv.indexOf(name);
@@ -37,6 +41,32 @@ function requireValue(value, label, output) {
   if (typeof value !== "string" || value.trim() === "") {
     output.push(`${label} boş bırakılamaz.`);
   }
+}
+
+function validateOutputTarget(filePath) {
+  if (isLocalTempPath(filePath)) {
+    fail(["GITHUB_CI_EVIDENCE_OUTPUT lokal temp path olmamalı."]);
+  }
+
+  const outputDirectory = dirname(filePath);
+  if (existsSync(outputDirectory)) {
+    const directoryStat = lstatSync(outputDirectory);
+    if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) {
+      fail(["GITHUB_CI_EVIDENCE_OUTPUT parent dizini symlink olmayan dizin olmalı."]);
+    }
+  }
+
+  if (existsSync(filePath)) {
+    const fileStat = lstatSync(filePath);
+    if (fileStat.isSymbolicLink() || !fileStat.isFile()) {
+      fail(["GITHUB_CI_EVIDENCE_OUTPUT symlink olmayan file artifact olmalı."]);
+    }
+  }
+}
+
+function isLocalTempPath(filePath) {
+  const normalized = filePath.replace(/\/+$/g, "") || "/";
+  return normalized === "/tmp" || normalized.startsWith("/tmp/") || normalized === "/var/tmp" || normalized.startsWith("/var/tmp/");
 }
 
 async function findSuccessfulCiRun(repo, sha) {

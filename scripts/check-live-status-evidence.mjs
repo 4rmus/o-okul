@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { lstat, readFile } from "node:fs/promises";
+import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const readinessPath = process.env.LIVE_STATUS_READINESS_PATH ?? "docs/phase-6-production-readiness.md";
@@ -238,15 +238,19 @@ async function readSourceJsonReference(value, baseUrl, output, label) {
 
   const url = resolveTargetReference(value, baseUrl);
   if (!url) {
-    output.push(`${label} file://, http://, https:// veya goreli URL olmalı.`);
+    output.push(`${label} file:// veya https:// URL olmalı.`);
+    return undefined;
+  }
+  if (!isAllowedEvidenceTargetUrl(url)) {
+    output.push(`${label} file:// veya https:// URL olmalı.`);
     return undefined;
   }
 
   try {
     let raw;
     if (url.protocol === "file:") {
-      raw = await readFile(fileURLToPath(url), "utf8");
-    } else if (url.protocol === "http:" || url.protocol === "https:") {
+      raw = await readEvidenceFile(url, label);
+    } else if (url.protocol === "https:") {
       const response = await fetch(url);
       if (!response.ok) {
         output.push(`${label} okunamadı: HTTP ${response.status}`);
@@ -254,7 +258,7 @@ async function readSourceJsonReference(value, baseUrl, output, label) {
       }
       raw = await response.text();
     } else {
-      output.push(`${label} yalnız file://, http:// veya https:// destekler.`);
+      output.push(`${label} yalnız file:// veya https:// destekler.`);
       return undefined;
     }
 
@@ -381,18 +385,22 @@ function requireExpectedGateSet(gates, output) {
 
 function toTargetUrl(value) {
   try {
-    return /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? new URL(value) : pathToFileURL(value);
+    const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? new URL(value) : pathToFileURL(value);
+    if (!isAllowedEvidenceTargetUrl(url)) {
+      failNow(["LIVE_STATUS_EVIDENCE_TARGET file:// veya https:// URL olmalı."]);
+    }
+    return url;
   } catch {
-    failNow(["LIVE_STATUS_EVIDENCE_TARGET file://, http:// veya https:// URL olmalı."]);
+    failNow(["LIVE_STATUS_EVIDENCE_TARGET file:// veya https:// URL olmalı."]);
   }
 }
 
 async function readJsonTarget(url) {
   if (url.protocol === "file:") {
-    return parseJson(await readFile(fileURLToPath(url), "utf8"));
+    return parseJson(await readEvidenceFile(url, "LIVE_STATUS_EVIDENCE_TARGET"));
   }
 
-  if (url.protocol === "http:" || url.protocol === "https:") {
+  if (url.protocol === "https:") {
     const response = await fetch(url);
     if (!response.ok) {
       failNow([`Live status evidence okunamadı: HTTP ${response.status}`]);
@@ -400,7 +408,78 @@ async function readJsonTarget(url) {
     return parseJson(await response.text());
   }
 
-  failNow(["LIVE_STATUS_EVIDENCE_TARGET yalnız file://, http:// veya https:// destekler."]);
+  failNow(["LIVE_STATUS_EVIDENCE_TARGET yalnız file:// veya https:// destekler."]);
+}
+
+async function readEvidenceFile(url, label) {
+  const filePath = fileURLToPath(url);
+  await assertParentPathAllowed(dirname(filePath), label);
+
+  let stat;
+  try {
+    stat = await lstat(filePath);
+  } catch {
+    failNow([`${label} okunabilir file:// artifact olmalı.`]);
+  }
+
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    failNow([`${label} symlink olmayan file:// artifact olmalı.`]);
+  }
+
+  return readFile(filePath, "utf8");
+}
+
+async function assertParentPathAllowed(parentPath, label) {
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+
+    let stat;
+    try {
+      stat = await lstat(current);
+    } catch (error) {
+      if (error?.code === "ENOENT") return;
+      throw error;
+    }
+
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      const failure =
+        label === "LIVE_STATUS_EVIDENCE_TARGET"
+          ? "LIVE_STATUS_EVIDENCE_TARGET parent dizini symlink olmayan dizin olmalı."
+          : `${label} parent dizini symlink olmayan dizin olmalı.`;
+      failNow([failure]);
+    }
+  }
+}
+
+function isAllowedEvidenceTargetUrl(url) {
+  return (
+    (url.protocol === "file:" && !isLocalTempEvidenceTargetUrl(url)) ||
+    (url.protocol === "https:" && !isPlaceholderEvidenceTargetHost(url.hostname))
+  );
+}
+
+function isPlaceholderEvidenceTargetHost(hostname) {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized.endsWith(".localhost") ||
+    normalized.endsWith(".test") ||
+    normalized === "example.com" ||
+    normalized.endsWith(".example.com") ||
+    normalized.includes("example") ||
+    normalized.includes("__set") ||
+    normalized.includes("placeholder")
+  );
+}
+
+function isLocalTempEvidenceTargetUrl(url) {
+  const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
+  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
 }
 
 function parseJson(value) {

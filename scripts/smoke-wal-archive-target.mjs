@@ -1,11 +1,17 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { writeSmokeEvidence } from "./smoke-evidence.mjs";
+import { validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const target = process.env.WAL_ARCHIVE_TARGET;
 const evidenceFile = process.env.WAL_ARCHIVE_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
 const checkedAt = new Date().toISOString();
+const fileTargetTempOrRootError = "WAL_ARCHIVE_TARGET file:// hedefi lokal temp/root path olmamalı.";
+const fileTargetSymlinkError = "WAL_ARCHIVE_TARGET file:// hedefi symlink olmayan dizin olmalı.";
+const fileTargetParentSymlinkError = "WAL_ARCHIVE_TARGET file:// parent dizini symlink olmayan dizin olmalı.";
+
+await validateSmokeEvidenceOutputTarget(evidenceFile);
 
 if (!target) {
   fail("WAL_ARCHIVE_TARGET boş bırakılamaz.");
@@ -52,10 +58,11 @@ await writeSmokeEvidence(evidenceFile, {
 console.log(`WAL archive smoke geçti: ${targetUrl.protocol}// hedef doğrulandı.`);
 
 async function smokeFileTarget(url, name, body, expected) {
-  const directory = fileURLToPath(url);
+  const directory = await validateFileTargetDirectory(url);
   const path = `${directory.replace(/\/$/, "")}/${name}`;
 
   await mkdir(directory, { recursive: true });
+  await assertExistingDirectory(directory);
   await writeFile(path, body, "utf8");
 
   const restored = await readFile(path, "utf8");
@@ -119,6 +126,58 @@ function summarizeTarget(url) {
     protocol: "file",
     pathRedacted: true,
   };
+}
+
+async function validateFileTargetDirectory(url) {
+  const directory = resolve(fileURLToPath(url));
+  if (isLocalTempOrRootPath(directory)) {
+    fail(fileTargetTempOrRootError);
+  }
+
+  await assertParentPathAllowed(dirname(directory));
+  await assertExistingDirectory(directory);
+  return directory;
+}
+
+async function assertParentPathAllowed(parentPath) {
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+
+    let stat;
+    try {
+      stat = await lstat(current);
+    } catch (error) {
+      if (error?.code === "ENOENT") return;
+      throw error;
+    }
+
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      fail(fileTargetParentSymlinkError);
+    }
+  }
+}
+
+async function assertExistingDirectory(directory) {
+  let stat;
+  try {
+    stat = await lstat(directory);
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    throw error;
+  }
+
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    fail(fileTargetSymlinkError);
+  }
+}
+
+function isLocalTempOrRootPath(path) {
+  const normalized = path.replace(/\/+$/g, "") || "/";
+  return normalized === "/" || normalized === "/tmp" || normalized.startsWith("/tmp/") || normalized === "/var/tmp" || normalized.startsWith("/var/tmp/");
 }
 
 function fail(message) {

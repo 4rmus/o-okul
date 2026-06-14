@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Socket } from "node:net";
 import pg from "pg";
-import { writeSmokeEvidence } from "./smoke-evidence.mjs";
+import { validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/uzman_hocam";
 const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/uzman_hocam";
@@ -15,6 +15,8 @@ const totalRequests = targetRps * durationSeconds;
 const runId = randomUUID();
 const tenantA = `tenant-rls-load-a-${runId}`;
 const tenantB = `tenant-rls-load-b-${runId}`;
+
+await validateSmokeEvidenceOutputTarget(evidenceFile);
 
 const postgresUrl = new URL(directDatabaseUrl);
 await assertPort("Postgres", postgresUrl.hostname, Number(postgresUrl.port || 5432), "pnpm db:migrate");

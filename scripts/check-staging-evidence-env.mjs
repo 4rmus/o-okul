@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 const templatePath = "docs/evidence-templates/staging-evidence.env.example";
 const prodEnvScriptPath = "scripts/check-prod-env.mjs";
 const prodEvidenceScriptPath = "scripts/check-prod-evidence.mjs";
-const workflowPath = ".github/workflows/staging-deploy.yml";
+const workflowPath = process.env.STAGING_DEPLOY_WORKFLOW_PATH ?? ".github/workflows/staging-deploy.yml";
 
 const args = process.argv.slice(2);
 const envFile = readArgValue("--env-file");
@@ -143,6 +143,8 @@ function checkWorkflowContract(output) {
     "GITHUB_CI_EVIDENCE_TARGET=\"file://$PWD/artifacts/staging/reports/github-ci.json\" pnpm github-ci:check",
     "actions/download-artifact@v4",
     "staging-github-ci-evidence-${{ github.sha }}",
+    "path: artifacts/staging/reports",
+    "path: artifacts/staging/reports/github-ci.json",
     "Check pre-deploy GitHub CI evidence",
     "echo \"SENTRY_RELEASE=$IMAGE_TAG\"",
     "echo \"ROLLBACK_IMAGE_TAG=$ROLLBACK_IMAGE_TAG\"",
@@ -159,6 +161,7 @@ function checkWorkflowContract(output) {
     "run: rm -f .staging-evidence.env",
     "actions/upload-artifact@v4",
     "staging-production-evidence-${{ needs.build-images.outputs.image-tag }}",
+    "path: artifacts/staging",
   ];
 
   for (const token of requiredTokens) {
@@ -166,6 +169,41 @@ function checkWorkflowContract(output) {
       output.push(`${workflowPath} beklenen staging evidence token'ını içermiyor: ${token}`);
     }
   }
+
+  requireWorkflowOrder(output, workflow, "preflight staging env check order", [
+    "Check staging evidence env before deploy",
+    "trap 'rm -f .staging-evidence.env' EXIT",
+    "base64 -d > .staging-evidence.env",
+    "test -s .staging-evidence.env",
+    "pnpm staging:evidence-env:check -- --env-file .staging-evidence.env",
+  ]);
+  requireWorkflowOrder(output, workflow, "GitHub CI evidence artifact order", [
+    "Generate GitHub CI evidence before deploy",
+    "GITHUB_CI_EVIDENCE_OUTPUT=\"artifacts/staging/reports/github-ci.json\" pnpm github-ci:generate",
+    "GITHUB_CI_EVIDENCE_TARGET=\"file://$PWD/artifacts/staging/reports/github-ci.json\" pnpm github-ci:check",
+    "actions/upload-artifact@v4",
+    "staging-github-ci-evidence-${{ github.sha }}",
+    "path: artifacts/staging/reports/github-ci.json",
+  ]);
+  requireWorkflowOrder(output, workflow, "staging evidence bundle order", [
+    "actions/download-artifact@v4",
+    "path: artifacts/staging/reports",
+    "Decode staging evidence env",
+    "base64 -d > .staging-evidence.env",
+    "Check staging evidence env",
+    "pnpm staging:evidence-env:check -- --env-file .staging-evidence.env",
+    "Check pre-deploy GitHub CI evidence",
+    "Append release evidence metadata",
+    "Run first staging evidence gates",
+    "Run production evidence chain",
+    "Check staging release artifact bundle",
+    "STAGING_RELEASE_ARTIFACTS_TARGET=\"$PWD/artifacts/staging\"",
+    "pnpm staging:release-artifacts:check",
+    "Cleanup staging evidence env",
+    "run: rm -f .staging-evidence.env",
+    "staging-production-evidence-${{ needs.build-images.outputs.image-tag }}",
+    "path: artifacts/staging",
+  ]);
 }
 
 function checkProdEvidenceDefaults(output) {
@@ -178,6 +216,18 @@ function checkProdEvidenceDefaults(output) {
     if (!source.includes(key)) {
       output.push(`${prodEvidenceScriptPath} eksik smoke evidence default key'i: ${key}`);
     }
+  }
+}
+
+function requireWorkflowOrder(output, workflow, label, tokens) {
+  let cursor = -1;
+  for (const token of tokens) {
+    const index = workflow.indexOf(token, cursor + 1);
+    if (index === -1) {
+      output.push(`${workflowPath} ${label} sırası bozuk veya eksik: ${token}`);
+      return;
+    }
+    cursor = index;
   }
 }
 

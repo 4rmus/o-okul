@@ -1,10 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
 
 const envFile = readArgValue("--env-file");
 const outputDir = resolve(readArgValue("--output-dir") ?? "artifacts/staging/first-gates");
+if (isLocalTempPath(outputDir)) {
+  fail("staging:first-gates:smoke output-dir lokal temp path olmamalı.");
+}
 const env = {
   ...process.env,
   ...(envFile ? readEnvFile(envFile) : {}),
@@ -17,6 +20,7 @@ const managedEvidenceFiles = new Map([
   ["ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE", "alert-webhook.json"],
   ["BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE", "backup-offsite.json"],
 ]);
+const expectedOutputFiles = new Set(["first-gates-manifest.json", ...managedEvidenceFiles.values()]);
 
 for (const [key, fileName] of managedEvidenceFiles.entries()) {
   if (typeof env[key] === "string" && env[key].trim() !== "") {
@@ -47,6 +51,7 @@ const smokeChecks = [
 ];
 
 mkdirSync(outputDir, { recursive: true });
+validateOutputDirectory({ requireExpectedFiles: false });
 
 const manifest = {
   result: "PASS",
@@ -79,8 +84,48 @@ for (const check of smokeChecks) {
 manifest.generatedAt = new Date().toISOString();
 const manifestFile = resolve(outputDir, "first-gates-manifest.json");
 writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+validateOutputDirectory({ requireExpectedFiles: true });
 
 console.log(`Staging ilk gate smoke kanıtları yazıldı: ${relative(process.cwd(), outputDir)}`);
+
+function validateOutputDirectory({ requireExpectedFiles }) {
+  const outputDirStat = lstatSync(outputDir);
+  if (outputDirStat.isSymbolicLink()) {
+    fail("staging:first-gates:smoke output-dir symlink olmayan dizin olmalı.");
+  }
+  if (!outputDirStat.isDirectory()) {
+    fail("staging:first-gates:smoke output-dir dizin olmalı.");
+  }
+
+  const seen = new Set();
+  for (const entry of readdirSync(outputDir, { withFileTypes: true })) {
+    if (!expectedOutputFiles.has(entry.name)) {
+      fail(`staging:first-gates:smoke output-dir beklenmeyen dosya içeriyor: ${entry.name}`);
+    }
+
+    const entryStat = lstatSync(resolve(outputDir, entry.name));
+    if (entryStat.isSymbolicLink()) {
+      fail(`staging:first-gates:smoke output-dir symlink içermemeli: ${entry.name}`);
+    }
+    if (!entryStat.isFile()) {
+      fail(`staging:first-gates:smoke output-dir sadece dosya içermeli: ${entry.name}`);
+    }
+    seen.add(entry.name);
+  }
+
+  if (requireExpectedFiles) {
+    for (const expectedFile of expectedOutputFiles) {
+      if (!seen.has(expectedFile)) {
+        fail(`staging:first-gates:smoke output-dir eksik dosya içeriyor: ${expectedFile}`);
+      }
+    }
+  }
+}
+
+function isLocalTempPath(path) {
+  const normalized = path.replace(/\/+$/g, "") || "/";
+  return normalized === "/tmp" || normalized.startsWith("/tmp/") || normalized === "/var/tmp" || normalized.startsWith("/var/tmp/");
+}
 
 function validateEvidenceFile({ label, evidenceFile, expectedCheck }) {
   if (!existsSync(evidenceFile)) {

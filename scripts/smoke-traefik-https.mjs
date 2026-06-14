@@ -1,5 +1,5 @@
 import { request } from "node:https";
-import { redactedUrl, writeSmokeEvidence } from "./smoke-evidence.mjs";
+import { redactedUrl, validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const smokeUrl = process.env.TRAEFIK_HTTPS_SMOKE_URL ?? defaultSmokeUrl();
 const expectedStatus = Number(process.env.TRAEFIK_HTTPS_SMOKE_EXPECTED_STATUS ?? "200");
@@ -8,6 +8,8 @@ const allowLocal = process.env.TRAEFIK_HTTPS_SMOKE_ALLOW_LOCAL === "true";
 const allowInsecureTls = process.env.TRAEFIK_HTTPS_SMOKE_ALLOW_INSECURE_TLS === "true";
 const evidenceFile = process.env.TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
 const checkedAt = new Date().toISOString();
+
+await validateSmokeEvidenceOutputTarget(evidenceFile);
 
 if (!smokeUrl) {
   fail("TRAEFIK_HTTPS_SMOKE_URL boş bırakılamaz.");

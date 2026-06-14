@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, relative, resolve } from "node:path";
+import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, parse, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const summaryTarget = readOption("--summary-target") ?? process.env.PRODUCTION_EVIDENCE_SUMMARY_TARGET;
@@ -88,9 +88,10 @@ requireValue(outputPath, "LIVE_STATUS_EVIDENCE_OUTPUT veya --output");
 if (failures.length > 0) fail(failures);
 
 const outputUrl = pathToFileURL(resolve(outputPath));
-const summaryUrl = toTargetUrl(summaryTarget);
-const goLiveUrl = toTargetUrl(goLiveTarget);
-const pilotUrl = toTargetUrl(pilotTarget);
+validateOutputTarget(outputUrl);
+const summaryUrl = toEvidenceTargetUrl(summaryTarget, "PRODUCTION_EVIDENCE_SUMMARY_TARGET");
+const goLiveUrl = toEvidenceTargetUrl(goLiveTarget, "GO_LIVE_EVIDENCE_TARGET");
+const pilotUrl = toEvidenceTargetUrl(pilotTarget, "PILOT_EVIDENCE_TARGET");
 
 const summary = await readJsonTarget(summaryUrl, "Production evidence summary");
 const goLive = await readJsonTarget(goLiveUrl, "Go-live evidence");
@@ -183,7 +184,11 @@ function validateGoLiveLiveStatusTarget(goLiveReport, goLiveReportUrl, expectedO
 
   const resolvedTarget = resolveTargetReference(target, goLiveReportUrl);
   if (!resolvedTarget) {
-    output.push("goLiveEvidence.liveStatusEvidence.evidenceTarget file://, http://, https:// veya goreli URL olmalı.");
+    output.push("goLiveEvidence.liveStatusEvidence.evidenceTarget file:// veya https:// URL olmalı.");
+    return;
+  }
+  if (!isAllowedEvidenceTargetUrl(resolvedTarget)) {
+    output.push("goLiveEvidence.liveStatusEvidence.evidenceTarget file:// veya https:// URL olmalı.");
     return;
   }
 
@@ -298,20 +303,24 @@ function requireDate(value, label, output = failures) {
   }
 }
 
-function toTargetUrl(value) {
+function toEvidenceTargetUrl(value, label) {
   try {
-    return /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? new URL(value) : pathToFileURL(resolve(value));
+    const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? new URL(value) : pathToFileURL(resolve(value));
+    if (!isAllowedEvidenceTargetUrl(url)) {
+      fail([`${label} file:// veya https:// URL olmalı.`]);
+    }
+    return url;
   } catch {
-    fail([`${value} file://, http:// veya https:// URL olmalı.`]);
+    fail([`${label} file:// veya https:// URL olmalı.`]);
   }
 }
 
 async function readJsonTarget(url, label) {
   if (url.protocol === "file:") {
-    return parseJson(readFileSync(fileURLToPath(url), "utf8"), label);
+    return parseJson(readEvidenceFile(url, label), label);
   }
 
-  if (url.protocol === "http:" || url.protocol === "https:") {
+  if (url.protocol === "https:") {
     const response = await fetch(url);
     if (!response.ok) {
       fail([`${label} okunamadı: HTTP ${response.status}`]);
@@ -319,7 +328,99 @@ async function readJsonTarget(url, label) {
     return parseJson(await response.text(), label);
   }
 
-  fail([`${label} için yalnız file://, http:// veya https:// desteklenir.`]);
+  fail([`${label} için yalnız file:// veya https:// desteklenir.`]);
+}
+
+function readEvidenceFile(url, label) {
+  const filePath = fileURLToPath(url);
+  assertParentPathAllowed(dirname(filePath), label);
+
+  let stat;
+  try {
+    stat = lstatSync(filePath);
+  } catch {
+    fail([`${label} okunabilir file:// artifact olmalı.`]);
+  }
+
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    fail([`${label} symlink olmayan file:// artifact olmalı.`]);
+  }
+
+  return readFileSync(filePath, "utf8");
+}
+
+function assertParentPathAllowed(parentPath, label) {
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+    if (!existsSync(current)) return;
+
+    const stat = lstatSync(current);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      const failure =
+        label === "Production evidence summary"
+          ? "Production evidence summary parent dizini symlink olmayan dizin olmalı."
+          : `${label} parent dizini symlink olmayan dizin olmalı.`;
+      fail([failure]);
+    }
+  }
+}
+
+function isAllowedEvidenceTargetUrl(url) {
+  return (
+    (url.protocol === "file:" && !isLocalTempEvidenceTargetUrl(url)) ||
+    (url.protocol === "https:" && !isPlaceholderEvidenceTargetHost(url.hostname))
+  );
+}
+
+function isPlaceholderEvidenceTargetHost(hostname) {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized.endsWith(".localhost") ||
+    normalized.endsWith(".test") ||
+    normalized === "example.com" ||
+    normalized.endsWith(".example.com") ||
+    normalized.includes("example") ||
+    normalized.includes("__set") ||
+    normalized.includes("placeholder")
+  );
+}
+
+function isLocalTempEvidenceTargetUrl(url) {
+  const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
+  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+}
+
+function validateOutputTarget(url) {
+  const outputFile = fileURLToPath(url);
+  if (isLocalTempPath(outputFile)) {
+    fail(["LIVE_STATUS_EVIDENCE_OUTPUT lokal temp path olmamalı."]);
+  }
+
+  const outputDir = dirname(outputFile);
+  if (existsSync(outputDir)) {
+    const dirStat = lstatSync(outputDir);
+    if (dirStat.isSymbolicLink() || !dirStat.isDirectory()) {
+      fail(["LIVE_STATUS_EVIDENCE_OUTPUT parent dizini symlink olmayan dizin olmalı."]);
+    }
+  }
+
+  if (existsSync(outputFile)) {
+    const fileStat = lstatSync(outputFile);
+    if (fileStat.isSymbolicLink() || !fileStat.isFile()) {
+      fail(["LIVE_STATUS_EVIDENCE_OUTPUT symlink olmayan file artifact olmalı."]);
+    }
+  }
+}
+
+function isLocalTempPath(path) {
+  const normalized = path.replace(/\/+$/g, "") || "/";
+  return normalized === "/tmp" || normalized.startsWith("/tmp/") || normalized === "/var/tmp" || normalized.startsWith("/var/tmp/");
 }
 
 function parseJson(value, label) {

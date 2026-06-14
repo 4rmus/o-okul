@@ -13,6 +13,13 @@ Komut:
 pnpm backup:restore:smoke
 ```
 
+Staging/local artifact istenirse:
+
+```sh
+BACKUP_RESTORE_SMOKE_EVIDENCE_FILE=artifacts/staging/backup-restore-smoke.json \
+pnpm backup:restore:smoke
+```
+
 Beklenen sonuç:
 
 - `pg_dump` Postgres container içinde custom-format dump üretir.
@@ -20,6 +27,9 @@ Beklenen sonuç:
 - `pg_restore` dump'ı geçici veritabanına yükler.
 - `Tenant`, `AuditLog`, `ReportSnapshot` ve `_prisma_migrations` tabloları restore edilen DB'de
   okunur.
+- Kanıt dosyası istendiyse `backup_restore_smoke` payload'u `restoreDatabaseHash`, `dumpFormat=custom`,
+  dört `tableCounts` alanı, tek `commandsPassed=["pnpm backup:restore:smoke"]` ve boş `gaps` taşır.
+  Output hedefi lokal temp path, symlink dosya veya symlink parent dizin olamaz.
 - Geçici DB ve dump dosyası temizlenir.
 
 Bu smoke production restore garantisi değildir; repo içi minimum geri yükleme kanıtıdır.
@@ -366,6 +376,8 @@ Minimum kanıt içeriği:
   kırmızıya düşürür.
 - `prod:evidence:templates:check`, mock GitHub API ile `github-ci.json` generator çıktısını
   üretir ve aynı checker sözleşmesine sokar; staging deploy'daki üretim adımı bu kontratla korunur.
+- Generator `GITHUB_CI_EVIDENCE_OUTPUT` hedefinin lokal temp path (`/tmp`, `/var/tmp`) altında,
+  symlink file üzerinde veya symlink parent directory altında olmasını GitHub API çağrısından önce reddeder.
 - Gerçek kanıtta run URL, repo, branch, log URL ve artifact referansları `example`, `.test`,
   `redacted`, `localhost`, `__SET` veya placeholder değer içeremez; bu gevşetme yalnız template
   kontrolünde `GITHUB_CI_ALLOW_EXAMPLE_EVIDENCE=1` ile açılır.
@@ -457,7 +469,18 @@ Beklenen akış:
   gerçek production-evidence koşusunda bu bayrakları bypass olarak reddeder.
 - Release env dosyasındaki evidence target değerleri `file://` artifact yolu veya `https://`
   URL olmalıdır; `http://`, placeholder/example/test host ve lokal temp `file://` path'leri
-  `pnpm prod:env:check` tarafından reddedilir.
+  `pnpm prod:env:check` tarafından reddedilir. `pnpm prod:evidence:check` de evidence target
+  protokolünü, gerçek https host'unu ve temp/symlink-parent olmayan `file://` artifact path'ini
+  erken doğrular; `http://` veya placeholder/temp/symlink target'a ağ/dosya okuma denemesi yapmaz. Standalone evidence
+  checker'ların target protokolü, placeholder/test `https://` host reddi, lokal temp
+  `file://` path reddi ve symlink file artifact reddi de
+  `pnpm prod:evidence:templates:check` negatifleriyle korunur.
+- Ortak smoke evidence preflight/writer, `*_SMOKE_EVIDENCE_FILE`/`SMOKE_EVIDENCE_FILE`
+  çıktılarının lokal temp path (`/tmp`, `/var/tmp`) altında veya symlink file/parent directory
+  üzerinden yazılmasını reddeder; smoke üreticileri bu hedefi provider, HTTP, S3 veya DB yan etkisine
+  başlamadan doğrular. Writer ayrıca payload'u yazmadan önce smoke tipine özgü schema ile doğrular;
+  `noop` provider, dolu `gaps`, yanlış komut veya ham credential/id içeren artifact dosyaya düşmez.
+  `pnpm smoke:evidence:check` bu temp/symlink output ve invalid payload negatiflerini çalıştırır.
 - Release env dosyası `SMS_SMOKE_TO`, `SMS_SMOKE_BODY`, `SMS_SMOKE_CONFIRM=send`,
   `NOTIFICATION_SMOKE_SUBJECT`, `NOTIFICATION_SMOKE_BODY`, `NOTIFICATION_SMOKE_CONFIRM=send`,
   `SENTRY_SMOKE_CONFIRM=send` ve gerçek `SENTRY_SMOKE_MESSAGE` içermelidir; eksik smoke
@@ -467,6 +490,11 @@ Beklenen akış:
   `pnpm staging:first-gates:smoke -- --env-file .staging-evidence.env --output-dir artifacts/staging/first-gates`.
   Bu komut Traefik HTTPS, alert webhook ve off-site backup smoke dosyalarını yazar, her dosyayı
   ortak smoke evidence sözleşmesiyle doğrular ve `first-gates-manifest.json` manifest'i üretir.
+  Output dizini lokal temp path (`/tmp`, `/var/tmp`) altında olamaz ve yalnız
+  `first-gates-manifest.json`, `traefik-https.json`, `alert-webhook.json`
+  ve `backup-offsite.json` dosyalarını içerebilir; beklenmeyen dosya veya symlink varsa smoke
+  çalışmadan önce kırılır. Tekil smoke komutlarında kullanılan `*_SMOKE_EVIDENCE_FILE`
+  çıktıları da lokal temp path'e veya symlink file/parent directory üzerinden yazılamaz.
   Workflow aynı job içinde
   `STAGING_FIRST_GATES_TARGET=file://$PWD/artifacts/staging/first-gates/first-gates-manifest.json pnpm staging:first-gates:check`
   komutuyla manifest'i, üç artifact'i, artifact ortamlarının manifest ortamıyla eşleştiğini ve manifest
@@ -476,20 +504,37 @@ Beklenen akış:
   `pnpm prod:evidence:check -- --summary-file artifacts/staging/release-summary-<tag>.json`
   komutunu çalıştırır. Bu komut release summary dosyasını yazdıktan sonra aynı summary'yi
   `scripts/check-production-evidence-summary.mjs` ile doğrular ve `artifacts/staging`
-  klasörünü artifact olarak saklar. Evidence job, artifact upload öncesinde `if: always()` cleanup
+  klasörünü artifact olarak saklar. `--summary-file`, sibling `reports/` ve `smoke/` output
+  layout'u lokal temp path veya symlink file/directory üzerinden yazılamaz; birleşik kapı bunu
+  evidence check'leri başlamadan önce reddeder. Birleşik kapı ayrıca `*_SMOKE_EVIDENCE_FILE`
+  raw smoke target'larını provider/HTTP/DB smoke'ları başlamadan önce production artifact girdisi
+  olarak doğrular; `/tmp`/`/var/tmp`, symlink dosya ve symlink parent directory üzerinden gelen raw
+  smoke path'i kabul edilmez. Evidence job, artifact upload öncesinde `if: always()` cleanup
   adımıyla `.staging-evidence.env` secret dosyasını workspace'ten siler.
 - Full evidence zinciri PASS olduktan sonra workflow aynı job içinde
   `STAGING_RELEASE_ARTIFACTS_TARGET=$PWD/artifacts/staging pnpm staging:release-artifacts:check`
   komutunu çalıştırır. Bu kontrol indirilecek `staging-production-evidence-<tag>` artifact setinde
   `reports/*.json`, `first-gates/first-gates-manifest.json`, tek `release-summary-*.json`
   ve `smoke/*.json` ham kanıt dosyalarının mevcut olduğunu, mevcut checker'larla geçtiklerini ve
-  release summary içindeki gömülü kanıtlarla birebir eşleştiklerini doğrular. First-gates ortak
+  release summary içindeki gömülü kanıtlarla birebir eşleştiklerini doğrular. `release-summary-<tag>.json`
+  dosya adındaki tag, summary içindeki `reports.deploymentRollback.releaseCandidate` image tag'iyle
+  eşleşmelidir. Bundle yalnız beklenen root, `reports/`, `smoke/` ve `first-gates/` dosyalarını
+  içerebilir; beklenmeyen raw JSON/log dosyası kalırsa kontrol kırılır. Bundle symlink içeremez;
+  beklenen artifact'ler symlink olmayan dosya/dizin olmalıdır. Bundle `.staging-evidence.env`,
+  `.env*` veya GHCR token dosyası içeremez; secret/env dosyası artifact setine karışırsa kontrol kırılır. First-gates ortak
   smoke'larının ortamı manifest ortamıyla eşleşmeli, manifest zamanı kendi artifact zamanlarından önce olamaz ve final `smoke/*.json`
   kanıtlarından daha geç tarih taşıyamaz; bu kural stale final
   smoke veya report dosyalarının bundle'a karışmasını engeller.
+- First-gates manifest'indeki `evidenceFile` değerleri manifest dizini altındaki symlink olmayan
+  relative artifact dosya adlarıdır; mutlak URL/yol veya manifest dizini dışına çıkan kanıt
+  referansı geçmez.
+- `pnpm staging:evidence-env:check`, workflow içindeki kritik evidence sırasını da korur:
+  GitHub CI artifact üretimi/download, env decode/check, metadata append, first-gates, production
+  evidence, release bundle check, cleanup ve upload adımları bu sırada kalmalıdır.
 - Release summary artifact'i ayrıca
   `PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///path/to/release-summary.json pnpm prod:evidence:summary:check`
-  ile tek başına doğrulanır; summary top-level alanları, tam/tekrarsız check listesi, her check maddesinin
+  ile tek başına doğrulanır; bu target yalnız `file://` artifact yolu veya `https://` URL olabilir,
+  `http://`, lokal temp path, symlink artifact ve symlink parent directory reddedilir. Summary top-level alanları, tam/tekrarsız check listesi, her check maddesinin
   `label/script/status` şekli, beklenen script path'i, `smokeEvidence`, `reports` ve her gömülü report blok alan seti tam ve beklenmeyen
   anahtarsız olmalı, smoke payload'ları, zorunlu report blokları, tarih sıralaması ve
   placeholder/example/redacted değer reddi bu sözleşmeyle korunur; check status/script/duplicate sapmaları ve smoke/report kanıtlarının summary
@@ -498,8 +543,10 @@ Beklenen akış:
   `environment=production`, gelecekte olmayan `generatedAt` ve smoke tipine özgü payload
   alanlarını doğrular; Traefik smoke URL origin'i summary `webUrl` origin'iyle ve external
   monitoring monitor URL origin'leri summary `webUrl` public edge origin'iyle eşleşmelidir.
+  Override edilen raw smoke dosya path'leri kalıcı, symlink olmayan artifact dosyası olmalıdır.
   `pnpm smoke:evidence:check`, örnek production summary içindeki Traefik/SMS/
-  notification/Sentry/alert/backup/WAL smoke şemalarını ve temel negatif senaryoları CI öncesi sabitler.
+  notification/Sentry/alert/backup/WAL smoke şemalarını, backup restore smoke artifact'ini ve temel
+  negatif senaryoları CI öncesi sabitler.
 
 Bu workflow prod deploy değildir; staging environment üzerinde gerçek HTTPS, provider, backup,
 observability ve UAT kanıtlarını üretmek için kapıdır.
@@ -590,6 +637,50 @@ Minimum kanıt içeriği:
   `.test`, `redacted`, `localhost`, `__SET` veya şablondaki açıklama cümleleri yalnız template
   kontrolünde `UAT_ALLOW_EXAMPLE_EVIDENCE=1` ile geçebilir.
 
+Live onboarding smoke preflight:
+
+```sh
+NEXT_E2E_LIVE_ONBOARDING=1 \
+LIVE_ONBOARDING_EVIDENCE_PATH=artifacts/staging/live-onboarding-input.json \
+pnpm live:onboarding:evidence-check
+```
+
+Smoke komutu aynı preflight'ı tarayıcı açmadan önce otomatik çalıştırır:
+
+```sh
+NEXT_E2E_LIVE_ONBOARDING=1 \
+LIVE_ONBOARDING_EVIDENCE_PATH=artifacts/staging/live-onboarding-input.json \
+pnpm live:onboarding:smoke
+```
+
+`LIVE_ONBOARDING_EVIDENCE_PATH` JSON'u system admin ve ilk tenant admin credential'larını, tenant
+adı/slug/plan/koltuk limitini ve opsiyonel kurulum alanlarını exact shape ile taşır. Gerçek staging
+kanıtında `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder değerler kabul edilmez;
+dosya lokal temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent dizin altında olamaz.
+`pnpm live:onboarding:evidence-contract` bu negatifleri lokal CI'da tarayıcı açmadan korur.
+
+Live UI-worker/report smoke preflight:
+
+```sh
+NEXT_E2E_LIVE_UI_WORKER=1 \
+LIVE_UI_WORKER_EVIDENCE_PATH=artifacts/staging/live-ui-worker-input.json \
+pnpm live:ui-worker:evidence-check
+```
+
+Smoke komutu aynı preflight'ı tarayıcı açmadan önce otomatik çalıştırır:
+
+```sh
+NEXT_E2E_LIVE_UI_WORKER=1 \
+LIVE_UI_WORKER_EVIDENCE_PATH=artifacts/staging/live-ui-worker-input.json \
+pnpm live:ui-worker:smoke
+```
+
+`LIVE_UI_WORKER_EVIDENCE_PATH` JSON'u rapor admin credential'ını, `examId`, `firstStudentId` ve
+opsiyonel öğrenci/veli portal credential'larını exact shape ile taşır. Gerçek staging kanıtında
+`example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder değerler kabul edilmez; dosya lokal
+temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent dizin altında olamaz.
+`pnpm live:ui-worker:evidence-contract` bu negatifleri lokal CI'da tarayıcı açmadan korur.
+
 ## Pilot Closure Evidence
 
 Amaç: Faz 10 sonunda pilot kurumla gerçek veri üstünden genel açılışa hazır olunduğunu kanıtlamak.
@@ -661,6 +752,9 @@ raporundaki `liveStatusEvidence.generatedAt`, yoksa `checkedAt` değerini kullan
 doğrular; çıktı yazıldıktan sonra go-live checker'ını bağlı live-status zinciriyle tekrar çalıştırır.
 Normal çalışmada `--output` yolu, go-live raporundaki `liveStatusEvidence.evidenceTarget` ile aynı
 Canlı Durum artifact'ini göstermelidir; üretici bu eşleşmeyi erken reddeder.
+Canlı Durum source/output hedefleri yalnız kalıcı, symlink olmayan `file://` artifact yolu veya
+`https://` URL olabilir; `http://`, lokal temp path, symlink artifact ve symlink parent directory
+hedefleri üretici, checker ve go-live linked checker tarafından reddedilir.
 
 Kanıt template'i: `docs/evidence-templates/live-status.example.json`.
 PASS geçiş fixture'i: `docs/evidence-templates/live-status-pass-readiness.example.md`.
@@ -802,6 +896,9 @@ Staging kanıtı repo artifact'i olarak saklanacaksa:
 BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE=artifacts/staging/backup-offsite.json pnpm backup:offsite:smoke
 ```
 
+`file://` hedef root, lokal temp path (`/tmp`, `/var/tmp`) veya symlink dizin/parent path
+olamaz; mount hedefi kalıcı, symlink olmayan dizin olmalıdır.
+
 Artifact `checkedAt`, target özeti, marker sha256, tek
 `commandsPassed=["pnpm backup:offsite:smoke"]` ve boş `gaps` listesi taşır; raw path/credential
 yazılmaz.
@@ -855,6 +952,9 @@ S3 hedefi için `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCES
   `storageMode`/`dryRun`/`migration` blok shape'leri, iki subject item seti, migrated item seti
   ve tam `commandsPassed` seti ile boş `gaps` listesi `prod:evidence:templates:check` fazla
   alan/komut ve invalid/non-empty gaps negatifleriyle korunur.
+- `INLINE_UPLOAD_CONTENT_MIGRATION_REPORT_FILE` lokal temp path (`/tmp`, `/var/tmp`) altında,
+  symlink file üzerinde veya symlink parent directory altında olamaz; script bu hedefleri DB
+  bağlantısından önce reddeder.
 
 ## WAL Archive Hedef Smoke
 
@@ -874,10 +974,47 @@ WAL_ARCHIVE_SMOKE_EVIDENCE_FILE=artifacts/staging/wal-archive.json pnpm wal:arch
 ```
 
 Desteklenen hedefler `BACKUP_OFFSITE_TARGET` ile aynıdır: `file:///...` veya `s3://bucket/prefix`.
+`file://` hedef root, lokal temp path (`/tmp`, `/var/tmp`) veya symlink dizin/parent path
+olamaz; mount hedefi kalıcı, symlink olmayan dizin olmalıdır.
 Production env kontrolü WAL hedefinin base backup hedefinden ayrı bucket veya path olmasını zorunlu tutar.
 Bu smoke Postgres'in gerçek WAL üretimini test etmez; arşiv hedefinin erişilebilirliğini kanıtlar.
 Artifact `checkedAt`, target özeti, marker sha256, tek
 `commandsPassed=["pnpm wal:archive:smoke"]` ve boş `gaps` listesi taşır.
+
+## AuditLog Partition Bakımı
+
+Amaç: `AuditLog` range partition setinin ay başında elle SQL yazmadan genişletilebildiğini ve
+bakım kanıtının arşivlenebilir olduğunu doğrulamak.
+
+Yerel/CI contract:
+
+```sh
+pnpm audit-log-partition:check
+```
+
+Staging dry-run kanıtı:
+
+```sh
+AUDIT_LOG_PARTITION_EVIDENCE_FILE=artifacts/staging/audit-log-partition.json pnpm audit-log-partition:maintain
+```
+
+Canlı uygulama yalnız migration/admin bağlantısıyla yapılır:
+
+```sh
+AUDIT_LOG_PARTITION_APPLY=1 \
+AUDIT_LOG_PARTITION_EVIDENCE_FILE=artifacts/staging/audit-log-partition.json \
+DIRECT_DATABASE_URL=postgresql://... \
+pnpm audit-log-partition:maintain
+```
+
+Bakım script'i varsayılan olarak içinde bulunulan UTC aydan başlayarak 12 aylık
+`CREATE TABLE IF NOT EXISTS "AuditLog_YYYY_MM" PARTITION OF "AuditLog"` planı üretir.
+`AUDIT_LOG_PARTITION_START_MONTH=YYYY-MM` ve `AUDIT_LOG_PARTITION_MONTHS_AHEAD=1..36`
+ile pencere değiştirilebilir. Evidence output lokal temp path (`/tmp`, `/var/tmp`), symlink dosya
+veya symlink parent dizin olamaz; `pnpm audit-log-partition:check` bu negatifleri contract
+olarak koşturur. Canlı bakım kanıtı `result=PASS`, `check=audit_log_partition_maintenance`,
+`mode=apply`, `applied=true`, partition adları/tarih aralıkları, bakım komutu ve boş `gaps`
+listesi taşır.
 
 ## Production PITR Sözleşmesi
 
@@ -902,6 +1039,9 @@ Zorunlu operasyon sözleşmesi:
   ve `_prisma_migrations` sayımları en az `1` olmalıdır.
 - Restore raporu `RESTORE_DRILL_TARGET` altında saklanır ve `pnpm restore:drill:check` ile
   doğrulanır.
+- Panel/worker üzerinden tetiklenen restore drill işi `file://` evidence hedefini lokal temp path'ten,
+  symlink dosyadan veya symlink parent dizin altından okuyamaz; API `/tmp` ve `/var/tmp`
+  altındaki restore evidence hedeflerini kuyruğa almaz.
 - Gerçek restore raporunda `sourceBackup` ve `targetDatabase` gerçek backup/run referansı olmalıdır;
   `backup-bucket`, `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder değerler yalnız
   template kontrolünde `RESTORE_DRILL_ALLOW_EXAMPLE_EVIDENCE=1` ile geçebilir.
@@ -926,7 +1066,7 @@ Restore raporu örnek sözleşmesi:
   "result": "PASS",
   "environment": "staging",
   "drillDate": "2026-05-30",
-  "sourceBackup": "s3://backup-bucket/base/2026-05-30.dump",
+  "sourceBackup": "s3://uzman-hocam-prod-backups/base/2026-05-30.dump",
   "targetDatabase": "uzman_hocam_restore_20260530",
   "tableCounts": {
     "Tenant": 5,

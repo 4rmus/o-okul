@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { writeSmokeEvidence } from "./smoke-evidence.mjs";
+import { validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const require = createRequire(import.meta.url);
 const { createNotificationAdapterFromEnv } = require("../packages/notification-adapter/dist/index.js");
@@ -11,6 +11,8 @@ const subject = process.env.NOTIFICATION_SMOKE_SUBJECT ?? "Uzman Hocam notificat
 const body = process.env.NOTIFICATION_SMOKE_BODY ?? "Uzman Hocam notification smoke";
 const evidenceFile = process.env.NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
 const checkedAt = new Date().toISOString();
+
+await validateSmokeEvidenceOutputTarget(evidenceFile);
 
 const messages = [
   emailTo ? { channel: "EMAIL", to: emailTo, subject, body } : undefined,

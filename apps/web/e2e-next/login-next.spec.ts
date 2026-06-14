@@ -4760,7 +4760,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByLabel("Yedek restore işleri").getByRole("heading", { name: "Yedek alma" })).toBeVisible();
   await expect(page.getByLabel("Yedek restore işleri").getByText("backup-restore-job-created_backup")).toBeVisible();
   await page.getByLabel("Panel restore drill işi").getByLabel("İş tipi").selectOption("RESTORE_DRILL");
-  await page.getByLabel("Panel restore drill işi").getByLabel("Restore kanıt dosyası").fill("file:///tmp/restore-drill.json");
+  await page.getByLabel("Panel restore drill işi").getByLabel("Restore kanıt dosyası").fill("file:///mnt/restore-drills/restore-drill.json");
   await page.getByLabel("Panel restore drill işi").getByLabel("Onay metni").fill("RESTORE DRILL");
   await page.getByLabel("Panel restore drill işi").getByRole("button", { name: "Restore drill işi başlat" }).click();
   const restoreDrillJob = page

@@ -9,7 +9,7 @@ import {
   createRedisConnectionOptions,
   createReportGenerationBullWorker,
 } from "../apps/worker/dist/queue/bullmq-worker.js";
-import { writeSmokeEvidence } from "./smoke-evidence.mjs";
+import { validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/uzman_hocam";
 const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/uzman_hocam";
@@ -32,6 +32,8 @@ const rawImportId = `raw-import-report-smoke-${runId}`;
 const answerKeyId = `answer-key-report-smoke-${runId}`;
 const contentHash = `results-${resultCount}-${runId}`;
 const expectedClassCount = resultCount === 1 ? 1 : 20;
+
+await validateSmokeEvidenceOutputTarget(evidencePath);
 
 process.env.DATABASE_URL = databaseUrl;
 process.env.REDIS_URL = redisUrl;

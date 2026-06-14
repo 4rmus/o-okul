@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
+import { dirname, join, parse, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runWithJobContext } from "../context/job-context.js";
 import { assertTenantJobPayload, type QueueJob, type TenantJobPayload } from "../queue/queues.js";
@@ -37,6 +38,16 @@ export interface BackupRestoreJobReporter {
 }
 
 const criticalTables = ["Tenant", "AuditLog", "ReportSnapshot", "_prisma_migrations"] as const;
+const restoreDrillTopLevelKeys = [
+  "result",
+  "environment",
+  "drillDate",
+  "sourceBackup",
+  "targetDatabase",
+  "tableCounts",
+  "errors",
+] as const;
+const tableCountsKeys = [...criticalTables];
 
 export async function processBackupRestoreJob(
   job: QueueJob<BackupRestoreJobPayload>,
@@ -99,7 +110,7 @@ async function resolveEvidence(payload: BackupRestoreJobPayload): Promise<{ chec
   }
 
   const url = parseFileUrl(payload.targetReference);
-  const report = parseJson(await readFile(fileURLToPath(url), "utf8"));
+  const report = parseJson(await readRestoreDrillEvidenceFile(url));
   const failures = validateRestoreDrillReport(report);
   if (failures.length > 0) {
     throw new Error(`BACKUP_RESTORE_EVIDENCE_INVALID: ${failures.join("; ")}`);
@@ -120,6 +131,62 @@ function parseFileUrl(value: string): URL {
   return url;
 }
 
+async function readRestoreDrillEvidenceFile(url: URL): Promise<string> {
+  const filePath = fileURLToPath(url);
+  await assertEvidenceFilePath(filePath);
+  return readFile(filePath, "utf8");
+}
+
+async function assertEvidenceFilePath(filePath: string): Promise<void> {
+  const resolvedPath = resolve(filePath);
+  if (isLocalTempEvidencePath(resolvedPath)) {
+    throw new Error("BACKUP_RESTORE_EVIDENCE_FILE_TEMP_PATH_DISALLOWED");
+  }
+
+  await assertEvidenceFileParentPath(resolvedPath);
+
+  let stat;
+  try {
+    stat = await lstat(resolvedPath);
+  } catch {
+    throw new Error("BACKUP_RESTORE_EVIDENCE_FILE_REQUIRED");
+  }
+
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new Error("BACKUP_RESTORE_EVIDENCE_FILE_SYMLINK_DISALLOWED");
+  }
+}
+
+async function assertEvidenceFileParentPath(filePath: string): Promise<void> {
+  const root = parse(filePath).root;
+  const parentPath = dirname(filePath);
+  const segments = relative(root, parentPath).split(sep).filter(Boolean);
+  let currentPath = root;
+
+  for (const segment of segments) {
+    currentPath = join(currentPath, segment);
+    let stat;
+    try {
+      stat = await lstat(currentPath);
+    } catch {
+      throw new Error("BACKUP_RESTORE_EVIDENCE_FILE_REQUIRED");
+    }
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new Error("BACKUP_RESTORE_EVIDENCE_FILE_PARENT_SYMLINK_DISALLOWED");
+    }
+  }
+}
+
+function isLocalTempEvidencePath(filePath: string): boolean {
+  const normalizedPath = filePath.replace(/\/+$/g, "") || "/";
+  return (
+    normalizedPath === "/tmp" ||
+    normalizedPath.startsWith("/tmp/") ||
+    normalizedPath === "/var/tmp" ||
+    normalizedPath.startsWith("/var/tmp/")
+  );
+}
+
 function parseJson(value: string): unknown {
   try {
     return JSON.parse(value);
@@ -135,26 +202,29 @@ function resolveErrorCode(error: unknown): string {
 function validateRestoreDrillReport(report: unknown): string[] {
   const failures: string[] = [];
   if (!isObjectRecord(report)) {
-    return ["report nesnesi zorunlu"];
+    return ["restoreDrill nesnesi zorunlu"];
   }
+  if (!requireObjectKeySet(report, failures, "restoreDrill", restoreDrillTopLevelKeys)) return failures;
+
   requireEqual(report, failures, "result", "PASS");
   requireOneOf(report, failures, "environment", ["staging", "production"]);
   requireDate(report, failures, "drillDate");
+  requireDateNotInFuture(report, failures, "drillDate");
   requireString(report, failures, "sourceBackup");
+  requireNonPlaceholderString(report, failures, "sourceBackup");
   requireString(report, failures, "targetDatabase");
+  requireNonPlaceholderString(report, failures, "targetDatabase");
 
   const tableCounts = report.tableCounts;
   if (!isObjectRecord(tableCounts)) {
     failures.push("tableCounts nesnesi zorunlu");
-  } else {
+  } else if (requireObjectKeySet(tableCounts, failures, "tableCounts", tableCountsKeys)) {
     for (const tableName of criticalTables) {
       requireCount(tableCounts, failures, tableName);
     }
   }
 
-  if (Array.isArray(report.errors) && report.errors.length > 0) {
-    failures.push("errors boş olmalı");
-  }
+  requireEmptyArray(report, failures, "errors");
   return failures;
 }
 
@@ -177,17 +247,82 @@ function requireDate(report: Record<string, unknown>, failures: string[], key: s
   }
 }
 
+function requireDateNotInFuture(report: Record<string, unknown>, failures: string[], key: string): void {
+  const value = report[key];
+  const timestamp = typeof value === "string" ? Date.parse(value) : NaN;
+  if (Number.isNaN(timestamp)) return;
+
+  const clockSkewMs = 5 * 60 * 1000;
+  if (timestamp > Date.now() + clockSkewMs) {
+    failures.push(`${key} gelecekte olamaz`);
+  }
+}
+
 function requireString(report: Record<string, unknown>, failures: string[], key: string): void {
   if (typeof report[key] !== "string" || report[key].trim() === "") {
     failures.push(`${key} boş olmayan metin olmalı`);
   }
 }
 
+function requireNonPlaceholderString(report: Record<string, unknown>, failures: string[], key: string): void {
+  const value = report[key];
+  if (typeof value !== "string" || value.trim() === "") return;
+
+  if (hasPlaceholderToken(value)) {
+    failures.push(`${key} production kanıtı için örnek/placeholder/redacted değer olmamalı`);
+  }
+}
+
 function requireCount(tableCounts: Record<string, unknown>, failures: string[], key: string): void {
   const value = tableCounts[key];
-  if (!Number.isInteger(value) || Number(value) < 0) {
-    failures.push(`tableCounts.${key} sıfır veya daha büyük tam sayı olmalı`);
+  if (!Number.isInteger(value) || Number(value) < 1) {
+    failures.push(`tableCounts.${key} en az 1 tam sayı olmalı`);
   }
+}
+
+function requireEmptyArray(report: Record<string, unknown>, failures: string[], key: string): void {
+  const value = report[key];
+  if (!Array.isArray(value) || value.length > 0) {
+    failures.push(`${key} boş olmalı`);
+  }
+}
+
+function requireObjectKeySet(
+  value: Record<string, unknown>,
+  failures: string[],
+  label: string,
+  expectedKeys: readonly string[],
+): boolean {
+  const keys = Object.keys(value);
+  if (keys.length !== expectedKeys.length) {
+    failures.push(`${label} tam ${expectedKeys.length} alan içermeli`);
+    return false;
+  }
+
+  for (const expectedKey of expectedKeys) {
+    if (!Object.hasOwn(value, expectedKey)) {
+      failures.push(`${label}.${expectedKey} alanı zorunlu`);
+    }
+  }
+
+  return true;
+}
+
+function hasPlaceholderToken(value: string): boolean {
+  const normalized = value.toLowerCase();
+  return [
+    "__set",
+    "change-me",
+    "replace-me",
+    "placeholder",
+    "redacted",
+    "example",
+    ".test",
+    ".invalid",
+    "localhost",
+    "127.0.0.1",
+    "backup-bucket",
+  ].some((token) => normalized.includes(token));
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
