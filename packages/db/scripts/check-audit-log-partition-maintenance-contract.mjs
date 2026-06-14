@@ -57,7 +57,7 @@ try {
     "audit log partition evidence symlink parent negative",
     {
       AUDIT_LOG_PARTITION_START_MONTH: "2026-06",
-      AUDIT_LOG_PARTITION_EVIDENCE_FILE: join(symlinkDirectory, "evidence.json"),
+      AUDIT_LOG_PARTITION_EVIDENCE_FILE: join(symlinkDirectory, "nested", "evidence.json"),
     },
     "AUDIT_LOG_PARTITION_EVIDENCE_FILE parent dizini symlink olmayan dizin olmalı.",
   );

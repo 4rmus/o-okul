@@ -27,10 +27,11 @@ try {
 
   const realDirectory = join(root, "real-parent");
   const symlinkDirectory = join(root, "symlink-parent");
-  mkdirSync(realDirectory, { recursive: true });
+  const realNestedDirectory = join(realDirectory, "nested");
+  mkdirSync(realNestedDirectory, { recursive: true });
   symlinkSync(realDirectory, symlinkDirectory, "dir");
   expectProfileOutputFailure(
-    join(symlinkDirectory, "profile.json"),
+    join(symlinkDirectory, "nested", "profile.json"),
     "WEB_PERFORMANCE_PROFILE_OUT parent dizini symlink olmayan dizin olmalı.",
     "web performance profile output symlink parent negative",
   );

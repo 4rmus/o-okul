@@ -24,6 +24,7 @@ const { PostgresSessionStore, hashRefreshToken } = await import("../apps/api/dis
 const { TokenService } = await import("../apps/api/dist/auth/token-service.js");
 const { PostgresIdentityInvitationStore } = await import("../apps/api/dist/identity-invitation/identity-invitation-store.js");
 const { IdentityInvitationService } = await import("../apps/api/dist/identity-invitation/identity-invitation.service.js");
+const { PostgresTenantStore } = await import("../apps/api/dist/tenant/tenant-store.js");
 const { PostgresUserManagementStore } = await import("../apps/api/dist/user-management/user-management-store.js");
 const { PostgresClassStore } = await import("../apps/api/dist/school/class-store.js");
 const { PostgresScheduleStore } = await import("../apps/api/dist/program/schedule-store.js");
@@ -56,6 +57,7 @@ try {
   const authService = new AuthService(authUserStore, sessionStore, passwordResetStore, { resolve: async () => undefined });
   const tokenService = new TokenService(sessionStore, "postgres-store-smoke-secret");
   const identityInvitationStore = new PostgresIdentityInvitationStore(appPool);
+  const tenantStore = new PostgresTenantStore(appPool);
   const userManagementStore = new PostgresUserManagementStore(appPool);
   const identityInvitationService = new IdentityInvitationService(
     identityInvitationStore,
@@ -63,6 +65,7 @@ try {
     studentStore,
     guardianStore,
     teacherStore,
+    tenantStore,
   );
 
   const authUser = await authUserStore.findByEmail(`store-smoke-${runId}@example.test`);

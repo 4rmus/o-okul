@@ -402,13 +402,7 @@ function validateOutputTarget(url) {
     fail(["LIVE_STATUS_EVIDENCE_OUTPUT lokal temp path olmamalı."]);
   }
 
-  const outputDir = dirname(outputFile);
-  if (existsSync(outputDir)) {
-    const dirStat = lstatSync(outputDir);
-    if (dirStat.isSymbolicLink() || !dirStat.isDirectory()) {
-      fail(["LIVE_STATUS_EVIDENCE_OUTPUT parent dizini symlink olmayan dizin olmalı."]);
-    }
-  }
+  assertParentPathAllowed(dirname(outputFile), "LIVE_STATUS_EVIDENCE_OUTPUT");
 
   if (existsSync(outputFile)) {
     const fileStat = lstatSync(outputFile);

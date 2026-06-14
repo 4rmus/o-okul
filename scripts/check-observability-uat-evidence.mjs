@@ -1,5 +1,5 @@
 import { lstat, readFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const target = process.env.OBSERVABILITY_UAT_TARGET;
@@ -88,15 +88,23 @@ async function readEvidenceFile(url) {
 }
 
 async function assertParentPathAllowed(parentPath) {
-  let stat;
-  try {
-    stat = await lstat(parentPath);
-  } catch {
-    fail(["OBSERVABILITY_UAT_TARGET parent dizini okunabilir olmali."]);
-  }
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
 
-  if (stat.isSymbolicLink() || !stat.isDirectory()) {
-    fail(["OBSERVABILITY_UAT_TARGET parent dizini symlink olmayan dizin olmali."]);
+  for (const segment of segments) {
+    current = resolve(current, segment);
+
+    let stat;
+    try {
+      stat = await lstat(current);
+    } catch {
+      fail(["OBSERVABILITY_UAT_TARGET parent dizini okunabilir olmali."]);
+    }
+
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      fail(["OBSERVABILITY_UAT_TARGET parent dizini symlink olmayan dizin olmali."]);
+    }
   }
 }
 

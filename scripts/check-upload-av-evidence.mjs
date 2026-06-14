@@ -1,4 +1,5 @@
 import { lstat, readFile } from "node:fs/promises";
+import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const target = process.env.UPLOAD_AV_TARGET;
@@ -59,7 +60,30 @@ async function readEvidenceFile(url) {
     fail(["UPLOAD_AV_TARGET symlink olmayan file:// artifact olmali."]);
   }
 
+  await assertParentPathAllowed(dirname(filePath));
+
   return readFile(filePath, "utf8");
+}
+
+async function assertParentPathAllowed(parentPath) {
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+
+    let stat;
+    try {
+      stat = await lstat(current);
+    } catch {
+      fail(["UPLOAD_AV_TARGET parent dizini okunabilir olmali."]);
+    }
+
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      fail(["UPLOAD_AV_TARGET parent dizini symlink olmayan dizin olmali."]);
+    }
+  }
 }
 
 function requireAllowedEvidenceTargetUrl(url) {

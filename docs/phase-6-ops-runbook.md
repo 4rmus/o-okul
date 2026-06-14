@@ -206,14 +206,14 @@ AI_REPORT_SUMMARY_EVIDENCE_TARGET=file:///path/to/ai-report-summary.json pnpm ai
 
 Minimum kanıt içeriği:
 
-- `AI_REPORT_SUMMARY_PROVIDER=disabled|template` staging/prod env içinde ayarlanır; dış LLM
-  provider bu release için production env kontrolünden geçmez.
-- Template fallback `ReportSnapshot.snapshotData.commentary` ve öğrenci `commentary` alanlarına
-  deterministik taslak yazar; veliye yayın öncesi öğretmen kontrolü ve disclaimer zorunludur.
+- `AI_REPORT_SUMMARY_PROVIDER=disabled` staging/prod env içinde ayarlanır; dış LLM provider veya
+  template yorum üretimi bu release için production env kontrolünden geçmez.
+- Disabled modda `ReportSnapshot.snapshotData.commentary` ve öğrenci `commentary` alanlarına yeni
+  taslak yazılmaz.
 - Kullanılan alanlar net/puan/branş/kazanım/sıralama gibi yapısal metriklerle sınırlıdır; öğrenci
   adı, öğrenci id, veli adı, TC, telefon, e-posta ve adres yorum metnine girmez.
-- `validation.externalProviderNotCalled=true` olmalıdır; Claude/Anthropic production açılışı ayrıca
-  KVKK aktarım değerlendirmesi ve ürün sahibi onayı gerektirir.
+- `validation.externalProviderNotCalled=true` olmalıdır; Claude/Anthropic veya template yorum
+  üretimi ayrıca KVKK değerlendirmesi, öğretmen onay akışı ve ürün sahibi onayı gerektirir.
 - Gerçek kanıtta `evidenceReferences` placeholder, `.test`, localhost veya redacted değer içeremez;
   bu gevşetme yalnız template kontrolünde `AI_REPORT_SUMMARY_ALLOW_EXAMPLE_EVIDENCE=1` ile açılır.
 - Rapor top-level 11 alanı, `provider`/`kvkk`/`externalAiStopRule`/`generation`/`validation`
@@ -416,7 +416,10 @@ Gerekli GitHub `staging` environment secret/var değerleri:
 
 - Secrets: `STAGING_SSH_HOST`, `STAGING_SSH_USER`, `STAGING_SSH_PRIVATE_KEY`, `GHCR_READ_TOKEN`,
   `STAGING_EVIDENCE_ENV_B64`.
-- Vars: `STAGING_DEPLOY_DIR`, `STAGING_NEXT_PUBLIC_API_URL`.
+- Vars: `STAGING_DEPLOY_DIR`, `STAGING_NEXT_PUBLIC_API_URL`, opsiyonel `STAGING_EDGE_MODE`.
+  `STAGING_EDGE_MODE=domain` varsayılandır ve `docker-compose.traefik.yml` ile ACME kullanır.
+  `STAGING_EDGE_MODE=ip` bu cihazdaki geçici IP/self-signed edge için `docker-compose.traefik-ip.yml`
+  dosyasını seçer.
 
 `STAGING_EVIDENCE_ENV_B64` içeriği `docs/evidence-templates/staging-evidence.env.example`
 sözleşmesinden üretilir. Gerçek değerlerle doldurulan özel env dosyası GitHub secret'a yazılmadan önce
@@ -435,11 +438,13 @@ base64 -w0 /path/to/staging-evidence.env
 Beklenen akış:
 
 - Workflow önce dispatch input'larını, Docker tag biçimini, `STAGING_NEXT_PUBLIC_API_URL=https://...`
-  değerini ve gerekli staging secret/var varlığını doğrular.
+  değerini, `STAGING_EDGE_MODE=domain|ip` değerini ve gerekli staging secret/var varlığını doğrular.
 - Workflow `STAGING_EVIDENCE_ENV_B64` içeriğini decode eder, boş dosyayı reddeder ve
   `pnpm staging:evidence-env:check -- --env-file .staging-evidence.env` ile gerçek env içeriğini
   deploy başlamadan önce doğrular; zorunlu anahtarlar eksik veya boş değerli olamaz. Preflight
-  shell'i `.staging-evidence.env` dosyasını exit trap'i ile siler.
+  shell'i `.staging-evidence.env` dosyasını exit trap'i ile siler. Bu secret env dosyası
+  `REPORT_GENERATION_SMOKE_EVIDENCE_FILE` veya diğer raw smoke evidence path'lerini içermez;
+  `prod:evidence:check --summary-file` bunları `artifacts/staging/smoke/*.json` altında üretir.
 - Workflow aynı commit'in başarılı `.github/workflows/ci.yml` run'ını GitHub API'dan okuyup
   `artifacts/staging/reports/github-ci.json` üretir, `pnpm github-ci:check` ile doğrular ve
   `staging-github-ci-evidence-<sha>` artifact'i olarak saklar. Bu job geçmeden image build veya deploy başlamaz.
@@ -447,7 +452,8 @@ Beklenen akış:
   `pnpm --filter @uzman-hocam/web exec playwright install --with-deps chromium` ile kurar.
 - `web`, `api`, `worker` ve `queue-board` image'ları GHCR'a commit SHA tag'i ve `staging-latest`
   tag'i ile push edilir.
-- GitHub runner `docker-compose.yml`, `docker-compose.release.yml`, `docker-compose.traefik.yml` ve
+- GitHub runner `docker-compose.yml`, `docker-compose.release.yml`, `docker-compose.traefik.yml`,
+  `docker-compose.traefik-ip.yml` ve
   `docker/postgres/init` içeriğini SSH üzerinden staging deploy dizinine kopyalar; staging host'un
   repo clone yetkisine ihtiyacı yoktur.
 - `.env.release` dosyası `WEB_IMAGE`, `API_IMAGE`, `WORKER_IMAGE`, `QUEUE_BOARD_IMAGE`, `SENTRY_RELEASE` ve
@@ -520,7 +526,8 @@ Beklenen akış:
   dosya adındaki tag, summary içindeki `reports.deploymentRollback.releaseCandidate` image tag'iyle
   eşleşmelidir. Bundle yalnız beklenen root, `reports/`, `smoke/` ve `first-gates/` dosyalarını
   içerebilir; beklenmeyen raw JSON/log dosyası kalırsa kontrol kırılır. Bundle symlink içeremez;
-  beklenen artifact'ler symlink olmayan dosya/dizin olmalıdır. Bundle `.staging-evidence.env`,
+  beklenen artifact'ler symlink olmayan dosya/dizin olmalıdır. `STAGING_RELEASE_ARTIFACTS_TARGET`
+  parent-symlink target üzerinden verilemez; hedef path'in parent zincirinde symlink varsa kontrol kırılır. Bundle `.staging-evidence.env`,
   `.env*` veya GHCR token dosyası içeremez; secret/env dosyası artifact setine karışırsa kontrol kırılır. First-gates ortak
   smoke'larının ortamı manifest ortamıyla eşleşmeli, manifest zamanı kendi artifact zamanlarından önce olamaz ve final `smoke/*.json`
   kanıtlarından daha geç tarih taşıyamaz; bu kural stale final
@@ -656,7 +663,7 @@ pnpm live:onboarding:smoke
 `LIVE_ONBOARDING_EVIDENCE_PATH` JSON'u system admin ve ilk tenant admin credential'larını, tenant
 adı/slug/plan/koltuk limitini ve opsiyonel kurulum alanlarını exact shape ile taşır. Gerçek staging
 kanıtında `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder değerler kabul edilmez;
-dosya lokal temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent dizin altında olamaz.
+dosya lokal temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent zinciri altında olamaz.
 `pnpm live:onboarding:evidence-contract` bu negatifleri lokal CI'da tarayıcı açmadan korur.
 
 Live UI-worker/report smoke preflight:
@@ -678,7 +685,7 @@ pnpm live:ui-worker:smoke
 `LIVE_UI_WORKER_EVIDENCE_PATH` JSON'u rapor admin credential'ını, `examId`, `firstStudentId` ve
 opsiyonel öğrenci/veli portal credential'larını exact shape ile taşır. Gerçek staging kanıtında
 `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder değerler kabul edilmez; dosya lokal
-temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent dizin altında olamaz.
+temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent zinciri altında olamaz.
 `pnpm live:ui-worker:evidence-contract` bu negatifleri lokal CI'da tarayıcı açmadan korur.
 
 ## Pilot Closure Evidence
@@ -709,7 +716,9 @@ Minimum kanıt içeriği:
   çalıştırılır; artifact `report_generation_smoke`, hash'li tenant/user/email/exam/snapshot referansları,
   `generationDurationMs`, `resultCount=10000` ve eşik sonucunu taşır, ham credential veya ham id içermez.
   Artifact top-level alan seti, `hashes`/`thresholds` blok shape'leri, tek izinli `commandsPassed`
-  değeri ve boş `gaps` listesi `pnpm smoke:evidence:check` içinde korunur.
+  değeri ve boş `gaps` listesi `pnpm smoke:evidence:check` içinde korunur. Production evidence
+  summary üretiminde aynı payload `artifacts/staging/smoke/report-generation.json` dosyasına
+  otomatik yönlendirilir ve staging release bundle içinde summary ile birebir eşleştirilir.
 - Dar RLS kanıtı `RLS_LIVE_EVIDENCE_TARGET=file:///... pnpm rls:live:check` ile arşivlenir ve
   pilot/go-live paketindeki production summary'ye bağlanır.
 - Remote CI kanıtı `GITHUB_CI_EVIDENCE_TARGET=file:///... pnpm github-ci:check` ile arşivlenir;
@@ -1032,6 +1041,10 @@ Zorunlu operasyon sözleşmesi:
 - Günlük base backup alınır ve immutable/off-host hedefte saklanır.
 - WAL arşivi base backup hedefinden ayrı path veya bucket altında tutulur.
 - En az haftada bir restore denemesi yapılır.
+- Panel/API/worker backup işi yalnız `s3://bucket/prefix` veya kalıcı `file://` dizin hedefi
+  kabul eder; root, lokal temp path, symlink dizin veya symlink parent zinciri altındaki hedefler
+  panel preflight/queue producer/API/worker katmanında reddedilir; panel formu ve queue producer
+  serbest string, geçersiz protokol ve lokal temp/root hedefleri enqueue öncesi kırar.
 - Restore denemesi `Tenant`, `AuditLog`, `ReportSnapshot` ve son migration varlığını doğrular.
 - Restore raporu tarih, kaynak backup, hedef DB, doğrulanan tablo sayımları ve hata yoksa `PASS`
   sonucu içerir.
@@ -1039,9 +1052,11 @@ Zorunlu operasyon sözleşmesi:
   ve `_prisma_migrations` sayımları en az `1` olmalıdır.
 - Restore raporu `RESTORE_DRILL_TARGET` altında saklanır ve `pnpm restore:drill:check` ile
   doğrulanır.
-- Panel/worker üzerinden tetiklenen restore drill işi `file://` evidence hedefini lokal temp path'ten,
-  symlink dosyadan veya symlink parent dizin altından okuyamaz; API `/tmp` ve `/var/tmp`
-  altındaki restore evidence hedeflerini kuyruğa almaz.
+- Panel/API/worker üzerinden tetiklenen restore drill işi `file://` evidence hedefini lokal temp
+  path'ten, symlink dosyadan veya symlink parent zinciri altından kuyruğa alamaz/okuyamaz;
+  panel formu ve queue producer serbest string, geçersiz protokol ve lokal temp `file://` hedefleri
+  enqueue öncesi kırar, API `/tmp` ve `/var/tmp` altındaki restore evidence hedeflerini ve yerelde görünen symlink
+  file/parent-zincir hedeflerini kuyruğa almaz.
 - Gerçek restore raporunda `sourceBackup` ve `targetDatabase` gerçek backup/run referansı olmalıdır;
   `backup-bucket`, `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder değerler yalnız
   template kontrolünde `RESTORE_DRILL_ALLOW_EXAMPLE_EVIDENCE=1` ile geçebilir.

@@ -170,7 +170,7 @@ function checkProductionEnv(env) {
   requireSecret(env, failures, "ADMIN_MFA_CHALLENGE_SECRET");
   requireSet(env, failures, "ADMIN_MFA_ISSUER");
   requireNoPlaceholderValue(env, failures, "ADMIN_MFA_ISSUER");
-  requireOneOf(env, failures, "AI_REPORT_SUMMARY_PROVIDER", ["disabled", "template"]);
+  requireEqual(env, failures, "AI_REPORT_SUMMARY_PROVIDER", "disabled");
   if (env.JWT_ACCESS_SECRET && env.JWT_REFRESH_SECRET && env.JWT_ACCESS_SECRET === env.JWT_REFRESH_SECRET) {
     failures.push("JWT_ACCESS_SECRET ve JWT_REFRESH_SECRET farklı olmalı.");
   }

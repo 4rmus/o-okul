@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, parse, resolve } from "node:path";
 
 const outputPath = readOption("--output") ?? process.env.GITHUB_CI_EVIDENCE_OUTPUT;
 const repository = readOption("--repository") ?? process.env.GITHUB_REPOSITORY;
@@ -48,18 +48,28 @@ function validateOutputTarget(filePath) {
     fail(["GITHUB_CI_EVIDENCE_OUTPUT lokal temp path olmamalı."]);
   }
 
-  const outputDirectory = dirname(filePath);
-  if (existsSync(outputDirectory)) {
-    const directoryStat = lstatSync(outputDirectory);
-    if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) {
-      fail(["GITHUB_CI_EVIDENCE_OUTPUT parent dizini symlink olmayan dizin olmalı."]);
-    }
-  }
+  assertParentPathAllowed(dirname(filePath));
 
   if (existsSync(filePath)) {
     const fileStat = lstatSync(filePath);
     if (fileStat.isSymbolicLink() || !fileStat.isFile()) {
       fail(["GITHUB_CI_EVIDENCE_OUTPUT symlink olmayan file artifact olmalı."]);
+    }
+  }
+}
+
+function assertParentPathAllowed(parentPath) {
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+    if (!existsSync(current)) return;
+
+    const directoryStat = lstatSync(current);
+    if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) {
+      fail(["GITHUB_CI_EVIDENCE_OUTPUT parent dizini symlink olmayan dizin olmalı."]);
     }
   }
 }

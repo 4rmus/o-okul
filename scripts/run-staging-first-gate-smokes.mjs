@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { parse, relative, resolve } from "node:path";
 import { validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
 
 const envFile = readArgValue("--env-file");
@@ -8,6 +8,7 @@ const outputDir = resolve(readArgValue("--output-dir") ?? "artifacts/staging/fir
 if (isLocalTempPath(outputDir)) {
   fail("staging:first-gates:smoke output-dir lokal temp path olmamalı.");
 }
+assertOutputPathAllowed(outputDir);
 const env = {
   ...process.env,
   ...(envFile ? readEnvFile(envFile) : {}),
@@ -51,6 +52,7 @@ const smokeChecks = [
 ];
 
 mkdirSync(outputDir, { recursive: true });
+assertOutputPathAllowed(outputDir);
 validateOutputDirectory({ requireExpectedFiles: false });
 
 const manifest = {
@@ -118,6 +120,22 @@ function validateOutputDirectory({ requireExpectedFiles }) {
       if (!seen.has(expectedFile)) {
         fail(`staging:first-gates:smoke output-dir eksik dosya içeriyor: ${expectedFile}`);
       }
+    }
+  }
+}
+
+function assertOutputPathAllowed(directory) {
+  const root = parse(directory).root;
+  const segments = directory.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+    if (!existsSync(current)) return;
+
+    const stat = lstatSync(current);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      fail("staging:first-gates:smoke output-dir symlink olmayan dizin olmalı.");
     }
   }
 }

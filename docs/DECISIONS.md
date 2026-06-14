@@ -182,21 +182,19 @@ Açık soru: Production'da `ADMIN_MFA_MODE=required` geçişi pilot kurum admin 
 sonra ayrı go-live kararıyla yapılır; repo sözleşmesi staging için `optional` POC'yi kabul eder.
 Son kontrol: 2026-06-13
 
-### DEC-20260613-03 — AI karne özeti template fallback'i
+### DEC-20260613-03 — AI karne özeti kapsam dışı
 
-Durum: Onaylı
-Karar: Karne/veli özeti için ilk üretilebilir katman LLM'siz, deterministik template fallback olarak
-`ReportSnapshot.snapshotData.commentary` ve öğrenci `commentary` alanlarına yazılır. Production
-runtime'da `AI_REPORT_SUMMARY_PROVIDER` yalnız `disabled` veya `template` kabul eder; `anthropic`
-dış sağlayıcı yolu ayrıca uygulanıp onaylanana kadar fail-fast kalır.
-Kaynak: `claudedocs/prod-plan-2026-06-12.md` §6.11 stop-rule.
-Kanıt: `apps/worker/src/jobs/report-generation-job.ts`,
-`docs/evidence-templates/ai-report-summary.example.json`,
-`scripts/check-ai-report-summary-evidence.mjs`.
+Durum: Ertelendi
+Karar: Bu release ve mevcut tek-node sunucu çalışması için karne/veli özeti tarafında AI veya
+AI olarak pazarlanacak template yorum üretimi açılmaz. Production/staging runtime'da
+`AI_REPORT_SUMMARY_PROVIDER=disabled` zorunludur; `template` ve dış sağlayıcı modları ürün sahibi
+tarafından ayrı release kararı verilene kadar go-live kapısından geçmez.
+Kaynak: `claudedocs/prod-plan-2026-06-12.md` 2026-06-14 tek-node/no-AI güncellemesi.
+Kanıt: `scripts/check-prod-env.mjs`, `docs/evidence-templates/ai-report-summary.example.json`.
 Etkilenen ADR: Yok
-Açık soru: Dış LLM POC'si yapılacaksa öğretmen değerlendirme rubriği ve KVKK aktarım kararı hangi
-release candidate'a bağlanacak?
-Son kontrol: 2026-06-13
+Açık soru: İleride bu kapsam yeniden açılırsa öğretmen onayı, KVKK aktarım kararı ve veliye gösterim
+metni yeni bir DEC ile tanımlanacak.
+Son kontrol: 2026-06-14
 
 ### DEC-20260613-04 — V1 karne görsel kabul eşiği
 

@@ -53,14 +53,15 @@ try {
 
   const realDirectory = join(artifactRoot, "real-dir");
   const symlinkDirectory = join(artifactRoot, "symlink-dir");
-  mkdirSync(realDirectory, { recursive: true });
-  writeJson(join(realDirectory, "live-onboarding.json"), createValidEvidence());
+  const realNestedDirectory = join(realDirectory, "nested");
+  mkdirSync(realNestedDirectory, { recursive: true });
+  writeJson(join(realNestedDirectory, "live-onboarding.json"), createValidEvidence());
   symlinkSync(realDirectory, symlinkDirectory, "dir");
   runNegativeCheck(
     "live onboarding symlink parent negative",
     {
       NEXT_E2E_LIVE_ONBOARDING: "1",
-      LIVE_ONBOARDING_EVIDENCE_PATH: join(symlinkDirectory, "live-onboarding.json"),
+      LIVE_ONBOARDING_EVIDENCE_PATH: join(symlinkDirectory, "nested", "live-onboarding.json"),
     },
     "LIVE_ONBOARDING_EVIDENCE_PATH parent dizini symlink olmayan dizin olmalı.",
   );

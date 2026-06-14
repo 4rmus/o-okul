@@ -20,6 +20,7 @@ const summaryDefaultedSmokeKeys = new Map([
   ["ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE", "alert-webhook.json"],
   ["BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE", "backup-offsite.json"],
   ["WAL_ARCHIVE_SMOKE_EVIDENCE_FILE", "wal-archive.json"],
+  ["REPORT_GENERATION_SMOKE_EVIDENCE_FILE", "report-generation.json"],
 ]);
 const workflowInjectedKeys = new Set(["ROLLBACK_IMAGE_TAG", "SENTRY_RELEASE", "GITHUB_CI_EVIDENCE_TARGET"]);
 const runtimeRequiredKeys = [
@@ -212,9 +213,12 @@ function checkProdEvidenceDefaults(output) {
     output.push(`${prodEvidenceScriptPath} --summary-file smoke evidence defaultlarını üretmeli.`);
   }
 
-  for (const key of summaryDefaultedSmokeKeys.keys()) {
+  for (const [key, fileName] of summaryDefaultedSmokeKeys) {
     if (!source.includes(key)) {
       output.push(`${prodEvidenceScriptPath} eksik smoke evidence default key'i: ${key}`);
+    }
+    if (!source.includes(fileName)) {
+      output.push(`${prodEvidenceScriptPath} eksik smoke evidence default dosyası: ${fileName}`);
     }
   }
 }

@@ -15,6 +15,7 @@ const requiredEvidenceCheckScripts = new Map([
   ["Alert webhook", "scripts/smoke-alert-webhook.mjs"],
   ["Off-host backup target", "scripts/smoke-backup-offsite.mjs"],
   ["WAL archive target", "scripts/smoke-wal-archive-target.mjs"],
+  ["Report generation smoke", "scripts/smoke-report-generation-live.mjs"],
   ["Deployment region evidence", "scripts/check-deployment-region-evidence.mjs"],
   ["Deployment rollback evidence", "scripts/check-deployment-rollback-evidence.mjs"],
   ["GitHub CI evidence", "scripts/check-github-ci-evidence.mjs"],
@@ -63,6 +64,7 @@ const goLiveDeploymentKeys = [
   "restoreDrillPassed",
   "offHostBackupPassed",
   "walArchivePassed",
+  "reportGenerationPassed",
   "rollbackDrillPassed",
   "observabilityUatPassed",
   "externalMonitoringPassed",
@@ -118,6 +120,7 @@ const summarySmokeEvidenceKeys = [
   "alertWebhook",
   "backupOffsite",
   "walArchive",
+  "reportGeneration",
 ];
 const summaryReportKeys = [
   "restoreDrill",
@@ -762,6 +765,111 @@ function requireSummarySmokeEvidence(summary, failures, goLiveReport) {
   if (walArchive) {
     requireSmokeTargetSummary(walArchive, failures, "productionEvidenceSummary.summary.smokeEvidence.walArchive.target");
     requireObjectSha256(walArchive, failures, "productionEvidenceSummary.summary.smokeEvidence.walArchive.markerSha256", "markerSha256");
+  }
+
+  const reportGeneration = requireSmokeCheck(value, failures, "reportGeneration", "report_generation_smoke", summary, goLiveReport);
+  if (reportGeneration) {
+    requireObjectEqual(
+      reportGeneration,
+      failures,
+      "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.reportType",
+      "reportType",
+      "EXAM_RESULT_SUMMARY",
+    );
+    requireObjectEqual(reportGeneration, failures, "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.status", "status", "READY");
+    requireObjectIntegerAtLeast(reportGeneration, failures, "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.resultCount", "resultCount", 1);
+    requireObjectIntegerAtLeast(reportGeneration, failures, "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.studentCount", "studentCount", 1);
+    requireObjectIntegerAtLeast(reportGeneration, failures, "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.classCount", "classCount", 1);
+    requireObjectIntegerAtLeast(reportGeneration, failures, "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.branchCount", "branchCount", 1);
+    requireObjectIntegerAtLeast(
+      reportGeneration,
+      failures,
+      "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.expectedClassCount",
+      "expectedClassCount",
+      1,
+    );
+    requireObjectIntegerAtLeast(reportGeneration, failures, "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.seedDurationMs", "seedDurationMs", 0);
+    requireObjectIntegerAtLeast(
+      reportGeneration,
+      failures,
+      "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.generationDurationMs",
+      "generationDurationMs",
+      0,
+    );
+    if (Number.isInteger(reportGeneration.resultCount) && reportGeneration.studentCount !== reportGeneration.resultCount) {
+      failures.push("productionEvidenceSummary.summary.smokeEvidence.reportGeneration.studentCount resultCount ile eslesmeli.");
+    }
+    if (Number.isInteger(reportGeneration.expectedClassCount) && reportGeneration.classCount !== reportGeneration.expectedClassCount) {
+      failures.push("productionEvidenceSummary.summary.smokeEvidence.reportGeneration.classCount expectedClassCount ile eslesmeli.");
+    }
+
+    const hashes = requireNestedObject(reportGeneration, failures, "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.hashes", "hashes");
+    if (hashes) {
+      for (const key of [
+        "tenantHash",
+        "userHash",
+        "emailHash",
+        "examHash",
+        "snapshotHash",
+        "firstStudentHash",
+        "contentHash",
+        "queuedJobIdHash",
+      ]) {
+        requireObjectSha256(hashes, failures, `productionEvidenceSummary.summary.smokeEvidence.reportGeneration.hashes.${key}`, key);
+      }
+    }
+
+    const thresholds = requireNestedObject(
+      reportGeneration,
+      failures,
+      "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.thresholds",
+      "thresholds",
+    );
+    if (thresholds) {
+      requireObjectTrue(
+        thresholds,
+        failures,
+        "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.thresholds.resultCountMatches",
+        "resultCountMatches",
+      );
+      requireObjectIntegerAtLeast(
+        thresholds,
+        failures,
+        "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.thresholds.generationDurationMsMax",
+        "generationDurationMsMax",
+        1,
+      );
+      requireObjectTrue(
+        thresholds,
+        failures,
+        "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.thresholds.generationDurationPassed",
+        "generationDurationPassed",
+      );
+      if (
+        Number.isInteger(reportGeneration.generationDurationMs) &&
+        Number.isInteger(thresholds.generationDurationMsMax) &&
+        reportGeneration.generationDurationMs > thresholds.generationDurationMsMax
+      ) {
+        failures.push("productionEvidenceSummary.summary.smokeEvidence.reportGeneration.generationDurationMs esik degerini asmamali.");
+      }
+    }
+
+    requireObjectStringList(
+      reportGeneration,
+      failures,
+      "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.commandsPassed",
+      "commandsPassed",
+      1,
+      false,
+    );
+    if (
+      Array.isArray(reportGeneration.commandsPassed) &&
+      (reportGeneration.commandsPassed.length !== 1 ||
+        !["pnpm report-generation:smoke", "pnpm report-generation:perf"].includes(reportGeneration.commandsPassed[0]))
+    ) {
+      failures.push("productionEvidenceSummary.summary.smokeEvidence.reportGeneration.commandsPassed tek report generation komutu icermeli.");
+    }
+    requireEmptyArray(reportGeneration, failures, "gaps", "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.gaps");
   }
 }
 
@@ -2720,6 +2828,7 @@ function requireDeployment(report, failures) {
     "restoreDrillPassed",
     "offHostBackupPassed",
     "walArchivePassed",
+    "reportGenerationPassed",
     "rollbackDrillPassed",
     "observabilityUatPassed",
     "externalMonitoringPassed",

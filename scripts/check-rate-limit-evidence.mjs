@@ -1,4 +1,5 @@
 import { lstat, readFile } from "node:fs/promises";
+import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const target = process.env.RATE_LIMIT_EVIDENCE_TARGET;
@@ -7,7 +8,9 @@ const allowExampleEvidence = process.env.RATE_LIMIT_ALLOW_EXAMPLE_EVIDENCE === "
 const requiredCommands = ["pnpm rate-limit:smoke", "pnpm rate-limit:check"];
 const expectedExcludedPaths = ["/health", "/metrics"];
 const rateLimitTopLevelKeys = [
+  "generatedAt",
   "result",
+  "check",
   "environment",
   "checkedAt",
   "config",
@@ -103,7 +106,30 @@ async function readEvidenceFile(url) {
     fail(["RATE_LIMIT_EVIDENCE_TARGET symlink olmayan file:// artifact olmali."]);
   }
 
+  await assertParentPathAllowed(dirname(filePath));
+
   return readFile(filePath, "utf8");
+}
+
+async function assertParentPathAllowed(parentPath) {
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+
+    let stat;
+    try {
+      stat = await lstat(current);
+    } catch {
+      fail(["RATE_LIMIT_EVIDENCE_TARGET parent dizini okunabilir olmali."]);
+    }
+
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      fail(["RATE_LIMIT_EVIDENCE_TARGET parent dizini symlink olmayan dizin olmali."]);
+    }
+  }
 }
 
 function requireAllowedEvidenceTargetUrl(url) {
@@ -154,7 +180,10 @@ function validateReport(report) {
   if (!requireObjectKeySet(report, rateLimitTopLevelKeys, failures, "rateLimit")) {
     return failures;
   }
+  requireDate(report, failures, "generatedAt");
+  requireDateNotInFuture(report, failures, "generatedAt");
   requireEqual(report, failures, "result", "PASS");
+  requireEqual(report, failures, "check", "rate_limit_redis_smoke");
   requireOneOf(report, failures, "environment", ["staging", "production"]);
   requireDate(report, failures, "checkedAt");
   requireDateNotInFuture(report, failures, "checkedAt");

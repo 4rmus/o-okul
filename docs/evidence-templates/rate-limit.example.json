@@ -1,5 +1,7 @@
 {
+  "generatedAt": "2026-05-31T11:00:00.000Z",
   "result": "PASS",
+  "check": "rate_limit_redis_smoke",
   "environment": "staging",
   "checkedAt": "2026-05-31T11:00:00.000Z",
   "config": {

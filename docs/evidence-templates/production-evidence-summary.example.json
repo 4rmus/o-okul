@@ -14,6 +14,7 @@
     { "label": "Alert webhook", "script": "scripts/smoke-alert-webhook.mjs", "status": "PASS" },
     { "label": "Off-host backup target", "script": "scripts/smoke-backup-offsite.mjs", "status": "PASS" },
     { "label": "WAL archive target", "script": "scripts/smoke-wal-archive-target.mjs", "status": "PASS" },
+    { "label": "Report generation smoke", "script": "scripts/smoke-report-generation-live.mjs", "status": "PASS" },
     { "label": "Deployment region evidence", "script": "scripts/check-deployment-region-evidence.mjs", "status": "PASS" },
     { "label": "Deployment rollback evidence", "script": "scripts/check-deployment-rollback-evidence.mjs", "status": "PASS" },
     { "label": "GitHub CI evidence", "script": "scripts/check-github-ci-evidence.mjs", "status": "PASS" },
@@ -127,6 +128,39 @@
       },
       "markerSha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
       "commandsPassed": ["pnpm wal:archive:smoke"],
+      "gaps": []
+    },
+    "reportGeneration": {
+      "generatedAt": "2026-06-15T09:35:00.000Z",
+      "result": "PASS",
+      "check": "report_generation_smoke",
+      "environment": "production",
+      "checkedAt": "2026-06-15T09:35:00.000Z",
+      "reportType": "EXAM_RESULT_SUMMARY",
+      "status": "READY",
+      "resultCount": 10000,
+      "studentCount": 10000,
+      "classCount": 20,
+      "branchCount": 2,
+      "expectedClassCount": 20,
+      "seedDurationMs": 1200,
+      "generationDurationMs": 25000,
+      "hashes": {
+        "tenantHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "userHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "emailHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "examHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "snapshotHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "firstStudentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "contentHash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "queuedJobIdHash": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "thresholds": {
+        "resultCountMatches": true,
+        "generationDurationMsMax": 60000,
+        "generationDurationPassed": true
+      },
+      "commandsPassed": ["pnpm report-generation:perf"],
       "gaps": []
     }
   },
@@ -450,7 +484,7 @@
       "environment": "production",
       "checkedAt": "2026-06-01",
       "provider": {
-        "mode": "template",
+        "mode": "disabled",
         "featureFlagEnv": "AI_REPORT_SUMMARY_PROVIDER",
         "evidenceTargetEnv": "AI_REPORT_SUMMARY_EVIDENCE_TARGET",
         "externalProvider": "disabled",
@@ -476,7 +510,7 @@
           "email",
           "address"
         ],
-        "overseasTransferAssessment": "Template mode runs locally and does not transfer data to an external AI provider."
+        "overseasTransferAssessment": "AI report summary is disabled for this release and no data is transferred to an external AI provider."
       },
       "externalAiStopRule": {
         "kvkkAssessmentRequired": true,
@@ -486,19 +520,17 @@
         "decisionReference": "DEC-20260613-03"
       },
       "generation": {
-        "templateSummaryGenerated": true,
-        "studentCommentaryGenerated": true,
-        "teacherActionDraftGenerated": true,
-        "teacherReviewRequired": true,
-        "disclaimerIncluded": true,
+        "featureDisabled": true,
+        "templateSummaryGenerated": false,
+        "studentCommentaryGenerated": false,
+        "teacherActionDraftGenerated": false,
         "deterministicOutput": true,
-        "outputStoredInSnapshot": true
+        "outputStoredInSnapshot": false
       },
       "validation": {
         "piiLeakageCheckPassed": true,
         "logsExcludePromptResponse": true,
-        "externalProviderNotCalled": true,
-        "templateRegressionPassed": true
+        "externalProviderNotCalled": true
       },
       "commandsPassed": [
         "pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/report-generation-job.test.ts",
@@ -506,7 +538,7 @@
         "pnpm ai-report-summary:check"
       ],
       "evidenceReferences": [
-        "artifacts/example/ai-report-summary/template-snapshot.json",
+        "artifacts/example/ai-report-summary/disabled-provider-check.log",
         "artifacts/example/ai-report-summary/pii-leakage-check.log"
       ]
     },

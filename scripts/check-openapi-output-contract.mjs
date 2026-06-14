@@ -27,10 +27,11 @@ try {
 
   const realDirectory = join(root, "real-parent");
   const symlinkDirectory = join(root, "symlink-parent");
-  mkdirSync(realDirectory, { recursive: true });
+  const realNestedDirectory = join(realDirectory, "nested");
+  mkdirSync(realNestedDirectory, { recursive: true });
   symlinkSync(realDirectory, symlinkDirectory, "dir");
   expectOpenApiOutputFailure(
-    join(symlinkDirectory, "openapi.json"),
+    join(symlinkDirectory, "nested", "openapi.json"),
     "OPENAPI_OUTPUT parent dizini symlink olmayan dizin olmalı.",
     "OpenAPI output symlink parent negative",
   );

@@ -617,7 +617,7 @@ async function runSmokeEvidenceOutputNegativeChecks(output) {
     mkdirSync(realDirectory, { recursive: true });
     symlinkSync(realDirectory, symlinkDirectory, "dir");
     await expectWriteSmokeEvidenceFailure(
-      resolve(symlinkDirectory, "evidence.json"),
+      resolve(symlinkDirectory, "nested", "evidence.json"),
       "SMOKE_EVIDENCE_FILE parent directory symlink olmayan dizin olmalı.",
       "smoke evidence output symlink parent negative",
       output,

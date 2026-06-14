@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const templateChecks = [
@@ -595,6 +595,7 @@ runFinancialRetentionNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runFinancialRetentionSymlinkParentTargetNegativeCheck();
 runIdentityMigrationNegativeCheck({
   label: "Identity migration extra top-level key negative",
   path: "docs/evidence-templates/identity-migration.extra-top-level.tmp.json",
@@ -656,6 +657,7 @@ runIdentityMigrationNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runIdentityMigrationSymlinkParentTargetNegativeCheck();
 runKvkkInventoryNegativeCheck({
   label: "KVKK inventory extra top-level key negative",
   path: "docs/evidence-templates/kvkk-inventory.extra-top-level.tmp.json",
@@ -704,6 +706,7 @@ runKvkkInventoryNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runKvkkInventorySymlinkParentTargetNegativeCheck();
 runRestoreDrillNegativeCheck({
   label: "Restore drill extra top-level key negative",
   path: "docs/evidence-templates/restore-drill.extra-top-level.tmp.json",
@@ -906,6 +909,7 @@ runAdminMfaNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runAdminMfaSymlinkParentTargetNegativeCheck();
 runAiReportSummaryNegativeCheck({
   label: "AI report summary extra top-level key negative",
   path: "docs/evidence-templates/ai-report-summary.extra-top-level.tmp.json",
@@ -933,7 +937,7 @@ runAiReportSummaryNegativeCheck({
 runAiReportSummaryNegativeCheck({
   label: "AI report summary extra generation field negative",
   path: "docs/evidence-templates/ai-report-summary.extra-generation-field.tmp.json",
-  expectedFailure: "generation tam 7 alan içermeli.",
+  expectedFailure: "generation tam 6 alan içermeli.",
   mutate: (fixture) => {
     fixture.generation.unexpectedField = true;
   },
@@ -941,7 +945,7 @@ runAiReportSummaryNegativeCheck({
 runAiReportSummaryNegativeCheck({
   label: "AI report summary extra validation field negative",
   path: "docs/evidence-templates/ai-report-summary.extra-validation-field.tmp.json",
-  expectedFailure: "validation tam 4 alan içermeli.",
+  expectedFailure: "validation tam 3 alan içermeli.",
   mutate: (fixture) => {
     fixture.validation.unexpectedField = true;
   },
@@ -962,6 +966,7 @@ runAiReportSummaryNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runAiReportSummarySymlinkParentTargetNegativeCheck();
 runUploadAvNegativeCheck({
   label: "Upload AV extra top-level key negative",
   path: "docs/evidence-templates/upload-av.extra-top-level.tmp.json",
@@ -1002,6 +1007,7 @@ runUploadAvNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runUploadAvSymlinkParentTargetNegativeCheck();
 runGithubCiNegativeCheck({
   label: "GitHub CI extra top-level key negative",
   path: "docs/evidence-templates/github-ci.extra-top-level.tmp.json",
@@ -1068,6 +1074,7 @@ runGithubCiNegativeCheck({
     fixture.evidenceReferences[0] = "https://github.com/example/uzman-hocam/actions/runs/1234567891";
   },
 });
+runGithubCiSymlinkParentTargetNegativeCheck();
 runLiveExamCycleNegativeCheck({
   label: "Live exam cycle extra top-level key negative",
   path: "docs/evidence-templates/live-exam-cycle.extra-top-level.tmp.json",
@@ -1173,10 +1180,11 @@ runInlineUploadMigrationNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runInlineUploadMigrationSymlinkParentTargetNegativeCheck();
 runRateLimitNegativeCheck({
   label: "Rate limit extra top-level key negative",
   path: "docs/evidence-templates/rate-limit.extra-top-level.tmp.json",
-  expectedFailure: "rateLimit tam 10 alan icermeli.",
+  expectedFailure: "rateLimit tam 12 alan icermeli.",
   mutate: (fixture) => {
     fixture.unexpectedTopLevel = true;
   },
@@ -1237,6 +1245,7 @@ runRateLimitNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runRateLimitSymlinkParentTargetNegativeCheck();
 runRlsLiveNegativeCheck({
   label: "RLS live extra top-level key negative",
   path: "docs/evidence-templates/rls-live.extra-top-level.tmp.json",
@@ -1481,7 +1490,7 @@ runProductionSummarySymlinkParentTargetNegativeCheck();
 runProductionSummaryNegativeCheck({
   label: "Production summary extra check negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-check.tmp.json",
-  expectedFailure: "checks tam 26 madde içermeli.",
+  expectedFailure: "checks tam 27 madde içermeli.",
   mutate: (fixture) => {
     fixture.checks.push({
       label: "Beklenmeyen production check",
@@ -1533,7 +1542,7 @@ runProductionSummaryNegativeCheck({
 runProductionSummaryNegativeCheck({
   label: "Production summary extra smoke evidence negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-smoke-evidence.tmp.json",
-  expectedFailure: "smokeEvidence tam 7 alan içermeli.",
+  expectedFailure: "smokeEvidence tam 8 alan içermeli.",
   mutate: (fixture) => {
     fixture.smokeEvidence.unexpectedSmoke = { ...fixture.smokeEvidence.alertWebhook };
   },
@@ -1544,6 +1553,22 @@ runProductionSummaryNegativeCheck({
   expectedFailure: "smokeEvidence.traefikHttps.environment production olmalı.",
   mutate: (fixture) => {
     fixture.smokeEvidence.traefikHttps.environment = "staging";
+  },
+});
+runProductionSummaryNegativeCheck({
+  label: "Production summary report generation threshold negative",
+  path: "docs/evidence-templates/production-evidence-summary.report-generation-threshold.tmp.json",
+  expectedFailure: "smokeEvidence.reportGeneration.thresholds.generationDurationPassed true olmalı.",
+  mutate: (fixture) => {
+    fixture.smokeEvidence.reportGeneration.thresholds.generationDurationPassed = false;
+  },
+});
+runProductionSummaryNegativeCheck({
+  label: "Production summary report generation command negative",
+  path: "docs/evidence-templates/production-evidence-summary.report-generation-command.tmp.json",
+  expectedFailure: "smokeEvidence.reportGeneration.commandsPassed beklenen komutlardan biri olmalı.",
+  mutate: (fixture) => {
+    fixture.smokeEvidence.reportGeneration.commandsPassed = ["pnpm report-generation:local"];
   },
 });
 runProductionSummaryNegativeCheck({
@@ -1852,7 +1877,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra deployment field negative",
   path: "docs/evidence-templates/go-live.extra-deployment-field.tmp.json",
-  expectedFailure: "deployment tam 14 alan icermeli.",
+  expectedFailure: "deployment tam 15 alan icermeli.",
   mutate: (fixture) => {
     fixture.deployment.unexpectedField = true;
   },
@@ -1881,7 +1906,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra checksPassed negative",
   path: "docs/evidence-templates/go-live.extra-checks-passed.tmp.json",
-  expectedFailure: "productionEvidenceSummary.checksPassed tam 26 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.checksPassed tam 27 madde icermeli.",
   mutate: (fixture) => {
     fixture.productionEvidenceSummary.checksPassed.push("Beklenmeyen production check");
   },
@@ -1947,7 +1972,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked duplicate summary check negative",
   path: "docs/evidence-templates/go-live.linked-duplicate-summary-check.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.checks tam 26 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.checks tam 27 madde icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.duplicate-check-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -1986,7 +2011,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked extra summary smoke negative",
   path: "docs/evidence-templates/go-live.linked-extra-summary-smoke.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.smokeEvidence tam 7 alan icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.smokeEvidence tam 8 alan icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.extra-smoke-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -2466,8 +2491,9 @@ function runProductionSummarySymlinkParentTargetNegativeCheck() {
   const root = mkdtempSync(join(rootParent, "production-summary-parent-symlink-"));
   const realDirectory = join(root, "real-dir");
   const symlinkDirectory = join(root, "symlink-dir");
-  mkdirSync(realDirectory, { recursive: true });
-  writeFileSync(join(realDirectory, "release-summary.json"), readFileSync(productionSummaryFixturePath, "utf8"));
+  const realNestedDirectory = join(realDirectory, "nested");
+  mkdirSync(realNestedDirectory, { recursive: true });
+  writeFileSync(join(realNestedDirectory, "release-summary.json"), readFileSync(productionSummaryFixturePath, "utf8"));
   symlinkSync(realDirectory, symlinkDirectory, "dir");
 
   try {
@@ -2475,7 +2501,7 @@ function runProductionSummarySymlinkParentTargetNegativeCheck() {
       env: {
         ...process.env,
         PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE: "1",
-        PRODUCTION_EVIDENCE_SUMMARY_TARGET: pathToFileURL(join(symlinkDirectory, "release-summary.json")).href,
+        PRODUCTION_EVIDENCE_SUMMARY_TARGET: pathToFileURL(join(symlinkDirectory, "nested", "release-summary.json")).href,
       },
       encoding: "utf8",
     });
@@ -2535,8 +2561,9 @@ function runDeploymentRegionSymlinkParentTargetNegativeCheck() {
   const root = mkdtempSync(join(rootParent, "deployment-region-parent-symlink-"));
   const realDirectory = join(root, "real-dir");
   const symlinkDirectory = join(root, "symlink-dir");
-  mkdirSync(realDirectory, { recursive: true });
-  writeFileSync(join(realDirectory, "deployment-region.json"), `${JSON.stringify(deploymentRegionFixture, null, 2)}\n`);
+  const nestedDirectory = join(realDirectory, "nested");
+  mkdirSync(nestedDirectory, { recursive: true });
+  writeFileSync(join(nestedDirectory, "deployment-region.json"), `${JSON.stringify(deploymentRegionFixture, null, 2)}\n`);
   symlinkSync(realDirectory, symlinkDirectory, "dir");
 
   try {
@@ -2544,7 +2571,7 @@ function runDeploymentRegionSymlinkParentTargetNegativeCheck() {
       env: {
         ...process.env,
         DEPLOYMENT_REGION_ALLOW_EXAMPLE_EVIDENCE: "1",
-        DEPLOYMENT_REGION_TARGET: pathToFileURL(join(symlinkDirectory, "deployment-region.json")).href,
+        DEPLOYMENT_REGION_TARGET: pathToFileURL(join(symlinkDirectory, "nested", "deployment-region.json")).href,
       },
       encoding: "utf8",
     });
@@ -2672,8 +2699,9 @@ function runExternalMonitoringSymlinkParentTargetNegativeCheck() {
   const root = mkdtempSync(join(rootParent, "external-monitoring-parent-symlink-"));
   const realDirectory = join(root, "real-dir");
   const symlinkDirectory = join(root, "symlink-dir");
-  mkdirSync(realDirectory, { recursive: true });
-  writeFileSync(join(realDirectory, "external-monitoring.json"), `${JSON.stringify(externalMonitoringFixture, null, 2)}\n`);
+  const nestedDirectory = join(realDirectory, "nested");
+  mkdirSync(nestedDirectory, { recursive: true });
+  writeFileSync(join(nestedDirectory, "external-monitoring.json"), `${JSON.stringify(externalMonitoringFixture, null, 2)}\n`);
   symlinkSync(realDirectory, symlinkDirectory, "dir");
 
   try {
@@ -2681,7 +2709,7 @@ function runExternalMonitoringSymlinkParentTargetNegativeCheck() {
       env: {
         ...process.env,
         EXTERNAL_MONITORING_ALLOW_EXAMPLE_EVIDENCE: "1",
-        EXTERNAL_MONITORING_TARGET: pathToFileURL(join(symlinkDirectory, "external-monitoring.json")).href,
+        EXTERNAL_MONITORING_TARGET: pathToFileURL(join(symlinkDirectory, "nested", "external-monitoring.json")).href,
       },
       encoding: "utf8",
     });
@@ -2741,8 +2769,9 @@ function runObservabilityUatSymlinkParentTargetNegativeCheck() {
   const root = mkdtempSync(join(rootParent, "observability-uat-parent-symlink-"));
   const realDirectory = join(root, "real-dir");
   const symlinkDirectory = join(root, "symlink-dir");
-  mkdirSync(realDirectory, { recursive: true });
-  writeFileSync(join(realDirectory, "observability-uat.json"), `${JSON.stringify(observabilityUatFixture, null, 2)}\n`);
+  const nestedDirectory = join(realDirectory, "nested");
+  mkdirSync(nestedDirectory, { recursive: true });
+  writeFileSync(join(nestedDirectory, "observability-uat.json"), `${JSON.stringify(observabilityUatFixture, null, 2)}\n`);
   symlinkSync(realDirectory, symlinkDirectory, "dir");
 
   try {
@@ -2750,7 +2779,7 @@ function runObservabilityUatSymlinkParentTargetNegativeCheck() {
       env: {
         ...process.env,
         OBSERVABILITY_UAT_ALLOW_EXAMPLE_EVIDENCE: "1",
-        OBSERVABILITY_UAT_TARGET: pathToFileURL(join(symlinkDirectory, "observability-uat.json")).href,
+        OBSERVABILITY_UAT_TARGET: pathToFileURL(join(symlinkDirectory, "nested", "observability-uat.json")).href,
       },
       encoding: "utf8",
     });
@@ -2911,8 +2940,9 @@ function runRestoreDrillSymlinkParentTargetNegativeCheck() {
   const root = mkdtempSync(join(rootParent, "restore-drill-parent-symlink-"));
   const realDirectory = join(root, "real-dir");
   const symlinkDirectory = join(root, "symlink-dir");
-  mkdirSync(realDirectory, { recursive: true });
-  writeFileSync(join(realDirectory, "restore-drill.json"), `${JSON.stringify(restoreDrillFixture, null, 2)}\n`);
+  const nestedDirectory = join(realDirectory, "nested");
+  mkdirSync(nestedDirectory, { recursive: true });
+  writeFileSync(join(nestedDirectory, "restore-drill.json"), `${JSON.stringify(restoreDrillFixture, null, 2)}\n`);
   symlinkSync(realDirectory, symlinkDirectory, "dir");
 
   try {
@@ -2920,7 +2950,7 @@ function runRestoreDrillSymlinkParentTargetNegativeCheck() {
       env: {
         ...process.env,
         RESTORE_DRILL_ALLOW_EXAMPLE_EVIDENCE: "1",
-        RESTORE_DRILL_TARGET: pathToFileURL(join(symlinkDirectory, "restore-drill.json")).href,
+        RESTORE_DRILL_TARGET: pathToFileURL(join(symlinkDirectory, "nested", "restore-drill.json")).href,
       },
       encoding: "utf8",
     });
@@ -2980,8 +3010,9 @@ function runSecurityAuditSymlinkParentTargetNegativeCheck() {
   const root = mkdtempSync(join(rootParent, "security-audit-parent-symlink-"));
   const realDirectory = join(root, "real-dir");
   const symlinkDirectory = join(root, "symlink-dir");
-  mkdirSync(realDirectory, { recursive: true });
-  writeFileSync(join(realDirectory, "security-audit.json"), `${JSON.stringify(securityAuditFixture, null, 2)}\n`);
+  const nestedDirectory = join(realDirectory, "nested");
+  mkdirSync(nestedDirectory, { recursive: true });
+  writeFileSync(join(nestedDirectory, "security-audit.json"), `${JSON.stringify(securityAuditFixture, null, 2)}\n`);
   symlinkSync(realDirectory, symlinkDirectory, "dir");
 
   try {
@@ -2989,7 +3020,7 @@ function runSecurityAuditSymlinkParentTargetNegativeCheck() {
       env: {
         ...process.env,
         SECURITY_AUDIT_ALLOW_EXAMPLE_EVIDENCE: "1",
-        SECURITY_AUDIT_TARGET: pathToFileURL(join(symlinkDirectory, "security-audit.json")).href,
+        SECURITY_AUDIT_TARGET: pathToFileURL(join(symlinkDirectory, "nested", "security-audit.json")).href,
       },
       encoding: "utf8",
     });
@@ -3145,6 +3176,172 @@ function runRateLimitNegativeCheck({ label, path, expectedFailure, mutate }) {
   }
 }
 
+function runSymlinkParentTargetNegativeCheck({
+  label,
+  fixture,
+  scriptPath,
+  targetEnvName,
+  allowEnvName,
+  fileName,
+  directoryPrefix,
+  expectedFailure,
+}) {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, directoryPrefix));
+  const realDirectory = join(root, "real-dir");
+  const symlinkDirectory = join(root, "symlink-dir");
+  const nestedDirectory = join(realDirectory, "nested");
+  mkdirSync(nestedDirectory, { recursive: true });
+  writeFileSync(join(nestedDirectory, fileName), `${JSON.stringify(fixture, null, 2)}\n`);
+  symlinkSync(realDirectory, symlinkDirectory, "dir");
+
+  const env = {
+    ...process.env,
+    [targetEnvName]: pathToFileURL(join(symlinkDirectory, "nested", fileName)).href,
+  };
+  if (allowEnvName) {
+    env[allowEnvName] = "1";
+  }
+
+  try {
+    const result = spawnSync(process.execPath, [scriptPath], {
+      env,
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error(`Production evidence template kontrolü başarısız: ${label} beklenen şekilde kırılmadı.`);
+      process.exit(1);
+    }
+    if (!output.includes(expectedFailure)) {
+      console.error(`Production evidence template kontrolü başarısız: ${label} beklenen hata yok.`);
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function runFinancialRetentionSymlinkParentTargetNegativeCheck() {
+  runSymlinkParentTargetNegativeCheck({
+    label: "financial retention symlink parent target negative",
+    fixture: financialRetentionFixture,
+    scriptPath: "scripts/check-financial-retention-evidence.mjs",
+    targetEnvName: "FINANCIAL_RETENTION_TARGET",
+    allowEnvName: "FINANCIAL_RETENTION_ALLOW_EXAMPLE_EVIDENCE",
+    fileName: "financial-retention.json",
+    directoryPrefix: "financial-retention-parent-symlink-",
+    expectedFailure: "FINANCIAL_RETENTION_TARGET parent dizini symlink olmayan dizin olmali.",
+  });
+}
+
+function runIdentityMigrationSymlinkParentTargetNegativeCheck() {
+  runSymlinkParentTargetNegativeCheck({
+    label: "identity migration symlink parent target negative",
+    fixture: identityMigrationFixture,
+    scriptPath: "scripts/check-identity-migration-evidence.mjs",
+    targetEnvName: "IDENTITY_MIGRATION_TARGET",
+    allowEnvName: "IDENTITY_MIGRATION_ALLOW_EXAMPLE_EVIDENCE",
+    fileName: "identity-migration.json",
+    directoryPrefix: "identity-migration-parent-symlink-",
+    expectedFailure: "IDENTITY_MIGRATION_TARGET parent dizini symlink olmayan dizin olmali.",
+  });
+}
+
+function runKvkkInventorySymlinkParentTargetNegativeCheck() {
+  runSymlinkParentTargetNegativeCheck({
+    label: "KVKK inventory symlink parent target negative",
+    fixture: kvkkInventoryFixture,
+    scriptPath: "scripts/check-kvkk-inventory-evidence.mjs",
+    targetEnvName: "KVKK_INVENTORY_TARGET",
+    allowEnvName: null,
+    fileName: "kvkk-inventory.json",
+    directoryPrefix: "kvkk-inventory-parent-symlink-",
+    expectedFailure: "KVKK_INVENTORY_TARGET parent dizini symlink olmayan dizin olmali.",
+  });
+}
+
+function runAdminMfaSymlinkParentTargetNegativeCheck() {
+  runSymlinkParentTargetNegativeCheck({
+    label: "admin MFA symlink parent target negative",
+    fixture: adminMfaFixture,
+    scriptPath: "scripts/check-admin-mfa-evidence.mjs",
+    targetEnvName: "ADMIN_MFA_EVIDENCE_TARGET",
+    allowEnvName: "ADMIN_MFA_ALLOW_EXAMPLE_EVIDENCE",
+    fileName: "admin-mfa.json",
+    directoryPrefix: "admin-mfa-parent-symlink-",
+    expectedFailure: "ADMIN_MFA_EVIDENCE_TARGET parent dizini symlink olmayan dizin olmali.",
+  });
+}
+
+function runAiReportSummarySymlinkParentTargetNegativeCheck() {
+  runSymlinkParentTargetNegativeCheck({
+    label: "AI report summary symlink parent target negative",
+    fixture: aiReportSummaryFixture,
+    scriptPath: "scripts/check-ai-report-summary-evidence.mjs",
+    targetEnvName: "AI_REPORT_SUMMARY_EVIDENCE_TARGET",
+    allowEnvName: "AI_REPORT_SUMMARY_ALLOW_EXAMPLE_EVIDENCE",
+    fileName: "ai-report-summary.json",
+    directoryPrefix: "ai-report-summary-parent-symlink-",
+    expectedFailure: "AI_REPORT_SUMMARY_EVIDENCE_TARGET parent dizini symlink olmayan dizin olmali.",
+  });
+}
+
+function runUploadAvSymlinkParentTargetNegativeCheck() {
+  runSymlinkParentTargetNegativeCheck({
+    label: "upload AV symlink parent target negative",
+    fixture: uploadAvFixture,
+    scriptPath: "scripts/check-upload-av-evidence.mjs",
+    targetEnvName: "UPLOAD_AV_TARGET",
+    allowEnvName: "UPLOAD_AV_ALLOW_EXAMPLE_EVIDENCE",
+    fileName: "upload-av.json",
+    directoryPrefix: "upload-av-parent-symlink-",
+    expectedFailure: "UPLOAD_AV_TARGET parent dizini symlink olmayan dizin olmali.",
+  });
+}
+
+function runGithubCiSymlinkParentTargetNegativeCheck() {
+  runSymlinkParentTargetNegativeCheck({
+    label: "GitHub CI symlink parent target negative",
+    fixture: githubCiFixture,
+    scriptPath: "scripts/check-github-ci-evidence.mjs",
+    targetEnvName: "GITHUB_CI_EVIDENCE_TARGET",
+    allowEnvName: "GITHUB_CI_ALLOW_EXAMPLE_EVIDENCE",
+    fileName: "github-ci.json",
+    directoryPrefix: "github-ci-parent-symlink-",
+    expectedFailure: "GITHUB_CI_EVIDENCE_TARGET parent dizini symlink olmayan dizin olmali.",
+  });
+}
+
+function runInlineUploadMigrationSymlinkParentTargetNegativeCheck() {
+  runSymlinkParentTargetNegativeCheck({
+    label: "inline upload migration symlink parent target negative",
+    fixture: inlineUploadMigrationFixture,
+    scriptPath: "scripts/check-inline-upload-content-migration-evidence.mjs",
+    targetEnvName: "INLINE_UPLOAD_CONTENT_MIGRATION_TARGET",
+    allowEnvName: "INLINE_UPLOAD_CONTENT_MIGRATION_ALLOW_EXAMPLE_EVIDENCE",
+    fileName: "inline-upload-content-migration.json",
+    directoryPrefix: "inline-upload-migration-parent-symlink-",
+    expectedFailure: "INLINE_UPLOAD_CONTENT_MIGRATION_TARGET parent dizini symlink olmayan dizin olmali.",
+  });
+}
+
+function runRateLimitSymlinkParentTargetNegativeCheck() {
+  runSymlinkParentTargetNegativeCheck({
+    label: "rate limit symlink parent target negative",
+    fixture: rateLimitFixture,
+    scriptPath: "scripts/check-rate-limit-evidence.mjs",
+    targetEnvName: "RATE_LIMIT_EVIDENCE_TARGET",
+    allowEnvName: "RATE_LIMIT_ALLOW_EXAMPLE_EVIDENCE",
+    fileName: "rate-limit.json",
+    directoryPrefix: "rate-limit-parent-symlink-",
+    expectedFailure: "RATE_LIMIT_EVIDENCE_TARGET parent dizini symlink olmayan dizin olmali.",
+  });
+}
+
 function runLiveExamCycleNegativeCheck({ label, path, expectedFailure, mutate }) {
   const fixture = structuredClone(liveExamCycleFixture);
   mutate(fixture);
@@ -3185,8 +3382,9 @@ function runLiveExamCycleSymlinkParentTargetNegativeCheck() {
   const root = mkdtempSync(join(rootParent, "live-exam-cycle-parent-symlink-"));
   const realDirectory = join(root, "real-dir");
   const symlinkDirectory = join(root, "symlink-dir");
-  mkdirSync(realDirectory, { recursive: true });
-  writeFileSync(join(realDirectory, "live-exam-cycle.json"), `${JSON.stringify(liveExamCycleFixture, null, 2)}\n`);
+  const nestedDirectory = join(realDirectory, "nested");
+  mkdirSync(nestedDirectory, { recursive: true });
+  writeFileSync(join(nestedDirectory, "live-exam-cycle.json"), `${JSON.stringify(liveExamCycleFixture, null, 2)}\n`);
   symlinkSync(realDirectory, symlinkDirectory, "dir");
 
   try {
@@ -3194,7 +3392,7 @@ function runLiveExamCycleSymlinkParentTargetNegativeCheck() {
       env: {
         ...process.env,
         LIVE_EXAM_CYCLE_ALLOW_EXAMPLE_EVIDENCE: "1",
-        LIVE_EXAM_CYCLE_TARGET: pathToFileURL(join(symlinkDirectory, "live-exam-cycle.json")).href,
+        LIVE_EXAM_CYCLE_TARGET: pathToFileURL(join(symlinkDirectory, "nested", "live-exam-cycle.json")).href,
       },
       encoding: "utf8",
     });
@@ -3254,8 +3452,9 @@ function runRlsLiveSymlinkParentTargetNegativeCheck() {
   const root = mkdtempSync(join(rootParent, "rls-live-parent-symlink-"));
   const realDirectory = join(root, "real-dir");
   const symlinkDirectory = join(root, "symlink-dir");
-  mkdirSync(realDirectory, { recursive: true });
-  writeFileSync(join(realDirectory, "rls-live.json"), `${JSON.stringify(rlsLiveFixture, null, 2)}\n`);
+  const nestedDirectory = join(realDirectory, "nested");
+  mkdirSync(nestedDirectory, { recursive: true });
+  writeFileSync(join(nestedDirectory, "rls-live.json"), `${JSON.stringify(rlsLiveFixture, null, 2)}\n`);
   symlinkSync(realDirectory, symlinkDirectory, "dir");
 
   try {
@@ -3263,7 +3462,7 @@ function runRlsLiveSymlinkParentTargetNegativeCheck() {
       env: {
         ...process.env,
         RLS_LIVE_ALLOW_EXAMPLE_EVIDENCE: "1",
-        RLS_LIVE_EVIDENCE_TARGET: pathToFileURL(join(symlinkDirectory, "rls-live.json")).href,
+        RLS_LIVE_EVIDENCE_TARGET: pathToFileURL(join(symlinkDirectory, "nested", "rls-live.json")).href,
       },
       encoding: "utf8",
     });
@@ -3323,8 +3522,9 @@ function runUatSymlinkParentTargetNegativeCheck() {
   const root = mkdtempSync(join(rootParent, "uat-parent-symlink-"));
   const realDirectory = join(root, "real-dir");
   const symlinkDirectory = join(root, "symlink-dir");
-  mkdirSync(realDirectory, { recursive: true });
-  writeFileSync(join(realDirectory, "uat.json"), `${JSON.stringify(uatFixture, null, 2)}\n`);
+  const nestedDirectory = join(realDirectory, "nested");
+  mkdirSync(nestedDirectory, { recursive: true });
+  writeFileSync(join(nestedDirectory, "uat.json"), `${JSON.stringify(uatFixture, null, 2)}\n`);
   symlinkSync(realDirectory, symlinkDirectory, "dir");
 
   try {
@@ -3332,7 +3532,7 @@ function runUatSymlinkParentTargetNegativeCheck() {
       env: {
         ...process.env,
         UAT_ALLOW_EXAMPLE_EVIDENCE: "1",
-        UAT_EVIDENCE_TARGET: pathToFileURL(join(symlinkDirectory, "uat.json")).href,
+        UAT_EVIDENCE_TARGET: pathToFileURL(join(symlinkDirectory, "nested", "uat.json")).href,
       },
       encoding: "utf8",
     });
@@ -3392,8 +3592,9 @@ function runPilotSymlinkParentTargetNegativeCheck() {
   const root = mkdtempSync(join(rootParent, "pilot-parent-symlink-"));
   const realDirectory = join(root, "real-dir");
   const symlinkDirectory = join(root, "symlink-dir");
-  mkdirSync(realDirectory, { recursive: true });
-  writeFileSync(join(realDirectory, "pilot.json"), `${JSON.stringify(pilotFixture, null, 2)}\n`);
+  const nestedDirectory = join(realDirectory, "nested");
+  mkdirSync(nestedDirectory, { recursive: true });
+  writeFileSync(join(nestedDirectory, "pilot.json"), `${JSON.stringify(pilotFixture, null, 2)}\n`);
   symlinkSync(realDirectory, symlinkDirectory, "dir");
 
   try {
@@ -3401,7 +3602,7 @@ function runPilotSymlinkParentTargetNegativeCheck() {
       env: {
         ...process.env,
         PILOT_ALLOW_EXAMPLE_EVIDENCE: "1",
-        PILOT_EVIDENCE_TARGET: pathToFileURL(join(symlinkDirectory, "pilot.json")).href,
+        PILOT_EVIDENCE_TARGET: pathToFileURL(join(symlinkDirectory, "nested", "pilot.json")).href,
       },
       encoding: "utf8",
     });
@@ -3461,8 +3662,9 @@ function runDeploymentRollbackSymlinkParentTargetNegativeCheck() {
   const root = mkdtempSync(join(rootParent, "deployment-rollback-parent-symlink-"));
   const realDirectory = join(root, "real-dir");
   const symlinkDirectory = join(root, "symlink-dir");
-  mkdirSync(realDirectory, { recursive: true });
-  writeFileSync(join(realDirectory, "deployment-rollback.json"), `${JSON.stringify(deploymentRollbackFixture, null, 2)}\n`);
+  const nestedDirectory = join(realDirectory, "nested");
+  mkdirSync(nestedDirectory, { recursive: true });
+  writeFileSync(join(nestedDirectory, "deployment-rollback.json"), `${JSON.stringify(deploymentRollbackFixture, null, 2)}\n`);
   symlinkSync(realDirectory, symlinkDirectory, "dir");
 
   try {
@@ -3470,7 +3672,7 @@ function runDeploymentRollbackSymlinkParentTargetNegativeCheck() {
       env: {
         ...process.env,
         DEPLOYMENT_ROLLBACK_ALLOW_EXAMPLE_EVIDENCE: "1",
-        DEPLOYMENT_ROLLBACK_TARGET: pathToFileURL(join(symlinkDirectory, "deployment-rollback.json")).href,
+        DEPLOYMENT_ROLLBACK_TARGET: pathToFileURL(join(symlinkDirectory, "nested", "deployment-rollback.json")).href,
       },
       encoding: "utf8",
     });
@@ -3653,8 +3855,9 @@ function runLiveStatusGeneratorSymlinkParentTargetNegativeCheck() {
   const realDirectory = join(root, "real-dir");
   const symlinkDirectory = join(root, "symlink-dir");
   const outputPath = join(root, "live-status.parent-symlink-source-target.tmp.json");
-  mkdirSync(realDirectory, { recursive: true });
-  writeFileSync(join(realDirectory, "production-summary.json"), readFileSync(productionSummaryFixturePath, "utf8"));
+  const realNestedDirectory = join(realDirectory, "nested");
+  mkdirSync(realNestedDirectory, { recursive: true });
+  writeFileSync(join(realNestedDirectory, "production-summary.json"), readFileSync(productionSummaryFixturePath, "utf8"));
   symlinkSync(realDirectory, symlinkDirectory, "dir");
 
   try {
@@ -3663,7 +3866,7 @@ function runLiveStatusGeneratorSymlinkParentTargetNegativeCheck() {
       [
         "scripts/generate-live-status-evidence.mjs",
         "--summary-target",
-        pathToFileURL(join(symlinkDirectory, "production-summary.json")).href,
+        pathToFileURL(join(symlinkDirectory, "nested", "production-summary.json")).href,
         "--go-live-target",
         goLiveFixturePath,
         "--pilot-target",
@@ -3705,8 +3908,12 @@ function runLiveStatusGeneratorOutputTargetNegativeChecks() {
   const root = mkdtempSync(join(rootParent, "live-status-generator-output-"));
   const symlinkTargetPath = join(root, "live-status.real.json");
   const symlinkOutputPath = join(root, "live-status.symlink.json");
+  const realDirectory = join(root, "real-dir");
+  const symlinkDirectory = join(root, "symlink-dir");
   writeFileSync(symlinkTargetPath, "{}\n");
   symlinkSync(symlinkTargetPath, symlinkOutputPath);
+  mkdirSync(realDirectory, { recursive: true });
+  symlinkSync(realDirectory, symlinkDirectory, "dir");
 
   try {
     const tempResult = runLiveStatusGeneratorForOutput("/tmp/live-status-output-temp-negative.json");
@@ -3732,6 +3939,18 @@ function runLiveStatusGeneratorOutputTargetNegativeChecks() {
       console.error(symlinkOutput);
       process.exit(1);
     }
+
+    const symlinkParentResult = runLiveStatusGeneratorForOutput(join(symlinkDirectory, "nested", "live-status.json"));
+    const symlinkParentOutput = `${symlinkParentResult.stdout ?? ""}${symlinkParentResult.stderr ?? ""}`;
+    if (symlinkParentResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: live status generator output symlink parent negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!symlinkParentOutput.includes("LIVE_STATUS_EVIDENCE_OUTPUT parent dizini symlink olmayan dizin olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: live status generator output symlink parent negative beklenen hata yok.");
+      console.error(symlinkParentOutput);
+      process.exit(1);
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -3743,8 +3962,9 @@ function runLiveStatusEvidenceSymlinkParentTargetNegativeCheck() {
   const root = mkdtempSync(join(rootParent, "live-status-evidence-parent-symlink-"));
   const realDirectory = join(root, "real-dir");
   const symlinkDirectory = join(root, "symlink-dir");
-  mkdirSync(realDirectory, { recursive: true });
-  writeFileSync(join(realDirectory, "live-status.json"), readFileSync(liveStatusFixturePath, "utf8"));
+  const realNestedDirectory = join(realDirectory, "nested");
+  mkdirSync(realNestedDirectory, { recursive: true });
+  writeFileSync(join(realNestedDirectory, "live-status.json"), readFileSync(liveStatusFixturePath, "utf8"));
   symlinkSync(realDirectory, symlinkDirectory, "dir");
 
   try {
@@ -3753,7 +3973,7 @@ function runLiveStatusEvidenceSymlinkParentTargetNegativeCheck() {
         ...process.env,
         LIVE_STATUS_ALLOW_EXAMPLE_EVIDENCE: "1",
         LIVE_STATUS_READINESS_PATH: liveStatusReadinessPath,
-        LIVE_STATUS_EVIDENCE_TARGET: pathToFileURL(join(symlinkDirectory, "live-status.json")).href,
+        LIVE_STATUS_EVIDENCE_TARGET: pathToFileURL(join(symlinkDirectory, "nested", "live-status.json")).href,
       },
       encoding: "utf8",
     });
@@ -3843,12 +4063,13 @@ function runGoLiveLinkedLiveStatusSymlinkParentTargetNegativeCheck() {
   const realDirectory = join(root, "real-dir");
   const symlinkDirectory = join(root, "symlink-dir");
   const goLivePath = "docs/evidence-templates/go-live.linked-live-status-parent-symlink-target.tmp.json";
-  mkdirSync(realDirectory, { recursive: true });
-  writeFileSync(join(realDirectory, "live-status.json"), readFileSync(liveStatusFixturePath, "utf8"));
+  const realNestedDirectory = join(realDirectory, "nested");
+  mkdirSync(realNestedDirectory, { recursive: true });
+  writeFileSync(join(realNestedDirectory, "live-status.json"), readFileSync(liveStatusFixturePath, "utf8"));
   symlinkSync(realDirectory, symlinkDirectory, "dir");
 
   const fixture = structuredClone(goLiveFixture);
-  fixture.liveStatusEvidence.evidenceTarget = pathToFileURL(join(symlinkDirectory, "live-status.json")).href;
+  fixture.liveStatusEvidence.evidenceTarget = pathToFileURL(join(symlinkDirectory, "nested", "live-status.json")).href;
   writeFileSync(goLivePath, `${JSON.stringify(fixture, null, 2)}\n`);
 
   try {
@@ -3908,6 +4129,25 @@ function runStagingEvidenceEnvNegativeCheck() {
       process.exit(1);
     }
 
+    const defaultedSmokePath = "docs/evidence-templates/staging-evidence.defaulted-smoke.tmp.env";
+    writeFileSync(
+      defaultedSmokePath,
+      `${readFileSync("docs/evidence-templates/staging-evidence.env.example", "utf8")}\nREPORT_GENERATION_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/report-generation.json\n`,
+    );
+    const defaultedSmokeResult = spawnSync(process.execPath, ["scripts/check-staging-evidence-env.mjs", "--env-file", defaultedSmokePath], {
+      encoding: "utf8",
+    });
+    const defaultedSmokeOutput = `${defaultedSmokeResult.stdout ?? ""}${defaultedSmokeResult.stderr ?? ""}`;
+    if (defaultedSmokeResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging env defaulted smoke negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!defaultedSmokeOutput.includes("REPORT_GENERATION_SMOKE_EVIDENCE_FILE içermemeli; workflow veya --summary-file bu değeri üretir.")) {
+      console.error("Production evidence template kontrolü başarısız: staging env defaulted smoke negative beklenen hata yok.");
+      console.error(defaultedSmokeOutput);
+      process.exit(1);
+    }
+
     const workflow = readFileSync(".github/workflows/staging-deploy.yml", "utf8");
     const cleanupBlock = `      - name: Cleanup staging evidence env
         if: always()
@@ -3943,7 +4183,7 @@ function runStagingEvidenceEnvNegativeCheck() {
       process.exit(1);
     }
   } finally {
-    for (const cleanupPath of [path, workflowPath]) {
+    for (const cleanupPath of [path, "docs/evidence-templates/staging-evidence.defaulted-smoke.tmp.env", workflowPath]) {
       try {
         unlinkSync(cleanupPath);
       } catch {
@@ -3958,6 +4198,10 @@ function runStagingFirstGatesOutputDirNegativeCheck() {
   mkdirSync(rootParent, { recursive: true });
   const unexpectedRoot = mkdtempSync(join(rootParent, "staging-first-gates-output-unexpected-"));
   const symlinkRoot = mkdtempSync(join(rootParent, "staging-first-gates-output-symlink-"));
+  const realDirectory = mkdtempSync(join(rootParent, "staging-first-gates-output-real-parent-"));
+  const symlinkParentRoot = mkdtempSync(join(rootParent, "staging-first-gates-output-symlink-parent-"));
+  const symlinkParent = join(symlinkParentRoot, "link");
+  symlinkSync(realDirectory, symlinkParent, "dir");
 
   try {
     const tempResult = spawnSync(
@@ -4018,9 +4262,30 @@ function runStagingFirstGatesOutputDirNegativeCheck() {
       console.error(symlinkOutput);
       process.exit(1);
     }
+
+    const symlinkParentResult = spawnSync(
+      process.execPath,
+      ["scripts/run-staging-first-gate-smokes.mjs", "--output-dir", join(symlinkParent, "nested")],
+      {
+        env: process.env,
+        encoding: "utf8",
+      },
+    );
+    const symlinkParentOutput = `${symlinkParentResult.stdout ?? ""}${symlinkParentResult.stderr ?? ""}`;
+    if (symlinkParentResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates output-dir symlink parent negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!symlinkParentOutput.includes("staging:first-gates:smoke output-dir symlink olmayan dizin olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates output-dir symlink parent negative beklenen hata yok.");
+      console.error(symlinkParentOutput);
+      process.exit(1);
+    }
   } finally {
     rmSync(unexpectedRoot, { recursive: true, force: true });
     rmSync(symlinkRoot, { recursive: true, force: true });
+    rmSync(symlinkParentRoot, { recursive: true, force: true });
+    rmSync(realDirectory, { recursive: true, force: true });
   }
 }
 
@@ -4064,7 +4329,7 @@ function runGithubCiGeneratorOutputNegativeChecks() {
     const symlinkDirectory = join(root, "symlink-dir");
     mkdirSync(realDirectory, { recursive: true });
     symlinkSync(realDirectory, symlinkDirectory, "dir");
-    const symlinkParentResult = runGithubCiGeneratorOutputNegative(join(symlinkDirectory, "github-ci.json"));
+    const symlinkParentResult = runGithubCiGeneratorOutputNegative(join(symlinkDirectory, "nested", "github-ci.json"));
     const symlinkParentOutput = `${symlinkParentResult.stdout ?? ""}${symlinkParentResult.stderr ?? ""}`;
     if (symlinkParentResult.status === 0) {
       console.error("Production evidence template kontrolü başarısız: GitHub CI generator output symlink parent negative kırılmadı.");
@@ -4133,9 +4398,10 @@ function runInlineUploadMigrationReportOutputNegativeChecks() {
 
     const realDirectory = join(root, "real-dir");
     const symlinkDirectory = join(root, "symlink-dir");
-    mkdirSync(realDirectory, { recursive: true });
+    const realNestedDirectory = join(realDirectory, "nested");
+    mkdirSync(realNestedDirectory, { recursive: true });
     symlinkSync(realDirectory, symlinkDirectory, "dir");
-    const symlinkParentResult = runInlineUploadMigrationReportOutputNegative(join(symlinkDirectory, "report.json"));
+    const symlinkParentResult = runInlineUploadMigrationReportOutputNegative(join(symlinkDirectory, "nested", "report.json"));
     const symlinkParentOutput = `${symlinkParentResult.stdout ?? ""}${symlinkParentResult.stderr ?? ""}`;
     if (symlinkParentResult.status === 0) {
       console.error("Production evidence template kontrolü başarısız: inline upload migration report output symlink parent negative kırılmadı.");
@@ -4230,6 +4496,7 @@ function runStagingReleaseArtifactsBundleCheck() {
       alertWebhook: "alert-webhook.json",
       backupOffsite: "backup-offsite.json",
       walArchive: "wal-archive.json",
+      reportGeneration: "report-generation.json",
     })) {
       writeFileSync(`${smokeDir}/${file}`, `${JSON.stringify(summary.smokeEvidence[key], null, 2)}\n`);
     }
@@ -4328,6 +4595,32 @@ function runStagingReleaseArtifactsBundleCheck() {
       console.error(positive.stdout);
       console.error(positive.stderr);
       process.exit(positive.status ?? 1);
+    }
+
+    const symlinkParentRoot = mkdtempSync(join(rootParent, "staging-release-artifacts-parent-symlink-"));
+    const symlinkParent = join(symlinkParentRoot, "parent-link");
+    symlinkSync(rootParent, symlinkParent, "dir");
+    try {
+      const symlinkParentNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
+        env: {
+          ...process.env,
+          STAGING_RELEASE_ARTIFACTS_TARGET: join(symlinkParent, basename(root)),
+          STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1",
+        },
+        encoding: "utf8",
+      });
+      const symlinkParentOutput = `${symlinkParentNegative.stdout ?? ""}${symlinkParentNegative.stderr ?? ""}`;
+      if (symlinkParentNegative.status === 0) {
+        console.error("Production evidence template kontrolü başarısız: staging release artifact parent symlink negative beklenen şekilde kırılmadı.");
+        process.exit(1);
+      }
+      if (!symlinkParentOutput.includes("artifactsDir parent dizini symlink olmayan dizin olmalı.")) {
+        console.error("Production evidence template kontrolü başarısız: staging release artifact parent symlink negative beklenen hata yok.");
+        console.error(symlinkParentOutput);
+        process.exit(1);
+      }
+    } finally {
+      rmSync(symlinkParentRoot, { recursive: true, force: true });
     }
 
     const wrongReleaseSummaryPath = `${root}/release-summary-wrong-tag.json`;
@@ -4685,9 +4978,10 @@ function runProdEvidenceSummaryOutputNegativeChecks() {
 
     const realDirectory = join(root, "real-dir");
     const symlinkDirectory = join(root, "symlink-dir");
-    mkdirSync(realDirectory, { recursive: true });
+    const realNestedDirectory = join(realDirectory, "nested");
+    mkdirSync(realNestedDirectory, { recursive: true });
     symlinkSync(realDirectory, symlinkDirectory, "dir");
-    const symlinkParentResult = runProdEvidenceSummaryOutputNegative(join(symlinkDirectory, "release-summary.json"));
+    const symlinkParentResult = runProdEvidenceSummaryOutputNegative(join(symlinkDirectory, "nested", "release-summary.json"));
     const symlinkParentOutput = `${symlinkParentResult.stdout ?? ""}${symlinkParentResult.stderr ?? ""}`;
     if (symlinkParentResult.status === 0) {
       console.error("Production evidence template kontrolü başarısız: prod evidence summary output symlink parent negative kırılmadı.");
@@ -4756,10 +5050,11 @@ function runProdEvidenceSmokeEvidenceFileNegativeChecks() {
 
     const realDirectory = join(root, "real-dir");
     const symlinkDirectory = join(root, "symlink-dir");
-    mkdirSync(realDirectory, { recursive: true });
+    const realNestedDirectory = join(realDirectory, "nested");
+    mkdirSync(realNestedDirectory, { recursive: true });
     symlinkSync(realDirectory, symlinkDirectory, "dir");
     const symlinkParentEnv = createValidProdEnvForNegativeCheck();
-    symlinkParentEnv.TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE = join(symlinkDirectory, "traefik-https.json");
+    symlinkParentEnv.TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE = join(symlinkDirectory, "nested", "traefik-https.json");
     runProdEvidenceSmokeEvidenceFileNegative(
       "prod evidence smoke file symlink parent negative",
       symlinkParentEnv,
@@ -4889,16 +5184,17 @@ function runProdEvidenceSymlinkParentEvidenceTargetNegativeCheck() {
   const root = mkdtempSync(join(rootParent, "prod-evidence-symlink-parent-"));
   const realDirectory = join(root, "real-dir");
   const symlinkDirectory = join(root, "symlink-dir");
-  mkdirSync(realDirectory, { recursive: true });
+  const realNestedDirectory = join(realDirectory, "nested");
+  mkdirSync(realNestedDirectory, { recursive: true });
   writeFileSync(
-    join(realDirectory, "deployment-region.json"),
+    join(realNestedDirectory, "deployment-region.json"),
     readFileSync("docs/evidence-templates/deployment-region.example.json", "utf8"),
   );
   symlinkSync(realDirectory, symlinkDirectory, "dir");
 
   try {
     const env = createValidProdEnvForNegativeCheck();
-    env.DEPLOYMENT_REGION_TARGET = pathToFileURL(join(symlinkDirectory, "deployment-region.json")).href;
+    env.DEPLOYMENT_REGION_TARGET = pathToFileURL(join(symlinkDirectory, "nested", "deployment-region.json")).href;
 
     const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
       env,
@@ -5086,7 +5382,7 @@ function createValidProdEnvForNegativeCheck() {
     ADMIN_MFA_RECOVERY_HASH_KEY: "admin-mfa-recovery-hash-12345678901",
     ADMIN_MFA_CHALLENGE_SECRET: "admin-mfa-challenge-secret-123456789",
     ADMIN_MFA_ISSUER: "Uzman Hocam",
-    AI_REPORT_SUMMARY_PROVIDER: "template",
+    AI_REPORT_SUMMARY_PROVIDER: "disabled",
     COOKIE_DOMAIN: "uzmanhocam.com",
     COOKIE_SECURE: "true",
     LOG_LEVEL: "info",
@@ -5154,6 +5450,7 @@ function createValidProdEnvForNegativeCheck() {
     "ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE",
     "BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE",
     "WAL_ARCHIVE_SMOKE_EVIDENCE_FILE",
+    "REPORT_GENERATION_SMOKE_EVIDENCE_FILE",
   ]) {
     delete env[key];
   }

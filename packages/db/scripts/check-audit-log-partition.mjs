@@ -69,6 +69,7 @@ requireTokens(
     "audit log partition evidence temp path negative",
     "audit log partition evidence symlink file negative",
     "audit log partition evidence symlink parent negative",
+    "join(symlinkDirectory, \"nested\", \"evidence.json\")",
     "AuditLog_2026_06",
     "AuditLog_2026_07",
     "AuditLog_2026_08",

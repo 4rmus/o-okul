@@ -92,7 +92,7 @@
 - `pnpm prod:evidence:check` eklendi; production env, Traefik HTTPS, SMS provider, Sentry test
   event'i, alert webhook, off-host backup, WAL archive, restore drill, KVKK envanter,
   observability UAT, güvenlik denetimi ve UAT kanıt kontrollerini tek komutta sıralı çalıştırır;
-  `--summary-file` verilirse release kanıt özetini ve Traefik/SMS/notification/Sentry/alert/backup/WAL
+  `--summary-file` verilirse release kanıt özetini ve Traefik/SMS/notification/Sentry/alert/backup/WAL/report-generation
   smoke artifact setini secret içermeyen JSON olarak yazar.
 - `pnpm sms:smoke` eklendi; Netgsm test/canlı credential geldiğinde kontrollü SMS sağlayıcı
   doğrulaması yapılır, gerçek sağlayıcı için `SMS_SMOKE_CONFIRM=send` gerekir.

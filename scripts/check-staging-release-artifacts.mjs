@@ -1,12 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, dirname, relative, resolve } from "node:path";
+import { basename, dirname, parse, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
 
 const artifactsTarget =
   process.env.STAGING_RELEASE_ARTIFACTS_TARGET ?? readArgValue("--artifacts-dir") ?? process.argv[2];
 const allowExampleEvidence = process.env.STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE === "1";
+const artifactsDirParentSymlinkError = "artifactsDir parent dizini symlink olmayan dizin olmalı.";
 
 const smokeArtifacts = new Map([
   ["traefikHttps", { file: "traefik-https.json", check: "traefik_https_smoke" }],
@@ -16,6 +17,7 @@ const smokeArtifacts = new Map([
   ["alertWebhook", { file: "alert-webhook.json", check: "alert_webhook_smoke" }],
   ["backupOffsite", { file: "backup-offsite.json", check: "backup_offsite_smoke" }],
   ["walArchive", { file: "wal-archive.json", check: "wal_archive_smoke" }],
+  ["reportGeneration", { file: "report-generation.json", check: "report_generation_smoke" }],
 ]);
 const firstGateSummaryKeys = new Map([
   ["Traefik HTTPS smoke", "traefikHttps"],
@@ -214,6 +216,7 @@ if (!artifactsTarget) {
 
 const artifactsDir = resolveArtifactsDir(artifactsTarget);
 const failures = [];
+requireParentPathAllowed(dirname(artifactsDir), failures, "artifactsDir parent");
 requireDirectory(artifactsDir, failures, "artifactsDir");
 requireNoSymlinks(artifactsDir, failures);
 requireNoForbiddenArtifactFiles(artifactsDir, failures);
@@ -470,6 +473,23 @@ function requireDirectory(path, output, label) {
   }
   if (!statSync(path).isDirectory()) {
     output.push(`${label} dizin olmalı: ${path}`);
+  }
+}
+
+function requireParentPathAllowed(parentPath, output, label) {
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+    if (!existsSync(current)) return;
+
+    const stat = lstatSync(current);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      output.push(label === "artifactsDir parent" ? artifactsDirParentSymlinkError : `${label} dizini symlink olmayan dizin olmalı.`);
+      return;
+    }
   }
 }
 

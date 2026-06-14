@@ -3,7 +3,7 @@
   "environment": "staging",
   "checkedAt": "2026-06-01",
   "provider": {
-    "mode": "template",
+    "mode": "disabled",
     "featureFlagEnv": "AI_REPORT_SUMMARY_PROVIDER",
     "evidenceTargetEnv": "AI_REPORT_SUMMARY_EVIDENCE_TARGET",
     "externalProvider": "disabled",
@@ -29,7 +29,7 @@
       "email",
       "address"
     ],
-    "overseasTransferAssessment": "Template mode runs locally and does not transfer data to an external AI provider."
+    "overseasTransferAssessment": "AI report summary is disabled for this release and no data is transferred to an external AI provider."
   },
   "externalAiStopRule": {
     "kvkkAssessmentRequired": true,
@@ -39,19 +39,17 @@
     "decisionReference": "DEC-20260613-03"
   },
   "generation": {
-    "templateSummaryGenerated": true,
-    "studentCommentaryGenerated": true,
-    "teacherActionDraftGenerated": true,
-    "teacherReviewRequired": true,
-    "disclaimerIncluded": true,
+    "featureDisabled": true,
+    "templateSummaryGenerated": false,
+    "studentCommentaryGenerated": false,
+    "teacherActionDraftGenerated": false,
     "deterministicOutput": true,
-    "outputStoredInSnapshot": true
+    "outputStoredInSnapshot": false
   },
   "validation": {
     "piiLeakageCheckPassed": true,
     "logsExcludePromptResponse": true,
-    "externalProviderNotCalled": true,
-    "templateRegressionPassed": true
+    "externalProviderNotCalled": true
   },
   "commandsPassed": [
     "pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/report-generation-job.test.ts",
@@ -59,7 +57,7 @@
     "AI_REPORT_SUMMARY_ALLOW_EXAMPLE_EVIDENCE=1 AI_REPORT_SUMMARY_EVIDENCE_TARGET=file:///root/uzman-hocam/docs/evidence-templates/ai-report-summary.example.json pnpm ai-report-summary:check"
   ],
   "evidenceReferences": [
-    "artifacts/example/ai-report-summary/template-snapshot.json",
+    "artifacts/example/ai-report-summary/disabled-provider-check.log",
     "artifacts/example/ai-report-summary/pii-leakage-check.log"
   ],
   "gaps": []

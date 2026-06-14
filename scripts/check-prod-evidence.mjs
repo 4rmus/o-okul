@@ -39,6 +39,7 @@ const smokeEvidenceFileDefaults = {
   ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE: "alert-webhook.json",
   BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE: "backup-offsite.json",
   WAL_ARCHIVE_SMOKE_EVIDENCE_FILE: "wal-archive.json",
+  REPORT_GENERATION_SMOKE_EVIDENCE_FILE: "report-generation.json",
 };
 
 if (summaryOutputFile) {
@@ -54,6 +55,7 @@ const checks = [
   ["Alert webhook", "scripts/smoke-alert-webhook.mjs"],
   ["Off-host backup target", "scripts/smoke-backup-offsite.mjs"],
   ["WAL archive target", "scripts/smoke-wal-archive-target.mjs"],
+  ["Report generation smoke", "scripts/smoke-report-generation-live.mjs"],
   ["Deployment region evidence", "scripts/check-deployment-region-evidence.mjs"],
   ["Deployment rollback evidence", "scripts/check-deployment-rollback-evidence.mjs"],
   ["GitHub CI evidence", "scripts/check-github-ci-evidence.mjs"],
@@ -189,6 +191,7 @@ function writeSummary(file) {
     alertWebhook: readSmokeEvidence("ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE", "alert_webhook_smoke"),
     backupOffsite: readSmokeEvidence("BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE", "backup_offsite_smoke"),
     walArchive: readSmokeEvidence("WAL_ARCHIVE_SMOKE_EVIDENCE_FILE", "wal_archive_smoke"),
+    reportGeneration: readSmokeEvidence("REPORT_GENERATION_SMOKE_EVIDENCE_FILE", "report_generation_smoke"),
   };
   const reports = {
     restoreDrill: readJsonTarget(env.RESTORE_DRILL_TARGET),
