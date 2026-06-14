@@ -12,12 +12,26 @@ export interface AuthUser {
   roles: string[];
   membershipVersion: number;
   purgedAt?: string;
+  totpSecretEncrypted?: string;
+  totpEnabledAt?: string;
+  totpRecoveryCodeHashes?: string[];
+  totpLastUsedCounter?: string;
 }
 
 export interface AuthUserStore {
   findByEmail(email: string): Promise<AuthUser | undefined>;
   findById(id: string): Promise<AuthUser | undefined>;
   updatePassword(id: string, passwordHash: string): Promise<AuthUser | undefined>;
+  enableTotp(input: {
+    userId: string;
+    secretEncrypted: string;
+    enabledAt: string;
+    recoveryCodeHashes: string[];
+    lastUsedCounter?: string;
+  }): Promise<AuthUser | undefined>;
+  disableTotp(userId: string): Promise<AuthUser | undefined>;
+  markTotpCounterUsed(userId: string, counter: string): Promise<boolean>;
+  consumeTotpRecoveryCode(userId: string, codeHash: string): Promise<boolean>;
   purgePii(id: string, input: { email: string; name: string; purgedAt: string }): Promise<AuthUser | undefined>;
 }
 
@@ -32,6 +46,7 @@ const demoUsers: AuthUser[] = [
     tenantId: "tenant-a",
     roles: ["TENANT_ADMIN"],
     membershipVersion: 1,
+    totpRecoveryCodeHashes: [],
   },
   {
     id: "user-tenant-b",
@@ -41,6 +56,7 @@ const demoUsers: AuthUser[] = [
     tenantId: "tenant-b",
     roles: ["TENANT_ADMIN"],
     membershipVersion: 1,
+    totpRecoveryCodeHashes: [],
   },
   {
     id: "assistant-tenant-a",
@@ -50,6 +66,7 @@ const demoUsers: AuthUser[] = [
     tenantId: "tenant-a",
     roles: ["ASSISTANT_ADMIN"],
     membershipVersion: 1,
+    totpRecoveryCodeHashes: [],
   },
   {
     id: "teacher-tenant-a",
@@ -59,6 +76,7 @@ const demoUsers: AuthUser[] = [
     tenantId: "tenant-a",
     roles: ["TEACHER"],
     membershipVersion: 1,
+    totpRecoveryCodeHashes: [],
   },
   {
     id: "student-tenant-a",
@@ -68,6 +86,7 @@ const demoUsers: AuthUser[] = [
     tenantId: "tenant-a",
     roles: ["STUDENT"],
     membershipVersion: 1,
+    totpRecoveryCodeHashes: [],
   },
   {
     id: "guardian-tenant-a",
@@ -77,6 +96,7 @@ const demoUsers: AuthUser[] = [
     tenantId: "tenant-a",
     roles: ["GUARDIAN"],
     membershipVersion: 1,
+    totpRecoveryCodeHashes: [],
   },
   {
     id: "user-system",
@@ -86,6 +106,7 @@ const demoUsers: AuthUser[] = [
     tenantId: "system",
     roles: ["SYSTEM_ADMIN"],
     membershipVersion: 1,
+    totpRecoveryCodeHashes: [],
   },
   {
     id: "user-expired-tenant",
@@ -95,6 +116,7 @@ const demoUsers: AuthUser[] = [
     tenantId: "tenant-expired",
     roles: ["TENANT_ADMIN"],
     membershipVersion: 1,
+    totpRecoveryCodeHashes: [],
   },
   {
     id: "user-privacy",
@@ -104,6 +126,7 @@ const demoUsers: AuthUser[] = [
     tenantId: "tenant-a",
     roles: ["TENANT_ADMIN"],
     membershipVersion: 1,
+    totpRecoveryCodeHashes: [],
   },
   {
     id: "user-finance-privacy",
@@ -113,6 +136,7 @@ const demoUsers: AuthUser[] = [
     tenantId: "tenant-a",
     roles: ["TENANT_ADMIN"],
     membershipVersion: 1,
+    totpRecoveryCodeHashes: [],
   },
 ];
 
@@ -126,6 +150,10 @@ export function upsertInMemoryAuthUser(input: {
   passwordHash?: string;
   tenantId: string;
   roles: string[];
+  totpSecretEncrypted?: string;
+  totpEnabledAt?: string;
+  totpRecoveryCodeHashes?: string[];
+  totpLastUsedCounter?: string;
 }): AuthUser {
   const email = input.email.toLowerCase();
   const existing = inMemoryUsers.find((candidate) => candidate.email.toLowerCase() === email);
@@ -134,6 +162,10 @@ export function upsertInMemoryAuthUser(input: {
     existing.tenantId = input.tenantId;
     existing.roles = [...input.roles];
     existing.membershipVersion += 1;
+    existing.totpSecretEncrypted = input.totpSecretEncrypted;
+    existing.totpEnabledAt = input.totpEnabledAt;
+    existing.totpRecoveryCodeHashes = [...(input.totpRecoveryCodeHashes ?? existing.totpRecoveryCodeHashes ?? [])];
+    existing.totpLastUsedCounter = input.totpLastUsedCounter;
     if (input.password !== undefined || input.passwordHash !== undefined) {
       existing.passwordHash = input.passwordHash ?? hashPassword(input.password ?? "");
     }
@@ -148,6 +180,10 @@ export function upsertInMemoryAuthUser(input: {
     tenantId: input.tenantId,
     roles: [...input.roles],
     membershipVersion: 1,
+    totpSecretEncrypted: input.totpSecretEncrypted,
+    totpEnabledAt: input.totpEnabledAt,
+    totpRecoveryCodeHashes: [...(input.totpRecoveryCodeHashes ?? [])],
+    totpLastUsedCounter: input.totpLastUsedCounter,
   };
   inMemoryUsers.push(user);
   return cloneRequiredUser(user);
@@ -174,6 +210,52 @@ export class InMemoryAuthUserStore implements AuthUserStore {
     return cloneUser(user);
   }
 
+  async enableTotp(input: {
+    userId: string;
+    secretEncrypted: string;
+    enabledAt: string;
+    recoveryCodeHashes: string[];
+    lastUsedCounter?: string;
+  }): Promise<AuthUser | undefined> {
+    const user = this.users.find((candidate) => candidate.id === input.userId);
+    if (!user) return undefined;
+
+    user.totpSecretEncrypted = input.secretEncrypted;
+    user.totpEnabledAt = input.enabledAt;
+    user.totpRecoveryCodeHashes = [...input.recoveryCodeHashes];
+    user.totpLastUsedCounter = input.lastUsedCounter;
+    user.membershipVersion += 1;
+    return cloneUser(user);
+  }
+
+  async disableTotp(userId: string): Promise<AuthUser | undefined> {
+    const user = this.users.find((candidate) => candidate.id === userId);
+    if (!user) return undefined;
+
+    user.totpSecretEncrypted = undefined;
+    user.totpEnabledAt = undefined;
+    user.totpRecoveryCodeHashes = [];
+    user.totpLastUsedCounter = undefined;
+    user.membershipVersion += 1;
+    return cloneUser(user);
+  }
+
+  async markTotpCounterUsed(userId: string, counter: string): Promise<boolean> {
+    const user = this.users.find((candidate) => candidate.id === userId);
+    if (!user || user.totpLastUsedCounter === counter) return false;
+
+    user.totpLastUsedCounter = counter;
+    return true;
+  }
+
+  async consumeTotpRecoveryCode(userId: string, codeHash: string): Promise<boolean> {
+    const user = this.users.find((candidate) => candidate.id === userId);
+    if (!user?.totpRecoveryCodeHashes?.includes(codeHash)) return false;
+
+    user.totpRecoveryCodeHashes = user.totpRecoveryCodeHashes.filter((hash) => hash !== codeHash);
+    return true;
+  }
+
   async purgePii(id: string, input: { email: string; name: string; purgedAt: string }): Promise<AuthUser | undefined> {
     const user = this.users.find((candidate) => candidate.id === id);
     if (!user) return undefined;
@@ -183,6 +265,10 @@ export class InMemoryAuthUserStore implements AuthUserStore {
     user.passwordHash = "";
     user.membershipVersion += 1;
     user.purgedAt = input.purgedAt;
+    user.totpSecretEncrypted = undefined;
+    user.totpEnabledAt = undefined;
+    user.totpRecoveryCodeHashes = [];
+    user.totpLastUsedCounter = undefined;
     return cloneUser(user);
   }
 }
@@ -194,8 +280,8 @@ export class PostgresAuthUserStore implements AuthUserStore {
     const result = await this.queryAuthUsers(
       `WHERE lower(u."email") = lower($1)
          AND t."status" = 'ACTIVE'
-         AND (t."licenseEndsAt" IS NULL OR t."licenseEndsAt" >= now())
-       GROUP BY u."id", u."email", u."name", u."passwordHash", m."tenantId"
+       GROUP BY u."id", u."email", u."name", u."passwordHash", u."totpSecretEncrypted",
+                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
        ORDER BY min(m."createdAt") ASC
        LIMIT 1`,
       [email],
@@ -207,8 +293,8 @@ export class PostgresAuthUserStore implements AuthUserStore {
     const result = await this.queryAuthUsers(
       `WHERE u."id" = $1
          AND t."status" = 'ACTIVE'
-         AND (t."licenseEndsAt" IS NULL OR t."licenseEndsAt" >= now())
-       GROUP BY u."id", u."email", u."name", u."passwordHash", m."tenantId"
+       GROUP BY u."id", u."email", u."name", u."passwordHash", u."totpSecretEncrypted",
+                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
        ORDER BY min(m."createdAt") ASC
        LIMIT 1`,
       [id],
@@ -220,7 +306,14 @@ export class PostgresAuthUserStore implements AuthUserStore {
     const updated = await withBypassRlsQuery(this.pool, async (client) => {
       const update = await client.query(
         `UPDATE "User"
-         SET "email" = $2, "name" = $3, "passwordHash" = '', "updatedAt" = now()
+         SET "email" = $2,
+             "name" = $3,
+             "passwordHash" = '',
+             "totpSecretEncrypted" = NULL,
+             "totpEnabledAt" = NULL,
+             "totpRecoveryCodeHashes" = ARRAY[]::TEXT[],
+             "totpLastUsedCounter" = NULL,
+             "updatedAt" = now()
          WHERE "id" = $1
          RETURNING "id"`,
         [id, input.email, input.name],
@@ -228,6 +321,78 @@ export class PostgresAuthUserStore implements AuthUserStore {
       return Boolean(update.rows[0]);
     });
     return updated ? this.findById(id) : undefined;
+  }
+
+  async enableTotp(input: {
+    userId: string;
+    secretEncrypted: string;
+    enabledAt: string;
+    recoveryCodeHashes: string[];
+    lastUsedCounter?: string;
+  }): Promise<AuthUser | undefined> {
+    const updated = await withBypassRlsQuery(this.pool, async (client) => {
+      const update = await client.query(
+        `UPDATE "User"
+         SET "totpSecretEncrypted" = $2,
+             "totpEnabledAt" = $3::timestamptz,
+             "totpRecoveryCodeHashes" = $4::text[],
+             "totpLastUsedCounter" = $5,
+             "updatedAt" = now()
+         WHERE "id" = $1
+         RETURNING "id"`,
+        [input.userId, input.secretEncrypted, input.enabledAt, input.recoveryCodeHashes, input.lastUsedCounter ?? null],
+      );
+      return Boolean(update.rows[0]);
+    });
+    return updated ? this.findById(input.userId) : undefined;
+  }
+
+  async disableTotp(userId: string): Promise<AuthUser | undefined> {
+    const updated = await withBypassRlsQuery(this.pool, async (client) => {
+      const update = await client.query(
+        `UPDATE "User"
+         SET "totpSecretEncrypted" = NULL,
+             "totpEnabledAt" = NULL,
+             "totpRecoveryCodeHashes" = ARRAY[]::TEXT[],
+             "totpLastUsedCounter" = NULL,
+             "updatedAt" = now()
+         WHERE "id" = $1
+         RETURNING "id"`,
+        [userId],
+      );
+      return Boolean(update.rows[0]);
+    });
+    return updated ? this.findById(userId) : undefined;
+  }
+
+  async markTotpCounterUsed(userId: string, counter: string): Promise<boolean> {
+    return withBypassRlsQuery(this.pool, async (client) => {
+      const update = await client.query(
+        `UPDATE "User"
+         SET "totpLastUsedCounter" = $2,
+             "updatedAt" = now()
+         WHERE "id" = $1
+           AND "totpLastUsedCounter" IS DISTINCT FROM $2
+         RETURNING "id"`,
+        [userId, counter],
+      );
+      return Boolean(update.rows[0]);
+    });
+  }
+
+  async consumeTotpRecoveryCode(userId: string, codeHash: string): Promise<boolean> {
+    return withBypassRlsQuery(this.pool, async (client) => {
+      const update = await client.query(
+        `UPDATE "User"
+         SET "totpRecoveryCodeHashes" = array_remove("totpRecoveryCodeHashes", $2),
+             "updatedAt" = now()
+         WHERE "id" = $1
+           AND $2 = ANY("totpRecoveryCodeHashes")
+         RETURNING "id"`,
+        [userId, codeHash],
+      );
+      return Boolean(update.rows[0]);
+    });
   }
 
   async updatePassword(id: string, passwordHash: string): Promise<AuthUser | undefined> {
@@ -253,6 +418,10 @@ export class PostgresAuthUserStore implements AuthUserStore {
            u."email",
            u."name",
            u."passwordHash",
+           u."totpSecretEncrypted",
+           u."totpEnabledAt",
+           u."totpRecoveryCodeHashes",
+           u."totpLastUsedCounter",
            m."tenantId",
            array_agg(m."role"::text ORDER BY m."role"::text) AS roles
          FROM "User" u
@@ -290,6 +459,10 @@ interface AuthUserRow {
   email: string;
   name: string;
   passwordHash: string;
+  totpSecretEncrypted: string | null;
+  totpEnabledAt: Date | string | null;
+  totpRecoveryCodeHashes: string[] | null;
+  totpLastUsedCounter: string | null;
   tenantId: string;
   roles: string[];
 }
@@ -303,11 +476,15 @@ function toAuthUser(row: AuthUserRow): AuthUser {
     tenantId: row.tenantId,
     roles: row.roles,
     membershipVersion: 1,
+    totpSecretEncrypted: row.totpSecretEncrypted ?? undefined,
+    totpEnabledAt: row.totpEnabledAt ? new Date(row.totpEnabledAt).toISOString() : undefined,
+    totpRecoveryCodeHashes: [...(row.totpRecoveryCodeHashes ?? [])],
+    totpLastUsedCounter: row.totpLastUsedCounter ?? undefined,
   };
 }
 
 function cloneRequiredUser(user: AuthUser): AuthUser {
-  return { ...user, roles: [...user.roles] };
+  return { ...user, roles: [...user.roles], totpRecoveryCodeHashes: [...(user.totpRecoveryCodeHashes ?? [])] };
 }
 
 function cloneUser(user: AuthUser | undefined): AuthUser | undefined {

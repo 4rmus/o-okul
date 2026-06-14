@@ -361,10 +361,16 @@ function requiredText(value: string | undefined, errorCode: string): string {
 
 function requiredDate(value: string | undefined): string {
   const trimmed = requiredText(value, "ATTENDANCE_DATE_REQUIRED");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+  if (!isCalendarDateString(trimmed)) {
     throw new BadRequestException("ATTENDANCE_DATE_INVALID");
   }
   return trimmed;
+}
+
+function isCalendarDateString(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 function optionalText(value: string | undefined): string | undefined {

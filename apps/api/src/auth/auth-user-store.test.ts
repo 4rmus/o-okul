@@ -78,6 +78,7 @@ describe("auth user store", () => {
     expect(queries.some((query) => query.sql.includes("set_config('app.bypass_rls'"))).toBe(true);
     expect(queries.some((query) => query.sql.includes('JOIN "Tenant" t'))).toBe(true);
     expect(queries.some((query) => query.sql.includes(`t."status" = 'ACTIVE'`))).toBe(true);
+    expect(queries.some((query) => query.sql.includes(`t."licenseEndsAt"`))).toBe(false);
     expect(queries.some((query) => query.sql === "COMMIT")).toBe(true);
   });
 });

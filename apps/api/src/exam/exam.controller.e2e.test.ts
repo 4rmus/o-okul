@@ -65,6 +65,36 @@ describe("ExamController", () => {
     expect(repository.exams.size).toBe(1);
   });
 
+  it("TENANT_ADMIN sınav oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const issued = await login("admin-a@example.test");
+    const key = "exam-create-idempotency-a";
+    const body = { title: "Idempotent Deneme", startsAt: "2026-03-15T09:00:00.000Z" };
+
+    const first = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+    const second = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+
+    await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send({ ...body, title: "Farklı Deneme" })
+      .expect(409);
+
+    expect(repository.exams.size).toBe(1);
+  });
+
   it("TENANT_ADMIN sınıflarla sınav oluşturunca sınıf öğrencilerini katılımcı yapar", async () => {
     const issued = await login("admin-a@example.test");
     const extraClass = await request(server)
@@ -138,15 +168,50 @@ describe("ExamController", () => {
     expect(list.body[0]).toMatchObject({ studentId: "student-a", status: "REGISTERED" });
   });
 
-  it("başlık yoksa 400 döner ve yazmaz", async () => {
+  it("başlık yoksa 422 döner ve yazmaz", async () => {
     const issued = await login("admin-a@example.test");
 
-    await request(server)
+    const response = await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .send({ title: "  " })
-      .expect(400);
+      .expect(422);
 
+    expect(response.body).toMatchObject({
+      error: {
+        code: "VALIDATION_FAILED",
+        details: {
+          fields: expect.arrayContaining([
+            expect.objectContaining({ path: "title" }),
+          ]),
+        },
+      },
+    });
+    expect(repository.exams.size).toBe(0);
+  });
+
+  it("takvim dışı sınav başlangıcını 422 ile reddeder ve yazmaz", async () => {
+    const issued = await login("admin-a@example.test");
+
+    const response = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ title: "Geçersiz tarihli deneme", startsAt: "2026-02-29T09:00" })
+      .expect(422);
+
+    expect(response.body).toMatchObject({
+      error: {
+        code: "VALIDATION_FAILED",
+        details: {
+          fields: expect.arrayContaining([
+            expect.objectContaining({
+              message: "EXAM_STARTS_AT_INVALID",
+              path: "startsAt",
+            }),
+          ]),
+        },
+      },
+    });
     expect(repository.exams.size).toBe(0);
   });
 
@@ -200,6 +265,37 @@ describe("ExamController", () => {
       .expect(201);
 
     expect(published.body).toMatchObject({ id: created.body.id, status: "PUBLISHED" });
+  });
+
+  it("TENANT_ADMIN sınav yayınlamayı Idempotency-Key ile tekilleştirir", async () => {
+    const issued = await login("admin-a@example.test");
+    const key = "exam-publish-idempotency-a";
+    const created = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ title: "Idempotent Yayın" })
+      .expect(201);
+
+    const first = await request(server)
+      .post(`/exams/${created.body.id}/publish`)
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .expect(201);
+    const second = await request(server)
+      .post(`/exams/${created.body.id}/publish`)
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+
+    await request(server)
+      .post(`/exams/${randomUUID()}/publish`)
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .expect(409);
+
+    expect(repository.exams.get(created.body.id)?.status).toBe("PUBLISHED");
   });
 
   it("TENANT_ADMIN sınavı siler ve listeden kaldırır", async () => {
@@ -269,6 +365,41 @@ describe("ExamController", () => {
       .expect(200);
     expect(list.body).toHaveLength(1);
     expect(list.body[0]).toMatchObject({ studentId: "student-a", status: "REGISTERED" });
+  });
+
+  it("TENANT_ADMIN sınav katılımcısı eklemeyi Idempotency-Key ile tekilleştirir", async () => {
+    const admin = await login("admin-a@example.test");
+    const key = "exam-participant-idempotency-a";
+    const created = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ title: "Idempotent Katılımcı" })
+      .expect(201);
+    const body = { studentId: "student-a", participantNo: "43", bookletType: "A" };
+
+    const first = await request(server)
+      .post(`/exams/${created.body.id}/participants`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+    const second = await request(server)
+      .post(`/exams/${created.body.id}/participants`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+
+    await request(server)
+      .post(`/exams/${created.body.id}/participants`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send({ ...body, participantNo: "44" })
+      .expect(409);
+
+    expect(participants.participants.size).toBe(1);
   });
 
   it("TEACHER katılımcı ekleyemez", async () => {

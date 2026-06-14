@@ -1,5 +1,6 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from "@nestjs/common";
-import type { Response } from "express";
+import type { Request, Response } from "express";
+import { captureApiException, type ApiExceptionMetadata } from "../observability/sentry.js";
 
 interface ErrorBody {
   error: {
@@ -12,10 +13,24 @@ interface ErrorBody {
 @Catch()
 export class ApiErrorFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
-    const response = host.switchToHttp().getResponse<Response>();
+    const http = host.switchToHttp();
+    const response = http.getResponse<Response>();
+    const request = http.getRequest<Request>();
     const status = exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
 
+    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      this.reportException(exception, {
+        method: request.method,
+        path: request.path ?? request.url,
+        status,
+      });
+    }
+
     response.status(status).json(toErrorBody(exception, status));
+  }
+
+  protected reportException(exception: unknown, metadata: ApiExceptionMetadata): void {
+    captureApiException(exception, metadata);
   }
 }
 

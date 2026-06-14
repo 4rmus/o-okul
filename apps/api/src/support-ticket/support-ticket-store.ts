@@ -280,7 +280,7 @@ export class PostgresSupportTicketStore implements SupportTicketStore {
           input.contentType,
           input.byteSize,
           input.sha256,
-          input.contentBase64 ?? "",
+          input.contentBase64 ?? null,
           input.storageKey ?? null,
           input.createdAt,
         ],
@@ -362,7 +362,7 @@ interface SupportTicketAttachmentRow {
   contentType: SupportTicketAttachmentRecord["contentType"];
   byteSize: number;
   sha256: string;
-  contentBase64: string;
+  contentBase64: string | null;
   storageKey: string | null;
   createdAt: Date | string;
   deletedAt: Date | string | null;
@@ -408,7 +408,7 @@ function toSupportTicketAttachmentRecord(record: SupportTicketAttachmentRow): Su
     contentType: record.contentType,
     byteSize: record.byteSize,
     sha256: record.sha256,
-    contentBase64: record.contentBase64,
+    contentBase64: record.contentBase64 ?? undefined,
     storageKey: record.storageKey ?? undefined,
     createdAt: toIsoString(record.createdAt),
     deletedAt: record.deletedAt ? toIsoString(record.deletedAt) : undefined,

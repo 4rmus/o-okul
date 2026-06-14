@@ -172,6 +172,12 @@ describe("TenantService", () => {
       slug: "hatali-kurum",
       licenseEndsAt: "not-a-date",
     })).rejects.toThrow("TENANT_LICENSE_END_INVALID");
+
+    await expect(service.create(systemContext, {
+      name: "Hatalı Kurum",
+      slug: "hatali-kurum-2",
+      licenseEndsAt: "2026-02-29T00:00:00.000Z",
+    })).rejects.toThrow("TENANT_LICENSE_END_INVALID");
   });
 });
 
@@ -180,7 +186,7 @@ const systemContext: RequestContext = {
   tenantId: null,
   roles: ["SYSTEM_ADMIN"],
   capabilities: ["tenant:*"],
-  bypassRls: true,
+  bypassRls: false,
 };
 
 const tenantAdminContext: RequestContext = {

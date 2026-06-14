@@ -105,6 +105,84 @@ describe("TenantController", () => {
       .expect(403);
   });
 
+  it("tenant yönetim gövdelerini Zod ile doğrular", async () => {
+    const invalidCreate = await request(server)
+      .post("/tenants")
+      .set("Authorization", `Bearer ${systemToken}`)
+      .send({
+        firstAdmin: {
+          email: "gecersiz",
+          mode: "password",
+          name: " ",
+          password: "short",
+        },
+        name: " ",
+        seatLimit: 1.5,
+        slug: " ",
+      })
+      .expect(422);
+
+    expect(invalidCreate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: expect.arrayContaining([
+          expect.objectContaining({ path: "firstAdmin.email" }),
+          expect.objectContaining({ path: "firstAdmin.name" }),
+          expect.objectContaining({ path: "firstAdmin.password" }),
+          expect.objectContaining({ path: "name" }),
+          expect.objectContaining({ path: "seatLimit" }),
+          expect.objectContaining({ path: "slug" }),
+        ]),
+      },
+    });
+
+    const invalidUpdate = await request(server)
+      .patch("/tenants/tenant-a")
+      .set("Authorization", `Bearer ${systemToken}`)
+      .send({
+        contactEmail: "gecersiz",
+        licenseEndsAt: "2026-02-29T00:00:00.000Z",
+        logoUrl: "ftp://cdn.example.test/logo.png",
+        seatLimit: 0,
+      })
+      .expect(422);
+
+    expect(invalidUpdate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: expect.arrayContaining([
+          expect.objectContaining({ path: "contactEmail" }),
+          expect.objectContaining({ path: "licenseEndsAt" }),
+          expect.objectContaining({ path: "logoUrl" }),
+          expect.objectContaining({ path: "seatLimit" }),
+        ]),
+      },
+    });
+  });
+
+  it("kurum profil gövdesini Zod ile doğrular", async () => {
+    const invalidProfile = await request(server)
+      .patch("/me/tenant")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        contactEmail: "gecersiz",
+        logoUrl: "ftp://cdn.example.test/logo.png",
+        name: 123,
+      })
+      .expect(422);
+
+    expect(invalidProfile.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: expect.arrayContaining([
+          expect.objectContaining({ path: "contactEmail" }),
+          expect.objectContaining({ path: "logoUrl" }),
+          expect.objectContaining({ path: "name" }),
+        ]),
+      },
+    });
+  });
+
   it("SYSTEM_ADMIN tenant listesini arama, sıralama ve sayfalama ile alır", async () => {
     await request(server)
       .get("/tenants")
@@ -117,13 +195,25 @@ describe("TenantController", () => {
       });
   });
 
-  it("expired tenant bearer token ile normal request başlatamaz", async () => {
+  it("expired tenant bearer token ile okuma yapar ama yazma isteği başlatamaz", async () => {
     await request(server)
       .get("/me/profile")
       .set("Authorization", `Bearer ${expiredTenantToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          tenantId: "tenant-expired",
+          roles: ["TENANT_ADMIN"],
+        });
+      });
+
+    await request(server)
+      .post("/students")
+      .set("Authorization", `Bearer ${expiredTenantToken}`)
+      .send({})
       .expect(403)
       .expect(({ body }) => {
-        expect(JSON.stringify(body)).toContain("TENANT_INACTIVE_OR_EXPIRED");
+        expect(JSON.stringify(body)).toContain("TENANT_LICENSE_EXPIRED_READ_ONLY");
       });
   });
 });

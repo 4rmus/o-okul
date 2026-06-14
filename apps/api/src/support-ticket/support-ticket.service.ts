@@ -9,6 +9,7 @@ import type {
 } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import { type GuardianStudentStore, guardianStudentStoreToken } from "../school/guardian-student-store.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
 import { type CampusStore, campusStoreToken } from "../school/campus-store.js";
@@ -21,6 +22,7 @@ import {
 } from "../school/teacher-assignment-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
 import { assertTenantResourceAccess, filterTenantResources } from "../tenant/tenant-access.js";
+import { type UploadAvScanner, uploadAvScannerToken } from "../upload/upload-av-scanner.js";
 import { assertUploadContentMatchesContentType } from "../upload/upload-validation.js";
 import {
   supportTicketAttachmentStorageToken,
@@ -89,7 +91,9 @@ export class SupportTicketService {
     @Inject(guardianStudentStoreToken) private readonly guardianStudentStore: GuardianStudentStore,
     @Inject(supportTicketAttachmentStorageToken)
     private readonly attachmentStorage: SupportTicketAttachmentStorage,
+    @Inject(uploadAvScannerToken) private readonly uploadAvScanner: UploadAvScanner,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async list(context: RequestContext, filters: SupportTicketListFilters = {}): Promise<SupportTicketRecord[]> {
@@ -239,6 +243,20 @@ export class SupportTicketService {
     }
 
     this.assertAccess(context, attachment);
+    if (attachment.storageKey && this.attachmentStorage.createSignedDownloadUrl) {
+      const signedDownload = await this.attachmentStorage.createSignedDownloadUrl(attachment.storageKey);
+      return {
+        fileName: attachment.fileName,
+        contentType: attachment.contentType,
+        byteSize: attachment.byteSize,
+        sha256: attachment.sha256,
+        downloadMode: "signed-url",
+        downloadUrl: signedDownload.url,
+        downloadUrlExpiresAt: signedDownload.expiresAt,
+        downloadUrlExpiresInSeconds: signedDownload.expiresInSeconds,
+      };
+    }
+
     const fileBase64 = attachment.storageKey
       ? (await this.attachmentStorage.get(attachment.storageKey)).toString("base64")
       : attachment.contentBase64;
@@ -251,11 +269,35 @@ export class SupportTicketService {
       contentType: attachment.contentType,
       byteSize: attachment.byteSize,
       sha256: attachment.sha256,
+      downloadMode: "inline",
       fileBase64,
     };
   }
 
   async addAttachment(
+    context: RequestContext,
+    ticketId: string,
+    input: CreateSupportTicketAttachmentInput,
+    idempotencyKey?: string,
+  ): Promise<SupportTicketAttachmentRecord> {
+    const idempotencyRequest = {
+      ticketId,
+      fileName: input.fileName,
+      contentType: input.contentType,
+      fileSha256: input.fileBase64 ? createSha256(Buffer.from(input.fileBase64, "base64")) : undefined,
+    };
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "support-ticket.attachment.create", request: idempotencyRequest },
+        () => this.addAttachmentOnce(context, ticketId, input),
+      );
+    }
+
+    return this.addAttachmentOnce(context, ticketId, input);
+  }
+
+  private async addAttachmentOnce(
     context: RequestContext,
     ticketId: string,
     input: CreateSupportTicketAttachmentInput,
@@ -266,6 +308,14 @@ export class SupportTicketService {
     assertUploadContentMatchesContentType(body, contentType, "SUPPORT_TICKET_ATTACHMENT_CONTENT_MISMATCH");
     const fileName = normalizeAttachmentFileName(input.fileName);
     const sha256 = createSha256(body);
+    await this.uploadAvScanner.scan({
+      surface: "support_ticket_attachment",
+      tenantId: ticket.tenantId,
+      fileName,
+      contentType,
+      body,
+      sha256,
+    });
     const storedAttachment = await this.attachmentStorage.put({
       tenantId: ticket.tenantId,
       ticketId: ticket.id,
@@ -309,6 +359,23 @@ export class SupportTicketService {
   }
 
   async addComment(
+    context: RequestContext,
+    ticketId: string,
+    input: CreateSupportTicketCommentInput,
+    idempotencyKey?: string,
+  ): Promise<SupportTicketCommentRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "support-ticket.comment.create", request: { ticketId, body: input.body } },
+        () => this.addCommentOnce(context, ticketId, input),
+      );
+    }
+
+    return this.addCommentOnce(context, ticketId, input);
+  }
+
+  private async addCommentOnce(
     context: RequestContext,
     ticketId: string,
     input: CreateSupportTicketCommentInput,

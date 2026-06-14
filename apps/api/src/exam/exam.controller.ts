@@ -1,10 +1,24 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import type { ExamParticipantRecord, ExamRecord } from "@uzman-hocam/shared-types";
+import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
+import { optionalIsoDateTime, optionalTrimmedString, requiredTrimmedString, zodBody } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
-import { ExamService } from "./exam.service.js";
+import { ExamService, type CreateExamInput, type CreateExamParticipantInput } from "./exam.service.js";
+
+const examBodySchema = z.object({
+  classId: optionalTrimmedString,
+  classIds: z.array(requiredTrimmedString).optional(),
+  startsAt: optionalIsoDateTime("EXAM_STARTS_AT_INVALID"),
+  title: requiredTrimmedString,
+}).strict();
+const examParticipantBodySchema = z.object({
+  bookletType: optionalTrimmedString,
+  participantNo: optionalTrimmedString,
+  studentId: requiredTrimmedString,
+}).strict();
 
 @Controller("exams")
 @UseGuards(RolesGuard)
@@ -13,13 +27,16 @@ export class ExamController {
 
   @Post()
   @RequireCapability("academic:manage")
-  create(@Body() body: { title?: string; startsAt?: string; classId?: string; classIds?: string[] }): Promise<ExamRecord> {
+  create(
+    @Body(zodBody(examBodySchema)) body: CreateExamInput,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<ExamRecord> {
     return this.exams.create(getRequestContext(), {
       title: body.title,
       startsAt: body.startsAt,
       classId: body.classId,
       classIds: body.classIds,
-    });
+    }, idempotencyKey);
   }
 
   @Get()
@@ -38,7 +55,7 @@ export class ExamController {
   @RequireCapability("academic:manage")
   update(
     @Param("examId") examId: string,
-    @Body() body: { title?: string; startsAt?: string; classId?: string; classIds?: string[] },
+    @Body(zodBody(examBodySchema)) body: CreateExamInput,
   ): Promise<ExamRecord> {
     return this.exams.update(getRequestContext(), examId, {
       title: body.title,
@@ -50,8 +67,11 @@ export class ExamController {
 
   @Post(":examId/publish")
   @RequireCapability("academic:manage")
-  publish(@Param("examId") examId: string): Promise<ExamRecord> {
-    return this.exams.publish(getRequestContext(), examId);
+  publish(
+    @Param("examId") examId: string,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<ExamRecord> {
+    return this.exams.publish(getRequestContext(), examId, idempotencyKey);
   }
 
   @Delete(":examId")
@@ -71,12 +91,13 @@ export class ExamController {
   @RequireCapability("academic:manage")
   addParticipant(
     @Param("examId") examId: string,
-    @Body() body: { studentId?: string; participantNo?: string; bookletType?: string },
+    @Body(zodBody(examParticipantBodySchema)) body: CreateExamParticipantInput,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<ExamParticipantRecord> {
     return this.exams.addParticipant(getRequestContext(), examId, {
       studentId: body.studentId,
       participantNo: body.participantNo,
       bookletType: body.bookletType,
-    });
+    }, idempotencyKey);
   }
 }

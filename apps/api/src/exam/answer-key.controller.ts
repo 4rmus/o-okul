@@ -1,20 +1,57 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Post, UseGuards } from "@nestjs/common";
 import type { AnswerKeyRecord } from "@uzman-hocam/shared-types";
+import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
+import { optionalTrimmedString, requiredTrimmedString, zodBody } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
   AnswerKeyService,
   type AnswerKeyDryRunResult,
-  type CreateAnswerKeyInput,
 } from "./answer-key.service.js";
 import {
   AnswerKeyExcelImportService,
   type AnswerKeyExcelImportDryRunResult,
-  type AnswerKeyExcelImportInput,
   type AnswerKeyExcelImportResult,
 } from "./answer-key-excel-import.service.js";
+
+const answerChoiceSchema = z.preprocess(
+  (value) => typeof value === "string" ? value.trim().toUpperCase() : value,
+  z.enum(["A", "B", "C", "D", "E"]),
+);
+const answerKeyQuestionSchema = z.object({
+  branch: requiredTrimmedString,
+  correctAnswer: answerChoiceSchema,
+  outcomeCode: optionalTrimmedString,
+  questionNo: z.number().int().positive(),
+  topic: optionalTrimmedString,
+}).strict();
+const answerKeyScoringConfigSchema = z.object({
+  rawScoreMultiplier: z.number().optional(),
+  standardScoreBase: z.number().optional(),
+  standardScoreMultiplier: z.number().optional(),
+  wrongPenalty: z.number().min(0).optional(),
+}).strict().optional();
+const answerKeyBookletVariantSchema = z.object({
+  code: requiredTrimmedString,
+  permutation: z.array(z.number().int().positive()).min(1),
+}).strict();
+const answerKeyCreateBodySchema = z.object({
+  bookletVariants: z.array(answerKeyBookletVariantSchema).optional(),
+  dryRun: z.boolean().optional(),
+  questions: z.array(answerKeyQuestionSchema).min(1),
+  scoringConfig: answerKeyScoringConfigSchema,
+  version: requiredTrimmedString,
+}).strict();
+const answerKeyExcelImportBodySchema = z.object({
+  fileBase64: requiredTrimmedString,
+  scoringConfig: answerKeyScoringConfigSchema,
+  version: requiredTrimmedString,
+}).strict();
+
+type AnswerKeyCreateBody = z.infer<typeof answerKeyCreateBodySchema>;
+type AnswerKeyExcelImportBody = z.infer<typeof answerKeyExcelImportBodySchema>;
 
 @Controller("exams/:examId/answer-keys")
 @UseGuards(RolesGuard)
@@ -28,7 +65,8 @@ export class AnswerKeyController {
   @RequireCapability("academic:manage")
   create(
     @Param("examId") examId: string,
-    @Body() body: Omit<CreateAnswerKeyInput, "examId">,
+    @Body(zodBody(answerKeyCreateBodySchema)) body: AnswerKeyCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<AnswerKeyRecord | AnswerKeyDryRunResult> {
     return this.answerKeys.create(getRequestContext(), {
       examId,
@@ -37,7 +75,7 @@ export class AnswerKeyController {
       scoringConfig: body.scoringConfig,
       bookletVariants: body.bookletVariants,
       dryRun: body.dryRun,
-    });
+    }, idempotencyKey);
   }
 
   @Get()
@@ -50,7 +88,7 @@ export class AnswerKeyController {
   @RequireCapability("academic:manage")
   dryRunImport(
     @Param("examId") examId: string,
-    @Body() body: Omit<AnswerKeyExcelImportInput, "examId">,
+    @Body(zodBody(answerKeyExcelImportBodySchema)) body: AnswerKeyExcelImportBody,
   ): Promise<AnswerKeyExcelImportDryRunResult> {
     return this.imports.dryRun(getRequestContext(), {
       examId,
@@ -64,14 +102,15 @@ export class AnswerKeyController {
   @RequireCapability("academic:manage")
   import(
     @Param("examId") examId: string,
-    @Body() body: Omit<AnswerKeyExcelImportInput, "examId">,
+    @Body(zodBody(answerKeyExcelImportBodySchema)) body: AnswerKeyExcelImportBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<AnswerKeyExcelImportResult> {
     return this.imports.import(getRequestContext(), {
       examId,
       version: body.version,
       fileBase64: body.fileBase64,
       scoringConfig: body.scoringConfig,
-    });
+    }, idempotencyKey);
   }
 
   @Post(":version/publish")
@@ -79,7 +118,8 @@ export class AnswerKeyController {
   publish(
     @Param("examId") examId: string,
     @Param("version") version: string,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<AnswerKeyRecord> {
-    return this.answerKeys.publish(getRequestContext(), examId, version);
+    return this.answerKeys.publish(getRequestContext(), examId, version, idempotencyKey);
   }
 }

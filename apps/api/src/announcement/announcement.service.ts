@@ -18,6 +18,7 @@ import type {
 } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import { NotificationDeviceService } from "../notification-device/notification-device.service.js";
 import type { ProducedJob, TenantQueueJobInput } from "../queue/job-producer.js";
 import { assertTenantResourceAccess, filterTenantResources } from "../tenant/tenant-access.js";
@@ -114,6 +115,7 @@ export class AnnouncementService {
     @Inject(notificationAdapterToken) private readonly notificationAdapter: NotificationAdapter,
     private readonly notificationDevices: NotificationDeviceService,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async list(context: RequestContext): Promise<AnnouncementRecord[]> {
@@ -166,6 +168,27 @@ export class AnnouncementService {
     context: RequestContext,
     id: string,
     input: AnnouncementDeliveryResultInput,
+    idempotencyKey?: string,
+  ): Promise<AnnouncementDeliveryQueueResult> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        {
+          key: idempotencyKey,
+          operation: "announcement.delivery-result.enqueue",
+          request: { announcementId: id, ...input },
+        },
+        () => this.enqueueDeliveryResultOnce(context, id, input),
+      );
+    }
+
+    return this.enqueueDeliveryResultOnce(context, id, input);
+  }
+
+  private async enqueueDeliveryResultOnce(
+    context: RequestContext,
+    id: string,
+    input: AnnouncementDeliveryResultInput,
   ): Promise<AnnouncementDeliveryQueueResult> {
     const announcement = await this.findOne(context, id);
     const result = parseDeliveryResultInput(input);
@@ -173,6 +196,27 @@ export class AnnouncementService {
   }
 
   async sendExternalDelivery(
+    context: RequestContext,
+    id: string,
+    input: AnnouncementDeliverySendInput,
+    idempotencyKey?: string,
+  ): Promise<AnnouncementDeliveryQueueResult> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        {
+          key: idempotencyKey,
+          operation: "announcement.delivery.send",
+          request: { announcementId: id, ...input },
+        },
+        () => this.sendExternalDeliveryOnce(context, id, input),
+      );
+    }
+
+    return this.sendExternalDeliveryOnce(context, id, input);
+  }
+
+  private async sendExternalDeliveryOnce(
     context: RequestContext,
     id: string,
     input: AnnouncementDeliverySendInput,

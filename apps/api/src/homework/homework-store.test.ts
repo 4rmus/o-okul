@@ -41,6 +41,7 @@ describe("PostgresHomeworkStore", () => {
                 byteSize: 11,
                 sha256: "64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c",
                 contentBase64: "aGVsbG8gd29ybGQ=",
+                storageKey: null,
                 createdAt: new Date("2026-06-08T09:10:00.000Z"),
                 deletedAt: null,
               },
@@ -182,6 +183,7 @@ describe("PostgresHomeworkStore", () => {
       11,
       "64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c",
       "aGVsbG8gd29ybGQ=",
+      null,
       "2026-06-08T10:00:00.000Z",
     ]);
     expect(businessQueries[14]?.sql).toContain('SELECT * FROM "HomeworkMaterialAssignment"');
@@ -199,5 +201,72 @@ describe("PostgresHomeworkStore", () => {
       "2026-06-09T12:00:00.000Z",
       "2026-06-08T10:05:00.000Z",
     ]);
+  });
+
+  it("HomeworkMaterialFile storageKey değerini Postgres'e yazar ama public record'dan saklar", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const pool = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        return {
+          rows: [
+            {
+              id: "material-file-s3",
+              tenantId: "tenant-a",
+              materialId: "material-a",
+              uploadedById: "user-tenant-a",
+              fileName: "kesirler.txt",
+              contentType: "text/plain",
+              byteSize: 11,
+              sha256: "sha-a",
+              contentBase64: null,
+              storageKey: "homework-material-files/tenant-a/material-a/sha-a/kesirler.txt",
+              createdAt: new Date("2026-06-08T09:10:00.000Z"),
+              deletedAt: null,
+            },
+          ] as T[],
+        };
+      },
+    };
+    const store = new PostgresHomeworkStore(pool);
+
+    const created = await runWithRequestContext(
+      { userId: "user-tenant-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      () =>
+        store.createMaterialFile({
+          tenantId: "tenant-a",
+          materialId: "material-a",
+          uploadedById: "user-tenant-a",
+          fileName: "kesirler.txt",
+          contentType: "text/plain",
+          byteSize: 11,
+          sha256: "sha-a",
+          storageKey: "homework-material-files/tenant-a/material-a/sha-a/kesirler.txt",
+          createdAt: "2026-06-08T10:00:00.000Z",
+        }),
+    );
+
+    const insert = queries.find((query) => query.sql.includes('INSERT INTO "HomeworkMaterialFile"'));
+    expect(insert?.sql).toContain('"storageKey"');
+    expect(insert?.values).toEqual([
+      expect.any(String),
+      "tenant-a",
+      "material-a",
+      "user-tenant-a",
+      "kesirler.txt",
+      "text/plain",
+      11,
+      "sha-a",
+      null,
+      "homework-material-files/tenant-a/material-a/sha-a/kesirler.txt",
+      "2026-06-08T10:00:00.000Z",
+    ]);
+    expect(created).toMatchObject({
+      id: "material-file-s3",
+      fileName: "kesirler.txt",
+      sha256: "sha-a",
+    });
+    expect((created as { contentBase64?: string }).contentBase64).toBeUndefined();
+    expect((created as { storageKey?: string }).storageKey).toBeUndefined();
   });
 });

@@ -50,7 +50,6 @@ describe("AnswerKeyController", () => {
       .post("/exams/exam-a/answer-keys")
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .send({
-        tenantId: "tenant-b",
         version: "v1",
         questions: [
           { questionNo: 2, correctAnswer: "b", branch: "Türkçe", outcomeCode: "SÖZCÜKTE ANLAM" },
@@ -83,6 +82,39 @@ describe("AnswerKeyController", () => {
       questionCount: 2,
       status: "DRAFT",
     });
+  });
+
+  it("TENANT_ADMIN cevap anahtarı oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const issued = await login("admin-a@example.test");
+    const key = "answer-key-create-idempotency-a";
+    const body = { version: "v1", questions: createQuestions(), scoringConfig: { wrongPenalty: 0.25 } };
+
+    const first = await request(server)
+      .post("/exams/exam-a/answer-keys")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+    const second = await request(server)
+      .post("/exams/exam-a/answer-keys")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+
+    await request(server)
+      .post("/exams/exam-a/answer-keys")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send({ ...body, version: "v2" })
+      .expect(409);
+
+    expect(repository.records).toHaveLength(1);
+    expect(snapshots.markStaleInputs).toEqual([
+      { tenantId: "tenant-a", examId: "exam-a", reason: "answer_key.created" },
+    ]);
   });
 
   it("TEACHER cevap anahtarı oluşturamaz ama listeleyebilir", async () => {
@@ -197,6 +229,43 @@ describe("AnswerKeyController", () => {
     });
   });
 
+  it("cevap anahtarı Excel import commit işlemini Idempotency-Key ile tekilleştirir", async () => {
+    const issued = await login("admin-a@example.test");
+    const key = "answer-key-import-idempotency-a";
+    const body = {
+      version: "v1",
+      fileBase64: await createAnswerKeyWorkbookBase64(),
+      scoringConfig: { wrongPenalty: 0.333333 },
+    };
+
+    const first = await request(server)
+      .post("/exams/exam-a/answer-keys/imports")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+    const second = await request(server)
+      .post("/exams/exam-a/answer-keys/imports")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+
+    await request(server)
+      .post("/exams/exam-a/answer-keys/imports")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send({ ...body, version: "v2" })
+      .expect(409);
+
+    expect(repository.records).toHaveLength(1);
+    expect(snapshots.markStaleInputs).toEqual([
+      { tenantId: "tenant-a", examId: "exam-a", reason: "answer_key.created" },
+    ]);
+  });
+
   it("TENANT_ADMIN cevap anahtarını yayınlar", async () => {
     const issued = await login("admin-a@example.test");
     await request(server)
@@ -218,15 +287,57 @@ describe("AnswerKeyController", () => {
     ]);
   });
 
-  it("geçersiz soru DB'ye gitmeden 400 döner", async () => {
+  it("TENANT_ADMIN cevap anahtarı yayınlamayı Idempotency-Key ile tekilleştirir", async () => {
     const issued = await login("admin-a@example.test");
-
+    const key = "answer-key-publish-idempotency-a";
     await request(server)
       .post("/exams/exam-a/answer-keys")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ version: "v1", questions: [{ questionNo: 1, correctAnswer: "X", branch: "Matematik" }] })
-      .expect(400);
+      .send({ version: "v1", questions: createQuestions(), scoringConfig: { wrongPenalty: 0.25 } })
+      .expect(201);
 
+    const first = await request(server)
+      .post("/exams/exam-a/answer-keys/v1/publish")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .expect(201);
+    const second = await request(server)
+      .post("/exams/exam-a/answer-keys/v1/publish")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+
+    await request(server)
+      .post("/exams/exam-a/answer-keys/v2/publish")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .expect(409);
+
+    expect(snapshots.markStaleInputs).toEqual([
+      { tenantId: "tenant-a", examId: "exam-a", reason: "answer_key.created" },
+      { tenantId: "tenant-a", examId: "exam-a", reason: "answer_key.published" },
+    ]);
+  });
+
+  it("geçersiz soru DB'ye gitmeden 422 alan hatası döner", async () => {
+    const issued = await login("admin-a@example.test");
+
+    const response = await request(server)
+      .post("/exams/exam-a/answer-keys")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ version: "v1", questions: [{ questionNo: 1, correctAnswer: "X", branch: "Matematik" }] })
+      .expect(422);
+
+    expect(response.body).toMatchObject({
+      error: {
+        code: "VALIDATION_FAILED",
+        details: {
+          fields: [expect.objectContaining({ path: "questions.0.correctAnswer" })],
+        },
+      },
+    });
     expect(repository.records).toHaveLength(0);
     expect(snapshots.markStaleInputs).toEqual([]);
   });

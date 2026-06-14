@@ -1,15 +1,20 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Post, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
+import { zodBody } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
   SmsBatchService,
-  type CreateSmsBatchInput,
   type SmsBatchQueueResult,
-  type SmsBatchRecipientPreviewInput,
   type SmsBatchRecipientPreviewResult,
 } from "./sms-batch.service.js";
 import type { SmsBatchDeliveryReportRecord } from "./sms-batch-delivery-report-store.js";
+import {
+  type SmsBatchCreateBody,
+  type SmsBatchRecipientPreviewBody,
+  smsBatchCreateBodySchema,
+  smsBatchRecipientPreviewBodySchema,
+} from "./sms-batch-validation.js";
 
 @Controller("sms-batches")
 @UseGuards(RolesGuard)
@@ -18,13 +23,18 @@ export class SmsBatchController {
 
   @Post()
   @RequireCapability("announcement:manage")
-  create(@Body() body: CreateSmsBatchInput): Promise<SmsBatchQueueResult> {
-    return this.batches.enqueue(getRequestContext(), body);
+  create(
+    @Body(zodBody(smsBatchCreateBodySchema)) body: SmsBatchCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<SmsBatchQueueResult> {
+    return this.batches.enqueue(getRequestContext(), body, idempotencyKey);
   }
 
   @Post("recipients/preview")
   @RequireCapability("announcement:manage")
-  previewRecipients(@Body() body: SmsBatchRecipientPreviewInput): Promise<SmsBatchRecipientPreviewResult> {
+  previewRecipients(
+    @Body(zodBody(smsBatchRecipientPreviewBodySchema)) body: SmsBatchRecipientPreviewBody,
+  ): Promise<SmsBatchRecipientPreviewResult> {
     return this.batches.previewRecipients(getRequestContext(), body);
   }
 

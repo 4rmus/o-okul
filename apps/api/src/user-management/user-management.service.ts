@@ -4,6 +4,12 @@ import type { RequestContext } from "../context/request-context.js";
 import { authSessionStoreToken, type SessionStore } from "../auth/session-store.js";
 import { roles, type Role } from "../rbac/roles.js";
 import {
+  assertTenantSeatCapacity,
+  isTenantSeatLimitExceededError,
+  tenantSeatLimitExceededCode,
+} from "../tenant/tenant-seat-limit.js";
+import { type TenantStore, tenantStoreToken } from "../tenant/tenant-store.js";
+import {
   type CreateTenantUserInput,
   type TenantUserRecord,
   type UserManagementStore,
@@ -26,6 +32,7 @@ export class UserManagementService {
   constructor(
     @Inject(userManagementStoreToken) private readonly store: UserManagementStore,
     @Inject(authSessionStoreToken) private readonly sessions: SessionStore,
+    @Inject(tenantStoreToken) private readonly tenants: TenantStore,
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
@@ -37,7 +44,17 @@ export class UserManagementService {
   async create(context: RequestContext, body: CreateTenantUserBody): Promise<TenantUserRecord> {
     const tenantId = this.requireTenantId(context);
     const input = this.parseCreateInput(tenantId, body);
-    const record = await this.store.createOrAttachTenantUser(input);
+    const existingUsers = await this.store.listTenantUsers(tenantId);
+    if (!existingUsers.some((user) => user.email.toLowerCase() === input.email)) {
+      await this.assertTenantSeatAvailable(tenantId);
+    }
+
+    let record: TenantUserRecord;
+    try {
+      record = await this.store.createOrAttachTenantUser(input);
+    } catch (error) {
+      throwTenantSeatLimitBadRequest(error);
+    }
     await this.sessions.revokeByUser(record.id);
     await this.auditLogs?.record({
       tenantId,
@@ -80,6 +97,18 @@ export class UserManagementService {
     return context.tenantId;
   }
 
+  private async assertTenantSeatAvailable(tenantId: string): Promise<void> {
+    const tenant = await this.tenants.findById(tenantId);
+    if (!tenant) {
+      throw new NotFoundException("TENANT_NOT_FOUND");
+    }
+    try {
+      assertTenantSeatCapacity(tenant);
+    } catch (error) {
+      throwTenantSeatLimitBadRequest(error);
+    }
+  }
+
   private parseCreateInput(tenantId: string, body: CreateTenantUserBody): CreateTenantUserInput {
     const email = body.email?.trim().toLowerCase();
     const name = body.name?.trim();
@@ -101,6 +130,13 @@ export class UserManagementService {
       roles: parseTenantRoles(body.roles),
     };
   }
+}
+
+function throwTenantSeatLimitBadRequest(error: unknown): never {
+  if (isTenantSeatLimitExceededError(error)) {
+    throw new BadRequestException(tenantSeatLimitExceededCode);
+  }
+  throw error;
 }
 
 function parseTenantRoles(input: string[] | undefined): Role[] {

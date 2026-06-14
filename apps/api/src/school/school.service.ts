@@ -1290,10 +1290,16 @@ function optionalText(value: string | undefined): string | undefined {
 function optionalDate(value: string | undefined, message: string): string | undefined {
   const trimmed = optionalText(value);
   if (trimmed === undefined) return undefined;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+  if (!isCalendarDateString(trimmed)) {
     throw new BadRequestException(message);
   }
   return trimmed;
+}
+
+function isCalendarDateString(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 function resolveDateRange(startsAt: string | undefined, endsAt: string | undefined, message: string): { startsAt: string; endsAt: string } {

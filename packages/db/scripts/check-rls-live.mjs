@@ -1,4 +1,5 @@
 import pg from "pg";
+import { getTenantScopedTables } from "./tenant-models.mjs";
 
 const { Client } = pg;
 
@@ -9,20 +10,39 @@ const appDatabaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localho
 
 const adminClient = new Client({ connectionString: adminDatabaseUrl });
 const appClient = new Client({ connectionString: appDatabaseUrl });
+const tenantReadTables = getTenantScopedTables();
 
 const ids = {
   tenantA: "00000000-0000-4000-8000-0000000000a1",
   tenantB: "00000000-0000-4000-8000-0000000000b1",
   userA: "00000000-0000-4000-8000-0000000000a8",
   userB: "00000000-0000-4000-8000-0000000000b8",
+  tenantMembershipA: "00000000-0000-4000-8000-000000000011a1",
+  tenantMembershipB: "00000000-0000-4000-8000-000000000011b1",
+  notificationDeviceA: "00000000-0000-4000-8000-000000000012a1",
+  notificationDeviceB: "00000000-0000-4000-8000-000000000012b1",
   authSessionA: "00000000-0000-4000-8000-0000000000a0",
   authSessionB: "00000000-0000-4000-8000-0000000000b0",
+  idempotencyA: "00000000-0000-4000-8000-00000000002aa1",
+  idempotencyB: "00000000-0000-4000-8000-00000000002bb1",
   identityInvitationA: "00000000-0000-4000-8000-0000000000a7",
   identityInvitationB: "00000000-0000-4000-8000-0000000000b7",
+  campusA: "00000000-0000-4000-8000-000000000013a1",
+  campusB: "00000000-0000-4000-8000-000000000013b1",
+  gradeLevelA: "00000000-0000-4000-8000-000000000014a1",
+  gradeLevelB: "00000000-0000-4000-8000-000000000014b1",
+  courseA: "00000000-0000-4000-8000-000000000015a1",
+  courseB: "00000000-0000-4000-8000-000000000015b1",
+  academicYearA: "00000000-0000-4000-8000-000000000016a1",
+  academicYearB: "00000000-0000-4000-8000-000000000016b1",
+  academicTermA: "00000000-0000-4000-8000-000000000017a1",
+  academicTermB: "00000000-0000-4000-8000-000000000017b1",
   classA: "00000000-0000-4000-8000-0000000000a2",
   classB: "00000000-0000-4000-8000-0000000000b2",
   studentA: "00000000-0000-4000-8000-0000000000a3",
   studentB: "00000000-0000-4000-8000-0000000000b3",
+  studentClassHistoryA: "00000000-0000-4000-8000-000000000018a1",
+  studentClassHistoryB: "00000000-0000-4000-8000-000000000018b1",
   studentEnrollmentA: "00000000-0000-4000-8000-0000000000f3",
   studentEnrollmentB: "00000000-0000-4000-8000-0000000000f4",
   attendanceA: "00000000-0000-4000-8000-0000000000e3",
@@ -33,8 +53,14 @@ const ids = {
   paymentInstallmentB: "00000000-0000-4000-8000-0000000000e0",
   teacherA: "00000000-0000-4000-8000-0000000000a4",
   teacherB: "00000000-0000-4000-8000-0000000000b4",
+  teacherAssignmentA: "00000000-0000-4000-8000-000000000019a1",
+  teacherAssignmentB: "00000000-0000-4000-8000-000000000019b1",
   teacherNoteA: "00000000-0000-4000-8000-0000000000e5",
   teacherNoteB: "00000000-0000-4000-8000-0000000000e6",
+  guardianA: "00000000-0000-4000-8000-000000000020a1",
+  guardianB: "00000000-0000-4000-8000-000000000020b1",
+  guardianStudentA: "00000000-0000-4000-8000-000000000021a1",
+  guardianStudentB: "00000000-0000-4000-8000-000000000021b1",
   scheduleA: "00000000-0000-4000-8000-0000000000a5",
   scheduleB: "00000000-0000-4000-8000-0000000000b5",
   studyA: "00000000-0000-4000-8000-0000000000a6",
@@ -43,6 +69,8 @@ const ids = {
   studyStudentB: "00000000-0000-4000-8000-0000000000b6",
   materialA: "00000000-0000-4000-8000-0000000000a8",
   materialB: "00000000-0000-4000-8000-0000000000b8",
+  materialFileA: "00000000-0000-4000-8000-000000000022a1",
+  materialFileB: "00000000-0000-4000-8000-000000000022b1",
   materialAssignmentA: "00000000-0000-4000-8000-0000000000d5",
   materialAssignmentB: "00000000-0000-4000-8000-0000000000d6",
   homeworkA: "00000000-0000-4000-8000-0000000000a9",
@@ -50,6 +78,8 @@ const ids = {
   examA: "00000000-0000-4000-8000-0000000000ea",
   examA2: "00000000-0000-4000-8000-0000000000e2",
   examB: "00000000-0000-4000-8000-0000000000eb",
+  opticalFormTemplateA: "00000000-0000-4000-8000-000000000023a1",
+  opticalFormTemplateB: "00000000-0000-4000-8000-000000000023b1",
   parserConfigA: "00000000-0000-4000-8000-0000000000ec",
   parserConfigB: "00000000-0000-4000-8000-0000000000ed",
   learningOutcomeA: "00000000-0000-4000-8000-0000000000f1",
@@ -72,18 +102,30 @@ const ids = {
   snapshotB: "00000000-0000-4000-8000-0000000000c2",
   announcementA: "00000000-0000-4000-8000-0000000000d1",
   announcementB: "00000000-0000-4000-8000-0000000000d2",
+  announcementReceiptA: "00000000-0000-4000-8000-000000000024a1",
+  announcementReceiptB: "00000000-0000-4000-8000-000000000024b1",
   announcementDeliveryReportA: "00000000-0000-4000-8000-0000000000df",
   announcementDeliveryReportB: "00000000-0000-4000-8000-0000000000e1",
   messageTemplateA: "00000000-0000-4000-8000-0000000000d3",
   messageTemplateB: "00000000-0000-4000-8000-0000000000d4",
   smsBatchDeliveryReportA: "00000000-0000-4000-8000-0000000000dd",
   smsBatchDeliveryReportB: "00000000-0000-4000-8000-0000000000de",
+  backupRestoreJobA: "00000000-0000-4000-8000-000000000025a1",
+  backupRestoreJobB: "00000000-0000-4000-8000-000000000025b1",
+  developmentCriterionA: "00000000-0000-4000-8000-000000000026a1",
+  developmentCriterionB: "00000000-0000-4000-8000-000000000026b1",
+  developmentAssessmentA: "00000000-0000-4000-8000-000000000027a1",
+  developmentAssessmentB: "00000000-0000-4000-8000-000000000027b1",
+  developmentScoreA: "00000000-0000-4000-8000-000000000028a1",
+  developmentScoreB: "00000000-0000-4000-8000-000000000028b1",
   supportTicketA: "00000000-0000-4000-8000-0000000000d7",
   supportTicketB: "00000000-0000-4000-8000-0000000000d8",
   supportTicketAttachmentA: "00000000-0000-4000-8000-0000000000d9",
   supportTicketAttachmentB: "00000000-0000-4000-8000-0000000000da",
   supportTicketCommentA: "00000000-0000-4000-8000-0000000000db",
   supportTicketCommentB: "00000000-0000-4000-8000-0000000000dc",
+  auditLogA: "00000000-0000-4000-8000-000000000029a1",
+  auditLogB: "00000000-0000-4000-8000-000000000029b1",
 };
 
 async function withTransaction(callback) {
@@ -133,6 +175,26 @@ async function seedFixtures() {
     );
 
     await adminClient.query(
+      `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
+       VALUES
+         ($1, $2, $3, 'TENANT_ADMIN', now()),
+         ($4, $5, $6, 'TENANT_ADMIN', now())
+       ON CONFLICT ("id") DO NOTHING`,
+      [ids.tenantMembershipA, ids.tenantA, ids.userA, ids.tenantMembershipB, ids.tenantB, ids.userB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "NotificationDeviceToken" (
+         "id", "tenantId", "userId", "subjectType", "subjectId", "provider", "token", "platform", "lastSeenAt", "updatedAt"
+       )
+       VALUES
+         ($1, $2, $3, 'STUDENT', $4, 'webpush', 'rls-push-token-a', 'web', now(), now()),
+         ($5, $6, $7, 'STUDENT', $8, 'webpush', 'rls-push-token-b', 'web', now(), now())
+       ON CONFLICT ("tenantId", "userId", "token") DO NOTHING`,
+      [ids.notificationDeviceA, ids.tenantA, ids.userA, ids.studentA, ids.notificationDeviceB, ids.tenantB, ids.userB, ids.studentB],
+    );
+
+    await adminClient.query(
       `INSERT INTO "AuthSession" (
          "id", "tenantId", "userId", "roles", "tokenFamilyId", "refreshTokenHash", "status", "membershipVersion", "updatedAt"
        )
@@ -141,6 +203,17 @@ async function seedFixtures() {
          ($4, $5, $6, ARRAY['TENANT_ADMIN'], 'family-b', 'refresh-hash-b', 'ACTIVE', 1, now())
        ON CONFLICT ("id") DO NOTHING`,
       [ids.authSessionA, ids.tenantA, ids.userA, ids.authSessionB, ids.tenantB, ids.userB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "IdempotencyKey" (
+         "id", "tenantId", "key", "operation", "requestHash", "status", "responseBody", "completedAt", "updatedAt"
+       )
+       VALUES
+         ($1, $2, 'rls-idempotency-a', 'payment.plan.create', 'hash-a', 'COMPLETED', '{"ok":true}'::jsonb, now(), now()),
+         ($3, $4, 'rls-idempotency-b', 'payment.plan.create', 'hash-b', 'COMPLETED', '{"ok":true}'::jsonb, now(), now())
+       ON CONFLICT ("tenantId", "key", "operation") DO NOTHING`,
+      [ids.idempotencyA, ids.tenantA, ids.idempotencyB, ids.tenantB],
     );
 
     await adminClient.query(
@@ -155,6 +228,51 @@ async function seedFixtures() {
     );
 
     await adminClient.query(
+      `INSERT INTO "Campus" ("id", "tenantId", "name", "code", "updatedAt")
+       VALUES
+         ($1, $2, 'RLS Kampus A', 'RLS-CAMPUS-A', now()),
+         ($3, $4, 'RLS Kampus B', 'RLS-CAMPUS-B', now())
+       ON CONFLICT ("tenantId", "code") DO NOTHING`,
+      [ids.campusA, ids.tenantA, ids.campusB, ids.tenantB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "GradeLevel" ("id", "tenantId", "name", "code", "updatedAt")
+       VALUES
+         ($1, $2, '8. Sınıf A', 'RLS-GRADE-A', now()),
+         ($3, $4, '8. Sınıf B', 'RLS-GRADE-B', now())
+       ON CONFLICT ("tenantId", "code") DO NOTHING`,
+      [ids.gradeLevelA, ids.tenantA, ids.gradeLevelB, ids.tenantB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "Course" ("id", "tenantId", "name", "code", "updatedAt")
+       VALUES
+         ($1, $2, 'RLS Ders A', 'RLS-COURSE-A', now()),
+         ($3, $4, 'RLS Ders B', 'RLS-COURSE-B', now())
+       ON CONFLICT ("tenantId", "code") DO NOTHING`,
+      [ids.courseA, ids.tenantA, ids.courseB, ids.tenantB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "AcademicYear" ("id", "tenantId", "name", "startsAt", "endsAt", "isActive", "updatedAt")
+       VALUES
+         ($1, $2, 'RLS 2026 A', '2026-01-01', '2026-12-31', true, now()),
+         ($3, $4, 'RLS 2026 B', '2026-01-01', '2026-12-31', true, now())
+       ON CONFLICT ("tenantId", "name") DO NOTHING`,
+      [ids.academicYearA, ids.tenantA, ids.academicYearB, ids.tenantB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "AcademicTerm" ("id", "tenantId", "academicYearId", "name", "startsAt", "endsAt", "isActive", "updatedAt")
+       VALUES
+         ($1, $2, $3, 'RLS Donem A', '2026-01-01', '2026-06-30', true, now()),
+         ($4, $5, $6, 'RLS Donem B', '2026-01-01', '2026-06-30', true, now())
+       ON CONFLICT ("tenantId", "academicYearId", "name") DO NOTHING`,
+      [ids.academicTermA, ids.tenantA, ids.academicYearA, ids.academicTermB, ids.tenantB, ids.academicYearB],
+    );
+
+    await adminClient.query(
       `INSERT INTO "Class" ("id", "tenantId", "name", "updatedAt")
        VALUES ($1, $2, 'A Sınıfı', now()), ($3, $4, 'B Sınıfı', now())
        ON CONFLICT ("id") DO NOTHING`,
@@ -166,6 +284,28 @@ async function seedFixtures() {
        VALUES ($1, $2, $3, 'Ada', 'A', 'A-001', now()), ($4, $5, $6, 'Bora', 'B', 'B-001', now())
        ON CONFLICT ("id") DO NOTHING`,
       [ids.studentA, ids.tenantA, ids.classA, ids.studentB, ids.tenantB, ids.classB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "StudentClassHistory" ("id", "tenantId", "studentId", "classId", "academicYearId", "termId", "startsAt", "reason", "updatedAt")
+       VALUES
+         ($1, $2, $3, $4, $5, $6, '2026-01-01', 'RLS', now()),
+         ($7, $8, $9, $10, $11, $12, '2026-01-01', 'RLS', now())
+       ON CONFLICT ("id") DO NOTHING`,
+      [
+        ids.studentClassHistoryA,
+        ids.tenantA,
+        ids.studentA,
+        ids.classA,
+        ids.academicYearA,
+        ids.academicTermA,
+        ids.studentClassHistoryB,
+        ids.tenantB,
+        ids.studentB,
+        ids.classB,
+        ids.academicYearB,
+        ids.academicTermB,
+      ],
     );
 
     await adminClient.query(
@@ -219,6 +359,95 @@ async function seedFixtures() {
     );
 
     await adminClient.query(
+      `INSERT INTO "TeacherAssignment" ("id", "tenantId", "teacherId", "classId", "studentId", "courseId", "termId", "role", "startsAt", "updatedAt")
+       VALUES
+         ($1, $2, $3, $4, $5, $6, $7, 'CLASS_TEACHER', '2026-01-01', now()),
+         ($8, $9, $10, $11, $12, $13, $14, 'CLASS_TEACHER', '2026-01-01', now())
+       ON CONFLICT ("id") DO NOTHING`,
+      [
+        ids.teacherAssignmentA,
+        ids.tenantA,
+        ids.teacherA,
+        ids.classA,
+        ids.studentA,
+        ids.courseA,
+        ids.academicTermA,
+        ids.teacherAssignmentB,
+        ids.tenantB,
+        ids.teacherB,
+        ids.classB,
+        ids.studentB,
+        ids.courseB,
+        ids.academicTermB,
+      ],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "Guardian" ("id", "tenantId", "firstName", "lastName", "phone", "updatedAt")
+       VALUES
+         ($1, $2, 'Aylin', 'Veli', '+905550000001', now()),
+         ($3, $4, 'Burcu', 'Veli', '+905550000002', now())
+       ON CONFLICT ("id") DO NOTHING`,
+      [ids.guardianA, ids.tenantA, ids.guardianB, ids.tenantB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "GuardianStudent" ("id", "tenantId", "guardianId", "studentId", "relationshipType", "isPrimary", "updatedAt")
+       VALUES
+         ($1, $2, $3, $4, 'MOTHER', true, now()),
+         ($5, $6, $7, $8, 'MOTHER', true, now())
+       ON CONFLICT ("tenantId", "guardianId", "studentId") DO NOTHING`,
+      [ids.guardianStudentA, ids.tenantA, ids.guardianA, ids.studentA, ids.guardianStudentB, ids.tenantB, ids.guardianB, ids.studentB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "DevelopmentCriterion" ("id", "tenantId", "name", "sortOrder", "updatedAt")
+       VALUES
+         ($1, $2, 'RLS Gelisim A', 1, now()),
+         ($3, $4, 'RLS Gelisim B', 1, now())
+       ON CONFLICT ("id") DO NOTHING`,
+      [ids.developmentCriterionA, ids.tenantA, ids.developmentCriterionB, ids.tenantB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "DevelopmentAssessment" ("id", "tenantId", "studentId", "teacherId", "termId", "periodLabel", "mentorNote", "updatedAt")
+       VALUES
+         ($1, $2, $3, $4, $5, 'RLS A', 'A gelişim notu', now()),
+         ($6, $7, $8, $9, $10, 'RLS B', 'B gelişim notu', now())
+       ON CONFLICT ("id") DO NOTHING`,
+      [
+        ids.developmentAssessmentA,
+        ids.tenantA,
+        ids.studentA,
+        ids.teacherA,
+        ids.academicTermA,
+        ids.developmentAssessmentB,
+        ids.tenantB,
+        ids.studentB,
+        ids.teacherB,
+        ids.academicTermB,
+      ],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "DevelopmentScore" ("id", "tenantId", "assessmentId", "criterionId", "score", "updatedAt")
+       VALUES
+         ($1, $2, $3, $4, 4, now()),
+         ($5, $6, $7, $8, 3, now())
+       ON CONFLICT ("tenantId", "assessmentId", "criterionId") DO NOTHING`,
+      [
+        ids.developmentScoreA,
+        ids.tenantA,
+        ids.developmentAssessmentA,
+        ids.developmentCriterionA,
+        ids.developmentScoreB,
+        ids.tenantB,
+        ids.developmentAssessmentB,
+        ids.developmentCriterionB,
+      ],
+    );
+
+    await adminClient.query(
       `INSERT INTO "TeacherNote" ("id", "tenantId", "studentId", "teacherId", "visibility", "body", "updatedAt")
        VALUES
          ($1, $2, $3, $4, 'GUARDIAN_STUDENT', 'RLS not A', now()),
@@ -257,6 +486,15 @@ async function seedFixtures() {
        VALUES ($1, $2, 'RLS Materyal A', 'A materyali', now()), ($3, $4, 'RLS Materyal B', 'B materyali', now())
        ON CONFLICT ("id") DO NOTHING`,
       [ids.materialA, ids.tenantA, ids.materialB, ids.tenantB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "HomeworkMaterialFile" ("id", "tenantId", "materialId", "uploadedById", "fileName", "contentType", "byteSize", "sha256", "contentBase64", "updatedAt")
+       VALUES
+         ($1, $2, $3, 'user-tenant-a', 'rls-material-a.txt', 'text/plain', 1, 'sha-material-a', 'YQ==', now()),
+         ($4, $5, $6, 'user-tenant-b', 'rls-material-b.txt', 'text/plain', 1, 'sha-material-b', 'Yg==', now())
+       ON CONFLICT ("id") DO NOTHING`,
+      [ids.materialFileA, ids.tenantA, ids.materialA, ids.materialFileB, ids.tenantB, ids.materialB],
     );
 
     await adminClient.query(
@@ -300,6 +538,15 @@ async function seedFixtures() {
        VALUES ($1, $2, 'RLS Sınav A2', 'PUBLISHED', '2026-06-11T09:00:00.000Z', now())
        ON CONFLICT ("id") DO NOTHING`,
       [ids.examA2, ids.tenantA],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "OpticalFormTemplate" ("id", "tenantId", "name", "version", "encoding", "delimiter", "fieldMapping", "status", "updatedAt")
+       VALUES
+         ($1, $2, 'RLS Optik Şablon A', 'v1', 'UTF-8', 'TAB', '{"studentNo":{"index":0},"answers":{"start":1}}'::jsonb, 'APPROVED', now()),
+         ($3, $4, 'RLS Optik Şablon B', 'v1', 'UTF-8', 'TAB', '{"studentNo":{"index":0},"answers":{"start":1}}'::jsonb, 'APPROVED', now())
+       ON CONFLICT ("id") DO NOTHING`,
+      [ids.opticalFormTemplateA, ids.tenantA, ids.opticalFormTemplateB, ids.tenantB],
     );
 
     await adminClient.query(
@@ -430,6 +677,28 @@ async function seedFixtures() {
     );
 
     await adminClient.query(
+      `INSERT INTO "AnnouncementReceipt" (
+         "id", "tenantId", "announcementId", "userId", "subjectType", "subjectId", "readAt", "updatedAt"
+       )
+       VALUES
+         ($1, $2, $3, $4, 'STUDENT', $5, now(), now()),
+         ($6, $7, $8, $9, 'STUDENT', $10, now(), now())
+       ON CONFLICT ("tenantId", "announcementId", "userId", "subjectType", "subjectId") DO NOTHING`,
+      [
+        ids.announcementReceiptA,
+        ids.tenantA,
+        ids.announcementA,
+        ids.userA,
+        ids.studentA,
+        ids.announcementReceiptB,
+        ids.tenantB,
+        ids.announcementB,
+        ids.userB,
+        ids.studentB,
+      ],
+    );
+
+    await adminClient.query(
       `INSERT INTO "MessageTemplate" ("id", "tenantId", "name", "channel", "body", "updatedAt")
        VALUES
          ($1, $2, 'RLS Şablon A', 'SMS', 'A mesajı', now()),
@@ -473,6 +742,17 @@ async function seedFixtures() {
     );
 
     await adminClient.query(
+      `INSERT INTO "BackupRestoreJob" (
+         "id", "tenantId", "requestedByUserId", "operationType", "targetReference", "reason", "jobId", "status", "checkedTables", "updatedAt"
+       )
+       VALUES
+         ($1, $2, $3, 'BACKUP', 'rls-backup-a', 'RLS smoke A', 'rls-backup-job-a', 'queued', ARRAY['Tenant'], now()),
+         ($4, $5, $6, 'BACKUP', 'rls-backup-b', 'RLS smoke B', 'rls-backup-job-b', 'queued', ARRAY['Tenant'], now())
+       ON CONFLICT ("tenantId", "jobId") DO NOTHING`,
+      [ids.backupRestoreJobA, ids.tenantA, ids.userA, ids.backupRestoreJobB, ids.tenantB, ids.userB],
+    );
+
+    await adminClient.query(
       `INSERT INTO "SupportTicket" ("id", "tenantId", "requesterId", "subject", "message", "priority", "status", "updatedAt")
        VALUES
          ($1, $2, 'user-tenant-a', 'RLS Destek A', 'A destek mesajı', 'NORMAL', 'OPEN', now()),
@@ -511,6 +791,15 @@ async function seedFixtures() {
         ids.tenantB,
         ids.supportTicketB,
       ],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "AuditLog" ("id", "tenantId", "actorUserId", "entityType", "entityId", "action", "diff", "createdAt")
+       VALUES
+         ($1, $2, $3, 'RlsSmoke', $4, 'CREATE', '{"tenant":"A"}'::jsonb, '2026-06-12T00:00:00.000Z'),
+         ($5, $6, $7, 'RlsSmoke', $8, 'CREATE', '{"tenant":"B"}'::jsonb, '2026-06-12T00:00:00.000Z')
+       ON CONFLICT ("id", "createdAt") DO NOTHING`,
+      [ids.auditLogA, ids.tenantA, ids.userA, ids.studentA, ids.auditLogB, ids.tenantB, ids.userB, ids.studentB],
     );
   });
 }
@@ -689,40 +978,7 @@ try {
   await appClient.connect();
   appConnected = true;
   await seedFixtures();
-  for (const table of [
-    "AuthSession",
-    "IdentityInvitation",
-    "Student",
-    "StudentEnrollment",
-    "Attendance",
-    "PaymentPlan",
-    "PaymentInstallment",
-    "TeacherNote",
-    "ScheduleLesson",
-    "StudySession",
-    "StudySessionStudent",
-    "HomeworkMaterial",
-    "HomeworkMaterialAssignment",
-    "Homework",
-    "Exam",
-    "ParserConfig",
-    "LearningOutcome",
-    "ExamParticipant",
-    "RawImport",
-    "AnswerKey",
-    "ExamBookletVariant",
-    "ExamResult",
-    "ParsedAnswer",
-    "ImportQuarantine",
-    "ReportSnapshot",
-    "Announcement",
-    "AnnouncementDeliveryReport",
-    "MessageTemplate",
-    "SmsBatchDeliveryReport",
-    "SupportTicket",
-    "SupportTicketAttachment",
-    "SupportTicketComment",
-  ]) {
+  for (const table of tenantReadTables) {
     await assertTenantAOnlyReadsTenantA(table);
   }
   await assertWithCheckBlocksWrongTenantWrite();
@@ -733,7 +989,7 @@ try {
   await assertParsedAnswerBlocksCrossTenantReferences();
   await assertParsedAnswerBlocksCrossExamReferences();
   await assertParsedAnswerBlocksDuplicateParsedRows();
-  console.log("Canlı RLS kontrolü geçti: tenant okuma/yazma izolasyonu doğrulandı.");
+  console.log(`Canlı RLS kontrolü geçti: ${tenantReadTables.length} tenant tablosunda okuma/yazma izolasyonu doğrulandı.`);
 } catch (error) {
   if (error?.code === "ECONNREFUSED") {
     console.error("Canlı RLS kontrolü çalışmadı: localhost:5432 üzerinde Postgres'e bağlanılamadı.");

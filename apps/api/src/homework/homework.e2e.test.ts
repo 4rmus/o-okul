@@ -4,17 +4,52 @@ import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
+import { type UploadAvScanInput, uploadAvScannerToken } from "../upload/upload-av-scanner.js";
+import {
+  homeworkMaterialFileStorageToken,
+  type StoreHomeworkMaterialFileInput,
+} from "./homework-material-file-storage.js";
 
 describe("Homework API", () => {
   let app: INestApplication;
   let server: Parameters<typeof request>[0];
   let tenantAAccessToken: string;
   let teacherAAccessToken: string;
+  let scanInputs: UploadAvScanInput[];
+  let storageInputs: StoreHomeworkMaterialFileInput[];
 
   beforeAll(async () => {
+    scanInputs = [];
+    storageInputs = [];
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(uploadAvScannerToken)
+      .useValue({
+        async scan(input: UploadAvScanInput) {
+          scanInputs.push(input);
+        },
+      })
+      .overrideProvider(homeworkMaterialFileStorageToken)
+      .useValue({
+        async put(input: StoreHomeworkMaterialFileInput) {
+          storageInputs.push(input);
+          return {
+            storageKey: `homework-material-files/${input.tenantId}/${input.materialId}/${input.sha256}/${input.fileName}`,
+          };
+        },
+        async get() {
+          throw new Error("NOT_USED");
+        },
+        async createSignedDownloadUrl(storageKey: string) {
+          return {
+            url: `https://storage.example.test/${encodeURIComponent(storageKey)}`,
+            expiresAt: "2026-06-13T12:05:00.000Z",
+            expiresInSeconds: 300,
+          };
+        },
+      })
+      .compile();
 
     app = moduleRef.createNestApplication();
     await app.init();
@@ -163,6 +198,22 @@ describe("Homework API", () => {
       },
     ]);
 
+    const downloaded = await request(server)
+      .get("/homework/materials/material-a/files/material-file-a/download")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200);
+
+    expect(downloaded.body).toEqual({
+      fileName: "kesirler.txt",
+      contentType: "text/plain",
+      byteSize: 11,
+      sha256: "64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c",
+      downloadMode: "inline",
+      fileBase64: "aGVsbG8gd29ybGQ=",
+    });
+
+    const previousScanCount = scanInputs.length;
+    const previousStorageCount = storageInputs.length;
     const created = await request(server)
       .post("/homework/materials/material-a/files")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
@@ -183,6 +234,100 @@ describe("Homework API", () => {
       sha256: "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
     });
     expect(created.body.contentBase64).toBeUndefined();
+    expect(created.body.storageKey).toBeUndefined();
+    const createdDownload = await request(server)
+      .get(`/homework/materials/material-a/files/${created.body.id}/download`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200);
+    expect(createdDownload.body).toMatchObject({
+      fileName: "kesirler-ek.txt",
+      contentType: "text/plain",
+      byteSize: 11,
+      sha256: "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+      downloadMode: "signed-url",
+      downloadUrlExpiresAt: "2026-06-13T12:05:00.000Z",
+      downloadUrlExpiresInSeconds: 300,
+    });
+    expect(createdDownload.body.downloadUrl).toContain("homework-material-files%2Ftenant-a%2Fmaterial-a");
+    expect(createdDownload.body.fileBase64).toBeUndefined();
+    expect(scanInputs.slice(previousScanCount)).toEqual([
+      expect.objectContaining({
+        surface: "homework_material_file",
+        tenantId: "tenant-a",
+        fileName: "kesirler-ek.txt",
+        contentType: "text/plain",
+        sha256: "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+      }),
+    ]);
+    expect(storageInputs.slice(previousStorageCount)).toEqual([
+      expect.objectContaining({
+        tenantId: "tenant-a",
+        materialId: "material-a",
+        fileName: "kesirler-ek.txt",
+        contentType: "text/plain",
+        sha256: "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+      }),
+    ]);
+  });
+
+  it("materyal dosyası yüklemeyi Idempotency-Key ile tekilleştirir", async () => {
+    const key = "homework-material-file-idempotency-a";
+    const body = {
+      fileName: "idempotent-materyal.txt",
+      contentType: "text/plain",
+      fileBase64: Buffer.from("idempotent homework file").toString("base64"),
+    };
+    const previousScanCount = scanInputs.length;
+    const previousStorageCount = storageInputs.length;
+
+    const first = await request(server)
+      .post("/homework/materials/material-a/files")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+    const second = await request(server)
+      .post("/homework/materials/material-a/files")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+
+    await request(server)
+      .post("/homework/materials/material-a/files")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send({
+        ...body,
+        fileBase64: Buffer.from("different homework file").toString("base64"),
+      })
+      .expect(409);
+
+    expect(scanInputs.slice(previousScanCount)).toEqual([
+      expect.objectContaining({
+        surface: "homework_material_file",
+        tenantId: "tenant-a",
+        fileName: "idempotent-materyal.txt",
+        contentType: "text/plain",
+      }),
+    ]);
+    expect(storageInputs.slice(previousStorageCount)).toEqual([
+      expect.objectContaining({
+        tenantId: "tenant-a",
+        materialId: "material-a",
+        fileName: "idempotent-materyal.txt",
+        contentType: "text/plain",
+      }),
+    ]);
+    await request(server)
+      .get("/homework/materials/material-a/files")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body: files }) => {
+        expect((files as Array<{ fileName: string }>).filter((file) => file.fileName === "idempotent-materyal.txt")).toHaveLength(1);
+      });
   });
 
   it("materyali tenant içindeki öğrenciye atar ve listeler", async () => {
@@ -230,6 +375,51 @@ describe("Homework API", () => {
     });
   });
 
+  it("materyal atamasını Idempotency-Key ile tekilleştirir", async () => {
+    const key = "homework-material-assignment-idempotency-a";
+    const body = {
+      studentId: "student-a",
+      courseId: "course-math",
+      termId: "term-2026-spring",
+      note: "Idempotent materyal ataması",
+      dueAt: "2026-06-11T12:00:00.000Z",
+    };
+
+    const first = await request(server)
+      .post("/homework/materials/material-a/assignments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+    const second = await request(server)
+      .post("/homework/materials/material-a/assignments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+
+    await request(server)
+      .post("/homework/materials/material-a/assignments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send({ ...body, note: "Farklı materyal ataması" })
+      .expect(409);
+
+    await request(server)
+      .get("/homework/materials/material-a/assignments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body: assignments }) => {
+        expect(
+          (assignments as Array<{ note?: string }>).filter(
+            (assignment) => assignment.note === "Idempotent materyal ataması",
+          ),
+        ).toHaveLength(1);
+      });
+  });
+
   it("materyal havuzu tenant ve rol kurallarını korur", async () => {
     await request(server)
       .get("/homework/materials/material-b")
@@ -265,6 +455,16 @@ describe("Homework API", () => {
       .get("/homework/materials/material-b/files")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(403);
+
+    await request(server)
+      .get("/homework/materials/material-b/files/material-file-b/download")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(403);
+
+    await request(server)
+      .get("/homework/materials/material-a/files/material-file-b/download")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(404);
 
     await request(server)
       .post("/homework/materials/material-a/files")
@@ -338,7 +538,7 @@ describe("Homework API", () => {
   });
 
   it("geçersiz materyal dosyası girdilerini reddeder", async () => {
-    await request(server)
+    const invalidContentType = await request(server)
       .post("/homework/materials/material-a/files")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
@@ -346,7 +546,30 @@ describe("Homework API", () => {
         contentType: "application/x-msdownload",
         fileBase64: Buffer.from("hello world").toString("base64"),
       })
-      .expect(400);
+      .expect(422);
+
+    expect(invalidContentType.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "contentType" })],
+      },
+    });
+
+    const missingFile = await request(server)
+      .post("/homework/materials/material-a/files")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        fileName: "calisma.txt",
+        contentType: "text/plain",
+      })
+      .expect(422);
+
+    expect(missingFile.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "fileBase64" })],
+      },
+    });
 
     await request(server)
       .post("/homework/materials/material-a/files")
@@ -380,25 +603,64 @@ describe("Homework API", () => {
   });
 
   it("öğrencisiz veya geçersiz tarihli materyal atamasını reddeder", async () => {
-    await request(server)
+    const missingStudent = await request(server)
       .post("/homework/materials/material-a/assignments")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ note: "Öğrenci yok" })
-      .expect(400);
+      .expect(422);
 
-    await request(server)
+    expect(missingStudent.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "studentId" })],
+      },
+    });
+
+    const invalidDueAt = await request(server)
       .post("/homework/materials/material-a/assignments")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ studentId: "student-a", dueAt: "gecersiz-tarih" })
-      .expect(400);
+      .expect(422);
+
+    expect(invalidDueAt.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "dueAt" })],
+      },
+    });
+
+    const invalidCalendarDueAt = await request(server)
+      .post("/homework/materials/material-a/assignments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ studentId: "student-a", dueAt: "2026-02-29T12:00" })
+      .expect(422);
+
+    expect(invalidCalendarDueAt.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [
+          expect.objectContaining({
+            message: "HOMEWORK_DUE_DATE_INVALID",
+            path: "dueAt",
+          }),
+        ],
+      },
+    });
   });
 
   it("başlıksız materyal oluşturmayı reddeder", async () => {
-    await request(server)
+    const response = await request(server)
       .post("/homework/materials")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ description: "Başlık yok" })
-      .expect(400);
+      .expect(422);
+
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "title" })],
+      },
+    });
   });
 
   it("ödev CRUD akışını tenant içinde tamamlar", async () => {
@@ -503,23 +765,37 @@ describe("Homework API", () => {
   });
 
   it("classId olmadan ödev oluşturmayı reddeder", async () => {
-    await request(server)
+    const response = await request(server)
       .post("/homework")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ title: "Sınıfsız Ödev" })
-      .expect(400);
+      .expect(422);
+
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "classId" })],
+      },
+    });
   });
 
   it("materialId olmadan materyalden ödev oluşturmayı reddeder", async () => {
-    await request(server)
+    const response = await request(server)
       .post("/homework/from-material")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ classId: "class-a" })
-      .expect(400);
+      .expect(422);
+
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "materialId" })],
+      },
+    });
   });
 
   it("geçersiz teslim tarihiyle materyalden ödev oluşturmayı reddeder", async () => {
-    await request(server)
+    const response = await request(server)
       .post("/homework/from-material")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
@@ -527,7 +803,37 @@ describe("Homework API", () => {
         materialId: "material-a",
         dueAt: "gecersiz-tarih",
       })
-      .expect(400);
+      .expect(422);
+
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "dueAt" })],
+      },
+    });
+  });
+
+  it("ödev güncelleme gövdesini Zod ile doğrular", async () => {
+    const response = await request(server)
+      .patch("/homework/homework-a")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        classId: 123,
+        dueAt: "gecersiz-tarih",
+        title: " ",
+      })
+      .expect(422);
+
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: expect.arrayContaining([
+          expect.objectContaining({ path: "classId" }),
+          expect.objectContaining({ path: "dueAt" }),
+          expect.objectContaining({ path: "title" }),
+        ]),
+      },
+    });
   });
 
   it("ödev başka tenant class kaydına taşınamaz", async () => {
@@ -579,11 +885,18 @@ describe("Homework API", () => {
   });
 
   it("kontrol durumu olmadan ödev kontrol isteğini reddeder", async () => {
-    await request(server)
+    const response = await request(server)
       .patch("/homework/homework-a/check-status")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .send({})
-      .expect(400);
+      .expect(422);
+
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "checked" })],
+      },
+    });
   });
 
   it("teacher ödevleri okuyabilir ama yazamaz", async () => {

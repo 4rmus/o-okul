@@ -20,18 +20,26 @@ describe("SupportTicketAttachmentStorage", () => {
     })).resolves.toEqual({ contentBase64: "aGVsbG8gd29ybGQ=" });
   });
 
-  it("S3 depolama support attachment key'i ile put/get yapar", async () => {
+  it("S3 depolama support attachment key'i ile put/get ve imzalı GET URL üretir", async () => {
     const commands: Array<PutObjectCommand | GetObjectCommand> = [];
+    const signedCommands: GetObjectCommand[] = [];
+    const client = {
+      async send(command: PutObjectCommand | GetObjectCommand) {
+        commands.push(command);
+        if (command instanceof GetObjectCommand) {
+          return { Body: { async transformToByteArray() { return new Uint8Array(Buffer.from("remote file")); } } };
+        }
+        return {};
+      },
+    };
     const storage = new S3SupportTicketAttachmentStorage({
       bucket: "uzman-hocam-local",
-      client: {
-        async send(command) {
-          commands.push(command);
-          if (command instanceof GetObjectCommand) {
-            return { Body: { async transformToByteArray() { return new Uint8Array(Buffer.from("remote file")); } } };
-          }
-          return {};
-        },
+      client,
+      async presigner(presignClient, command, expiresInSeconds) {
+        expect(presignClient).toBe(client);
+        signedCommands.push(command);
+        expect(expiresInSeconds).toBe(300);
+        return "https://storage.example.test/support-ticket-attachment";
       },
     });
 
@@ -44,17 +52,27 @@ describe("SupportTicketAttachmentStorage", () => {
       sha256: "sha-a",
     });
     const body = await storage.get(stored.storageKey ?? "");
+    const signedDownload = await storage.createSignedDownloadUrl(stored.storageKey ?? "");
 
     expect(stored).toEqual({
       storageKey: "support-ticket-attachments/tenant-a/support-ticket-a/sha-a/hata_ekrani.txt",
     });
     expect(body.toString("utf8")).toBe("remote file");
+    expect(signedDownload).toMatchObject({
+      url: "https://storage.example.test/support-ticket-attachment",
+      expiresInSeconds: 300,
+    });
+    expect(new Date(signedDownload.expiresAt).getTime()).toBeGreaterThan(Date.now());
     expect(commands[0]?.input).toMatchObject({
       Bucket: "uzman-hocam-local",
       Key: stored.storageKey,
       ContentType: "text/plain",
     });
     expect(commands[1]?.input).toMatchObject({
+      Bucket: "uzman-hocam-local",
+      Key: stored.storageKey,
+    });
+    expect(signedCommands[0]?.input).toMatchObject({
       Bucket: "uzman-hocam-local",
       Key: stored.storageKey,
     });
@@ -72,5 +90,20 @@ describe("SupportTicketAttachmentStorage", () => {
 
     expect(() => createSupportTicketAttachmentStorageFromEnv({ SUPPORT_ATTACHMENT_STORAGE: "disk" }))
       .toThrow("SUPPORT_ATTACHMENT_STORAGE_INVALID");
+  });
+
+  it("production ortamında inline storage ile başlamaz", () => {
+    expect(() =>
+      createSupportTicketAttachmentStorageFromEnv({
+        NODE_ENV: "production",
+        SUPPORT_ATTACHMENT_STORAGE: "inline",
+      }),
+    ).toThrow('SUPPORT_ATTACHMENT_STORAGE must be "s3" in production.');
+
+    expect(createSupportTicketAttachmentStorageFromEnv({
+      NODE_ENV: "production",
+      S3_BUCKET: "uzman-hocam-prod",
+      S3_REGION: "us-east-1",
+    })).toBeInstanceOf(S3SupportTicketAttachmentStorage);
   });
 });

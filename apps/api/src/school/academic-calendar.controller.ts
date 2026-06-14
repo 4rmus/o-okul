@@ -1,11 +1,22 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type { AcademicTermRecord, AcademicYearRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
+import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { SchoolService } from "./school.service.js";
+import {
+  academicTermCreateBodySchema,
+  academicTermUpdateBodySchema,
+  academicYearCreateBodySchema,
+  academicYearUpdateBodySchema,
+  type AcademicTermCreateBody,
+  type AcademicTermUpdateBody,
+  type AcademicYearCreateBody,
+  type AcademicYearUpdateBody,
+} from "./school-validation.js";
 
 @Controller()
 @UseGuards(RolesGuard)
@@ -26,13 +37,16 @@ export class AcademicCalendarController {
 
   @Post("academic-years")
   @RequireCapability("academic:manage")
-  createYear(@Body() body: Partial<AcademicYearRecord>): Promise<AcademicYearRecord> {
+  createYear(@Body(zodBody(academicYearCreateBodySchema)) body: AcademicYearCreateBody): Promise<AcademicYearRecord> {
     return this.school.createAcademicYear(getRequestContext(), body);
   }
 
   @Patch("academic-years/:id")
   @RequireCapability("academic:manage")
-  updateYear(@Param("id") id: string, @Body() body: Partial<AcademicYearRecord>): Promise<AcademicYearRecord> {
+  updateYear(
+    @Param("id") id: string,
+    @Body(zodBody(academicYearUpdateBodySchema)) body: AcademicYearUpdateBody,
+  ): Promise<AcademicYearRecord> {
     return this.school.updateAcademicYear(getRequestContext(), id, body);
   }
 
@@ -57,13 +71,16 @@ export class AcademicCalendarController {
 
   @Post("academic-terms")
   @RequireCapability("academic:manage")
-  createTerm(@Body() body: Partial<AcademicTermRecord>): Promise<AcademicTermRecord> {
+  createTerm(@Body(zodBody(academicTermCreateBodySchema)) body: AcademicTermCreateBody): Promise<AcademicTermRecord> {
     return this.school.createAcademicTerm(getRequestContext(), body);
   }
 
   @Patch("academic-terms/:id")
   @RequireCapability("academic:manage")
-  updateTerm(@Param("id") id: string, @Body() body: Partial<AcademicTermRecord>): Promise<AcademicTermRecord> {
+  updateTerm(
+    @Param("id") id: string,
+    @Body(zodBody(academicTermUpdateBodySchema)) body: AcademicTermUpdateBody,
+  ): Promise<AcademicTermRecord> {
     return this.school.updateAcademicTerm(getRequestContext(), id, body);
   }
 

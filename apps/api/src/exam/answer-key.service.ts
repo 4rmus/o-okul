@@ -8,6 +8,7 @@ import type {
 } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import { reportSnapshotStoreToken, type ReportSnapshotStore } from "../report/report-snapshot-store.js";
 
 export const answerKeyRepositoryToken = Symbol("AnswerKeyRepository");
@@ -68,9 +69,29 @@ export class AnswerKeyService {
     @Optional()
     @Inject(reportSnapshotStoreToken)
     private readonly snapshots?: ReportSnapshotStore,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
-  async create(context: RequestContext, input: CreateAnswerKeyInput): Promise<AnswerKeyRecord | AnswerKeyDryRunResult> {
+  async create(
+    context: RequestContext,
+    input: CreateAnswerKeyInput,
+    idempotencyKey?: string,
+  ): Promise<AnswerKeyRecord | AnswerKeyDryRunResult> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "answer-key.create", request: input },
+        () => this.createOnce(context, input),
+      );
+    }
+
+    return this.createOnce(context, input);
+  }
+
+  private async createOnce(
+    context: RequestContext,
+    input: CreateAnswerKeyInput,
+  ): Promise<AnswerKeyRecord | AnswerKeyDryRunResult> {
     const tenantId = requireTenant(context);
     const examId = requiredString(input.examId, "ANSWER_KEY_EXAM_REQUIRED");
     const version = requiredString(input.version, "ANSWER_KEY_VERSION_REQUIRED");
@@ -124,6 +145,23 @@ export class AnswerKeyService {
   }
 
   async publish(
+    context: RequestContext,
+    examId: string | undefined,
+    version: string | undefined,
+    idempotencyKey?: string,
+  ): Promise<AnswerKeyRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "answer-key.publish", request: { examId, version } },
+        () => this.publishOnce(context, examId, version),
+      );
+    }
+
+    return this.publishOnce(context, examId, version);
+  }
+
+  private async publishOnce(
     context: RequestContext,
     examId: string | undefined,
     version: string | undefined,

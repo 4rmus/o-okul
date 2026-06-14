@@ -9,6 +9,7 @@ import type { TeacherAssignmentStore } from "../school/teacher-assignment-store.
 import type { StudentStore } from "../student/student-store.js";
 import type { TenantStore } from "../tenant/tenant-store.js";
 import {
+  createReportPdfRenderer,
   examResultSummaryReportType,
   ReportGenerationService,
   type ReportGenerationQueueProducer,
@@ -18,6 +19,20 @@ import {
 import type { ReportSnapshotStore } from "./report-snapshot-store.js";
 
 describe("ReportGenerationService", () => {
+  it("production ortamında API içi PDF renderer'ı reddeder", () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousRenderer = process.env.REPORT_PDF_RENDERER;
+    try {
+      process.env.NODE_ENV = "production";
+      process.env.REPORT_PDF_RENDERER = "memory";
+
+      expect(() => createReportPdfRenderer()).toThrow('REPORT_PDF_RENDERER must be "worker" in production.');
+    } finally {
+      restoreEnv("NODE_ENV", previousNodeEnv);
+      restoreEnv("REPORT_PDF_RENDERER", previousRenderer);
+    }
+  });
+
   it("rapor üretim isteğini report-generation queue job'una çevirir", async () => {
     const producer = new FakeProducer();
     const store = new FakeReportSnapshotStore();
@@ -358,33 +373,19 @@ describe("ReportGenerationService", () => {
     const text = Buffer.from(result.fileBase64, "base64").toString("utf8");
     expect(text.startsWith("%PDF-1.4")).toBe(true);
     expect(pdfRenderer.inputs).toHaveLength(1);
-    expect(pdfRenderer.inputs[0]?.html).toContain("Sınav Raporu");
-    expect(pdfRenderer.inputs[0]?.html).toContain("Branş Başarı");
-    expect(pdfRenderer.inputs[0]?.html).toContain("Sınıf Başarı");
-    expect(pdfRenderer.inputs[0]?.html).toContain("Öğrenci Özeti");
-    expect(pdfRenderer.inputs[0]?.html).toContain("Öğrenci Karnesi");
-    expect(pdfRenderer.inputs[0]?.html).toContain("BÖLÜM ANALİZİ");
-    expect(pdfRenderer.inputs[0]?.html).toContain("Soru sayısı");
-    expect(pdfRenderer.inputs[0]?.html).toContain("Sınıf net ort");
-    expect(pdfRenderer.inputs[0]?.html).toContain("PUAN - SIRA ANALİZİ");
-    expect(pdfRenderer.inputs[0]?.html).toContain("LGS puanı");
-    expect(pdfRenderer.inputs[0]?.html).toContain("BÖLÜM BAŞARI YÜZDELERİ");
-    expect(pdfRenderer.inputs[0]?.html).toContain("SON SINAV NETLERİ");
-    expect(pdfRenderer.inputs[0]?.html).toContain("Detaylı Deneme Analizi");
-    expect(pdfRenderer.inputs[0]?.html).toContain("KAZANIM DETAYI");
-    expect(pdfRenderer.inputs[0]?.html).toContain("SORU CEVAP ANALİZİ");
-    expect(pdfRenderer.inputs[0]?.html).toContain("Öğrenci cevabı");
-    expect(pdfRenderer.inputs[0]?.html).toContain("Yanlış");
-    expect(pdfRenderer.inputs[0]?.html).toContain("Matematik");
-    expect(pdfRenderer.inputs[0]?.html).toContain("student-a");
-    expect(pdfRenderer.inputs[0]?.html).toContain("Genel sıra");
-    expect(pdfRenderer.inputs[0]?.html).toContain("3/40 (%92.5)");
-    expect(pdfRenderer.inputs[0]?.html).toContain("Sınıf sıra");
-    expect(pdfRenderer.inputs[0]?.html).toContain("1/20 (%97.5)");
-    expect(pdfRenderer.inputs[0]?.html).toContain("https://cdn.example.test/dna-logo.png");
-    expect(pdfRenderer.inputs[0]?.fallbackLines).toContain("DNA EĞİTİM KURUMU - Sinav Raporu");
-    expect(pdfRenderer.inputs[0]?.fallbackLines).toContain("Ogrenci Karnesi");
-    expect(pdfRenderer.inputs[0]?.fallbackLines).toContain("student-a 8-A: 17.5 net, 123.4 LGS puani, genel 3/40 (%92.5), sinif 1/20 (%97.5)");
+    expect(pdfRenderer.inputs[0]?.institution).toEqual({
+      institutionLogoUrl: "https://cdn.example.test/dna-logo.png",
+      institutionName: "DNA EĞİTİM KURUMU",
+    });
+    expect(pdfRenderer.inputs[0]?.snapshot).toMatchObject({
+      id: "snapshot-a",
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      snapshotData: expect.objectContaining({
+        resultCount: 1,
+        students: [expect.objectContaining({ studentId: "student-a" })],
+      }),
+    });
   });
 
   it("hazır snapshot içinden öğrenci sınav raporu döner", async () => {
@@ -491,6 +492,57 @@ describe("ReportGenerationService", () => {
         ],
       },
       generatedAt: "2026-06-06T09:00:00.000Z",
+    });
+  });
+
+  it("hazır snapshot içindeki template yorum taslağını öğrenci raporuna taşır", async () => {
+    const producer = new FakeProducer();
+    const snapshotData = fakeSnapshot.snapshotData as { students: Record<string, unknown>[] };
+    const student = snapshotData.students[0] ?? {};
+    const store = new FakeReportSnapshotStore([{
+      ...fakeSnapshot,
+      snapshotData: {
+        ...snapshotData,
+        students: [{
+          ...student,
+          commentary: {
+            provider: "template",
+            generatedAt: "2026-06-06T09:00:00.000Z",
+            parentSummary: "Bu sonuçta toplam 17.5 net görünüyor.",
+            teacherActionDraft: "Matematik için hedefli soru seti atanmalı.",
+            reviewStatus: "DRAFT",
+            disclaimer: "Bu yorum otomatik taslaktır; veliye yayınlanmadan önce öğretmen tarafından kontrol edilmelidir.",
+          },
+        }],
+      },
+    }]);
+    const service = new ReportGenerationService(
+      producer,
+      store,
+      undefined,
+      undefined,
+      new FakeStudentStore() as unknown as StudentStore,
+    );
+
+    const result = await service.getStudentReport(
+      {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        roles: ["TENANT_ADMIN"],
+        bypassRls: false,
+      },
+      "exam-a",
+      "snapshot-a",
+      "student-a",
+    );
+
+    expect(result.commentary).toEqual({
+      provider: "template",
+      generatedAt: "2026-06-06T09:00:00.000Z",
+      parentSummary: "Bu sonuçta toplam 17.5 net görünüyor.",
+      teacherActionDraft: "Matematik için hedefli soru seti atanmalı.",
+      reviewStatus: "DRAFT",
+      disclaimer: "Bu yorum otomatik taslaktır; veliye yayınlanmadan önce öğretmen tarafından kontrol edilmelidir.",
     });
   });
 
@@ -717,9 +769,14 @@ class FakeProducer implements ReportGenerationQueueProducer {
 class FakePdfRenderer implements ReportPdfRenderer {
   readonly inputs: Parameters<ReportPdfRenderer["render"]>[0][] = [];
 
-  async render(input: Parameters<ReportPdfRenderer["render"]>[0]): Promise<Buffer> {
+  async render(input: Parameters<ReportPdfRenderer["render"]>[0]): ReturnType<ReportPdfRenderer["render"]> {
     this.inputs.push(input);
-    return Buffer.from("%PDF-1.4\nrich\n%%EOF", "utf8");
+    return {
+      fileName: `${input.snapshot.examId}-${input.snapshot.id}.pdf`,
+      contentType: "application/pdf",
+      fileBase64: Buffer.from("%PDF-1.4\nrich\n%%EOF", "utf8").toString("base64"),
+      pageCount: 1,
+    };
   }
 }
 
@@ -1066,6 +1123,14 @@ class FakeReportSnapshotStore implements ReportSnapshotStore {
   async markStaleByExam(): Promise<number> {
     return 0;
   }
+}
+
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key];
+    return;
+  }
+  process.env[key] = value;
 }
 
 const fakeMixedSnapshot: ReportSnapshotRecord = {

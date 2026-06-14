@@ -1,20 +1,36 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type {
   HomeworkMaterialAssignmentRecord,
+  HomeworkMaterialFileDownloadResult,
   HomeworkMaterialFileRecord,
   HomeworkMaterialRecord,
   HomeworkRecord,
 } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
+import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
+import { HomeworkService } from "./homework.service.js";
 import {
-  HomeworkService,
-  type CreateHomeworkMaterialAssignmentInput,
-  type CreateHomeworkMaterialFileInput,
-} from "./homework.service.js";
+  homeworkCheckStatusBodySchema,
+  homeworkCreateBodySchema,
+  homeworkFromMaterialCreateBodySchema,
+  homeworkMaterialAssignmentCreateBodySchema,
+  homeworkMaterialCreateBodySchema,
+  homeworkMaterialFileCreateBodySchema,
+  homeworkMaterialUpdateBodySchema,
+  homeworkUpdateBodySchema,
+  type HomeworkCheckStatusBody,
+  type HomeworkCreateBody,
+  type HomeworkFromMaterialCreateBody,
+  type HomeworkMaterialAssignmentCreateBody,
+  type HomeworkMaterialCreateBody,
+  type HomeworkMaterialFileCreateBody,
+  type HomeworkMaterialUpdateBody,
+  type HomeworkUpdateBody,
+} from "./homework-validation.js";
 
 @Controller("homework")
 @UseGuards(RolesGuard)
@@ -45,13 +61,23 @@ export class HomeworkController {
     return this.homework.listMaterialFiles(getRequestContext(), id);
   }
 
+  @Get("materials/:id/files/:fileId/download")
+  @Roles("TEACHER")
+  downloadMaterialFile(
+    @Param("id") id: string,
+    @Param("fileId") fileId: string,
+  ): Promise<HomeworkMaterialFileDownloadResult> {
+    return this.homework.downloadMaterialFile(getRequestContext(), id, fileId);
+  }
+
   @Post("materials/:id/files")
   @RequireCapability("academic:manage")
   addMaterialFile(
     @Param("id") id: string,
-    @Body() body: CreateHomeworkMaterialFileInput,
+    @Body(zodBody(homeworkMaterialFileCreateBodySchema)) body: HomeworkMaterialFileCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<HomeworkMaterialFileRecord> {
-    return this.homework.addMaterialFile(getRequestContext(), id, body);
+    return this.homework.addMaterialFile(getRequestContext(), id, body, idempotencyKey);
   }
 
   @Get("materials/:id/assignments")
@@ -64,14 +90,17 @@ export class HomeworkController {
   @Roles("TEACHER")
   assignMaterial(
     @Param("id") id: string,
-    @Body() body: CreateHomeworkMaterialAssignmentInput,
+    @Body(zodBody(homeworkMaterialAssignmentCreateBodySchema)) body: HomeworkMaterialAssignmentCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<HomeworkMaterialAssignmentRecord> {
-    return this.homework.assignMaterial(getRequestContext(), id, body);
+    return this.homework.assignMaterial(getRequestContext(), id, body, idempotencyKey);
   }
 
   @Post("materials")
   @RequireCapability("academic:manage")
-  createMaterial(@Body() body: Partial<HomeworkMaterialRecord>): Promise<HomeworkMaterialRecord> {
+  createMaterial(
+    @Body(zodBody(homeworkMaterialCreateBodySchema)) body: HomeworkMaterialCreateBody,
+  ): Promise<HomeworkMaterialRecord> {
     return this.homework.createMaterial(getRequestContext(), body);
   }
 
@@ -79,7 +108,7 @@ export class HomeworkController {
   @RequireCapability("academic:manage")
   updateMaterial(
     @Param("id") id: string,
-    @Body() body: Partial<HomeworkMaterialRecord>,
+    @Body(zodBody(homeworkMaterialUpdateBodySchema)) body: HomeworkMaterialUpdateBody,
   ): Promise<HomeworkMaterialRecord> {
     return this.homework.updateMaterial(getRequestContext(), id, body);
   }
@@ -99,25 +128,33 @@ export class HomeworkController {
 
   @Post()
   @RequireCapability("academic:manage")
-  create(@Body() body: Partial<HomeworkRecord>): Promise<HomeworkRecord> {
+  create(@Body(zodBody(homeworkCreateBodySchema)) body: HomeworkCreateBody): Promise<HomeworkRecord> {
     return this.homework.create(getRequestContext(), body);
   }
 
   @Post("from-material")
   @RequireCapability("academic:manage")
-  createFromMaterial(@Body() body: { tenantId?: string; classId?: string; materialId?: string; dueAt?: string }): Promise<HomeworkRecord> {
+  createFromMaterial(
+    @Body(zodBody(homeworkFromMaterialCreateBodySchema)) body: HomeworkFromMaterialCreateBody,
+  ): Promise<HomeworkRecord> {
     return this.homework.createFromMaterial(getRequestContext(), body);
   }
 
   @Patch(":id")
   @RequireCapability("academic:manage")
-  update(@Param("id") id: string, @Body() body: Partial<HomeworkRecord>): Promise<HomeworkRecord> {
+  update(
+    @Param("id") id: string,
+    @Body(zodBody(homeworkUpdateBodySchema)) body: HomeworkUpdateBody,
+  ): Promise<HomeworkRecord> {
     return this.homework.update(getRequestContext(), id, body);
   }
 
   @Patch(":id/check-status")
   @Roles("TEACHER")
-  updateCheckStatus(@Param("id") id: string, @Body() body: { checked?: boolean }): Promise<HomeworkRecord> {
+  updateCheckStatus(
+    @Param("id") id: string,
+    @Body(zodBody(homeworkCheckStatusBodySchema)) body: HomeworkCheckStatusBody,
+  ): Promise<HomeworkRecord> {
     return this.homework.updateCheckStatus(getRequestContext(), id, body.checked);
   }
 

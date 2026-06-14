@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { BadRequestException, Inject, Injectable, Optional } from "@nestjs/common";
 import ExcelJS from "exceljs";
 import type {
@@ -6,6 +7,7 @@ import type {
   AnswerKeyScoringConfig,
 } from "@uzman-hocam/shared-types";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import { learningOutcomeStoreToken, type LearningOutcomeStore } from "../school/learning-outcome-store.js";
 import {
   AnswerKeyService,
@@ -71,6 +73,7 @@ export class AnswerKeyExcelImportService {
     @Optional()
     @Inject(learningOutcomeStoreToken)
     private readonly learningOutcomes?: LearningOutcomeStore,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async dryRun(context: RequestContext, input: AnswerKeyExcelImportInput): Promise<AnswerKeyExcelImportDryRunResult> {
@@ -99,7 +102,29 @@ export class AnswerKeyExcelImportService {
     };
   }
 
-  async import(context: RequestContext, input: AnswerKeyExcelImportInput): Promise<AnswerKeyExcelImportResult> {
+  async import(
+    context: RequestContext,
+    input: AnswerKeyExcelImportInput,
+    idempotencyKey?: string,
+  ): Promise<AnswerKeyExcelImportResult> {
+    const idempotencyRequest = {
+      examId: input.examId,
+      version: input.version,
+      scoringConfig: input.scoringConfig,
+      fileSha256: input.fileBase64 ? createSha256(Buffer.from(input.fileBase64, "base64")) : undefined,
+    };
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "answer-key.import.commit", request: idempotencyRequest },
+        () => this.importOnce(context, input),
+      );
+    }
+
+    return this.importOnce(context, input);
+  }
+
+  private async importOnce(context: RequestContext, input: AnswerKeyExcelImportInput): Promise<AnswerKeyExcelImportResult> {
     const parsed = await this.parseWorkbook(input.fileBase64);
     const answerKey = await this.answerKeys.create(context, {
       examId: input.examId,
@@ -347,6 +372,10 @@ function requiredAnyHeader(headers: Map<string, number>, names: string[]): numbe
 
 function optionalHeader(headers: Map<string, number>, name: string): number | undefined {
   return headers.get(normalizeHeader(name));
+}
+
+function createSha256(body: Buffer): string {
+  return createHash("sha256").update(body).digest("hex");
 }
 
 function normalizeHeader(value: string): string {

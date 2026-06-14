@@ -1,11 +1,14 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from "@nestjs/common";
 import type { ReportErrorBooklet, ReportStudentProgress, ReportStudentSnapshot } from "@uzman-hocam/shared-types";
+import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
+import { optionalTrimmedString, requiredTrimmedString, zodBody } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
   ReportGenerationService,
+  examResultSummaryReportType,
   type ReportGenerationQueueResult,
   type ReportSnapshotListFilters,
   type ReportSnapshotExportResult,
@@ -14,6 +17,18 @@ import {
 } from "./report-generation.service.js";
 
 interface ReportSnapshotListQuery extends ReportSnapshotListFilters {}
+
+const reportGenerationEnqueueBodySchema = z.object({
+  campusId: optionalTrimmedString,
+  classId: optionalTrimmedString,
+  contentHash: requiredTrimmedString,
+  courseId: optionalTrimmedString,
+  gradeLevelId: optionalTrimmedString,
+  reportType: z.literal(examResultSummaryReportType),
+  termId: optionalTrimmedString,
+}).strict();
+
+type EnqueueReportGenerationBody = z.infer<typeof reportGenerationEnqueueBodySchema>;
 
 @Controller("exams/:examId/reports")
 @UseGuards(RolesGuard)
@@ -80,7 +95,8 @@ export class ReportGenerationController {
   @RequireCapability("academic:manage")
   enqueue(
     @Param("examId") examId: string,
-    @Body() body: EnqueueReportGenerationBody,
+    @Body(zodBody(reportGenerationEnqueueBodySchema)) body: EnqueueReportGenerationBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<ReportGenerationQueueResult> {
     return this.reports.enqueueGeneration(getRequestContext(), {
       examId,
@@ -91,16 +107,6 @@ export class ReportGenerationController {
       classId: body.classId,
       courseId: body.courseId,
       termId: body.termId,
-    });
+    }, idempotencyKey);
   }
-}
-
-interface EnqueueReportGenerationBody {
-  reportType?: string;
-  contentHash?: string;
-  campusId?: string;
-  gradeLevelId?: string;
-  classId?: string;
-  courseId?: string;
-  termId?: string;
 }

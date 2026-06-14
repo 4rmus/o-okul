@@ -131,6 +131,76 @@ describe("Schedule API", () => {
       .expect(409);
   });
 
+  it("ders programı gövdelerini Zod ile doğrular", async () => {
+    const invalidCreate = await request(server)
+      .post("/schedule-lessons")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        classId: " ",
+        endsAt: 123,
+        startsAt: " ",
+        teacherId: 123,
+        title: " ",
+      })
+      .expect(422);
+
+    expect(invalidCreate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: expect.arrayContaining([
+          expect.objectContaining({ path: "classId" }),
+          expect.objectContaining({ path: "endsAt" }),
+          expect.objectContaining({ path: "startsAt" }),
+          expect.objectContaining({ path: "teacherId" }),
+          expect.objectContaining({ path: "title" }),
+        ]),
+      },
+    });
+
+    const invalidCalendarDate = await request(server)
+      .post("/schedule-lessons")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        classId: "class-a",
+        teacherId: "teacher-a",
+        title: "Takvim Hatalı Ders",
+        startsAt: "2026-02-29T09:00",
+        endsAt: "2026-03-01T10:00",
+      })
+      .expect(422);
+
+    expect(invalidCalendarDate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [
+          expect.objectContaining({
+            message: "SCHEDULE_LESSON_TIME_INVALID",
+            path: "startsAt",
+          }),
+        ],
+      },
+    });
+
+    const invalidUpdate = await request(server)
+      .patch("/schedule-lessons/lesson-a")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        startsAt: 123,
+        title: " ",
+      })
+      .expect(422);
+
+    expect(invalidUpdate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: expect.arrayContaining([
+          expect.objectContaining({ path: "startsAt" }),
+          expect.objectContaining({ path: "title" }),
+        ]),
+      },
+    });
+  });
+
   it("tenant A başka tenant class/teacher ile ders programı oluşturamaz", async () => {
     await request(server)
       .post("/schedule-lessons")

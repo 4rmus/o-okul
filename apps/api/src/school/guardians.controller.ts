@@ -1,11 +1,22 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type { GuardianRecord, GuardianStudentRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
+import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
-import { type GuardianStudentRelationInput, SchoolService } from "./school.service.js";
+import { SchoolService } from "./school.service.js";
+import {
+  guardianCreateBodySchema,
+  guardianStudentLinkBodySchema,
+  guardianStudentRelationBodySchema,
+  guardianUpdateBodySchema,
+  type GuardianCreateBody,
+  type GuardianStudentLinkBody,
+  type GuardianStudentRelationBody,
+  type GuardianUpdateBody,
+} from "./school-validation.js";
 
 @Controller("guardians")
 @UseGuards(RolesGuard)
@@ -32,13 +43,13 @@ export class GuardiansController {
 
   @Post()
   @RequireCapability("student:manage")
-  create(@Body() body: Partial<GuardianRecord>): Promise<GuardianRecord> {
+  create(@Body(zodBody(guardianCreateBodySchema)) body: GuardianCreateBody): Promise<GuardianRecord> {
     return this.school.createGuardian(getRequestContext(), body);
   }
 
   @Patch(":id")
   @RequireCapability("student:manage")
-  update(@Param("id") id: string, @Body() body: Partial<GuardianRecord>): Promise<GuardianRecord> {
+  update(@Param("id") id: string, @Body(zodBody(guardianUpdateBodySchema)) body: GuardianUpdateBody): Promise<GuardianRecord> {
     return this.school.updateGuardian(getRequestContext(), id, body);
   }
 
@@ -52,9 +63,9 @@ export class GuardiansController {
   @RequireCapability("student:manage")
   linkStudent(
     @Param("id") id: string,
-    @Body() body: { studentId?: string } & GuardianStudentRelationInput,
+    @Body(zodBody(guardianStudentLinkBodySchema)) body: GuardianStudentLinkBody,
   ): Promise<GuardianStudentRecord> {
-    return this.school.linkGuardianStudent(getRequestContext(), id, body.studentId ?? "", body);
+    return this.school.linkGuardianStudent(getRequestContext(), id, body.studentId, body);
   }
 
   @Patch(":id/students/:studentId")
@@ -62,7 +73,7 @@ export class GuardiansController {
   updateStudentLink(
     @Param("id") id: string,
     @Param("studentId") studentId: string,
-    @Body() body: GuardianStudentRelationInput,
+    @Body(zodBody(guardianStudentRelationBodySchema)) body: GuardianStudentRelationBody,
   ): Promise<GuardianStudentRecord> {
     return this.school.updateGuardianStudent(getRequestContext(), id, studentId, body);
   }

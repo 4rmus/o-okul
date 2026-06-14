@@ -124,10 +124,54 @@ describe("RawImportController", () => {
     });
   });
 
-  it("eksik dosya gövdesinde yan etki oluşturmaz", async () => {
+  it("TENANT_ADMIN RawImport upload isteğini Idempotency-Key ile tekilleştirir", async () => {
     const issued = await login("admin-a@example.test");
+    const key = "raw-import-upload-idempotency-a";
+    const file = Buffer.from("ogrenci_no\tcevaplar");
+    const body = {
+      sourceType: "OPTICAL_TXT",
+      fileName: "answers.dat",
+      fileBase64: file.toString("base64"),
+      contentType: "text/plain",
+      parserConfigVersion: "parser-v1",
+    };
+
+    const first = await request(server)
+      .post("/exams/exam-a/raw-imports")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+    const second = await request(server)
+      .post("/exams/exam-a/raw-imports")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+    expect(archiveStore.puts).toHaveLength(1);
+    expect(repository.creates).toHaveLength(1);
+    expect(producer.inputs).toHaveLength(1);
 
     await request(server)
+      .post("/exams/exam-a/raw-imports")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send({
+        ...body,
+        fileBase64: Buffer.from("ogrenci_no\tfarkli-cevaplar").toString("base64"),
+      })
+      .expect(409);
+    expect(archiveStore.puts).toHaveLength(1);
+    expect(repository.creates).toHaveLength(1);
+    expect(producer.inputs).toHaveLength(1);
+  });
+
+  it("eksik dosya gövdesinde 422 döner ve yan etki oluşturmaz", async () => {
+    const issued = await login("admin-a@example.test");
+
+    const response = await request(server)
       .post("/exams/exam-a/raw-imports")
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .send({
@@ -135,8 +179,16 @@ describe("RawImportController", () => {
         fileName: "answers.dat",
         parserConfigVersion: "parser-v1",
       })
-      .expect(400);
+      .expect(422);
 
+    expect(response.body).toMatchObject({
+      error: {
+        code: "VALIDATION_FAILED",
+        details: {
+          fields: [expect.objectContaining({ path: "fileBase64" })],
+        },
+      },
+    });
     expect(archiveStore.puts).toHaveLength(0);
     expect(repository.creates).toHaveLength(0);
     expect(producer.inputs).toHaveLength(0);
@@ -234,6 +286,42 @@ describe("RawImportController", () => {
     });
   });
 
+  it("TENANT_ADMIN evaluation işi üretimini Idempotency-Key ile tekilleştirir", async () => {
+    const issued = await login("admin-a@example.test");
+    const key = "raw-import-evaluation-idempotency-a";
+    const body = { answerKeyId: "answer-key-a" };
+
+    const first = await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/evaluation-jobs")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+    const second = await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/evaluation-jobs")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+    expect(analysisStore.evaluationCalls).toEqual([
+      { tenantId: "tenant-a", examId: "exam-a", rawImportId: "raw-import-a", answerKeyId: "answer-key-a" },
+    ]);
+    expect(producer.inputs).toHaveLength(2);
+
+    await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/evaluation-jobs")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send({ answerKeyId: "answer-key-b" })
+      .expect(409);
+    expect(analysisStore.evaluationCalls).toEqual([
+      { tenantId: "tenant-a", examId: "exam-a", rawImportId: "raw-import-a", answerKeyId: "answer-key-a" },
+    ]);
+    expect(producer.inputs).toHaveLength(2);
+  });
+
   it("TENANT_ADMIN evaluation tamamlanma durumunu görür", async () => {
     const issued = await login("admin-a@example.test");
     analysisStore.evaluatedCount = 2;
@@ -275,12 +363,32 @@ describe("RawImportController", () => {
 
   it("TENANT_ADMIN karantina satırını öğrenciye bağlayıp çözer", async () => {
     const issued = await login("admin-a@example.test");
+    const key = "raw-import-quarantine-resolve-idempotency-a";
+    const body = { resolvedStudentId: "student-a" };
 
     const response = await request(server)
       .post("/exams/exam-a/raw-imports/raw-import-a/quarantines/quarantine-a/resolve")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ resolvedStudentId: "student-a" })
+      .set("Idempotency-Key", key)
+      .send(body)
       .expect(201);
+
+    await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/quarantines/quarantine-a/resolve")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual(response.body);
+      });
+
+    await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/quarantines/quarantine-a/resolve")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send({ resolvedStudentId: "student-c" })
+      .expect(409);
 
     expect(quarantineStore.resolves).toEqual([
       {

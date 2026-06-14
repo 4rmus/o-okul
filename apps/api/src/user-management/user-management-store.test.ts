@@ -68,4 +68,52 @@ describe("PostgresUserManagementStore", () => {
     expect(tenantMembershipInserts[0]?.values).toEqual([expect.any(String), "tenant-a", "user-created", "TEACHER"]);
     expect(tenantMembershipInserts[1]?.values).toEqual([expect.any(String), "tenant-a", "user-created", "STUDENT"]);
   });
+
+  it("yeni üyelik eklerken koltuk limiti doluysa transaction'ı geri alır", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const pool = {
+      async query<T>() {
+        return { rows: [] as T[] };
+      },
+      async connect() {
+        return {
+          async query<T>(sql: string, values?: unknown[]) {
+            queries.push({ sql, values });
+            if (sql.includes('INSERT INTO "User"')) {
+              return { rows: [{ id: "user-new-seat" }] as T[] };
+            }
+            if (sql.includes('SELECT "id" FROM "TenantMembership"')) {
+              return { rows: [] as T[] };
+            }
+            if (sql.includes('SELECT "seatLimit" FROM "Tenant"')) {
+              return { rows: [{ seatLimit: 1 }] as T[] };
+            }
+            if (sql.includes('COUNT(DISTINCT "userId")')) {
+              return { rows: [{ activeSeatCount: 1 }] as T[] };
+            }
+            return { rows: [] as T[] };
+          },
+          release() {},
+        };
+      },
+    };
+    const store = new PostgresUserManagementStore(pool);
+
+    await expect(
+      store.createOrAttachTenantUser({
+        tenantId: "tenant-full",
+        email: "new-seat@example.test",
+        name: "New Seat",
+        password: "password1",
+        roles: ["TEACHER"],
+      }),
+    ).rejects.toThrow("TENANT_SEAT_LIMIT_EXCEEDED");
+
+    expect(queries.some((query) => query.sql.includes('SELECT "seatLimit" FROM "Tenant"') && query.sql.includes("FOR UPDATE"))).toBe(
+      true,
+    );
+    expect(queries.some((query) => query.sql.includes('DELETE FROM "TenantMembership"'))).toBe(false);
+    expect(queries.some((query) => query.sql.includes('INSERT INTO "TenantMembership"'))).toBe(false);
+    expect(queries.at(-1)?.sql).toBe("ROLLBACK");
+  });
 });

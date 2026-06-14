@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { getTenantScopedTables } from "./tenant-models.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const migrationsPath = join(__dirname, "../prisma/migrations");
@@ -9,56 +10,13 @@ const sql = readdirSync(migrationsPath, { withFileTypes: true })
   .map((entry) => readFileSync(join(migrationsPath, entry.name, "migration.sql"), "utf8"))
   .join("\n");
 
-const tenantTables = [
-  "TenantMembership",
-  "AuthSession",
-  "IdentityInvitation",
-  "NotificationDeviceToken",
-  "Class",
-  "Course",
-  "AcademicYear",
-  "AcademicTerm",
-  "Student",
-  "StudentClassHistory",
-  "StudentEnrollment",
-  "Attendance",
-  "TeacherNote",
-  "TeacherAssignment",
-  "PaymentPlan",
-  "PaymentInstallment",
-  "Teacher",
-  "Guardian",
-  "GuardianStudent",
-  "ScheduleLesson",
-  "StudySession",
-  "StudySessionStudent",
-  "HomeworkMaterial",
-  "HomeworkMaterialFile",
-  "HomeworkMaterialAssignment",
-  "Homework",
-  "Exam",
-  "ParserConfig",
-  "OpticalFormTemplate",
-  "LearningOutcome",
-  "ExamParticipant",
-  "RawImport",
-  "AnswerKey",
-  "ExamBookletVariant",
-  "ExamResult",
-  "ParsedAnswer",
-  "ImportQuarantine",
-  "ReportSnapshot",
-  "Announcement",
-  "AnnouncementDeliveryReport",
-  "MessageTemplate",
-  "SmsBatchDeliveryReport",
-  "SupportTicket",
-  "SupportTicketAttachment",
-  "SupportTicketComment",
-  "AuditLog",
-];
+const tenantTables = getTenantScopedTables();
 
 const failures = [];
+if (tenantTables.length === 0) {
+  failures.push("schema.prisma içinde tenantId taşıyan model bulunamadı");
+}
+
 const appGrantTables = new Set(
   [...sql.matchAll(/GRANT SELECT, INSERT, UPDATE, DELETE ON([\s\S]*?)TO app;/g)].flatMap((match) =>
     [...(match[1] ?? "").matchAll(/"([^"]+)"/g)].map((tableMatch) => tableMatch[1]),
@@ -67,17 +25,18 @@ const appGrantTables = new Set(
 
 for (const table of tenantTables) {
   const escaped = table.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const enable = new RegExp(`ALTER TABLE "${escaped}" ENABLE ROW LEVEL SECURITY;`);
-  const force = new RegExp(`ALTER TABLE "${escaped}" FORCE ROW LEVEL SECURITY;`);
-  const policy = new RegExp(`CREATE POLICY "${escaped}_tenant_isolation" ON "${escaped}"[\\s\\S]*?USING[\\s\\S]*?WITH CHECK`, "m");
-  const tenantSetting = new RegExp(`"${escaped}"[\\s\\S]*?app\\.current_tenant_id`, "m");
-  const bypassSetting = new RegExp(`"${escaped}"[\\s\\S]*?app\\.bypass_rls`, "m");
+  const enable = new RegExp(`ALTER TABLE\\s+"${escaped}"\\s+ENABLE ROW LEVEL SECURITY;`);
+  const force = new RegExp(`ALTER TABLE\\s+"${escaped}"\\s+FORCE ROW LEVEL SECURITY;`);
+  const policy = new RegExp(`CREATE POLICY\\s+"${escaped}_tenant_isolation"\\s+ON\\s+"${escaped}"([\\s\\S]*?);`, "m");
+  const policyBody = policy.exec(sql)?.[1] ?? "";
 
   if (!enable.test(sql)) failures.push(`${table}: ENABLE ROW LEVEL SECURITY eksik`);
   if (!force.test(sql)) failures.push(`${table}: FORCE ROW LEVEL SECURITY eksik`);
-  if (!policy.test(sql)) failures.push(`${table}: USING + WITH CHECK policy eksik`);
-  if (!tenantSetting.test(sql)) failures.push(`${table}: app.current_tenant_id kontrolü eksik`);
-  if (!bypassSetting.test(sql)) failures.push(`${table}: app.bypass_rls kontrolü eksik`);
+  if (!policyBody || !/\bUSING\b[\s\S]*\bWITH CHECK\b/m.test(policyBody)) {
+    failures.push(`${table}: USING + WITH CHECK policy eksik`);
+  }
+  if (!policyBody.includes("app.current_tenant_id")) failures.push(`${table}: app.current_tenant_id kontrolü eksik`);
+  if (!policyBody.includes("app.bypass_rls")) failures.push(`${table}: app.bypass_rls kontrolü eksik`);
   if (!appGrantTables.has(table)) failures.push(`${table}: app rolü için SELECT/INSERT/UPDATE/DELETE yetkisi eksik`);
 }
 

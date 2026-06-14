@@ -94,6 +94,41 @@ describe("SmsBatch API", () => {
     });
   });
 
+  it("SMS batch kuyruğa almayı Idempotency-Key ile tekilleştirir", async () => {
+    const key = "sms-batch-idempotency-a";
+    const body = {
+      templateId: "message-template-a",
+      recipients: [{ to: "5000000001" }, { to: "5000000002" }],
+    };
+    const first = await request(server)
+      .post("/sms-batches")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    const second = await request(server)
+      .post("/sms-batches")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+    expect(producer.inputs).toHaveLength(1);
+
+    await request(server)
+      .post("/sms-batches")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send({
+        templateId: "message-template-a",
+        recipients: [{ to: "5000000001" }],
+      })
+      .expect(409);
+    expect(producer.inputs).toHaveLength(1);
+  });
+
   it("başka tenant şablonuyla batch oluşturamaz", async () => {
     await request(server)
       .post("/sms-batches")
@@ -108,14 +143,21 @@ describe("SmsBatch API", () => {
   });
 
   it("alıcı doğrulaması yapar", async () => {
-    await request(server)
+    const response = await request(server)
       .post("/sms-batches")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
         templateId: "message-template-a",
         recipients: [{ to: " " }],
       })
-      .expect(400);
+      .expect(422);
+
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "recipients.0.to" })],
+      },
+    });
 
     expect(producer.inputs).toHaveLength(0);
   });
@@ -136,6 +178,21 @@ describe("SmsBatch API", () => {
         studentIds: ["student-a"],
         studentNames: ["Ada A"],
       }],
+    });
+  });
+
+  it("SMS alıcı önizleme filtresini Zod ile doğrular", async () => {
+    const response = await request(server)
+      .post("/sms-batches/recipients/preview")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ studentStatus: "UNKNOWN" })
+      .expect(422);
+
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "studentStatus" })],
+      },
     });
   });
 

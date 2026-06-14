@@ -58,6 +58,22 @@ describe("AttendanceService", () => {
       }),
     ]));
   });
+
+  it("takvim dışı devamsızlık tarihini servis katmanında reddeder", async () => {
+    const service = new AttendanceService(
+      new InMemoryAttendanceStore(),
+      {} as never,
+      {} as never,
+      new InMemoryStudentStore(),
+      new InMemoryGuardianStudentStore(),
+      new InMemoryTeacherAssignmentStore(),
+      {} as never,
+    );
+
+    await expect(
+      service.create(adminContext, { studentId: "student-a", date: "2026-02-29", status: "ABSENT" }),
+    ).rejects.toThrow("ATTENDANCE_DATE_INVALID");
+  });
 });
 
 const adminContext: RequestContext = {

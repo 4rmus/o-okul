@@ -180,7 +180,7 @@ export class TenantService {
   }
 
   private assertSystemAdmin(context: RequestContext): void {
-    if (!context.bypassRls || !isSystemAdmin(context.roles)) {
+    if (!isSystemAdmin(context.roles)) {
       throw new BadRequestException("SYSTEM_ADMIN_CONTEXT_REQUIRED");
     }
   }
@@ -340,11 +340,21 @@ function optionalUrl(value: string | undefined, errorCode: string): string | und
 
 function optionalDate(value: string | undefined, errorCode: string): string | undefined {
   if (value === undefined || value === "") return undefined;
-  const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) {
+  const trimmed = value.trim();
+  if (!isIsoDateTimeString(trimmed)) {
     throw new BadRequestException(errorCode);
   }
-  return new Date(timestamp).toISOString();
+  return new Date(Date.parse(trimmed)).toISOString();
+}
+
+function isIsoDateTimeString(value: string): boolean {
+  const match = /^(\d{4}-\d{2}-\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/.exec(value);
+  return Boolean(match?.[1] && isCalendarDateString(match[1]) && !Number.isNaN(Date.parse(value)));
+}
+
+function isCalendarDateString(value: string): boolean {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 function optionalPositiveInt(value: number | undefined, errorCode: string): number | undefined {

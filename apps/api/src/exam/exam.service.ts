@@ -10,6 +10,7 @@ import {
 import type { ExamParticipantRecord, ExamRecord } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import {
@@ -83,9 +84,26 @@ export class ExamService {
     @Inject(teacherAssignmentStoreToken)
     private readonly teacherAssignments: TeacherAssignmentStore,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
-  async create(context: RequestContext, input: CreateExamInput): Promise<ExamRecord> {
+  async create(
+    context: RequestContext,
+    input: CreateExamInput,
+    idempotencyKey?: string,
+  ): Promise<ExamRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "exam.create", request: input },
+        () => this.createOnce(context, input),
+      );
+    }
+
+    return this.createOnce(context, input);
+  }
+
+  private async createOnce(context: RequestContext, input: CreateExamInput): Promise<ExamRecord> {
     const tenantId = requireTenant(context);
     const title = requiredString(input.title, "EXAM_TITLE_REQUIRED");
     const startsAt = optionalIso(input.startsAt, "EXAM_STARTS_AT_INVALID");
@@ -150,7 +168,23 @@ export class ExamService {
     return exam;
   }
 
-  async publish(context: RequestContext, examId: string | undefined): Promise<ExamRecord> {
+  async publish(
+    context: RequestContext,
+    examId: string | undefined,
+    idempotencyKey?: string,
+  ): Promise<ExamRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "exam.publish", request: { examId } },
+        () => this.publishOnce(context, examId),
+      );
+    }
+
+    return this.publishOnce(context, examId);
+  }
+
+  private async publishOnce(context: RequestContext, examId: string | undefined): Promise<ExamRecord> {
     const tenantId = requireTenant(context);
     const id = requiredString(examId, "EXAM_ID_REQUIRED");
     const exam = await this.repository.publish(tenantId, id);
@@ -193,6 +227,23 @@ export class ExamService {
   }
 
   async addParticipant(
+    context: RequestContext,
+    examId: string | undefined,
+    input: CreateExamParticipantInput,
+    idempotencyKey?: string,
+  ): Promise<ExamParticipantRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "exam.participant.create", request: { examId, ...input } },
+        () => this.addParticipantOnce(context, examId, input),
+      );
+    }
+
+    return this.addParticipantOnce(context, examId, input);
+  }
+
+  private async addParticipantOnce(
     context: RequestContext,
     examId: string | undefined,
     input: CreateExamParticipantInput,
@@ -298,10 +349,20 @@ function optionalIso(value: string | undefined, errorCode: string): string | und
   if (!trimmed) {
     return undefined;
   }
-  if (Number.isNaN(Date.parse(trimmed))) {
+  if (!isIsoDateTimeString(trimmed)) {
     throw new BadRequestException(errorCode);
   }
   return trimmed;
+}
+
+function isIsoDateTimeString(value: string): boolean {
+  const match = /^(\d{4}-\d{2}-\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/.exec(value);
+  return Boolean(match?.[1] && isCalendarDateString(match[1]) && !Number.isNaN(Date.parse(value)));
+}
+
+function isCalendarDateString(value: string): boolean {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 function optionalString(value: string | undefined): string | undefined {

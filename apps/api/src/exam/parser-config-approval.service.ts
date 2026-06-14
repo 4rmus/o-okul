@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import type { ParserConfigSuggestion } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import { reportSnapshotStoreToken, type ReportSnapshotStore } from "../report/report-snapshot-store.js";
 
 export const parserConfigRepositoryToken = Symbol("ParserConfigRepository");
@@ -45,9 +46,26 @@ export class ParserConfigApprovalService {
     @Optional()
     @Inject(reportSnapshotStoreToken)
     private readonly snapshots?: ReportSnapshotStore,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async approve(
+    context: RequestContext,
+    input: ParserConfigApprovalInput,
+    idempotencyKey?: string,
+  ): Promise<SavedParserConfig> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "parser-config.approve", request: input },
+        () => this.approveOnce(context, input),
+      );
+    }
+
+    return this.approveOnce(context, input);
+  }
+
+  private async approveOnce(
     context: RequestContext,
     input: ParserConfigApprovalInput,
   ): Promise<SavedParserConfig> {

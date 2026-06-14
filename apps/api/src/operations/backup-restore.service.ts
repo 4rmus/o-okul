@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, Optional }
 import { createHash } from "node:crypto";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import type { ProducedJob, TenantQueueJobInput } from "../queue/job-producer.js";
 import {
   backupRestoreJobStoreToken,
@@ -31,6 +32,7 @@ export class BackupRestoreService {
     @Inject(backupRestoreQueueProducerToken)
     private readonly producer: BackupRestoreQueueProducer,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async list(context: RequestContext): Promise<BackupRestoreJobRecord[]> {
@@ -40,7 +42,26 @@ export class BackupRestoreService {
     return this.store.listByTenant(context.tenantId);
   }
 
-  async enqueue(context: RequestContext, input: CreateBackupRestoreJobInput): Promise<BackupRestoreJobRecord> {
+  async enqueue(
+    context: RequestContext,
+    input: CreateBackupRestoreJobInput,
+    idempotencyKey?: string,
+  ): Promise<BackupRestoreJobRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "backup-restore.enqueue", request: input },
+        () => this.enqueueJob(context, input),
+      );
+    }
+
+    return this.enqueueJob(context, input);
+  }
+
+  private async enqueueJob(
+    context: RequestContext,
+    input: CreateBackupRestoreJobInput,
+  ): Promise<BackupRestoreJobRecord> {
     if (!context.tenantId || context.bypassRls) {
       throw new ForbiddenException("TENANT_CONTEXT_REQUIRED");
     }

@@ -1,4 +1,5 @@
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createS3ClientConfigFromEnv } from "../exam/s3-raw-import-archive-store.js";
 import type { SupportTicketAttachmentContentType } from "./support-ticket.service.js";
 
@@ -16,12 +17,20 @@ export interface StoredSupportTicketAttachment {
   storageKey?: string;
 }
 
+export interface SignedSupportTicketAttachmentDownloadUrl {
+  url: string;
+  expiresAt: string;
+  expiresInSeconds: number;
+}
+
 export interface SupportTicketAttachmentStorage {
   put(input: StoreSupportTicketAttachmentInput): Promise<StoredSupportTicketAttachment>;
   get(storageKey: string): Promise<Buffer>;
+  createSignedDownloadUrl?(storageKey: string): Promise<SignedSupportTicketAttachmentDownloadUrl>;
 }
 
 export const supportTicketAttachmentStorageToken = Symbol("SupportTicketAttachmentStorage");
+export const supportTicketAttachmentDownloadUrlExpiresInSeconds = 300;
 
 export class InlineSupportTicketAttachmentStorage implements SupportTicketAttachmentStorage {
   async put(input: StoreSupportTicketAttachmentInput): Promise<StoredSupportTicketAttachment> {
@@ -38,11 +47,19 @@ export interface S3SupportTicketAttachmentStorageOptions {
   client: {
     send(command: PutObjectCommand | GetObjectCommand): Promise<{ Body?: unknown } | unknown>;
   };
+  downloadUrlExpiresInSeconds?: number;
+  presigner?: (
+    client: S3SupportTicketAttachmentStorageOptions["client"],
+    command: GetObjectCommand,
+    expiresInSeconds: number,
+  ) => Promise<string>;
 }
 
 export class S3SupportTicketAttachmentStorage implements SupportTicketAttachmentStorage {
   private readonly bucket: string;
   private readonly client: S3SupportTicketAttachmentStorageOptions["client"];
+  private readonly downloadUrlExpiresInSeconds: number;
+  private readonly presigner: NonNullable<S3SupportTicketAttachmentStorageOptions["presigner"]>;
 
   constructor(options: S3SupportTicketAttachmentStorageOptions) {
     const bucket = options.bucket.trim();
@@ -52,6 +69,11 @@ export class S3SupportTicketAttachmentStorage implements SupportTicketAttachment
 
     this.bucket = bucket;
     this.client = options.client;
+    this.downloadUrlExpiresInSeconds =
+      options.downloadUrlExpiresInSeconds ?? supportTicketAttachmentDownloadUrlExpiresInSeconds;
+    this.presigner =
+      options.presigner ??
+      ((client, command, expiresInSeconds) => presignS3GetObjectUrl(client, command, expiresInSeconds));
   }
 
   async put(input: StoreSupportTicketAttachmentInput): Promise<StoredSupportTicketAttachment> {
@@ -84,12 +106,30 @@ export class S3SupportTicketAttachmentStorage implements SupportTicketAttachment
     }
     return readS3Body(body);
   }
+
+  async createSignedDownloadUrl(storageKey: string): Promise<SignedSupportTicketAttachmentDownloadUrl> {
+    const key = storageKey.trim();
+    if (!key) {
+      throw new Error("SUPPORT_TICKET_ATTACHMENT_STORAGE_KEY_MISSING");
+    }
+
+    const expiresInSeconds = this.downloadUrlExpiresInSeconds;
+    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
+    return {
+      url: await this.presigner(this.client, command, expiresInSeconds),
+      expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
+      expiresInSeconds,
+    };
+  }
 }
 
 export function createSupportTicketAttachmentStorageFromEnv(
   env: Record<string, string | undefined> = process.env,
 ): SupportTicketAttachmentStorage {
-  const mode = env.SUPPORT_ATTACHMENT_STORAGE ?? "inline";
+  const mode = env.SUPPORT_ATTACHMENT_STORAGE ?? (env.NODE_ENV === "production" ? "s3" : "inline");
+  if (env.NODE_ENV === "production" && mode !== "s3") {
+    throw new Error('SUPPORT_ATTACHMENT_STORAGE must be "s3" in production.');
+  }
   if (mode === "inline") {
     return new InlineSupportTicketAttachmentStorage();
   }
@@ -119,6 +159,18 @@ function createSupportAttachmentStorageKey(input: StoreSupportTicketAttachmentIn
 
 function cleanKeySegment(value: string): string {
   return value.trim().replace(/[^A-Za-z0-9._-]/g, "_");
+}
+
+function presignS3GetObjectUrl(
+  client: unknown,
+  command: GetObjectCommand,
+  expiresInSeconds: number,
+): Promise<string> {
+  return getSignedUrl(
+    client as Parameters<typeof getSignedUrl>[0],
+    command as Parameters<typeof getSignedUrl>[1],
+    { expiresIn: expiresInSeconds },
+  );
 }
 
 async function readS3Body(body: unknown): Promise<Buffer> {

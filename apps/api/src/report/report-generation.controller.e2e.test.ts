@@ -88,6 +88,52 @@ describe("ReportGenerationController", () => {
     });
   });
 
+  it("TENANT_ADMIN rapor üretim işini Idempotency-Key ile tekilleştirir", async () => {
+    const issued = await login("admin-a@example.test");
+    const key = "report-generation-idempotency-a";
+    const body = {
+      reportType: examResultSummaryReportType,
+      contentHash: "results-idempotent-v1",
+      campusId: "campus-main",
+      gradeLevelId: "grade-8",
+      classId: "class-a",
+      courseId: "course-math",
+      termId: "term-2026-spring",
+    };
+    producer.inputs = [];
+
+    const first = await request(server)
+      .post("/exams/exam-a/reports/generation-jobs")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+    const second = await request(server)
+      .post("/exams/exam-a/reports/generation-jobs")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+    expect(producer.inputs).toHaveLength(1);
+    expect(producer.inputs[0]).toMatchObject({
+      queueName: "report-generation",
+      tenantId: "tenant-a",
+      entityId: "exam-a",
+      contentHash: "results-idempotent-v1",
+      reportType: examResultSummaryReportType,
+    });
+
+    await request(server)
+      .post("/exams/exam-a/reports/generation-jobs")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send({ ...body, contentHash: "results-idempotent-v2" })
+      .expect(409);
+    expect(producer.inputs).toHaveLength(1);
+  });
+
   it("TENANT_ADMIN hazır rapor snapshotlarını listeler", async () => {
     const issued = await login("admin-a@example.test");
 
@@ -164,10 +210,12 @@ describe("ReportGenerationController", () => {
     expect(response.body.contentType).toBe("application/pdf");
     expect(response.body.pageCount).toBe(1);
     expect(Buffer.from(response.body.fileBase64 as string, "base64").toString("utf8")).toContain("%PDF-1.4");
-    expect(pdfRenderer.inputs.at(-1)?.html).toContain("Sınav Raporu");
-    expect(pdfRenderer.inputs.at(-1)?.html).toContain("Sınıf Başarı");
-    expect(pdfRenderer.inputs.at(-1)?.html).toContain("Genel sıra");
-    expect(pdfRenderer.inputs.at(-1)?.html).toContain("3/40 (%92.5)");
+    const pdfInput = pdfRenderer.inputs.at(-1);
+    expect(pdfInput?.snapshot.id).toBe("snapshot-a");
+    expect(pdfInput?.snapshot.snapshotData).toMatchObject({
+      resultCount: 1,
+      students: [expect.objectContaining({ studentId: "student-a" })],
+    });
   });
 
   it("TEACHER hazır snapshot içinden öğrenci sınav raporu okuyabilir", async () => {
@@ -369,12 +417,18 @@ describe("ReportGenerationController", () => {
     const issued = await login("admin-a@example.test");
     producer.inputs = [];
 
-    await request(server)
+    const response = await request(server)
       .post("/exams/exam-a/reports/generation-jobs")
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .send({ reportType: examResultSummaryReportType })
-      .expect(400);
+      .expect(422);
 
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "contentHash" })],
+      },
+    });
     expect(producer.inputs).toHaveLength(0);
   });
 
@@ -407,9 +461,14 @@ class FakeProducer implements ReportGenerationQueueProducer {
 class FakePdfRenderer implements ReportPdfRenderer {
   readonly inputs: Parameters<ReportPdfRenderer["render"]>[0][] = [];
 
-  async render(input: Parameters<ReportPdfRenderer["render"]>[0]): Promise<Buffer> {
+  async render(input: Parameters<ReportPdfRenderer["render"]>[0]): ReturnType<ReportPdfRenderer["render"]> {
     this.inputs.push(input);
-    return Buffer.from("%PDF-1.4\ncontroller\n%%EOF", "utf8");
+    return {
+      fileName: `${input.snapshot.examId}-${input.snapshot.id}.pdf`,
+      contentType: "application/pdf",
+      fileBase64: Buffer.from("%PDF-1.4\ncontroller\n%%EOF", "utf8").toString("base64"),
+      pageCount: 1,
+    };
   }
 }
 

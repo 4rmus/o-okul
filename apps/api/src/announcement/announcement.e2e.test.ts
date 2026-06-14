@@ -66,6 +66,7 @@ describe("Announcement API", () => {
   beforeEach(() => {
     producer.inputs = [];
     notificationAdapter.messages = [];
+    notificationAdapter.sendCalls = [];
     notificationAdapter.results = [];
   });
 
@@ -256,6 +257,42 @@ describe("Announcement API", () => {
     });
   });
 
+  it("tenant admin sağlayıcı teslim sonucunu Idempotency-Key ile tekilleştirir", async () => {
+    const key = "announcement-delivery-result-idempotency-a";
+    const body = {
+      channel: "EMAIL",
+      recipientCount: 3,
+      deliveredCount: 2,
+      failedCount: 1,
+      status: "completed",
+      providerErrorCode: "EMAIL_PROVIDER_RETRY",
+    };
+
+    const first = await request(server)
+      .post("/announcements/announcement-a/delivery-results")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+    const second = await request(server)
+      .post("/announcements/announcement-a/delivery-results")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+    expect(producer.inputs).toHaveLength(1);
+
+    await request(server)
+      .post("/announcements/announcement-a/delivery-results")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send({ ...body, failedCount: 0 })
+      .expect(409);
+    expect(producer.inputs).toHaveLength(1);
+  });
+
   it("tenant admin duyuru alıcılarına e-posta gönderir ve sonucu rapor kuyruğuna bağlar", async () => {
     notificationAdapter.results = [
       { channel: "EMAIL", to: "guardian-a@example.test", status: "sent", providerMessageId: "mail-1" },
@@ -313,6 +350,42 @@ describe("Announcement API", () => {
       jobId: `${producer.inputs[0]?.entityId}_${producer.inputs[0]?.contentHash}`,
       status: "queued",
     });
+  });
+
+  it("tenant admin dış duyuru gönderimini Idempotency-Key ile tekilleştirir", async () => {
+    const key = "announcement-delivery-send-idempotency-a";
+    notificationAdapter.results = [
+      { channel: "EMAIL", to: "guardian-a@example.test", status: "sent", providerMessageId: "mail-1" },
+      { channel: "EMAIL", to: "student-a@example.test", status: "failed", errorCode: "EMAIL_BOUNCED" },
+      { channel: "EMAIL", to: "teacher-a@example.test", status: "sent", providerMessageId: "mail-3" },
+    ];
+    const body = { channel: "EMAIL" };
+
+    const first = await request(server)
+      .post("/announcements/announcement-a/deliveries")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+    const second = await request(server)
+      .post("/announcements/announcement-a/deliveries")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+    expect(notificationAdapter.sendCalls).toHaveLength(1);
+    expect(producer.inputs).toHaveLength(1);
+
+    await request(server)
+      .post("/announcements/announcement-a/deliveries")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send({ channel: "PUSH" })
+      .expect(409);
+    expect(notificationAdapter.sendCalls).toHaveLength(1);
+    expect(producer.inputs).toHaveLength(1);
   });
 
   it("tenant admin duyuru alıcılarına push gönderir ve sonucu rapor kuyruğuna bağlar", async () => {
@@ -392,6 +465,45 @@ describe("Announcement API", () => {
     expect(producer.inputs).toHaveLength(0);
   });
 
+  it("duyuru teslim gövdelerini Zod ile doğrular", async () => {
+    const invalidResult = await request(server)
+      .post("/announcements/announcement-a/delivery-results")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        channel: "SMS",
+        recipientCount: -1,
+        deliveredCount: 0,
+        failedCount: 0,
+        status: "queued",
+      })
+      .expect(422);
+
+    expect(invalidResult.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: expect.arrayContaining([
+          expect.objectContaining({ path: "channel" }),
+          expect.objectContaining({ path: "recipientCount" }),
+          expect.objectContaining({ path: "status" }),
+        ]),
+      },
+    });
+
+    const invalidSend = await request(server)
+      .post("/announcements/announcement-a/deliveries")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({})
+      .expect(422);
+
+    expect(invalidSend.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "channel" })],
+      },
+    });
+    expect(producer.inputs).toHaveLength(0);
+  });
+
   it("tenant admin başka tenant adına duyuru oluşturamaz", async () => {
     await request(server)
       .post("/announcements")
@@ -405,13 +517,20 @@ describe("Announcement API", () => {
   });
 
   it("başlık ve hedef kitle doğrulaması yapar", async () => {
-    await request(server)
+    const missingTitle = await request(server)
       .post("/announcements")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ body: "Eksik başlık" })
-      .expect(400);
+      .expect(422);
 
-    await request(server)
+    expect(missingTitle.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "title" })],
+      },
+    });
+
+    const invalidAudience = await request(server)
       .post("/announcements")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
@@ -419,7 +538,14 @@ describe("Announcement API", () => {
         body: "Geçersiz hedef",
         audience: "UNKNOWN",
       })
-      .expect(400);
+      .expect(422);
+
+    expect(invalidAudience.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "audience" })],
+      },
+    });
   });
 
   it("duyuru hedef referanslarını tenant içinde doğrular", async () => {
@@ -475,10 +601,12 @@ class FakeProducer implements AnnouncementDeliveryQueueProducer {
 
 class FakeNotificationAdapter implements NotificationAdapter {
   messages: NotificationMessage[] = [];
+  sendCalls: NotificationMessage[][] = [];
   results: NotificationSendResult[] = [];
 
   async sendBatch(messages: NotificationMessage[]): Promise<NotificationSendResult[]> {
     this.messages = messages.map((message) => ({ ...message }));
+    this.sendCalls.push(this.messages);
     if (this.results.length > 0) {
       return this.results.map((result) => ({ ...result }));
     }

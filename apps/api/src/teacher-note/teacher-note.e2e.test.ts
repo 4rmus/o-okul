@@ -138,6 +138,47 @@ describe("TeacherNote API", () => {
       .expect(204);
   });
 
+  it("öğretmen notu gövdelerini Zod ile doğrular", async () => {
+    const invalidCreate = await request(server)
+      .post("/teacher-notes")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({
+        visibility: "PUBLIC",
+        body: " ",
+      })
+      .expect(422);
+
+    expect(invalidCreate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: expect.arrayContaining([
+          expect.objectContaining({ path: "studentId" }),
+          expect.objectContaining({ path: "visibility" }),
+          expect.objectContaining({ path: "body" }),
+        ]),
+      },
+    });
+
+    const invalidUpdate = await request(server)
+      .patch("/teacher-notes/teacher-note-visible-a")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({
+        visibility: "PUBLIC",
+        body: " ",
+      })
+      .expect(422);
+
+    expect(invalidUpdate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: expect.arrayContaining([
+          expect.objectContaining({ path: "visibility" }),
+          expect.objectContaining({ path: "body" }),
+        ]),
+      },
+    });
+  });
+
   it("başka tenant öğrenci veya öğretmen referansını reddeder", async () => {
     await request(server)
       .post("/teacher-notes")

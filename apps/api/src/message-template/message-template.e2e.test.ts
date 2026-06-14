@@ -133,19 +133,33 @@ describe("MessageTemplate API", () => {
   });
 
   it("ad, gövde ve kanal doğrulaması yapar", async () => {
-    await request(server)
+    const missingName = await request(server)
       .post("/message-templates")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ body: "Eksik ad" })
-      .expect(400);
+      .expect(422);
 
-    await request(server)
+    expect(missingName.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "name" })],
+      },
+    });
+
+    const missingBody = await request(server)
       .post("/message-templates")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ name: "Eksik gövde" })
-      .expect(400);
+      .expect(422);
 
-    await request(server)
+    expect(missingBody.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "body" })],
+      },
+    });
+
+    const invalidChannel = await request(server)
       .post("/message-templates")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
@@ -153,7 +167,14 @@ describe("MessageTemplate API", () => {
         channel: "EMAIL",
         body: "Geçersiz kanal",
       })
-      .expect(400);
+      .expect(422);
+
+    expect(invalidChannel.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "channel" })],
+      },
+    });
   });
 
   it("teacher mesaj şablonu oluşturamaz", async () => {

@@ -1,10 +1,17 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type { ScheduleLessonRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
+import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
+import {
+  scheduleLessonCreateBodySchema,
+  scheduleLessonUpdateBodySchema,
+  type ScheduleLessonCreateBody,
+  type ScheduleLessonUpdateBody,
+} from "./schedule-validation.js";
 import { ScheduleService } from "./schedule.service.js";
 
 @Controller("schedule-lessons")
@@ -26,13 +33,18 @@ export class ScheduleController {
 
   @Post()
   @RequireCapability("academic:manage")
-  create(@Body() body: Partial<ScheduleLessonRecord>): Promise<ScheduleLessonRecord> {
+  create(
+    @Body(zodBody(scheduleLessonCreateBodySchema)) body: ScheduleLessonCreateBody,
+  ): Promise<ScheduleLessonRecord> {
     return this.schedule.create(getRequestContext(), body);
   }
 
   @Patch(":id")
   @RequireCapability("academic:manage")
-  update(@Param("id") id: string, @Body() body: Partial<ScheduleLessonRecord>): Promise<ScheduleLessonRecord> {
+  update(
+    @Param("id") id: string,
+    @Body(zodBody(scheduleLessonUpdateBodySchema)) body: ScheduleLessonUpdateBody,
+  ): Promise<ScheduleLessonRecord> {
     return this.schedule.update(getRequestContext(), id, body);
   }
 

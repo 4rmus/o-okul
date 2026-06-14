@@ -1,15 +1,20 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
+import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
-  type AcceptIdentityInvitationBody,
-  type CreateIdentityInvitationBody,
   type IdentityInvitationIssueResult,
   IdentityInvitationService,
 } from "./identity-invitation.service.js";
 import type { IdentityInvitationRecord } from "./identity-invitation-store.js";
+import {
+  type IdentityInvitationAcceptBody,
+  type IdentityInvitationCreateBody,
+  identityInvitationAcceptBodySchema,
+  identityInvitationCreateBodySchema,
+} from "./identity-invitation-validation.js";
 
 @Controller("identity-invitations")
 @UseGuards(RolesGuard)
@@ -24,12 +29,14 @@ export class IdentityInvitationController {
 
   @Post()
   @RequireCapability("user:manage")
-  create(@Body() body: CreateIdentityInvitationBody): Promise<IdentityInvitationIssueResult> {
+  create(
+    @Body(zodBody(identityInvitationCreateBodySchema)) body: IdentityInvitationCreateBody,
+  ): Promise<IdentityInvitationIssueResult> {
     return this.invitations.create(getRequestContext(), body);
   }
 
   @Post("accept")
-  accept(@Body() body: AcceptIdentityInvitationBody): Promise<IdentityInvitationRecord> {
+  accept(@Body(zodBody(identityInvitationAcceptBodySchema)) body: IdentityInvitationAcceptBody): Promise<IdentityInvitationRecord> {
     return this.invitations.accept(body);
   }
 

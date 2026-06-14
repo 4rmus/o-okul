@@ -23,10 +23,11 @@ export class AuditLogService {
   constructor(@Inject(auditLogStoreToken) private readonly store: AuditLogStore) {}
 
   async list(context: RequestContext): Promise<AuditLogRecord[]> {
-    const records = await this.store.list();
-    if (context.bypassRls && isSystemAdmin(context.roles)) {
-      return records;
+    if (isSystemAdmin(context.roles)) {
+      return this.store.listForAdmin ? this.store.listForAdmin() : this.store.list();
     }
+
+    const records = await this.store.list();
     if (!context.tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }

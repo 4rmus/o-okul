@@ -1,10 +1,17 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type { TeacherNoteRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
+import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
-import { TeacherNoteService, type TeacherNoteInput } from "./teacher-note.service.js";
+import { TeacherNoteService } from "./teacher-note.service.js";
+import {
+  type TeacherNoteCreateBody,
+  type TeacherNoteUpdateBody,
+  teacherNoteCreateBodySchema,
+  teacherNoteUpdateBodySchema,
+} from "./teacher-note-validation.js";
 
 interface TeacherNoteListQuery extends ListQuery {
   classId?: string;
@@ -27,7 +34,7 @@ export class TeacherNoteController {
 
   @Post()
   @Roles("TEACHER")
-  create(@Body() body: Partial<TeacherNoteInput>): Promise<TeacherNoteRecord> {
+  create(@Body(zodBody(teacherNoteCreateBodySchema)) body: TeacherNoteCreateBody): Promise<TeacherNoteRecord> {
     return this.notes.create(getRequestContext(), body);
   }
 
@@ -35,7 +42,7 @@ export class TeacherNoteController {
   @Roles("TEACHER")
   update(
     @Param("id") id: string,
-    @Body() body: Partial<Pick<TeacherNoteRecord, "body" | "visibility" | "courseId" | "termId" | "developmentStatus">>,
+    @Body(zodBody(teacherNoteUpdateBodySchema)) body: TeacherNoteUpdateBody,
   ): Promise<TeacherNoteRecord> {
     return this.notes.update(getRequestContext(), id, body);
   }

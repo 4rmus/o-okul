@@ -1,4 +1,9 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable, OnModuleDestroy, Optional } from "@nestjs/common";
+import {
+  queueMetricsCollectorToken,
+  type QueueMetric,
+  type QueueMetricsCollector,
+} from "./queue-metrics.js";
 
 interface RequestMetric {
   method: string;
@@ -9,9 +14,13 @@ interface RequestMetric {
 }
 
 @Injectable()
-export class MetricsService {
+export class MetricsService implements OnModuleDestroy {
   private readonly startedAt = Date.now();
   private readonly requests = new Map<string, RequestMetric>();
+
+  constructor(
+    @Optional() @Inject(queueMetricsCollectorToken) private readonly queueMetrics?: QueueMetricsCollector,
+  ) {}
 
   recordRequest(input: { method: string; path: string; statusCode: number; durationSeconds: number }): void {
     const path = normalizePath(input.path);
@@ -29,7 +38,8 @@ export class MetricsService {
     this.requests.set(key, current);
   }
 
-  render(): string {
+  async render(): Promise<string> {
+    const queueMetricsResult = await this.collectQueueMetrics();
     const lines = [
       "# HELP uzman_hocam_process_uptime_seconds API process uptime.",
       "# TYPE uzman_hocam_process_uptime_seconds gauge",
@@ -46,9 +56,34 @@ export class MetricsService {
         (metric) =>
           `uzman_hocam_http_request_duration_seconds_sum{method="${escapeLabel(metric.method)}",path="${escapeLabel(metric.path)}",status="${metric.statusCode}"} ${metric.totalDurationSeconds.toFixed(6)}`,
       ),
+      "# HELP uzman_hocam_queue_jobs BullMQ job counts by queue and status.",
+      "# TYPE uzman_hocam_queue_jobs gauge",
+      ...queueMetricsResult.metrics.map(
+        (metric) =>
+          `uzman_hocam_queue_jobs{queue="${escapeLabel(metric.queueName)}",status="${escapeLabel(metric.status)}"} ${metric.count}`,
+      ),
+      "# HELP uzman_hocam_queue_metrics_scrape_error Queue metrics scrape error flag.",
+      "# TYPE uzman_hocam_queue_metrics_scrape_error gauge",
+      `uzman_hocam_queue_metrics_scrape_error ${queueMetricsResult.error ? 1 : 0}`,
     ];
 
     return `${lines.join("\n")}\n`;
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.queueMetrics?.close();
+  }
+
+  private async collectQueueMetrics(): Promise<{ metrics: QueueMetric[]; error: boolean }> {
+    if (!this.queueMetrics) {
+      return { metrics: [], error: false };
+    }
+
+    try {
+      return { metrics: await this.queueMetrics.collect(), error: false };
+    } catch {
+      return { metrics: [], error: true };
+    }
   }
 }
 

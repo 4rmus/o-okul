@@ -31,6 +31,8 @@ describe("Metrics API", () => {
     expect(response.headers["content-type"]).toContain("text/plain");
     expect(response.text).toContain("# TYPE uzman_hocam_process_uptime_seconds gauge");
     expect(response.text).toContain("uzman_hocam_http_requests_total");
+    expect(response.text).toContain("# TYPE uzman_hocam_queue_jobs gauge");
+    expect(response.text).toContain("uzman_hocam_queue_metrics_scrape_error 0");
     expect(response.text).toContain('method="GET"');
     expect(response.text).toContain('path="/health"');
     expect(response.text).toContain('status="200"');

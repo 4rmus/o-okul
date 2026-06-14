@@ -19,6 +19,7 @@ export interface HomeworkStore {
   ): Promise<HomeworkMaterialRecord | undefined>;
   softDeleteMaterial(id: string, deletedAt: string): Promise<HomeworkMaterialRecord | undefined>;
   listMaterialFiles(materialId: string): Promise<HomeworkMaterialFileRecord[]>;
+  findMaterialFileById(id: string): Promise<HomeworkMaterialFileRecord | undefined>;
   createMaterialFile(input: Omit<HomeworkMaterialFileRecord, "id">): Promise<HomeworkMaterialFileRecord>;
   listMaterialAssignments(materialId: string): Promise<HomeworkMaterialAssignmentRecord[]>;
   createMaterialAssignment(
@@ -164,6 +165,10 @@ export class InMemoryHomeworkStore implements HomeworkStore {
 
   async listMaterialFiles(materialId: string): Promise<HomeworkMaterialFileRecord[]> {
     return this.materialFiles.filter((candidate) => candidate.materialId === materialId).map(withoutMaterialFileContent);
+  }
+
+  async findMaterialFileById(id: string): Promise<HomeworkMaterialFileRecord | undefined> {
+    return this.materialFiles.find((candidate) => candidate.id === id);
   }
 
   async createMaterialFile(input: Omit<HomeworkMaterialFileRecord, "id">): Promise<HomeworkMaterialFileRecord> {
@@ -316,15 +321,27 @@ export class PostgresHomeworkStore implements HomeworkStore {
          ORDER BY "createdAt" DESC`,
         [materialId],
       );
-      return result.rows.map(toHomeworkMaterialFileRecord);
+      return result.rows.map(toHomeworkMaterialFileRecord).map(withoutMaterialFileContent);
+    });
+  }
+
+  async findMaterialFileById(id: string): Promise<HomeworkMaterialFileRecord | undefined> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<HomeworkMaterialFileRow>(
+        `SELECT * FROM "HomeworkMaterialFile"
+         WHERE "id" = $1
+         LIMIT 1`,
+        [id],
+      );
+      return result.rows[0] ? toHomeworkMaterialFileRecord(result.rows[0]) : undefined;
     });
   }
 
   async createMaterialFile(input: Omit<HomeworkMaterialFileRecord, "id">): Promise<HomeworkMaterialFileRecord> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<HomeworkMaterialFileRow>(
-        `INSERT INTO "HomeworkMaterialFile" ("id", "tenantId", "materialId", "uploadedById", "fileName", "contentType", "byteSize", "sha256", "contentBase64", "createdAt", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
+        `INSERT INTO "HomeworkMaterialFile" ("id", "tenantId", "materialId", "uploadedById", "fileName", "contentType", "byteSize", "sha256", "contentBase64", "storageKey", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
          RETURNING *`,
         [
           randomUUID(),
@@ -335,7 +352,8 @@ export class PostgresHomeworkStore implements HomeworkStore {
           input.contentType,
           input.byteSize,
           input.sha256,
-          input.contentBase64 ?? "",
+          input.contentBase64 ?? null,
+          input.storageKey ?? null,
           input.createdAt,
         ],
       );
@@ -343,7 +361,7 @@ export class PostgresHomeworkStore implements HomeworkStore {
       if (!record) {
         throw new Error("HOMEWORK_MATERIAL_FILE_CREATE_FAILED");
       }
-      return toHomeworkMaterialFileRecord(record);
+      return withoutMaterialFileContent(toHomeworkMaterialFileRecord(record));
     });
   }
 
@@ -515,7 +533,8 @@ interface HomeworkMaterialFileRow {
   contentType: HomeworkMaterialFileRecord["contentType"];
   byteSize: number;
   sha256: string;
-  contentBase64: string;
+  contentBase64: string | null;
+  storageKey: string | null;
   createdAt: Date | string;
   deletedAt: Date | string | null;
 }
@@ -568,6 +587,8 @@ function toHomeworkMaterialFileRecord(record: HomeworkMaterialFileRow): Homework
     contentType: record.contentType,
     byteSize: record.byteSize,
     sha256: record.sha256,
+    contentBase64: record.contentBase64 ?? undefined,
+    storageKey: record.storageKey ?? undefined,
     createdAt: toIsoString(record.createdAt),
     deletedAt: record.deletedAt ? toIsoString(record.deletedAt) : undefined,
   };
@@ -606,7 +627,7 @@ function toHomeworkRecord(record: HomeworkRow): HomeworkRecord {
 }
 
 function withoutMaterialFileContent(record: HomeworkMaterialFileRecord): HomeworkMaterialFileRecord {
-  const { contentBase64: _contentBase64, ...publicRecord } = record;
+  const { contentBase64: _contentBase64, storageKey: _storageKey, ...publicRecord } = record;
   return publicRecord;
 }
 

@@ -23,8 +23,8 @@ describe("Tenant user management", () => {
     await app.close();
   });
 
-  async function login(email: string): Promise<string> {
-    const response = await request(server).post("/auth/login").send({ email, password: "password" }).expect(200);
+  async function login(email: string, password = "password"): Promise<string> {
+    const response = await request(server).post("/auth/login").send({ email, password }).expect(200);
     return (response.body as { accessToken: string }).accessToken;
   }
 
@@ -108,6 +108,80 @@ describe("Tenant user management", () => {
       .expect(({ body }) => {
         expect(JSON.stringify(body)).not.toContain("created-user-a@example.test");
       });
+  });
+
+  it("koltuk limiti dolu tenantta yeni kullanıcı oluşturmaz", async () => {
+    const system = await login("system@example.test");
+    await request(server)
+      .post("/tenants")
+      .set("Authorization", `Bearer ${system}`)
+      .send({
+        id: "tenant-seat-users",
+        name: "Seat Users Tenant",
+        slug: "seat-users-tenant",
+        seatLimit: 1,
+        firstAdmin: {
+          name: "Seat Users Admin",
+          email: "seat-users-admin@example.test",
+          mode: "password",
+          password: "password1",
+        },
+      })
+      .expect(201);
+
+    const admin = await login("seat-users-admin@example.test", "password1");
+    await request(server)
+      .post("/tenant-users")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({
+        email: "seat-users-new@example.test",
+        name: "Seat Users New",
+        password: "password1",
+        roles: ["TEACHER"],
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(JSON.stringify(body)).toContain("TENANT_SEAT_LIMIT_EXCEEDED");
+      });
+  });
+
+  it("tenant kullanıcı gövdelerini Zod ile doğrular", async () => {
+    const tenantA = await login("admin-a@example.test");
+    const invalidCreate = await request(server)
+      .post("/tenant-users")
+      .set("Authorization", `Bearer ${tenantA}`)
+      .send({
+        email: "gecersiz-email",
+        name: " ",
+        password: "short",
+        roles: [],
+      })
+      .expect(422);
+
+    expect(invalidCreate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: expect.arrayContaining([
+          expect.objectContaining({ path: "email" }),
+          expect.objectContaining({ path: "name" }),
+          expect.objectContaining({ path: "password" }),
+          expect.objectContaining({ path: "roles" }),
+        ]),
+      },
+    });
+
+    const invalidRoles = await request(server)
+      .patch("/tenant-users/user-tenant-a/roles")
+      .set("Authorization", `Bearer ${tenantA}`)
+      .send({ roles: ["UNKNOWN_ROLE"] })
+      .expect(422);
+
+    expect(invalidRoles.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "roles.0" })],
+      },
+    });
   });
 
   it("tenant admin SYSTEM_ADMIN veremez ve kendi admin rolünü düşüremez", async () => {

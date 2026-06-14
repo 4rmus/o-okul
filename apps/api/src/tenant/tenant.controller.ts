@@ -1,9 +1,16 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
+import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import type { TenantRecord } from "./tenant-store.js";
-import { TenantService, type TenantCreateResponse, type TenantWriteBody } from "./tenant.service.js";
+import { TenantService, type TenantCreateResponse } from "./tenant.service.js";
+import {
+  tenantCreateBodySchema,
+  tenantUpdateBodySchema,
+  type TenantCreateBody,
+  type TenantUpdateBody,
+} from "./tenant-validation.js";
 
 @Controller("tenants")
 export class TenantController {
@@ -23,13 +30,18 @@ export class TenantController {
 
   @Post()
   @RequireCapability("tenant:manage")
-  create(@Body() body: TenantWriteBody): Promise<TenantCreateResponse> {
+  create(
+    @Body(zodBody(tenantCreateBodySchema)) body: TenantCreateBody,
+  ): Promise<TenantCreateResponse> {
     return this.tenants.create(getRequestContext(), body);
   }
 
   @Patch(":id")
   @RequireCapability("tenant:manage")
-  update(@Param("id") id: string, @Body() body: TenantWriteBody): Promise<TenantRecord> {
+  update(
+    @Param("id") id: string,
+    @Body(zodBody(tenantUpdateBodySchema)) body: TenantUpdateBody,
+  ): Promise<TenantRecord> {
     return this.tenants.update(getRequestContext(), id, body);
   }
 

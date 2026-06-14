@@ -1,6 +1,8 @@
-import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
-import { applyListQuery, type ListQuery } from "../listing/list-query.js";
+import { z } from "zod";
+import { applyListQuery } from "../listing/list-query.js";
+import { optionalDateString, optionalTrimmedString, requiredTrimmedString, zodBody, zodQuery } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
@@ -14,6 +16,7 @@ import {
   StudentService,
   type StudentBulkEnrollmentInput,
   type StudentBulkEnrollmentResult,
+  type StudentCreateInput,
   type StudentEnrollmentActionInput,
   type StudentProfileInput,
   type StudentRecord,
@@ -23,19 +26,81 @@ import type {
   GuardianRecord,
   GuardianStudentRecord,
   StudentEnrollmentRecord,
-  StudentStatus,
   StudentClassHistoryRecord,
   StudentProfileRecord,
   TeacherAssignmentRecord,
 } from "@uzman-hocam/shared-types";
 
-interface StudentListQuery extends ListQuery {
-  classId?: string;
-  level?: string;
-  responsibleTeacherId?: string;
-  status?: StudentStatus;
-  guardianLinked?: string;
-}
+const studentStatusSchema = z.enum(["ACTIVE", "PASSIVE", "GRADUATED", "TRANSFERRED"]);
+const optionalStudentStatusQuerySchema = z.preprocess((value) => value === "" ? undefined : value, studentStatusSchema.optional());
+const optionalGuardianLinkedQuerySchema = z.preprocess((value) => value === "" ? undefined : value, z.enum(["true", "false"]).optional());
+const optionalStudentBirthDateSchema = z.preprocess((value) => value === "" ? undefined : value, optionalDateString("STUDENT_BIRTH_DATE_INVALID"));
+const optionalStudentEnrollmentStartsAtSchema = z.preprocess((value) => value === "" ? undefined : value, optionalDateString("STUDENT_ENROLLMENT_STARTS_AT_INVALID"));
+const studentListQuerySchema = z.object({
+  classId: optionalTrimmedString,
+  guardianLinked: optionalGuardianLinkedQuerySchema,
+  level: optionalTrimmedString,
+  limit: optionalTrimmedString,
+  page: optionalTrimmedString,
+  q: optionalTrimmedString,
+  responsibleTeacherId: optionalTrimmedString,
+  sort: optionalTrimmedString,
+  status: optionalStudentStatusQuerySchema,
+});
+type StudentListQuery = z.infer<typeof studentListQuerySchema>;
+const guardianRelationshipTypeSchema = z.enum(["MOTHER", "FATHER", "GUARDIAN", "EMERGENCY_CONTACT", "OTHER"]);
+const studentGuardianProvisionBodySchema = z.object({
+  canOpenSupportTickets: z.boolean().optional(),
+  canReceiveAnnouncements: z.boolean().optional(),
+  canReceiveSms: z.boolean().optional(),
+  canViewFinance: z.boolean().optional(),
+  email: optionalTrimmedString,
+  firstName: optionalTrimmedString,
+  isPrimary: z.boolean().optional(),
+  lastName: optionalTrimmedString,
+  phone: optionalTrimmedString,
+  relationshipType: guardianRelationshipTypeSchema.optional(),
+}).strict();
+const studentCreateBodySchema = z.object({
+  classId: optionalTrimmedString,
+  firstName: requiredTrimmedString,
+  guardian: studentGuardianProvisionBodySchema.optional(),
+  lastName: requiredTrimmedString,
+  responsibleTeacherId: optionalTrimmedString,
+  status: studentStatusSchema.optional(),
+  tenantId: optionalTrimmedString,
+}).strict();
+const studentUpdateBodySchema = z.object({
+  classId: optionalTrimmedString,
+  firstName: requiredTrimmedString.optional(),
+  lastName: requiredTrimmedString.optional(),
+  responsibleTeacherId: optionalTrimmedString,
+  status: studentStatusSchema.optional(),
+}).strict();
+const studentProfileBodySchema = z.object({
+  birthDate: optionalStudentBirthDateSchema,
+  email: optionalTrimmedString,
+  nationalId: optionalTrimmedString,
+  phone: optionalTrimmedString,
+  photoKey: optionalTrimmedString,
+}).strict();
+const studentEnrollmentActionBodySchema = z.object({
+  academicYearId: optionalTrimmedString,
+  classId: optionalTrimmedString,
+  startsAt: optionalStudentEnrollmentStartsAtSchema,
+  termId: optionalTrimmedString,
+}).strict();
+const studentBulkEnrollmentBodySchema = studentEnrollmentActionBodySchema.extend({
+  classIdBySourceClassId: z.record(z.string(), z.string()).optional(),
+  studentIds: z.array(requiredTrimmedString).optional(),
+  useAutomaticClassMapping: z.boolean().optional(),
+}).strict();
+const studentImportBodySchema = z.object({
+  fileBase64: requiredTrimmedString,
+}).strict();
+const studentTenantUpdateBodySchema = z.object({
+  tenantId: requiredTrimmedString,
+}).strict();
 
 @Controller("students")
 @UseGuards(RolesGuard)
@@ -48,7 +113,7 @@ export class StudentController {
 
   @Get()
   @Roles("TEACHER")
-  async list(@Query() query: StudentListQuery): Promise<StudentRecord[]> {
+  async list(@Query(zodQuery(studentListQuerySchema)) query: StudentListQuery): Promise<StudentRecord[]> {
     const records = await this.filterStudents(await this.students.list(getRequestContext()), query);
     return applyListQuery(records, query, studentListFields);
   }
@@ -103,50 +168,64 @@ export class StudentController {
 
   @Post()
   @RequireCapability("student:manage")
-  create(@Body() body: Partial<StudentRecord>): Promise<StudentRecord> {
+  create(@Body(zodBody(studentCreateBodySchema)) body: StudentCreateInput): Promise<StudentRecord> {
     return this.students.create(getRequestContext(), body);
   }
 
   @Post("enrollments/bulk-renew")
   @RequireCapability("student:manage")
-  bulkRenewEnrollments(@Body() body: StudentBulkEnrollmentInput): Promise<StudentBulkEnrollmentResult> {
-    return this.students.bulkRenewEnrollments(getRequestContext(), body);
+  bulkRenewEnrollments(
+    @Body(zodBody(studentBulkEnrollmentBodySchema)) body: StudentBulkEnrollmentInput,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<StudentBulkEnrollmentResult> {
+    return this.students.bulkRenewEnrollments(getRequestContext(), body, idempotencyKey);
   }
 
   @Post("imports/dry-run")
   @RequireCapability("student:manage")
-  dryRunImport(@Body() body: { fileBase64?: string }): Promise<StudentImportDryRunResult> {
+  dryRunImport(@Body(zodBody(studentImportBodySchema)) body: { fileBase64: string }): Promise<StudentImportDryRunResult> {
     return this.imports.dryRun(getRequestContext(), body);
   }
 
   @Post("imports")
   @RequireCapability("student:manage")
-  import(@Body() body: { fileBase64?: string }): Promise<StudentImportResult> {
-    return this.imports.import(getRequestContext(), body);
+  import(
+    @Body(zodBody(studentImportBodySchema)) body: { fileBase64: string },
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<StudentImportResult> {
+    return this.imports.import(getRequestContext(), body, idempotencyKey);
   }
 
   @Patch(":id")
   @RequireCapability("student:manage")
-  update(@Param("id") id: string, @Body() body: Partial<StudentRecord>): Promise<StudentRecord> {
+  update(@Param("id") id: string, @Body(zodBody(studentUpdateBodySchema)) body: Partial<StudentRecord>): Promise<StudentRecord> {
     return this.students.update(getRequestContext(), id, body);
   }
 
   @Patch(":id/profile")
   @RequireCapability("student:manage")
-  updateProfile(@Param("id") id: string, @Body() body: StudentProfileInput): Promise<StudentProfileRecord> {
+  updateProfile(@Param("id") id: string, @Body(zodBody(studentProfileBodySchema)) body: StudentProfileInput): Promise<StudentProfileRecord> {
     return this.students.updateProfile(getRequestContext(), id, body);
   }
 
   @Post(":id/enrollments/renew")
   @RequireCapability("student:manage")
-  renewEnrollment(@Param("id") id: string, @Body() body: StudentEnrollmentActionInput): Promise<StudentEnrollmentRecord> {
-    return this.students.renewEnrollment(getRequestContext(), id, body);
+  renewEnrollment(
+    @Param("id") id: string,
+    @Body(zodBody(studentEnrollmentActionBodySchema)) body: StudentEnrollmentActionInput,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<StudentEnrollmentRecord> {
+    return this.students.renewEnrollment(getRequestContext(), id, body, idempotencyKey);
   }
 
   @Post(":id/enrollments/transfer")
   @RequireCapability("student:manage")
-  transferEnrollment(@Param("id") id: string, @Body() body: StudentEnrollmentActionInput): Promise<StudentEnrollmentRecord | null> {
-    return this.students.transferEnrollment(getRequestContext(), id, body);
+  transferEnrollment(
+    @Param("id") id: string,
+    @Body(zodBody(studentEnrollmentActionBodySchema)) body: StudentEnrollmentActionInput,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<StudentEnrollmentRecord | null> {
+    return this.students.transferEnrollment(getRequestContext(), id, body, idempotencyKey);
   }
 
   @Post(":id/purge-pii")
@@ -164,7 +243,7 @@ export class StudentController {
 
   @Patch(":id/tenant")
   @Roles("TENANT_ADMIN")
-  updateTenant(@Param("id") id: string, @Body() body: Pick<StudentRecord, "tenantId">): Promise<StudentRecord> {
+  updateTenant(@Param("id") id: string, @Body(zodBody(studentTenantUpdateBodySchema)) body: Pick<StudentRecord, "tenantId">): Promise<StudentRecord> {
     return this.students.updateTenant(getRequestContext(), id, body.tenantId);
   }
 
@@ -177,9 +256,6 @@ export class StudentController {
       filtered = filtered.filter((student) => student.responsibleTeacherId === query.responsibleTeacherId);
     }
     if (query.status) {
-      if (!["ACTIVE", "PASSIVE", "GRADUATED", "TRANSFERRED"].includes(query.status)) {
-        throw new BadRequestException("STUDENT_STATUS_INVALID");
-      }
       filtered = filtered.filter((student) => student.status === query.status);
     }
     if (query.level) {
@@ -190,10 +266,7 @@ export class StudentController {
       );
       filtered = filtered.filter((student) => Boolean(student.classId && classIds.has(student.classId)));
     }
-    if (query.guardianLinked !== undefined && query.guardianLinked !== "") {
-      if (query.guardianLinked !== "true" && query.guardianLinked !== "false") {
-        throw new BadRequestException("STUDENT_GUARDIAN_LINKED_FILTER_INVALID");
-      }
+    if (query.guardianLinked !== undefined) {
       const expected = query.guardianLinked === "true";
       const linked = await Promise.all(
         filtered.map(async (student) => ({

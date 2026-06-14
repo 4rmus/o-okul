@@ -4,6 +4,7 @@ import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withExplicitTenantQuery } from "../db/tenant-query.js";
 import { hashPassword } from "../auth/auth-user-store.js";
 import type { Role } from "../rbac/roles.js";
+import { assertTenantSeatCapacity } from "../tenant/tenant-seat-limit.js";
 
 export interface TenantUserRecord {
   id: string;
@@ -242,6 +243,14 @@ export class PostgresUserManagementStore implements UserManagementStore {
   }
 
   private async replaceMemberships(client: Queryable, tenantId: string, userId: string, roles: Role[]): Promise<void> {
+    const existing = await client.query<{ id: string }>(
+      `SELECT "id" FROM "TenantMembership" WHERE "tenantId" = $1 AND "userId" = $2 LIMIT 1`,
+      [tenantId, userId],
+    );
+    if (!existing.rows[0]) {
+      await this.assertTenantSeatAvailableForNewMembership(client, tenantId);
+    }
+
     await client.query(`DELETE FROM "TenantMembership" WHERE "tenantId" = $1 AND "userId" = $2`, [tenantId, userId]);
     for (const role of roles) {
       await client.query(
@@ -250,6 +259,24 @@ export class PostgresUserManagementStore implements UserManagementStore {
         [randomUUID(), tenantId, userId, role],
       );
     }
+  }
+
+  private async assertTenantSeatAvailableForNewMembership(client: Queryable, tenantId: string): Promise<void> {
+    const tenant = await client.query<{ seatLimit: number | null }>(
+      `SELECT "seatLimit" FROM "Tenant" WHERE "id" = $1 FOR UPDATE`,
+      [tenantId],
+    );
+    const seatLimit = tenant.rows[0]?.seatLimit;
+    if (seatLimit === undefined || seatLimit === null) return;
+
+    const usage = await client.query<{ activeSeatCount: number | string | null }>(
+      `SELECT COUNT(DISTINCT "userId")::int AS "activeSeatCount" FROM "TenantMembership" WHERE "tenantId" = $1`,
+      [tenantId],
+    );
+    assertTenantSeatCapacity({
+      seatLimit,
+      activeSeatCount: optionalNumber(usage.rows[0]?.activeSeatCount),
+    });
   }
 }
 
@@ -287,4 +314,9 @@ function cloneTenantUser(user: TenantUserRecord | undefined): TenantUserRecord |
 
 function cloneRequiredTenantUser(user: TenantUserRecord): TenantUserRecord {
   return { ...user, roles: [...user.roles] };
+}
+
+function optionalNumber(value: number | string | null | undefined): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  return typeof value === "number" ? value : Number(value);
 }

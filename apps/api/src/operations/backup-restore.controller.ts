@@ -1,9 +1,14 @@
-import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Post, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
+import { zodBody } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
-import { BackupRestoreService, type CreateBackupRestoreJobInput } from "./backup-restore.service.js";
+import { BackupRestoreService } from "./backup-restore.service.js";
 import type { BackupRestoreJobRecord } from "./backup-restore-store.js";
+import {
+  backupRestoreJobCreateBodySchema,
+  type BackupRestoreJobCreateBody,
+} from "./backup-restore-validation.js";
 
 @Controller("backup-restore-jobs")
 @UseGuards(RolesGuard)
@@ -18,7 +23,10 @@ export class BackupRestoreController {
 
   @Post()
   @RequireCapability("operation:manage")
-  create(@Body() body: CreateBackupRestoreJobInput): Promise<BackupRestoreJobRecord> {
-    return this.jobs.enqueue(getRequestContext(), body);
+  create(
+    @Body(zodBody(backupRestoreJobCreateBodySchema)) body: BackupRestoreJobCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<BackupRestoreJobRecord> {
+    return this.jobs.enqueue(getRequestContext(), body, idempotencyKey);
   }
 }

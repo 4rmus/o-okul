@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
+import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
@@ -8,10 +9,16 @@ import type { AnnouncementDeliveryReportRecord, AnnouncementRecipientReport } fr
 import {
   AnnouncementService,
   type AnnouncementDeliveryQueueResult,
-  type AnnouncementDeliveryResultInput,
-  type AnnouncementDeliverySendInput,
   type AnnouncementRecord,
 } from "./announcement.service.js";
+import {
+  type AnnouncementCreateBody,
+  type AnnouncementDeliveryResultBody,
+  type AnnouncementDeliverySendBody,
+  announcementCreateBodySchema,
+  announcementDeliveryResultBodySchema,
+  announcementDeliverySendBodySchema,
+} from "./announcement-validation.js";
 
 @Controller("announcements")
 @UseGuards(RolesGuard)
@@ -44,19 +51,27 @@ export class AnnouncementController {
 
   @Post(":id/delivery-results")
   @RequireCapability("announcement:manage")
-  deliveryResult(@Param("id") id: string, @Body() body: AnnouncementDeliveryResultInput): Promise<AnnouncementDeliveryQueueResult> {
-    return this.announcements.enqueueDeliveryResult(getRequestContext(), id, body);
+  deliveryResult(
+    @Param("id") id: string,
+    @Body(zodBody(announcementDeliveryResultBodySchema)) body: AnnouncementDeliveryResultBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<AnnouncementDeliveryQueueResult> {
+    return this.announcements.enqueueDeliveryResult(getRequestContext(), id, body, idempotencyKey);
   }
 
   @Post(":id/deliveries")
   @RequireCapability("announcement:manage")
-  sendDelivery(@Param("id") id: string, @Body() body: AnnouncementDeliverySendInput): Promise<AnnouncementDeliveryQueueResult> {
-    return this.announcements.sendExternalDelivery(getRequestContext(), id, body);
+  sendDelivery(
+    @Param("id") id: string,
+    @Body(zodBody(announcementDeliverySendBodySchema)) body: AnnouncementDeliverySendBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<AnnouncementDeliveryQueueResult> {
+    return this.announcements.sendExternalDelivery(getRequestContext(), id, body, idempotencyKey);
   }
 
   @Post()
   @RequireCapability("announcement:manage")
-  create(@Body() body: Partial<AnnouncementRecord>): Promise<AnnouncementRecord> {
+  create(@Body(zodBody(announcementCreateBodySchema)) body: AnnouncementCreateBody): Promise<AnnouncementRecord> {
     return this.announcements.create(getRequestContext(), body);
   }
 }

@@ -3,9 +3,11 @@ import { AsyncLocalStorage } from "node:async_hooks";
 export interface RequestContext {
   userId: string;
   tenantId: string | null;
+  tenantAccessMode?: "active" | "read_only";
   roles: string[];
   capabilities?: string[];
   bypassRls: boolean;
+  rlsBypassReason?: string;
   subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER";
   subjectId?: string;
   rolePreview?: {

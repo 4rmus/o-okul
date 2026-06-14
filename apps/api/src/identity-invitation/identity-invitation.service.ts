@@ -5,7 +5,17 @@ import type { RequestContext } from "../context/request-context.js";
 import { type GuardianStore, guardianStoreToken } from "../school/guardian-store.js";
 import { type TeacherStore, teacherStoreToken } from "../school/teacher-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
-import { type UserManagementStore, userManagementStoreToken } from "../user-management/user-management-store.js";
+import {
+  assertTenantSeatCapacity,
+  isTenantSeatLimitExceededError,
+  tenantSeatLimitExceededCode,
+} from "../tenant/tenant-seat-limit.js";
+import { type TenantStore, tenantStoreToken } from "../tenant/tenant-store.js";
+import {
+  type TenantUserRecord,
+  type UserManagementStore,
+  userManagementStoreToken,
+} from "../user-management/user-management-store.js";
 import {
   type IdentityInvitationRecord,
   type IdentityInvitationStore,
@@ -39,6 +49,7 @@ export class IdentityInvitationService {
     @Inject(studentStoreToken) private readonly students: StudentStore,
     @Inject(guardianStoreToken) private readonly guardians: GuardianStore,
     @Inject(teacherStoreToken) private readonly teachers: TeacherStore,
+    @Inject(tenantStoreToken) private readonly tenants: TenantStore,
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
@@ -115,13 +126,23 @@ export class IdentityInvitationService {
     if (invitation.status !== "PENDING") throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
     if (Date.parse(invitation.expiresAt) <= Date.now()) throw new BadRequestException("IDENTITY_INVITATION_EXPIRED");
 
-    const user = await this.users.createOrAttachTenantUser({
-      tenantId: invitation.tenantId,
-      email: invitation.email,
-      name: body.name?.trim() || invitation.name,
-      password,
-      roles: [invitation.role],
-    });
+    const existingUsers = await this.users.listTenantUsers(invitation.tenantId);
+    if (!existingUsers.some((user) => user.email.toLowerCase() === invitation.email)) {
+      await this.assertTenantSeatAvailable(invitation.tenantId);
+    }
+
+    let user: TenantUserRecord;
+    try {
+      user = await this.users.createOrAttachTenantUser({
+        tenantId: invitation.tenantId,
+        email: invitation.email,
+        name: body.name?.trim() || invitation.name,
+        password,
+        roles: [invitation.role],
+      });
+    } catch (error) {
+      throwTenantSeatLimitBadRequest(error);
+    }
     const subject = await this.bindSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId, user.id);
     if (!subject) throw new NotFoundException("SUBJECT_NOT_FOUND");
 
@@ -145,6 +166,18 @@ export class IdentityInvitationService {
     return context.tenantId;
   }
 
+  private async assertTenantSeatAvailable(tenantId: string): Promise<void> {
+    const tenant = await this.tenants.findById(tenantId);
+    if (!tenant) {
+      throw new NotFoundException("TENANT_NOT_FOUND");
+    }
+    try {
+      assertTenantSeatCapacity(tenant);
+    } catch (error) {
+      throwTenantSeatLimitBadRequest(error);
+    }
+  }
+
   private async findSubject(tenantId: string, subjectType: InvitationSubjectType, subjectId: string) {
     const subject =
       subjectType === "STUDENT"
@@ -160,6 +193,13 @@ export class IdentityInvitationService {
     if (subjectType === "GUARDIAN") return this.guardians.bindUser(tenantId, subjectId, userId);
     return this.teachers.bindUser(tenantId, subjectId, userId);
   }
+}
+
+function throwTenantSeatLimitBadRequest(error: unknown): never {
+  if (isTenantSeatLimitExceededError(error)) {
+    throw new BadRequestException(tenantSeatLimitExceededCode);
+  }
+  throw error;
 }
 
 function parseSubjectType(input: string | undefined): InvitationSubjectType {

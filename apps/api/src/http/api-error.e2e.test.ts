@@ -87,4 +87,62 @@ describe("API error envelope", () => {
       },
     });
   });
+
+  it("auth login gövde validasyon hatalarını 422 alan listesiyle döner", async () => {
+    const response = await request(server)
+      .post("/auth/login")
+      .send({ email: "gecersiz", password: 123 })
+      .expect(422);
+
+    expect(response.body).toMatchObject({
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "İstek gövdesi geçersiz.",
+        details: {
+          fields: expect.arrayContaining([
+            expect.objectContaining({ path: "email" }),
+            expect.objectContaining({ path: "password" }),
+          ]),
+        },
+      },
+    });
+  });
+
+  it("kritik mutation gövdelerini Zod pipe ile 422 olarak reddeder", async () => {
+    const scenarios = [
+      {
+        body: { firstName: 123, lastName: "Veli" },
+        field: "firstName",
+        path: "/students",
+      },
+      {
+        body: { startsAt: "", title: 123 },
+        field: "title",
+        path: "/exams",
+      },
+      {
+        body: { installments: [], studentId: "student-a", title: "Hatalı", totalAmount: "1000" },
+        field: "totalAmount",
+        path: "/payment-plans",
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const response = await request(server)
+        .post(scenario.path)
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send(scenario.body)
+        .expect(422);
+      expect(response.body).toMatchObject({
+        error: {
+          code: "VALIDATION_FAILED",
+          details: {
+            fields: expect.arrayContaining([
+              expect.objectContaining({ path: scenario.field }),
+            ]),
+          },
+        },
+      });
+    }
+  });
 });

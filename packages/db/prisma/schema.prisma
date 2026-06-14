@@ -31,6 +31,7 @@ model Tenant {
   updatedAt   DateTime           @updatedAt
   memberships TenantMembership[]
   authSessions AuthSession[]
+  idempotencyKeys IdempotencyKey[]
   identityInvitations IdentityInvitation[]
   campuses    Campus[]
   gradeLevels GradeLevel[]
@@ -144,6 +145,10 @@ model User {
   email       String             @unique
   name        String
   passwordHash String
+  totpSecretEncrypted String?
+  totpEnabledAt DateTime? @db.Timestamptz(6)
+  totpRecoveryCodeHashes String[] @default([])
+  totpLastUsedCounter String?
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
   memberships TenantMembership[]
@@ -211,6 +216,24 @@ model AuthSession {
 
   @@index([tenantId, userId, status])
   @@index([tokenFamilyId])
+}
+
+model IdempotencyKey {
+  id           String    @id @default(uuid())
+  tenantId     String
+  key          String
+  operation    String
+  requestHash  String
+  status       String    @default("IN_PROGRESS")
+  responseBody Json?
+  completedAt  DateTime? @db.Timestamptz(6)
+  expiresAt    DateTime? @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key, operation])
+  @@index([tenantId, status, createdAt])
 }
 
 model IdentityInvitation {
@@ -784,7 +807,8 @@ model HomeworkMaterialFile {
   contentType String
   byteSize    Int
   sha256      String
-  contentBase64 String
+  contentBase64 String?
+  storageKey  String?
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -1303,7 +1327,7 @@ model SupportTicketAttachment {
   contentType String
   byteSize    Int
   sha256      String
-  contentBase64 String
+  contentBase64 String?
   storageKey  String?
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())

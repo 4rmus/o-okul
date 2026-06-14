@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type {
   SupportTicketAttachmentDownloadResult,
   SupportTicketAttachmentRecord,
@@ -6,16 +6,25 @@ import type {
   SupportTicketRecord,
 } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
+import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
   SupportTicketService,
-  type CreateSupportTicketAttachmentInput,
-  type CreateSupportTicketCommentInput,
   type SupportTicketListFilters,
 } from "./support-ticket.service.js";
+import {
+  type SupportTicketAttachmentCreateBody,
+  type SupportTicketCommentCreateBody,
+  type SupportTicketCreateBody,
+  type SupportTicketUpdateBody,
+  supportTicketAttachmentCreateBodySchema,
+  supportTicketCommentCreateBodySchema,
+  supportTicketCreateBodySchema,
+  supportTicketUpdateBodySchema,
+} from "./support-ticket-validation.js";
 
 interface SupportTicketListQuery extends ListQuery, SupportTicketListFilters {}
 
@@ -38,7 +47,9 @@ export class SupportTicketController {
 
   @Post()
   @Roles("TEACHER")
-  create(@Body() body: Partial<SupportTicketRecord>): Promise<SupportTicketRecord> {
+  create(
+    @Body(zodBody(supportTicketCreateBodySchema)) body: SupportTicketCreateBody,
+  ): Promise<SupportTicketRecord> {
     return this.tickets.create(getRequestContext(), body);
   }
 
@@ -46,7 +57,7 @@ export class SupportTicketController {
   @RequireCapability("support:manage")
   update(
     @Param("id") id: string,
-    @Body() body: Partial<Pick<SupportTicketRecord, "priority" | "status">>,
+    @Body(zodBody(supportTicketUpdateBodySchema)) body: SupportTicketUpdateBody,
   ): Promise<SupportTicketRecord> {
     return this.tickets.update(getRequestContext(), id, body);
   }
@@ -70,9 +81,10 @@ export class SupportTicketController {
   @Roles("TEACHER")
   addAttachment(
     @Param("id") id: string,
-    @Body() body: CreateSupportTicketAttachmentInput,
+    @Body(zodBody(supportTicketAttachmentCreateBodySchema)) body: SupportTicketAttachmentCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<SupportTicketAttachmentRecord> {
-    return this.tickets.addAttachment(getRequestContext(), id, body);
+    return this.tickets.addAttachment(getRequestContext(), id, body, idempotencyKey);
   }
 
   @Get(":id/comments")
@@ -85,9 +97,10 @@ export class SupportTicketController {
   @Roles("TEACHER")
   addComment(
     @Param("id") id: string,
-    @Body() body: CreateSupportTicketCommentInput,
+    @Body(zodBody(supportTicketCommentCreateBodySchema)) body: SupportTicketCommentCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<SupportTicketCommentRecord> {
-    return this.tickets.addComment(getRequestContext(), id, body);
+    return this.tickets.addComment(getRequestContext(), id, body, idempotencyKey);
   }
 }
 

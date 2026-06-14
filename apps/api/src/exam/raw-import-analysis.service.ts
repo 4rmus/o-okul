@@ -1,5 +1,6 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import {
   rawImportAnalysisStoreToken,
   type RawImportAnalysisStore,
@@ -44,6 +45,7 @@ export class RawImportAnalysisService {
     private readonly store: RawImportAnalysisStore,
     @Inject(rawImportQueueProducerToken)
     private readonly producer: RawImportQueueProducer,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async summary(
@@ -62,6 +64,22 @@ export class RawImportAnalysisService {
   }
 
   async enqueueEvaluation(
+    context: RequestContext,
+    input: { examId?: string; rawImportId?: string; answerKeyId?: string },
+    idempotencyKey?: string,
+  ): Promise<RawImportEvaluationQueueResult> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "raw-import.evaluation.enqueue", request: input },
+        () => this.enqueueEvaluationJobs(context, input),
+      );
+    }
+
+    return this.enqueueEvaluationJobs(context, input);
+  }
+
+  private async enqueueEvaluationJobs(
     context: RequestContext,
     input: { examId?: string; rawImportId?: string; answerKeyId?: string },
   ): Promise<RawImportEvaluationQueueResult> {

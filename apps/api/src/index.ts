@@ -11,5 +11,6 @@ export { createRawImportS3Key, RawImportUploadService, rawImportArchiveStoreToke
 export { createS3RawImportArchiveStoreFromEnv, S3RawImportArchiveStore } from "./exam/s3-raw-import-archive-store.js";
 export { createBullTenantQueueProducer } from "./queue/bullmq-producer.js";
 export { createTenantQueueJob } from "./queue/job-producer.js";
+export { createOpenApiDocument, isOpenApiUiEnabled, mountOpenApi } from "./openapi.js";
 export { assertRole, hasRole, isSystemAdmin, roles } from "./rbac/roles.js";
 export { assertTenantResourceAccess, filterTenantResources } from "./tenant/tenant-access.js";

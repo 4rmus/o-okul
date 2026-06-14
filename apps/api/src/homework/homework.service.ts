@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type {
   HomeworkMaterialAssignmentRecord as SharedHomeworkMaterialAssignmentRecord,
+  HomeworkMaterialFileDownloadResult,
   HomeworkMaterialFileRecord as SharedHomeworkMaterialFileRecord,
   HomeworkMaterialRecord as SharedHomeworkMaterialRecord,
   HomeworkRecord as SharedHomeworkRecord,
@@ -9,6 +10,7 @@ import type {
 } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import { type ScheduleStore, scheduleStoreToken } from "../program/schedule-store.js";
 import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";
 import { SchoolService } from "../school/school.service.js";
@@ -18,7 +20,12 @@ import {
 } from "../school/teacher-assignment-store.js";
 import { StudentService } from "../student/student.service.js";
 import { assertTenantResourceAccess, filterTenantResources, isTeacherSubjectContext } from "../tenant/tenant-access.js";
+import { type UploadAvScanner, uploadAvScannerToken } from "../upload/upload-av-scanner.js";
 import { assertUploadContentMatchesContentType } from "../upload/upload-validation.js";
+import {
+  homeworkMaterialFileStorageToken,
+  type HomeworkMaterialFileStorage,
+} from "./homework-material-file-storage.js";
 import { type HomeworkStore, homeworkStoreToken } from "./homework-store.js";
 
 export interface HomeworkRecord extends SharedHomeworkRecord {
@@ -31,6 +38,7 @@ export interface HomeworkMaterialRecord extends SharedHomeworkMaterialRecord {
 
 export interface HomeworkMaterialFileRecord extends SharedHomeworkMaterialFileRecord {
   contentBase64?: string;
+  storageKey?: string;
   deletedAt?: string;
 }
 
@@ -64,7 +72,11 @@ export class HomeworkService {
     @Inject(homeworkStoreToken) private readonly store: HomeworkStore,
     @Inject(scheduleStoreToken) private readonly scheduleStore: ScheduleStore,
     @Inject(teacherAssignmentStoreToken) private readonly teacherAssignmentStore: TeacherAssignmentStore,
+    @Inject(uploadAvScannerToken) private readonly uploadAvScanner: UploadAvScanner,
+    @Inject(homeworkMaterialFileStorageToken)
+    private readonly materialFileStorage: HomeworkMaterialFileStorage,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async listMaterials(context: RequestContext): Promise<HomeworkMaterialRecord[]> {
@@ -155,7 +167,73 @@ export class HomeworkService {
     return filterTenantResources(context, await this.store.listMaterialFiles(materialId)).filter((file) => !file.deletedAt);
   }
 
+  async downloadMaterialFile(
+    context: RequestContext,
+    materialId: string,
+    fileId: string,
+  ): Promise<HomeworkMaterialFileDownloadResult> {
+    const material = await this.findMaterial(context, materialId);
+    const file = await this.store.findMaterialFileById(fileId);
+    if (!file || file.deletedAt || file.materialId !== material.id) {
+      throw new NotFoundException("HOMEWORK_MATERIAL_FILE_NOT_FOUND");
+    }
+
+    this.assertAccess(context, file);
+    if (file.storageKey && this.materialFileStorage.createSignedDownloadUrl) {
+      const signedDownload = await this.materialFileStorage.createSignedDownloadUrl(file.storageKey);
+      return {
+        fileName: file.fileName,
+        contentType: file.contentType,
+        byteSize: file.byteSize,
+        sha256: file.sha256,
+        downloadMode: "signed-url",
+        downloadUrl: signedDownload.url,
+        downloadUrlExpiresAt: signedDownload.expiresAt,
+        downloadUrlExpiresInSeconds: signedDownload.expiresInSeconds,
+      };
+    }
+
+    const fileBase64 = file.storageKey
+      ? (await this.materialFileStorage.get(file.storageKey)).toString("base64")
+      : file.contentBase64;
+    if (!fileBase64) {
+      throw new NotFoundException("HOMEWORK_MATERIAL_FILE_NOT_FOUND");
+    }
+
+    return {
+      fileName: file.fileName,
+      contentType: file.contentType,
+      byteSize: file.byteSize,
+      sha256: file.sha256,
+      downloadMode: "inline",
+      fileBase64,
+    };
+  }
+
   async addMaterialFile(
+    context: RequestContext,
+    materialId: string,
+    input: CreateHomeworkMaterialFileInput,
+    idempotencyKey?: string,
+  ): Promise<HomeworkMaterialFileRecord> {
+    const idempotencyRequest = {
+      materialId,
+      fileName: input.fileName,
+      contentType: input.contentType,
+      fileSha256: input.fileBase64 ? createSha256(Buffer.from(input.fileBase64, "base64")) : undefined,
+    };
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "homework.material-file.create", request: idempotencyRequest },
+        () => this.addMaterialFileOnce(context, materialId, input),
+      );
+    }
+
+    return this.addMaterialFileOnce(context, materialId, input);
+  }
+
+  private async addMaterialFileOnce(
     context: RequestContext,
     materialId: string,
     input: CreateHomeworkMaterialFileInput,
@@ -164,16 +242,35 @@ export class HomeworkService {
     const body = readMaterialFileBytes(input.fileBase64);
     const contentType = resolveMaterialFileContentType(input.contentType);
     assertUploadContentMatchesContentType(body, contentType, "HOMEWORK_MATERIAL_FILE_CONTENT_MISMATCH");
+    const fileName = normalizeMaterialFileName(input.fileName);
+    const sha256 = createSha256(body);
+    await this.uploadAvScanner.scan({
+      surface: "homework_material_file",
+      tenantId: material.tenantId,
+      fileName,
+      contentType,
+      body,
+      sha256,
+    });
+    const storedFile = await this.materialFileStorage.put({
+      tenantId: material.tenantId,
+      materialId: material.id,
+      fileName,
+      contentType,
+      body,
+      sha256,
+    });
 
     const record = await this.store.createMaterialFile({
       tenantId: material.tenantId,
       materialId: material.id,
       uploadedById: context.userId,
-      fileName: normalizeMaterialFileName(input.fileName),
+      fileName,
       contentType,
       byteSize: body.length,
-      sha256: createSha256(body),
-      contentBase64: body.toString("base64"),
+      sha256,
+      contentBase64: storedFile.contentBase64,
+      storageKey: storedFile.storageKey,
       createdAt: new Date().toISOString(),
     });
     await this.auditLogs?.record({
@@ -214,6 +311,23 @@ export class HomeworkService {
   }
 
   async assignMaterial(
+    context: RequestContext,
+    materialId: string,
+    input: CreateHomeworkMaterialAssignmentInput,
+    idempotencyKey?: string,
+  ): Promise<HomeworkMaterialAssignmentRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "homework.material-assignment.create", request: { materialId, ...input } },
+        () => this.assignMaterialOnce(context, materialId, input),
+      );
+    }
+
+    return this.assignMaterialOnce(context, materialId, input);
+  }
+
+  private async assignMaterialOnce(
     context: RequestContext,
     materialId: string,
     input: CreateHomeworkMaterialAssignmentInput,
@@ -501,12 +615,11 @@ export class HomeworkService {
       return undefined;
     }
 
-    const time = Date.parse(value);
-    if (!Number.isFinite(time)) {
+    if (!isIsoDateTimeString(value)) {
       throw new BadRequestException("HOMEWORK_DUE_DATE_INVALID");
     }
 
-    return new Date(time).toISOString();
+    return new Date(Date.parse(value)).toISOString();
   }
 
   private assertAccess(context: RequestContext, resource: { tenantId: string }): void {
@@ -517,6 +630,16 @@ export class HomeworkService {
       throw new ForbiddenException(message);
     }
   }
+}
+
+function isIsoDateTimeString(value: string): boolean {
+  const match = /^(\d{4}-\d{2}-\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/.exec(value);
+  return Boolean(match?.[1] && isCalendarDateString(match[1]) && !Number.isNaN(Date.parse(value)));
+}
+
+function isCalendarDateString(value: string): boolean {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 function requiredText(value: string | undefined, errorCode: string): string {

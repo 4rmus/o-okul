@@ -185,8 +185,109 @@ describe("School management API", () => {
               isActive: true,
             },
           ]);
-        });
+      });
     }
+  });
+
+  it("okul yönetimi gövdelerini Zod ile doğrular", async () => {
+    expectValidationFields(
+      await request(server)
+        .post("/classes")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ name: " ", campusId: 123 })
+        .expect(422),
+      ["campusId", "name"],
+    );
+
+    expectValidationFields(
+      await request(server)
+        .post("/campuses")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ code: "KPS" })
+        .expect(422),
+      ["name"],
+    );
+
+    expectValidationFields(
+      await request(server)
+        .post("/learning-outcomes")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ code: " ", branch: 123, title: " " })
+        .expect(422),
+      ["branch", "code", "title"],
+    );
+
+    expectValidationFields(
+      await request(server)
+        .post("/academic-years")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ name: "2027", startsAt: "2027/09/01", endsAt: "2028-06-30", isActive: "yes" })
+        .expect(422),
+      ["isActive", "startsAt"],
+    );
+
+    expectValidationFields(
+      await request(server)
+        .post("/academic-years")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ name: "2027", startsAt: "2027-02-29", endsAt: "2028-06-30" })
+        .expect(422),
+      ["startsAt"],
+    );
+
+    expectValidationFields(
+      await request(server)
+        .post("/teachers")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ firstName: "Ada" })
+        .expect(422),
+      ["lastName"],
+    );
+
+    expectValidationFields(
+      await request(server)
+        .post("/teachers/teacher-a/assignments")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ role: "CLASS_TEACHER" })
+        .expect(422),
+      ["classId"],
+    );
+
+    expectValidationFields(
+      await request(server)
+        .post("/teachers/teacher-a/assignments")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ classId: "class-a", role: "OWNER" })
+        .expect(422),
+      ["role"],
+    );
+
+    expectValidationFields(
+      await request(server)
+        .post("/teachers/teacher-a/assignments")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ classId: "class-a", role: "CLASS_TEACHER", startsAt: "2026-02-29" })
+        .expect(422),
+      ["startsAt"],
+    );
+
+    expectValidationFields(
+      await request(server)
+        .post("/guardians")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ firstName: " ", lastName: "Veli" })
+        .expect(422),
+      ["firstName"],
+    );
+
+    expectValidationFields(
+      await request(server)
+        .post("/guardians/guardian-a/students")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ relationshipType: "OWNER", canReceiveSms: "yes" })
+        .expect(422),
+      ["canReceiveSms", "relationshipType", "studentId"],
+    );
   });
 
   it("sınıf, öğretmen, veli ve öğrenci listelerinde page/limit/q/sort uygular", async () => {
@@ -889,15 +990,36 @@ describe("School management API", () => {
         ]);
       });
 
+    const renewRequest = {
+      academicYearId: "academic-year-2026",
+      termId: "term-2026-spring",
+      classId: nextClassId,
+      startsAt: "2026-06-05",
+    };
     await request(server)
       .post(`/students/${studentId}/enrollments/renew`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({
-        academicYearId: "academic-year-2026",
-        termId: "term-2026-spring",
-        classId: nextClassId,
-        startsAt: "2026-06-05",
-      })
+      .send({ ...renewRequest, startsAt: "2026-02-29" })
+      .expect(422)
+      .expect(({ body }) => {
+        expect(body.error).toMatchObject({
+          code: "VALIDATION_FAILED",
+          details: {
+            fields: [
+              expect.objectContaining({
+                message: "STUDENT_ENROLLMENT_STARTS_AT_INVALID",
+                path: "startsAt",
+              }),
+            ],
+          },
+        });
+      });
+
+    const renewed = await request(server)
+      .post(`/students/${studentId}/enrollments/renew`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", `student-renew-${studentId}`)
+      .send(renewRequest)
       .expect(201)
       .expect(({ body }) => {
         expect(body).toEqual(expect.objectContaining({
@@ -912,14 +1034,45 @@ describe("School management API", () => {
       });
 
     await request(server)
+      .post(`/students/${studentId}/enrollments/renew`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", `student-renew-${studentId}`)
+      .send(renewRequest)
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual(renewed.body);
+      });
+
+    await request(server)
+      .post(`/students/${studentId}/enrollments/renew`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", `student-renew-${studentId}`)
+      .send({ ...renewRequest, startsAt: "2026-06-09" })
+      .expect(409);
+
+    await request(server)
+      .get(`/students/${studentId}/enrollments`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(
+          (body as Array<{ reason: string; startsAt: string }>).filter(
+            (enrollment) => enrollment.reason === "RENEWED" && enrollment.startsAt === "2026-06-05",
+          ),
+        ).toHaveLength(1);
+      });
+
+    const transferRequest = {
+      classId: "class-a",
+      academicYearId: "academic-year-2026",
+      termId: "term-2026-spring",
+      startsAt: "2026-06-06",
+    };
+    const transferred = await request(server)
       .post(`/students/${studentId}/enrollments/transfer`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({
-        classId: "class-a",
-        academicYearId: "academic-year-2026",
-        termId: "term-2026-spring",
-        startsAt: "2026-06-06",
-      })
+      .set("Idempotency-Key", `student-transfer-${studentId}`)
+      .send(transferRequest)
       .expect(201)
       .expect(({ body }) => {
         expect(body).toEqual(expect.objectContaining({
@@ -932,15 +1085,46 @@ describe("School management API", () => {
       });
 
     await request(server)
+      .post(`/students/${studentId}/enrollments/transfer`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", `student-transfer-${studentId}`)
+      .send(transferRequest)
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual(transferred.body);
+      });
+
+    await request(server)
+      .post(`/students/${studentId}/enrollments/transfer`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", `student-transfer-${studentId}`)
+      .send({ ...transferRequest, startsAt: "2026-06-10" })
+      .expect(409);
+
+    await request(server)
+      .get(`/students/${studentId}/enrollments`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(
+          (body as Array<{ reason: string; startsAt: string }>).filter(
+            (enrollment) => enrollment.reason === "TRANSFERRED" && enrollment.startsAt === "2026-06-06",
+          ),
+        ).toHaveLength(1);
+      });
+
+    const bulkRenewRequest = {
+      studentIds: [studentId],
+      classIdBySourceClassId: { "class-a": nextClassId },
+      academicYearId: "academic-year-2026",
+      termId: "term-2026-spring",
+      startsAt: "2026-06-07",
+    };
+    const bulkRenewed = await request(server)
       .post("/students/enrollments/bulk-renew")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({
-        studentIds: [studentId],
-        classIdBySourceClassId: { "class-a": nextClassId },
-        academicYearId: "academic-year-2026",
-        termId: "term-2026-spring",
-        startsAt: "2026-06-07",
-      })
+      .set("Idempotency-Key", `student-bulk-renew-${studentId}`)
+      .send(bulkRenewRequest)
       .expect(201)
       .expect(({ body }) => {
         expect(body.updatedCount).toBe(1);
@@ -954,6 +1138,23 @@ describe("School management API", () => {
           }),
         ]);
       });
+
+    await request(server)
+      .post("/students/enrollments/bulk-renew")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", `student-bulk-renew-${studentId}`)
+      .send(bulkRenewRequest)
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual(bulkRenewed.body);
+      });
+
+    await request(server)
+      .post("/students/enrollments/bulk-renew")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", `student-bulk-renew-${studentId}`)
+      .send({ ...bulkRenewRequest, startsAt: "2026-06-09" })
+      .expect(409);
 
     await request(server)
       .get("/students")
@@ -1061,3 +1262,12 @@ describe("School management API", () => {
       });
   });
 });
+
+function expectValidationFields(response: { body: { error?: unknown } }, paths: string[]): void {
+  expect(response.body.error).toMatchObject({
+    code: "VALIDATION_FAILED",
+    details: {
+      fields: expect.arrayContaining(paths.map((path) => expect.objectContaining({ path }))),
+    },
+  });
+}

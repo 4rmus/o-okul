@@ -251,8 +251,20 @@ describe("Me access matrix", () => {
     await request(server)
       .post("/me/notification-devices")
       .set("Authorization", `Bearer ${studentToken}`)
-      .send({ provider: "", token: "" })
-      .expect(400);
+      .send({ platform: 123, provider: "", token: "" })
+      .expect(422)
+      .expect(({ body }) => {
+        expect(body.error).toMatchObject({
+          code: "VALIDATION_FAILED",
+          details: {
+            fields: expect.arrayContaining([
+              expect.objectContaining({ path: "platform" }),
+              expect.objectContaining({ path: "provider" }),
+              expect.objectContaining({ path: "token" }),
+            ]),
+          },
+        });
+      });
 
     await request(server)
       .get("/me/notification-devices")

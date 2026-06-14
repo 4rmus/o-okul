@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { BadRequestException, ConflictException, Inject, Injectable, Optional } from "@nestjs/common";
 import ExcelJS from "exceljs";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import { StudentService, type StudentGuardianProvisionInput, type StudentRecord } from "./student.service.js";
 
@@ -58,6 +60,7 @@ export class StudentImportService {
     private readonly students: StudentService,
     @Inject(classStoreToken) private readonly classes: ClassStore,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async dryRun(context: RequestContext, input: StudentImportDryRunInput): Promise<StudentImportDryRunResult> {
@@ -83,7 +86,26 @@ export class StudentImportService {
     };
   }
 
-  async import(context: RequestContext, input: StudentImportDryRunInput): Promise<StudentImportResult> {
+  async import(
+    context: RequestContext,
+    input: StudentImportDryRunInput,
+    idempotencyKey?: string,
+  ): Promise<StudentImportResult> {
+    const idempotencyRequest = {
+      fileSha256: input.fileBase64 ? createSha256(Buffer.from(input.fileBase64, "base64")) : undefined,
+    };
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "student.import.commit", request: idempotencyRequest },
+        () => this.importOnce(context, input),
+      );
+    }
+
+    return this.importOnce(context, input);
+  }
+
+  private async importOnce(context: RequestContext, input: StudentImportDryRunInput): Promise<StudentImportResult> {
     const dryRun = await this.dryRun(context, input);
     const rowErrors = dryRun.errors.filter((error) => error.code !== "STUDENT_QUOTA_EXCEEDED");
 
@@ -284,6 +306,10 @@ export class StudentImportService {
 
 function isXlsx(bytes: Buffer): boolean {
   return bytes[0] === 0x50 && bytes[1] === 0x4b;
+}
+
+function createSha256(body: Buffer): string {
+  return createHash("sha256").update(body).digest("hex");
 }
 
 function detectDelimiter(line: string): string {

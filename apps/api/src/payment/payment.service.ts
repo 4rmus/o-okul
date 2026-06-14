@@ -6,6 +6,7 @@ import type {
 } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
 import { type CampusStore, campusStoreToken } from "../school/campus-store.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
@@ -63,6 +64,7 @@ export class PaymentService {
     @Inject(gradeLevelStoreToken) private readonly gradeLevelStore: GradeLevelStore,
     @Inject(studentStoreToken) private readonly studentStore: StudentStore,
     @Inject(guardianStudentStoreToken) private readonly guardianStudentStore: GuardianStudentStore,
+    private readonly idempotency: IdempotencyService,
     @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
@@ -97,7 +99,19 @@ export class PaymentService {
     return filterTenantResources(context, await this.store.listByStudent(student.id)).filter((record) => !record.deletedAt);
   }
 
-  async create(context: RequestContext, input: Partial<PaymentPlanInput>): Promise<PaymentPlanWithInstallmentsRecord> {
+  async create(
+    context: RequestContext,
+    input: Partial<PaymentPlanInput>,
+    idempotencyKey?: string,
+  ): Promise<PaymentPlanWithInstallmentsRecord> {
+    return this.idempotency.run(
+      context,
+      { key: idempotencyKey, operation: "payment.plan.create", request: input },
+      () => this.createPaymentPlan(context, input),
+    );
+  }
+
+  private async createPaymentPlan(context: RequestContext, input: Partial<PaymentPlanInput>): Promise<PaymentPlanWithInstallmentsRecord> {
     this.assertTenantAdmin(context);
     const student = await this.findStudentForTenant(context, requiredText(input.studentId, "PAYMENT_PLAN_STUDENT_REQUIRED"));
     const paymentContext = await this.resolvePaymentContext(student.tenantId, student, input);
@@ -135,6 +149,20 @@ export class PaymentService {
   }
 
   async updateInstallment(
+    context: RequestContext,
+    planId: string,
+    installmentId: string,
+    input: Partial<PaymentInstallmentUpdateInput>,
+    idempotencyKey?: string,
+  ): Promise<PaymentPlanWithInstallmentsRecord> {
+    return this.idempotency.run(
+      context,
+      { key: idempotencyKey, operation: "payment.installment.update", request: { planId, installmentId, input } },
+      () => this.updatePaymentInstallment(context, planId, installmentId, input),
+    );
+  }
+
+  private async updatePaymentInstallment(
     context: RequestContext,
     planId: string,
     installmentId: string,
@@ -354,7 +382,8 @@ function optionalCurrency(value: string | undefined): string {
 
 function requiredDate(value: string | undefined): string {
   const trimmed = requiredText(value, "PAYMENT_INSTALLMENT_DUE_DATE_REQUIRED");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+  const parsed = new Date(`${trimmed}T00:00:00.000Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed) || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== trimmed) {
     throw new BadRequestException("PAYMENT_INSTALLMENT_DUE_DATE_INVALID");
   }
   return trimmed;

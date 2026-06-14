@@ -21,16 +21,22 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1056.0",
+    "@aws-sdk/s3-request-presigner": "^3.1067.0",
     "@nestjs/common": "^11.1.24",
     "@nestjs/core": "^11.1.24",
     "@nestjs/platform-express": "^11.1.24",
+    "@nestjs/swagger": "11.4.4",
+    "@sentry/node": "10.57.0",
     "@uzman-hocam/notification-adapter": "workspace:*",
     "@uzman-hocam/shared-types": "workspace:*",
     "bullmq": "^5.77.6",
     "exceljs": "^4.4.0",
+    "otplib": "^12.0.1",
     "pg": "^8.21.0",
-    "puppeteer-core": "^25.1.0",
+    "pino": "10.3.1",
+    "pino-http": "11.0.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "zod": "4.4.3"
   }
 }

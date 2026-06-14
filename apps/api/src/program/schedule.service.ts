@@ -168,9 +168,9 @@ export class ScheduleService {
   }
 
   private resolveTimeRange(startsAt: string | undefined, endsAt: string | undefined): { startsAt: string; endsAt: string } {
-    const startTime = Date.parse(startsAt ?? "");
-    const endTime = Date.parse(endsAt ?? "");
-    if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || startTime >= endTime) {
+    const startTime = parseIsoDateTime(startsAt, "SCHEDULE_LESSON_TIME_INVALID");
+    const endTime = parseIsoDateTime(endsAt, "SCHEDULE_LESSON_TIME_INVALID");
+    if (startTime >= endTime) {
       throw new BadRequestException("SCHEDULE_LESSON_TIME_INVALID");
     }
 
@@ -236,6 +236,24 @@ export class ScheduleService {
       throw error;
     }
   }
+}
+
+function parseIsoDateTime(value: string | undefined, errorCode: string): number {
+  const trimmed = value?.trim();
+  if (!trimmed || !isIsoDateTimeString(trimmed)) {
+    throw new BadRequestException(errorCode);
+  }
+  return Date.parse(trimmed);
+}
+
+function isIsoDateTimeString(value: string): boolean {
+  const match = /^(\d{4}-\d{2}-\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/.exec(value);
+  return Boolean(match?.[1] && isCalendarDateString(match[1]) && !Number.isNaN(Date.parse(value)));
+}
+
+function isCalendarDateString(value: string): boolean {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 function presentFields<TRecord extends object>(record: TRecord, fields: Array<keyof TRecord>): string[] {

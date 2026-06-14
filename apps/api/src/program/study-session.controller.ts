@@ -1,10 +1,17 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type { StudySessionRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
+import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
+import {
+  studySessionCreateBodySchema,
+  studySessionUpdateBodySchema,
+  type StudySessionCreateBody,
+  type StudySessionUpdateBody,
+} from "./study-session-validation.js";
 import { StudySessionService } from "./study-session.service.js";
 
 @Controller("study-sessions")
@@ -26,13 +33,18 @@ export class StudySessionController {
 
   @Post()
   @RequireCapability("academic:manage")
-  create(@Body() body: Partial<StudySessionRecord>): Promise<StudySessionRecord> {
+  create(
+    @Body(zodBody(studySessionCreateBodySchema)) body: StudySessionCreateBody,
+  ): Promise<StudySessionRecord> {
     return this.studySessions.create(getRequestContext(), body);
   }
 
   @Patch(":id")
   @RequireCapability("academic:manage")
-  update(@Param("id") id: string, @Body() body: Partial<StudySessionRecord>): Promise<StudySessionRecord> {
+  update(
+    @Param("id") id: string,
+    @Body(zodBody(studySessionUpdateBodySchema)) body: StudySessionUpdateBody,
+  ): Promise<StudySessionRecord> {
     return this.studySessions.update(getRequestContext(), id, body);
   }
 

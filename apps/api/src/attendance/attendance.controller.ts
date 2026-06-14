@@ -1,10 +1,17 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type { AttendanceRecord, AttendanceSummaryRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
+import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
-import { AttendanceService, type AttendanceInput } from "./attendance.service.js";
+import { AttendanceService } from "./attendance.service.js";
+import {
+  type AttendanceCreateBody,
+  type AttendanceUpdateBody,
+  attendanceCreateBodySchema,
+  attendanceUpdateBodySchema,
+} from "./attendance-validation.js";
 
 interface AttendanceListQuery extends ListQuery {
   classId?: string;
@@ -34,13 +41,16 @@ export class AttendanceController {
 
   @Post()
   @Roles("TEACHER")
-  create(@Body() body: Partial<AttendanceInput>): Promise<AttendanceRecord> {
+  create(@Body(zodBody(attendanceCreateBodySchema)) body: AttendanceCreateBody): Promise<AttendanceRecord> {
     return this.attendance.create(getRequestContext(), body);
   }
 
   @Patch(":id")
   @Roles("TEACHER")
-  update(@Param("id") id: string, @Body() body: Partial<Pick<AttendanceRecord, "status" | "courseId" | "termId">>): Promise<AttendanceRecord> {
+  update(
+    @Param("id") id: string,
+    @Body(zodBody(attendanceUpdateBodySchema)) body: AttendanceUpdateBody,
+  ): Promise<AttendanceRecord> {
     return this.attendance.update(getRequestContext(), id, body);
   }
 

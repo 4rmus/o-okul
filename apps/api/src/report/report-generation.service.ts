@@ -1,9 +1,15 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, type OnModuleDestroy } from "@nestjs/common";
 import type {
+  ReportPdfInstitution,
+  ReportPdfRenderJobPayload,
+  ReportPdfRenderJobResult,
+  ReportPdfSnapshotRecord,
   ReportErrorBooklet,
   ReportScopeRank,
   ReportStudentBranchStatistics,
   ReportStudentBranchSummary,
+  ReportStudentCommentary,
   ReportStudentOutcomeSummary,
   ReportStudentProgress,
   ReportStudentProgressPoint,
@@ -12,9 +18,13 @@ import type {
   ReportStudentSnapshot,
   ReportStudentStatistics,
 } from "@uzman-hocam/shared-types";
+import { Queue, QueueEvents } from "bullmq";
 import ExcelJS from "exceljs";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
+import { parseRedisUrl } from "../config/env.js";
+import { resolvePersistenceDriver } from "../config/persistence.js";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import type { ProducedJob, TenantQueueJobInput } from "../queue/job-producer.js";
 import { examParticipantRepositoryToken, examRepositoryToken, type ExamParticipantRepository, type ExamRepository } from "../exam/exam.service.js";
 import { type TeacherAssignmentStore, teacherAssignmentStoreToken } from "../school/teacher-assignment-store.js";
@@ -91,24 +101,17 @@ export interface ReportSnapshotExportResult {
   rowCount: number;
 }
 
-export interface ReportSnapshotPdfResult {
-  fileName: string;
-  contentType: "application/pdf";
-  fileBase64: string;
-  pageCount: number;
-}
+export type ReportSnapshotPdfResult = ReportPdfRenderJobResult;
 
-export interface ReportPdfRenderInput {
-  html: string;
-  fallbackLines: string[];
-}
+export type ReportPdfRenderInput = ReportPdfRenderJobPayload;
 
 export interface ReportPdfRenderer {
-  render(input: ReportPdfRenderInput): Promise<Buffer>;
+  render(input: ReportPdfRenderInput): Promise<ReportSnapshotPdfResult>;
+  close?(): Promise<void>;
 }
 
 @Injectable()
-export class ReportGenerationService {
+export class ReportGenerationService implements OnModuleDestroy {
   constructor(
     @Inject(reportGenerationQueueProducerToken)
     private readonly producer: ReportGenerationQueueProducer,
@@ -133,9 +136,30 @@ export class ReportGenerationService {
     @Optional()
     @Inject(tenantStoreToken)
     private readonly tenantStore?: TenantStore,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
+  async onModuleDestroy(): Promise<void> {
+    await this.pdfRenderer.close?.();
+  }
+
   async enqueueGeneration(
+    context: RequestContext,
+    input: EnqueueReportGenerationInput,
+    idempotencyKey?: string,
+  ): Promise<ReportGenerationQueueResult> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "report.generation.enqueue", request: input },
+        () => this.enqueueGenerationJob(context, input),
+      );
+    }
+
+    return this.enqueueGenerationJob(context, input);
+  }
+
+  private async enqueueGenerationJob(
     context: RequestContext,
     input: EnqueueReportGenerationInput,
   ): Promise<ReportGenerationQueueResult> {
@@ -271,6 +295,7 @@ export class ReportGenerationService {
     const outcomes = readRecords(student.outcomes).map(readOutcomeSummary);
     const questions = readRecords(student.questions).map(readQuestionSummary);
     const statistics = readStudentStatistics(student.statistics);
+    const commentary = readStudentCommentary(student.commentary);
     const branchAverages = createStudentBranchAverageLookup(snapshot.snapshotData, classId);
     const institution = await this.findInstitutionProfile(context);
     const examMeta = await this.findExamMeta(context, resolvedExamId);
@@ -295,6 +320,7 @@ export class ReportGenerationService {
       ...(outcomes.length > 0 ? { outcomes } : {}),
       ...(questions.length > 0 ? { questions } : {}),
       ...(statistics ? { statistics } : {}),
+      ...(commentary ? { commentary } : {}),
       generatedAt: snapshot.generatedAt,
     };
   }
@@ -814,64 +840,72 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
 }
 
 export function createReportPdfRenderer(): ReportPdfRenderer {
-  const executablePath = process.env.REPORT_PDF_BROWSER_EXECUTABLE_PATH ?? process.env.PUPPETEER_EXECUTABLE_PATH;
-  return executablePath ? new PuppeteerReportPdfRenderer(executablePath) : new SimpleReportPdfRenderer();
+  const mode = process.env.REPORT_PDF_RENDERER ?? (resolvePersistenceDriver() === "postgres" ? "worker" : "memory");
+  if (process.env.NODE_ENV === "production" && mode !== "worker") {
+    throw new Error('REPORT_PDF_RENDERER must be "worker" in production.');
+  }
+  if (mode === "worker") {
+    return new BullReportPdfRenderer();
+  }
+  if (mode === "memory") {
+    return new SimpleReportPdfRenderer();
+  }
+  throw new Error("REPORT_PDF_RENDERER_INVALID");
 }
 
-class PuppeteerReportPdfRenderer implements ReportPdfRenderer {
-  constructor(private readonly executablePath: string) {}
+class BullReportPdfRenderer implements ReportPdfRenderer {
+  private readonly queue = new Queue<ReportPdfRenderInput, ReportSnapshotPdfResult>("report-pdf-render", {
+    connection: parseRedisUrl(),
+    prefix: process.env.QUEUE_PREFIX,
+  });
+  private readonly queueEvents = new QueueEvents("report-pdf-render", {
+    connection: parseRedisUrl(),
+    prefix: process.env.QUEUE_PREFIX,
+  });
+  private readonly timeoutMs = Number(process.env.REPORT_PDF_RENDER_TIMEOUT_MS ?? 30_000);
 
-  async render(input: ReportPdfRenderInput): Promise<Buffer> {
-    const puppeteer = await import("puppeteer-core");
-    const browser = await puppeteer.launch({
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-      executablePath: this.executablePath,
-      headless: true,
+  async render(input: ReportPdfRenderInput): Promise<ReportSnapshotPdfResult> {
+    await this.queueEvents.waitUntilReady();
+    const job = await this.queue.add("report-pdf-render", input, {
+      attempts: 1,
+      jobId: `report-pdf-${randomUUID()}`,
+      removeOnComplete: true,
+      removeOnFail: false,
     });
+    return job.waitUntilFinished(this.queueEvents, this.timeoutMs);
+  }
 
-    try {
-      const page = await browser.newPage();
-      await page.setContent(input.html, { waitUntil: "domcontentloaded" });
-      const pdf = await page.pdf({
-        format: "A4",
-        margin: { bottom: "16mm", left: "14mm", right: "14mm", top: "16mm" },
-        printBackground: true,
-      });
-      return Buffer.from(pdf);
-    } finally {
-      await browser.close();
-    }
+  async close(): Promise<void> {
+    await Promise.all([this.queue.close(), this.queueEvents.close()]);
   }
 }
 
 class SimpleReportPdfRenderer implements ReportPdfRenderer {
-  async render(input: ReportPdfRenderInput): Promise<Buffer> {
-    return buildSimplePdf(input.fallbackLines);
+  async render(input: ReportPdfRenderInput): Promise<ReportSnapshotPdfResult> {
+    const pdf = buildSimplePdf(createSnapshotPdfLines(input.snapshot, input.institution));
+    return {
+      fileName: `${input.snapshot.examId}-${input.snapshot.id}.pdf`,
+      contentType: "application/pdf",
+      fileBase64: pdf.toString("base64"),
+      pageCount: 1,
+    };
   }
 }
 
 async function createSnapshotPdf(
   snapshot: ReportSnapshotRecord,
   renderer: ReportPdfRenderer,
-  institution: Pick<ReportStudentSnapshot, "institutionLogoUrl" | "institutionName"> = {},
+  institution: ReportPdfInstitution = {},
 ): Promise<ReportSnapshotPdfResult> {
-  const lines = createSnapshotPdfLines(snapshot, institution);
-  const pdf = await renderer.render({
-    fallbackLines: lines,
-    html: createSnapshotPdfHtml(snapshot, institution),
+  return renderer.render({
+    institution,
+    snapshot,
   });
-
-  return {
-    fileName: `${snapshot.examId}-${snapshot.id}.pdf`,
-    contentType: "application/pdf",
-    fileBase64: pdf.toString("base64"),
-    pageCount: 1,
-  };
 }
 
 function createSnapshotPdfLines(
-  snapshot: ReportSnapshotRecord,
-  institution: Pick<ReportStudentSnapshot, "institutionName"> = {},
+  snapshot: ReportPdfSnapshotRecord,
+  institution: ReportPdfInstitution = {},
 ): string[] {
   const snapshotData = snapshot.snapshotData ?? {};
   const averages = readRecord(snapshotData.averages);
@@ -914,267 +948,9 @@ function createSnapshotPdfLines(
   ];
 }
 
-function createSnapshotPdfHtml(
-  snapshot: ReportSnapshotRecord,
-  institution: Pick<ReportStudentSnapshot, "institutionLogoUrl" | "institutionName"> = {},
-): string {
-  const snapshotData = snapshot.snapshotData ?? {};
-  const averages = readRecord(snapshotData.averages);
-  const averageLgsScore = readLgsScore(averages);
-  const branches = readRecords(snapshotData.branches).slice(0, 8);
-  const classes = readRecords(snapshotData.classes).slice(0, 8);
-  const students = readRecords(snapshotData.students).slice(0, 14);
-  const institutionName = institution.institutionName ?? "Uzman Hocam";
-
-  return `<!doctype html>
-<html lang="tr">
-<head>
-  <meta charset="utf-8" />
-  <style>
-    body { color: #1b1d23; font-family: Arial, sans-serif; margin: 0; }
-    .hero { background: #16324f; color: #fff; padding: 28px 30px; }
-    .hero p { margin: 0 0 8px; opacity: .78; }
-    .hero h1 { font-size: 26px; margin: 0; }
-    .content { padding: 24px 30px; }
-    .cards { display: grid; gap: 12px; grid-template-columns: repeat(4, 1fr); margin-bottom: 24px; }
-    .card { border: 1px solid #dce3ec; border-radius: 8px; padding: 12px; }
-    .card span { color: #66758a; display: block; font-size: 11px; margin-bottom: 7px; }
-    .card strong { font-size: 18px; }
-    .karne { border: 3px solid #d9a428; margin: 0 0 24px; padding: 14px; }
-    .karne-detail { page-break-before: always; }
-    .karne-header { display: grid; grid-template-columns: 1fr 160px; border: 1px solid #d9a428; }
-    .karne-header div { padding: 10px 12px; }
-    .karne-header h2 { margin: 0 0 6px; }
-    .karne-header strong { display: block; font-size: 20px; }
-    .karne-brand { align-items: center; border-left: 1px solid #d9a428; color: #0f766e; display: grid; font-weight: 800; justify-items: center; padding: 10px; text-align: center; }
-    .karne-brand img { display: block; max-height: 66px; max-width: 116px; object-fit: contain; }
-    .karne-summary { display: grid; grid-template-columns: repeat(5, 1fr); margin: 10px 0; }
-    .karne-summary span { border: 1px solid #d9a428; font-size: 11px; font-weight: 700; padding: 7px; text-align: center; }
-    .karne-grid { display: grid; gap: 12px; grid-template-columns: 1.3fr .7fr; }
-    h2 { color: #16324f; font-size: 16px; margin: 22px 0 10px; }
-    table { border-collapse: collapse; font-size: 12px; width: 100%; }
-    th { background: #eef3f8; color: #273447; text-align: left; }
-    th, td { border: 1px solid #dce3ec; padding: 7px 8px; }
-    .footer { color: #66758a; font-size: 11px; margin-top: 18px; }
-  </style>
-</head>
-<body>
-  <section class="hero">
-    <p>${escapeHtml(institutionName)}</p>
-    <h1>Sınav Raporu</h1>
-  </section>
-  <main class="content">
-    <section class="cards">
-      ${renderPdfCard("Sınav", snapshot.examId)}
-    ${renderPdfCard("Snapshot", snapshot.id)}
-    ${renderPdfCard("Sonuç", readNumber(snapshotData.resultCount) || "-")}
-    ${renderPdfCard("Ortalama net", readNumber(averages.net) || "-")}
-    ${renderPdfCard("Ortalama LGS puanı", averageLgsScore || "-")}
-    ${renderPdfCard("Standart puan", readNumber(averages.standardScore) || "-")}
-    ${renderPdfCard("Durum", snapshot.status)}
-    ${renderPdfCard("Üretim", snapshot.generatedAt ?? "-")}
-    ${renderPdfCard("Rapor tipi", snapshot.reportType)}
-    </section>
-    ${renderPdfStudentKarne(students[0], createStudentBranchAverageLookup(snapshotData, readText(students[0]?.classId)), institution)}
-    ${renderPdfTable("Branş Başarı", ["Branş", "Sonuç", "Net"], branches, (branch) => [
-      readText(branch.branch) || "-",
-      readNumber(branch.resultCount) || "-",
-      readNumber(branch.net) || "-",
-    ])}
-    ${renderPdfTable("Sınıf Başarı", ["Sınıf", "Sonuç", "Net", "LGS puanı", "Standart puan"], classes, (classSummary) => {
-      const classAverages = readRecord(classSummary.averages);
-      return [
-        readText(classSummary.className) || "Sınıfsız",
-        readNumber(classSummary.resultCount) || "-",
-        readNumber(classAverages.net) || "-",
-        readLgsScore(classAverages) || "-",
-        readNumber(classAverages.standardScore) || "-",
-      ];
-    })}
-    ${renderPdfTable("Öğrenci Özeti", ["Öğrenci", "Sınıf", "Net", "LGS puanı", "Standart puan", "Genel sıra", "Sınıf sıra"], students, (student) => {
-      const total = readRecord(student.total);
-      const statistics = readStudentStatistics(student.statistics);
-      return [
-        readText(student.studentId) || "-",
-        readText(student.className) || "-",
-        readNumber(total.net) || "-",
-        readLgsScore(total) || "-",
-        readNumber(total.standardScore) || "-",
-        formatPdfRank(statistics?.general),
-        formatPdfRank(statistics?.class),
-      ];
-    })}
-    <p class="footer">Bu çıktı hazır ReportSnapshot verisinden üretilmiştir.</p>
-  </main>
-</body>
-</html>`;
-}
-
-function renderPdfStudentKarne(
-  student: Record<string, unknown> | undefined,
-  branchAverages = new Map<string, Pick<ReportStudentBranchSummary, "classNetAverage" | "generalNetAverage" | "schoolNetAverage">>(),
-  institution: Pick<ReportStudentSnapshot, "institutionLogoUrl" | "institutionName"> = {},
-): string {
-  if (!student) return "";
-
-  const total = readRecord(student.total);
-  const lgsScore = readLgsScore(total);
-  const statistics = readStudentStatistics(student.statistics);
-  const branches = readRecords(student.branches);
-  const outcomes = readRecords(student.outcomes);
-  const summaryOutcomes = outcomes.slice(0, 6);
-  const questions = readRecords(student.questions).sort((left, right) => {
-    const leftNo = readNumber(left.questionNo) || 0;
-    const rightNo = readNumber(right.questionNo) || 0;
-    return leftNo - rightNo;
-  });
-
-  return `<section class="karne">
-      <div class="karne-header">
-        <div>
-          <h2>Öğrenci Karnesi</h2>
-          <strong>${escapeHtml(readText(student.studentId) || "-")}</strong>
-          <span>${escapeHtml(readText(student.className) || readText(student.classId) || "-")}</span>
-        </div>
-        <div class="karne-brand">${renderPdfInstitutionBrand(institution)}</div>
-      </div>
-      <div class="karne-summary">
-        <span>Net ${escapeHtml(formatPdfValue(readNumber(total.net)))}</span>
-        <span>LGS puanı ${escapeHtml(formatPdfValue(lgsScore))}</span>
-        <span>Standart puan ${escapeHtml(formatPdfValue(readNumber(total.standardScore)))}</span>
-        <span>Genel sıra ${escapeHtml(formatPdfRank(statistics?.general))}</span>
-        <span>Sınıf sıra ${escapeHtml(formatPdfRank(statistics?.class))}</span>
-      </div>
-      <div class="karne-grid">
-        ${renderPdfTable("BÖLÜM ANALİZİ", ["No", "Branş", "Soru sayısı", "Doğru", "Yanlış", "Boş", "Net", "Sınıf net ort", "Okul net ort", "Genel net ort"], branches, (branch, index) => [
-          index + 1,
-          readText(branch.branch) || "-",
-          formatPdfValue(branchQuestionCount(branch)),
-          formatPdfValue(readNumber(branch.correct)),
-          formatPdfValue(readNumber(branch.wrong)),
-          formatPdfValue(readNumber(branch.blank)),
-          formatPdfValue(readNumber(branch.net)),
-          formatPdfValue(branchAverages.get(readText(branch.branch))?.classNetAverage ?? readNumber(branch.classNetAverage)),
-          formatPdfValue(branchAverages.get(readText(branch.branch))?.schoolNetAverage ?? readNumber(branch.schoolNetAverage)),
-          formatPdfValue(branchAverages.get(readText(branch.branch))?.generalNetAverage ?? readNumber(branch.generalNetAverage)),
-        ])}
-        <section>
-          <h2>PUAN - SIRA ANALİZİ</h2>
-          <table>
-            <tbody>
-        <tr><th>LGS puanı</th><td>${escapeHtml(formatPdfValue(lgsScore))}</td></tr>
-        <tr><th>Standart puan</th><td>${escapeHtml(formatPdfValue(readNumber(total.standardScore)))}</td></tr>
-        <tr><th>SIRA</th><td>${escapeHtml(formatPdfRank(statistics?.general))}</td></tr>
-        <tr><th>SINIF</th><td>${escapeHtml(formatPdfRank(statistics?.class))}</td></tr>
-      </tbody>
-    </table>
-        </section>
-      </div>
-      ${renderPdfTable("BÖLÜM BAŞARI YÜZDELERİ", ["Kazanım", "Branş", "Doğru", "Yanlış", "Boş", "Net"], summaryOutcomes, (outcome) => [
-        readText(outcome.outcomeCode) || "-",
-        readText(outcome.branch) || "-",
-        formatPdfValue(readNumber(outcome.correct)),
-        formatPdfValue(readNumber(outcome.wrong)),
-        formatPdfValue(readNumber(outcome.blank)),
-        formatPdfValue(readNumber(outcome.net)),
-      ])}
-      ${renderPdfTable("SON SINAV NETLERİ", ["Öğrenci", "Net", "LGS puanı", "Standart puan"], [student], (row) => {
-        const rowTotal = readRecord(row.total);
-        return [
-          readText(row.studentId) || "-",
-          formatPdfValue(readNumber(rowTotal.net)),
-          formatPdfValue(readLgsScore(rowTotal)),
-          formatPdfValue(readNumber(rowTotal.standardScore)),
-        ];
-      })}
-    </section>
-    <section class="karne karne-detail">
-      <div class="karne-header">
-        <div>
-          <h2>Detaylı Deneme Analizi</h2>
-          <strong>${escapeHtml(readText(student.studentId) || "-")}</strong>
-          <span>${escapeHtml(readText(student.className) || readText(student.classId) || "-")}</span>
-        </div>
-        <div class="karne-brand">${renderPdfInstitutionBrand(institution)}</div>
-      </div>
-      ${renderPdfTable("KAZANIM DETAYI", ["Kazanım", "Ders", "Doğru", "Yanlış", "Boş", "Net"], outcomes, (outcome) => [
-        readText(outcome.outcomeCode) || "-",
-        readText(outcome.branch) || "-",
-        formatPdfValue(readNumber(outcome.correct)),
-        formatPdfValue(readNumber(outcome.wrong)),
-        formatPdfValue(readNumber(outcome.blank)),
-        formatPdfValue(readNumber(outcome.net)),
-      ])}
-      ${renderPdfTable("SORU CEVAP ANALİZİ", ["Soru", "Ders", "Kazanım", "Öğrenci cevabı", "Doğru cevap", "Durum"], questions, (question) => [
-        formatPdfValue(readNumber(question.questionNo)),
-        readText(question.branch) || "-",
-        readText(question.outcomeCode) || "-",
-        readText(question.answer) || "-",
-        readText(question.correctAnswer) || "-",
-        formatPdfQuestionStatus(question.status),
-      ])}
-    </section>`;
-}
-
-function renderPdfInstitutionBrand(institution: Pick<ReportStudentSnapshot, "institutionLogoUrl" | "institutionName">): string {
-  const name = institution.institutionName ?? "Uzman Hocam";
-  if (institution.institutionLogoUrl) {
-    return `<img src="${escapeHtml(institution.institutionLogoUrl)}" alt="${escapeHtml(name)} logosu" />`;
-  }
-  return escapeHtml(name);
-}
-
-function renderPdfCard(label: string, value: string | number): string {
-  return `<article class="card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></article>`;
-}
-
-function formatPdfValue(value: string | number): string {
-  return value === "" ? "-" : String(value);
-}
-
 function formatPdfRank(rank: ReportScopeRank | undefined): string {
   if (!rank) return "-";
   return `${rank.rank}/${rank.outOf} (%${rank.percentile})`;
-}
-
-function formatPdfQuestionStatus(value: unknown): string {
-  const status = readQuestionStatus(value);
-  if (status === "WRONG") return "Yanlış";
-  if (status === "BLANK") return "Boş";
-  return "Doğru";
-}
-
-function renderPdfTable(
-  title: string,
-  headers: string[],
-  rows: Record<string, unknown>[],
-  mapRow: (row: Record<string, unknown>, index: number) => Array<string | number>,
-): string {
-  if (rows.length === 0) return "";
-
-  const headerHtml = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("");
-  const rowHtml = rows
-    .map((row, index) => `<tr>${mapRow(row, index).map((cell) => `<td>${escapeHtml(String(cell))}</td>`).join("")}</tr>`)
-    .join("");
-
-  return `<section><h2>${escapeHtml(title)}</h2><table><thead><tr>${headerHtml}</tr></thead><tbody>${rowHtml}</tbody></table></section>`;
-}
-
-function branchQuestionCount(branch: Record<string, unknown>): string | number {
-  const correct = readNumber(branch.correct);
-  const wrong = readNumber(branch.wrong);
-  const blank = readNumber(branch.blank);
-  if (correct === "" || wrong === "" || blank === "") return "-";
-  return correct + wrong + blank;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 function buildSimplePdf(lines: string[]): Buffer {
@@ -1343,6 +1119,28 @@ function readStudentStatistics(value: unknown): ReportStudentStatistics | undefi
     branches: readRecords(record.branches)
       .map(readBranchStatistics)
       .filter((branch): branch is ReportStudentBranchStatistics => branch !== undefined),
+  };
+}
+
+function readStudentCommentary(value: unknown): ReportStudentCommentary | undefined {
+  const record = readRecord(value);
+  if (record.provider !== "template" || record.reviewStatus !== "DRAFT") {
+    return undefined;
+  }
+  const generatedAt = readText(record.generatedAt);
+  const parentSummary = readText(record.parentSummary);
+  const teacherActionDraft = readText(record.teacherActionDraft);
+  const disclaimer = readText(record.disclaimer);
+  if (!generatedAt || !parentSummary || !teacherActionDraft || !disclaimer) {
+    return undefined;
+  }
+  return {
+    provider: "template",
+    generatedAt,
+    parentSummary,
+    teacherActionDraft,
+    reviewStatus: "DRAFT",
+    disclaimer,
   };
 }
 

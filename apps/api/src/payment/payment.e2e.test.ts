@@ -149,6 +149,34 @@ describe("PaymentPlan API", () => {
       });
   });
 
+  it("ödeme planı oluştururken takvim dışı taksit tarihini 422 ile reddeder", async () => {
+    await request(server)
+      .post("/payment-plans")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        studentId: "student-a",
+        title: "Takvim dışı ödeme planı",
+        totalAmount: 10000,
+        installments: [{ installmentNo: 1, amount: 10000, dueDate: "2026-02-29" }],
+      })
+      .expect(422)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          error: {
+            code: "VALIDATION_FAILED",
+            details: {
+              fields: expect.arrayContaining([
+                expect.objectContaining({
+                  message: "PAYMENT_DATE_INVALID",
+                  path: "installments.0.dueDate",
+                }),
+              ]),
+            },
+          },
+        });
+      });
+  });
+
   it("başka tenant öğrencisine ödeme planı oluşturmayı reddeder", async () => {
     await request(server)
       .post("/payment-plans")
@@ -160,6 +188,49 @@ describe("PaymentPlan API", () => {
         installments: [{ installmentNo: 1, amount: 10000, dueDate: "2026-07-15" }],
       })
       .expect(403);
+  });
+
+  it("ödeme planı oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const body = {
+      studentId: "student-a",
+      title: "Idempotent ödeme planı",
+      totalAmount: 130000,
+      installments: [{ installmentNo: 1, amount: 130000, dueDate: "2026-09-15" }],
+    };
+    const key = "payment-plan-idempotent-create";
+
+    const first = await request(server)
+      .post("/payment-plans")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+    const second = await request(server)
+      .post("/payment-plans")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+
+    await request(server)
+      .post("/payment-plans")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send({ ...body, totalAmount: 140000, installments: [{ installmentNo: 1, amount: 140000, dueDate: "2026-09-15" }] })
+      .expect(409)
+      .expect(({ body: errorBody }) => {
+        expect(JSON.stringify(errorBody)).toContain("IDEMPOTENCY_KEY_BODY_MISMATCH");
+      });
+
+    await request(server)
+      .get("/payment-plans")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body: plans }) => {
+        expect(plans.filter((plan: { title: string }) => plan.title === body.title)).toHaveLength(1);
+      });
   });
 
   it("öğretmen ve öğrenci kurum ödeme planı endpointine erişemez", async () => {
@@ -237,6 +308,75 @@ describe("PaymentPlan API", () => {
           status: "OVERDUE",
         });
         expect(body.installments[0]).not.toHaveProperty("paidAt");
+      });
+  });
+
+  it("taksit güncellerken takvim dışı tarihi 422 ile reddeder", async () => {
+    await request(server)
+      .patch("/payment-plans/payment-plan-a/installments/payment-installment-a-1")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ dueDate: "2026-04-31" })
+      .expect(422)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          error: {
+            code: "VALIDATION_FAILED",
+            details: {
+              fields: expect.arrayContaining([
+                expect.objectContaining({
+                  message: "PAYMENT_DATE_INVALID",
+                  path: "dueDate",
+                }),
+              ]),
+            },
+          },
+        });
+      });
+  });
+
+  it("taksit güncellemeyi Idempotency-Key ile tekilleştirir", async () => {
+    const created = await request(server)
+      .post("/payment-plans")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        studentId: "student-a",
+        title: "Idempotent taksit planı",
+        totalAmount: 90000,
+        installments: [{ installmentNo: 1, amount: 90000, dueDate: "2026-10-01" }],
+      })
+      .expect(201);
+    const installmentId = created.body.installments[0].id;
+    const key = "payment-installment-idempotent-update";
+    const update = { status: "PAID", paidAt: "2026-10-02T09:30:00.000Z" };
+
+    const first = await request(server)
+      .patch(`/payment-plans/${created.body.id}/installments/${installmentId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(update)
+      .expect(200);
+    const second = await request(server)
+      .patch(`/payment-plans/${created.body.id}/installments/${installmentId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(update)
+      .expect(200);
+
+    expect(second.body).toEqual(first.body);
+    expect(second.body.installments[0]).toMatchObject({
+      id: installmentId,
+      status: "PAID",
+      paidAt: "2026-10-02T09:30:00.000Z",
+    });
+
+    await request(server)
+      .patch(`/payment-plans/${created.body.id}/installments/${installmentId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send({ status: "OVERDUE" })
+      .expect(409)
+      .expect(({ body }) => {
+        expect(JSON.stringify(body)).toContain("IDEMPOTENCY_KEY_BODY_MISMATCH");
       });
   });
 

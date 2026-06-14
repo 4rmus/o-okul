@@ -3,6 +3,7 @@ import { InMemoryGuardianStore } from "../school/guardian-store.js";
 import { InMemoryTeacherStore } from "../school/teacher-store.js";
 import { InMemorySessionStore } from "../auth/session-store.js";
 import { InMemoryStudentStore } from "../student/student-store.js";
+import { InMemoryTenantStore } from "../tenant/tenant-store.js";
 import { InMemoryUserManagementStore } from "../user-management/user-management-store.js";
 import { IdentityInvitationService, hashActivationToken } from "./identity-invitation.service.js";
 import type { IdentityInvitationStore } from "./identity-invitation-store.js";
@@ -38,6 +39,7 @@ describe("IdentityInvitationService", () => {
       new InMemoryStudentStore(),
       new InMemoryGuardianStore(),
       new InMemoryTeacherStore(),
+      new InMemoryTenantStore(),
     );
 
     await expect(service.accept({ token: "expired-token", password: "password1" })).rejects.toThrow(

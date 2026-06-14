@@ -1,5 +1,6 @@
-import { Body, Controller, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Headers, Param, Post, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
+import { zodBody } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
@@ -8,10 +9,14 @@ import {
 } from "./parser-config-approval.service.js";
 import {
   ParserConfigSuggestionService,
-  type ParserConfigSuggestionInput,
   type ParserConfigSuggestionResult,
 } from "./parser-config-suggestion.service.js";
-import type { ParserConfigSuggestion } from "@uzman-hocam/shared-types";
+import {
+  parserConfigApprovalBodySchema,
+  parserConfigSuggestionBodySchema,
+  type ParserConfigApprovalBody,
+  type ParserConfigSuggestionBody,
+} from "./parser-config-validation.js";
 
 @Controller("exams/:examId/parser-configs")
 @UseGuards(RolesGuard)
@@ -25,7 +30,7 @@ export class ParserConfigController {
   @RequireCapability("academic:manage")
   suggest(
     @Param("examId") examId: string,
-    @Body() body: Omit<ParserConfigSuggestionInput, "examId">,
+    @Body(zodBody(parserConfigSuggestionBodySchema)) body: ParserConfigSuggestionBody,
   ): ParserConfigSuggestionResult {
     return this.suggestions.suggest(getRequestContext(), {
       examId,
@@ -40,12 +45,13 @@ export class ParserConfigController {
   @RequireCapability("academic:manage")
   approve(
     @Param("examId") examId: string,
-    @Body() body: { version?: string; suggestion?: ParserConfigSuggestion },
+    @Body(zodBody(parserConfigApprovalBodySchema)) body: ParserConfigApprovalBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<SavedParserConfig> {
     return this.approvals.approve(getRequestContext(), {
       examId,
       version: body.version,
       suggestion: body.suggestion,
-    });
+    }, idempotencyKey);
   }
 }

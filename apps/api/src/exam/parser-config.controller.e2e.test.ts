@@ -155,8 +155,6 @@ describe("ParserConfigController", () => {
       .post("/exams/exam-a/parser-configs/approvals")
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .send({
-        tenantId: "tenant-b",
-        status: "DRAFT",
         version: "parser-v1",
         suggestion: createSuggestion(),
       })
@@ -183,6 +181,44 @@ describe("ParserConfigController", () => {
     });
   });
 
+  it("TENANT_ADMIN parser config onayını Idempotency-Key ile tekilleştirir", async () => {
+    const issued = await login("admin-a@example.test");
+    const key = "parser-config-approval-idempotency-a";
+    const body = {
+      version: "parser-v1",
+      suggestion: createSuggestion(),
+    };
+
+    const first = await request(server)
+      .post("/exams/exam-a/parser-configs/approvals")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+    const second = await request(server)
+      .post("/exams/exam-a/parser-configs/approvals")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+
+    await request(server)
+      .post("/exams/exam-a/parser-configs/approvals")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send({ ...body, version: "parser-v2" })
+      .expect(409);
+
+    expect(repository.inputs).toHaveLength(1);
+    expect(snapshots.markStaleInputs).toEqual([{
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      reason: "parser_config.approved",
+    }]);
+  });
+
   it("TEACHER onay yazamaz", async () => {
     const issued = await login("teacher-a@example.test");
 
@@ -205,15 +241,23 @@ describe("ParserConfigController", () => {
     expect(repository.inputs).toHaveLength(0);
   });
 
-  it("eksik suggestion DB'ye gitmeden 400 döner", async () => {
+  it("eksik suggestion DB'ye gitmeden 422 alan hatası döner", async () => {
     const issued = await login("admin-a@example.test");
 
-    await request(server)
+    const response = await request(server)
       .post("/exams/exam-a/parser-configs/approvals")
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .send({ version: "parser-v1" })
-      .expect(400);
+      .expect(422);
 
+    expect(response.body).toMatchObject({
+      error: {
+        code: "VALIDATION_FAILED",
+        details: {
+          fields: [expect.objectContaining({ path: "suggestion" })],
+        },
+      },
+    });
     expect(repository.inputs).toHaveLength(0);
   });
 

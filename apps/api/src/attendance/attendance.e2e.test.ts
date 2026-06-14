@@ -120,6 +120,60 @@ describe("Attendance API", () => {
       .expect(204);
   });
 
+  it("devamsızlık gövdelerini Zod ile doğrular", async () => {
+    const invalidCreate = await request(server)
+      .post("/attendance")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({
+        studentId: " ",
+        date: "06-04-2026",
+        status: "UNKNOWN",
+      })
+      .expect(422);
+
+    expect(invalidCreate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: expect.arrayContaining([
+          expect.objectContaining({ path: "studentId" }),
+          expect.objectContaining({ path: "date" }),
+          expect.objectContaining({ path: "status" }),
+        ]),
+      },
+    });
+
+    const invalidCalendarDate = await request(server)
+      .post("/attendance")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({ studentId: "student-a", date: "2026-02-29", status: "PRESENT" })
+      .expect(422);
+
+    expect(invalidCalendarDate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [
+          expect.objectContaining({
+            message: "ATTENDANCE_DATE_INVALID",
+            path: "date",
+          }),
+        ],
+      },
+    });
+
+    const invalidUpdate = await request(server)
+      .patch("/attendance/attendance-a")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({ status: "UNKNOWN" })
+      .expect(422);
+
+    expect(invalidUpdate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "status" })],
+      },
+    });
+  });
+
   it("başka tenant öğrencisine devamsızlık yazmayı ve mükerrer tarihi reddeder", async () => {
     await request(server)
       .post("/attendance")

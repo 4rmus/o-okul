@@ -103,7 +103,6 @@ describe("PostgresSupportTicketStore", () => {
           contentType: "text/plain",
           byteSize: 11,
           sha256: "64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c",
-          contentBase64: "aGVsbG8gd29ybGQ=",
           storageKey: "support-ticket-attachments/tenant-a/support-ticket-a/sha/ekran.txt",
           createdAt: "2026-06-08T10:05:00.000Z",
         });
@@ -153,7 +152,7 @@ describe("PostgresSupportTicketStore", () => {
       "text/plain",
       11,
       "64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c",
-      "aGVsbG8gd29ybGQ=",
+      null,
       "support-ticket-attachments/tenant-a/support-ticket-a/sha/ekran.txt",
       "2026-06-08T10:05:00.000Z",
     ]);

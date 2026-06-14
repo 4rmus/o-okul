@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { announcementStoreToken, type AnnouncementStore } from "../announcement/announcement-store.js";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import { MessageTemplateService } from "../message-template/message-template.service.js";
 import { type ScheduleStore, scheduleStoreToken } from "../program/schedule-store.js";
 import type { ProducedJob, TenantQueueJobInput } from "../queue/job-producer.js";
@@ -85,6 +86,7 @@ export class SmsBatchService {
     @Inject(studentStoreToken)
     private readonly studentStore: StudentStore,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async previewRecipients(
@@ -202,7 +204,23 @@ export class SmsBatchService {
     return report;
   }
 
-  async enqueue(context: RequestContext, input: CreateSmsBatchInput): Promise<SmsBatchQueueResult> {
+  async enqueue(
+    context: RequestContext,
+    input: CreateSmsBatchInput,
+    idempotencyKey?: string,
+  ): Promise<SmsBatchQueueResult> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "sms.batch.enqueue", request: input },
+        () => this.enqueueBatch(context, input),
+      );
+    }
+
+    return this.enqueueBatch(context, input);
+  }
+
+  private async enqueueBatch(context: RequestContext, input: CreateSmsBatchInput): Promise<SmsBatchQueueResult> {
     if (!context.tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }

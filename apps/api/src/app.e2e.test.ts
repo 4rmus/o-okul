@@ -150,6 +150,57 @@ describe("API auth + tenant isolation", () => {
     ]);
   });
 
+  it("öğrenci liste query validasyon hatalarını 422 alan listesiyle döner", async () => {
+    const issued = await login("admin-a@example.test");
+
+    await request(server)
+      .get("/students")
+      .query({ status: "UNKNOWN" })
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(422)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          error: {
+            code: "VALIDATION_FAILED",
+            message: "Sorgu parametreleri geçersiz.",
+            details: {
+              fields: expect.arrayContaining([
+                expect.objectContaining({ path: "status" }),
+              ]),
+            },
+          },
+        });
+      });
+
+    await request(server)
+      .get("/students")
+      .query({ guardianLinked: "maybe" })
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(422)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          error: {
+            code: "VALIDATION_FAILED",
+            message: "Sorgu parametreleri geçersiz.",
+            details: {
+              fields: expect.arrayContaining([
+                expect.objectContaining({ path: "guardianLinked" }),
+              ]),
+            },
+          },
+        });
+      });
+
+    await request(server)
+      .get("/students")
+      .query({ guardianLinked: "" })
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: "student-a" })]);
+      });
+  });
+
   it("tenant A, tenant B tekil kaynağına erişemez", async () => {
     const issued = await login("admin-a@example.test");
 
@@ -770,6 +821,59 @@ describe("API auth + tenant isolation", () => {
               canOpenSupportTickets: true,
             }),
           ]);
+        });
+    } finally {
+      if (studentId) {
+        await request(server).delete(`/students/${encodeURIComponent(studentId)}`).set("Authorization", `Bearer ${issued.accessToken}`);
+      }
+    }
+  });
+
+  it("student Excel import commit işlemini Idempotency-Key ile tekilleştirir", async () => {
+    const issued = await login("admin-a@example.test");
+    const key = "student-import-idempotency-a";
+    const fileBase64 = await createStudentWorkbookBase64(
+      [["322", "Ece", "Idempotent", "8-A"]],
+      ["okul_no", "ad", "soyad", "sinif"],
+    );
+    let studentId = "";
+
+    try {
+      const first = await request(server)
+        .post("/students/imports")
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ fileBase64 })
+        .expect(201);
+      studentId = first.body.students[0].id;
+
+      const second = await request(server)
+        .post("/students/imports")
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ fileBase64 })
+        .expect(201);
+
+      expect(second.body).toEqual(first.body);
+
+      await request(server)
+        .post("/students/imports")
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .set("Idempotency-Key", key)
+        .send({
+          fileBase64: await createStudentWorkbookBase64(
+            [["323", "Ece", "Farkli", "8-A"]],
+            ["okul_no", "ad", "soyad", "sinif"],
+          ),
+        })
+        .expect(409);
+
+      await request(server)
+        .get("/students")
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .expect(200)
+        .expect(({ body }) => {
+          expect((body as Array<{ studentNo?: string }>).filter((student) => student.studentNo === "322")).toHaveLength(1);
         });
     } finally {
       if (studentId) {

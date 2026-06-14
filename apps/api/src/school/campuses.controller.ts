@@ -1,11 +1,18 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type { CampusRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
+import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { SchoolService } from "./school.service.js";
+import {
+  campusCreateBodySchema,
+  campusUpdateBodySchema,
+  type CampusCreateBody,
+  type CampusUpdateBody,
+} from "./school-validation.js";
 
 @Controller("campuses")
 @UseGuards(RolesGuard)
@@ -26,13 +33,13 @@ export class CampusesController {
 
   @Post()
   @RequireCapability("class:manage")
-  create(@Body() body: Partial<CampusRecord>): Promise<CampusRecord> {
+  create(@Body(zodBody(campusCreateBodySchema)) body: CampusCreateBody): Promise<CampusRecord> {
     return this.school.createCampus(getRequestContext(), body);
   }
 
   @Patch(":id")
   @RequireCapability("class:manage")
-  update(@Param("id") id: string, @Body() body: Partial<CampusRecord>): Promise<CampusRecord> {
+  update(@Param("id") id: string, @Body(zodBody(campusUpdateBodySchema)) body: CampusUpdateBody): Promise<CampusRecord> {
     return this.school.updateCampus(getRequestContext(), id, body);
   }
 

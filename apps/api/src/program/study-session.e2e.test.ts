@@ -134,8 +134,8 @@ describe("Study Session API", () => {
       .expect(409);
   });
 
-  it("kapasite öğrenci sayısını karşılamazsa etüt oluşturmayı reddeder", async () => {
-    await request(server)
+  it("geçersiz etüt kapasitesini Zod ile reddeder", async () => {
+    const response = await request(server)
       .post("/study-sessions")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
@@ -147,7 +147,94 @@ describe("Study Session API", () => {
         startsAt: "2026-06-02T15:00:00.000Z",
         endsAt: "2026-06-02T16:00:00.000Z",
       })
-      .expect(400);
+      .expect(422);
+
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "capacity" })],
+      },
+    });
+  });
+
+  it("etüt gövdelerini Zod ile doğrular", async () => {
+    const invalidCreate = await request(server)
+      .post("/study-sessions")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        capacity: 1.5,
+        classId: " ",
+        endsAt: 123,
+        startsAt: " ",
+        studentIds: [],
+        teacherId: 123,
+        title: " ",
+      })
+      .expect(422);
+
+    expect(invalidCreate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: expect.arrayContaining([
+          expect.objectContaining({ path: "capacity" }),
+          expect.objectContaining({ path: "classId" }),
+          expect.objectContaining({ path: "endsAt" }),
+          expect.objectContaining({ path: "startsAt" }),
+          expect.objectContaining({ path: "studentIds" }),
+          expect.objectContaining({ path: "teacherId" }),
+          expect.objectContaining({ path: "title" }),
+        ]),
+      },
+    });
+
+    const invalidCalendarDate = await request(server)
+      .post("/study-sessions")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        capacity: 1,
+        classId: "class-a",
+        teacherId: "teacher-a",
+        studentIds: ["student-a"],
+        title: "Takvim Hatalı Etüt",
+        startsAt: "2026-02-29T15:00",
+        endsAt: "2026-03-01T16:00",
+      })
+      .expect(422);
+
+    expect(invalidCalendarDate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [
+          expect.objectContaining({
+            message: "STUDY_SESSION_TIME_INVALID",
+            path: "startsAt",
+          }),
+        ],
+      },
+    });
+
+    const invalidUpdate = await request(server)
+      .patch("/study-sessions/study-a")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        capacity: 0,
+        startsAt: 123,
+        studentIds: [],
+        title: " ",
+      })
+      .expect(422);
+
+    expect(invalidUpdate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: expect.arrayContaining([
+          expect.objectContaining({ path: "capacity" }),
+          expect.objectContaining({ path: "startsAt" }),
+          expect.objectContaining({ path: "studentIds" }),
+          expect.objectContaining({ path: "title" }),
+        ]),
+      },
+    });
   });
 
   it("tenant A başka tenant class/teacher/student ile etüt oluşturamaz", async () => {
@@ -241,8 +328,8 @@ describe("Study Session API", () => {
       .expect(403);
   });
 
-  it("zorunlu bağlantılar olmadan etüt oluşturmayı reddeder", async () => {
-    await request(server)
+  it("zorunlu etüt bağlantıları olmadan etüt oluşturmayı Zod ile reddeder", async () => {
+    const response = await request(server)
       .post("/study-sessions")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
@@ -252,7 +339,17 @@ describe("Study Session API", () => {
         startsAt: "2026-06-02T15:00:00.000Z",
         endsAt: "2026-06-02T16:00:00.000Z",
       })
-      .expect(400);
+      .expect(422);
+
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: expect.arrayContaining([
+          expect.objectContaining({ path: "studentIds" }),
+          expect.objectContaining({ path: "teacherId" }),
+        ]),
+      },
+    });
   });
 
   it("geçersiz saat aralığını reddeder", async () => {

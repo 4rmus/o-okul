@@ -72,6 +72,25 @@ describe("Student profile + TC API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ nationalId: "10000000145" })
       .expect(422);
+
+    await request(server)
+      .patch("/students/student-a/profile")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ birthDate: "2011-02-29" })
+      .expect(422)
+      .expect(({ body }) => {
+        expect(body.error).toMatchObject({
+          code: "VALIDATION_FAILED",
+          details: {
+            fields: [
+              expect.objectContaining({
+                message: "STUDENT_BIRTH_DATE_INVALID",
+                path: "birthDate",
+              }),
+            ],
+          },
+        });
+      });
   });
 
   it("tenant içinde nationalIdHash benzersizliğini korur", async () => {

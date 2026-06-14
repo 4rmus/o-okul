@@ -22,6 +22,7 @@ import {
 } from "../school/guardian-student-store.js";
 import { type GuardianRecord, type GuardianStore, guardianStoreToken } from "../school/guardian-store.js";
 import { IdentityInvitationService } from "../identity-invitation/identity-invitation.service.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
 import { type CampusStore, campusStoreToken } from "../school/campus-store.js";
 import { type ClassRecord, type ClassStore, classStoreToken } from "../school/class-store.js";
@@ -118,6 +119,7 @@ export class StudentService {
     @Inject(teacherStoreToken) private readonly teacherStore: TeacherStore,
     private readonly identityInvitations: IdentityInvitationService,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async list(context: RequestContext): Promise<StudentRecord[]> {
@@ -414,7 +416,28 @@ export class StudentService {
     return updated;
   }
 
-  async renewEnrollment(context: RequestContext, id: string, input: StudentEnrollmentActionInput): Promise<StudentEnrollmentRecord> {
+  async renewEnrollment(
+    context: RequestContext,
+    id: string,
+    input: StudentEnrollmentActionInput,
+    idempotencyKey?: string,
+  ): Promise<StudentEnrollmentRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "student.enrollment.renew", request: { studentId: id, ...input } },
+        () => this.renewEnrollmentOnce(context, id, input),
+      );
+    }
+
+    return this.renewEnrollmentOnce(context, id, input);
+  }
+
+  private async renewEnrollmentOnce(
+    context: RequestContext,
+    id: string,
+    input: StudentEnrollmentActionInput,
+  ): Promise<StudentEnrollmentRecord> {
     const existing = await this.findOne(context, id);
     const startsAt = input.startsAt ? enrollmentDate(input.startsAt) : todayDateString();
     const academicContext = await this.resolveEnrollmentAcademicContext(context, input);
@@ -459,7 +482,23 @@ export class StudentService {
     return enrollment;
   }
 
-  async bulkRenewEnrollments(context: RequestContext, input: StudentBulkEnrollmentInput): Promise<StudentBulkEnrollmentResult> {
+  async bulkRenewEnrollments(
+    context: RequestContext,
+    input: StudentBulkEnrollmentInput,
+    idempotencyKey?: string,
+  ): Promise<StudentBulkEnrollmentResult> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "student.enrollment.bulk-renew", request: input },
+        () => this.bulkRenewEnrollmentBatch(context, input),
+      );
+    }
+
+    return this.bulkRenewEnrollmentBatch(context, input);
+  }
+
+  private async bulkRenewEnrollmentBatch(context: RequestContext, input: StudentBulkEnrollmentInput): Promise<StudentBulkEnrollmentResult> {
     const studentIds = [...new Set(input.studentIds ?? [])].filter(Boolean);
     if (studentIds.length === 0) {
       throw new BadRequestException("STUDENT_BULK_ENROLLMENT_STUDENTS_REQUIRED");
@@ -508,7 +547,28 @@ export class StudentService {
     return mapping;
   }
 
-  async transferEnrollment(context: RequestContext, id: string, input: StudentEnrollmentActionInput): Promise<StudentEnrollmentRecord | null> {
+  async transferEnrollment(
+    context: RequestContext,
+    id: string,
+    input: StudentEnrollmentActionInput,
+    idempotencyKey?: string,
+  ): Promise<StudentEnrollmentRecord | null> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "student.enrollment.transfer", request: { studentId: id, ...input } },
+        () => this.transferEnrollmentOnce(context, id, input),
+      );
+    }
+
+    return this.transferEnrollmentOnce(context, id, input);
+  }
+
+  private async transferEnrollmentOnce(
+    context: RequestContext,
+    id: string,
+    input: StudentEnrollmentActionInput,
+  ): Promise<StudentEnrollmentRecord | null> {
     await this.findOne(context, id);
     const startsAt = input.startsAt ? enrollmentDate(input.startsAt) : todayDateString();
     const academicContext = await this.resolveEnrollmentAcademicContext(context, input);
@@ -975,7 +1035,7 @@ function optionalText(value: string | undefined): string | undefined {
 function optionalDate(value: string | undefined): string | undefined {
   const trimmed = optionalText(value);
   if (trimmed === undefined) return undefined;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+  if (!isCalendarDateString(trimmed)) {
     throw new BadRequestException("STUDENT_BIRTH_DATE_INVALID");
   }
   return trimmed;
@@ -983,7 +1043,7 @@ function optionalDate(value: string | undefined): string | undefined {
 
 function enrollmentDate(value: string): string {
   const trimmed = value.trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+  if (!isCalendarDateString(trimmed)) {
     throw new BadRequestException("STUDENT_ENROLLMENT_STARTS_AT_INVALID");
   }
   return trimmed;
@@ -996,6 +1056,12 @@ function optionalEmail(value: string | undefined): string | undefined {
     throw new BadRequestException("STUDENT_EMAIL_INVALID");
   }
   return trimmed;
+}
+
+function isCalendarDateString(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 function isAssignmentActive(assignment: { startsAt?: string; endsAt?: string }): boolean {

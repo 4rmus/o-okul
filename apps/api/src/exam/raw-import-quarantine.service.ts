@@ -1,5 +1,6 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import {
   rawImportQuarantineStoreToken,
   type ImportQuarantineRecord,
@@ -41,6 +42,7 @@ export class RawImportQuarantineService {
     private readonly store: RawImportQuarantineStore,
     @Inject(rawImportQueueProducerToken)
     private readonly producer: RawImportQueueProducer,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async list(
@@ -62,6 +64,22 @@ export class RawImportQuarantineService {
   }
 
   async resolve(
+    context: RequestContext,
+    input: ResolveImportQuarantineInput,
+    idempotencyKey?: string,
+  ): Promise<ResolvedImportQuarantineResult> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "raw-import.quarantine.resolve", request: input },
+        () => this.resolveOnce(context, input),
+      );
+    }
+
+    return this.resolveOnce(context, input);
+  }
+
+  private async resolveOnce(
     context: RequestContext,
     input: ResolveImportQuarantineInput,
   ): Promise<ResolvedImportQuarantineResult> {

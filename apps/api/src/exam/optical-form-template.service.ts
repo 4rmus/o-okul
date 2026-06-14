@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import type { OpticalFormTemplateRecord, ParserConfigSuggestion } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import {
   parserConfigRepositoryToken,
   type ParserConfigRepository,
@@ -32,6 +33,7 @@ export class OpticalFormTemplateService {
     @Inject(parserConfigRepositoryToken)
     private readonly parserConfigs: ParserConfigRepository,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async list(context: RequestContext): Promise<OpticalFormTemplateRecord[]> {
@@ -39,7 +41,23 @@ export class OpticalFormTemplateService {
     return this.templates.list(tenantId);
   }
 
-  async create(context: RequestContext, input: CreateOpticalFormTemplateInput): Promise<OpticalFormTemplateRecord> {
+  async create(
+    context: RequestContext,
+    input: CreateOpticalFormTemplateInput,
+    idempotencyKey?: string,
+  ): Promise<OpticalFormTemplateRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "optical-form-template.create", request: input },
+        () => this.createOnce(context, input),
+      );
+    }
+
+    return this.createOnce(context, input);
+  }
+
+  private async createOnce(context: RequestContext, input: CreateOpticalFormTemplateInput): Promise<OpticalFormTemplateRecord> {
     const tenantId = requireTenant(context);
     const name = required(input.name, "OPTICAL_FORM_TEMPLATE_NAME_REQUIRED");
     const version = required(input.version, "OPTICAL_FORM_TEMPLATE_VERSION_REQUIRED");
@@ -68,7 +86,23 @@ export class OpticalFormTemplateService {
     }
   }
 
-  async applyToExam(context: RequestContext, input: ApplyOpticalFormTemplateInput): Promise<SavedParserConfig> {
+  async applyToExam(
+    context: RequestContext,
+    input: ApplyOpticalFormTemplateInput,
+    idempotencyKey?: string,
+  ): Promise<SavedParserConfig> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "optical-form-template.apply", request: input },
+        () => this.applyToExamOnce(context, input),
+      );
+    }
+
+    return this.applyToExamOnce(context, input);
+  }
+
+  private async applyToExamOnce(context: RequestContext, input: ApplyOpticalFormTemplateInput): Promise<SavedParserConfig> {
     const tenantId = requireTenant(context);
     const templateId = required(input.templateId, "OPTICAL_FORM_TEMPLATE_ID_REQUIRED");
     const examId = required(input.examId, "OPTICAL_FORM_TEMPLATE_EXAM_REQUIRED");

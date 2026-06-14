@@ -27,21 +27,32 @@ import { AttendanceService } from "../attendance/attendance.service.js";
 import { getRequestContext, type RequestContext } from "../context/request-context.js";
 import { DevelopmentService } from "../development/development.service.js";
 import { HomeworkService } from "../homework/homework.service.js";
+import { zodBody } from "../http/zod-validation.js";
+import { NotificationDeviceService } from "../notification-device/notification-device.service.js";
 import {
-  NotificationDeviceService,
-  type RegisterNotificationDeviceInput,
-} from "../notification-device/notification-device.service.js";
+  notificationDeviceRegisterBodySchema,
+  type NotificationDeviceRegisterBody,
+} from "../notification-device/notification-device-validation.js";
 import { PaymentService } from "../payment/payment.service.js";
 import { ScheduleService } from "../program/schedule.service.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { ReportGenerationService } from "../report/report-generation.service.js";
-import { type GuardianNotificationPreferenceInput, SchoolService } from "../school/school.service.js";
+import { SchoolService } from "../school/school.service.js";
+import {
+  guardianNotificationPreferenceBodySchema,
+  type GuardianNotificationPreferenceBody,
+} from "../school/school-validation.js";
 import { StudentService } from "../student/student.service.js";
 import { SupportTicketService } from "../support-ticket/support-ticket.service.js";
+import {
+  type SupportTicketCreateBody,
+  supportTicketCreateBodySchema,
+} from "../support-ticket/support-ticket-validation.js";
 import { TeacherNoteService } from "../teacher-note/teacher-note.service.js";
-import { TenantService, type TenantWriteBody } from "../tenant/tenant.service.js";
+import { TenantService } from "../tenant/tenant.service.js";
 import type { TenantRecord } from "../tenant/tenant-store.js";
+import { tenantCurrentProfileBodySchema, type TenantCurrentProfileBody } from "../tenant/tenant-validation.js";
 
 @Controller("me")
 @UseGuards(RolesGuard)
@@ -83,7 +94,9 @@ export class MeController {
 
   @Patch("tenant")
   @Roles("TENANT_ADMIN", "ASSISTANT_ADMIN")
-  updateTenant(@Body() body: TenantWriteBody): Promise<TenantRecord> {
+  updateTenant(
+    @Body(zodBody(tenantCurrentProfileBodySchema)) body: TenantCurrentProfileBody,
+  ): Promise<TenantRecord> {
     return this.tenants.updateCurrent(getRequestContext(), body);
   }
 
@@ -95,7 +108,9 @@ export class MeController {
 
   @Post("notification-devices")
   @Roles("TENANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN")
-  registerNotificationDevice(@Body() body: RegisterNotificationDeviceInput): Promise<NotificationDeviceTokenRecord> {
+  registerNotificationDevice(
+    @Body(zodBody(notificationDeviceRegisterBodySchema)) body: NotificationDeviceRegisterBody,
+  ): Promise<NotificationDeviceTokenRecord> {
     return this.notificationDevices.registerCurrentUser(getRequestContext(), body);
   }
 
@@ -195,7 +210,9 @@ export class MeController {
 
   @Post("student/support-tickets")
   @Roles("STUDENT")
-  createStudentSupportTicket(@Body() body: Partial<SupportTicketRecord>): Promise<SupportTicketRecord> {
+  createStudentSupportTicket(
+    @Body(zodBody(supportTicketCreateBodySchema)) body: SupportTicketCreateBody,
+  ): Promise<SupportTicketRecord> {
     return this.supportTickets.createCurrentStudent(getRequestContext(), body);
   }
 
@@ -332,7 +349,7 @@ export class MeController {
   @Roles("GUARDIAN")
   updateGuardianStudentNotificationPreferences(
     @Param("studentId") studentId: string,
-    @Body() body: GuardianNotificationPreferenceInput,
+    @Body(zodBody(guardianNotificationPreferenceBodySchema)) body: GuardianNotificationPreferenceBody,
   ): Promise<GuardianStudentRecord> {
     return this.school.updateCurrentGuardianNotificationPreferences(getRequestContext(), studentId, body);
   }
@@ -353,7 +370,7 @@ export class MeController {
   @Roles("GUARDIAN")
   createGuardianStudentSupportTicket(
     @Param("studentId") studentId: string,
-    @Body() body: Partial<SupportTicketRecord>,
+    @Body(zodBody(supportTicketCreateBodySchema)) body: SupportTicketCreateBody,
   ): Promise<SupportTicketRecord> {
     return this.supportTickets.createCurrentGuardianStudent(getRequestContext(), studentId, body);
   }
@@ -366,7 +383,9 @@ export class MeController {
 
   @Post("teacher/support-tickets")
   @Roles("TEACHER")
-  createTeacherSupportTicket(@Body() body: Partial<SupportTicketRecord>): Promise<SupportTicketRecord> {
+  createTeacherSupportTicket(
+    @Body(zodBody(supportTicketCreateBodySchema)) body: SupportTicketCreateBody,
+  ): Promise<SupportTicketRecord> {
     return this.supportTickets.createCurrentTeacher(getRequestContext(), body);
   }
 

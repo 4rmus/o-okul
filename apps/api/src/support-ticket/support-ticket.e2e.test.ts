@@ -291,6 +291,23 @@ describe("Support ticket API", () => {
       });
 
     await request(server)
+      .patch("/me/guardian/students/student-a/notification-preferences")
+      .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .send({ canReceiveSms: "no", canReceiveAnnouncements: 1 })
+      .expect(422)
+      .expect(({ body }) => {
+        expect(body.error).toMatchObject({
+          code: "VALIDATION_FAILED",
+          details: {
+            fields: expect.arrayContaining([
+              expect.objectContaining({ path: "canReceiveAnnouncements" }),
+              expect.objectContaining({ path: "canReceiveSms" }),
+            ]),
+          },
+        });
+      });
+
+    await request(server)
       .get("/me/guardian/students/student-b/notification-preferences")
       .set("Authorization", `Bearer ${guardianAAccessToken}`)
       .expect(403);
@@ -371,6 +388,48 @@ describe("Support ticket API", () => {
     expect(created.body.contentBase64).toBeUndefined();
   });
 
+  it("destek eki yüklemeyi Idempotency-Key ile tekilleştirir", async () => {
+    const key = "support-attachment-idempotency-a";
+    const body = {
+      fileName: "idempotent-ek.txt",
+      contentType: "text/plain",
+      fileBase64: Buffer.from("idempotent attachment").toString("base64"),
+    };
+
+    const first = await request(server)
+      .post("/support-tickets/support-ticket-a/attachments")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+    const second = await request(server)
+      .post("/support-tickets/support-ticket-a/attachments")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+
+    await request(server)
+      .post("/support-tickets/support-ticket-a/attachments")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send({
+        ...body,
+        fileBase64: Buffer.from("different attachment").toString("base64"),
+      })
+      .expect(409);
+
+    await request(server)
+      .get("/support-tickets/support-ticket-a/attachments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body: attachments }) => {
+        expect((attachments as Array<{ fileName: string }>).filter((attachment) => attachment.fileName === "idempotent-ek.txt")).toHaveLength(1);
+      });
+  });
+
   it("destek eki içeriğini sadece doğru tenant ve bildirim altında indirir", async () => {
     const downloaded = await request(server)
       .get("/support-tickets/support-ticket-a/attachments/support-attachment-a/download")
@@ -382,6 +441,7 @@ describe("Support ticket API", () => {
       contentType: "text/plain",
       byteSize: 11,
       sha256: "64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c",
+      downloadMode: "inline",
       fileBase64: "aGVsbG8gd29ybGQ=",
     });
 
@@ -428,6 +488,41 @@ describe("Support ticket API", () => {
     expect(typeof (created.body as { createdAt?: unknown }).createdAt).toBe("string");
   });
 
+  it("destek yorumunu Idempotency-Key ile tekilleştirir", async () => {
+    const key = "support-comment-idempotency-a";
+    const body = { body: "Idempotent destek yorumu." };
+
+    const first = await request(server)
+      .post("/support-tickets/support-ticket-a/comments")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+    const second = await request(server)
+      .post("/support-tickets/support-ticket-a/comments")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+
+    await request(server)
+      .post("/support-tickets/support-ticket-a/comments")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send({ body: "Farklı destek yorumu." })
+      .expect(409);
+
+    await request(server)
+      .get("/support-tickets/support-ticket-a/comments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body: comments }) => {
+        expect((comments as Array<{ body: string }>).filter((comment) => comment.body === "Idempotent destek yorumu.")).toHaveLength(1);
+      });
+  });
+
   it("başka tenant destek talebine dosya eki ekleyemez", async () => {
     await request(server)
       .post("/support-tickets/support-ticket-b/attachments")
@@ -454,7 +549,7 @@ describe("Support ticket API", () => {
   });
 
   it("geçersiz destek eki girdilerini reddeder", async () => {
-    await request(server)
+    const invalidContentType = await request(server)
       .post("/support-tickets/support-ticket-a/attachments")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .send({
@@ -462,7 +557,30 @@ describe("Support ticket API", () => {
         contentType: "application/x-msdownload",
         fileBase64: Buffer.from("hello world").toString("base64"),
       })
-      .expect(400);
+      .expect(422);
+
+    expect(invalidContentType.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "contentType" })],
+      },
+    });
+
+    const missingFile = await request(server)
+      .post("/support-tickets/support-ticket-a/attachments")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({
+        fileName: "ekran.txt",
+        contentType: "text/plain",
+      })
+      .expect(422);
+
+    expect(missingFile.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "fileBase64" })],
+      },
+    });
 
     await request(server)
       .post("/support-tickets/support-ticket-a/attachments")
@@ -496,25 +614,46 @@ describe("Support ticket API", () => {
   });
 
   it("boş destek yorumunu reddeder", async () => {
-    await request(server)
+    const response = await request(server)
       .post("/support-tickets/support-ticket-a/comments")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .send({ body: " " })
-      .expect(400);
+      .expect(422);
+
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "body" })],
+      },
+    });
   });
 
   it("geçersiz destek talebi girdilerini reddeder", async () => {
-    await request(server)
+    const missingSubject = await request(server)
       .post("/support-tickets")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .send({ message: "Konu yok" })
-      .expect(400);
+      .expect(422);
 
-    await request(server)
+    expect(missingSubject.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "subject" })],
+      },
+    });
+
+    const invalidPriority = await request(server)
       .post("/support-tickets")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .send({ subject: "Konu", message: "Mesaj", priority: "URGENT" })
-      .expect(400);
+      .expect(422);
+
+    expect(invalidPriority.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "priority" })],
+      },
+    });
 
     await request(server)
       .post("/support-tickets")
@@ -522,11 +661,33 @@ describe("Support ticket API", () => {
       .send({ subject: "Konu", message: "Mesaj", classId: "class-b" })
       .expect(400);
 
-    await request(server)
+    const emptyUpdate = await request(server)
       .patch("/support-tickets/support-ticket-a")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({})
-      .expect(400);
+      .expect(422);
+
+    expect(emptyUpdate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "$" })],
+      },
+    });
+  });
+
+  it("portal destek talebi gövdesini Zod ile doğrular", async () => {
+    const response = await request(server)
+      .post("/me/student/support-tickets")
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .send({ message: "Konu yok" })
+      .expect(422);
+
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [expect.objectContaining({ path: "subject" })],
+      },
+    });
   });
 
   it("teacher destek durumunu güncelleyemez", async () => {

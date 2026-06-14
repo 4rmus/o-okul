@@ -16,6 +16,35 @@ export interface AuthResponse {
   session: Session;
 }
 
+export interface MfaChallengeResponse {
+  status: "MFA_REQUIRED";
+  challengeToken: string;
+  expiresAt: string;
+  methods: Array<"totp" | "recovery_code">;
+}
+
+export type LoginResponse = AuthResponse | MfaChallengeResponse;
+
+export interface TotpSetupResponse {
+  secret: string;
+  keyUri: string;
+  setupToken: string;
+  setupExpiresAt: string;
+  recoveryCodes: string[];
+}
+
+export interface TotpSetupConfirmResponse {
+  enabledAt: string;
+  recoveryCodesRemaining: number;
+}
+
+export interface TotpStatusResponse {
+  mode: "off" | "optional" | "required";
+  enabled: boolean;
+  enabledAt?: string;
+  recoveryCodesRemaining: number;
+}
+
 export interface MeProfileResponse {
   userId: string;
   tenantId: string | null;
@@ -274,6 +303,18 @@ export interface HomeworkMaterialFileRecord {
   createdAt: string;
 }
 
+export interface HomeworkMaterialFileDownloadResult {
+  fileName: string;
+  contentType: HomeworkMaterialFileRecord["contentType"];
+  byteSize: number;
+  sha256: string;
+  downloadMode: "inline" | "signed-url";
+  fileBase64?: string;
+  downloadUrl?: string;
+  downloadUrlExpiresAt?: string;
+  downloadUrlExpiresInSeconds?: number;
+}
+
 export interface HomeworkMaterialAssignmentRecord {
   id: string;
   tenantId: string;
@@ -474,7 +515,11 @@ export interface SupportTicketAttachmentDownloadResult {
   contentType: SupportTicketAttachmentRecord["contentType"];
   byteSize: number;
   sha256: string;
-  fileBase64: string;
+  downloadMode: "inline" | "signed-url";
+  fileBase64?: string;
+  downloadUrl?: string;
+  downloadUrlExpiresAt?: string;
+  downloadUrlExpiresInSeconds?: number;
 }
 
 export interface SupportTicketCommentRecord {
@@ -552,6 +597,7 @@ export interface ReportSnapshotRecord {
         estimatedRawScore?: number;
       };
     }>;
+    commentary?: ReportSnapshotCommentary;
     students?: Array<{
       studentId: string;
       classId?: string;
@@ -589,11 +635,26 @@ export interface ReportSnapshotRecord {
         correctAnswer: string;
         status: "CORRECT" | "WRONG" | "BLANK";
       }>;
+      commentary?: ReportStudentCommentary;
     }>;
   };
   generatedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ReportSnapshotCommentary {
+  provider: "template";
+  generatedAt: string;
+  parentSummary: string;
+  teacherActionDrafts: string[];
+  reviewStatus: "DRAFT";
+  disclaimer: string;
+  dataPolicy: {
+    piiIncluded: false;
+    fieldsUsed: string[];
+    fieldsExcluded: string[];
+  };
 }
 
 export interface ReportSnapshotExportResult {
@@ -602,6 +663,33 @@ export interface ReportSnapshotExportResult {
   fileBase64: string;
   rowCount?: number;
   pageCount?: number;
+}
+
+export interface ReportPdfSnapshotRecord {
+  id: string;
+  tenantId: string;
+  examId: string;
+  reportType: string;
+  status: string;
+  snapshotData?: Record<string, unknown>;
+  generatedAt?: string;
+}
+
+export interface ReportPdfInstitution {
+  institutionLogoUrl?: string;
+  institutionName?: string;
+}
+
+export interface ReportPdfRenderJobPayload {
+  snapshot: ReportPdfSnapshotRecord;
+  institution?: ReportPdfInstitution;
+}
+
+export interface ReportPdfRenderJobResult {
+  fileName: string;
+  contentType: "application/pdf";
+  fileBase64: string;
+  pageCount: number;
 }
 
 export interface ReportStudentScoreSummary {
@@ -663,6 +751,15 @@ export interface ReportStudentStatistics {
   branches: ReportStudentBranchStatistics[];
 }
 
+export interface ReportStudentCommentary {
+  provider: "template";
+  generatedAt: string;
+  parentSummary: string;
+  teacherActionDraft: string;
+  reviewStatus: "DRAFT";
+  disclaimer: string;
+}
+
 export interface ReportStudentSnapshot {
   tenantId: string;
   institutionName?: string;
@@ -685,6 +782,7 @@ export interface ReportStudentSnapshot {
   outcomes?: ReportStudentOutcomeSummary[];
   questions?: ReportStudentQuestionSummary[];
   statistics?: ReportStudentStatistics;
+  commentary?: ReportStudentCommentary;
   generatedAt?: string;
 }
 

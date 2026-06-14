@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
-import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
+import { type TenantQueryable, withBypassRlsQuery, withTenantQuery } from "../db/tenant-query.js";
 import type { AuditLogRecord, CreateAuditLogInput } from "./audit-log.service.js";
 
 export interface AuditLogStore {
   list(): Promise<AuditLogRecord[]>;
+  listForAdmin?(): Promise<AuditLogRecord[]>;
   create(input: CreateAuditLogInput & { createdAt: string }): Promise<AuditLogRecord>;
 }
 
@@ -49,6 +50,10 @@ export class InMemoryAuditLogStore implements AuditLogStore {
     return this.records;
   }
 
+  async listForAdmin(): Promise<AuditLogRecord[]> {
+    return this.list();
+  }
+
   async create(input: CreateAuditLogInput & { createdAt: string }): Promise<AuditLogRecord> {
     const record = {
       id: `audit-log-${this.records.length + 1}`,
@@ -68,6 +73,17 @@ export class PostgresAuditLogStore implements AuditLogStore {
 
   async list(): Promise<AuditLogRecord[]> {
     return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<AuditLogRow>(
+        `SELECT * FROM "AuditLog"
+         ORDER BY "createdAt" DESC
+         LIMIT 100`,
+      );
+      return result.rows.map(toAuditLogRecord);
+    });
+  }
+
+  async listForAdmin(): Promise<AuditLogRecord[]> {
+    return withBypassRlsQuery(this.pool, async (client) => {
       const result = await client.query<AuditLogRow>(
         `SELECT * FROM "AuditLog"
          ORDER BY "createdAt" DESC

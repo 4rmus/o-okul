@@ -23,8 +23,8 @@ describe("Identity invitations", () => {
     await app.close();
   });
 
-  async function login(email: string): Promise<string> {
-    const response = await request(server).post("/auth/login").send({ email, password: "password" }).expect(200);
+  async function login(email: string, password = "password"): Promise<string> {
+    const response = await request(server).post("/auth/login").send({ email, password }).expect(200);
     return (response.body as { accessToken: string }).accessToken;
   }
 
@@ -121,6 +121,91 @@ describe("Identity invitations", () => {
       .post("/identity-invitations/accept")
       .send({ token: resent.body.activationToken, password: "password1" })
       .expect(201);
+  });
+
+  it("koltuk limiti dolu tenantta davet kabulünü engeller", async () => {
+    const system = await login("system@example.test");
+    await request(server)
+      .post("/tenants")
+      .set("Authorization", `Bearer ${system}`)
+      .send({
+        id: "tenant-seat-invitations",
+        name: "Seat Invitations Tenant",
+        slug: "seat-invitations-tenant",
+        seatLimit: 1,
+        firstAdmin: {
+          name: "Seat Invitations Admin",
+          email: "seat-invitations-admin@example.test",
+          mode: "password",
+          password: "password1",
+        },
+      })
+      .expect(201);
+
+    const admin = await login("seat-invitations-admin@example.test", "password1");
+    const teacher = await request(server)
+      .post("/teachers")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ firstName: "Seat", lastName: "Teacher", branch: "Math" })
+      .expect(201);
+    const teacherId = (teacher.body as { id: string }).id;
+
+    const invite = await request(server)
+      .post("/identity-invitations")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({
+        subjectType: "TEACHER",
+        subjectId: teacherId,
+        email: "seat-invitations-teacher@example.test",
+      })
+      .expect(201);
+
+    await request(server)
+      .post("/identity-invitations/accept")
+      .send({ token: invite.body.activationToken, password: "password1" })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(JSON.stringify(body)).toContain("TENANT_SEAT_LIMIT_EXCEEDED");
+      });
+  });
+
+  it("davet create ve accept gövdelerini Zod ile doğrular", async () => {
+    const admin = await login("admin-a@example.test");
+    const invalidCreate = await request(server)
+      .post("/identity-invitations")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({
+        subjectType: "PARENT",
+        subjectId: " ",
+        email: "gecersiz-email",
+      })
+      .expect(422);
+
+    expect(invalidCreate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: expect.arrayContaining([
+          expect.objectContaining({ path: "subjectType" }),
+          expect.objectContaining({ path: "subjectId" }),
+          expect.objectContaining({ path: "email" }),
+        ]),
+      },
+    });
+
+    const invalidAccept = await request(server)
+      .post("/identity-invitations/accept")
+      .send({ token: " ", password: "short" })
+      .expect(422);
+
+    expect(invalidAccept.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: expect.arrayContaining([
+          expect.objectContaining({ path: "token" }),
+          expect.objectContaining({ path: "password" }),
+        ]),
+      },
+    });
   });
 
   it("öğretmen davet oluşturamaz ve bağlı subject tekrar davet edilemez", async () => {

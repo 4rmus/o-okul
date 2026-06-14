@@ -1,5 +1,7 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
+import { optionalTrimmedString, requiredTrimmedString, zodBody } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { RawImportQuarantineService } from "./raw-import-quarantine.service.js";
@@ -8,6 +10,24 @@ import {
   RawImportUploadService,
   type RawImportUploadResult,
 } from "./raw-import-upload.service.js";
+
+const rawImportUploadBodySchema = z.object({
+  contentType: optionalTrimmedString,
+  fileBase64: requiredTrimmedString,
+  fileName: requiredTrimmedString,
+  parserConfigVersion: requiredTrimmedString,
+  sourceType: requiredTrimmedString,
+}).strict();
+const rawImportEvaluationBodySchema = z.preprocess((value) => value ?? {}, z.object({
+  answerKeyId: optionalTrimmedString,
+}).strict());
+const rawImportResolveBodySchema = z.preprocess((value) => value ?? {}, z.object({
+  resolvedStudentId: optionalTrimmedString,
+}).strict());
+
+type RawImportUploadBody = z.infer<typeof rawImportUploadBodySchema>;
+type RawImportEvaluationBody = z.infer<typeof rawImportEvaluationBodySchema>;
+type RawImportResolveBody = z.infer<typeof rawImportResolveBodySchema>;
 
 @Controller("exams/:examId/raw-imports")
 @UseGuards(RolesGuard)
@@ -22,13 +42,8 @@ export class RawImportController {
   @RequireCapability("academic:manage")
   upload(
     @Param("examId") examId: string,
-    @Body() body: {
-      sourceType?: string;
-      fileName?: string;
-      fileBase64?: string;
-      contentType?: string;
-      parserConfigVersion?: string;
-    },
+    @Body(zodBody(rawImportUploadBodySchema)) body: RawImportUploadBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<RawImportUploadResult> {
     return this.rawImports.upload(getRequestContext(), {
       examId,
@@ -37,7 +52,7 @@ export class RawImportController {
       bytes: body.fileBase64 ? Buffer.from(body.fileBase64, "base64") : undefined,
       contentType: body.contentType,
       parserConfigVersion: body.parserConfigVersion,
-    });
+    }, idempotencyKey);
   }
 
   @Get(":rawImportId/quarantines")
@@ -63,13 +78,14 @@ export class RawImportController {
   enqueueEvaluation(
     @Param("examId") examId: string,
     @Param("rawImportId") rawImportId: string,
-    @Body() body: { answerKeyId?: string },
+    @Body(zodBody(rawImportEvaluationBodySchema)) body: RawImportEvaluationBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ) {
     return this.analysis.enqueueEvaluation(getRequestContext(), {
       examId,
       rawImportId,
       answerKeyId: body.answerKeyId,
-    });
+    }, idempotencyKey);
   }
 
   @Get(":rawImportId/evaluation-status")
@@ -92,13 +108,14 @@ export class RawImportController {
     @Param("examId") examId: string,
     @Param("rawImportId") rawImportId: string,
     @Param("quarantineId") quarantineId: string,
-    @Body() body: { resolvedStudentId?: string },
+    @Body(zodBody(rawImportResolveBodySchema)) body: RawImportResolveBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ) {
     return this.quarantines.resolve(getRequestContext(), {
       examId,
       rawImportId,
       quarantineId,
       resolvedStudentId: body.resolvedStudentId,
-    });
+    }, idempotencyKey);
   }
 }
