@@ -134,7 +134,7 @@ const workflow = [
 ];
 
 const trustValues = [
-  "Türkiye'deki dershane ve özel okul süreçlerine uygun yapı",
+  "Dershane, özel okul ve kurs merkezi süreçlerine uygun yapı",
   "Kolay kullanım ve kısa adaptasyon süreci",
   "Zaman tasarrufu sağlayan merkezi operasyon",
   "Daha güçlü veli iletişimi",
@@ -167,7 +167,7 @@ const faqs = [
   {
     question: "Mevcut kurum süreçlerine uyum sağlanabilir mi?",
     answer:
-      "Sınıf, seviye, kampüs, ders programı, sınav ve duyuru yapıları Türkiye eğitim kurumlarının günlük işleyişine göre modellenmiştir.",
+      "Sınıf, seviye, kampüs, ders programı, sınav ve duyuru yapıları eğitim kurumlarının günlük işleyişine göre modellenmiştir.",
   },
   {
     question: "Güvenlik ve operasyonel hazırlık nasıl ele alınıyor?",
@@ -396,7 +396,7 @@ export default function HomePage() {
       <section className="next-marketing-section next-marketing-section--trust" aria-labelledby="trust-title">
         <div className="next-marketing-section__header">
           <span>Güven ve değer önerisi</span>
-          <h2 id="trust-title">Türkiye eğitim kurumlarının gerçek işleyişine uygun tasarlandı.</h2>
+          <h2 id="trust-title">Eğitim kurumlarının gerçek işleyişine uygun tasarlandı.</h2>
         </div>
         <div className="next-marketing-trust-grid">
           {trustValues.map((value) => (
