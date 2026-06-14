@@ -611,7 +611,7 @@ Etiketler: ⚙️ backend/worker · 🎨 frontend · 🔐 güvenlik · 🧱 veri
 - 🎨 Tasarım-kalite cilası (token/responsive/axe a11y) — 30 sayfaya yayılmış, yapı değişmeden.
 - 🧱 Doküman senkronu (MASTER_PLAN ↔ assessment ↔ bu plan).
 - 🔐 KVKK/PII denetimi: yeni karne/export/log yollarında TC/telefon maskeleme/şifreleme gerilemediğinin kanıtı.
-- **Kalite kapısı:** `pnpm ci`, `pnpm live:smoke`, rol-bazlı UAT (kurum/öğretmen/öğrenci/veli), `identity-link:audit → READY`.
+- **Kalite kapısı:** `pnpm run ci`, `pnpm live:smoke`, rol-bazlı UAT (kurum/öğretmen/öğrenci/veli), `identity-link:audit → READY`.
 
 **Bağımlılık özeti:** Faz 0 → {Faz 1 her iki kol}. Faz 1⚙️ → Faz 2 → Faz 3 → Faz 4. Faz 5 trend: Faz 2 (çoklu sınav puanlı) + Faz 3 (kazanım UI) + Faz 4 (portal) sonrası. Kritik yol: **0→1⚙️→2→3→4→5**. Paralel: 1🎨 (UI lib) baştan; 0/1🧱 doküman+RLS sürekli.
 
@@ -655,7 +655,7 @@ Etiketler: ⚙️ backend/worker · 🎨 frontend · 🔐 güvenlik · 🧱 veri
 - Birim/entegrasyon: `corepack pnpm --filter @uzman-hocam/worker exec vitest run` · `--filter @uzman-hocam/api exec vitest run` · `--filter @uzman-hocam/shared-types exec vitest run`
 - Tip/derleme: `corepack pnpm --filter @uzman-hocam/web typecheck` · `pnpm --filter @uzman-hocam/ui build`
 - RLS: `pnpm db:rls:check` (+ `:live`)
-- Tümü: `pnpm test` (turbo) · `pnpm ci`
+- Tümü: `pnpm test` (turbo) · `pnpm run ci`
 - Canlı: `pnpm live:smoke` · `identity-link:audit → READY` · rol-bazlı UAT
 - e2e: `apps/web` Playwright (`playwright.next.config.ts`, `e2e-next/`)
 

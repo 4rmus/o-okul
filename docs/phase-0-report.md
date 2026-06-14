@@ -39,7 +39,7 @@
   Homework Postgres store yolları canlı DB üzerinde tenant izolasyonuyla geçti.
 - `pnpm queue:smoke`: BullMQ `exam-evaluation` ve `excel-import` tüketimi geçti.
 - `pnpm backup:restore:smoke`: `pg_dump`/`pg_restore` geçici DB üzerinde geçti.
-- `docker compose -f docker-compose.yml -f docker-compose.traefik.yml config`: Traefik v2.11
+- `docker compose -f docker-compose.yml -f docker-compose.traefik.yml config`: Traefik v3.7.5
   ACME/entrypoint/Docker label compose config'i geçti.
 
 ## Kalan dış ortam kanıtları

@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const target = process.env.WAL_ARCHIVE_TARGET;
+const evidenceFile = process.env.WAL_ARCHIVE_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
+const checkedAt = new Date().toISOString();
 
 if (!target) {
   fail("WAL_ARCHIVE_TARGET boş bırakılamaz.");
@@ -20,7 +23,7 @@ const markerBody = JSON.stringify(
   {
     source: "uzman-hocam",
     event: "backup.wal_archive_smoke",
-    sentAt: new Date().toISOString(),
+    sentAt: checkedAt,
   },
   null,
   2,
@@ -34,6 +37,17 @@ if (targetUrl.protocol === "file:") {
 } else {
   fail("WAL_ARCHIVE_TARGET yalnız file:// veya s3:// destekler.");
 }
+
+await writeSmokeEvidence(evidenceFile, {
+  result: "PASS",
+  check: "wal_archive_smoke",
+  environment: process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown",
+  checkedAt,
+  target: summarizeTarget(targetUrl),
+  markerSha256: expectedHash,
+  commandsPassed: ["pnpm wal:archive:smoke"],
+  gaps: [],
+});
 
 console.log(`WAL archive smoke geçti: ${targetUrl.protocol}// hedef doğrulandı.`);
 
@@ -91,6 +105,20 @@ async function smokeS3Target(url, name, body, expected) {
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function summarizeTarget(url) {
+  if (url.protocol === "s3:") {
+    return {
+      protocol: "s3",
+      bucket: url.hostname,
+      prefix: url.pathname.replace(/^\/+|\/+$/g, ""),
+    };
+  }
+  return {
+    protocol: "file",
+    pathRedacted: true,
+  };
 }
 
 function fail(message) {

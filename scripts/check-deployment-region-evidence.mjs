@@ -2,6 +2,20 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const target = process.env.DEPLOYMENT_REGION_TARGET;
+const allowExampleEvidence = process.env.DEPLOYMENT_REGION_ALLOW_EXAMPLE_EVIDENCE === "1";
+const deploymentRegionTopLevelKeys = [
+  "result",
+  "environment",
+  "checkedAt",
+  "provider",
+  "region",
+  "datacenterCountryCode",
+  "dataResidencyVerified",
+  "evidenceReference",
+  "servicesVerified",
+  "gaps",
+];
+const requiredServicesVerified = ["api", "worker", "postgres", "redis", "object-storage"];
 
 if (!target) {
   fail(["DEPLOYMENT_REGION_TARGET boş bırakılamaz."]);
@@ -50,19 +64,23 @@ function parseJson(value) {
 function validateReport(report) {
   const failures = [];
 
+  if (!requireObjectKeySet(report, deploymentRegionTopLevelKeys, failures, "deploymentRegion")) {
+    return failures;
+  }
   requireEqual(report, failures, "result", "PASS");
   requireOneOf(report, failures, "environment", ["staging", "production"]);
   requireDate(report, failures, "checkedAt");
+  requireDateNotInFuture(report, failures, "checkedAt");
   requireString(report, failures, "provider");
   requireString(report, failures, "region");
+  requireNonPlaceholderString(report, failures, "provider");
+  requireNonPlaceholderString(report, failures, "region");
   requireEqual(report, failures, "datacenterCountryCode", "TR");
   requireTrue(report, failures, "dataResidencyVerified");
   requireString(report, failures, "evidenceReference");
-  requireList(report, failures, "servicesVerified", ["api", "worker", "postgres", "redis", "object-storage"]);
-
-  if (Array.isArray(report.gaps) && report.gaps.length > 0) {
-    failures.push("gaps boş olmalı.");
-  }
+  requireNonPlaceholderString(report, failures, "evidenceReference");
+  requireExactStringSet(report, failures, "servicesVerified", requiredServicesVerified);
+  requireEmptyArray(report, failures, "gaps");
 
   return failures;
 }
@@ -86,10 +104,53 @@ function requireDate(report, failures, key) {
   }
 }
 
+function requireDateNotInFuture(report, failures, key) {
+  if (allowExampleEvidence) return;
+
+  const value = report[key];
+  const timestamp = Date.parse(value);
+  if (typeof value !== "string" || Number.isNaN(timestamp)) {
+    return;
+  }
+
+  const clockSkewMs = 5 * 60 * 1000;
+  if (timestamp > Date.now() + clockSkewMs) {
+    failures.push(`${key} gelecekte olamaz.`);
+  }
+}
+
 function requireString(report, failures, key) {
   if (typeof report[key] !== "string" || report[key].trim() === "") {
     failures.push(`${key} boş olmayan metin olmalı.`);
   }
+}
+
+function requireNonPlaceholderString(report, failures, key) {
+  if (allowExampleEvidence) return;
+
+  const value = report[key];
+  if (typeof value !== "string" || value.trim() === "") {
+    return;
+  }
+
+  if (hasPlaceholderToken(value)) {
+    failures.push(`${key} production kanıtı için örnek/placeholder değer olmamalı.`);
+  }
+}
+
+function hasPlaceholderToken(value) {
+  const normalized = value.toLowerCase();
+  return [
+    "__set",
+    "change-me",
+    "replace-me",
+    "placeholder",
+    "example",
+    ".test",
+    ".invalid",
+    "localhost",
+    "127.0.0.1",
+  ].some((token) => normalized.includes(token));
 }
 
 function requireTrue(report, failures, key) {
@@ -98,17 +159,74 @@ function requireTrue(report, failures, key) {
   }
 }
 
-function requireList(report, failures, key, expectedValues) {
+function requireObjectKeySet(value, expectedKeys, failures, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    failures.push(`${label} nesnesi zorunlu.`);
+    return false;
+  }
+
+  const actualKeys = Object.keys(value);
+  if (actualKeys.length !== expectedKeys.length) {
+    failures.push(`${label} tam ${expectedKeys.length} alan içermeli.`);
+  }
+
+  const expected = new Set(expectedKeys);
+  for (const key of actualKeys) {
+    if (!expected.has(key)) {
+      failures.push(`${label}.${key} beklenmeyen alan.`);
+    }
+  }
+  for (const key of expectedKeys) {
+    if (!actualKeys.includes(key)) {
+      failures.push(`${label}.${key} eksik.`);
+    }
+  }
+
+  return true;
+}
+
+function requireExactStringSet(report, failures, key, expectedValues) {
   const value = report[key];
   if (!Array.isArray(value)) {
     failures.push(`${key} alan listesi zorunlu.`);
     return;
   }
 
-  for (const expected of expectedValues) {
-    if (!value.includes(expected)) {
-      failures.push(`${key} eksik: ${expected}`);
+  if (value.length !== expectedValues.length) {
+    failures.push(`${key} tam ${expectedValues.length} servis içermeli.`);
+  }
+
+  const seen = new Set();
+  const expected = new Set(expectedValues);
+  for (const item of value) {
+    if (typeof item !== "string" || item.trim() === "") {
+      failures.push(`${key} boş olmayan metinlerden oluşmalı.`);
+      continue;
     }
+    if (seen.has(item)) {
+      failures.push(`${key} tekrarlı servis içeriyor: ${item}`);
+    }
+    seen.add(item);
+    if (!expected.has(item)) {
+      failures.push(`${key} beklenmeyen servis içeriyor: ${item}`);
+    }
+  }
+
+  for (const expectedValue of expectedValues) {
+    if (!seen.has(expectedValue)) {
+      failures.push(`${key} eksik: ${expectedValue}`);
+    }
+  }
+}
+
+function requireEmptyArray(report, failures, key) {
+  const value = report[key];
+  if (!Array.isArray(value)) {
+    failures.push(`${key} listesi zorunlu.`);
+    return;
+  }
+  if (value.length > 0) {
+    failures.push(`${key} boş olmalı.`);
   }
 }
 

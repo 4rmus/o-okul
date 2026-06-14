@@ -19,5 +19,11 @@
     "UzmanHocamHigh5xxRate",
     "UzmanHocamSlowRequests"
   ],
+  "evidenceReferences": [
+    "artifacts/example/observability/prometheus-targets.png",
+    "artifacts/example/observability/grafana-api-overview.png",
+    "artifacts/example/observability/loki-request-id-query.png",
+    "artifacts/example/observability/alert-webhook-delivery.json"
+  ],
   "gaps": []
 }

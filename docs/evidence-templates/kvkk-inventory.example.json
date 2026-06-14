@@ -10,7 +10,7 @@
     "user": 4
   },
   "purgeCoverage": {
-    "student": ["firstName", "lastName"],
+    "student": ["firstName", "lastName", "phone", "email"],
     "teacher": ["firstName", "lastName"],
     "guardian": ["firstName", "lastName", "phone"],
     "user": ["email", "name"]

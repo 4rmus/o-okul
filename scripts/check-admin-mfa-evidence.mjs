@@ -1,0 +1,287 @@
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+
+const target = process.env.ADMIN_MFA_EVIDENCE_TARGET;
+const allowExampleEvidence = process.env.ADMIN_MFA_ALLOW_EXAMPLE_EVIDENCE === "1";
+const adminMfaTopLevelKeys = [
+  "result",
+  "environment",
+  "checkedAt",
+  "policy",
+  "enrollment",
+  "loginVerification",
+  "commandsPassed",
+  "evidenceReferences",
+  "gaps",
+];
+const adminMfaPolicyKeys = [
+  "mode",
+  "requiredRoles",
+  "secretStorage",
+  "secretEncryptionKeyEnv",
+  "recoveryCodeHashKeyEnv",
+  "challengeSecretEnv",
+  "smsOtpRejected",
+];
+const adminMfaEnrollmentKeys = [
+  "systemAdminsTotal",
+  "systemAdminsEnrolled",
+  "tenantAdminsTotal",
+  "tenantAdminsEnrolled",
+  "unenrolledRequiredAdmins",
+  "recoveryCodesPerEnrollment",
+];
+const adminMfaLoginVerificationKeys = [
+  "passwordOnlyLoginBlocked",
+  "totpLoginSucceeded",
+  "invalidTotpRejected",
+  "totpReuseRejected",
+  "recoveryCodeLoginSucceeded",
+  "recoveryCodeReuseRejected",
+  "sessionsRevokedOnEnable",
+  "sessionsRevokedOnDisable",
+];
+
+if (!target) {
+  fail(["ADMIN_MFA_EVIDENCE_TARGET boş bırakılamaz."]);
+}
+
+let targetUrl;
+try {
+  targetUrl = new URL(target);
+} catch {
+  fail(["ADMIN_MFA_EVIDENCE_TARGET file://, http:// veya https:// URL olmalı."]);
+}
+
+const report = await readJsonTarget(targetUrl);
+const failures = validateReport(report);
+
+if (failures.length > 0) {
+  fail(failures);
+}
+
+console.log(`Admin MFA kanıt kontrolü geçti: ${report.environment} ${report.checkedAt}`);
+
+async function readJsonTarget(url) {
+  if (url.protocol === "file:") {
+    return parseJson(await readFile(fileURLToPath(url), "utf8"));
+  }
+
+  if (url.protocol === "http:" || url.protocol === "https:") {
+    const response = await fetch(url);
+    if (!response.ok) {
+      fail([`Admin MFA raporu okunamadı: HTTP ${response.status}`]);
+    }
+    return parseJson(await response.text());
+  }
+
+  fail(["ADMIN_MFA_EVIDENCE_TARGET yalnız file://, http:// veya https:// destekler."]);
+}
+
+function parseJson(value) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    fail(["Admin MFA raporu geçerli JSON olmalı."]);
+  }
+}
+
+function validateReport(report) {
+  const failures = [];
+
+  if (!requireObjectKeySet(report, adminMfaTopLevelKeys, failures, "adminMfa")) {
+    return failures;
+  }
+
+  requireEqual(report, failures, "result", "PASS");
+  requireOneOf(report, failures, "environment", ["staging", "production"]);
+  requireDate(report, failures, "checkedAt");
+  requireDateNotInFuture(report, failures, "checkedAt");
+  requirePolicy(report.policy, failures);
+  requireEnrollment(report.enrollment, failures);
+  requireLoginVerification(report.loginVerification, failures);
+  requireStringArray(report.commandsPassed, failures, "commandsPassed");
+  requireStringArray(report.evidenceReferences, failures, "evidenceReferences");
+  requireEvidenceReferences(report.evidenceReferences, failures);
+  requireEmptyArray(report, failures, "gaps");
+
+  return failures;
+}
+
+function requirePolicy(policy, failures) {
+  if (!policy || typeof policy !== "object" || Array.isArray(policy)) {
+    failures.push("policy nesnesi zorunlu.");
+    return;
+  }
+
+  requireObjectKeySet(policy, adminMfaPolicyKeys, failures, "policy");
+  requireOneOf(policy, failures, "policy.mode", ["optional", "required"], "mode");
+  requireStringArray(policy.requiredRoles, failures, "policy.requiredRoles");
+  for (const role of ["SYSTEM_ADMIN", "TENANT_ADMIN"]) {
+    if (!policy.requiredRoles?.includes(role)) {
+      failures.push(`policy.requiredRoles eksik: ${role}`);
+    }
+  }
+  requireObjectEqual(policy, failures, "policy.secretStorage", "secretStorage", "aes-256-gcm");
+  requireObjectEqual(policy, failures, "policy.secretEncryptionKeyEnv", "secretEncryptionKeyEnv", "ADMIN_MFA_SECRET_ENCRYPTION_KEY");
+  requireObjectEqual(policy, failures, "policy.recoveryCodeHashKeyEnv", "recoveryCodeHashKeyEnv", "ADMIN_MFA_RECOVERY_HASH_KEY");
+  requireObjectEqual(policy, failures, "policy.challengeSecretEnv", "challengeSecretEnv", "ADMIN_MFA_CHALLENGE_SECRET");
+  if (policy.smsOtpRejected !== true) {
+    failures.push("policy.smsOtpRejected true olmalı.");
+  }
+}
+
+function requireEnrollment(enrollment, failures) {
+  if (!enrollment || typeof enrollment !== "object" || Array.isArray(enrollment)) {
+    failures.push("enrollment nesnesi zorunlu.");
+    return;
+  }
+
+  requireObjectKeySet(enrollment, adminMfaEnrollmentKeys, failures, "enrollment");
+  for (const key of adminMfaEnrollmentKeys) {
+    requireObjectNonNegativeInteger(enrollment, failures, `enrollment.${key}`, key);
+  }
+
+  if (enrollment.systemAdminsEnrolled > enrollment.systemAdminsTotal) {
+    failures.push("enrollment.systemAdminsEnrolled toplamdan büyük olamaz.");
+  }
+  if (enrollment.tenantAdminsEnrolled > enrollment.tenantAdminsTotal) {
+    failures.push("enrollment.tenantAdminsEnrolled toplamdan büyük olamaz.");
+  }
+  if (enrollment.unenrolledRequiredAdmins !== 0) {
+    failures.push("enrollment.unenrolledRequiredAdmins 0 olmalı.");
+  }
+  if (enrollment.recoveryCodesPerEnrollment < 8) {
+    failures.push("enrollment.recoveryCodesPerEnrollment en az 8 olmalı.");
+  }
+}
+
+function requireLoginVerification(verification, failures) {
+  if (!verification || typeof verification !== "object" || Array.isArray(verification)) {
+    failures.push("loginVerification nesnesi zorunlu.");
+    return;
+  }
+
+  requireObjectKeySet(verification, adminMfaLoginVerificationKeys, failures, "loginVerification");
+  for (const key of adminMfaLoginVerificationKeys) {
+    if (verification[key] !== true) {
+      failures.push(`loginVerification.${key} true olmalı.`);
+    }
+  }
+}
+
+function requireEvidenceReferences(references, failures) {
+  if (!Array.isArray(references)) return;
+  for (const reference of references) {
+    if (typeof reference !== "string" || reference.trim() === "") continue;
+    if (!allowExampleEvidence && hasPlaceholderToken(reference)) {
+      failures.push("evidenceReferences production kanıtı için örnek/placeholder/redacted değer içermemeli.");
+    }
+  }
+}
+
+function requireStringArray(value, failures, label) {
+  if (!Array.isArray(value) || value.length === 0 || value.some((item) => typeof item !== "string" || item.trim() === "")) {
+    failures.push(`${label} boş olmayan metin listesi olmalı.`);
+  }
+}
+
+function requireEqual(scope, failures, key, expected) {
+  if (scope[key] !== expected) {
+    failures.push(`${key} ${expected} olmalı.`);
+  }
+}
+
+function requireObjectEqual(scope, failures, label, key, expected) {
+  if (scope[key] !== expected) {
+    failures.push(`${label} ${expected} olmalı.`);
+  }
+}
+
+function requireOneOf(scope, failures, label, expectedValues, key = label) {
+  if (!expectedValues.includes(scope[key])) {
+    failures.push(`${label} ${expectedValues.join(" veya ")} olmalı.`);
+  }
+}
+
+function requireObjectNonNegativeInteger(scope, failures, label, key) {
+  if (!Number.isInteger(scope[key]) || scope[key] < 0) {
+    failures.push(`${label} negatif olmayan tam sayı olmalı.`);
+  }
+}
+
+function requireEmptyArray(report, failures, key) {
+  const value = report?.[key];
+  if (!Array.isArray(value)) {
+    failures.push(`${key} listesi zorunlu.`);
+    return;
+  }
+  if (value.length > 0) {
+    failures.push(`${key} boş olmalı.`);
+  }
+}
+
+function requireObjectKeySet(value, expectedKeys, failures, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    failures.push(`${label} nesnesi zorunlu.`);
+    return false;
+  }
+
+  const keys = Object.keys(value);
+  if (keys.length !== expectedKeys.length) {
+    failures.push(`${label} tam ${expectedKeys.length} alan içermeli.`);
+    return false;
+  }
+
+  for (const expectedKey of expectedKeys) {
+    if (!Object.hasOwn(value, expectedKey)) {
+      failures.push(`${label}.${expectedKey} alanı zorunlu.`);
+    }
+  }
+
+  return true;
+}
+
+function requireDate(report, failures, key) {
+  const value = report[key];
+  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) {
+    failures.push(`${key} geçerli tarih olmalı.`);
+  }
+}
+
+function requireDateNotInFuture(report, failures, key) {
+  if (allowExampleEvidence) return;
+
+  const value = report[key];
+  const timestamp = Date.parse(value);
+  if (typeof value !== "string" || Number.isNaN(timestamp)) {
+    return;
+  }
+
+  const clockSkewMs = 5 * 60 * 1000;
+  if (timestamp > Date.now() + clockSkewMs) {
+    failures.push(`${key} gelecekte olamaz.`);
+  }
+}
+
+function hasPlaceholderToken(value) {
+  const normalized = value.toLowerCase();
+  return [
+    "__set",
+    "change-me",
+    "replace-me",
+    "placeholder",
+    "redacted",
+    "example",
+    ".test",
+    ".invalid",
+    "localhost",
+    "127.0.0.1",
+  ].some((token) => normalized.includes(token));
+}
+
+function fail(failures) {
+  console.error("Admin MFA kanıt kontrolü başarısız:");
+  for (const failure of failures) console.error(`- ${failure}`);
+  process.exit(1);
+}

@@ -92,7 +92,8 @@
 - `pnpm prod:evidence:check` eklendi; production env, Traefik HTTPS, SMS provider, Sentry test
   event'i, alert webhook, off-host backup, WAL archive, restore drill, KVKK envanter,
   observability UAT, güvenlik denetimi ve UAT kanıt kontrollerini tek komutta sıralı çalıştırır;
-  `--summary-file` verilirse release kanıt özetini JSON olarak yazar.
+  `--summary-file` verilirse release kanıt özetini ve Traefik/SMS/notification/Sentry/alert/backup/WAL
+  smoke artifact setini secret içermeyen JSON olarak yazar.
 - `pnpm sms:smoke` eklendi; Netgsm test/canlı credential geldiğinde kontrollü SMS sağlayıcı
   doğrulaması yapılır, gerçek sağlayıcı için `SMS_SMOKE_CONFIRM=send` gerekir.
 - `pnpm sentry:smoke` eklendi; gerçek `SENTRY_DSN` geldiğinde kontrollü test event'i gönderir,
@@ -208,7 +209,7 @@
   datacenter kodu ve temel servis yerleşimi doğrulandı.
 - Postgres store smoke sonucu: Class, Teacher, Guardian, Student, Schedule, StudySession ve
   Homework/Material store yolları canlı Postgres üzerinde tenant izolasyonuyla doğrulandı.
-- Traefik compose config sonucu: v2.11 entrypoint, ACME HTTP-01 ve Docker label sözdizimi compose
+- Traefik compose config sonucu: v3.7.5 entrypoint, ACME HTTP-01 ve Docker label sözdizimi compose
   seviyesinde doğrulandı; canlı TLS/ACME smoke staging domain bekliyor.
 - `corepack pnpm --filter @uzman-hocam/web typecheck`
 - `corepack pnpm --filter @uzman-hocam/web test:e2e`

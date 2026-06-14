@@ -1,0 +1,976 @@
+{
+  "result": "PASS",
+  "generatedAt": "2026-06-15T10:00:00.000Z",
+  "nodeEnv": "production",
+  "appUrl": "https://staging.example.test",
+  "apiUrl": "https://staging-api.example.test",
+  "webUrl": "https://staging.example.test",
+  "checks": [
+    { "label": "Production env", "script": "scripts/check-prod-env.mjs", "status": "PASS" },
+    { "label": "Traefik HTTPS", "script": "scripts/smoke-traefik-https.mjs", "status": "PASS" },
+    { "label": "SMS provider", "script": "scripts/smoke-sms-provider.mjs", "status": "PASS" },
+    { "label": "Notification provider", "script": "scripts/smoke-notification-provider.mjs", "status": "PASS" },
+    { "label": "Sentry test event", "script": "scripts/smoke-sentry-event.mjs", "status": "PASS" },
+    { "label": "Alert webhook", "script": "scripts/smoke-alert-webhook.mjs", "status": "PASS" },
+    { "label": "Off-host backup target", "script": "scripts/smoke-backup-offsite.mjs", "status": "PASS" },
+    { "label": "WAL archive target", "script": "scripts/smoke-wal-archive-target.mjs", "status": "PASS" },
+    { "label": "Deployment region evidence", "script": "scripts/check-deployment-region-evidence.mjs", "status": "PASS" },
+    { "label": "Deployment rollback evidence", "script": "scripts/check-deployment-rollback-evidence.mjs", "status": "PASS" },
+    { "label": "GitHub CI evidence", "script": "scripts/check-github-ci-evidence.mjs", "status": "PASS" },
+    { "label": "Restore drill evidence", "script": "scripts/check-restore-drill-evidence.mjs", "status": "PASS" },
+    { "label": "KVKK inventory evidence", "script": "scripts/check-kvkk-inventory-evidence.mjs", "status": "PASS" },
+    { "label": "Identity migration evidence", "script": "scripts/check-identity-migration-evidence.mjs", "status": "PASS" },
+    { "label": "Financial retention evidence", "script": "scripts/check-financial-retention-evidence.mjs", "status": "PASS" },
+    { "label": "Upload AV evidence", "script": "scripts/check-upload-av-evidence.mjs", "status": "PASS" },
+    { "label": "Observability UAT evidence", "script": "scripts/check-observability-uat-evidence.mjs", "status": "PASS" },
+    { "label": "External monitoring evidence", "script": "scripts/check-external-monitoring-evidence.mjs", "status": "PASS" },
+    { "label": "Admin MFA evidence", "script": "scripts/check-admin-mfa-evidence.mjs", "status": "PASS" },
+    { "label": "AI report summary evidence", "script": "scripts/check-ai-report-summary-evidence.mjs", "status": "PASS" },
+    { "label": "Security audit evidence", "script": "scripts/check-security-audit-evidence.mjs", "status": "PASS" },
+    { "label": "Live exam cycle evidence", "script": "scripts/check-live-exam-cycle-evidence.mjs", "status": "PASS" },
+    {
+      "label": "Inline upload migration evidence",
+      "script": "scripts/check-inline-upload-content-migration-evidence.mjs",
+      "status": "PASS"
+    },
+    { "label": "Rate limit Redis evidence", "script": "scripts/check-rate-limit-evidence.mjs", "status": "PASS" },
+    { "label": "RLS live evidence", "script": "scripts/check-rls-live-evidence.mjs", "status": "PASS" },
+    { "label": "UAT evidence", "script": "scripts/check-uat-evidence.mjs", "status": "PASS" }
+  ],
+  "smokeEvidence": {
+    "traefikHttps": {
+      "result": "PASS",
+      "check": "traefik_https_smoke",
+      "generatedAt": "2026-06-15T09:00:00.000Z",
+      "environment": "production",
+      "checkedAt": "2026-06-15T09:00:00.000Z",
+      "url": "https://staging.example.test/",
+      "expectedStatus": 200,
+      "statusCode": 200,
+      "strictTransportSecurity": "max-age=31536000",
+      "commandsPassed": ["pnpm traefik:https:smoke"],
+      "gaps": []
+    },
+    "smsProvider": {
+      "result": "PASS",
+      "check": "sms_provider_smoke",
+      "generatedAt": "2026-06-15T09:05:00.000Z",
+      "environment": "production",
+      "checkedAt": "2026-06-15T09:05:00.000Z",
+      "provider": "netgsm",
+      "recipient": "*******1234",
+      "segments": 1,
+      "providerMessageId": "netgsm-message-20260615-001",
+      "commandsPassed": ["pnpm sms:smoke"],
+      "gaps": []
+    },
+    "notificationProvider": {
+      "result": "PASS",
+      "check": "notification_provider_smoke",
+      "generatedAt": "2026-06-15T09:10:00.000Z",
+      "environment": "production",
+      "checkedAt": "2026-06-15T09:10:00.000Z",
+      "provider": "http",
+      "channels": ["EMAIL"],
+      "recipients": ["***********.test"],
+      "commandsPassed": ["pnpm notification:smoke"],
+      "gaps": []
+    },
+    "sentryEvent": {
+      "result": "PASS",
+      "check": "sentry_smoke",
+      "generatedAt": "2026-06-15T09:15:00.000Z",
+      "environment": "production",
+      "checkedAt": "2026-06-15T09:15:00.000Z",
+      "dsn": "https://public@example.test/1",
+      "eventId": "sentry-event-redacted",
+      "commandsPassed": ["pnpm sentry:smoke"],
+      "gaps": []
+    },
+    "alertWebhook": {
+      "result": "PASS",
+      "check": "alert_webhook_smoke",
+      "generatedAt": "2026-06-15T09:20:00.000Z",
+      "environment": "production",
+      "checkedAt": "2026-06-15T09:20:00.000Z",
+      "webhookUrl": "https://hooks.example.test/alerts",
+      "statusCode": 200,
+      "authorizationScheme": "bearer",
+      "commandsPassed": ["pnpm alert:webhook:smoke"],
+      "gaps": []
+    },
+    "backupOffsite": {
+      "result": "PASS",
+      "check": "backup_offsite_smoke",
+      "generatedAt": "2026-06-15T09:25:00.000Z",
+      "environment": "production",
+      "checkedAt": "2026-06-15T09:25:00.000Z",
+      "target": {
+        "protocol": "s3",
+        "bucket": "backup-bucket-example",
+        "prefix": "staging"
+      },
+      "markerSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "commandsPassed": ["pnpm backup:offsite:smoke"],
+      "gaps": []
+    },
+    "walArchive": {
+      "result": "PASS",
+      "check": "wal_archive_smoke",
+      "generatedAt": "2026-06-15T09:30:00.000Z",
+      "environment": "production",
+      "checkedAt": "2026-06-15T09:30:00.000Z",
+      "target": {
+        "protocol": "s3",
+        "bucket": "backup-bucket-example",
+        "prefix": "wal/staging"
+      },
+      "markerSha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "commandsPassed": ["pnpm wal:archive:smoke"],
+      "gaps": []
+    }
+  },
+  "reports": {
+    "restoreDrill": {
+      "environment": "production",
+      "drillDate": "2026-05-30",
+      "sourceBackup": "s3://backup-bucket/base/2026-05-30.dump",
+      "targetDatabase": "uzman_hocam_restore_drill",
+      "tableCounts": {
+        "Tenant": 2,
+        "AuditLog": 1,
+        "ReportSnapshot": 1,
+        "_prisma_migrations": 56
+      }
+    },
+    "deploymentRegion": {
+      "environment": "production",
+      "checkedAt": "2026-05-30",
+      "provider": "tr-provider-example",
+      "region": "tr-istanbul-1",
+      "datacenterCountryCode": "TR",
+      "evidenceReference": "provider-console-or-contract-reference",
+      "servicesVerified": ["api", "worker", "postgres", "redis", "object-storage"]
+    },
+    "deploymentRollback": {
+      "environment": "production",
+      "checkedAt": "2026-05-30",
+      "releaseCandidate": "ghcr.io/example/uzman-hocam/api:2026-06-15.1",
+      "failedImageTag": "ghcr.io/example/uzman-hocam/api:broken-20260530",
+      "rollbackImageTag": "ghcr.io/example/uzman-hocam/api:2026-06-14.2",
+      "failureInjected": true,
+      "failureMode": "broken image deploy rejected by healthcheck",
+      "migrationRollbackSafe": true,
+      "commandsPassed": [
+        "docker compose pull web api worker",
+        "docker compose up -d --remove-orphans",
+        "pnpm compose:health:smoke",
+        "pnpm prod:evidence:check"
+      ],
+      "servicesVerified": [
+        {
+          "service": "web",
+          "status": "healthy",
+          "imageTag": "ghcr.io/example/uzman-hocam/web:2026-06-14.2",
+          "evidenceReference": "https://staging.example.test/"
+        },
+        {
+          "service": "api",
+          "status": "healthy",
+          "imageTag": "ghcr.io/example/uzman-hocam/api:2026-06-14.2",
+          "evidenceReference": "https://staging.example.test/api/v1/health"
+        },
+        {
+          "service": "worker",
+          "status": "running",
+          "imageTag": "ghcr.io/example/uzman-hocam/worker:2026-06-14.2",
+          "evidenceReference": "docker compose ps worker"
+        }
+      ],
+      "evidenceReferences": [
+        "artifacts/example/production/release-summary-broken-20260615.json",
+        "artifacts/example/production/release-summary-rollback-20260615.json"
+      ]
+    },
+    "githubCi": {
+      "environment": "github-actions",
+      "checkedAt": "2026-05-31T12:00:00.000Z",
+      "repository": "example/uzman-hocam",
+      "commitSha": "0123456789abcdef0123456789abcdef01234567",
+      "branch": "main",
+      "workflow": {
+        "name": "CI",
+        "path": ".github/workflows/ci.yml",
+        "runId": "1234567890",
+        "runAttempt": 1,
+        "runUrl": "https://github.com/example/uzman-hocam/actions/runs/1234567890",
+        "conclusion": "success",
+        "event": "push",
+        "startedAt": "2026-05-31T11:00:00.000Z",
+        "completedAt": "2026-05-31T11:45:00.000Z"
+      },
+      "command": {
+        "workflowUsesSingleCiCommand": true,
+        "command": "pnpm run ci",
+        "localCiParity": true
+      },
+      "jobs": [
+        {
+          "name": "ci",
+          "conclusion": "success",
+          "startedAt": "2026-05-31T11:00:00.000Z",
+          "completedAt": "2026-05-31T11:45:00.000Z",
+          "logUrl": "https://github.com/example/uzman-hocam/actions/runs/1234567890/job/9876543210",
+          "stepsPassed": [
+            "pnpm install --frozen-lockfile",
+            "pnpm run ci"
+          ]
+        }
+      ],
+      "commandsPassed": ["pnpm run ci", "pnpm github-ci:check"],
+      "evidenceReferences": [
+        "https://github.com/example/uzman-hocam/actions/runs/1234567890",
+        "artifacts/example/github-ci/ci-run-log.txt"
+      ]
+    },
+    "kvkkInventory": {
+      "environment": "production",
+      "checkedAt": "2026-05-30",
+      "inventorySource": "production readonly inventory query",
+      "dataSubjectCounts": {
+        "student": 254,
+        "teacher": 12,
+        "guardian": 254,
+        "user": 42
+      },
+      "purgeCoverage": {
+        "student": ["firstName", "lastName", "phone", "email"],
+        "teacher": ["firstName", "lastName"],
+        "guardian": ["firstName", "lastName", "phone"],
+        "user": ["email", "name"]
+      },
+      "auditActionsVerified": [
+        "kvkk.student_pii_purged",
+        "kvkk.teacher_pii_purged",
+        "kvkk.guardian_pii_purged",
+        "kvkk.user_pii_purged"
+      ]
+    },
+    "identityMigration": {
+      "environment": "production",
+      "checkedAt": "2026-05-31",
+      "migrationDecision": {
+        "approvedBy": "product-ops@example.test",
+        "approvalReference": "IDENTITY-MIG-2026-05",
+        "activationMode": "invite"
+      },
+      "subjects": [
+        {
+          "role": "STUDENT",
+          "sourceRecords": 254,
+          "linkedUsers": 254,
+          "tenantMembershipsCreated": 254
+        },
+        {
+          "role": "GUARDIAN",
+          "sourceRecords": 254,
+          "linkedUsers": 254,
+          "tenantMembershipsCreated": 254
+        },
+        {
+          "role": "TEACHER",
+          "sourceRecords": 12,
+          "linkedUsers": 12,
+          "tenantMembershipsCreated": 12
+        }
+      ],
+      "invitationFlow": {
+        "created": 520,
+        "accepted": 510,
+        "expiredOrRevoked": 10
+      },
+      "verifications": [
+        "identity_link_audit_ready",
+        "tenant_memberships_created",
+        "wrong_role_access_rejected",
+        "cross_tenant_activation_rejected"
+      ]
+    },
+    "financialRetention": {
+      "environment": "production",
+      "checkedAt": "2026-05-31",
+      "policyDecision": {
+        "approvedBy": "finance-ops@example.test",
+        "approvalReference": "KVKK-FIN-RET-2026-05",
+        "retentionPeriodYears": 10,
+        "legalBasis": "Finansal kayıtlar yasal saklama yükümlülüğü nedeniyle PII purge dışında tutulur.",
+        "purgeException": true
+      },
+      "financialRecords": {
+        "paymentPlans": 10,
+        "installments": 24
+      },
+      "purgeBehaviorVerified": [
+        "privacy.me.purge_preserves_payment_plans",
+        "payment_plan_records_excluded_from_pii_purge"
+      ]
+    },
+    "uploadAv": {
+      "environment": "production",
+      "checkedAt": "2026-05-31",
+      "scannerDecision": {
+        "mode": "provider",
+        "approvedBy": "security-ops@example.test",
+        "approvalReference": "UPLOAD-AV-2026-05",
+        "scannerName": "example-av-provider",
+        "signatureVersion": "2026.05.31",
+        "failClosed": true
+      },
+      "uploadSurfaces": ["homework_material_file", "support_ticket_attachment"],
+      "scanResults": {
+        "cleanFileAccepted": true,
+        "eicarRejected": true,
+        "scannerUnavailableRejected": true
+      }
+    },
+    "observabilityUat": {
+      "environment": "production",
+      "checkedAt": "2026-05-30",
+      "prometheusScrapeOk": true,
+      "grafanaDashboardOk": true,
+      "lokiLogPanelOk": true,
+      "alertWebhookStatus": 204,
+      "alertsVerified": [
+        "UzmanHocamApiDown",
+        "UzmanHocamReadinessFailing",
+        "UzmanHocamHigh5xxRate",
+        "UzmanHocamSlowRequests"
+      ],
+      "evidenceReferences": [
+        "artifacts/example/observability/prometheus-targets.png",
+        "artifacts/example/observability/grafana-api-overview.png",
+        "artifacts/example/observability/loki-request-id-query.png",
+        "artifacts/example/observability/alert-webhook-delivery.json"
+      ]
+    },
+    "externalMonitoring": {
+      "environment": "production",
+      "checkedAt": "2026-05-30",
+      "provider": "self-hosted-uptime-kuma",
+      "monitoringNode": {
+        "host": "uptime-kuma.example.test",
+        "region": "tr-istanbul-1",
+        "network": "external-vps"
+      },
+      "monitorsVerified": [
+        {
+          "name": "API /health",
+          "type": "http",
+          "url": "https://staging.example.test/health",
+          "status": "UP",
+          "responseTimeMs": 142
+        },
+        {
+          "name": "API /health/ready",
+          "type": "http",
+          "url": "https://staging.example.test/health/ready",
+          "status": "UP",
+          "responseTimeMs": 168
+        },
+        {
+          "name": "Web login",
+          "type": "http",
+          "url": "https://staging.example.test/login",
+          "status": "UP",
+          "responseTimeMs": 190
+        },
+        {
+          "name": "Traefik TLS certificate",
+          "type": "certificate",
+          "url": "https://staging.example.test/",
+          "status": "UP",
+          "certificateDaysRemaining": 45
+        }
+      ],
+      "outageDrill": {
+        "inducedAt": "2026-05-30T09:00:00.000Z",
+        "detectedAt": "2026-05-30T09:01:15.000Z",
+        "webhookDeliveredAt": "2026-05-30T09:01:25.000Z",
+        "recoveredAt": "2026-05-30T09:02:30.000Z",
+        "detectionLatencySeconds": 75,
+        "webhookDeliveryLatencySeconds": 85
+      },
+      "evidenceReferences": [
+        "artifacts/example/external-monitoring/uptime-kuma-monitors.png",
+        "artifacts/example/external-monitoring/outage-webhook-delivery.json",
+        "artifacts/example/external-monitoring/tls-certificate-monitor.png"
+      ]
+    },
+    "adminMfa": {
+      "environment": "production",
+      "checkedAt": "2026-06-01",
+      "policy": {
+        "mode": "optional",
+        "requiredRoles": ["SYSTEM_ADMIN", "TENANT_ADMIN"],
+        "secretStorage": "aes-256-gcm",
+        "secretEncryptionKeyEnv": "ADMIN_MFA_SECRET_ENCRYPTION_KEY",
+        "recoveryCodeHashKeyEnv": "ADMIN_MFA_RECOVERY_HASH_KEY",
+        "challengeSecretEnv": "ADMIN_MFA_CHALLENGE_SECRET",
+        "smsOtpRejected": true
+      },
+      "enrollment": {
+        "systemAdminsTotal": 1,
+        "systemAdminsEnrolled": 1,
+        "tenantAdminsTotal": 2,
+        "tenantAdminsEnrolled": 2,
+        "unenrolledRequiredAdmins": 0,
+        "recoveryCodesPerEnrollment": 8
+      },
+      "loginVerification": {
+        "passwordOnlyLoginBlocked": true,
+        "totpLoginSucceeded": true,
+        "invalidTotpRejected": true,
+        "totpReuseRejected": true,
+        "recoveryCodeLoginSucceeded": true,
+        "recoveryCodeReuseRejected": true,
+        "sessionsRevokedOnEnable": true,
+        "sessionsRevokedOnDisable": true
+      },
+      "commandsPassed": [
+        "pnpm --filter @uzman-hocam/api exec vitest run src/auth/auth.service.test.ts src/auth/auth-user-store.test.ts",
+        "pnpm --filter @uzman-hocam/api typecheck"
+      ],
+      "evidenceReferences": [
+        "artifacts/example/admin-mfa/login-mfa-required.json",
+        "artifacts/example/admin-mfa/totp-reuse-rejected.log",
+        "artifacts/example/admin-mfa/recovery-code-reuse-rejected.log"
+      ]
+    },
+    "aiReportSummary": {
+      "environment": "production",
+      "checkedAt": "2026-06-01",
+      "provider": {
+        "mode": "template",
+        "featureFlagEnv": "AI_REPORT_SUMMARY_PROVIDER",
+        "evidenceTargetEnv": "AI_REPORT_SUMMARY_EVIDENCE_TARGET",
+        "externalProvider": "disabled",
+        "productionExternalAiEnabled": false,
+        "templateFallbackAvailable": true
+      },
+      "kvkk": {
+        "piiSentToModel": false,
+        "fieldsSent": [
+          "total.net",
+          "total.standardScore",
+          "branches.branch",
+          "branches.net",
+          "classes.averages.net",
+          "statistics.rank"
+        ],
+        "excludedFields": [
+          "studentId",
+          "studentName",
+          "guardianName",
+          "tcKimlikNo",
+          "phone",
+          "email",
+          "address"
+        ],
+        "overseasTransferAssessment": "Template mode runs locally and does not transfer data to an external AI provider."
+      },
+      "externalAiStopRule": {
+        "kvkkAssessmentRequired": true,
+        "productOwnerApprovalRequired": true,
+        "teacherReviewRequired": true,
+        "anthropicEnabledInProduction": false,
+        "decisionReference": "DEC-20260613-03"
+      },
+      "generation": {
+        "templateSummaryGenerated": true,
+        "studentCommentaryGenerated": true,
+        "teacherActionDraftGenerated": true,
+        "teacherReviewRequired": true,
+        "disclaimerIncluded": true,
+        "deterministicOutput": true,
+        "outputStoredInSnapshot": true
+      },
+      "validation": {
+        "piiLeakageCheckPassed": true,
+        "logsExcludePromptResponse": true,
+        "externalProviderNotCalled": true,
+        "templateRegressionPassed": true
+      },
+      "commandsPassed": [
+        "pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/report-generation-job.test.ts",
+        "pnpm --filter @uzman-hocam/api exec vitest run src/report/report-generation.service.test.ts",
+        "pnpm ai-report-summary:check"
+      ],
+      "evidenceReferences": [
+        "artifacts/example/ai-report-summary/template-snapshot.json",
+        "artifacts/example/ai-report-summary/pii-leakage-check.log"
+      ]
+    },
+    "securityAudit": {
+      "environment": "production",
+      "checkedAt": "2026-05-30",
+      "prodEnvCheckOk": true,
+      "httpsOk": true,
+      "rlsLiveCheckOk": true,
+      "noCriticalFindings": true,
+      "evidenceReferences": [
+        "artifacts/example/security/prod-env-check.log",
+        "artifacts/example/security/https-headers.json",
+        "artifacts/example/security/rls-live-check.log",
+        "artifacts/example/security/auth-controls.log"
+      ]
+    },
+    "liveExamCycle": {
+      "environment": "production",
+      "checkedAt": "2026-05-30",
+      "tester": "qa-owner-redacted",
+      "releaseCandidate": "ghcr.io/example/uzman-hocam/api:2026-06-15.1",
+      "appUrl": "https://staging.example.test",
+      "apiUrl": "https://staging-api.example.test",
+      "commandsPassed": [
+        "pnpm isem-answer-key:smoke",
+        "pnpm isem-optical-pipeline:smoke",
+        "pnpm raw-import:smoke",
+        "pnpm report-generation:smoke",
+        "pnpm live:ui-worker:smoke"
+      ],
+      "examCycle": {
+        "examId": "exam-isem-optical-smoke-redacted",
+        "answerKeyId": "answer-key-isem-lgs-1-redacted",
+        "answerKeyVersion": "isem-lgs-1-v1",
+        "parserConfigVersion": "optik-7108-lgs-v1",
+        "rawImportId": "raw-import-isem-optical-smoke-redacted",
+        "reportSnapshotId": "snapshot-isem-optical-smoke-redacted",
+        "firstStudentId": "student-isem-331-redacted",
+        "answerKeyQuestionCount": 90,
+        "bookletVariantCount": 1,
+        "participantCount": 254,
+        "matchedCount": 254,
+        "examResultCount": 254,
+        "reportResultCount": 254,
+        "downloadedArtifacts": 2,
+        "answerKeyImported": true,
+        "opticalImportCommitted": true,
+        "rawImportArchived": true,
+        "evaluationQueued": true,
+        "quarantinePathVerified": true,
+        "reportGenerated": true,
+        "reportReady": true,
+        "karnePdfDownloaded": true,
+        "excelDownloaded": true,
+        "studentPortalViewed": true,
+        "guardianPortalViewed": true,
+        "noMockRoutes": true
+      },
+      "evidenceReferences": [
+        "artifacts/example/live-exam-cycle/isem-optical-pipeline.log",
+        "artifacts/example/live-exam-cycle/live-ui-worker-report.json"
+      ]
+    },
+    "inlineUploadMigration": {
+      "environment": "production",
+      "checkedAt": "2026-05-31T10:00:00.000Z",
+      "storageMode": {
+        "supportAttachmentStorage": "s3",
+        "homeworkMaterialFileStorage": "s3",
+        "downloadMode": "signed-url",
+        "downloadUrlExpiresInSeconds": 300,
+        "contentBase64WriteDisabled": true,
+        "inlineReadCompatibility": true
+      },
+      "dryRun": {
+        "status": "DRY_RUN",
+        "generatedAt": "2026-05-31T09:00:00.000Z",
+        "approvalRequired": "INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true",
+        "subjects": [
+          {
+            "subject": "homework_material_files",
+            "totalRows": 18,
+            "pendingRows": 4,
+            "pendingActiveRows": 4,
+            "pendingDeletedRows": 0,
+            "pendingBase64Characters": 8192,
+            "tableSizeBytes": 49152
+          },
+          {
+            "subject": "support_ticket_attachments",
+            "totalRows": 9,
+            "pendingRows": 2,
+            "pendingActiveRows": 2,
+            "pendingDeletedRows": 0,
+            "pendingBase64Characters": 4096,
+            "tableSizeBytes": 32768
+          }
+        ]
+      },
+      "migration": {
+        "status": "MIGRATED",
+        "generatedAt": "2026-05-31T09:30:00.000Z",
+        "approvedBy": "ops-owner-redacted",
+        "approvalReference": "INLINE-S3-MIG-2026-05",
+        "approvalEnv": "INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true",
+        "subjects": [
+          {
+            "subject": "homework_material_files",
+            "totalRows": 18,
+            "pendingRows": 0,
+            "pendingActiveRows": 0,
+            "pendingDeletedRows": 0,
+            "pendingBase64Characters": 0,
+            "tableSizeBytes": 32768
+          },
+          {
+            "subject": "support_ticket_attachments",
+            "totalRows": 9,
+            "pendingRows": 0,
+            "pendingActiveRows": 0,
+            "pendingDeletedRows": 0,
+            "pendingBase64Characters": 0,
+            "tableSizeBytes": 24576
+          }
+        ],
+        "migrated": [
+          {
+            "subject": "homework_material_files",
+            "migratedRows": 4,
+            "migratedBytes": 6144
+          },
+          {
+            "subject": "support_ticket_attachments",
+            "migratedRows": 2,
+            "migratedBytes": 3072
+          }
+        ]
+      },
+      "commandsPassed": [
+        "pnpm inline-upload-content:audit",
+        "INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true pnpm inline-upload-content:migrate"
+      ],
+      "evidenceReferences": [
+        "artifacts/example/inline-upload-content/dry-run.json",
+        "artifacts/example/inline-upload-content/migrated.json"
+      ]
+    },
+    "rateLimit": {
+      "environment": "production",
+      "checkedAt": "2026-05-31T11:00:00.000Z",
+      "config": {
+        "apiRateLimitEnabled": true,
+        "apiRateLimitStore": "redis",
+        "loginAttemptLimiterStore": "redis",
+        "windowMs": 60000,
+        "maxRequests": 300,
+        "loginMaxAttempts": 5,
+        "keyIncludesClientIpHash": true,
+        "excludedPaths": ["/health", "/metrics"]
+      },
+      "instances": [
+        {
+          "label": "api-instance-a",
+          "baseUrl": "https://prod-api-a.example.test/api/v1/__rate-limit-smoke"
+        },
+        {
+          "label": "api-instance-b",
+          "baseUrl": "https://prod-api-b.example.test/api/v1/__rate-limit-smoke"
+        }
+      ],
+      "apiRateLimit": {
+        "clientIpHash": "7b1d2a69c10e16c6827d8cfa31f2b5d80e56ed3f832f2e0f6b833f8f1d2d8e11",
+        "requestsSent": 301,
+        "allowedBeforeLimit": 300,
+        "limitedAtRequest": 301,
+        "limitStatusCode": 429,
+        "errorCode": "RATE_LIMITED",
+        "retryAfterHeaderPresent": true,
+        "secondInstanceLimitObserved": true,
+        "healthEndpointExcluded": true,
+        "metricsEndpointExcluded": true
+      },
+      "loginAttemptLimiter": {
+        "clientIpHash": "e0f2f7e2cfd4f1e7a41db3f6b1a5369bd4dfb9fb8f77060f72a89f3ea2ed92d3",
+        "emailHash": "8b9c7fd58536f6c82840e521a4fd26c7faeb3bf7ac93d77dfc41273512f34072",
+        "attemptsSent": 6,
+        "lockStatusCode": 429,
+        "errorCode": "LOGIN_LOCKED",
+        "sharedAcrossInstances": true,
+        "emailAndIpScoped": true,
+        "differentIpNotLocked": true
+      },
+      "commandsPassed": ["pnpm rate-limit:smoke", "pnpm rate-limit:check"],
+      "evidenceReferences": [
+        "artifacts/example/rate-limit/rate-limit-smoke.json",
+        "artifacts/example/rate-limit/redis-shared-window-observation.txt"
+      ]
+    },
+    "rlsLive": {
+      "environment": "production",
+      "checkedAt": "2026-05-31T11:30:00.000Z",
+      "schema": {
+        "tenantScopedTables": 54,
+        "derivedFromSchema": true,
+        "staticCheckPassed": true,
+        "liveCheckPassed": true,
+        "tablesVerified": [
+          "DevelopmentCriterion",
+          "DevelopmentAssessment",
+          "DevelopmentScore",
+          "NotificationDeviceToken",
+          "TenantMembership",
+          "AuthSession",
+          "IdempotencyKey",
+          "IdentityInvitation",
+          "Class",
+          "GradeLevel",
+          "Campus",
+          "Course",
+          "AcademicYear",
+          "AcademicTerm",
+          "Student",
+          "StudentClassHistory",
+          "StudentEnrollment",
+          "Teacher",
+          "TeacherAssignment",
+          "Guardian",
+          "GuardianStudent",
+          "Attendance",
+          "TeacherNote",
+          "PaymentPlan",
+          "PaymentInstallment",
+          "ScheduleLesson",
+          "StudySession",
+          "StudySessionStudent",
+          "HomeworkMaterial",
+          "HomeworkMaterialFile",
+          "HomeworkMaterialAssignment",
+          "Homework",
+          "Exam",
+          "ParserConfig",
+          "OpticalFormTemplate",
+          "ExamParticipant",
+          "RawImport",
+          "AnswerKey",
+          "ExamBookletVariant",
+          "LearningOutcome",
+          "ParsedAnswer",
+          "ExamResult",
+          "ImportQuarantine",
+          "ReportSnapshot",
+          "Announcement",
+          "AnnouncementReceipt",
+          "AnnouncementDeliveryReport",
+          "MessageTemplate",
+          "SmsBatchDeliveryReport",
+          "BackupRestoreJob",
+          "SupportTicket",
+          "SupportTicketAttachment",
+          "SupportTicketComment",
+          "AuditLog"
+        ]
+      },
+      "isolation": {
+        "tenantAHash": "tenant-a-redacted",
+        "tenantBHash": "tenant-b-redacted",
+        "crossTenantReadRows": 0,
+        "crossTenantReadChecks": 54,
+        "withCheckRejects": [
+          "Student wrong tenant insert",
+          "Homework wrong tenant insert",
+          "Announcement wrong tenant insert",
+          "MessageTemplate wrong tenant insert",
+          "ExamResult foreign tenant RawImport",
+          "ParsedAnswer foreign tenant RawImport",
+          "ParsedAnswer cross exam mismatch",
+          "ParsedAnswer duplicate raw import participant parser"
+        ],
+        "systemAdminBypassDefaultOff": true,
+        "bypassRequiresReason": true,
+        "auditBypassAction": "system.rls_bypass_requested"
+      },
+      "loadSmoke": {
+        "targetRps": 200,
+        "actualRps": 240.5,
+        "durationSeconds": 3,
+        "concurrency": 16,
+        "queriesCompleted": 600,
+        "failures": 0
+      },
+      "commandsPassed": [
+        "pnpm db:rls:check",
+        "pnpm db:rls:check:live",
+        "pnpm rls:load:smoke",
+        "pnpm rls:live:check"
+      ],
+      "evidenceReferences": [
+        "artifacts/example/rls-live/db-rls-check.log",
+        "artifacts/example/rls-live/db-rls-check-live.log",
+        "artifacts/example/rls-live/rls-load-smoke.json"
+      ]
+    },
+    "uat": {
+      "environment": "production",
+      "checkedAt": "2026-05-30",
+      "tester": "qa-owner-redacted",
+      "releaseCandidate": "ghcr.io/example/uzman-hocam/api:2026-06-15.1",
+      "rollbackImageTag": "ghcr.io/example/uzman-hocam/api:2026-06-14.2",
+      "restoreBackupReference": "s3://backup-bucket/base/2026-05-30.dump",
+      "liveExamCyclePassed": true,
+      "flowsVerified": [
+        "tenant admin login",
+        "teacher workflow",
+        "guardian workflow",
+        "raw import smoke",
+        "report generation smoke",
+        "live exam cycle evidence",
+        "sms batch smoke",
+        "notification provider smoke",
+        "privacy purge"
+      ],
+      "journeyScenariosVerified": [
+        {
+          "id": "UAT-SYS-01",
+          "persona": "SYSTEM_ADMIN",
+          "status": "PASS",
+          "evidence": ["system dashboard opened", "audit and observability screens checked"]
+        },
+        {
+          "id": "UAT-SYS-02",
+          "persona": "SYSTEM_ADMIN",
+          "status": "PASS",
+          "evidence": ["tenant created", "first admin logged in"]
+        },
+        {
+          "id": "UAT-SYS-03",
+          "persona": "SYSTEM_ADMIN",
+          "status": "PASS",
+          "evidence": ["expired tenant read request passed", "expired tenant write request returned 403"]
+        },
+        {
+          "id": "UAT-SYS-04",
+          "persona": "SYSTEM_ADMIN",
+          "status": "PASS",
+          "evidence": ["prod evidence check passed", "rollback reference reviewed"]
+        },
+        {
+          "id": "UAT-KURUM-01",
+          "persona": "TENANT_ADMIN",
+          "status": "PASS",
+          "evidence": ["setup wizard completed", "academic structure visible"]
+        },
+        {
+          "id": "UAT-KURUM-02",
+          "persona": "TENANT_ADMIN",
+          "status": "PASS",
+          "evidence": ["student created", "guardian and teacher relation verified"]
+        },
+        {
+          "id": "UAT-KURUM-03",
+          "persona": "TENANT_ADMIN",
+          "status": "PASS",
+          "evidence": ["tenant user role updated", "identity invitation accepted"]
+        },
+        {
+          "id": "UAT-KURUM-04",
+          "persona": "TENANT_ADMIN",
+          "status": "PASS",
+          "evidence": ["schedule created", "attendance and study session flows verified"]
+        },
+        {
+          "id": "UAT-KURUM-05",
+          "persona": "TENANT_ADMIN",
+          "status": "PASS",
+          "evidence": ["exam created", "answer key and raw import smoke passed"]
+        },
+        {
+          "id": "UAT-KURUM-06",
+          "persona": "TENANT_ADMIN",
+          "status": "PASS",
+          "evidence": ["report generation smoke passed", "PDF and Excel download verified"]
+        },
+        {
+          "id": "UAT-KURUM-07",
+          "persona": "TENANT_ADMIN",
+          "status": "PASS",
+          "evidence": ["payment plan created", "idempotency retry verified"]
+        },
+        {
+          "id": "UAT-KURUM-08",
+          "persona": "TENANT_ADMIN",
+          "status": "PASS",
+          "evidence": ["announcement and SMS smoke passed", "support and material upload verified"]
+        },
+        {
+          "id": "UAT-TEACHER-01",
+          "persona": "TEACHER",
+          "status": "PASS",
+          "evidence": ["teacher scoped student list opened", "teacher scoped report opened"]
+        },
+        {
+          "id": "UAT-TEACHER-02",
+          "persona": "TEACHER",
+          "status": "PASS",
+          "evidence": ["teacher support flow verified", "teacher homework and announcement flow verified"]
+        },
+        {
+          "id": "UAT-TEACHER-03",
+          "persona": "TEACHER",
+          "status": "PASS",
+          "evidence": ["out-of-scope student read rejected", "out-of-scope write rejected"]
+        },
+        {
+          "id": "UAT-STUDENT-01",
+          "persona": "STUDENT",
+          "status": "PASS",
+          "evidence": ["student portal profile opened", "student homework attendance and report opened"]
+        },
+        {
+          "id": "UAT-STUDENT-02",
+          "persona": "STUDENT",
+          "status": "PASS",
+          "evidence": ["student announcement marked read", "student support ticket created"]
+        },
+        {
+          "id": "UAT-STUDENT-03",
+          "persona": "STUDENT",
+          "status": "PASS",
+          "evidence": ["other student access returned 403"]
+        },
+        {
+          "id": "UAT-GUARDIAN-01",
+          "persona": "GUARDIAN",
+          "status": "PASS",
+          "evidence": ["guardian linked student profile opened", "guardian finance and report permission verified"]
+        },
+        {
+          "id": "UAT-GUARDIAN-02",
+          "persona": "GUARDIAN",
+          "status": "PASS",
+          "evidence": ["guardian announcement read", "guardian support and notification preference verified"]
+        },
+        {
+          "id": "UAT-GUARDIAN-03",
+          "persona": "GUARDIAN",
+          "status": "PASS",
+          "evidence": ["unlinked student access returned 403", "finance permission denial verified"]
+        }
+      ],
+      "commandsPassed": [
+        "pnpm run ci",
+        "pnpm prod:env:check",
+        "pnpm db:rls:check:live",
+        "pnpm raw-import:smoke",
+        "pnpm report-generation:smoke",
+        "pnpm live:exam-cycle:check",
+        "pnpm queue:smoke",
+        "pnpm live:onboarding:smoke",
+        "pnpm live:ui-worker:smoke",
+        "pnpm sms:smoke",
+        "pnpm notification:smoke",
+        "pnpm traefik:https:smoke"
+      ]
+    }
+  }
+}

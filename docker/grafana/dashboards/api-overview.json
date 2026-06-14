@@ -64,9 +64,36 @@
     },
     {
       "id": 5,
+      "type": "timeseries",
+      "title": "Queue Jobs by Status",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "sum(uzman_hocam_queue_jobs) by (queue, status)",
+          "legendFormat": "{{queue}} {{status}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Queue Metrics Scrape Error",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "max(uzman_hocam_queue_metrics_scrape_error)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
       "type": "logs",
       "title": "Docker Logs",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "Loki" },

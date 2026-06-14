@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const require = createRequire(import.meta.url);
 const { createNotificationAdapterFromEnv } = require("../packages/notification-adapter/dist/index.js");
@@ -8,6 +9,8 @@ const emailTo = process.env.NOTIFICATION_SMOKE_EMAIL_TO;
 const pushTo = process.env.NOTIFICATION_SMOKE_PUSH_TO;
 const subject = process.env.NOTIFICATION_SMOKE_SUBJECT ?? "Uzman Hocam notification smoke";
 const body = process.env.NOTIFICATION_SMOKE_BODY ?? "Uzman Hocam notification smoke";
+const evidenceFile = process.env.NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
+const checkedAt = new Date().toISOString();
 
 const messages = [
   emailTo ? { channel: "EMAIL", to: emailTo, subject, body } : undefined,
@@ -33,6 +36,18 @@ const failed = results.find((result) => result.status !== "sent");
 if (failed) {
   fail(`Notification provider smoke başarısız: ${failed.channel} ${failed.errorCode ?? "UNKNOWN"}`);
 }
+
+await writeSmokeEvidence(evidenceFile, {
+  result: "PASS",
+  check: "notification_provider_smoke",
+  environment: process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown",
+  checkedAt,
+  provider,
+  channels: results.map((result) => result.channel),
+  recipients: results.map((result) => maskRecipient(result.to)),
+  commandsPassed: ["pnpm notification:smoke"],
+  gaps: [],
+});
 
 console.log(
   [

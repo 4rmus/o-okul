@@ -1,0 +1,16 @@
+services:
+  web:
+    image: ${WEB_IMAGE:?WEB_IMAGE is required}
+    pull_policy: always
+
+  api:
+    image: ${API_IMAGE:?API_IMAGE is required}
+    pull_policy: always
+
+  worker:
+    image: ${WORKER_IMAGE:?WORKER_IMAGE is required}
+    pull_policy: always
+
+  queue-board:
+    image: ${QUEUE_BOARD_IMAGE:?QUEUE_BOARD_IMAGE is required}
+    pull_policy: always

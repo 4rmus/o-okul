@@ -36,3 +36,21 @@ groups:
         annotations:
           summary: API readiness check is failing
           description: /health/ready returned a non-2xx response in the last 5 minutes.
+
+      - alert: UzmanHocamQueueFailedJobs
+        expr: sum(uzman_hocam_queue_jobs{status="failed"}) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: BullMQ failed jobs are present
+          description: At least one BullMQ queue has failed jobs for more than 5 minutes.
+
+      - alert: UzmanHocamQueueMetricsScrapeFailing
+        expr: uzman_hocam_queue_metrics_scrape_error == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Queue metrics scrape is failing
+          description: The API /metrics endpoint is reachable but cannot collect BullMQ queue counts.

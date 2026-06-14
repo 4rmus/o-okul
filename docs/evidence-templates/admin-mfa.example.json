@@ -1,0 +1,42 @@
+{
+  "result": "PASS",
+  "environment": "staging",
+  "checkedAt": "2026-06-01",
+  "policy": {
+    "mode": "optional",
+    "requiredRoles": ["SYSTEM_ADMIN", "TENANT_ADMIN"],
+    "secretStorage": "aes-256-gcm",
+    "secretEncryptionKeyEnv": "ADMIN_MFA_SECRET_ENCRYPTION_KEY",
+    "recoveryCodeHashKeyEnv": "ADMIN_MFA_RECOVERY_HASH_KEY",
+    "challengeSecretEnv": "ADMIN_MFA_CHALLENGE_SECRET",
+    "smsOtpRejected": true
+  },
+  "enrollment": {
+    "systemAdminsTotal": 1,
+    "systemAdminsEnrolled": 1,
+    "tenantAdminsTotal": 2,
+    "tenantAdminsEnrolled": 2,
+    "unenrolledRequiredAdmins": 0,
+    "recoveryCodesPerEnrollment": 8
+  },
+  "loginVerification": {
+    "passwordOnlyLoginBlocked": true,
+    "totpLoginSucceeded": true,
+    "invalidTotpRejected": true,
+    "totpReuseRejected": true,
+    "recoveryCodeLoginSucceeded": true,
+    "recoveryCodeReuseRejected": true,
+    "sessionsRevokedOnEnable": true,
+    "sessionsRevokedOnDisable": true
+  },
+  "commandsPassed": [
+    "pnpm --filter @uzman-hocam/api exec vitest run src/auth/auth.service.test.ts src/auth/auth-user-store.test.ts",
+    "pnpm --filter @uzman-hocam/api typecheck"
+  ],
+  "evidenceReferences": [
+    "artifacts/example/admin-mfa/login-mfa-required.json",
+    "artifacts/example/admin-mfa/totp-reuse-rejected.log",
+    "artifacts/example/admin-mfa/recovery-code-reuse-rejected.log"
+  ],
+  "gaps": []
+}

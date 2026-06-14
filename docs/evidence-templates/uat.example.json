@@ -12,6 +12,7 @@
     "guardian workflow",
     "raw import smoke",
     "report generation smoke",
+    "live exam cycle evidence",
     "sms batch smoke",
     "notification provider smoke",
     "privacy purge"
@@ -22,10 +23,141 @@
     "pnpm db:rls:check:live",
     "pnpm raw-import:smoke",
     "pnpm report-generation:smoke",
+    "pnpm live:exam-cycle:check",
     "pnpm queue:smoke",
+    "pnpm live:onboarding:smoke",
+    "pnpm live:ui-worker:smoke",
     "pnpm sms:smoke",
     "pnpm notification:smoke",
     "pnpm traefik:https:smoke"
+  ],
+  "journeyScenariosVerified": [
+    {
+      "id": "UAT-SYS-01",
+      "persona": "SYSTEM_ADMIN",
+      "status": "PASS",
+      "evidence": ["system dashboard opened", "audit and observability screens checked"]
+    },
+    {
+      "id": "UAT-SYS-02",
+      "persona": "SYSTEM_ADMIN",
+      "status": "PASS",
+      "evidence": ["tenant created", "first admin logged in"]
+    },
+    {
+      "id": "UAT-SYS-03",
+      "persona": "SYSTEM_ADMIN",
+      "status": "PASS",
+      "evidence": ["expired tenant read request passed", "expired tenant write request returned 403"]
+    },
+    {
+      "id": "UAT-SYS-04",
+      "persona": "SYSTEM_ADMIN",
+      "status": "PASS",
+      "evidence": ["prod evidence check passed", "rollback reference reviewed"]
+    },
+    {
+      "id": "UAT-KURUM-01",
+      "persona": "TENANT_ADMIN",
+      "status": "PASS",
+      "evidence": ["setup wizard completed", "academic structure visible"]
+    },
+    {
+      "id": "UAT-KURUM-02",
+      "persona": "TENANT_ADMIN",
+      "status": "PASS",
+      "evidence": ["student created", "guardian and teacher relation verified"]
+    },
+    {
+      "id": "UAT-KURUM-03",
+      "persona": "TENANT_ADMIN",
+      "status": "PASS",
+      "evidence": ["tenant user role updated", "identity invitation accepted"]
+    },
+    {
+      "id": "UAT-KURUM-04",
+      "persona": "TENANT_ADMIN",
+      "status": "PASS",
+      "evidence": ["schedule created", "attendance and study session flows verified"]
+    },
+    {
+      "id": "UAT-KURUM-05",
+      "persona": "TENANT_ADMIN",
+      "status": "PASS",
+      "evidence": ["exam created", "answer key and raw import smoke passed"]
+    },
+    {
+      "id": "UAT-KURUM-06",
+      "persona": "TENANT_ADMIN",
+      "status": "PASS",
+      "evidence": ["report generation smoke passed", "PDF and Excel download verified"]
+    },
+    {
+      "id": "UAT-KURUM-07",
+      "persona": "TENANT_ADMIN",
+      "status": "PASS",
+      "evidence": ["payment plan created", "idempotency retry verified"]
+    },
+    {
+      "id": "UAT-KURUM-08",
+      "persona": "TENANT_ADMIN",
+      "status": "PASS",
+      "evidence": ["announcement and SMS smoke passed", "support and material upload verified"]
+    },
+    {
+      "id": "UAT-TEACHER-01",
+      "persona": "TEACHER",
+      "status": "PASS",
+      "evidence": ["teacher scoped student list opened", "teacher scoped report opened"]
+    },
+    {
+      "id": "UAT-TEACHER-02",
+      "persona": "TEACHER",
+      "status": "PASS",
+      "evidence": ["teacher support flow verified", "teacher homework and announcement flow verified"]
+    },
+    {
+      "id": "UAT-TEACHER-03",
+      "persona": "TEACHER",
+      "status": "PASS",
+      "evidence": ["out-of-scope student read rejected", "out-of-scope write rejected"]
+    },
+    {
+      "id": "UAT-STUDENT-01",
+      "persona": "STUDENT",
+      "status": "PASS",
+      "evidence": ["student portal profile opened", "student homework attendance and report opened"]
+    },
+    {
+      "id": "UAT-STUDENT-02",
+      "persona": "STUDENT",
+      "status": "PASS",
+      "evidence": ["student announcement marked read", "student support ticket created"]
+    },
+    {
+      "id": "UAT-STUDENT-03",
+      "persona": "STUDENT",
+      "status": "PASS",
+      "evidence": ["other student access returned 403"]
+    },
+    {
+      "id": "UAT-GUARDIAN-01",
+      "persona": "GUARDIAN",
+      "status": "PASS",
+      "evidence": ["guardian linked student profile opened", "guardian finance and report permission verified"]
+    },
+    {
+      "id": "UAT-GUARDIAN-02",
+      "persona": "GUARDIAN",
+      "status": "PASS",
+      "evidence": ["guardian announcement read", "guardian support and notification preference verified"]
+    },
+    {
+      "id": "UAT-GUARDIAN-03",
+      "persona": "GUARDIAN",
+      "status": "PASS",
+      "evidence": ["unlinked student access returned 403", "finance permission denial verified"]
+    }
   ],
   "defects": []
 }

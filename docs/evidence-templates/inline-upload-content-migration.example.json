@@ -1,0 +1,86 @@
+{
+  "result": "PASS",
+  "environment": "staging",
+  "checkedAt": "2026-05-31T10:00:00.000Z",
+  "storageMode": {
+    "supportAttachmentStorage": "s3",
+    "homeworkMaterialFileStorage": "s3",
+    "downloadMode": "signed-url",
+    "downloadUrlExpiresInSeconds": 300,
+    "contentBase64WriteDisabled": true,
+    "inlineReadCompatibility": true
+  },
+  "dryRun": {
+    "status": "DRY_RUN",
+    "generatedAt": "2026-05-31T09:00:00.000Z",
+    "approvalRequired": "INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true",
+    "subjects": [
+      {
+        "subject": "homework_material_files",
+        "totalRows": 18,
+        "pendingRows": 4,
+        "pendingActiveRows": 4,
+        "pendingDeletedRows": 0,
+        "pendingBase64Characters": 8192,
+        "tableSizeBytes": 49152
+      },
+      {
+        "subject": "support_ticket_attachments",
+        "totalRows": 9,
+        "pendingRows": 2,
+        "pendingActiveRows": 2,
+        "pendingDeletedRows": 0,
+        "pendingBase64Characters": 4096,
+        "tableSizeBytes": 32768
+      }
+    ]
+  },
+  "migration": {
+    "status": "MIGRATED",
+    "generatedAt": "2026-05-31T09:30:00.000Z",
+    "approvedBy": "ops-owner@example.test",
+    "approvalReference": "INLINE-S3-MIG-2026-05",
+    "approvalEnv": "INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true",
+    "subjects": [
+      {
+        "subject": "homework_material_files",
+        "totalRows": 18,
+        "pendingRows": 0,
+        "pendingActiveRows": 0,
+        "pendingDeletedRows": 0,
+        "pendingBase64Characters": 0,
+        "tableSizeBytes": 32768
+      },
+      {
+        "subject": "support_ticket_attachments",
+        "totalRows": 9,
+        "pendingRows": 0,
+        "pendingActiveRows": 0,
+        "pendingDeletedRows": 0,
+        "pendingBase64Characters": 0,
+        "tableSizeBytes": 24576
+      }
+    ],
+    "migrated": [
+      {
+        "subject": "homework_material_files",
+        "migratedRows": 4,
+        "migratedBytes": 6144
+      },
+      {
+        "subject": "support_ticket_attachments",
+        "migratedRows": 2,
+        "migratedBytes": 3072
+      }
+    ]
+  },
+  "commandsPassed": [
+    "pnpm inline-upload-content:audit",
+    "INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true pnpm inline-upload-content:migrate"
+  ],
+  "evidenceReferences": [
+    "artifacts/example/inline-upload-content/dry-run.json",
+    "artifacts/example/inline-upload-content/migrated.json"
+  ],
+  "gaps": []
+}

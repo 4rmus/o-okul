@@ -1,0 +1,165 @@
+{
+  "result": "PASS",
+  "environment": "production",
+  "checkedAt": "2026-06-15T13:30:00.000Z",
+  "releaseCandidate": "ghcr.io/example/uzman-hocam/api:2026-06-15.1",
+  "rollbackImageTag": "ghcr.io/example/uzman-hocam/api:2026-06-14.2",
+  "productionEvidenceSummary": {
+    "result": "PASS",
+    "summaryTarget": "production-evidence-summary.example.json",
+    "summaryReference": "artifacts/example/production/release-summary-2026-06-15.json",
+    "generatedAt": "2026-06-15T10:00:00.000Z",
+    "checksPassed": [
+      "Production env",
+      "Traefik HTTPS",
+      "SMS provider",
+      "Notification provider",
+      "Sentry test event",
+      "Alert webhook",
+      "Off-host backup target",
+      "WAL archive target",
+      "Deployment region evidence",
+      "Deployment rollback evidence",
+      "GitHub CI evidence",
+      "Restore drill evidence",
+      "KVKK inventory evidence",
+      "Identity migration evidence",
+      "Financial retention evidence",
+      "Upload AV evidence",
+      "Observability UAT evidence",
+      "External monitoring evidence",
+      "Admin MFA evidence",
+      "AI report summary evidence",
+      "Security audit evidence",
+      "Live exam cycle evidence",
+      "Inline upload migration evidence",
+      "Rate limit Redis evidence",
+      "RLS live evidence",
+      "UAT evidence"
+    ]
+  },
+  "liveStatusEvidence": {
+    "result": "PASS",
+    "evidenceTarget": "live-status.example.json",
+    "generatedAt": "2026-06-15T13:30:00.000Z",
+    "gatesPassed": [
+      "Traefik HTTPS smoke",
+      "TR datacenter/provider kanıtı",
+      "Staging/prod UAT",
+      "Deployment rollback tatbikatı",
+      "Pilot kapanış kanıtı",
+      "Go-live karar paketi",
+      "Off-host backup hedefi",
+      "Alert bildirim kanalı"
+    ]
+  },
+  "deployment": {
+    "deploymentRegionPassed": true,
+    "githubCiPassed": true,
+    "traefikHttpsPassed": true,
+    "restoreDrillPassed": true,
+    "offHostBackupPassed": true,
+    "walArchivePassed": true,
+    "rollbackDrillPassed": true,
+    "observabilityUatPassed": true,
+    "externalMonitoringPassed": true,
+    "adminMfaPassed": true,
+    "aiReportSummaryPassed": true,
+    "rateLimitRedisPassed": true,
+    "rlsLivePassed": true,
+    "securityAuditPassed": true
+  },
+  "uat": {
+    "stagingUatPassed": true,
+    "productionSmokePassed": true,
+    "journeyScenarioCount": 21,
+    "liveOnboardingPassed": true,
+    "liveExamCyclePassed": true,
+    "liveUiWorkerReportPassed": true,
+    "roleReportsSigned": true
+  },
+  "pilot": {
+    "pilotEvidencePassed": true,
+    "pilotDurationDays": 14,
+    "criticalDefectsOpen": 0,
+    "goLiveDecision": "APPROVED",
+    "pilotEvidenceReference": "pilot.example.json"
+  },
+  "legal": {
+    "dataProcessingAgreementSigned": true,
+    "kvkkNoticeApproved": true,
+    "privacyInventoryPassed": true,
+    "financialRetentionPassed": true,
+    "inlineUploadMigrationPassed": true
+  },
+  "operations": {
+    "incidentRunbookAcknowledged": true,
+    "supportChannelReady": true,
+    "alertChannelReady": true,
+    "backupRestoreOwnerAssigned": true,
+    "rollbackOwnerAssigned": true,
+    "monitoringOwnerAssigned": true,
+    "onCallPrimary": "ops-primary-redacted",
+    "supportChannelReference": "support-channel-redacted"
+  },
+  "cutover": {
+    "scheduledAt": "2026-06-16T06:00:00.000Z",
+    "rollbackWindowMinutes": 60,
+    "monitoringWindowHours": 48,
+    "statusPageReady": true,
+    "customerCommunicationReady": true
+  },
+  "approvals": [
+    {
+      "role": "product",
+      "decision": "APPROVED",
+      "approver": "product-owner-redacted",
+      "approvedAt": "2026-06-15T11:00:00.000Z"
+    },
+    {
+      "role": "technical",
+      "decision": "APPROVED",
+      "approver": "technical-owner-redacted",
+      "approvedAt": "2026-06-15T11:05:00.000Z"
+    },
+    {
+      "role": "operations",
+      "decision": "APPROVED",
+      "approver": "ops-owner-redacted",
+      "approvedAt": "2026-06-15T11:10:00.000Z"
+    },
+    {
+      "role": "dataProtection",
+      "decision": "APPROVED",
+      "approver": "kvkk-owner-redacted",
+      "approvedAt": "2026-06-15T11:15:00.000Z"
+    }
+  ],
+  "openRisks": [
+    {
+      "id": "RISK-01",
+      "severity": "LOW",
+      "accepted": true,
+      "owner": "product-owner-redacted",
+      "mitigation": "Pilot operator training follow-up scheduled."
+    }
+  ],
+  "goLiveDecision": "APPROVED",
+  "evidenceReferences": [
+    "artifacts/example/production/release-summary-2026-06-15.json",
+    "https://github.com/example/uzman-hocam/actions/runs/1234567890",
+    "artifacts/example/production/deployment-region.json",
+    "artifacts/example/production/deployment-rollback.json",
+    "artifacts/example/production/external-monitoring.json",
+    "artifacts/example/production/admin-mfa.json",
+    "artifacts/example/production/ai-report-summary.json",
+    "artifacts/example/production/live-exam-cycle.json",
+    "artifacts/example/production/inline-upload-content-migration.json",
+    "artifacts/example/production/rate-limit.json",
+    "artifacts/example/production/rls-live.json",
+    "artifacts/example/production/live-status.json",
+    "artifacts/example/production/restore-drill.json",
+    "artifacts/example/production/uat.json",
+    "artifacts/example/pilot/pilot.json"
+  ]
+}

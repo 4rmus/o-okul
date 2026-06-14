@@ -148,7 +148,7 @@ pnpm prod:readiness:check
 
 ```bash
 # Tüm kontrolleri çalıştır (CI'da kullanılan komut)
-pnpm ci
+pnpm run ci
 
 # Sadece birim/entegrasyon testleri
 pnpm test
@@ -158,6 +158,10 @@ pnpm typecheck
 
 # RLS politika doğrulaması
 pnpm db:rls:check
+
+# OpenAPI JSON sözleşmesi (CI build sonrasında artifacts/openapi.json üretir)
+pnpm build
+pnpm openapi:generate
 
 # Smoke testleri (canlı ortam gerektirir)
 pnpm live:smoke

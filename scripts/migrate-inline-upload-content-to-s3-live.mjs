@@ -1,0 +1,248 @@
+import { createHash } from "node:crypto";
+import { Socket } from "node:net";
+import { writeFile } from "node:fs/promises";
+import pg from "pg";
+
+const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/uzman_hocam";
+const approval = process.env.INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED;
+const batchSize = Number(process.env.INLINE_UPLOAD_CONTENT_MIGRATION_BATCH_SIZE ?? 100);
+const reportFile = process.env.INLINE_UPLOAD_CONTENT_MIGRATION_REPORT_FILE;
+
+const subjects = [
+  {
+    label: "homework_material_files",
+    table: "HomeworkMaterialFile",
+    parentColumn: "materialId",
+    prefix: "homework-material-files",
+  },
+  {
+    label: "support_ticket_attachments",
+    table: "SupportTicketAttachment",
+    parentColumn: "ticketId",
+    prefix: "support-ticket-attachments",
+  },
+];
+
+if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 1000) {
+  throw new Error("INLINE_UPLOAD_CONTENT_MIGRATION_BATCH_SIZE must be an integer between 1 and 1000.");
+}
+
+const postgresUrl = new URL(directDatabaseUrl);
+await assertPort("Postgres", postgresUrl.hostname, Number(postgresUrl.port || 5432), "pnpm db:migrate");
+
+const pool = new pg.Pool({ connectionString: directDatabaseUrl });
+const client = await pool.connect();
+let s3Client;
+let s3Bucket;
+
+try {
+  await client.query("SELECT set_config('app.bypass_rls', 'true', false)");
+  const before = await auditInlineUploadContent();
+
+  if (approval !== "true") {
+    const report = {
+      status: "DRY_RUN",
+      approvalRequired: "INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true",
+      generatedAt: new Date().toISOString(),
+      subjects: before,
+    };
+    await writeReport(report);
+    console.log(JSON.stringify(report, null, 2));
+    process.exit(0);
+  }
+
+  ({ client: s3Client, bucket: s3Bucket } = await createS3ClientFromEnv());
+  const migrated = [];
+  for (const subject of subjects) {
+    migrated.push(await migrateSubject(subject));
+  }
+
+  const after = await auditInlineUploadContent();
+  const report = {
+    status: "MIGRATED",
+    generatedAt: new Date().toISOString(),
+    subjects: after,
+    migrated,
+  };
+  await writeReport(report);
+  console.log(JSON.stringify(report, null, 2));
+} finally {
+  client.release();
+  await pool.end();
+}
+
+async function auditInlineUploadContent() {
+  const results = [];
+  for (const subject of subjects) {
+    const counts = await client.query(
+      `SELECT
+         count(*)::int AS "totalRows",
+         count(*) FILTER (
+           WHERE "storageKey" IS NULL
+             AND "contentBase64" IS NOT NULL
+             AND "contentBase64" <> ''
+         )::int AS "pendingRows",
+         count(*) FILTER (
+           WHERE "storageKey" IS NULL
+             AND "contentBase64" IS NOT NULL
+             AND "contentBase64" <> ''
+             AND "deletedAt" IS NULL
+         )::int AS "pendingActiveRows",
+         count(*) FILTER (
+           WHERE "storageKey" IS NULL
+             AND "contentBase64" IS NOT NULL
+             AND "contentBase64" <> ''
+             AND "deletedAt" IS NOT NULL
+         )::int AS "pendingDeletedRows",
+         coalesce(sum(length("contentBase64")) FILTER (
+           WHERE "storageKey" IS NULL
+             AND "contentBase64" IS NOT NULL
+             AND "contentBase64" <> ''
+         ), 0)::bigint AS "pendingBase64Characters",
+         pg_total_relation_size($1::regclass)::bigint AS "tableSizeBytes"
+       FROM "${subject.table}"`,
+      [subject.table],
+    );
+    results.push({ subject: subject.label, ...(counts.rows[0] ?? {}) });
+  }
+  return results;
+}
+
+async function migrateSubject(subject) {
+  let migratedRows = 0;
+  let migratedBytes = 0;
+
+  while (true) {
+    const result = await client.query(
+      `SELECT "id", "tenantId", "${subject.parentColumn}" AS "parentId", "fileName", "contentType", "sha256", "contentBase64"
+       FROM "${subject.table}"
+       WHERE "storageKey" IS NULL
+         AND "contentBase64" IS NOT NULL
+         AND "contentBase64" <> ''
+       ORDER BY "tenantId", "id"
+       LIMIT $1`,
+      [batchSize],
+    );
+
+    if (result.rows.length === 0) {
+      return { subject: subject.label, migratedRows, migratedBytes };
+    }
+
+    for (const row of result.rows) {
+      const body = decodeBase64(row.contentBase64, `${subject.label}:${row.id}`);
+      const actualSha256 = sha256(body);
+      if (actualSha256 !== row.sha256) {
+        throw new Error(`${subject.label}:${row.id} sha256 mismatch; migration stopped before DB update.`);
+      }
+
+      const storageKey = createStorageKey(subject, row);
+      await putS3Object(storageKey, body, row.contentType);
+      const updated = await client.query(
+        `UPDATE "${subject.table}"
+         SET "storageKey" = $2,
+             "contentBase64" = NULL,
+             "updatedAt" = now()
+         WHERE "id" = $1
+           AND "storageKey" IS NULL
+           AND "contentBase64" IS NOT NULL
+           AND "contentBase64" <> ''
+           AND "sha256" = $3`,
+        [row.id, storageKey, row.sha256],
+      );
+
+      if (updated.rowCount !== 1) {
+        throw new Error(`${subject.label}:${row.id} DB update failed after S3 put; rerun is idempotent by storage key.`);
+      }
+
+      migratedRows += 1;
+      migratedBytes += body.length;
+    }
+  }
+}
+
+async function createS3ClientFromEnv() {
+  const bucket = process.env.S3_BUCKET?.trim();
+  if (!bucket) {
+    throw new Error("S3_BUCKET is required when INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true.");
+  }
+
+  const { S3Client } = await import("@aws-sdk/client-s3");
+  return {
+    bucket,
+    client: new S3Client({
+      endpoint: process.env.S3_ENDPOINT || undefined,
+      region: process.env.S3_REGION || "us-east-1",
+      forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
+      credentials:
+        process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY
+          ? {
+              accessKeyId: process.env.S3_ACCESS_KEY_ID,
+              secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+            }
+          : undefined,
+    }),
+  };
+}
+
+async function putS3Object(key, body, contentType) {
+  const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: s3Bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    }),
+  );
+}
+
+function createStorageKey(subject, row) {
+  return [
+    subject.prefix,
+    cleanKeySegment(row.tenantId),
+    cleanKeySegment(row.parentId),
+    row.sha256,
+    cleanKeySegment(row.fileName),
+  ].join("/");
+}
+
+function decodeBase64(value, label) {
+  const normalized = String(value).trim();
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized) || normalized.length % 4 === 1) {
+    throw new Error(`${label} contentBase64 is not valid base64.`);
+  }
+  return Buffer.from(normalized, "base64");
+}
+
+function cleanKeySegment(value) {
+  return String(value).trim().replace(/[^A-Za-z0-9._-]/g, "_");
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+async function writeReport(report) {
+  if (!reportFile) return;
+  await writeFile(reportFile, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+}
+
+async function assertPort(label, host, port, hint) {
+  await new Promise((resolve, reject) => {
+    const socket = new Socket();
+    socket.setTimeout(1000);
+    socket.once("connect", () => {
+      socket.destroy();
+      resolve();
+    });
+    socket.once("timeout", () => {
+      socket.destroy();
+      reject(new Error(`${label} is not reachable at ${host}:${port}. Run ${hint} first.`));
+    });
+    socket.once("error", () => {
+      socket.destroy();
+      reject(new Error(`${label} is not reachable at ${host}:${port}. Run ${hint} first.`));
+    });
+    socket.connect(port, host);
+  });
+}

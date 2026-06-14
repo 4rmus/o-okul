@@ -50,12 +50,12 @@
   snapshot verisinden tek sayfalık PDF rapor çıktısı üretir.
 - Web rapor paneline `PDF indir` aksiyonu eklendi; snapshot PDF response'u base64 `.pdf`
   dosyasına çevrilip tarayıcı indirmesi başlatılır.
-- PDF export yolu zengin HTML şablonuna taşındı; `REPORT_PDF_BROWSER_EXECUTABLE_PATH` veya
-  `PUPPETEER_EXECUTABLE_PATH` verilirse `puppeteer-core` ile A4 PDF render edilir, tarayıcı yolu
-  yoksa mevcut basit PDF yedeği korunur.
-- API Docker image'ı Chromium paketini kurar ve
-  `REPORT_PDF_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium-browser` değerini sabitler; Puppeteer PDF
-  render yolu container içinde doğrudan çalışabilecek hale getirildi.
+- PDF export yolu worker render sınırına taşındı. API, teacher/tenant kapsamı uygulanmış snapshot
+  payload'unu `report-pdf-render` kuyruğuna verir; lokal/test modunda `REPORT_PDF_RENDERER=memory`
+  ile basit PDF yedeği korunur.
+- Worker Docker image'ı Chromium paketini kurar ve
+  `REPORT_PDF_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium-browser` değerini sabitler; API imajından
+  Chromium ve `puppeteer-core` bağımlılığı çıkarıldı.
 - `pnpm report-generation:smoke` komutu eklendi; canlı Postgres/Redis üzerinde örnek sınav
   sonucu seed eder, gerçek `report-generation` kuyruğuna iş gönderir, worker'ın `ReportSnapshot`
   kaydını `READY` ürettiğini doğrular.

@@ -28,5 +28,11 @@
     "audit PII redaction",
     "SENTRY_SEND_DEFAULT_PII=false"
   ],
+  "evidenceReferences": [
+    "artifacts/example/security/prod-env-check.log",
+    "artifacts/example/security/https-headers.json",
+    "artifacts/example/security/rls-live-check.log",
+    "artifacts/example/security/auth-controls.log"
+  ],
   "findings": []
 }

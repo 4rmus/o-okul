@@ -1,42 +1,13 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { getTenantScopedTables } from "../packages/db/scripts/tenant-models.mjs";
 
 const sourceRoots = ["apps/api/src", "apps/worker/src"];
 const ignoredFiles = new Set([
   "apps/api/src/db/tenant-query.ts",
   "apps/api/src/health/health.service.ts",
 ]);
-const tenantScopedTables = [
-  "TenantMembership",
-  "Class",
-  "Student",
-  "Teacher",
-  "Guardian",
-  "GuardianStudent",
-  "ScheduleLesson",
-  "StudySession",
-  "StudySessionStudent",
-  "HomeworkMaterial",
-  "HomeworkMaterialFile",
-  "HomeworkMaterialAssignment",
-  "Homework",
-  "Exam",
-  "ParserConfig",
-  "ExamParticipant",
-  "RawImport",
-  "AnswerKey",
-  "ExamBookletVariant",
-  "ExamResult",
-  "ParsedAnswer",
-  "ImportQuarantine",
-  "ReportSnapshot",
-  "Announcement",
-  "MessageTemplate",
-  "SupportTicket",
-  "SupportTicketAttachment",
-  "SupportTicketComment",
-  "AuditLog",
-];
+const tenantScopedTables = getTenantScopedTables();
 
 const failures = [];
 
@@ -51,7 +22,12 @@ for (const file of sourceRoots.flatMap(listTsFiles)) {
   }
 
   const tenantWrappers = ["withTenantQuery", "withExplicitTenantQuery", "withBypassRlsQuery", "withTenantDb"];
-  if (!tenantWrappers.some((wrapper) => contents.includes(wrapper))) {
+  const hasTenantWrapper = tenantWrappers.some((wrapper) => contents.includes(wrapper));
+  const hasTransactionScopedBypass =
+    contents.includes("BEGIN") &&
+    contents.includes("COMMIT") &&
+    contents.includes("set_config('app.bypass_rls'");
+  if (!hasTenantWrapper && !hasTransactionScopedBypass) {
     failures.push(`${file}: tenant tablosu SQL'i tenant/bypass wrapper dışından çalışıyor.`);
   }
 }

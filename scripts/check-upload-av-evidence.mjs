@@ -2,6 +2,11 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const target = process.env.UPLOAD_AV_TARGET;
+const allowExampleEvidence = process.env.UPLOAD_AV_ALLOW_EXAMPLE_EVIDENCE === "1";
+const requiredUploadSurfaces = ["homework_material_file", "support_ticket_attachment"];
+const uploadAvTopLevelKeys = ["result", "environment", "checkedAt", "scannerDecision", "uploadSurfaces", "scanResults", "gaps"];
+const scannerDecisionKeys = ["mode", "approvedBy", "approvalReference", "scannerName", "signatureVersion", "failClosed"];
+const scanResultsKeys = ["cleanFileAccepted", "eicarRejected", "scannerUnavailableRejected"];
 
 if (!target) {
   fail(["UPLOAD_AV_TARGET boş bırakılamaz."]);
@@ -50,16 +55,18 @@ function parseJson(value) {
 function validateReport(report) {
   const failures = [];
 
+  if (!requireObjectKeySet(report, uploadAvTopLevelKeys, failures, "uploadAv")) {
+    return failures;
+  }
+
   requireEqual(report, failures, "result", "PASS");
   requireOneOf(report, failures, "environment", ["staging", "production"]);
   requireDate(report, failures, "checkedAt");
+  requireDateNotInFuture(report, failures, "checkedAt");
   requireScannerDecision(report.scannerDecision, failures);
   requireSurfaces(report.uploadSurfaces, failures);
   requireScanResults(report.scanResults, failures);
-
-  if (Array.isArray(report.gaps) && report.gaps.length > 0) {
-    failures.push("gaps boş olmalı.");
-  }
+  requireEmptyArray(report, failures, "gaps");
 
   return failures;
 }
@@ -70,10 +77,14 @@ function requireScannerDecision(decision, failures) {
     return;
   }
 
+  requireObjectKeySet(decision, scannerDecisionKeys, failures, "scannerDecision");
   requireOneOf(decision, failures, "mode", ["provider", "local"]);
   requireString(decision, failures, "scannerDecision.approvedBy", "approvedBy");
+  requireObjectNonPlaceholderString(decision, failures, "scannerDecision.approvedBy", "approvedBy");
   requireString(decision, failures, "scannerDecision.approvalReference", "approvalReference");
+  requireObjectNonPlaceholderString(decision, failures, "scannerDecision.approvalReference", "approvalReference");
   requireString(decision, failures, "scannerDecision.scannerName", "scannerName");
+  requireObjectNonPlaceholderString(decision, failures, "scannerDecision.scannerName", "scannerName");
   requireString(decision, failures, "scannerDecision.signatureVersion", "signatureVersion");
   if (decision.failClosed !== true) {
     failures.push("scannerDecision.failClosed true olmalı.");
@@ -81,16 +92,7 @@ function requireScannerDecision(decision, failures) {
 }
 
 function requireSurfaces(surfaces, failures) {
-  if (!Array.isArray(surfaces)) {
-    failures.push("uploadSurfaces alan listesi zorunlu.");
-    return;
-  }
-
-  for (const surface of ["homework_material_file", "support_ticket_attachment"]) {
-    if (!surfaces.includes(surface)) {
-      failures.push(`uploadSurfaces eksik: ${surface}`);
-    }
-  }
+  requireExactStringSet(surfaces, failures, "uploadSurfaces", requiredUploadSurfaces, "surface");
 }
 
 function requireScanResults(results, failures) {
@@ -99,6 +101,7 @@ function requireScanResults(results, failures) {
     return;
   }
 
+  requireObjectKeySet(results, scanResultsKeys, failures, "scanResults");
   for (const key of ["cleanFileAccepted", "eicarRejected", "scannerUnavailableRejected"]) {
     if (results[key] !== true) {
       failures.push(`scanResults.${key} true olmalı.`);
@@ -125,10 +128,111 @@ function requireDate(report, failures, key) {
   }
 }
 
+function requireDateNotInFuture(report, failures, key) {
+  if (allowExampleEvidence) return;
+
+  const value = report[key];
+  const timestamp = Date.parse(value);
+  if (typeof value !== "string" || Number.isNaN(timestamp)) {
+    return;
+  }
+
+  const clockSkewMs = 5 * 60 * 1000;
+  if (timestamp > Date.now() + clockSkewMs) {
+    failures.push(`${key} gelecekte olamaz.`);
+  }
+}
+
 function requireString(scope, failures, label, key) {
   if (typeof scope[key] !== "string" || scope[key].trim() === "") {
     failures.push(`${label} boş olmayan metin olmalı.`);
   }
+}
+
+function requireObjectNonPlaceholderString(scope, failures, label, key) {
+  if (allowExampleEvidence) return;
+
+  const value = scope[key];
+  if (typeof value !== "string" || value.trim() === "") {
+    return;
+  }
+
+  if (hasPlaceholderToken(value)) {
+    failures.push(`${label} production kanıtı için örnek/placeholder/redacted değer olmamalı.`);
+  }
+}
+
+function requireObjectKeySet(value, expectedKeys, failures, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    failures.push(`${label} nesnesi zorunlu.`);
+    return false;
+  }
+
+  const keys = Object.keys(value);
+  if (keys.length !== expectedKeys.length) {
+    failures.push(`${label} tam ${expectedKeys.length} alan içermeli.`);
+    return false;
+  }
+
+  for (const expectedKey of expectedKeys) {
+    if (!Object.hasOwn(value, expectedKey)) {
+      failures.push(`${label}.${expectedKey} alanı zorunlu.`);
+    }
+  }
+
+  return true;
+}
+
+function requireExactStringSet(value, failures, label, expectedValues, itemLabel) {
+  if (!Array.isArray(value)) {
+    failures.push(`${label} alan listesi zorunlu.`);
+    return;
+  }
+
+  if (value.length !== expectedValues.length) {
+    failures.push(`${label} tam ${expectedValues.length} ${itemLabel} içermeli.`);
+    return;
+  }
+
+  for (const [index, item] of value.entries()) {
+    if (typeof item !== "string" || item.trim() === "") {
+      failures.push(`${label}.${index} boş olmayan metin olmalı.`);
+      return;
+    }
+  }
+
+  for (const expected of expectedValues) {
+    if (!value.includes(expected)) {
+      failures.push(`${label} eksik: ${expected}`);
+    }
+  }
+}
+
+function requireEmptyArray(report, failures, key) {
+  const value = report?.[key];
+  if (!Array.isArray(value)) {
+    failures.push(`${key} listesi zorunlu.`);
+    return;
+  }
+  if (value.length > 0) {
+    failures.push(`${key} boş olmalı.`);
+  }
+}
+
+function hasPlaceholderToken(value) {
+  const normalized = value.toLowerCase();
+  return [
+    "__set",
+    "change-me",
+    "replace-me",
+    "placeholder",
+    "redacted",
+    "example",
+    ".test",
+    ".invalid",
+    "localhost",
+    "127.0.0.1",
+  ].some((token) => normalized.includes(token));
 }
 
 function fail(failures) {

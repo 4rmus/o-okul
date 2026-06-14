@@ -23,11 +23,4 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm docker:check
-      - run: pnpm ops:check
-      - run: pnpm report-listing:k6:check
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
-      - run: pnpm db:rls:check
+      - run: pnpm run ci

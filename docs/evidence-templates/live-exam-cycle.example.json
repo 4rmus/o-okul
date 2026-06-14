@@ -1,0 +1,49 @@
+{
+  "result": "PASS",
+  "environment": "staging",
+  "checkedAt": "2026-05-30",
+  "tester": "qa-owner",
+  "releaseCandidate": "staging-2026-05-30",
+  "appUrl": "https://staging.example.invalid",
+  "apiUrl": "https://api.staging.example.invalid",
+  "commandsPassed": [
+    "pnpm isem-answer-key:smoke",
+    "pnpm isem-optical-pipeline:smoke",
+    "pnpm raw-import:smoke",
+    "pnpm report-generation:smoke",
+    "pnpm live:ui-worker:smoke"
+  ],
+  "examCycle": {
+    "examId": "exam-isem-optical-smoke-example",
+    "answerKeyId": "answer-key-isem-lgs-1-example",
+    "answerKeyVersion": "isem-lgs-1-v1",
+    "parserConfigVersion": "optik-7108-lgs-v1",
+    "rawImportId": "raw-import-isem-optical-smoke-example",
+    "reportSnapshotId": "snapshot-isem-optical-smoke-example",
+    "firstStudentId": "student-isem-331-example",
+    "answerKeyQuestionCount": 90,
+    "bookletVariantCount": 1,
+    "participantCount": 254,
+    "matchedCount": 254,
+    "examResultCount": 254,
+    "reportResultCount": 254,
+    "downloadedArtifacts": 2,
+    "answerKeyImported": true,
+    "opticalImportCommitted": true,
+    "rawImportArchived": true,
+    "evaluationQueued": true,
+    "quarantinePathVerified": true,
+    "reportGenerated": true,
+    "reportReady": true,
+    "karnePdfDownloaded": true,
+    "excelDownloaded": true,
+    "studentPortalViewed": true,
+    "guardianPortalViewed": true,
+    "noMockRoutes": true
+  },
+  "evidenceReferences": [
+    "artifacts/example/live-exam-cycle/isem-optical-pipeline.log",
+    "artifacts/example/live-exam-cycle/live-ui-worker-report.json"
+  ],
+  "gaps": []
+}

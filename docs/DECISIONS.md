@@ -29,10 +29,10 @@ Karar: VPS/self-hosted Docker Compose; TR datacenter gereksinimi.
 Kaynak: Kullanıcı görüşmesi / master plan §2 ve §3.7.
 Kanıt: `MASTER_PLAN.md` §2/§3.7, `docs/ADR-0002-deployment.md`.
 Etkilenen ADR: ADR-0002
-Açık soru: Yok. Traefik v2.11 entrypoint, Docker label ve ACME HTTP-01 challenge sözdizimi
-resmi Traefik dokümantasyonu ile doğrulandı; compose config kontrolü geçti. Canlı HTTPS kanıtı
-staging domain bekliyor.
-Son kontrol: 2026-05-30
+Açık soru: Yok. Traefik v3.7.5 imajına geçildi; v2->v3 geçiş rehberindeki kademeli Docker
+label/routing uyumluluğu ve ACME HTTP-01/entrypoint kullanımı resmi Traefik dokümantasyonu ile
+doğrulandı. Compose config kontrolü geçti; canlı HTTPS kanıtı staging domain bekliyor.
+Son kontrol: 2026-06-13
 
 ### DEC-20260529-03 — Geliştirme modeli
 
@@ -151,6 +151,92 @@ Kanıt: `apps/worker/src/jobs/scoring-engine.ts`, `scoring-engine.test.ts`.
 Etkilenen ADR: Yok
 Açık soru: Yok
 Son kontrol: 2026-05-31
+
+### DEC-20260613-01 — V1 ürün kapsam sınırı
+
+Durum: Onaylı
+Karar: V1 hedefi tek veya çok şubeli dershane/özel öğretim kurumunda TXT/DAT optik import,
+rapor/karne, kişi portalları, ödeme/taksit takibi, duyuru/SMS/destek ve operasyon kanıt zinciridir.
+Salon/oturma planı, online deneme oturumu, ödeme sağlayıcı/fatura/makbuz entegrasyonu ve OMR
+görüntü tarama v1 kapsamı dışıdır.
+Kaynak: `claudedocs/prod-plan-2026-06-12.md` Faz 1 ve Faz 7.
+Kanıt: `docs/product-journeys-v1.md`, `docs/MASTER_PLAN.md` sınav ve kota kararları,
+`docs/development-plan-2026-06-02.md` kapsam dışı notları.
+Etkilenen ADR: Yok
+Açık soru: Pilot kurum farklı optik format veya fatura entegrasyonu isterse Faz 4/Faz 10 karar
+kapısında ayrı DEC açılır.
+Son kontrol: 2026-06-13
+
+### DEC-20260613-02 — Admin MFA ikinci faktörü
+
+Durum: Onaylı
+Karar: SYSTEM_ADMIN ve TENANT_ADMIN hesapları için ikinci faktör TOTP + tek kullanımlık recovery
+code olarak uygulanır. SMS OTP v1'de ikinci faktör olarak kullanılmaz; SIM-swap ve maliyet riski
+nedeniyle reddedilir. TOTP secret'ları AES-GCM ile şifreli saklanır, recovery code'lar HMAC hash
+olarak tutulur ve MFA enable/disable işlemleri mevcut refresh session'ları iptal eder.
+Kaynak: `claudedocs/prod-plan-2026-06-12.md` §6.10.
+Kanıt: `apps/api/src/auth/totp-mfa.ts`, `apps/api/src/auth/auth.service.ts`,
+`docs/evidence-templates/admin-mfa.example.json`, `scripts/check-admin-mfa-evidence.mjs`.
+Etkilenen ADR: Yok
+Açık soru: Production'da `ADMIN_MFA_MODE=required` geçişi pilot kurum admin enrollment'ı tamamlandıktan
+sonra ayrı go-live kararıyla yapılır; repo sözleşmesi staging için `optional` POC'yi kabul eder.
+Son kontrol: 2026-06-13
+
+### DEC-20260613-03 — AI karne özeti template fallback'i
+
+Durum: Onaylı
+Karar: Karne/veli özeti için ilk üretilebilir katman LLM'siz, deterministik template fallback olarak
+`ReportSnapshot.snapshotData.commentary` ve öğrenci `commentary` alanlarına yazılır. Production
+runtime'da `AI_REPORT_SUMMARY_PROVIDER` yalnız `disabled` veya `template` kabul eder; `anthropic`
+dış sağlayıcı yolu ayrıca uygulanıp onaylanana kadar fail-fast kalır.
+Kaynak: `claudedocs/prod-plan-2026-06-12.md` §6.11 stop-rule.
+Kanıt: `apps/worker/src/jobs/report-generation-job.ts`,
+`docs/evidence-templates/ai-report-summary.example.json`,
+`scripts/check-ai-report-summary-evidence.mjs`.
+Etkilenen ADR: Yok
+Açık soru: Dış LLM POC'si yapılacaksa öğretmen değerlendirme rubriği ve KVKK aktarım kararı hangi
+release candidate'a bağlanacak?
+Son kontrol: 2026-06-13
+
+### DEC-20260613-04 — V1 karne görsel kabul eşiği
+
+Durum: Onaylı
+Karar: ADIGÜZEL hedef PDF'leri v1 için sayısal doğruluk ve görsel regresyon bazı olarak kalır; v1
+go-live için UI/portal karne ekranlarının hedef PDF'e birebir piksel eşleşmesi beklenmez. Kabul
+kapısı iki katmanlıdır: `pnpm karne:visual-targets` 3 hedef PDF render/hash boyutunu korur ve
+`pnpm karne:visual-diff -- --target iSEM --ui <png> --max-diff-ratio 0.53 --max-mean-channel-delta 36`
+kanıt screenshot'ları için üst sınırı uygular. Bu eşikler mevcut 16+ iterasyonluk kanıt serisindeki
+ham diff oranı bandını release regresyon kapısına çevirir; daha iyi görsel yakınsama hedeflenir ama
+v1'i bloklamaz.
+Kaynak: `claudedocs/prod-plan-2026-06-12.md` D4/Faz 2 ve `docs/development-plan-2026-06-02.md`
+ADIGÜZEL visual-diff denemeleri.
+Kanıt: `scripts/check-adiguzel-pdf-visual-targets.mjs`, `scripts/compare-karne-visual-evidence.mjs`,
+`scripts/check-karne-visual-contract.mjs`, `pnpm karne:visual-contract:check`.
+Etkilenen ADR: Yok
+Açık soru: Gerçek kurum logosu, basılı karne marka uyumu ve nihai tasarım onayı pilot kurum
+öncesinde ürün sahibi tarafından ayrıca imzalanacak; bu karar yalnız v1 teknik regresyon eşiğini
+sabitler.
+Son kontrol: 2026-06-13
+
+### DEC-20260613-05 — V1 contact PII retention policy
+
+Durum: Onaylı
+Karar: TC kimlik alanı `STUDENT_PII_ENCRYPTION_KEY` ve `STUDENT_PII_HASH_KEY` ile şifreli+hash'li
+kalır. Student.phone, Student.email, Guardian.phone ve User.email v1'de operasyonel iletişim,
+login/davet, veli eşleştirme ve SMS/e-posta iş akışları için birincil veritabanında düz metin
+operasyonel alan olarak saklanır. Guardian.email is not a persisted Guardian column; veli portal
+hesap e-postası User.email ile temsil edilir. Bu alanlar log, Sentry event'i, audit diff'i, smoke
+kanıtı veya production evidence artifact'ine ham değer olarak yazılamaz; `SENTRY_SEND_DEFAULT_PII=false`
+ve redaction testleri bu sınırı korur.
+Kaynak: `claudedocs/prod-plan-2026-06-12.md` A6 ve `docs/MASTER_PLAN.md` KVKK/PII notları.
+Kanıt: `apps/api/src/observability/logging.ts`, `apps/api/src/observability/sentry.ts`,
+`scripts/check-kvkk-inventory-evidence.mjs`, `scripts/check-pii-contact-policy.mjs`,
+`docs/evidence-templates/kvkk-inventory.example.json`, `pnpm pii:contact-policy:check`,
+`pnpm privacy:inventory:check`.
+Etkilenen ADR: Yok
+Açık soru: Real staging/prod KVKK inventory, KVKK aydınlatma metni/DPA ve hukuk veya veri koruma
+onayı üretim çıkışından önce ayrıca alınacak; repo kararı bu gerçek kanıtların yerine geçmez.
+Son kontrol: 2026-06-13
 
 ## Faz Öncesi Onay Gerektirenler
 

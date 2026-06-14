@@ -1,0 +1,74 @@
+{
+  "result": "PASS",
+  "environment": "production",
+  "generatedAt": "2026-06-15T13:30:00.000Z",
+  "productionEvidenceSummaryTarget": "production-evidence-summary.example.json",
+  "goLiveEvidenceTarget": "go-live.example.json",
+  "pilotEvidenceTarget": "pilot.example.json",
+  "gates": [
+    {
+      "label": "Traefik HTTPS smoke",
+      "status": "PASS",
+      "command": "pnpm traefik:https:smoke",
+      "source": "productionEvidenceSummary.smokeEvidence.traefikHttps",
+      "checkedAt": "2026-06-15T09:00:00.000Z",
+      "evidenceReference": "production-evidence-summary.example.json#/smokeEvidence/traefikHttps"
+    },
+    {
+      "label": "TR datacenter/provider kanıtı",
+      "status": "PASS",
+      "command": "pnpm deployment:region:check",
+      "source": "productionEvidenceSummary.reports.deploymentRegion",
+      "checkedAt": "2026-05-30",
+      "evidenceReference": "provider-console-or-contract-reference"
+    },
+    {
+      "label": "Staging/prod UAT",
+      "status": "PASS",
+      "command": "pnpm uat:check",
+      "source": "productionEvidenceSummary.reports.uat",
+      "checkedAt": "2026-05-30",
+      "evidenceReference": "production-evidence-summary.example.json#/reports/uat"
+    },
+    {
+      "label": "Deployment rollback tatbikatı",
+      "status": "PASS",
+      "command": "pnpm deployment:rollback:check",
+      "source": "productionEvidenceSummary.reports.deploymentRollback",
+      "checkedAt": "2026-05-30",
+      "evidenceReference": "artifacts/example/production/release-summary-broken-20260615.json"
+    },
+    {
+      "label": "Pilot kapanış kanıtı",
+      "status": "PASS",
+      "command": "pnpm pilot:check",
+      "source": "pilotEvidence",
+      "checkedAt": "2026-06-15",
+      "evidenceReference": "pilot.example.json"
+    },
+    {
+      "label": "Go-live karar paketi",
+      "status": "PASS",
+      "command": "pnpm go-live:check",
+      "source": "goLiveEvidence",
+      "checkedAt": "2026-06-15T13:30:00.000Z",
+      "evidenceReference": "go-live.example.json"
+    },
+    {
+      "label": "Off-host backup hedefi",
+      "status": "PASS",
+      "command": "pnpm backup:offsite:smoke",
+      "source": "productionEvidenceSummary.smokeEvidence.backupOffsite",
+      "checkedAt": "2026-06-15T09:25:00.000Z",
+      "evidenceReference": "production-evidence-summary.example.json#/smokeEvidence/backupOffsite"
+    },
+    {
+      "label": "Alert bildirim kanalı",
+      "status": "PASS",
+      "command": "pnpm alert:webhook:smoke",
+      "source": "productionEvidenceSummary.smokeEvidence.alertWebhook",
+      "checkedAt": "2026-06-15T09:20:00.000Z",
+      "evidenceReference": "production-evidence-summary.example.json#/smokeEvidence/alertWebhook"
+    }
+  ]
+}

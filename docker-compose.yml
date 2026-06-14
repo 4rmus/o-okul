@@ -40,6 +40,14 @@ services:
       target: api
     environment:
       NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_ENABLED: ${LOG_ENABLED:-true}
+      OPENAPI_UI_ENABLED: ${OPENAPI_UI_ENABLED:-false}
+      API_RATE_LIMIT_ENABLED: ${API_RATE_LIMIT_ENABLED:-true}
+      API_RATE_LIMIT_STORE: ${API_RATE_LIMIT_STORE:-redis}
+      API_RATE_LIMIT_WINDOW_MS: ${API_RATE_LIMIT_WINDOW_MS:-60000}
+      API_RATE_LIMIT_MAX: ${API_RATE_LIMIT_MAX:-300}
+      IDEMPOTENCY_STORE: ${IDEMPOTENCY_STORE:-postgres}
       PORT: 3100
       APP_URL: ${APP_URL}
       API_URL: ${API_URL}
@@ -55,6 +63,9 @@ services:
       PASSWORD_RESET_STORE: ${PASSWORD_RESET_STORE:-postgres}
       REDIS_URL: ${REDIS_URL}
       QUEUE_PREFIX: ${QUEUE_PREFIX}
+      QUEUE_METRICS_ENABLED: ${QUEUE_METRICS_ENABLED:-true}
+      REPORT_PDF_RENDERER: ${REPORT_PDF_RENDERER:-worker}
+      REPORT_PDF_RENDER_TIMEOUT_MS: ${REPORT_PDF_RENDER_TIMEOUT_MS:-30000}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
@@ -62,8 +73,19 @@ services:
       COOKIE_DOMAIN: ${COOKIE_DOMAIN}
       STUDENT_PII_ENCRYPTION_KEY: ${STUDENT_PII_ENCRYPTION_KEY}
       STUDENT_PII_HASH_KEY: ${STUDENT_PII_HASH_KEY}
+      ADMIN_MFA_MODE: ${ADMIN_MFA_MODE:-off}
+      ADMIN_MFA_SECRET_ENCRYPTION_KEY: ${ADMIN_MFA_SECRET_ENCRYPTION_KEY}
+      ADMIN_MFA_RECOVERY_HASH_KEY: ${ADMIN_MFA_RECOVERY_HASH_KEY}
+      ADMIN_MFA_CHALLENGE_SECRET: ${ADMIN_MFA_CHALLENGE_SECRET}
+      ADMIN_MFA_ISSUER: ${ADMIN_MFA_ISSUER:-Uzman Hocam}
+      AI_REPORT_SUMMARY_PROVIDER: ${AI_REPORT_SUMMARY_PROVIDER:-disabled}
       COOKIE_SECURE: ${COOKIE_SECURE}
-      SUPPORT_ATTACHMENT_STORAGE: ${SUPPORT_ATTACHMENT_STORAGE:-inline}
+      SUPPORT_ATTACHMENT_STORAGE: ${SUPPORT_ATTACHMENT_STORAGE:-s3}
+      HOMEWORK_MATERIAL_FILE_STORAGE: ${HOMEWORK_MATERIAL_FILE_STORAGE:-s3}
+      UPLOAD_AV_SCANNER: ${UPLOAD_AV_SCANNER:-disabled}
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      CLAMAV_TIMEOUT_MS: ${CLAMAV_TIMEOUT_MS:-5000}
       S3_ENDPOINT: http://minio:9000
       S3_REGION: ${S3_REGION}
       S3_BUCKET: ${S3_BUCKET}
@@ -74,6 +96,10 @@ services:
       NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION: ${NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION:-false}
       NOTIFICATION_HTTP_ENDPOINT: ${NOTIFICATION_HTTP_ENDPOINT:-}
       NOTIFICATION_HTTP_BEARER_TOKEN: ${NOTIFICATION_HTTP_BEARER_TOKEN:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_SEND_DEFAULT_PII: ${SENTRY_SEND_DEFAULT_PII:-false}
     ports:
       - "${API_HOST_PORT:-3100}:3100"
     healthcheck:
@@ -89,6 +115,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      clamav:
+        condition: service_healthy
 
   worker:
     restart: unless-stopped
@@ -98,12 +126,15 @@ services:
       target: worker
     environment:
       NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_ENABLED: ${LOG_ENABLED:-true}
       PERSISTENCE_DRIVER: ${PERSISTENCE_DRIVER:-postgres}
       DATABASE_URL: ${DATABASE_URL}
       DIRECT_DATABASE_URL: ${DIRECT_DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       QUEUE_PREFIX: ${QUEUE_PREFIX}
       STUDENT_PII_HASH_KEY: ${STUDENT_PII_HASH_KEY}
+      AI_REPORT_SUMMARY_PROVIDER: ${AI_REPORT_SUMMARY_PROVIDER:-disabled}
       S3_ENDPOINT: http://minio:9000
       S3_REGION: ${S3_REGION}
       S3_BUCKET: ${S3_BUCKET}
@@ -118,11 +149,42 @@ services:
       NETGSM_MSG_HEADER: ${NETGSM_MSG_HEADER:-}
       NETGSM_IYS_FILTER: ${NETGSM_IYS_FILTER:-0}
       NETGSM_APP_NAME: ${NETGSM_APP_NAME:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_SEND_DEFAULT_PII: ${SENTRY_SEND_DEFAULT_PII:-false}
     networks:
       - backend_net
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  queue-board:
+    restart: unless-stopped
+    logging: *default-logging
+    build:
+      context: .
+      target: queue-board
+    environment:
+      NODE_ENV: production
+      PORT: 3200
+      REDIS_URL: ${REDIS_URL}
+      QUEUE_PREFIX: ${QUEUE_PREFIX}
+      QUEUE_BOARD_BASE_PATH: ${QUEUE_BOARD_BASE_PATH:-/admin/queues}
+      QUEUE_BOARD_BASIC_AUTH_USER: ${QUEUE_BOARD_BASIC_AUTH_USER}
+      QUEUE_BOARD_BASIC_AUTH_PASSWORD: ${QUEUE_BOARD_BASIC_AUTH_PASSWORD}
+    ports:
+      - "127.0.0.1:${QUEUE_BOARD_HOST_PORT:-3200}:3200"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3200/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend_net
+    depends_on:
       redis:
         condition: service_healthy
 
@@ -168,6 +230,25 @@ services:
     networks:
       - backend_net
 
+  clamav:
+    restart: unless-stopped
+    logging: *default-logging
+    image: clamav/clamav:stable
+    environment:
+      CLAMD_STARTUP_TIMEOUT: ${CLAMD_STARTUP_TIMEOUT:-1800}
+    expose:
+      - "3310"
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan --version >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 2m
+    networks:
+      - backend_net
+
   minio:
     restart: unless-stopped
     logging: *default-logging
@@ -210,4 +291,5 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  clamav_data:
   minio_data:

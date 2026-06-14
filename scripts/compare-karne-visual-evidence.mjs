@@ -66,6 +66,9 @@ try {
   if (options.maxDiffRatio !== undefined && diff.diffRatio > options.maxDiffRatio) {
     throw new Error(`KARNE_VISUAL_DIFF_TOO_HIGH:${diff.diffRatio.toFixed(6)}>${options.maxDiffRatio}`);
   }
+  if (options.maxMeanChannelDelta !== undefined && diff.meanChannelDelta > options.maxMeanChannelDelta) {
+    throw new Error(`KARNE_VISUAL_MEAN_DELTA_TOO_HIGH:${diff.meanChannelDelta.toFixed(2)}>${options.maxMeanChannelDelta}`);
+  }
 } finally {
   rmSync(tempDir, { force: true, recursive: true });
 }
@@ -82,6 +85,9 @@ function parseArgs(args) {
       index += 1;
     } else if (arg === "--max-diff-ratio") {
       parsed.maxDiffRatio = Number(args[index + 1]);
+      index += 1;
+    } else if (arg === "--max-mean-channel-delta") {
+      parsed.maxMeanChannelDelta = Number(args[index + 1]);
       index += 1;
     }
   }

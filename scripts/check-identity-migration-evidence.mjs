@@ -2,6 +2,27 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const target = process.env.IDENTITY_MIGRATION_TARGET;
+const allowExampleEvidence = process.env.IDENTITY_MIGRATION_ALLOW_EXAMPLE_EVIDENCE === "1";
+const identityMigrationTopLevelKeys = [
+  "result",
+  "environment",
+  "checkedAt",
+  "migrationDecision",
+  "subjects",
+  "invitationFlow",
+  "verifications",
+  "gaps",
+];
+const migrationDecisionKeys = ["approvedBy", "approvalReference", "activationMode"];
+const subjectKeys = ["role", "sourceRecords", "linkedUsers", "tenantMembershipsCreated"];
+const invitationFlowKeys = ["created", "accepted", "expiredOrRevoked"];
+const expectedSubjectRoles = ["STUDENT", "GUARDIAN", "TEACHER"];
+const expectedVerifications = [
+  "identity_link_audit_ready",
+  "tenant_memberships_created",
+  "wrong_role_access_rejected",
+  "cross_tenant_activation_rejected",
+];
 
 if (!target) {
   fail(["IDENTITY_MIGRATION_TARGET boş bırakılamaz."]);
@@ -50,20 +71,20 @@ function parseJson(value) {
 function validateReport(report) {
   const failures = [];
 
+  if (!requireObjectKeySet(report, identityMigrationTopLevelKeys, failures, "identityMigration")) return failures;
+
   requireEqual(report, failures, "result", "PASS");
   requireOneOf(report, failures, "environment", ["staging", "production"]);
   requireDate(report, failures, "checkedAt");
+  requireDateNotInFuture(report, failures, "checkedAt");
   requireDecision(report.migrationDecision, failures);
   requireSubjects(report.subjects, failures);
   requireInvitations(report.invitationFlow, failures);
-  requireVerified(report.verifications, failures, [
-    "identity_link_audit_ready",
-    "tenant_memberships_created",
-    "wrong_role_access_rejected",
-    "cross_tenant_activation_rejected",
-  ]);
+  requireExactStringSet(report.verifications, failures, "verifications", expectedVerifications, "doğrulama");
 
-  if (Array.isArray(report.gaps) && report.gaps.length > 0) {
+  if (!Array.isArray(report.gaps)) {
+    failures.push("gaps listesi zorunlu.");
+  } else if (report.gaps.length > 0) {
     failures.push("gaps boş olmalı.");
   }
 
@@ -71,13 +92,12 @@ function validateReport(report) {
 }
 
 function requireDecision(decision, failures) {
-  if (!decision || typeof decision !== "object" || Array.isArray(decision)) {
-    failures.push("migrationDecision nesnesi zorunlu.");
-    return;
-  }
+  if (!requireObjectKeySet(decision, migrationDecisionKeys, failures, "migrationDecision")) return;
 
   requireString(decision, failures, "migrationDecision.approvedBy", "approvedBy");
+  requireObjectNonPlaceholderString(decision, failures, "migrationDecision.approvedBy", "approvedBy");
   requireString(decision, failures, "migrationDecision.approvalReference", "approvalReference");
+  requireObjectNonPlaceholderString(decision, failures, "migrationDecision.approvalReference", "approvalReference");
   requireOneOf(decision, failures, "activationMode", ["invite", "admin_link", "hybrid"]);
 }
 
@@ -87,7 +107,30 @@ function requireSubjects(subjects, failures) {
     return;
   }
 
-  for (const role of ["STUDENT", "GUARDIAN", "TEACHER"]) {
+  if (subjects.length !== expectedSubjectRoles.length) {
+    failures.push(`subjects tam ${expectedSubjectRoles.length} subject içermeli.`);
+    return;
+  }
+
+  const seenRoles = new Set();
+  for (const subject of subjects) {
+    if (!subject || typeof subject !== "object" || Array.isArray(subject)) {
+      failures.push("subjects item nesnesi zorunlu.");
+      continue;
+    }
+    const role = subject.role;
+    if (typeof role === "string" && seenRoles.has(role)) {
+      failures.push(`subjects tekrarlı subject içeriyor: ${role}`);
+    }
+    if (typeof role === "string") seenRoles.add(role);
+    if (typeof role !== "string" || !expectedSubjectRoles.includes(role)) {
+      failures.push(`subjects beklenmeyen subject içeriyor: ${String(role)}`);
+      continue;
+    }
+    requireObjectKeySet(subject, subjectKeys, failures, `subjects.${role}`);
+  }
+
+  for (const role of expectedSubjectRoles) {
     const subject = subjects.find((entry) => entry?.role === role);
     if (!subject) {
       failures.push(`subjects eksik: ${role}`);
@@ -110,10 +153,7 @@ function requireSubjects(subjects, failures) {
 }
 
 function requireInvitations(flow, failures) {
-  if (!flow || typeof flow !== "object" || Array.isArray(flow)) {
-    failures.push("invitationFlow nesnesi zorunlu.");
-    return;
-  }
+  if (!requireObjectKeySet(flow, invitationFlowKeys, failures, "invitationFlow")) return;
 
   for (const key of ["created", "accepted", "expiredOrRevoked"]) {
     if (!Number.isInteger(flow[key]) || flow[key] < 0) {
@@ -125,17 +165,62 @@ function requireInvitations(flow, failures) {
   }
 }
 
-function requireVerified(values, failures, expectedValues) {
-  if (!Array.isArray(values)) {
-    failures.push("verifications alan listesi zorunlu.");
+function requireExactStringSet(value, failures, label, expectedValues, itemLabel) {
+  if (!Array.isArray(value)) {
+    failures.push(`${label} listesi zorunlu.`);
     return;
   }
 
-  for (const expected of expectedValues) {
-    if (!values.includes(expected)) {
-      failures.push(`verifications eksik: ${expected}`);
+  if (value.length !== expectedValues.length) {
+    failures.push(`${label} tam ${expectedValues.length} ${itemLabel} içermeli.`);
+    return;
+  }
+
+  const uniqueValues = new Set(value);
+  if (uniqueValues.size !== value.length) {
+    failures.push(`${label} tekrarlı ${itemLabel} içeremez.`);
+  }
+
+  for (const expectedValue of expectedValues) {
+    if (!uniqueValues.has(expectedValue)) {
+      failures.push(`${label} eksik: ${expectedValue}`);
     }
   }
+
+  for (const item of value) {
+    if (typeof item !== "string" || item.trim() === "") {
+      failures.push(`${label} boş olmayan string ${itemLabel} içermeli.`);
+    } else if (!expectedValues.includes(item)) {
+      failures.push(`${label} beklenmeyen ${itemLabel} içeriyor: ${item}`);
+    }
+  }
+}
+
+function requireObjectKeySet(value, expectedKeys, failures, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    failures.push(`${label} nesnesi zorunlu.`);
+    return false;
+  }
+
+  const keys = Object.keys(value);
+  if (keys.length !== expectedKeys.length) {
+    failures.push(`${label} tam ${expectedKeys.length} alan içermeli.`);
+    return false;
+  }
+
+  const keySet = new Set(keys);
+  for (const key of expectedKeys) {
+    if (!keySet.has(key)) {
+      failures.push(`${label} eksik alan içeriyor: ${key}`);
+    }
+  }
+  for (const key of keys) {
+    if (!expectedKeys.includes(key)) {
+      failures.push(`${label} beklenmeyen alan içeriyor: ${key}`);
+    }
+  }
+
+  return true;
 }
 
 function requireEqual(report, failures, key, expected) {
@@ -157,10 +242,54 @@ function requireDate(report, failures, key) {
   }
 }
 
+function requireDateNotInFuture(report, failures, key) {
+  if (allowExampleEvidence) return;
+
+  const value = report[key];
+  const timestamp = Date.parse(value);
+  if (typeof value !== "string" || Number.isNaN(timestamp)) {
+    return;
+  }
+
+  const clockSkewMs = 5 * 60 * 1000;
+  if (timestamp > Date.now() + clockSkewMs) {
+    failures.push(`${key} gelecekte olamaz.`);
+  }
+}
+
 function requireString(scope, failures, label, key) {
   if (typeof scope[key] !== "string" || scope[key].trim() === "") {
     failures.push(`${label} boş olmayan metin olmalı.`);
   }
+}
+
+function requireObjectNonPlaceholderString(scope, failures, label, key) {
+  if (allowExampleEvidence) return;
+
+  const value = scope[key];
+  if (typeof value !== "string" || value.trim() === "") {
+    return;
+  }
+
+  if (hasPlaceholderToken(value)) {
+    failures.push(`${label} production kanıtı için örnek/placeholder/redacted değer olmamalı.`);
+  }
+}
+
+function hasPlaceholderToken(value) {
+  const normalized = value.toLowerCase();
+  return [
+    "__set",
+    "change-me",
+    "replace-me",
+    "placeholder",
+    "redacted",
+    "example",
+    ".test",
+    ".invalid",
+    "localhost",
+    "127.0.0.1",
+  ].some((token) => normalized.includes(token));
 }
 
 function fail(failures) {

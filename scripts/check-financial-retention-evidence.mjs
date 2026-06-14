@@ -2,6 +2,22 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const target = process.env.FINANCIAL_RETENTION_TARGET;
+const allowExampleEvidence = process.env.FINANCIAL_RETENTION_ALLOW_EXAMPLE_EVIDENCE === "1";
+const financialRetentionTopLevelKeys = [
+  "result",
+  "environment",
+  "checkedAt",
+  "policyDecision",
+  "financialRecords",
+  "purgeBehaviorVerified",
+  "gaps",
+];
+const policyDecisionKeys = ["approvedBy", "approvalReference", "retentionPeriodYears", "legalBasis", "purgeException"];
+const financialRecordKeys = ["paymentPlans", "installments"];
+const expectedPurgeBehaviorVerifications = [
+  "privacy.me.purge_preserves_payment_plans",
+  "payment_plan_records_excluded_from_pii_purge",
+];
 
 if (!target) {
   fail(["FINANCIAL_RETENTION_TARGET boş bırakılamaz."]);
@@ -50,17 +66,25 @@ function parseJson(value) {
 function validateReport(report) {
   const failures = [];
 
+  if (!requireObjectKeySet(report, financialRetentionTopLevelKeys, failures, "financialRetention")) return failures;
+
   requireEqual(report, failures, "result", "PASS");
   requireOneOf(report, failures, "environment", ["staging", "production"]);
   requireDate(report, failures, "checkedAt");
+  requireDateNotInFuture(report, failures, "checkedAt");
   requirePolicyDecision(report.policyDecision, failures);
   requireFinancialRecords(report.financialRecords, failures);
-  requireVerified(report.purgeBehaviorVerified, failures, [
-    "privacy.me.purge_preserves_payment_plans",
-    "payment_plan_records_excluded_from_pii_purge",
-  ]);
+  requireExactStringSet(
+    report.purgeBehaviorVerified,
+    failures,
+    "purgeBehaviorVerified",
+    expectedPurgeBehaviorVerifications,
+    "doğrulama",
+  );
 
-  if (Array.isArray(report.gaps) && report.gaps.length > 0) {
+  if (!Array.isArray(report.gaps)) {
+    failures.push("gaps listesi zorunlu.");
+  } else if (report.gaps.length > 0) {
     failures.push("gaps boş olmalı.");
   }
 
@@ -68,13 +92,12 @@ function validateReport(report) {
 }
 
 function requirePolicyDecision(policy, failures) {
-  if (!policy || typeof policy !== "object" || Array.isArray(policy)) {
-    failures.push("policyDecision nesnesi zorunlu.");
-    return;
-  }
+  if (!requireObjectKeySet(policy, policyDecisionKeys, failures, "policyDecision")) return;
 
   requireString(policy, failures, "policyDecision.approvedBy", "approvedBy");
+  requireObjectNonPlaceholderString(policy, failures, "policyDecision.approvedBy", "approvedBy");
   requireString(policy, failures, "policyDecision.approvalReference", "approvalReference");
+  requireObjectNonPlaceholderString(policy, failures, "policyDecision.approvalReference", "approvalReference");
   requireString(policy, failures, "policyDecision.legalBasis", "legalBasis");
   if (!Number.isInteger(policy.retentionPeriodYears) || policy.retentionPeriodYears < 1) {
     failures.push("policyDecision.retentionPeriodYears pozitif tam sayı olmalı.");
@@ -85,29 +108,71 @@ function requirePolicyDecision(policy, failures) {
 }
 
 function requireFinancialRecords(records, failures) {
-  if (!records || typeof records !== "object" || Array.isArray(records)) {
-    failures.push("financialRecords nesnesi zorunlu.");
-    return;
-  }
+  if (!requireObjectKeySet(records, financialRecordKeys, failures, "financialRecords")) return;
 
-  for (const key of ["paymentPlans", "installments"]) {
+  for (const key of financialRecordKeys) {
     if (!Number.isInteger(records[key]) || records[key] <= 0) {
       failures.push(`financialRecords.${key} gerçek kanıt için sıfırdan büyük tam sayı olmalı.`);
     }
   }
 }
 
-function requireVerified(values, failures, expectedValues) {
-  if (!Array.isArray(values)) {
-    failures.push("purgeBehaviorVerified alan listesi zorunlu.");
+function requireExactStringSet(value, failures, label, expectedValues, itemLabel) {
+  if (!Array.isArray(value)) {
+    failures.push(`${label} listesi zorunlu.`);
     return;
   }
 
-  for (const expected of expectedValues) {
-    if (!values.includes(expected)) {
-      failures.push(`purgeBehaviorVerified eksik: ${expected}`);
+  if (value.length !== expectedValues.length) {
+    failures.push(`${label} tam ${expectedValues.length} ${itemLabel} içermeli.`);
+    return;
+  }
+
+  const uniqueValues = new Set(value);
+  if (uniqueValues.size !== value.length) {
+    failures.push(`${label} tekrarlı ${itemLabel} içeremez.`);
+  }
+
+  for (const expectedValue of expectedValues) {
+    if (!uniqueValues.has(expectedValue)) {
+      failures.push(`${label} eksik: ${expectedValue}`);
     }
   }
+
+  for (const item of value) {
+    if (typeof item !== "string" || item.trim() === "") {
+      failures.push(`${label} boş olmayan string ${itemLabel} içermeli.`);
+    } else if (!expectedValues.includes(item)) {
+      failures.push(`${label} beklenmeyen ${itemLabel} içeriyor: ${item}`);
+    }
+  }
+}
+
+function requireObjectKeySet(value, expectedKeys, failures, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    failures.push(`${label} nesnesi zorunlu.`);
+    return false;
+  }
+
+  const keys = Object.keys(value);
+  if (keys.length !== expectedKeys.length) {
+    failures.push(`${label} tam ${expectedKeys.length} alan içermeli.`);
+    return false;
+  }
+
+  const keySet = new Set(keys);
+  for (const key of expectedKeys) {
+    if (!keySet.has(key)) {
+      failures.push(`${label} eksik alan içeriyor: ${key}`);
+    }
+  }
+  for (const key of keys) {
+    if (!expectedKeys.includes(key)) {
+      failures.push(`${label} beklenmeyen alan içeriyor: ${key}`);
+    }
+  }
+
+  return true;
 }
 
 function requireEqual(report, failures, key, expected) {
@@ -129,10 +194,54 @@ function requireDate(report, failures, key) {
   }
 }
 
+function requireDateNotInFuture(report, failures, key) {
+  if (allowExampleEvidence) return;
+
+  const value = report[key];
+  const timestamp = Date.parse(value);
+  if (typeof value !== "string" || Number.isNaN(timestamp)) {
+    return;
+  }
+
+  const clockSkewMs = 5 * 60 * 1000;
+  if (timestamp > Date.now() + clockSkewMs) {
+    failures.push(`${key} gelecekte olamaz.`);
+  }
+}
+
 function requireString(scope, failures, label, key) {
   if (typeof scope[key] !== "string" || scope[key].trim() === "") {
     failures.push(`${label} boş olmayan metin olmalı.`);
   }
+}
+
+function requireObjectNonPlaceholderString(scope, failures, label, key) {
+  if (allowExampleEvidence) return;
+
+  const value = scope[key];
+  if (typeof value !== "string" || value.trim() === "") {
+    return;
+  }
+
+  if (hasPlaceholderToken(value)) {
+    failures.push(`${label} production kanıtı için örnek/placeholder/redacted değer olmamalı.`);
+  }
+}
+
+function hasPlaceholderToken(value) {
+  const normalized = value.toLowerCase();
+  return [
+    "__set",
+    "change-me",
+    "replace-me",
+    "placeholder",
+    "redacted",
+    "example",
+    ".test",
+    ".invalid",
+    "localhost",
+    "127.0.0.1",
+  ].some((token) => normalized.includes(token));
 }
 
 function fail(failures) {

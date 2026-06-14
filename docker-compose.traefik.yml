@@ -1,12 +1,15 @@
 services:
   traefik:
-    image: traefik:v2.11
+    image: traefik:v3.7.5
     command:
       - "--api.dashboard=false"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
       - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
@@ -21,6 +24,25 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      web:
+        condition: service_healthy
+
+  web:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=uzman-hocam_frontend_net"
+      - "traefik.http.routers.web.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.web.entrypoints=websecure"
+      - "traefik.http.routers.web.priority=10"
+      - "traefik.http.routers.web.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.web.middlewares=web-security-headers"
+      - "traefik.http.middlewares.web-security-headers.headers.stsseconds=15552000"
+      - "traefik.http.middlewares.web-security-headers.headers.stsincludesubdomains=true"
+      - "traefik.http.middlewares.web-security-headers.headers.contenttypenosniff=true"
+      - "traefik.http.middlewares.web-security-headers.headers.framedeny=true"
+      - "traefik.http.middlewares.web-security-headers.headers.referrerpolicy=no-referrer"
+      - "traefik.http.middlewares.web-security-headers.headers.permissionspolicy=camera=(), microphone=(), geolocation=()"
+      - "traefik.http.services.web.loadbalancer.server.port=3001"
 
   api:
     labels:
@@ -28,7 +50,15 @@ services:
       - "traefik.docker.network=uzman-hocam_frontend_net"
       - "traefik.http.routers.api.rule=Host(`${DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/health`))"
       - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.priority=100"
       - "traefik.http.routers.api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api.middlewares=api-security-headers"
+      - "traefik.http.middlewares.api-security-headers.headers.stsseconds=15552000"
+      - "traefik.http.middlewares.api-security-headers.headers.stsincludesubdomains=true"
+      - "traefik.http.middlewares.api-security-headers.headers.contenttypenosniff=true"
+      - "traefik.http.middlewares.api-security-headers.headers.framedeny=true"
+      - "traefik.http.middlewares.api-security-headers.headers.referrerpolicy=no-referrer"
+      - "traefik.http.middlewares.api-security-headers.headers.permissionspolicy=camera=(), microphone=(), geolocation=()"
       - "traefik.http.services.api.loadbalancer.server.port=3100"
 
 volumes:

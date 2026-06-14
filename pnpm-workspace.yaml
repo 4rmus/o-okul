@@ -4,6 +4,8 @@ packages:
 allowBuilds:
   '@nestjs/core': true
   '@prisma/engines': true
+  '@scarf/scarf': false
+  '@sentry/cli': false
   esbuild: true
   msgpackr-extract: false
   prisma: true

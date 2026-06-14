@@ -2,6 +2,33 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const target = process.env.OBSERVABILITY_UAT_TARGET;
+const allowExampleEvidence = process.env.OBSERVABILITY_UAT_ALLOW_EXAMPLE_EVIDENCE === "1";
+const observabilityUatTopLevelKeys = [
+  "result",
+  "environment",
+  "checkedAt",
+  "prometheusScrapeOk",
+  "grafanaDashboardOk",
+  "lokiLogPanelOk",
+  "alertWebhookStatus",
+  "dashboardPanelsVerified",
+  "alertsVerified",
+  "evidenceReferences",
+  "gaps",
+];
+const requiredDashboardPanels = [
+  "API up",
+  "Request rate",
+  "Average duration",
+  "Readiness failures",
+  "Docker logs",
+];
+const requiredAlerts = [
+  "UzmanHocamApiDown",
+  "UzmanHocamReadinessFailing",
+  "UzmanHocamHigh5xxRate",
+  "UzmanHocamSlowRequests",
+];
 
 if (!target) {
   fail(["OBSERVABILITY_UAT_TARGET boş bırakılamaz."]);
@@ -50,31 +77,23 @@ function parseJson(value) {
 function validateReport(report) {
   const failures = [];
 
+  if (!requireObjectKeySet(report, observabilityUatTopLevelKeys, failures, "observabilityUat")) {
+    return failures;
+  }
+
   requireEqual(report, failures, "result", "PASS");
   requireOneOf(report, failures, "environment", ["staging", "production"]);
   requireDate(report, failures, "checkedAt");
+  requireDateNotInFuture(report, failures, "checkedAt");
   requireTrue(report, failures, "prometheusScrapeOk");
   requireTrue(report, failures, "grafanaDashboardOk");
   requireTrue(report, failures, "lokiLogPanelOk");
   requireStatus(report, failures, "alertWebhookStatus");
 
-  requireList(report, failures, "dashboardPanelsVerified", [
-    "API up",
-    "Request rate",
-    "Average duration",
-    "Readiness failures",
-    "Docker logs",
-  ]);
-  requireList(report, failures, "alertsVerified", [
-    "UzmanHocamApiDown",
-    "UzmanHocamReadinessFailing",
-    "UzmanHocamHigh5xxRate",
-    "UzmanHocamSlowRequests",
-  ]);
-
-  if (Array.isArray(report.gaps) && report.gaps.length > 0) {
-    failures.push("gaps boş olmalı.");
-  }
+  requireExactStringSet(report, failures, "dashboardPanelsVerified", requiredDashboardPanels, "panel");
+  requireExactStringSet(report, failures, "alertsVerified", requiredAlerts, "alert");
+  requireEvidenceReferences(report, failures, "evidenceReferences");
+  requireEmptyArray(report, failures, "gaps");
 
   return failures;
 }
@@ -98,6 +117,21 @@ function requireDate(report, failures, key) {
   }
 }
 
+function requireDateNotInFuture(report, failures, key) {
+  if (allowExampleEvidence) return;
+
+  const value = report[key];
+  const timestamp = Date.parse(value);
+  if (typeof value !== "string" || Number.isNaN(timestamp)) {
+    return;
+  }
+
+  const clockSkewMs = 5 * 60 * 1000;
+  if (timestamp > Date.now() + clockSkewMs) {
+    failures.push(`${key} gelecekte olamaz.`);
+  }
+}
+
 function requireTrue(report, failures, key) {
   if (report[key] !== true) {
     failures.push(`${key} true olmalı.`);
@@ -111,11 +145,23 @@ function requireStatus(report, failures, key) {
   }
 }
 
-function requireList(report, failures, key, expectedValues) {
+function requireExactStringSet(report, failures, key, expectedValues, itemLabel) {
   const value = report[key];
   if (!Array.isArray(value)) {
     failures.push(`${key} alan listesi zorunlu.`);
     return;
+  }
+
+  if (value.length !== expectedValues.length) {
+    failures.push(`${key} tam ${expectedValues.length} ${itemLabel} içermeli.`);
+    return;
+  }
+
+  for (const [index, item] of value.entries()) {
+    if (typeof item !== "string" || item.trim() === "") {
+      failures.push(`${key}.${index} boş olmayan metin olmalı.`);
+      return;
+    }
   }
 
   for (const expected of expectedValues) {
@@ -123,6 +169,73 @@ function requireList(report, failures, key, expectedValues) {
       failures.push(`${key} eksik: ${expected}`);
     }
   }
+}
+
+function requireEmptyArray(report, failures, key) {
+  const value = report?.[key];
+  if (!Array.isArray(value)) {
+    failures.push(`${key} listesi zorunlu.`);
+    return;
+  }
+  if (value.length > 0) {
+    failures.push(`${key} boş olmalı.`);
+  }
+}
+
+function requireObjectKeySet(value, expectedKeys, failures, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    failures.push(`${label} nesnesi zorunlu.`);
+    return false;
+  }
+
+  const keys = Object.keys(value);
+  if (keys.length !== expectedKeys.length) {
+    failures.push(`${label} tam ${expectedKeys.length} alan içermeli.`);
+    return false;
+  }
+
+  for (const expectedKey of expectedKeys) {
+    if (!Object.hasOwn(value, expectedKey)) {
+      failures.push(`${label}.${expectedKey} alanı zorunlu.`);
+    }
+  }
+
+  return true;
+}
+
+function requireEvidenceReferences(report, failures, label) {
+  const value = report.evidenceReferences;
+  if (!Array.isArray(value) || value.length === 0) {
+    failures.push(`${label} boş olmayan liste olmalı.`);
+    return;
+  }
+
+  for (const item of value) {
+    if (typeof item !== "string" || item.trim() === "") {
+      failures.push(`${label} boş olmayan metinlerden oluşmalı.`);
+      return;
+    }
+    if (!allowExampleEvidence && hasPlaceholderToken(item)) {
+      failures.push(`${label} production kanıtı için örnek/placeholder/redacted değer içermemeli.`);
+      return;
+    }
+  }
+}
+
+function hasPlaceholderToken(value) {
+  const normalized = value.toLowerCase();
+  return [
+    "__set",
+    "change-me",
+    "replace-me",
+    "placeholder",
+    "redacted",
+    "example",
+    ".test",
+    ".invalid",
+    "localhost",
+    "127.0.0.1",
+  ].some((token) => normalized.includes(token));
 }
 
 function fail(failures) {

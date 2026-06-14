@@ -1,10 +1,13 @@
 import { request } from "node:https";
+import { redactedUrl, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const smokeUrl = process.env.TRAEFIK_HTTPS_SMOKE_URL ?? defaultSmokeUrl();
 const expectedStatus = Number(process.env.TRAEFIK_HTTPS_SMOKE_EXPECTED_STATUS ?? "200");
 const timeoutMs = Number(process.env.TRAEFIK_HTTPS_SMOKE_TIMEOUT_MS ?? "10000");
 const allowLocal = process.env.TRAEFIK_HTTPS_SMOKE_ALLOW_LOCAL === "true";
 const allowInsecureTls = process.env.TRAEFIK_HTTPS_SMOKE_ALLOW_INSECURE_TLS === "true";
+const evidenceFile = process.env.TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
+const checkedAt = new Date().toISOString();
 
 if (!smokeUrl) {
   fail("TRAEFIK_HTTPS_SMOKE_URL boş bırakılamaz.");
@@ -42,6 +45,19 @@ if (!response.headers["strict-transport-security"]) {
 if (url.pathname === "/health" && !response.body.includes('"status":"ok"')) {
   fail("Traefik HTTPS smoke başarısız: /health yanıtı status=ok içermiyor.");
 }
+
+await writeSmokeEvidence(evidenceFile, {
+  result: "PASS",
+  check: "traefik_https_smoke",
+  environment: process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown",
+  checkedAt,
+  url: redactedUrl(url),
+  expectedStatus,
+  statusCode: response.statusCode,
+  strictTransportSecurity: response.headers["strict-transport-security"],
+  commandsPassed: ["pnpm traefik:https:smoke"],
+  gaps: [],
+});
 
 console.log(`Traefik HTTPS smoke geçti: ${url.href} HTTP ${response.statusCode}`);
 

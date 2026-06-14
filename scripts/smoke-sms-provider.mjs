@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const require = createRequire(import.meta.url);
 const { createSmsAdapterFromEnv } = require("../packages/sms-adapter/dist/index.js");
@@ -6,6 +7,8 @@ const { createSmsAdapterFromEnv } = require("../packages/sms-adapter/dist/index.
 const provider = process.env.SMS_PROVIDER ?? "noop";
 const to = process.env.SMS_SMOKE_TO;
 const body = process.env.SMS_SMOKE_BODY ?? "Uzman Hocam SMS smoke";
+const evidenceFile = process.env.SMS_PROVIDER_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
+const checkedAt = new Date().toISOString();
 
 if (!to) {
   fail("SMS_SMOKE_TO boş bırakılamaz.");
@@ -21,6 +24,19 @@ const [result] = await adapter.sendBatch([{ to, body }]);
 if (!result || result.status !== "sent") {
   fail(`SMS provider smoke başarısız: ${result?.errorCode ?? "UNKNOWN"}`);
 }
+
+await writeSmokeEvidence(evidenceFile, {
+  result: "PASS",
+  check: "sms_provider_smoke",
+  environment: process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown",
+  checkedAt,
+  provider,
+  recipient: maskRecipient(to),
+  segments: result.segmentEstimate?.segments ?? 0,
+  providerMessageId: result.providerMessageId ?? null,
+  commandsPassed: ["pnpm sms:smoke"],
+  gaps: [],
+});
 
 console.log(
   [

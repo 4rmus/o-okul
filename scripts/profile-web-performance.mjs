@@ -1,9 +1,11 @@
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 
 const webAppRoot = "apps/web/app";
 const sourceRoots = ["apps/web/app", "apps/web/src"];
 const outputTarget = process.env.WEB_PERFORMANCE_PROFILE_OUT;
+const enforceBudget = process.env.WEB_PERFORMANCE_BUDGET === "1";
+const landingPageSource = readFileSync("apps/web/app/page.tsx", "utf8");
 
 const sourceFiles = sourceRoots.flatMap((root) => listFiles(root));
 const sourceFileSet = new Set(sourceFiles);
@@ -12,10 +14,16 @@ const componentFiles = sourceFiles.filter((file) => /\.(ts|tsx)$/.test(file));
 const routeProfiles = pageFiles.map(profileRoute).sort((a, b) => a.route.localeCompare(b.route));
 const queryProfiles = componentFiles.map(profileQueries).filter((profile) => profile.useQueryCalls > 0);
 const queryKeyUsage = countQueryKeys(queryProfiles);
+const assetBudgets = {
+  landingHeroFallbackPng: publicAssetProfile("apps/web/public/images/landing-hero-education-ops.png", 2_000_000),
+  landingHeroWebp: publicAssetProfile("apps/web/public/images/landing-hero-education-ops.webp", 250_000),
+};
+const budgetFailures = validateBudgets();
 
 const profile = {
   generatedAt: new Date().toISOString(),
   profileVersion: "2026.06.web-static-v1",
+  assetBudgets,
   totals: {
     clientComponents: componentFiles.filter(isClientComponent).length,
     institutionRoutes: routeProfiles.filter((route) => route.route.startsWith("/kurum")).length,
@@ -39,6 +47,16 @@ if (outputTarget) {
 
 console.log(JSON.stringify(profile, null, 2));
 
+if (enforceBudget) {
+  if (budgetFailures.length > 0) {
+    console.error("Web performance budget kontrolü başarısız:");
+    for (const failure of budgetFailures) console.error(`- ${failure}`);
+    process.exit(1);
+  }
+
+  console.error("Web performance budget kontrolü geçti.");
+}
+
 function listFiles(root) {
   return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
     const path = join(root, entry.name);
@@ -59,6 +77,51 @@ function profileRoute(file) {
     route: toRoute(file),
     useQueryCalls: files.reduce((total, routeFile) => total + countMatches(readFileSync(routeFile, "utf8"), /\buseQuery\s*\(/g), 0),
   };
+}
+
+function publicAssetProfile(file, maxBytes) {
+  return {
+    file,
+    maxBytes,
+    sizeBytes: existsSync(file) ? statSync(file).size : null,
+  };
+}
+
+function validateBudgets() {
+  const failures = [];
+  for (const asset of Object.values(assetBudgets)) {
+    if (asset.sizeBytes === null) {
+      failures.push(`${asset.file} eksik`);
+      continue;
+    }
+    if (asset.sizeBytes > asset.maxBytes) {
+      failures.push(`${asset.file} ${asset.sizeBytes} byte; bütçe ${asset.maxBytes} byte`);
+    }
+  }
+
+  const landingRoute = routeProfiles.find((route) => route.route === "/");
+  if (!landingRoute) {
+    failures.push("Landing route profili bulunamadı.");
+  } else {
+    if (landingRoute.clientEntry) failures.push("Landing route server component kalmalı.");
+    if (landingRoute.useQueryCalls !== 0) failures.push(`Landing route useQuery kullanmamalı: ${landingRoute.useQueryCalls}`);
+  }
+
+  const landingTokens = [
+    "landing-hero-education-ops.webp",
+    "<picture>",
+    "fetchPriority=\"high\"",
+    "loading=\"eager\"",
+    "width={1440}",
+    "height={810}",
+  ];
+  for (const token of landingTokens) {
+    if (!landingPageSource.includes(token)) {
+      failures.push(`apps/web/app/page.tsx eksik: ${token}`);
+    }
+  }
+
+  return failures;
 }
 
 function profileQueries(file) {

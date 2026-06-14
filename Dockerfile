@@ -28,8 +28,7 @@ CMD ["./node_modules/.bin/next", "start", "-H", "0.0.0.0", "-p", "3001"]
 FROM node:24-alpine AS api
 WORKDIR /app
 ENV NODE_ENV=production
-ENV REPORT_PDF_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium-browser
-RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont && corepack enable
+RUN corepack enable
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/apps/api ./apps/api
 COPY --from=build /app/packages ./packages
@@ -40,9 +39,20 @@ CMD ["node", "apps/api/dist/main.js"]
 FROM node:24-alpine AS worker
 WORKDIR /app
 ENV NODE_ENV=production
-RUN corepack enable
+ENV REPORT_PDF_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont && corepack enable
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/apps/worker ./apps/worker
 COPY --from=build /app/packages ./packages
 COPY package.json pnpm-workspace.yaml turbo.json ./
 CMD ["node", "apps/worker/dist/main.js"]
+
+FROM node:24-alpine AS queue-board
+WORKDIR /app
+ENV NODE_ENV=production
+RUN corepack enable
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/apps/queue-board ./apps/queue-board
+COPY package.json pnpm-workspace.yaml turbo.json ./
+EXPOSE 3200
+CMD ["node", "apps/queue-board/dist/main.js"]

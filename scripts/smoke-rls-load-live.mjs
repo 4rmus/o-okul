@@ -1,6 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { Socket } from "node:net";
 import pg from "pg";
+import { writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/uzman_hocam";
 const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/uzman_hocam";
@@ -8,6 +9,8 @@ const targetRps = readPositiveInt("RLS_LOAD_TARGET_RPS", 200);
 const durationSeconds = readPositiveInt("RLS_LOAD_DURATION_SECONDS", 3);
 const concurrency = readPositiveInt("RLS_LOAD_CONCURRENCY", 16);
 const seedCount = readPositiveInt("RLS_LOAD_SEED_STUDENTS", 80);
+const evidenceFile = process.env.RLS_LOAD_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
+const environment = process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown";
 const totalRequests = targetRps * durationSeconds;
 const runId = randomUUID();
 const tenantA = `tenant-rls-load-a-${runId}`;
@@ -34,6 +37,29 @@ try {
   if (rps < targetRps) {
     throw new Error(`RLS_LOAD_TARGET_MISSED: target=${targetRps.toFixed(2)}rps actual=${rps.toFixed(2)}rps`);
   }
+
+  await writeSmokeEvidence(evidenceFile, {
+    result: "PASS",
+    check: "rls_load_smoke",
+    environment,
+    checkedAt: new Date().toISOString(),
+    loadSmoke: {
+      targetRps,
+      actualRps: Number(rps.toFixed(2)),
+      durationSeconds,
+      concurrency,
+      seedStudentsPerTenant: seedCount,
+      queriesCompleted: result.completed,
+      failures: result.failures.length,
+    },
+    isolation: {
+      tenantAHash: sha256(tenantA),
+      tenantBHash: sha256(tenantB),
+      crossTenantReadRows: 0,
+    },
+    commandsPassed: ["pnpm rls:load:smoke"],
+    gaps: [],
+  });
 
   console.log(
     `RLS load smoke gecti: ${result.completed} tenant-scope sorgu, ${rps.toFixed(2)} rps, hedef ${targetRps} rps, concurrency ${concurrency}.`,
@@ -172,6 +198,10 @@ function readPositiveInt(name, fallback) {
     throw new Error(`${name} pozitif tam sayi olmali.`);
   }
   return parsed;
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 async function assertPort(label, host, port, hint) {

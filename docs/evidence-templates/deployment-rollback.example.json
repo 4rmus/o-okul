@@ -1,0 +1,44 @@
+{
+  "result": "PASS",
+  "environment": "staging",
+  "checkedAt": "2026-05-30T10:30:00.000Z",
+  "releaseCandidate": "staging-2026-05-30",
+  "failedImageTag": "ghcr.io/example/uzman-hocam/api:broken-20260530",
+  "rollbackImageTag": "ghcr.io/example/uzman-hocam/api:previous-pass",
+  "drillStartedAt": "2026-05-30T10:15:00.000Z",
+  "drillCompletedAt": "2026-05-30T10:25:00.000Z",
+  "failureInjected": true,
+  "failureMode": "broken image deploy rejected by healthcheck",
+  "migrationRollbackSafe": true,
+  "commandsPassed": [
+    "docker compose pull web api worker",
+    "docker compose up -d --remove-orphans",
+    "pnpm compose:health:smoke",
+    "pnpm prod:evidence:check"
+  ],
+  "servicesVerified": [
+    {
+      "service": "web",
+      "status": "healthy",
+      "imageTag": "ghcr.io/example/uzman-hocam/web:previous-pass",
+      "evidenceReference": "https://staging.example.test/"
+    },
+    {
+      "service": "api",
+      "status": "healthy",
+      "imageTag": "ghcr.io/example/uzman-hocam/api:previous-pass",
+      "evidenceReference": "https://staging.example.test/api/v1/health"
+    },
+    {
+      "service": "worker",
+      "status": "running",
+      "imageTag": "ghcr.io/example/uzman-hocam/worker:previous-pass",
+      "evidenceReference": "docker compose ps worker"
+    }
+  ],
+  "evidenceReferences": [
+    "artifacts/staging/release-summary-broken-20260530.json",
+    "artifacts/staging/release-summary-rollback-20260530.json"
+  ],
+  "gaps": []
+}

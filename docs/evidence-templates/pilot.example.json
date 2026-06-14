@@ -1,0 +1,73 @@
+{
+  "result": "PASS",
+  "environment": "production",
+  "checkedAt": "2026-06-15",
+  "pilotTenantReference": "pilot-tenant-redacted",
+  "pilotStartDate": "2026-06-01",
+  "pilotEndDate": "2026-06-15",
+  "dataProcessingAgreementSigned": true,
+  "kvkkNoticeApproved": true,
+  "phase0And5GatesPassed": true,
+  "realDataImport": {
+    "source": "student Excel import",
+    "dryRunRows": 254,
+    "committedRows": 254,
+    "rollbackTested": true,
+    "identityMigrationApproved": true,
+    "identityMigrationReference": "identity-migration-approval-redacted"
+  },
+  "examCycle": {
+    "examReference": "pilot-exam-redacted",
+    "participantCount": 254,
+    "answerKeyImported": true,
+    "opticalImportCommitted": true,
+    "quarantineResolved": true,
+    "reportGenerated": true,
+    "karnePdfDownloaded": true,
+    "excelDownloaded": true,
+    "guardianPortalViewed": true,
+    "idempotencyVerified": true,
+    "evidenceReferences": [
+      "artifacts/example/pilot/live-ui-worker-report.json",
+      "artifacts/example/pilot/guardian-portal-screenshot.png"
+    ]
+  },
+  "performance": {
+    "reportListingExpectedResultCount": 10000,
+    "reportListingP95Ms": 1200,
+    "studentProgressP95Ms": 900,
+    "rlsLoadRps": 240,
+    "reportGenerationResultCount": 10000,
+    "reportGenerationDurationMs": 25000,
+    "thresholdsPassed": true
+  },
+  "operations": {
+    "incidentDrillPerformed": true,
+    "alertDelivered": true,
+    "sentryEventReviewed": true,
+    "supportTicketExercised": true,
+    "restoreDrillRepeated": true,
+    "restoreDrillReference": "restore-drill-2026-06-15",
+    "incidentResponseMinutes": 18
+  },
+  "assessmentCriteria": [
+    { "id": "AC-01", "status": "PASS", "evidence": "artifacts/example/pilot/ac-01-tenant-isolation.json" },
+    { "id": "AC-02", "status": "PASS", "evidence": "artifacts/example/pilot/ac-02-auth-rbac.json" },
+    { "id": "AC-03", "status": "PASS", "evidence": "artifacts/example/pilot/ac-03-exam-import-cycle.json" },
+    { "id": "AC-04", "status": "PASS", "evidence": "artifacts/example/pilot/ac-04-report-karne.json" },
+    { "id": "AC-05", "status": "PASS", "evidence": "artifacts/example/pilot/ac-05-guardian-portal.json" },
+    { "id": "AC-06", "status": "PASS", "evidence": "artifacts/example/pilot/ac-06-backup-restore.json" },
+    { "id": "AC-07", "status": "PASS", "evidence": "artifacts/example/pilot/ac-07-observability-alerting.json" },
+    { "id": "AC-08", "status": "PASS", "evidence": "artifacts/example/pilot/ac-08-kvkk-retention.json" },
+    { "id": "AC-09", "status": "PASS", "evidence": "artifacts/example/pilot/ac-09-performance.json" },
+    { "id": "AC-10", "status": "PASS", "evidence": "artifacts/example/pilot/ac-10-operator-signoff.json" }
+  ],
+  "criticalDefectsOpen": 0,
+  "goLiveDecision": "APPROVED",
+  "evidenceReferences": [
+    "artifacts/example/pilot/uat.json",
+    "artifacts/example/pilot/k6-report-listing.json",
+    "artifacts/example/pilot/incident-drill.json"
+  ],
+  "gaps": []
+}

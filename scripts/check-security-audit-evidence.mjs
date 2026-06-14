@@ -2,6 +2,43 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const target = process.env.SECURITY_AUDIT_TARGET;
+const allowExampleEvidence = process.env.SECURITY_AUDIT_ALLOW_EXAMPLE_EVIDENCE === "1";
+const securityAuditTopLevelKeys = [
+  "result",
+  "environment",
+  "checkedAt",
+  "prodEnvCheckOk",
+  "httpsOk",
+  "rlsLiveCheckOk",
+  "noCriticalFindings",
+  "healthStatus",
+  "readinessStatus",
+  "securityHeadersVerified",
+  "authControlsVerified",
+  "dataControlsVerified",
+  "evidenceReferences",
+  "findings",
+];
+const requiredSecurityHeaders = [
+  "Strict-Transport-Security",
+  "X-Content-Type-Options",
+  "X-Frame-Options",
+  "Referrer-Policy",
+  "Permissions-Policy",
+  "Content-Security-Policy",
+];
+const requiredAuthControls = [
+  "COOKIE_SECURE=true",
+  "login lockout",
+  "strong JWT secrets",
+  "refresh session revocation",
+];
+const requiredDataControls = [
+  "RLS live check",
+  "tenant isolation",
+  "audit PII redaction",
+  "SENTRY_SEND_DEFAULT_PII=false",
+];
 
 if (!target) {
   fail(["SECURITY_AUDIT_TARGET boş bırakılamaz."]);
@@ -50,9 +87,14 @@ function parseJson(value) {
 function validateReport(report) {
   const failures = [];
 
+  if (!requireObjectKeySet(report, securityAuditTopLevelKeys, failures, "securityAudit")) {
+    return failures;
+  }
+
   requireEqual(report, failures, "result", "PASS");
   requireOneOf(report, failures, "environment", ["staging", "production"]);
   requireDate(report, failures, "checkedAt");
+  requireDateNotInFuture(report, failures, "checkedAt");
   requireTrue(report, failures, "prodEnvCheckOk");
   requireTrue(report, failures, "httpsOk");
   requireTrue(report, failures, "rlsLiveCheckOk");
@@ -60,26 +102,10 @@ function validateReport(report) {
   requireStatus(report, failures, "healthStatus");
   requireStatus(report, failures, "readinessStatus");
 
-  requireList(report, failures, "securityHeadersVerified", [
-    "Strict-Transport-Security",
-    "X-Content-Type-Options",
-    "X-Frame-Options",
-    "Referrer-Policy",
-    "Permissions-Policy",
-    "Content-Security-Policy",
-  ]);
-  requireList(report, failures, "authControlsVerified", [
-    "COOKIE_SECURE=true",
-    "login lockout",
-    "strong JWT secrets",
-    "refresh session revocation",
-  ]);
-  requireList(report, failures, "dataControlsVerified", [
-    "RLS live check",
-    "tenant isolation",
-    "audit PII redaction",
-    "SENTRY_SEND_DEFAULT_PII=false",
-  ]);
+  requireExactStringSet(report, failures, "securityHeadersVerified", requiredSecurityHeaders, "header");
+  requireExactStringSet(report, failures, "authControlsVerified", requiredAuthControls, "auth kontrolü");
+  requireExactStringSet(report, failures, "dataControlsVerified", requiredDataControls, "data kontrolü");
+  requireEvidenceReferences(report, failures, "evidenceReferences");
 
   if (Array.isArray(report.findings) && report.findings.length > 0) {
     failures.push("findings boş olmalı.");
@@ -107,6 +133,21 @@ function requireDate(report, failures, key) {
   }
 }
 
+function requireDateNotInFuture(report, failures, key) {
+  if (allowExampleEvidence) return;
+
+  const value = report[key];
+  const timestamp = Date.parse(value);
+  if (typeof value !== "string" || Number.isNaN(timestamp)) {
+    return;
+  }
+
+  const clockSkewMs = 5 * 60 * 1000;
+  if (timestamp > Date.now() + clockSkewMs) {
+    failures.push(`${key} gelecekte olamaz.`);
+  }
+}
+
 function requireTrue(report, failures, key) {
   if (report[key] !== true) {
     failures.push(`${key} true olmalı.`);
@@ -120,11 +161,23 @@ function requireStatus(report, failures, key) {
   }
 }
 
-function requireList(report, failures, key, expectedValues) {
+function requireExactStringSet(report, failures, key, expectedValues, itemLabel) {
   const value = report[key];
   if (!Array.isArray(value)) {
     failures.push(`${key} alan listesi zorunlu.`);
     return;
+  }
+
+  if (value.length !== expectedValues.length) {
+    failures.push(`${key} tam ${expectedValues.length} ${itemLabel} içermeli.`);
+    return;
+  }
+
+  for (const [index, item] of value.entries()) {
+    if (typeof item !== "string" || item.trim() === "") {
+      failures.push(`${key}.${index} boş olmayan metin olmalı.`);
+      return;
+    }
   }
 
   for (const expected of expectedValues) {
@@ -132,6 +185,62 @@ function requireList(report, failures, key, expectedValues) {
       failures.push(`${key} eksik: ${expected}`);
     }
   }
+}
+
+function requireObjectKeySet(value, expectedKeys, failures, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    failures.push(`${label} nesnesi zorunlu.`);
+    return false;
+  }
+
+  const keys = Object.keys(value);
+  if (keys.length !== expectedKeys.length) {
+    failures.push(`${label} tam ${expectedKeys.length} alan içermeli.`);
+    return false;
+  }
+
+  for (const expectedKey of expectedKeys) {
+    if (!Object.hasOwn(value, expectedKey)) {
+      failures.push(`${label}.${expectedKey} alanı zorunlu.`);
+    }
+  }
+
+  return true;
+}
+
+function requireEvidenceReferences(report, failures, label) {
+  const value = report.evidenceReferences;
+  if (!Array.isArray(value) || value.length === 0) {
+    failures.push(`${label} boş olmayan liste olmalı.`);
+    return;
+  }
+
+  for (const item of value) {
+    if (typeof item !== "string" || item.trim() === "") {
+      failures.push(`${label} boş olmayan metinlerden oluşmalı.`);
+      return;
+    }
+    if (!allowExampleEvidence && hasPlaceholderToken(item)) {
+      failures.push(`${label} production kanıtı için örnek/placeholder/redacted değer içermemeli.`);
+      return;
+    }
+  }
+}
+
+function hasPlaceholderToken(value) {
+  const normalized = value.toLowerCase();
+  return [
+    "__set",
+    "change-me",
+    "replace-me",
+    "placeholder",
+    "redacted",
+    "example",
+    ".test",
+    ".invalid",
+    "localhost",
+    "127.0.0.1",
+  ].some((token) => normalized.includes(token));
 }
 
 function fail(failures) {

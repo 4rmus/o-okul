@@ -2,6 +2,30 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const target = process.env.KVKK_INVENTORY_TARGET;
+const kvkkInventoryTopLevelKeys = [
+  "result",
+  "environment",
+  "checkedAt",
+  "inventorySource",
+  "dataSubjectCounts",
+  "purgeCoverage",
+  "auditActionsVerified",
+  "gaps",
+];
+const dataSubjectCountKeys = ["student", "teacher", "guardian", "user"];
+const purgeCoverageKeys = ["student", "teacher", "guardian", "user"];
+const expectedPurgeCoverage = {
+  student: ["firstName", "lastName", "phone", "email"],
+  teacher: ["firstName", "lastName"],
+  guardian: ["firstName", "lastName", "phone"],
+  user: ["email", "name"],
+};
+const expectedAuditActions = [
+  "kvkk.student_pii_purged",
+  "kvkk.teacher_pii_purged",
+  "kvkk.guardian_pii_purged",
+  "kvkk.user_pii_purged",
+];
 
 if (!target) {
   fail(["KVKK_INVENTORY_TARGET boş bırakılamaz."]);
@@ -50,27 +74,17 @@ function parseJson(value) {
 function validateReport(report) {
   const failures = [];
 
+  if (!requireObjectKeySet(report, kvkkInventoryTopLevelKeys, failures, "kvkkInventory")) return failures;
+
   requireEqual(report, failures, "result", "PASS");
   requireOneOf(report, failures, "environment", ["staging", "production"]);
   requireDate(report, failures, "checkedAt");
+  requireDateNotInFuture(report, failures, "checkedAt");
   requireString(report, failures, "inventorySource");
   requirePositiveTotal(report.dataSubjectCounts, failures);
-
-  requireFields(report, failures, "student", ["firstName", "lastName"]);
-  requireFields(report, failures, "teacher", ["firstName", "lastName"]);
-  requireFields(report, failures, "guardian", ["firstName", "lastName", "phone"]);
-  requireFields(report, failures, "user", ["email", "name"]);
-
-  requireActions(report, failures, [
-    "kvkk.student_pii_purged",
-    "kvkk.teacher_pii_purged",
-    "kvkk.guardian_pii_purged",
-    "kvkk.user_pii_purged",
-  ]);
-
-  if (Array.isArray(report.gaps) && report.gaps.length > 0) {
-    failures.push("gaps boş olmalı.");
-  }
+  requirePurgeCoverage(report.purgeCoverage, failures);
+  requireExactStringSet(report.auditActionsVerified, failures, "auditActionsVerified", expectedAuditActions, "action");
+  requireEmptyArray(report, failures, "gaps");
 
   return failures;
 }
@@ -94,6 +108,19 @@ function requireDate(report, failures, key) {
   }
 }
 
+function requireDateNotInFuture(report, failures, key) {
+  const value = report[key];
+  const timestamp = Date.parse(value);
+  if (typeof value !== "string" || Number.isNaN(timestamp)) {
+    return;
+  }
+
+  const clockSkewMs = 5 * 60 * 1000;
+  if (timestamp > Date.now() + clockSkewMs) {
+    failures.push(`${key} gelecekte olamaz.`);
+  }
+}
+
 function requireString(report, failures, key) {
   if (typeof report[key] !== "string" || report[key].trim() === "") {
     failures.push(`${key} boş olmayan metin olmalı.`);
@@ -101,13 +128,10 @@ function requireString(report, failures, key) {
 }
 
 function requirePositiveTotal(counts, failures) {
-  if (!counts || typeof counts !== "object" || Array.isArray(counts)) {
-    failures.push("dataSubjectCounts nesnesi zorunlu.");
-    return;
-  }
+  if (!requireObjectKeySet(counts, dataSubjectCountKeys, failures, "dataSubjectCounts")) return;
 
   let total = 0;
-  for (const key of ["student", "teacher", "guardian", "user"]) {
+  for (const key of dataSubjectCountKeys) {
     const value = counts[key];
     if (!Number.isInteger(value) || value < 0) {
       failures.push(`dataSubjectCounts.${key} sıfır veya daha büyük tam sayı olmalı.`);
@@ -121,31 +145,81 @@ function requirePositiveTotal(counts, failures) {
   }
 }
 
-function requireFields(report, failures, subject, expectedFields) {
-  const fields = report.purgeCoverage?.[subject];
-  if (!Array.isArray(fields)) {
-    failures.push(`purgeCoverage.${subject} alan listesi zorunlu.`);
+function requirePurgeCoverage(coverage, failures) {
+  if (!requireObjectKeySet(coverage, purgeCoverageKeys, failures, "purgeCoverage", "subject")) return;
+
+  for (const [subject, expectedFields] of Object.entries(expectedPurgeCoverage)) {
+    requireExactStringSet(coverage[subject], failures, `purgeCoverage.${subject}`, expectedFields, "alan");
+  }
+}
+
+function requireExactStringSet(value, failures, label, expectedValues, itemLabel) {
+  if (!Array.isArray(value)) {
+    failures.push(`${label} listesi zorunlu.`);
     return;
   }
 
-  for (const field of expectedFields) {
-    if (!fields.includes(field)) {
-      failures.push(`purgeCoverage.${subject} eksik: ${field}`);
+  if (value.length !== expectedValues.length) {
+    failures.push(`${label} tam ${expectedValues.length} ${itemLabel} içermeli.`);
+    return;
+  }
+
+  const uniqueValues = new Set(value);
+  if (uniqueValues.size !== value.length) {
+    failures.push(`${label} tekrarlı ${itemLabel} içeremez.`);
+  }
+
+  for (const expectedValue of expectedValues) {
+    if (!uniqueValues.has(expectedValue)) {
+      failures.push(`${label} eksik: ${expectedValue}`);
+    }
+  }
+
+  for (const item of value) {
+    if (typeof item !== "string" || item.trim() === "") {
+      failures.push(`${label} boş olmayan string ${itemLabel} içermeli.`);
+    } else if (!expectedValues.includes(item)) {
+      failures.push(`${label} beklenmeyen ${itemLabel} içeriyor: ${item}`);
     }
   }
 }
 
-function requireActions(report, failures, expectedActions) {
-  if (!Array.isArray(report.auditActionsVerified)) {
-    failures.push("auditActionsVerified alan listesi zorunlu.");
+function requireEmptyArray(report, failures, key) {
+  const value = report?.[key];
+  if (!Array.isArray(value)) {
+    failures.push(`${key} listesi zorunlu.`);
     return;
   }
+  if (value.length > 0) {
+    failures.push(`${key} boş olmalı.`);
+  }
+}
 
-  for (const action of expectedActions) {
-    if (!report.auditActionsVerified.includes(action)) {
-      failures.push(`auditActionsVerified eksik: ${action}`);
+function requireObjectKeySet(value, expectedKeys, failures, label, itemLabel = "alan") {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    failures.push(`${label} nesnesi zorunlu.`);
+    return false;
+  }
+
+  const keys = Object.keys(value);
+  if (keys.length !== expectedKeys.length) {
+    failures.push(`${label} tam ${expectedKeys.length} ${itemLabel} içermeli.`);
+    return false;
+  }
+
+  const keySet = new Set(keys);
+  for (const key of expectedKeys) {
+    if (!keySet.has(key)) {
+      failures.push(`${label} eksik ${itemLabel}: ${key}`);
     }
   }
+  for (const key of keys) {
+    if (!expectedKeys.includes(key)) {
+      failures.push(`${label} beklenmeyen ${itemLabel} içeriyor: ${key}`);
+    }
+  }
+
+  return true;
 }
 
 function fail(failures) {

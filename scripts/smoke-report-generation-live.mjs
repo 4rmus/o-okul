@@ -1,5 +1,4 @@
-import { randomUUID } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
 import { Socket } from "node:net";
 import { performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
@@ -10,6 +9,7 @@ import {
   createRedisConnectionOptions,
   createReportGenerationBullWorker,
 } from "../apps/worker/dist/queue/bullmq-worker.js";
+import { writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/uzman_hocam";
 const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/uzman_hocam";
@@ -21,7 +21,11 @@ const tenantId = process.env.REPORT_GENERATION_SMOKE_TENANT_ID ?? "tenant-smoke-
 const userId = process.env.REPORT_GENERATION_SMOKE_USER_ID ?? "user-smoke-report";
 const smokeEmail = process.env.REPORT_GENERATION_SMOKE_EMAIL ?? `report-smoke-${runId}@example.test`;
 const smokePassword = process.env.REPORT_GENERATION_SMOKE_PASSWORD ?? "password";
-const evidencePath = process.env.REPORT_GENERATION_SMOKE_EVIDENCE_PATH;
+const evidencePath = process.env.REPORT_GENERATION_SMOKE_EVIDENCE_FILE ?? process.env.REPORT_GENERATION_SMOKE_EVIDENCE_PATH;
+const environment = process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown";
+const commandPassed =
+  process.env.REPORT_GENERATION_SMOKE_COMMAND ??
+  (resultCount >= 10_000 ? "pnpm report-generation:perf" : "pnpm report-generation:smoke");
 const membershipId = `membership-report-smoke-${runId}`;
 const examId = `exam-report-smoke-${runId}`;
 const rawImportId = `raw-import-report-smoke-${runId}`;
@@ -83,27 +87,38 @@ try {
     throw new Error("REPORT_GENERATION_SMOKE_SNAPSHOT_MISMATCH");
   }
 
-  if (evidencePath) {
-    await writeFile(
-      evidencePath,
-      JSON.stringify(
-        {
-          tenantId,
-          userId,
-          email: smokeEmail,
-          password: smokePassword,
-          examId,
-          snapshotId: snapshot.id,
-          firstStudentId: snapshot.firstStudentId,
-          resultCount,
-          contentHash,
-          queuedJobId: producedJob.options.jobId,
-        },
-        null,
-        2,
-      ),
-    );
-  }
+  await writeSmokeEvidence(evidencePath, {
+    result: "PASS",
+    check: "report_generation_smoke",
+    environment,
+    checkedAt: new Date().toISOString(),
+    reportType: "EXAM_RESULT_SUMMARY",
+    status: "READY",
+    resultCount,
+    studentCount: snapshot.studentCount,
+    classCount: snapshot.classCount,
+    branchCount: snapshot.branchCount,
+    expectedClassCount,
+    seedDurationMs,
+    generationDurationMs,
+    hashes: {
+      tenantHash: sha256(tenantId),
+      userHash: sha256(userId),
+      emailHash: sha256(smokeEmail.toLowerCase()),
+      examHash: sha256(examId),
+      snapshotHash: sha256(snapshot.id),
+      firstStudentHash: sha256(snapshot.firstStudentId),
+      contentHash: sha256(contentHash),
+      queuedJobIdHash: sha256(producedJob.options.jobId),
+    },
+    thresholds: {
+      resultCountMatches: snapshot.resultCount === resultCount,
+      generationDurationMsMax: resultCount >= 10_000 ? 60_000 : 5_000,
+      generationDurationPassed: generationDurationMs <= (resultCount >= 10_000 ? 60_000 : 5_000),
+    },
+    commandsPassed: [commandPassed],
+    gaps: [],
+  });
 
   console.log(
     `ReportGeneration live smoke passed: tenant ${tenantId}, exam ${examId}, first student ${snapshot.firstStudentId}, ${resultCount} results, queued ${producedJob.options.jobId}, snapshot ${snapshot.id}, seed ${seedDurationMs}ms, generation ${generationDurationMs}ms`,
@@ -388,6 +403,10 @@ function readResultCount() {
     throw new Error("REPORT_GENERATION_SMOKE_RESULT_COUNT_INVALID");
   }
   return parsed;
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function range(start, end) {
