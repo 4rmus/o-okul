@@ -134,15 +134,77 @@ Uygulamalar:
 ### Üretim Dağıtımı
 
 ```bash
-# Docker Compose ile tam stack
+# Bu cihazdaki provider'sız single-node staging/pilot koşusu
+API_NODE_ENV=staging \
+WORKER_NODE_ENV=staging \
+API_RATE_LIMIT_ENABLED=true \
+API_RATE_LIMIT_STORE=redis \
+LOGIN_ATTEMPT_LIMITER_STORE=redis \
+REPORT_PDF_RENDERER=worker \
+SUPPORT_ATTACHMENT_STORAGE=s3 \
+HOMEWORK_MATERIAL_FILE_STORAGE=s3 \
+SMS_ALLOW_NOOP_IN_PRODUCTION=true \
+NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION=true \
+docker compose --env-file .env.local up -d
+
+# Bu sunucunun IP adresiyle HTTPS edge koşusu.
+# IP için Let's Encrypt/ACME kullanılmaz; Traefik self-signed TLS sunar.
+SERVER_DOMAIN=212.108.107.190 \
+APP_URL=https://212.108.107.190 \
+API_URL=https://212.108.107.190 \
+WEB_URL=https://212.108.107.190 \
+NEXT_PUBLIC_API_URL=https://212.108.107.190 \
+COOKIE_SECURE=true \
+COOKIE_DOMAIN=212.108.107.190 \
+API_NODE_ENV=staging \
+WORKER_NODE_ENV=staging \
+API_RATE_LIMIT_ENABLED=true \
+API_RATE_LIMIT_STORE=redis \
+LOGIN_ATTEMPT_LIMITER_STORE=redis \
+REPORT_PDF_RENDERER=worker \
+SUPPORT_ATTACHMENT_STORAGE=s3 \
+HOMEWORK_MATERIAL_FILE_STORAGE=s3 \
+SMS_ALLOW_NOOP_IN_PRODUCTION=true \
+NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION=true \
+docker compose --env-file .env.local -f docker-compose.yml -f docker-compose.traefik-ip.yml up -d --build web api worker queue-board traefik
+
+# Tek-node varsayılan stack: web, api, worker, queue-board, postgres, redis, minio
 docker compose up -d
 
+# Upload AV/ClamAV kanıtı veya fail-closed tarama gerektiğinde
+docker compose --profile av up -d
+
 # Traefik HTTPS kontrolü
+pnpm traefik:https:smoke
+
+# IP/self-signed HTTPS smoke için
+TRAEFIK_HTTPS_SMOKE_URL=https://212.108.107.190/health \
+TRAEFIK_HTTPS_SMOKE_ALLOW_INSECURE_TLS=true \
+TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE=artifacts/single-node-2026-06-14/traefik-https-smoke.json \
 pnpm traefik:https:smoke
 
 # Üretim hazırlık denetimi
 pnpm prod:readiness:check
 ```
+
+Bu repo varsayılan compose değerlerini 4 vCPU / 8 GiB RAM sınıfı tek VPS için sınırlar. ClamAV,
+observability ve external monitoring varsayılan açılışa dahil değildir; ilgili kanıt veya staging
+doğrulaması sırasında profil/override ile çalıştırılır. AI karne özeti bu release'te kapalıdır:
+production/staging için `AI_REPORT_SUMMARY_PROVIDER=disabled` kullanılır.
+
+Domain alınana kadar `docker-compose.traefik-ip.yml` bu sunucunun public IP'siyle HTTPS smoke
+kanıtı üretmek içindir. Gerçek domain geldiğinde `docker-compose.traefik.yml` ve `DOMAIN`/`ACME_EMAIL`
+ile Let's Encrypt moduna dönülür.
+
+Geçici off-site backup modeli provider kullanmaz: sunucuda üretilen
+`artifacts/single-node-2026-06-14/kurum-cihazi-yedek-2026-06-14.dump` dosyası ve yanındaki
+`.sha256` dosyası kurum yetkilisinin kendi cihazına indirilerek sunucu dışı kopya oluşturulur.
+Bu model S3/provider off-site smoke yerine geçmez; domain/provider hazırlığı tamamlanınca kalıcı
+off-host hedef ayrıca doğrulanır.
+
+Host üzerinde çalışan pnpm scriptleri `DATABASE_URL`/`REDIS_URL` ile `localhost` bağlantılarını
+kullanır. Docker Compose servisleri ise container ağı içinde `DOCKER_DATABASE_URL`,
+`DOCKER_DIRECT_DATABASE_URL` ve `DOCKER_REDIS_URL` değerlerini kullanır.
 
 ## Test & CI
 

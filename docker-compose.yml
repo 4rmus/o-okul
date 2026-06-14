@@ -8,6 +8,8 @@ x-default-logging: &default-logging
 
 services:
   web:
+    cpus: ${WEB_CPUS:-0.75}
+    mem_limit: ${WEB_MEM_LIMIT:-768m}
     restart: unless-stopped
     logging: *default-logging
     build:
@@ -17,6 +19,7 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     environment:
       NODE_ENV: production
+      NODE_OPTIONS: ${WEB_NODE_OPTIONS:---max-old-space-size=512}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY: ${NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY:-}
     ports:
@@ -33,13 +36,18 @@ services:
         condition: service_healthy
 
   api:
+    cpus: ${API_CPUS:-1.00}
+    mem_limit: ${API_MEM_LIMIT:-1g}
     restart: unless-stopped
     logging: *default-logging
     build:
       context: .
       target: api
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${API_NODE_ENV:-production}
+      NODE_OPTIONS: ${API_NODE_OPTIONS:---max-old-space-size=768}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_ENABLED: ${LOG_ENABLED:-true}
       OPENAPI_UI_ENABLED: ${OPENAPI_UI_ENABLED:-false}
@@ -54,14 +62,14 @@ services:
       WEB_URL: ${WEB_URL}
       PERSISTENCE_DRIVER: ${PERSISTENCE_DRIVER:-postgres}
       STUDENT_QUOTA: ${STUDENT_QUOTA:-200}
-      DATABASE_URL: ${DATABASE_URL}
-      DIRECT_DATABASE_URL: ${DIRECT_DATABASE_URL}
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://app:app@postgres:5432/uzman_hocam}
+      DIRECT_DATABASE_URL: ${DOCKER_DIRECT_DATABASE_URL:-postgresql://migration:migration@postgres:5432/uzman_hocam}
       AUTH_USER_STORE: ${AUTH_USER_STORE:-postgres}
       AUTH_SESSION_STORE: ${AUTH_SESSION_STORE:-postgres}
       USER_MANAGEMENT_STORE: ${USER_MANAGEMENT_STORE:-postgres}
       IDENTITY_INVITATION_STORE: ${IDENTITY_INVITATION_STORE:-postgres}
       PASSWORD_RESET_STORE: ${PASSWORD_RESET_STORE:-postgres}
-      REDIS_URL: ${REDIS_URL}
+      REDIS_URL: ${DOCKER_REDIS_URL:-redis://redis:6379}
       QUEUE_PREFIX: ${QUEUE_PREFIX}
       QUEUE_METRICS_ENABLED: ${QUEUE_METRICS_ENABLED:-true}
       REPORT_PDF_RENDERER: ${REPORT_PDF_RENDERER:-worker}
@@ -74,9 +82,9 @@ services:
       STUDENT_PII_ENCRYPTION_KEY: ${STUDENT_PII_ENCRYPTION_KEY}
       STUDENT_PII_HASH_KEY: ${STUDENT_PII_HASH_KEY}
       ADMIN_MFA_MODE: ${ADMIN_MFA_MODE:-off}
-      ADMIN_MFA_SECRET_ENCRYPTION_KEY: ${ADMIN_MFA_SECRET_ENCRYPTION_KEY}
-      ADMIN_MFA_RECOVERY_HASH_KEY: ${ADMIN_MFA_RECOVERY_HASH_KEY}
-      ADMIN_MFA_CHALLENGE_SECRET: ${ADMIN_MFA_CHALLENGE_SECRET}
+      ADMIN_MFA_SECRET_ENCRYPTION_KEY: ${ADMIN_MFA_SECRET_ENCRYPTION_KEY:-}
+      ADMIN_MFA_RECOVERY_HASH_KEY: ${ADMIN_MFA_RECOVERY_HASH_KEY:-}
+      ADMIN_MFA_CHALLENGE_SECRET: ${ADMIN_MFA_CHALLENGE_SECRET:-}
       ADMIN_MFA_ISSUER: ${ADMIN_MFA_ISSUER:-Uzman Hocam}
       AI_REPORT_SUMMARY_PROVIDER: ${AI_REPORT_SUMMARY_PROVIDER:-disabled}
       COOKIE_SECURE: ${COOKIE_SECURE}
@@ -115,23 +123,26 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      clamav:
-        condition: service_healthy
 
   worker:
+    cpus: ${WORKER_CPUS:-1.50}
+    mem_limit: ${WORKER_MEM_LIMIT:-2g}
     restart: unless-stopped
     logging: *default-logging
     build:
       context: .
       target: worker
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${WORKER_NODE_ENV:-production}
+      NODE_OPTIONS: ${WORKER_NODE_OPTIONS:---max-old-space-size=1536}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_ENABLED: ${LOG_ENABLED:-true}
       PERSISTENCE_DRIVER: ${PERSISTENCE_DRIVER:-postgres}
-      DATABASE_URL: ${DATABASE_URL}
-      DIRECT_DATABASE_URL: ${DIRECT_DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://app:app@postgres:5432/uzman_hocam}
+      DIRECT_DATABASE_URL: ${DOCKER_DIRECT_DATABASE_URL:-postgresql://migration:migration@postgres:5432/uzman_hocam}
+      REDIS_URL: ${DOCKER_REDIS_URL:-redis://redis:6379}
       QUEUE_PREFIX: ${QUEUE_PREFIX}
       STUDENT_PII_HASH_KEY: ${STUDENT_PII_HASH_KEY}
       AI_REPORT_SUMMARY_PROVIDER: ${AI_REPORT_SUMMARY_PROVIDER:-disabled}
@@ -162,15 +173,20 @@ services:
         condition: service_healthy
 
   queue-board:
+    cpus: ${QUEUE_BOARD_CPUS:-0.25}
+    mem_limit: ${QUEUE_BOARD_MEM_LIMIT:-256m}
     restart: unless-stopped
     logging: *default-logging
     build:
       context: .
       target: queue-board
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${QUEUE_BOARD_NODE_ENV:-production}
+      NODE_OPTIONS: ${QUEUE_BOARD_NODE_OPTIONS:---max-old-space-size=256}
       PORT: 3200
-      REDIS_URL: ${REDIS_URL}
+      REDIS_URL: ${DOCKER_REDIS_URL:-redis://redis:6379}
       QUEUE_PREFIX: ${QUEUE_PREFIX}
       QUEUE_BOARD_BASE_PATH: ${QUEUE_BOARD_BASE_PATH:-/admin/queues}
       QUEUE_BOARD_BASIC_AUTH_USER: ${QUEUE_BOARD_BASIC_AUTH_USER}
@@ -189,9 +205,23 @@ services:
         condition: service_healthy
 
   postgres:
+    cpus: ${POSTGRES_CPUS:-1.00}
+    mem_limit: ${POSTGRES_MEM_LIMIT:-1536m}
     restart: unless-stopped
     logging: *default-logging
     image: postgres:16-alpine
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=${POSTGRES_SHARED_BUFFERS:-256MB}"
+      - "-c"
+      - "effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-2GB}"
+      - "-c"
+      - "work_mem=${POSTGRES_WORK_MEM:-8MB}"
+      - "-c"
+      - "maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM:-128MB}"
+      - "-c"
+      - "max_connections=${POSTGRES_MAX_CONNECTIONS:-80}"
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -214,10 +244,12 @@ services:
       - backend_net
 
   redis:
+    cpus: ${REDIS_CPUS:-0.50}
+    mem_limit: ${REDIS_MEM_LIMIT:-512m}
     restart: unless-stopped
     logging: *default-logging
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "${REDIS_MAXMEMORY:-384mb}", "--maxmemory-policy", "noeviction"]
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
@@ -231,6 +263,9 @@ services:
       - backend_net
 
   clamav:
+    profiles: ["av"]
+    cpus: ${CLAMAV_CPUS:-0.75}
+    mem_limit: ${CLAMAV_MEM_LIMIT:-1536m}
     restart: unless-stopped
     logging: *default-logging
     image: clamav/clamav:stable
@@ -250,6 +285,8 @@ services:
       - backend_net
 
   minio:
+    cpus: ${MINIO_CPUS:-0.50}
+    mem_limit: ${MINIO_MEM_LIMIT:-768m}
     restart: unless-stopped
     logging: *default-logging
     image: minio/minio:latest
@@ -271,6 +308,8 @@ services:
       - backend_net
 
   minio-setup:
+    cpus: ${MINIO_SETUP_CPUS:-0.25}
+    mem_limit: ${MINIO_SETUP_MEM_LIMIT:-256m}
     image: minio/minio:latest
     depends_on:
       minio:

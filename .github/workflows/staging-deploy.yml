@@ -29,6 +29,7 @@ jobs:
           ROLLBACK_IMAGE_TAG: ${{ inputs.rollback_image_tag }}
           STAGING_NEXT_PUBLIC_API_URL: ${{ vars.STAGING_NEXT_PUBLIC_API_URL }}
           STAGING_DEPLOY_DIR: ${{ vars.STAGING_DEPLOY_DIR }}
+          STAGING_EDGE_MODE: ${{ vars.STAGING_EDGE_MODE }}
           STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
           STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
           STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
@@ -71,6 +72,15 @@ jobs:
             https://*) ;;
             *)
               echo "STAGING_NEXT_PUBLIC_API_URL must be an https:// URL." >&2
+              exit 1
+              ;;
+          esac
+
+          edge_mode="${STAGING_EDGE_MODE:-domain}"
+          case "$edge_mode" in
+            domain|ip) ;;
+            *)
+              echo "STAGING_EDGE_MODE must be either domain or ip." >&2
               exit 1
               ;;
           esac
@@ -280,6 +290,7 @@ jobs:
             docker-compose.yml \
             docker-compose.release.yml \
             docker-compose.traefik.yml \
+            docker-compose.traefik-ip.yml \
             docker/postgres/init
 
           ssh -i ~/.ssh/staging_deploy_key \
@@ -307,6 +318,7 @@ jobs:
           IMAGE_PREFIX: ${{ needs.build-images.outputs.image-prefix }}
           IMAGE_TAG: ${{ needs.build-images.outputs.image-tag }}
           ROLLBACK_IMAGE_TAG: ${{ inputs.rollback_image_tag }}
+          STAGING_EDGE_MODE: ${{ vars.STAGING_EDGE_MODE }}
         run: |
           set -euo pipefail
 
@@ -340,6 +352,7 @@ jobs:
              IMAGE_PREFIX='$IMAGE_PREFIX' \
              IMAGE_TAG='$IMAGE_TAG' \
              ROLLBACK_IMAGE_TAG='$ROLLBACK_IMAGE_TAG' \
+             STAGING_EDGE_MODE='${STAGING_EDGE_MODE:-domain}' \
              bash -se" <<'REMOTE'
           set -euo pipefail
 
@@ -347,6 +360,15 @@ jobs:
             echo "STAGING_DEPLOY_DIR is required" >&2
             exit 1
           fi
+
+          case "${STAGING_EDGE_MODE:-domain}" in
+            domain) EDGE_COMPOSE_FILE="docker-compose.traefik.yml" ;;
+            ip) EDGE_COMPOSE_FILE="docker-compose.traefik-ip.yml" ;;
+            *)
+              echo "STAGING_EDGE_MODE must be either domain or ip." >&2
+              exit 1
+              ;;
+          esac
 
           trap 'rm -f "$STAGING_DEPLOY_DIR/.ghcr_read_token"' EXIT
           cd "$STAGING_DEPLOY_DIR"
@@ -373,7 +395,7 @@ jobs:
             --env-file .env.release \
             -f docker-compose.yml \
             -f docker-compose.release.yml \
-            -f docker-compose.traefik.yml \
+            -f "$EDGE_COMPOSE_FILE" \
             pull web api worker queue-board
 
           docker compose \
@@ -381,7 +403,7 @@ jobs:
             --env-file .env.release \
             -f docker-compose.yml \
             -f docker-compose.release.yml \
-            -f docker-compose.traefik.yml \
+            -f "$EDGE_COMPOSE_FILE" \
             run --rm api pnpm --filter @uzman-hocam/db db:migrate
 
           docker compose \
@@ -389,7 +411,7 @@ jobs:
             --env-file .env.release \
             -f docker-compose.yml \
             -f docker-compose.release.yml \
-            -f docker-compose.traefik.yml \
+            -f "$EDGE_COMPOSE_FILE" \
             up -d --remove-orphans
 
           docker compose \
@@ -397,7 +419,7 @@ jobs:
             --env-file .env.release \
             -f docker-compose.yml \
             -f docker-compose.release.yml \
-            -f docker-compose.traefik.yml \
+            -f "$EDGE_COMPOSE_FILE" \
             ps
           REMOTE
 

@@ -1,6 +1,12 @@
 node_modules
 .turbo
 dist
+**/.turbo
+**/.next
+**/dist
+**/test-results
+**/playwright-report
+**/coverage
 .git
 .env
 .env.*
