@@ -6,7 +6,7 @@ export default defineConfig({
     baseURL: "http://localhost:3001",
   },
   webServer: {
-    command: "pnpm --filter @uzman-hocam/web next:dev",
+    command: "pnpm --filter @uzman-hocam/ui build && pnpm --filter @uzman-hocam/web next:dev",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     url: "http://localhost:3001",

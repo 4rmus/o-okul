@@ -8,6 +8,7 @@ const files = {
   "docs/phase-6-production-readiness.md": readFileSync("docs/phase-6-production-readiness.md", "utf8"),
   "docs/product-journeys-v1.md": readFileSync("docs/product-journeys-v1.md", "utf8"),
   "package.json": readFileSync("package.json", "utf8"),
+  "apps/web/playwright.next.config.ts": readFileSync("apps/web/playwright.next.config.ts", "utf8"),
   "scripts/profile-web-performance.mjs": readFileSync("scripts/profile-web-performance.mjs", "utf8"),
 };
 
@@ -59,6 +60,10 @@ requireTokens("apps/web/app/page.tsx", [
   "loading=\"eager\"",
   "width={1440}",
   "height={810}",
+]);
+
+requireTokens("apps/web/playwright.next.config.ts", [
+  "pnpm --filter @uzman-hocam/ui build && pnpm --filter @uzman-hocam/web next:dev",
 ]);
 
 requireTokens("docs/phase-6-production-readiness.md", [
