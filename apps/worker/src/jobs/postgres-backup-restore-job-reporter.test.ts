@@ -11,7 +11,7 @@ describe("PostgresBackupRestoreJobReporter", () => {
       tenantId: "tenant-a",
       jobId: "backup-restore-a_hash-a",
       operationType: "RESTORE_DRILL",
-      targetReference: "staging-drill-2026-06",
+      targetReference: "file:///mnt/restore-drills/staging-drill-2026-06.json",
       reason: "Aylık restore kanıtı",
       result: "PASS",
       status: "completed",
@@ -23,7 +23,7 @@ describe("PostgresBackupRestoreJobReporter", () => {
       "tenant-a",
       "backup-restore-a_hash-a",
       "PASS",
-      "staging-drill-2026-06",
+      "file:///mnt/restore-drills/staging-drill-2026-06.json",
       "Aylık restore kanıtı",
       ["Tenant", "AuditLog", "ReportSnapshot", "_prisma_migrations"],
     ]);

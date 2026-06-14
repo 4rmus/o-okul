@@ -150,7 +150,7 @@ describe("createTenantQueueJob", () => {
       entityId: "backup-restore-a",
       contentHash: "backup-hash-a",
       operationType: "RESTORE_DRILL",
-      targetReference: "staging-drill-2026-06",
+      targetReference: "file:///mnt/restore-drills/staging-drill-2026-06.json",
       reason: "Aylık restore kanıtı",
     });
 
@@ -163,8 +163,38 @@ describe("createTenantQueueJob", () => {
         entityId: "backup-restore-a",
         contentHash: "backup-hash-a",
         operationType: "RESTORE_DRILL",
-        targetReference: "staging-drill-2026-06",
+        targetReference: "file:///mnt/restore-drills/staging-drill-2026-06.json",
         reason: "Aylık restore kanıtı",
+      },
+      options: {
+        jobId: "backup-restore-a_backup-hash-a",
+      },
+    });
+  });
+
+  it("backup-restore backup job payload'ına off-host hedefini ekler", () => {
+    const job = createTenantQueueJob({
+      queueName: "backup-restore",
+      tenantId: "tenant-a",
+      userId: "user-a",
+      entityId: "backup-restore-a",
+      contentHash: "backup-hash-a",
+      operationType: "BACKUP",
+      targetReference: "s3://uzman-hocam-prod-backups/tenant-a",
+      reason: "Günlük off-host yedek",
+    });
+
+    expect(job).toMatchObject({
+      queueName: "backup-restore",
+      name: "backup-restore",
+      payload: {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        entityId: "backup-restore-a",
+        contentHash: "backup-hash-a",
+        operationType: "BACKUP",
+        targetReference: "s3://uzman-hocam-prod-backups/tenant-a",
+        reason: "Günlük off-host yedek",
       },
       options: {
         jobId: "backup-restore-a_backup-hash-a",
@@ -254,6 +284,74 @@ describe("createTenantQueueJob", () => {
         contentHash: "backup-hash-a",
         operationType: "BACKUP",
         targetReference: "",
+      }),
+    ).toThrow("BACKUP_RESTORE_JOB_PAYLOAD_INVALID");
+  });
+
+  it("restore drill hedefi file URL değilse payload üretmez", () => {
+    expect(() =>
+      createTenantQueueJob({
+        queueName: "backup-restore",
+        tenantId: "tenant-a",
+        userId: "user-a",
+        entityId: "backup-restore-a",
+        contentHash: "backup-hash-a",
+        operationType: "RESTORE_DRILL",
+        targetReference: "staging-drill-2026-06",
+      }),
+    ).toThrow("BACKUP_RESTORE_JOB_PAYLOAD_INVALID");
+  });
+
+  it("backup hedefi off-host URL değilse payload üretmez", () => {
+    expect(() =>
+      createTenantQueueJob({
+        queueName: "backup-restore",
+        tenantId: "tenant-a",
+        userId: "user-a",
+        entityId: "backup-restore-a",
+        contentHash: "backup-hash-a",
+        operationType: "BACKUP",
+        targetReference: "offsite-backup",
+      }),
+    ).toThrow("BACKUP_RESTORE_JOB_PAYLOAD_INVALID");
+  });
+
+  it("backup hedefi lokal temp/root file URL ise payload üretmez", () => {
+    expect(() =>
+      createTenantQueueJob({
+        queueName: "backup-restore",
+        tenantId: "tenant-a",
+        userId: "user-a",
+        entityId: "backup-restore-a",
+        contentHash: "backup-hash-a",
+        operationType: "BACKUP",
+        targetReference: "file:///tmp/tenant-a-backups",
+      }),
+    ).toThrow("BACKUP_RESTORE_JOB_PAYLOAD_INVALID");
+
+    expect(() =>
+      createTenantQueueJob({
+        queueName: "backup-restore",
+        tenantId: "tenant-a",
+        userId: "user-a",
+        entityId: "backup-restore-a",
+        contentHash: "backup-hash-a",
+        operationType: "BACKUP",
+        targetReference: "file:///",
+      }),
+    ).toThrow("BACKUP_RESTORE_JOB_PAYLOAD_INVALID");
+  });
+
+  it("restore drill hedefi lokal temp file URL ise payload üretmez", () => {
+    expect(() =>
+      createTenantQueueJob({
+        queueName: "backup-restore",
+        tenantId: "tenant-a",
+        userId: "user-a",
+        entityId: "backup-restore-a",
+        contentHash: "backup-hash-a",
+        operationType: "RESTORE_DRILL",
+        targetReference: "file:///tmp/staging-drill-2026-06.json",
       }),
     ).toThrow("BACKUP_RESTORE_JOB_PAYLOAD_INVALID");
   });

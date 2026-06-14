@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 export type TenantQueueName =
   | "announcement-delivery"
   | "backup-restore"
@@ -134,7 +136,60 @@ function isAnnouncementDeliveryInputValid(input: AnnouncementDeliveryQueueJobInp
 
 function isBackupRestoreInputValid(input: BackupRestoreQueueJobInput): boolean {
   if (input.operationType !== "BACKUP" && input.operationType !== "RESTORE_DRILL") return false;
-  return Boolean(input.targetReference.trim());
+  const targetReference = input.targetReference.trim();
+  if (!targetReference) return false;
+  if (input.operationType === "BACKUP") return isBackupTargetReferenceValid(targetReference);
+  return isRestoreDrillTargetReferenceValid(targetReference);
+}
+
+function isBackupTargetReferenceValid(targetReference: string): boolean {
+  const url = parseTargetUrl(targetReference);
+  if (!url) return false;
+  if (url.protocol === "s3:") {
+    const prefix = url.pathname.replace(/^\/+|\/+$/g, "");
+    return Boolean(url.hostname && prefix);
+  }
+  if (url.protocol !== "file:") return false;
+  const filePath = filePathFromUrl(url);
+  return Boolean(filePath && !isLocalTempOrRootPath(filePath));
+}
+
+function isRestoreDrillTargetReferenceValid(targetReference: string): boolean {
+  const url = parseTargetUrl(targetReference);
+  if (!url || url.protocol !== "file:") return false;
+  const filePath = filePathFromUrl(url);
+  return Boolean(filePath && !isLocalTempPath(filePath));
+}
+
+function parseTargetUrl(targetReference: string): URL | null {
+  try {
+    return new URL(targetReference);
+  } catch {
+    return null;
+  }
+}
+
+function filePathFromUrl(url: URL): string | null {
+  try {
+    return fileURLToPath(url);
+  } catch {
+    return null;
+  }
+}
+
+function isLocalTempPath(filePath: string): boolean {
+  const normalized = filePath.replace(/\/+$/g, "") || "/";
+  return (
+    normalized === "/tmp" ||
+    normalized.startsWith("/tmp/") ||
+    normalized === "/var/tmp" ||
+    normalized.startsWith("/var/tmp/")
+  );
+}
+
+function isLocalTempOrRootPath(filePath: string): boolean {
+  const normalized = filePath.replace(/\/+$/g, "") || "/";
+  return normalized === "/" || isLocalTempPath(normalized);
 }
 
 function createPayload<TInput extends TenantQueueJobInput>(input: TInput): Omit<TInput, "queueName"> {

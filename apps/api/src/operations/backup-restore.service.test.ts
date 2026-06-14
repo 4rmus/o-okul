@@ -1,10 +1,19 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { AuditLogService, CreateAuditLogInput } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import type { ProducedJob } from "../queue/job-producer.js";
 import { BackupRestoreService, type BackupRestoreQueueProducer } from "./backup-restore.service.js";
 import { createBackupRestoreJobStore } from "./backup-restore-store.js";
+
+const testDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(testDirectories.splice(0).map((directory) => rm(directory, { force: true, recursive: true })));
+});
 
 describe("BackupRestoreService", () => {
   it("çift onaylı restore drill isteğini queue job ve audit kaydına çevirir", async () => {
@@ -55,7 +64,7 @@ describe("BackupRestoreService", () => {
 
     const record = await service.enqueue(tenantAdminContext, {
       operationType: "BACKUP",
-      targetReference: "file:///mnt/backups/tenant-a",
+      targetReference: "s3://uzman-hocam-prod-backups/tenant-a",
       confirmationText: "YEDEK AL",
       reason: "Panelden korumalı yedek alma",
     });
@@ -65,17 +74,76 @@ describe("BackupRestoreService", () => {
       tenantId: "tenant-a",
       userId: "user-a",
       operationType: "BACKUP",
-      targetReference: "file:///mnt/backups/tenant-a",
+      targetReference: "s3://uzman-hocam-prod-backups/tenant-a",
       reason: "Panelden korumalı yedek alma",
     })]);
     expect(record).toMatchObject({
       tenantId: "tenant-a",
       requestedByUserId: "user-a",
       operationType: "BACKUP",
-      targetReference: "file:///mnt/backups/tenant-a",
+      targetReference: "s3://uzman-hocam-prod-backups/tenant-a",
       queueName: "backup-restore",
       status: "queued",
     });
+  });
+
+  it("backup hedefi off-host URL değilse job oluşturmaz", async () => {
+    const producer = new FakeProducer();
+    const service = new BackupRestoreService(createBackupRestoreJobStore(), producer);
+
+    await expect(service.enqueue(tenantAdminContext, {
+      operationType: "BACKUP",
+      targetReference: "offsite",
+      confirmationText: "YEDEK AL",
+    })).rejects.toThrow("BACKUP_RESTORE_BACKUP_TARGET_URL_REQUIRED");
+    expect(producer.inputs).toHaveLength(0);
+  });
+
+  it("backup hedefi lokal temp/root file URL ise job oluşturmaz", async () => {
+    const producer = new FakeProducer();
+    const service = new BackupRestoreService(createBackupRestoreJobStore(), producer);
+
+    await expect(service.enqueue(tenantAdminContext, {
+      operationType: "BACKUP",
+      targetReference: "file:///tmp/tenant-a-backups",
+      confirmationText: "YEDEK AL",
+    })).rejects.toThrow("BACKUP_RESTORE_BACKUP_TARGET_TEMP_PATH_DISALLOWED");
+    expect(producer.inputs).toHaveLength(0);
+  });
+
+  it("backup hedefi symlink dizin ise job oluşturmaz", async () => {
+    const producer = new FakeProducer();
+    const service = new BackupRestoreService(createBackupRestoreJobStore(), producer);
+    const directory = await createTestDirectory();
+    const realDirectory = join(directory, "real-backups");
+    const linkDirectory = join(directory, "linked-backups");
+    await mkdir(realDirectory, { recursive: true });
+    await symlink(realDirectory, linkDirectory, "dir");
+
+    await expect(service.enqueue(tenantAdminContext, {
+      operationType: "BACKUP",
+      targetReference: pathToFileURL(linkDirectory).toString(),
+      confirmationText: "YEDEK AL",
+    })).rejects.toThrow("BACKUP_RESTORE_BACKUP_TARGET_SYMLINK_DISALLOWED");
+    expect(producer.inputs).toHaveLength(0);
+  });
+
+  it("backup hedefi symlink parent zinciri altındaysa job oluşturmaz", async () => {
+    const producer = new FakeProducer();
+    const service = new BackupRestoreService(createBackupRestoreJobStore(), producer);
+    const directory = await createTestDirectory();
+    const realDirectory = join(directory, "real");
+    const realNestedDirectory = join(realDirectory, "nested-backups");
+    const linkDirectory = join(directory, "linked");
+    await mkdir(realNestedDirectory, { recursive: true });
+    await symlink(realDirectory, linkDirectory, "dir");
+
+    await expect(service.enqueue(tenantAdminContext, {
+      operationType: "BACKUP",
+      targetReference: pathToFileURL(join(linkDirectory, "nested-backups")).toString(),
+      confirmationText: "YEDEK AL",
+    })).rejects.toThrow("BACKUP_RESTORE_BACKUP_TARGET_PARENT_SYMLINK_DISALLOWED");
+    expect(producer.inputs).toHaveLength(0);
   });
 
   it("onay metni yanlışsa job oluşturmaz", async () => {
@@ -111,6 +179,42 @@ describe("BackupRestoreService", () => {
       targetReference: "file:///tmp/staging-drill-2026-06.json",
       confirmationText: "RESTORE DRILL",
     })).rejects.toThrow("BACKUP_RESTORE_EVIDENCE_FILE_TEMP_PATH_DISALLOWED");
+    expect(producer.inputs).toHaveLength(0);
+  });
+
+  it("restore drill hedefi symlink file artifact ise job oluşturmaz", async () => {
+    const producer = new FakeProducer();
+    const service = new BackupRestoreService(createBackupRestoreJobStore(), producer);
+    const directory = await createTestDirectory();
+    const filePath = join(directory, "restore-drill.json");
+    const linkPath = join(directory, "restore-drill-link.json");
+    await writeFile(filePath, "{}\n", "utf8");
+    await symlink(filePath, linkPath);
+
+    await expect(service.enqueue(tenantAdminContext, {
+      operationType: "RESTORE_DRILL",
+      targetReference: pathToFileURL(linkPath).toString(),
+      confirmationText: "RESTORE DRILL",
+    })).rejects.toThrow("BACKUP_RESTORE_EVIDENCE_FILE_SYMLINK_DISALLOWED");
+    expect(producer.inputs).toHaveLength(0);
+  });
+
+  it("restore drill hedefi symlink parent zinciri altındaysa job oluşturmaz", async () => {
+    const producer = new FakeProducer();
+    const service = new BackupRestoreService(createBackupRestoreJobStore(), producer);
+    const directory = await createTestDirectory();
+    const realDirectory = join(directory, "real");
+    const realNestedDirectory = join(realDirectory, "nested");
+    const linkDirectory = join(directory, "linked");
+    await mkdir(realNestedDirectory, { recursive: true });
+    await symlink(realDirectory, linkDirectory, "dir");
+    await writeFile(join(realNestedDirectory, "restore-drill.json"), "{}\n", "utf8");
+
+    await expect(service.enqueue(tenantAdminContext, {
+      operationType: "RESTORE_DRILL",
+      targetReference: pathToFileURL(join(linkDirectory, "nested", "restore-drill.json")).toString(),
+      confirmationText: "RESTORE DRILL",
+    })).rejects.toThrow("BACKUP_RESTORE_EVIDENCE_FILE_PARENT_SYMLINK_DISALLOWED");
     expect(producer.inputs).toHaveLength(0);
   });
 
@@ -168,4 +272,12 @@ class FakeAuditLogService {
     this.records.push(input);
     return { id: "audit-a", createdAt: "2026-06-06T09:00:00.000Z", ...input };
   }
+}
+
+async function createTestDirectory(): Promise<string> {
+  const root = join(process.cwd(), "artifacts", "api-backup-restore-tests");
+  await mkdir(root, { recursive: true });
+  const directory = await mkdtemp(join(root, "case-"));
+  testDirectories.push(directory);
+  return directory;
 }

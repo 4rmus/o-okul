@@ -16,14 +16,14 @@ describe("createBackupRestoreProcessor", () => {
         entityId: "backup-restore-a",
         contentHash: "hash-a",
         operationType: "BACKUP",
-        targetReference: "offsite-backup",
+        targetReference: "s3://uzman-hocam-prod-backups/tenant-a",
       },
     });
 
     expect(result).toMatchObject({
       tenantId: "tenant-a",
       operationType: "BACKUP",
-      targetReference: "offsite-backup",
+      targetReference: "s3://uzman-hocam-prod-backups/tenant-a",
       status: "completed",
     });
     expect(reporter.completed).toEqual([result]);

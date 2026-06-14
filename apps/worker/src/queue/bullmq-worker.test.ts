@@ -556,7 +556,7 @@ function createBackupRestorePayload(): BackupRestoreJobPayload {
     entityId: "backup-restore-a",
     contentHash: "hash-a",
     operationType: "RESTORE_DRILL",
-    targetReference: "staging-drill-2026-06",
+    targetReference: "file:///mnt/restore-drills/staging-drill-2026-06.json",
     reason: "Aylık restore kanıtı",
   };
 }
@@ -680,7 +680,7 @@ function createBackupRestoreResult(): BackupRestoreJobResult {
     tenantId: "tenant-a",
     jobId: "backup-restore-a_hash-a",
     operationType: "RESTORE_DRILL",
-    targetReference: "staging-drill-2026-06",
+    targetReference: "file:///mnt/restore-drills/staging-drill-2026-06.json",
     reason: "Aylık restore kanıtı",
     result: "PASS",
     status: "completed",

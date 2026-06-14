@@ -124,6 +124,25 @@ describe("BackupRestoreController", () => {
     expect(producer.inputs).toHaveLength(1);
   });
 
+  it("backup target sözleşmesi geçersizse producer'a iş göndermez", async () => {
+    const response = await request(server)
+      .post("/backup-restore-jobs")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        confirmationText: "YEDEK AL",
+        operationType: "BACKUP",
+        reason: "Serbest hedef reddi",
+        targetReference: "offsite-backup",
+      })
+      .expect(400);
+
+    expect(response.body.error).toMatchObject({
+      code: "BACKUP_RESTORE_BACKUP_TARGET_URL_REQUIRED",
+      message: "İstek geçersiz.",
+    });
+    expect(producer.inputs).toHaveLength(0);
+  });
+
   it("backup restore job gövdesini Zod ile doğrular", async () => {
     const response = await request(server)
       .post("/backup-restore-jobs")

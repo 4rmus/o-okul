@@ -6,6 +6,7 @@
   "scripts": {
     "build": "next build",
     "a11y": "playwright test -c playwright.next.config.ts e2e-next/a11y-next.spec.ts",
+    "backup-restore-panel": "playwright test -c playwright.next.config.ts e2e-next/backup-restore-next.spec.ts",
     "dev": "next dev --hostname 0.0.0.0 --port 3001",
     "lint": "tsc -p tsconfig.json --noEmit",
     "next:build": "next build",

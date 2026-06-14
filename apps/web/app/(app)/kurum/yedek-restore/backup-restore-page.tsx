@@ -97,6 +97,11 @@ export function BackupRestorePage() {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const targetError = validateTargetReference(operationType, targetReference);
+    if (targetError) {
+      setError(targetError);
+      return;
+    }
     setError("");
     createJobMutation.mutate();
   }
@@ -118,7 +123,7 @@ export function BackupRestorePage() {
       <OperationDecisionNotice
         decision="Karar: panel yedek ve restore drill işini çift onayla kuyruğa alır."
         reason="Gerçek restore hâlâ yıkıcıdır; bu panel C1 kapsamında yalnız TENANT_ADMIN, audit log ve açık onayla denetlenebilir job başlatır."
-        nextStep="Sonraki C1 dilimi worker tarafında gerçek backup/restore drill çıktısını bu job kaydına bağlar."
+        nextStep="Worker sonucu bu job kaydına PASS/failed olarak bağlar; gerçek staging/prod restore kanıtı hâlâ dış ortamda üretilmelidir."
       />
       <section className="next-report-list" aria-label="Panel restore drill işi">
         <h2>Panel İş Tetikleme</h2>
@@ -143,8 +148,11 @@ export function BackupRestorePage() {
             <Input
               required
               value={targetReference}
-              onChange={(event) => setTargetReference(event.target.value)}
-              placeholder={operationType === "BACKUP" ? "file:///mnt/backups/tenant-a" : "file:///path/to/restore-drill.json"}
+              onChange={(event) => {
+                setTargetReference(event.target.value);
+                setError("");
+              }}
+              placeholder={operationType === "BACKUP" ? "s3://uzman-hocam-prod-backups/tenant-a" : "file:///mnt/restore-drills/restore-drill.json"}
             />
           </label>
           <label>
@@ -212,6 +220,55 @@ function createBackupRestoreJob(
 
 function confirmationFor(operationType: BackupRestoreOperationType) {
   return operationType === "BACKUP" ? "YEDEK AL" : "RESTORE DRILL";
+}
+
+function validateTargetReference(operationType: BackupRestoreOperationType, targetReference: string): string {
+  const trimmed = targetReference.trim();
+  if (!trimmed) return "Hedef referansı zorunlu.";
+
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return operationType === "BACKUP"
+      ? "Yedek hedefi s3://bucket/prefix veya kalıcı file:// dizin olmalı."
+      : "Restore kanıt dosyası file:// artifact yolu olmalı.";
+  }
+
+  if (operationType === "BACKUP") {
+    if (url.protocol === "s3:") {
+      const prefix = url.pathname.replace(/^\/+|\/+$/g, "");
+      return url.hostname && prefix ? "" : "Yedek S3 hedefi bucket ve prefix içermeli.";
+    }
+    if (url.protocol !== "file:") return "Yedek hedefi s3://bucket/prefix veya kalıcı file:// dizin olmalı.";
+    return isLocalTempOrRootFileUrl(url) ? "Yedek file:// hedefi root, /tmp veya /var/tmp altında olamaz." : "";
+  }
+
+  if (url.protocol !== "file:") return "Restore kanıt dosyası file:// artifact yolu olmalı.";
+  return isLocalTempFileUrl(url) ? "Restore kanıt dosyası /tmp veya /var/tmp altında olamaz." : "";
+}
+
+function isLocalTempOrRootFileUrl(url: URL): boolean {
+  const normalizedPath = normalizedFilePath(url);
+  return normalizedPath === "/" || isLocalTempPath(normalizedPath);
+}
+
+function isLocalTempFileUrl(url: URL): boolean {
+  return isLocalTempPath(normalizedFilePath(url));
+}
+
+function normalizedFilePath(url: URL): string {
+  let pathname = url.pathname;
+  try {
+    pathname = decodeURIComponent(pathname);
+  } catch {
+    pathname = url.pathname;
+  }
+  return pathname.replace(/\/+$/g, "") || "/";
+}
+
+function isLocalTempPath(path: string): boolean {
+  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
 }
 
 function operationLabel(operationType: BackupRestoreJobRecord["operationType"]) {

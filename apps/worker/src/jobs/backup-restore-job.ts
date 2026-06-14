@@ -106,6 +106,7 @@ function assertBackupRestorePayload(payload: BackupRestoreJobPayload): void {
 
 async function resolveEvidence(payload: BackupRestoreJobPayload): Promise<{ checkedTables: string[] }> {
   if (payload.operationType === "BACKUP") {
+    await assertBackupTargetReference(payload.targetReference);
     return { checkedTables: [...criticalTables] };
   }
 
@@ -116,6 +117,37 @@ async function resolveEvidence(payload: BackupRestoreJobPayload): Promise<{ chec
     throw new Error(`BACKUP_RESTORE_EVIDENCE_INVALID: ${failures.join("; ")}`);
   }
   return { checkedTables: [...criticalTables] };
+}
+
+async function assertBackupTargetReference(targetReference: string): Promise<void> {
+  const url = parseBackupTargetUrl(targetReference);
+  if (url.protocol === "s3:") {
+    const prefix = url.pathname.replace(/^\/+|\/+$/g, "");
+    if (!url.hostname || !prefix) {
+      throw new Error("BACKUP_RESTORE_BACKUP_TARGET_URL_REQUIRED");
+    }
+    return;
+  }
+
+  const directoryPath = fileURLToPath(url);
+  const resolvedPath = resolve(directoryPath);
+  if (isLocalTempOrRootPath(resolvedPath)) {
+    throw new Error("BACKUP_RESTORE_BACKUP_TARGET_TEMP_PATH_DISALLOWED");
+  }
+  await assertBackupDirectoryTargetIfVisible(resolvedPath);
+}
+
+function parseBackupTargetUrl(value: string): URL {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("BACKUP_RESTORE_BACKUP_TARGET_URL_REQUIRED");
+  }
+  if (url.protocol !== "file:" && url.protocol !== "s3:") {
+    throw new Error("BACKUP_RESTORE_BACKUP_TARGET_URL_REQUIRED");
+  }
+  return url;
 }
 
 function parseFileUrl(value: string): URL {
@@ -157,6 +189,41 @@ async function assertEvidenceFilePath(filePath: string): Promise<void> {
   }
 }
 
+async function assertBackupDirectoryTargetIfVisible(directoryPath: string): Promise<void> {
+  await assertBackupTargetParentPath(directoryPath);
+
+  let stat;
+  try {
+    stat = await lstat(directoryPath);
+  } catch {
+    return;
+  }
+
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new Error("BACKUP_RESTORE_BACKUP_TARGET_SYMLINK_DISALLOWED");
+  }
+}
+
+async function assertBackupTargetParentPath(directoryPath: string): Promise<void> {
+  const root = parse(directoryPath).root;
+  const parentPath = dirname(directoryPath);
+  const segments = relative(root, parentPath).split(sep).filter(Boolean);
+  let currentPath = root;
+
+  for (const segment of segments) {
+    currentPath = join(currentPath, segment);
+    let stat;
+    try {
+      stat = await lstat(currentPath);
+    } catch {
+      return;
+    }
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new Error("BACKUP_RESTORE_BACKUP_TARGET_PARENT_SYMLINK_DISALLOWED");
+    }
+  }
+}
+
 async function assertEvidenceFileParentPath(filePath: string): Promise<void> {
   const root = parse(filePath).root;
   const parentPath = dirname(filePath);
@@ -185,6 +252,11 @@ function isLocalTempEvidencePath(filePath: string): boolean {
     normalizedPath === "/var/tmp" ||
     normalizedPath.startsWith("/var/tmp/")
   );
+}
+
+function isLocalTempOrRootPath(filePath: string): boolean {
+  const normalizedPath = filePath.replace(/\/+$/g, "") || "/";
+  return normalizedPath === "/" || isLocalTempEvidencePath(normalizedPath);
 }
 
 function parseJson(value: string): unknown {

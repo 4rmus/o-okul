@@ -22,19 +22,92 @@ describe("processBackupRestoreJob", () => {
         entityId: "backup-restore-a",
         contentHash: "hash-a",
         operationType: "BACKUP",
-        targetReference: "file:///mnt/backups/tenant-a",
+        targetReference: "s3://uzman-hocam-prod-backups/tenant-a",
         reason: "Panelden korumalı yedek alma",
       },
     })).resolves.toEqual({
       tenantId: "tenant-a",
       jobId: "backup-restore-a_hash-a",
       operationType: "BACKUP",
-      targetReference: "file:///mnt/backups/tenant-a",
+      targetReference: "s3://uzman-hocam-prod-backups/tenant-a",
       reason: "Panelden korumalı yedek alma",
       result: "PASS",
       status: "completed",
       checkedTables: ["Tenant", "AuditLog", "ReportSnapshot", "_prisma_migrations"],
     });
+  });
+
+  it("backup hedefi off-host URL değilse işi başlatmaz", async () => {
+    await expect(processBackupRestoreJob({
+      id: "backup-restore-a_hash-a",
+      name: "backup-restore",
+      payload: {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        entityId: "backup-restore-a",
+        contentHash: "hash-a",
+        operationType: "BACKUP",
+        targetReference: "offsite-backup",
+      },
+    })).rejects.toThrow("BACKUP_RESTORE_BACKUP_TARGET_URL_REQUIRED");
+  });
+
+  it("backup hedefi lokal temp/root path ise işi başlatmaz", async () => {
+    await expect(processBackupRestoreJob({
+      id: "backup-restore-a_hash-a",
+      name: "backup-restore",
+      payload: {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        entityId: "backup-restore-a",
+        contentHash: "hash-a",
+        operationType: "BACKUP",
+        targetReference: "file:///tmp/tenant-a-backups",
+      },
+    })).rejects.toThrow("BACKUP_RESTORE_BACKUP_TARGET_TEMP_PATH_DISALLOWED");
+  });
+
+  it("backup hedefi symlink dizin ise işi başlatmaz", async () => {
+    const directory = await createTestDirectory();
+    const realDirectory = join(directory, "real-backups");
+    const linkDirectory = join(directory, "linked-backups");
+    await mkdir(realDirectory, { recursive: true });
+    await symlink(realDirectory, linkDirectory, "dir");
+
+    await expect(processBackupRestoreJob({
+      id: "backup-restore-a_hash-a",
+      name: "backup-restore",
+      payload: {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        entityId: "backup-restore-a",
+        contentHash: "hash-a",
+        operationType: "BACKUP",
+        targetReference: pathToFileURL(linkDirectory).toString(),
+      },
+    })).rejects.toThrow("BACKUP_RESTORE_BACKUP_TARGET_SYMLINK_DISALLOWED");
+  });
+
+  it("backup hedefi symlink parent altında ise işi başlatmaz", async () => {
+    const directory = await createTestDirectory();
+    const realDirectory = join(directory, "real");
+    const realNestedDirectory = join(realDirectory, "nested-backups");
+    const linkDirectory = join(directory, "linked");
+    await mkdir(realNestedDirectory, { recursive: true });
+    await symlink(realDirectory, linkDirectory, "dir");
+
+    await expect(processBackupRestoreJob({
+      id: "backup-restore-a_hash-a",
+      name: "backup-restore",
+      payload: {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        entityId: "backup-restore-a",
+        contentHash: "hash-a",
+        operationType: "BACKUP",
+        targetReference: pathToFileURL(join(linkDirectory, "nested-backups")).toString(),
+      },
+    })).rejects.toThrow("BACKUP_RESTORE_BACKUP_TARGET_PARENT_SYMLINK_DISALLOWED");
   });
 
   it("restore drill payload'ını denetlenebilir sonuca çevirir", async () => {
@@ -125,10 +198,11 @@ describe("processBackupRestoreJob", () => {
   it("restore drill kanıtı symlink parent altında ise işi başlatmaz", async () => {
     const directory = await createTestDirectory();
     const realDirectory = join(directory, "real");
+    const realNestedDirectory = join(realDirectory, "nested");
     const linkDirectory = join(directory, "linked");
-    await mkdir(realDirectory);
+    await mkdir(realNestedDirectory, { recursive: true });
     await symlink(realDirectory, linkDirectory, "dir");
-    await writeRestoreDrillEvidence(join(realDirectory, "restore-drill.json"));
+    await writeRestoreDrillEvidence(join(realNestedDirectory, "restore-drill.json"));
 
     await expect(processBackupRestoreJob({
       id: "backup-restore-a_hash-a",
@@ -139,7 +213,7 @@ describe("processBackupRestoreJob", () => {
         entityId: "backup-restore-a",
         contentHash: "hash-a",
         operationType: "RESTORE_DRILL",
-        targetReference: pathToFileURL(join(linkDirectory, "restore-drill.json")).toString(),
+        targetReference: pathToFileURL(join(linkDirectory, "nested", "restore-drill.json")).toString(),
       },
     })).rejects.toThrow("BACKUP_RESTORE_EVIDENCE_FILE_PARENT_SYMLINK_DISALLOWED");
   });

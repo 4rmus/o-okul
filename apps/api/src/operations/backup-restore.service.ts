@@ -1,5 +1,7 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, Optional } from "@nestjs/common";
 import { createHash } from "node:crypto";
+import { lstat } from "node:fs/promises";
+import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
@@ -69,7 +71,7 @@ export class BackupRestoreService {
 
     const operationType = parseOperationType(input.operationType);
     const targetReference = required(input.targetReference, "BACKUP_RESTORE_TARGET_REQUIRED");
-    assertTargetReference(operationType, targetReference);
+    await assertTargetReference(operationType, targetReference);
     const expectedConfirmation = confirmationFor(operationType);
     if (input.confirmationText !== expectedConfirmation) {
       throw new BadRequestException("BACKUP_RESTORE_CONFIRMATION_REQUIRED");
@@ -129,14 +131,43 @@ function confirmationFor(operationType: BackupRestoreOperationType): string {
   return operationType === "BACKUP" ? "YEDEK AL" : "RESTORE DRILL";
 }
 
-function assertTargetReference(operationType: BackupRestoreOperationType, targetReference: string): void {
-  if (operationType === "BACKUP") return;
-  let url: URL;
-  try {
-    url = new URL(targetReference);
-  } catch {
-    throw new BadRequestException("BACKUP_RESTORE_EVIDENCE_FILE_URL_REQUIRED");
+async function assertTargetReference(operationType: BackupRestoreOperationType, targetReference: string): Promise<void> {
+  if (operationType === "BACKUP") {
+    await assertBackupTargetReference(targetReference);
+    return;
   }
+  await assertRestoreDrillTargetReference(targetReference);
+}
+
+async function assertBackupTargetReference(targetReference: string): Promise<void> {
+  const url = parseTargetUrl(targetReference, "BACKUP_RESTORE_BACKUP_TARGET_URL_REQUIRED");
+  if (url.protocol === "s3:") {
+    const prefix = url.pathname.replace(/^\/+|\/+$/g, "");
+    if (!url.hostname || !prefix) {
+      throw new BadRequestException("BACKUP_RESTORE_BACKUP_TARGET_URL_REQUIRED");
+    }
+    return;
+  }
+  if (url.protocol !== "file:") {
+    throw new BadRequestException("BACKUP_RESTORE_BACKUP_TARGET_URL_REQUIRED");
+  }
+
+  let filePath: string;
+  try {
+    filePath = fileURLToPath(url);
+  } catch {
+    throw new BadRequestException("BACKUP_RESTORE_BACKUP_TARGET_URL_REQUIRED");
+  }
+
+  const resolvedPath = resolve(filePath);
+  if (isLocalTempOrRootPath(resolvedPath)) {
+    throw new BadRequestException("BACKUP_RESTORE_BACKUP_TARGET_TEMP_PATH_DISALLOWED");
+  }
+  await assertDirectoryTargetIfVisible(resolvedPath);
+}
+
+async function assertRestoreDrillTargetReference(targetReference: string): Promise<void> {
+  const url = parseTargetUrl(targetReference, "BACKUP_RESTORE_EVIDENCE_FILE_URL_REQUIRED");
   if (url.protocol !== "file:") {
     throw new BadRequestException("BACKUP_RESTORE_EVIDENCE_FILE_URL_REQUIRED");
   }
@@ -147,8 +178,70 @@ function assertTargetReference(operationType: BackupRestoreOperationType, target
   } catch {
     throw new BadRequestException("BACKUP_RESTORE_EVIDENCE_FILE_URL_REQUIRED");
   }
-  if (isLocalTempEvidencePath(filePath)) {
+  const resolvedPath = resolve(filePath);
+  if (isLocalTempEvidencePath(resolvedPath)) {
     throw new BadRequestException("BACKUP_RESTORE_EVIDENCE_FILE_TEMP_PATH_DISALLOWED");
+  }
+  await assertEvidenceFilePathIfVisible(resolvedPath);
+}
+
+function parseTargetUrl(targetReference: string, errorCode: string): URL {
+  let url: URL;
+  try {
+    url = new URL(targetReference);
+  } catch {
+    throw new BadRequestException(errorCode);
+  }
+  return url;
+}
+
+async function assertEvidenceFilePathIfVisible(filePath: string): Promise<void> {
+  await assertParentPathAllowed(dirname(filePath), "BACKUP_RESTORE_EVIDENCE_FILE_PARENT_SYMLINK_DISALLOWED");
+
+  let stat;
+  try {
+    stat = await lstat(filePath);
+  } catch {
+    return;
+  }
+
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new BadRequestException("BACKUP_RESTORE_EVIDENCE_FILE_SYMLINK_DISALLOWED");
+  }
+}
+
+async function assertDirectoryTargetIfVisible(directoryPath: string): Promise<void> {
+  await assertParentPathAllowed(dirname(directoryPath), "BACKUP_RESTORE_BACKUP_TARGET_PARENT_SYMLINK_DISALLOWED");
+
+  let stat;
+  try {
+    stat = await lstat(directoryPath);
+  } catch {
+    return;
+  }
+
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new BadRequestException("BACKUP_RESTORE_BACKUP_TARGET_SYMLINK_DISALLOWED");
+  }
+}
+
+async function assertParentPathAllowed(parentPath: string, errorCode: string): Promise<void> {
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+    let stat;
+    try {
+      stat = await lstat(current);
+    } catch {
+      return;
+    }
+
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new BadRequestException(errorCode);
+    }
   }
 }
 
@@ -160,6 +253,11 @@ function isLocalTempEvidencePath(filePath: string): boolean {
     normalizedPath === "/var/tmp" ||
     normalizedPath.startsWith("/var/tmp/")
   );
+}
+
+function isLocalTempOrRootPath(filePath: string): boolean {
+  const normalizedPath = filePath.replace(/\/+$/g, "") || "/";
+  return normalizedPath === "/" || isLocalTempEvidencePath(normalizedPath);
 }
 
 function required(value: string | undefined, errorCode: string): string {
