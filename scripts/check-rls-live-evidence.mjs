@@ -1,4 +1,5 @@
 import { lstat, readFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getTenantScopedTables } from "../packages/db/scripts/tenant-models.mjs";
 
@@ -97,7 +98,22 @@ async function readEvidenceFile(url) {
     fail(["RLS_LIVE_EVIDENCE_TARGET symlink olmayan file:// artifact olmali."]);
   }
 
+  await assertParentPathAllowed(dirname(filePath));
+
   return readFile(filePath, "utf8");
+}
+
+async function assertParentPathAllowed(parentPath) {
+  let stat;
+  try {
+    stat = await lstat(parentPath);
+  } catch {
+    fail(["RLS_LIVE_EVIDENCE_TARGET parent dizini okunabilir olmali."]);
+  }
+
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    fail(["RLS_LIVE_EVIDENCE_TARGET parent dizini symlink olmayan dizin olmali."]);
+  }
 }
 
 function requireAllowedEvidenceTargetUrl(url) {

@@ -720,6 +720,7 @@ runRestoreDrillNegativeCheck({
     fixture.tableCounts.UnexpectedTable = 1;
   },
 });
+runRestoreDrillSymlinkParentTargetNegativeCheck();
 runObservabilityUatNegativeCheck({
   label: "Observability UAT extra top-level key negative",
   path: "docs/evidence-templates/observability-uat.extra-top-level.tmp.json",
@@ -752,6 +753,7 @@ runObservabilityUatNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runObservabilityUatSymlinkParentTargetNegativeCheck();
 runSecurityAuditNegativeCheck({
   label: "Security audit extra top-level key negative",
   path: "docs/evidence-templates/security-audit.extra-top-level.tmp.json",
@@ -784,6 +786,7 @@ runSecurityAuditNegativeCheck({
     fixture.dataControlsVerified.push("unexpected data control");
   },
 });
+runSecurityAuditSymlinkParentTargetNegativeCheck();
 runExternalMonitoringNegativeCheck({
   label: "External monitoring extra top-level key negative",
   path: "docs/evidence-templates/external-monitoring.extra-top-level.tmp.json",
@@ -862,6 +865,7 @@ runExternalMonitoringNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runExternalMonitoringSymlinkParentTargetNegativeCheck();
 runAdminMfaNegativeCheck({
   label: "Admin MFA extra top-level key negative",
   path: "docs/evidence-templates/admin-mfa.extra-top-level.tmp.json",
@@ -1096,6 +1100,7 @@ runLiveExamCycleNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runLiveExamCycleSymlinkParentTargetNegativeCheck();
 runInlineUploadMigrationNegativeCheck({
   label: "Inline upload migration extra top-level key negative",
   path: "docs/evidence-templates/inline-upload-content-migration.extra-top-level.tmp.json",
@@ -1296,6 +1301,7 @@ runRlsLiveNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runRlsLiveSymlinkParentTargetNegativeCheck();
 runUatNegativeCheck({
   label: "UAT extra top-level key negative",
   path: "docs/evidence-templates/uat.extra-top-level.tmp.json",
@@ -1333,6 +1339,7 @@ runUatNegativeCheck({
     fixture.journeyScenariosVerified[0].unexpectedField = true;
   },
 });
+runUatSymlinkParentTargetNegativeCheck();
 runPilotNegativeCheck({
   label: "Pilot extra top-level key negative",
   path: "docs/evidence-templates/pilot.extra-top-level.tmp.json",
@@ -1373,6 +1380,7 @@ runPilotNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runPilotSymlinkParentTargetNegativeCheck();
 runDeploymentRegionNegativeCheck({
   label: "Deployment region extra top-level key negative",
   path: "docs/evidence-templates/deployment-region.extra-top-level.tmp.json",
@@ -2658,6 +2666,41 @@ function runExternalMonitoringNegativeCheck({ label, path, expectedFailure, muta
   }
 }
 
+function runExternalMonitoringSymlinkParentTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "external-monitoring-parent-symlink-"));
+  const realDirectory = join(root, "real-dir");
+  const symlinkDirectory = join(root, "symlink-dir");
+  mkdirSync(realDirectory, { recursive: true });
+  writeFileSync(join(realDirectory, "external-monitoring.json"), `${JSON.stringify(externalMonitoringFixture, null, 2)}\n`);
+  symlinkSync(realDirectory, symlinkDirectory, "dir");
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-external-monitoring-evidence.mjs"], {
+      env: {
+        ...process.env,
+        EXTERNAL_MONITORING_ALLOW_EXAMPLE_EVIDENCE: "1",
+        EXTERNAL_MONITORING_TARGET: pathToFileURL(join(symlinkDirectory, "external-monitoring.json")).href,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: external monitoring symlink parent target negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!output.includes("EXTERNAL_MONITORING_TARGET parent dizini symlink olmayan dizin olmali.")) {
+      console.error("Production evidence template kontrolü başarısız: external monitoring symlink parent target negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function runObservabilityUatNegativeCheck({ label, path, expectedFailure, mutate }) {
   const fixture = structuredClone(observabilityUatFixture);
   mutate(fixture);
@@ -2689,6 +2732,41 @@ function runObservabilityUatNegativeCheck({ label, path, expectedFailure, mutate
     } catch {
       // Ignore cleanup errors; the negative-check failure above is the actionable signal.
     }
+  }
+}
+
+function runObservabilityUatSymlinkParentTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "observability-uat-parent-symlink-"));
+  const realDirectory = join(root, "real-dir");
+  const symlinkDirectory = join(root, "symlink-dir");
+  mkdirSync(realDirectory, { recursive: true });
+  writeFileSync(join(realDirectory, "observability-uat.json"), `${JSON.stringify(observabilityUatFixture, null, 2)}\n`);
+  symlinkSync(realDirectory, symlinkDirectory, "dir");
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-observability-uat-evidence.mjs"], {
+      env: {
+        ...process.env,
+        OBSERVABILITY_UAT_ALLOW_EXAMPLE_EVIDENCE: "1",
+        OBSERVABILITY_UAT_TARGET: pathToFileURL(join(symlinkDirectory, "observability-uat.json")).href,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: observability UAT symlink parent target negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!output.includes("OBSERVABILITY_UAT_TARGET parent dizini symlink olmayan dizin olmali.")) {
+      console.error("Production evidence template kontrolü başarısız: observability UAT symlink parent target negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 }
 
@@ -2827,6 +2905,41 @@ function runFinancialRetentionNegativeCheck({ label, path, expectedFailure, muta
   }
 }
 
+function runRestoreDrillSymlinkParentTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "restore-drill-parent-symlink-"));
+  const realDirectory = join(root, "real-dir");
+  const symlinkDirectory = join(root, "symlink-dir");
+  mkdirSync(realDirectory, { recursive: true });
+  writeFileSync(join(realDirectory, "restore-drill.json"), `${JSON.stringify(restoreDrillFixture, null, 2)}\n`);
+  symlinkSync(realDirectory, symlinkDirectory, "dir");
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-restore-drill-evidence.mjs"], {
+      env: {
+        ...process.env,
+        RESTORE_DRILL_ALLOW_EXAMPLE_EVIDENCE: "1",
+        RESTORE_DRILL_TARGET: pathToFileURL(join(symlinkDirectory, "restore-drill.json")).href,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: restore drill symlink parent target negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!output.includes("RESTORE_DRILL_TARGET parent dizini symlink olmayan dizin olmali.")) {
+      console.error("Production evidence template kontrolü başarısız: restore drill symlink parent target negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function runSecurityAuditNegativeCheck({ label, path, expectedFailure, mutate }) {
   const fixture = structuredClone(securityAuditFixture);
   mutate(fixture);
@@ -2858,6 +2971,41 @@ function runSecurityAuditNegativeCheck({ label, path, expectedFailure, mutate })
     } catch {
       // Ignore cleanup errors; the negative-check failure above is the actionable signal.
     }
+  }
+}
+
+function runSecurityAuditSymlinkParentTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "security-audit-parent-symlink-"));
+  const realDirectory = join(root, "real-dir");
+  const symlinkDirectory = join(root, "symlink-dir");
+  mkdirSync(realDirectory, { recursive: true });
+  writeFileSync(join(realDirectory, "security-audit.json"), `${JSON.stringify(securityAuditFixture, null, 2)}\n`);
+  symlinkSync(realDirectory, symlinkDirectory, "dir");
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-security-audit-evidence.mjs"], {
+      env: {
+        ...process.env,
+        SECURITY_AUDIT_ALLOW_EXAMPLE_EVIDENCE: "1",
+        SECURITY_AUDIT_TARGET: pathToFileURL(join(symlinkDirectory, "security-audit.json")).href,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: security audit symlink parent target negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!output.includes("SECURITY_AUDIT_TARGET parent dizini symlink olmayan dizin olmali.")) {
+      console.error("Production evidence template kontrolü başarısız: security audit symlink parent target negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 }
 
@@ -3031,6 +3179,41 @@ function runLiveExamCycleNegativeCheck({ label, path, expectedFailure, mutate })
   }
 }
 
+function runLiveExamCycleSymlinkParentTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "live-exam-cycle-parent-symlink-"));
+  const realDirectory = join(root, "real-dir");
+  const symlinkDirectory = join(root, "symlink-dir");
+  mkdirSync(realDirectory, { recursive: true });
+  writeFileSync(join(realDirectory, "live-exam-cycle.json"), `${JSON.stringify(liveExamCycleFixture, null, 2)}\n`);
+  symlinkSync(realDirectory, symlinkDirectory, "dir");
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-live-exam-cycle-evidence.mjs"], {
+      env: {
+        ...process.env,
+        LIVE_EXAM_CYCLE_ALLOW_EXAMPLE_EVIDENCE: "1",
+        LIVE_EXAM_CYCLE_TARGET: pathToFileURL(join(symlinkDirectory, "live-exam-cycle.json")).href,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: live exam cycle symlink parent target negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!output.includes("LIVE_EXAM_CYCLE_TARGET parent dizini symlink olmayan dizin olmali.")) {
+      console.error("Production evidence template kontrolü başarısız: live exam cycle symlink parent target negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function runRlsLiveNegativeCheck({ label, path, expectedFailure, mutate }) {
   const fixture = structuredClone(rlsLiveFixture);
   mutate(fixture);
@@ -3062,6 +3245,41 @@ function runRlsLiveNegativeCheck({ label, path, expectedFailure, mutate }) {
     } catch {
       // Ignore cleanup errors; the negative-check failure above is the actionable signal.
     }
+  }
+}
+
+function runRlsLiveSymlinkParentTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "rls-live-parent-symlink-"));
+  const realDirectory = join(root, "real-dir");
+  const symlinkDirectory = join(root, "symlink-dir");
+  mkdirSync(realDirectory, { recursive: true });
+  writeFileSync(join(realDirectory, "rls-live.json"), `${JSON.stringify(rlsLiveFixture, null, 2)}\n`);
+  symlinkSync(realDirectory, symlinkDirectory, "dir");
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-rls-live-evidence.mjs"], {
+      env: {
+        ...process.env,
+        RLS_LIVE_ALLOW_EXAMPLE_EVIDENCE: "1",
+        RLS_LIVE_EVIDENCE_TARGET: pathToFileURL(join(symlinkDirectory, "rls-live.json")).href,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: RLS live symlink parent target negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!output.includes("RLS_LIVE_EVIDENCE_TARGET parent dizini symlink olmayan dizin olmali.")) {
+      console.error("Production evidence template kontrolü başarısız: RLS live symlink parent target negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 }
 
@@ -3099,6 +3317,41 @@ function runUatNegativeCheck({ label, path, expectedFailure, mutate }) {
   }
 }
 
+function runUatSymlinkParentTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "uat-parent-symlink-"));
+  const realDirectory = join(root, "real-dir");
+  const symlinkDirectory = join(root, "symlink-dir");
+  mkdirSync(realDirectory, { recursive: true });
+  writeFileSync(join(realDirectory, "uat.json"), `${JSON.stringify(uatFixture, null, 2)}\n`);
+  symlinkSync(realDirectory, symlinkDirectory, "dir");
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-uat-evidence.mjs"], {
+      env: {
+        ...process.env,
+        UAT_ALLOW_EXAMPLE_EVIDENCE: "1",
+        UAT_EVIDENCE_TARGET: pathToFileURL(join(symlinkDirectory, "uat.json")).href,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: UAT symlink parent target negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!output.includes("UAT_EVIDENCE_TARGET parent dizini symlink olmayan dizin olmali.")) {
+      console.error("Production evidence template kontrolü başarısız: UAT symlink parent target negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function runPilotNegativeCheck({ label, path, expectedFailure, mutate }) {
   const fixture = structuredClone(pilotFixture);
   mutate(fixture);
@@ -3130,6 +3383,41 @@ function runPilotNegativeCheck({ label, path, expectedFailure, mutate }) {
     } catch {
       // Ignore cleanup errors; the negative-check failure above is the actionable signal.
     }
+  }
+}
+
+function runPilotSymlinkParentTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "pilot-parent-symlink-"));
+  const realDirectory = join(root, "real-dir");
+  const symlinkDirectory = join(root, "symlink-dir");
+  mkdirSync(realDirectory, { recursive: true });
+  writeFileSync(join(realDirectory, "pilot.json"), `${JSON.stringify(pilotFixture, null, 2)}\n`);
+  symlinkSync(realDirectory, symlinkDirectory, "dir");
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-pilot-evidence.mjs"], {
+      env: {
+        ...process.env,
+        PILOT_ALLOW_EXAMPLE_EVIDENCE: "1",
+        PILOT_EVIDENCE_TARGET: pathToFileURL(join(symlinkDirectory, "pilot.json")).href,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: pilot symlink parent target negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!output.includes("PILOT_EVIDENCE_TARGET parent dizini symlink olmayan dizin olmali.")) {
+      console.error("Production evidence template kontrolü başarısız: pilot symlink parent target negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 }
 
