@@ -92,7 +92,12 @@ export interface ReportGenerationJobAdapter {
   saveSnapshot(snapshot: ReportSnapshotCandidate): Promise<ReportGenerationJobResult>;
 }
 
-interface ScoreAverages {
+interface ScoreMetrics {
+  questionCount: number;
+  successRate: number;
+}
+
+interface ScoreAverages extends ScoreMetrics {
   correct: number;
   wrong: number;
   blank: number;
@@ -102,7 +107,7 @@ interface ScoreAverages {
   standardScore: number;
 }
 
-interface BranchAverages {
+interface BranchAverages extends ScoreMetrics {
   branch: string;
   resultCount: number;
   correct: number;
@@ -111,7 +116,7 @@ interface BranchAverages {
   net: number;
 }
 
-interface OutcomeAverages {
+interface OutcomeAverages extends ScoreMetrics {
   outcomeCode: string;
   branch: string;
   resultCount: number;
@@ -151,14 +156,18 @@ interface CohortStatisticsSummary {
   version: string;
 }
 
+type StudentScoreSummary = ScoringResult["total"] & ScoreMetrics;
+type StudentBranchSummary = BranchScore & ScoreMetrics;
+type StudentOutcomeSummary = OutcomeScore & ScoreMetrics;
+
 interface StudentReportSummary {
   studentId: string;
   classId?: string;
   className?: string;
   resultKey: string;
-  total: ScoringResult["total"];
-  branches: BranchScore[];
-  outcomes?: OutcomeScore[];
+  total: StudentScoreSummary;
+  branches: StudentBranchSummary[];
+  outcomes?: StudentOutcomeSummary[];
   questions: QuestionScore[];
   statistics: StudentStatisticsSummary;
   commentary?: ReportStudentCommentary;
@@ -335,15 +344,18 @@ function assertReportGenerationPayload(payload: ReportGenerationJobPayload): voi
 }
 
 function createTotalAverages(results: ExamResultForReport[]): ScoreAverages {
+  const totals = results.map((result) => result.score.total);
   const estimatedRawScore = averageOptional(results.map((result) => result.score.total.estimatedRawScore));
   return {
-    correct: average(results.map((result) => result.score.total.correct)),
-    wrong: average(results.map((result) => result.score.total.wrong)),
-    blank: average(results.map((result) => result.score.total.blank)),
-    net: average(results.map((result) => result.score.total.net)),
-    rawScore: average(results.map((result) => result.score.total.rawScore)),
+    correct: average(totals.map((score) => score.correct)),
+    wrong: average(totals.map((score) => score.wrong)),
+    blank: average(totals.map((score) => score.blank)),
+    net: average(totals.map((score) => score.net)),
+    questionCount: average(totals.map(scoreQuestionCount)),
+    rawScore: average(totals.map((score) => score.rawScore)),
     ...(estimatedRawScore !== undefined ? { estimatedRawScore } : {}),
-    standardScore: average(results.map((result) => result.score.total.standardScore)),
+    standardScore: average(totals.map((score) => score.standardScore)),
+    successRate: average(totals.map(scoreSuccessRate)),
   };
 }
 
@@ -366,6 +378,8 @@ function createBranchAverages(results: ExamResultForReport[]): BranchAverages[] 
       wrong: average(scores.map((score) => score.wrong)),
       blank: average(scores.map((score) => score.blank)),
       net: average(scores.map((score) => score.net)),
+      questionCount: average(scores.map(scoreQuestionCount)),
+      successRate: average(scores.map(scoreSuccessRate)),
     }));
 }
 
@@ -391,6 +405,8 @@ function createOutcomeAverages(results: ExamResultForReport[]): OutcomeAverages[
         wrong: average(scores.map((score) => score.wrong)),
         blank: average(scores.map((score) => score.blank)),
         net: average(scores.map((score) => score.net)),
+        questionCount: average(scores.map(scoreQuestionCount)),
+        successRate: average(scores.map(scoreSuccessRate)),
       };
     });
 }
@@ -409,9 +425,9 @@ function createStudentSummary(
     classId: result.classId,
     className: result.className,
     resultKey: result.resultKey,
-    total: result.score.total,
-    branches: result.score.branches,
-    ...(outcomes.length > 0 ? { outcomes } : {}),
+    total: withScoreMetrics(result.score.total),
+    branches: result.score.branches.map(withScoreMetrics),
+    ...(outcomes.length > 0 ? { outcomes: outcomes.map(withScoreMetrics) } : {}),
     questions: result.score.questions ?? [],
     statistics: toStudentStatisticsSummary(statistics),
   };
@@ -420,10 +436,13 @@ function createStudentSummary(
 const templateCommentaryDisclaimer = "Bu yorum otomatik taslaktır; veliye yayınlanmadan önce öğretmen tarafından kontrol edilmelidir.";
 const reportSummaryFieldsUsed = [
   "total.net",
+  "total.successRate",
   "total.standardScore",
   "branches.branch",
   "branches.net",
+  "branches.successRate",
   "classes.averages.net",
+  "classes.averages.successRate",
   "statistics.rank",
 ];
 const reportSummaryFieldsExcluded = [
@@ -580,6 +599,26 @@ function createClassAverages(results: ExamResultForReport[]): ClassAverages[] {
     });
 }
 
+function withScoreMetrics<T extends { blank: number; correct: number; net: number; wrong: number }>(score: T): T & ScoreMetrics {
+  return {
+    ...score,
+    questionCount: scoreQuestionCount(score),
+    successRate: scoreSuccessRate(score),
+  };
+}
+
+function scoreQuestionCount(score: { blank: number; correct: number; wrong: number }): number {
+  return roundMetric(score.correct + score.wrong + score.blank);
+}
+
+function scoreSuccessRate(score: { blank: number; correct: number; net: number; wrong: number }): number {
+  const questionCount = scoreQuestionCount(score);
+  if (questionCount <= 0) {
+    return 0;
+  }
+  return roundMetric((score.net / questionCount) * 100);
+}
+
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort((a, b) => a.localeCompare(b));
 }
@@ -589,7 +628,7 @@ function average(values: number[]): number;
 function average(values: number | number[]): number {
   const list = Array.isArray(values) ? values : [values];
   const total = list.reduce((sum, value) => sum + value, 0);
-  return Number((total / list.length).toFixed(4));
+  return roundMetric(total / list.length);
 }
 
 function averageOptional(values: Array<number | undefined>): number | undefined {
@@ -598,4 +637,8 @@ function averageOptional(values: Array<number | undefined>): number | undefined 
     return undefined;
   }
   return average(validValues);
+}
+
+function roundMetric(value: number): number {
+  return Number(value.toFixed(4));
 }

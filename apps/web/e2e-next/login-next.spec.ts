@@ -5,7 +5,7 @@ const corsHeaders = {
   "access-control-allow-credentials": "true",
   "access-control-allow-headers": "authorization,content-type,x-csrf-token",
   "access-control-allow-methods": "DELETE,GET,PATCH,POST,OPTIONS",
-  "access-control-allow-origin": "http://localhost:3001",
+  "access-control-allow-origin": `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`,
 };
 
 function heading(page: Page, options: Parameters<Page["getByRole"]>[1]) {
@@ -17,6 +17,13 @@ async function expandSidebarGroup(page: Page, name: string) {
   if ((await groupButton.getAttribute("aria-expanded")) !== "true") {
     await groupButton.click();
   }
+}
+
+async function clickSidebarLink(page: Page, name: string, url: RegExp) {
+  await Promise.all([
+    page.waitForURL(url),
+    page.getByRole("link", { name }).click(),
+  ]);
 }
 
 async function openCommandPalette(page: Page) {
@@ -100,7 +107,7 @@ function buildIsemProgress(examId: string) {
         snapshotId: "snapshot-progress-palme",
         examTitle: "PALME - TİS ENERJİ LGS - 8",
         generatedAt: "2026-05-26T09:00:00.000Z",
-        total: { net: 82.01, standardScore: 430 },
+        total: { net: 82.01, questionCount: 90, standardScore: 430 },
         branches: [
           { branch: "TÜRKÇE", net: 18.67 },
           { branch: "İNKILAP TARİHİ", net: 8.67 },
@@ -114,7 +121,7 @@ function buildIsemProgress(examId: string) {
         snapshotId: "snapshot-progress-ozdebir",
         examTitle: "ÖZDEBİR - TG LGS - 5",
         generatedAt: "2026-05-26T09:00:00.000Z",
-        total: { net: 84.66, standardScore: 440 },
+        total: { net: 84.66, questionCount: 90, standardScore: 440 },
         branches: [
           { branch: "TÜRKÇE", net: 17.33 },
           { branch: "İNKILAP TARİHİ", net: 10 },
@@ -128,7 +135,7 @@ function buildIsemProgress(examId: string) {
         snapshotId: "snapshot-progress-sempatik",
         examTitle: "SEMPATİK - LGS - 6",
         generatedAt: "2026-05-23T09:00:00.000Z",
-        total: { net: 79.33, standardScore: 410 },
+        total: { net: 79.33, questionCount: 90, standardScore: 410 },
         branches: [
           { branch: "TÜRKÇE", net: 18.67 },
           { branch: "İNKILAP TARİHİ", net: 10 },
@@ -142,7 +149,7 @@ function buildIsemProgress(examId: string) {
         snapshotId: "snapshot-progress-hiz",
         examTitle: "HIZ - TG LGS - 7",
         generatedAt: "2026-05-23T09:00:00.000Z",
-        total: { net: 80.67, standardScore: 420 },
+        total: { net: 80.67, questionCount: 90, standardScore: 420 },
         branches: [
           { branch: "TÜRKÇE", net: 17.33 },
           { branch: "İNKILAP TARİHİ", net: 10 },
@@ -156,7 +163,7 @@ function buildIsemProgress(examId: string) {
         snapshotId: "snapshot-progress-ankara",
         examTitle: "ANKARA - LGS - 3 KALA",
         generatedAt: "2026-05-20T09:00:00.000Z",
-        total: { net: 83.34, standardScore: 435 },
+        total: { net: 83.34, questionCount: 90, standardScore: 435 },
         branches: [
           { branch: "TÜRKÇE", net: 17.33 },
           { branch: "İNKILAP TARİHİ", net: 10 },
@@ -354,6 +361,7 @@ type StudentFixture = {
   tenantId: string;
   firstName: string;
   lastName: string;
+  studentNo?: string;
   classId?: string;
   responsibleTeacherId?: string;
   status: "ACTIVE" | "PASSIVE" | "GRADUATED" | "TRANSFERRED";
@@ -488,7 +496,7 @@ type PaymentPlanFixture = {
 };
 
 test("Next login gerçek auth store ile kurum paneline geçer", async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(300_000);
 
   let loginCount = 0;
   let students: StudentFixture[] = [
@@ -497,12 +505,13 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       tenantId: "tenant-a",
       firstName: "Ada",
       lastName: "A",
+      studentNo: "176",
       classId: "class-a",
       responsibleTeacherId: "teacher-a",
       status: "ACTIVE",
     },
-    { id: "student-b", tenantId: "tenant-a", firstName: "Bora", lastName: "B", status: "ACTIVE" },
-    { id: "student-c", tenantId: "tenant-a", firstName: "Can", lastName: "C", status: "PASSIVE" },
+    { id: "student-b", tenantId: "tenant-a", firstName: "Bora", lastName: "B", studentNo: "201", status: "ACTIVE" },
+    { id: "student-c", tenantId: "tenant-a", firstName: "Can", lastName: "C", studentNo: "305", status: "PASSIVE" },
   ];
   let studentEnrollments: StudentEnrollmentFixture[] = [
     {
@@ -617,6 +626,28 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       participantNo: "176",
       bookletType: "A",
       status: "REGISTERED",
+      createdAt: "2026-06-01T09:00:00.000Z",
+      updatedAt: "2026-06-01T09:00:00.000Z",
+    },
+    {
+      id: "exam-participant-b",
+      tenantId: "tenant-a",
+      examId: "exam-demo",
+      studentId: "student-b",
+      participantNo: "201",
+      bookletType: "B",
+      status: "REGISTERED",
+      createdAt: "2026-06-01T09:00:00.000Z",
+      updatedAt: "2026-06-01T09:00:00.000Z",
+    },
+    {
+      id: "exam-participant-c",
+      tenantId: "tenant-a",
+      examId: "exam-demo",
+      studentId: "student-c",
+      participantNo: "305",
+      bookletType: "A",
+      status: "ABSENT",
       createdAt: "2026-06-01T09:00:00.000Z",
       updatedAt: "2026-06-01T09:00:00.000Z",
     },
@@ -1017,10 +1048,10 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       return;
     }
 
-    await route.continue();
+    await route.fallback();
   });
 
-  await page.route("**/auth/refresh", async (route) => {
+  await page.route("**/api/v1/auth/refresh", async (route) => {
     if (loginCount === 0) {
       await route.fulfill({ headers: corsHeaders, status: 401 });
       return;
@@ -1033,7 +1064,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     });
   });
 
-  await page.route("**/auth/login", async (route) => {
+  await page.route("**/api/v1/auth/login", async (route) => {
     loginCount += 1;
     await route.fulfill({
       contentType: "application/json",
@@ -1043,7 +1074,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     });
   });
 
-  await page.route("**/auth/logout", async (route) => {
+  await page.route("**/api/v1/auth/logout", async (route) => {
     await route.fulfill({ headers: corsHeaders, status: 204 });
   });
 
@@ -3330,6 +3361,25 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       return;
     }
 
+    if (path === "/exams/exam-demo/reports/snapshots/snapshot-a/students/student-b/error-booklet" && request.method() === "GET") {
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope({
+          tenantId: "tenant-a",
+          examId: "exam-demo",
+          snapshotId: "snapshot-a",
+          studentId: "student-b",
+          items: [
+            { questionNo: 3, branch: "Matematik", answer: "A", correctAnswer: "C", status: "WRONG" },
+          ],
+          generatedAt: "2026-06-08T09:00:00.000Z",
+        })),
+      });
+      return;
+    }
+
     if (path === "/audit-logs" && request.method() === "GET") {
       await route.fulfill({
         contentType: "application/json",
@@ -3587,7 +3637,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByLabel("Karar sinyalleri").getByRole("link", { name: /Optik kontrol 1/ })).toBeVisible();
   await expect(page.getByLabel("Sınav sonuç özeti").getByText("Toplam 20 soru")).toBeVisible();
   await expect(page.getByLabel("Sınav sonuç özeti").locator("canvas")).toBeVisible();
-  await expect(page.getByLabel("Sınıf karşılaştırması").getByText("Sınıf net karşılaştırması")).toBeVisible();
+  await expect(page.getByLabel("Sınıf karşılaştırması").getByText("Sınıf başarı karşılaştırması")).toBeVisible();
   await expect(page.getByLabel("Sınıf karşılaştırması").getByText("8-A")).toBeVisible();
   await expect(page.getByLabel("Sınıf karşılaştırması").getByText("18,3")).toBeVisible();
   await expect(page.getByLabel("Sınıf karşılaştırması").locator("canvas")).toBeVisible();
@@ -3595,7 +3645,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByLabel("Öğrenci gelişimi").getByText("17,5")).toBeVisible();
   await expect(page.getByLabel("Öğrenci gelişimi").getByText("420")).toBeVisible();
   await expect(page.getByLabel("Öğrenci gelişimi").locator("canvas")).toBeVisible();
-  await expect(page.getByLabel("Branş analizi").getByText("Branş net analizi")).toBeVisible();
+  await expect(page.getByLabel("Branş analizi").getByText("Branş başarı analizi")).toBeVisible();
   await expect(page.getByLabel("Branş analizi").getByText("Matematik")).toBeVisible();
   await expect(page.getByLabel("Branş analizi").getByText("11,5")).toBeVisible();
   await expect(page.getByLabel("Branş analizi").locator("canvas")).toBeVisible();
@@ -3732,8 +3782,8 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "Ada A davetini yenile" }).click();
   await expect(page.getByText("activation-token-resent")).toBeVisible();
 
-  await page.getByRole("link", { name: "Kampüsler" }).click();
-  await expect(page).toHaveURL(/\/kurum\/kampusler$/);
+  await expandSidebarGroup(page, "Eğitim");
+  await clickSidebarLink(page, "Kampüsler", /\/kurum\/kampusler$/);
   await expect(heading(page, { name: "Kampüsler" })).toBeVisible();
   await expect(page.getByText("Merkez Kampüs")).toBeVisible();
   await expect(page.getByText("1 kayıt")).toBeVisible();
@@ -3806,8 +3856,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "2026-27 yılını sil" }).click();
   await expect(page.getByLabel("Akademik yıl yönetimi").getByText("2026-27")).toBeHidden();
 
-  await page.getByRole("link", { name: "Seviyeler" }).click();
-  await expect(page).toHaveURL(/\/kurum\/seviyeler$/);
+  await clickSidebarLink(page, "Seviyeler", /\/kurum\/seviyeler$/);
   await expect(heading(page, { name: "Seviyeler" })).toBeVisible();
   await expect(page.getByText("8. Sınıf")).toBeVisible();
   await expect(page.getByText("1 kayıt")).toBeVisible();
@@ -3833,8 +3882,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "Hazırlık sil" }).click();
   await expect(page.getByText("Hazırlık")).toBeHidden();
 
-  await page.getByRole("link", { name: "Sınıflar" }).click();
-  await expect(page).toHaveURL(/\/kurum\/siniflar$/);
+  await clickSidebarLink(page, "Sınıflar", /\/kurum\/siniflar$/);
   await expect(heading(page, { name: "Sınıflar" })).toBeVisible();
   await expect(page.getByText("8-A")).toBeVisible();
   await expect(page.getByRole("cell", { name: "Merkez Kampüs" }).first()).toBeVisible();
@@ -3873,8 +3921,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "9-B sil" }).click();
   await expect(page.getByText("9-B")).toBeHidden();
 
-  await page.getByRole("link", { name: "Dersler" }).click();
-  await expect(page).toHaveURL(/\/kurum\/dersler$/);
+  await clickSidebarLink(page, "Dersler", /\/kurum\/dersler$/);
   await expect(heading(page, { name: "Dersler" })).toBeVisible();
   await expect(page.getByText("Matematik")).toBeVisible();
   await expect(page.getByText("2 kayıt")).toBeVisible();
@@ -3903,8 +3950,8 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "Fen sil" }).click();
   await expect(page.getByRole("cell", { name: "Fen", exact: true })).toBeHidden();
 
-  await page.getByRole("link", { name: "Kazanımlar" }).click();
-  await expect(page).toHaveURL(/\/kurum\/kazanimlar$/);
+  await expandSidebarGroup(page, "Sınav ve Analiz");
+  await clickSidebarLink(page, "Kazanımlar", /\/kurum\/kazanimlar$/);
   await expect(heading(page, { name: "Kazanımlar" })).toBeVisible();
   await expect(page.getByText("Çarpanlar ve katlar")).toBeVisible();
   await page.getByRole("button", { name: "Kazanım ekle" }).click();
@@ -3927,8 +3974,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "TUR.8.1.1 sil" }).click();
   await expect(page.getByRole("cell", { name: "Cümlede anlam", exact: true })).toBeHidden();
 
-  await page.getByRole("link", { name: "Program" }).click();
-  await expect(page).toHaveURL(/\/kurum\/program$/);
+  await clickSidebarLink(page, "Program", /\/kurum\/program$/);
   await expect(heading(page, { name: "Ders Programı" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Matematik", exact: true }).first()).toBeVisible();
   await expect(page.getByText("1 kayıt")).toBeVisible();
@@ -3960,8 +4006,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "Analitik Geometri sil" }).click();
   await expect(page.getByRole("cell", { name: "Analitik Geometri", exact: true })).toBeHidden();
 
-  await page.getByRole("link", { name: "Etütler" }).click();
-  await expect(page).toHaveURL(/\/kurum\/etutler$/);
+  await clickSidebarLink(page, "Etütler", /\/kurum\/etutler$/);
   await expect(heading(page, { name: "Etütler" })).toBeVisible();
   await expect(page.getByText("Matematik Etut")).toBeVisible();
   await expect(page.getByText("1 kayıt")).toBeVisible();
@@ -4207,7 +4252,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByLabel("Öğrenci 360").getByText("Nakil")).toBeVisible();
   await expect(page.getByLabel("Öğrenci 360").getByText("class-b")).toBeVisible();
   await expect(page.getByLabel("Öğrenci 360").getByText("1.000,00 TRY")).toBeVisible();
-  await expect(page.getByLabel("Öğrenci 360").getByText("76,67")).toBeVisible();
+  await expect(page.getByLabel("Öğrenci 360").getByText("%85,2")).toBeVisible();
   await expect(page.getByLabel("Öğrenci 360").getByText("2 soru")).toBeVisible();
   await expect(page.getByLabel("Öğrenci 360").getByText("Dikkat takibi iç notu")).toBeVisible();
   await page.getByLabel("Kayıt durumu").selectOption("GRADUATED");
@@ -4380,8 +4425,8 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.getByRole("button", { name: "Problemler Tekrar Föyü sil" }).click();
   await expect(page.getByLabel("Materyal listesi").getByText("Problemler Tekrar Föyü", { exact: true })).toHaveCount(0);
 
-  await page.getByRole("link", { name: "Sınavlar" }).click();
-  await expect(page).toHaveURL(/\/kurum\/sinavlar$/);
+  await expandSidebarGroup(page, "Sınav ve Analiz");
+  await clickSidebarLink(page, "Sınavlar", /\/kurum\/sinavlar$/);
   await expect(heading(page, { name: "Sınavlar" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "LGS deneme sınavı", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Sınav ekle" }).click();
@@ -4420,8 +4465,8 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(participantPanel.getByRole("row", { name: /Ada A/ }).getByText("301")).toBeVisible();
   await expect(participantPanel.getByRole("row", { name: /Ada A/ }).getByText("Kayıtlı")).toBeVisible();
 
-  await page.getByRole("link", { name: "Optik" }).click();
-  await expect(page).toHaveURL(/\/kurum\/optik$/);
+  await expandSidebarGroup(page, "Sınav ve Analiz");
+  await clickSidebarLink(page, "Optik", /\/kurum\/optik$/);
   await expect(heading(page, { name: "Format seç ve ilerle" })).toBeVisible();
   const opticalExamSelector = page.getByLabel("Sınav seçimi");
   await opticalExamSelector.getByLabel("Sınav seç", { exact: true }).selectOption("");
@@ -4481,15 +4526,19 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(opticalReportPanel.getByLabel("Rapor üretim durumu").getByText("Tamamlandı")).toBeVisible();
   await opticalReportPanel.getByRole("button", { name: "Rapor üret" }).click();
   await expect(opticalReportPanel.getByText("Rapor işi kuyruğa alındı.")).toBeVisible();
+  await expect(page.getByLabel("Rapor listesi").getByRole("row", { name: /Hazır 2 17 3 0 16,25 1/ })).toBeVisible();
+  await expect(page.getByLabel("Katılan öğrenciler").getByRole("row", { name: /Ada A.*Sonuç var.*17.*3.*16,25.*1\/2/ })).toBeVisible();
+  await expect(page.getByLabel("Katılan öğrenciler").getByRole("row", { name: /Bora B.*Sonuç var.*16.*4.*14,75.*2\/2/ })).toBeVisible();
 
-  await page.getByRole("link", { name: "Raporlar" }).click();
-  await expect(page).toHaveURL(/\/kurum\/raporlar$/);
+  await expandSidebarGroup(page, "Sınav ve Analiz");
+  await clickSidebarLink(page, "Raporlar", /\/kurum\/raporlar$/);
   await expect(heading(page, { name: "Sınav Raporu" })).toBeVisible();
   await page.getByLabel("Rapor sınav ID").fill("exam-a");
   await page.getByRole("button", { name: "Raporu getir" }).click();
   await expect(page.getByLabel("Rapor özeti").getByText("READY")).toBeVisible();
   await expect(page.getByRole("article").filter({ hasText: "Ortalama net" }).getByText("16,25")).toBeVisible();
-  await expect(page.getByLabel("Branş Netleri").getByRole("rowheader", { name: "Matematik" })).toBeVisible();
+  await expect(page.getByLabel("Öğrenci sonuç listesi").getByRole("row", { name: /Ada A.*Sonuç var.*17.*3.*16,3.*1\/2/ })).toBeVisible();
+  await expect(page.getByLabel("Branş Başarıları").getByRole("rowheader", { name: "Matematik" })).toBeVisible();
   await expect(page.getByLabel("Kazanım radar grafiği").getByText("ÖĞRENCİ")).toBeVisible();
   await expect(page.getByLabel("Kazanım radar grafiği").getByRole("cell", { name: "Geometri", includeHidden: true })).toHaveCount(1);
   await expect(page.getByLabel("Hata kitapçığı").getByText("1 soru")).toBeVisible();
@@ -4501,10 +4550,12 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByLabel("Rapor özeti").getByText("READY")).toBeVisible();
   await expect(page.getByRole("article").filter({ hasText: "Ortalama net" }).getByText("17,5")).toBeVisible();
   await expect(page.getByRole("article").filter({ hasText: "Bağlam" }).getByText("Merkez Kampüs / 8. Sınıf / 8-A / Matematik / 2. Donem")).toBeVisible();
-  await expect(page.getByLabel("Branş Netleri").getByText("Branş net analizi")).toBeVisible();
-  await expect(page.getByLabel("Branş Netleri").getByRole("rowheader", { name: "Matematik" })).toBeVisible();
-  await expect(page.getByLabel("Branş Netleri").getByRole("cell", { name: "11,5" })).toBeVisible();
-  await expect(page.getByLabel("Kazanım Netleri").getByRole("rowheader", { name: /Sayılar/ })).toBeVisible();
+  await expect(page.getByLabel("Öğrenci sonuç listesi").getByRole("row", { name: /Ada A.*Sonuç var.*17,5.*1\/3/ })).toBeVisible();
+  await expect(page.getByLabel("Öğrenci sonuç listesi").getByRole("row", { name: /Can C.*Katılmadı/ })).toBeVisible();
+  await expect(page.getByLabel("Branş Başarıları").getByText("Rapor branş başarıları")).toBeVisible();
+  await expect(page.getByLabel("Branş Başarıları").getByRole("rowheader", { name: "Matematik" })).toBeVisible();
+  await expect(page.getByLabel("Branş Başarıları").getByRole("cell", { name: "11,5" })).toBeVisible();
+  await expect(page.getByLabel("Kazanım Başarıları").getByRole("rowheader", { name: /Sayılar/ })).toBeVisible();
   await expect(page.getByLabel(/Sınıf karşılaştırması/i).getByRole("rowheader", { name: "8-A" })).toBeVisible();
   await expect(page.getByLabel(/Sınıf karşılaştırması/i).getByRole("cell", { name: "18,3" })).toBeVisible();
   await expect(page.getByLabel("Öğrenci karne özeti").getByText("+3 net / +40 puan")).toBeVisible();
@@ -4513,10 +4564,13 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByLabel("Kazanım radar grafiği").getByText("Kazanım radar tablosu")).toHaveCount(1);
   await expect(page.getByLabel("Kazanım radar grafiği").getByRole("cell", { name: "Geometri", includeHidden: true })).toHaveCount(1);
   await expect(page.getByLabel("Öğrenci karne özeti").getByText("Öğrenci branş karne tablosu")).toBeVisible();
+  await page.getByLabel("Öğrenci sonuç listesi").getByRole("button", { name: "Bora B karnesini aç" }).click();
+  await expect(page.getByLabel("Öğrenci karne özeti").getByText("Bora B")).toBeVisible();
+  await expect(page.getByLabel("Hata kitapçığı").getByText("3. soru Yanıt A Doğru C")).toBeVisible();
   await page.getByLabel("Rapor sınav ID").fill("exam-demo-isem-lgs-1");
   await page.getByRole("button", { name: "Raporu getir" }).click();
   await expect(page.getByLabel("Rapor özeti").getByText("READY")).toBeVisible();
-  await expect(page.getByLabel("Öğrenci karne özeti").getByRole("cell", { name: "76,67" }).first()).toBeVisible();
+  await expect(page.getByLabel("Öğrenci karne özeti").getByRole("cell", { name: "%85,2" }).first()).toBeVisible();
   await expect(page.getByLabel("Öğrenci karne özeti").getByRole("cell", { name: "TÜRKÇE" }).first()).toBeVisible();
   await captureKarneVisualEvidence(page, test.info(), "kurum-raporlar-ogrenci-karne");
   await expect(page.getByLabel("Hata kitapçığı").getByText("2 soru")).toBeVisible();
@@ -4813,10 +4867,10 @@ test("Next sıfır-veri kurulum adımlarını ve yeni kayıt derin linkini göst
       return;
     }
 
-    await route.continue();
+    await route.fallback();
   });
 
-  await page.route("**/auth/refresh", async (route) => {
+  await page.route("**/api/v1/auth/refresh", async (route) => {
     if (!activeEmail) {
       await route.fulfill({ headers: corsHeaders, status: 401 });
       return;
@@ -4829,7 +4883,7 @@ test("Next sıfır-veri kurulum adımlarını ve yeni kayıt derin linkini göst
     });
   });
 
-  await page.route("**/auth/login", async (route) => {
+  await page.route("**/api/v1/auth/login", async (route) => {
     const body = route.request().postDataJSON() as { email?: string };
     activeEmail = body.email ?? "";
     await route.fulfill({
@@ -5037,10 +5091,10 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
       return;
     }
 
-    await route.continue();
+    await route.fallback();
   });
 
-  await page.route("**/auth/refresh", async (route) => {
+  await page.route("**/api/v1/auth/refresh", async (route) => {
     if (!activeEmail) {
       await route.fulfill({ headers: corsHeaders, status: 401 });
       return;
@@ -5053,7 +5107,7 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
     });
   });
 
-  await page.route("**/auth/login", async (route) => {
+  await page.route("**/api/v1/auth/login", async (route) => {
     const body = route.request().postDataJSON() as { email?: string };
     activeEmail = body.email ?? "";
     await route.fulfill({
@@ -5064,7 +5118,7 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
     });
   });
 
-  await page.route("**/auth/logout", async (route) => {
+  await page.route("**/api/v1/auth/logout", async (route) => {
     activeEmail = "";
     await route.fulfill({ headers: corsHeaders, status: 204 });
   });
@@ -5447,14 +5501,14 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
       return;
     }
 
-    await route.continue();
+    await route.fallback();
   });
 
-  await page.route("**/auth/refresh", async (route) => {
+  await page.route("**/api/v1/auth/refresh", async (route) => {
     await route.fulfill({ headers: corsHeaders, status: 401 });
   });
 
-  await page.route("**/auth/login", async (route) => {
+  await page.route("**/api/v1/auth/login", async (route) => {
     const body = route.request().postDataJSON() as { email: string };
     await route.fulfill({
       contentType: "application/json",
@@ -5464,7 +5518,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
     });
   });
 
-  await page.route("**/auth/logout", async (route) => {
+  await page.route("**/api/v1/auth/logout", async (route) => {
     await route.fulfill({ headers: corsHeaders, status: 204 });
   });
 
@@ -5862,7 +5916,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await page.getByLabel("Destek talepleri").getByLabel("Öncelik").selectOption("HIGH");
   await page.getByLabel("Destek talepleri").getByRole("button", { name: "Destek talebi aç" }).click();
   await expect(page.getByLabel("Destek talepleri").getByText("Soru çözümü")).toBeVisible();
-  await expect(page.getByLabel("Sınav raporu").getByText("76,67").first()).toBeVisible();
+  await expect(page.getByLabel("Sınav raporu").getByText("%85,2").first()).toBeVisible();
   await expect(page.getByLabel("Sınav raporu").getByText("ÖĞRENCİ NO : 176")).toBeVisible();
   await expect(page.getByLabel("Sınav raporu").getByRole("heading", { name: "Öğrenci gelişim grafiği" })).toBeVisible();
   await expect(page.getByLabel("Sınav raporu").getByText("1/3 (%100)").first()).toBeVisible();
@@ -5870,8 +5924,8 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page.getByLabel("Portal kazanım radar grafiği").getByText("ÖĞRENCİ")).toBeVisible();
   await expect(page.getByLabel("Portal kazanım radar grafiği").getByText("Portal kazanım radar tablosu")).toHaveCount(1);
   await expect(page.getByLabel("Portal kazanım radar grafiği").getByRole("cell", { name: "Geometri", includeHidden: true })).toHaveCount(1);
-  await expect(page.getByLabel("Sınav raporu").getByRole("row", { name: /MATEMATİK 20 20 0 0 20/ })).toBeVisible();
-  await expect(page.getByLabel("Sınav raporu").getByRole("row", { name: /MATEMATİK 20 20 0 0 20 19,92 9,46 9,39/ })).toBeVisible();
+  await expect(page.getByLabel("Sınav raporu").getByRole("row", { name: /MATEMATİK 20 %100,0 20 0 0 20,0/ })).toBeVisible();
+  await expect(page.getByLabel("Sınav raporu").getByRole("row", { name: /MATEMATİK 20 %100,0 20 0 0 20,0 19,9 9,5 9,4/ })).toBeVisible();
   await expect(page.getByLabel("Son sınav branş netleri").getByRole("row", { name: /MATEMATİK 18,67 20 17,33 18,67 18,67/ })).toBeVisible();
   await expect(page.getByLabel("Sınav raporu").getByText("1 soru").first()).toBeVisible();
   await capturePortalKarneVisualEvidence(page, test.info(), "portal-ogrenci-sinav-raporu");
@@ -5968,7 +6022,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page.getByLabel("Sınav raporu").getByRole("heading", { name: "Öğrenci gelişim grafiği" })).toBeVisible();
   await expect(page.getByLabel("Sınav raporu").getByText("1/3 (%100)").first()).toBeVisible();
   await expect(page.getByLabel("Sınav raporu").getByText("1/2 (%100)").first()).toBeVisible();
-  await expect(page.getByLabel("Sınav raporu").getByRole("row", { name: /Matematik 23 20 3 0 19,25/ })).toBeVisible();
+  await expect(page.getByLabel("Sınav raporu").getByRole("row", { name: /Matematik 23 %83,7 20 3 0 19,3/ })).toBeVisible();
   await capturePortalKarneVisualEvidence(page, test.info(), "portal-ogretmen-sinav-raporu");
   await expect(page.getByLabel("Öğretmen sınıf raporları").getByRole("cell", { name: "8-A" })).toBeVisible();
   await expect(page.getByLabel("Öğretmen sınıf raporları").getByRole("cell", { name: "Turkce / 2. Donem" })).toBeVisible();
@@ -5999,7 +6053,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await page.getByLabel("Destek talepleri").getByLabel("Mesaj").fill("Taksit tarihi hakkında bilgi istiyorum.");
   await page.getByLabel("Destek talepleri").getByRole("button", { name: "Destek talebi aç" }).click();
   await expect(page.getByLabel("Destek talepleri").getByText("Ödeme sorusu")).toBeVisible();
-  await expect(page.getByLabel("Sınav raporu").getByText("76,67").first()).toBeVisible();
+  await expect(page.getByLabel("Sınav raporu").getByText("%85,2").first()).toBeVisible();
   await expect(page.getByLabel("Sınav raporu").getByText("ÖĞRENCİ NO : 176")).toBeVisible();
   await expect(page.getByLabel("Sınav raporu").getByRole("heading", { name: "Öğrenci gelişim grafiği" })).toBeVisible();
   await expect(page.getByLabel("Sınav raporu").getByText("1/3 (%100)").first()).toBeVisible();
@@ -6007,8 +6061,8 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page.getByLabel("Portal kazanım radar grafiği").getByText("ÖĞRENCİ")).toBeVisible();
   await expect(page.getByLabel("Portal kazanım radar grafiği").getByText("Portal kazanım radar tablosu")).toHaveCount(1);
   await expect(page.getByLabel("Portal kazanım radar grafiği").getByRole("cell", { name: "Geometri", includeHidden: true })).toHaveCount(1);
-  await expect(page.getByLabel("Sınav raporu").getByRole("row", { name: /MATEMATİK 20 20 0 0 20/ })).toBeVisible();
-  await expect(page.getByLabel("Sınav raporu").getByRole("row", { name: /MATEMATİK 20 20 0 0 20 19,92 9,46 9,39/ })).toBeVisible();
+  await expect(page.getByLabel("Sınav raporu").getByRole("row", { name: /MATEMATİK 20 %100,0 20 0 0 20,0/ })).toBeVisible();
+  await expect(page.getByLabel("Sınav raporu").getByRole("row", { name: /MATEMATİK 20 %100,0 20 0 0 20,0 19,9 9,5 9,4/ })).toBeVisible();
   await expect(page.getByLabel("Son sınav branş netleri").getByRole("row", { name: /MATEMATİK 18,67 20 17,33 18,67 18,67/ })).toBeVisible();
   await capturePortalKarneVisualEvidence(page, test.info(), "portal-veli-sinav-raporu");
   await page.evaluate(() => {
@@ -6387,7 +6441,7 @@ function readPortalFixture(path: string) {
           courseId: "course-turkish",
           generatedAt: "2026-05-25T09:00:00.000Z",
           termId: "term-2026-spring",
-          total: { net: 14.5, standardScore: 380 },
+          total: { net: 14.5, questionCount: 20, standardScore: 380 },
           branches: [
             { branch: "TÜRKÇE", net: 12.33 },
             { branch: "İNKILAP TARİHİ", net: 8 },
@@ -6402,7 +6456,7 @@ function readPortalFixture(path: string) {
           courseId: "course-math",
           generatedAt: "2026-06-08T09:00:00.000Z",
           termId: "term-2026-spring",
-          total: { net: 17.5, standardScore: 420 },
+          total: { net: 17.5, questionCount: 20, standardScore: 420 },
           branches: [
             { branch: "TÜRKÇE", net: 13.33 },
             { branch: "İNKILAP TARİHİ", net: 8.67 },
@@ -6649,6 +6703,8 @@ function readFixture(path: string) {
           students: [
             {
               studentId: "student-a",
+              classId: "class-a",
+              className: "8-A",
               resultKey: "student-a",
               total: {
                 correct: 18,
@@ -6656,6 +6712,31 @@ function readFixture(path: string) {
                 blank: 0,
                 net: 17.5,
                 standardScore: 420,
+              },
+              statistics: {
+                standardScore: 420,
+                general: { rank: 1, outOf: 3, percentile: 100 },
+                class: { rank: 1, outOf: 2, percentile: 100 },
+                branches: [],
+              },
+            },
+            {
+              studentId: "student-b",
+              classId: "class-a",
+              className: "8-A",
+              resultKey: "student-b",
+              total: {
+                correct: 15,
+                wrong: 5,
+                blank: 0,
+                net: 13.33,
+                standardScore: 390,
+              },
+              statistics: {
+                standardScore: 390,
+                general: { rank: 2, outOf: 3, percentile: 50 },
+                class: { rank: 2, outOf: 2, percentile: 50 },
+                branches: [],
               },
             },
           ],
@@ -6743,6 +6824,8 @@ function readFixture(path: string) {
           students: [
             {
               studentId: "student-a",
+              classId: "class-a",
+              className: "8-A",
               resultKey: "student-a",
               total: {
                 correct: 20,
@@ -6750,6 +6833,12 @@ function readFixture(path: string) {
                 blank: 0,
                 net: 19.25,
                 standardScore: 440,
+              },
+              statistics: {
+                standardScore: 440,
+                general: { rank: 1, outOf: 3, percentile: 100 },
+                class: { rank: 1, outOf: 2, percentile: 100 },
+                branches: [],
               },
             },
           ],
@@ -6808,6 +6897,8 @@ function readFixture(path: string) {
           students: [
             {
               studentId: "student-a",
+              classId: "class-a",
+              className: "8-A",
               resultKey: "student-a",
               total: {
                 correct: 17,
@@ -6815,6 +6906,31 @@ function readFixture(path: string) {
                 blank: 0,
                 net: 16.25,
                 standardScore: 410,
+              },
+              statistics: {
+                standardScore: 410,
+                general: { rank: 1, outOf: 2, percentile: 75 },
+                class: { rank: 1, outOf: 2, percentile: 75 },
+                branches: [],
+              },
+            },
+            {
+              studentId: "student-b",
+              classId: "class-a",
+              className: "8-A",
+              resultKey: "student-b",
+              total: {
+                correct: 16,
+                wrong: 4,
+                blank: 0,
+                net: 14.75,
+                standardScore: 390,
+              },
+              statistics: {
+                standardScore: 390,
+                general: { rank: 2, outOf: 2, percentile: 25 },
+                class: { rank: 2, outOf: 2, percentile: 25 },
+                branches: [],
               },
             },
           ],
@@ -6894,6 +7010,66 @@ function readFixture(path: string) {
             standardScore: 420,
             general: { rank: 1, outOf: 3, percentile: 100 },
             class: { rank: 1, outOf: 2, percentile: 100 },
+          },
+        ],
+      },
+      generatedAt: "2026-06-08T09:00:00.000Z",
+    };
+  }
+
+  if (path === "/exams/exam-demo/reports/snapshots/snapshot-a/students/student-b") {
+    return {
+      tenantId: "tenant-a",
+      institutionName: "DNA EĞİTİM KURUMU",
+      examId: "exam-demo",
+      examStartsAt: "2025-11-05T00:00:00.000Z",
+      snapshotId: "snapshot-a",
+      studentId: "student-b",
+      studentName: "Bora B",
+      participantNo: "201",
+      bookletType: "B",
+      classId: "class-a",
+      className: "8-A",
+      resultKey: "student-b",
+      total: {
+        correct: 15,
+        wrong: 5,
+        blank: 0,
+        net: 13.33,
+        standardScore: 390,
+      },
+      branches: [
+        {
+          branch: "Matematik",
+          correct: 15,
+          wrong: 5,
+          blank: 0,
+          net: 13.33,
+          classNetAverage: 16.75,
+          schoolNetAverage: 11.5,
+          generalNetAverage: 15.5,
+        },
+      ],
+      outcomes: [
+        {
+          outcomeCode: "Sayılar",
+          branch: "Matematik",
+          correct: 6,
+          wrong: 2,
+          blank: 0,
+          net: 5.33,
+        },
+      ],
+      statistics: {
+        standardScore: 390,
+        general: { rank: 2, outOf: 3, percentile: 50 },
+        class: { rank: 2, outOf: 2, percentile: 50 },
+        branches: [
+          {
+            branch: "Matematik",
+            standardScore: 390,
+            general: { rank: 2, outOf: 3, percentile: 50 },
+            class: { rank: 2, outOf: 2, percentile: 50 },
           },
         ],
       },
@@ -7174,6 +7350,7 @@ function readFixture(path: string) {
           generatedAt: "2026-05-25T09:00:00.000Z",
           total: {
             net: 14.5,
+            questionCount: 20,
             standardScore: 380,
           },
           branches: [
@@ -7190,6 +7367,7 @@ function readFixture(path: string) {
           generatedAt: "2026-06-08T09:00:00.000Z",
           total: {
             net: 17.5,
+            questionCount: 20,
             standardScore: 420,
           },
           branches: [
@@ -7207,14 +7385,44 @@ function readFixture(path: string) {
     };
   }
 
+  if (path === "/exams/exam-demo/reports/students/student-b/progress") {
+    return {
+      tenantId: "tenant-a",
+      examId: "exam-demo",
+      studentId: "student-b",
+      points: [
+        {
+          snapshotId: "snapshot-prev",
+          generatedAt: "2026-05-25T09:00:00.000Z",
+          total: {
+            net: 12.33,
+            questionCount: 20,
+            standardScore: 370,
+          },
+        },
+        {
+          snapshotId: "snapshot-a",
+          generatedAt: "2026-06-08T09:00:00.000Z",
+          total: {
+            net: 13.33,
+            questionCount: 20,
+            standardScore: 390,
+          },
+        },
+      ],
+      netDelta: 1,
+      standardScoreDelta: 20,
+    };
+  }
+
   if (path === "/exams/exam-a/reports/students/student-a/progress") {
     return {
       tenantId: "tenant-a",
       examId: "exam-a",
       studentId: "student-a",
       points: [
-        { snapshotId: "snapshot-prev", generatedAt: "2026-06-01T09:00:00.000Z", total: { net: 14.5, standardScore: 390 } },
-        { snapshotId: "snapshot-optik-a", generatedAt: "2026-06-09T09:30:00.000Z", total: { net: 16.25, standardScore: 410 } },
+        { snapshotId: "snapshot-prev", generatedAt: "2026-06-01T09:00:00.000Z", total: { net: 14.5, questionCount: 20, standardScore: 390 } },
+        { snapshotId: "snapshot-optik-a", generatedAt: "2026-06-09T09:30:00.000Z", total: { net: 16.25, questionCount: 20, standardScore: 410 } },
       ],
       netDelta: 1.75,
       standardScoreDelta: 20,

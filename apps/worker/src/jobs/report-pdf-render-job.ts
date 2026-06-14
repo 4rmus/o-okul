@@ -265,16 +265,18 @@ function renderPdfStudentKarne(
       </div>
       <div class="karne-summary">
         <span>Net ${escapeHtml(formatPdfValue(readNumber(total.net)))}</span>
+        <span>Başarı ${escapeHtml(formatPdfPercent(scoreSuccessRate(total)))}</span>
         <span>LGS puanı ${escapeHtml(formatPdfValue(lgsScore))}</span>
         <span>Standart puan ${escapeHtml(formatPdfValue(readNumber(total.standardScore)))}</span>
         <span>Genel sıra ${escapeHtml(formatPdfRank(statistics?.general))}</span>
         <span>Sınıf sıra ${escapeHtml(formatPdfRank(statistics?.class))}</span>
       </div>
       <div class="karne-grid">
-        ${renderPdfTable("BÖLÜM ANALİZİ", ["No", "Branş", "Soru sayısı", "Doğru", "Yanlış", "Boş", "Net", "Sınıf net ort", "Okul net ort", "Genel net ort"], branches, (branch, index) => [
+        ${renderPdfTable("BÖLÜM ANALİZİ", ["No", "Branş", "Soru sayısı", "Başarı %", "Doğru", "Yanlış", "Boş", "Net", "Sınıf net ort", "Okul net ort", "Genel net ort"], branches, (branch, index) => [
           index + 1,
           readText(branch.branch) || "-",
           formatPdfValue(branchQuestionCount(branch)),
+          formatPdfPercent(scoreSuccessRate(branch)),
           formatPdfValue(readNumber(branch.correct)),
           formatPdfValue(readNumber(branch.wrong)),
           formatPdfValue(readNumber(branch.blank)),
@@ -288,6 +290,7 @@ function renderPdfStudentKarne(
           <table>
             <tbody>
         <tr><th>LGS puanı</th><td>${escapeHtml(formatPdfValue(lgsScore))}</td></tr>
+        <tr><th>Başarı %</th><td>${escapeHtml(formatPdfPercent(scoreSuccessRate(total)))}</td></tr>
         <tr><th>Standart puan</th><td>${escapeHtml(formatPdfValue(readNumber(total.standardScore)))}</td></tr>
         <tr><th>SIRA</th><td>${escapeHtml(formatPdfRank(statistics?.general))}</td></tr>
         <tr><th>SINIF</th><td>${escapeHtml(formatPdfRank(statistics?.class))}</td></tr>
@@ -295,18 +298,21 @@ function renderPdfStudentKarne(
     </table>
         </section>
       </div>
-      ${renderPdfTable("BÖLÜM BAŞARI YÜZDELERİ", ["Kazanım", "Branş", "Doğru", "Yanlış", "Boş", "Net"], summaryOutcomes, (outcome) => [
+      ${renderPdfTable("BÖLÜM BAŞARI YÜZDELERİ", ["Kazanım", "Branş", "Soru", "Başarı %", "Doğru", "Yanlış", "Boş", "Net"], summaryOutcomes, (outcome) => [
         readText(outcome.outcomeCode) || "-",
         readText(outcome.branch) || "-",
+        formatPdfValue(branchQuestionCount(outcome)),
+        formatPdfPercent(scoreSuccessRate(outcome)),
         formatPdfValue(readNumber(outcome.correct)),
         formatPdfValue(readNumber(outcome.wrong)),
         formatPdfValue(readNumber(outcome.blank)),
         formatPdfValue(readNumber(outcome.net)),
       ])}
-      ${renderPdfTable("SON SINAV NETLERİ", ["Öğrenci", "Net", "LGS puanı", "Standart puan"], [student], (row) => {
+      ${renderPdfTable("SON SINAV NETLERİ", ["Öğrenci", "Başarı %", "Net", "LGS puanı", "Standart puan"], [student], (row) => {
         const rowTotal = readRecord(row.total);
         return [
           readText(row.studentId) || "-",
+          formatPdfPercent(scoreSuccessRate(rowTotal)),
           formatPdfValue(readNumber(rowTotal.net)),
           formatPdfValue(readLgsScore(rowTotal)),
           formatPdfValue(readNumber(rowTotal.standardScore)),
@@ -322,9 +328,11 @@ function renderPdfStudentKarne(
         </div>
         <div class="karne-brand">${renderPdfInstitutionBrand(institution)}</div>
       </div>
-      ${renderPdfTable("KAZANIM DETAYI", ["Kazanım", "Ders", "Doğru", "Yanlış", "Boş", "Net"], outcomes, (outcome) => [
+      ${renderPdfTable("KAZANIM DETAYI", ["Kazanım", "Ders", "Soru", "Başarı %", "Doğru", "Yanlış", "Boş", "Net"], outcomes, (outcome) => [
         readText(outcome.outcomeCode) || "-",
         readText(outcome.branch) || "-",
+        formatPdfValue(branchQuestionCount(outcome)),
+        formatPdfPercent(scoreSuccessRate(outcome)),
         formatPdfValue(readNumber(outcome.correct)),
         formatPdfValue(readNumber(outcome.wrong)),
         formatPdfValue(readNumber(outcome.blank)),
@@ -357,6 +365,10 @@ function formatPdfValue(value: string | number): string {
   return value === "" ? "-" : String(value);
 }
 
+function formatPdfPercent(value: string | number): string {
+  return value === "" ? "-" : `%${value}`;
+}
+
 function formatPdfRank(rank: ReportScopeRank | undefined): string {
   if (!rank) return "-";
   return `${rank.rank}/${rank.outOf} (%${rank.percentile})`;
@@ -386,11 +398,22 @@ function renderPdfTable(
 }
 
 function branchQuestionCount(branch: Record<string, unknown>): string | number {
+  const questionCount = readNumber(branch.questionCount);
+  if (questionCount !== "") return questionCount;
   const correct = readNumber(branch.correct);
   const wrong = readNumber(branch.wrong);
   const blank = readNumber(branch.blank);
   if (correct === "" || wrong === "" || blank === "") return "-";
   return correct + wrong + blank;
+}
+
+function scoreSuccessRate(score: Record<string, unknown>): string | number {
+  const successRate = readNumber(score.successRate);
+  if (successRate !== "") return successRate;
+  const net = readNumber(score.net);
+  const questionCount = branchQuestionCount(score);
+  if (net === "" || typeof questionCount !== "number" || questionCount <= 0) return "-";
+  return Number(((net / questionCount) * 100).toFixed(4));
 }
 
 function buildSimplePdf(lines: string[]): Buffer {

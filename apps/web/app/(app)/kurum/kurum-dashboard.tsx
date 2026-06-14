@@ -19,6 +19,7 @@ import { canAccessHref } from "../_shared/access.js";
 import { formatCourseName, shortCourseName } from "../_shared/academic-labels.js";
 import { ClassCompareBar, ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../_shared/lazy-report-charts.js";
 import { ReportChartPanel } from "../_shared/report-chart-panel.js";
+import { reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
 
 interface DashboardLinkCard {
   description: string;
@@ -173,13 +174,13 @@ export function KurumDashboard() {
         >
           <ExamResultDonut result={examResult} />
         </ReportChartPanel>
-        <ReportChartPanel description={classCompare.length > 0 ? "Sınıf ortalama netleri" : "Sınıf raporu bekleniyor"} title="Sınıf Karşılaştırması">
+        <ReportChartPanel description={classCompare.length > 0 ? "Sınıf başarı yüzdeleri" : "Sınıf raporu bekleniyor"} title="Sınıf Karşılaştırması">
           <ClassCompareBar classes={classCompare} />
         </ReportChartPanel>
-        <ReportChartPanel description={progressPoints.length > 0 ? "İlk öğrencinin sınav gelişimi" : "Gelişim verisi bekleniyor"} title="Öğrenci Gelişimi">
+        <ReportChartPanel description={progressPoints.length > 0 ? "İlk öğrencinin başarı gelişimi" : "Gelişim verisi bekleniyor"} title="Öğrenci Gelişimi">
           <ProgressLineChart points={progressPoints} />
         </ReportChartPanel>
-        <ReportChartPanel description={topicRadar.length > 0 ? "Branş net dağılımı" : "Branş raporu bekleniyor"} title="Branş Analizi">
+        <ReportChartPanel description={topicRadar.length > 0 ? "Branş başarı dağılımı" : "Branş raporu bekleniyor"} title="Branş Analizi">
           <TopicRadarChart branches={topicRadar} />
         </ReportChartPanel>
       </div>
@@ -385,6 +386,9 @@ function toExamResult(snapshot: ReportSnapshotRecord | null | undefined) {
     correct: averages?.correct ?? studentTotal?.correct,
     wrong: averages?.wrong ?? studentTotal?.wrong,
     blank: averages?.blank ?? studentTotal?.blank,
+    net: averages?.net ?? studentTotal?.net,
+    questionCount: averages?.questionCount ?? studentTotal?.questionCount ?? reportQuestionCount(averages ?? studentTotal),
+    successRate: averages?.successRate ?? studentTotal?.successRate ?? reportSuccessRate(averages ?? studentTotal),
   };
 }
 
@@ -393,7 +397,9 @@ function toClassCompare(snapshot: ReportSnapshotRecord | null | undefined) {
     classId: record.classId,
     className: record.className,
     net: record.averages.net,
+    questionCount: record.averages.questionCount ?? reportQuestionCount(record.averages),
     standardScore: record.averages.standardScore,
+    successRate: record.averages.successRate ?? reportSuccessRate(record.averages),
   }));
 }
 
@@ -401,7 +407,12 @@ function toTopicRadar(snapshot: ReportSnapshotRecord | null | undefined) {
   return (snapshot?.snapshotData?.branches ?? []).map((record) => ({
     branch: formatCourseName(record.branch),
     chartLabel: shortCourseName(record.branch),
+    blank: record.blank,
+    correct: record.correct,
     net: record.net,
+    questionCount: record.questionCount ?? reportQuestionCount(record),
     resultCount: record.resultCount,
+    successRate: record.successRate ?? reportSuccessRate(record),
+    wrong: record.wrong,
   }));
 }

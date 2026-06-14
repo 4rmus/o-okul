@@ -2953,6 +2953,11 @@ a {
   cursor: pointer;
 }
 
+.next-row-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .next-detail-back {
   width: fit-content;
   text-decoration: none;
@@ -3263,6 +3268,58 @@ a {
 .next-report-list p {
   margin: 0;
   color: var(--color-text-secondary);
+}
+
+.next-report-table-section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid var(--color-border-faint);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.next-report-table-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.next-report-table-header h3,
+.next-report-table-header p {
+  margin: 0;
+}
+
+.next-report-table-header h3 {
+  font-size: 16px;
+}
+
+.next-report-analysis-table {
+  min-width: 1180px;
+}
+
+.next-report-analysis-table th,
+.next-report-analysis-table td {
+  white-space: nowrap;
+}
+
+.next-report-analysis-table td small {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.next-report-student-name {
+  display: block;
+  color: var(--color-text);
+  font-weight: 800;
+}
+
+.next-report-row--selected td {
+  background: var(--color-surface-elevated);
 }
 
 .next-relationship-list {
@@ -3931,6 +3988,7 @@ a {
 
 .next-report-visual-grid .next-chart-panel {
   min-height: 360px;
+  box-shadow: none;
 }
 
 .next-chart-panel__body > :first-child {
@@ -4453,6 +4511,12 @@ a {
   box-shadow: var(--shadow-card);
 }
 
+.uh-chart-canvas-shell {
+  position: relative;
+  min-width: 0;
+}
+
+.uh-chart-canvas-shell > canvas,
 .uh-exam-result-donut > canvas,
 .uh-class-compare-bar > canvas,
 .uh-progress-line-chart > canvas,
@@ -4460,6 +4524,29 @@ a {
   width: 100% !important;
   height: 260px !important;
   min-height: 260px;
+}
+
+.uh-chart-center-label {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  display: grid;
+  min-width: 80px;
+  transform: translate(-50%, -58%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.uh-chart-center-label strong {
+  color: var(--color-text);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.uh-chart-center-label span {
+  margin-top: 4px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .uh-chart-empty-state,
@@ -4526,6 +4613,31 @@ a {
 .uh-outcome-net-table td:nth-child(2) {
   text-align: left;
   white-space: normal;
+}
+
+.next-success-meter {
+  display: grid;
+  grid-template-columns: minmax(46px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 100px;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.next-success-meter__track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-border-faint);
+}
+
+.next-success-meter__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-primary);
 }
 
 .uh-outcome-net-table td[colspan] {
@@ -4702,6 +4814,7 @@ a {
 }
 
 @media (max-width: 520px) {
+  .uh-chart-canvas-shell > canvas,
   .uh-exam-result-donut > canvas,
   .uh-class-compare-bar > canvas,
   .uh-progress-line-chart > canvas,

@@ -562,9 +562,11 @@ export interface ReportSnapshotRecord {
       wrong?: number;
       blank?: number;
       net?: number;
+      questionCount?: number;
       rawScore?: number;
       estimatedRawScore?: number;
       standardScore?: number;
+      successRate?: number;
     };
     branches?: Array<{
       branch: string;
@@ -573,6 +575,8 @@ export interface ReportSnapshotRecord {
       wrong?: number;
       blank?: number;
       net: number;
+      questionCount?: number;
+      successRate?: number;
     }>;
     outcomes?: Array<{
       outcomeCode: string;
@@ -582,6 +586,8 @@ export interface ReportSnapshotRecord {
       wrong?: number;
       blank?: number;
       net: number;
+      questionCount?: number;
+      successRate?: number;
     }>;
     classes?: Array<{
       classId: string | null;
@@ -592,10 +598,22 @@ export interface ReportSnapshotRecord {
         wrong?: number;
         blank?: number;
         net?: number;
+        questionCount?: number;
         rawScore?: number;
         standardScore?: number;
         estimatedRawScore?: number;
+        successRate?: number;
       };
+      branches?: Array<{
+        branch: string;
+        resultCount: number;
+        correct?: number;
+        wrong?: number;
+        blank?: number;
+        net: number;
+        questionCount?: number;
+        successRate?: number;
+      }>;
     }>;
     commentary?: ReportSnapshotCommentary;
     students?: Array<{
@@ -608,9 +626,11 @@ export interface ReportSnapshotRecord {
         wrong?: number;
         blank?: number;
         net?: number;
+        questionCount?: number;
         rawScore?: number;
         standardScore?: number;
         estimatedRawScore?: number;
+        successRate?: number;
       };
       branches?: Array<{
         branch: string;
@@ -618,6 +638,8 @@ export interface ReportSnapshotRecord {
         wrong?: number;
         blank?: number;
         net?: number;
+        questionCount?: number;
+        successRate?: number;
       }>;
       outcomes?: Array<{
         outcomeCode: string;
@@ -626,6 +648,8 @@ export interface ReportSnapshotRecord {
         wrong?: number;
         blank?: number;
         net?: number;
+        questionCount?: number;
+        successRate?: number;
       }>;
       questions?: Array<{
         questionNo: number;
@@ -697,9 +721,11 @@ export interface ReportStudentScoreSummary {
   wrong?: number;
   blank?: number;
   net?: number;
+  questionCount?: number;
   rawScore?: number;
   standardScore?: number;
   estimatedRawScore?: number;
+  successRate?: number;
 }
 
 export interface ReportStudentBranchSummary {
@@ -708,6 +734,8 @@ export interface ReportStudentBranchSummary {
   wrong?: number;
   blank?: number;
   net?: number;
+  questionCount?: number;
+  successRate?: number;
   classNetAverage?: number;
   schoolNetAverage?: number;
   generalNetAverage?: number;
@@ -720,6 +748,8 @@ export interface ReportStudentOutcomeSummary {
   wrong?: number;
   blank?: number;
   net?: number;
+  questionCount?: number;
+  successRate?: number;
 }
 
 export interface ReportStudentQuestionSummary {

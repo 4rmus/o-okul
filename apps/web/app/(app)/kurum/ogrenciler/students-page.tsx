@@ -33,6 +33,7 @@ import {
   type StudentFormState,
 } from "../../../../src/form-validation.js";
 import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 
 interface StudentProfilePayload {
   nationalId?: string;
@@ -843,12 +844,20 @@ function StudentDetailPanel({ detail, loading }: { detail?: StudentDetail; loadi
           <dd>{formatPendingPayment(detail?.paymentPlans ?? [])}</dd>
         </div>
         <div>
-          <dt>Son net</dt>
-          <dd>{formatNumber(detail?.report?.total?.net)}</dd>
+          <dt>Başarı</dt>
+          <dd>{formatPercentNumber(reportSuccessRate(detail?.report?.total))}</dd>
+        </div>
+        <div>
+          <dt>Soru</dt>
+          <dd>{formatNumber(reportQuestionCount(detail?.report?.total))}</dd>
         </div>
         <div>
           <dt>LGS puanı</dt>
           <dd>{formatNumber(readLgsScore(detail?.report?.total))}</dd>
+        </div>
+        <div>
+          <dt>Son net</dt>
+          <dd>{formatNumber(detail?.report?.total?.net)}</dd>
         </div>
         <div>
           <dt>Hata kitapçığı</dt>

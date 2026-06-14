@@ -5,6 +5,7 @@ import { Button, EmptyState, Input } from "@uzman-hocam/ui";
 import type {
   AnswerChoice,
   AnswerKeyRecord,
+  ExamParticipantRecord,
   ExamRecord,
   OpticalFormTemplateRecord,
   ParserConfigPreset,
@@ -18,6 +19,7 @@ import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
+import { buildReportAnalysisRows, type ReportAnalysisRow } from "../../_shared/report-analysis.js";
 import {
   answerKeyImportFormSchema,
   examFormSchema,
@@ -296,6 +298,7 @@ export function ParserConfigPage() {
   const [selectedStudentByQuarantine, setSelectedStudentByQuarantine] = useState<Record<string, string>>({});
   const [reportContentHash, setReportContentHash] = useState("");
   const [reportJob, setReportJob] = useState<ReportGenerationQueueResult | null>(null);
+  const [reportParticipants, setReportParticipants] = useState<ExamParticipantRecord[]>([]);
   const [reportSnapshots, setReportSnapshots] = useState<ReportSnapshotRecord[]>([]);
   const [isReportSubmitting, setIsReportSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -809,7 +812,13 @@ export function ParserConfigPage() {
     try {
       const currentReadyCount = countReadyReportSnapshots(reportSnapshots);
       setReportJob(await enqueueReportGeneration(auth.accessToken, normalizedExamId, normalizedContentHash));
-      setReportSnapshots(await waitForReportSnapshots(auth.accessToken, normalizedExamId, currentReadyCount));
+      const [snapshots, context] = await Promise.all([
+        waitForReportSnapshots(auth.accessToken, normalizedExamId, currentReadyCount),
+        loadReportTableContext(auth.accessToken, normalizedExamId),
+      ]);
+      setReportSnapshots(snapshots);
+      setReportParticipants(context.participants);
+      setStudents(context.students);
     } catch (reportError) {
       setError(apiErrorMessage(reportError, "Rapor üretimi kuyruğa alınamadı."));
     } finally {
@@ -827,7 +836,13 @@ export function ParserConfigPage() {
       return;
     }
     try {
-      setReportSnapshots(await loadReportSnapshots(auth.accessToken, normalizedExamId));
+      const [snapshots, context] = await Promise.all([
+        loadReportSnapshots(auth.accessToken, normalizedExamId),
+        loadReportTableContext(auth.accessToken, normalizedExamId),
+      ]);
+      setReportSnapshots(snapshots);
+      setReportParticipants(context.participants);
+      setStudents(context.students);
     } catch (snapshotError) {
       setError(apiErrorMessage(snapshotError, "Rapor listesi alınamadı."));
     }
@@ -859,6 +874,7 @@ export function ParserConfigPage() {
         onExamChange={(value) => {
           setExamId(value);
           setReportSnapshots([]);
+          setReportParticipants([]);
           setReportJob(null);
           setSuggestion(null);
           setSavedConfig(null);
@@ -972,9 +988,11 @@ export function ParserConfigPage() {
             <OpticalReportPanel
               evaluationStatus={evaluationStatus}
               isReportSubmitting={isReportSubmitting}
+              participants={reportParticipants}
               reportContentHash={reportContentHash}
               reportJob={reportJob}
               reportSnapshots={reportSnapshots}
+              students={students}
               onDownload={downloadReportSnapshot}
               onRefreshSnapshots={refreshReportSnapshots}
               onSubmit={submitReportGeneration}
@@ -1643,9 +1661,11 @@ function QuarantineResolutionPanel({
 interface OpticalReportPanelProps {
   evaluationStatus: RawImportEvaluationStatus | null;
   isReportSubmitting: boolean;
+  participants: ExamParticipantRecord[];
   reportContentHash: string;
   reportJob: ReportGenerationQueueResult | null;
   reportSnapshots: ReportSnapshotRecord[];
+  students: StudentRecord[];
   onDownload: (snapshot: ReportSnapshotRecord, format: "xlsx" | "pdf") => void | Promise<void>;
   onRefreshSnapshots: () => void | Promise<void>;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -1654,9 +1674,11 @@ interface OpticalReportPanelProps {
 function OpticalReportPanel({
   evaluationStatus,
   isReportSubmitting,
+  participants,
   reportContentHash,
   reportJob,
   reportSnapshots,
+  students,
   onDownload,
   onRefreshSnapshots,
   onSubmit,
@@ -1665,6 +1687,8 @@ function OpticalReportPanel({
   const isAnalysisComplete = evaluationStatus?.status === "COMPLETED" && evaluationStatus.evaluatedCount > 0;
   const canGenerateReport = hasReportInput && isAnalysisComplete && !isReportSubmitting;
   const reportMessage = getReportReadinessMessage(evaluationStatus, hasReportInput, isReportSubmitting);
+  const latestSnapshot = reportSnapshots[0] ?? null;
+  const studentRows = buildReportAnalysisRows({ participants, snapshot: latestSnapshot, students });
 
   return (
     <>
@@ -1709,7 +1733,12 @@ function OpticalReportPanel({
             <thead>
               <tr>
                 <th>Durum</th>
-                <th>Sonuç</th>
+                <th>Öğrenci</th>
+                <th>Doğru</th>
+                <th>Yanlış</th>
+                <th>Boş</th>
+                <th>Net</th>
+                <th>Sınıf</th>
                 <th>Oluşturulma</th>
                 <th>İndirme</th>
               </tr>
@@ -1719,6 +1748,11 @@ function OpticalReportPanel({
                 <tr key={snapshot.id}>
                   <td>{formatReportStatus(snapshot.status)}</td>
                   <td>{formatReportResultCount(snapshot)}</td>
+                  <td>{formatReportAverage(snapshot, "correct")}</td>
+                  <td>{formatReportAverage(snapshot, "wrong")}</td>
+                  <td>{formatReportAverage(snapshot, "blank")}</td>
+                  <td>{formatReportAverage(snapshot, "net")}</td>
+                  <td>{formatReportClassCount(snapshot)}</td>
                   <td>{formatReportGeneratedAt(snapshot)}</td>
                   <td>
                     <div className="next-row-actions">
@@ -1738,7 +1772,66 @@ function OpticalReportPanel({
           <EmptyState title="Hazır rapor yok" description="Rapor ürettiğinizde Excel ve PDF indirme seçenekleri burada görünür." />
         )}
       </section>
+      <OpticalStudentResultsTable rows={studentRows} />
     </>
+  );
+}
+
+function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
+  return (
+    <section className="next-support-tool next-support-tool--full" aria-label="Katılan öğrenciler">
+      <h2>Katılan öğrenciler</h2>
+      {rows.length > 0 ? (
+        <div className="next-grid-scroll">
+          <table className="uh-data-table next-report-analysis-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Öğrenci</th>
+                <th>Sınıf</th>
+                <th>Katılım</th>
+                <th>Durum</th>
+                <th>Doğru</th>
+                <th>Yanlış</th>
+                <th>Boş</th>
+                <th>Net</th>
+                <th>Puan</th>
+                <th>Genel sıra</th>
+                <th>Sınıf sıra</th>
+                <th>Yüzdelik</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, index) => (
+                <tr key={row.rowKey}>
+                  <td>{index + 1}</td>
+                  <td>
+                    <span className="next-report-student-name">{row.studentName}</span>
+                    {row.studentNo ? <small>#{row.studentNo}</small> : null}
+                  </td>
+                  <td>{row.className}</td>
+                  <td>{formatParticipantMeta(row)}</td>
+                  <td>{formatResultStatus(row)}</td>
+                  <td>{formatReportNumber(row.correct)}</td>
+                  <td>{formatReportNumber(row.wrong)}</td>
+                  <td>{formatReportNumber(row.blank)}</td>
+                  <td>{formatReportNumber(row.net)}</td>
+                  <td>{formatReportNumber(readRowScore(row))}</td>
+                  <td>{formatRank(row.generalRank)}</td>
+                  <td>{formatRank(row.classRank)}</td>
+                  <td>{formatPercentile(row.percentile)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <EmptyState
+          title="Katılımcı sonucu yok"
+          description="Hazır rapor geldiğinde katılan öğrenci listesi burada görünür."
+        />
+      )}
+    </section>
   );
 }
 
@@ -1763,12 +1856,51 @@ function formatReportResultCount(snapshot: ReportSnapshotRecord): string {
   return typeof resultCount === "number" || typeof resultCount === "string" ? String(resultCount) : "-";
 }
 
+function formatReportAverage(
+  snapshot: ReportSnapshotRecord,
+  key: "blank" | "correct" | "net" | "wrong",
+): string {
+  return formatReportNumber(snapshot.snapshotData?.averages?.[key]);
+}
+
+function formatReportClassCount(snapshot: ReportSnapshotRecord): string {
+  return String(snapshot.snapshotData?.classes?.length ?? 0);
+}
+
 function formatReportGeneratedAt(snapshot: ReportSnapshotRecord): string {
-  if (!snapshot.generatedAt) return "-";
-  return new Date(snapshot.generatedAt).toLocaleString("tr-TR", {
+  const generatedAt = snapshot.generatedAt ?? snapshot.createdAt;
+  if (!generatedAt) return "-";
+  return new Date(generatedAt).toLocaleString("tr-TR", {
     dateStyle: "short",
     timeStyle: "short",
   });
+}
+
+function formatParticipantMeta(row: ReportAnalysisRow): string {
+  const parts = [row.participantNo, row.bookletType ? `${row.bookletType} kitapçık` : ""].filter(Boolean);
+  return parts.length > 0 ? parts.join(" / ") : "-";
+}
+
+function formatResultStatus(row: ReportAnalysisRow): string {
+  if (row.resultStatus === "READY") return "Sonuç var";
+  if (row.resultStatus === "ABSENT") return "Katılmadı";
+  return "Sonuç yok";
+}
+
+function readRowScore(row: ReportAnalysisRow): number | undefined {
+  return row.estimatedRawScore ?? row.standardScore ?? row.rawScore;
+}
+
+function formatRank(rank: ReportAnalysisRow["generalRank"]): string {
+  return rank ? `${rank.rank}/${rank.outOf}` : "-";
+}
+
+function formatPercentile(value: number | undefined): string {
+  return value === undefined ? "-" : `%${formatReportNumber(value)}`;
+}
+
+function formatReportNumber(value: number | undefined): string {
+  return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
 }
 
 async function suggestParserConfig(
@@ -1999,6 +2131,21 @@ async function loadQuarantines(accessToken: string, input: QuarantineLookupFormP
 
 async function loadStudents(accessToken: string) {
   return apiRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/students`);
+}
+
+async function loadExamParticipants(accessToken: string, examId: string) {
+  return apiRequest<ExamParticipantRecord[]>(
+    accessToken,
+    `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/participants`,
+  );
+}
+
+async function loadReportTableContext(accessToken: string, examId: string) {
+  const [participants, studentRecords] = await Promise.all([
+    loadExamParticipants(accessToken, examId).catch(() => []),
+    loadStudents(accessToken).catch(() => []),
+  ]);
+  return { participants, students: studentRecords };
 }
 
 async function resolveImportQuarantine(

@@ -706,10 +706,12 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
     ["averageRawScore", readNumber(averages.rawScore)],
     ["averageStandardScore", readNumber(averages.standardScore)],
     ["averageEstimatedRawScore", readNumber(averages.estimatedRawScore)],
+    ["averageQuestionCount", readNumberOrFallback(averages.questionCount, scoreQuestionCount(averages))],
+    ["averageSuccessRate", readNumberOrFallback(averages.successRate, scoreSuccessRate(averages))],
   ]);
 
   const branches = workbook.addWorksheet("Branches");
-  branches.addRow(["branch", "resultCount", "correct", "wrong", "blank", "net"]);
+  branches.addRow(["branch", "resultCount", "correct", "wrong", "blank", "net", "questionCount", "successRate"]);
   for (const branch of readRecords(snapshotData.branches)) {
     branches.addRow([
       readText(branch.branch),
@@ -718,6 +720,8 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
       readNumber(branch.wrong),
       readNumber(branch.blank),
       readNumber(branch.net),
+      readNumberOrFallback(branch.questionCount, scoreQuestionCount(branch)),
+      readNumberOrFallback(branch.successRate, scoreSuccessRate(branch)),
     ]);
   }
 
@@ -733,6 +737,8 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
     "rawScore",
     "standardScore",
     "estimatedRawScore",
+    "questionCount",
+    "successRate",
   ]);
   for (const classSummary of readRecords(snapshotData.classes)) {
     const averages = readRecord(classSummary.averages);
@@ -747,6 +753,8 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
       readNumber(averages.rawScore),
       readNumber(averages.standardScore),
       readNumber(averages.estimatedRawScore),
+      readNumberOrFallback(averages.questionCount, scoreQuestionCount(averages)),
+      readNumberOrFallback(averages.successRate, scoreSuccessRate(averages)),
     ]);
   }
 
@@ -769,6 +777,8 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
     "classOutOf",
     "classPercentile",
     "estimatedRawScore",
+    "questionCount",
+    "successRate",
   ]);
   for (const student of readRecords(snapshotData.students)) {
     const total = readRecord(student.total);
@@ -791,6 +801,8 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
       statistics?.class?.outOf ?? "",
       statistics?.class?.percentile ?? "",
       readNumber(total.estimatedRawScore),
+      readNumberOrFallback(total.questionCount, scoreQuestionCount(total)),
+      readNumberOrFallback(total.successRate, scoreSuccessRate(total)),
     ]);
   }
 
@@ -919,25 +931,26 @@ function createSnapshotPdfLines(
     "Genel Ozet",
     `Sonuc sayisi: ${readNumber(snapshotData.resultCount) || "-"}`,
     `Ortalama net: ${readNumber(averages.net) || "-"}`,
+    `Ortalama basari: ${formatPdfPercent(readNumberOrFallback(averages.successRate, scoreSuccessRate(averages)))}`,
     `Ortalama LGS puani: ${readLgsScore(averages) || "-"}`,
     `Standart puan: ${readNumber(averages.standardScore) || "-"}`,
     "",
     "Branslar",
     ...readRecords(snapshotData.branches).slice(0, 8).map((branch) =>
-      `${readText(branch.branch) || "-"}: ${readNumber(branch.resultCount) || "-"} sonuc, ${readNumber(branch.net) || "-"} net`
+      `${readText(branch.branch) || "-"}: ${readNumber(branch.resultCount) || "-"} sonuc, ${readNumber(branch.net) || "-"} net, ${formatPdfPercent(readNumberOrFallback(branch.successRate, scoreSuccessRate(branch)))}`
     ),
     "",
     "Siniflar",
     ...readRecords(snapshotData.classes).slice(0, 8).map((classSummary) => {
       const classAverages = readRecord(classSummary.averages);
-      return `${readText(classSummary.className) || "Sinifsiz"}: ${readNumber(classSummary.resultCount) || "-"} sonuc, ${readNumber(classAverages.net) || "-"} net`;
+      return `${readText(classSummary.className) || "Sinifsiz"}: ${readNumber(classSummary.resultCount) || "-"} sonuc, ${readNumber(classAverages.net) || "-"} net, ${formatPdfPercent(readNumberOrFallback(classAverages.successRate, scoreSuccessRate(classAverages)))}`;
     }),
     "",
     "Ogrenciler",
     ...readRecords(snapshotData.students).slice(0, 12).map((student) => {
       const total = readRecord(student.total);
       const statistics = readStudentStatistics(student.statistics);
-      return `${readText(student.studentId) || "-"} ${readText(student.className) || ""}: ${readNumber(total.net) || "-"} net, ${readLgsScore(total) || "-"} LGS puani, genel ${formatPdfRank(statistics?.general)}, sinif ${formatPdfRank(statistics?.class)}`;
+      return `${readText(student.studentId) || "-"} ${readText(student.className) || ""}: ${readNumber(total.net) || "-"} net, ${formatPdfPercent(readNumberOrFallback(total.successRate, scoreSuccessRate(total)))}, ${readLgsScore(total) || "-"} LGS puani, genel ${formatPdfRank(statistics?.general)}, sinif ${formatPdfRank(statistics?.class)}`;
     }),
     "",
     "Ogrenci Karnesi",
@@ -951,6 +964,10 @@ function createSnapshotPdfLines(
 function formatPdfRank(rank: ReportScopeRank | undefined): string {
   if (!rank) return "-";
   return `${rank.rank}/${rank.outOf} (%${rank.percentile})`;
+}
+
+function formatPdfPercent(value: number | ""): string {
+  return value === "" ? "-" : `%${value}`;
 }
 
 function buildSimplePdf(lines: string[]): Buffer {
@@ -1020,6 +1037,11 @@ function readNumber(value: unknown): number | "" {
   return typeof value === "number" && Number.isFinite(value) ? value : "";
 }
 
+function readNumberOrFallback(value: unknown, fallback: number | undefined): number | "" {
+  const direct = readNumber(value);
+  return direct === "" ? fallback ?? "" : direct;
+}
+
 function readLgsScore(value: unknown): number | "" {
   const record = readRecord(value);
   const estimatedRawScore = readNumber(record.estimatedRawScore);
@@ -1032,13 +1054,17 @@ function readOptionalNumber(value: unknown): number | undefined {
 
 function readScoreSummary(value: unknown): ReportStudentScoreSummary {
   const record = readRecord(value);
+  const questionCount = readOptionalNumber(record.questionCount) ?? scoreQuestionCount(record);
+  const successRate = readOptionalNumber(record.successRate) ?? scoreSuccessRate(record);
   const summary: ReportStudentScoreSummary = {
     correct: readOptionalNumber(record.correct),
     wrong: readOptionalNumber(record.wrong),
     blank: readOptionalNumber(record.blank),
     net: readOptionalNumber(record.net),
+    ...(questionCount !== undefined ? { questionCount } : {}),
     rawScore: readOptionalNumber(record.rawScore),
     standardScore: readOptionalNumber(record.standardScore),
+    ...(successRate !== undefined ? { successRate } : {}),
   };
   const estimatedRawScore = readOptionalNumber(record.estimatedRawScore);
   if (estimatedRawScore !== undefined) {
@@ -1054,12 +1080,16 @@ function readBranchSummary(
   const record = readRecord(value);
   const branch = readText(record.branch);
   const branchAverages = averages.get(branch);
+  const questionCount = readOptionalNumber(record.questionCount) ?? scoreQuestionCount(record);
+  const successRate = readOptionalNumber(record.successRate) ?? scoreSuccessRate(record);
   return {
     branch,
     correct: readOptionalNumber(record.correct),
     wrong: readOptionalNumber(record.wrong),
     blank: readOptionalNumber(record.blank),
     net: readOptionalNumber(record.net),
+    ...(questionCount !== undefined ? { questionCount } : {}),
+    ...(successRate !== undefined ? { successRate } : {}),
     ...(branchAverages?.classNetAverage !== undefined ? { classNetAverage: branchAverages.classNetAverage } : {}),
     ...(branchAverages?.schoolNetAverage !== undefined ? { schoolNetAverage: branchAverages.schoolNetAverage } : {}),
     ...(branchAverages?.generalNetAverage !== undefined ? { generalNetAverage: branchAverages.generalNetAverage } : {}),
@@ -1173,6 +1203,8 @@ function readScopeRank(value: unknown): ReportScopeRank | undefined {
 
 function readOutcomeSummary(value: unknown): ReportStudentOutcomeSummary {
   const record = readRecord(value);
+  const questionCount = readOptionalNumber(record.questionCount) ?? scoreQuestionCount(record);
+  const successRate = readOptionalNumber(record.successRate) ?? scoreSuccessRate(record);
   return {
     outcomeCode: readText(record.outcomeCode),
     branch: readText(record.branch),
@@ -1180,7 +1212,32 @@ function readOutcomeSummary(value: unknown): ReportStudentOutcomeSummary {
     wrong: readOptionalNumber(record.wrong),
     blank: readOptionalNumber(record.blank),
     net: readOptionalNumber(record.net),
+    ...(questionCount !== undefined ? { questionCount } : {}),
+    ...(successRate !== undefined ? { successRate } : {}),
   };
+}
+
+function scoreQuestionCount(value: Record<string, unknown>): number | undefined {
+  const correct = readOptionalNumber(value.correct);
+  const wrong = readOptionalNumber(value.wrong);
+  const blank = readOptionalNumber(value.blank);
+  if (correct === undefined || wrong === undefined || blank === undefined) {
+    return undefined;
+  }
+  return roundReportMetric(correct + wrong + blank);
+}
+
+function scoreSuccessRate(value: Record<string, unknown>): number | undefined {
+  const net = readOptionalNumber(value.net);
+  const questionCount = readOptionalNumber(value.questionCount) ?? scoreQuestionCount(value);
+  if (net === undefined || questionCount === undefined || questionCount <= 0) {
+    return undefined;
+  }
+  return roundReportMetric((net / questionCount) * 100);
+}
+
+function roundReportMetric(value: number): number {
+  return Number(value.toFixed(4));
 }
 
 function readQuestionSummary(value: unknown): ReportStudentQuestionSummary {

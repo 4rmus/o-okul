@@ -35,6 +35,7 @@ import { formatCourseName, formatOutcomeCode, shortCourseName } from "../../_sha
 import { ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
 import { formatNetNumber, OutcomeNetTable } from "../../_shared/outcome-net-table.js";
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
+import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 
 interface StudentBaseDetail {
   attendanceSummary: AttendanceSummaryRecord | null;
@@ -266,19 +267,21 @@ function StudentDashboard({
           { label: "Eğitim ekibi", value: detail.teacherAssignments.length },
           { label: "Devamsızlık", value: detail.attendanceSummary?.total ?? 0 },
           { label: "Bekleyen ödeme", value: formatPendingPayment(detail.paymentPlans) },
+          { label: "Başarı", value: formatPercentNumber(reportSuccessRate(report?.total)) },
           { label: "Son net", value: formatNetNumber(report?.total?.net) },
+          { label: "Soru", value: formatNumber(reportQuestionCount(report?.total)) },
           { label: "Net gelişimi", value: formatDelta(progress?.netDelta) },
         ]}
       />
 
-      <ReportChartPanel description="Hazır raporu olan tüm sınavlardaki net ve standart puan gelişimi" title="Öğrenci Gelişim Grafiği">
-        <ProgressLineChart caption="Tüm sınav net gelişimi" points={progressPoints} />
+      <ReportChartPanel description="Hazır raporu olan tüm sınavlardaki başarı yüzdesi, net ve standart puan gelişimi" title="Öğrenci Gelişim Grafiği">
+        <ProgressLineChart caption="Tüm sınav başarı gelişimi" points={progressPoints} />
       </ReportChartPanel>
 
       <div className="next-dashboard-summary-grid" aria-label="Öğrenci karar kartları">
         <Link className="next-dashboard-summary-card" href={studentExamsHref}>
           <span>Sınav performansı</span>
-          <strong>{formatNetNumberWithSuffix(report?.total?.net, "net")}</strong>
+          <strong>{formatPercentNumber(reportSuccessRate(report?.total))}</strong>
           <small>
             {selectedSnapshot ? formatSnapshotLabel(selectedSnapshot, studentId) : "Hazır rapor bekleniyor"}
             <ChevronRight size={15} aria-hidden="true" />
@@ -471,7 +474,9 @@ function StudentExamDetails({
       <MetricPanelGrid
         ariaLabel="Sınav rapor özeti"
         metrics={[
+          { label: "Başarı", value: formatPercentNumber(reportSuccessRate(report?.total)) },
           { label: "Son net", value: formatNetNumber(report?.total?.net) },
+          { label: "Soru", value: formatNumber(reportQuestionCount(report?.total)) },
           { label: "Hata kitapçığı", value: errorBooklet ? `${errorBooklet.items.length} soru` : "-" },
           { label: "Net gelişimi", value: formatDelta(progress?.netDelta) },
           { label: "LGS puanı", value: formatNumber(readLgsScore(report?.total)) },
@@ -482,17 +487,17 @@ function StudentExamDetails({
       {report ? (
         <>
           <div className="next-report-visual-grid">
-            <ReportChartPanel description="Soru bazlı doğruluk grafiği" title="Öğrenci Sonuç Dağılımı">
+            <ReportChartPanel description="Soru sayısına göre başarı ve doğruluk dağılımı" title="Öğrenci Sonuç Dağılımı">
               <ExamResultDonut result={examResult} />
             </ReportChartPanel>
-            <ReportChartPanel description="Rapor bazlı branş netleri" title="Branş Netleri">
-              <TopicRadarChart branches={branchRadar} caption="Öğrenci branş netleri" />
+            <ReportChartPanel description="Rapor bazlı branş başarıları" title="Branş Başarıları">
+              <TopicRadarChart branches={branchRadar} caption="Öğrenci branş başarıları" />
             </ReportChartPanel>
-            <ReportChartPanel description="Kazanım bazlı net karşılaştırması" title="Kazanım Netleri">
-              <OutcomeNetTable caption="Öğrenci kazanım netleri" rows={outcomeRows} />
+            <ReportChartPanel description="Kazanım bazlı başarı ve net karşılaştırması" title="Kazanım Başarıları">
+              <OutcomeNetTable caption="Öğrenci kazanım başarıları" rows={outcomeRows} />
             </ReportChartPanel>
-            <ReportChartPanel description="Net ve standart puan gelişimi" title="Öğrenci Gelişim">
-              <ProgressLineChart caption="Öğrenci net gelişimi" points={progressPoints} />
+            <ReportChartPanel description="Başarı yüzdesi, net ve standart puan gelişimi" title="Öğrenci Gelişim">
+              <ProgressLineChart caption="Öğrenci başarı gelişimi" points={progressPoints} />
             </ReportChartPanel>
           </div>
 
@@ -684,10 +689,6 @@ function formatNumber(value: number | undefined) {
   return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
 }
 
-function formatNetNumberWithSuffix(value: number | undefined, suffix: string) {
-  return value === undefined ? "-" : `${formatNetNumber(value)} ${suffix}`;
-}
-
 function readLgsScore(total: { estimatedRawScore?: number; standardScore?: number } | undefined) {
   return total?.estimatedRawScore ?? total?.standardScore;
 }
@@ -814,6 +815,9 @@ function toStudentExamResult(report: ReportStudentSnapshot | null) {
     correct: report?.total?.correct ?? 0,
     wrong: report?.total?.wrong ?? 0,
     blank: report?.total?.blank ?? 0,
+    net: report?.total?.net ?? 0,
+    questionCount: report?.total?.questionCount ?? reportQuestionCount(report?.total),
+    successRate: report?.total?.successRate ?? reportSuccessRate(report?.total),
   };
 }
 
@@ -821,19 +825,26 @@ function toStudentBranchRadar(report: ReportStudentSnapshot | null) {
   return (report?.branches ?? []).map((branch) => ({
     branch: formatCourseName(branch.branch),
     chartLabel: shortCourseName(branch.branch),
+    blank: branch.blank,
+    correct: branch.correct,
     net: branch.net ?? 0,
+    questionCount: branch.questionCount ?? reportQuestionCount(branch),
+    successRate: branch.successRate ?? reportSuccessRate(branch),
+    wrong: branch.wrong,
   }));
 }
 
 function toStudentOutcomeRows(report: ReportStudentSnapshot | null) {
   return [...(report?.outcomes ?? [])]
-    .sort((first, second) => (second.net ?? Number.NEGATIVE_INFINITY) - (first.net ?? Number.NEGATIVE_INFINITY))
+    .sort((first, second) => (reportSuccessRate(second) ?? Number.NEGATIVE_INFINITY) - (reportSuccessRate(first) ?? Number.NEGATIVE_INFINITY))
     .slice(0, 12)
     .map((outcome, index) => ({
       courseName: formatCourseName(outcome.branch),
       id: `${outcome.branch}-${outcome.outcomeCode}-${index}`,
       net: outcome.net,
       outcomeCode: formatOutcomeCode(outcome.outcomeCode),
+      questionCount: outcome.questionCount ?? reportQuestionCount(outcome),
+      successRate: outcome.successRate ?? reportSuccessRate(outcome),
     }));
 }
 

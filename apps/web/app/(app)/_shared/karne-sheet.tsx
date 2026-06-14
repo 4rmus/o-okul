@@ -7,6 +7,7 @@ import type {
   ReportStudentSnapshot,
 } from "@uzman-hocam/shared-types";
 import { formatCourseName, formatOutcomeCode } from "./academic-labels.js";
+import { clampSuccessRate, formatPercentNumber, reportQuestionCount, reportSuccessRate } from "./report-metrics.js";
 
 type KarneHeadingLevel = "h2" | "h3" | "h4";
 
@@ -76,6 +77,8 @@ export function KarneSheet({
   const scoreExtra = showProgressHistory ? "" : summaryExtra.replace(/^Gelişim\s+/u, "");
   const institutionName = report.institutionName ?? reportLabel;
   const lgsScore = report.total.estimatedRawScore ?? report.total.standardScore;
+  const totalQuestionCount = reportQuestionCount(report.total);
+  const totalSuccessRate = reportSuccessRate(report.total);
   const outcomeRows = (report.outcomes ?? []).filter((outcome) => outcome.outcomeCode || outcome.branch);
   const questionRows = [...(report.questions ?? [])].sort((left, right) => left.questionNo - right.questionNo);
 
@@ -99,6 +102,7 @@ export function KarneSheet({
                 <th>No</th>
                 <th>Branş</th>
                 <th>Soru sayısı</th>
+                <th>Başarı %</th>
                 <th>Doğru</th>
                 <th>Yanlış</th>
                 <th>Boş</th>
@@ -114,6 +118,7 @@ export function KarneSheet({
                   <td>{index + 1}</td>
                   <td>{formatCourseName(branch.branch)}</td>
                   <td>{formatNumber(branchQuestionCount(branch))}</td>
+                  <td><SuccessMeter value={branchSuccessRate(branch)} /></td>
                   <td>{formatNumber(branch.correct)}</td>
                   <td>{formatNumber(branch.wrong)}</td>
                   <td>{formatNumber(branch.blank)}</td>
@@ -126,7 +131,8 @@ export function KarneSheet({
               <tr>
                 <td></td>
                 <td>TOPLAM</td>
-                <td>{formatNumber(branchQuestionCount(report.total))}</td>
+                <td>{formatNumber(totalQuestionCount)}</td>
+                <td><SuccessMeter value={totalSuccessRate} /></td>
                 <td>{formatNumber(report.total.correct)}</td>
                 <td>{formatNumber(report.total.wrong)}</td>
                 <td>{formatNumber(report.total.blank)}</td>
@@ -151,6 +157,10 @@ export function KarneSheet({
               <tr>
                 <th>LGS PUANI</th>
                 <td colSpan={2}>{formatNumber(lgsScore)}</td>
+              </tr>
+              <tr>
+                <th>BAŞARI %</th>
+                <td colSpan={2}>{formatPercentNumber(totalSuccessRate)}</td>
               </tr>
               <tr>
                 <th className="next-karne-score-scope" rowSpan={2}>{scoreGeneralLabel === "SIRA" ? "GENEL" : scoreGeneralLabel}</th>
@@ -200,7 +210,9 @@ export function KarneSheet({
                 <tr>
                   <th>No</th>
                   <th>Deneme</th>
+                  <th>Başarı</th>
                   <th>Net</th>
+                  <th>Soru</th>
                   <th>Tarih</th>
                 </tr>
               </thead>
@@ -209,7 +221,9 @@ export function KarneSheet({
                   <tr key={point.snapshotId ?? point.generatedAt ?? index}>
                     <td>{index + 1}</td>
                     <td>{point.examTitle ?? (recentProgressPoints.length ? `Deneme ${index + 1}` : "Son rapor")}</td>
+                    <td>{formatPercentNumber(reportSuccessRate(point.total))}</td>
                     <td>{formatNetNumber(point.total.net)}</td>
+                    <td>{formatNumber(reportQuestionCount(point.total))}</td>
                     <td>{formatProgressDate(point.generatedAt, index)}</td>
                   </tr>
                 ))}
@@ -266,6 +280,7 @@ export function KarneSheet({
             <thead>
               <tr>
                 <th>Toplam soru</th>
+                <th>Başarı %</th>
                 <th>Doğru</th>
                 <th>Yanlış</th>
                 <th>Boş</th>
@@ -274,7 +289,8 @@ export function KarneSheet({
             </thead>
             <tbody>
               <tr>
-                <td>{formatNumber(branchQuestionCount(report.total))}</td>
+                <td>{formatNumber(totalQuestionCount)}</td>
+                <td><SuccessMeter value={totalSuccessRate} /></td>
                 <td>{formatNumber(report.total.correct)}</td>
                 <td>{formatNumber(report.total.wrong)}</td>
                 <td>{formatNumber(report.total.blank)}</td>
@@ -292,6 +308,8 @@ export function KarneSheet({
                 <tr>
                   <th>Kazanım</th>
                   <th>Ders</th>
+                  <th>Soru</th>
+                  <th>Başarı %</th>
                   <th>Doğru</th>
                   <th>Yanlış</th>
                   <th>Boş</th>
@@ -303,6 +321,8 @@ export function KarneSheet({
                   <tr key={`${outcome.outcomeCode}-${outcome.branch}-${index}`}>
                     <td>{formatOutcomeCode(outcome.outcomeCode)}</td>
                     <td>{formatCourseName(outcome.branch)}</td>
+                    <td>{formatNumber(branchQuestionCount(outcome))}</td>
+                    <td><SuccessMeter value={branchSuccessRate(outcome)} /></td>
                     <td>{formatNumber(outcome.correct)}</td>
                     <td>{formatNumber(outcome.wrong)}</td>
                     <td>{formatNumber(outcome.blank)}</td>
@@ -392,6 +412,8 @@ function KarneOutcomeRadar({
           <tr>
             <th>Kazanım</th>
             <th>Branş</th>
+            <th>Soru</th>
+            <th>Başarı %</th>
             <th>Doğru</th>
             <th>Yanlış</th>
             <th>Boş</th>
@@ -403,6 +425,8 @@ function KarneOutcomeRadar({
             <tr key={outcome.outcomeCode}>
               <th scope="row">{formatOutcomeCode(outcome.outcomeCode)}</th>
               <td>{formatCourseName(outcome.branch)}</td>
+              <td>{formatNumber(branchQuestionCount(outcome))}</td>
+              <td><SuccessMeter value={branchSuccessRate(outcome)} /></td>
               <td>{formatNumber(outcome.correct)}</td>
               <td>{formatNumber(outcome.wrong)}</td>
               <td>{formatNumber(outcome.blank)}</td>
@@ -506,6 +530,17 @@ function formatDelta(value: number | undefined) {
   return `${value > 0 ? "+" : ""}${formatNetNumber(value)}`;
 }
 
+function SuccessMeter({ value }: { value: number | undefined }) {
+  return (
+    <span className="next-success-meter">
+      <span className="next-success-meter__track" aria-hidden="true">
+        <span className="next-success-meter__fill" style={{ width: `${clampSuccessRate(value)}%` }} />
+      </span>
+      <span>{formatPercentNumber(value)}</span>
+    </span>
+  );
+}
+
 function formatProgressDate(value: string | undefined, index: number) {
   return value ? new Date(value).toLocaleDateString("tr-TR") : `Ölçüm ${index + 1}`;
 }
@@ -523,8 +558,12 @@ function formatKarneDate(value: string | undefined) {
   return value ? new Date(value).toLocaleDateString("tr-TR") : undefined;
 }
 
-function branchQuestionCount(value: { blank?: number; correct?: number; wrong?: number }) {
-  return (value.correct ?? 0) + (value.wrong ?? 0) + (value.blank ?? 0);
+function branchQuestionCount(value: { blank?: number; correct?: number; questionCount?: number; wrong?: number }) {
+  return reportQuestionCount(value);
+}
+
+function branchSuccessRate(value: { blank?: number; correct?: number; net?: number; questionCount?: number; successRate?: number; wrong?: number }) {
+  return reportSuccessRate(value);
 }
 
 function findBranchNet(point: ReportStudentProgress["points"][number], branchName: string) {

@@ -438,9 +438,11 @@ describe("ReportGenerationService", () => {
         wrong: 2,
         blank: 0,
         net: 17.5,
+        questionCount: 20,
         rawScore: 87.5,
         standardScore: 87.5,
         estimatedRawScore: 123.4,
+        successRate: 87.5,
       },
       branches: [
         {
@@ -449,9 +451,11 @@ describe("ReportGenerationService", () => {
           wrong: 2,
           blank: 0,
           net: 17.5,
+          questionCount: 20,
           classNetAverage: 16.75,
           schoolNetAverage: 17.5,
           generalNetAverage: 15.5,
+          successRate: 87.5,
         },
       ],
       outcomes: [
@@ -462,6 +466,8 @@ describe("ReportGenerationService", () => {
           wrong: 2,
           blank: 0,
           net: 17.5,
+          questionCount: 20,
+          successRate: 87.5,
         },
       ],
       questions: [
@@ -651,8 +657,10 @@ describe("ReportGenerationService", () => {
             wrong: 4,
             blank: 1,
             net: 14,
+            questionCount: 20,
             rawScore: 70,
             standardScore: 80,
+            successRate: 70,
           },
           branches: [
             {
@@ -661,6 +669,8 @@ describe("ReportGenerationService", () => {
               wrong: 4,
               blank: 1,
               net: 14,
+              questionCount: 20,
+              successRate: 70,
             },
           ],
         },
@@ -674,9 +684,11 @@ describe("ReportGenerationService", () => {
             wrong: 2,
             blank: 0,
             net: 17.5,
+            questionCount: 20,
             rawScore: 87.5,
             standardScore: 87.5,
             estimatedRawScore: 123.4,
+            successRate: 87.5,
           },
           branches: [
             {
@@ -685,6 +697,8 @@ describe("ReportGenerationService", () => {
               wrong: 2,
               blank: 0,
               net: 17.5,
+              questionCount: 20,
+              successRate: 87.5,
             },
           ],
         },

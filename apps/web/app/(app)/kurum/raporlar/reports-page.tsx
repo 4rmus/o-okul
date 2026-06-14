@@ -12,6 +12,7 @@ import type {
   CampusRecord,
   ClassRecord,
   CourseRecord,
+  ExamParticipantRecord,
   ExamRecord,
   GradeLevelRecord,
   ReportErrorBooklet,
@@ -19,8 +20,9 @@ import type {
   ReportSnapshotRecord,
   ReportStudentProgress,
   ReportStudentSnapshot,
+  StudentRecord,
 } from "@uzman-hocam/shared-types";
-import { Download, RefreshCw } from "lucide-react";
+import { Download, Eye, RefreshCw } from "lucide-react";
 import { KarneSheet } from "../../_shared/karne-sheet.js";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest } from "../../../../src/api-client.js";
@@ -31,12 +33,16 @@ import { formatCourseName, formatOutcomeCode, shortCourseName } from "../../_sha
 import { ClassCompareBar, ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
 import { formatNetNumber, OutcomeNetTable } from "../../_shared/outcome-net-table.js";
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
+import { buildReportAnalysisRows, type ReportAnalysisRow } from "../../_shared/report-analysis.js";
+import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 
 interface ReportData {
+  errorBooklet: ReportErrorBooklet | null;
+  participants: ExamParticipantRecord[];
+  selectedStudentId: string;
   snapshots: ReportSnapshotRecord[];
   studentReport: ReportStudentSnapshot | null;
   studentProgress: ReportStudentProgress | null;
-  errorBooklet: ReportErrorBooklet | null;
 }
 
 interface ReportReferences {
@@ -45,6 +51,7 @@ interface ReportReferences {
   courses: CourseRecord[];
   exams: ExamRecord[];
   gradeLevels: GradeLevelRecord[];
+  students: StudentRecord[];
   terms: AcademicTermRecord[];
 }
 
@@ -62,6 +69,7 @@ const emptyReferences: ReportReferences = {
   courses: [],
   exams: [],
   gradeLevels: [],
+  students: [],
   terms: [],
 };
 
@@ -88,6 +96,7 @@ export function ReportsPage() {
   const courses = references.courses;
   const exams = references.exams;
   const terms = references.terms;
+  const students = references.students;
   const classNameById = new Map(classes.map((klass) => [klass.id, klass.name]));
   const campusNameById = new Map(campuses.map((campus) => [campus.id, campus.name]));
   const gradeLevelNameById = new Map(gradeLevels.map((level) => [level.id, level.name]));
@@ -95,6 +104,12 @@ export function ReportsPage() {
   const termNameById = new Map(terms.map((term) => [term.id, term.name]));
   const latestSnapshot = reportData?.snapshots[0] ?? null;
   const studentReport = reportData?.studentReport ?? null;
+  const studentRows = buildReportAnalysisRows({
+    classes,
+    participants: reportData?.participants ?? [],
+    snapshot: latestSnapshot,
+    students,
+  });
   const branchRadar = toBranchRadar(latestSnapshot);
   const outcomeRows = toOutcomeRows(latestSnapshot);
   const classBars = toClassBars(latestSnapshot);
@@ -118,7 +133,7 @@ export function ReportsPage() {
       return;
     }
     try {
-      setReportData(await loadReportData(auth.accessToken, parsedForm.data.examId, filters));
+      setReportData(await loadReportData(auth.accessToken, parsedForm.data.examId, filters, { classes, students }));
       setLoadedExamId(parsedForm.data.examId);
     } catch (loadError) {
       setReportData(null);
@@ -149,6 +164,24 @@ export function ReportsPage() {
       setQueueMessage(`${result.jobId} kuyruğa alındı.`);
     } catch (queueError) {
       setError(apiErrorMessage(queueError, "Rapor üretimi kuyruğa alınamadı."));
+    }
+  }
+
+  async function selectStudentReport(studentId: string) {
+    if (!auth || !latestSnapshot || !loadedExamId) return;
+
+    setError("");
+    try {
+      const selectedReport = await loadStudentReportData(auth.accessToken, loadedExamId, latestSnapshot.id, studentId);
+      setReportData((current) => current
+        ? {
+            ...current,
+            ...selectedReport,
+            selectedStudentId: studentId,
+          }
+        : current);
+    } catch (selectError) {
+      setError(apiErrorMessage(selectError, "Öğrenci raporu alınamadı."));
     }
   }
 
@@ -273,6 +306,8 @@ export function ReportsPage() {
               metrics={[
                 { label: "Durum", value: latestSnapshot.status },
                 { label: "Sonuç", value: latestSnapshot.snapshotData?.resultCount ?? "-" },
+                { label: "Soru", value: formatNumber(reportQuestionCount(latestSnapshot.snapshotData?.averages)) },
+                { label: "Başarı", value: formatPercentNumber(reportSuccessRate(latestSnapshot.snapshotData?.averages)) },
                 { label: "Ortalama net", value: formatNetNumber(latestSnapshot.snapshotData?.averages?.net) },
                 { label: "LGS puanı", value: formatNumber(readLgsScore(latestSnapshot.snapshotData?.averages)) },
                 { label: "Standart puan", value: formatNumber(latestSnapshot.snapshotData?.averages?.standardScore) },
@@ -289,22 +324,27 @@ export function ReportsPage() {
               ]}
             />
             <div className="next-report-visual-grid">
-              <ReportChartPanel description="Soru bazlı doğruluk dağılımı" title="Sınav Sonuç Dağılımı">
+              <ReportChartPanel description="Soru sayısına göre başarı ve doğruluk dağılımı" title="Sınav Sonuç Dağılımı">
                 <ExamResultDonut result={examResult} />
               </ReportChartPanel>
-              <ReportChartPanel description="Branş ortalaması" title="Branş Netleri">
-                <TopicRadarChart branches={branchRadar} caption="Rapor branş netleri" />
+              <ReportChartPanel description="Branş soru sayılarına göre başarı yüzdesi" title="Branş Başarıları">
+                <TopicRadarChart branches={branchRadar} caption="Rapor branş başarıları" />
               </ReportChartPanel>
-              <ReportChartPanel description="Kazanım bazlı net karşılaştırması" title="Kazanım Netleri">
-                <OutcomeNetTable caption="Rapor kazanım netleri" rows={outcomeRows} />
+              <ReportChartPanel description="Kazanım bazlı başarı ve net karşılaştırması" title="Kazanım Başarıları">
+                <OutcomeNetTable caption="Rapor kazanım başarıları" rows={outcomeRows} />
               </ReportChartPanel>
-              <ReportChartPanel description="Sınıf ortalama netleri" title="Sınıf Karşılaştırması">
-                <ClassCompareBar caption="Sınıf ortalama netleri" classes={classBars} />
+              <ReportChartPanel description="Sınıf ortalamalarının soru sayısına göre başarı yüzdesi" title="Sınıf Karşılaştırması">
+                <ClassCompareBar caption="Sınıf ortalama başarıları" classes={classBars} />
               </ReportChartPanel>
-              <ReportChartPanel description="Net ve standart puan gelişimi" title="Öğrenci Gelişim Eğrisi">
-                <ProgressLineChart caption="Öğrenci net gelişimi" points={progressPoints} />
+              <ReportChartPanel description="Başarı yüzdesi, net ve standart puan gelişimi" title="Öğrenci Gelişim Eğrisi">
+                <ProgressLineChart caption="Öğrenci başarı gelişimi" points={progressPoints} />
               </ReportChartPanel>
             </div>
+            <StudentResultsTable
+              rows={studentRows}
+              selectedStudentId={reportData?.selectedStudentId ?? ""}
+              onSelect={(studentId) => void selectStudentReport(studentId)}
+            />
             <StudentReportCard
               report={studentReport}
               progress={reportData?.studentProgress ?? null}
@@ -343,28 +383,51 @@ export function ReportsPage() {
   );
 }
 
-async function loadReportData(accessToken: string, examId: string, filters: typeof emptyFilters): Promise<ReportData> {
+async function loadReportData(
+  accessToken: string,
+  examId: string,
+  filters: typeof emptyFilters,
+  references: Pick<ReportReferences, "classes" | "students">,
+): Promise<ReportData> {
   const snapshotsUrl = new URL(`${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots`);
   if (filters.campusId) snapshotsUrl.searchParams.set("campusId", filters.campusId);
   if (filters.gradeLevelId) snapshotsUrl.searchParams.set("gradeLevelId", filters.gradeLevelId);
   if (filters.classId) snapshotsUrl.searchParams.set("classId", filters.classId);
   if (filters.courseId) snapshotsUrl.searchParams.set("courseId", filters.courseId);
   if (filters.termId) snapshotsUrl.searchParams.set("termId", filters.termId);
-  const snapshots = await apiRequest<ReportSnapshotRecord[]>(
-    accessToken,
-    snapshotsUrl.toString(),
-  );
+  const [snapshots, participants] = await Promise.all([
+    apiRequest<ReportSnapshotRecord[]>(
+      accessToken,
+      snapshotsUrl.toString(),
+    ),
+    loadExamParticipants(accessToken, examId).catch(() => []),
+  ]);
   const latestSnapshot = snapshots[0];
-  const studentId = latestSnapshot?.snapshotData?.students?.[0]?.studentId;
+  const studentId = buildReportAnalysisRows({
+    classes: references.classes,
+    participants,
+    snapshot: latestSnapshot,
+    students: references.students,
+  }).find((row) => row.hasResult)?.studentId;
 
   if (!latestSnapshot || !studentId) {
-    return { snapshots, studentReport: null, studentProgress: null, errorBooklet: null };
+    return { errorBooklet: null, participants, selectedStudentId: "", snapshots, studentReport: null, studentProgress: null };
   }
 
+  const studentReportData = await loadStudentReportData(accessToken, examId, latestSnapshot.id, studentId);
+  return { snapshots, participants, selectedStudentId: studentId, ...studentReportData };
+}
+
+async function loadStudentReportData(
+  accessToken: string,
+  examId: string,
+  snapshotId: string,
+  studentId: string,
+): Promise<Pick<ReportData, "errorBooklet" | "studentProgress" | "studentReport">> {
   const [studentReport, studentProgress, errorBooklet] = await Promise.all([
     apiRequest<ReportStudentSnapshot>(
       accessToken,
-      `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots/${encodeURIComponent(latestSnapshot.id)}/students/${encodeURIComponent(studentId)}`,
+      `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots/${encodeURIComponent(snapshotId)}/students/${encodeURIComponent(studentId)}`,
     ).catch(() => null),
     apiRequest<ReportStudentProgress>(
       accessToken,
@@ -372,20 +435,21 @@ async function loadReportData(accessToken: string, examId: string, filters: type
     ).catch(() => null),
     apiRequest<ReportErrorBooklet>(
       accessToken,
-      `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots/${encodeURIComponent(latestSnapshot.id)}/students/${encodeURIComponent(studentId)}/error-booklet`,
+      `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots/${encodeURIComponent(snapshotId)}/students/${encodeURIComponent(studentId)}/error-booklet`,
     ).catch(() => null),
   ]);
 
-  return { snapshots, studentReport, studentProgress, errorBooklet };
+  return { studentReport, studentProgress, errorBooklet };
 }
 
 async function loadReportReferences(accessToken: string): Promise<ReportReferences> {
-  const [campuses, classes, courses, exams, gradeLevels, terms] = await Promise.all([
+  const [campuses, classes, courses, exams, gradeLevels, students, terms] = await Promise.all([
     apiListRequest<CampusRecord>(accessToken, `${apiBaseUrl}/campuses`),
     apiListRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes`),
     apiListRequest<CourseRecord>(accessToken, `${apiBaseUrl}/courses`),
     apiListRequest<ExamRecord>(accessToken, `${apiBaseUrl}/exams`),
     apiListRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels`),
+    apiListRequest<StudentRecord>(accessToken, `${apiBaseUrl}/students`),
     apiListRequest<AcademicTermRecord>(accessToken, `${apiBaseUrl}/academic-terms`),
   ]);
   return {
@@ -394,8 +458,16 @@ async function loadReportReferences(accessToken: string): Promise<ReportReferenc
     courses: courses.data,
     exams: exams.data,
     gradeLevels: gradeLevels.data,
+    students: students.data,
     terms: terms.data,
   };
+}
+
+async function loadExamParticipants(accessToken: string, examId: string) {
+  return apiRequest<ExamParticipantRecord[]>(
+    accessToken,
+    `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/participants`,
+  );
 }
 
 function preferredExamId(exams: ExamRecord[]) {
@@ -483,20 +555,27 @@ function toBranchRadar(snapshot: ReportSnapshotRecord | null) {
   return (snapshot?.snapshotData?.branches ?? []).map((branch) => ({
     branch: formatCourseName(branch.branch),
     chartLabel: shortCourseName(branch.branch),
+    blank: branch.blank,
+    correct: branch.correct,
     net: branch.net,
+    questionCount: branch.questionCount ?? reportQuestionCount(branch),
     resultCount: branch.resultCount,
+    successRate: branch.successRate ?? reportSuccessRate(branch),
+    wrong: branch.wrong,
   }));
 }
 
 function toOutcomeRows(snapshot: ReportSnapshotRecord | null) {
   return [...(snapshot?.snapshotData?.outcomes ?? [])]
-    .sort((first, second) => (second.net ?? Number.NEGATIVE_INFINITY) - (first.net ?? Number.NEGATIVE_INFINITY))
+    .sort((first, second) => (reportSuccessRate(second) ?? Number.NEGATIVE_INFINITY) - (reportSuccessRate(first) ?? Number.NEGATIVE_INFINITY))
     .slice(0, 12)
     .map((outcome, index) => ({
       courseName: formatCourseName(outcome.branch),
       id: `${outcome.branch}-${outcome.outcomeCode}-${index}`,
       net: outcome.net,
       outcomeCode: formatOutcomeCode(outcome.outcomeCode),
+      questionCount: outcome.questionCount ?? reportQuestionCount(outcome),
+      successRate: outcome.successRate ?? reportSuccessRate(outcome),
     }));
 }
 
@@ -505,7 +584,9 @@ function toClassBars(snapshot: ReportSnapshotRecord | null) {
     classId: record.classId,
     className: record.className ?? "Sınıfsız",
     net: record.averages.net,
+    questionCount: record.averages.questionCount ?? reportQuestionCount(record.averages),
     standardScore: record.averages.standardScore,
+    successRate: record.averages.successRate ?? reportSuccessRate(record.averages),
   }));
 }
 
@@ -515,11 +596,106 @@ function toExamResult(snapshot: ReportSnapshotRecord | null) {
     correct: averages?.correct ?? 0,
     wrong: averages?.wrong ?? 0,
     blank: averages?.blank ?? 0,
+    net: averages?.net ?? 0,
+    questionCount: averages?.questionCount ?? reportQuestionCount(averages),
+    successRate: averages?.successRate ?? reportSuccessRate(averages),
   };
 }
 
 function toProgressPoints(progress: ReportStudentProgress | null) {
   return progress?.points ?? [];
+}
+
+function StudentResultsTable({
+  rows,
+  selectedStudentId,
+  onSelect,
+}: {
+  rows: ReportAnalysisRow[];
+  selectedStudentId: string;
+  onSelect: (studentId: string) => void;
+}) {
+  return (
+    <section className="next-report-table-section" aria-label="Öğrenci sonuç listesi">
+      <div className="next-report-table-header">
+        <div>
+          <h3>Öğrenci sıralamaları</h3>
+          <p>{rows.length} katılımcı</p>
+        </div>
+      </div>
+      <div className="next-grid-scroll">
+        <table className="uh-data-table next-report-analysis-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Öğrenci</th>
+              <th>Sınıf</th>
+              <th>Katılım</th>
+              <th>Durum</th>
+              <th>Doğru</th>
+              <th>Yanlış</th>
+              <th>Boş</th>
+              <th>Soru</th>
+              <th>Başarı</th>
+              <th>Net</th>
+              <th>Puan</th>
+              <th>Genel sıra</th>
+              <th>Sınıf sıra</th>
+              <th>Yüzdelik</th>
+              <th>Karne</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={row.rowKey} className={row.studentId === selectedStudentId ? "next-report-row--selected" : undefined}>
+                <td>{index + 1}</td>
+                <td>
+                  <span className="next-report-student-name">{row.studentName}</span>
+                  {row.studentNo ? <small>#{row.studentNo}</small> : null}
+                </td>
+                <td>{row.className}</td>
+                <td>{formatParticipantMeta(row)}</td>
+                <td>{formatResultStatus(row)}</td>
+                <td>{formatNumber(row.correct)}</td>
+                <td>{formatNumber(row.wrong)}</td>
+                <td>{formatNumber(row.blank)}</td>
+                <td>{formatNumber(reportQuestionCount(row))}</td>
+                <td>{formatPercentNumber(reportSuccessRate(row))}</td>
+                <td>{formatNetNumber(row.net)}</td>
+                <td>{formatNumber(readRowScore(row))}</td>
+                <td>{formatRank(row.generalRank)}</td>
+                <td>{formatRank(row.classRank)}</td>
+                <td>{formatPercentile(row.percentile)}</td>
+                <td>
+                  <div className="next-row-actions">
+                    <button
+                      aria-label={`${row.studentName} karnesini aç`}
+                      disabled={!row.hasResult}
+                      onClick={() => onSelect(row.studentId)}
+                      title="Karneyi aç"
+                      type="button"
+                    >
+                      <Eye size={17} aria-hidden="true" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={16}>
+                  <EmptyState
+                    title="Öğrenci sonucu yok"
+                    description="Bu snapshot içinde öğrenci sonucu veya katılımcı kaydı bulunamadı."
+                  />
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
 }
 
 function StudentReportCard({
@@ -554,6 +730,29 @@ function StudentReportCard({
       titleLevel="h3"
     />
   );
+}
+
+function formatParticipantMeta(row: ReportAnalysisRow): string {
+  const parts = [row.participantNo, row.bookletType ? `${row.bookletType} kitapçık` : ""].filter(Boolean);
+  return parts.length > 0 ? parts.join(" / ") : "-";
+}
+
+function formatResultStatus(row: ReportAnalysisRow): string {
+  if (row.resultStatus === "READY") return "Sonuç var";
+  if (row.resultStatus === "ABSENT") return "Katılmadı";
+  return "Sonuç yok";
+}
+
+function readRowScore(row: ReportAnalysisRow): number | undefined {
+  return row.estimatedRawScore ?? row.standardScore ?? row.rawScore;
+}
+
+function formatRank(rank: ReportAnalysisRow["generalRank"]): string {
+  return rank ? `${rank.rank}/${rank.outOf}` : "-";
+}
+
+function formatPercentile(value: number | undefined): string {
+  return value === undefined ? "-" : `%${formatNumber(value)}`;
 }
 
 function downloadBase64File(file: ReportSnapshotExportResult): void {

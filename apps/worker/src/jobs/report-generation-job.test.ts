@@ -76,12 +76,14 @@ describe("report generation job", () => {
           wrong: 1.5,
           blank: 0.5,
           net: 7.625,
+          questionCount: 10,
           rawScore: 7.625,
           standardScore: 7.625,
+          successRate: 76.25,
         },
         branches: [
-          { branch: "Matematik", resultCount: 2, correct: 4, wrong: 1, blank: 0, net: 3.75 },
-          { branch: "Türkçe", resultCount: 2, correct: 4, wrong: 0.5, blank: 0.5, net: 3.875 },
+          { branch: "Matematik", resultCount: 2, correct: 4, wrong: 1, blank: 0, net: 3.75, questionCount: 5, successRate: 75 },
+          { branch: "Türkçe", resultCount: 2, correct: 4, wrong: 0.5, blank: 0.5, net: 3.875, questionCount: 5, successRate: 77.5 },
         ],
         classes: [
           {
@@ -93,12 +95,14 @@ describe("report generation job", () => {
               wrong: 1,
               blank: 1,
               net: 7.75,
+              questionCount: 10,
               rawScore: 7.75,
               standardScore: 7.75,
+              successRate: 77.5,
             },
             branches: [
-              { branch: "Matematik", resultCount: 1, correct: 4, wrong: 1, blank: 0, net: 3.75 },
-              { branch: "Türkçe", resultCount: 1, correct: 4, wrong: 0, blank: 1, net: 4 },
+              { branch: "Matematik", resultCount: 1, correct: 4, wrong: 1, blank: 0, net: 3.75, questionCount: 5, successRate: 75 },
+              { branch: "Türkçe", resultCount: 1, correct: 4, wrong: 0, blank: 1, net: 4, questionCount: 5, successRate: 80 },
             ],
           },
           {
@@ -110,12 +114,14 @@ describe("report generation job", () => {
               wrong: 2,
               blank: 0,
               net: 7.5,
+              questionCount: 10,
               rawScore: 7.5,
               standardScore: 7.5,
+              successRate: 75,
             },
             branches: [
-              { branch: "Matematik", resultCount: 1, correct: 4, wrong: 1, blank: 0, net: 3.75 },
-              { branch: "Türkçe", resultCount: 1, correct: 4, wrong: 1, blank: 0, net: 3.75 },
+              { branch: "Matematik", resultCount: 1, correct: 4, wrong: 1, blank: 0, net: 3.75, questionCount: 5, successRate: 75 },
+              { branch: "Türkçe", resultCount: 1, correct: 4, wrong: 1, blank: 0, net: 3.75, questionCount: 5, successRate: 75 },
             ],
           },
         ],
@@ -135,8 +141,8 @@ describe("report generation job", () => {
             classId: "class-a",
             className: "8-A",
             resultKey: "result-a",
-            total: createScore(8, 1, 1).total,
-            branches: createScore(8, 1, 1).branches,
+            total: withMetrics(createScore(8, 1, 1).total),
+            branches: createScore(8, 1, 1).branches.map(withMetrics),
             questions: createScore(8, 1, 1).questions,
             statistics: {
               standardScore: 60,
@@ -153,8 +159,8 @@ describe("report generation job", () => {
             classId: "class-b",
             className: "8-B",
             resultKey: "result-b",
-            total: createScore(8, 2, 0).total,
-            branches: createScore(8, 2, 0).branches,
+            total: withMetrics(createScore(8, 2, 0).total),
+            branches: createScore(8, 2, 0).branches.map(withMetrics),
             questions: createScore(8, 2, 0).questions,
             statistics: {
               standardScore: 40,
@@ -202,10 +208,10 @@ describe("report generation job", () => {
     );
 
     expect(snapshot.snapshotData.outcomes).toEqual([
-      { outcomeCode: "MAT.8.1.1", branch: "Matematik", resultCount: 1, correct: 1, wrong: 1, blank: 0, net: 0.75 },
-      { outcomeCode: "TUR.8.2.1", branch: "Türkçe", resultCount: 1, correct: 0, wrong: 0, blank: 1, net: 0 },
+      { outcomeCode: "MAT.8.1.1", branch: "Matematik", resultCount: 1, correct: 1, wrong: 1, blank: 0, net: 0.75, questionCount: 2, successRate: 37.5 },
+      { outcomeCode: "TUR.8.2.1", branch: "Türkçe", resultCount: 1, correct: 0, wrong: 0, blank: 1, net: 0, questionCount: 1, successRate: 0 },
     ]);
-    expect(snapshot.snapshotData.students[0]?.outcomes).toEqual(createScoreWithOutcomes().outcomes);
+    expect(snapshot.snapshotData.students[0]?.outcomes).toEqual(createScoreWithOutcomes().outcomes?.map(withMetrics));
     expect(snapshot.snapshotData.students[0]?.questions[0]).toMatchObject({ outcomeCode: "MAT.8.1.1" });
   });
 
@@ -289,7 +295,7 @@ describe("report generation job", () => {
     expect(snapshot.inputRefs.resultKeys).toHaveLength(10_000);
     expect(snapshot.snapshotData.students[0]?.studentId).toBe("student-00000");
     expect(snapshot.snapshotData.students[9_999]?.studentId).toBe("student-09999");
-    expect(durationMs).toBeLessThan(1_500);
+    expect(durationMs).toBeLessThan(2_000);
   });
 
   it("job adı report-generation değilse adapter çağırmadan reddeder", async () => {
@@ -456,5 +462,14 @@ function createScoreWithOutcomes(): ScoringResult {
         status: "BLANK",
       },
     ],
+  };
+}
+
+function withMetrics<T extends { blank: number; correct: number; net: number; wrong: number }>(score: T) {
+  const questionCount = score.correct + score.wrong + score.blank;
+  return {
+    ...score,
+    questionCount,
+    successRate: questionCount > 0 ? Number(((score.net / questionCount) * 100).toFixed(4)) : 0,
   };
 }

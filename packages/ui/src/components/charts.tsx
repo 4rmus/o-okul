@@ -11,13 +11,12 @@ import {
   LinearScale,
   LineElement,
   PointElement,
-  RadialLinearScale,
   Tooltip,
   type ChartData,
   type ChartOptions,
   type TooltipItem,
 } from "chart.js";
-import { Bar, Doughnut, Line, Radar } from "react-chartjs-2";
+import { Bar, Doughnut, Line } from "react-chartjs-2";
 import { classNames } from "../class-names.js";
 
 ChartJS.register(
@@ -28,7 +27,6 @@ ChartJS.register(
   LinearScale,
   LineElement,
   PointElement,
-  RadialLinearScale,
   Tooltip,
   Legend,
 );
@@ -62,6 +60,14 @@ function formatNetNumber(value: number | undefined) {
   return value === undefined ? "-" : new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(value);
 }
 
+function formatPercentNumber(value: number | undefined) {
+  return value === undefined ? "-" : `%${new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(value)}`;
+}
+
+function formatQuestionCount(value: number | undefined) {
+  return value === undefined ? "-" : new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 }).format(value);
+}
+
 function shortLabel(label: string, maxLength = 20) {
   return label.length > maxLength ? `${label.slice(0, maxLength - 3)}...` : label;
 }
@@ -74,6 +80,24 @@ function ChartEmptyState({ label }: { label: string }) {
   return <div className="uh-chart-empty-state">{label}</div>;
 }
 
+function scoreQuestionCount(value: { blank?: number; correct?: number; questionCount?: number; wrong?: number }) {
+  if (typeof value.questionCount === "number" && Number.isFinite(value.questionCount)) return value.questionCount;
+  if (typeof value.correct !== "number" || typeof value.wrong !== "number" || typeof value.blank !== "number") return undefined;
+  return Number((value.correct + value.wrong + value.blank).toFixed(4));
+}
+
+function scoreSuccessRate(value: { blank?: number; correct?: number; net?: number; questionCount?: number; successRate?: number; wrong?: number }) {
+  if (typeof value.successRate === "number" && Number.isFinite(value.successRate)) return value.successRate;
+  const questionCount = scoreQuestionCount(value);
+  if (typeof value.net !== "number" || !Number.isFinite(value.net) || !questionCount || questionCount <= 0) return undefined;
+  return Number(((value.net / questionCount) * 100).toFixed(4));
+}
+
+function clampPercent(value: number | undefined) {
+  if (value === undefined || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, value));
+}
+
 function EmptyTableRow({ colSpan, label }: { colSpan: number; label: string }) {
   return (
     <tr>
@@ -83,9 +107,12 @@ function EmptyTableRow({ colSpan, label }: { colSpan: number; label: string }) {
 }
 
 export interface ExamResultDonutInput {
-  correct?: number;
-  wrong?: number;
   blank?: number;
+  correct?: number;
+  net?: number;
+  questionCount?: number;
+  successRate?: number;
+  wrong?: number;
 }
 
 export interface ExamResultDonutProps extends HTMLAttributes<HTMLDivElement> {
@@ -96,7 +123,15 @@ export function ExamResultDonut({ className, result, ...props }: ExamResultDonut
   const correct = result.correct ?? 0;
   const wrong = result.wrong ?? 0;
   const blank = result.blank ?? 0;
-  const total = correct + wrong + blank;
+  const total = scoreQuestionCount({ blank, correct, questionCount: result.questionCount, wrong }) ?? 0;
+  const successRate = scoreSuccessRate({
+    blank,
+    correct,
+    net: result.net ?? correct,
+    questionCount: result.questionCount,
+    successRate: result.successRate,
+    wrong,
+  });
   const data: ChartData<"doughnut", number[], string> = {
     labels: ["Doğru", "Yanlış", "Boş"],
     datasets: [
@@ -132,9 +167,19 @@ export function ExamResultDonut({ className, result, ...props }: ExamResultDonut
 
   return (
     <div {...props} className={classNames("uh-exam-result-donut", className)}>
-      {total > 0 ? <Doughnut data={data} options={options} /> : <ChartEmptyState label="Sonuç verisi yok" />}
+      {total > 0 ? (
+        <div className="uh-chart-canvas-shell uh-chart-canvas-shell--donut">
+          <Doughnut data={data} options={options} />
+          <div className="uh-chart-center-label" aria-hidden="true">
+            <strong>{formatPercentNumber(successRate)}</strong>
+            <span>Başarı</span>
+          </div>
+        </div>
+      ) : (
+        <ChartEmptyState label="Sonuç verisi yok" />
+      )}
       <table className="uh-chart-table">
-        <caption>{total > 0 ? `Toplam ${total} soru` : "Sonuç verisi yok"}</caption>
+        <caption>{total > 0 ? `Toplam ${formatQuestionCount(total)} soru / Başarı ${formatPercentNumber(successRate)}` : "Sonuç verisi yok"}</caption>
         <thead>
           <tr>
             <th scope="col">Durum</th>
@@ -154,6 +199,10 @@ export function ExamResultDonut({ className, result, ...props }: ExamResultDonut
             <th scope="row">Boş</th>
             <td>{blank}</td>
           </tr>
+          <tr>
+            <th scope="row">Başarı</th>
+            <td>{formatPercentNumber(successRate)}</td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -165,7 +214,9 @@ export interface ClassCompareBarInput {
   classId?: string | null;
   className?: string | null;
   net?: number;
+  questionCount?: number;
   standardScore?: number;
+  successRate?: number;
 }
 
 export interface ClassCompareBarProps extends HTMLAttributes<HTMLDivElement> {
@@ -176,11 +227,11 @@ export interface ClassCompareBarProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 export function ClassCompareBar({
-  caption = "Sınıf net karşılaştırması",
+  caption = "Sınıf başarı karşılaştırması",
   className,
   classes,
   emptyLabel = "Sınıf verisi yok",
-  valueLabel = "Net",
+  valueLabel = "Başarı %",
   ...props
 }: ClassCompareBarProps) {
   const rows = classes.map((record) => ({
@@ -188,14 +239,16 @@ export function ClassCompareBar({
     id: record.classId ?? record.className ?? "no-class",
     name: record.className ?? "Sınıfsız",
     net: record.net ?? 0,
+    questionCount: record.questionCount,
     standardScore: record.standardScore ?? 0,
+    successRate: scoreSuccessRate(record),
   }));
   const data: ChartData<"bar", number[], string> = {
     labels: rows.map((record) => shortLabel(record.chartLabel)),
     datasets: [
       {
         label: valueLabel,
-        data: rows.map((record) => record.net),
+        data: rows.map((record) => clampPercent(record.successRate)),
         backgroundColor: chartBlue,
         borderRadius: 6,
         maxBarThickness: 42,
@@ -212,7 +265,13 @@ export function ClassCompareBar({
       tooltip: {
         callbacks: {
           title: (items: TooltipItem<"bar">[]) => rows[items[0]?.dataIndex ?? -1]?.name ?? "",
-          label: (item: TooltipItem<"bar">) => `${valueLabel}: ${typeof item.raw === "number" ? formatNetNumber(item.raw) : tooltipNumber(item.raw)}`,
+          label: (item: TooltipItem<"bar">) => `${valueLabel}: ${typeof item.raw === "number" ? formatPercentNumber(item.raw) : tooltipNumber(item.raw)}`,
+          afterLabel: (item: TooltipItem<"bar">) => {
+            const row = rows[item.dataIndex];
+            return row
+              ? [`Net: ${formatNetNumber(row.net)}`, `Soru: ${formatQuestionCount(row.questionCount)}`, `Standart puan: ${formatChartNumber(row.standardScore)}`]
+              : [];
+          },
         },
       },
     },
@@ -228,12 +287,13 @@ export function ClassCompareBar({
       },
       y: {
         beginAtZero: true,
+        max: 100,
         grid: {
           color: chartGrid,
         },
         ticks: {
           color: chartText,
-          callback: (value) => formatNetNumber(Number(value)),
+          callback: (value) => formatPercentNumber(Number(value)),
         },
         title: {
           display: true,
@@ -251,7 +311,9 @@ export function ClassCompareBar({
         <thead>
           <tr>
             <th scope="col">Başlık</th>
-            <th scope="col">{valueLabel}</th>
+            <th scope="col">Başarı</th>
+            <th scope="col">Net</th>
+            <th scope="col">Soru</th>
           </tr>
         </thead>
         <tbody>
@@ -259,11 +321,13 @@ export function ClassCompareBar({
             rows.map((record) => (
               <tr key={record.id}>
                 <th scope="row">{record.name}</th>
+                <td>{formatPercentNumber(record.successRate)}</td>
                 <td>{formatNetNumber(record.net)}</td>
+                <td>{formatQuestionCount(record.questionCount)}</td>
               </tr>
             ))
           ) : (
-            <EmptyTableRow colSpan={2} label="Kayıt yok" />
+            <EmptyTableRow colSpan={4} label="Kayıt yok" />
           )}
         </tbody>
       </table>
@@ -275,8 +339,13 @@ export interface ProgressLineChartPoint {
   snapshotId?: string;
   generatedAt?: string;
   total: {
+    blank?: number;
+    correct?: number;
     net?: number;
+    questionCount?: number;
     standardScore?: number;
+    successRate?: number;
+    wrong?: number;
   };
 }
 
@@ -297,14 +366,16 @@ export function ProgressLineChart({
     id: point.snapshotId ?? point.generatedAt ?? String(index),
     label: point.generatedAt ? new Date(point.generatedAt).toLocaleDateString("tr-TR") : `Ölçüm ${index + 1}`,
     net: point.total.net ?? 0,
+    questionCount: scoreQuestionCount(point.total),
     standardScore: point.total.standardScore ?? 0,
+    successRate: scoreSuccessRate(point.total),
   }));
   const data: ChartData<"line", number[], string> = {
     labels: rows.map((point) => point.label),
     datasets: [
       {
-        label: "Net",
-        data: rows.map((point) => point.net),
+        label: "Başarı %",
+        data: rows.map((point) => clampPercent(point.successRate)),
         borderColor: chartBlue,
         backgroundColor: chartBlueSoft,
         pointBackgroundColor: chartBlue,
@@ -324,10 +395,12 @@ export function ProgressLineChart({
       },
       tooltip: {
         callbacks: {
-          label: (item: TooltipItem<"line">) => `Net: ${typeof item.raw === "number" ? formatNetNumber(item.raw) : tooltipNumber(item.raw)}`,
+          label: (item: TooltipItem<"line">) => `Başarı: ${typeof item.raw === "number" ? formatPercentNumber(item.raw) : tooltipNumber(item.raw)}`,
           afterLabel: (item: TooltipItem<"line">) => {
             const row = rows[item.dataIndex];
-            return row ? `Standart puan: ${formatChartNumber(row.standardScore)}` : "";
+            return row
+              ? [`Net: ${formatNetNumber(row.net)}`, `Soru: ${formatQuestionCount(row.questionCount)}`, `Standart puan: ${formatChartNumber(row.standardScore)}`]
+              : [];
           },
         },
       },
@@ -344,16 +417,17 @@ export function ProgressLineChart({
       },
       y: {
         beginAtZero: true,
+        max: 100,
         grid: {
           color: chartGrid,
         },
         ticks: {
           color: chartText,
-          callback: (value) => formatNetNumber(Number(value)),
+          callback: (value) => formatPercentNumber(Number(value)),
         },
         title: {
           display: true,
-          text: "Net",
+          text: "Başarı %",
         },
       },
     },
@@ -367,7 +441,9 @@ export function ProgressLineChart({
         <thead>
           <tr>
             <th scope="col">Ölçüm</th>
+            <th scope="col">Başarı</th>
             <th scope="col">Net</th>
+            <th scope="col">Soru</th>
             <th scope="col">Standart puan</th>
           </tr>
         </thead>
@@ -376,12 +452,14 @@ export function ProgressLineChart({
             rows.map((point) => (
               <tr key={point.id}>
                 <th scope="row">{point.label}</th>
+                <td>{formatPercentNumber(point.successRate)}</td>
                 <td>{formatNetNumber(point.net)}</td>
+                <td>{formatQuestionCount(point.questionCount)}</td>
                 <td>{formatChartNumber(point.standardScore)}</td>
               </tr>
             ))
           ) : (
-            <EmptyTableRow colSpan={3} label="Kayıt yok" />
+            <EmptyTableRow colSpan={5} label="Kayıt yok" />
           )}
         </tbody>
       </table>
@@ -392,8 +470,13 @@ export function ProgressLineChart({
 export interface TopicRadarChartInput {
   branch: string;
   chartLabel?: string;
+  blank?: number;
+  correct?: number;
   net?: number;
+  questionCount?: number;
   resultCount?: number;
+  successRate?: number;
+  wrong?: number;
 }
 
 export interface TopicRadarChartProps extends HTMLAttributes<HTMLDivElement> {
@@ -404,7 +487,7 @@ export interface TopicRadarChartProps extends HTMLAttributes<HTMLDivElement> {
 
 export function TopicRadarChart({
   branches,
-  caption = "Branş net analizi",
+  caption = "Branş başarı analizi",
   className,
   emptyLabel = "Branş verisi yok",
   ...props
@@ -413,75 +496,23 @@ export function TopicRadarChart({
     chartLabel: branch.chartLabel ?? branch.branch,
     name: branch.branch,
     net: branch.net ?? 0,
+    questionCount: scoreQuestionCount(branch),
     resultCount: branch.resultCount ?? 0,
+    successRate: scoreSuccessRate(branch),
   }));
-  const useCompactBar = rows.length > 0 && rows.length < 3;
-  const radarData: ChartData<"radar", number[], string> = {
+  const barData: ChartData<"bar", number[], string> = {
     labels: rows.map((branch) => shortLabel(branch.chartLabel, 18)),
     datasets: [
       {
-        label: "Net",
-        data: rows.map((branch) => branch.net),
-        backgroundColor: chartBlueSoft,
-        borderColor: chartBlue,
-        pointBackgroundColor: chartBlue,
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 2,
-      },
-    ],
-  };
-  const compactBarData: ChartData<"bar", number[], string> = {
-    labels: rows.map((branch) => shortLabel(branch.chartLabel, 18)),
-    datasets: [
-      {
-        label: "Net",
-        data: rows.map((branch) => branch.net),
+        label: "Başarı %",
+        data: rows.map((branch) => clampPercent(branch.successRate)),
         backgroundColor: chartBlue,
         borderRadius: 6,
         maxBarThickness: 34,
       },
     ],
   };
-  const radarOptions: ChartOptions<"radar"> = {
-    ...defaultChartOptions,
-    plugins: {
-      ...defaultChartOptions.plugins,
-      legend: {
-        display: false,
-      },
-      tooltip: {
-        callbacks: {
-          title: (items: TooltipItem<"radar">[]) => rows[items[0]?.dataIndex ?? -1]?.name ?? "",
-          label: (item: TooltipItem<"radar">) => `Net: ${typeof item.raw === "number" ? formatNetNumber(item.raw) : tooltipNumber(item.raw)}`,
-          afterLabel: (item: TooltipItem<"radar">) => {
-            const row = rows[item.dataIndex];
-            return row ? `Sonuç: ${formatChartNumber(row.resultCount)}` : "";
-          },
-        },
-      },
-    },
-    scales: {
-      r: {
-        beginAtZero: true,
-        grid: {
-          color: chartGrid,
-        },
-        pointLabels: {
-          color: chartText,
-          font: {
-            size: 12,
-          },
-        },
-        ticks: {
-          backdropColor: "transparent",
-          color: chartText,
-          callback: (value) => formatNetNumber(Number(value)),
-          showLabelBackdrop: false,
-        },
-      },
-    },
-  };
-  const compactBarOptions: ChartOptions<"bar"> = {
+  const barOptions: ChartOptions<"bar"> = {
     ...defaultChartOptions,
     indexAxis: "y",
     plugins: {
@@ -492,10 +523,12 @@ export function TopicRadarChart({
       tooltip: {
         callbacks: {
           title: (items: TooltipItem<"bar">[]) => rows[items[0]?.dataIndex ?? -1]?.name ?? "",
-          label: (item: TooltipItem<"bar">) => `Net: ${typeof item.raw === "number" ? formatNetNumber(item.raw) : tooltipNumber(item.raw)}`,
+          label: (item: TooltipItem<"bar">) => `Başarı: ${typeof item.raw === "number" ? formatPercentNumber(item.raw) : tooltipNumber(item.raw)}`,
           afterLabel: (item: TooltipItem<"bar">) => {
             const row = rows[item.dataIndex];
-            return row ? `Sonuç: ${formatChartNumber(row.resultCount)}` : "";
+            return row
+              ? [`Net: ${formatNetNumber(row.net)}`, `Soru: ${formatQuestionCount(row.questionCount)}`, `Sonuç: ${formatChartNumber(row.resultCount)}`]
+              : [];
           },
         },
       },
@@ -503,12 +536,13 @@ export function TopicRadarChart({
     scales: {
       x: {
         beginAtZero: true,
+        max: 100,
         grid: {
           color: chartGrid,
         },
         ticks: {
           color: chartText,
-          callback: (value) => formatNetNumber(Number(value)),
+          callback: (value) => formatPercentNumber(Number(value)),
         },
       },
       y: {
@@ -524,21 +558,15 @@ export function TopicRadarChart({
 
   return (
     <div {...props} className={classNames("uh-topic-radar-chart", className)}>
-      {rows.length > 0 ? (
-        useCompactBar ? (
-          <Bar data={compactBarData} options={compactBarOptions} />
-        ) : (
-          <Radar data={radarData} options={radarOptions} />
-        )
-      ) : (
-        <ChartEmptyState label={emptyLabel} />
-      )}
+      {rows.length > 0 ? <Bar data={barData} options={barOptions} /> : <ChartEmptyState label={emptyLabel} />}
       <table className="uh-chart-table">
         <caption>{caption}</caption>
         <thead>
           <tr>
             <th scope="col">Branş</th>
+            <th scope="col">Başarı</th>
             <th scope="col">Net</th>
+            <th scope="col">Soru</th>
             <th scope="col">Sonuç</th>
           </tr>
         </thead>
@@ -547,12 +575,14 @@ export function TopicRadarChart({
             rows.map((branch) => (
               <tr key={branch.name}>
                 <th scope="row">{branch.name}</th>
+                <td>{formatPercentNumber(branch.successRate)}</td>
                 <td>{formatNetNumber(branch.net)}</td>
-                <td>{branch.resultCount}</td>
+                <td>{formatQuestionCount(branch.questionCount)}</td>
+                <td>{formatChartNumber(branch.resultCount)}</td>
               </tr>
             ))
           ) : (
-            <EmptyTableRow colSpan={3} label="Kayıt yok" />
+            <EmptyTableRow colSpan={5} label="Kayıt yok" />
           )}
         </tbody>
       </table>
