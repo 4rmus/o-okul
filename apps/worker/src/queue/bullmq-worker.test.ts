@@ -4,6 +4,7 @@ import {
   createBackupRestoreBullWorker,
   createExcelImportBullWorker,
   createExamEvaluationBullWorker,
+  createReportPdfRenderBullWorker,
   createReportGenerationBullWorker,
   createRedisConnectionOptions,
   createSmsBatchBullWorker,
@@ -11,6 +12,7 @@ import {
   type BullBackupRestoreJob,
   type BullExcelImportJob,
   type BullExamEvaluationJob,
+  type BullReportPdfRenderJob,
   type BullReportGenerationJob,
   type BullSmsBatchJob,
   type BullWorkerFactory,
@@ -20,6 +22,7 @@ import type { BackupRestoreJobPayload, BackupRestoreJobResult } from "../jobs/ba
 import type { ExcelImportJobResult } from "../jobs/excel-import-job.js";
 import type { ExamEvaluationJobPayload, ExamEvaluationJobResult } from "../jobs/exam-evaluation-job.js";
 import { examResultSummaryReportType, type ReportGenerationJobPayload, type ReportGenerationJobResult } from "../jobs/report-generation-job.js";
+import type { ReportPdfRenderJobResult } from "../jobs/report-pdf-render-job.js";
 import type { SmsBatchJobPayload, SmsBatchJobResult } from "../jobs/sms-batch-job.js";
 import type { QueueJob, TenantJobPayload } from "./queues.js";
 
@@ -231,6 +234,43 @@ describe("BullMQ report generation worker", () => {
   });
 });
 
+describe("BullMQ report PDF render worker", () => {
+  it("BullMQ job'unu report PDF renderer imzasına çevirir", async () => {
+    const calls: Array<{
+      name: string;
+      processor: (job: BullReportPdfRenderJob) => Promise<ReportPdfRenderJobResult>;
+      options: unknown;
+    }> = [];
+    const createWorker: BullWorkerFactory<BullReportPdfRenderJob, ReportPdfRenderJobResult> = (name, processor, options) => {
+      calls.push({ name, processor, options });
+      return { close: async () => undefined };
+    };
+
+    createReportPdfRenderBullWorker({
+      connection: { host: "127.0.0.1", port: 6379 },
+      createWorker,
+      workerOptions: { prefix: "uzman-hocam-test" },
+      renderer: {
+        async render() {
+          return Buffer.from("%PDF-1.4\nworker\n%%EOF", "utf8");
+        },
+      },
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.name).toBe("report-pdf-render");
+    expect(calls[0]?.options).toEqual({
+      connection: { host: "127.0.0.1", port: 6379 },
+      prefix: "uzman-hocam-test",
+    });
+    await expect(calls[0]?.processor(createReportPdfRenderBullJob())).resolves.toMatchObject({
+      contentType: "application/pdf",
+      fileName: "exam-a-snapshot-a.pdf",
+      pageCount: 1,
+    });
+  });
+});
+
 describe("BullMQ SMS batch worker", () => {
   it("BullMQ job'unu SMS batch processor imzasına çevirir", async () => {
     const calls: Array<{
@@ -422,6 +462,28 @@ function createSmsBatchBullJob(): BullSmsBatchJob {
     id: "message-template-a_sms-hash-a",
     name: "sms-batch",
     data: createSmsBatchPayload(),
+  };
+}
+
+function createReportPdfRenderBullJob(): BullReportPdfRenderJob {
+  return {
+    id: "pdf-job-a",
+    name: "report-pdf-render",
+    data: {
+      institution: { institutionName: "DNA Egitim" },
+      snapshot: {
+        id: "snapshot-a",
+        tenantId: "tenant-a",
+        examId: "exam-a",
+        reportType: examResultSummaryReportType,
+        status: "READY",
+        snapshotData: {
+          resultCount: 1,
+          averages: { net: 17.5, standardScore: 123.4 },
+          students: [{ studentId: "student-a", total: { net: 17.5, standardScore: 123.4 } }],
+        },
+      },
+    },
   };
 }
 

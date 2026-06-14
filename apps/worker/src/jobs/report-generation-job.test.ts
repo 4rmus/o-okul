@@ -9,6 +9,7 @@ import {
   type ReportGenerationJobPayload,
   type ReportGenerationJobResult,
   processReportGenerationJob,
+  resolveReportSummaryOptions,
 } from "./report-generation-job.js";
 import type { ScoringResult } from "./scoring-engine.js";
 
@@ -206,6 +207,68 @@ describe("report generation job", () => {
     ]);
     expect(snapshot.snapshotData.students[0]?.outcomes).toEqual(createScoreWithOutcomes().outcomes);
     expect(snapshot.snapshotData.students[0]?.questions[0]).toMatchObject({ outcomeCode: "MAT.8.1.1" });
+  });
+
+  it("template provider ile PII içermeyen karne yorum taslağı üretir", () => {
+    const snapshot = createExamResultSummarySnapshot(
+      { tenantId: "tenant-a", examId: "exam-a", reportType: examResultSummaryReportType },
+      [
+        {
+          studentId: "student-a",
+          classId: "class-a",
+          className: "8-A",
+          resultKey: "result-a",
+          answerKeyVersion: "answer-key-v1",
+          parserConfigVersion: "parser-v1",
+          engineVersion: "engine-v1",
+          score: createScore(8, 1, 1),
+          computedAt: "2026-05-30T07:00:00.000Z",
+        },
+      ],
+      "2026-05-30T08:00:00.000Z",
+      { provider: "template" },
+    );
+
+    expect(snapshot.snapshotData.commentary).toMatchObject({
+      provider: "template",
+      reviewStatus: "DRAFT",
+      dataPolicy: {
+        piiIncluded: false,
+        fieldsExcluded: expect.arrayContaining(["studentId", "studentName", "phone", "email"]),
+      },
+    });
+    expect(snapshot.snapshotData.students[0]?.commentary).toMatchObject({
+      provider: "template",
+      reviewStatus: "DRAFT",
+      generatedAt: "2026-05-30T08:00:00.000Z",
+    });
+    const commentaryText = JSON.stringify({
+      snapshot: snapshot.snapshotData.commentary,
+      student: snapshot.snapshotData.students[0]?.commentary,
+    });
+    expect(commentaryText).not.toContain("student-a");
+    expect(commentaryText).not.toContain("result-a");
+    expect(commentaryText).toContain("öğretmen");
+  });
+
+  it("external AI provider açıkça uygulanmadan report job içinde çalışmaz", () => {
+    expect(() => resolveReportSummaryOptions({ AI_REPORT_SUMMARY_PROVIDER: "anthropic" })).toThrow(
+      "AI_REPORT_SUMMARY_EXTERNAL_PROVIDER_NOT_ENABLED",
+    );
+    expect(() => createExamResultSummarySnapshot(
+      { tenantId: "tenant-a", examId: "exam-a", reportType: examResultSummaryReportType },
+      [{
+        studentId: "student-a",
+        resultKey: "result-a",
+        answerKeyVersion: "answer-key-v1",
+        parserConfigVersion: "parser-v1",
+        engineVersion: "engine-v1",
+        score: createScore(8, 1, 1),
+        computedAt: "2026-05-30T07:00:00.000Z",
+      }],
+      "2026-05-30T08:00:00.000Z",
+      { provider: "anthropic" },
+    )).toThrow("AI_REPORT_SUMMARY_EXTERNAL_PROVIDER_NOT_ENABLED");
   });
 
   it("10.000 öğrenci için snapshot özetini makul sürede üretir", () => {

@@ -18,9 +18,12 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1056.0",
+    "@sentry/node": "10.57.0",
     "@uzman-hocam/db": "workspace:*",
     "@uzman-hocam/shared-types": "workspace:*",
     "@uzman-hocam/sms-adapter": "workspace:*",
-    "bullmq": "^5.77.6"
+    "bullmq": "^5.77.6",
+    "pino": "10.3.1",
+    "puppeteer-core": "25.1.0"
   }
 }

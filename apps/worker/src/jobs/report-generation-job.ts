@@ -11,6 +11,7 @@ import {
 export const examResultSummaryReportType = "EXAM_RESULT_SUMMARY";
 
 export type ReportType = typeof examResultSummaryReportType;
+export type ReportSummaryProvider = "disabled" | "template" | "anthropic";
 
 export interface ReportGenerationJobPayload extends TenantJobPayload {
   reportType: ReportType;
@@ -33,6 +34,10 @@ export interface ReportGenerationJobInput {
   classId?: string;
   courseId?: string;
   termId?: string;
+}
+
+export interface ReportSummaryOptions {
+  provider?: ReportSummaryProvider;
 }
 
 export interface ExamResultForReport {
@@ -72,6 +77,7 @@ export interface ReportSnapshotCandidate {
     outcomes?: OutcomeAverages[];
     classes: ClassAverages[];
     statistics: CohortStatisticsSummary;
+    commentary?: ReportSnapshotCommentary;
     students: StudentReportSummary[];
   };
   generatedAt: string;
@@ -155,12 +161,37 @@ interface StudentReportSummary {
   outcomes?: OutcomeScore[];
   questions: QuestionScore[];
   statistics: StudentStatisticsSummary;
+  commentary?: ReportStudentCommentary;
+}
+
+interface ReportSnapshotCommentary {
+  provider: "template";
+  generatedAt: string;
+  parentSummary: string;
+  teacherActionDrafts: string[];
+  reviewStatus: "DRAFT";
+  disclaimer: string;
+  dataPolicy: {
+    piiIncluded: false;
+    fieldsUsed: string[];
+    fieldsExcluded: string[];
+  };
+}
+
+interface ReportStudentCommentary {
+  provider: "template";
+  generatedAt: string;
+  parentSummary: string;
+  teacherActionDraft: string;
+  reviewStatus: "DRAFT";
+  disclaimer: string;
 }
 
 export async function processReportGenerationJob(
   job: QueueJob<ReportGenerationJobPayload>,
   adapter: ReportGenerationJobAdapter,
   now: () => string = () => new Date().toISOString(),
+  summaryOptions: ReportSummaryOptions = resolveReportSummaryOptions(),
 ): Promise<ReportGenerationJobResult> {
   if (job.name !== "report-generation") {
     throw new Error("REPORT_GENERATION_JOB_NAME_INVALID");
@@ -189,7 +220,7 @@ export async function processReportGenerationJob(
         termId: job.payload.termId,
       };
       const results = await adapter.loadResults(input);
-      const snapshot = createExamResultSummarySnapshot(input, results, now());
+      const snapshot = createExamResultSummarySnapshot(input, results, now(), summaryOptions);
       return adapter.saveSnapshot(snapshot);
     },
   );
@@ -199,6 +230,7 @@ export function createExamResultSummarySnapshot(
   input: Pick<ReportGenerationJobInput, "tenantId" | "examId" | "reportType" | "campusId" | "classId" | "courseId" | "gradeLevelId" | "termId">,
   results: ExamResultForReport[],
   generatedAt: string,
+  summaryOptions: ReportSummaryOptions = {},
 ): ReportSnapshotCandidate {
   if (input.reportType !== examResultSummaryReportType) {
     throw new Error("REPORT_TYPE_INVALID");
@@ -219,6 +251,25 @@ export function createExamResultSummarySnapshot(
     })),
   );
   const statisticsByStudent = new Map(cohortStatistics.students.map((student) => [student.studentId, student]));
+  const averages = createTotalAverages(results);
+  const branches = createBranchAverages(results);
+  const classes = createClassAverages(results);
+  const statistics = toCohortStatisticsSummary(cohortStatistics);
+  const students = sortedResults.map((result) => createStudentSummary(result, statisticsByStudent));
+  const provider = parseReportSummaryProvider(summaryOptions.provider ?? "disabled");
+  if (provider === "anthropic") {
+    throw new Error("AI_REPORT_SUMMARY_EXTERNAL_PROVIDER_NOT_ENABLED");
+  }
+  const commentary = provider === "template"
+    ? createTemplateSnapshotCommentary({ averages, branches, classes, generatedAt })
+    : undefined;
+  const studentsWithCommentary = provider === "template"
+    ? students.map((student) => ({
+      ...student,
+      commentary: createTemplateStudentCommentary(student, branches, generatedAt),
+    }))
+    : students;
+
   return {
     tenantId: input.tenantId,
     examId: input.examId,
@@ -235,15 +286,31 @@ export function createExamResultSummarySnapshot(
       reportType: input.reportType,
       generatedAt,
       resultCount: results.length,
-      averages: createTotalAverages(results),
-      branches: createBranchAverages(results),
+      averages,
+      branches,
       ...(outcomeAverages.length > 0 ? { outcomes: outcomeAverages } : {}),
-      classes: createClassAverages(results),
-      statistics: toCohortStatisticsSummary(cohortStatistics),
-      students: sortedResults.map((result) => createStudentSummary(result, statisticsByStudent)),
+      classes,
+      statistics,
+      ...(commentary ? { commentary } : {}),
+      students: studentsWithCommentary,
     },
     generatedAt,
   };
+}
+
+export function resolveReportSummaryOptions(env: NodeJS.ProcessEnv = process.env): ReportSummaryOptions {
+  const provider = parseReportSummaryProvider(env.AI_REPORT_SUMMARY_PROVIDER?.trim() || "disabled");
+  if (provider === "anthropic") {
+    throw new Error("AI_REPORT_SUMMARY_EXTERNAL_PROVIDER_NOT_ENABLED");
+  }
+  return { provider };
+}
+
+function parseReportSummaryProvider(value: string): ReportSummaryProvider {
+  if (value !== "disabled" && value !== "template" && value !== "anthropic") {
+    throw new Error("AI_REPORT_SUMMARY_PROVIDER_INVALID");
+  }
+  return value;
 }
 
 function optionalText(value: string | undefined): string | undefined {
@@ -348,6 +415,122 @@ function createStudentSummary(
     questions: result.score.questions ?? [],
     statistics: toStudentStatisticsSummary(statistics),
   };
+}
+
+const templateCommentaryDisclaimer = "Bu yorum otomatik taslaktır; veliye yayınlanmadan önce öğretmen tarafından kontrol edilmelidir.";
+const reportSummaryFieldsUsed = [
+  "total.net",
+  "total.standardScore",
+  "branches.branch",
+  "branches.net",
+  "classes.averages.net",
+  "statistics.rank",
+];
+const reportSummaryFieldsExcluded = [
+  "studentId",
+  "studentName",
+  "guardianName",
+  "tcKimlikNo",
+  "phone",
+  "email",
+  "address",
+];
+
+function createTemplateSnapshotCommentary(input: {
+  averages: ScoreAverages;
+  branches: BranchAverages[];
+  classes: ClassAverages[];
+  generatedAt: string;
+}): ReportSnapshotCommentary {
+  const strongestBranch = pickBranch(input.branches, "strongest");
+  const focusBranch = pickBranch(input.branches, "weakest");
+  const classSpread = describeClassSpread(input.classes);
+  return {
+    provider: "template",
+    generatedAt: input.generatedAt,
+    parentSummary: [
+      `Genel ortalama ${formatScore(input.averages.net)} net.`,
+      strongestBranch ? `En güçlü alan ${strongestBranch.branch} (${formatScore(strongestBranch.net)} net).` : "",
+      focusBranch ? `Gelişim odağı ${focusBranch.branch} (${formatScore(focusBranch.net)} net).` : "",
+      classSpread,
+    ].filter(Boolean).join(" "),
+    teacherActionDrafts: [
+      focusBranch
+        ? `${focusBranch.branch} için yanlış ve boş soru örüntüsü sınıfta kısa tekrar planına alınmalı.`
+        : "Düşük netli kazanımlar sınıf tekrar planına alınmalı.",
+      strongestBranch
+        ? `${strongestBranch.branch} performansı korunurken karışık deneme takibi sürdürülmeli.`
+        : "Haftalık deneme takibi öğretmen onayıyla paylaşılmalı.",
+    ],
+    reviewStatus: "DRAFT",
+    disclaimer: templateCommentaryDisclaimer,
+    dataPolicy: {
+      piiIncluded: false,
+      fieldsUsed: reportSummaryFieldsUsed,
+      fieldsExcluded: reportSummaryFieldsExcluded,
+    },
+  };
+}
+
+function createTemplateStudentCommentary(
+  student: StudentReportSummary,
+  cohortBranches: BranchAverages[],
+  generatedAt: string,
+): ReportStudentCommentary {
+  const strongestBranch = pickBranch(student.branches, "strongest");
+  const focusBranch = pickBranch(student.branches, "weakest");
+  const focusGap = focusBranch ? describeBranchGap(focusBranch, cohortBranches) : "";
+  return {
+    provider: "template",
+    generatedAt,
+    parentSummary: [
+      `Bu sonuçta toplam ${formatScore(student.total.net)} net görünüyor.`,
+      strongestBranch ? `Güçlü alan ${strongestBranch.branch}.` : "",
+      focusBranch ? `Öncelikli çalışma alanı ${focusBranch.branch}${focusGap}.` : "",
+      "Yorum, yalnızca sayısal sınav verilerinden üretilmiş anonim bir taslaktır.",
+    ].filter(Boolean).join(" "),
+    teacherActionDraft: focusBranch
+      ? `${focusBranch.branch} için yanlış/boş soru incelemesi yapılıp kısa tekrar ve hedefli soru seti atanmalı.`
+      : "Öğretmen, sınav kırılımını kontrol ederek hedefli tekrar planı oluşturmalı.",
+    reviewStatus: "DRAFT",
+    disclaimer: templateCommentaryDisclaimer,
+  };
+}
+
+function pickBranch<T extends { branch: string; net: number }>(branches: T[], mode: "strongest" | "weakest"): T | undefined {
+  return [...branches].sort((a, b) => mode === "strongest" ? b.net - a.net : a.net - b.net)[0];
+}
+
+function describeBranchGap(branch: { branch: string; net: number }, cohortBranches: BranchAverages[]): string {
+  const cohort = cohortBranches.find((candidate) => candidate.branch === branch.branch);
+  if (!cohort) return "";
+  const difference = Number((branch.net - cohort.net).toFixed(2));
+  if (Math.abs(difference) < 0.01) {
+    return ", kurum ortalamasına yakın";
+  }
+  return difference > 0
+    ? `, kurum ortalamasının ${formatScore(difference)} net üzerinde`
+    : `, kurum ortalamasının ${formatScore(Math.abs(difference))} net altında`;
+}
+
+function describeClassSpread(classes: ClassAverages[]): string {
+  if (classes.length < 2) {
+    return "";
+  }
+  const sorted = [...classes].sort((a, b) => b.averages.net - a.averages.net);
+  const top = sorted[0];
+  const bottom = sorted.at(-1);
+  if (!top || !bottom || top.classId === bottom.classId) {
+    return "";
+  }
+  return `Sınıf ortalamaları ${formatScore(bottom.averages.net)}-${formatScore(top.averages.net)} net aralığında.`;
+}
+
+function formatScore(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) {
+    return "-";
+  }
+  return Number(value.toFixed(2)).toString();
 }
 
 function toStudentStatisticsSummary(statistics: StudentStatistics): StudentStatisticsSummary {

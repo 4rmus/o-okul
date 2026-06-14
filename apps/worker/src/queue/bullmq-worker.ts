@@ -33,6 +33,13 @@ import {
   type ReportGenerationProcessor,
 } from "../jobs/report-generation-processor.js";
 import {
+  processReportPdfRenderJob,
+  type ReportPdfRenderJobPayload,
+  type ReportPdfRenderJobResult,
+  type ReportPdfRenderQueueJob,
+  type ReportPdfRenderer,
+} from "../jobs/report-pdf-render-job.js";
+import {
   type ReportGenerationJobPayload,
   type ReportGenerationJobResult,
 } from "../jobs/report-generation-job.js";
@@ -44,11 +51,14 @@ import {
   createSmsBatchProcessor,
   type SmsBatchProcessor,
 } from "../jobs/sms-batch-processor.js";
+import { logWorkerJobCompleted, logWorkerJobFailed, workerLogger } from "../observability/logging.js";
+import { captureWorkerJobException } from "../observability/sentry.js";
 import { type QueueJob, type TenantJobPayload } from "./queues.js";
 
 const examEvaluationQueueName = "exam-evaluation";
 const excelImportQueueName = "excel-import";
 const reportGenerationQueueName = "report-generation";
+const reportPdfRenderQueueName = "report-pdf-render";
 const smsBatchQueueName = "sms-batch";
 const announcementDeliveryQueueName = "announcement-delivery";
 const backupRestoreQueueName = "backup-restore";
@@ -69,6 +79,12 @@ export interface BullReportGenerationJob {
   id?: string | number;
   name: string;
   data: ReportGenerationJobPayload;
+}
+
+export interface BullReportPdfRenderJob {
+  id?: string | number;
+  name: string;
+  data: ReportPdfRenderJobPayload;
 }
 
 export interface BullSmsBatchJob {
@@ -123,6 +139,13 @@ export interface ReportGenerationBullWorkerOptions {
   createWorker?: BullWorkerFactory<BullReportGenerationJob, ReportGenerationJobResult>;
 }
 
+export interface ReportPdfRenderBullWorkerOptions {
+  connection: ConnectionOptions;
+  renderer?: ReportPdfRenderer;
+  workerOptions?: Omit<WorkerOptions, "connection">;
+  createWorker?: BullWorkerFactory<BullReportPdfRenderJob, ReportPdfRenderJobResult>;
+}
+
 export interface SmsBatchBullWorkerOptions {
   connection: ConnectionOptions;
   processor?: SmsBatchProcessor;
@@ -152,7 +175,7 @@ export function createExamEvaluationBullWorker(
 
   return createWorker(
     examEvaluationQueueName,
-    async (job) => processor(toExamEvaluationQueueJob(job)),
+    async (job) => runObservedWorkerJob(job, () => processor(toExamEvaluationQueueJob(job))),
     {
       ...options.workerOptions,
       connection: options.connection,
@@ -168,7 +191,7 @@ export function createExcelImportBullWorker(
 
   return createWorker(
     excelImportQueueName,
-    async (job) => processor(toExcelImportQueueJob(job)),
+    async (job) => runObservedWorkerJob(job, () => processor(toExcelImportQueueJob(job))),
     {
       ...options.workerOptions,
       connection: options.connection,
@@ -184,7 +207,22 @@ export function createReportGenerationBullWorker(
 
   return createWorker(
     reportGenerationQueueName,
-    async (job) => processor(toReportGenerationQueueJob(job)),
+    async (job) => runObservedWorkerJob(job, () => processor(toReportGenerationQueueJob(job))),
+    {
+      ...options.workerOptions,
+      connection: options.connection,
+    },
+  );
+}
+
+export function createReportPdfRenderBullWorker(
+  options: ReportPdfRenderBullWorkerOptions,
+): BullWorkerInstance {
+  const createWorker = options.createWorker ?? createDefaultReportPdfRenderWorker;
+
+  return createWorker(
+    reportPdfRenderQueueName,
+    async (job) => runObservedReportPdfRenderJob(job, () => processReportPdfRenderJob(job, options.renderer)),
     {
       ...options.workerOptions,
       connection: options.connection,
@@ -200,7 +238,7 @@ export function createSmsBatchBullWorker(
 
   return createWorker(
     smsBatchQueueName,
-    async (job) => processor(toSmsBatchQueueJob(job)),
+    async (job) => runObservedWorkerJob(job, () => processor(toSmsBatchQueueJob(job))),
     {
       ...options.workerOptions,
       connection: options.connection,
@@ -216,7 +254,7 @@ export function createAnnouncementDeliveryBullWorker(
 
   return createWorker(
     announcementDeliveryQueueName,
-    async (job) => processor(toAnnouncementDeliveryQueueJob(job)),
+    async (job) => runObservedWorkerJob(job, () => processor(toAnnouncementDeliveryQueueJob(job))),
     {
       ...options.workerOptions,
       connection: options.connection,
@@ -232,7 +270,7 @@ export function createBackupRestoreBullWorker(
 
   return createWorker(
     backupRestoreQueueName,
-    async (job) => processor(toBackupRestoreQueueJob(job)),
+    async (job) => runObservedWorkerJob(job, () => processor(toBackupRestoreQueueJob(job))),
     {
       ...options.workerOptions,
       connection: options.connection,
@@ -361,6 +399,77 @@ function toBackupRestoreQueueJob(
   };
 }
 
+async function runObservedWorkerJob<TResult>(
+  job: { id?: string | number; name: string; data: Partial<TenantJobPayload> },
+  run: () => Promise<TResult>,
+): Promise<TResult> {
+  const startedAt = Date.now();
+  try {
+    const result = await run();
+    logWorkerJobCompleted(workerLogger, {
+      queueName: job.name,
+      jobId: job.id === undefined || job.id === null ? undefined : String(job.id),
+      tenantId: job.data.tenantId,
+      userId: job.data.userId,
+      entityId: job.data.entityId,
+      contentHash: job.data.contentHash,
+      durationMs: Date.now() - startedAt,
+    });
+    return result;
+  } catch (error) {
+    logWorkerJobFailed(workerLogger, {
+      queueName: job.name,
+      jobId: job.id === undefined || job.id === null ? undefined : String(job.id),
+      tenantId: job.data.tenantId,
+      userId: job.data.userId,
+      entityId: job.data.entityId,
+      contentHash: job.data.contentHash,
+      durationMs: Date.now() - startedAt,
+    }, error);
+    captureWorkerJobException(error, {
+      queueName: job.name,
+      jobId: job.id === undefined || job.id === null ? undefined : String(job.id),
+      tenantId: job.data.tenantId,
+      entityId: job.data.entityId,
+      contentHash: job.data.contentHash,
+    });
+    throw error;
+  }
+}
+
+async function runObservedReportPdfRenderJob<TResult>(
+  job: ReportPdfRenderQueueJob,
+  run: () => Promise<TResult>,
+): Promise<TResult> {
+  const startedAt = Date.now();
+  try {
+    const result = await run();
+    logWorkerJobCompleted(workerLogger, {
+      queueName: job.name,
+      jobId: job.id === undefined || job.id === null ? undefined : String(job.id),
+      tenantId: job.data.snapshot?.tenantId,
+      entityId: job.data.snapshot?.id,
+      durationMs: Date.now() - startedAt,
+    });
+    return result;
+  } catch (error) {
+    logWorkerJobFailed(workerLogger, {
+      queueName: job.name,
+      jobId: job.id === undefined || job.id === null ? undefined : String(job.id),
+      tenantId: job.data.snapshot?.tenantId,
+      entityId: job.data.snapshot?.id,
+      durationMs: Date.now() - startedAt,
+    }, error);
+    captureWorkerJobException(error, {
+      queueName: job.name,
+      jobId: job.id === undefined || job.id === null ? undefined : String(job.id),
+      tenantId: job.data.snapshot?.tenantId,
+      entityId: job.data.snapshot?.id,
+    });
+    throw error;
+  }
+}
+
 function parseRedisDb(pathname: string): number | undefined {
   if (!pathname || pathname === "/") {
     return undefined;
@@ -403,6 +512,18 @@ function createDefaultReportGenerationWorker(
   options: WorkerOptions,
 ): BullWorkerInstance {
   return new Worker<ReportGenerationJobPayload, ReportGenerationJobResult>(
+    name,
+    processor,
+    options,
+  );
+}
+
+function createDefaultReportPdfRenderWorker(
+  name: string,
+  processor: (job: BullReportPdfRenderJob) => Promise<ReportPdfRenderJobResult>,
+  options: WorkerOptions,
+): BullWorkerInstance {
+  return new Worker<ReportPdfRenderJobPayload, ReportPdfRenderJobResult>(
     name,
     processor,
     options,
