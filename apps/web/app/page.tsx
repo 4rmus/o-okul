@@ -1,36 +1,179 @@
+import type { CSSProperties } from "react";
 import Link from "next/link";
-import { ArrowRight, BarChart3, CheckCircle2, FileText, LockKeyhole, Mail, ScanLine, ShieldCheck, UsersRound } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  Building2,
+  CalendarDays,
+  CheckCircle2,
+  ClipboardCheck,
+  FileText,
+  GraduationCap,
+  LayoutDashboard,
+  Megaphone,
+  MessageSquareText,
+  NotebookTabs,
+  ScanLine,
+  School,
+  ShieldCheck,
+  UserRoundCog,
+  Users,
+} from "lucide-react";
 
-const workflow = [
+const demoHref =
+  "mailto:demo@uzmanhocam.local?subject=Demo%20iste%20-%20Uzman%20Hocam&body=Merhaba,%20Uzman%20Hocam%20i%C3%A7in%20demo%20talep%20ediyoruz.";
+
+const heroMetrics = [
+  { value: "4 rol", label: "Öğrenci, veli, öğretmen ve kurum görünümü" },
+  { value: "8 modül", label: "Takip, iletişim, sınav ve raporlama altyapısı" },
+  { value: "Tek akış", label: "Dershane ve özel okul süreçleri için ortak veri" },
+];
+
+const problemSolutions = [
+  {
+    problem: "Öğrenci verisi farklı dosya ve panellerde dağılır.",
+    solution: "Öğrenci bilgi sistemi, ders programı, devamsızlık, sınav ve ödev takibi aynı kurum kaydında birleşir.",
+  },
+  {
+    problem: "Veliler bilgiye geç ulaşır, kurum ekibi tekrar tekrar açıklama yapmak zorunda kalır.",
+    solution: "Duyuru, sınav sonucu, devamsızlık ve öğretmen notları zamanında paylaşılır; iletişim kayıt altında ilerler.",
+  },
+  {
+    problem: "Yönetici kararları çoğu zaman manuel raporlarla ve gecikmeli alınır.",
+    solution: "Kurum paneli performans, şube, sınıf ve öğrenci gelişimini ölçülebilir raporlara dönüştürür.",
+  },
+];
+
+const audienceBenefits = [
+  {
+    icon: GraduationCap,
+    title: "Öğrenciler için",
+    description: "Ders programı, ödev, sınav, başarı takibi ve duyurular tek ekranda takip edilir.",
+    items: ["Güncel ders programı", "Ödev ve materyal takibi", "Sınav sonucu ve gelişim görünümü"],
+  },
+  {
+    icon: Users,
+    title: "Veliler için",
+    description: "Anlık bilgilendirme, devamsızlık, sınav sonuçları ve öğretmen iletişimi düzenli hale gelir.",
+    items: ["Devamsızlık ve duyuru bildirimleri", "Sınav sonuçlarına hızlı erişim", "Öğretmen iletişim kayıtları"],
+  },
+  {
+    icon: UserRoundCog,
+    title: "Öğretmenler için",
+    description: "Sınıf yönetimi, ödev/sınav takibi, raporlama ve veli iletişimi daha az manuel işle yürür.",
+    items: ["Sınıf ve öğrenci listeleri", "Ödev, sınav ve not takibi", "Raporlama ve geri bildirim akışı"],
+  },
+  {
+    icon: Building2,
+    title: "Kurumlar için",
+    description: "Operasyon yönetimi, performans analizi, veli memnuniyeti ve dijitalleşme aynı platformda toplanır.",
+    items: ["Şube ve sınıf operasyonu", "Performans analizi", "Kurumsal dijital dönüşüm"],
+  },
+];
+
+const coreFeatures = [
+  {
+    icon: School,
+    title: "Öğrenci bilgi sistemi",
+    description: "Kayıt, sınıf, seviye, sorumlu öğretmen ve veli bilgileri kurum genelinde tutarlı yönetilir.",
+  },
   {
     icon: ScanLine,
-    title: "Optik import",
-    description: "TXT/DAT dosyaları cevap anahtarı, kitapçık hizalama ve karantina akışıyla işlenir.",
+    title: "Sınav ve başarı takibi",
+    description: "Optik okuma, cevap anahtarı ve sınav sonuçları öğrenci gelişimine bağlanır.",
+  },
+  {
+    icon: CalendarDays,
+    title: "Ödev ve ders programı yönetimi",
+    description: "Ders akışı, ödevler, materyaller ve takvim bilgisi öğrenci ve veliye düzenli aktarılır.",
+  },
+  {
+    icon: MessageSquareText,
+    title: "Veli bilgilendirme",
+    description: "Duyuru, devamsızlık, sınav sonucu ve öğretmen notları kontrollü bildirimlerle paylaşılır.",
+  },
+  {
+    icon: ClipboardCheck,
+    title: "Öğretmen paneli",
+    description: "Öğretmenler sınıflarını, ödevlerini, sınav kayıtlarını ve öğrenci geri bildirimlerini izler.",
+  },
+  {
+    icon: LayoutDashboard,
+    title: "Kurum yönetim paneli",
+    description: "Yönetim ekibi kampüs, sınıf, öğretmen, öğrenci ve süreç performansını tek yerden takip eder.",
   },
   {
     icon: BarChart3,
-    title: "Kazanım analizi",
-    description: "Sınıf, öğrenci ve branş kırılımları aynı rapor snapshot'ında izlenir.",
+    title: "Raporlama ve analiz",
+    description: "Kazanım analizi, sınıf karşılaştırmaları ve gelişim raporları karar süreçlerini hızlandırır.",
   },
   {
-    icon: FileText,
-    title: "Karne ve portal",
-    description: "Kurum, öğretmen, öğrenci ve veli aynı güvenilir rapor verisini görür.",
+    icon: Megaphone,
+    title: "Duyuru ve bildirim sistemi",
+    description: "Kurum duyuruları hedef kitleye göre planlanır, teslim ve görüntülenme durumu izlenir.",
   },
 ];
 
-const trustSignals = [
-  "Çok kiracılı RLS izolasyonu",
-  "TR datacenter kanıt zinciri",
-  "KVKK purge ve audit izleri",
-  "S3 dosya saklama ve AV tarama",
+const workflow = [
+  {
+    title: "Kurumu yapılandırın",
+    description: "Kampüs, sınıf, seviye, öğretmen, öğrenci ve veli kayıtlarını kurumsal yapınıza göre tanımlayın.",
+  },
+  {
+    title: "Eğitim süreçlerini işletin",
+    description: "Ders programı, ödev, sınav, devamsızlık ve duyuruları günlük akışın parçası haline getirin.",
+  },
+  {
+    title: "Karne ve portal paylaşın",
+    description: "Karne ve portal görünümleriyle öğrenci, veli ve öğretmen aynı güncel veriye ulaşır.",
+  },
+  {
+    title: "Raporlayın ve iyileştirin",
+    description: "Yönetim panelinde gelişim, performans ve iletişim kalitesini düzenli takip edin.",
+  },
 ];
 
-const outcomes = [
-  { label: "UAT senaryosu", value: "21" },
-  { label: "OpenAPI path", value: "175" },
-  { label: "API test", value: "551" },
-  { label: "Worker test", value: "152" },
+const trustValues = [
+  "Türkiye'deki dershane ve özel okul süreçlerine uygun yapı",
+  "Kolay kullanım ve kısa adaptasyon süreci",
+  "Zaman tasarrufu sağlayan merkezi operasyon",
+  "Daha güçlü veli iletişimi",
+  "Ölçülebilir öğrenci gelişimi",
+  "Kurumsal dijital dönüşüm için sürdürülebilir temel",
+];
+
+const reportHighlights = [
+  { label: "Sınav görünümü", value: "Sınıf, öğrenci ve kazanım bazında sonuç takibi" },
+  { label: "İletişim görünümü", value: "Duyuru, bildirim ve veli bilgilendirme kayıtları" },
+  { label: "Operasyon görünümü", value: "Devamsızlık, ödev, ders programı ve kurum performansı" },
+];
+
+const faqs = [
+  {
+    question: "Uzman Hocam hangi kurumlar için uygundur?",
+    answer:
+      "Dershaneler, özel okullar, kurs merkezleri ve çok şubeli eğitim kurumları için tasarlanmıştır. Kurum, öğretmen, öğrenci ve veli akışlarını birlikte yönetir.",
+  },
+  {
+    question: "Demo sürecinde ne gösterilir?",
+    answer:
+      "Demo görüşmesinde kurum paneli, öğrenci takip akışı, sınav ve başarı raporları, veli bilgilendirme, öğretmen paneli ve örnek kurum yönetimi senaryoları gösterilir.",
+  },
+  {
+    question: "Veliler ve öğretmenler ayrı panel kullanabilir mi?",
+    answer:
+      "Evet. Öğrenci, veli, öğretmen ve kurum yöneticileri kendi rollerine uygun görünümle çalışır; yetkiler kurum ihtiyaçlarına göre ayrıştırılır.",
+  },
+  {
+    question: "Mevcut kurum süreçlerine uyum sağlanabilir mi?",
+    answer:
+      "Sınıf, seviye, kampüs, ders programı, sınav ve duyuru yapıları Türkiye eğitim kurumlarının günlük işleyişine göre modellenmiştir.",
+  },
+  {
+    question: "Güvenlik ve operasyonel hazırlık nasıl ele alınıyor?",
+    answer:
+      "Rol bazlı erişim, audit kayıtları ve Production readiness kapıları ile kurum verisinin güvenli ve izlenebilir yürütülmesi hedeflenir.",
+  },
 ];
 
 export default function HomePage() {
@@ -53,107 +196,274 @@ export default function HomePage() {
         </picture>
         <div className="next-marketing-hero__overlay" aria-hidden="true" />
         <nav className="next-marketing-nav" aria-label="Landing navigasyonu">
-          <div className="next-brand">
+          <Link className="next-brand" href="/" aria-label="Uzman Hocam ana sayfa">
             <span className="next-brand-mark">UH</span>
             <span>Uzman Hocam</span>
+          </Link>
+          <div className="next-marketing-nav__links">
+            <a href="#faydalar">Faydalar</a>
+            <a href="#ozellikler">Özellikler</a>
+            <a href="#sss">SSS</a>
           </div>
           <Link className="uh-button uh-button--secondary uh-button--md" href="/login">
             Giriş
           </Link>
         </nav>
+
         <div className="next-marketing-hero__content">
-          <p className="next-marketing-kicker">Dershane yönetimi ve optik analiz platformu</p>
+          <p className="next-marketing-kicker">Dershane, özel okul ve kurs merkezleri için</p>
           <h1 id="home-title">Uzman Hocam</h1>
-          <p>
-            Optik okuma, sınav analizi, karne, veli görünümü, ödeme takibi ve kurum operasyonunu tek
-            üretim disiplininde birleştirir.
+          <p className="next-marketing-hero__headline">
+            Eğitim kurumları için öğrenci takip ve kurum yönetimini tek platformda birleştirir.
+          </p>
+          <p className="next-marketing-hero__copy">
+            Öğrenci takibi, veli iletişimi, öğretmen verimliliği, sınav başarısı ve kurum operasyonunu
+            aynı güvenilir veri akışında yönetin.
           </p>
           <div className="next-marketing-actions">
-            <Link className="uh-button uh-button--primary uh-button--lg" href="/login">
-              <span>Panele giriş</span>
+            <a className="uh-button uh-button--primary uh-button--lg" href={demoHref} title="Demo iste">
+              <span>Demo Talep Et</span>
               <ArrowRight size={18} aria-hidden="true" />
-            </Link>
-            <a className="uh-button uh-button--secondary uh-button--lg" href="mailto:demo@uzmanhocam.local?subject=Uzman%20Hocam%20demo">
-              <Mail size={18} aria-hidden="true" />
-              <span>Demo iste</span>
             </a>
+            <a className="uh-button uh-button--secondary uh-button--lg" href="#ozellikler">
+              <span>Özellikleri İncele</span>
+            </a>
+          </div>
+          <div className="next-marketing-hero__proof" aria-label="Platform kapsamı">
+            {heroMetrics.map((item) => (
+              <div key={item.label}>
+                <strong>{item.value}</strong>
+                <span>{item.label}</span>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      <section className="next-marketing-band" aria-label="Üretim kanıtları">
-        {outcomes.map((item) => (
-          <div key={item.label}>
-            <strong>{item.value}</strong>
-            <span>{item.label}</span>
+      <section className="next-marketing-band" aria-label="Değer önerisi">
+        {trustValues.slice(0, 3).map((item) => (
+          <div key={item}>
+            <CheckCircle2 size={18} aria-hidden="true" />
+            <span>{item}</span>
           </div>
         ))}
       </section>
 
-      <section className="next-marketing-section" aria-labelledby="workflow-title">
+      <section className="next-marketing-section next-marketing-section--problem" aria-labelledby="problem-title">
         <div className="next-marketing-section__header">
-          <span>Optik döngü</span>
-          <h2 id="workflow-title">Sınav dosyasından veliye anlaşılır karneye kadar.</h2>
+          <span>Kurumlar için problem ve çözüm</span>
+          <h2 id="problem-title">Dağınık eğitim operasyonunu ölçülebilir ve takip edilebilir hale getirin.</h2>
+          <p>
+            Uzman Hocam, kurum yöneticilerinin günlük operasyonu görmesini, ekiplerin aynı veriden çalışmasını
+            ve velilerin zamanında bilgilendirilmesini sağlar.
+          </p>
         </div>
-        <div className="next-marketing-workflow">
-          {workflow.map((item) => {
-            const Icon = item.icon;
+        <div className="next-marketing-problem-grid">
+          {problemSolutions.map((item) => (
+            <article className="next-marketing-problem" key={item.problem}>
+              <div>
+                <span>Bugün</span>
+                <p>{item.problem}</p>
+              </div>
+              <ArrowRight size={20} aria-hidden="true" />
+              <div>
+                <span>Uzman Hocam ile</span>
+                <p>{item.solution}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section id="faydalar" className="next-marketing-section" aria-labelledby="audience-title">
+        <div className="next-marketing-section__header">
+          <span>Kullanıcı tiplerine göre avantajlar</span>
+          <h2 id="audience-title">Her rol için net fayda, kurum için tek merkez.</h2>
+          <p>
+            Öğrenci, veli ve öğretmen günlük ihtiyaçlarını sade panellerden takip ederken kurum yönetimi
+            bütün resmi aynı ekranda görür.
+          </p>
+        </div>
+        <div className="next-marketing-audience-grid">
+          {audienceBenefits.map((benefit) => {
+            const Icon = benefit.icon;
             return (
-              <article className="next-marketing-card" key={item.title}>
-                <Icon size={24} aria-hidden="true" />
-                <h3>{item.title}</h3>
-                <p>{item.description}</p>
+              <article className="next-marketing-card" key={benefit.title}>
+                <span className="next-marketing-icon">
+                  <Icon size={22} aria-hidden="true" />
+                </span>
+                <h3>{benefit.title}</h3>
+                <p>{benefit.description}</p>
+                <ul>
+                  {benefit.items.map((item) => (
+                    <li key={item}>
+                      <CheckCircle2 size={16} aria-hidden="true" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
               </article>
             );
           })}
         </div>
       </section>
 
-      <section className="next-marketing-section next-marketing-section--split" aria-labelledby="ops-title">
-        <div className="next-marketing-section__header">
-          <span>Operasyon ve güven</span>
-          <h2 id="ops-title">Pilot kuruma çıkmadan önce kanıt isteyen kurumlar için.</h2>
-        </div>
-        <div className="next-marketing-proof">
-          <div>
-            <ShieldCheck size={28} aria-hidden="true" />
-            <h3>Production readiness kapıları</h3>
+      <section id="ozellikler" className="next-marketing-section next-marketing-section--surface" aria-labelledby="features-title">
+        <div className="next-marketing-section__inner">
+          <div className="next-marketing-section__header">
+            <span>Ana özellikler</span>
+            <h2 id="features-title">Kurum yönetimi, eğitim takibi ve iletişim için eksiksiz modüller.</h2>
             <p>
-              CI, RLS, OpenAPI, Sentry, pino log, rate limit, idempotency, backup ve UAT kanıtları aynı
-              release zincirinde izlenir.
+              Modüller birbirinden kopuk değil; öğrenci kaydından sınav sonucuna, veli bilgilendirmeden kurum
+              raporuna kadar aynı veri modeliyle çalışır.
             </p>
           </div>
-          <ul>
-            {trustSignals.map((signal) => (
-              <li key={signal}>
-                <CheckCircle2 size={18} aria-hidden="true" />
-                <span>{signal}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="next-marketing-feature-grid">
+            {coreFeatures.map((feature) => {
+              const Icon = feature.icon;
+              return (
+                <article className="next-marketing-card next-marketing-card--compact" key={feature.title}>
+                  <span className="next-marketing-icon next-marketing-icon--muted">
+                    <Icon size={20} aria-hidden="true" />
+                  </span>
+                  <h3>{feature.title}</h3>
+                  <p>{feature.description}</p>
+                </article>
+              );
+            })}
+          </div>
         </div>
       </section>
 
-      <section className="next-marketing-section next-marketing-section--contact" aria-labelledby="contact-title">
-        <div>
-          <span>V1 teklif</span>
-          <h2 id="contact-title">Tek veya çok şubeli dershaneler için kapalı beta.</h2>
+      <section className="next-marketing-section" aria-labelledby="workflow-title">
+        <div className="next-marketing-section__header">
+          <span>Nasıl çalışır?</span>
+          <h2 id="workflow-title">Kurulumdan rapora kadar sade bir işletim akışı.</h2>
+        </div>
+        <div className="next-marketing-workflow">
+          {workflow.map((step, index) => (
+            <article className="next-marketing-step" key={step.title}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <h3>{step.title}</h3>
+              <p>{step.description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="next-marketing-section next-marketing-section--reporting" aria-labelledby="report-title">
+        <div className="next-marketing-section__header">
+          <span>Raporlama ve takip</span>
+          <h2 id="report-title">Karar vericiler için güncel, anlaşılır ve aksiyona dönük raporlar.</h2>
           <p>
-            İlk kurulum, rol bazlı eğitim, optik rapor döngüsü, KVKK/audit kontrolleri ve üretim kanıt
-            checklist'i birlikte yürütülür.
+            Kurum yöneticileri sınav başarısını, devamsızlığı, ödev takibini, duyuru erişimini ve sınıf
+            performansını düzenli göstergelerle takip eder.
+          </p>
+        </div>
+        <div className="next-marketing-report">
+          <div className="next-marketing-report__visual" aria-hidden="true">
+            <div className="next-marketing-report__topline">
+              <span>Genel başarı</span>
+              <strong>%82</strong>
+            </div>
+            <div className="next-marketing-report__bars">
+              <span style={{ "--bar-size": "78%" } as CSSProperties} />
+              <span style={{ "--bar-size": "64%" } as CSSProperties} />
+              <span style={{ "--bar-size": "88%" } as CSSProperties} />
+              <span style={{ "--bar-size": "56%" } as CSSProperties} />
+              <span style={{ "--bar-size": "72%" } as CSSProperties} />
+            </div>
+            <div className="next-marketing-report__legend">
+              <span>Matematik</span>
+              <span>Fen</span>
+              <span>Türkçe</span>
+            </div>
+          </div>
+          <div className="next-marketing-report__list">
+            {reportHighlights.map((item) => (
+              <div key={item.label}>
+                <FileText size={18} aria-hidden="true" />
+                <div>
+                  <strong>{item.label}</strong>
+                  <span>{item.value}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="next-marketing-section next-marketing-section--trust" aria-labelledby="trust-title">
+        <div className="next-marketing-section__header">
+          <span>Güven ve değer önerisi</span>
+          <h2 id="trust-title">Türkiye eğitim kurumlarının gerçek işleyişine uygun tasarlandı.</h2>
+        </div>
+        <div className="next-marketing-trust-grid">
+          {trustValues.map((value) => (
+            <div key={value}>
+              <ShieldCheck size={18} aria-hidden="true" />
+              <span>{value}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section id="demo" className="next-marketing-section next-marketing-section--contact" aria-labelledby="contact-title">
+        <div>
+          <span>Demo çağrısı</span>
+          <h2 id="contact-title">Kurumunuzun takip, iletişim ve raporlama sürecini birlikte değerlendirelim.</h2>
+          <p>
+            Demo görüşmesinde mevcut işleyişinizi dinleyip Uzman Hocam'ın öğrenci, veli, öğretmen ve kurum
+            yönetimi akışlarını kurum senaryonuz üzerinden gösteririz.
+          </p>
+          <p className="next-marketing-contact-note">
+            Kapalı beta başvurusu ve demo talepleri aynı kurum keşif sürecinde değerlendirilir.
           </p>
         </div>
         <div className="next-marketing-contact-actions">
-          <a className="uh-button uh-button--primary uh-button--lg" href="mailto:demo@uzmanhocam.local?subject=Kapali%20beta%20basvurusu">
-            <UsersRound size={18} aria-hidden="true" />
-            <span>Kapalı beta başvurusu</span>
+          <a className="uh-button uh-button--primary uh-button--lg" href={demoHref} title="Demo iste">
+            <span>Demo Talep Et</span>
+            <ArrowRight size={18} aria-hidden="true" />
           </a>
           <Link className="uh-button uh-button--secondary uh-button--lg" href="/login">
-            <LockKeyhole size={18} aria-hidden="true" />
-            <span>Müşteri girişi</span>
+            <span>Müşteri Girişi</span>
           </Link>
         </div>
       </section>
+
+      <section id="sss" className="next-marketing-section next-marketing-section--faq" aria-labelledby="faq-title">
+        <div className="next-marketing-section__header">
+          <span>SSS</span>
+          <h2 id="faq-title">Demo öncesi sık sorulan sorular.</h2>
+        </div>
+        <div className="next-marketing-faq-list">
+          {faqs.map((faq) => (
+            <details key={faq.question}>
+              <summary>
+                <NotebookTabs size={18} aria-hidden="true" />
+                <span>{faq.question}</span>
+              </summary>
+              <p>{faq.answer}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      <footer className="next-marketing-footer">
+        <div>
+          <Link className="next-brand" href="/" aria-label="Uzman Hocam ana sayfa">
+            <span className="next-brand-mark">UH</span>
+            <span>Uzman Hocam</span>
+          </Link>
+          <p>Dershaneler, özel okullar ve kurs merkezleri için eğitim kurumu yönetim platformu.</p>
+        </div>
+        <nav aria-label="Footer navigasyonu">
+          <a href="#faydalar">Faydalar</a>
+          <a href="#ozellikler">Özellikler</a>
+          <a href="#demo">Demo</a>
+          <Link href="/login">Giriş</Link>
+        </nav>
+      </footer>
     </main>
   );
 }
