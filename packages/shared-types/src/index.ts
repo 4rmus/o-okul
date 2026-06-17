@@ -1,5 +1,18 @@
 export type TenantId = string;
 export { FormatAnalyzerService, getParserConfigPresetSuggestion } from "./format-analyzer.js";
+export {
+  capabilitiesForRoles,
+  hasCapabilityForRoles,
+  isPortalSubjectRoleName,
+  isTenantAssignableRoleName,
+  isTenantRoleName,
+  portalSubjectRoles,
+  roleCapabilities,
+  tenantAssignableRoles,
+  tenantRoleLabel,
+  tenantRoleLabels,
+  tenantRoles,
+} from "./role-capabilities.js";
 export type {
   AcademicTermRecord,
   AcademicYearRecord,
@@ -99,3 +112,4 @@ export type {
   ParserDelimiter,
   ParserEncoding,
 } from "./format-analyzer.js";
+export type { PortalSubjectRoleName, RoleCapability, TenantAssignableRoleName, TenantRoleName } from "./role-capabilities.js";

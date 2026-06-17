@@ -1,8 +1,8 @@
 import { z } from "zod";
+import { tenantAssignableRoles } from "@uzman-hocam/shared-types";
 import { requiredTrimmedString } from "../http/zod-validation.js";
-import { roles } from "../rbac/roles.js";
 
-const tenantUserRoleSchema = z.enum(roles);
+const tenantUserRoleSchema = z.enum(tenantAssignableRoles);
 
 export const tenantUserCreateBodySchema = z.object({
   email: requiredTrimmedString.refine((value) => value.includes("@"), { message: "EMAIL_REQUIRED" }),

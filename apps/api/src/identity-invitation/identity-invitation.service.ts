@@ -1,4 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { isPortalSubjectRoleName } from "@uzman-hocam/shared-types";
 import { createHash, randomBytes } from "node:crypto";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
@@ -203,7 +204,7 @@ function throwTenantSeatLimitBadRequest(error: unknown): never {
 }
 
 function parseSubjectType(input: string | undefined): InvitationSubjectType {
-  if (input === "STUDENT" || input === "GUARDIAN" || input === "TEACHER") return input;
+  if (input && isPortalSubjectRoleName(input)) return input;
   throw new BadRequestException("SUBJECT_TYPE_INVALID");
 }
 

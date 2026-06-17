@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { portalSubjectRoles } from "@uzman-hocam/shared-types";
 import { optionalTrimmedString, requiredTrimmedString } from "../http/zod-validation.js";
 
-const invitationSubjectTypeSchema = z.enum(["STUDENT", "GUARDIAN", "TEACHER"]);
+const invitationSubjectTypeSchema = z.enum(portalSubjectRoles);
 
 export const identityInvitationCreateBodySchema = z.object({
   email: requiredTrimmedString.refine((value) => value.includes("@"), { message: "EMAIL_REQUIRED" }),

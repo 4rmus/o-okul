@@ -196,7 +196,7 @@ describe("Tenant user management", () => {
         password: "password1",
         roles: ["SYSTEM_ADMIN"],
       })
-      .expect(400);
+      .expect(422);
 
     await request(server)
       .patch("/tenant-users/user-tenant-a/roles")

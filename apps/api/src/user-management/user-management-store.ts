@@ -1,17 +1,19 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import type { TenantAssignableRoleName } from "@uzman-hocam/shared-types";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withExplicitTenantQuery } from "../db/tenant-query.js";
 import { hashPassword } from "../auth/auth-user-store.js";
-import type { Role } from "../rbac/roles.js";
 import { assertTenantSeatCapacity } from "../tenant/tenant-seat-limit.js";
+
+export type TenantUserRole = TenantAssignableRoleName;
 
 export interface TenantUserRecord {
   id: string;
   email: string;
   name: string;
   tenantId: string;
-  roles: Role[];
+  roles: TenantUserRole[];
   createdAt: string;
   updatedAt: string;
 }
@@ -21,14 +23,14 @@ export interface CreateTenantUserInput {
   email: string;
   name: string;
   password: string;
-  roles: Role[];
+  roles: TenantUserRole[];
 }
 
 export interface UserManagementStore {
   listTenantUsers(tenantId: string): Promise<TenantUserRecord[]>;
   findTenantUser(tenantId: string, userId: string): Promise<TenantUserRecord | undefined>;
   createOrAttachTenantUser(input: CreateTenantUserInput): Promise<TenantUserRecord>;
-  setTenantRoles(tenantId: string, userId: string, roles: Role[]): Promise<TenantUserRecord | undefined>;
+  setTenantRoles(tenantId: string, userId: string, roles: TenantUserRole[]): Promise<TenantUserRecord | undefined>;
 }
 
 export const userManagementStoreToken = Symbol("UserManagementStore");
@@ -115,7 +117,7 @@ export class InMemoryUserManagementStore implements UserManagementStore {
     return cloneRequiredTenantUser(record);
   }
 
-  async setTenantRoles(tenantId: string, userId: string, roles: Role[]): Promise<TenantUserRecord | undefined> {
+  async setTenantRoles(tenantId: string, userId: string, roles: TenantUserRole[]): Promise<TenantUserRecord | undefined> {
     const user = this.users.find((candidate) => candidate.tenantId === tenantId && candidate.id === userId);
     if (!user) return undefined;
 
@@ -205,7 +207,7 @@ export class PostgresUserManagementStore implements UserManagementStore {
     });
   }
 
-  async setTenantRoles(tenantId: string, userId: string, roles: Role[]): Promise<TenantUserRecord | undefined> {
+  async setTenantRoles(tenantId: string, userId: string, roles: TenantUserRole[]): Promise<TenantUserRecord | undefined> {
     return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const existing = await client.query<{ id: string }>(
         `SELECT "id" FROM "TenantMembership" WHERE "tenantId" = $1 AND "userId" = $2 LIMIT 1`,
@@ -242,7 +244,7 @@ export class PostgresUserManagementStore implements UserManagementStore {
     return result.rows[0] ? toTenantUserRecord(result.rows[0]) : undefined;
   }
 
-  private async replaceMemberships(client: Queryable, tenantId: string, userId: string, roles: Role[]): Promise<void> {
+  private async replaceMemberships(client: Queryable, tenantId: string, userId: string, roles: TenantUserRole[]): Promise<void> {
     const existing = await client.query<{ id: string }>(
       `SELECT "id" FROM "TenantMembership" WHERE "tenantId" = $1 AND "userId" = $2 LIMIT 1`,
       [tenantId, userId],
@@ -291,7 +293,7 @@ interface TenantUserRow {
   email: string;
   name: string;
   tenantId: string;
-  roles: Role[];
+  roles: TenantUserRole[];
   createdAt: Date;
   updatedAt: Date;
 }

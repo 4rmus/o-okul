@@ -35,6 +35,7 @@ import {
 } from "../notification-device/notification-device-validation.js";
 import { PaymentService } from "../payment/payment.service.js";
 import { ScheduleService } from "../program/schedule.service.js";
+import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { ReportGenerationService } from "../report/report-generation.service.js";
@@ -94,6 +95,7 @@ export class MeController {
 
   @Patch("tenant")
   @Roles("TENANT_ADMIN", "ASSISTANT_ADMIN")
+  @RequireCapability("operation:manage")
   updateTenant(
     @Body(zodBody(tenantCurrentProfileBodySchema)) body: TenantCurrentProfileBody,
   ): Promise<TenantRecord> {

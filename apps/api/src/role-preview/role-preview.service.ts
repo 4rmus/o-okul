@@ -1,9 +1,13 @@
-import { BadRequestException, ForbiddenException, Injectable, Optional } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { isPortalSubjectRoleName, type PortalSubjectRoleName } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { type GuardianStore, guardianStoreToken } from "../school/guardian-store.js";
+import { type TeacherStore, teacherStoreToken } from "../school/teacher-store.js";
+import { type StudentStore, studentStoreToken } from "../student/student-store.js";
 
-export type RolePreviewTargetRole = "TEACHER" | "STUDENT" | "GUARDIAN";
+export type RolePreviewTargetRole = PortalSubjectRoleName;
 
 export interface StartRolePreviewInput {
   targetRole?: string;
@@ -34,11 +38,18 @@ export interface RolePreviewTokenPayload {
   expiresAt: string;
 }
 
+type RolePreviewSubjectRecord = { tenantId: string };
+
 @Injectable()
 export class RolePreviewService {
   private readonly previewSecret = process.env.ROLE_PREVIEW_SECRET ?? process.env.JWT_ACCESS_SECRET ?? "test-access-secret";
 
-  constructor(@Optional() private readonly auditLogs?: AuditLogService) {}
+  constructor(
+    @Inject(teacherStoreToken) private readonly teacherStore: TeacherStore,
+    @Inject(studentStoreToken) private readonly studentStore: StudentStore,
+    @Inject(guardianStoreToken) private readonly guardianStore: GuardianStore,
+    @Optional() private readonly auditLogs?: AuditLogService,
+  ) {}
 
   async start(context: RequestContext, input: StartRolePreviewInput): Promise<RolePreviewSession> {
     if (!context.tenantId || context.bypassRls) {
@@ -50,6 +61,8 @@ export class RolePreviewService {
 
     const targetRole = parseTargetRole(input.targetRole);
     const targetSubjectId = required(input.targetSubjectId, "ROLE_PREVIEW_SUBJECT_REQUIRED");
+    await this.assertTargetSubjectExists(context.tenantId, targetRole, targetSubjectId);
+
     const createdAt = new Date();
     const expiresAt = new Date(createdAt);
     expiresAt.setMinutes(expiresAt.getMinutes() + 15);
@@ -109,10 +122,35 @@ export class RolePreviewService {
     const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
     return `${encodedPayload}.${sign(encodedPayload, this.previewSecret)}`;
   }
+
+  private async assertTargetSubjectExists(
+    tenantId: string,
+    targetRole: RolePreviewTargetRole,
+    targetSubjectId: string,
+  ): Promise<void> {
+    const subject = await this.findTargetSubject(targetRole, targetSubjectId);
+    if (!subject || subject.tenantId !== tenantId) {
+      throw new NotFoundException("ROLE_PREVIEW_SUBJECT_NOT_FOUND");
+    }
+  }
+
+  private findTargetSubject(
+    targetRole: RolePreviewTargetRole,
+    targetSubjectId: string,
+  ): Promise<RolePreviewSubjectRecord | undefined> {
+    switch (targetRole) {
+      case "TEACHER":
+        return this.teacherStore.findById(targetSubjectId);
+      case "STUDENT":
+        return this.studentStore.findById(targetSubjectId);
+      case "GUARDIAN":
+        return this.guardianStore.findById(targetSubjectId);
+    }
+  }
 }
 
 function parseTargetRole(value: string | undefined): RolePreviewTargetRole {
-  if (value === "TEACHER" || value === "STUDENT" || value === "GUARDIAN") return value;
+  if (value && isPortalSubjectRoleName(value)) return value;
   throw new BadRequestException("ROLE_PREVIEW_TARGET_UNSUPPORTED");
 }
 

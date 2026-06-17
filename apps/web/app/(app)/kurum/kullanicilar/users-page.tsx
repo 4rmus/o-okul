@@ -4,7 +4,17 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
-import type { GuardianRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
+import {
+  isPortalSubjectRoleName,
+  portalSubjectRoles,
+  tenantAssignableRoles,
+  tenantRoleLabel,
+  type GuardianRecord,
+  type PortalSubjectRoleName,
+  type StudentRecord,
+  type TeacherRecord,
+  type TenantAssignableRoleName,
+} from "@uzman-hocam/shared-types";
 import { Plus, RotateCcw, Save, Send } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest } from "../../../../src/api-client.js";
@@ -18,10 +28,10 @@ import {
   type TenantUserFormPayload,
   type TenantUserFormState,
 } from "../../../../src/form-validation.js";
-import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 
-type Role = "TENANT_ADMIN" | "ASSISTANT_ADMIN" | "TEACHER" | "STUDENT" | "GUARDIAN";
-type InvitationSubjectType = "STUDENT" | "GUARDIAN" | "TEACHER";
+type Role = TenantAssignableRoleName;
+type InvitationSubjectType = PortalSubjectRoleName;
 type InvitationStatus = "PENDING" | "ACCEPTED";
 
 interface TenantUserRecord {
@@ -61,19 +71,11 @@ interface UserSubjectReferences {
   teachers: TeacherRecord[];
 }
 
-const roleOptions: Array<{ value: Role; label: string }> = [
-  { value: "TENANT_ADMIN", label: "Kurum admin" },
-  { value: "ASSISTANT_ADMIN", label: "Yardımcı yönetici" },
-  { value: "TEACHER", label: "Öğretmen" },
-  { value: "STUDENT", label: "Öğrenci" },
-  { value: "GUARDIAN", label: "Veli" },
-];
+const roleOptions = tenantAssignableRoles.map((role) => ({ value: role, label: tenantRoleLabel(role) }));
 
-const subjectTypeLabels: Record<InvitationSubjectType, string> = {
-  GUARDIAN: "Veli",
-  STUDENT: "Öğrenci",
-  TEACHER: "Öğretmen",
-};
+const subjectTypeLabels = Object.fromEntries(
+  portalSubjectRoles.map((role) => [role, tenantRoleLabel(role)]),
+) as Record<InvitationSubjectType, string>;
 
 const statusLabels: Record<InvitationStatus, string> = {
   ACCEPTED: "Kabul edildi",
@@ -105,8 +107,8 @@ export function UsersPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const tenantId = auth?.session.tenantId ?? "anonymous";
-  const [userListQuery, setUserListQuery] = useState<ListQueryState>(initialListQuery);
-  const [invitationListQuery, setInvitationListQuery] = useState<ListQueryState>(initialListQuery);
+  const [userListQuery, setUserListQuery] = useUrlListState(searchParams, { namespace: "users", sortOptions: tenantUserSortOptions });
+  const [invitationListQuery, setInvitationListQuery] = useUrlListState(searchParams, { namespace: "invitations", sortOptions: identityInvitationSortOptions });
   const usersQueryKey = ["next-tenant-users", tenantId, userListQuery];
   const usersListQueryKey = ["next-tenant-users", tenantId];
   const invitationsQueryKey = ["next-identity-invitations", tenantId, invitationListQuery];
@@ -556,10 +558,8 @@ function buildSubjects(
 }
 
 function parseInvitationSubjectType(value: string | null): InvitationSubjectType | null {
-  if (value === "guardian") return "GUARDIAN";
-  if (value === "student") return "STUDENT";
-  if (value === "teacher") return "TEACHER";
-  return null;
+  const role = value?.trim().toUpperCase();
+  return role && isPortalSubjectRoleName(role) ? role : null;
 }
 
 function findSubjectName(subjectType: InvitationSubjectType, subjectId: string, references: UserSubjectReferences) {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { portalSubjectRoles, tenantAssignableRoles } from "@uzman-hocam/shared-types";
 
 const requiredText = (fieldName: string) => z.string().trim().min(1, `${fieldName} zorunludur.`);
 const optionalText = () => z.string().trim();
@@ -289,7 +290,7 @@ export const homeworkMaterialFormSchema = z.object({
   description: optionalText(),
 });
 
-export const userRolesSchema = z.array(z.enum(["TENANT_ADMIN", "ASSISTANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN"])).min(1, "En az bir rol seçilmelidir.");
+export const userRolesSchema = z.array(z.enum(tenantAssignableRoles)).min(1, "En az bir rol seçilmelidir.");
 
 export const tenantUserFormSchema = z.object({
   email: requiredText("E-posta").email("E-posta geçerli olmalıdır."),
@@ -299,7 +300,7 @@ export const tenantUserFormSchema = z.object({
 });
 
 export const identityInvitationFormSchema = z.object({
-  subjectType: z.enum(["STUDENT", "GUARDIAN", "TEACHER"]),
+  subjectType: z.enum(portalSubjectRoles),
   subjectId: requiredText("Kişi"),
   email: requiredText("E-posta").email("E-posta geçerli olmalıdır."),
   name: optionalText(),

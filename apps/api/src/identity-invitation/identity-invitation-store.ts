@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import type { PortalSubjectRoleName } from "@uzman-hocam/shared-types";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withExplicitTenantQuery } from "../db/tenant-query.js";
-import type { Role } from "../rbac/roles.js";
 
-export type InvitationSubjectType = "STUDENT" | "GUARDIAN" | "TEACHER";
+export type InvitationSubjectType = PortalSubjectRoleName;
 export type InvitationStatus = "PENDING" | "ACCEPTED";
 
 export interface IdentityInvitationRecord {
@@ -14,7 +14,7 @@ export interface IdentityInvitationRecord {
   subjectId: string;
   email: string;
   name: string;
-  role: Role;
+  role: InvitationSubjectType;
   status: InvitationStatus;
   expiresAt: string;
   acceptedAt?: string;
@@ -29,7 +29,7 @@ export interface CreateIdentityInvitationInput {
   subjectId: string;
   email: string;
   name: string;
-  role: Role;
+  role: InvitationSubjectType;
   tokenHash: string;
   expiresAt: string;
 }
@@ -244,7 +244,7 @@ interface IdentityInvitationRow {
   subjectId: string;
   email: string;
   name: string;
-  role: Role;
+  role: InvitationSubjectType;
   status: InvitationStatus;
   expiresAt: Date;
   acceptedAt: Date | null;

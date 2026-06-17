@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException, Optional } 
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { authSessionStoreToken, type SessionStore } from "../auth/session-store.js";
-import { roles, type Role } from "../rbac/roles.js";
+import { isTenantAssignableRoleName, type TenantAssignableRoleName } from "@uzman-hocam/shared-types";
 import {
   assertTenantSeatCapacity,
   isTenantSeatLimitExceededError,
@@ -139,18 +139,20 @@ function throwTenantSeatLimitBadRequest(error: unknown): never {
   throw error;
 }
 
-function parseTenantRoles(input: string[] | undefined): Role[] {
+function parseTenantRoles(input: string[] | undefined): TenantAssignableRoleName[] {
   if (!input || input.length === 0) {
     throw new BadRequestException("ROLES_REQUIRED");
   }
   const normalized = [...new Set(input)];
+  const parsedRoles: TenantAssignableRoleName[] = [];
   for (const role of normalized) {
-    if (!roles.includes(role as Role)) {
-      throw new BadRequestException("ROLE_INVALID");
-    }
     if (role === "SYSTEM_ADMIN") {
       throw new BadRequestException("SYSTEM_ADMIN_ROLE_FORBIDDEN");
     }
+    if (!isTenantAssignableRoleName(role)) {
+      throw new BadRequestException("ROLE_INVALID");
+    }
+    parsedRoles.push(role);
   }
-  return normalized as Role[];
+  return parsedRoles;
 }

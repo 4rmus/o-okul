@@ -92,6 +92,23 @@ describe("Capability access matrix", () => {
       .expect(200);
   });
 
+  it("tenant profilini TENANT_ADMIN günceller, ASSISTANT_ADMIN güncelleyemez", async () => {
+    await request(server)
+      .patch("/me/tenant")
+      .set("Authorization", `Bearer ${assistantToken}`)
+      .send({ name: "Yardımcı Güncelleme Denemesi" })
+      .expect(403);
+
+    await request(server)
+      .patch("/me/tenant")
+      .set("Authorization", `Bearer ${tenantAdminToken}`)
+      .send({ name: "DNA EĞİTİM KURUMU" })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({ id: "tenant-a", name: "DNA EĞİTİM KURUMU" });
+      });
+  });
+
   it("ASSISTANT_ADMIN menüde görünen akademik ve destek işlemlerini yapar", async () => {
     await request(server)
       .post("/schedule-lessons")

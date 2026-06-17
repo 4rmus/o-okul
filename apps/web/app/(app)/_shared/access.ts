@@ -1,3 +1,4 @@
+import { hasCapabilityForRoles as sharedHasCapabilityForRoles } from "@uzman-hocam/shared-types";
 import { institutionNavGroups } from "./navigation.js";
 
 type NavigationItem = {
@@ -9,32 +10,6 @@ type NavigationItem = {
 type SessionLike = {
   roles: readonly string[];
   subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER";
-};
-
-const roleCapabilityMap: Record<string, readonly string[]> = {
-  SYSTEM_ADMIN: ["system:*", "tenant:*", "audit:*"],
-  TENANT_ADMIN: [
-    "academic:*",
-    "announcement:*",
-    "attendance:*",
-    "audit:*",
-    "class:*",
-    "finance:*",
-    "note:*",
-    "observability:*",
-    "operation:*",
-    "privacy:*",
-    "role-preview:*",
-    "security:*",
-    "staff:*",
-    "student:*",
-    "support:*",
-    "user:*",
-  ],
-  ASSISTANT_ADMIN: ["academic:*", "announcement:*", "attendance:*", "class:*", "note:*", "staff:*", "student:*", "support:*"],
-  TEACHER: ["academic:read", "attendance:write-assigned", "homework:write-assigned", "note:write-assigned"],
-  STUDENT: ["self:read"],
-  GUARDIAN: ["ward:read"],
 };
 
 const hiddenInstitutionPathCapabilities: Record<string, string> = {
@@ -86,12 +61,7 @@ export function canAccessNavigationItem(roles: readonly string[], item: Navigati
 }
 
 export function hasCapabilityForRoles(roles: readonly string[], requiredCapability: string) {
-  if (roles.includes("SYSTEM_ADMIN") && requiredCapability.startsWith("system:")) {
-    return true;
-  }
-
-  const capabilities = capabilitiesForRoles(roles);
-  return capabilities.some((capability) => capability === requiredCapability || matchesCapabilityWildcard(capability, requiredCapability));
+  return sharedHasCapabilityForRoles(roles, requiredCapability);
 }
 
 function findInstitutionNavigationItem(pathname: string) {
@@ -105,18 +75,4 @@ function findHiddenInstitutionPathCapability(pathname: string) {
   return Object.entries(hiddenInstitutionPathCapabilities)
     .filter(([href]) => pathname === href || pathname.startsWith(`${href}/`))
     .sort(([left], [right]) => right.length - left.length)[0]?.[1];
-}
-
-function capabilitiesForRoles(roles: readonly string[]) {
-  const capabilities = new Set<string>();
-  for (const role of roles) {
-    for (const capability of roleCapabilityMap[role] ?? []) {
-      capabilities.add(capability);
-    }
-  }
-  return [...capabilities];
-}
-
-function matchesCapabilityWildcard(capability: string, requiredCapability: string) {
-  return capability.endsWith(":*") && requiredCapability.startsWith(capability.slice(0, -1));
 }

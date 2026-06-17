@@ -1,6 +1,8 @@
-export const roles = ["SYSTEM_ADMIN", "TENANT_ADMIN", "ASSISTANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN"] as const;
+import { isTenantRoleName, tenantRoles, type TenantRoleName } from "@uzman-hocam/shared-types";
 
-export type Role = (typeof roles)[number];
+export const roles = tenantRoles;
+
+export type Role = TenantRoleName;
 
 const roleRank: Record<Role, number> = {
   SYSTEM_ADMIN: 5,
@@ -25,6 +27,4 @@ export function isSystemAdmin(userRoles: readonly string[]): boolean {
   return userRoles.includes("SYSTEM_ADMIN");
 }
 
-function isRole(role: string): role is Role {
-  return roles.includes(role as Role);
-}
+const isRole = isTenantRoleName;

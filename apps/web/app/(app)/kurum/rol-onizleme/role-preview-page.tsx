@@ -3,6 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@uzman-hocam/ui";
+import {
+  tenantAssignableRoles,
+  tenantRoleLabel,
+  type PortalSubjectRoleName,
+  type TenantAssignableRoleName,
+} from "@uzman-hocam/shared-types";
 import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import { useAuth } from "../../../providers.js";
 import { getInstitutionNavGroups, hasInstitutionAccess } from "../../_shared/access.js";
@@ -10,7 +16,7 @@ import { OperationDecisionNotice, ReferenceBadge } from "../_shared/evidence-pan
 import { PageFrame } from "../_shared/page-frame.js";
 import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
 
-type PreviewRole = "TENANT_ADMIN" | "ASSISTANT_ADMIN" | "TEACHER" | "STUDENT" | "GUARDIAN";
+type PreviewRole = TenantAssignableRoleName;
 
 const roleCards = [
   {
@@ -56,17 +62,11 @@ const evidenceChecks = [
   "pnpm identity-link:audit",
 ] as const;
 
-const previewRoles: Array<{ label: string; value: PreviewRole }> = [
-  { label: "Kurum yöneticisi", value: "TENANT_ADMIN" },
-  { label: "Yardımcı yönetici", value: "ASSISTANT_ADMIN" },
-  { label: "Öğretmen", value: "TEACHER" },
-  { label: "Öğrenci", value: "STUDENT" },
-  { label: "Veli", value: "GUARDIAN" },
-];
+const previewRoles = tenantAssignableRoles.map((role) => ({ label: tenantRoleLabel(role), value: role }));
 
 interface RolePreviewSession {
   id: string;
-  targetRole: "TEACHER" | "STUDENT" | "GUARDIAN";
+  targetRole: PortalSubjectRoleName;
   targetSubjectId: string;
   mode: "READ_ONLY";
   expiresAt: string;

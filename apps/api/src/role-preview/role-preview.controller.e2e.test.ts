@@ -54,6 +54,24 @@ describe("RolePreview API", () => {
       });
   });
 
+  it("does not issue a role preview token for missing or cross-tenant subjects", async () => {
+    for (const targetSubjectId of ["student-missing", "student-b"]) {
+      const response = await request(server)
+        .post("/role-previews")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({
+          targetRole: "STUDENT",
+          targetSubjectId,
+        })
+        .expect(404);
+
+      expect(response.body).toMatchObject({
+        error: { code: "ROLE_PREVIEW_SUBJECT_NOT_FOUND" },
+      });
+      expect(response.body.previewToken).toBeUndefined();
+    }
+  });
+
   it("validates role preview start bodies with Zod", async () => {
     const invalidCreate = await request(server)
       .post("/role-previews")
