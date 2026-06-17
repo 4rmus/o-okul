@@ -3,6 +3,7 @@ export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from ".
 export { Input, type InputProps } from "./components/input.js";
 export { Table } from "./components/table.js";
 export { Dialog, type DialogProps } from "./components/dialog.js";
+export { ConfirmDialog, useConfirmDialog, type ConfirmDialogProps, type ConfirmDialogRequest } from "./components/confirm-dialog.js";
 export { Toast, type ToastProps, type ToastTone } from "./components/toast.js";
 export { LoadingState, type LoadingStateProps } from "./components/loading-state.js";
 export { EmptyState, type EmptyStateAction, type EmptyStateProps } from "./components/empty-state.js";

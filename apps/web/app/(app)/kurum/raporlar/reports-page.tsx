@@ -18,6 +18,7 @@ import type {
   ReportErrorBooklet,
   ReportSnapshotExportResult,
   ReportSnapshotRecord,
+  ReportStudentQuestionSummary,
   ReportStudentProgress,
   ReportStudentSnapshot,
   StudentRecord,
@@ -353,12 +354,11 @@ export function ReportsPage() {
             {reportData?.errorBooklet ? (
               <section className="next-report-list" aria-label="Hata kitapçığı">
                 <h3>Hata kitapçığı</h3>
-                <p>{reportData.errorBooklet.items.length} soru</p>
-                {reportData.errorBooklet.items.map((item) => (
-                  <p key={`${item.questionNo}-${item.status}`}>
-                    {item.questionNo}. soru {item.status === "BLANK" ? "Boş" : `Yanıt ${item.answer}`} Doğru {item.correctAnswer}
-                  </p>
-                ))}
+                <ErrorBookletTable
+                  caption="Seçili öğrenci hata kitapçığı"
+                  emptyLabel="Hata kaydı yok"
+                  items={reportData.errorBooklet.items}
+                />
               </section>
             ) : null}
             <div className="next-report-actions">
@@ -604,6 +604,59 @@ function toExamResult(snapshot: ReportSnapshotRecord | null) {
 
 function toProgressPoints(progress: ReportStudentProgress | null) {
   return progress?.points ?? [];
+}
+
+function ErrorBookletTable({
+  caption,
+  emptyLabel,
+  items,
+}: {
+  caption: string;
+  emptyLabel: string;
+  items: ReportStudentQuestionSummary[];
+}) {
+  return (
+    <table className="uh-chart-table next-error-booklet-table">
+      <caption>{caption}</caption>
+      <thead>
+        <tr>
+          <th scope="col">Soru</th>
+          <th scope="col">Ders</th>
+          <th scope="col">Kazanım</th>
+          <th scope="col">Durum</th>
+          <th scope="col">Yanıt</th>
+          <th scope="col">Doğru</th>
+        </tr>
+      </thead>
+      <tbody>
+        {items.length > 0 ? (
+          items.map((item) => (
+            <tr key={`${item.questionNo}-${item.branch}-${item.status}`}>
+              <th scope="row">{item.questionNo}</th>
+              <td>{formatCourseName(item.branch)}</td>
+              <td>{item.outcomeCode ? formatOutcomeCode(item.outcomeCode) : "-"}</td>
+              <td>{formatQuestionStatus(item.status)}</td>
+              <td>{item.status === "BLANK" ? "Boş" : item.answer}</td>
+              <td>{item.correctAnswer}</td>
+            </tr>
+          ))
+        ) : (
+          <tr>
+            <td colSpan={6}>{emptyLabel}</td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  );
+}
+
+function formatQuestionStatus(status: ReportStudentQuestionSummary["status"]) {
+  const labels: Record<ReportStudentQuestionSummary["status"], string> = {
+    BLANK: "Boş",
+    CORRECT: "Doğru",
+    WRONG: "Yanlış",
+  };
+  return labels[status] ?? status;
 }
 
 function StudentResultsTable({

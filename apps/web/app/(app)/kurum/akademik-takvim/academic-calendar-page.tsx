@@ -3,7 +3,7 @@
 import { type FormEvent, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AcademicTermRecord, AcademicYearRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -36,6 +36,7 @@ const emptyTermForm: AcademicTermFormState = {
 export function AcademicCalendarPage() {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const [yearListQuery, setYearListQuery] = useState<ListQueryState>(initialListQuery);
   const [termListQuery, setTermListQuery] = useState<ListQueryState>(initialListQuery);
   const yearQueryKey = ["next-academic-years", auth?.session.tenantId ?? "anonymous", yearListQuery];
@@ -211,7 +212,12 @@ export function AcademicCalendarPage() {
 
   async function handleYearDelete(record: AcademicYearRecord) {
     if (!auth) return;
-    if (!window.confirm(`${record.name} akademik yılı silinsin mi?`)) return;
+    const confirmed = await confirm({
+      confirmLabel: "Sil",
+      message: `${record.name} akademik yılı silinsin mi?`,
+      title: "Akademik yılı sil",
+    });
+    if (!confirmed) return;
 
     setError("");
     try {
@@ -225,7 +231,12 @@ export function AcademicCalendarPage() {
 
   async function handleTermDelete(record: AcademicTermRecord) {
     if (!auth) return;
-    if (!window.confirm(`${record.name} dönemi silinsin mi?`)) return;
+    const confirmed = await confirm({
+      confirmLabel: "Sil",
+      message: `${record.name} dönemi silinsin mi?`,
+      title: "Dönemi sil",
+    });
+    if (!confirmed) return;
 
     setError("");
     try {
@@ -405,6 +416,7 @@ export function AcademicCalendarPage() {
           Aktif
         </label>
       </FormModal>
+      {confirmationDialog}
     </>
   );
 }

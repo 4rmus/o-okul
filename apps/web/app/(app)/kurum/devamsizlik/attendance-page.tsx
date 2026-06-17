@@ -3,7 +3,7 @@
 import { type FormEvent, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AcademicTermRecord, AttendanceRecord, ClassRecord, CourseRecord, StudentRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -27,6 +27,7 @@ const emptyForm: AttendanceFormState = {
 export function AttendancePage() {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
   const [classId, setClassId] = useState("");
   const queryKey = ["next-attendance", auth?.session.tenantId ?? "anonymous", listQuery, classId];
@@ -131,7 +132,12 @@ export function AttendancePage() {
 
   async function handleDelete(record: AttendanceRecord) {
     if (!auth) return;
-    if (!window.confirm(`${studentNames.get(record.studentId) ?? record.studentId} devamsızlığı silinsin mi?`)) return;
+    const confirmed = await confirm({
+      confirmLabel: "Sil",
+      message: `${studentNames.get(record.studentId) ?? record.studentId} devamsızlığı silinsin mi?`,
+      title: "Devamsızlığı sil",
+    });
+    if (!confirmed) return;
 
     setError("");
     try {
@@ -203,6 +209,7 @@ export function AttendancePage() {
         open={isFormOpen}
         references={references}
       />
+      {confirmationDialog}
     </>
   );
 }

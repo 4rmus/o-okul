@@ -14,7 +14,7 @@ import type {
   SupportTicketRecord,
   TeacherRecord,
 } from "@uzman-hocam/shared-types";
-import { apiBaseUrl, apiListRequest, apiRequest } from "../../../src/api-client.js";
+import { apiBaseUrl, apiListRequest, apiRequest, apiUrl } from "../../../src/api-client.js";
 
 export interface KurumReportSummary {
   exam: ExamRecord | null;
@@ -41,15 +41,35 @@ export interface KurumAnnouncementSummary {
   publishedCount: number;
 }
 
+export interface KurumSystemHealthSummary {
+  apiOk: boolean;
+  postgresOk: boolean;
+  redisOk: boolean;
+  readyOk: boolean;
+}
+
 export interface KurumDashboardData {
   announcements: KurumAnnouncementSummary;
   decisionSignals: KurumDecisionSignals;
   overview: KurumOverview;
   report: KurumReportSummary;
+  systemHealth: KurumSystemHealthSummary;
 }
 
 interface ImportQuarantineSummary {
   openCount: number;
+}
+
+interface HealthStatus {
+  status: "ok";
+}
+
+interface ReadyStatus {
+  status: "ready";
+  dependencies?: {
+    postgres?: "ok" | "down";
+    redis?: "ok" | "down";
+  };
 }
 
 export function useKurumDashboardDataQuery(accessToken: string, tenantId: string, enabled: boolean) {
@@ -77,13 +97,14 @@ export function useKurumStudentProgressQuery(
 }
 
 async function loadKurumDashboardData(accessToken: string): Promise<KurumDashboardData> {
-  const [overview, decisionSignals, report, announcements] = await Promise.all([
+  const [overview, decisionSignals, report, announcements, systemHealth] = await Promise.all([
     loadKurumOverview(accessToken),
     loadKurumDecisionSignals(accessToken),
     loadLatestReportSummary(accessToken),
     loadAnnouncementSummary(accessToken),
+    loadSystemHealthSummary(),
   ]);
-  return { announcements, decisionSignals, overview, report };
+  return { announcements, decisionSignals, overview, report, systemHealth };
 }
 
 async function loadKurumDecisionSignals(accessToken: string): Promise<KurumDecisionSignals> {
@@ -129,6 +150,30 @@ async function loadAnnouncementSummary(accessToken: string): Promise<KurumAnnoun
     latestTitle: latestAnnouncement?.title,
     publishedCount: announcements.meta.total,
   };
+}
+
+async function loadSystemHealthSummary(): Promise<KurumSystemHealthSummary> {
+  const [health, ready] = await Promise.all([
+    safeFetchJson<HealthStatus>(`${apiUrl}/health`),
+    safeFetchJson<ReadyStatus>(`${apiUrl}/health/ready`),
+  ]);
+
+  return {
+    apiOk: health.ok && health.data?.status === "ok",
+    readyOk: ready.ok && ready.data?.status === "ready",
+    postgresOk: ready.ok && ready.data?.dependencies?.postgres === "ok",
+    redisOk: ready.ok && ready.data?.dependencies?.redis === "ok",
+  };
+}
+
+async function safeFetchJson<TData>(url: string): Promise<{ data: TData | null; ok: boolean }> {
+  try {
+    const response = await fetch(url);
+    const data = await response.json().catch(() => null);
+    return { data: response.ok ? (data as TData) : null, ok: response.ok };
+  } catch {
+    return { data: null, ok: false };
+  }
 }
 
 async function safeRequest<T>(accessToken: string, url: string, fallback: T): Promise<T> {

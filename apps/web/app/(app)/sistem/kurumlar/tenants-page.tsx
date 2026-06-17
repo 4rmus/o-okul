@@ -3,7 +3,7 @@
 import { type FormEvent, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import { Plus } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError } from "../../../../src/api-client.js";
@@ -40,6 +40,7 @@ const emptyCreateForm: TenantCreateFormState = {
 export function TenantsPage() {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
   const queryKey = ["next-tenants", listQuery];
   const listQueryKey = ["next-tenants"];
@@ -121,7 +122,12 @@ export function TenantsPage() {
 
   async function handleDeleteTenant(tenant: TenantRecord) {
     if (!auth) return;
-    const confirmed = window.confirm(`${tenant.name} kurumunu silmek istiyor musun? Kurum listeden kaldırılır, kayıtlar korunur.`);
+    const confirmed = await confirm({
+      confirmLabel: "Sil",
+      description: "Kurum listeden kaldırılır, kayıtlar korunur.",
+      message: `${tenant.name} kurumunu silmek istiyor musun?`,
+      title: "Kurumu sil",
+    });
     if (!confirmed) return;
 
     setError("");
@@ -182,6 +188,7 @@ export function TenantsPage() {
         submitLabel="Oluştur"
         title="Kurum oluştur"
       />
+      {confirmationDialog}
     </PageFrame>
   );
 }

@@ -3,7 +3,7 @@
 import { type FormEvent, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherNoteRecord, TeacherRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -29,6 +29,7 @@ const emptyForm: TeacherNoteFormState = {
 export function TeacherNotesPage() {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
   const [classId, setClassId] = useState("");
   const queryKey = ["next-teacher-notes", auth?.session.tenantId ?? "anonymous", listQuery, classId];
@@ -145,7 +146,12 @@ export function TeacherNotesPage() {
 
   async function handleDelete(record: TeacherNoteRecord) {
     if (!auth) return;
-    if (!window.confirm(`${studentNames.get(record.studentId) ?? record.studentId} notu silinsin mi?`)) return;
+    const confirmed = await confirm({
+      confirmLabel: "Sil",
+      message: `${studentNames.get(record.studentId) ?? record.studentId} notu silinsin mi?`,
+      title: "Notu sil",
+    });
+    if (!confirmed) return;
 
     setError("");
     try {
@@ -217,6 +223,7 @@ export function TeacherNotesPage() {
         open={isFormOpen}
         references={references}
       />
+      {confirmationDialog}
     </>
   );
 }

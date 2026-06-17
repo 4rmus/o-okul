@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import type {
   AttendanceSummaryRecord,
   ClassRecord,
@@ -34,6 +34,7 @@ import {
 } from "../../../../src/form-validation.js";
 import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
+import { readReportExamId } from "../../_shared/report-exam-selection.js";
 
 interface StudentProfilePayload {
   nationalId?: string;
@@ -142,6 +143,8 @@ export function StudentsPage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const { confirm, confirmationDialog } = useConfirmDialog();
+  const reportExamId = readReportExamId(searchParams);
   const [listQuery, setListQuery] = useState<ListQueryState>(() => readStudentListQuery(searchParams));
   const [filters, setFilters] = useState<StudentListFilters>(() => readStudentFilters(searchParams));
   const [tableDensity, setTableDensity] = useState<StudentTableDensity>(() => readStudentTableDensity(searchParams));
@@ -170,8 +173,8 @@ export function StudentsPage() {
   const sourceClassIds = [...new Set(rows.map((student) => student.classId).filter((classId): classId is string => Boolean(classId)))].sort();
 
   const detailQuery = useQuery({
-    queryKey: ["next-student-detail", auth?.session.tenantId ?? "anonymous", editingStudent?.id ?? "none"],
-    queryFn: () => loadStudentDetail(auth?.accessToken ?? "", editingStudent?.id ?? ""),
+    queryKey: ["next-student-detail", auth?.session.tenantId ?? "anonymous", editingStudent?.id ?? "none", reportExamId],
+    queryFn: () => loadStudentDetail(auth?.accessToken ?? "", editingStudent?.id ?? "", reportExamId),
     enabled: Boolean(auth && editingStudent),
     refetchOnWindowFocus: false,
   });
@@ -351,7 +354,12 @@ export function StudentsPage() {
 
   async function handleDelete(student: StudentRecord) {
     if (!auth) return;
-    if (!window.confirm(`${student.firstName} ${student.lastName} silinsin mi?`)) return;
+    const confirmed = await confirm({
+      confirmLabel: "Sil",
+      message: `${student.firstName} ${student.lastName} öğrencisi silinsin mi?`,
+      title: "Öğrenciyi sil",
+    });
+    if (!confirmed) return;
 
     setError("");
     try {
@@ -408,6 +416,20 @@ export function StudentsPage() {
 
   async function handleBulkRenewEnrollment() {
     if (!auth || isBulkEnrollmentSaving || rows.length === 0) return;
+
+    const confirmed = await confirm({
+      confirmLabel: "Geçir",
+      description: "Bu işlem mevcut filtrede listelenen öğrencilerin kayıt dönemini toplu günceller.",
+      message: `${rows.length} öğrenci ${bulkEnrollmentAction.startsAt} tarihinden itibaren ${
+        bulkEnrollmentAction.useAutomaticClassMapping
+          ? "otomatik seviye yükseltme ile"
+          : bulkEnrollmentAction.classId
+            ? `${classNameById.get(bulkEnrollmentAction.classId) ?? "seçili sınıf"} hedefine`
+            : "sınıfsız hedefe"
+      } geçirilsin mi?`,
+      title: "Toplu dönem geçişini onayla",
+    });
+    if (!confirmed) return;
 
     setError("");
     setIsBulkEnrollmentSaving(true);
@@ -805,6 +827,7 @@ export function StudentsPage() {
         ) : null}
         {editingStudent ? <StudentDetailPanel detail={detail} loading={detailQuery.isPending} /> : null}
       </FormModal>
+      {confirmationDialog}
     </>
   );
 }
@@ -1051,7 +1074,7 @@ async function loadStudentReferences(accessToken: string): Promise<StudentRefere
   return { classes, teachers };
 }
 
-async function loadStudentDetail(accessToken: string, id: string): Promise<StudentDetail> {
+async function loadStudentDetail(accessToken: string, id: string, reportExamId: string): Promise<StudentDetail> {
   const [
     attendanceSummary,
     errorBooklet,
@@ -1066,13 +1089,13 @@ async function loadStudentDetail(accessToken: string, id: string): Promise<Stude
     teacherNotes,
   ] = await Promise.all([
     apiRequestOrNull<AttendanceSummaryRecord>(accessToken, `${apiBaseUrl}/attendance/summary?studentId=${encodeURIComponent(id)}`),
-    loadLatestErrorBooklet(accessToken, id),
+    loadLatestErrorBooklet(accessToken, id, reportExamId),
     apiRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/profile`),
     apiRequest<GuardianRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/guardians`),
     loadStudentHomeworkAssignments(accessToken, id),
     apiRequest<PaymentPlanWithInstallmentsRecord[]>(accessToken, `${apiBaseUrl}/payment-plans?studentId=${encodeURIComponent(id)}`),
-    apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/exams/exam-demo-isem-lgs-1/reports/students/${encodeURIComponent(id)}/progress?scope=all`),
-    loadLatestStudentReport(accessToken, id),
+    apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/students/${encodeURIComponent(id)}/progress?scope=all`),
+    loadLatestStudentReport(accessToken, id, reportExamId),
     apiRequest<StudentClassHistoryRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/class-history`),
     apiRequest<StudentEnrollmentRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/enrollments`),
     apiRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/teacher-notes?studentId=${encodeURIComponent(id)}`),
@@ -1105,26 +1128,26 @@ async function loadStudentHomeworkAssignments(accessToken: string, studentId: st
   return assignmentLists.flat().filter((assignment) => assignment.studentId === studentId);
 }
 
-async function loadLatestStudentReport(accessToken: string, studentId: string): Promise<ReportStudentSnapshot | null> {
-  const snapshot = await loadLatestSnapshot(accessToken, studentId);
+async function loadLatestStudentReport(accessToken: string, studentId: string, reportExamId: string): Promise<ReportStudentSnapshot | null> {
+  const snapshot = await loadLatestSnapshot(accessToken, studentId, reportExamId);
   if (!snapshot) return null;
   return apiRequestOrNull<ReportStudentSnapshot>(
     accessToken,
-    `${apiBaseUrl}/exams/exam-demo-isem-lgs-1/reports/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}`,
+    `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}`,
   );
 }
 
-async function loadLatestErrorBooklet(accessToken: string, studentId: string): Promise<ReportErrorBooklet | null> {
-  const snapshot = await loadLatestSnapshot(accessToken, studentId);
+async function loadLatestErrorBooklet(accessToken: string, studentId: string, reportExamId: string): Promise<ReportErrorBooklet | null> {
+  const snapshot = await loadLatestSnapshot(accessToken, studentId, reportExamId);
   if (!snapshot) return null;
   return apiRequestOrNull<ReportErrorBooklet>(
     accessToken,
-    `${apiBaseUrl}/exams/exam-demo-isem-lgs-1/reports/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}/error-booklet`,
+    `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}/error-booklet`,
   );
 }
 
-async function loadLatestSnapshot(accessToken: string, studentId: string): Promise<ReportSnapshotRecord | null> {
-  const snapshots = await apiRequest<ReportSnapshotRecord[]>(accessToken, `${apiBaseUrl}/exams/exam-demo-isem-lgs-1/reports/snapshots`);
+async function loadLatestSnapshot(accessToken: string, studentId: string, reportExamId: string): Promise<ReportSnapshotRecord | null> {
+  const snapshots = await apiRequest<ReportSnapshotRecord[]>(accessToken, `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/snapshots`);
   return snapshots.find((snapshot) =>
     snapshot.status === "READY" && snapshot.snapshotData?.students?.some((student) => student.studentId === studentId),
   ) ?? null;

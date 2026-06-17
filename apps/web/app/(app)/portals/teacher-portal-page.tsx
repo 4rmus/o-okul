@@ -47,8 +47,8 @@ import { ReportPanel } from "./_shared/report-panel.js";
 import { StudentHistoryPanel } from "./_shared/student-panels.js";
 import { SupportTicketsPanel } from "./_shared/support-tickets-panel.js";
 import { TeacherClassReportsPanel, TeacherProfileSummaryPanel, TeacherTodaySchedulePanel } from "./_shared/teacher-panels.js";
-
-const portalExamId = "exam-demo-isem-lgs-1";
+import { fallbackReportExamId, readReportExamId } from "../_shared/report-exam-selection.js";
+import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
 
 interface TeacherPortalData {
   teacher: TeacherRecord;
@@ -109,12 +109,13 @@ export function TeacherPortalPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const rolePreviewToken = searchParams.get("rolePreviewToken")?.trim() ?? "";
+  const reportExamId = readReportExamId(searchParams);
   const isRolePreview = Boolean(rolePreviewToken);
   const canReadPortal = Boolean(auth && (auth.session.subjectType === "TEACHER" || isRolePreview));
-  const queryKey = ["next-teacher-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session"];
+  const queryKey = ["next-teacher-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", reportExamId];
   const query = useQuery({
     queryKey,
-    queryFn: () => loadTeacherPortal(auth?.accessToken ?? "", rolePreviewToken),
+    queryFn: () => loadTeacherPortal(auth?.accessToken ?? "", rolePreviewToken, reportExamId),
     enabled: canReadPortal,
     refetchOnWindowFocus: false,
   });
@@ -199,11 +200,12 @@ export function TeacherPortalPage() {
   const todayLessons = useMemo(() => selectTodayLessons(data?.schedule ?? []), [data?.schedule]);
   const nextLesson = useMemo(() => selectNextLesson(data?.schedule ?? []), [data?.schedule]);
   const reportQuery = useQuery({
-    queryKey: ["next-teacher-student-report", auth?.session.userId ?? "anonymous", selectedStudentId ?? "none", rolePreviewToken || "session"],
-    queryFn: () => loadTeacherStudentReport(auth?.accessToken ?? "", selectedStudentId ?? "", rolePreviewToken),
+    queryKey: ["next-teacher-student-report", auth?.session.userId ?? "anonymous", selectedStudentId ?? "none", rolePreviewToken || "session", reportExamId],
+    queryFn: () => loadTeacherStudentReport(auth?.accessToken ?? "", selectedStudentId ?? "", rolePreviewToken, reportExamId),
     enabled: Boolean(canReadPortal && selectedStudentId),
     refetchOnWindowFocus: false,
   });
+  const selectedReportTotal = reportQuery.data?.report?.total;
   const historyQuery = useQuery({
     queryKey: ["next-teacher-student-history", auth?.session.userId ?? "anonymous", selectedStudentId ?? "none", rolePreviewToken || "session"],
     queryFn: () => loadTeacherStudentHistory(auth?.accessToken ?? "", selectedStudentId ?? "", rolePreviewToken),
@@ -334,7 +336,9 @@ export function TeacherPortalPage() {
           { label: "Öğrenci", value: students.length },
           { label: "Yoklama", value: data?.attendance.length ?? 0 },
           { label: "Ödev", value: data?.homework.length ?? 0 },
-          { label: "Not", value: data?.teacherNotes.length ?? 0 },
+          { label: "Başarı", value: formatPercentNumber(reportSuccessRate(selectedReportTotal)) },
+          { label: "Net", value: formatNetNumber(selectedReportTotal?.net) },
+          { label: "Soru", value: formatNetNumber(reportQuestionCount(selectedReportTotal)) },
           { label: "Destek", value: data?.supportTickets.length ?? 0 },
         ]}
       />
@@ -695,7 +699,7 @@ async function apiRequestOrNull<T>(accessToken: string, input: RequestInfo | URL
   return readData<T>(response);
 }
 
-async function loadTeacherPortal(accessToken: string, rolePreviewToken = ""): Promise<TeacherPortalData> {
+async function loadTeacherPortal(accessToken: string, rolePreviewToken = "", reportExamId = fallbackReportExamId): Promise<TeacherPortalData> {
   const [teacher, announcements, schedule, students, attendance, homework, materials, teacherNotes, supportTickets, snapshots, campuses, classes, courses, gradeLevels, terms] = await Promise.all([
     readOnlyRequest<TeacherRecord>(accessToken, `${apiBaseUrl}/me/teacher`, rolePreviewToken),
     readOnlyRequest<AnnouncementRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/announcements`, rolePreviewToken),
@@ -706,7 +710,7 @@ async function loadTeacherPortal(accessToken: string, rolePreviewToken = ""): Pr
     readOnlyRequest<HomeworkMaterialRecord[]>(accessToken, `${apiBaseUrl}/homework/materials`, rolePreviewToken),
     readOnlyRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/teacher-notes`, rolePreviewToken),
     readOnlyRequest<SupportTicketRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/support-tickets`, rolePreviewToken),
-    readOnlyRequest<ReportSnapshotRecord[]>(accessToken, `${apiBaseUrl}/exams/${portalExamId}/reports/snapshots`, rolePreviewToken),
+    readOnlyRequest<ReportSnapshotRecord[]>(accessToken, `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/snapshots`, rolePreviewToken),
     readOnlyRequest<CampusRecord[]>(accessToken, `${apiBaseUrl}/campuses`, rolePreviewToken),
     readOnlyRequest<ClassRecord[]>(accessToken, `${apiBaseUrl}/classes`, rolePreviewToken),
     readOnlyRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`, rolePreviewToken),
@@ -802,10 +806,15 @@ async function createPortalSupportTicket(accessToken: string, path: string, inpu
   });
 }
 
-async function loadTeacherStudentReport(accessToken: string, studentId: string, rolePreviewToken = ""): Promise<TeacherStudentReportData> {
+async function loadTeacherStudentReport(
+  accessToken: string,
+  studentId: string,
+  rolePreviewToken = "",
+  reportExamId = fallbackReportExamId,
+): Promise<TeacherStudentReportData> {
   const snapshots = await readOnlyRequest<ReportSnapshotRecord[]>(
     accessToken,
-    `${apiBaseUrl}/exams/${portalExamId}/reports/snapshots`,
+    `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/snapshots`,
     rolePreviewToken,
   );
   const snapshot = selectLatestReadySnapshot(snapshots);
@@ -816,17 +825,17 @@ async function loadTeacherStudentReport(accessToken: string, studentId: string, 
   const [report, errorBooklet, progress] = await Promise.all([
     apiRequestOrNull<ReportStudentSnapshot>(
       accessToken,
-      `${apiBaseUrl}/exams/${portalExamId}/reports/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}`,
+      `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}`,
       rolePreviewToken,
     ),
     apiRequestOrNull<ReportErrorBooklet>(
       accessToken,
-      `${apiBaseUrl}/exams/${portalExamId}/reports/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}/error-booklet`,
+      `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}/error-booklet`,
       rolePreviewToken,
     ),
     apiRequestOrNull<ReportStudentProgress>(
       accessToken,
-      `${apiBaseUrl}/exams/${portalExamId}/reports/students/${encodeURIComponent(studentId)}/progress`,
+      `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/students/${encodeURIComponent(studentId)}/progress?scope=all`,
       rolePreviewToken,
     ),
   ]);
@@ -933,6 +942,10 @@ function formatTeacherStudentLabel(student: StudentRecord, classNames: ReadonlyM
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("tr-TR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+}
+
+function formatNetNumber(value: number | undefined) {
+  return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
 }
 
 function todayInputValue() {

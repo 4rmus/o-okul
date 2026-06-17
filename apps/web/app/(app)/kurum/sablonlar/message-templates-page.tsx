@@ -2,7 +2,7 @@
 
 import { type FormEvent, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import type {
   AcademicTermRecord,
   AnnouncementRecord,
@@ -45,6 +45,7 @@ const emptySmsForm = {
 export function MessageTemplatesPage() {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
   const queryKey = ["next-message-templates", auth?.session.tenantId ?? "anonymous", listQuery];
   const listQueryKey = ["next-message-templates", auth?.session.tenantId ?? "anonymous"];
@@ -159,7 +160,12 @@ export function MessageTemplatesPage() {
 
   async function handleDelete(template: MessageTemplateRecord) {
     if (!auth) return;
-    if (!window.confirm(`${template.name} silinsin mi?`)) return;
+    const confirmed = await confirm({
+      confirmLabel: "Sil",
+      message: `${template.name} şablonu silinsin mi?`,
+      title: "Şablonu sil",
+    });
+    if (!confirmed) return;
 
     setError("");
     try {
@@ -457,6 +463,7 @@ export function MessageTemplatesPage() {
           />
         </label>
       </FormModal>
+      {confirmationDialog}
     </>
   );
 }

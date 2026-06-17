@@ -3,7 +3,7 @@
 import { type FormEvent, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, StudySessionRecord, TeacherRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -31,6 +31,7 @@ const emptyForm: StudySessionFormState = {
 export function StudySessionsPage() {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
   const queryKey = ["next-study-sessions", auth?.session.tenantId ?? "anonymous", listQuery];
   const listQueryKey = ["next-study-sessions", auth?.session.tenantId ?? "anonymous"];
@@ -145,7 +146,12 @@ export function StudySessionsPage() {
 
   async function handleDelete(record: StudySessionRecord) {
     if (!auth) return;
-    if (!window.confirm(`${record.title} silinsin mi?`)) return;
+    const confirmed = await confirm({
+      confirmLabel: "Sil",
+      message: `${record.title} etüdü silinsin mi?`,
+      title: "Etüdü sil",
+    });
+    if (!confirmed) return;
 
     setError("");
     try {
@@ -282,6 +288,7 @@ export function StudySessionsPage() {
           <Input required type="datetime-local" value={form.endsAt} onChange={(event) => setForm((current) => ({ ...current, endsAt: event.target.value }))} />
         </label>
       </FormModal>
+      {confirmationDialog}
     </>
   );
 }

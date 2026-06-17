@@ -9,7 +9,11 @@ export default defineConfig({
     baseURL,
   },
   webServer: {
-    command: `pnpm --filter @uzman-hocam/ui build && pnpm --filter @uzman-hocam/web exec next dev --hostname 0.0.0.0 --port ${port}`,
+    command: "pnpm --filter @uzman-hocam/ui build && pnpm --filter @uzman-hocam/web next:dev",
+    env: {
+      ...process.env,
+      NEXT_E2E_PORT: port,
+    },
     reuseExistingServer: !process.env.CI && !process.env.NEXT_E2E_PORT,
     timeout: 120_000,
     url: baseURL,

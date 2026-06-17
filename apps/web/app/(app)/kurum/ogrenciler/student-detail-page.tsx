@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import type {
   AcademicTermRecord,
@@ -16,6 +17,7 @@ import type {
   HomeworkMaterialRecord,
   PaymentPlanWithInstallmentsRecord,
   ReportErrorBooklet,
+  ReportStudentQuestionSummary,
   ReportSnapshotRecord,
   ReportStudentProgress,
   ReportStudentSnapshot,
@@ -36,6 +38,10 @@ import { ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../../_shar
 import { formatNetNumber, OutcomeNetTable } from "../../_shared/outcome-net-table.js";
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
+import { fallbackReportExamId, readReportExamId } from "../../_shared/report-exam-selection.js";
+import type { StudentRelationshipFlowData } from "./student-relationship-flow.js";
+
+const LazyStudentRelationshipFlow = lazy(() => import("./student-relationship-flow.js"));
 
 interface StudentBaseDetail {
   attendanceSummary: AttendanceSummaryRecord | null;
@@ -68,12 +74,12 @@ interface StudentReportData {
   snapshots: ReportSnapshotRecord[];
 }
 
-const defaultExamId = "exam-demo-isem-lgs-1";
-
 type StudentDetailMode = "dashboard" | "exams";
 
 export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: StudentDetailMode; studentId: string }) {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
+  const requestedReportExamId = readReportExamId(searchParams);
   const [selectedExamId, setSelectedExamId] = useState("");
   const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
 
@@ -101,7 +107,7 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
   const courseNameById = useMemo(() => new Map((detail?.courses ?? []).map((record) => [record.id, formatCourseName(record.name)])), [detail?.courses]);
   const termNameById = useMemo(() => new Map((detail?.terms ?? []).map((record) => [record.id, record.name])), [detail?.terms]);
   const exams = pageDataQuery.data?.exams ?? [];
-  const activeExamId = selectedExamId || preferredExamId(exams);
+  const activeExamId = selectedExamId || preferredExamId(exams, requestedReportExamId);
   const reportDataQuery = useQuery({
     queryKey: [
       "next-student-detail-report-data",
@@ -243,6 +249,16 @@ function StudentDashboard({
   const primaryGuardianName = primaryGuardian ? guardianNameById.get(primaryGuardian.guardianId) ?? primaryGuardian.guardianId : "Veli bağı yok";
   const activeEnrollment = resolveActiveEnrollment(detail.enrollments);
   const latestAudit = studentAuditLogs[0];
+  const relationshipFlowData = buildStudentRelationshipFlowData({
+    activeEnrollment,
+    classNameById,
+    courseNameById,
+    currentClass,
+    detail,
+    guardianNameById,
+    teacherNameById,
+    termNameById,
+  });
 
   return (
     <section className="next-report-panel" aria-label="Öğrenci dashboard">
@@ -277,6 +293,21 @@ function StudentDashboard({
       <ReportChartPanel description="Hazır raporu olan tüm sınavlardaki başarı yüzdesi, net ve standart puan gelişimi" title="Öğrenci Gelişim Grafiği">
         <ProgressLineChart caption="Tüm sınav başarı gelişimi" points={progressPoints} />
       </ReportChartPanel>
+
+      <section className="next-report-list next-student-relationship-section" aria-label="Öğrenci ilişki haritası">
+        <h2>İlişki haritası</h2>
+        <p>Sınıf, veli ve öğretmen bağları öğrenci merkezli gösterilir; aynı bilgi liste görünümünde de korunur.</p>
+        <div className="next-student-relationship-flow-shell" aria-hidden="true">
+          <Suspense fallback={<p className="next-status-note">İlişki haritası yükleniyor...</p>}>
+            <LazyStudentRelationshipFlow data={relationshipFlowData} />
+          </Suspense>
+        </div>
+        <div className="next-student-relationship-fallback" aria-label="İlişki haritası liste görünümü">
+          <RelationshipList title="Sınıf" items={[relationshipFlowData.classNode]} />
+          <RelationshipList title="Veliler" items={relationshipFlowData.guardians} />
+          <RelationshipList title="Öğretmenler" items={relationshipFlowData.teachers} />
+        </div>
+      </section>
 
       <div className="next-dashboard-summary-grid" aria-label="Öğrenci karar kartları">
         <Link className="next-dashboard-summary-card" href={studentExamsHref}>
@@ -409,6 +440,78 @@ function StudentDashboard({
   );
 }
 
+function RelationshipList({ items, title }: { items: StudentRelationshipFlowData["guardians"]; title: string }) {
+  return (
+    <section>
+      <h3>{title}</h3>
+      {items.length > 0 ? (
+        <ul>
+          {items.map((item) => (
+            <li key={item.id}>
+              <strong>{item.label}</strong>
+              <span>{item.detail}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p>Tanımlı kayıt yok.</p>
+      )}
+    </section>
+  );
+}
+
+function buildStudentRelationshipFlowData({
+  activeEnrollment,
+  classNameById,
+  courseNameById,
+  currentClass,
+  detail,
+  guardianNameById,
+  teacherNameById,
+  termNameById,
+}: {
+  activeEnrollment: StudentEnrollmentRecord | undefined;
+  classNameById: ReadonlyMap<string, string>;
+  courseNameById: ReadonlyMap<string, string>;
+  currentClass: string;
+  detail: StudentBaseDetail;
+  guardianNameById: ReadonlyMap<string, string>;
+  teacherNameById: ReadonlyMap<string, string>;
+  termNameById: ReadonlyMap<string, string>;
+}): StudentRelationshipFlowData {
+  return {
+    student: {
+      id: detail.profile.id,
+      label: `${detail.profile.firstName} ${detail.profile.lastName}`,
+      detail: formatStudentStatus(detail.profile.status),
+    },
+    classNode: {
+      id: detail.profile.classId ?? "no-class",
+      label: currentClass,
+      detail: activeEnrollment
+        ? `${formatEnrollmentReason(activeEnrollment.reason)} · ${formatDate(activeEnrollment.startsAt)}`
+        : "Aktif kayıt bulunamadı",
+    },
+    guardians: detail.guardianLinks.map((link) => ({
+      id: link.id,
+      label: guardianNameById.get(link.guardianId) ?? link.guardianId,
+      detail: [
+        formatRelationshipType(link.relationshipType),
+        link.isPrimary ? "Birincil" : "",
+        formatGuardianPermissions(link),
+      ].filter(Boolean).join(" · "),
+    })),
+    teachers: detail.teacherAssignments.map((assignment) => ({
+      id: assignment.id,
+      label: teacherNameById.get(assignment.teacherId) ?? assignment.teacherId,
+      detail: [
+        formatTeacherAssignmentRole(assignment.role),
+        formatTeacherAssignmentScope(assignment, classNameById, courseNameById, termNameById).replace(/^ - /, ""),
+      ].filter(Boolean).join(" · "),
+    })),
+  };
+}
+
 function StudentExamDetails({
   branchRadar,
   errorBooklet,
@@ -503,15 +606,11 @@ function StudentExamDetails({
 
           <section className="next-report-list" aria-label="Hata kitapçığı">
             <h2>Hata kitapçığı</h2>
-            {errorBooklet?.items.length ? (
-              errorBooklet.items.map((item) => (
-                <p key={`${item.questionNo}-${item.branch}`}>
-                  {item.questionNo}. soru {formatCourseName(item.branch)}: {item.status === "BLANK" ? "Boş" : `Yanıt ${item.answer}`} / Doğru {item.correctAnswer}
-                </p>
-              ))
-            ) : (
-              <p>Hata kaydı yok</p>
-            )}
+            <ErrorBookletTable
+              caption="Öğrenci hata kitapçığı"
+              emptyLabel="Hata kaydı yok"
+              items={errorBooklet?.items ?? []}
+            />
           </section>
         </>
       ) : (
@@ -522,6 +621,59 @@ function StudentExamDetails({
       )}
     </section>
   );
+}
+
+function ErrorBookletTable({
+  caption,
+  emptyLabel,
+  items,
+}: {
+  caption: string;
+  emptyLabel: string;
+  items: ReportStudentQuestionSummary[];
+}) {
+  return (
+    <table className="uh-chart-table next-error-booklet-table">
+      <caption>{caption}</caption>
+      <thead>
+        <tr>
+          <th scope="col">Soru</th>
+          <th scope="col">Ders</th>
+          <th scope="col">Kazanım</th>
+          <th scope="col">Durum</th>
+          <th scope="col">Yanıt</th>
+          <th scope="col">Doğru</th>
+        </tr>
+      </thead>
+      <tbody>
+        {items.length > 0 ? (
+          items.map((item) => (
+            <tr key={`${item.questionNo}-${item.branch}-${item.status}`}>
+              <th scope="row">{item.questionNo}</th>
+              <td>{formatCourseName(item.branch)}</td>
+              <td>{item.outcomeCode ? formatOutcomeCode(item.outcomeCode) : "-"}</td>
+              <td>{formatQuestionStatus(item.status)}</td>
+              <td>{item.status === "BLANK" ? "Boş" : item.answer}</td>
+              <td>{item.correctAnswer}</td>
+            </tr>
+          ))
+        ) : (
+          <tr>
+            <td colSpan={6}>{emptyLabel}</td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  );
+}
+
+function formatQuestionStatus(status: ReportStudentQuestionSummary["status"]) {
+  const labels: Record<ReportStudentQuestionSummary["status"], string> = {
+    BLANK: "Boş",
+    CORRECT: "Doğru",
+    WRONG: "Yanlış",
+  };
+  return labels[status] ?? status;
 }
 
 async function loadStudentDetailPageData(accessToken: string, id: string): Promise<StudentDetailPageData> {
@@ -590,7 +742,7 @@ async function loadExams(accessToken: string): Promise<ExamRecord[]> {
   return exams && exams.length > 0
     ? exams
     : [{
-        id: defaultExamId,
+        id: fallbackReportExamId,
         tenantId: "",
         title: "Demo sınav",
         status: "PUBLISHED",
@@ -599,8 +751,11 @@ async function loadExams(accessToken: string): Promise<ExamRecord[]> {
       }];
 }
 
-function preferredExamId(exams: ExamRecord[]) {
-  return exams.find((exam) => exam.status === "PUBLISHED")?.id ?? exams[0]?.id ?? "";
+function preferredExamId(exams: ExamRecord[], requestedExamId = fallbackReportExamId) {
+  return exams.find((exam) => exam.id === requestedExamId)?.id
+    ?? exams.find((exam) => exam.status === "PUBLISHED")?.id
+    ?? exams[0]?.id
+    ?? requestedExamId;
 }
 
 async function loadStudentSnapshots(accessToken: string, examId: string, studentId: string) {

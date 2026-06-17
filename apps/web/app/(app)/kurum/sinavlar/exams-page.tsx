@@ -3,7 +3,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ClassRecord, ExamParticipantRecord, ExamRecord, StudentRecord } from "@uzman-hocam/shared-types";
-import { Button, EmptyState, FormModal, Input } from "@uzman-hocam/ui";
+import { Button, EmptyState, FormModal, Input, useConfirmDialog } from "@uzman-hocam/ui";
 import { CheckCircle2, Pencil, Plus, Search, Trash2, Users, X } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiErrorMessage, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -29,6 +29,7 @@ interface ExamPageReferences {
 export function ExamsPage() {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const queryKey = ["next-exams", auth?.session.tenantId ?? "anonymous"];
   const examsQuery = useQuery({
     queryKey,
@@ -170,7 +171,13 @@ export function ExamsPage() {
 
   async function handleDelete(exam: ExamRecord) {
     if (!auth) return;
-    if (!window.confirm(`${exam.title} sınavı ve ona ait tüm optik, sonuç ve rapor kayıtları silinsin mi?`)) return;
+    const confirmed = await confirm({
+      confirmLabel: "Sil",
+      description: "Bu işlem optik, sonuç ve rapor kayıtlarını da etkiler.",
+      message: `${exam.title} sınavı silinsin mi?`,
+      title: "Sınavı sil",
+    });
+    if (!confirmed) return;
 
     setError("");
     try {
@@ -398,6 +405,7 @@ export function ExamsPage() {
           {referencesQuery.isPending ? <p className="next-field-help">Sınıflar yükleniyor.</p> : null}
         </div>
       </FormModal>
+      {confirmationDialog}
     </PageFrame>
   );
 }

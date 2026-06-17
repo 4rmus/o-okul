@@ -3,7 +3,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, FormModal, Input, LoadingState } from "@uzman-hocam/ui";
+import { Button, FormModal, Input, LoadingState, useConfirmDialog } from "@uzman-hocam/ui";
 import { useAuth } from "../../../../providers.js";
 import {
   firstFormError,
@@ -29,6 +29,7 @@ export function TenantDetailPage() {
   const router = useRouter();
   const { auth } = useAuth();
   const queryClient = useQueryClient();
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const tenantQuery = useQuery({
     queryKey: ["next-tenant", tenantId],
     queryFn: () => loadTenant(auth?.accessToken ?? "", tenantId),
@@ -79,7 +80,12 @@ export function TenantDetailPage() {
 
   async function handleDelete() {
     if (!auth || !tenant) return;
-    const confirmed = window.confirm(`${tenant.name} kurumunu silmek istiyor musun? Kurum listeden kaldırılır, kayıtlar korunur.`);
+    const confirmed = await confirm({
+      confirmLabel: "Sil",
+      description: "Kurum listeden kaldırılır, kayıtlar korunur.",
+      message: `${tenant.name} kurumunu silmek istiyor musun?`,
+      title: "Kurumu sil",
+    });
     if (!confirmed) return;
 
     setError("");
@@ -128,6 +134,7 @@ export function TenantDetailPage() {
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
       />
+      {confirmationDialog}
     </PageFrame>
   );
 }

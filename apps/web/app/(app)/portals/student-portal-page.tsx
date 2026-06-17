@@ -31,14 +31,14 @@ import { AccessPanel, MetricGrid, PortalFrame } from "./_shared/portal-shell.js"
 import { ReportPanel } from "./_shared/report-panel.js";
 import { GuardianRelationsPanel, ProfilePanel, StudentHistoryPanel } from "./_shared/student-panels.js";
 import { SupportTicketsPanel } from "./_shared/support-tickets-panel.js";
-
-const portalExamId = "exam-demo-isem-lgs-1";
+import { readReportExamId, fallbackReportExamId } from "../_shared/report-exam-selection.js";
+import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
 
 export function StudentPortalPage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const rolePreviewToken = searchParams.get("rolePreviewToken")?.trim() ?? "";
-  const reportExamId = searchParams.get("examId")?.trim() || portalExamId;
+  const reportExamId = readReportExamId(searchParams);
   const isRolePreview = Boolean(rolePreviewToken);
   const canReadPortal = Boolean(auth && (auth.session.subjectType === "STUDENT" || isRolePreview));
   const queryKey = ["next-student-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", reportExamId];
@@ -56,6 +56,7 @@ export function StudentPortalPage() {
   const data = query.data;
   const courseNameById = new Map((data?.courses ?? []).map((course) => [course.id, course.name]));
   const termNameById = new Map((data?.terms ?? []).map((term) => [term.id, term.name]));
+  const reportTotal = data?.report?.total;
   return (
     <PortalFrame title="Öğrenci Portalı" subtitle={data?.profile ? `${data.profile.firstName} ${data.profile.lastName}` : "Öğrenci özeti"}>
       <MetricGrid
@@ -63,9 +64,11 @@ export function StudentPortalPage() {
           { label: "Toplam devamsızlık", value: data?.attendanceSummary.total ?? 0 },
           { label: "Geç kalma", value: data?.attendanceSummary.late ?? 0 },
           { label: "Not", value: data?.teacherNotes.length ?? 0 },
-          { label: "Gelişim", value: data?.developmentAssessments.length ?? 0 },
           { label: "Ödev", value: data?.homeworkAssignments.length ?? 0 },
-          { label: "Net", value: formatNumber(data?.report?.total.net) },
+          { label: "Başarı", value: formatPercentNumber(reportSuccessRate(reportTotal)) },
+          { label: "Net", value: formatNumber(reportTotal?.net) },
+          { label: "Soru", value: formatNumber(reportQuestionCount(reportTotal)) },
+          { label: "Gelişim", value: data?.developmentAssessments.length ?? 0 },
         ]}
       />
       {isRolePreview ? (
@@ -116,7 +119,7 @@ export function StudentPortalPage() {
   );
 }
 
-async function loadStudentPortal(accessToken: string, rolePreviewToken = "", reportExamId = portalExamId) {
+async function loadStudentPortal(accessToken: string, rolePreviewToken = "", reportExamId = fallbackReportExamId) {
   const [profile, guardians, guardianLinks, classHistory, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, report, errorBooklet, progress, courses, terms] = await Promise.all([
     readOnlyRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/student/profile`, rolePreviewToken),
     readOnlyRequest<GuardianRecord[]>(accessToken, `${apiBaseUrl}/me/student/guardians`, rolePreviewToken),

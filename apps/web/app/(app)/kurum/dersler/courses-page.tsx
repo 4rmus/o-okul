@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CourseRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -15,7 +15,7 @@ import {
   type CourseFormPayload,
   type CourseFormState,
 } from "../../../../src/form-validation.js";
-import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 
 const emptyForm: CourseFormState = {
   name: "",
@@ -26,7 +26,8 @@ export function CoursesPage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
+  const { confirm, confirmationDialog } = useConfirmDialog();
+  const [listQuery, setListQuery] = useUrlListState(searchParams, { sortOptions: courseSortOptions });
   const queryKey = ["next-courses", auth?.session.tenantId ?? "anonymous", listQuery];
   const listQueryKey = ["next-courses", auth?.session.tenantId ?? "anonymous"];
   const coursesQuery = useQuery({
@@ -120,7 +121,12 @@ export function CoursesPage() {
 
   async function handleDelete(record: CourseRecord) {
     if (!auth) return;
-    if (!window.confirm(`${formatCourseName(record.name)} silinsin mi?`)) return;
+    const confirmed = await confirm({
+      confirmLabel: "Sil",
+      message: `${formatCourseName(record.name)} dersi silinsin mi?`,
+      title: "Dersi sil",
+    });
+    if (!confirmed) return;
 
     setError("");
     try {
@@ -190,6 +196,7 @@ export function CoursesPage() {
           />
         </label>
       </FormModal>
+      {confirmationDialog}
     </>
   );
 }

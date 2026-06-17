@@ -1,6 +1,7 @@
 "use client";
 
 import type { ClassRecord, ScheduleLessonRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
+import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 
 interface TeacherClassReportSummary {
   snapshotId: string;
@@ -15,7 +16,9 @@ interface TeacherClassReportSummary {
     wrong?: number;
     blank?: number;
     net?: number;
+    questionCount?: number;
     standardScore?: number;
+    successRate?: number;
   };
 }
 
@@ -172,22 +175,32 @@ export function TeacherClassReportsPanel({
             <th>Sınıf</th>
             <th>Bağlam</th>
             <th>Sonuç</th>
+            <th>Soru</th>
+            <th>Başarı</th>
             <th>Net</th>
             <th>LGS puanı</th>
             <th>Standart puan</th>
           </tr>
         </thead>
         <tbody>
-          {reports.map((report) => (
-            <tr key={`${report.snapshotId}-${report.classId ?? "no-class"}`}>
-              <td>{report.className ?? report.classId ?? "-"}</td>
-              <td>{formatReportContext(report, courseNames, termNames)}</td>
-              <td>{report.resultCount}</td>
-              <td>{formatNumber(report.averages.net)}</td>
-              <td>{formatNumber(readLgsScore(report.averages))}</td>
-              <td>{formatNumber(report.averages.standardScore)}</td>
+          {reports.length > 0 ? (
+            reports.map((report) => (
+              <tr key={`${report.snapshotId}-${report.classId ?? "no-class"}`}>
+                <td>{report.className ?? report.classId ?? "-"}</td>
+                <td>{formatReportContext(report, courseNames, termNames)}</td>
+                <td>{report.resultCount}</td>
+                <td>{formatNumber(reportQuestionCount(report.averages))}</td>
+                <td>{formatPercentNumber(reportSuccessRate(report.averages))}</td>
+                <td>{formatNumber(report.averages.net)}</td>
+                <td>{formatNumber(readLgsScore(report.averages))}</td>
+                <td>{formatNumber(report.averages.standardScore)}</td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={8}>Hazır sınıf raporu yok.</td>
             </tr>
-          ))}
+          )}
         </tbody>
       </table>
     </section>

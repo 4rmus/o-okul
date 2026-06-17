@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LearningOutcomeRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -28,6 +28,7 @@ export function LearningOutcomesPage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const tenantId = auth?.session.tenantId ?? "anonymous";
   const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
   const queryKey = ["next-learning-outcomes", tenantId, listQuery];
@@ -136,7 +137,12 @@ export function LearningOutcomesPage() {
 
   async function handleDelete(record: LearningOutcomeRecord) {
     if (!auth) return;
-    if (!window.confirm(`${formatOutcomeCode(record.code)} silinsin mi?`)) return;
+    const confirmed = await confirm({
+      confirmLabel: "Sil",
+      message: `${formatOutcomeCode(record.code)} kazanımı silinsin mi?`,
+      title: "Kazanımı sil",
+    });
+    if (!confirmed) return;
 
     setError("");
     try {
@@ -223,6 +229,7 @@ export function LearningOutcomesPage() {
           />
         </label>
       </FormModal>
+      {confirmationDialog}
     </>
   );
 }

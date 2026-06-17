@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
 import { Eye, Pencil, Plus, Send, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
@@ -19,7 +19,7 @@ import {
   type TeacherFormPayload,
   type TeacherFormState,
 } from "../../../../src/form-validation.js";
-import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 
 interface TeacherAssignmentReferences {
   classes: ClassRecord[];
@@ -55,7 +55,8 @@ export function TeachersPage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
+  const { confirm, confirmationDialog } = useConfirmDialog();
+  const [listQuery, setListQuery] = useUrlListState(searchParams, { sortOptions: teacherSortOptions });
   const queryKey = ["next-teachers", auth?.session.tenantId ?? "anonymous", listQuery];
   const listQueryKey = ["next-teachers", auth?.session.tenantId ?? "anonymous"];
   const teachersQuery = useQuery({
@@ -185,7 +186,12 @@ export function TeachersPage() {
 
   async function handleDelete(teacher: TeacherRecord) {
     if (!auth) return;
-    if (!window.confirm(`${teacher.firstName} ${teacher.lastName} silinsin mi?`)) return;
+    const confirmed = await confirm({
+      confirmLabel: "Sil",
+      message: `${teacher.firstName} ${teacher.lastName} öğretmeni silinsin mi?`,
+      title: "Öğretmeni sil",
+    });
+    if (!confirmed) return;
 
     setError("");
     try {
@@ -415,6 +421,7 @@ export function TeachersPage() {
           </section>
         ) : null}
       </FormModal>
+      {confirmationDialog}
     </>
   );
 }

@@ -106,10 +106,25 @@ Faz 7 başlangıç:
 - Öğrenci detayında rapor verisi, sınav listesi yüklenmeden eski demo sınav id’siyle çağrılmayacak şekilde düzeltildi.
 
 Faz 7 kanıt:
-- `npx --yes pnpm@11.5.0 --filter @uzman-hocam/web typecheck`
-- `npx --yes pnpm@11.5.0 --filter @uzman-hocam/web next:build`
-- 3011 production smoke: öğrenci detay ilişki haritasında `nodeCount=5`, `edgeCount=5`, `zoomChanged=true`, mobilde `mobileFlowVisible=false`, `consoleErrorCount=0`.
+- `pnpm --filter @uzman-hocam/web typecheck`
+- `pnpm --filter @uzman-hocam/web build`
+- `NEXT_E2E_PORT=3018 pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/a11y-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts` -> 5 test geçti.
+- Hedefli Playwright spec: öğrenci detay ilişki haritasında `nodeCount=6`, `edgeCount=5`; zoom kontrolü viewport transform değişimini doğrular; liste fallback veli/öğretmen metinlerini korur.
+- Mobil spec: React Flow shell gizlenir, “İlişki haritası liste görünümü” görünür kalır ve yatay taşma `<=1px`.
 - Smoke ekran görüntüleri: `artifacts/ui-smoke/faz7-student-relationship-flow.png`, `artifacts/ui-smoke/faz7-student-relationship-mobile.png`.
+
+2026-06-17 devam notu:
+- Öğrenci, veli ve öğretmen portal özetleri sınav rapor metriğini `Başarı`, `Net` ve `Soru` üçlüsüyle gösterir hale getirildi.
+- Öğretmen portalındaki sınıf rapor tablosu `Soru` ve `Başarı` kolonlarıyla ham net karşılaştırmasına bağımlı kalmayacak şekilde genişletildi.
+- Öğretmen portal öğrenci gelişim çağrısı tek sınavla sınırlı kalmaması için `progress?scope=all` kullanır.
+- React Flow iddiası gerçek uygulamaya bağlandı: `@xyflow/react@12.11.0`, lazy `StudentRelationshipFlow`, mobil liste fallback ve hedefli Playwright kanıtı mevcut.
+- Liste URL durumu ortak `useUrlListState` yardımcı hook’una taşındı; kullanıcı/öğretmen/veli/sınıf/ders/kampüs/seviye listeleri `page`, `limit`, `q` ve `sort` değerlerini URL’den okur ve URL’ye yazar.
+- Öğrenci listesi URL durumu filtre, kolon görünürlüğü ve yoğunluk parametreleriyle genişletildi; `classId`, `level`, `responsibleTeacherId`, `status`, `guardianLinked`, `density` ve `columns` URL'den okunup URL'ye yazılır.
+- Kurum dashboard "Operasyon özeti" alanı son rapor, son duyuru ve `/health` + `/health/ready` kaynaklı sistem sağlığı kartını birlikte gösterir.
+- Öğrenci sınav detay ve rapor ekranlarındaki hata kitapçığı paragraf yerine okunabilir tablo olarak render edilir.
+- Öğretmen portal sınıf raporu boş state'i artık boş `<tbody>` bırakmaz; "Hazır sınıf raporu yok." satırı gösterir.
+- Liste URL kanıtı: `NEXT_E2E_PORT=3020 pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/list-url-state-next.spec.ts` -> 3 test geçti.
+- Yerel plan kapıları staging/UAT/provider/pilot/go-live onaylarının yerine geçmez; bu kanıtlar üretim hazırlık planında ayrı kapı olarak kalır.
 
 Faz 8 başlangıç:
 - Chart bileşenleri `@uzman-hocam/ui` ana exportundan ayrıldı; `@uzman-hocam/ui/charts` ayrı girişinden lazy yükleniyor.
@@ -118,11 +133,12 @@ Faz 8 başlangıç:
 - React Flow lazy yapısı korundu; öğrenci listesinde flow chunk isteği oluşmadı.
 
 Faz 8 kanıt:
-- `npx --yes pnpm@11.5.0 --filter @uzman-hocam/ui typecheck`
-- `npx --yes pnpm@11.5.0 --filter @uzman-hocam/web typecheck`
-- `npx --yes pnpm@11.5.0 --filter @uzman-hocam/web next:build`
-- Build chunk kontrolü: Chart uygulama chunk’ı `04_9nejic8cy9.js` yaklaşık 200 KB, React Flow chunk’ı `07v8i293e4_4h.js` yaklaşık 175 KB; login, kurum dashboard, öğrenci listesi, öğrenci detay ve rapor sayfası ilk build manifestlerinde ağır chunk yok.
-- 3011 production smoke: `/kurum/ogrenciler` için `heavyRequested=[]`, `consoleErrorCount=0`; `/kurum/ogrenciler/student-a` için lazy gelen chart uygulama chunk’ı `04_9nejic8cy9.js`, flow chunk’ı `07v8i293e4_4h.js`, `consoleErrorCount=0`.
+- `pnpm --filter @uzman-hocam/ui typecheck`
+- `pnpm --filter @uzman-hocam/web typecheck`
+- `pnpm --filter @uzman-hocam/web build`
+- Build chunk kontrolü: Chart uygulama chunk’ı `0j827pnm5ks6q.js` yaklaşık 200 KB; React Flow / öğrenci ilişki haritası chunk’ları `0ngmsdsb.18zt.js` yaklaşık 171 KB ve `0o0a63.kau~c2.js` yaklaşık 37 KB; React Flow CSS `0v~wtps5j8c53.css` yaklaşık 91 KB global CSS içinde.
+- Build manifest kontrolü: `rootMainFiles` içinde Chart/React Flow chunk isimleri yok; `apps/web/.next/server/app/page_client-reference-manifest.js` ve `apps/web/.next/server/app/page/build-manifest.json` içinde `0ngmsdsb.18zt.js`, `0j827pnm5ks6q.js`, `0o0a63.kau~c2.js` yok.
+- Not: React Flow JS lazy yükleniyor; paket CSS'i global import edildiği için JS kadar ayrışmış değildir.
 
 Faz 9 başlangıç:
 - Browser plugin bu oturumda callable araç olarak görünmedi; görsel QA standalone Playwright ile yapıldı.
@@ -130,11 +146,12 @@ Faz 9 başlangıç:
 - Görsel QA kontrolü; yatay gövde taşması, boş canvas, konsol hatası ve erişilebilir label eksikliği ölçtü.
 
 Faz 9 kanıt:
-- `npx --yes pnpm@11.5.0 --filter @uzman-hocam/web typecheck`
-- `npx --yes pnpm@11.5.0 --filter @uzman-hocam/web next:build`
-- Standalone Playwright QA: `dashboard-desktop`, `students-mobile`, `student-detail-desktop`, `student-detail-mobile`, `reports-desktop` senaryolarında `consoleErrorCount=0`, `bodyHorizontalOverflow=0`, `blankCanvasCount=0`, `unlabeledControls=0`.
-- Canvas kanıtı: dashboard desktop `canvasCount=4`; öğrenci detay desktop/mobile `canvasCount=4`; raporlar desktop `canvasCount=5`.
-- Mobil öğrenci listesi `390x844` viewportta `bodyHorizontalOverflow=0`; tablo satırı ve filtreler kullanılabilir kaldı.
+- `pnpm --filter @uzman-hocam/web typecheck`
+- `pnpm --filter @uzman-hocam/web build`
+- `NEXT_E2E_PORT=3023 pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/ui-visual-qa-next.spec.ts` -> 4 test geçti.
+- Standalone Playwright QA: `faz9-dashboard-desktop`, `faz9-students-mobile`, `faz9-student-detail-desktop`, `faz9-student-detail-mobile`, `faz9-reports-desktop` senaryolarında `consoleErrorCount=0`, yatay taşma `<=1px`, `blankCanvasCount=0`, `unlabeledControls=0`.
+- Dashboard desktop "Operasyon özeti / Sistem sağlığı" kartını; öğrenci sınav detay ve rapor desktop hata kitapçığı tablolarını; mobil öğrenci dashboard ilişki haritası liste fallback'ini doğrular.
+- Mobil öğrenci listesi `390x844` viewportta URL'den gelen filtre, kolon ve yoğun görünüm state'iyle taşmadan kalır.
 - Smoke ekran görüntüleri: `artifacts/ui-smoke/faz9-dashboard-desktop.png`, `artifacts/ui-smoke/faz9-students-mobile.png`, `artifacts/ui-smoke/faz9-student-detail-desktop.png`, `artifacts/ui-smoke/faz9-student-detail-mobile.png`, `artifacts/ui-smoke/faz9-reports-desktop.png`.
 
 Faz 10 kapanış raporu:
@@ -142,9 +159,8 @@ Faz 10 kapanış raporu:
 - Güncellenen/eklenen componentler: chart empty/table fallback iyileştirmeleri, `lazy-report-charts`, `ReportChartPanel`, dashboard metrik/karar alanları, öğrenci ilişki haritası için lazy React Flow bileşenleri, öğrenci listesi kolon/yoğunluk kontrolleri.
 - Kütüphane kararı: mevcut Chart.js korundu; `@xyflow/react@12.11.0` sadece öğrenci ilişki haritası için eklendi; Recharts, shadcn/Tremor ve @tanstack/react-table eklenmedi.
 - Lazy loading: Chart bileşenleri `@uzman-hocam/ui/charts` ayrı girişinden lazy yükleniyor; React Flow öğrenci detayda lazy yükleniyor; mobilde flow yerine liste fallback korunuyor.
-- Geçen doğrulamalar: UI ve web typecheck, web `next:build`, Faz 4-9 standalone Playwright smoke/QA kontrolleri.
+- Geçen doğrulamalar: UI ve web typecheck, web `build`, Faz 4/7/9 Playwright smoke/QA kontrolleri, `pnpm web:ux-baseline:check`, `pnpm karne:visual-contract:check`, `git diff --check`.
 - Kalan bilinçli ertelemeler: müfredat/kazanım için React Flow haritası yapılmadı; @tanstack/react-table ihtiyacı mevcut öğrenci listesi davranışı yeterli olduğu için ertelendi; tam `pnpm run ci` bu fazda koşulmadı, odaklı web typecheck/build ve Playwright QA ile kapatıldı.
-- Operasyon notu: yerel `pnpm` shim’i bozuk olduğu için kanıt komutları `npx --yes pnpm@11.5.0` üzerinden koşuldu.
 
 Faz 0 - Repo Gerçeğini Oku
 1. apps/web/package.json, packages/ui/package.json, mevcut UI componentleri, öğrenci/veli/öğretmen/kurum sayfalarını incele.

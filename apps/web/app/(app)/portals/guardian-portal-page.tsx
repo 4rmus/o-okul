@@ -34,14 +34,14 @@ import { AccessPanel, MetricGrid, PortalFrame } from "./_shared/portal-shell.js"
 import { ReportPanel } from "./_shared/report-panel.js";
 import { ProfilePanel, StudentHistoryPanel } from "./_shared/student-panels.js";
 import { SupportTicketsPanel } from "./_shared/support-tickets-panel.js";
-
-const portalExamId = "exam-demo-isem-lgs-1";
+import { readReportExamId, fallbackReportExamId } from "../_shared/report-exam-selection.js";
+import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
 
 export function GuardianPortalPage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const rolePreviewToken = searchParams.get("rolePreviewToken")?.trim() ?? "";
-  const reportExamId = searchParams.get("examId")?.trim() || portalExamId;
+  const reportExamId = readReportExamId(searchParams);
   const isRolePreview = Boolean(rolePreviewToken);
   const canReadPortal = Boolean(auth && (auth.session.subjectType === "GUARDIAN" || isRolePreview));
   const studentsQuery = useQuery({
@@ -78,6 +78,7 @@ export function GuardianPortalPage() {
   const courseNameById = new Map((data?.courses ?? []).map((course) => [course.id, course.name]));
   const termNameById = new Map((data?.terms ?? []).map((term) => [term.id, term.name]));
   const canViewFinance = data?.notificationPreferences?.canViewFinance !== false;
+  const reportTotal = data?.report?.total;
   return (
     <PortalFrame title="Veli Portalı" subtitle={selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "Bağlı öğrenci özeti"}>
       <div className="next-segmented" aria-label="Öğrenci seçimi">
@@ -95,10 +96,12 @@ export function GuardianPortalPage() {
       <MetricGrid
         items={[
           { label: "Devamsızlık", value: data?.attendanceSummary.total ?? 0 },
-          { label: "Ödeme planı", value: data?.paymentPlans.length ?? 0 },
           { label: "Öğretmen notu", value: data?.teacherNotes.length ?? 0 },
-          { label: "Gelişim", value: data?.developmentAssessments.length ?? 0 },
           { label: "Ödev", value: data?.homeworkAssignments.length ?? 0 },
+          { label: "Başarı", value: formatPercentNumber(reportSuccessRate(reportTotal)) },
+          { label: "Net", value: formatNetNumber(reportTotal?.net) },
+          { label: "Soru", value: formatNetNumber(reportQuestionCount(reportTotal)) },
+          { label: "Ödeme planı", value: data?.paymentPlans.length ?? 0 },
           { label: "Bekleyen ödeme", value: canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Kapalı" },
         ]}
       />
@@ -175,7 +178,7 @@ export function GuardianPortalPage() {
   );
 }
 
-async function loadGuardianStudentPortal(accessToken: string, studentId: string, rolePreviewToken = "", reportExamId = portalExamId) {
+async function loadGuardianStudentPortal(accessToken: string, studentId: string, rolePreviewToken = "", reportExamId = fallbackReportExamId) {
   const [profile, classHistory, enrollments, notificationPreferences, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, paymentPlans, report, errorBooklet, progress, courses, terms] = await Promise.all([
     readOnlyRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/profile`, rolePreviewToken),
     readOnlyRequest<StudentClassHistoryRecord[]>(
@@ -348,4 +351,8 @@ function formatPendingPayment(plans: PaymentPlanWithInstallmentsRecord[]) {
     0,
   );
   return formatMoney(total, plans[0]?.currency ?? "TRY");
+}
+
+function formatNetNumber(value: number | undefined) {
+  return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
 }

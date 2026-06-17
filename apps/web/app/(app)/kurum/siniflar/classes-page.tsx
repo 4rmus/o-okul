@@ -3,7 +3,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import type { CampusRecord, ClassRecord, GradeLevelRecord } from "@uzman-hocam/shared-types";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
@@ -14,7 +14,7 @@ import {
   type ClassFormPayload,
   type ClassFormState,
 } from "../../../../src/form-validation.js";
-import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 
 const emptyForm: ClassFormState = {
   name: "",
@@ -28,7 +28,8 @@ export function ClassesPage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
+  const { confirm, confirmationDialog } = useConfirmDialog();
+  const [listQuery, setListQuery] = useUrlListState(searchParams, { sortOptions: classSortOptions });
   const queryKey = ["next-classes", auth?.session.tenantId ?? "anonymous", listQuery];
   const listQueryKey = ["next-classes", auth?.session.tenantId ?? "anonymous"];
   const classesQuery = useQuery({
@@ -151,7 +152,12 @@ export function ClassesPage() {
 
   async function handleDelete(record: ClassRecord) {
     if (!auth) return;
-    if (!window.confirm(`${record.name} silinsin mi?`)) return;
+    const confirmed = await confirm({
+      confirmLabel: "Sil",
+      message: `${record.name} sınıfı silinsin mi?`,
+      title: "Sınıfı sil",
+    });
+    if (!confirmed) return;
 
     setError("");
     try {
@@ -253,6 +259,7 @@ export function ClassesPage() {
           </select>
         </label>
       </FormModal>
+      {confirmationDialog}
     </>
   );
 }

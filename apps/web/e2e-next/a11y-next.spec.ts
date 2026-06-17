@@ -67,6 +67,9 @@ async function expectNoHorizontalOverflow(page: Page, label: string) {
 
 async function openInstitutionDashboard(page: Page) {
   await installInstitutionApiMocks(page);
+  await page.addInitScript(() => {
+    document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
+  });
   await page.context().addCookies([{ name: "csrfToken", url: "http://localhost:3001", value: "csrf-token" }]);
 
   await page.goto("/kurum");
@@ -75,9 +78,9 @@ async function openInstitutionDashboard(page: Page) {
 }
 
 async function installInstitutionApiMocks(page: Page) {
-  await page.route("http://localhost:3100/api/v1/**", async (route) => {
+  await page.route("**/api/v1/**", async (route) => {
     if (route.request().method() === "OPTIONS") {
-      await route.fulfill({ headers: corsHeaders, status: 204 });
+      await route.fulfill({ headers: corsHeadersFor(route), status: 204 });
       return;
     }
 
@@ -144,9 +147,16 @@ async function fulfillData(route: Route, data: unknown, meta?: { limit: number; 
   await route.fulfill({
     body: JSON.stringify(meta ? { data, meta } : { data }),
     headers: {
-      ...corsHeaders,
+      ...corsHeadersFor(route),
       "content-type": "application/json",
     },
     status: 200,
   });
+}
+
+function corsHeadersFor(route: Route) {
+  return {
+    ...corsHeaders,
+    "access-control-allow-origin": route.request().headers().origin ?? corsHeaders["access-control-allow-origin"],
+  };
 }

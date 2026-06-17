@@ -10,6 +10,7 @@ import { apiBaseUrl, apiRequest } from "../../../src/api-client.js";
 import {
   type KurumAnnouncementSummary,
   type KurumDecisionSignals,
+  type KurumSystemHealthSummary,
   useKurumDashboardDataQuery,
   useKurumStudentProgressQuery,
 } from "./kurum-dashboard-data.js";
@@ -61,6 +62,12 @@ export function KurumDashboard() {
     overdueInstallments: 0,
   };
   const announcements = dashboardQuery.data?.announcements ?? { publishedCount: 0 };
+  const systemHealth = dashboardQuery.data?.systemHealth ?? {
+    apiOk: false,
+    postgresOk: false,
+    readyOk: false,
+    redisOk: false,
+  };
   const examResult = toExamResult(latestSnapshot);
   const classCompare = toClassCompare(latestSnapshot);
   const topicRadar = toTopicRadar(latestSnapshot);
@@ -78,7 +85,7 @@ export function KurumDashboard() {
   const visibleAttentionItems = buildAttentionItems(decisionSignals, latestExam?.title, latestSnapshot).filter((item) =>
     canAccessHref(auth?.session.roles ?? [], item.href),
   );
-  const visibleSummaryCards = buildSummaryCards(latestExam?.title, latestSnapshot, announcements).filter((card) =>
+  const visibleSummaryCards = buildSummaryCards(latestExam?.title, latestSnapshot, announcements, systemHealth).filter((card) =>
     canAccessHref(auth?.session.roles ?? [], card.href),
   );
   const [isSetupDismissed, setIsSetupDismissed] = useState(false);
@@ -149,10 +156,13 @@ export function KurumDashboard() {
         )}
       </section>
       {visibleSummaryCards.length > 0 ? (
-        <section className="next-dashboard-summary-grid" aria-label="Güncel özet">
-          {visibleSummaryCards.map((card) => (
-            <SummaryCard key={card.href} {...card} />
-          ))}
+        <section className="next-report-list" aria-label="Operasyon özeti">
+          <h2>Operasyon özeti</h2>
+          <div className="next-dashboard-summary-grid">
+            {visibleSummaryCards.map((card) => (
+              <SummaryCard key={`${card.href}-${card.title}`} {...card} />
+            ))}
+          </div>
         </section>
       ) : null}
       {visibleDecisionCards.length > 0 ? (
@@ -317,6 +327,7 @@ function buildSummaryCards(
   examTitle: string | undefined,
   snapshot: ReportSnapshotRecord | null | undefined,
   announcements: KurumAnnouncementSummary,
+  systemHealth: KurumSystemHealthSummary,
 ) {
   return [
     {
@@ -335,7 +346,27 @@ function buildSummaryCards(
         : "Henüz yayınlanmış duyuru yok",
       href: "/kurum/duyurular",
     },
+    {
+      title: "Sistem sağlığı",
+      value: systemHealthStatusLabel(systemHealth),
+      description: systemHealthDescription(systemHealth),
+      href: "/kurum/sistem-sagligi",
+    },
   ];
+}
+
+function systemHealthStatusLabel(systemHealth: KurumSystemHealthSummary) {
+  if (systemHealth.apiOk && systemHealth.readyOk && systemHealth.postgresOk && systemHealth.redisOk) return "Hazır";
+  if (systemHealth.apiOk || systemHealth.readyOk) return "Kısıtlı";
+  return "Sorunlu";
+}
+
+function systemHealthDescription(systemHealth: KurumSystemHealthSummary) {
+  const dependencies = [
+    systemHealth.postgresOk ? "Postgres hazır" : "Postgres kontrol",
+    systemHealth.redisOk ? "Redis hazır" : "Redis kontrol",
+  ];
+  return `${systemHealth.apiOk ? "API çalışıyor" : "API kontrol"} · ${dependencies.join(" · ")}`;
 }
 
 function reportStatusLabel(examTitle: string | undefined, snapshot: ReportSnapshotRecord | null | undefined) {

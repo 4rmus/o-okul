@@ -4,7 +4,7 @@ import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import type { GuardianRecord } from "@uzman-hocam/shared-types";
 import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
@@ -15,7 +15,7 @@ import {
   type GuardianFormPayload,
   type GuardianFormState,
 } from "../../../../src/form-validation.js";
-import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 
 const emptyForm: GuardianFormState = {
   firstName: "",
@@ -27,7 +27,8 @@ export function GuardiansPage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
+  const { confirm, confirmationDialog } = useConfirmDialog();
+  const [listQuery, setListQuery] = useUrlListState(searchParams, { sortOptions: guardianSortOptions });
   const queryKey = ["next-guardians", auth?.session.tenantId ?? "anonymous", listQuery];
   const listQueryKey = ["next-guardians", auth?.session.tenantId ?? "anonymous"];
   const guardiansQuery = useQuery({
@@ -125,7 +126,12 @@ export function GuardiansPage() {
 
   async function handleDelete(guardian: GuardianRecord) {
     if (!auth) return;
-    if (!window.confirm(`${guardian.firstName} ${guardian.lastName} silinsin mi?`)) return;
+    const confirmed = await confirm({
+      confirmLabel: "Sil",
+      message: `${guardian.firstName} ${guardian.lastName} velisi silinsin mi?`,
+      title: "Veliyi sil",
+    });
+    if (!confirmed) return;
 
     setError("");
     try {
@@ -203,6 +209,7 @@ export function GuardiansPage() {
           />
         </label>
       </FormModal>
+      {confirmationDialog}
     </>
   );
 }
