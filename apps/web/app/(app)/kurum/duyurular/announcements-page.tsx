@@ -1,10 +1,28 @@
 "use client";
 
 import { type FormEvent, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import {
+  Alert,
+  Button,
+  CrudPage,
+  DataTable,
+  EmptyState,
+  Field,
+  FormModal,
+  Input,
+  MetricCard,
+  Panel,
+  Select,
+  StatusBadge,
+  Textarea,
+  type DataTableColumn,
+  type StatusBadgeProps,
+} from "@uzman-hocam/ui";
 import type {
   AcademicTermRecord,
+  AnnouncementRecipientRecord,
   AnnouncementRecipientReport,
   AnnouncementRecord,
   CampusRecord,
@@ -23,7 +41,9 @@ import {
   type AnnouncementFormPayload,
   type AnnouncementFormState,
 } from "../../../../src/form-validation.js";
-import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+import { buildListUrl, initialListQuery, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { SmsDeliveryReportPanel, type SmsBatchDeliveryReportRecord } from "../_shared/sms-delivery-report-panel.js";
 
 const emptyForm: AnnouncementFormState = {
   title: "",
@@ -49,7 +69,8 @@ interface AnnouncementReportData {
 export function AnnouncementsPage() {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
-  const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
+  const searchParams = useSearchParams();
+  const [listQuery, setListQuery] = useUrlListState(searchParams, { sortOptions: announcementSortOptions });
   const queryKey = ["next-announcements", auth?.session.tenantId ?? "anonymous", listQuery];
   const listQueryKey = ["next-announcements", auth?.session.tenantId ?? "anonymous"];
   const announcementsQuery = useQuery({
@@ -91,36 +112,66 @@ export function AnnouncementsPage() {
   const classNames = useMemo(() => new Map(references.classes.map((record) => [record.id, record.name])), [references.classes]);
   const courseNames = useMemo(() => new Map(references.courses.map((record) => [record.id, formatCourseName(record.name)])), [references.courses]);
   const termNames = useMemo(() => new Map(references.terms.map((record) => [record.id, record.name])), [references.terms]);
+  const recipientReport = reportDataQuery.data?.recipientReport;
+  const announcementSummaryItems = buildAnnouncementSummaryItems({
+    listTotal: announcementsQuery.data?.meta?.total ?? rows.length,
+    recipientReport,
+    rows,
+  });
+  const announcementSummaryBadges = buildAnnouncementSummaryBadges({
+    isReferenceLoading: pageDataQuery.isPending,
+    listQuery,
+    messageTemplates,
+  });
+  const announcementSummaryActions = buildAnnouncementSummaryActions({
+    recipientReport,
+    selectedAnnouncement,
+    selectedSmsTemplate,
+    smsDeliveryReportJobId,
+    smsStatus,
+  });
 
   const columns: Array<DataTableColumn<AnnouncementRecord>> = [
     {
       key: "title",
       header: "Başlık",
+      mobilePriority: "primary",
+      priority: "primary",
       render: (announcement) => announcement.title,
+      sticky: "left",
     },
     {
       key: "audience",
       header: "Hedef",
+      mobilePriority: "secondary",
+      priority: "secondary",
       render: (announcement) => audienceLabel(announcement.audience),
     },
     {
       key: "scope",
       header: "Kapsam",
+      mobilePriority: "hidden",
+      priority: "optional",
       render: (announcement) => scopeLabel(announcement, { campusNames, gradeLevelNames, classNames, courseNames, termNames }),
     },
     {
       key: "publishedAt",
       header: "Yayın",
+      mobilePriority: "secondary",
+      priority: "optional",
       render: (announcement) => new Date(announcement.publishedAt).toLocaleDateString("tr-TR"),
     },
     {
       key: "recipients",
       header: "Rapor",
+      mobilePriority: "primary",
+      priority: "primary",
       render: (announcement) => (
         <Button type="button" variant="secondary" onClick={() => openRecipientReport(announcement.id)}>
           Alıcılar
         </Button>
       ),
+      sticky: "right",
     },
   ];
 
@@ -232,8 +283,20 @@ export function AnnouncementsPage() {
         emptyText="Duyuru kaydı yok"
         error={error || (announcementsQuery.isError ? apiErrorMessage(announcementsQuery.error, "Duyurular alınamadı.") : undefined)}
         getRowKey={(announcement) => announcement.id}
+        density="compact"
         loading={announcementsQuery.isPending}
+        rowClassName={(announcement) => (announcement.id === selectedReportId ? "next-announcement-row--selected" : undefined)}
         rows={rows}
+        summary={
+          <OperationSummary
+            actions={announcementSummaryActions}
+            ariaLabel="Duyuru operasyon özeti"
+            badges={announcementSummaryBadges}
+            items={announcementSummaryItems}
+          />
+        }
+        tableCaption="Duyuru yönetimi"
+        tableDescription="Kurum, sınıf, öğretmen, öğrenci ve veli hedefli duyuru operasyonları."
         title="Duyurular"
       />
       {selectedReportId ? (
@@ -241,30 +304,30 @@ export function AnnouncementsPage() {
           <header className="uh-panel__header">
             <div>
               <h2>Alıcı raporu</h2>
-              <p>{selectedAnnouncement?.title ?? selectedReportId}</p>
+              <p>{selectedAnnouncement?.title ?? "Seçili duyuru listede yok"}</p>
             </div>
             <Button type="button" variant="secondary" onClick={closeRecipientReport}>
               Kapat
             </Button>
           </header>
           {reportDataQuery.isPending ? (
-            <p>Rapor yükleniyor...</p>
+            <Alert title="Rapor yükleniyor">Alıcı raporu hazırlanıyor.</Alert>
           ) : reportDataQuery.isError ? (
-            <p>{apiErrorMessage(reportDataQuery.error, "Alıcı raporu alınamadı.")}</p>
+            <Alert tone="danger" title="Alıcı raporu alınamadı">
+              {apiErrorMessage(reportDataQuery.error, "Alıcı raporu alınamadı.")}
+            </Alert>
           ) : reportDataQuery.data?.recipientReport ? (
             <AnnouncementRecipientReportPanel report={reportDataQuery.data.recipientReport} />
           ) : null}
           {selectedAnnouncement && selectedAnnouncement.audience !== "TEACHERS" ? (
-            <section aria-label="Duyuru SMS gönderimi" className="next-preview-box">
-              <header className="next-inline-header">
-                <div>
-                  <strong>SMS gönderimi</strong>
-                  <p>{selectedAnnouncement.title}</p>
-                </div>
-              </header>
-              <label>
-                SMS şablonu
-                <select
+            <Panel
+              aria-label="Duyuru SMS gönderimi"
+              title="SMS gönderimi"
+              description={selectedAnnouncement.title}
+              tone="muted"
+            >
+              <Field label="SMS şablonu">
+                <Select
                   value={selectedSmsTemplate?.id ?? ""}
                   onChange={(event) => setSmsTemplateId(event.target.value)}
                 >
@@ -273,14 +336,22 @@ export function AnnouncementsPage() {
                       {template.name}
                     </option>
                   ))}
-                </select>
-              </label>
+                </Select>
+              </Field>
               <Button type="button" onClick={() => void handleSendAnnouncementSms()} disabled={!selectedSmsTemplate}>
                 <Send size={17} aria-hidden="true" />
                 SMS gönder
               </Button>
-              {smsStatus ? <p>{smsStatus}</p> : null}
-              {smsError ? <p>{smsError}</p> : null}
+              {smsStatus ? (
+                <Alert tone="success" title="SMS kuyruğa alındı">
+                  {smsStatus}
+                </Alert>
+              ) : null}
+              {smsError ? (
+                <Alert tone="danger" title="SMS gönderimi başlatılamadı">
+                  {smsError}
+                </Alert>
+              ) : null}
               {smsDeliveryReportJobId ? (
                 <SmsDeliveryReportPanel
                   isError={reportDataQuery.isError}
@@ -290,7 +361,7 @@ export function AnnouncementsPage() {
                   report={reportDataQuery.data?.smsDeliveryReport}
                 />
               ) : null}
-            </section>
+            </Panel>
           ) : null}
         </section>
       ) : null}
@@ -302,25 +373,23 @@ export function AnnouncementsPage() {
         submitLabel="Yayınla"
         title="Duyuru ekle"
       >
-        <label>
-          Başlık
+        <Field label="Başlık">
           <Input
             required
             value={form.title}
             onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
           />
-        </label>
-        <label>
-          Duyuru metni
-          <Input
+        </Field>
+        <Field label="Duyuru metni" description="Veliler, öğrenciler veya öğretmenlerle paylaşılacak duyuru içeriği.">
+          <Textarea
             required
+            rows={5}
             value={form.body}
             onChange={(event) => setForm((current) => ({ ...current, body: event.target.value }))}
           />
-        </label>
-        <label>
-          Hedef
-          <select
+        </Field>
+        <Field label="Hedef">
+          <Select
             value={form.audience}
             onChange={(event) =>
               setForm((current) => ({
@@ -333,11 +402,10 @@ export function AnnouncementsPage() {
             <option value="TEACHERS">Öğretmenler</option>
             <option value="STUDENTS">Öğrenciler</option>
             <option value="GUARDIANS">Veliler</option>
-          </select>
-        </label>
-        <label>
-          Kampüs
-          <select
+          </Select>
+        </Field>
+        <Field label="Kampüs">
+          <Select
             value={form.campusId}
             onChange={(event) => setForm((current) => ({ ...current, campusId: event.target.value }))}
           >
@@ -347,11 +415,10 @@ export function AnnouncementsPage() {
                 {campus.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Seviye
-          <select
+          </Select>
+        </Field>
+        <Field label="Seviye">
+          <Select
             value={form.gradeLevelId}
             onChange={(event) => setForm((current) => ({ ...current, gradeLevelId: event.target.value }))}
           >
@@ -361,11 +428,10 @@ export function AnnouncementsPage() {
                 {gradeLevel.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Sınıf
-          <select
+          </Select>
+        </Field>
+        <Field label="Sınıf">
+          <Select
             value={form.classId}
             onChange={(event) => setForm((current) => ({ ...current, classId: event.target.value }))}
           >
@@ -375,11 +441,10 @@ export function AnnouncementsPage() {
                 {schoolClass.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Ders
-          <select
+          </Select>
+        </Field>
+        <Field label="Ders">
+          <Select
             value={form.courseId}
             onChange={(event) => setForm((current) => ({ ...current, courseId: event.target.value }))}
           >
@@ -389,11 +454,10 @@ export function AnnouncementsPage() {
                 {formatCourseName(course.name)}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Dönem
-          <select
+          </Select>
+        </Field>
+        <Field label="Dönem">
+          <Select
             value={form.termId}
             onChange={(event) => setForm((current) => ({ ...current, termId: event.target.value }))}
           >
@@ -403,8 +467,8 @@ export function AnnouncementsPage() {
                 {term.name}
               </option>
             ))}
-          </select>
-        </label>
+          </Select>
+        </Field>
       </FormModal>
     </>
   );
@@ -504,6 +568,122 @@ function audienceLabel(audience: AnnouncementRecord["audience"]) {
   return "Tüm okul";
 }
 
+function buildAnnouncementSummaryItems({
+  listTotal,
+  recipientReport,
+  rows,
+}: {
+  listTotal: number;
+  recipientReport?: AnnouncementRecipientReport;
+  rows: AnnouncementRecord[];
+}): OperationSummaryItem[] {
+  const smsEligibleCount = rows.filter((announcement) => announcement.audience !== "TEACHERS").length;
+  const scopedCount = rows.filter(hasAnnouncementScope).length;
+  const guardianCount = rows.filter((announcement) => announcement.audience === "GUARDIANS").length;
+  const readProgress = recipientReport ? `${formatCount(recipientReport.read)}/${formatCount(recipientReport.total)}` : "Seçim bekliyor";
+
+  return [
+    {
+      description: "URL state ile sayfalanan kayıt",
+      key: "total",
+      label: "Duyuru toplamı",
+      value: formatCount(listTotal),
+    },
+    {
+      description: `${formatCount(guardianCount)} veli hedefli`,
+      key: "sms-eligible",
+      label: "SMS uygun",
+      tone: smsEligibleCount > 0 ? "info" : "default",
+      value: formatCount(smsEligibleCount),
+    },
+    {
+      description: "Kampüs, sınıf, ders veya dönem hedefli",
+      key: "scoped",
+      label: "Kapsamlı hedef",
+      tone: scopedCount > 0 ? "info" : "default",
+      value: `${formatCount(scopedCount)}/${formatCount(rows.length)}`,
+    },
+    {
+      description: recipientReport ? "Seçili duyuru okundu oranı" : "Alıcı raporu seçilmedi",
+      key: "read-progress",
+      label: "Okunma takibi",
+      tone: recipientReport && recipientReport.unread > 0 ? "warning" : recipientReport ? "success" : "default",
+      value: readProgress,
+    },
+  ];
+}
+
+function buildAnnouncementSummaryBadges({
+  isReferenceLoading,
+  listQuery,
+  messageTemplates,
+}: {
+  isReferenceLoading: boolean;
+  listQuery: ListQueryState;
+  messageTemplates: MessageTemplateRecord[];
+}): OperationSummaryBadge[] {
+  return [
+    {
+      key: "sort",
+      label: formatAnnouncementSortLabel(listQuery.sort),
+      tone: listQuery.sort ? "info" : "neutral",
+    },
+    {
+      key: "references",
+      label: isReferenceLoading ? "Referanslar yükleniyor" : "Bağlam referansları hazır",
+      tone: isReferenceLoading ? "warning" : "success",
+    },
+    {
+      key: "templates",
+      label: messageTemplates.length > 0 ? "SMS şablonu hazır" : "SMS şablonu bekliyor",
+      tone: messageTemplates.length > 0 ? "success" : "warning",
+    },
+  ];
+}
+
+function buildAnnouncementSummaryActions({
+  recipientReport,
+  selectedAnnouncement,
+  selectedSmsTemplate,
+  smsDeliveryReportJobId,
+  smsStatus,
+}: {
+  recipientReport?: AnnouncementRecipientReport;
+  selectedAnnouncement?: AnnouncementRecord;
+  selectedSmsTemplate?: MessageTemplateRecord;
+  smsDeliveryReportJobId: string;
+  smsStatus: string;
+}): OperationSummaryAction[] {
+  const smsUnavailable = selectedAnnouncement?.audience === "TEACHERS";
+
+  return [
+    {
+      detail: selectedAnnouncement ? "Seçili duyurunun alıcı kapsamı" : "Satırdaki Alıcılar aksiyonuyla açılır",
+      key: "recipient-report",
+      label: "Alıcı raporu",
+      status: selectedAnnouncement ? "Seçili" : "Seçilmedi",
+      tone: selectedAnnouncement ? "info" : "neutral",
+      value: recipientReport ? `${formatCount(recipientReport.total)} alıcı` : "Bekliyor",
+    },
+    {
+      detail: smsUnavailable ? "Öğretmen hedefinde SMS kapalı" : selectedSmsTemplate ? selectedSmsTemplate.name : "Önce SMS şablonu oluşturulmalı",
+      key: "sms-queue",
+      label: "SMS kuyruğu",
+      status: smsDeliveryReportJobId ? "Kuyrukta" : selectedSmsTemplate && !smsUnavailable ? "Hazır" : "Bekliyor",
+      tone: smsDeliveryReportJobId ? "warning" : selectedSmsTemplate && !smsUnavailable ? "success" : "neutral",
+      value: smsStatus || (smsUnavailable ? "Uygun değil" : selectedSmsTemplate ? "Gönderilebilir" : "Şablon yok"),
+    },
+    {
+      detail: recipientReport ? "Okunmayan alıcılar raporda görünür" : "Rapor seçimi bekleniyor",
+      key: "read-tracking",
+      label: "Okunma takibi",
+      status: recipientReport && recipientReport.unread > 0 ? "Takip" : recipientReport ? "Güncel" : "Bekliyor",
+      tone: recipientReport && recipientReport.unread > 0 ? "warning" : recipientReport ? "success" : "neutral",
+      value: recipientReport ? `${formatCount(recipientReport.unread)} bekliyor` : "Rapor yok",
+    },
+  ];
+}
+
 function scopeLabel(
   announcement: AnnouncementRecord,
   lookups: {
@@ -514,50 +694,84 @@ function scopeLabel(
     termNames: Map<string, string>;
   },
 ) {
+  const fallback = "Kapsam doğrulanmadı";
+  const unresolvedFallback = (value: string | undefined) => (value ? fallback : "");
   const parts = [
-    announcement.campusId ? (lookups.campusNames.get(announcement.campusId) ?? announcement.campusId) : "",
-    announcement.gradeLevelId ? (lookups.gradeLevelNames.get(announcement.gradeLevelId) ?? announcement.gradeLevelId) : "",
-    announcement.classId ? (lookups.classNames.get(announcement.classId) ?? announcement.classId) : "",
-    announcement.courseId ? (lookups.courseNames.get(announcement.courseId) ?? announcement.courseId) : "",
-    announcement.termId ? (lookups.termNames.get(announcement.termId) ?? announcement.termId) : "",
+    announcement.campusId ? (lookups.campusNames.get(announcement.campusId) ?? unresolvedFallback(announcement.campusId)) : "",
+    announcement.gradeLevelId ? (lookups.gradeLevelNames.get(announcement.gradeLevelId) ?? unresolvedFallback(announcement.gradeLevelId)) : "",
+    announcement.classId ? (lookups.classNames.get(announcement.classId) ?? unresolvedFallback(announcement.classId)) : "",
+    announcement.courseId ? (lookups.courseNames.get(announcement.courseId) ?? unresolvedFallback(announcement.courseId)) : "",
+    announcement.termId ? (lookups.termNames.get(announcement.termId) ?? unresolvedFallback(announcement.termId)) : "",
   ].filter(Boolean);
-  return parts.length > 0 ? parts.join(" / ") : "Tüm kapsam";
+  return parts.length > 0 ? Array.from(new Set(parts)).join(" / ") : "Tüm kapsam";
+}
+
+function hasAnnouncementScope(announcement: AnnouncementRecord) {
+  return Boolean(announcement.campusId || announcement.gradeLevelId || announcement.classId || announcement.courseId || announcement.termId);
+}
+
+function formatAnnouncementSortLabel(sort: string) {
+  const option = announcementSortOptions.find((candidate) => candidate.value === sort);
+  return option ? `Sıralama: ${option.label}` : "Sıralama: Varsayılan";
+}
+
+function formatCount(value: number) {
+  return value.toLocaleString("tr-TR");
 }
 
 function AnnouncementRecipientReportPanel({ report }: { report: AnnouncementRecipientReport }) {
+  const columns: Array<DataTableColumn<AnnouncementRecipientRecord>> = [
+    {
+      key: "recipient",
+      header: "Alıcı",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (recipient) => recipient.displayName,
+      sticky: "left",
+    },
+    {
+      key: "type",
+      header: "Tür",
+      mobilePriority: "secondary",
+      priority: "secondary",
+      render: (recipient) => recipientTypeLabel(recipient.recipientType),
+    },
+    {
+      key: "student",
+      header: "Öğrenci",
+      mobilePriority: "hidden",
+      priority: "optional",
+      render: (recipient) => recipient.relatedStudentName ?? "-",
+    },
+    {
+      key: "status",
+      header: "Durum",
+      mobilePriority: "primary",
+      priority: "secondary",
+      render: (recipient) => (
+        <StatusBadge tone={recipientReadTone(recipient)}>
+          {recipient.readAt ? `Okundu ${new Date(recipient.readAt).toLocaleString("tr-TR")}` : "Bekliyor"}
+        </StatusBadge>
+      ),
+    },
+  ];
+
   return (
     <>
-      <div className="uh-summary-grid">
-        <span>Toplam: {report.total}</span>
-        <span>Okundu: {report.read}</span>
-        <span>Bekleyen: {report.unread}</span>
-      </div>
-      <table className="uh-data-table">
-        <thead>
-          <tr>
-            <th>Alıcı</th>
-            <th>Tür</th>
-            <th>Öğrenci</th>
-            <th>Durum</th>
-          </tr>
-        </thead>
-        <tbody>
-          {report.recipients.length > 0 ? (
-            report.recipients.map((recipient) => (
-              <tr key={`${recipient.recipientType}-${recipient.subjectId}-${recipient.relatedStudentId ?? ""}`}>
-                <td>{recipient.displayName}</td>
-                <td>{recipientTypeLabel(recipient.recipientType)}</td>
-                <td>{recipient.relatedStudentName ?? "-"}</td>
-                <td>{recipient.readAt ? `Okundu ${new Date(recipient.readAt).toLocaleString("tr-TR")}` : "Bekliyor"}</td>
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan={4}>Alıcı yok</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      <section className="next-announcement-recipient-metrics" aria-label="Alıcı raporu özeti">
+        <MetricCard label="Toplam" value={report.total} description="Duyuru kapsamındaki kişi" />
+        <MetricCard label="Okundu" tone="success" value={report.read} description="Okuma zamanı kaydedildi" />
+        <MetricCard label="Bekleyen" tone="warning" value={report.unread} description="Okuma bekliyor" />
+      </section>
+      <DataTable
+        caption="Duyuru alıcıları"
+        columns={columns}
+        density="compact"
+        description="Duyuruya bağlı alıcı kapsamı ve okundu durumu."
+        emptyText="Alıcı yok"
+        getRowKey={(recipient) => `${recipient.recipientType}-${recipient.subjectId}-${recipient.relatedStudentId ?? ""}`}
+        rows={report.recipients}
+      />
     </>
   );
 }
@@ -584,85 +798,14 @@ interface SmsBatchRecipientPreviewResult {
   recipientCount: number;
 }
 
-interface SmsBatchDeliveryReportRecord {
-  id: string;
-  tenantId: string;
-  jobId: string;
-  templateId: string;
-  recipientCount: number;
-  sentCount: number;
-  failedCount: number;
-  billableSegments: number;
-  status: "queued" | "completed" | "failed";
-  providerErrorCode?: string;
-}
-
-function SmsDeliveryReportPanel({
-  isError,
-  isLoading,
-  jobId,
-  onRefresh,
-  report,
-}: {
-  isError: boolean;
-  isLoading: boolean;
-  jobId: string;
-  onRefresh: () => void;
-  report?: SmsBatchDeliveryReportRecord;
-}) {
-  return (
-    <section aria-label="SMS teslim raporu" className="next-preview-box">
-      <header className="next-inline-header">
-        <div>
-          <strong>Teslim raporu</strong>
-          <p>{jobId}</p>
-        </div>
-        <Button type="button" variant="secondary" onClick={onRefresh}>
-          Yenile
-        </Button>
-      </header>
-      {isLoading ? (
-        <p>Rapor yükleniyor...</p>
-      ) : isError ? (
-        <p>Rapor alınamadı.</p>
-      ) : report ? (
-        <dl className="next-report-grid">
-          <div>
-            <dt>Durum</dt>
-            <dd>{report.status}</dd>
-          </div>
-          <div>
-            <dt>Alıcı</dt>
-            <dd>{report.recipientCount}</dd>
-          </div>
-          <div>
-            <dt>Gönderilen</dt>
-            <dd>{report.sentCount}</dd>
-          </div>
-          <div>
-            <dt>Başarısız</dt>
-            <dd>{report.failedCount}</dd>
-          </div>
-          <div>
-            <dt>Segment</dt>
-            <dd>{report.billableSegments}</dd>
-          </div>
-          {report.providerErrorCode ? (
-            <div>
-              <dt>Hata</dt>
-              <dd>{report.providerErrorCode}</dd>
-            </div>
-          ) : null}
-        </dl>
-      ) : null}
-    </section>
-  );
-}
-
 function recipientTypeLabel(type: AnnouncementRecipientReport["recipients"][number]["recipientType"]) {
   if (type === "TEACHER") return "Öğretmen";
   if (type === "GUARDIAN") return "Veli";
   return "Öğrenci";
+}
+
+function recipientReadTone(recipient: AnnouncementRecipientRecord): StatusBadgeProps["tone"] {
+  return recipient.readAt ? "success" : "warning";
 }
 
 const emptyReferences = {

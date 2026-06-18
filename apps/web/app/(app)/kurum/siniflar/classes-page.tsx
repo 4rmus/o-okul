@@ -3,7 +3,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, Field, FormModal, Input, Select, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import type { CampusRecord, ClassRecord, GradeLevelRecord } from "@uzman-hocam/shared-types";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
@@ -15,6 +15,7 @@ import {
   type ClassFormState,
 } from "../../../../src/form-validation.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 const emptyForm: ClassFormState = {
   name: "",
@@ -59,6 +60,80 @@ export function ClassesPage() {
   const gradeLevels = gradeLevelsQuery.data?.data ?? [];
   const campusNames = new Map(campuses.map((record) => [record.id, record.name]));
   const gradeLevelNames = new Map(gradeLevels.map((record) => [record.id, record.name]));
+  const campusCoverageCount = new Set(rows.map((record) => record.campusId).filter(Boolean)).size;
+  const gradeLevelCoverageCount = new Set(rows.map((record) => record.gradeLevelId || record.level).filter(Boolean)).size;
+  const sectionCoverageCount = rows.filter((record) => Boolean(record.section)).length;
+  const classSummaryItems: OperationSummaryItem[] = [
+    {
+      description: "Filtrelenmiş toplam kayıt",
+      key: "total",
+      label: "Sınıf toplamı",
+      value: formatCount(classesQuery.data?.meta?.total ?? rows.length),
+    },
+    {
+      description: "Bu sayfada bağlı kampüs",
+      key: "campus",
+      label: "Kampüs kapsamı",
+      tone: campusCoverageCount > 0 ? "info" : "warning",
+      value: campusCoverageCount > 0 ? `${campusCoverageCount} kampüs` : "Bağsız",
+    },
+    {
+      description: "Seviye veya legacy level",
+      key: "grade",
+      label: "Seviye kapsamı",
+      tone: gradeLevelCoverageCount > 0 ? "success" : "warning",
+      value: gradeLevelCoverageCount > 0 ? `${gradeLevelCoverageCount} seviye` : "Eksik",
+    },
+    {
+      description: "Şube alanı dolu sınıflar",
+      key: "section",
+      label: "Şube düzeni",
+      value: `${sectionCoverageCount}/${rows.length}`,
+    },
+  ];
+  const classSummaryBadges: OperationSummaryBadge[] = [
+    {
+      key: "campus-ref",
+      label: campuses.length > 0 ? "Kampüs referansı hazır" : "Kampüs referansı bekliyor",
+      tone: campuses.length > 0 ? "success" : "warning",
+    },
+    {
+      key: "grade-ref",
+      label: gradeLevels.length > 0 ? "Seviye referansı hazır" : "Seviye referansı bekliyor",
+      tone: gradeLevels.length > 0 ? "success" : "warning",
+    },
+    {
+      key: "sort",
+      label: `Sıralama: ${formatClassSort(listQuery.sort)}`,
+      tone: "neutral",
+    },
+  ];
+  const classSummaryActions: OperationSummaryAction[] = [
+    {
+      detail: "Kampüs ve seviye referansları birlikte izlenir",
+      key: "references",
+      label: "Referans eşleşmesi",
+      status: campuses.length > 0 && gradeLevels.length > 0 ? "Hazır" : "Kontrol",
+      tone: campuses.length > 0 && gradeLevels.length > 0 ? "success" : "warning",
+      value: `Kampüs ${campuses.length} / Seviye ${gradeLevels.length}`,
+    },
+    {
+      detail: "Bu sayfadaki sınıf dağılımı",
+      key: "campus-distribution",
+      label: "Kampüs dağılımı",
+      status: campusCoverageCount > 0 ? "İzleniyor" : "Eksik",
+      tone: campusCoverageCount > 0 ? "info" : "warning",
+      value: campusCoverageCount > 0 ? `${campusCoverageCount} kampüs` : "Bağsız",
+    },
+    {
+      detail: "Şube alanı sınıf adını destekler",
+      key: "section-coverage",
+      label: "Şube düzeni",
+      status: sectionCoverageCount > 0 ? "İzleniyor" : "Opsiyonel",
+      tone: sectionCoverageCount > 0 ? "neutral" : "warning",
+      value: `${sectionCoverageCount}/${rows.length}`,
+    },
+  ];
 
   useEffect(() => {
     if (searchParams.get("new") === "1") openCreateForm();
@@ -68,26 +143,39 @@ export function ClassesPage() {
     {
       key: "name",
       header: "Sınıf",
+      mobilePriority: "primary",
+      priority: "primary",
       render: (record) => record.name,
+      sticky: "left",
     },
     {
       key: "level",
       header: "Seviye",
+      mobilePriority: "secondary",
+      priority: "secondary",
       render: (record) => gradeLevelLabel(record, gradeLevelNames),
     },
     {
       key: "section",
       header: "Şube",
+      mobilePriority: "hidden",
+      priority: "optional",
       render: (record) => record.section ?? "-",
     },
     {
       key: "campusId",
       header: "Kampüs",
+      mobilePriority: "secondary",
+      priority: "secondary",
       render: (record) => campusLabel(record.campusId, campusNames),
     },
     {
       key: "actions",
+      align: "center",
       header: "İşlem",
+      mobilePriority: "primary",
+      priority: "primary",
+      sticky: "right",
       render: (record) => (
         <span className="next-row-actions">
           <button type="button" onClick={() => openEditForm(record)} aria-label={`${record.name} düzenle`}>
@@ -187,6 +275,7 @@ export function ClassesPage() {
         }
         aria-label="Sınıf yönetimi"
         columns={columns}
+        density="compact"
         description="Kurum sınıflarını aynı CRUD kalıbıyla yönet."
         emptyState={
           <EmptyState
@@ -205,6 +294,16 @@ export function ClassesPage() {
         getRowKey={(record) => record.id}
         loading={classesQuery.isPending || campusesQuery.isPending || gradeLevelsQuery.isPending}
         rows={rows}
+        summary={
+          <OperationSummary
+            actions={classSummaryActions}
+            ariaLabel="Sınıf operasyon özeti"
+            badges={classSummaryBadges}
+            items={classSummaryItems}
+          />
+        }
+        tableCaption="Sınıf eğitim yapısı"
+        tableDescription="Sınıf, seviye, şube ve kampüs ilişkileri."
         title="Sınıflar"
       />
       <FormModal
@@ -215,17 +314,15 @@ export function ClassesPage() {
         submitLabel={editingClass ? "Kaydet" : "Ekle"}
         title={editingClass ? "Sınıf düzenle" : "Sınıf ekle"}
       >
-        <label>
-          Sınıf adı
+        <Field label="Sınıf adı">
           <Input
             required
             value={form.name}
             onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
           />
-        </label>
-        <label>
-          Seviye
-          <select
+        </Field>
+        <Field label="Seviye" description="Seçilen seviye sınıf raporları ve filtreleriyle eşleşir.">
+          <Select
             value={form.gradeLevelId ?? ""}
             onChange={(event) => {
               const gradeLevel = gradeLevels.find((record) => record.id === event.target.value);
@@ -238,26 +335,24 @@ export function ClassesPage() {
                 {record.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Şube
+          </Select>
+        </Field>
+        <Field label="Şube">
           <Input
             value={form.section ?? ""}
             onChange={(event) => setForm((current) => ({ ...current, section: event.target.value }))}
           />
-        </label>
-        <label>
-          Kampüs
-          <select value={form.campusId ?? ""} onChange={(event) => setForm((current) => ({ ...current, campusId: event.target.value }))}>
+        </Field>
+        <Field label="Kampüs" description="Kampüs bağlantısı sınıf rapor ve operasyon filtrelerinde bağlam sağlar.">
+          <Select value={form.campusId ?? ""} onChange={(event) => setForm((current) => ({ ...current, campusId: event.target.value }))}>
             <option value="">Seçiniz</option>
             {campuses.map((record) => (
               <option key={record.id} value={record.id}>
                 {record.name}
               </option>
             ))}
-          </select>
-        </label>
+          </Select>
+        </Field>
       </FormModal>
       {confirmationDialog}
     </>
@@ -319,4 +414,12 @@ function campusLabel(campusId: string | undefined, campusNames: Map<string, stri
 function gradeLevelLabel(record: ClassRecord, gradeLevelNames: Map<string, string>) {
   if (record.gradeLevelId) return gradeLevelNames.get(record.gradeLevelId) ?? record.gradeLevelId;
   return record.level ?? "-";
+}
+
+function formatCount(value: number) {
+  return value.toLocaleString("tr-TR");
+}
+
+function formatClassSort(value: string) {
+  return classSortOptions.find((option) => option.value === value)?.label ?? "Varsayılan";
 }

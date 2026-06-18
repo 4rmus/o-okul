@@ -3,7 +3,17 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import {
+  Button,
+  CrudPage,
+  EmptyState,
+  Field,
+  FormModal,
+  Input,
+  Select,
+  StatusBadge,
+  type DataTableColumn,
+} from "@uzman-hocam/ui";
 import {
   isPortalSubjectRoleName,
   portalSubjectRoles,
@@ -29,6 +39,7 @@ import {
   type TenantUserFormState,
 } from "../../../../src/form-validation.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 type Role = TenantAssignableRoleName;
 type InvitationSubjectType = PortalSubjectRoleName;
@@ -137,6 +148,7 @@ export function UsersPage() {
   const [isInvitationFormOpen, setIsInvitationFormOpen] = useState(false);
   const [invitationForm, setInvitationForm] = useState<IdentityInvitationFormState>(emptyInvitationForm);
   const [issuedToken, setIssuedToken] = useState<{ email: string; token: string } | null>(null);
+  const [isIssuedTokenRevealed, setIsIssuedTokenRevealed] = useState(false);
   const [error, setError] = useState("");
 
   const users = usersQuery.data?.data ?? [];
@@ -146,6 +158,7 @@ export function UsersPage() {
     () => buildSubjects(invitationForm.subjectType, subjectReferences.students, subjectReferences.guardians, subjectReferences.teachers),
     [invitationForm.subjectType, subjectReferences.guardians, subjectReferences.students, subjectReferences.teachers],
   );
+  const selectedInvitationSubject = subjects.find((subject) => subject.id === invitationForm.subjectId);
 
   useEffect(() => {
     const subjectType = parseInvitationSubjectType(searchParams.get("invite"));
@@ -160,6 +173,7 @@ export function UsersPage() {
     });
     setError("");
     setIssuedToken(null);
+    setIsIssuedTokenRevealed(false);
     setIsInvitationFormOpen(true);
   }, [searchParams, subjectReferences]);
 
@@ -167,18 +181,26 @@ export function UsersPage() {
     {
       key: "name",
       header: "Ad Soyad",
+      priority: "primary",
       render: (user) => user.name,
+      sticky: "left",
     },
     {
       key: "email",
       header: "E-posta",
+      priority: "secondary",
       render: (user) => user.email,
     },
     {
       key: "roles",
       header: "Roller",
+      priority: "primary",
       render: (user) => (
-        <div className="next-role-checks" aria-label={`${user.name} rolleri`}>
+        <div
+          className={hasRoleDraftChanges(user) ? "next-role-checks next-role-checks--dirty" : "next-role-checks"}
+          aria-label={`${user.name} rolleri`}
+          aria-describedby={hasRoleDraftChanges(user) ? `role-draft-status-${user.id}` : undefined}
+        >
           {roleOptions.map((role) => (
             <label key={role.value}>
               <input
@@ -189,19 +211,35 @@ export function UsersPage() {
               {role.label}
             </label>
           ))}
+          {hasRoleDraftChanges(user) ? (
+            <span className="next-role-draft-status" id={`role-draft-status-${user.id}`}>
+              <StatusBadge tone="warning">Kaydedilmemiş rol değişikliği</StatusBadge>
+              <button type="button" onClick={() => resetRoleDraft(user.id)} aria-label={`${user.name} rol taslağını sıfırla`}>
+                <RotateCcw size={15} aria-hidden="true" />
+              </button>
+            </span>
+          ) : null}
         </div>
       ),
     },
     {
       key: "actions",
+      align: "center",
       header: "İşlem",
+      priority: "primary",
       render: (user) => (
         <span className="next-row-actions">
-          <button type="button" onClick={() => void saveRoles(user)} aria-label={`${user.name} rollerini kaydet`}>
+          <button
+            type="button"
+            disabled={!hasRoleDraftChanges(user)}
+            onClick={() => void saveRoles(user)}
+            aria-label={`${user.name} rollerini kaydet`}
+          >
             <Save size={17} aria-hidden="true" />
           </button>
         </span>
       ),
+      sticky: "right",
     },
   ];
 
@@ -209,31 +247,49 @@ export function UsersPage() {
     {
       key: "name",
       header: "Ad Soyad",
+      priority: "primary",
       render: (invitation) => invitation.name,
+      sticky: "left",
     },
     {
       key: "email",
       header: "E-posta",
+      priority: "secondary",
       render: (invitation) => invitation.email,
     },
     {
       key: "subject",
       header: "Kişi",
+      priority: "secondary",
       render: (invitation) => subjectTypeLabels[invitation.subjectType],
+    },
+    {
+      key: "role",
+      header: "Rol",
+      priority: "secondary",
+      render: (invitation) => tenantRoleLabel(invitation.role),
     },
     {
       key: "status",
       header: "Durum",
-      render: (invitation) => statusLabels[invitation.status],
+      priority: "primary",
+      render: (invitation) => (
+        <StatusBadge tone={invitationStatusTone(invitation.status)}>
+          {statusLabels[invitation.status]}
+        </StatusBadge>
+      ),
     },
     {
       key: "expiresAt",
       header: "Bitiş",
+      priority: "optional",
       render: (invitation) => formatDate(invitation.expiresAt),
     },
     {
       key: "actions",
+      align: "center",
       header: "İşlem",
+      priority: "primary",
       render: (invitation) =>
         invitation.status === "PENDING" ? (
           <span className="next-row-actions">
@@ -244,11 +300,16 @@ export function UsersPage() {
         ) : (
           "-"
         ),
+      sticky: "right",
     },
   ];
 
   function getDraftRoles(user: TenantUserRecord) {
     return roleDrafts[user.id] ?? user.roles;
+  }
+
+  function hasRoleDraftChanges(user: TenantUserRecord) {
+    return normalizeRoles(getDraftRoles(user)).join("|") !== normalizeRoles(user.roles).join("|");
   }
 
   function toggleRole(userId: string, role: Role) {
@@ -257,6 +318,14 @@ export function UsersPage() {
       const roles = current[userId] ?? user?.roles ?? [];
       const nextRoles = roles.includes(role) ? roles.filter((candidate) => candidate !== role) : [...roles, role];
       return { ...current, [userId]: nextRoles };
+    });
+  }
+
+  function resetRoleDraft(userId: string) {
+    setRoleDrafts((current) => {
+      const next = { ...current };
+      delete next[userId];
+      return next;
     });
   }
 
@@ -270,6 +339,7 @@ export function UsersPage() {
     setInvitationForm(emptyInvitationForm);
     setError("");
     setIssuedToken(null);
+    setIsIssuedTokenRevealed(false);
     setIsInvitationFormOpen(true);
   }
 
@@ -330,6 +400,7 @@ export function UsersPage() {
       const issued = await createInvitation(auth.accessToken, parsedForm.data);
       void queryClient.invalidateQueries({ queryKey: invitationsListQueryKey });
       setIssuedToken({ email: issued.invitation.email, token: issued.activationToken });
+      setIsIssuedTokenRevealed(false);
       setIsInvitationFormOpen(false);
       setInvitationForm(emptyInvitationForm);
     } catch (invitationError) {
@@ -345,10 +416,63 @@ export function UsersPage() {
       const issued = await resendIdentityInvitation(auth.accessToken, invitation.id);
       void queryClient.invalidateQueries({ queryKey: invitationsListQueryKey });
       setIssuedToken({ email: issued.invitation.email, token: issued.activationToken });
+      setIsIssuedTokenRevealed(false);
     } catch (resendError) {
       setError(apiErrorMessage(resendError, "Davet yenilenemedi."));
     }
   }
+
+  const draftRoleCount = users.filter((user) => hasRoleDraftChanges(user)).length;
+  const pendingInvitationCount = invitations.filter((invitation) => invitation.status === "PENDING").length;
+  const acceptedInvitationCount = invitations.filter((invitation) => invitation.status === "ACCEPTED").length;
+  const subjectReferenceCount =
+    subjectReferences.students.length + subjectReferences.guardians.length + subjectReferences.teachers.length;
+  const userSummaryItems: OperationSummaryItem[] = [
+    {
+      description: "Filtrelenmiş yönetim hesabı",
+      key: "users",
+      label: "Kullanıcı toplamı",
+      value: formatCount(usersQuery.data?.meta?.total ?? users.length),
+    },
+    {
+      description: "Aktivasyon bekleyen portal daveti",
+      key: "pendingInvitations",
+      label: "Davet bekliyor",
+      tone: pendingInvitationCount > 0 ? "warning" : "success",
+      value: formatCount(pendingInvitationCount),
+    },
+    {
+      description: "Hesaba bağlanmış davet",
+      key: "acceptedInvitations",
+      label: "Kabul edildi",
+      tone: acceptedInvitationCount > 0 ? "success" : "default",
+      value: formatCount(acceptedInvitationCount),
+    },
+    {
+      description: "Henüz kaydedilmemiş rol satırı",
+      key: "roleDrafts",
+      label: "Rol taslağı",
+      tone: draftRoleCount > 0 ? "warning" : "default",
+      value: formatCount(draftRoleCount),
+    },
+  ];
+  const userSummaryBadges: OperationSummaryBadge[] = [
+    {
+      key: "token",
+      label: issuedToken ? (isIssuedTokenRevealed ? "Token açık" : "Token maskeli") : "Token beklemede yok",
+      tone: issuedToken ? (isIssuedTokenRevealed ? "warning" : "neutral") : "neutral",
+    },
+    {
+      key: "portal",
+      label: `${formatCount(subjectReferenceCount)} portal kişi referansı`,
+      tone: subjectReferenceCount > 0 ? "info" : "neutral",
+    },
+    {
+      key: "state",
+      label: "URL state ayrışık",
+      tone: "neutral",
+    },
+  ];
 
   return (
     <div className="next-users-page">
@@ -361,18 +485,21 @@ export function UsersPage() {
               sortOptions={tenantUserSortOptions}
               state={userListQuery}
             />
-            <Button onClick={openUserForm} variant="secondary">
-              <Plus size={17} aria-hidden="true" />
-              Kullanıcı ekle
-            </Button>
-            <Button onClick={openInvitationForm}>
-              <Send size={17} aria-hidden="true" />
-              Davet oluştur
-            </Button>
+            <div className="next-users-actions">
+              <Button onClick={openUserForm} variant="secondary">
+                <Plus size={17} aria-hidden="true" />
+                Kullanıcı ekle
+              </Button>
+              <Button onClick={openInvitationForm}>
+                <Send size={17} aria-hidden="true" />
+                Davet oluştur
+              </Button>
+            </div>
           </>
         }
         aria-label="Kullanıcı ve rol yönetimi"
         columns={userColumns}
+        density="compact"
         description="Yönetim hesaplarını ve tenant rollerini yönet. Öğretmen, öğrenci ve veli portal erişimi için kişi davetlerini kullan."
         emptyState={
           <EmptyState
@@ -388,12 +515,49 @@ export function UsersPage() {
         getRowKey={(user) => user.id}
         loading={usersQuery.isPending}
         rows={users}
+        tableCaption="Kurum kullanıcıları"
+        tableDescription="Panel kullanıcıları ve tenant rolleri. Portal erişimleri davet akışından yönetilir."
+        summary={
+          <OperationSummary ariaLabel="Kullanıcı ve davet operasyon özeti" badges={userSummaryBadges} items={userSummaryItems} />
+        }
         title="Kullanıcılar"
       />
       {issuedToken ? (
-        <section className="next-token-panel" aria-label="Son aktivasyon tokenı">
-          <strong>{issuedToken.email}</strong>
-          <code>{issuedToken.token}</code>
+        <section
+          className="next-token-panel"
+          aria-label="Son aktivasyon tokenı"
+          aria-live="polite"
+          data-token-state={isIssuedTokenRevealed ? "revealed" : "masked"}
+        >
+          <div className="next-token-panel__body">
+            <div className="next-token-panel__status" aria-label="Aktivasyon token güven durumu">
+              <StatusBadge tone="warning">Tek seferlik</StatusBadge>
+              <StatusBadge tone={isIssuedTokenRevealed ? "warning" : "neutral"}>
+                {isIssuedTokenRevealed ? "Token açık" : "Token maskeli"}
+              </StatusBadge>
+              <StatusBadge tone="neutral">Portal daveti</StatusBadge>
+            </div>
+            <strong>{issuedToken.email}</strong>
+            <p>Aktivasyon tokenı tek seferliktir; yalnız paylaşacağın anda göster ve işin bitince panelden kaldır.</p>
+          </div>
+          <code className="next-token-panel__token">
+            {isIssuedTokenRevealed ? issuedToken.token : maskActivationToken(issuedToken.token)}
+          </code>
+          <div className="next-token-panel__actions">
+            <Button type="button" variant="secondary" onClick={() => setIsIssuedTokenRevealed((current) => !current)}>
+              {isIssuedTokenRevealed ? "Tokenı gizle" : "Tokenı göster"}
+            </Button>
+            <Button
+              type="button"
+              variant={isIssuedTokenRevealed ? "primary" : "secondary"}
+              onClick={() => {
+                setIssuedToken(null);
+                setIsIssuedTokenRevealed(false);
+              }}
+            >
+              Tokenı kapat
+            </Button>
+          </div>
         </section>
       ) : null}
       <CrudPage
@@ -407,6 +571,7 @@ export function UsersPage() {
         }
         aria-label="Kimlik davetleri"
         columns={invitationColumns}
+        density="compact"
         description="Mevcut öğretmen, öğrenci ve veli kayıtlarını giriş hesabına bağlayan portal davetlerini takip et."
         emptyState={
           <EmptyState
@@ -421,6 +586,8 @@ export function UsersPage() {
         getRowKey={(invitation) => invitation.id}
         loading={invitationsQuery.isPending}
         rows={invitations}
+        tableCaption="Portal davetleri"
+        tableDescription="Öğretmen, öğrenci ve veli kayıtlarına bağlı giriş davetleri ve aktivasyon durumu."
         title="Davetler"
       />
       <FormModal
@@ -431,25 +598,22 @@ export function UsersPage() {
         submitLabel="Ekle"
         title="Kullanıcı ekle"
       >
-        <label>
-          E-posta
+        <Field label="E-posta">
           <Input
             required
             type="email"
             value={userForm.email}
             onChange={(event) => setUserForm((current) => ({ ...current, email: event.target.value }))}
           />
-        </label>
-        <label>
-          Ad Soyad
+        </Field>
+        <Field label="Ad Soyad">
           <Input
             required
             value={userForm.name}
             onChange={(event) => setUserForm((current) => ({ ...current, name: event.target.value }))}
           />
-        </label>
-        <label>
-          Şifre
+        </Field>
+        <Field label="Şifre">
           <Input
             minLength={8}
             required
@@ -457,7 +621,7 @@ export function UsersPage() {
             value={userForm.password}
             onChange={(event) => setUserForm((current) => ({ ...current, password: event.target.value }))}
           />
-        </label>
+        </Field>
         <fieldset className="next-role-fieldset">
           <legend>Roller</legend>
           {roleOptions.map((role) => (
@@ -487,9 +651,20 @@ export function UsersPage() {
         submitLabel="Oluştur"
         title="Davet oluştur"
       >
-        <label>
-          Kişi türü
-          <select
+        {invitationForm.subjectId ? (
+          <div className="next-invitation-context" aria-label="Davet bağlamı">
+            <span>Davet hedefi</span>
+            <strong>{selectedInvitationSubject?.name || invitationForm.name || "Seçili kayıt"}</strong>
+            <div>
+              <StatusBadge tone="info">{subjectTypeLabels[invitationForm.subjectType]}</StatusBadge>
+              <StatusBadge tone={invitationForm.email ? "success" : "neutral"}>
+                {invitationForm.email ? "E-posta hazır" : "E-posta bekliyor"}
+              </StatusBadge>
+            </div>
+          </div>
+        ) : null}
+        <Field label="Kişi türü">
+          <Select
             value={invitationForm.subjectType}
             onChange={(event) =>
               setInvitationForm((current) => ({
@@ -504,11 +679,10 @@ export function UsersPage() {
                 {label}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Kişi
-          <select
+          </Select>
+        </Field>
+        <Field label="Kişi">
+          <Select
             required
             value={invitationForm.subjectId}
             onChange={(event) => setInvitationForm((current) => ({ ...current, subjectId: event.target.value }))}
@@ -519,24 +693,22 @@ export function UsersPage() {
                 {subject.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          E-posta
+          </Select>
+        </Field>
+        <Field label="E-posta">
           <Input
             required
             type="email"
             value={invitationForm.email}
             onChange={(event) => setInvitationForm((current) => ({ ...current, email: event.target.value }))}
           />
-        </label>
-        <label>
-          Ad Soyad
+        </Field>
+        <Field label="Ad Soyad">
           <Input
             value={invitationForm.name}
             onChange={(event) => setInvitationForm((current) => ({ ...current, name: event.target.value }))}
           />
-        </label>
+        </Field>
       </FormModal>
     </div>
   );
@@ -577,6 +749,23 @@ function findSubjectName(subjectType: InvitationSubjectType, subjectId: string, 
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("tr-TR", { dateStyle: "short" }).format(new Date(value));
+}
+
+function invitationStatusTone(status: InvitationStatus) {
+  return status === "ACCEPTED" ? "success" : "warning";
+}
+
+function normalizeRoles(roles: Role[]) {
+  return [...roles].sort();
+}
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat("tr-TR").format(value);
+}
+
+function maskActivationToken(token: string) {
+  if (token.length <= 8) return "••••••••";
+  return `${token.slice(0, 4)}••••${token.slice(-4)}`;
 }
 
 const tenantUserSortOptions = [

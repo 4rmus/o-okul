@@ -3,7 +3,15 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { LoadingState } from "@uzman-hocam/ui";
+import {
+  DataTable,
+  LoadingState,
+  MetricCard,
+  Panel,
+  StatusBadge,
+  type DataTableColumn,
+  type StatusBadgeProps,
+} from "@uzman-hocam/ui";
 import type { ReportSnapshotRecord } from "@uzman-hocam/shared-types";
 import { useAuth } from "../../providers.js";
 import { apiBaseUrl, apiRequest } from "../../../src/api-client.js";
@@ -15,7 +23,12 @@ import {
   useKurumStudentProgressQuery,
 } from "./kurum-dashboard-data.js";
 import { PageFrame } from "./_shared/page-frame.js";
-import { MetricPanelGrid } from "./_shared/metric-panel-grid.js";
+import {
+  OperationSummary,
+  type OperationSummaryAction,
+  type OperationSummaryBadge,
+  type OperationSummaryItem,
+} from "./_shared/operation-summary.js";
 import { canAccessHref } from "../_shared/access.js";
 import { formatCourseName, shortCourseName } from "../_shared/academic-labels.js";
 import { ClassCompareBar, ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../_shared/lazy-report-charts.js";
@@ -27,6 +40,23 @@ interface DashboardLinkCard {
   href: string;
   title: string;
   value: number | string;
+}
+
+interface DashboardOverviewMetric {
+  description: string;
+  label: string;
+  tone?: "default" | "success" | "warning" | "danger" | "info";
+  value: number | string;
+}
+
+interface DashboardSummaryRow extends DashboardLinkCard {
+  badge: string;
+  tone: StatusBadgeProps["tone"];
+}
+
+interface DashboardDecisionRow extends DashboardLinkCard {
+  status: string;
+  tone: StatusBadgeProps["tone"];
 }
 
 interface TenantProfileRecord {
@@ -41,7 +71,6 @@ export function KurumDashboard() {
   const { auth } = useAuth();
   const accessToken = auth?.accessToken ?? "";
   const tenantId = auth?.session.tenantId ?? "anonymous";
-  const roles = auth?.session.roles.join(", ") ?? "-";
   const dashboardQuery = useKurumDashboardDataQuery(accessToken, tenantId, Boolean(auth));
   const tenantProfileQuery = useQuery({
     queryKey: ["next-current-tenant", tenantId],
@@ -88,6 +117,12 @@ export function KurumDashboard() {
   const visibleSummaryCards = buildSummaryCards(latestExam?.title, latestSnapshot, announcements, systemHealth).filter((card) =>
     canAccessHref(auth?.session.roles ?? [], card.href),
   );
+  const overviewMetrics = buildOverviewMetrics(overview);
+  const summaryRows = toSummaryRows(visibleSummaryCards);
+  const decisionRows = toDecisionRows(visibleDecisionCards);
+  const dashboardSummaryItems = buildDashboardSummaryItems(overview, latestExam?.title, latestSnapshot, systemHealth, visibleDecisionCards);
+  const dashboardSummaryBadges = buildDashboardSummaryBadges(latestSnapshot, systemHealth);
+  const dashboardSummaryActions = buildDashboardSummaryActions(visibleAttentionItems, latestExam?.title, latestSnapshot, isEmptyInstitution);
   const [isSetupDismissed, setIsSetupDismissed] = useState(false);
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState(false);
   const setupDismissedCookieName = `uh_setup_${encodeURIComponent(tenantId)}_dismissed`;
@@ -105,42 +140,56 @@ export function KurumDashboard() {
   }
 
   return (
-      <PageFrame
-        title={tenantDisplayName}
-        subtitle="Kurumsal özetin ve son sınav analizlerinin tek ekranda görünümü."
-      >
+    <PageFrame
+      title={tenantDisplayName}
+      subtitle="Kurumsal özetin ve son sınav analizlerinin tek ekranda görünümü."
+    >
       {dashboardQuery.isPending ? <LoadingState label="Kurum özeti yükleniyor…" /> : null}
       {tenantProfile ? <TenantProfileSummary tenant={tenantProfile} /> : null}
-      <MetricPanelGrid
-        ariaLabel="Kurum özeti"
-        metrics={[
-          { label: "Sınıf", value: overview.classCount },
-          { label: "Öğretmen", value: overview.teacherCount },
-          { label: "Öğrenci", value: overview.studentCount },
-          { label: "Veli", value: overview.guardianCount },
-        ]}
+      <section aria-label="Kurum özeti" className="next-dashboard-overview-grid">
+        {overviewMetrics.map((metric) => (
+          <MetricCard
+            className="next-dashboard-overview-card"
+            description={metric.description}
+            key={metric.label}
+            label={metric.label}
+            tone={metric.tone}
+            value={metric.value}
+          />
+        ))}
+      </section>
+      <OperationSummary
+        actions={dashboardSummaryActions}
+        ariaLabel="Kurum dashboard operasyon özeti"
+        badges={dashboardSummaryBadges}
+        items={dashboardSummaryItems}
       />
       {isEmptyInstitution && !isSetupDismissed && !isOnboardingCompleted ? (
-        <section className="next-dashboard-onboarding" aria-label="Kurum kurulum başlangıcı">
-          <div>
-            <h2>Kurumunu kurmaya başla</h2>
-            <p>Beş adımlı kurulum sihirbazı genel bilgilerden kişi yönetimine kadar ilk düzeni toplar.</p>
-          </div>
-          <div className="next-dashboard-onboarding__actions">
-            <Link className="uh-button uh-button--primary uh-button--md" href="/kurum/kurulum">
-              Sihirbazı aç
-            </Link>
-            <button className="uh-button uh-button--secondary uh-button--md" type="button" onClick={dismissSetupCard}>
-              Daha sonra
-            </button>
-          </div>
-        </section>
+        <Panel
+          actions={
+            <div className="next-dashboard-onboarding__actions">
+              <Link className="uh-button uh-button--primary uh-button--md" href="/kurum/kurulum">
+                Kuruluma git
+              </Link>
+              <button className="uh-button uh-button--secondary uh-button--md" type="button" onClick={dismissSetupCard}>
+                Daha sonra
+              </button>
+            </div>
+          }
+          aria-label="Kurum kurulum başlangıcı"
+          className="next-dashboard-onboarding"
+          description="Beş adımlı kurulum sihirbazı genel bilgilerden kişi yönetimine kadar ilk düzeni toplar."
+          title="Kurumunu kurmaya başla"
+          tone="muted"
+        />
       ) : null}
-      <section className="next-attention-panel" aria-label="Bugün dikkat gerektirenler">
-        <div>
-          <h2>Bugün dikkat gerektirenler</h2>
-          <p>Destek, ödeme, devamsızlık ve optik sinyallerinin kısa listesi.</p>
-        </div>
+      <Panel
+        aria-label="Bugün dikkat gerektirenler"
+        className="next-attention-panel"
+        description="Destek, ödeme, devamsızlık ve optik sinyallerinin kısa listesi."
+        title="Bugün dikkat gerektirenler"
+        tone={visibleAttentionItems.length > 0 ? "warning" : "default"}
+      >
         {visibleAttentionItems.length > 0 ? (
           <div className="next-attention-list">
             {visibleAttentionItems.map((item) => (
@@ -154,29 +203,48 @@ export function KurumDashboard() {
         ) : (
           <p className="next-attention-empty">Açık kritik iş görünmüyor.</p>
         )}
-      </section>
+      </Panel>
       {visibleSummaryCards.length > 0 ? (
-        <section className="next-report-list" aria-label="Operasyon özeti">
-          <h2>Operasyon özeti</h2>
-          <div className="next-dashboard-summary-grid">
-            {visibleSummaryCards.map((card) => (
-              <SummaryCard key={`${card.href}-${card.title}`} {...card} />
-            ))}
-          </div>
-        </section>
+        <Panel
+          aria-label="Operasyon özeti"
+          className="next-dashboard-summary-panel"
+          description="Rapor, duyuru ve sistem sağlığı bağlantıları rol yetkisine göre listelenir."
+          title="Operasyon özeti"
+        >
+          <DataTable
+            caption="Operasyon özeti"
+            columns={dashboardSummaryColumns}
+            density="compact"
+            description="Son rapor durumu, kurum duyurusu ve sistem sağlığı görevleri."
+            emptyText="Görüntülenebilir operasyon kaydı yok."
+            getRowKey={(row) => `${row.href}-${row.title}`}
+            rows={summaryRows}
+          />
+        </Panel>
       ) : null}
       {visibleDecisionCards.length > 0 ? (
-        <section className="next-decision-strip" aria-label="Karar sinyalleri">
-          {visibleDecisionCards.map((card) => (
-            <DecisionSignalCard key={card.href} {...card} />
-          ))}
-        </section>
+        <Panel
+          aria-label="Karar sinyalleri"
+          className="next-dashboard-decision-panel"
+          description="Destek, finans, devamsızlık ve optik işaretleri tek tablo içinde takip edilir."
+          title="Karar sinyalleri"
+        >
+          <DataTable
+            caption="Karar sinyalleri"
+            columns={dashboardDecisionColumns}
+            density="compact"
+            description="Aksiyon gerektiren kurum sinyalleri ve modül bağlantıları."
+            emptyText="Açık karar sinyali yok."
+            getRowKey={(row) => row.href}
+            rows={decisionRows}
+          />
+        </Panel>
       ) : null}
-      <section className="next-session-panel" aria-label="Oturum özeti">
-        <span>{auth?.session.tenantId ?? "-"}</span>
-        <span>{auth?.session.userId ?? "-"}</span>
-        <span>{roles}</span>
-      </section>
+      <Panel aria-label="Oturum özeti" className="next-session-panel" title="Oturum özeti" tone="muted">
+        <StatusBadge tone="success">Kurum kapsamı doğrulandı</StatusBadge>
+        <StatusBadge tone="success">Kullanıcı oturumu aktif</StatusBadge>
+        <StatusBadge tone="info">{formatRoleSummary(auth?.session.roles ?? [])}</StatusBadge>
+      </Panel>
       <div className="next-report-visual-grid">
         <ReportChartPanel
           description={reportDescription}
@@ -200,51 +268,17 @@ export function KurumDashboard() {
   );
 }
 
-function SummaryCard({
-  description,
-  href,
-  title,
-  value,
-}: {
-  description: string;
-  href: string;
-  title: string;
-  value: string;
-}) {
-  return (
-    <Link className="next-dashboard-summary-card" href={href}>
-      <span>{title}</span>
-      <strong>{value}</strong>
-      <small>{description}</small>
-    </Link>
-  );
-}
-
-function DecisionSignalCard({
-  description,
-  href,
-  title,
-  value,
-}: {
-  description: string;
-  href: string;
-  title: string;
-  value: number | string;
-}) {
-  return (
-    <Link className="next-decision-card" href={href}>
-      <span>{title}</span>
-      <strong>{value}</strong>
-      <small>{description}</small>
-    </Link>
-  );
-}
-
 function TenantProfileSummary({ tenant }: { tenant: TenantProfileRecord }) {
   const tenantDisplayName = tenantNameOrFallback(tenant);
 
   return (
-    <section className="next-tenant-profile" aria-label="Kurum bilgileri">
+    <Panel
+      actions={tenant.contactEmail ? <a href={`mailto:${tenant.contactEmail}`}>{tenant.contactEmail}</a> : null}
+      aria-label="Kurum bilgileri"
+      className="next-tenant-profile"
+      description={institutionTypeLabel(tenant.institutionType)}
+      title={tenantDisplayName}
+    >
       {tenant.logoUrl ? (
         <img src={tenant.logoUrl} alt={`${tenantDisplayName} logosu`} />
       ) : (
@@ -252,12 +286,55 @@ function TenantProfileSummary({ tenant }: { tenant: TenantProfileRecord }) {
           {tenantDisplayName.slice(0, 1).toLocaleUpperCase("tr-TR")}
         </span>
       )}
-      <div>
-        <h2>{tenantDisplayName}</h2>
-        <p>{institutionTypeLabel(tenant.institutionType)}</p>
-      </div>
-      {tenant.contactEmail ? <a href={`mailto:${tenant.contactEmail}`}>{tenant.contactEmail}</a> : null}
-    </section>
+    </Panel>
+  );
+}
+
+const dashboardSummaryColumns: Array<DataTableColumn<DashboardSummaryRow>> = [
+  {
+    header: "Başlık",
+    key: "title",
+    mobilePriority: "primary",
+    priority: "primary",
+    render: (row) => <DashboardTableLink row={row} />,
+    sticky: "left",
+  },
+  {
+    header: "Durum",
+    key: "status",
+    mobileLabel: "Durum",
+    mobilePriority: "secondary",
+    priority: "secondary",
+    render: (row) => <StatusBadge tone={row.tone}>{row.badge}</StatusBadge>,
+  },
+];
+
+const dashboardDecisionColumns: Array<DataTableColumn<DashboardDecisionRow>> = [
+  {
+    header: "Sinyal",
+    key: "signal",
+    mobilePriority: "primary",
+    priority: "primary",
+    render: (row) => <DashboardTableLink row={row} />,
+    sticky: "left",
+  },
+  {
+    header: "Durum",
+    key: "status",
+    mobileLabel: "Durum",
+    mobilePriority: "secondary",
+    priority: "secondary",
+    render: (row) => <StatusBadge tone={row.tone}>{row.status}</StatusBadge>,
+  },
+];
+
+function DashboardTableLink({ row }: { row: DashboardLinkCard }) {
+  return (
+    <Link className="next-dashboard-link-cell" href={row.href}>
+      <span>{row.title}</span>
+      <strong>{row.value}</strong>
+      <small>{row.description}</small>
+    </Link>
   );
 }
 
@@ -273,6 +350,135 @@ function institutionTypeLabel(value: string | undefined) {
   if (value === "school") return "Okul";
   if (value === "study-center") return "Etüt merkezi";
   return "Kurs merkezi";
+}
+
+function buildOverviewMetrics(overview: { classCount: number; guardianCount: number; teacherCount: number; studentCount: number }): DashboardOverviewMetric[] {
+  return [
+    {
+      description: "Aktif sınıf yapısı",
+      label: "Sınıf",
+      value: overview.classCount,
+    },
+    {
+      description: "Eğitim kadrosu",
+      label: "Öğretmen",
+      value: overview.teacherCount,
+    },
+    {
+      description: "Kayıtlı öğrenci",
+      label: "Öğrenci",
+      tone: overview.studentCount > 0 ? "success" : "default",
+      value: overview.studentCount,
+    },
+    {
+      description: "Veli ilişkisi",
+      label: "Veli",
+      value: overview.guardianCount,
+    },
+  ];
+}
+
+function buildDashboardSummaryItems(
+  overview: { classCount: number; guardianCount: number; teacherCount: number; studentCount: number },
+  examTitle: string | undefined,
+  snapshot: ReportSnapshotRecord | null | undefined,
+  systemHealth: KurumSystemHealthSummary,
+  decisionCards: DashboardLinkCard[],
+): OperationSummaryItem[] {
+  const decisionTotal = decisionCards.reduce((total, card) => total + Number(card.value || 0), 0);
+
+  return [
+    {
+      description: `${overview.classCount} sınıf · ${overview.teacherCount} öğretmen`,
+      key: "institution",
+      label: "Kurum kapsamı",
+      tone: overview.studentCount > 0 ? "success" : "default",
+      value: `${overview.studentCount} öğrenci`,
+    },
+    {
+      description: examTitle ?? "Yayınlanmış sınav yok",
+      key: "report",
+      label: "Rapor durumu",
+      tone: reportStatusTone(examTitle, snapshot),
+      value: reportStatusLabel(examTitle, snapshot),
+    },
+    {
+      description: "Rol yetkisine göre görünen iş kuyruğu",
+      key: "decisions",
+      label: "Karar sinyali",
+      tone: decisionTotal > 0 ? "warning" : "success",
+      value: decisionTotal,
+    },
+    {
+      description: systemHealthDescription(systemHealth),
+      key: "health",
+      label: "Sistem sağlığı",
+      tone: systemHealthOperationTone(systemHealth),
+      value: systemHealthStatusLabel(systemHealth),
+    },
+  ];
+}
+
+function buildDashboardSummaryBadges(
+  snapshot: ReportSnapshotRecord | null | undefined,
+  systemHealth: KurumSystemHealthSummary,
+): OperationSummaryBadge[] {
+  return [
+    {
+      key: "success-rate",
+      label: "Başarı % ana metrik",
+      tone: "info",
+    },
+    {
+      key: "report-ready",
+      label: snapshot?.status === "READY" ? "READY rapor" : "Rapor bekliyor",
+      tone: snapshot?.status === "READY" ? "success" : "warning",
+    },
+    {
+      key: "health",
+      label: systemHealthStatusLabel(systemHealth),
+      tone: systemHealthBadgeTone(systemHealth),
+    },
+    {
+      key: "tenant-scope",
+      label: "Tenant scope doğrulandı",
+      tone: "success",
+    },
+  ];
+}
+
+function buildDashboardSummaryActions(
+  attentionItems: DashboardLinkCard[],
+  examTitle: string | undefined,
+  snapshot: ReportSnapshotRecord | null | undefined,
+  isEmptyInstitution: boolean,
+): OperationSummaryAction[] {
+  return [
+    {
+      detail: "Destek, finans, devamsızlık ve optik izleri",
+      key: "attention",
+      label: "Dikkat kuyruğu",
+      status: attentionItems.length > 0 ? "İzle" : "Sakin",
+      tone: attentionItems.length > 0 ? "warning" : "success",
+      value: attentionItems.length > 0 ? `${attentionItems.length} başlık` : "Temiz",
+    },
+    {
+      detail: examTitle ?? "Sınav bağlamı yok",
+      key: "report",
+      label: "Rapor üretimi",
+      status: snapshot?.status === "READY" ? "Hazır" : "Kontrol",
+      tone: reportStatusBadgeTone(examTitle, snapshot),
+      value: reportStatusLabel(examTitle, snapshot),
+    },
+    {
+      detail: "İlk veri girişi ve kişi ağacı",
+      key: "setup",
+      label: "Kurulum",
+      status: isEmptyInstitution ? "Sihirbaz" : "Tamam",
+      tone: isEmptyInstitution ? "info" : "success",
+      value: isEmptyInstitution ? "Başlangıç" : "Aktif",
+    },
+  ];
 }
 
 function buildDecisionCards(decisionSignals: KurumDecisionSignals): DashboardLinkCard[] {
@@ -355,6 +561,44 @@ function buildSummaryCards(
   ];
 }
 
+function toSummaryRows(cards: DashboardLinkCard[]): DashboardSummaryRow[] {
+  return cards.map((card) => ({
+    ...card,
+    badge: summaryCardBadge(card),
+    tone: summaryCardTone(card),
+  }));
+}
+
+function toDecisionRows(cards: DashboardLinkCard[]): DashboardDecisionRow[] {
+  return cards.map((card) => ({
+    ...card,
+    status: Number(card.value) > 0 ? "İşlem bekliyor" : "Sakin",
+    tone: Number(card.value) > 0 ? "warning" : "success",
+  }));
+}
+
+function summaryCardBadge(card: DashboardLinkCard) {
+  if (card.title === "Son sınav / rapor") return String(card.value);
+  if (card.title === "Sistem sağlığı") return String(card.value);
+  if (card.title === "Son duyuru") return card.value === "Duyuru yok" ? "Bekliyor" : "Yayında";
+  return "İzle";
+}
+
+function summaryCardTone(card: DashboardLinkCard): StatusBadgeProps["tone"] {
+  if (card.title === "Son sınav / rapor") {
+    if (card.value === "Rapor hazır") return "success";
+    if (card.value === "Rapor bekliyor") return "warning";
+    return "neutral";
+  }
+  if (card.title === "Sistem sağlığı") {
+    if (card.value === "Hazır") return "success";
+    if (card.value === "Kısıtlı") return "warning";
+    return "danger";
+  }
+  if (card.title === "Son duyuru") return card.value === "Duyuru yok" ? "neutral" : "info";
+  return "neutral";
+}
+
 function systemHealthStatusLabel(systemHealth: KurumSystemHealthSummary) {
   if (systemHealth.apiOk && systemHealth.readyOk && systemHealth.postgresOk && systemHealth.redisOk) return "Hazır";
   if (systemHealth.apiOk || systemHealth.readyOk) return "Kısıtlı";
@@ -374,6 +618,44 @@ function reportStatusLabel(examTitle: string | undefined, snapshot: ReportSnapsh
   if (!snapshot) return "Rapor bekliyor";
   if (snapshot.status === "READY") return "Rapor hazır";
   return snapshot.status;
+}
+
+function reportStatusTone(
+  examTitle: string | undefined,
+  snapshot: ReportSnapshotRecord | null | undefined,
+): OperationSummaryItem["tone"] {
+  if (!examTitle) return "default";
+  if (!snapshot) return "warning";
+  if (snapshot.status === "READY") return "success";
+  return "info";
+}
+
+function reportStatusBadgeTone(
+  examTitle: string | undefined,
+  snapshot: ReportSnapshotRecord | null | undefined,
+): StatusBadgeProps["tone"] {
+  if (!examTitle) return "neutral";
+  if (!snapshot) return "warning";
+  if (snapshot.status === "READY") return "success";
+  return "info";
+}
+
+function systemHealthOperationTone(systemHealth: KurumSystemHealthSummary): OperationSummaryItem["tone"] {
+  if (systemHealth.apiOk && systemHealth.readyOk && systemHealth.postgresOk && systemHealth.redisOk) return "success";
+  if (systemHealth.apiOk || systemHealth.readyOk) return "warning";
+  return "danger";
+}
+
+function systemHealthBadgeTone(systemHealth: KurumSystemHealthSummary): StatusBadgeProps["tone"] {
+  if (systemHealth.apiOk && systemHealth.readyOk && systemHealth.postgresOk && systemHealth.redisOk) return "success";
+  if (systemHealth.apiOk || systemHealth.readyOk) return "warning";
+  return "danger";
+}
+
+function formatRoleSummary(roles: string[]) {
+  if (roles.length === 0) return "Rol bilgisi yok";
+  if (roles.length === 1) return "1 rol doğrulandı";
+  return `${roles.length} rol doğrulandı`;
 }
 
 function formatDate(value: string) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@uzman-hocam/ui";
+import { Button, DataTable, Panel, type DataTableColumn } from "@uzman-hocam/ui";
 import type { AnnouncementRecord } from "@uzman-hocam/shared-types";
 
 export function AnnouncementsPanel({
@@ -12,40 +12,59 @@ export function AnnouncementsPanel({
   onMarkRead?: (announcement: AnnouncementRecord) => void | Promise<unknown>;
   readOnly?: boolean;
 }) {
+  const columns: Array<DataTableColumn<AnnouncementRecord>> = [
+    {
+      header: "Başlık",
+      key: "title",
+      priority: "primary",
+      render: (announcement) => announcement.title,
+      sticky: "left",
+    },
+    {
+      header: "Hedef",
+      key: "audience",
+      priority: "secondary",
+      render: (announcement) => announcementAudienceLabel(announcement.audience),
+    },
+    {
+      header: "Metin",
+      key: "body",
+      priority: "optional",
+      render: (announcement) => announcement.body,
+    },
+    {
+      header: "Okunma",
+      key: "read",
+      priority: "primary",
+      render: (announcement) =>
+        announcement.readAt ? (
+          `Okundu ${formatDateTime(announcement.readAt)}`
+        ) : readOnly ? (
+          "Salt-okuma"
+        ) : (
+          <Button onClick={() => void onMarkRead?.(announcement)} disabled={!onMarkRead}>
+            Okundu işaretle
+          </Button>
+        ),
+      sticky: "right",
+    },
+  ];
+
   return (
-    <section className="next-list-panel" aria-label="Duyurular">
-      <h2>Duyurular</h2>
-      <table className="uh-data-table">
-        <thead>
-          <tr>
-            <th>Başlık</th>
-            <th>Hedef</th>
-            <th>Metin</th>
-            <th>Okunma</th>
-          </tr>
-        </thead>
-        <tbody>
-          {announcements.map((announcement) => (
-            <tr key={announcement.id}>
-              <td>{announcement.title}</td>
-              <td>{announcementAudienceLabel(announcement.audience)}</td>
-              <td>{announcement.body}</td>
-              <td>
-                {announcement.readAt ? (
-                  `Okundu ${formatDateTime(announcement.readAt)}`
-                ) : readOnly ? (
-                  "Salt-okuma"
-                ) : (
-                  <Button onClick={() => void onMarkRead?.(announcement)} disabled={!onMarkRead}>
-                    Okundu işaretle
-                  </Button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+    <Panel
+      aria-label="Duyurular"
+      description="Portala görünür okul, öğrenci, veli veya öğretmen duyuruları."
+      title="Duyurular"
+    >
+      <DataTable
+        caption="Portal duyuruları"
+        columns={columns}
+        description="Portala görünür okul, öğrenci, veli veya öğretmen duyuruları."
+        emptyText="Duyuru yok."
+        getRowKey={(announcement) => announcement.id}
+        rows={announcements}
+      />
+    </Panel>
   );
 }
 

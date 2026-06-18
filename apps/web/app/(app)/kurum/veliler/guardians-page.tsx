@@ -4,7 +4,17 @@ import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
+import {
+  Button,
+  CrudPage,
+  EmptyState,
+  Field,
+  FormModal,
+  Input,
+  StatusBadge,
+  type DataTableColumn,
+  useConfirmDialog,
+} from "@uzman-hocam/ui";
 import type { GuardianRecord } from "@uzman-hocam/shared-types";
 import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
@@ -16,6 +26,7 @@ import {
   type GuardianFormState,
 } from "../../../../src/form-validation.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 const emptyForm: GuardianFormState = {
   firstName: "",
@@ -42,6 +53,75 @@ export function GuardiansPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
   const rows = guardiansQuery.data?.data ?? [];
+  const guardianPhoneReadyCount = rows.filter((guardian) => Boolean(guardian.phone)).length;
+  const guardianPortalReadyCount = rows.filter((guardian) => Boolean(guardian.userId)).length;
+  const guardianSummaryItems: OperationSummaryItem[] = [
+    {
+      description: "Filtrelenmiş toplam kayıt",
+      key: "total",
+      label: "Veli toplamı",
+      value: formatCount(guardiansQuery.data?.meta?.total ?? rows.length),
+    },
+    {
+      description: "Bu sayfada maskeli telefon",
+      key: "phone",
+      label: "Maskeli iletişim",
+      tone: guardianPhoneReadyCount > 0 ? "info" : "warning",
+      value: `${guardianPhoneReadyCount}/${rows.length}`,
+    },
+    {
+      description: "Portal kullanıcısı bağlı",
+      key: "portal",
+      label: "Portal hazır",
+      tone: guardianPortalReadyCount > 0 ? "success" : "default",
+      value: `${guardianPortalReadyCount}/${rows.length}`,
+    },
+    {
+      description: "Liste, kanıt ve ekran görüntüsü güvenliği",
+      key: "pii",
+      label: "PII modu",
+      tone: "success",
+      value: "Maskeli",
+    },
+  ];
+  const guardianSummaryBadges: OperationSummaryBadge[] = [
+    {
+      key: "phone",
+      label: "Telefon ham gösterilmez",
+      tone: "success",
+    },
+    {
+      key: "sort",
+      label: `Sıralama: ${formatGuardianSort(listQuery.sort)}`,
+      tone: "neutral",
+    },
+  ];
+  const guardianSummaryActions: OperationSummaryAction[] = [
+    {
+      detail: "Liste telefonları maskeli tutar",
+      key: "masked-contact",
+      label: "İletişim temizliği",
+      status: guardianPhoneReadyCount === rows.length && rows.length > 0 ? "Hazır" : "Kontrol",
+      tone: guardianPhoneReadyCount > 0 ? "success" : "warning",
+      value: `${guardianPhoneReadyCount}/${rows.length}`,
+    },
+    {
+      detail: "Veli portal hesabı bağlantısı",
+      key: "portal-link",
+      label: "Portal bağlantısı",
+      status: guardianPortalReadyCount > 0 ? "Bağlı" : "Bekliyor",
+      tone: guardianPortalReadyCount > 0 ? "success" : "neutral",
+      value: `${guardianPortalReadyCount}/${rows.length}`,
+    },
+    {
+      detail: "URL state ile korunur",
+      key: "sort-context",
+      label: "Liste sırası",
+      status: "Liste",
+      tone: "neutral",
+      value: formatGuardianSort(listQuery.sort),
+    },
+  ];
 
   useEffect(() => {
     if (searchParams.get("new") === "1") openCreateForm();
@@ -51,16 +131,27 @@ export function GuardiansPage() {
     {
       key: "name",
       header: "Ad Soyad",
+      priority: "primary",
+      sticky: "left",
       render: (guardian) => `${guardian.firstName} ${guardian.lastName}`,
     },
     {
       key: "phone",
-      header: "Telefon",
-      render: (guardian) => guardian.phone ?? "-",
+      header: "İletişim",
+      priority: "secondary",
+      render: (guardian) =>
+        guardian.phone ? (
+          <StatusBadge tone="info">{maskPhoneNumber(guardian.phone)}</StatusBadge>
+        ) : (
+          <StatusBadge tone="neutral">Telefon yok</StatusBadge>
+        ),
     },
     {
       key: "actions",
       header: "İşlem",
+      align: "center",
+      priority: "primary",
+      sticky: "right",
       render: (guardian) => (
         <span className="next-row-actions">
           <Link href={`/kurum/veliler/${encodeURIComponent(guardian.id)}`} aria-label={`${guardian.firstName} detay`}>
@@ -150,7 +241,7 @@ export function GuardiansPage() {
             <ListControls
               meta={guardiansQuery.data?.meta}
               onChange={setListQuery}
-              searchPlaceholder="Ad, soyad veya telefon ara"
+              searchPlaceholder="Ad veya soyad ara"
               sortOptions={guardianSortOptions}
               state={listQuery}
             />
@@ -162,6 +253,8 @@ export function GuardiansPage() {
         }
         aria-label="Veli yönetimi"
         columns={columns}
+        density="compact"
+        description="Veli kayıtlarını öğrenci bağlantısı ve portal hazırlığı için yönet. Liste görünümünde iletişim PII maskelenir."
         emptyState={
           <EmptyState
             title="Veli kaydı yok"
@@ -175,6 +268,16 @@ export function GuardiansPage() {
         getRowKey={(guardian) => guardian.id}
         loading={guardiansQuery.isPending}
         rows={rows}
+        summary={
+          <OperationSummary
+            actions={guardianSummaryActions}
+            ariaLabel="Veli operasyon özeti"
+            badges={guardianSummaryBadges}
+            items={guardianSummaryItems}
+          />
+        }
+        tableCaption="Veli operasyon listesi"
+        tableDescription="Ad soyad, maskeli iletişim durumu ve veli aksiyonları."
         title="Veliler"
       />
       <FormModal
@@ -185,29 +288,28 @@ export function GuardiansPage() {
         submitLabel={editingGuardian ? "Kaydet" : "Ekle"}
         title={editingGuardian ? "Veli düzenle" : "Veli ekle"}
       >
-        <label>
-          Ad
-          <Input
-            required
-            value={form.firstName}
-            onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))}
-          />
-        </label>
-        <label>
-          Soyad
-          <Input
-            required
-            value={form.lastName}
-            onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))}
-          />
-        </label>
-        <label>
-          Telefon
-          <Input
-            value={form.phone ?? ""}
-            onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
-          />
-        </label>
+        <div className="next-guardian-form-grid">
+          <Field label="Ad">
+            <Input
+              required
+              value={form.firstName}
+              onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))}
+            />
+          </Field>
+          <Field label="Soyad">
+            <Input
+              required
+              value={form.lastName}
+              onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))}
+            />
+          </Field>
+          <Field label="Telefon" description="Tam telefon yalnız kayıt formunda ve detay akışlarında gösterilir. Liste görünümünde maskelenir.">
+            <Input
+              value={form.phone ?? ""}
+              onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
+            />
+          </Field>
+        </div>
       </FormModal>
       {confirmationDialog}
     </>
@@ -219,8 +321,6 @@ const guardianSortOptions = [
   { label: "Ad Z-A", value: "-firstName" },
   { label: "Soyad A-Z", value: "lastName" },
   { label: "Soyad Z-A", value: "-lastName" },
-  { label: "Telefon A-Z", value: "phone" },
-  { label: "Telefon Z-A", value: "-phone" },
 ];
 
 async function loadGuardians(accessToken: string, listQuery: ListQueryState) {
@@ -251,4 +351,19 @@ async function deleteGuardian(accessToken: string, id: string) {
   if (!response.ok) {
     throw new Error("GUARDIAN_DELETE_FAILED");
   }
+}
+
+function maskPhoneNumber(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 0) return "Telefon kayıtlı";
+  const suffix = digits.slice(-2).padStart(2, "•");
+  return `••• ••• ••${suffix}`;
+}
+
+function formatCount(value: number) {
+  return value.toLocaleString("tr-TR");
+}
+
+function formatGuardianSort(value: string) {
+  return guardianSortOptions.find((option) => option.value === value)?.label ?? "Varsayılan";
 }

@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { GradeLevelRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, Field, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -15,6 +15,7 @@ import {
   type GradeLevelFormState,
 } from "../../../../src/form-validation.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 const emptyForm: GradeLevelFormState = {
   name: "",
@@ -40,6 +41,66 @@ export function GradeLevelsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
   const rows = gradeLevelsQuery.data?.data ?? [];
+  const codedGradeLevelCount = rows.filter((record) => Boolean(record.code)).length;
+  const gradeLevelSummaryItems: OperationSummaryItem[] = [
+    {
+      description: "Filtrelenmiş toplam kayıt",
+      key: "total",
+      label: "Seviye toplamı",
+      value: formatCount(gradeLevelsQuery.data?.meta?.total ?? rows.length),
+    },
+    {
+      description: "Bu sayfada kodu olan seviye",
+      key: "code",
+      label: "Kod kapsamı",
+      tone: codedGradeLevelCount > 0 ? "info" : "warning",
+      value: `${codedGradeLevelCount}/${rows.length}`,
+    },
+    {
+      description: "Sınıf, rapor ve kurulum bağlamı",
+      key: "context",
+      label: "Operasyon bağlamı",
+      value: "Sınıf yapısı",
+    },
+  ];
+  const gradeLevelSummaryBadges: OperationSummaryBadge[] = [
+    {
+      key: "sort",
+      label: `Sıralama: ${formatGradeLevelSort(listQuery.sort)}`,
+      tone: "neutral",
+    },
+    {
+      key: "code",
+      label: codedGradeLevelCount === rows.length && rows.length > 0 ? "Kod alanı tamam" : "Kod alanı opsiyonel",
+      tone: codedGradeLevelCount === rows.length && rows.length > 0 ? "success" : "neutral",
+    },
+  ];
+  const gradeLevelSummaryActions: OperationSummaryAction[] = [
+    {
+      detail: "Kısa kod sınıf eşleşmesini ve rapor filtresini besler",
+      key: "code-readiness",
+      label: "Kod temizliği",
+      status: codedGradeLevelCount === rows.length && rows.length > 0 ? "Hazır" : "Opsiyonel",
+      tone: codedGradeLevelCount > 0 ? "info" : "neutral",
+      value: `${codedGradeLevelCount}/${rows.length}`,
+    },
+    {
+      detail: "Sınıf kurulumu ve öğrenci yerleşimi",
+      key: "class-context",
+      label: "Sınıf eşleşmesi",
+      status: "Bağlam",
+      tone: "info",
+      value: "Seviye ref",
+    },
+    {
+      detail: "Sınav ve karne filtrelerinde seviye kullanılır",
+      key: "report-context",
+      label: "Rapor filtresi",
+      status: "İzleniyor",
+      tone: "neutral",
+      value: "Seviye",
+    },
+  ];
 
   useEffect(() => {
     if (searchParams.get("new") === "1") openCreateForm();
@@ -49,16 +110,25 @@ export function GradeLevelsPage() {
     {
       key: "name",
       header: "Seviye",
+      mobilePriority: "primary",
+      priority: "primary",
       render: (record) => record.name,
+      sticky: "left",
     },
     {
       key: "code",
       header: "Kod",
+      mobilePriority: "secondary",
+      priority: "secondary",
       render: (record) => record.code ?? "-",
     },
     {
       key: "actions",
+      align: "center",
       header: "İşlem",
+      mobilePriority: "primary",
+      priority: "primary",
+      sticky: "right",
       render: (record) => (
         <span className="next-row-actions">
           <button type="button" onClick={() => openEditForm(record)} aria-label={`${record.name} düzenle`}>
@@ -152,6 +222,7 @@ export function GradeLevelsPage() {
         }
         aria-label="Seviye yönetimi"
         columns={columns}
+        density="compact"
         description="Kurum seviyelerini sınıf bölümlerine bağlamak için yönet."
         emptyState={
           <EmptyState
@@ -166,6 +237,16 @@ export function GradeLevelsPage() {
         getRowKey={(record) => record.id}
         loading={gradeLevelsQuery.isPending}
         rows={rows}
+        summary={
+          <OperationSummary
+            actions={gradeLevelSummaryActions}
+            ariaLabel="Seviye operasyon özeti"
+            badges={gradeLevelSummaryBadges}
+            items={gradeLevelSummaryItems}
+          />
+        }
+        tableCaption="Seviye eğitim yapısı"
+        tableDescription="Seviye adı, kısa kod ve seviye aksiyonları."
         title="Seviyeler"
       />
       <FormModal
@@ -176,21 +257,19 @@ export function GradeLevelsPage() {
         submitLabel={editingGradeLevel ? "Kaydet" : "Ekle"}
         title={editingGradeLevel ? "Seviye düzenle" : "Seviye ekle"}
       >
-        <label>
-          Seviye adı
+        <Field label="Seviye adı">
           <Input
             required
             value={form.name}
             onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
           />
-        </label>
-        <label>
-          Kod
+        </Field>
+        <Field label="Kod" description="Kısa kod sınıf eşleşmesi ve rapor filtrelerinde kullanılır.">
           <Input
             value={form.code ?? ""}
             onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
           />
-        </label>
+        </Field>
       </FormModal>
       {confirmationDialog}
     </>
@@ -232,4 +311,12 @@ async function deleteGradeLevel(accessToken: string, id: string) {
   if (!response.ok) {
     throw new Error("GRADE_LEVEL_DELETE_FAILED");
   }
+}
+
+function formatCount(value: number) {
+  return value.toLocaleString("tr-TR");
+}
+
+function formatGradeLevelSort(value: string) {
+  return gradeLevelSortOptions.find((option) => option.value === value)?.label ?? "Varsayılan";
 }

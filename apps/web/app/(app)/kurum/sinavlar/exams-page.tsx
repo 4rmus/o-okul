@@ -3,7 +3,18 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ClassRecord, ExamParticipantRecord, ExamRecord, StudentRecord } from "@uzman-hocam/shared-types";
-import { Button, EmptyState, FormModal, Input, useConfirmDialog } from "@uzman-hocam/ui";
+import {
+  Button,
+  DataTable,
+  EmptyState,
+  FormModal,
+  Input,
+  Panel,
+  StatusBadge,
+  type DataTableColumn,
+  type StatusBadgeProps,
+  useConfirmDialog,
+} from "@uzman-hocam/ui";
 import { CheckCircle2, Pencil, Plus, Search, Trash2, Users, X } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiErrorMessage, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -14,6 +25,7 @@ import {
   type ExamWithClassFormState,
 } from "../../../../src/form-validation.js";
 import { PageFrame } from "../_shared/page-frame.js";
+import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 const emptyForm: ExamWithClassFormState = {
   title: "",
@@ -64,6 +76,59 @@ export function ExamsPage() {
   const studentById = new Map(students.map((student) => [student.id, student]));
   const classes = referencesQuery.data?.classes ?? [];
   const classById = new Map(classes.map((klass) => [klass.id, klass]));
+  const publishedExamCount = rows.filter((exam) => exam.status === "PUBLISHED").length;
+  const draftExamCount = rows.filter((exam) => exam.status === "DRAFT").length;
+  const selectedParticipantClassCount = countParticipantClasses(participants, studentById);
+  const selectedAttendedCount = participants.filter((participant) => participant.status === "ATTENDED").length;
+  const selectedAbsentCount = participants.filter((participant) => participant.status === "ABSENT").length;
+  const selectedRegisteredCount = participants.filter((participant) => participant.status === "REGISTERED").length;
+  const selectedBookletSummary = formatBookletSummary(participants);
+  const examSummaryItems: OperationSummaryItem[] = [
+    {
+      description: "Bu kurum kapsamındaki deneme sınavı",
+      key: "total",
+      label: "Sınav toplamı",
+      value: formatCount(rows.length),
+    },
+    {
+      description: "Rapor zincirine açık sınav",
+      key: "published",
+      label: "Yayında",
+      tone: publishedExamCount > 0 ? "success" : "warning",
+      value: formatCount(publishedExamCount),
+    },
+    {
+      description: "Yayın veya katılımcı hazırlığı bekleyen sınav",
+      key: "draft",
+      label: "Taslak",
+      tone: draftExamCount > 0 ? "warning" : "default",
+      value: formatCount(draftExamCount),
+    },
+    {
+      description: selectedExam ? "Seçili sınav katılımcı kapsamı" : "Seçili sınav yok",
+      key: "participants",
+      label: "Seçili katılımcı",
+      tone: participants.length > 0 ? "info" : "warning",
+      value: formatCount(participants.length),
+    },
+  ];
+  const examSummaryBadges: OperationSummaryBadge[] = [
+    {
+      key: "active-exam",
+      label: selectedExam ? `Aktif sınav: ${selectedExam.title}` : "Aktif sınav yok",
+      tone: selectedExam ? examStatusTone(selectedExam.status) : "neutral",
+    },
+    {
+      key: "participant-status",
+      label: `Katılım: ${formatCount(selectedAttendedCount)} katıldı / ${formatCount(selectedAbsentCount)} gelmedi`,
+      tone: selectedAttendedCount > 0 ? "success" : "neutral",
+    },
+    {
+      key: "class-scope",
+      label: `${formatCount(selectedParticipantClassCount)} sınıf kapsamı`,
+      tone: selectedParticipantClassCount > 0 ? "info" : "neutral",
+    },
+  ];
   const studentCountByClassId = countStudentsByClassId(students);
   const normalizedClassSearch = classSearch.trim().toLocaleLowerCase("tr-TR");
   const visibleClasses = normalizedClassSearch
@@ -72,6 +137,99 @@ export function ExamsPage() {
   const selectedClassCount = form.classIds.length;
   const selectedStudentCount = form.classIds.reduce((total, classId) => total + (studentCountByClassId.get(classId) ?? 0), 0);
   const participantsNotFound = participantsQuery.error instanceof ApiRequestError && participantsQuery.error.status === 404;
+  const examColumns: Array<DataTableColumn<ExamRecord>> = [
+    {
+      header: "Sınav",
+      key: "title",
+      priority: "primary",
+      render: (exam) => exam.title,
+      sticky: "left",
+    },
+    {
+      header: "Durum",
+      key: "status",
+      priority: "secondary",
+      render: (exam) => <StatusBadge tone={examStatusTone(exam.status)}>{examStatusLabel(exam.status)}</StatusBadge>,
+    },
+    {
+      header: "Başlangıç",
+      key: "startsAt",
+      priority: "secondary",
+      render: (exam) => formatDateTime(exam.startsAt),
+    },
+    {
+      align: "right",
+      header: "İşlem",
+      key: "actions",
+      priority: "primary",
+      render: (exam) => (
+        <div className="next-row-actions">
+          <button
+            type="button"
+            aria-pressed={activeExamId === exam.id}
+            data-active={activeExamId === exam.id ? "true" : undefined}
+            onClick={() => setSelectedExamId(exam.id)}
+            aria-label={`${exam.title} katılımcıları`}
+          >
+            <Users size={17} aria-hidden="true" />
+          </button>
+          <button type="button" onClick={() => void openEditForm(exam)} aria-label={`${exam.title} düzenle`}>
+            <Pencil size={17} aria-hidden="true" />
+          </button>
+          {exam.status === "DRAFT" ? (
+            <button type="button" onClick={() => void handlePublish(exam)} aria-label={`${exam.title} yayınla`}>
+              <CheckCircle2 size={17} aria-hidden="true" />
+            </button>
+          ) : null}
+          <button type="button" onClick={() => void handleDelete(exam)} aria-label={`${exam.title} sil`}>
+            <Trash2 size={17} aria-hidden="true" />
+          </button>
+        </div>
+      ),
+      sticky: "right",
+    },
+  ];
+  const participantColumns: Array<DataTableColumn<ExamParticipantRecord>> = [
+    {
+      header: "Öğrenci",
+      key: "student",
+      priority: "primary",
+      render: (participant) => studentName(studentById.get(participant.studentId)),
+      sticky: "left",
+    },
+    {
+      header: "Öğrenci no",
+      key: "studentNo",
+      priority: "optional",
+      render: (participant) => studentById.get(participant.studentId)?.studentNo ?? "-",
+    },
+    {
+      header: "Sınıf",
+      key: "class",
+      priority: "secondary",
+      render: (participant) => classLabel(studentById.get(participant.studentId)?.classId, classById),
+    },
+    {
+      header: "Katılım no",
+      key: "participantNo",
+      priority: "secondary",
+      render: (participant) => participant.participantNo ?? "-",
+    },
+    {
+      header: "Kitapçık",
+      key: "booklet",
+      priority: "optional",
+      render: (participant) => participant.bookletType ?? "-",
+    },
+    {
+      header: "Durum",
+      key: "status",
+      priority: "secondary",
+      render: (participant) => (
+        <StatusBadge tone={participantStatusTone(participant.status)}>{participantStatusLabel(participant.status)}</StatusBadge>
+      ),
+    },
+  ];
 
   useEffect(() => {
     if (!participantsNotFound || !auth) return;
@@ -203,114 +361,91 @@ export function ExamsPage() {
         </Button>
       }
     >
-      <section className="next-list-panel" aria-label="Sınav yönetimi">
-        <h2>Sınav yönetimi</h2>
-        {error || examsQuery.isError ? (
-          <p className="uh-crud-page__error">{error || apiErrorMessage(examsQuery.error, "Sınavlar alınamadı.")}</p>
-        ) : null}
-        <table className="uh-data-table">
-          <thead>
-            <tr>
-              <th>Sınav</th>
-              <th>Durum</th>
-              <th>Başlangıç</th>
-              <th>İşlem</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((exam) => (
-              <tr key={exam.id}>
-                <td>{exam.title}</td>
-                <td>{examStatusLabel(exam.status)}</td>
-                <td>{formatDateTime(exam.startsAt)}</td>
-                <td>
-                  <div className="next-row-actions">
-                    {exam.status === "PUBLISHED" ? <span>Yayında</span> : null}
-                    <button type="button" onClick={() => setSelectedExamId(exam.id)} aria-label={`${exam.title} katılımcıları`}>
-                      <Users size={17} aria-hidden="true" />
-                    </button>
-                    <button type="button" onClick={() => void openEditForm(exam)} aria-label={`${exam.title} düzenle`}>
-                      <Pencil size={17} aria-hidden="true" />
-                    </button>
-                    {exam.status === "DRAFT" ? (
-                      <button type="button" onClick={() => void handlePublish(exam)} aria-label={`${exam.title} yayınla`}>
-                        <CheckCircle2 size={17} aria-hidden="true" />
-                      </button>
-                    ) : null}
-                    <button type="button" onClick={() => void handleDelete(exam)} aria-label={`${exam.title} sil`}>
-                      <Trash2 size={17} aria-hidden="true" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 && !examsQuery.isPending ? (
-              <tr>
-                <td colSpan={4}>
-                  <EmptyState
-                    title="Henüz sınav yok"
-                    description="İlk deneme sınavını ekleyerek katılımcı ve rapor hazırlığını başlat."
-                    primaryAction={{ label: "Sınav ekle", onClick: openCreateForm }}
-                  />
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </section>
-      {examsQuery.isPending ? <p className="next-status-note">Sınavlar yükleniyor</p> : null}
+      <OperationSummary ariaLabel="Sınav operasyon özeti" badges={examSummaryBadges} items={examSummaryItems} />
+      <Panel
+        aria-label="Sınav yönetimi"
+        description="Deneme sınavlarının yayın durumu, başlangıç zamanı ve katılımcı hazırlığı."
+        title="Sınav yönetimi"
+      >
+        {error ? <p className="uh-crud-page__error">{error}</p> : null}
+        <DataTable
+          caption="Sınav yönetimi"
+          columns={examColumns}
+          description="Deneme sınavlarının yayın durumu, başlangıç zamanı ve katılımcı hazırlığı."
+          emptyText={
+            <EmptyState
+              title="Henüz sınav yok"
+              description="İlk deneme sınavını ekleyerek katılımcı ve rapor hazırlığını başlat."
+              primaryAction={{ label: "Sınav ekle", onClick: openCreateForm }}
+            />
+          }
+          error={examsQuery.isError ? apiErrorMessage(examsQuery.error, "Sınavlar alınamadı.") : undefined}
+          getRowKey={(exam) => exam.id}
+          loading={examsQuery.isPending}
+          rows={rows}
+        />
+      </Panel>
       {selectedExam ? (
-        <section className="next-subsection" aria-label="Sınav katılımcıları">
-          <div className="next-section-header">
-            <div>
-              <h2>{selectedExam.title} katılımcıları</h2>
-              <p>Katılımcılar sınav oluşturulurken seçilen sınıftan otomatik eklenir.</p>
+        <Panel
+          aria-label="Sınav katılımcıları"
+          className="next-exam-selected-panel"
+          description="Katılımcılar sınav oluşturulurken seçilen sınıftan otomatik eklenir."
+          title={`${selectedExam.title} katılımcıları`}
+        >
+          <section className="next-exam-selected-context" aria-label="Sınav seçili detay">
+            <div className="next-support-ticket-badges" aria-label="Seçili sınav durumu">
+              <StatusBadge tone={examStatusTone(selectedExam.status)}>{examStatusLabel(selectedExam.status)}</StatusBadge>
+              <StatusBadge tone={participants.length > 0 ? "success" : "warning"}>
+                {participants.length > 0 ? "Katılım listesi hazır" : "Katılımcı bekleniyor"}
+              </StatusBadge>
+              <StatusBadge tone={selectedExam.status === "PUBLISHED" ? "info" : "neutral"}>
+                {selectedExam.status === "PUBLISHED" ? "Rapor zinciri açık" : "Rapor için yayın bekliyor"}
+              </StatusBadge>
             </div>
-          </div>
-          <table className="uh-data-table">
-            <thead>
-              <tr>
-                <th>Öğrenci</th>
-                <th>Öğrenci no</th>
-                <th>Sınıf</th>
-                <th>Katılım no</th>
-                <th>Kitapçık</th>
-                <th>Durum</th>
-              </tr>
-            </thead>
-            <tbody>
-              {participants.map((participant) => {
-                const student = studentById.get(participant.studentId);
-                return (
-                  <tr key={participant.id}>
-                    <td>{studentName(student)}</td>
-                    <td>{student?.studentNo ?? "-"}</td>
-                    <td>{classLabel(student?.classId, classById)}</td>
-                    <td>{participant.participantNo ?? "-"}</td>
-                    <td>{participant.bookletType ?? "-"}</td>
-                    <td>{participantStatusLabel(participant.status)}</td>
-                  </tr>
-                );
-              })}
-              {participants.length === 0 && !participantsQuery.isPending && !participantsQuery.isError ? (
-                <tr>
-                  <td colSpan={6}>
-                    <EmptyState
-                      title="Katılımcı yok"
-                      description="Bu sınav oluşturulurken seçilen sınıfta öğrenci bulunamadı."
-                    />
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-          {participantsQuery.isPending ? <p className="next-status-note">Katılımcılar yükleniyor</p> : null}
-          {referencesQuery.isError || participantsQuery.isError ? (
-            <p className="uh-crud-page__error">
-              {participantsNotFound ? "Seçili sınav bulunamadı. Liste yenileniyor." : "Katılımcı verisi alınamadı."}
-            </p>
-          ) : null}
-        </section>
+            <dl className="next-support-ticket-meta" aria-label="Seçili sınav metrikleri">
+              <div>
+                <dt>Başlangıç</dt>
+                <dd>{formatDateTime(selectedExam.startsAt)}</dd>
+              </div>
+              <div>
+                <dt>Katılımcı</dt>
+                <dd>{formatCount(participants.length)} öğrenci</dd>
+              </div>
+              <div>
+                <dt>Katılan</dt>
+                <dd>
+                  {formatCount(selectedAttendedCount)}/{formatCount(participants.length)}
+                </dd>
+              </div>
+              <div>
+                <dt>Kitapçık</dt>
+                <dd>{selectedBookletSummary}</dd>
+              </div>
+            </dl>
+            <section className="next-exam-readiness" aria-label="Sınav hazırlık durumu">
+              <span>{formatCount(selectedRegisteredCount)} kayıtlı katılımcı</span>
+              <span>{formatCount(selectedAbsentCount)} gelmeyen katılımcı</span>
+              <span>{formatCount(selectedParticipantClassCount)} sınıf kapsamı</span>
+            </section>
+            <DataTable
+              caption={`${selectedExam.title} katılımcıları`}
+              columns={participantColumns}
+              density="compact"
+              description="Sınıf seçiminden gelen öğrenci kapsamı, katılım no, kitapçık ve sınav katılım durumu."
+              emptyText={<EmptyState title="Katılımcı yok" description="Bu sınav oluşturulurken seçilen sınıfta öğrenci bulunamadı." />}
+              error={
+                referencesQuery.isError || participantsQuery.isError
+                  ? participantsNotFound
+                    ? "Seçili sınav bulunamadı. Liste yenileniyor."
+                    : "Katılımcı verisi alınamadı."
+                  : undefined
+              }
+              getRowKey={(participant) => participant.id}
+              loading={participantsQuery.isPending}
+              rows={participants}
+            />
+          </section>
+        </Panel>
       ) : null}
       <FormModal
         description="Sınav adı zorunludur. Başlangıç tarihi isteğe bağlıdır."
@@ -463,17 +598,23 @@ function examStatusLabel(status: string) {
   return status;
 }
 
+function examStatusTone(status: string): StatusBadgeProps["tone"] {
+  if (status === "PUBLISHED") return "success";
+  if (status === "DRAFT") return "warning";
+  return "neutral";
+}
+
 function formatDateTime(value: string | undefined) {
   return value ? new Date(value).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" }) : "-";
 }
 
 function studentName(student: StudentRecord | undefined) {
-  return student ? `${student.firstName} ${student.lastName}` : "-";
+  return student ? `${student.firstName} ${student.lastName}` : "Öğrenci kapsamı doğrulanmadı";
 }
 
 function classLabel(classId: string | undefined, classById: Map<string, ClassRecord>) {
-  if (!classId) return "-";
-  return classById.get(classId)?.name ?? classId;
+  if (!classId) return "Sınıf kapsamı doğrulanmadı";
+  return classById.get(classId)?.name ?? "Sınıf kapsamı doğrulanmadı";
 }
 
 function participantStatusLabel(status: string) {
@@ -481,6 +622,13 @@ function participantStatusLabel(status: string) {
   if (status === "ATTENDED") return "Katıldı";
   if (status === "ABSENT") return "Gelmedi";
   return status;
+}
+
+function participantStatusTone(status: string): StatusBadgeProps["tone"] {
+  if (status === "ATTENDED") return "success";
+  if (status === "ABSENT") return "danger";
+  if (status === "REGISTERED") return "info";
+  return "neutral";
 }
 
 function classSearchText(record: ClassRecord) {
@@ -499,6 +647,26 @@ function classIdsFromParticipants(participants: ExamParticipantRecord[], student
         .filter((classId): classId is string => Boolean(classId)),
     ),
   ];
+}
+
+function countParticipantClasses(participants: ExamParticipantRecord[], studentById: Map<string, StudentRecord>) {
+  return new Set(
+    participants
+      .map((participant) => studentById.get(participant.studentId)?.classId)
+      .filter((classId): classId is string => Boolean(classId)),
+  ).size;
+}
+
+function formatBookletSummary(participants: ExamParticipantRecord[]) {
+  const bookletTypes = [
+    ...new Set(participants.map((participant) => participant.bookletType).filter((booklet): booklet is string => Boolean(booklet))),
+  ];
+  if (bookletTypes.length === 0) return "Kitapçık yok";
+  return bookletTypes.sort((left, right) => left.localeCompare(right, "tr-TR")).join(" / ");
+}
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat("tr-TR").format(value);
 }
 
 function toDateTimeLocal(value: string | undefined) {

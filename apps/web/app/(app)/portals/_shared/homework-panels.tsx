@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@uzman-hocam/ui";
+import { Button, DataTable, Panel, type DataTableColumn } from "@uzman-hocam/ui";
 import type {
   HomeworkMaterialAssignmentRecord,
   HomeworkMaterialRecord,
@@ -17,30 +17,49 @@ export function HomeworkAssignmentsPanel({
   courseNames: ReadonlyMap<string, string>;
   termNames: ReadonlyMap<string, string>;
 }) {
+  const columns: Array<DataTableColumn<HomeworkMaterialAssignmentRecord>> = [
+    {
+      header: "Materyal",
+      key: "material",
+      priority: "primary",
+      render: (assignment) => assignment.materialTitle ?? "Bilinmeyen materyal",
+      sticky: "left",
+    },
+    {
+      header: "Bağlam",
+      key: "context",
+      priority: "primary",
+      render: (assignment) => formatAssignmentContext(assignment, courseNames, termNames),
+    },
+    {
+      header: "Not",
+      key: "note",
+      priority: "optional",
+      render: (assignment) => assignment.note ?? "-",
+    },
+    {
+      header: "Teslim",
+      key: "dueAt",
+      priority: "secondary",
+      render: (assignment) => (assignment.dueAt ? formatDateTime(assignment.dueAt) : "-"),
+    },
+  ];
+
   return (
-    <section className="next-list-panel" aria-label="Ödevler">
-      <h2>Ödevler</h2>
-      <table className="uh-data-table">
-        <thead>
-          <tr>
-            <th>Materyal</th>
-            <th>Bağlam</th>
-            <th>Not</th>
-            <th>Teslim</th>
-          </tr>
-        </thead>
-        <tbody>
-          {assignments.map((assignment) => (
-            <tr key={assignment.id}>
-              <td>{assignment.materialTitle ?? assignment.materialId}</td>
-              <td>{formatAssignmentContext(assignment, courseNames, termNames)}</td>
-              <td>{assignment.note ?? "-"}</td>
-              <td>{assignment.dueAt ? formatDateTime(assignment.dueAt) : "-"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+    <Panel
+      aria-label="Ödevler"
+      description="Öğrenciye atanmış materyal, ders ve dönem bağlamı."
+      title="Ödevler"
+    >
+      <DataTable
+        caption="Ödev ve materyal atamaları"
+        columns={columns}
+        description="Öğrenciye atanmış materyal, ders ve dönem bağlamı."
+        emptyText="Ödev ataması yok."
+        getRowKey={(assignment) => assignment.id}
+        rows={assignments}
+      />
+    </Panel>
   );
 }
 
@@ -53,40 +72,64 @@ export function TeacherHomeworkPanel({
   onToggle(homework: HomeworkRecord): void;
   readOnly?: boolean;
 }) {
+  const columns: Array<DataTableColumn<HomeworkRecord>> = [
+    {
+      header: "Ödev",
+      key: "title",
+      priority: "primary",
+      render: (record) => record.title,
+      sticky: "left",
+    },
+    {
+      header: "Materyal",
+      key: "material",
+      priority: "secondary",
+      render: (record) => record.sourceMaterialTitle ?? "-",
+    },
+    {
+      header: "Teslim",
+      key: "dueAt",
+      priority: "secondary",
+      render: (record) => (record.dueAt ? formatDateTime(record.dueAt) : "-"),
+    },
+    {
+      header: "Durum",
+      key: "status",
+      priority: "primary",
+      render: (record) => (record.checkedAt ? "Kontrol edildi" : "Bekliyor"),
+    },
+    {
+      header: "İşlem",
+      key: "action",
+      priority: "primary",
+      render: (record) =>
+        readOnly ? (
+          "Salt-okuma"
+        ) : (
+          <Button onClick={() => onToggle(record)} variant="secondary">
+            {record.checkedAt ? "Bekliyor yap" : "Kontrol et"}
+          </Button>
+        ),
+      sticky: "right",
+    },
+  ];
+
   return (
-    <section className="next-list-panel" aria-label="Öğretmen ödev kontrolü">
-      <h2>Ödev Kontrolü</h2>
-      <table className="uh-data-table">
-        <thead>
-          <tr>
-            <th>Ödev</th>
-            <th>Materyal</th>
-            <th>Teslim</th>
-            <th>Durum</th>
-            <th>İşlem</th>
-          </tr>
-        </thead>
-        <tbody>
-          {homework.map((record) => (
-            <tr key={record.id}>
-              <td>{record.title}</td>
-              <td>{record.sourceMaterialTitle ?? "-"}</td>
-              <td>{record.dueAt ? formatDateTime(record.dueAt) : "-"}</td>
-              <td>{record.checkedAt ? "Kontrol edildi" : "Bekliyor"}</td>
-              <td>
-                {readOnly ? (
-                  "Salt-okuma"
-                ) : (
-                  <Button onClick={() => onToggle(record)} variant="secondary">
-                    {record.checkedAt ? "Bekliyor yap" : "Kontrol et"}
-                  </Button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+    <Panel
+      aria-label="Öğretmen ödev kontrolü"
+      description="Ödev kontrol durumları ve öğretmen aksiyonları."
+      title="Ödev Kontrolü"
+    >
+      <DataTable
+        caption="Öğretmen ödev kontrol kayıtları"
+        columns={columns}
+        description="Ödev kontrol durumları ve öğretmen aksiyonları."
+        density="compact"
+        emptyText="Kontrol edilecek ödev yok."
+        getRowKey={(record) => record.id}
+        rows={homework}
+      />
+    </Panel>
   );
 }
 
@@ -105,34 +148,62 @@ export function TeacherMaterialAssignmentsPanel({
 }) {
   const materialTitleById = new Map(materials.map((material) => [material.id, material.title]));
   const studentNameById = new Map(students.map((student) => [student.id, `${student.firstName} ${student.lastName}`]));
+  const columns: Array<DataTableColumn<HomeworkMaterialAssignmentRecord>> = [
+    {
+      header: "Öğrenci",
+      key: "student",
+      priority: "primary",
+      render: (assignment) => studentNameById.get(assignment.studentId) ?? "Bilinmeyen öğrenci",
+      sticky: "left",
+    },
+    {
+      header: "Materyal",
+      key: "material",
+      priority: "primary",
+      render: (assignment) => materialTitleById.get(assignment.materialId) ?? "Bilinmeyen materyal",
+    },
+    {
+      header: "Branş",
+      key: "course",
+      priority: "secondary",
+      render: (assignment) => (assignment.courseId ? courseNames.get(assignment.courseId) ?? "Ders bilgisi yok" : "-"),
+    },
+    {
+      header: "Dönem",
+      key: "term",
+      priority: "secondary",
+      render: (assignment) => (assignment.termId ? termNames.get(assignment.termId) ?? "Dönem bilgisi yok" : "-"),
+    },
+    {
+      header: "Not",
+      key: "note",
+      priority: "optional",
+      render: (assignment) => assignment.note ?? "-",
+    },
+    {
+      header: "Teslim",
+      key: "dueAt",
+      priority: "secondary",
+      render: (assignment) => (assignment.dueAt ? formatDateTime(assignment.dueAt) : "-"),
+    },
+  ];
+
   return (
-    <section className="next-list-panel" aria-label="Öğretmen materyal atamaları">
-      <h2>Materyal Atamaları</h2>
-      <table className="uh-data-table">
-        <thead>
-          <tr>
-            <th>Öğrenci</th>
-            <th>Materyal</th>
-            <th>Branş</th>
-            <th>Dönem</th>
-            <th>Not</th>
-            <th>Teslim</th>
-          </tr>
-        </thead>
-        <tbody>
-          {assignments.map((assignment) => (
-            <tr key={assignment.id}>
-              <td>{studentNameById.get(assignment.studentId) ?? assignment.studentId}</td>
-              <td>{materialTitleById.get(assignment.materialId) ?? assignment.materialId}</td>
-              <td>{assignment.courseId ? courseNames.get(assignment.courseId) ?? assignment.courseId : "-"}</td>
-              <td>{assignment.termId ? termNames.get(assignment.termId) ?? assignment.termId : "-"}</td>
-              <td>{assignment.note ?? "-"}</td>
-              <td>{assignment.dueAt ? formatDateTime(assignment.dueAt) : "-"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+    <Panel
+      aria-label="Öğretmen materyal atamaları"
+      description="Seçili öğrenci için atanmış materyal ve ders-dönem bağlamı."
+      title="Materyal Atamaları"
+    >
+      <DataTable
+        caption="Öğretmen materyal atamaları"
+        columns={columns}
+        description="Seçili öğrenci için atanmış materyal ve ders-dönem bağlamı."
+        density="compact"
+        emptyText="Materyal ataması yok."
+        getRowKey={(assignment) => assignment.id}
+        rows={assignments}
+      />
+    </Panel>
   );
 }
 
@@ -142,8 +213,8 @@ function formatAssignmentContext(
   termNames: ReadonlyMap<string, string>,
 ) {
   const parts = [
-    assignment.courseId ? courseNames.get(assignment.courseId) ?? assignment.courseId : undefined,
-    assignment.termId ? termNames.get(assignment.termId) ?? assignment.termId : undefined,
+    assignment.courseId ? courseNames.get(assignment.courseId) ?? "Ders bilgisi yok" : undefined,
+    assignment.termId ? termNames.get(assignment.termId) ?? "Dönem bilgisi yok" : undefined,
   ].filter((part): part is string => Boolean(part));
   return parts.length > 0 ? parts.join(" / ") : "-";
 }

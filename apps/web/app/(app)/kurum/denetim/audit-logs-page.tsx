@@ -1,16 +1,18 @@
 "use client";
 
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CrudPage, EmptyState, type DataTableColumn } from "@uzman-hocam/ui";
-import type { AuditLogRecord } from "@uzman-hocam/shared-types";
+import { useSearchParams } from "next/navigation";
+import { CrudPage, EmptyState, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@uzman-hocam/ui";
+import type { AuditLogListItemRecord } from "@uzman-hocam/shared-types";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest } from "../../../../src/api-client.js";
-import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 export function AuditLogsPage() {
   const { auth } = useAuth();
-  const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
+  const searchParams = useSearchParams();
+  const [listQuery, setListQuery] = useUrlListState(searchParams, { sortOptions: auditLogSortOptions });
   const auditLogsQuery = useQuery({
     queryKey: ["next-audit-logs", auth?.session.tenantId ?? "anonymous", listQuery],
     queryFn: () => loadAuditLogs(auth?.accessToken ?? "", listQuery),
@@ -18,26 +20,72 @@ export function AuditLogsPage() {
     refetchOnWindowFocus: false,
   });
   const rows = auditLogsQuery.data?.data ?? [];
-  const columns: Array<DataTableColumn<AuditLogRecord>> = [
+  const totalCount = auditLogsQuery.data?.meta?.total ?? rows.length;
+  const identityEventCount = rows.filter((record) => record.category === "identity").length;
+  const userEventCount = rows.filter((record) => record.category === "user").length;
+  const auditSummaryItems: OperationSummaryItem[] = [
+    {
+      description: "Filtrelenmiş toplam kayıt",
+      key: "total",
+      label: "Kayıt toplamı",
+      value: formatCount(totalCount),
+    },
+    {
+      description: "En yeni güvenli olay etiketi",
+      key: "latest",
+      label: "Son olay",
+      value: rows[0]?.actionLabel ?? "Yok",
+    },
+    {
+      description: "Kimlik / kullanıcı kırılımı",
+      key: "security",
+      label: "Kimlik olayı",
+      tone: identityEventCount > 0 ? "info" : "default",
+      value: `${formatCount(identityEventCount)} / ${formatCount(userEventCount)}`,
+    },
+    {
+      description: "Ham kanıt alanları panelde gösterilmez",
+      key: "safe-display",
+      label: "PII güvenliği",
+      tone: "success",
+      value: "PII maskeli",
+    },
+  ];
+  const auditSummaryBadges: OperationSummaryBadge[] = [
+    { key: "source", label: "Server/audit kaynağı", tone: "info" },
+    { key: "mode", label: "Salt-okuma", tone: "neutral" },
+    { key: "pii", label: "PII ham gösterilmez", tone: "success" },
+    { key: "sort", label: `Sıralama: ${formatAuditSort(listQuery.sort)}`, tone: "neutral" },
+  ];
+  const columns: Array<DataTableColumn<AuditLogListItemRecord>> = [
     {
       key: "action",
-      header: "Aksiyon",
-      render: (record) => record.action,
+      header: "Olay",
+      priority: "primary",
+      render: (record) => (
+        <StatusBadge tone={auditCategoryTone(record.category)} title="Audit aksiyon etiketi">
+          {record.actionLabel}
+        </StatusBadge>
+      ),
+      sticky: "left",
     },
     {
       key: "entityType",
-      header: "Kayıt",
-      render: (record) => record.entityType,
+      header: "Kayıt türü",
+      priority: "secondary",
+      render: (record) => record.entityLabel,
     },
     {
       key: "actor",
-      header: "Kullanıcı",
-      render: (record) => record.actorUserId ?? "-",
+      header: "Aktör",
+      priority: "optional",
+      render: (record) => record.actorLabel,
     },
     {
       key: "createdAt",
-      header: "Tarih",
-      render: (record) => new Date(record.createdAt).toLocaleDateString("tr-TR"),
+      header: "Zaman",
+      priority: "secondary",
+      render: (record) => formatAuditDate(record.createdAt),
     },
   ];
 
@@ -53,7 +101,8 @@ export function AuditLogsPage() {
       }
       aria-label="Denetim kayıtları"
       columns={columns}
-      description="Kurum içindeki önemli işlem kayıtlarını salt okunur olarak izle."
+      density="compact"
+      description="Kurum işlem izini salt-okunur izle; ham PII ve gizli kanıt değerleri panelde gösterilmez."
       emptyState={
         <EmptyState
           title="Denetim kaydı yok"
@@ -66,6 +115,9 @@ export function AuditLogsPage() {
       getRowKey={(record) => record.id}
       loading={auditLogsQuery.isPending}
       rows={rows}
+      summary={<OperationSummary ariaLabel="Denetim operasyon özeti" badges={auditSummaryBadges} items={auditSummaryItems} />}
+      tableCaption="Denetim kayıtları"
+      tableDescription="Kurum içi işlem izi; aktör, kayıt türü ve zaman bilgisi PII göstermeden listelenir."
       title="Denetim"
     />
   );
@@ -79,5 +131,31 @@ const auditLogSortOptions = [
 ];
 
 async function loadAuditLogs(accessToken: string, listQuery: ListQueryState) {
-  return apiListRequest<AuditLogRecord>(accessToken, buildListUrl(`${apiBaseUrl}/audit-logs`, listQuery));
+  return apiListRequest<AuditLogListItemRecord>(accessToken, buildListUrl(`${apiBaseUrl}/audit-logs/safe-list`, listQuery));
+}
+
+function auditCategoryTone(category: AuditLogListItemRecord["category"]): StatusBadgeProps["tone"] {
+  if (category === "identity" || category === "invitation") return "warning";
+  if (category === "kvkk" || category === "tenant") return "info";
+  if (category === "finance") return "danger";
+  if (category === "academic" || category === "report") return "success";
+  return "neutral";
+}
+
+function formatAuditDate(value: string) {
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function formatAuditSort(sort: string) {
+  return auditLogSortOptions.find((option) => option.value === sort)?.label ?? "Varsayılan";
+}
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat("tr-TR").format(value);
 }

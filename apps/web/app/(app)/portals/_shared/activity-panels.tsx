@@ -1,28 +1,40 @@
 "use client";
 
+import { DataTable, Panel, type DataTableColumn } from "@uzman-hocam/ui";
 import type { AttendanceRecord, StudentRecord, TeacherNoteRecord } from "@uzman-hocam/shared-types";
 
 export function AttendancePanel({ records }: { records: AttendanceRecord[] }) {
+  const columns: Array<DataTableColumn<AttendanceRecord>> = [
+    {
+      header: "Tarih",
+      key: "date",
+      priority: "primary",
+      render: (record) => record.date,
+      sticky: "left",
+    },
+    {
+      header: "Durum",
+      key: "status",
+      priority: "primary",
+      render: (record) => formatAttendanceStatus(record.status),
+    },
+  ];
+
   return (
-    <section className="next-list-panel" aria-label="Devamsızlık">
-      <h2>Devamsızlık</h2>
-      <table className="uh-data-table">
-        <thead>
-          <tr>
-            <th>Tarih</th>
-            <th>Durum</th>
-          </tr>
-        </thead>
-        <tbody>
-          {records.map((record) => (
-            <tr key={record.id}>
-              <td>{record.date}</td>
-              <td>{formatAttendanceStatus(record.status)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+    <Panel
+      aria-label="Devamsızlık"
+      description="Öğrencinin portaldan görebildiği yoklama kayıtları."
+      title="Devamsızlık"
+    >
+      <DataTable
+        caption="Devamsızlık kayıtları"
+        columns={columns}
+        description="Öğrencinin portaldan görebildiği yoklama kayıtları."
+        emptyText="Devamsızlık kaydı yok."
+        getRowKey={(record) => record.id}
+        rows={records}
+      />
+    </Panel>
   );
 }
 
@@ -38,32 +50,61 @@ export function TeacherAttendancePanel({
   termNames: ReadonlyMap<string, string>;
 }) {
   const studentNameById = new Map(students.map((student) => [student.id, `${student.firstName} ${student.lastName}`]));
+  const columns: Array<DataTableColumn<AttendanceRecord>> = [
+    {
+      header: "Öğrenci",
+      key: "student",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (record) => studentNameById.get(record.studentId) ?? "Bilinmeyen öğrenci",
+      sticky: "left",
+    },
+    {
+      header: "Branş",
+      key: "course",
+      mobilePriority: "secondary",
+      priority: "primary",
+      render: (record) => formatCourseLabel(record.courseId, courseNames),
+    },
+    {
+      header: "Dönem",
+      key: "term",
+      mobilePriority: "hidden",
+      priority: "secondary",
+      render: (record) => formatTermLabel(record.termId, termNames),
+    },
+    {
+      header: "Tarih",
+      key: "date",
+      mobilePriority: "secondary",
+      priority: "primary",
+      render: (record) => record.date,
+    },
+    {
+      header: "Durum",
+      key: "status",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (record) => formatAttendanceStatus(record.status),
+    },
+  ];
+
   return (
-    <section className="next-list-panel" aria-label="Öğretmen yoklama kayıtları">
-      <h2>Yoklama Kayıtları</h2>
-      <table className="uh-data-table">
-        <thead>
-          <tr>
-            <th>Öğrenci</th>
-            <th>Branş</th>
-            <th>Dönem</th>
-            <th>Tarih</th>
-            <th>Durum</th>
-          </tr>
-        </thead>
-        <tbody>
-          {records.map((record) => (
-            <tr key={record.id}>
-              <td>{studentNameById.get(record.studentId) ?? record.studentId}</td>
-              <td>{record.courseId ? courseNames.get(record.courseId) ?? record.courseId : "-"}</td>
-              <td>{record.termId ? termNames.get(record.termId) ?? record.termId : "-"}</td>
-              <td>{record.date}</td>
-              <td>{formatAttendanceStatus(record.status)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+    <Panel
+      aria-label="Öğretmen yoklama kayıtları"
+      description="Öğretmenin kapsamındaki öğrenci, branş ve dönem yoklama kayıtları."
+      title="Yoklama Kayıtları"
+    >
+      <DataTable
+        caption="Öğretmen yoklama kayıtları"
+        columns={columns}
+        description="Öğretmenin kapsamındaki öğrenci, branş ve dönem yoklama kayıtları."
+        density="compact"
+        emptyText="Yoklama kaydı yok."
+        getRowKey={(record) => record.id}
+        rows={records}
+      />
+    </Panel>
   );
 }
 
@@ -79,22 +120,54 @@ export function TeacherNotesPanel({
   termNames?: ReadonlyMap<string, string>;
 }) {
   const studentNameById = new Map((students ?? []).map((student) => [student.id, `${student.firstName} ${student.lastName}`]));
+  const columns: Array<DataTableColumn<TeacherNoteRecord>> = [
+    {
+      header: students ? "Öğrenci" : "Bağlam",
+      key: "student",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (note) => formatTeacherNoteSubject(note, studentNameById, Boolean(students)),
+      sticky: "left",
+    },
+    {
+      header: "Branş",
+      key: "course",
+      mobilePriority: "secondary",
+      priority: "secondary",
+      render: (note) => formatCourseLabel(note.courseId, courseNames),
+    },
+    {
+      header: "Dönem",
+      key: "term",
+      mobilePriority: "hidden",
+      priority: "optional",
+      render: (note) => formatTermLabel(note.termId, termNames),
+    },
+    {
+      header: "Not",
+      key: "body",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (note) => note.body,
+    },
+  ];
+
   return (
-    <section className="next-list-panel" aria-label="Öğretmen notları">
-      <h2>Öğretmen Notları</h2>
-      <div className="next-note-list">
-        {notes.map((note) => (
-          <article key={note.id}>
-            <strong>{studentNameById.get(note.studentId) ?? note.developmentStatus ?? "Not"}</strong>
-            <span className="next-field-hint">
-              {note.courseId ? courseNames?.get(note.courseId) ?? note.courseId : "Branş yok"} ·{" "}
-              {note.termId ? termNames?.get(note.termId) ?? note.termId : "Dönem yok"}
-            </span>
-            <p>{note.body}</p>
-          </article>
-        ))}
-      </div>
-    </section>
+    <Panel
+      aria-label="Öğretmen notları"
+      description="Veli, öğrenci ve öğretmen portalında görünür gelişim notları."
+      title="Öğretmen Notları"
+    >
+      <DataTable
+        caption="Öğretmen notları"
+        columns={columns}
+        density="compact"
+        description="Görünür gelişim notları, ders ve dönem bağlamıyla listelenir."
+        emptyText="Görünür öğretmen notu yok."
+        getRowKey={(note) => note.id}
+        rows={notes}
+      />
+    </Panel>
   );
 }
 
@@ -106,4 +179,19 @@ function formatAttendanceStatus(status: AttendanceRecord["status"]) {
     PRESENT: "Var",
   };
   return labels[status];
+}
+
+function formatTeacherNoteSubject(note: TeacherNoteRecord, studentNameById: ReadonlyMap<string, string>, hasStudentScope: boolean) {
+  if (hasStudentScope && note.studentId) return studentNameById.get(note.studentId) ?? "Bilinmeyen öğrenci";
+  return note.developmentStatus || "Not";
+}
+
+function formatCourseLabel(courseId: string | undefined, courseNames: ReadonlyMap<string, string> | undefined) {
+  if (!courseId) return "Ders bilgisi yok";
+  return courseNames?.get(courseId) ?? "Ders bilgisi yok";
+}
+
+function formatTermLabel(termId: string | undefined, termNames: ReadonlyMap<string, string> | undefined) {
+  if (!termId) return "Dönem bilgisi yok";
+  return termNames?.get(termId) ?? "Dönem bilgisi yok";
 }

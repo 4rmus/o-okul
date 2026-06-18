@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Checkbox, DataTable, Panel, type DataTableColumn } from "@uzman-hocam/ui";
 import type { GuardianStudentRecord, PaymentPlanWithInstallmentsRecord } from "@uzman-hocam/shared-types";
 
 export function NotificationPreferencesPanel({
@@ -26,45 +27,34 @@ export function NotificationPreferencesPanel({
   }
 
   return (
-    <section className="next-list-panel" aria-label="Bildirim tercihleri">
-      <h2>Bildirim Tercihleri</h2>
+    <Panel aria-label="Bildirim tercihleri" title="Bildirim Tercihleri">
       {readOnly ? <p>Salt-okuma önizlemede bildirim tercihleri değiştirilemez.</p> : null}
-      <label className="next-checkbox-row">
-        <input
-          checked={preferences?.canReceiveSms ?? false}
-          disabled={readOnly || !preferences || !onUpdate}
-          onChange={(event) => void update({ canReceiveSms: event.target.checked })}
-          type="checkbox"
-        />
-        SMS al
-      </label>
-      <label className="next-checkbox-row">
-        <input
-          checked={preferences?.canReceiveAnnouncements ?? false}
-          disabled={readOnly || !preferences || !onUpdate}
-          onChange={(event) => void update({ canReceiveAnnouncements: event.target.checked })}
-          type="checkbox"
-        />
-        Duyuru al
-      </label>
-      <label className="next-checkbox-row">
-        <input
-          checked={preferences?.canOpenSupportTickets ?? false}
-          disabled={readOnly || !preferences || !onUpdate}
-          onChange={(event) => void update({ canOpenSupportTickets: event.target.checked })}
-          type="checkbox"
-        />
-        Destek talebi aç
-      </label>
+      <Checkbox
+        checked={preferences?.canReceiveSms ?? false}
+        disabled={readOnly || !preferences || !onUpdate}
+        label="SMS al"
+        onChange={(event) => void update({ canReceiveSms: event.target.checked })}
+      />
+      <Checkbox
+        checked={preferences?.canReceiveAnnouncements ?? false}
+        disabled={readOnly || !preferences || !onUpdate}
+        label="Duyuru al"
+        onChange={(event) => void update({ canReceiveAnnouncements: event.target.checked })}
+      />
+      <Checkbox
+        checked={preferences?.canOpenSupportTickets ?? false}
+        disabled={readOnly || !preferences || !onUpdate}
+        label="Destek talebi aç"
+        onChange={(event) => void update({ canOpenSupportTickets: event.target.checked })}
+      />
       {error ? <p className="next-form-error">{error}</p> : null}
-    </section>
+    </Panel>
   );
 }
 
 export function GuardianRelationshipSummaryPanel({ relationship }: { relationship?: GuardianStudentRecord }) {
   return (
-    <section className="next-list-panel" aria-label="Veli ilişki özeti">
-      <h2>Veli İlişki Özeti</h2>
+    <Panel aria-label="Veli ilişki özeti" title="Veli İlişki Özeti">
       <dl className="next-definition-list">
         <div>
           <dt>İlişki</dt>
@@ -83,7 +73,7 @@ export function GuardianRelationshipSummaryPanel({ relationship }: { relationshi
           <dd>{relationship ? formatGuardianPermissions(relationship) : "-"}</dd>
         </div>
       </dl>
-    </section>
+    </Panel>
   );
 }
 
@@ -96,39 +86,60 @@ export function PaymentPlansPanel({
 }) {
   if (!canViewFinance) {
     return (
-      <section className="next-list-panel" aria-label="Ödeme planları">
-        <h2>Ödeme Planları</h2>
+      <Panel aria-label="Ödeme planları" title="Ödeme Planları">
         <p className="next-status-note">Ödeme görünümü kapalı.</p>
-      </section>
+      </Panel>
     );
   }
 
+  const columns: Array<DataTableColumn<PaymentPlanWithInstallmentsRecord>> = [
+    {
+      header: "Plan",
+      key: "plan",
+      priority: "primary",
+      render: (plan) => plan.title,
+      sticky: "left",
+    },
+    {
+      align: "right",
+      header: "Tutar",
+      key: "amount",
+      priority: "primary",
+      render: (plan) => formatMoney(plan.totalAmount, plan.currency),
+    },
+    {
+      align: "right",
+      header: "Taksit",
+      key: "installmentCount",
+      priority: "secondary",
+      render: (plan) => plan.installments.length,
+    },
+    {
+      align: "right",
+      header: "Bekleyen",
+      key: "pending",
+      priority: "primary",
+      render: (plan) => formatPendingPaymentForPlan(plan),
+    },
+    {
+      header: "Sıradaki taksit",
+      key: "nextInstallment",
+      priority: "secondary",
+      render: (plan) => formatNextInstallmentSummary(plan),
+    },
+  ];
+
   return (
-    <section className="next-list-panel" aria-label="Ödeme planları">
-      <h2>Ödeme Planları</h2>
-      <table className="uh-data-table">
-        <thead>
-          <tr>
-            <th>Plan</th>
-            <th>Tutar</th>
-            <th>Taksit</th>
-            <th>Bekleyen</th>
-            <th>Sıradaki taksit</th>
-          </tr>
-        </thead>
-        <tbody>
-          {plans.map((plan) => (
-            <tr key={plan.id}>
-              <td>{plan.title}</td>
-              <td>{formatMoney(plan.totalAmount, plan.currency)}</td>
-              <td>{plan.installments.length}</td>
-              <td>{formatPendingPaymentForPlan(plan)}</td>
-              <td>{formatNextInstallmentSummary(plan)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+    <Panel aria-label="Ödeme planları" title="Ödeme Planları">
+      <DataTable
+        caption="Ödeme planları"
+        columns={columns}
+        description="Veli finans izni açık olan öğrenciler için ödeme planı ve bekleyen tutar."
+        emptyText="Ödeme planı yok."
+        getRowKey={(plan) => plan.id}
+        rows={plans}
+      />
+    </Panel>
   );
 }
 

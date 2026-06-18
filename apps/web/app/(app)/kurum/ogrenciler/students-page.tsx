@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
+import { Button, Checkbox, CrudPage, DataTable, EmptyState, Field, FormModal, Input, Select, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import type {
   AttendanceSummaryRecord,
   ClassRecord,
@@ -35,6 +35,7 @@ import {
 import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { readReportExamId } from "../../_shared/report-exam-selection.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 interface StudentProfilePayload {
   nationalId?: string;
@@ -205,32 +206,40 @@ export function StudentsPage() {
     {
       key: "studentNo",
       header: "Okul No",
+      priority: "optional",
       render: (student) => student.studentNo ?? "—",
     },
     {
       key: "name",
       header: "Ad Soyad",
+      priority: "primary",
       render: (student) => `${student.firstName} ${student.lastName}`,
+      sticky: true,
     },
     {
       key: "class",
       header: "Sınıf",
+      priority: "secondary",
       render: (student) => (student.classId ? (classNameById.get(student.classId) ?? "—") : "—"),
     },
     {
       key: "responsibleTeacher",
       header: "Sorumlu öğretmen",
+      priority: "optional",
       render: (student) =>
         student.responsibleTeacherId ? (teacherNameById.get(student.responsibleTeacherId) ?? "—") : "—",
     },
     {
       key: "status",
       header: "Durum",
+      priority: "secondary",
       render: (student) => formatStudentStatus(student.status),
     },
     {
       key: "actions",
+      align: "center",
       header: "İşlem",
+      priority: "primary",
       render: (student) => (
         <span className="next-row-actions">
           <Link href={`/kurum/ogrenciler/${encodeURIComponent(student.id)}`} aria-label={`${student.firstName} öğrenci dashboard`}>
@@ -248,6 +257,79 @@ export function StudentsPage() {
   ];
   const visibleColumns = columns.filter((column) => visibleColumnKeys.includes(column.key));
   const pageClassName = tableDensity === "compact" ? "next-students-page next-students-page--compact" : "next-students-page";
+  const activeRowCount = rows.filter((student) => student.status === "ACTIVE").length;
+  const classCoverageCount = new Set(rows.map((student) => student.classId).filter(Boolean)).size;
+  const studentSummaryItems: OperationSummaryItem[] = [
+    {
+      description: "Filtrelenmiş toplam kayıt",
+      key: "total",
+      label: "Öğrenci toplamı",
+      value: formatCount(studentsQuery.data?.meta?.total ?? rows.length),
+    },
+    {
+      description: "Geçerli sayfada aktif kayıt",
+      key: "active",
+      label: "Aktif kayıt",
+      tone: activeRowCount === rows.length && rows.length > 0 ? "success" : "default",
+      value: `${activeRowCount}/${rows.length}`,
+    },
+    {
+      description: filters.level ? `${filters.level}. seviye filtresi` : "Geçerli sayfa kapsamı",
+      key: "classes",
+      label: "Sınıf kapsamı",
+      value: classCoverageCount > 0 ? `${classCoverageCount} sınıf` : "Sınıfsız",
+    },
+    {
+      description: `${visibleColumns.length}/${studentColumnKeys.length} kolon`,
+      key: "view",
+      label: "Tablo görünümü",
+      tone: tableDensity === "compact" ? "info" : "default",
+      value: tableDensity === "compact" ? "Yoğun" : "Rahat",
+    },
+  ];
+  const studentSummaryBadges: OperationSummaryBadge[] = [
+    {
+      key: "guardian",
+      label: `Veli: ${formatGuardianLinkedFilter(filters.guardianLinked)}`,
+      tone: filters.guardianLinked === "true" ? "success" : filters.guardianLinked === "false" ? "warning" : "neutral",
+    },
+    {
+      key: "teacher",
+      label: filters.responsibleTeacherId ? "Sorumlu filtreli" : "Tüm sorumlular",
+      tone: filters.responsibleTeacherId ? "info" : "neutral",
+    },
+    {
+      key: "bulk",
+      label: bulkEnrollmentAction.useAutomaticClassMapping ? "Toplu geçiş: otomatik" : "Toplu geçiş: manuel",
+      tone: bulkEnrollmentAction.useAutomaticClassMapping ? "info" : "neutral",
+    },
+  ];
+  const studentSummaryActions: OperationSummaryAction[] = [
+    {
+      detail: filters.level ? `${filters.level}. seviye görünümü` : "Bu sayfadaki sınıf dağılımı",
+      key: "class-mapping",
+      label: "Sınıf eşleştirme",
+      status: classCoverageCount > 0 ? "İzleniyor" : "Kontrol",
+      tone: classCoverageCount > 0 ? "info" : "warning",
+      value: classCoverageCount > 0 ? `${classCoverageCount} sınıf` : "Sınıfsız",
+    },
+    {
+      detail: "Filtre ve tablo kolonu birlikte izlenir",
+      key: "responsible-teacher",
+      label: "Sorumlu öğretmen",
+      status: filters.responsibleTeacherId ? "Odak" : "Genel",
+      tone: filters.responsibleTeacherId ? "info" : "neutral",
+      value: filters.responsibleTeacherId ? "Filtreli" : "Tüm sorumlular",
+    },
+    {
+      detail: `${sourceClassIds.length} kaynak sınıf`,
+      key: "bulk-transition",
+      label: "Toplu dönem geçişi",
+      status: bulkEnrollmentAction.useAutomaticClassMapping ? "Hazır" : "Kontrol",
+      tone: bulkEnrollmentAction.useAutomaticClassMapping ? "success" : "neutral",
+      value: bulkEnrollmentAction.useAutomaticClassMapping ? "Otomatik" : "Manuel",
+    },
+  ];
 
   function openCreateForm() {
     setEditingStudent(null);
@@ -465,9 +547,8 @@ export function StudentsPage() {
               state={listQuery}
             />
             <div className="next-list-controls" aria-label="Öğrenci filtreleri">
-              <label>
-                Sınıf
-                <select
+              <Field label="Sınıf">
+                <Select
                   value={filters.classId}
                   onChange={(event) => updateFilters({ ...filters, classId: event.target.value })}
                 >
@@ -477,11 +558,10 @@ export function StudentsPage() {
                       {klass.name}
                     </option>
                   ))}
-                </select>
-              </label>
-              <label>
-                Seviye
-                <select
+                </Select>
+              </Field>
+              <Field label="Seviye">
+                <Select
                   value={filters.level}
                   onChange={(event) => updateFilters({ ...filters, level: event.target.value })}
                 >
@@ -491,11 +571,10 @@ export function StudentsPage() {
                       {level}
                     </option>
                   ))}
-                </select>
-              </label>
-              <label>
-                Sorumlu
-                <select
+                </Select>
+              </Field>
+              <Field label="Sorumlu">
+                <Select
                   value={filters.responsibleTeacherId}
                   onChange={(event) => updateFilters({ ...filters, responsibleTeacherId: event.target.value })}
                 >
@@ -505,11 +584,10 @@ export function StudentsPage() {
                       {teacher.firstName} {teacher.lastName}
                     </option>
                   ))}
-                </select>
-              </label>
-              <label>
-                Durum
-                <select
+                </Select>
+              </Field>
+              <Field label="Durum">
+                <Select
                   value={filters.status}
                   onChange={(event) => updateFilters({
                     ...filters,
@@ -521,11 +599,10 @@ export function StudentsPage() {
                   <option value="PASSIVE">Pasif</option>
                   <option value="GRADUATED">Mezun</option>
                   <option value="TRANSFERRED">Nakil</option>
-                </select>
-              </label>
-              <label>
-                Veli
-                <select
+                </Select>
+              </Field>
+              <Field label="Veli">
+                <Select
                   value={filters.guardianLinked}
                   onChange={(event) => updateFilters({
                     ...filters,
@@ -535,44 +612,39 @@ export function StudentsPage() {
                   <option value="">Tümü</option>
                   <option value="true">Bağlı</option>
                   <option value="false">Bağlı değil</option>
-                </select>
-              </label>
+                </Select>
+              </Field>
             </div>
             <div className="next-list-controls" aria-label="Öğrenci tablo görünümü">
               <fieldset className="next-column-picker">
                 <legend>Kolonlar</legend>
                 {studentColumnOptions.map((option) => (
-                  <label key={option.key}>
-                    <input
-                      type="checkbox"
-                      checked={visibleColumnKeys.includes(option.key)}
-                      disabled={requiredStudentColumnKeys.has(option.key)}
-                      onChange={(event) => toggleColumn(option.key, event.target.checked)}
-                    />
-                    {option.label}
-                  </label>
+                  <Checkbox
+                    checked={visibleColumnKeys.includes(option.key)}
+                    disabled={requiredStudentColumnKeys.has(option.key)}
+                    key={option.key}
+                    label={option.label}
+                    onChange={(event) => toggleColumn(option.key, event.target.checked)}
+                  />
                 ))}
               </fieldset>
-              <label>
-                Görünüm
-                <select value={tableDensity} onChange={(event) => setTableDensity(event.target.value as StudentTableDensity)}>
+              <Field label="Görünüm">
+                <Select value={tableDensity} onChange={(event) => setTableDensity(event.target.value as StudentTableDensity)}>
                   <option value="comfortable">Rahat</option>
                   <option value="compact">Yoğun</option>
-                </select>
-              </label>
+                </Select>
+              </Field>
             </div>
             <div className="next-list-controls" aria-label="Toplu dönem geçişi">
-              <label>
-                Geçiş tarihi
+              <Field label="Geçiş tarihi">
                 <Input
                   type="date"
                   value={bulkEnrollmentAction.startsAt}
                   onChange={(event) => setBulkEnrollmentAction((current) => ({ ...current, startsAt: event.target.value }))}
                 />
-              </label>
-              <label>
-                Hedef sınıf
-                <select
+              </Field>
+              <Field label="Hedef sınıf">
+                <Select
                   value={bulkEnrollmentAction.classId}
                   onChange={(event) => setBulkEnrollmentAction((current) => ({ ...current, classId: event.target.value }))}
                 >
@@ -582,20 +654,16 @@ export function StudentsPage() {
                       {klass.name}
                     </option>
                   ))}
-                </select>
-              </label>
-              <label className="next-checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={bulkEnrollmentAction.useAutomaticClassMapping}
-                  onChange={(event) => setBulkEnrollmentAction((current) => ({ ...current, useAutomaticClassMapping: event.target.checked }))}
-                />
-                Otomatik seviye yükselt
-              </label>
+                </Select>
+              </Field>
+              <Checkbox
+                checked={bulkEnrollmentAction.useAutomaticClassMapping}
+                label="Otomatik seviye yükselt"
+                onChange={(event) => setBulkEnrollmentAction((current) => ({ ...current, useAutomaticClassMapping: event.target.checked }))}
+              />
               {sourceClassIds.map((sourceClassId) => (
-                <label key={sourceClassId}>
-                  {(classNameById.get(sourceClassId) ?? sourceClassId)} hedefi
-                  <select
+                <Field key={sourceClassId} label={`${classNameById.get(sourceClassId) ?? "Sınıf eşleşmedi"} hedefi`}>
+                  <Select
                     value={bulkEnrollmentAction.classIdBySourceClassId[sourceClassId] ?? ""}
                     onChange={(event) => setBulkEnrollmentAction((current) => ({
                       ...current,
@@ -608,11 +676,11 @@ export function StudentsPage() {
                     <option value="">Varsayılan</option>
                     {classes.map((klass) => (
                       <option key={klass.id} value={klass.id}>
-                        {klass.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                      {klass.name}
+                    </option>
+                  ))}
+                  </Select>
+                </Field>
               ))}
               <Button type="button" variant="secondary" onClick={() => void handleBulkRenewEnrollment()} disabled={isBulkEnrollmentSaving || rows.length === 0}>
                 Listelenenleri geçir
@@ -627,6 +695,7 @@ export function StudentsPage() {
         aria-label="Öğrenci yönetimi"
         className={pageClassName}
         columns={visibleColumns}
+        density={tableDensity}
         emptyState={
           <EmptyState
             title="Henüz öğrenci yok"
@@ -641,6 +710,16 @@ export function StudentsPage() {
         getRowKey={(student) => student.id}
         loading={studentsQuery.isPending}
         rows={rows}
+        summary={
+          <OperationSummary
+            actions={studentSummaryActions}
+            ariaLabel="Öğrenci operasyon özeti"
+            badges={studentSummaryBadges}
+            items={studentSummaryItems}
+          />
+        }
+        tableCaption="Öğrenci listesi"
+        tableDescription="Filtreler, kolon görünürlüğü ve yoğunluk seçimi URL durumuyla korunur."
         title="Öğrenciler"
       />
       <FormModal
@@ -651,25 +730,22 @@ export function StudentsPage() {
         submitLabel={isSaving ? "Kaydediliyor…" : editingStudent ? "Kaydet" : "Ekle"}
         title={editingStudent ? "Öğrenci düzenle" : "Öğrenci ekle"}
       >
-        <label>
-          Ad
+        <Field label="Ad">
           <Input
             required
             value={form.firstName}
             onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))}
           />
-        </label>
-        <label>
-          Soyad
+        </Field>
+        <Field label="Soyad">
           <Input
             required
             value={form.lastName}
             onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))}
           />
-        </label>
-        <label>
-          Sınıf
-          <select
+        </Field>
+        <Field label="Sınıf" description="Sınıf bağlantısı rapor, devamsızlık, ödeme ve portal bağlamını besler.">
+          <Select
             value={form.classId}
             onChange={(event) => setForm((current) => ({ ...current, classId: event.target.value }))}
           >
@@ -679,11 +755,10 @@ export function StudentsPage() {
                 {klass.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Sorumlu öğretmen
-          <select
+          </Select>
+        </Field>
+        <Field label="Sorumlu öğretmen">
+          <Select
             value={form.responsibleTeacherId}
             onChange={(event) => setForm((current) => ({ ...current, responsibleTeacherId: event.target.value }))}
           >
@@ -693,11 +768,10 @@ export function StudentsPage() {
                 {teacher.firstName} {teacher.lastName}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Kayıt durumu
-          <select
+          </Select>
+        </Field>
+        <Field label="Kayıt durumu">
+          <Select
             value={form.status}
             onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as StudentRecord["status"] }))}
           >
@@ -705,40 +779,40 @@ export function StudentsPage() {
             <option value="PASSIVE">Pasif</option>
             <option value="GRADUATED">Mezun</option>
             <option value="TRANSFERRED">Nakil</option>
-          </select>
-        </label>
-        <label>
-          TC Kimlik No
+          </Select>
+        </Field>
+        <Field
+          label="TC Kimlik No"
+          description={detail?.profile.nationalIdMasked ? `Kayıtlı: ${detail.profile.nationalIdMasked}` : undefined}
+        >
           <Input
             inputMode="numeric"
             maxLength={11}
             value={form.nationalId}
             onChange={(event) => setForm((current) => ({ ...current, nationalId: event.target.value }))}
           />
-          {detail?.profile.nationalIdMasked ? (
-            <span className="next-field-hint">Kayıtlı: {detail.profile.nationalIdMasked}</span>
-          ) : null}
-        </label>
-        <label>
-          Telefon
+        </Field>
+        <Field
+          label="Telefon"
+          description={detail?.profile.phone ? `Kayıtlı: ${maskPhoneNumber(detail.profile.phone)}` : undefined}
+        >
           <Input
             inputMode="tel"
             value={form.phone}
             onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
           />
-          {detail?.profile.phone ? <span className="next-field-hint">Kayıtlı: {detail.profile.phone}</span> : null}
-        </label>
-        <label>
-          E-posta
+        </Field>
+        <Field
+          label="E-posta"
+          description={detail?.profile.email ? `Kayıtlı: ${maskEmail(detail.profile.email)}` : undefined}
+        >
           <Input
             type="email"
             value={form.email}
             onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
           />
-          {detail?.profile.email ? <span className="next-field-hint">Kayıtlı: {detail.profile.email}</span> : null}
-        </label>
-        <label>
-          Doğum tarihi
+        </Field>
+        <Field label="Doğum tarihi">
           <Input
             type="date"
             value={form.birthDate}
@@ -747,7 +821,7 @@ export function StudentsPage() {
           {detail?.profile.birthDate ? (
             <span className="next-field-hint">Kayıtlı: {detail.profile.birthDate}</span>
           ) : null}
-        </label>
+        </Field>
         <div className="next-form-section">
           <p className="next-form-section-title">Veli</p>
           {editingStudent ? (
@@ -758,7 +832,7 @@ export function StudentsPage() {
                   {detail.guardians.map((guardian) => (
                     <li key={guardian.id}>
                       {guardian.firstName} {guardian.lastName}
-                      {guardian.phone ? ` · ${guardian.phone}` : ""}
+                      {guardian.phone ? ` · ${maskPhoneNumber(guardian.phone)}` : ""}
                     </li>
                   ))}
                 </ul>
@@ -767,43 +841,38 @@ export function StudentsPage() {
               )}
             </div>
           ) : null}
-          <label>
-            Veli adı
+          <Field label="Veli adı">
             <Input
               value={form.guardianFirstName}
               onChange={(event) => setForm((current) => ({ ...current, guardianFirstName: event.target.value }))}
             />
-          </label>
-          <label>
-            Veli soyadı
+          </Field>
+          <Field label="Veli soyadı">
             <Input
               value={form.guardianLastName}
               onChange={(event) => setForm((current) => ({ ...current, guardianLastName: event.target.value }))}
             />
-          </label>
-          <label>
-            Veli telefonu
+          </Field>
+          <Field label="Veli telefonu" description="Bağlı veli listelerinde telefon maskeli gösterilir.">
             <Input
               inputMode="tel"
               value={form.guardianPhone}
               onChange={(event) => setForm((current) => ({ ...current, guardianPhone: event.target.value }))}
             />
-          </label>
+          </Field>
         </div>
         {editingStudent ? (
           <section className="next-form-section" aria-label="Kayıt işlemleri">
             <p className="next-form-section-title">Kayıt işlemleri</p>
-            <label>
-              İşlem tarihi
+            <Field label="İşlem tarihi">
               <Input
                 type="date"
                 value={enrollmentAction.startsAt}
                 onChange={(event) => setEnrollmentAction((current) => ({ ...current, startsAt: event.target.value }))}
               />
-            </label>
-            <label>
-              Yeni sınıf
-              <select
+            </Field>
+            <Field label="Yeni sınıf">
+              <Select
                 value={enrollmentAction.classId}
                 onChange={(event) => setEnrollmentAction((current) => ({ ...current, classId: event.target.value }))}
               >
@@ -813,9 +882,9 @@ export function StudentsPage() {
                     {klass.name}
                   </option>
                 ))}
-              </select>
-            </label>
-            <div className="next-form-list">
+              </Select>
+            </Field>
+            <div className="next-form-actions">
               <Button type="button" onClick={() => void handleRenewEnrollment()} disabled={isEnrollmentSaving}>
                 Kayıt yenile
               </Button>
@@ -825,14 +894,85 @@ export function StudentsPage() {
             </div>
           </section>
         ) : null}
-        {editingStudent ? <StudentDetailPanel detail={detail} loading={detailQuery.isPending} /> : null}
+        {editingStudent ? <StudentDetailPanel classNameById={classNameById} detail={detail} loading={detailQuery.isPending} /> : null}
       </FormModal>
       {confirmationDialog}
     </>
   );
 }
 
-function StudentDetailPanel({ detail, loading }: { detail?: StudentDetail; loading: boolean }) {
+function StudentDetailPanel({
+  classNameById,
+  detail,
+  loading,
+}: {
+  classNameById: ReadonlyMap<string, string>;
+  detail?: StudentDetail;
+  loading: boolean;
+}) {
+  const classHistoryColumns: Array<DataTableColumn<StudentClassHistoryRecord>> = [
+    {
+      key: "class",
+      header: "Sınıf",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (record) => formatStudentClassLabel(record, classNameById),
+      sticky: true,
+    },
+    {
+      key: "context",
+      header: "Bağlam",
+      mobilePriority: "secondary",
+      priority: "secondary",
+      render: formatStudentAcademicContext,
+    },
+    {
+      key: "dates",
+      header: "Tarih",
+      mobilePriority: "secondary",
+      priority: "secondary",
+      render: formatStudentRecordDateRange,
+    },
+  ];
+  const enrollmentColumns: Array<DataTableColumn<StudentEnrollmentRecord>> = [
+    {
+      key: "reason",
+      header: "İşlem",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (record) => formatEnrollmentReason(record.reason),
+      sticky: true,
+    },
+    {
+      key: "status",
+      header: "Durum",
+      mobilePriority: "secondary",
+      priority: "secondary",
+      render: (record) => formatStudentStatus(record.status),
+    },
+    {
+      key: "class",
+      header: "Sınıf",
+      mobilePriority: "secondary",
+      priority: "secondary",
+      render: (record) => formatStudentClassLabel(record, classNameById),
+    },
+    {
+      key: "context",
+      header: "Bağlam",
+      mobilePriority: "hidden",
+      priority: "optional",
+      render: formatStudentAcademicContext,
+    },
+    {
+      key: "dates",
+      header: "Tarih",
+      mobilePriority: "secondary",
+      priority: "secondary",
+      render: formatStudentRecordDateRange,
+    },
+  ];
+
   if (loading) {
     return (
       <section className="next-form-section" aria-label="Öğrenci 360">
@@ -900,30 +1040,24 @@ function StudentDetailPanel({ detail, loading }: { detail?: StudentDetail; loadi
         </div>
       ) : null}
       {detail && detail.classHistory.length > 0 ? (
-        <div className="next-form-guardians">
-          <span className="next-field-hint">Sınıf geçmişi</span>
-          <ul>
-            {detail.classHistory.map((record) => (
-              <li key={record.id}>
-                {record.classId ?? "Sınıfsız"} · {formatClassHistoryAcademicContext(record)} · {formatDate(record.startsAt)}
-                {record.endsAt ? ` - ${formatDate(record.endsAt)}` : " - devam ediyor"}
-              </li>
-            ))}
-          </ul>
-        </div>
+        <DataTable
+          caption="Sınıf geçmişi"
+          columns={classHistoryColumns}
+          density="compact"
+          description="Öğrencinin sınıf geçişleri ve akademik bağlamı"
+          getRowKey={(record) => record.id}
+          rows={detail.classHistory}
+        />
       ) : null}
       {detail && detail.enrollments.length > 0 ? (
-        <div className="next-form-guardians">
-          <span className="next-field-hint">Kayıt geçmişi</span>
-          <ul>
-            {detail.enrollments.map((record) => (
-              <li key={record.id}>
-                {formatEnrollmentReason(record.reason)} · {formatStudentStatus(record.status)} · {record.classId ?? "Sınıfsız"} · {formatClassHistoryAcademicContext(record)} · {formatDate(record.startsAt)}
-                {record.endsAt ? ` - ${formatDate(record.endsAt)}` : " - devam ediyor"}
-              </li>
-            ))}
-          </ul>
-        </div>
+        <DataTable
+          caption="Kayıt geçmişi"
+          columns={enrollmentColumns}
+          density="compact"
+          description="Yenileme, nakil ve ayrılış işlemleri"
+          getRowKey={(record) => record.id}
+          rows={detail.enrollments}
+        />
       ) : null}
     </section>
   );
@@ -1273,6 +1407,30 @@ function formatDelta(value: number | undefined) {
   return value > 0 ? `+${formatNumber(value)}` : formatNumber(value);
 }
 
+function formatCount(value: number) {
+  return value.toLocaleString("tr-TR");
+}
+
+function formatGuardianLinkedFilter(value: StudentListFilters["guardianLinked"]) {
+  if (value === "true") return "Bağlı";
+  if (value === "false") return "Bağlı değil";
+  return "Tümü";
+}
+
+function maskPhoneNumber(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 0) return "Telefon kayıtlı";
+  const suffix = digits.slice(-2).padStart(2, "•");
+  return `••• ••• ••${suffix}`;
+}
+
+function maskEmail(value: string) {
+  const [localPart = "", domain = ""] = value.split("@");
+  if (!localPart || !domain) return "E-posta kayıtlı";
+  const visiblePrefix = localPart.slice(0, 2);
+  return `${visiblePrefix}${"•".repeat(Math.max(localPart.length - 2, 2))}@${domain}`;
+}
+
 function formatStudentStatus(status: StudentRecord["status"]) {
   const labels: Record<StudentRecord["status"], string> = {
     ACTIVE: "Aktif",
@@ -1283,8 +1441,41 @@ function formatStudentStatus(status: StudentRecord["status"]) {
   return labels[status] ?? status;
 }
 
-function formatClassHistoryAcademicContext(record: StudentClassHistoryRecord) {
-  return [record.academicYearId, record.termId].filter(Boolean).join(" / ") || "Akademik bağlam yok";
+interface StudentAcademicContextRecord {
+  academicYearId?: string;
+  campusName?: string;
+  classId?: string;
+  className?: string;
+  endsAt?: string;
+  gradeLevelName?: string;
+  section?: string;
+  startsAt: string;
+  termId?: string;
+}
+
+function formatStudentClassLabel(record: Pick<StudentAcademicContextRecord, "classId" | "className">, classNameById: ReadonlyMap<string, string>) {
+  if (record.className) return record.className;
+  if (record.classId) return classNameById.get(record.classId) ?? "Sınıf eşleşmedi";
+  return "Sınıfsız";
+}
+
+function formatStudentAcademicContext(record: StudentAcademicContextRecord) {
+  const resolvedContext = [
+    record.campusName,
+    record.gradeLevelName,
+    record.section ? `${record.section} şube` : undefined,
+  ].filter(Boolean);
+  if (resolvedContext.length > 0) return resolvedContext.join(" / ");
+
+  const unresolvedContext = [
+    record.academicYearId ? "Akademik yıl eşleşmedi" : undefined,
+    record.termId ? "Dönem eşleşmedi" : undefined,
+  ].filter(Boolean);
+  return unresolvedContext.join(" / ") || "Akademik bağlam yok";
+}
+
+function formatStudentRecordDateRange(record: Pick<StudentAcademicContextRecord, "endsAt" | "startsAt">) {
+  return `${formatDate(record.startsAt)}${record.endsAt ? ` - ${formatDate(record.endsAt)}` : " - devam ediyor"}`;
 }
 
 function formatEnrollmentReason(reason: string | undefined) {

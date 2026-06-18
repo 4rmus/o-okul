@@ -1,11 +1,13 @@
 import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
+const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
+
 const corsHeaders = {
   "access-control-allow-credentials": "true",
   "access-control-allow-headers": "authorization,content-type,x-csrf-token",
   "access-control-allow-methods": "DELETE,GET,PATCH,POST,OPTIONS",
-  "access-control-allow-origin": "http://localhost:3001",
+  "access-control-allow-origin": appOrigin,
 };
 
 interface AxeViolationSummary {
@@ -37,6 +39,43 @@ test.describe("Next erişilebilirlik smoke", () => {
     await expectNoHorizontalOverflow(page, "kurum-dashboard-tablet");
     await expectNoCriticalA11yViolations(page, "kurum-dashboard-tablet");
   });
+
+  test("kurum dashboard gövdesi mobil viewport'ta taşmadan açılır", async ({ page }) => {
+    await page.setViewportSize({ height: 844, width: 390 });
+    await openInstitutionDashboard(page, { expectNavigationVisible: false });
+    await expect(page.getByRole("region", { exact: true, name: "Kurum özeti" })).toBeVisible();
+    await expect(page.getByRole("region", { exact: true, name: "Kurum dashboard operasyon özeti" })).toBeVisible();
+    await expect(page.getByRole("region", { exact: true, name: "Operasyon özeti" })).toBeVisible();
+    await expect(page.getByRole("region", { exact: true, name: "Karar sinyalleri" })).toBeVisible();
+    await expectNoHorizontalOverflow(page, "kurum-dashboard-mobile-body");
+    await expectNoCriticalA11yViolations(page, "kurum-dashboard-mobile-body");
+  });
+
+  test("shell komut paleti kritik axe ihlali olmadan klavye akışını korur", async ({ page }) => {
+    await openInstitutionDashboard(page);
+
+    const commandTrigger = page.getByRole("button", { name: "Komut paleti" }).first();
+    await commandTrigger.click();
+    const commandDialog = page.getByRole("dialog", { name: "Komut paleti" });
+    await expect(commandDialog).toBeVisible();
+    await expect(commandDialog.getByLabel("Komut ara")).toBeFocused();
+    await expectNoCriticalA11yViolations(page, "kurum-command-palette");
+    await page.keyboard.press("Escape");
+    await expect(commandDialog).toHaveCount(0);
+  });
+
+  test("mobil ana menü kritik axe ihlali olmadan açılıp kapanır", async ({ page }) => {
+    await page.setViewportSize({ height: 844, width: 390 });
+    await openInstitutionDashboard(page, { expectNavigationVisible: false });
+    await page.getByRole("button", { name: "Ana menüyü aç" }).click();
+    await expect(page.getByRole("navigation", { name: "Ana menü" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Ana menüyü kapat" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Menü arka planını kapat" })).toBeVisible();
+    await expectNoHorizontalOverflow(page, "kurum-mobile-menu");
+    await expectNoCriticalA11yViolations(page, "kurum-mobile-menu");
+    await page.getByRole("button", { name: "Ana menüyü kapat" }).click();
+    await expect(page.getByRole("button", { name: "Ana menüyü aç" })).toHaveAttribute("aria-expanded", "false");
+  });
 });
 
 async function expectNoCriticalA11yViolations(page: Page, label: string) {
@@ -65,16 +104,18 @@ async function expectNoHorizontalOverflow(page: Page, label: string) {
   expect(overflow, `${label}: yatay taşma ${overflow}px`).toBeLessThanOrEqual(1);
 }
 
-async function openInstitutionDashboard(page: Page) {
+async function openInstitutionDashboard(page: Page, options: { expectNavigationVisible?: boolean } = {}) {
   await installInstitutionApiMocks(page);
   await page.addInitScript(() => {
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
   });
-  await page.context().addCookies([{ name: "csrfToken", url: "http://localhost:3001", value: "csrf-token" }]);
+  await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
 
   await page.goto("/kurum");
   await expect(page.getByRole("heading", { level: 1, name: "A11y Akademi" })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Ana menü" })).toBeVisible();
+  if (options.expectNavigationVisible !== false) {
+    await expect(page.getByRole("navigation", { name: "Ana menü" })).toBeVisible();
+  }
 }
 
 async function installInstitutionApiMocks(page: Page) {

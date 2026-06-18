@@ -3,14 +3,26 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, FormModal, Input, LoadingState, useConfirmDialog } from "@uzman-hocam/ui";
+import {
+  Alert,
+  Button,
+  Field,
+  FormModal,
+  Input,
+  LoadingState,
+  MetricCard,
+  Panel,
+  Select,
+  StatusBadge,
+  type StatusBadgeProps,
+  useConfirmDialog,
+} from "@uzman-hocam/ui";
 import { useAuth } from "../../../../providers.js";
 import {
   firstFormError,
   tenantFormSchema,
   type TenantFormState,
 } from "../../../../../src/form-validation.js";
-import { MetricPanelGrid } from "../../../kurum/_shared/metric-panel-grid.js";
 import { PageFrame } from "../../../kurum/_shared/page-frame.js";
 import { deleteTenant, loadTenant, updateTenant, type TenantRecord } from "../../_shared/system-api.js";
 
@@ -37,6 +49,8 @@ export function TenantDetailPage() {
     refetchOnWindowFocus: false,
   });
   const tenant = tenantQuery.data ?? null;
+  const licenseDays = tenant ? licenseDaysRemaining(tenant.licenseEndsAt) : null;
+  const seatPercent = tenant ? seatUsagePercent(tenant) : null;
   const [form, setForm] = useState<TenantFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
@@ -107,28 +121,93 @@ export function TenantDetailPage() {
         tenant ? (
           <>
             <Button onClick={openEditForm}>Düzenle</Button>
-            <Button onClick={() => void handleDelete()} variant="secondary">Sil</Button>
+            <Button onClick={() => void handleDelete()} variant="danger">Sil</Button>
           </>
         ) : null
       }
     >
       {tenantQuery.isPending ? <LoadingState label="Kurum detayı yükleniyor…" /> : null}
-      {tenantQuery.isError ? <p className="next-form-error">Kurum detayı alınamadı.</p> : null}
-      {tenant ? (
-        <MetricPanelGrid
-          ariaLabel="Kurum detayı"
-          metrics={[
-            { label: "Slug", value: tenant.slug },
-            { label: "Plan", value: tenant.plan },
-            { label: "Durum", value: statusLabel(tenant.status) },
-            { label: "Koltuk", value: formatSeatUsage(tenant) },
-            { label: "Lisans bitişi", value: formatDate(tenant.licenseEndsAt) },
-          ]}
-        />
+      {tenantQuery.isError ? (
+        <Alert tone="danger" title="Kurum detayı alınamadı">
+          Sistem yönetimi verisi şu anda okunamıyor.
+        </Alert>
       ) : null}
-      {error ? <p className="next-form-error">{error}</p> : null}
+      {tenant ? (
+        <section className="next-system-summary-grid" aria-label="Kurum detayı">
+          <MetricCard
+            className="next-system-summary-card"
+            description="Sistem teknik kısa adı"
+            label="Slug"
+            value={tenant.slug}
+          />
+          <MetricCard
+            className="next-system-summary-card"
+            description="Lisans planı"
+            label="Plan"
+            tone={metricPlanTone(tenant.plan)}
+            value={<StatusBadge tone={planTone(tenant.plan)}>{planLabel(tenant.plan)}</StatusBadge>}
+          />
+          <MetricCard
+            className="next-system-summary-card"
+            description="Kurum operasyon durumu"
+            label="Durum"
+            tone={metricStatusTone(tenant.status)}
+            value={<StatusBadge tone={statusTone(tenant.status)}>{statusLabel(tenant.status)}</StatusBadge>}
+          />
+          <MetricCard
+            className="next-system-summary-card"
+            description="Aktif koltuk / limit"
+            label="Koltuk"
+            tone={isSeatLimitExceeded(tenant) ? "warning" : "default"}
+            value={formatSeatUsage(tenant)}
+          />
+          <MetricCard
+            className="next-system-summary-card"
+            description="Yenileme penceresi"
+            label="Lisans bitişi"
+            tone={tenantCapacityTone(tenant)}
+            value={formatDate(tenant.licenseEndsAt)}
+          />
+        </section>
+      ) : null}
+      {tenant ? (
+        <Panel
+          aria-label="Lisans ve kapasite"
+          description="Sistem admin için lisans penceresi, koltuk kullanımı ve operasyon aksiyonu."
+          title="Lisans ve kapasite"
+          tone={tenantCapacityTone(tenant)}
+        >
+          <div className="next-tenant-capacity-grid">
+            <div>
+              <span>Lisans penceresi</span>
+              <strong>{formatLicenseWindow(tenant)}</strong>
+            </div>
+            <div>
+              <span>Kalan gün</span>
+              <strong>{formatLicenseDays(licenseDays)}</strong>
+            </div>
+            <div>
+              <span>Koltuk kullanımı</span>
+              <strong>
+                {formatSeatUsage(tenant)}
+                {seatPercent === null ? "" : ` · %${seatPercent}`}
+              </strong>
+            </div>
+            <div>
+              <span>Önerilen aksiyon</span>
+              <StatusBadge tone={tenantCapacityTone(tenant)}>{tenantRecommendedAction(tenant)}</StatusBadge>
+            </div>
+          </div>
+        </Panel>
+      ) : null}
+      {error ? (
+        <Alert tone="danger" title="İşlem tamamlanamadı">
+          {error}
+        </Alert>
+      ) : null}
       <TenantEditModal
         form={form}
+        activeSeatCount={tenant?.activeSeatCount ?? 0}
         onCancel={closeForm}
         onChange={setForm}
         onSubmit={(event) => void handleSubmit(event)}
@@ -140,18 +219,23 @@ export function TenantDetailPage() {
 }
 
 function TenantEditModal({
+  activeSeatCount,
   form,
   onCancel,
   onChange,
   onSubmit,
   open,
 }: {
+  activeSeatCount: number;
   form: TenantFormState;
   onCancel(): void;
   onChange(value: TenantFormState): void;
   onSubmit(event: FormEvent<HTMLFormElement>): void;
   open: boolean;
 }) {
+  const hasInvalidLicenseWindow = isLicenseWindowInvalid(form.licenseStartsAt, form.licenseEndsAt);
+  const hasSeatLimitBelowActiveCount = isSeatLimitBelowActiveCount(form.seatLimit, activeSeatCount);
+
   return (
     <FormModal
       description="Kurum kimliği, lisans ve durum bilgisini güncelle."
@@ -161,44 +245,51 @@ function TenantEditModal({
       submitLabel="Kaydet"
       title="Kurum düzenle"
     >
-      <label>
-        Kurum adı
+      <Field label="Kurum adı">
         <Input required value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
-      </label>
-      <label>
-        Slug
+      </Field>
+      <Field label="Slug" description="Kurumun teknik kısa adı. Örn: yeni-kurum. URL ve sistem kimliği için kullanılır.">
         <Input required value={form.slug} onChange={(event) => onChange({ ...form, slug: event.target.value })} />
-        <small className="next-field-help">Kurumun teknik kısa adı. Örn: yeni-kurum. URL ve sistem kimliği için kullanılır.</small>
-      </label>
-      <label>
-        Plan
-        <select value={form.plan} onChange={(event) => onChange({ ...form, plan: event.target.value as TenantFormState["plan"] })}>
-          <option value="TRIAL">TRIAL</option>
-          <option value="PRO">PRO</option>
-          <option value="ENTERPRISE">ENTERPRISE</option>
-        </select>
-      </label>
-      <label>
-        Lisans başlangıç
+      </Field>
+      <Field label="Plan">
+        <Select value={form.plan} onChange={(event) => onChange({ ...form, plan: event.target.value as TenantFormState["plan"] })}>
+          <option value="TRIAL">Deneme</option>
+          <option value="PRO">Pro</option>
+          <option value="ENTERPRISE">Enterprise</option>
+        </Select>
+      </Field>
+      <Field label="Lisans başlangıç">
         <Input type="date" value={form.licenseStartsAt ?? ""} onChange={(event) => onChange({ ...form, licenseStartsAt: event.target.value })} />
-      </label>
-      <label>
-        Lisans bitiş
+      </Field>
+      <Field label="Lisans bitiş">
         <Input type="date" value={form.licenseEndsAt ?? ""} onChange={(event) => onChange({ ...form, licenseEndsAt: event.target.value })} />
-      </label>
-      <label>
-        Koltuk limiti
-        <Input inputMode="numeric" value={form.seatLimit ?? ""} onChange={(event) => onChange({ ...form, seatLimit: event.target.value })} />
-        <small className="next-field-help">Bu kuruma tanımlanabilecek aktif kullanıcı sayısı. Boş bırakırsan sınırsız olur.</small>
-      </label>
-      <label>
-        Durum
-        <select value={form.status} onChange={(event) => onChange({ ...form, status: event.target.value as TenantFormState["status"] })}>
-          <option value="ACTIVE">ACTIVE</option>
-          <option value="SUSPENDED">SUSPENDED</option>
-          <option value="TRIAL">TRIAL</option>
-        </select>
-      </label>
+      </Field>
+      {hasInvalidLicenseWindow ? (
+        <Alert tone="warning" title="Lisans tarihi kontrolü">
+          Lisans bitişi başlangıç tarihinden önce olamaz.
+        </Alert>
+      ) : null}
+      <Field label="Koltuk limiti" description="Bu kuruma tanımlanabilecek aktif kullanıcı sayısı. Boş bırakırsan sınırsız olur.">
+        <Input
+          inputMode="numeric"
+          min={1}
+          type="number"
+          value={form.seatLimit ?? ""}
+          onChange={(event) => onChange({ ...form, seatLimit: event.target.value })}
+        />
+      </Field>
+      {hasSeatLimitBelowActiveCount ? (
+        <Alert tone="warning" title="Koltuk limiti kontrolü">
+          Bu kurumda {activeSeatCount} aktif kullanıcı var; limit aktif kullanıcının altına inemez.
+        </Alert>
+      ) : null}
+      <Field label="Durum">
+        <Select value={form.status} onChange={(event) => onChange({ ...form, status: event.target.value as TenantFormState["status"] })}>
+          <option value="ACTIVE">Aktif</option>
+          <option value="SUSPENDED">Askıda</option>
+          <option value="TRIAL">Deneme</option>
+        </Select>
+      </Field>
     </FormModal>
   );
 }
@@ -228,9 +319,100 @@ function formatSeatUsage(tenant: TenantRecord) {
   return tenant.seatLimit ? `${used} / ${tenant.seatLimit}` : `${used} / Sınırsız`;
 }
 
+function seatUsagePercent(tenant: TenantRecord) {
+  const used = tenant.activeSeatCount ?? 0;
+  if (!tenant.seatLimit) return null;
+  return Math.round((used / tenant.seatLimit) * 100);
+}
+
+function formatLicenseWindow(tenant: TenantRecord) {
+  return `${formatDate(tenant.licenseStartsAt)} - ${formatDate(tenant.licenseEndsAt)}`;
+}
+
+function licenseDaysRemaining(value: string | undefined) {
+  if (!value) return null;
+  const end = new Date(value).getTime();
+  if (Number.isNaN(end)) return null;
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Math.ceil((end - Date.now()) / dayMs);
+}
+
+function formatLicenseDays(days: number | null) {
+  if (days === null) return "Süre tanımsız";
+  if (days < 0) return `${Math.abs(days)} gün geçmiş`;
+  if (days === 0) return "Bugün bitiyor";
+  return `${days} gün kaldı`;
+}
+
+function tenantCapacityTone(tenant: TenantRecord): "danger" | "success" | "warning" {
+  if (tenant.status === "SUSPENDED") return "danger";
+  const days = licenseDaysRemaining(tenant.licenseEndsAt);
+  if ((days !== null && days <= 30) || isSeatLimitExceeded(tenant)) return "warning";
+  return "success";
+}
+
+function tenantRecommendedAction(tenant: TenantRecord) {
+  if (tenant.status === "SUSPENDED") return "Askı durumunu incele";
+  if (isSeatLimitExceeded(tenant)) return "Koltuk limitini yükselt";
+  const days = licenseDaysRemaining(tenant.licenseEndsAt);
+  if (days !== null && days < 0) return "Lisansı yenile";
+  if (days !== null && days <= 30) return "Yenileme planla";
+  return "Operasyon normal";
+}
+
+function isSeatLimitExceeded(tenant: TenantRecord) {
+  return Boolean(tenant.seatLimit && (tenant.activeSeatCount ?? 0) > tenant.seatLimit);
+}
+
+function isLicenseWindowInvalid(startsAt: string | undefined, endsAt: string | undefined) {
+  if (!startsAt || !endsAt) return false;
+  return new Date(endsAt).getTime() < new Date(startsAt).getTime();
+}
+
+function isSeatLimitBelowActiveCount(seatLimit: string | undefined, activeSeatCount: number) {
+  if (!seatLimit) return false;
+  const parsed = Number(seatLimit);
+  return Number.isFinite(parsed) && parsed > 0 && parsed < activeSeatCount;
+}
+
 function statusLabel(status: string) {
   if (status === "ACTIVE") return "Aktif";
   if (status === "SUSPENDED") return "Askıda";
   if (status === "TRIAL") return "Deneme";
   return status;
+}
+
+function statusTone(status: string): StatusBadgeProps["tone"] {
+  if (status === "ACTIVE") return "success";
+  if (status === "SUSPENDED") return "danger";
+  if (status === "TRIAL") return "warning";
+  return "neutral";
+}
+
+function metricStatusTone(status: string): "danger" | "default" | "success" | "warning" {
+  if (status === "ACTIVE") return "success";
+  if (status === "SUSPENDED") return "danger";
+  if (status === "TRIAL") return "warning";
+  return "default";
+}
+
+function planLabel(plan: string) {
+  if (plan === "ENTERPRISE") return "Enterprise";
+  if (plan === "PRO") return "Pro";
+  if (plan === "TRIAL") return "Trial";
+  return plan;
+}
+
+function planTone(plan: string): StatusBadgeProps["tone"] {
+  if (plan === "ENTERPRISE") return "info";
+  if (plan === "PRO") return "success";
+  if (plan === "TRIAL") return "warning";
+  return "neutral";
+}
+
+function metricPlanTone(plan: string): "default" | "info" | "success" | "warning" {
+  if (plan === "ENTERPRISE") return "info";
+  if (plan === "PRO") return "success";
+  if (plan === "TRIAL") return "warning";
+  return "default";
 }

@@ -1,10 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { EmptyState, LoadingState } from "@uzman-hocam/ui";
+import { EmptyState, LoadingState, MetricCard } from "@uzman-hocam/ui";
 import { useAuth } from "../../providers.js";
 import { initialListQuery } from "../../../src/list-controls.js";
-import { MetricPanelGrid } from "../kurum/_shared/metric-panel-grid.js";
 import { PageFrame } from "../kurum/_shared/page-frame.js";
 import { loadTenants } from "./_shared/system-api.js";
 
@@ -23,14 +22,28 @@ export function SystemDashboard() {
   return (
     <PageFrame title="Sistem Paneli" subtitle="Platform kurumlarını ve sistem yönetimi başlangıcını izle.">
       {tenantsQuery.isPending ? <LoadingState label="Sistem özeti yükleniyor…" /> : null}
-      <MetricPanelGrid
-        ariaLabel="Sistem özeti"
-        metrics={[
-          { label: "Kurum", value: tenantsQuery.data?.meta.total ?? tenants.length },
-          { label: "Aktif", value: activeCount },
-          { label: "Deneme", value: trialCount },
-        ]}
-      />
+      <section className="next-system-summary-grid" aria-label="Sistem özeti">
+        <MetricCard
+          className="next-system-summary-card"
+          description="Platformdaki toplam kurum"
+          label="Kurum"
+          value={tenantsQuery.data?.meta.total ?? tenants.length}
+        />
+        <MetricCard
+          className="next-system-summary-card"
+          description="Operasyon erişimi açık"
+          label="Aktif"
+          tone="success"
+          value={activeCount}
+        />
+        <MetricCard
+          className="next-system-summary-card"
+          description="Pilot veya deneme kapsamı"
+          label="Deneme"
+          tone="warning"
+          value={trialCount}
+        />
+      </section>
       {tenantsQuery.isError ? <p className="next-form-error">Sistem özeti alınamadı.</p> : null}
       {!tenantsQuery.isPending && !tenantsQuery.isError && tenants.length === 0 ? (
         <section aria-label="Sistem başlangıcı">

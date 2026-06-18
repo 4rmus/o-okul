@@ -1,5 +1,6 @@
 "use client";
 
+import { DataTable, Panel, StatusBadge, type DataTableColumn } from "@uzman-hocam/ui";
 import type { ClassRecord, ScheduleLessonRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 
@@ -35,41 +36,60 @@ export function TeacherTodaySchedulePanel({
   nextLesson?: ScheduleLessonRecord;
   termNames: ReadonlyMap<string, string>;
 }) {
+  const columns: Array<DataTableColumn<ScheduleLessonRecord>> = [
+    {
+      header: "Ders",
+      key: "lesson",
+      priority: "primary",
+      render: (lesson) => lesson.title,
+      sticky: "left",
+    },
+    {
+      header: "Sınıf",
+      key: "class",
+      priority: "primary",
+      render: (lesson) => (lesson.classId ? classNames.get(lesson.classId) ?? lesson.classId : "-"),
+    },
+    {
+      header: "Branş",
+      key: "course",
+      priority: "secondary",
+      render: (lesson) => (lesson.courseId ? courseNames.get(lesson.courseId) ?? lesson.courseId : "-"),
+    },
+    {
+      header: "Dönem",
+      key: "term",
+      priority: "optional",
+      render: (lesson) => (lesson.termId ? termNames.get(lesson.termId) ?? lesson.termId : "-"),
+    },
+    {
+      header: "Saat",
+      key: "time",
+      priority: "primary",
+      render: (lesson) => formatLessonTimeRange(lesson),
+    },
+  ];
+
   return (
-    <section className="next-list-panel" aria-label="Bugünkü dersler">
-      <h2>Bugünkü Dersler</h2>
-      {lessons.length > 0 ? (
-        <table className="uh-data-table">
-          <thead>
-            <tr>
-              <th>Ders</th>
-              <th>Sınıf</th>
-              <th>Branş</th>
-              <th>Dönem</th>
-              <th>Saat</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lessons.map((lesson) => (
-              <tr key={lesson.id}>
-                <td>{lesson.title}</td>
-                <td>{lesson.classId ? classNames.get(lesson.classId) ?? lesson.classId : "-"}</td>
-                <td>{lesson.courseId ? courseNames.get(lesson.courseId) ?? lesson.courseId : "-"}</td>
-                <td>{lesson.termId ? termNames.get(lesson.termId) ?? lesson.termId : "-"}</td>
-                <td>{formatLessonTimeRange(lesson)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <p className="next-status-note">Bugün planlı ders yok.</p>
-      )}
+    <Panel
+      aria-label="Bugünkü dersler"
+      description="Öğretmenin bugünkü ders, sınıf, branş ve saat akışı."
+      title="Bugünkü Dersler"
+    >
+      <DataTable
+        caption="Bugünkü dersler"
+        columns={columns}
+        description="Öğretmenin bugünkü ders, sınıf, branş ve saat akışı."
+        emptyText="Bugün planlı ders yok."
+        getRowKey={(lesson) => lesson.id}
+        rows={lessons}
+      />
       {nextLesson && !lessons.some((lesson) => lesson.id === nextLesson.id) ? (
         <p className="next-status-note">
           Sonraki ders: {nextLesson.title} · {formatDateTime(nextLesson.startsAt)}
         </p>
       ) : null}
-    </section>
+    </Panel>
   );
 }
 
@@ -117,8 +137,11 @@ export function TeacherProfileSummaryPanel({
   const termScope = formatUniqueLabels(schedule.map((lesson) => (lesson.termId ? termNames.get(lesson.termId) ?? lesson.termId : undefined)));
 
   return (
-    <section className="next-list-panel" aria-label="Öğretmen profil özeti">
-      <h2>Profil Özeti</h2>
+    <Panel
+      aria-label="Öğretmen profil özeti"
+      description="Öğretmenin ders, sınıf, dönem ve organizasyon kapsamı."
+      title="Profil Özeti"
+    >
       <dl className="next-definition-list">
         <div>
           <dt>Ad soyad</dt>
@@ -153,7 +176,7 @@ export function TeacherProfileSummaryPanel({
           <dd>{formatCount(schedule.length, "ders")}</dd>
         </div>
       </dl>
-    </section>
+    </Panel>
   );
 }
 
@@ -166,44 +189,164 @@ export function TeacherClassReportsPanel({
   reports: TeacherClassReportSummary[];
   termNames: ReadonlyMap<string, string>;
 }) {
+  const columns: Array<DataTableColumn<TeacherClassReportSummary>> = [
+    {
+      header: "Sınıf",
+      key: "class",
+      priority: "primary",
+      render: (report) => report.className ?? report.classId ?? "-",
+      sticky: "left",
+    },
+    {
+      header: "Bağlam",
+      key: "context",
+      priority: "secondary",
+      render: (report) => formatReportContext(report, courseNames, termNames),
+    },
+    {
+      align: "right",
+      header: "Sonuç",
+      key: "resultCount",
+      priority: "secondary",
+      render: (report) => report.resultCount,
+    },
+    {
+      align: "right",
+      header: "Başarı %",
+      key: "successRate",
+      priority: "primary",
+      render: (report) => formatPercentNumber(reportSuccessRate(report.averages)),
+    },
+    {
+      align: "right",
+      header: "Net",
+      key: "net",
+      priority: "primary",
+      render: (report) => formatNumber(report.averages.net),
+    },
+    {
+      align: "right",
+      header: "Soru",
+      key: "questionCount",
+      priority: "primary",
+      render: (report) => formatNumber(reportQuestionCount(report.averages)),
+    },
+    {
+      align: "right",
+      header: "LGS puanı",
+      key: "lgsScore",
+      priority: "optional",
+      render: (report) => formatNumber(readLgsScore(report.averages)),
+    },
+    {
+      align: "right",
+      header: "Standart puan",
+      key: "standardScore",
+      priority: "optional",
+      render: (report) => formatNumber(report.averages.standardScore),
+    },
+  ];
+
   return (
-    <section className="next-list-panel" aria-label="Öğretmen sınıf raporları">
-      <h2>Sınıf Raporları</h2>
-      <table className="uh-data-table">
-        <thead>
-          <tr>
-            <th>Sınıf</th>
-            <th>Bağlam</th>
-            <th>Sonuç</th>
-            <th>Soru</th>
-            <th>Başarı</th>
-            <th>Net</th>
-            <th>LGS puanı</th>
-            <th>Standart puan</th>
-          </tr>
-        </thead>
-        <tbody>
-          {reports.length > 0 ? (
-            reports.map((report) => (
-              <tr key={`${report.snapshotId}-${report.classId ?? "no-class"}`}>
-                <td>{report.className ?? report.classId ?? "-"}</td>
-                <td>{formatReportContext(report, courseNames, termNames)}</td>
-                <td>{report.resultCount}</td>
-                <td>{formatNumber(reportQuestionCount(report.averages))}</td>
-                <td>{formatPercentNumber(reportSuccessRate(report.averages))}</td>
-                <td>{formatNumber(report.averages.net)}</td>
-                <td>{formatNumber(readLgsScore(report.averages))}</td>
-                <td>{formatNumber(report.averages.standardScore)}</td>
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan={8}>Hazır sınıf raporu yok.</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </section>
+    <Panel
+      aria-label="Öğretmen sınıf raporları"
+      description="Başarı % ana karşılaştırma metriğidir; Net ve Soru bağlam olarak korunur."
+      title="Sınıf Raporları"
+    >
+      <DataTable
+        caption="Öğretmen sınıf raporları"
+        columns={columns}
+        description="Başarı % ana karşılaştırma metriğidir; Net ve Soru bağlam olarak korunur."
+        density="compact"
+        emptyText="Hazır sınıf raporu yok."
+        getRowKey={(report) => `${report.snapshotId}-${report.classId ?? "no-class"}`}
+        rows={reports}
+      />
+    </Panel>
+  );
+}
+
+export function TeacherFocusPanel({
+  campusNames,
+  courseName,
+  gradeLevelNames,
+  mode,
+  net,
+  openSupportTicketCount,
+  questionCount,
+  selectedClass,
+  selectedStudent,
+  successRate,
+  termName,
+}: {
+  campusNames: ReadonlyMap<string, string>;
+  courseName?: string;
+  gradeLevelNames: ReadonlyMap<string, string>;
+  mode: "read-only" | "write";
+  net?: number;
+  openSupportTicketCount: number;
+  questionCount?: number;
+  selectedClass?: ClassRecord;
+  selectedStudent?: StudentRecord;
+  successRate?: number;
+  termName?: string;
+}) {
+  const studentName = selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "-";
+  const className = selectedClass?.name ?? selectedStudent?.classId ?? "-";
+  const campusName = selectedClass?.campusId ? campusNames.get(selectedClass.campusId) ?? selectedClass.campusId : "-";
+  const gradeLevelName = selectedClass?.gradeLevelId ? gradeLevelNames.get(selectedClass.gradeLevelId) ?? selectedClass.gradeLevelId : "-";
+  const modeLabel = mode === "read-only" ? "Salt-okuma" : "İşlem açık";
+
+  return (
+    <Panel
+      actions={<StatusBadge tone={mode === "read-only" ? "neutral" : "info"}>{modeLabel}</StatusBadge>}
+      aria-label="Öğretmen operasyon bağlamı"
+      className="next-teacher-focus"
+      description="Seçili çalışma bağlamı"
+      title="Öğrenci Odağı"
+    >
+      <div className="next-teacher-focus__body">
+        <div className="next-teacher-focus__identity">
+          <span>Öğrenci</span>
+          <strong>{studentName}</strong>
+          <small>{className}</small>
+        </div>
+        <dl className="next-teacher-focus__grid">
+          <div>
+            <dt>Kampüs</dt>
+            <dd>{campusName}</dd>
+          </div>
+          <div>
+            <dt>Seviye</dt>
+            <dd>{gradeLevelName}</dd>
+          </div>
+          <div>
+            <dt>Branş</dt>
+            <dd>{courseName ?? "-"}</dd>
+          </div>
+          <div>
+            <dt>Dönem</dt>
+            <dd>{termName ?? "-"}</dd>
+          </div>
+          <div>
+            <dt>Başarı %</dt>
+            <dd>{formatPercentNumber(successRate)}</dd>
+          </div>
+          <div>
+            <dt>Soru</dt>
+            <dd>{formatNumber(questionCount)}</dd>
+          </div>
+          <div>
+            <dt>Net</dt>
+            <dd>{formatNumber(net)}</dd>
+          </div>
+          <div>
+            <dt>Destek</dt>
+            <dd>{openSupportTicketCount > 0 ? `${openSupportTicketCount} açık` : "Açık talep yok"}</dd>
+          </div>
+        </dl>
+      </div>
+    </Panel>
   );
 }
 

@@ -1,8 +1,24 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
+import {
+  Button,
+  CrudPage,
+  EmptyState,
+  Field,
+  FormModal,
+  Input,
+  Panel,
+  Select,
+  StatusBadge,
+  Textarea,
+  Tooltip,
+  type DataTableColumn,
+  type StatusBadgeProps,
+  useConfirmDialog,
+} from "@uzman-hocam/ui";
 import type {
   HomeworkMaterialAssignmentRecord,
   HomeworkMaterialFileDownloadResult,
@@ -11,7 +27,7 @@ import type {
   HomeworkRecord,
   StudentRecord,
 } from "@uzman-hocam/shared-types";
-import { CheckCircle2, Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { CheckCircle2, Download, Eye, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch, type ListMeta } from "../../../../src/api-client.js";
 import {
@@ -20,7 +36,8 @@ import {
   type HomeworkMaterialFormPayload,
   type HomeworkMaterialFormState,
 } from "../../../../src/form-validation.js";
-import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+import { buildListUrl, initialListQuery, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 interface HomeworkMaterialData {
   homework: HomeworkRecord[];
@@ -51,8 +68,16 @@ const materialSortOptions = [
 export function HomeworkMaterialsPage() {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
-  const [homeworkListQuery, setHomeworkListQuery] = useState<ListQueryState>(initialListQuery);
-  const [materialListQuery, setMaterialListQuery] = useState<ListQueryState>(initialListQuery);
+  const { confirm, confirmationDialog } = useConfirmDialog();
+  const searchParams = useSearchParams();
+  const [homeworkListQuery, setHomeworkListQuery] = useUrlListState(searchParams, {
+    namespace: "homework",
+    sortOptions: homeworkSortOptions,
+  });
+  const [materialListQuery, setMaterialListQuery] = useUrlListState(searchParams, {
+    namespace: "materials",
+    sortOptions: materialSortOptions,
+  });
   const tenantId = auth?.session.tenantId ?? "anonymous";
   const queryKey = ["next-homework-materials", tenantId, homeworkListQuery, materialListQuery];
   const listQueryKey = ["next-homework-materials", tenantId];
@@ -65,27 +90,100 @@ export function HomeworkMaterialsPage() {
   const [editingMaterial, setEditingMaterial] = useState<HomeworkMaterialRecord | null>(null);
   const [form, setForm] = useState<HomeworkMaterialFormState>(emptyMaterialForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [fileMaterialId, setFileMaterialId] = useState("");
+  const [selectedMaterialId, setSelectedMaterialId] = useState("");
   const [fileName, setFileName] = useState("");
   const [fileBase64, setFileBase64] = useState("");
   const [fileContentType, setFileContentType] = useState<HomeworkMaterialFileRecord["contentType"]>("text/plain");
   const [downloadingFileId, setDownloadingFileId] = useState("");
-  const [assignmentMaterialId, setAssignmentMaterialId] = useState("");
   const [assignmentStudentId, setAssignmentStudentId] = useState("");
   const [assignmentNote, setAssignmentNote] = useState("");
   const [assignmentDueAt, setAssignmentDueAt] = useState("");
   const [error, setError] = useState("");
   const data = query.data ?? emptyHomeworkMaterialData();
   const checkedCount = data.homework.filter((record) => record.checkedAt).length;
+  const pendingHomeworkCount = Math.max(data.homework.length - checkedCount, 0);
+  const materialFileCount = Object.values(data.materialFiles).reduce((total, files) => total + files.length, 0);
+  const materialAssignmentCount = Object.values(data.materialAssignments).reduce((total, assignments) => total + assignments.length, 0);
+  const fileBackedMaterialCount = Object.values(data.materialFiles).filter((files) => files.length > 0).length;
+  const assignedMaterialCount = Object.values(data.materialAssignments).filter((assignments) => assignments.length > 0).length;
   const studentNames = new Map(data.students.map((student) => [student.id, `${student.firstName} ${student.lastName}`]));
+  const selectedMaterial = data.materials.find((material) => material.id === selectedMaterialId);
+  const selectedMaterialFiles = selectedMaterial ? (data.materialFiles[selectedMaterial.id] ?? []) : [];
+  const selectedMaterialAssignments = selectedMaterial ? (data.materialAssignments[selectedMaterial.id] ?? []) : [];
+  const materialSummaryItems: OperationSummaryItem[] = [
+    {
+      description: "Kontrol aksiyonu bekleyen ödev",
+      key: "pending-homework",
+      label: "Kontrol bekleyen",
+      tone: pendingHomeworkCount > 0 ? "warning" : "success",
+      value: formatCount(pendingHomeworkCount),
+    },
+    {
+      description: "Bu sayfada tamamlanan kontrol",
+      key: "checked-homework",
+      label: "Kontrol edilen",
+      tone: checkedCount > 0 ? "success" : "default",
+      value: `${formatCount(checkedCount)}/${formatCount(data.homework.length)}`,
+    },
+    {
+      description: "Materyal havuzu toplamı",
+      key: "materials",
+      label: "Materyal",
+      value: formatCount(data.materials.length),
+    },
+    {
+      description: "Öğrenciye atanmış materyal",
+      key: "assigned-materials",
+      label: "Atanmış materyal",
+      tone: assignedMaterialCount > 0 ? "info" : "warning",
+      value: `${formatCount(assignedMaterialCount)}/${formatCount(data.materials.length)}`,
+    },
+  ];
+  const materialSummaryBadges: OperationSummaryBadge[] = [
+    {
+      key: "files",
+      label: `${formatCount(fileBackedMaterialCount)} dosyalı materyal`,
+      tone: fileBackedMaterialCount > 0 ? "success" : "neutral",
+    },
+    {
+      key: "assignments",
+      label: `${formatCount(materialAssignmentCount)} öğrenci ataması`,
+      tone: materialAssignmentCount > 0 ? "info" : "neutral",
+    },
+  ];
+  const materialSummaryActions: OperationSummaryAction[] = [
+    {
+      detail: selectedMaterial ? selectedMaterial.title : "Listeden materyal seç",
+      key: "selected-material",
+      label: "Materyal detayı",
+      status: selectedMaterial ? "Seçili" : "Bekliyor",
+      tone: selectedMaterial ? "info" : "neutral",
+      value: selectedMaterial ? `${formatCount(selectedMaterialFiles.length)} dosya` : "Seçilmedi",
+    },
+    {
+      detail: selectedMaterialFiles.length > 0 ? "Dosya indir/yükle akışı açık" : "Dosya yükleme bekliyor",
+      key: "files",
+      label: "Dosya akışı",
+      status: selectedMaterialFiles.length > 0 ? "Hazır" : "Bekliyor",
+      tone: selectedMaterialFiles.length > 0 ? "success" : "neutral",
+      value: `${formatCount(materialFileCount)} dosya`,
+    },
+    {
+      detail: selectedMaterialAssignments.length > 0 ? "Öğrenciye atanmış materyal var" : "Atama formu hazır",
+      key: "assignments",
+      label: "Atama akışı",
+      status: selectedMaterialAssignments.length > 0 ? "Atanmış" : "Hazır",
+      tone: selectedMaterialAssignments.length > 0 ? "info" : "warning",
+      value: `${formatCount(materialAssignmentCount)} atama`,
+    },
+  ];
 
   useEffect(() => {
     if (!query.isSuccess) return;
     const firstMaterialId = query.data.materials[0]?.id ?? "";
     const firstStudentId = query.data.students[0]?.id ?? "";
     const visibleMaterialIds = new Set(query.data.materials.map((material) => material.id));
-    setFileMaterialId((current) => (current && visibleMaterialIds.has(current) ? current : firstMaterialId));
-    setAssignmentMaterialId((current) => (current && visibleMaterialIds.has(current) ? current : firstMaterialId));
+    setSelectedMaterialId((current) => (current && visibleMaterialIds.has(current) ? current : firstMaterialId));
     setAssignmentStudentId((current) => current || firstStudentId);
   }, [query.data, query.isSuccess]);
 
@@ -93,21 +191,35 @@ export function HomeworkMaterialsPage() {
     {
       key: "title",
       header: "Ödev",
+      mobilePriority: "primary",
+      priority: "primary",
       render: (homework) => homework.title,
+      sticky: "left",
     },
     {
       key: "material",
       header: "Materyal",
+      mobilePriority: "secondary",
+      priority: "secondary",
       render: (homework) => homework.sourceMaterialTitle ?? "-",
     },
     {
       key: "status",
       header: "Durum",
-      render: (homework) => homework.checkedAt ? "Kontrol edildi" : "Bekliyor",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (homework) => (
+        <StatusBadge tone={homeworkStatusTone(homework)}>
+          {homework.checkedAt ? "Kontrol edildi" : "Bekliyor"}
+        </StatusBadge>
+      ),
     },
     {
       key: "actions",
+      align: "center",
       header: "İşlem",
+      mobilePriority: "primary",
+      priority: "primary",
       render: (homework) => (
         <span className="next-row-actions">
           <button
@@ -119,6 +231,7 @@ export function HomeworkMaterialsPage() {
           </button>
         </span>
       ),
+      sticky: "right",
     },
   ];
 
@@ -126,42 +239,45 @@ export function HomeworkMaterialsPage() {
     {
       key: "title",
       header: "Materyal",
+      mobilePriority: "primary",
+      priority: "primary",
       render: (material) => material.title,
+      sticky: "left",
     },
     {
       key: "description",
       header: "Açıklama",
+      mobilePriority: "hidden",
+      priority: "optional",
       render: (material) => material.description ?? "-",
     },
     {
       key: "details",
       header: "Ekler",
-      render: (material) => (
-        <span className="next-material-detail">
-          {(data.materialFiles[material.id] ?? []).map((file) => (
-            <span className="next-material-file-row" key={file.id}>
-              Dosya: {file.fileName}
-              <button
-                type="button"
-                onClick={() => void downloadMaterialFile(material.id, file)}
-                disabled={downloadingFileId === file.id}
-                aria-label={`${file.fileName} indir`}
-              >
-                <Download size={16} aria-hidden="true" />
-              </button>
-            </span>
-          ))}
-          {(data.materialAssignments[material.id] ?? []).map((assignment) => (
-            <span key={assignment.id}>Atama: {studentNames.get(assignment.studentId) ?? assignment.studentId}</span>
-          ))}
-        </span>
-      ),
+      mobilePriority: "secondary",
+      priority: "secondary",
+      render: (material) => {
+        const fileCount = data.materialFiles[material.id]?.length ?? 0;
+        const assignmentCount = data.materialAssignments[material.id]?.length ?? 0;
+        return (
+          <span className="next-material-detail">
+            <span>{formatCount(fileCount)} dosya</span>
+            <span>{formatCount(assignmentCount)} öğrenci ataması</span>
+          </span>
+        );
+      },
     },
     {
       key: "actions",
+      align: "center",
       header: "İşlem",
+      mobilePriority: "primary",
+      priority: "primary",
       render: (material) => (
         <span className="next-row-actions">
+          <button type="button" onClick={() => selectMaterial(material.id)} aria-label={`${material.title} detayını aç`}>
+            <Eye size={17} aria-hidden="true" />
+          </button>
           <button type="button" onClick={() => openEditForm(material)} aria-label={`${material.title} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
           </button>
@@ -170,6 +286,7 @@ export function HomeworkMaterialsPage() {
           </button>
         </span>
       ),
+      sticky: "right",
     },
   ];
 
@@ -181,10 +298,16 @@ export function HomeworkMaterialsPage() {
   }
 
   function openEditForm(material: HomeworkMaterialRecord) {
+    selectMaterial(material.id);
     setEditingMaterial(material);
     setForm({ title: material.title, description: material.description ?? "" });
     setError("");
     setIsFormOpen(true);
+  }
+
+  function selectMaterial(materialId: string) {
+    setSelectedMaterialId(materialId);
+    setError("");
   }
 
   function closeForm() {
@@ -210,8 +333,7 @@ export function HomeworkMaterialsPage() {
         : await createHomeworkMaterial(auth.accessToken, parsedForm.data);
       await queryClient.invalidateQueries({ queryKey: listQueryKey });
       if (!editingMaterial) {
-        setFileMaterialId(savedMaterial.id);
-        setAssignmentMaterialId(savedMaterial.id);
+        selectMaterial(savedMaterial.id);
       }
       closeForm();
     } catch {
@@ -221,6 +343,12 @@ export function HomeworkMaterialsPage() {
 
   async function deleteMaterial(material: HomeworkMaterialRecord) {
     if (!auth) return;
+    const confirmed = await confirm({
+      confirmLabel: "Sil",
+      message: `${material.title} materyali, dosya ve atama bağlantılarıyla silinsin mi?`,
+      title: "Materyali sil",
+    });
+    if (!confirmed) return;
 
     setError("");
     try {
@@ -273,7 +401,7 @@ export function HomeworkMaterialsPage() {
 
     setError("");
     try {
-      const savedFile = await addHomeworkMaterialFile(auth.accessToken, fileMaterialId, {
+      const savedFile = await addHomeworkMaterialFile(auth.accessToken, selectedMaterialId, {
         fileName,
         contentType: fileContentType,
         fileBase64,
@@ -315,7 +443,7 @@ export function HomeworkMaterialsPage() {
 
     setError("");
     try {
-      const savedAssignment = await addHomeworkMaterialAssignment(auth.accessToken, assignmentMaterialId, {
+      const savedAssignment = await addHomeworkMaterialAssignment(auth.accessToken, selectedMaterialId, {
         studentId: assignmentStudentId,
         note: assignmentNote || undefined,
         dueAt: assignmentDueAt || undefined,
@@ -361,8 +489,19 @@ export function HomeworkMaterialsPage() {
         emptyText="Ödev kaydı yok"
         error={query.isError ? "Ödev verisi alınamadı." : undefined}
         getRowKey={(homework) => homework.id}
+        density="compact"
         loading={query.isPending}
         rows={data.homework}
+        summary={
+          <OperationSummary
+            actions={materialSummaryActions}
+            ariaLabel="Materyal operasyon özeti"
+            badges={materialSummaryBadges}
+            items={materialSummaryItems}
+          />
+        }
+        tableCaption="Ödev kontrol akışı"
+        tableDescription="Ödev adı, materyal bağlantısı, kontrol durumu ve hızlı kontrol aksiyonu."
         title="Ödev Kontrolü"
       />
       <CrudPage
@@ -394,72 +533,141 @@ export function HomeworkMaterialsPage() {
         emptyText="Materyal yok"
         error={error || undefined}
         getRowKey={(material) => material.id}
+        density="compact"
         loading={query.isPending}
+        rowClassName={(material) => (material.id === selectedMaterialId ? "next-material-row--selected" : undefined)}
         rows={data.materials}
+        tableCaption="Materyal havuzu"
+        tableDescription="Materyal açıklaması, dosya ekleri, öğrenci atamaları ve havuz aksiyonları."
         title="Materyal Havuzu"
       />
-      <section className="next-support-tools" aria-label="Materyal araçları">
-        <form className="next-support-tool" onSubmit={(event) => void submitFile(event)}>
-          <h2>Dosya</h2>
-          <label>
-            Materyal
-            <select value={fileMaterialId} onChange={(event) => setFileMaterialId(event.target.value)} required>
+      <section className="next-material-detail-grid" aria-label="Materyal araçları">
+        <Panel
+          aria-label="Materyal seçili detay"
+          className="next-material-selected-panel"
+          description="Seçili materyalin dosya, atama ve geçmiş akışı."
+          title="Seçili Materyal"
+        >
+          <Field label="Materyal">
+            <Select value={selectedMaterialId} onChange={(event) => selectMaterial(event.target.value)} required>
               {data.materials.map((material) => (
                 <option key={material.id} value={material.id}>
                   {material.title}
                 </option>
               ))}
-            </select>
-          </label>
-          <label>
-            Materyal dosyası
-            <Input type="file" onChange={(event) => void changeFile(event.target.files?.[0])} />
-          </label>
-          <Button disabled={!fileMaterialId || !fileBase64} type="submit">
-            <Upload size={17} aria-hidden="true" />
-            Dosya yükle
-          </Button>
-          {fileName ? <p>{fileName}</p> : null}
-        </form>
-        <form className="next-support-tool" onSubmit={(event) => void submitAssignment(event)}>
-          <h2>Atama</h2>
-          <label>
-            Materyal
-            <select
-              value={assignmentMaterialId}
-              onChange={(event) => setAssignmentMaterialId(event.target.value)}
-              required
-            >
-              {data.materials.map((material) => (
-                <option key={material.id} value={material.id}>
-                  {material.title}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Öğrenci
-            <select value={assignmentStudentId} onChange={(event) => setAssignmentStudentId(event.target.value)} required>
-              {data.students.map((student) => (
-                <option key={student.id} value={student.id}>
-                  {student.firstName} {student.lastName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Not
-            <Input value={assignmentNote} onChange={(event) => setAssignmentNote(event.target.value)} />
-          </label>
-          <label>
-            Teslim
-            <Input type="date" value={assignmentDueAt} onChange={(event) => setAssignmentDueAt(event.target.value)} />
-          </label>
-          <Button disabled={!assignmentMaterialId || !assignmentStudentId} type="submit">
-            <Plus size={17} aria-hidden="true" />
-            Öğrenciye ata
-          </Button>
-        </form>
+            </Select>
+          </Field>
+          {selectedMaterial ? (
+            <div className="next-material-selected-context">
+              <h2>{selectedMaterial.title}</h2>
+              <div className="next-material-selected-badges" aria-label="Seçili materyal durumu">
+                <StatusBadge tone={selectedMaterialFiles.length > 0 ? "success" : "neutral"}>
+                  {selectedMaterialFiles.length > 0 ? "Dosyalı" : "Dosya yok"}
+                </StatusBadge>
+                <StatusBadge tone={selectedMaterialAssignments.length > 0 ? "info" : "warning"}>
+                  {selectedMaterialAssignments.length > 0 ? "Atanmış" : "Atama bekliyor"}
+                </StatusBadge>
+              </div>
+              <dl className="next-material-selected-meta">
+                <div>
+                  <dt>Açıklama</dt>
+                  <dd>{selectedMaterial.description || "Açıklama yok"}</dd>
+                </div>
+                <div>
+                  <dt>Dosya</dt>
+                  <dd>{formatCount(selectedMaterialFiles.length)} dosya</dd>
+                </div>
+                <div>
+                  <dt>Atama</dt>
+                  <dd>{formatCount(selectedMaterialAssignments.length)} öğrenci</dd>
+                </div>
+              </dl>
+            </div>
+          ) : (
+            <p>Dosya ve atama işlemi için listeden bir materyal seç.</p>
+          )}
+          <div className="next-material-actions">
+            <form className="next-material-form" onSubmit={(event) => void submitFile(event)}>
+              <h3>Dosya</h3>
+              <Field label="Materyal dosyası">
+                <Input type="file" onChange={(event) => void changeFile(event.target.files?.[0])} />
+              </Field>
+              <Button disabled={!selectedMaterialId || !fileBase64} type="submit">
+                <Upload size={17} aria-hidden="true" />
+                Dosya yükle
+              </Button>
+              {fileName ? <p>{fileName}</p> : null}
+            </form>
+            <form className="next-material-form" onSubmit={(event) => void submitAssignment(event)}>
+              <h3>Atama</h3>
+              <Field label="Öğrenci">
+                <Select value={assignmentStudentId} onChange={(event) => setAssignmentStudentId(event.target.value)} required>
+                  {data.students.map((student) => (
+                    <option key={student.id} value={student.id}>
+                      {student.firstName} {student.lastName}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Not" description="Atama notu olarak iletilecek kısa materyal yönergesi.">
+                <Textarea rows={3} value={assignmentNote} onChange={(event) => setAssignmentNote(event.target.value)} />
+              </Field>
+              <Field label="Teslim">
+                <Input type="date" value={assignmentDueAt} onChange={(event) => setAssignmentDueAt(event.target.value)} />
+              </Field>
+              <Button disabled={!selectedMaterialId || !assignmentStudentId} type="submit">
+                <Plus size={17} aria-hidden="true" />
+                Öğrenciye ata
+              </Button>
+            </form>
+          </div>
+          <section className="next-material-activity" aria-label="Materyal dosya ve atama listesi">
+            {selectedMaterial ? (
+              <article>
+                <h3>{selectedMaterial.title}</h3>
+                <section aria-label="Seçili materyal dosyaları">
+                  <h4>Dosyalar</h4>
+                  {selectedMaterialFiles.length > 0 ? (
+                    selectedMaterialFiles.map((file) => (
+                      <p key={file.id} className="next-material-file-row">
+                        <span>Dosya: {file.fileName}</span>
+                        <Tooltip label={`${file.fileName} indir`}>
+                          <Button
+                            aria-label={`${file.fileName} indir`}
+                            disabled={downloadingFileId === file.id}
+                            onClick={() => void downloadMaterialFile(selectedMaterial.id, file)}
+                            size="icon"
+                            type="button"
+                            variant="secondary"
+                          >
+                            <Download size={16} aria-hidden="true" />
+                          </Button>
+                        </Tooltip>
+                      </p>
+                    ))
+                  ) : (
+                    <p>Dosya yok</p>
+                  )}
+                </section>
+                <section aria-label="Seçili materyal atamaları">
+                  <h4>Atamalar</h4>
+                  {selectedMaterialAssignments.length > 0 ? (
+                    selectedMaterialAssignments.map((assignment) => (
+                      <p key={assignment.id}>Atama: {studentNames.get(assignment.studentId) ?? "Öğrenci kapsamı doğrulanmadı"}</p>
+                    ))
+                  ) : (
+                    <p>Atama yok</p>
+                  )}
+                </section>
+              </article>
+            ) : (
+              <article>
+                <h3>Seçili materyal yok</h3>
+                <p>Dosya ve atama geçmişi için listeden bir materyal seç.</p>
+              </article>
+            )}
+          </section>
+        </Panel>
       </section>
       <FormModal
         description="Materyal adı zorunludur."
@@ -469,22 +677,22 @@ export function HomeworkMaterialsPage() {
         submitLabel={editingMaterial ? "Kaydet" : "Ekle"}
         title={editingMaterial ? "Materyal düzenle" : "Materyal ekle"}
       >
-        <label>
-          Materyal adı
+        <Field label="Materyal adı">
           <Input
             required
             value={form.title}
             onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
           />
-        </label>
-        <label>
-          Açıklama
-          <Input
+        </Field>
+        <Field label="Açıklama" description="Öğretmen ve öğrenci listelerinde görünecek kısa materyal bağlamı.">
+          <Textarea
+            rows={4}
             value={form.description ?? ""}
             onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
           />
-        </label>
+        </Field>
       </FormModal>
+      {confirmationDialog}
     </>
   );
 }
@@ -632,6 +840,14 @@ function resolveBrowserMaterialContentType(value: string): HomeworkMaterialFileR
     return value;
   }
   return "text/plain";
+}
+
+function homeworkStatusTone(homework: HomeworkRecord): StatusBadgeProps["tone"] {
+  return homework.checkedAt ? "success" : "warning";
+}
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat("tr-TR").format(value);
 }
 
 async function readFileAsBase64(file: File): Promise<string> {

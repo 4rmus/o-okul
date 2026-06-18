@@ -3,15 +3,27 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
-import { ArrowLeft, BookOpen, ClipboardList, FileText, NotebookTabs } from "lucide-react";
+import { ArrowLeft, BookOpen, ClipboardList, FileText, NotebookTabs, Send } from "lucide-react";
+import { DataTable, Panel, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@uzman-hocam/ui";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
-import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
+import { hasCapabilityForRoles } from "../../_shared/access.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+
+interface TeacherDetailData {
+  assignments: TeacherAssignmentRecord[];
+  classNameById: Map<string, string>;
+  courseNameById: Map<string, string>;
+  studentNameById: Map<string, string>;
+  teacher: TeacherRecord;
+  termNameById: Map<string, string>;
+}
 
 export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
   const { auth } = useAuth();
+  const canManageUsers = auth ? hasCapabilityForRoles(auth.session.roles, "user:manage") : false;
   const detailQuery = useQuery({
     queryKey: ["next-teacher-detail", auth?.session.tenantId ?? "anonymous", teacherId],
     queryFn: () => loadTeacherDetail(auth?.accessToken ?? "", teacherId),
@@ -20,6 +32,11 @@ export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
   });
   const detail = detailQuery.data;
   const teacherName = detail ? `${detail.teacher.firstName} ${detail.teacher.lastName}` : "Öğretmen detayı";
+  const teacherBranch = detail?.teacher.branch?.trim() || "Branş bilgisi yok";
+  const teacherSummaryItems = detail ? buildTeacherSummaryItems(detail) : [];
+  const teacherSummaryBadges = detail ? buildTeacherSummaryBadges(detail) : [];
+  const teacherSummaryActions = detail ? buildTeacherSummaryActions(detail) : [];
+  const assignmentColumns = detail ? buildAssignmentColumns(detail) : [];
 
   return (
     <PageFrame
@@ -32,61 +49,57 @@ export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
         </Link>
       }
     >
-      <section className="next-report-panel" aria-label="Öğretmen detayı">
+      <section className="next-detail-workspace" aria-label="Öğretmen detayı">
         {detailQuery.isPending ? <p>Yükleniyor...</p> : null}
         {detailQuery.isError ? <p className="uh-crud-page__error">Öğretmen detayı alınamadı.</p> : null}
         {detail ? (
           <>
-            <MetricPanelGrid
-              ariaLabel="Öğretmen özeti"
-              metrics={[
-                { label: "Branş", value: detail.teacher.branch ?? "-" },
-                { label: "Atama", value: detail.assignments.length },
-                { label: "Sınıf", value: assignedScopeCount(detail.assignments, "classId") },
-                { label: "Öğrenci", value: assignedScopeCount(detail.assignments, "studentId") },
-                { label: "Portal", value: detail.teacher.userId ? "Bağlı" : "Yok" },
-              ]}
+            <OperationSummary
+              actions={teacherSummaryActions}
+              ariaLabel="Öğretmen detay operasyon özeti"
+              badges={teacherSummaryBadges}
+              items={teacherSummaryItems}
             />
-            <section className="next-report-list" aria-label="Öğretmen atamaları">
-              <h2>Atamalar</h2>
-              {detail.assignments.length > 0 ? (
-                <div className="next-relationship-list">
-                  {detail.assignments.map((assignment) => (
-                    <article className="next-relationship-item" key={assignment.id}>
-                      <header>
-                        <div>
-                          <h3>{formatAssignmentSummary(assignment, detail.classNameById, detail.studentNameById, detail.courseNameById, detail.termNameById)}</h3>
-                          <p>{formatAssignmentDateRange(assignment)}</p>
-                        </div>
-                        <span className="next-reference-badge">{formatAssignmentRole(assignment.role)}</span>
-                      </header>
-                      <dl className="next-definition-list">
-                        <div>
-                          <dt>Sınıf</dt>
-                          <dd>{assignment.classId ? detail.classNameById.get(assignment.classId) ?? assignment.classId : "-"}</dd>
-                        </div>
-                        <div>
-                          <dt>Öğrenci</dt>
-                          <dd>{assignment.studentId ? detail.studentNameById.get(assignment.studentId) ?? assignment.studentId : "-"}</dd>
-                        </div>
-                        <div>
-                          <dt>Ders</dt>
-                          <dd>{assignment.courseId ? detail.courseNameById.get(assignment.courseId) ?? assignment.courseId : "-"}</dd>
-                        </div>
-                        <div>
-                          <dt>Dönem</dt>
-                          <dd>{assignment.termId ? detail.termNameById.get(assignment.termId) ?? assignment.termId : "-"}</dd>
-                        </div>
-                      </dl>
-                    </article>
-                  ))}
+            <Panel
+              aria-label="Öğretmen profil kartı"
+              description="Branş, portal ve görev kapsamı tek görünümde okunur; ham tenant veya kayıt anahtarı gösterilmez."
+              title="Profil"
+            >
+              <dl className="next-definition-list">
+                <div>
+                  <dt>Branş</dt>
+                  <dd>{teacherBranch}</dd>
                 </div>
-              ) : (
-                <p>Atama yok</p>
-              )}
-            </section>
-            <section className="next-report-list" aria-label="Öğretmen çalışma alanları">
-              <h2>Çalışma alanları</h2>
+                <div>
+                  <dt>Portal</dt>
+                  <dd>{detail.teacher.userId ? "Bağlı" : "Yok"}</dd>
+                </div>
+                <div>
+                  <dt>Görev kapsamı</dt>
+                  <dd>{formatCount(detail.assignments.length)} atama</dd>
+                </div>
+              </dl>
+            </Panel>
+            <Panel
+              aria-label="Öğretmen atama ilişkileri"
+              description="Sınıf, öğrenci, ders ve dönem ilişkileri yoğun tablo düzeninde izlenir."
+              title="Atama ilişkileri"
+            >
+              <DataTable
+                caption="Öğretmen atama ilişkileri"
+                columns={assignmentColumns}
+                density="compact"
+                description="Öğretmen rolü, kapsamı, ders/dönem ve tarih aralığı."
+                emptyText="Atama yok"
+                getRowKey={(assignment) => assignment.id}
+                rows={detail.assignments}
+              />
+            </Panel>
+            <Panel
+              aria-label="Öğretmen çalışma alanları"
+              description="Bu öğretmenin günlük operasyonlarının bağlı olduğu kurum ekranları."
+              title="Çalışma alanları"
+            >
               <div className="next-action-link-grid">
                 <Link className="next-action-link" href="/kurum/notlar">
                   <NotebookTabs size={17} aria-hidden="true" />
@@ -104,8 +117,14 @@ export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
                   <FileText size={17} aria-hidden="true" />
                   Raporlar
                 </Link>
+                {canManageUsers ? (
+                  <Link className="next-action-link" href={`/kurum/kullanicilar?invite=teacher&subjectId=${encodeURIComponent(teacherId)}`}>
+                    <Send size={17} aria-hidden="true" />
+                    Portal daveti gönder
+                  </Link>
+                ) : null}
               </div>
-            </section>
+            </Panel>
           </>
         ) : null}
       </section>
@@ -133,6 +152,123 @@ async function loadTeacherDetail(accessToken: string, teacherId: string) {
   };
 }
 
+function buildTeacherSummaryItems(detail: TeacherDetailData): OperationSummaryItem[] {
+  const classCount = assignedScopeCount(detail.assignments, "classId");
+  const studentCount = assignedScopeCount(detail.assignments, "studentId");
+  const branchAssignmentCount = detail.assignments.filter((assignment) => assignment.role === "BRANCH_TEACHER").length;
+  return [
+    {
+      description: detail.teacher.branch?.trim() || "Branş bilgisi yok",
+      key: "assignment",
+      label: "Atama toplamı",
+      value: formatCount(detail.assignments.length),
+    },
+    {
+      description: "Sınıf ve öğrenci kapsamı",
+      key: "scope",
+      label: "Kapsam",
+      tone: classCount + studentCount > 0 ? "info" : "default",
+      value: `${formatCount(classCount)} / ${formatCount(studentCount)}`,
+    },
+    {
+      description: "Ders öğretmenliği ilişkileri",
+      key: "branch",
+      label: "Branş görevi",
+      tone: branchAssignmentCount > 0 ? "success" : "default",
+      value: formatCount(branchAssignmentCount),
+    },
+  ];
+}
+
+function buildTeacherSummaryBadges(detail: TeacherDetailData): OperationSummaryBadge[] {
+  const missingReferenceCount = countMissingAssignmentReferences(detail);
+  return [
+    {
+      key: "portal",
+      label: detail.teacher.userId ? "Portal bağlı" : "Portal daveti bekliyor",
+      tone: detail.teacher.userId ? "success" : "warning",
+    },
+    {
+      key: "references",
+      label: missingReferenceCount > 0 ? `${formatCount(missingReferenceCount)} eşleşme kontrolü` : "Referanslar temiz",
+      tone: missingReferenceCount > 0 ? "warning" : "success",
+    },
+  ];
+}
+
+function buildTeacherSummaryActions(detail: TeacherDetailData): OperationSummaryAction[] {
+  const classCount = assignedScopeCount(detail.assignments, "classId");
+  const courseCount = assignedScopeCount(detail.assignments, "courseId");
+  const studentCount = assignedScopeCount(detail.assignments, "studentId");
+  return [
+    {
+      detail: "Sınıf öğretmenliği ve rehberlik kapsamı",
+      key: "class-scope",
+      label: "Sınıf kapsamı",
+      status: classCount > 0 ? "Bağlı" : "Bekliyor",
+      tone: classCount > 0 ? "info" : "neutral",
+      value: `${formatCount(classCount)} sınıf`,
+    },
+    {
+      detail: "Ders programı ve rapor kırılımı için branş bağı",
+      key: "course-scope",
+      label: "Ders kapsamı",
+      status: courseCount > 0 ? "İzleniyor" : "Opsiyonel",
+      tone: courseCount > 0 ? "info" : "neutral",
+      value: `${formatCount(courseCount)} ders`,
+    },
+    {
+      detail: "Bireysel öğrenci sorumlulukları",
+      key: "student-scope",
+      label: "Öğrenci sorumluluğu",
+      status: studentCount > 0 ? "Bağlı" : "Yok",
+      tone: studentCount > 0 ? "success" : "neutral",
+      value: `${formatCount(studentCount)} öğrenci`,
+    },
+  ];
+}
+
+function buildAssignmentColumns(detail: TeacherDetailData): Array<DataTableColumn<TeacherAssignmentRecord>> {
+  return [
+    {
+      key: "role",
+      header: "Rol",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (assignment) => <StatusBadge tone={assignmentRoleTone(assignment.role)}>{formatAssignmentRole(assignment.role)}</StatusBadge>,
+      sticky: "left",
+    },
+    {
+      key: "scope",
+      header: "Kapsam",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (assignment) => formatAssignmentScope(assignment, detail.classNameById, detail.studentNameById),
+    },
+    {
+      key: "course",
+      header: "Ders",
+      mobilePriority: "secondary",
+      priority: "secondary",
+      render: (assignment) => courseLabel(assignment.courseId, detail.courseNameById),
+    },
+    {
+      key: "term",
+      header: "Dönem",
+      mobilePriority: "hidden",
+      priority: "optional",
+      render: (assignment) => termLabel(assignment.termId, detail.termNameById),
+    },
+    {
+      key: "dates",
+      header: "Tarih",
+      mobilePriority: "hidden",
+      priority: "optional",
+      render: (assignment) => formatAssignmentDateRange(assignment),
+    },
+  ];
+}
+
 function formatAssignmentRole(role: TeacherAssignmentRecord["role"]) {
   if (role === "CLASS_TEACHER") return "Sınıf öğretmeni";
   if (role === "BRANCH_TEACHER") return "Branş öğretmeni";
@@ -141,25 +277,43 @@ function formatAssignmentRole(role: TeacherAssignmentRecord["role"]) {
   return role;
 }
 
-function assignedScopeCount(assignments: TeacherAssignmentRecord[], key: "classId" | "studentId") {
+function assignmentRoleTone(role: TeacherAssignmentRecord["role"]): StatusBadgeProps["tone"] {
+  if (role === "CLASS_TEACHER" || role === "RESPONSIBLE_TEACHER") return "success";
+  if (role === "BRANCH_TEACHER") return "info";
+  if (role === "GUIDANCE_COUNSELOR") return "warning";
+  return "neutral";
+}
+
+function assignedScopeCount(assignments: TeacherAssignmentRecord[], key: "classId" | "courseId" | "studentId") {
   return new Set(assignments.map((assignment) => assignment[key]).filter(Boolean)).size;
 }
 
-function formatAssignmentSummary(
+function formatAssignmentScope(
   assignment: TeacherAssignmentRecord,
   classNameById: ReadonlyMap<string, string>,
   studentNameById: ReadonlyMap<string, string>,
-  courseNameById: ReadonlyMap<string, string>,
-  termNameById: ReadonlyMap<string, string>,
 ) {
   const parts = [
-    formatAssignmentRole(assignment.role),
-    assignment.classId ? classNameById.get(assignment.classId) ?? assignment.classId : undefined,
-    assignment.studentId ? studentNameById.get(assignment.studentId) ?? assignment.studentId : undefined,
-    assignment.courseId ? courseNameById.get(assignment.courseId) ?? assignment.courseId : undefined,
-    assignment.termId ? termNameById.get(assignment.termId) ?? assignment.termId : undefined,
+    assignment.classId ? classLabel(assignment.classId, classNameById) : undefined,
+    assignment.studentId ? studentLabel(assignment.studentId, studentNameById) : undefined,
   ].filter(Boolean);
-  return parts.join(" · ");
+  return parts.length > 0 ? parts.join(" / ") : "Genel görev";
+}
+
+function classLabel(classId: string, classNameById: ReadonlyMap<string, string>) {
+  return classNameById.get(classId) ?? "Sınıf eşleşmedi";
+}
+
+function studentLabel(studentId: string, studentNameById: ReadonlyMap<string, string>) {
+  return studentNameById.get(studentId) ?? "Öğrenci eşleşmedi";
+}
+
+function courseLabel(courseId: string | undefined, courseNameById: ReadonlyMap<string, string>) {
+  return courseId ? courseNameById.get(courseId) ?? "Ders eşleşmedi" : "-";
+}
+
+function termLabel(termId: string | undefined, termNameById: ReadonlyMap<string, string>) {
+  return termId ? termNameById.get(termId) ?? "Dönem eşleşmedi" : "-";
 }
 
 function formatAssignmentDateRange(assignment: TeacherAssignmentRecord) {
@@ -172,4 +326,18 @@ function formatAssignmentDateRange(assignment: TeacherAssignmentRecord) {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("tr-TR", { dateStyle: "short" }).format(new Date(value));
+}
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat("tr-TR").format(value);
+}
+
+function countMissingAssignmentReferences(detail: TeacherDetailData) {
+  return detail.assignments.reduce((total, assignment) => {
+    const missingClass = assignment.classId && !detail.classNameById.has(assignment.classId) ? 1 : 0;
+    const missingStudent = assignment.studentId && !detail.studentNameById.has(assignment.studentId) ? 1 : 0;
+    const missingCourse = assignment.courseId && !detail.courseNameById.has(assignment.courseId) ? 1 : 0;
+    const missingTerm = assignment.termId && !detail.termNameById.has(assignment.termId) ? 1 : 0;
+    return total + missingClass + missingStudent + missingCourse + missingTerm;
+  }, 0);
 }

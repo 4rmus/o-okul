@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CampusRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, Field, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -15,6 +15,7 @@ import {
   type CampusFormState,
 } from "../../../../src/form-validation.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 const emptyForm: CampusFormState = {
   name: "",
@@ -40,6 +41,66 @@ export function CampusesPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
   const rows = campusesQuery.data?.data ?? [];
+  const codedCampusCount = rows.filter((record) => Boolean(record.code)).length;
+  const campusSummaryItems: OperationSummaryItem[] = [
+    {
+      description: "Filtrelenmiş toplam kayıt",
+      key: "total",
+      label: "Kampüs toplamı",
+      value: formatCount(campusesQuery.data?.meta?.total ?? rows.length),
+    },
+    {
+      description: "Bu sayfada kodu olan kampüs",
+      key: "code",
+      label: "Kod kapsamı",
+      tone: codedCampusCount > 0 ? "info" : "warning",
+      value: `${codedCampusCount}/${rows.length}`,
+    },
+    {
+      description: "Sınıf, rapor ve finans filtre bağlamı",
+      key: "context",
+      label: "Operasyon bağlamı",
+      value: "Kurum yapısı",
+    },
+  ];
+  const campusSummaryBadges: OperationSummaryBadge[] = [
+    {
+      key: "sort",
+      label: `Sıralama: ${formatCampusSort(listQuery.sort)}`,
+      tone: "neutral",
+    },
+    {
+      key: "code",
+      label: codedCampusCount === rows.length && rows.length > 0 ? "Kod alanı tamam" : "Kod alanı opsiyonel",
+      tone: codedCampusCount === rows.length && rows.length > 0 ? "success" : "neutral",
+    },
+  ];
+  const campusSummaryActions: OperationSummaryAction[] = [
+    {
+      detail: "Kısa kod sınıf ve rapor filtrelerinde kullanılır",
+      key: "code-readiness",
+      label: "Kod temizliği",
+      status: codedCampusCount === rows.length && rows.length > 0 ? "Hazır" : "Opsiyonel",
+      tone: codedCampusCount > 0 ? "info" : "neutral",
+      value: `${codedCampusCount}/${rows.length}`,
+    },
+    {
+      detail: "Sınıf, öğrenci ve finans kırılımı",
+      key: "structure-context",
+      label: "Kurum yapısı",
+      status: "Bağlam",
+      tone: "info",
+      value: "Sınıf/Finans",
+    },
+    {
+      detail: "Kampüs filtresi rapor ve operasyon ekranlarına taşınır",
+      key: "filter-context",
+      label: "Rapor filtresi",
+      status: "İzleniyor",
+      tone: "neutral",
+      value: "Kampüs",
+    },
+  ];
 
   useEffect(() => {
     if (searchParams.get("new") === "1") openCreateForm();
@@ -49,16 +110,25 @@ export function CampusesPage() {
     {
       key: "name",
       header: "Kampüs",
+      mobilePriority: "primary",
+      priority: "primary",
       render: (record) => record.name,
+      sticky: "left",
     },
     {
       key: "code",
       header: "Kod",
+      mobilePriority: "secondary",
+      priority: "secondary",
       render: (record) => record.code ?? "-",
     },
     {
       key: "actions",
+      align: "center",
       header: "İşlem",
+      mobilePriority: "primary",
+      priority: "primary",
+      sticky: "right",
       render: (record) => (
         <span className="next-row-actions">
           <button type="button" onClick={() => openEditForm(record)} aria-label={`${record.name} düzenle`}>
@@ -152,6 +222,7 @@ export function CampusesPage() {
         }
         aria-label="Kampüs yönetimi"
         columns={columns}
+        density="compact"
         description="Kurum kampüslerini aynı CRUD kalıbıyla yönet."
         emptyState={
           <EmptyState
@@ -166,6 +237,16 @@ export function CampusesPage() {
         getRowKey={(record) => record.id}
         loading={campusesQuery.isPending}
         rows={rows}
+        summary={
+          <OperationSummary
+            actions={campusSummaryActions}
+            ariaLabel="Kampüs operasyon özeti"
+            badges={campusSummaryBadges}
+            items={campusSummaryItems}
+          />
+        }
+        tableCaption="Kampüs eğitim yapısı"
+        tableDescription="Kampüs adı, kısa kod ve kampüs aksiyonları."
         title="Kampüsler"
       />
       <FormModal
@@ -176,21 +257,19 @@ export function CampusesPage() {
         submitLabel={editingCampus ? "Kaydet" : "Ekle"}
         title={editingCampus ? "Kampüs düzenle" : "Kampüs ekle"}
       >
-        <label>
-          Kampüs adı
+        <Field label="Kampüs adı">
           <Input
             required
             value={form.name}
             onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
           />
-        </label>
-        <label>
-          Kod
+        </Field>
+        <Field label="Kod" description="Kısa kod sınıf, rapor ve kampüs filtrelerinde hızlı tanıma sağlar.">
           <Input
             value={form.code ?? ""}
             onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
           />
-        </label>
+        </Field>
       </FormModal>
       {confirmationDialog}
     </>
@@ -232,4 +311,12 @@ async function deleteCampus(accessToken: string, id: string) {
   if (!response.ok) {
     throw new Error("CAMPUS_DELETE_FAILED");
   }
+}
+
+function formatCount(value: number) {
+  return value.toLocaleString("tr-TR");
+}
+
+function formatCampusSort(value: string) {
+  return campusSortOptions.find((option) => option.value === value)?.label ?? "Varsayılan";
 }

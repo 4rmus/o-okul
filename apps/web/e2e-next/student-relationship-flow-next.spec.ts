@@ -16,7 +16,17 @@ const corsHeaders = {
 
 test.describe("Öğrenci ilişki haritası", () => {
   test("React Flow alanı dolu render olur ve liste fallback korunur", async ({ page }) => {
-    await openStudentDetail(page, { width: 1280, height: 900 });
+    const auditLogRequests: URL[] = [];
+    await openStudentDetail(page, { width: 1280, height: 900 }, auditLogRequests);
+
+    const operationSummary = page.getByRole("region", { exact: true, name: "Öğrenci detay operasyon özeti" });
+    await expect(operationSummary).toContainText("Kayıt durumu");
+    await expect(operationSummary).toContainText("Başarı %");
+    await expect(operationSummary).toContainText("Net - / Soru -");
+    await expect(operationSummary).toContainText("PII maskeli");
+    await expect(operationSummary.getByLabel("Öğrenci detay operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(page.getByLabel("Öğrenci profil kartı")).toContainText("Aktif");
+    await expect(page.getByLabel("Öğrenci karar kartları")).toContainText("Sınav performansı");
 
     const flow = page.locator(".next-student-relationship-flow");
     await expect(flow).toHaveAttribute("data-node-count", "6");
@@ -31,6 +41,33 @@ test.describe("Öğrenci ilişki haritası", () => {
 
     await expect(page.getByLabel("İlişki haritası liste görünümü")).toContainText("Ayşe Yılmaz");
     await expect(page.getByLabel("İlişki haritası liste görünümü")).toContainText("Mehmet Demir");
+    await expect(page.getByLabel("İlişki haritası liste görünümü")).not.toContainText("Ödeme görür");
+    await expect(page.getByLabel("İlişki haritası liste görünümü")).not.toContainText("Ödeme kapalı");
+
+    const relationshipHistory = page.getByLabel("İlişki geçmişi");
+    await expect(relationshipHistory).toContainText("Finans görünürlüğü ve bildirim izinleri");
+    await expect(relationshipHistory).toContainText("Finans görünürlüğü: açık");
+    await expect(relationshipHistory).toContainText("Finans görünürlüğü: kapalı");
+    await expect(relationshipHistory).not.toContainText("Ödeme görür");
+    await expect(relationshipHistory).not.toContainText("Ödeme kapalı");
+
+    const auditSummary = page.getByLabel("Denetim özeti");
+    await expect(auditSummary).toContainText("Profil güncellendi");
+    await expect(auditSummary).toContainText("Veli ilişkisi güncellendi");
+    await expect(auditSummary).not.toContainText("student.profile_updated");
+    await expect(auditSummary).not.toContainText("guardian_student.updated");
+    await expect(auditSummary).not.toContainText("announcement.created");
+    await expect(auditSummary).not.toContainText("Öğrenci silindi");
+    await expect(auditSummary).not.toContainText("student-b");
+    await expect(auditSummary).not.toContainText("announcement-unrelated");
+    await expect(auditSummary).not.toContainText("guardian-link-mother");
+    await expect(auditSummary).not.toContainText("entityId");
+    await expect(auditSummary).not.toContainText("actorUserId");
+    await expect(auditSummary).not.toContainText("diff");
+    expect(auditLogRequests).toHaveLength(1);
+    expect(auditLogRequests[0]?.pathname).toBe("/api/v1/audit-logs/student-summary");
+    expect(auditLogRequests[0]?.searchParams.get("studentId")).toBe("student-a");
+    expect(auditLogRequests[0]?.searchParams.get("limit")).toBe("5");
 
     await mkdir(artifactDir, { recursive: true });
     await page.screenshot({ fullPage: true, path: path.join(artifactDir, "faz7-student-relationship-flow.png") });
@@ -39,6 +76,7 @@ test.describe("Öğrenci ilişki haritası", () => {
   test("mobilde flow gizlenir, liste fallback taşmadan kalır", async ({ page }) => {
     await openStudentDetail(page, { width: 390, height: 844 });
 
+    await expect(page.getByRole("region", { exact: true, name: "Öğrenci detay operasyon özeti" })).toBeVisible();
     await expect(page.locator(".next-student-relationship-flow-shell")).toBeHidden();
     await expect(page.getByLabel("İlişki haritası liste görünümü")).toBeVisible();
     await expect(page.getByLabel("İlişki haritası liste görünümü")).toContainText("11-A");
@@ -49,9 +87,9 @@ test.describe("Öğrenci ilişki haritası", () => {
   });
 });
 
-async function openStudentDetail(page: Page, viewport: { width: number; height: number }) {
+async function openStudentDetail(page: Page, viewport: { width: number; height: number }, auditLogRequests: URL[] = []) {
   await page.setViewportSize(viewport);
-  await installStudentApiMocks(page);
+  await installStudentApiMocks(page, auditLogRequests);
   await page.addInitScript(() => {
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
   });
@@ -62,7 +100,7 @@ async function openStudentDetail(page: Page, viewport: { width: number; height: 
   await expect(page.getByRole("heading", { level: 2, name: "İlişki haritası" })).toBeVisible();
 }
 
-async function installStudentApiMocks(page: Page) {
+async function installStudentApiMocks(page: Page, auditLogRequests: URL[]) {
   await page.route("**/api/v1/**", async (route) => {
     if (route.request().method() === "OPTIONS") {
       await route.fulfill({ headers: corsHeadersFor(route), status: 204 });
@@ -71,12 +109,12 @@ async function installStudentApiMocks(page: Page) {
 
     const url = new URL(route.request().url());
     const pathName = url.pathname.replace(/^\/api\/v1/, "");
-    const response = mockApiResponse(pathName);
+    const response = mockApiResponse(pathName, url, auditLogRequests);
     await fulfillData(route, response.data, response.meta);
   });
 }
 
-function mockApiResponse(pathName: string): { data: unknown; meta?: { limit: number; page: number; total: number; totalPages: number } } {
+function mockApiResponse(pathName: string, url: URL, auditLogRequests: URL[]): { data: unknown; meta?: { limit: number; page: number; total: number; totalPages: number } } {
   if (pathName === "/auth/refresh") return { data: createAuthResponse() };
   if (pathName === "/me/tenant") return { data: createTenantResponse() };
   if (pathName === "/me/notification-devices") return { data: [] };
@@ -87,7 +125,11 @@ function mockApiResponse(pathName: string): { data: unknown; meta?: { limit: num
   if (pathName === "/students/student-a/enrollments") return { data: createEnrollments() };
   if (pathName === "/students/student-a/teacher-assignments") return { data: createTeacherAssignments() };
   if (pathName === "/attendance/summary") return { data: { absent: 1, excused: 0, late: 1, present: 28, studentId: "student-a", total: 30 } };
-  if (pathName === "/audit-logs") return { data: [] };
+  if (pathName === "/audit-logs/student-summary") {
+    auditLogRequests.push(url);
+    return { data: createAuditSummaries() };
+  }
+  if (pathName === "/audit-logs") return { data: [{ action: "unscoped.audit_call", createdAt: "2026-06-18T08:20:00.000Z", id: "audit-unscoped" }] };
   if (pathName === "/payment-plans") return { data: [] };
   if (pathName === "/homework/materials") return { data: [] };
   if (pathName === "/teachers") return { data: createTeachers() };
@@ -109,6 +151,21 @@ function mockApiResponse(pathName: string): { data: unknown; meta?: { limit: num
   if (pathName.includes("/reports/")) return { data: [] };
 
   return { data: [] };
+}
+
+function createAuditSummaries() {
+  return [
+    {
+      actionLabel: "Profil güncellendi",
+      createdAt: "2026-06-18T08:00:00.000Z",
+      id: "audit-student-a",
+    },
+    {
+      actionLabel: "Veli ilişkisi güncellendi",
+      createdAt: "2026-06-18T08:05:00.000Z",
+      id: "audit-guardian-student-a",
+    },
+  ];
 }
 
 function createAuthResponse() {

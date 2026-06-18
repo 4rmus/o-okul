@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LearningOutcomeRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, Field, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -15,7 +15,8 @@ import {
   type LearningOutcomeFormPayload,
   type LearningOutcomeFormState,
 } from "../../../../src/form-validation.js";
-import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 const emptyForm: LearningOutcomeFormState = {
   branch: "",
@@ -30,7 +31,7 @@ export function LearningOutcomesPage() {
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useConfirmDialog();
   const tenantId = auth?.session.tenantId ?? "anonymous";
-  const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
+  const [listQuery, setListQuery] = useUrlListState(searchParams, { sortOptions: learningOutcomeSortOptions });
   const queryKey = ["next-learning-outcomes", tenantId, listQuery];
   const listQueryKey = ["next-learning-outcomes", tenantId];
   const outcomesQuery = useQuery({
@@ -44,6 +45,70 @@ export function LearningOutcomesPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
   const rows = outcomesQuery.data?.data ?? [];
+  const listTotal = outcomesQuery.data?.meta?.total ?? rows.length;
+  const branchCount = new Set(rows.map((record) => formatCourseName(record.branch))).size;
+  const levelCount = rows.filter((record) => Boolean(record.level)).length;
+  const codeReadyCount = rows.filter((record) => Boolean(formatOutcomeCode(record.code))).length;
+  const outcomeSummaryItems: OperationSummaryItem[] = [
+    {
+      description: "Optik, sınav ve rapor eşleşmesinde kullanılan katalog",
+      key: "total",
+      label: "Kazanım toplamı",
+      value: formatCount(listTotal),
+    },
+    {
+      description: "Katalogda temsil edilen branş sayısı",
+      key: "branch",
+      label: "Branş kapsamı",
+      tone: branchCount > 0 ? "info" : "default",
+      value: formatCount(branchCount),
+    },
+    {
+      description: "Seviye etiketi bulunan kazanımlar",
+      key: "level",
+      label: "Seviye kapsamı",
+      tone: levelCount === rows.length && rows.length > 0 ? "success" : "info",
+      value: `${formatCount(levelCount)}/${formatCount(rows.length)}`,
+    },
+  ];
+  const outcomeSummaryBadges: OperationSummaryBadge[] = [
+    {
+      key: "sort",
+      label: `Sıralama: ${formatLearningOutcomeSort(listQuery.sort)}`,
+      tone: "neutral",
+    },
+    {
+      key: "report",
+      label: "Rapor/optik kataloğu",
+      tone: "info",
+    },
+  ];
+  const outcomeSummaryActions: OperationSummaryAction[] = [
+    {
+      detail: "Kısa kod optik eşleştirme ve hata kitapçığı kırılımında kullanılır",
+      key: "code-standard",
+      label: "Kod standardı",
+      status: codeReadyCount === rows.length && rows.length > 0 ? "Hazır" : "Kontrol",
+      tone: codeReadyCount === rows.length && rows.length > 0 ? "success" : "warning",
+      value: `${formatCount(codeReadyCount)} kod`,
+    },
+    {
+      detail: "Branş etiketi sınav ve öğretmen raporu filtresini besler",
+      key: "branch-coverage",
+      label: "Branş dağılımı",
+      status: branchCount > 0 ? "İzleniyor" : "Bekliyor",
+      tone: branchCount > 0 ? "info" : "neutral",
+      value: `${formatCount(branchCount)} branş`,
+    },
+    {
+      detail: "Seviye alanı program ve sınıf hedefleriyle tutarlı okunur",
+      key: "level-coverage",
+      label: "Seviye etiketi",
+      status: levelCount === rows.length && rows.length > 0 ? "Hazır" : "Opsiyonel",
+      tone: levelCount === rows.length && rows.length > 0 ? "success" : "neutral",
+      value: `${formatCount(levelCount)} etiket`,
+    },
+  ];
 
   useEffect(() => {
     if (searchParams.get("new") === "1") openCreateForm();
@@ -53,26 +118,38 @@ export function LearningOutcomesPage() {
     {
       key: "code",
       header: "Kod",
+      mobilePriority: "primary",
+      priority: "primary",
       render: (record) => formatOutcomeCode(record.code),
+      sticky: "left",
     },
     {
       key: "branch",
       header: "Branş",
+      mobilePriority: "secondary",
+      priority: "secondary",
       render: (record) => formatCourseName(record.branch),
     },
     {
       key: "title",
       header: "Kazanım",
+      mobilePriority: "primary",
+      priority: "primary",
       render: (record) => formatOutcomeTitle(record.title),
     },
     {
       key: "level",
       header: "Seviye",
+      mobilePriority: "hidden",
+      priority: "optional",
       render: (record) => record.level ?? "-",
     },
     {
       key: "actions",
+      align: "center",
       header: "İşlem",
+      mobilePriority: "primary",
+      priority: "primary",
       render: (record) => (
         <span className="next-row-actions">
           <button type="button" onClick={() => openEditForm(record)} aria-label={`${formatOutcomeCode(record.code)} düzenle`}>
@@ -83,6 +160,7 @@ export function LearningOutcomesPage() {
           </button>
         </span>
       ),
+      sticky: "right",
     },
   ];
 
@@ -173,6 +251,7 @@ export function LearningOutcomesPage() {
         }
         aria-label="Kazanım yönetimi"
         columns={columns}
+        density="compact"
         description="Sınav ve optik analizlerinde kullanılacak kazanım kataloğunu yönet."
         emptyState={
           <EmptyState
@@ -187,6 +266,16 @@ export function LearningOutcomesPage() {
         getRowKey={(record) => record.id}
         loading={outcomesQuery.isPending}
         rows={rows}
+        summary={
+          <OperationSummary
+            actions={outcomeSummaryActions}
+            ariaLabel="Kazanım operasyon özeti"
+            badges={outcomeSummaryBadges}
+            items={outcomeSummaryItems}
+          />
+        }
+        tableCaption="Kazanım katalog listesi"
+        tableDescription="Kazanım kodu, branş, kazanım adı ve seviye bilgisi."
         title="Kazanımlar"
       />
       <FormModal
@@ -197,37 +286,33 @@ export function LearningOutcomesPage() {
         submitLabel={editingOutcome ? "Kaydet" : "Ekle"}
         title={editingOutcome ? "Kazanım düzenle" : "Kazanım ekle"}
       >
-        <label>
-          Kazanım kodu
+        <Field label="Kazanım kodu">
           <Input
             required
             value={form.code}
             onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
           />
-        </label>
-        <label>
-          Branş
+        </Field>
+        <Field label="Branş">
           <Input
             required
             value={form.branch}
             onChange={(event) => setForm((current) => ({ ...current, branch: event.target.value }))}
           />
-        </label>
-        <label>
-          Kazanım adı
+        </Field>
+        <Field label="Kazanım adı">
           <Input
             required
             value={form.title}
             onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
           />
-        </label>
-        <label>
-          Seviye
+        </Field>
+        <Field label="Seviye">
           <Input
             value={form.level ?? ""}
             onChange={(event) => setForm((current) => ({ ...current, level: event.target.value }))}
           />
-        </label>
+        </Field>
       </FormModal>
       {confirmationDialog}
     </>
@@ -273,4 +358,12 @@ async function deleteLearningOutcome(accessToken: string, id: string) {
   if (!response.ok) {
     throw new Error("LEARNING_OUTCOME_DELETE_FAILED");
   }
+}
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat("tr-TR").format(value);
+}
+
+function formatLearningOutcomeSort(value: string) {
+  return learningOutcomeSortOptions.find((option) => option.value === value)?.label ?? "Varsayılan";
 }

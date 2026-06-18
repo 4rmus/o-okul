@@ -1,9 +1,22 @@
 "use client";
 
 import { type FormEvent, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AcademicTermRecord, AcademicYearRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
+import {
+  Button,
+  CrudPage,
+  EmptyState,
+  Field,
+  FormModal,
+  Input,
+  Select,
+  StatusBadge,
+  type DataTableColumn,
+  type StatusBadgeProps,
+  useConfirmDialog,
+} from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -16,7 +29,8 @@ import {
   type AcademicYearFormPayload,
   type AcademicYearFormState,
 } from "../../../../src/form-validation.js";
-import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 const emptyYearForm: AcademicYearFormState = {
   name: "",
@@ -35,10 +49,11 @@ const emptyTermForm: AcademicTermFormState = {
 
 export function AcademicCalendarPage() {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useConfirmDialog();
-  const [yearListQuery, setYearListQuery] = useState<ListQueryState>(initialListQuery);
-  const [termListQuery, setTermListQuery] = useState<ListQueryState>(initialListQuery);
+  const [yearListQuery, setYearListQuery] = useUrlListState(searchParams, { namespace: "years", sortOptions: academicYearSortOptions });
+  const [termListQuery, setTermListQuery] = useUrlListState(searchParams, { namespace: "terms", sortOptions: academicTermSortOptions });
   const yearQueryKey = ["next-academic-years", auth?.session.tenantId ?? "anonymous", yearListQuery];
   const termQueryKey = ["next-academic-terms", auth?.session.tenantId ?? "anonymous", termListQuery];
   const yearListQueryKey = ["next-academic-years", auth?.session.tenantId ?? "anonymous"];
@@ -58,6 +73,12 @@ export function AcademicCalendarPage() {
   const years = yearsQuery.data?.data ?? [];
   const terms = termsQuery.data?.data ?? [];
   const yearNames = useMemo(() => new Map(years.map((record) => [record.id, record.name])), [years]);
+  const activeYearCount = years.filter((record) => record.isActive).length;
+  const activeTermCount = terms.filter((record) => record.isActive).length;
+  const yearDateCoverageCount = years.filter((record) => Boolean(record.startsAt && record.endsAt)).length;
+  const termDateCoverageCount = terms.filter((record) => Boolean(record.startsAt && record.endsAt)).length;
+  const linkedYearCount = new Set(terms.map((record) => record.academicYearId).filter((academicYearId) => yearNames.has(academicYearId))).size;
+  const termYearMatchCount = terms.filter((record) => yearNames.has(record.academicYearId)).length;
   const [editingYear, setEditingYear] = useState<AcademicYearRecord | null>(null);
   const [editingTerm, setEditingTerm] = useState<AcademicTermRecord | null>(null);
   const [yearForm, setYearForm] = useState<AcademicYearFormState>(emptyYearForm);
@@ -66,14 +87,163 @@ export function AcademicCalendarPage() {
   const [isTermFormOpen, setIsTermFormOpen] = useState(false);
   const [error, setError] = useState("");
 
+  const yearSummaryItems: OperationSummaryItem[] = [
+    {
+      description: "Filtrelenmiş toplam kayıt",
+      key: "total",
+      label: "Akademik yıl toplamı",
+      value: formatCount(yearsQuery.data?.meta?.total ?? years.length),
+    },
+    {
+      description: "Bu sayfada aktif yıl",
+      key: "active",
+      label: "Aktif yıl",
+      tone: activeYearCount === 1 ? "success" : activeYearCount > 1 ? "danger" : "warning",
+      value: `${activeYearCount}/${years.length}`,
+    },
+    {
+      description: "Başlangıç ve bitiş tarihi tamam",
+      key: "date-coverage",
+      label: "Tarih kapsamı",
+      tone: yearDateCoverageCount === years.length && years.length > 0 ? "success" : "default",
+      value: `${yearDateCoverageCount}/${years.length}`,
+    },
+    {
+      description: "Döneme bağlı akademik yıl",
+      key: "term-coverage",
+      label: "Dönem kapsamı",
+      tone: linkedYearCount > 0 ? "info" : "warning",
+      value: `${linkedYearCount}/${years.length}`,
+    },
+  ];
+  const yearSummaryBadges: OperationSummaryBadge[] = [
+    {
+      key: "sort",
+      label: `Sıralama: ${formatAcademicYearSort(yearListQuery.sort)}`,
+      tone: "neutral",
+    },
+    {
+      key: "url-state",
+      label: "Yıl listesi URL state",
+      tone: "info",
+    },
+  ];
+  const yearSummaryActions: OperationSummaryAction[] = [
+    {
+      detail: "Ders programı ve rapor bağlamı",
+      key: "active-year",
+      label: "Aktif yıl kontrolü",
+      status: activeYearCount === 1 ? "Hazır" : activeYearCount > 1 ? "Çakışma" : "Eksik",
+      tone: activeYearCount === 1 ? "success" : activeYearCount > 1 ? "danger" : "warning",
+      value: activeYearCount === 1 ? "Tek aktif" : `${activeYearCount} aktif`,
+    },
+    {
+      detail: "Dönemler akademik yıla bağlanır",
+      key: "term-link",
+      label: "Dönem bağlantısı",
+      status: linkedYearCount > 0 ? "Bağlı" : "Bekliyor",
+      tone: linkedYearCount > 0 ? "info" : "neutral",
+      value: `${linkedYearCount}/${years.length}`,
+    },
+    {
+      detail: "Tarih aralığı boş kayıtları yakalar",
+      key: "year-dates",
+      label: "Tarih aralığı",
+      status: yearDateCoverageCount === years.length && years.length > 0 ? "Hazır" : "Kontrol",
+      tone: yearDateCoverageCount === years.length && years.length > 0 ? "success" : "neutral",
+      value: `${yearDateCoverageCount}/${years.length}`,
+    },
+  ];
+
+  const termSummaryItems: OperationSummaryItem[] = [
+    {
+      description: "Filtrelenmiş toplam kayıt",
+      key: "total",
+      label: "Dönem toplamı",
+      value: formatCount(termsQuery.data?.meta?.total ?? terms.length),
+    },
+    {
+      description: "Bu sayfada aktif dönem",
+      key: "active",
+      label: "Aktif dönem",
+      tone: activeTermCount === 1 ? "success" : activeTermCount > 1 ? "danger" : "warning",
+      value: `${activeTermCount}/${terms.length}`,
+    },
+    {
+      description: "Akademik yıl adı çözümlenmiş",
+      key: "year-match",
+      label: "Yıl eşleşmesi",
+      tone: termYearMatchCount === terms.length && terms.length > 0 ? "success" : "warning",
+      value: `${termYearMatchCount}/${terms.length}`,
+    },
+    {
+      description: "Başlangıç ve bitiş tarihi tamam",
+      key: "date-coverage",
+      label: "Tarih kapsamı",
+      tone: termDateCoverageCount === terms.length && terms.length > 0 ? "success" : "default",
+      value: `${termDateCoverageCount}/${terms.length}`,
+    },
+  ];
+  const termSummaryBadges: OperationSummaryBadge[] = [
+    {
+      key: "sort",
+      label: `Sıralama: ${formatAcademicTermSort(termListQuery.sort)}`,
+      tone: "neutral",
+    },
+    {
+      key: "year-required",
+      label: years.length > 0 ? "Dönem ekleme hazır" : "Dönem için yıl gerekli",
+      tone: years.length > 0 ? "success" : "warning",
+    },
+    {
+      key: "url-state",
+      label: "Dönem listesi URL state",
+      tone: "info",
+    },
+  ];
+  const termSummaryActions: OperationSummaryAction[] = [
+    {
+      detail: "Not, devamsızlık ve rapor varsayılanı",
+      key: "active-term",
+      label: "Aktif dönem kontrolü",
+      status: activeTermCount === 1 ? "Hazır" : activeTermCount > 1 ? "Çakışma" : "Eksik",
+      tone: activeTermCount === 1 ? "success" : activeTermCount > 1 ? "danger" : "warning",
+      value: activeTermCount === 1 ? "Tek aktif" : `${activeTermCount} aktif`,
+    },
+    {
+      detail: "Dönem, akademik yıl listesiyle eşleşir",
+      key: "year-match",
+      label: "Yıl eşleşmesi",
+      status: termYearMatchCount === terms.length && terms.length > 0 ? "Bağlı" : "Kontrol",
+      tone: termYearMatchCount === terms.length && terms.length > 0 ? "success" : "warning",
+      value: `${termYearMatchCount}/${terms.length}`,
+    },
+    {
+      detail: "Tarih aralığı rapor ve yoklama bağlamını besler",
+      key: "term-dates",
+      label: "Dönem tarihleri",
+      status: termDateCoverageCount === terms.length && terms.length > 0 ? "Hazır" : "Kontrol",
+      tone: termDateCoverageCount === terms.length && terms.length > 0 ? "success" : "neutral",
+      value: `${termDateCoverageCount}/${terms.length}`,
+    },
+  ];
+
   const yearColumns: Array<DataTableColumn<AcademicYearRecord>> = [
-    { key: "name", header: "Akademik yıl", render: (record) => record.name },
-    { key: "startsAt", header: "Başlangıç", render: (record) => record.startsAt },
-    { key: "endsAt", header: "Bitiş", render: (record) => record.endsAt },
-    { key: "isActive", header: "Durum", render: (record) => activeLabel(record.isActive) },
+    { key: "name", header: "Akademik yıl", priority: "primary", render: (record) => record.name, sticky: "left" },
+    { key: "startsAt", header: "Başlangıç", mobileLabel: "Başlangıç", priority: "secondary", render: (record) => record.startsAt },
+    { key: "endsAt", header: "Bitiş", mobileLabel: "Bitiş", priority: "optional", render: (record) => record.endsAt },
+    {
+      key: "isActive",
+      header: "Durum",
+      priority: "primary",
+      render: (record) => <StatusBadge tone={activeTone(record.isActive)}>{activeLabel(record.isActive)}</StatusBadge>,
+    },
     {
       key: "actions",
+      align: "center",
       header: "İşlem",
+      priority: "primary",
+      sticky: "right",
       render: (record) => (
         <span className="next-row-actions">
           <button type="button" onClick={() => openYearEditForm(record)} aria-label={`${record.name} yılını düzenle`}>
@@ -88,14 +258,27 @@ export function AcademicCalendarPage() {
   ];
 
   const termColumns: Array<DataTableColumn<AcademicTermRecord>> = [
-    { key: "name", header: "Dönem", render: (record) => record.name },
-    { key: "academicYearId", header: "Akademik yıl", render: (record) => yearNames.get(record.academicYearId) ?? record.academicYearId },
-    { key: "startsAt", header: "Başlangıç", render: (record) => record.startsAt },
-    { key: "endsAt", header: "Bitiş", render: (record) => record.endsAt },
-    { key: "isActive", header: "Durum", render: (record) => activeLabel(record.isActive) },
+    { key: "name", header: "Dönem", priority: "primary", render: (record) => record.name, sticky: "left" },
+    {
+      key: "academicYearId",
+      header: "Akademik yıl",
+      priority: "secondary",
+      render: (record) => yearNames.get(record.academicYearId) ?? "Yıl eşleşmesi yok",
+    },
+    { key: "startsAt", header: "Başlangıç", mobileLabel: "Başlangıç", priority: "secondary", render: (record) => record.startsAt },
+    { key: "endsAt", header: "Bitiş", mobileLabel: "Bitiş", priority: "optional", render: (record) => record.endsAt },
+    {
+      key: "isActive",
+      header: "Durum",
+      priority: "primary",
+      render: (record) => <StatusBadge tone={activeTone(record.isActive)}>{activeLabel(record.isActive)}</StatusBadge>,
+    },
     {
       key: "actions",
+      align: "center",
       header: "İşlem",
+      priority: "primary",
+      sticky: "right",
       render: (record) => (
         <span className="next-row-actions">
           <button type="button" onClick={() => openTermEditForm(record)} aria-label={`${record.name} dönemini düzenle`}>
@@ -135,6 +318,7 @@ export function AcademicCalendarPage() {
   }
 
   function openTermCreateForm() {
+    if (years.length === 0) return;
     setEditingTerm(null);
     setTermForm({
       ...emptyTermForm,
@@ -266,6 +450,7 @@ export function AcademicCalendarPage() {
         }
         aria-label="Akademik yıl yönetimi"
         columns={yearColumns}
+        density="compact"
         description="Kurumun eğitim yıllarını tarih aralıklarıyla yönet."
         emptyState={
           <EmptyState
@@ -280,6 +465,16 @@ export function AcademicCalendarPage() {
         getRowKey={(record) => record.id}
         loading={yearsQuery.isPending}
         rows={years}
+        summary={
+          <OperationSummary
+            actions={yearSummaryActions}
+            ariaLabel="Akademik yıl operasyon özeti"
+            badges={yearSummaryBadges}
+            items={yearSummaryItems}
+          />
+        }
+        tableCaption="Akademik yıl takvimi"
+        tableDescription="Yıl adı, tarih aralığı, aktiflik ve dönem bağlantısı URL durumuyla korunur."
         title="Akademik Takvim"
       />
       <CrudPage
@@ -291,7 +486,7 @@ export function AcademicCalendarPage() {
               sortOptions={academicTermSortOptions}
               state={termListQuery}
             />
-            <Button onClick={openTermCreateForm}>
+            <Button disabled={years.length === 0} onClick={openTermCreateForm} title={years.length === 0 ? "Önce akademik yıl ekle" : undefined}>
               <Plus size={17} aria-hidden="true" />
               Dönem ekle
             </Button>
@@ -299,13 +494,14 @@ export function AcademicCalendarPage() {
         }
         aria-label="Akademik dönem yönetimi"
         columns={termColumns}
+        density="compact"
         description="Akademik yıllara bağlı dönemleri yönet."
         emptyState={
           <EmptyState
             title="Dönem yok"
             description="Akademik yıl oluşturduktan sonra ilk dönemi ekle."
             hint="Dönemler ders programı, not ve rapor akışlarını bağlar."
-            primaryAction={{ label: "Dönem ekle", onClick: openTermCreateForm }}
+            primaryAction={years.length > 0 ? { label: "Dönem ekle", onClick: openTermCreateForm } : undefined}
           />
         }
         emptyText="Dönem kaydı yok"
@@ -313,6 +509,16 @@ export function AcademicCalendarPage() {
         getRowKey={(record) => record.id}
         loading={termsQuery.isPending}
         rows={terms}
+        summary={
+          <OperationSummary
+            actions={termSummaryActions}
+            ariaLabel="Akademik dönem operasyon özeti"
+            badges={termSummaryBadges}
+            items={termSummaryItems}
+          />
+        }
+        tableCaption="Akademik dönem takvimi"
+        tableDescription="Dönem adı, bağlı akademik yıl, tarih aralığı ve aktiflik durumu."
         title="Dönemler"
       />
       <FormModal
@@ -323,40 +529,36 @@ export function AcademicCalendarPage() {
         submitLabel={editingYear ? "Kaydet" : "Ekle"}
         title={editingYear ? "Akademik yıl düzenle" : "Akademik yıl ekle"}
       >
-        <label>
-          Akademik yıl adı
+        <Field label="Akademik yıl adı" description="Örn. 2026-2027">
           <Input
             required
             value={yearForm.name}
             onChange={(event) => setYearForm((current) => ({ ...current, name: event.target.value }))}
           />
-        </label>
-        <label>
-          Başlangıç
+        </Field>
+        <Field label="Başlangıç" description="Yılın kurum operasyonlarında açılacağı tarih.">
           <Input
             required
             type="date"
             value={yearForm.startsAt}
             onChange={(event) => setYearForm((current) => ({ ...current, startsAt: event.target.value }))}
           />
-        </label>
-        <label>
-          Bitiş
+        </Field>
+        <Field label="Bitiş" description="Yıl kapanış tarihi; dönemler bu aralıkta planlanır.">
           <Input
             required
             type="date"
             value={yearForm.endsAt}
             onChange={(event) => setYearForm((current) => ({ ...current, endsAt: event.target.value }))}
           />
-        </label>
-        <label>
+        </Field>
+        <Field label="Aktif" description="Aktif yıl ders programı, yoklama ve rapor bağlamını etkiler.">
           <input
             checked={yearForm.isActive}
             type="checkbox"
             onChange={(event) => setYearForm((current) => ({ ...current, isActive: event.target.checked }))}
           />
-          Aktif
-        </label>
+        </Field>
       </FormModal>
       <FormModal
         description="Dönem adı, akademik yıl ve tarih aralığı zorunludur."
@@ -366,9 +568,8 @@ export function AcademicCalendarPage() {
         submitLabel={editingTerm ? "Kaydet" : "Ekle"}
         title={editingTerm ? "Dönem düzenle" : "Dönem ekle"}
       >
-        <label>
-          Akademik yıl
-          <select
+        <Field label="Akademik yıl" description="Dönemin bağlı olduğu akademik yıl.">
+          <Select
             required
             value={termForm.academicYearId}
             onChange={(event) => setTermForm((current) => ({ ...current, academicYearId: event.target.value }))}
@@ -379,42 +580,38 @@ export function AcademicCalendarPage() {
                 {record.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Dönem adı
+          </Select>
+        </Field>
+        <Field label="Dönem adı" description="Örn. 1. Dönem veya Bahar.">
           <Input
             required
             value={termForm.name}
             onChange={(event) => setTermForm((current) => ({ ...current, name: event.target.value }))}
           />
-        </label>
-        <label>
-          Başlangıç
+        </Field>
+        <Field label="Başlangıç" description="Dönemin başladığı tarih.">
           <Input
             required
             type="date"
             value={termForm.startsAt}
             onChange={(event) => setTermForm((current) => ({ ...current, startsAt: event.target.value }))}
           />
-        </label>
-        <label>
-          Bitiş
+        </Field>
+        <Field label="Bitiş" description="Dönemin kapandığı tarih.">
           <Input
             required
             type="date"
             value={termForm.endsAt}
             onChange={(event) => setTermForm((current) => ({ ...current, endsAt: event.target.value }))}
           />
-        </label>
-        <label>
+        </Field>
+        <Field label="Aktif" description="Aktif dönem not, yoklama ve karne bağlamında öne çıkar.">
           <input
             checked={termForm.isActive}
             type="checkbox"
             onChange={(event) => setTermForm((current) => ({ ...current, isActive: event.target.checked }))}
           />
-          Aktif
-        </label>
+        </Field>
       </FormModal>
       {confirmationDialog}
     </>
@@ -497,4 +694,20 @@ async function deleteAcademicTerm(accessToken: string, id: string) {
 
 function activeLabel(isActive: boolean) {
   return isActive ? "Aktif" : "Pasif";
+}
+
+function activeTone(isActive: boolean): StatusBadgeProps["tone"] {
+  return isActive ? "success" : "neutral";
+}
+
+function formatAcademicYearSort(value: string) {
+  return academicYearSortOptions.find((option) => option.value === value)?.label ?? "Varsayılan";
+}
+
+function formatAcademicTermSort(value: string) {
+  return academicTermSortOptions.find((option) => option.value === value)?.label ?? "Varsayılan";
+}
+
+function formatCount(value: number) {
+  return value.toLocaleString("tr-TR");
 }

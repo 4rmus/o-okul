@@ -1,6 +1,7 @@
 "use client";
 
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AcademicTermRecord,
@@ -13,13 +14,13 @@ import type {
   PaymentPlanWithInstallmentsRecord,
   StudentRecord,
 } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn } from "@uzman-hocam/ui";
-import { CheckCircle2, Clock, Pencil, RotateCcw, TriangleAlert } from "lucide-react";
+import { CrudPage, EmptyState, Field, FormModal, Input, Select, StatusBadge, type DataTableColumn } from "@uzman-hocam/ui";
+import { CheckCircle2, Pencil, RotateCcw, TriangleAlert } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, type ListMeta } from "../../../../src/api-client.js";
-import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
-import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
+import { buildListUrl, initialListQuery, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 interface FinanceFilters {
   campusId: string;
@@ -51,6 +52,10 @@ interface InstallmentForm {
   status: PaymentInstallmentStatus;
 }
 
+interface QueryParamReader {
+  get(name: string): string | null;
+}
+
 const emptyFilters: FinanceFilters = {
   campusId: "",
   gradeLevelId: "",
@@ -69,12 +74,20 @@ const emptyReferences: FinanceReferences = {
   terms: [],
 };
 
+const financeDefaultListQuery: ListQueryState = { ...initialListQuery, sort: "dueDate" };
+const financeFilterKeys: Array<keyof FinanceFilters> = ["campusId", "gradeLevelId", "classId", "courseId", "termId", "studentId"];
+
 export function FinancePage() {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const tenantId = auth?.session.tenantId ?? "anonymous";
-  const [listQuery, setListQuery] = useState<ListQueryState>({ ...initialListQuery, sort: "dueDate" });
-  const [filters, setFilters] = useState<FinanceFilters>(emptyFilters);
+  const searchParamsKey = searchParams.toString();
+  const [listQuery, setListQuery] = useUrlListState(searchParams, {
+    defaultState: financeDefaultListQuery,
+    sortOptions: paymentSortOptions,
+  });
+  const [filters, setFilters] = useState<FinanceFilters>(() => readFinanceFilters(searchParams));
   const [editingRow, setEditingRow] = useState<InstallmentRow | null>(null);
   const [form, setForm] = useState<InstallmentForm>({ amount: "", dueDate: "", status: "PENDING" });
   const [error, setError] = useState("");
@@ -106,46 +119,77 @@ export function FinancePage() {
   const classNameById = useMemo(() => new Map(references.classes.map((klass) => [klass.id, klass.name])), [references.classes]);
   const courseNameById = useMemo(() => new Map(references.courses.map((course) => [course.id, formatCourseName(course.name)])), [references.courses]);
   const termNameById = useMemo(() => new Map(references.terms.map((term) => [term.id, term.name])), [references.terms]);
+  const financeSummaryItems = buildFinanceSummaryItems(metrics, rows.length);
+  const financeSummaryBadges = buildFinanceSummaryBadges(filters, listQuery);
+  const financeSummaryActions = buildFinanceSummaryActions(metrics, filters);
+
+  useEffect(() => {
+    const nextFilters = readFinanceFilters(searchParams);
+    setFilters((current) => (isSameFinanceFilters(current, nextFilters) ? current : nextFilters));
+  }, [searchParams, searchParamsKey]);
 
   const columns: Array<DataTableColumn<InstallmentRow>> = [
     {
       key: "student",
       header: "Öğrenci",
-      render: (row) => studentNameById.get(row.plan.studentId) ?? row.plan.studentId,
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (row) => studentNameById.get(row.plan.studentId) ?? "Öğrenci kapsamı doğrulanmadı",
+      sticky: true,
     },
     {
       key: "plan",
       header: "Plan",
+      mobilePriority: "secondary",
+      priority: "secondary",
       render: (row) => row.plan.title,
     },
     {
       key: "context",
       header: "Bağlam",
+      mobilePriority: "hidden",
+      priority: "optional",
       render: (row) => formatContext(row.plan, { campusNameById, classNameById, courseNameById, gradeLevelNameById, termNameById }),
     },
     {
       key: "installment",
       header: "Taksit",
+      mobilePriority: "secondary",
+      priority: "secondary",
       render: (row) => `${row.installment.installmentNo}. taksit`,
     },
     {
       key: "amount",
+      align: "right",
       header: "Tutar",
+      mobilePriority: "primary",
+      priority: "primary",
       render: (row) => formatMoney(row.installment.amount, row.plan.currency),
     },
     {
       key: "dueDate",
       header: "Vade",
+      mobilePriority: "secondary",
+      priority: "secondary",
       render: (row) => row.installment.dueDate,
     },
     {
       key: "status",
       header: "Durum",
-      render: (row) => statusLabel(row.installment.status),
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (row) => (
+        <StatusBadge tone={statusTone(row.installment.status)}>
+          {statusLabel(row.installment.status)}
+        </StatusBadge>
+      ),
     },
     {
       key: "actions",
+      align: "center",
       header: "İşlem",
+      mobilePriority: "primary",
+      priority: "primary",
       render: (row) => (
         <span className="next-row-actions">
           <button type="button" onClick={() => openEditForm(row)} aria-label={`${row.plan.title} ${row.installment.installmentNo}. taksit düzenle`}>
@@ -162,12 +206,14 @@ export function FinancePage() {
           </button>
         </span>
       ),
+      sticky: "right",
     },
   ];
 
   function updateFilters(nextFilters: FinanceFilters) {
     setFilters(nextFilters);
-    setListQuery((current) => ({ ...current, page: 1 }));
+    setListQuery({ ...listQuery, page: 1 });
+    writeFinanceFiltersToUrl(nextFilters);
   }
 
   function openEditForm(row: InstallmentRow) {
@@ -222,14 +268,6 @@ export function FinancePage() {
 
   return (
     <>
-      <MetricPanelGrid
-        ariaLabel="Finans özeti"
-        metrics={[
-          { label: "Bekleyen ödeme", value: formatMoney(metrics.pendingAmount, metrics.currency) },
-          { label: "Gecikmiş", value: formatMoney(metrics.overdueAmount, metrics.currency) },
-          { label: "Ödenen", value: formatMoney(metrics.paidAmount, metrics.currency) },
-        ]}
-      />
       <CrudPage
         actions={
           <>
@@ -250,8 +288,19 @@ export function FinancePage() {
         emptyText="Ödeme taksiti yok"
         error={error || (plansQuery.isError ? "Ödeme planları alınamadı." : referencesQuery.isError ? "Seçim listeleri alınamadı." : undefined)}
         getRowKey={(row) => row.id}
+        density="compact"
         loading={plansQuery.isPending || referencesQuery.isPending}
         rows={rows}
+        summary={
+          <OperationSummary
+            actions={financeSummaryActions}
+            ariaLabel="Finans operasyon özeti"
+            badges={financeSummaryBadges}
+            items={financeSummaryItems}
+          />
+        }
+        tableCaption="Ödeme taksitleri"
+        tableDescription="Bekleyen, geciken ve ödenen taksitler seçili akademik bağlama göre listelenir."
         title="Finans"
       />
       <InstallmentFormModal
@@ -276,62 +325,66 @@ function FinanceFiltersPanel({
 }) {
   return (
     <div className="next-list-controls" aria-label="Finans filtreleri">
-      <label>
-        Öğrenci
-        <select value={filters.studentId} onChange={(event) => onChange({ ...filters, studentId: event.target.value })}>
+      <Field label="Öğrenci">
+        <Select aria-label="Öğrenci" value={filters.studentId} onChange={(event) => onChange({ ...filters, studentId: event.target.value })}>
           <option value="">Tümü</option>
           {references.students.map((student) => (
             <option key={student.id} value={student.id}>
               {student.firstName} {student.lastName}
             </option>
           ))}
-        </select>
-      </label>
-      <label>
-        Kampüs
-        <select value={filters.campusId} onChange={(event) => onChange({ ...filters, campusId: event.target.value })}>
+        </Select>
+      </Field>
+      <Field label="Kampüs">
+        <Select aria-label="Kampüs" value={filters.campusId} onChange={(event) => onChange({ ...filters, campusId: event.target.value })}>
           <option value="">Tümü</option>
           {references.campuses.map((campus) => (
-            <option key={campus.id} value={campus.id}>{campus.name}</option>
+            <option key={campus.id} value={campus.id}>
+              {campus.name}
+            </option>
           ))}
-        </select>
-      </label>
-      <label>
-        Seviye
-        <select value={filters.gradeLevelId} onChange={(event) => onChange({ ...filters, gradeLevelId: event.target.value })}>
+        </Select>
+      </Field>
+      <Field label="Seviye">
+        <Select aria-label="Seviye" value={filters.gradeLevelId} onChange={(event) => onChange({ ...filters, gradeLevelId: event.target.value })}>
           <option value="">Tümü</option>
           {references.gradeLevels.map((level) => (
-            <option key={level.id} value={level.id}>{level.name}</option>
+            <option key={level.id} value={level.id}>
+              {level.name}
+            </option>
           ))}
-        </select>
-      </label>
-      <label>
-        Sınıf
-        <select value={filters.classId} onChange={(event) => onChange({ ...filters, classId: event.target.value })}>
+        </Select>
+      </Field>
+      <Field label="Sınıf">
+        <Select aria-label="Sınıf" value={filters.classId} onChange={(event) => onChange({ ...filters, classId: event.target.value })}>
           <option value="">Tümü</option>
           {references.classes.map((klass) => (
-            <option key={klass.id} value={klass.id}>{klass.name}</option>
+            <option key={klass.id} value={klass.id}>
+              {klass.name}
+            </option>
           ))}
-        </select>
-      </label>
-      <label>
-        Ders
-        <select value={filters.courseId} onChange={(event) => onChange({ ...filters, courseId: event.target.value })}>
+        </Select>
+      </Field>
+      <Field label="Ders">
+        <Select aria-label="Ders" value={filters.courseId} onChange={(event) => onChange({ ...filters, courseId: event.target.value })}>
           <option value="">Tümü</option>
           {references.courses.map((course) => (
-            <option key={course.id} value={course.id}>{formatCourseName(course.name)}</option>
+            <option key={course.id} value={course.id}>
+              {formatCourseName(course.name)}
+            </option>
           ))}
-        </select>
-      </label>
-      <label>
-        Dönem
-        <select value={filters.termId} onChange={(event) => onChange({ ...filters, termId: event.target.value })}>
+        </Select>
+      </Field>
+      <Field label="Dönem">
+        <Select aria-label="Dönem" value={filters.termId} onChange={(event) => onChange({ ...filters, termId: event.target.value })}>
           <option value="">Tümü</option>
           {references.terms.map((term) => (
-            <option key={term.id} value={term.id}>{term.name}</option>
+            <option key={term.id} value={term.id}>
+              {term.name}
+            </option>
           ))}
-        </select>
-      </label>
+        </Select>
+      </Field>
     </div>
   );
 }
@@ -358,23 +411,20 @@ function InstallmentFormModal({
       submitLabel="Kaydet"
       title="Taksit düzenle"
     >
-      <label>
-        Tutar
+      <Field label="Tutar">
         <Input required inputMode="decimal" value={form.amount} onChange={(event) => onChange({ ...form, amount: event.target.value })} />
-      </label>
-      <label>
-        Vade
+      </Field>
+      <Field label="Vade">
         <Input required type="date" value={form.dueDate} onChange={(event) => onChange({ ...form, dueDate: event.target.value })} />
-      </label>
-      <label>
-        Durum
-        <select value={form.status} onChange={(event) => onChange({ ...form, status: event.target.value as PaymentInstallmentStatus })}>
+      </Field>
+      <Field label="Durum">
+        <Select value={form.status} onChange={(event) => onChange({ ...form, status: event.target.value as PaymentInstallmentStatus })}>
           <option value="PENDING">Beklemede</option>
           <option value="PAID">Ödendi</option>
           <option value="OVERDUE">Gecikmiş</option>
           <option value="CANCELED">İptal</option>
-        </select>
-      </label>
+        </Select>
+      </Field>
     </FormModal>
   );
 }
@@ -453,6 +503,89 @@ function calculateMetrics(plans: PaymentPlanWithInstallmentsRecord[]) {
   };
 }
 
+function buildFinanceSummaryItems(metrics: ReturnType<typeof calculateMetrics>, rowCount: number): OperationSummaryItem[] {
+  return [
+    {
+      description: "Bekleyen ve geciken toplam tahsilat",
+      key: "pending",
+      label: "Bekleyen ödeme",
+      tone: metrics.pendingAmount > 0 ? "warning" : "success",
+      value: formatMoney(metrics.pendingAmount, metrics.currency),
+    },
+    {
+      description: "Öncelikli takip gerektiren toplam",
+      key: "overdue",
+      label: "Gecikmiş",
+      tone: metrics.overdueAmount > 0 ? "danger" : "success",
+      value: formatMoney(metrics.overdueAmount, metrics.currency),
+    },
+    {
+      description: "Seçili kapsamda tahsil edildi",
+      key: "paid",
+      label: "Ödenen",
+      tone: metrics.paidAmount > 0 ? "success" : "default",
+      value: formatMoney(metrics.paidAmount, metrics.currency),
+    },
+    {
+      description: "Liste yoğun görünümde izlenir",
+      key: "rows",
+      label: "Taksit satırı",
+      value: formatCount(rowCount),
+    },
+  ];
+}
+
+function buildFinanceSummaryBadges(filters: FinanceFilters, listQuery: ListQueryState): OperationSummaryBadge[] {
+  const filterCount = countActiveFinanceFilters(filters);
+  return [
+    {
+      key: "scope",
+      label: "Kurum finans görünümü",
+      tone: "info",
+    },
+    {
+      key: "filters",
+      label: filterCount > 0 ? `${filterCount} filtre aktif` : "Tüm finans kapsamı",
+      tone: filterCount > 0 ? "info" : "neutral",
+    },
+    {
+      key: "sort",
+      label: `Sıralama: ${formatSortLabel(listQuery.sort)}`,
+      tone: "neutral",
+    },
+  ];
+}
+
+function buildFinanceSummaryActions(metrics: ReturnType<typeof calculateMetrics>, filters: FinanceFilters): OperationSummaryAction[] {
+  const filterCount = countActiveFinanceFilters(filters);
+  return [
+    {
+      detail: "Gecikmiş taksitler öncelikli tahsilat listesinde kalır",
+      key: "overdue-follow-up",
+      label: "Geciken taksit",
+      status: metrics.overdueAmount > 0 ? "Takip" : "Temiz",
+      tone: metrics.overdueAmount > 0 ? "danger" : "success",
+      value: formatMoney(metrics.overdueAmount, metrics.currency),
+    },
+    {
+      detail: "Bekleyen ve geciken tahsilat birlikte izlenir",
+      key: "pending-collection",
+      label: "Bekleyen tahsilat",
+      status: metrics.pendingAmount > 0 ? "Açık" : "Kapalı",
+      tone: metrics.pendingAmount > 0 ? "warning" : "success",
+      value: formatMoney(metrics.pendingAmount, metrics.currency),
+    },
+    {
+      detail: filterCount > 0 ? "Öğrenci ve akademik bağlam filtreleri aktif" : "Kurum genel finans listesi",
+      key: "reconciliation-scope",
+      label: "Mutabakat kapsamı",
+      status: filterCount > 0 ? "Odak" : "Genel",
+      tone: filterCount > 0 ? "info" : "neutral",
+      value: filterCount > 0 ? `${filterCount} filtre` : "Tüm kayıtlar",
+    },
+  ];
+}
+
 function sumAmounts(installments: PaymentInstallmentRecord[]) {
   return installments.reduce((total, installment) => total + installment.amount, 0);
 }
@@ -476,12 +609,13 @@ function formatContext(
     termNameById: Map<string, string>;
   },
 ) {
+  const fallback = "Bağlam doğrulanmadı";
   const parts = [
-    plan.campusId ? (maps.campusNameById.get(plan.campusId) ?? plan.campusId) : "",
-    plan.gradeLevelId ? (maps.gradeLevelNameById.get(plan.gradeLevelId) ?? plan.gradeLevelId) : "",
-    plan.classId ? (maps.classNameById.get(plan.classId) ?? plan.classId) : "",
-    plan.courseId ? (maps.courseNameById.get(plan.courseId) ?? plan.courseId) : "",
-    plan.termId ? (maps.termNameById.get(plan.termId) ?? plan.termId) : "",
+    plan.campusId ? (maps.campusNameById.get(plan.campusId) ?? fallback) : "",
+    plan.gradeLevelId ? (maps.gradeLevelNameById.get(plan.gradeLevelId) ?? fallback) : "",
+    plan.classId ? (maps.classNameById.get(plan.classId) ?? fallback) : "",
+    plan.courseId ? (maps.courseNameById.get(plan.courseId) ?? fallback) : "",
+    plan.termId ? (maps.termNameById.get(plan.termId) ?? fallback) : "",
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(" / ") : "-";
 }
@@ -494,6 +628,58 @@ function statusLabel(status: PaymentInstallmentStatus) {
     PENDING: "Beklemede",
   };
   return labels[status];
+}
+
+function statusTone(status: PaymentInstallmentStatus) {
+  if (status === "PAID") return "success";
+  if (status === "OVERDUE") return "danger";
+  if (status === "CANCELED") return "neutral";
+  return "warning";
+}
+
+function readFinanceFilters(searchParams: QueryParamReader): FinanceFilters {
+  return {
+    campusId: searchParams.get("campusId") ?? emptyFilters.campusId,
+    classId: searchParams.get("classId") ?? emptyFilters.classId,
+    courseId: searchParams.get("courseId") ?? emptyFilters.courseId,
+    gradeLevelId: searchParams.get("gradeLevelId") ?? emptyFilters.gradeLevelId,
+    studentId: searchParams.get("studentId") ?? emptyFilters.studentId,
+    termId: searchParams.get("termId") ?? emptyFilters.termId,
+  };
+}
+
+function writeFinanceFiltersToUrl(filters: FinanceFilters) {
+  if (typeof window === "undefined") return;
+
+  const url = new URL(window.location.href);
+  for (const key of financeFilterKeys) {
+    setOptionalQueryParam(url.searchParams, key, filters[key]);
+  }
+  window.history.replaceState(window.history.state, "", `${url.pathname}?${url.searchParams.toString()}${url.hash}`);
+}
+
+function isSameFinanceFilters(left: FinanceFilters, right: FinanceFilters) {
+  return financeFilterKeys.every((key) => left[key] === right[key]);
+}
+
+function setOptionalQueryParam(searchParams: URLSearchParams, key: string, value: string) {
+  if (value) {
+    searchParams.set(key, value);
+    return;
+  }
+  searchParams.delete(key);
+}
+
+function countActiveFinanceFilters(filters: FinanceFilters) {
+  return financeFilterKeys.filter((key) => filters[key]).length;
+}
+
+function formatSortLabel(sort: string) {
+  return paymentSortOptions.find((option) => option.value === sort)?.label ?? "Varsayılan";
+}
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat("tr-TR").format(value);
 }
 
 function formatMoney(amount: number, currency: string) {

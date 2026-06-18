@@ -2,8 +2,21 @@
 
 import { type FormEvent, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
+import {
+  Button,
+  CrudPage,
+  EmptyState,
+  Field,
+  FormModal,
+  Input,
+  Select,
+  StatusBadge,
+  type DataTableColumn,
+  type StatusBadgeProps,
+  useConfirmDialog,
+} from "@uzman-hocam/ui";
 import { Plus } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError } from "../../../../src/api-client.js";
@@ -13,7 +26,8 @@ import {
   type TenantCreateFormState,
   type TenantFormState,
 } from "../../../../src/form-validation.js";
-import { initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+import { ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../../kurum/_shared/operation-summary.js";
 import { PageFrame } from "../../kurum/_shared/page-frame.js";
 import { createTenant, deleteTenant, loadTenants, type TenantRecord } from "../_shared/system-api.js";
 
@@ -39,9 +53,10 @@ const emptyCreateForm: TenantCreateFormState = {
 
 export function TenantsPage() {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useConfirmDialog();
-  const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
+  const [listQuery, setListQuery] = useUrlListState(searchParams, { sortOptions: tenantSortOptions });
   const queryKey = ["next-tenants", listQuery];
   const listQueryKey = ["next-tenants"];
   const tenantsQuery = useQuery({
@@ -52,35 +67,102 @@ export function TenantsPage() {
   });
   const [form, setForm] = useState<TenantCreateFormState>(emptyCreateForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [issuedToken, setIssuedToken] = useState<{ email: string; token: string } | null>(null);
+  const [issuedToken, setIssuedToken] = useState<{ email: string; tenantId: string; token: string } | null>(null);
+  const [isIssuedTokenRevealed, setIsIssuedTokenRevealed] = useState(false);
   const [deletingTenantId, setDeletingTenantId] = useState("");
   const [error, setError] = useState("");
   const rows = tenantsQuery.data?.data ?? [];
+  const activeTenantCount = rows.filter((tenant) => tenant.status === "ACTIVE").length;
+  const trialTenantCount = rows.filter((tenant) => tenant.status === "TRIAL").length;
+  const suspendedTenantCount = rows.filter((tenant) => tenant.status === "SUSPENDED").length;
+  const expiringTenantCount = rows.filter((tenant) => licenseDaysRemaining(tenant.licenseEndsAt) <= 30).length;
+  const overSeatLimitCount = rows.filter((tenant) => isSeatLimitExceeded(tenant)).length;
+  const tenantSummaryItems: OperationSummaryItem[] = [
+    {
+      description: "Filtrelenmiş platform kurumu",
+      key: "total",
+      label: "Kurum toplamı",
+      value: formatCount(tenantsQuery.data?.meta?.total ?? rows.length),
+    },
+    {
+      description: "Aktif / deneme / askıda",
+      key: "status",
+      label: "Durum dağılımı",
+      tone: suspendedTenantCount > 0 ? "warning" : "success",
+      value: `${formatCount(activeTenantCount)} / ${formatCount(trialTenantCount)} / ${formatCount(suspendedTenantCount)}`,
+    },
+    {
+      description: "30 gün içinde biten lisans",
+      key: "license",
+      label: "Lisans riski",
+      tone: expiringTenantCount > 0 ? "warning" : "success",
+      value: formatCount(expiringTenantCount),
+    },
+    {
+      description: "Koltuk limiti aşımı",
+      key: "seats",
+      label: "Koltuk riski",
+      tone: overSeatLimitCount > 0 ? "danger" : "success",
+      value: formatCount(overSeatLimitCount),
+    },
+  ];
+  const tenantSummaryBadges: OperationSummaryBadge[] = [
+    {
+      key: "scope",
+      label: "SYSTEM_ADMIN kapsamı",
+      tone: "info",
+    },
+    {
+      key: "token",
+      label: issuedToken ? (isIssuedTokenRevealed ? "Token açık" : "Token maskeli") : "Token beklemede yok",
+      tone: issuedToken ? (isIssuedTokenRevealed ? "warning" : "neutral") : "neutral",
+    },
+    {
+      key: "sort",
+      label: `Sıralama: ${formatTenantSort(listQuery.sort)}`,
+      tone: "neutral",
+    },
+  ];
 
   const columns: Array<DataTableColumn<TenantRecord>> = [
-    { key: "name", header: "Kurum", render: (tenant) => tenant.name },
-    { key: "slug", header: "Slug", render: (tenant) => tenant.slug },
-    { key: "plan", header: "Plan", render: (tenant) => tenant.plan },
-    { key: "licenseEndsAt", header: "Lisans bitişi", render: (tenant) => formatDate(tenant.licenseEndsAt) },
-    { key: "seatLimit", header: "Koltuk", render: (tenant) => formatSeatUsage(tenant) },
-    { key: "status", header: "Durum", render: (tenant) => statusLabel(tenant.status) },
+    { key: "name", header: "Kurum", priority: "primary", render: (tenant) => tenant.name, sticky: "left" },
+    { key: "slug", header: "Slug", priority: "secondary", render: (tenant) => tenant.slug },
+    {
+      key: "plan",
+      header: "Plan",
+      priority: "secondary",
+      render: (tenant) => <StatusBadge tone={planTone(tenant.plan)}>{planLabel(tenant.plan)}</StatusBadge>,
+    },
+    { key: "licenseEndsAt", header: "Lisans bitişi", priority: "optional", render: (tenant) => formatDate(tenant.licenseEndsAt) },
+    { key: "seatLimit", header: "Koltuk", priority: "secondary", render: (tenant) => formatSeatUsage(tenant) },
+    {
+      key: "status",
+      header: "Durum",
+      priority: "secondary",
+      render: (tenant) => <StatusBadge tone={statusTone(tenant.status)}>{statusLabel(tenant.status)}</StatusBadge>,
+    },
     {
       key: "actions",
       header: "İşlem",
+      priority: "primary",
       render: (tenant) => (
         <div className="next-row-actions">
-          <Link href={`/sistem/kurumlar/${encodeURIComponent(tenant.id)}`}>Detay</Link>
-          <button type="button" disabled={deletingTenantId === tenant.id} onClick={() => void handleDeleteTenant(tenant)}>
+          <Link href={`/sistem/kurumlar/${encodeURIComponent(tenant.id)}`} aria-label={`${tenant.name} detay`}>
+            Detay
+          </Link>
+          <button type="button" disabled={deletingTenantId === tenant.id} onClick={() => void handleDeleteTenant(tenant)} aria-label={`${tenant.name} sil`}>
             Sil
           </button>
         </div>
       ),
+      sticky: "right",
     },
   ];
 
   function openCreateForm() {
     setForm(emptyCreateForm);
     setIssuedToken(null);
+    setIsIssuedTokenRevealed(false);
     setError("");
     setIsFormOpen(true);
   }
@@ -113,7 +195,12 @@ export function TenantsPage() {
       const created = await createTenant(auth.accessToken, parsedForm.data);
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
-      setIssuedToken(created.admin.activationToken ? { email: created.admin.email, token: created.admin.activationToken } : null);
+      setIssuedToken(
+        created.admin.activationToken
+          ? { email: created.admin.email, tenantId: created.tenant.id, token: created.admin.activationToken }
+          : null,
+      );
+      setIsIssuedTokenRevealed(false);
       void queryClient.invalidateQueries({ queryKey: ["next-tenant", created.tenant.id] });
     } catch (createError) {
       setError(tenantCreateErrorMessage(createError));
@@ -134,6 +221,10 @@ export function TenantsPage() {
     setDeletingTenantId(tenant.id);
     try {
       await deleteTenant(auth.accessToken, tenant.id);
+      if (issuedToken?.tenantId === tenant.id) {
+        setIssuedToken(null);
+        setIsIssuedTokenRevealed(false);
+      }
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       void queryClient.invalidateQueries({ queryKey: ["next-tenant", tenant.id] });
     } catch {
@@ -170,12 +261,49 @@ export function TenantsPage() {
         getRowKey={(tenant) => tenant.id}
         loading={tenantsQuery.isPending}
         rows={rows}
+        summary={
+          <OperationSummary ariaLabel="Sistem kurum operasyon özeti" badges={tenantSummaryBadges} items={tenantSummaryItems} />
+        }
+        tableCaption="Kurum operasyon listesi"
+        tableDescription="Platform kurumlarının plan, lisans, koltuk ve erişim durumu."
         title="Kurumlar"
       />
       {issuedToken ? (
-        <section className="next-token-panel" aria-label="İlk admin aktivasyon tokenı">
-          <strong>{issuedToken.email}</strong>
-          <code>{issuedToken.token}</code>
+        <section
+          aria-label="İlk admin aktivasyon tokenı"
+          aria-live="polite"
+          className="next-token-panel"
+          data-token-state={isIssuedTokenRevealed ? "revealed" : "masked"}
+        >
+          <div className="next-token-panel__body">
+            <div className="next-token-panel__status" aria-label="İlk admin token güven durumu">
+              <StatusBadge tone="warning">Tek seferlik</StatusBadge>
+              <StatusBadge tone={isIssuedTokenRevealed ? "warning" : "neutral"}>
+                {isIssuedTokenRevealed ? "Token açık" : "Token maskeli"}
+              </StatusBadge>
+              <StatusBadge tone="info">SYSTEM_ADMIN işlemi</StatusBadge>
+            </div>
+            <strong>{issuedToken.email}</strong>
+            <p>İlk admin aktivasyon tokenı yalnız paylaşılacağı anda gösterilir; işlem tamamlanınca panelden kaldır.</p>
+          </div>
+          <code className="next-token-panel__token">
+            {isIssuedTokenRevealed ? issuedToken.token : maskActivationToken(issuedToken.token)}
+          </code>
+          <div className="next-token-panel__actions">
+            <Button type="button" variant="secondary" onClick={() => setIsIssuedTokenRevealed((current) => !current)}>
+              {isIssuedTokenRevealed ? "Tokenı gizle" : "Tokenı göster"}
+            </Button>
+            <Button
+              type="button"
+              variant={isIssuedTokenRevealed ? "primary" : "secondary"}
+              onClick={() => {
+                setIssuedToken(null);
+                setIsIssuedTokenRevealed(false);
+              }}
+            >
+              Tokenı kapat
+            </Button>
+          </div>
         </section>
       ) : null}
       <TenantFormModal
@@ -221,64 +349,58 @@ function TenantFormModal({
       submitLabel={submitLabel}
       title={title}
     >
-      <label>
-        Kurum adı
+      <Field label="Kurum adı">
         <Input required value={form.name} onChange={(event) => onNameChange(event.target.value)} />
-      </label>
-      <label>
-        Slug
+      </Field>
+      <Field label="Slug" description="Kurumun teknik kısa adı. Örn: yeni-kurum. URL ve sistem kimliği için kullanılır.">
         <Input required value={form.slug} onChange={(event) => onChange({ ...form, slug: event.target.value })} />
-        <small className="next-field-help">Kurumun teknik kısa adı. Örn: yeni-kurum. URL ve sistem kimliği için kullanılır.</small>
-      </label>
-      <label>
-        Plan
-        <select value={form.plan} onChange={(event) => onChange({ ...form, plan: event.target.value as TenantFormState["plan"] })}>
-          <option value="TRIAL">TRIAL</option>
-          <option value="PRO">PRO</option>
-          <option value="ENTERPRISE">ENTERPRISE</option>
-        </select>
-      </label>
-      <label>
-        Lisans başlangıç
+      </Field>
+      <Field label="Plan">
+        <Select value={form.plan} onChange={(event) => onChange({ ...form, plan: event.target.value as TenantFormState["plan"] })}>
+          <option value="TRIAL">Deneme</option>
+          <option value="PRO">Pro</option>
+          <option value="ENTERPRISE">Enterprise</option>
+        </Select>
+      </Field>
+      <Field label="Lisans başlangıç">
         <Input type="date" value={form.licenseStartsAt ?? ""} onChange={(event) => onChange({ ...form, licenseStartsAt: event.target.value })} />
-      </label>
-      <label>
-        Lisans bitiş
+      </Field>
+      <Field label="Lisans bitiş">
         <Input type="date" value={form.licenseEndsAt ?? ""} onChange={(event) => onChange({ ...form, licenseEndsAt: event.target.value })} />
-      </label>
-      <label>
-        Koltuk limiti
-        <Input inputMode="numeric" value={form.seatLimit ?? ""} onChange={(event) => onChange({ ...form, seatLimit: event.target.value })} />
-        <small className="next-field-help">Bu kuruma tanımlanabilecek aktif kullanıcı sayısı. Boş bırakırsan sınırsız olur.</small>
-      </label>
-      <label>
-        Durum
-        <select value={form.status} onChange={(event) => onChange({ ...form, status: event.target.value as TenantFormState["status"] })}>
-          <option value="ACTIVE">ACTIVE</option>
-          <option value="SUSPENDED">SUSPENDED</option>
-          <option value="TRIAL">TRIAL</option>
-        </select>
-      </label>
-      <label>
-        Admin ad soyad
+      </Field>
+      <Field label="Koltuk limiti" description="Bu kuruma tanımlanabilecek aktif kullanıcı sayısı. Boş bırakırsan sınırsız olur.">
+        <Input
+          inputMode="numeric"
+          min={1}
+          type="number"
+          value={form.seatLimit ?? ""}
+          onChange={(event) => onChange({ ...form, seatLimit: event.target.value })}
+        />
+      </Field>
+      <Field label="Durum">
+        <Select value={form.status} onChange={(event) => onChange({ ...form, status: event.target.value as TenantFormState["status"] })}>
+          <option value="ACTIVE">Aktif</option>
+          <option value="SUSPENDED">Askıda</option>
+          <option value="TRIAL">Deneme</option>
+        </Select>
+      </Field>
+      <Field label="Admin ad soyad">
         <Input
           required
           value={form.firstAdmin.name}
           onChange={(event) => onChange({ ...form, firstAdmin: { ...form.firstAdmin, name: event.target.value } })}
         />
-      </label>
-      <label>
-        Admin e-posta
+      </Field>
+      <Field label="Admin e-posta">
         <Input
           required
           type="email"
           value={form.firstAdmin.email}
           onChange={(event) => onChange({ ...form, firstAdmin: { ...form.firstAdmin, email: event.target.value } })}
         />
-      </label>
-      <label>
-        İlk admin modu
-        <select
+      </Field>
+      <Field label="İlk admin modu">
+        <Select
           value={form.firstAdmin.mode}
           onChange={(event) =>
             onChange({
@@ -293,11 +415,10 @@ function TenantFormModal({
         >
           <option value="password">Şifre belirle</option>
           <option value="invitation">Davet gönder</option>
-        </select>
-      </label>
+        </Select>
+      </Field>
       {form.firstAdmin.mode === "password" ? (
-        <label>
-          Admin şifre
+        <Field label="Admin şifre">
           <Input
             required
             minLength={8}
@@ -305,7 +426,7 @@ function TenantFormModal({
             value={form.firstAdmin.password}
             onChange={(event) => onChange({ ...form, firstAdmin: { ...form.firstAdmin, password: event.target.value } })}
           />
-        </label>
+        </Field>
       ) : null}
     </FormModal>
   );
@@ -331,6 +452,22 @@ function formatSeatUsage(tenant: TenantRecord) {
   return tenant.seatLimit ? `${used} / ${tenant.seatLimit}` : `${used} / Sınırsız`;
 }
 
+function formatCount(value: number) {
+  return new Intl.NumberFormat("tr-TR").format(value);
+}
+
+function licenseDaysRemaining(value: string | undefined) {
+  if (!value) return Number.POSITIVE_INFINITY;
+  const end = new Date(value).getTime();
+  if (Number.isNaN(end)) return Number.POSITIVE_INFINITY;
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Math.ceil((end - Date.now()) / dayMs);
+}
+
+function isSeatLimitExceeded(tenant: TenantRecord) {
+  return Boolean(tenant.seatLimit && (tenant.activeSeatCount ?? 0) > tenant.seatLimit);
+}
+
 function statusLabel(status: string) {
   if (status === "ACTIVE") return "Aktif";
   if (status === "SUSPENDED") return "Askıda";
@@ -338,11 +475,42 @@ function statusLabel(status: string) {
   return status;
 }
 
+function statusTone(status: string): StatusBadgeProps["tone"] {
+  if (status === "ACTIVE") return "success";
+  if (status === "SUSPENDED") return "danger";
+  if (status === "TRIAL") return "warning";
+  return "neutral";
+}
+
+function planLabel(plan: string) {
+  if (plan === "ENTERPRISE") return "Enterprise";
+  if (plan === "PRO") return "Pro";
+  if (plan === "TRIAL") return "Trial";
+  return plan;
+}
+
+function planTone(plan: string): StatusBadgeProps["tone"] {
+  if (plan === "ENTERPRISE") return "info";
+  if (plan === "PRO") return "success";
+  if (plan === "TRIAL") return "warning";
+  return "neutral";
+}
+
 function tenantCreateErrorMessage(error: unknown) {
   if (error instanceof ApiRequestError && error.code === "TENANT_SLUG_ALREADY_EXISTS") {
     return "Bu slug zaten kullanımda. Farklı bir slug gir.";
   }
   return "Kurum oluşturulamadı.";
+}
+
+function formatTenantSort(sort: string) {
+  const option = tenantSortOptions.find((candidate) => candidate.value === sort);
+  return option?.label ?? "Varsayılan";
+}
+
+function maskActivationToken(token: string) {
+  if (token.length <= 8) return "••••••••";
+  return `${token.slice(0, 4)}••••${token.slice(-4)}`;
 }
 
 const tenantSortOptions = [

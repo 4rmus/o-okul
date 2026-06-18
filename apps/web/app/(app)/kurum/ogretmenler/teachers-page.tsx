@@ -4,12 +4,26 @@ import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
+import {
+  Button,
+  CrudPage,
+  DataTable,
+  EmptyState,
+  Field,
+  FormModal,
+  Input,
+  Panel,
+  Select,
+  StatusBadge,
+  type DataTableColumn,
+  useConfirmDialog,
+} from "@uzman-hocam/ui";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
 import { Eye, Pencil, Plus, Send, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
+import { hasCapabilityForRoles } from "../../_shared/access.js";
 import {
   firstFormError,
   teacherAssignmentFormSchema,
@@ -20,6 +34,7 @@ import {
   type TeacherFormState,
 } from "../../../../src/form-validation.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 interface TeacherAssignmentReferences {
   classes: ClassRecord[];
@@ -71,6 +86,7 @@ export function TeachersPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
   const rows = teachersQuery.data?.data ?? [];
+  const canManageUsers = auth ? hasCapabilityForRoles(auth.session.roles, "user:manage") : false;
 
   const referencesQuery = useQuery({
     queryKey: ["next-teacher-assignment-refs", auth?.session.tenantId ?? "anonymous"],
@@ -87,6 +103,74 @@ export function TeachersPage() {
   const termNameById = new Map(terms.map((term) => [term.id, term.name]));
   const students = references.students;
   const studentNameById = new Map(students.map((student) => [student.id, `${student.firstName} ${student.lastName}`]));
+  const branchReadyCount = rows.filter((teacher) => Boolean(teacher.branch)).length;
+  const teacherPortalReadyCount = rows.filter((teacher) => Boolean(teacher.userId)).length;
+  const teacherSummaryItems: OperationSummaryItem[] = [
+    {
+      description: "Filtrelenmiş toplam kayıt",
+      key: "total",
+      label: "Öğretmen toplamı",
+      value: formatCount(teachersQuery.data?.meta?.total ?? rows.length),
+    },
+    {
+      description: "Bu sayfada branş etiketi",
+      key: "branch",
+      label: "Branş kapsamı",
+      tone: branchReadyCount > 0 ? "info" : "warning",
+      value: `${branchReadyCount}/${rows.length}`,
+    },
+    {
+      description: "Portal kullanıcısı bağlı",
+      key: "portal",
+      label: "Portal hazır",
+      tone: teacherPortalReadyCount > 0 ? "success" : "default",
+      value: `${teacherPortalReadyCount}/${rows.length}`,
+    },
+    {
+      description: "Sınıf/ders/öğrenci referansı",
+      key: "references",
+      label: "Atama bağlamı",
+      value: `${classes.length}/${courses.length}/${students.length}`,
+    },
+  ];
+  const teacherSummaryBadges: OperationSummaryBadge[] = [
+    {
+      key: "invite",
+      label: canManageUsers ? "Davet aksiyonu açık" : "Davet yetkisi kapalı",
+      tone: canManageUsers ? "success" : "neutral",
+    },
+    {
+      key: "sort",
+      label: `Sıralama: ${formatTeacherSort(listQuery.sort)}`,
+      tone: "neutral",
+    },
+  ];
+  const teacherSummaryActions: OperationSummaryAction[] = [
+    {
+      detail: "Bu sayfadaki branş etiketi",
+      key: "branch-readiness",
+      label: "Branş temizliği",
+      status: branchReadyCount === rows.length && rows.length > 0 ? "Hazır" : "Kontrol",
+      tone: branchReadyCount > 0 ? "info" : "warning",
+      value: `${branchReadyCount}/${rows.length}`,
+    },
+    {
+      detail: "Öğretmen portal hesabı bağlantısı",
+      key: "portal-invite",
+      label: "Portal daveti",
+      status: canManageUsers ? "Davet açık" : "Yetki kapalı",
+      tone: canManageUsers ? "success" : "neutral",
+      value: `${teacherPortalReadyCount}/${rows.length}`,
+    },
+    {
+      detail: "Sınıf / ders / öğrenci",
+      key: "assignment-reference",
+      label: "Atama referansı",
+      status: "Kapsam",
+      tone: "info",
+      value: `${classes.length}/${courses.length}/${students.length}`,
+    },
+  ];
 
   const assignmentsQueryKey = ["next-teacher-assignments", auth?.session.tenantId ?? "anonymous", editingTeacher?.id ?? "none"];
   const assignmentsQuery = useQuery({
@@ -105,24 +189,45 @@ export function TeachersPage() {
     {
       key: "name",
       header: "Ad Soyad",
+      priority: "primary",
+      sticky: "left",
       render: (teacher) => `${teacher.firstName} ${teacher.lastName}`,
     },
     {
       key: "branch",
       header: "Branş",
-      render: (teacher) => teacher.branch ?? "-",
+      priority: "primary",
+      render: (teacher) =>
+        teacher.branch ? (
+          <StatusBadge tone="info">{teacher.branch}</StatusBadge>
+        ) : (
+          <StatusBadge tone="neutral">Branş yok</StatusBadge>
+        ),
+    },
+    {
+      key: "portal",
+      header: "Portal",
+      priority: "secondary",
+      render: (teacher) => (
+        <StatusBadge tone={teacher.userId ? "success" : "neutral"}>{teacher.userId ? "Bağlı" : "Davet bekliyor"}</StatusBadge>
+      ),
     },
     {
       key: "actions",
       header: "İşlem",
+      align: "center",
+      priority: "primary",
+      sticky: "right",
       render: (teacher) => (
         <span className="next-row-actions">
           <Link href={`/kurum/ogretmenler/${encodeURIComponent(teacher.id)}`} aria-label={`${teacher.firstName} detay`}>
             <Eye size={17} aria-hidden="true" />
           </Link>
-          <Link href={`/kurum/kullanicilar?invite=teacher&subjectId=${encodeURIComponent(teacher.id)}`} aria-label={`${teacher.firstName} portal daveti gönder`}>
-            <Send size={17} aria-hidden="true" />
-          </Link>
+          {canManageUsers ? (
+            <Link href={`/kurum/kullanicilar?invite=teacher&subjectId=${encodeURIComponent(teacher.id)}`} aria-label={`${teacher.firstName} portal daveti gönder`}>
+              <Send size={17} aria-hidden="true" />
+            </Link>
+          ) : null}
           <button type="button" onClick={() => openEditForm(teacher)} aria-label={`${teacher.firstName} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
           </button>
@@ -232,6 +337,52 @@ export function TeachersPage() {
     }
   }
 
+  const assignmentColumns: Array<DataTableColumn<TeacherAssignmentRecord>> = [
+    {
+      key: "role",
+      header: "Rol",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (assignment) => (
+        <StatusBadge tone={teacherAssignmentRoleTone(assignment.role)}>
+          {formatTeacherAssignmentRole(assignment.role)}
+        </StatusBadge>
+      ),
+      sticky: "left",
+    },
+    {
+      key: "scope",
+      header: "Kapsam",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (assignment) => formatTeacherAssignmentScope(assignment, classNameById, studentNameById, courseNameById),
+    },
+    {
+      key: "context",
+      header: "Dönem ve tarih",
+      mobilePriority: "secondary",
+      priority: "secondary",
+      render: (assignment) => formatTeacherAssignmentContext(assignment, termNameById),
+    },
+    {
+      align: "center",
+      key: "actions",
+      header: "İşlem",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (assignment) => (
+        <button
+          type="button"
+          onClick={() => void handleAssignmentDelete(assignment)}
+          aria-label={`${formatTeacherAssignmentRole(assignment.role)} atamasını sil`}
+        >
+          <Trash2 size={16} aria-hidden="true" />
+        </button>
+      ),
+      sticky: "right",
+    },
+  ];
+
   return (
     <>
       <CrudPage
@@ -252,6 +403,8 @@ export function TeachersPage() {
         }
         aria-label="Öğretmen yönetimi"
         columns={columns}
+        density="compact"
+        description="Ders, sınıf, rehberlik ve portal daveti ilişkilerini tek yerden yönet."
         emptyState={
           <EmptyState
             title="Henüz öğretmen yok"
@@ -265,6 +418,16 @@ export function TeachersPage() {
         getRowKey={(teacher) => teacher.id}
         loading={teachersQuery.isPending}
         rows={rows}
+        summary={
+          <OperationSummary
+            actions={teacherSummaryActions}
+            ariaLabel="Öğretmen operasyon özeti"
+            badges={teacherSummaryBadges}
+            items={teacherSummaryItems}
+          />
+        }
+        tableCaption="Öğretmen operasyon listesi"
+        tableDescription="Ad soyad, branş, portal bağlantısı ve öğretmen aksiyonları."
         title="Öğretmenler"
       />
       <FormModal
@@ -275,150 +438,138 @@ export function TeachersPage() {
         submitLabel={editingTeacher ? "Kaydet" : "Ekle"}
         title={editingTeacher ? "Öğretmen düzenle" : "Öğretmen ekle"}
       >
-        <label>
-          Ad
-          <Input
-            required
-            value={form.firstName}
-            onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))}
-          />
-        </label>
-        <label>
-          Soyad
-          <Input
-            required
-            value={form.lastName}
-            onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))}
-          />
-        </label>
-        <label>
-          Branş
-          <Input
-            value={form.branch ?? ""}
-            onChange={(event) => setForm((current) => ({ ...current, branch: event.target.value }))}
-          />
-        </label>
+        <div className="next-teacher-form-grid">
+          <Field label="Ad">
+            <Input
+              required
+              value={form.firstName}
+              onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))}
+            />
+          </Field>
+          <Field label="Soyad">
+            <Input
+              required
+              value={form.lastName}
+              onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))}
+            />
+          </Field>
+          <Field label="Branş" description="Liste ve atama ekranlarında kısa etiket olarak görünür.">
+            <Input
+              value={form.branch ?? ""}
+              onChange={(event) => setForm((current) => ({ ...current, branch: event.target.value }))}
+            />
+          </Field>
+        </div>
         {editingTeacher ? (
-          <section className="next-form-section" aria-label="Öğretmen atamaları">
-            <p className="next-form-section-title">Öğretmen atamaları</p>
-            {assignmentsQuery.isPending ? (
-              <span className="next-field-hint">Yükleniyor…</span>
-            ) : assignments.length > 0 ? (
-              <ul className="next-form-list">
-                {assignments.map((assignment) => (
-                  <li key={assignment.id}>
-                    <span>
-                      {formatTeacherAssignmentRole(assignment.role)}
-                      {assignment.classId ? ` · ${classNameById.get(assignment.classId) ?? assignment.classId}` : ""}
-                      {assignment.studentId ? ` · ${studentNameById.get(assignment.studentId) ?? assignment.studentId}` : ""}
-                      {assignment.courseId ? ` · ${courseNameById.get(assignment.courseId) ?? assignment.courseId}` : ""}
-                      {assignment.termId ? ` · ${termNameById.get(assignment.termId) ?? assignment.termId}` : ""}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => void handleAssignmentDelete(assignment)}
-                      aria-label={`${formatTeacherAssignmentRole(assignment.role)} atamasını sil`}
-                    >
-                      <Trash2 size={16} aria-hidden="true" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <span className="next-field-hint">Atama yok</span>
-            )}
-            <label>
-              Atama rolü
-              <select
-                value={assignmentForm.role}
-                onChange={(event) => setAssignmentForm((current) => ({
-                  ...current,
-                  role: event.target.value as TeacherAssignmentRecord["role"],
-                }))}
-              >
-                <option value="CLASS_TEACHER">Sınıf öğretmeni</option>
-                <option value="BRANCH_TEACHER">Branş öğretmeni</option>
-                <option value="GUIDANCE_COUNSELOR">Rehber öğretmen</option>
-                <option value="RESPONSIBLE_TEACHER">Sorumlu öğretmen</option>
-              </select>
-            </label>
-            <label>
-              Atama sınıfı
-              <select
-                value={assignmentForm.classId}
-                onChange={(event) => setAssignmentForm((current) => ({ ...current, classId: event.target.value }))}
-              >
-                <option value="">Sınıf seçilmedi</option>
-                {classes.map((klass) => (
-                  <option key={klass.id} value={klass.id}>
-                    {klass.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Atama öğrencisi
-              <select
-                value={assignmentForm.studentId}
-                onChange={(event) => setAssignmentForm((current) => ({ ...current, studentId: event.target.value }))}
-              >
-                <option value="">Öğrenci seçilmedi</option>
-                {students.map((student) => (
-                  <option key={student.id} value={student.id}>
-                    {student.firstName} {student.lastName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Atama branşı
-              <select
-                value={assignmentForm.courseId}
-                onChange={(event) => setAssignmentForm((current) => ({ ...current, courseId: event.target.value }))}
-              >
-                <option value="">Branş seçilmedi</option>
-                {courses.map((course) => (
-                  <option key={course.id} value={course.id}>
-                    {formatCourseName(course.name)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Atama dönemi
-              <select
-                value={assignmentForm.termId}
-                onChange={(event) => setAssignmentForm((current) => ({ ...current, termId: event.target.value }))}
-              >
-                <option value="">Dönem seçilmedi</option>
-                {terms.map((term) => (
-                  <option key={term.id} value={term.id}>
-                    {term.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Başlangıç
-              <Input
-                type="date"
-                value={assignmentForm.startsAt}
-                onChange={(event) => setAssignmentForm((current) => ({ ...current, startsAt: event.target.value }))}
-              />
-            </label>
-            <label>
-              Bitiş
-              <Input
-                type="date"
-                value={assignmentForm.endsAt}
-                onChange={(event) => setAssignmentForm((current) => ({ ...current, endsAt: event.target.value }))}
-              />
-            </label>
+          <Panel
+            aria-label="Öğretmen atamaları"
+            className="next-teacher-assignment-section"
+            title="Öğretmen atamaları"
+            description="Sınıf, öğrenci, ders ve dönem bağlamı birlikte tutulur."
+            tone="muted"
+            actions={
+              <StatusBadge tone={assignments.length > 0 ? "success" : "neutral"}>
+                {assignments.length > 0 ? `${assignments.length} atama` : "Atama yok"}
+              </StatusBadge>
+            }
+          >
+            <DataTable
+              caption="Öğretmen atamaları"
+              columns={assignmentColumns}
+              density="compact"
+              description="Sınıf, öğrenci, ders, dönem ve tarih bağlamıyla tanımlı öğretmen atamaları."
+              emptyText="Bu öğretmen için sınıf, öğrenci veya ders ataması henüz tanımlanmadı."
+              getRowKey={(assignment) => assignment.id}
+              loading={assignmentsQuery.isPending}
+              rows={assignments}
+            />
+            <div className="next-assignment-form-grid" aria-label="Yeni öğretmen ataması">
+              <Field label="Atama rolü">
+                <Select
+                  value={assignmentForm.role}
+                  onChange={(event) => setAssignmentForm((current) => ({
+                    ...current,
+                    role: event.target.value as TeacherAssignmentRecord["role"],
+                  }))}
+                >
+                  <option value="CLASS_TEACHER">Sınıf öğretmeni</option>
+                  <option value="BRANCH_TEACHER">Branş öğretmeni</option>
+                  <option value="GUIDANCE_COUNSELOR">Rehber öğretmen</option>
+                  <option value="RESPONSIBLE_TEACHER">Sorumlu öğretmen</option>
+                </Select>
+              </Field>
+              <Field label="Atama sınıfı">
+                <Select
+                  value={assignmentForm.classId}
+                  onChange={(event) => setAssignmentForm((current) => ({ ...current, classId: event.target.value }))}
+                >
+                  <option value="">Sınıf seçilmedi</option>
+                  {classes.map((klass) => (
+                    <option key={klass.id} value={klass.id}>
+                      {klass.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Atama öğrencisi">
+                <Select
+                  value={assignmentForm.studentId}
+                  onChange={(event) => setAssignmentForm((current) => ({ ...current, studentId: event.target.value }))}
+                >
+                  <option value="">Öğrenci seçilmedi</option>
+                  {students.map((student) => (
+                    <option key={student.id} value={student.id}>
+                      {student.firstName} {student.lastName}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Atama branşı">
+                <Select
+                  value={assignmentForm.courseId}
+                  onChange={(event) => setAssignmentForm((current) => ({ ...current, courseId: event.target.value }))}
+                >
+                  <option value="">Branş seçilmedi</option>
+                  {courses.map((course) => (
+                    <option key={course.id} value={course.id}>
+                      {formatCourseName(course.name)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Atama dönemi">
+                <Select
+                  value={assignmentForm.termId}
+                  onChange={(event) => setAssignmentForm((current) => ({ ...current, termId: event.target.value }))}
+                >
+                  <option value="">Dönem seçilmedi</option>
+                  {terms.map((term) => (
+                    <option key={term.id} value={term.id}>
+                      {term.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Başlangıç">
+                <Input
+                  type="date"
+                  value={assignmentForm.startsAt}
+                  onChange={(event) => setAssignmentForm((current) => ({ ...current, startsAt: event.target.value }))}
+                />
+              </Field>
+              <Field label="Bitiş">
+                <Input
+                  type="date"
+                  value={assignmentForm.endsAt}
+                  onChange={(event) => setAssignmentForm((current) => ({ ...current, endsAt: event.target.value }))}
+                />
+              </Field>
+            </div>
             <Button type="button" onClick={() => void handleAssignmentSubmit()}>
               <Plus size={17} aria-hidden="true" />
               Atama ekle
             </Button>
-          </section>
+          </Panel>
         ) : null}
       </FormModal>
       {confirmationDialog}
@@ -515,4 +666,53 @@ function formatTeacherAssignmentRole(role: TeacherAssignmentRecord["role"]) {
     RESPONSIBLE_TEACHER: "Sorumlu öğretmen",
   };
   return labels[role] ?? role;
+}
+
+function teacherAssignmentRoleTone(role: TeacherAssignmentRecord["role"]) {
+  if (role === "CLASS_TEACHER") return "success";
+  if (role === "GUIDANCE_COUNSELOR") return "warning";
+  if (role === "RESPONSIBLE_TEACHER") return "info";
+  return "neutral";
+}
+
+function formatTeacherAssignmentScope(
+  assignment: TeacherAssignmentRecord,
+  classNameById: ReadonlyMap<string, string>,
+  studentNameById: ReadonlyMap<string, string>,
+  courseNameById: ReadonlyMap<string, string>,
+) {
+  const scope = [
+    assignment.classId ? classNameById.get(assignment.classId) ?? "Sınıf eşleşmedi" : undefined,
+    assignment.studentId ? studentNameById.get(assignment.studentId) ?? "Öğrenci eşleşmedi" : undefined,
+    assignment.courseId ? courseNameById.get(assignment.courseId) ?? "Ders eşleşmedi" : undefined,
+  ].filter(Boolean);
+  return scope.length > 0 ? scope.join(" · ") : "Kapsam seçilmedi";
+}
+
+function formatTeacherAssignmentContext(assignment: TeacherAssignmentRecord, termNameById: ReadonlyMap<string, string>) {
+  const context = [
+    assignment.termId ? termNameById.get(assignment.termId) ?? "Dönem eşleşmedi" : "Dönem seçilmedi",
+    formatAssignmentDateRange(assignment),
+  ].filter(Boolean);
+  return context.join(" · ");
+}
+
+function formatAssignmentDateRange(assignment: TeacherAssignmentRecord) {
+  const dates = [
+    assignment.startsAt ? formatDate(assignment.startsAt) : undefined,
+    assignment.endsAt ? formatDate(assignment.endsAt) : undefined,
+  ].filter(Boolean);
+  return dates.length > 0 ? dates.join(" - ") : "Tarih sınırı yok";
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("tr-TR", { dateStyle: "short" }).format(new Date(value));
+}
+
+function formatCount(value: number) {
+  return value.toLocaleString("tr-TR");
+}
+
+function formatTeacherSort(value: string) {
+  return teacherSortOptions.find((option) => option.value === value)?.label ?? "Varsayılan";
 }

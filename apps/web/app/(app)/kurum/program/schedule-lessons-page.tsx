@@ -1,9 +1,10 @@
 "use client";
 
 import { type FormEvent, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, ScheduleLessonRecord, TeacherRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, Field, FormModal, Input, Select, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -14,7 +15,8 @@ import {
   type ScheduleLessonFormPayload,
   type ScheduleLessonFormState,
 } from "../../../../src/form-validation.js";
-import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 const emptyForm: ScheduleLessonFormState = {
   classId: "",
@@ -28,9 +30,10 @@ const emptyForm: ScheduleLessonFormState = {
 
 export function ScheduleLessonsPage() {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useConfirmDialog();
-  const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
+  const [listQuery, setListQuery] = useUrlListState(searchParams, { sortOptions: scheduleSortOptions });
   const queryKey = ["next-schedule-lessons", auth?.session.tenantId ?? "anonymous", listQuery];
   const listQueryKey = ["next-schedule-lessons", auth?.session.tenantId ?? "anonymous"];
   const lessonsQuery = useQuery({
@@ -58,18 +61,86 @@ export function ScheduleLessonsPage() {
     () => new Map(references.teachers.map((record) => [record.id, `${record.firstName} ${record.lastName}`])),
     [references.teachers],
   );
+  const listTotal = lessonsQuery.data?.meta?.total ?? rows.length;
+  const classCoverageCount = new Set(rows.map((record) => record.classId)).size;
+  const teacherCoverageCount = new Set(rows.map((record) => record.teacherId)).size;
+  const courseLinkedCount = rows.filter((record) => Boolean(record.courseId)).length;
+  const termLinkedCount = rows.filter((record) => Boolean(record.termId)).length;
+  const programSummaryItems: OperationSummaryItem[] = [
+    {
+      description: "Ders programı kayıtları",
+      key: "total",
+      label: "Program toplamı",
+      value: formatCount(listTotal),
+    },
+    {
+      description: "Programda yer alan sınıf sayısı",
+      key: "classes",
+      label: "Sınıf kapsamı",
+      tone: classCoverageCount > 0 ? "info" : "default",
+      value: formatCount(classCoverageCount),
+    },
+    {
+      description: "Ders ve dönem referansı olan kayıtlar",
+      key: "context",
+      label: "Bağlam tamlığı",
+      tone: courseLinkedCount === rows.length && termLinkedCount === rows.length && rows.length > 0 ? "success" : "info",
+      value: `${formatCount(courseLinkedCount)}/${formatCount(rows.length)}`,
+    },
+  ];
+  const programSummaryBadges: OperationSummaryBadge[] = [
+    {
+      key: "sort",
+      label: `Sıralama: ${formatScheduleSort(listQuery.sort)}`,
+      tone: "neutral",
+    },
+    {
+      key: "teachers",
+      label: `${formatCount(teacherCoverageCount)} öğretmen kapsamı`,
+      tone: teacherCoverageCount > 0 ? "info" : "neutral",
+    },
+  ];
+  const programSummaryActions: OperationSummaryAction[] = [
+    {
+      detail: "Saat aralığı ve sınıf/öğretmen bağı tek listede izlenir",
+      key: "time-plan",
+      label: "Saat planı",
+      status: rows.length > 0 ? "İzleniyor" : "Bekliyor",
+      tone: rows.length > 0 ? "info" : "neutral",
+      value: `${formatCount(rows.length)} kayıt`,
+    },
+    {
+      detail: "Ders adı sınav, yoklama ve rapor bağlamıyla eşleştirilir",
+      key: "course-context",
+      label: "Ders eşleşmesi",
+      status: courseLinkedCount === rows.length && rows.length > 0 ? "Hazır" : "Kontrol",
+      tone: courseLinkedCount === rows.length && rows.length > 0 ? "success" : "warning",
+      value: `${formatCount(courseLinkedCount)} bağlı`,
+    },
+    {
+      detail: "Dönem alanı takvim ve rapor filtrelerini tutarlı tutar",
+      key: "term-context",
+      label: "Dönem bağı",
+      status: termLinkedCount === rows.length && rows.length > 0 ? "Hazır" : "Opsiyonel",
+      tone: termLinkedCount === rows.length && rows.length > 0 ? "success" : "neutral",
+      value: `${formatCount(termLinkedCount)} bağlı`,
+    },
+  ];
 
   const columns: Array<DataTableColumn<ScheduleLessonRecord>> = [
-    { key: "title", header: "Ders", render: (record) => record.title },
-    { key: "classId", header: "Sınıf", render: (record) => classNames.get(record.classId) ?? record.classId },
-    { key: "courseId", header: "Branş", render: (record) => courseLabel(record.courseId, courseNames) },
-    { key: "termId", header: "Dönem", render: (record) => termLabel(record.termId, termNames) },
-    { key: "teacherId", header: "Öğretmen", render: (record) => teacherNames.get(record.teacherId) ?? record.teacherId },
-    { key: "startsAt", header: "Başlangıç", render: (record) => formatDateTime(record.startsAt) },
-    { key: "endsAt", header: "Bitiş", render: (record) => formatDateTime(record.endsAt) },
+    { key: "title", header: "Ders", mobilePriority: "primary", priority: "primary", render: (record) => record.title, sticky: "left" },
+    { key: "classId", header: "Sınıf", mobilePriority: "primary", priority: "secondary", render: (record) => classLabel(record.classId, classNames) },
+    { key: "courseId", header: "Branş", mobilePriority: "secondary", priority: "secondary", render: (record) => courseLabel(record.courseId, courseNames) },
+    { key: "termId", header: "Dönem", mobilePriority: "hidden", priority: "optional", render: (record) => termLabel(record.termId, termNames) },
+    { key: "teacherId", header: "Öğretmen", mobilePriority: "hidden", priority: "secondary", render: (record) => teacherLabel(record.teacherId, teacherNames) },
+    { key: "startsAt", header: "Başlangıç", mobilePriority: "secondary", priority: "secondary", render: (record) => formatDateTime(record.startsAt) },
+    { key: "endsAt", header: "Bitiş", mobilePriority: "hidden", priority: "optional", render: (record) => formatDateTime(record.endsAt) },
     {
       key: "actions",
+      align: "center",
       header: "İşlem",
+      mobilePriority: "primary",
+      priority: "primary",
       render: (record) => (
         <span className="next-row-actions">
           <button type="button" onClick={() => openEditForm(record)} aria-label={`${record.title} düzenle`}>
@@ -80,6 +151,7 @@ export function ScheduleLessonsPage() {
           </button>
         </span>
       ),
+      sticky: "right",
     },
   ];
 
@@ -172,6 +244,7 @@ export function ScheduleLessonsPage() {
         }
         aria-label="Ders programı yönetimi"
         columns={columns}
+        density="compact"
         description="Kurum ders programını sınıf, öğretmen ve ders bağlantısıyla yönet."
         emptyState={
           <EmptyState
@@ -193,6 +266,16 @@ export function ScheduleLessonsPage() {
         getRowKey={(record) => record.id}
         loading={lessonsQuery.isPending || referenceQuery.isPending}
         rows={rows}
+        summary={
+          <OperationSummary
+            actions={programSummaryActions}
+            ariaLabel="Ders programı operasyon özeti"
+            badges={programSummaryBadges}
+            items={programSummaryItems}
+          />
+        }
+        tableCaption="Ders programı operasyon listesi"
+        tableDescription="Ders, sınıf, branş ve başlangıç bilgisi."
         title="Ders Programı"
       />
       <FormModal
@@ -203,62 +286,55 @@ export function ScheduleLessonsPage() {
         submitLabel={editingLesson ? "Kaydet" : "Ekle"}
         title={editingLesson ? "Ders düzenle" : "Ders ekle"}
       >
-        <label>
-          Sınıf
-          <select value={form.classId} onChange={(event) => setForm((current) => ({ ...current, classId: event.target.value }))}>
+        <Field label="Sınıf">
+          <Select value={form.classId} onChange={(event) => setForm((current) => ({ ...current, classId: event.target.value }))}>
             <option value="">Seçiniz</option>
             {references.classes.map((record) => (
               <option key={record.id} value={record.id}>
                 {record.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Öğretmen
-          <select value={form.teacherId} onChange={(event) => setForm((current) => ({ ...current, teacherId: event.target.value }))}>
+          </Select>
+        </Field>
+        <Field label="Öğretmen">
+          <Select value={form.teacherId} onChange={(event) => setForm((current) => ({ ...current, teacherId: event.target.value }))}>
             <option value="">Seçiniz</option>
             {references.teachers.map((record) => (
               <option key={record.id} value={record.id}>
                 {record.firstName} {record.lastName}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Branş
-          <select value={form.courseId ?? ""} onChange={(event) => setForm((current) => ({ ...current, courseId: event.target.value }))}>
+          </Select>
+        </Field>
+        <Field label="Branş">
+          <Select value={form.courseId ?? ""} onChange={(event) => setForm((current) => ({ ...current, courseId: event.target.value }))}>
             <option value="">Seçiniz</option>
             {references.courses.map((record) => (
               <option key={record.id} value={record.id}>
                 {formatCourseName(record.name)}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Dönem
-          <select value={form.termId ?? ""} onChange={(event) => setForm((current) => ({ ...current, termId: event.target.value }))}>
+          </Select>
+        </Field>
+        <Field label="Dönem">
+          <Select value={form.termId ?? ""} onChange={(event) => setForm((current) => ({ ...current, termId: event.target.value }))}>
             <option value="">Seçiniz</option>
             {references.terms.map((record) => (
               <option key={record.id} value={record.id}>
                 {record.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Ders başlığı
+          </Select>
+        </Field>
+        <Field label="Ders başlığı">
           <Input required value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
-        </label>
-        <label>
-          Başlangıç
+        </Field>
+        <Field label="Başlangıç">
           <Input required type="datetime-local" value={form.startsAt} onChange={(event) => setForm((current) => ({ ...current, startsAt: event.target.value }))} />
-        </label>
-        <label>
-          Bitiş
+        </Field>
+        <Field label="Bitiş">
           <Input required type="datetime-local" value={form.endsAt} onChange={(event) => setForm((current) => ({ ...current, endsAt: event.target.value }))} />
-        </label>
+        </Field>
       </FormModal>
       {confirmationDialog}
     </>
@@ -336,11 +412,19 @@ function toSchedulePayload(input: ScheduleLessonFormPayload): ScheduleLessonReco
 }
 
 function courseLabel(courseId: string | undefined, courseNames: Map<string, string>): string {
-  return courseId ? courseNames.get(courseId) ?? courseId : "-";
+  return courseId ? courseNames.get(courseId) ?? "Ders eşleşmedi" : "-";
 }
 
 function termLabel(termId: string | undefined, termNames: Map<string, string>): string {
-  return termId ? termNames.get(termId) ?? termId : "-";
+  return termId ? termNames.get(termId) ?? "Dönem eşleşmedi" : "-";
+}
+
+function classLabel(classId: string, classNames: Map<string, string>): string {
+  return classNames.get(classId) ?? "Sınıf eşleşmedi";
+}
+
+function teacherLabel(teacherId: string, teacherNames: Map<string, string>): string {
+  return teacherNames.get(teacherId) ?? "Öğretmen eşleşmedi";
 }
 
 function toDateTimeInput(value: string): string {
@@ -353,4 +437,12 @@ function toIsoDateTime(value: string): string {
 
 function formatDateTime(value: string): string {
   return value.slice(0, 16).replace("T", " ");
+}
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat("tr-TR").format(value);
+}
+
+function formatScheduleSort(value: string) {
+  return scheduleSortOptions.find((option) => option.value === value)?.label ?? "Varsayılan";
 }

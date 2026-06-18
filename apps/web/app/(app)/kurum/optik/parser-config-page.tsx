@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
-import { Button, EmptyState, Input } from "@uzman-hocam/ui";
+import { Button, DataTable, EmptyState, Field, Input, MetricCard, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn } from "@uzman-hocam/ui";
 import type {
   AnswerChoice,
   AnswerKeyRecord,
@@ -20,6 +20,7 @@ import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-cli
 import { PageFrame } from "../_shared/page-frame.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
 import { buildReportAnalysisRows, type ReportAnalysisRow } from "../../_shared/report-analysis.js";
+import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import {
   answerKeyImportFormSchema,
   examFormSchema,
@@ -182,6 +183,33 @@ interface OpticalFormPreviewRow {
   end: string;
 }
 
+const opticalFormPreviewColumns: Array<DataTableColumn<OpticalFormPreviewRow>> = [
+  {
+    header: "Bölüm",
+    key: "section",
+    mobilePriority: "primary",
+    priority: "primary",
+    render: (row) => row.section,
+    sticky: "left",
+  },
+  {
+    align: "right",
+    header: "Başlangıç",
+    key: "start",
+    mobilePriority: "secondary",
+    priority: "secondary",
+    render: (row) => row.start,
+  },
+  {
+    align: "right",
+    header: "Bitiş",
+    key: "end",
+    mobilePriority: "secondary",
+    priority: "secondary",
+    render: (row) => row.end,
+  },
+];
+
 const opticalFormPresets: Array<{
   preset: ParserConfigPreset;
   name: string;
@@ -249,6 +277,15 @@ function formatLocalDate(value: Date) {
   const month = String(value.getMonth() + 1).padStart(2, "0");
   const day = String(value.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function formatSelectedFileNotice(fileName: string) {
+  const extension = fileName.split(".").pop()?.replace(/[^a-z0-9]/gi, "").toLocaleUpperCase("tr-TR");
+  return extension ? `${extension} dosyası seçildi` : "Dosya seçildi";
+}
+
+function formatEvidenceSafeReference(value: string | undefined, label: string) {
+  return value?.trim() ? `${label}: maskeli` : `${label}: yok`;
 }
 
 export function ParserConfigPage() {
@@ -883,15 +920,33 @@ export function ParserConfigPage() {
         onNewExamTitleChange={setNewExamTitle}
         onSubmit={submitCreateExam}
       />
-      <section className="next-list-panel" aria-label="Optik operasyon">
-        <div className="next-segmented" role="tablist" aria-label="Optik sekmeleri">
+      <Panel
+        aria-label="Optik operasyon"
+        className="next-optical-workspace"
+        description="Sınav formatı, cevap anahtarı, optik yükleme, eşleşmeyen satır çözümü ve rapor üretimi aynı görev yüzeyinde ilerler."
+        title="Optik Operasyon Akışı"
+      >
+        <Tabs label="Optik sekmeleri" className="next-optical-tabs">
           {tabs.map((tab) => (
-            <button key={tab.id} type="button" aria-pressed={activeTab === tab.id} onClick={() => setActiveTab(tab.id)}>
+            <TabButton
+              key={tab.id}
+              aria-controls={activeTab === tab.id ? `optical-panel-${tab.id}` : undefined}
+              id={`optical-tab-${tab.id}`}
+              selected={activeTab === tab.id}
+              onClick={() => setActiveTab(tab.id)}
+            >
               {tab.label}
-            </button>
+            </TabButton>
           ))}
-        </div>
+        </Tabs>
         {error ? <p className="uh-crud-page__error">{error}</p> : null}
+        <div
+          aria-labelledby={`optical-tab-${activeTab}`}
+          className="next-optical-tab-panel"
+          id={`optical-panel-${activeTab}`}
+          role="tabpanel"
+          tabIndex={0}
+        >
         {activeTab === "format" ? (
           <OpticalFormatSetup
             examId={examId}
@@ -974,7 +1029,7 @@ export function ParserConfigPage() {
           />
         ) : null}
         {activeTab === "quarantine" ? (
-          <section className="next-support-tools" aria-label="Eşleşmeyen satırlar ve rapor">
+          <section className="next-optical-report-workspace" aria-label="Eşleşmeyen satırlar ve rapor">
             <QuarantineResolutionPanel
               quarantineRawImportId={quarantineRawImportId}
               quarantines={quarantines}
@@ -999,7 +1054,8 @@ export function ParserConfigPage() {
             />
           </section>
         ) : null}
-      </section>
+        </div>
+      </Panel>
     </PageFrame>
   );
 }
@@ -1030,44 +1086,47 @@ function OpticalExamSelector({
   const showCreateExamFields = !selectedExam;
 
   return (
-    <section className="next-support-tools" aria-label="Sınav seçimi">
-      <form className="next-support-tool" onSubmit={(event) => void onSubmit(event)}>
-        <h2>Sınav seç veya oluştur</h2>
-        <label>
-          Sınav seç
-          <select aria-label="Sınav seç" value={examId} onChange={(event) => onExamChange(event.target.value)}>
+    <section className="next-optical-selector-grid" aria-label="Sınav seçimi">
+      <Panel
+        as="form"
+        aria-label="Sınav seç veya oluştur"
+        className="next-optical-selector-panel"
+        description="Optik iş akışını mevcut sınava bağla veya yeni sınav kaydı oluştur."
+        title="Sınav seç veya oluştur"
+        onSubmit={(event) => void onSubmit(event)}
+      >
+        <Field label="Sınav seç">
+          <Select value={examId} onChange={(event) => onExamChange(event.target.value)}>
             <option value="">Yeni sınav oluştur</option>
             {exams.map((exam) => (
               <option key={exam.id} value={exam.id}>
                 {exam.title}
               </option>
             ))}
-          </select>
-        </label>
+          </Select>
+        </Field>
         {selectedExam ? <p>{`Seçili sınav: ${selectedExam.title}`}</p> : null}
         {showCreateExamFields ? (
           <>
             <p>Yeni sınav için ad ve başlangıç tarihi gir.</p>
-            <label>
-              Yeni sınav adı
+            <Field label="Yeni sınav adı">
               <Input required value={newExamTitle} onChange={(event) => onNewExamTitleChange(event.target.value)} />
-            </label>
-            <label>
-              Başlangıç
+            </Field>
+            <Field label="Başlangıç">
               <Input
                 required
                 type="datetime-local"
                 value={newExamStartsAt}
                 onChange={(event) => onNewExamStartsAtChange(event.target.value)}
               />
-            </label>
+            </Field>
             <Button type="submit">
               <CheckCircle2 size={17} aria-hidden="true" />
               Sınav oluştur
             </Button>
           </>
         ) : null}
-      </form>
+      </Panel>
     </section>
   );
 }
@@ -1128,16 +1187,17 @@ function OpticalFormatSetup({
   onVersionChange,
 }: OpticalFormatSetupProps) {
   return (
-    <section className="next-support-tools" aria-label="Format seç ve ilerle">
-      <form className="next-support-tool next-support-tool--wide" onSubmit={(event) => void onPresetSubmit(event)}>
-        <h2>Format seç ve ilerle</h2>
-        <p>
-          Kayıtlı TXT/DAT formu seçili sınav için kullanılacak. Sürüm form yapısından otomatik türetilir.
-        </p>
-        <label>
-          Kayıtlı TXT/DAT formu
-          <select
-            aria-label="Kayıtlı TXT/DAT formu"
+    <section className="next-optical-format-grid" aria-label="Format seç ve ilerle">
+      <Panel
+        as="form"
+        aria-label="Format seç ve ilerle"
+        className="next-optical-format-panel next-optical-format-panel--wide"
+        description="Kayıtlı TXT/DAT formu seçili sınav için kullanılacak. Sürüm form yapısından otomatik türetilir."
+        title="Format seç ve ilerle"
+        onSubmit={(event) => void onPresetSubmit(event)}
+      >
+        <Field label="Kayıtlı TXT/DAT formu">
+          <Select
             value={selectedPreset}
             onChange={(event) => onPresetChange(event.target.value as ParserConfigPreset)}
           >
@@ -1146,8 +1206,8 @@ function OpticalFormatSetup({
                 {form.name}
               </option>
             ))}
-          </select>
-        </label>
+          </Select>
+        </Field>
         <div className="next-optical-form-meta" aria-label="Seçili form özeti">
           <span>{selectedPresetForm.sourceType}</span>
           <span>{selectedPresetForm.rowLength} karakter</span>
@@ -1176,19 +1236,17 @@ function OpticalFormatSetup({
           Seç ve ilerle
         </Button>
         {savedConfig ? <p>{savedConfig.version} seçildi. Optik yükleme adımında bu sürüm kullanılacak.</p> : null}
-      </form>
+      </Panel>
 
-      <details className="next-support-tool next-advanced-details">
+      <details className="next-optical-format-panel next-optical-format-details next-advanced-details">
         <summary>Farklı dosya formatı ve kurum şablonları</summary>
         <form className="next-inline-form" onSubmit={(event) => void onSuggestionSubmit(event)}>
-          <label>
-            Dosyadan format tanı
+          <Field label="Dosyadan format tanı">
             <Input accept=".txt,.dat,text/plain" type="file" onChange={(event) => void onFileChange(event.target.files?.[0])} />
-          </label>
-          <label>
-            Dosya format sürümü
+          </Field>
+          <Field label="Dosya format sürümü">
             <Input required value={version} onChange={(event) => onVersionChange(event.target.value)} />
-          </label>
+          </Field>
           <Button disabled={!examId} type="submit">
             <FileText size={17} aria-hidden="true" />
             Dosyayı analiz edip kaydet
@@ -1196,25 +1254,22 @@ function OpticalFormatSetup({
         </form>
         {fileName ? <p>{fileName}</p> : null}
         <form className="next-inline-form" onSubmit={(event) => void onTemplateApplySubmit(event)}>
-          <label>
-            Kayıtlı kurum formu
-            <select
-              aria-label="Kayıtlı kurum formu"
+          <Field label="Kayıtlı kurum formu">
+            <Select
               value={selectedTemplateId}
               onChange={(event) => onTemplateIdChange(event.target.value)}
             >
               {templates.length === 0 ? <option value="">Şablon yok</option> : null}
               {templates.map((template) => (
                 <option key={template.id} value={template.id}>
-                  {template.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Kurum formu sürümü
+                {template.name}
+              </option>
+            ))}
+            </Select>
+          </Field>
+          <Field label="Kurum formu sürümü">
             <Input required value={templateApplyVersion} onChange={(event) => onTemplateApplyVersionChange(event.target.value)} />
-          </label>
+          </Field>
           <Button disabled={!selectedTemplateId || !examId} type="submit">
             <CheckCircle2 size={17} aria-hidden="true" />
             Sınava uygula
@@ -1222,14 +1277,12 @@ function OpticalFormatSetup({
         </form>
         {selectedTemplate ? renderOpticalFormPreview(createTemplatePreviewRows(selectedTemplate)) : null}
         <div className="next-inline-form">
-          <label>
-            Yeni kurum formu adı
+          <Field label="Yeni kurum formu adı">
             <Input value={templateName} onChange={(event) => onTemplateNameChange(event.target.value)} />
-          </label>
-          <label>
-            Şablon sürümü
+          </Field>
+          <Field label="Şablon sürümü">
             <Input value={templateVersion} onChange={(event) => onTemplateVersionChange(event.target.value)} />
-          </label>
+          </Field>
           <Button disabled={!suggestion} type="button" onClick={() => void onTemplateCreate()}>
             <Upload size={17} aria-hidden="true" />
             Kurum formu olarak kaydet
@@ -1263,6 +1316,24 @@ interface AnswerKeySetupProps {
   onManualSave: (dryRun: boolean) => void | Promise<void>;
 }
 
+type AnswerKeyBranchRow = AnswerKeyImportDryRunResult["branches"][number];
+
+const answerKeyBranchColumns: Array<DataTableColumn<AnswerKeyBranchRow>> = [
+  {
+    header: "Branş",
+    key: "branch",
+    priority: "primary",
+    render: (branch) => formatCourseName(branch.branch),
+  },
+  {
+    align: "right",
+    header: "Soru",
+    key: "questionCount",
+    priority: "primary",
+    render: (branch) => branch.questionCount,
+  },
+];
+
 function AnswerKeySetup({
   answerKeyDryRun,
   answerKeyFileName,
@@ -1285,18 +1356,93 @@ function AnswerKeySetup({
   onManualQuestionChange,
   onManualSave,
 }: AnswerKeySetupProps) {
+  const manualAnswerKeyColumns: Array<DataTableColumn<ManualAnswerKeyQuestion>> = [
+    {
+      align: "right",
+      header: "Soru",
+      key: "question",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (question) => question.questionNo,
+      sticky: "left",
+    },
+    {
+      header: "Şık",
+      key: "answer",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (question) => (
+        <Select
+          aria-label={`${question.questionNo}. soru şıkkı`}
+          value={question.correctAnswer}
+          onChange={(event) => onManualQuestionChange(question.questionNo, { correctAnswer: event.target.value as ManualAnswerChoice })}
+        >
+          <option value="">Seç</option>
+          {answerChoices.map((choice) => (
+            <option key={choice} value={choice}>
+              {choice}
+            </option>
+          ))}
+        </Select>
+      ),
+    },
+    {
+      header: "Branş",
+      key: "branch",
+      mobilePriority: "secondary",
+      priority: "secondary",
+      render: (question) => (
+        <Input
+          aria-label={`${question.questionNo}. soru branşı`}
+          value={question.branch}
+          onChange={(event) => onManualQuestionChange(question.questionNo, { branch: event.target.value })}
+        />
+      ),
+    },
+    {
+      header: "Kazanım",
+      key: "outcome",
+      mobilePriority: "hidden",
+      priority: "optional",
+      render: (question) => (
+        <Input
+          aria-label={`${question.questionNo}. soru kazanımı`}
+          value={question.outcomeCode}
+          onChange={(event) => onManualQuestionChange(question.questionNo, { outcomeCode: event.target.value })}
+        />
+      ),
+    },
+    {
+      header: "Konu",
+      key: "topic",
+      mobilePriority: "hidden",
+      priority: "optional",
+      render: (question) => (
+        <Input
+          aria-label={`${question.questionNo}. soru konusu`}
+          value={question.topic}
+          onChange={(event) => onManualQuestionChange(question.questionNo, { topic: event.target.value })}
+        />
+      ),
+    },
+  ];
+
   return (
-    <section className="next-support-tools next-support-tools--wide" aria-label="Cevap anahtarı">
-      <form className="next-support-tool" aria-label="Cevap anahtarı Excel import" onSubmit={(event) => void onAnswerKeyDryRunSubmit(event)}>
-        <h2>Excel ile hazırla</h2>
-        <label>
-          Anahtar sürümü
+    <section className="next-optical-answer-key-grid" aria-label="Cevap anahtarı">
+      <Panel
+        as="form"
+        aria-label="Cevap anahtarı Excel import"
+        className="next-optical-answer-key-panel"
+        description="Excel cevap anahtarını ön kontrolden geçir ve doğrulanan sürümü içe aktar."
+        title="Excel ile hazırla"
+        onSubmit={(event) => void onAnswerKeyDryRunSubmit(event)}
+      >
+        <Field label="Anahtar sürümü">
           <Input required value={answerKeyVersion} onChange={(event) => onAnswerKeyVersionChange(event.target.value)} />
-        </label>
-        <label>
-          Cevap anahtarı dosyası
+        </Field>
+        <Field label="Cevap anahtarı dosyası">
           <Input accept=".xlsx" type="file" onChange={(event) => void onAnswerKeyFileChange(event.target.files?.[0])} />
-        </label>
+        </Field>
         {answerKeyFileName ? <p>{answerKeyFileName}</p> : null}
         <Button type="submit">
           <FileSpreadsheet size={17} aria-hidden="true" />
@@ -1306,120 +1452,69 @@ function AnswerKeySetup({
           <Upload size={17} aria-hidden="true" />
           İçe aktar
         </Button>
-      </form>
-      <section className="next-support-tool" aria-label="Cevap anahtarı özeti">
-        <h2>Anahtar özeti</h2>
+      </Panel>
+      <Panel
+        aria-label="Cevap anahtarı özeti"
+        className="next-optical-answer-key-panel"
+        description="Ön kontrol sonucu, kitapçık varyantları ve branş soru dağılımı."
+        title="Anahtar özeti"
+      >
         {answerKeyDryRun ? (
           <>
             <p>{answerKeyDryRun.questionCount} soru doğrulandı.</p>
             <p>{answerKeyDryRun.bookletVariants.map((variant) => `${variant.code}: ${variant.questionCount} soru`).join(", ")}</p>
-            <table className="uh-data-table">
-              <thead>
-                <tr>
-                  <th>Branş</th>
-                  <th>Soru</th>
-                </tr>
-              </thead>
-              <tbody>
-                {answerKeyDryRun.branches.map((branch) => (
-                  <tr key={branch.branch}>
-                    <td>{formatCourseName(branch.branch)}</td>
-                    <td>{branch.questionCount}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable
+              caption="Cevap anahtarı branş dağılımı"
+              columns={answerKeyBranchColumns}
+              density="compact"
+              getRowKey={(branch) => branch.branch}
+              rows={answerKeyDryRun.branches}
+            />
           </>
         ) : (
           <p>Excel dosyası ön kontrol bekliyor.</p>
         )}
-        {answerKeyImport ? <p>{answerKeyImport.answerKey.version} içe aktarıldı.</p> : null}
-      </section>
-      <section className="next-support-tool next-support-tool--wide" aria-label="Manuel cevap anahtarı">
-        <h2>Manuel giriş</h2>
+        {answerKeyImport ? <p>Excel cevap anahtarı içe aktarıldı.</p> : null}
+      </Panel>
+      <Panel
+        aria-label="Manuel cevap anahtarı"
+        className="next-optical-answer-key-panel next-optical-answer-key-panel--wide"
+        description="Şık dizisini, kitapçık sırasını ve soru bazlı branş/kazanım bağlamını elle düzenle."
+        title="Manuel giriş"
+      >
         <div className="next-inline-form">
-          <label>
-            Manuel sürüm
+          <Field label="Manuel sürüm">
             <Input required value={manualAnswerKeyVersion} onChange={(event) => onManualAnswerKeyVersionChange(event.target.value)} />
-          </label>
-          <label>
-            Şık dizisi
+          </Field>
+          <Field label="Şık dizisi">
             <Input
               aria-label="90 şık dizisi"
               value={manualAnswerText}
               onChange={(event) => onManualAnswerTextChange(event.target.value)}
               placeholder="ABCDE..."
             />
-          </label>
-          <label>
-            B kitapçık sırası
+          </Field>
+          <Field label="B kitapçık sırası">
             <Input
               aria-label="B kitapçık sırası"
               value={manualBPermutationText}
               onChange={(event) => onManualBPermutationTextChange(event.target.value)}
               placeholder="90 89 ... 1"
             />
-          </label>
+          </Field>
           <Button type="button" onClick={onManualAnswerTextApply}>
             Gridi doldur
           </Button>
         </div>
         <div className="next-grid-scroll">
-          <table className="uh-data-table">
-            <thead>
-              <tr>
-                <th>Soru</th>
-                <th>Şık</th>
-                <th>Branş</th>
-                <th>Kazanım</th>
-                <th>Konu</th>
-              </tr>
-            </thead>
-            <tbody>
-              {manualQuestions.map((question) => (
-                <tr key={question.questionNo}>
-                  <td>{question.questionNo}</td>
-                  <td>
-                    <select
-                      aria-label={`${question.questionNo}. soru şıkkı`}
-                      value={question.correctAnswer}
-                      onChange={(event) =>
-                        onManualQuestionChange(question.questionNo, { correctAnswer: event.target.value as ManualAnswerChoice })
-                      }
-                    >
-                      <option value="">Seç</option>
-                      {answerChoices.map((choice) => (
-                        <option key={choice} value={choice}>
-                          {choice}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td>
-                    <Input
-                      aria-label={`${question.questionNo}. soru branşı`}
-                      value={question.branch}
-                      onChange={(event) => onManualQuestionChange(question.questionNo, { branch: event.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <Input
-                      aria-label={`${question.questionNo}. soru kazanımı`}
-                      value={question.outcomeCode}
-                      onChange={(event) => onManualQuestionChange(question.questionNo, { outcomeCode: event.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <Input
-                      aria-label={`${question.questionNo}. soru konusu`}
-                      value={question.topic}
-                      onChange={(event) => onManualQuestionChange(question.questionNo, { topic: event.target.value })}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable
+            caption="Manuel cevap anahtarı grid'i"
+            columns={manualAnswerKeyColumns}
+            density="compact"
+            description="Soru bazlı şık, branş, kazanım ve konu bilgisi."
+            getRowKey={(question) => String(question.questionNo)}
+            rows={manualQuestions}
+          />
         </div>
         <div className="next-row-actions">
           <Button type="button" onClick={() => void onManualSave(true)}>
@@ -1437,8 +1532,8 @@ function AnswerKeySetup({
               : ""}
           </p>
         ) : null}
-        {manualAnswerKey ? <p>{manualAnswerKey.version} manuel kaydedildi.</p> : null}
-      </section>
+        {manualAnswerKey ? <p>Manuel cevap anahtarı kaydedildi.</p> : null}
+      </Panel>
     </section>
   );
 }
@@ -1480,40 +1575,46 @@ function OpticalUploadPanel({
   const resultStatus = rawImportSummary ? "Kontrol tamamlandı" : rawImport ? "Kontrol bekleniyor" : "Dosya bekleniyor";
 
   return (
-    <section className="next-support-tools next-support-tools--wide" aria-label="Optik yükleme">
-      <form className="next-support-tool" onSubmit={(event) => void onSubmit(event)}>
-        <h2>Optik dosyayı yükle</h2>
-        <p>Seçili format sürümü: {rawImportParserVersion}</p>
+    <section className="next-optical-upload-grid" aria-label="Optik yükleme">
+      <Panel
+        as="form"
+        aria-label="Optik dosyayı yükle"
+        className="next-optical-upload-panel"
+        description={`Seçili format sürümü: ${rawImportParserVersion}`}
+        title="Optik dosyayı yükle"
+        onSubmit={(event) => void onSubmit(event)}
+      >
         <details className="next-advanced-details">
           <summary>Gelişmiş format sürümü</summary>
-          <label>
-            Teknik format sürümü
+          <Field label="Teknik format sürümü">
             <Input required value={rawImportParserVersion} onChange={(event) => onParserVersionChange(event.target.value)} />
-          </label>
+          </Field>
         </details>
-        <label>
-          Optik cevap dosyası
+        <Field label="Optik cevap dosyası">
           <Input accept=".txt,.dat,text/plain" type="file" onChange={(event) => void onFileChange(event.target.files?.[0])} />
-        </label>
-        {rawImportFileName ? <p>{rawImportFileName}</p> : null}
+        </Field>
+        {rawImportFileName ? <p>{formatSelectedFileNotice(rawImportFileName)}</p> : null}
         <Button type="submit" disabled={isRawImportSubmitting || isRawImportChecking}>
           <Upload size={17} aria-hidden="true" />
           {uploadButtonLabel}
         </Button>
-      </form>
-      <section className="next-support-tool next-support-tool--wide" aria-label="Optik yükleme sonucu">
-        <div className="next-optical-result-header">
-          <h2>Yükleme sonucu</h2>
-          <span className="next-reference-badge">{resultStatus}</span>
-        </div>
+      </Panel>
+      <Panel
+        actions={<span className="next-reference-badge">{resultStatus}</span>}
+        aria-label="Optik yükleme sonucu"
+        className="next-optical-upload-panel next-optical-upload-panel--wide"
+        description="Yüklenen dosya kontrolü, güvenli teknik referanslar ve analiz başlatma durumu."
+        title="Yükleme sonucu"
+      >
         {rawImport ? (
           <>
             <p>{isRawImportChecking ? "Dosya alındı, satırlar kontrol ediliyor." : "Yüklenen optik dosya alındı."}</p>
             <details className="next-advanced-details">
               <summary>Teknik yükleme bilgisi</summary>
-              <p>Yüklenen dosya kaydı: {rawImport.rawImport.id}</p>
-              <p>İş kuyruğu: {rawImport.parseJob.jobId}</p>
-              <p>Dosya izi: {rawImport.rawImport.sha256.slice(0, 12)}</p>
+              <p>{formatEvidenceSafeReference(rawImport.rawImport.id, "Dosya ref")}</p>
+              <p>{formatEvidenceSafeReference(rawImport.parseJob.jobId, "Kuyruk ref")}</p>
+              <p>{formatEvidenceSafeReference(rawImport.rawImport.sha256, "Dosya izi")}</p>
+              <p>Ham id, kuyruk id ve dosya izi ekran görüntülerinde gösterilmez.</p>
             </details>
             <div className="next-optical-step-actions">
               <Button type="button" variant="secondary" onClick={() => void onRefreshSummary()} disabled={isRawImportChecking}>
@@ -1552,7 +1653,7 @@ function OpticalUploadPanel({
             {evaluationStatus.evaluatedCount}/{evaluationStatus.matchedCount} analiz sonucu tamamlandı.
           </p>
         ) : null}
-      </section>
+      </Panel>
     </section>
   );
 }
@@ -1578,82 +1679,107 @@ function QuarantineResolutionPanel({
   onResolve,
   onSelectedStudentChange,
 }: QuarantineResolutionPanelProps) {
+  const quarantineColumns: Array<DataTableColumn<ImportQuarantineRecord>> = [
+    {
+      align: "right",
+      header: "Satır",
+      key: "rowNumber",
+      priority: "primary",
+      render: (record) => record.rowNumber,
+    },
+    {
+      header: "Sebep",
+      key: "reason",
+      priority: "primary",
+      render: (record) => record.reason,
+    },
+    {
+      header: "Durum",
+      key: "status",
+      priority: "primary",
+      render: (record) => (
+        <StatusBadge tone={quarantineStatusTone(record.status)}>{formatQuarantineStatus(record.status)}</StatusBadge>
+      ),
+    },
+    {
+      header: "Öğrenci",
+      key: "student",
+      priority: "secondary",
+      render: (record) => (
+        <Select
+          aria-label={`${record.rowNumber}. satır öğrencisi`}
+          value={selectedStudentByQuarantine[record.id] ?? record.resolvedStudentId ?? ""}
+          onChange={(event) =>
+            onSelectedStudentChange((current) => ({ ...current, [record.id]: event.target.value }))
+          }
+        >
+          <option value="">Seçiniz</option>
+          {students.map((student) => (
+            <option key={student.id} value={student.id}>
+              {student.firstName} {student.lastName}
+            </option>
+          ))}
+        </Select>
+      ),
+    },
+    {
+      header: "İşlem",
+      key: "action",
+      priority: "primary",
+      render: (record) =>
+        record.status === "RESOLVED" ? (
+          record.evaluationJob ? formatEvidenceSafeReference(record.evaluationJob.jobId, "Kuyruk ref") : "Çözüldü"
+        ) : (
+          <button type="button" onClick={() => void onResolve(record)} aria-label={`${record.rowNumber}. satırı çöz`}>
+            <CheckCircle2 size={17} aria-hidden="true" />
+          </button>
+        ),
+    },
+  ];
+
   return (
     <>
-      <form className="next-support-tool" onSubmit={(event) => void onLookupSubmit(event)}>
-        <h2>Eşleşmeyen satırları çöz</h2>
-        <p>{quarantineRawImportId ? "Yüklenen optik dosya seçili." : "Önce optik dosya yükleyin."}</p>
+      <Panel
+        as="form"
+        aria-label="Eşleşmeyen satırları çöz"
+        className="next-optical-quarantine-panel"
+        description={quarantineRawImportId ? "Yüklenen optik dosya seçili." : "Önce optik dosya yükleyin."}
+        title="Eşleşmeyen satırları çöz"
+        onSubmit={(event) => void onLookupSubmit(event)}
+      >
         <details className="next-advanced-details">
           <summary>Yüklenen dosya kaydı</summary>
-          <label>
-            Yüklenen optik dosya
-            <Input required value={quarantineRawImportId} onChange={(event) => onQuarantineRawImportIdChange(event.target.value)} />
-          </label>
+          <Field label="Yüklenen optik dosya">
+            <Input required type="password" value={quarantineRawImportId} onChange={(event) => onQuarantineRawImportIdChange(event.target.value)} />
+          </Field>
         </details>
         <Button type="submit">
           <Wand2 size={17} aria-hidden="true" />
           Eşleşmeyen satırları getir
         </Button>
-      </form>
-      <section className="next-support-tool next-support-tool--full" aria-label="Eşleşmeyen satır listesi">
-        <h2>Eşleşmeyen satırlar</h2>
+      </Panel>
+      <Panel
+        aria-label="Eşleşmeyen satır listesi"
+        className="next-optical-quarantine-panel next-optical-quarantine-panel--wide"
+        description="Öğrenciyle eşleşmeyen optik satırları çözüm durumu ve işlem aksiyonlarıyla izle."
+        title="Eşleşmeyen satırlar"
+      >
         <div className="next-grid-scroll">
-          <table className="uh-data-table">
-            <thead>
-              <tr>
-                <th>Satır</th>
-                <th>Sebep</th>
-                <th>Durum</th>
-                <th>Öğrenci</th>
-                <th>İşlem</th>
-              </tr>
-            </thead>
-            <tbody>
-              {quarantines.map((record) => (
-                <tr key={record.id}>
-                  <td>{record.rowNumber}</td>
-                  <td>{record.reason}</td>
-                  <td>{record.status}</td>
-                  <td>
-                    <select
-                      value={selectedStudentByQuarantine[record.id] ?? record.resolvedStudentId ?? ""}
-                      onChange={(event) =>
-                        onSelectedStudentChange((current) => ({ ...current, [record.id]: event.target.value }))
-                      }
-                    >
-                      <option value="">Seçiniz</option>
-                      {students.map((student) => (
-                        <option key={student.id} value={student.id}>
-                          {student.firstName} {student.lastName}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td>
-                    {record.status === "RESOLVED" ? (
-                      record.evaluationJob ? `Kuyruk: ${record.evaluationJob.jobId}` : "Çözüldü"
-                    ) : (
-                      <button type="button" onClick={() => void onResolve(record)} aria-label={`${record.rowNumber}. satırı çöz`}>
-                        <CheckCircle2 size={17} aria-hidden="true" />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {quarantines.length === 0 ? (
-                <tr>
-                  <td colSpan={5}>
-                    <EmptyState
-                      title="Eşleşmeyen satır yok"
-                      description="Yüklenen dosya için öğrenciyle eşleşmeyen satırlar burada listelenir."
-                    />
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+          <DataTable
+            caption="Eşleşmeyen satır listesi"
+            columns={quarantineColumns}
+            density="compact"
+            emptyText={
+              <EmptyState
+                title="Eşleşmeyen satır yok"
+                description="Yüklenen dosya için öğrenciyle eşleşmeyen satırlar burada listelenir."
+              />
+            }
+            getRowKey={(record) => record.id}
+            rows={quarantines}
+          />
         </div>
-      </section>
+      </Panel>
     </>
   );
 }
@@ -1689,25 +1815,143 @@ function OpticalReportPanel({
   const reportMessage = getReportReadinessMessage(evaluationStatus, hasReportInput, isReportSubmitting);
   const latestSnapshot = reportSnapshots[0] ?? null;
   const studentRows = buildReportAnalysisRows({ participants, snapshot: latestSnapshot, students });
+  const reportSnapshotColumns: Array<DataTableColumn<ReportSnapshotRecord>> = [
+    {
+      header: "Durum",
+      key: "status",
+      priority: "primary",
+      render: (snapshot) => (
+        <StatusBadge tone={reportSnapshotStatusTone(snapshot.status)}>{formatReportStatus(snapshot.status)}</StatusBadge>
+      ),
+    },
+    {
+      header: "Çıktı",
+      key: "exportReadiness",
+      priority: "primary",
+      render: (snapshot) => (
+        <StatusBadge tone={isReportSnapshotReady(snapshot) ? "success" : "warning"}>
+          {isReportSnapshotReady(snapshot) ? "Excel/PDF hazır" : "READY bekleniyor"}
+        </StatusBadge>
+      ),
+    },
+    {
+      align: "right",
+      header: "Sonuç",
+      key: "resultCount",
+      priority: "secondary",
+      render: (snapshot) => formatReportResultCount(snapshot),
+    },
+    {
+      align: "right",
+      header: "Başarı %",
+      key: "successRate",
+      priority: "primary",
+      render: (snapshot) => formatPercentNumber(reportSuccessRate(snapshot.snapshotData?.averages)),
+    },
+    {
+      align: "right",
+      header: "Net",
+      key: "net",
+      priority: "primary",
+      render: (snapshot) => formatReportNumber(snapshot.snapshotData?.averages?.net),
+    },
+    {
+      align: "right",
+      header: "Soru",
+      key: "questionCount",
+      priority: "primary",
+      render: (snapshot) => formatReportNumber(reportQuestionCount(snapshot.snapshotData?.averages)),
+    },
+    {
+      align: "right",
+      header: "Doğru",
+      key: "correct",
+      priority: "optional",
+      render: (snapshot) => formatReportAverage(snapshot, "correct"),
+    },
+    {
+      align: "right",
+      header: "Yanlış",
+      key: "wrong",
+      priority: "optional",
+      render: (snapshot) => formatReportAverage(snapshot, "wrong"),
+    },
+    {
+      align: "right",
+      header: "Boş",
+      key: "blank",
+      priority: "optional",
+      render: (snapshot) => formatReportAverage(snapshot, "blank"),
+    },
+    {
+      align: "right",
+      header: "Sınıf",
+      key: "classCount",
+      priority: "secondary",
+      render: (snapshot) => formatReportClassCount(snapshot),
+    },
+    {
+      header: "Oluşturulma",
+      key: "generatedAt",
+      priority: "optional",
+      render: (snapshot) => formatReportGeneratedAt(snapshot),
+    },
+    {
+      header: "İndirme",
+      key: "download",
+      priority: "primary",
+      render: (snapshot) => (
+        <div className="next-row-actions">
+          <button
+            type="button"
+            disabled={!isReportSnapshotReady(snapshot)}
+            onClick={() => void onDownload(snapshot, "xlsx")}
+            aria-label={`${formatReportStatus(snapshot.status)} optik raporu Excel indir`}
+            title={isReportSnapshotReady(snapshot) ? "Excel indir" : "READY snapshot gerekli"}
+          >
+            <Download size={17} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            disabled={!isReportSnapshotReady(snapshot)}
+            onClick={() => void onDownload(snapshot, "pdf")}
+            aria-label={`${formatReportStatus(snapshot.status)} optik raporu PDF indir`}
+            title={isReportSnapshotReady(snapshot) ? "PDF indir" : "READY snapshot gerekli"}
+          >
+            <FileText size={17} aria-hidden="true" />
+          </button>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <>
-      <form className="next-support-tool" aria-label="Optik rapor üretimi" onSubmit={(event) => void onSubmit(event)}>
-        <h2>Rapor üretimi</h2>
-        <p>{reportMessage}</p>
+      <Panel
+        as="form"
+        aria-label="Optik rapor üretimi"
+        className="next-optical-report-panel next-optical-report-panel--wide"
+        description={reportMessage}
+        title="Rapor üretimi"
+        onSubmit={(event) => void onSubmit(event)}
+      >
         <div className="next-report-status-grid" aria-label="Rapor üretim durumu">
-          <div>
-            <span>Analiz</span>
-            <strong>{evaluationStatus?.status === "COMPLETED" ? "Tamamlandı" : "Bekleniyor"}</strong>
-          </div>
-          <div>
-            <span>Sonuç</span>
-            <strong>{evaluationStatus ? `${evaluationStatus.evaluatedCount}/${evaluationStatus.matchedCount}` : "-"}</strong>
-          </div>
-          <div>
-            <span>Hazır rapor</span>
-            <strong>{reportSnapshots.length}</strong>
-          </div>
+          <MetricCard
+            label="Analiz"
+            tone={evaluationStatus?.status === "COMPLETED" ? "success" : "warning"}
+            value={evaluationStatus?.status === "COMPLETED" ? "Tamamlandı" : "Bekleniyor"}
+          />
+          <MetricCard
+            label="Sonuç"
+            description="Değerlendirilen / eşleşen"
+            value={evaluationStatus ? `${evaluationStatus.evaluatedCount}/${evaluationStatus.matchedCount}` : "-"}
+          />
+          <MetricCard
+            label="Hazır rapor"
+            description="READY snapshot indirmeye açıktır"
+            tone={reportSnapshots.some((snapshot) => snapshot.status === "READY") ? "success" : "default"}
+            value={reportSnapshots.length}
+          />
         </div>
         <div className="next-optical-step-actions">
           <Button disabled={!canGenerateReport} type="submit">
@@ -1722,108 +1966,159 @@ function OpticalReportPanel({
         {reportJob ? (
           <details className="next-advanced-details">
             <summary>Rapor işi kuyruğa alındı.</summary>
-            <p>{reportJob.jobId}</p>
+            <p>{formatEvidenceSafeReference(reportJob.jobId, "Rapor kuyruk ref")}</p>
+            <p>Ham kuyruk id ekran görüntülerinde gösterilmez.</p>
           </details>
         ) : null}
-      </form>
-      <section className="next-support-tool next-support-tool--full" aria-label="Rapor listesi">
-        <h2>Hazır raporlar</h2>
+      </Panel>
+      <Panel
+        aria-label="Rapor listesi"
+        className="next-optical-report-panel next-optical-report-panel--wide"
+        description="READY snapshot çıktıları, üretim tarihi ve indirme durumu tek listede izlenir."
+        title="Hazır raporlar"
+      >
         {reportSnapshots.length > 0 ? (
-          <table className="uh-data-table">
-            <thead>
-              <tr>
-                <th>Durum</th>
-                <th>Öğrenci</th>
-                <th>Doğru</th>
-                <th>Yanlış</th>
-                <th>Boş</th>
-                <th>Net</th>
-                <th>Sınıf</th>
-                <th>Oluşturulma</th>
-                <th>İndirme</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reportSnapshots.map((snapshot) => (
-                <tr key={snapshot.id}>
-                  <td>{formatReportStatus(snapshot.status)}</td>
-                  <td>{formatReportResultCount(snapshot)}</td>
-                  <td>{formatReportAverage(snapshot, "correct")}</td>
-                  <td>{formatReportAverage(snapshot, "wrong")}</td>
-                  <td>{formatReportAverage(snapshot, "blank")}</td>
-                  <td>{formatReportAverage(snapshot, "net")}</td>
-                  <td>{formatReportClassCount(snapshot)}</td>
-                  <td>{formatReportGeneratedAt(snapshot)}</td>
-                  <td>
-                    <div className="next-row-actions">
-                      <button type="button" onClick={() => void onDownload(snapshot, "xlsx")} aria-label="Excel indir" title="Excel indir">
-                        <Download size={17} aria-hidden="true" />
-                      </button>
-                      <button type="button" onClick={() => void onDownload(snapshot, "pdf")} aria-label="PDF indir" title="PDF indir">
-                        <FileText size={17} aria-hidden="true" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="next-grid-scroll">
+            <DataTable
+              caption="Hazır optik raporlar"
+              columns={reportSnapshotColumns}
+              description="Başarı % ana karşılaştırma metriğidir; Net ve Soru bağlam olarak gösterilir. Excel/PDF indirme yalnız READY snapshot için açıktır."
+              density="compact"
+              getRowKey={(snapshot) => snapshot.id}
+              rows={reportSnapshots}
+            />
+          </div>
         ) : (
           <EmptyState title="Hazır rapor yok" description="Rapor ürettiğinizde Excel ve PDF indirme seçenekleri burada görünür." />
         )}
-      </section>
+      </Panel>
       <OpticalStudentResultsTable rows={studentRows} />
     </>
   );
 }
 
 function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
+  const columns: Array<DataTableColumn<ReportAnalysisRow>> = [
+    {
+      header: "Öğrenci",
+      key: "student",
+      priority: "primary",
+      render: (row) => (
+        <>
+          <span className="next-report-student-name">{row.studentName}</span>
+          {row.studentNo ? <small>#{row.studentNo}</small> : null}
+        </>
+      ),
+      sticky: "left",
+    },
+    {
+      header: "Sınıf",
+      key: "class",
+      priority: "primary",
+      render: (row) => row.className,
+    },
+    {
+      header: "Katılım",
+      key: "participation",
+      priority: "optional",
+      render: (row) => formatParticipantMeta(row),
+    },
+    {
+      header: "Durum",
+      key: "status",
+      priority: "primary",
+      render: (row) => <StatusBadge tone={resultStatusTone(row)}>{formatResultStatus(row)}</StatusBadge>,
+    },
+    {
+      align: "right",
+      header: "Başarı %",
+      key: "successRate",
+      priority: "primary",
+      render: (row) => formatPercentNumber(reportSuccessRate(row)),
+    },
+    {
+      align: "right",
+      header: "Net",
+      key: "net",
+      priority: "primary",
+      render: (row) => formatReportNumber(row.net),
+    },
+    {
+      align: "right",
+      header: "Soru",
+      key: "questionCount",
+      priority: "primary",
+      render: (row) => formatReportNumber(reportQuestionCount(row)),
+    },
+    {
+      align: "right",
+      header: "Doğru",
+      key: "correct",
+      priority: "optional",
+      render: (row) => formatReportNumber(row.correct),
+    },
+    {
+      align: "right",
+      header: "Yanlış",
+      key: "wrong",
+      priority: "optional",
+      render: (row) => formatReportNumber(row.wrong),
+    },
+    {
+      align: "right",
+      header: "Boş",
+      key: "blank",
+      priority: "optional",
+      render: (row) => formatReportNumber(row.blank),
+    },
+    {
+      align: "right",
+      header: "Puan",
+      key: "score",
+      priority: "secondary",
+      render: (row) => formatReportNumber(readRowScore(row)),
+    },
+    {
+      align: "right",
+      header: "Genel sıra",
+      key: "generalRank",
+      priority: "optional",
+      render: (row) => formatRank(row.generalRank),
+    },
+    {
+      align: "right",
+      header: "Sınıf sıra",
+      key: "classRank",
+      priority: "optional",
+      render: (row) => formatRank(row.classRank),
+    },
+    {
+      align: "right",
+      header: "Yüzdelik",
+      key: "percentile",
+      priority: "optional",
+      render: (row) => formatPercentile(row.percentile),
+    },
+  ];
+
   return (
-    <section className="next-support-tool next-support-tool--full" aria-label="Katılan öğrenciler">
-      <h2>Katılan öğrenciler</h2>
+    <Panel
+      aria-label="Katılan öğrenciler"
+      className="next-optical-report-panel next-optical-report-panel--wide"
+      description="Öğrenci bazlı başarı dağılımı, soru sayısı, puan ve sıralama bağlamıyla izlenir."
+      title="Katılan öğrenciler"
+    >
       {rows.length > 0 ? (
         <div className="next-grid-scroll">
-          <table className="uh-data-table next-report-analysis-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Öğrenci</th>
-                <th>Sınıf</th>
-                <th>Katılım</th>
-                <th>Durum</th>
-                <th>Doğru</th>
-                <th>Yanlış</th>
-                <th>Boş</th>
-                <th>Net</th>
-                <th>Puan</th>
-                <th>Genel sıra</th>
-                <th>Sınıf sıra</th>
-                <th>Yüzdelik</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, index) => (
-                <tr key={row.rowKey}>
-                  <td>{index + 1}</td>
-                  <td>
-                    <span className="next-report-student-name">{row.studentName}</span>
-                    {row.studentNo ? <small>#{row.studentNo}</small> : null}
-                  </td>
-                  <td>{row.className}</td>
-                  <td>{formatParticipantMeta(row)}</td>
-                  <td>{formatResultStatus(row)}</td>
-                  <td>{formatReportNumber(row.correct)}</td>
-                  <td>{formatReportNumber(row.wrong)}</td>
-                  <td>{formatReportNumber(row.blank)}</td>
-                  <td>{formatReportNumber(row.net)}</td>
-                  <td>{formatReportNumber(readRowScore(row))}</td>
-                  <td>{formatRank(row.generalRank)}</td>
-                  <td>{formatRank(row.classRank)}</td>
-                  <td>{formatPercentile(row.percentile)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable
+            caption="Optik katılımcı sonuçları"
+            className="next-report-analysis-table"
+            columns={columns}
+            description="Başarı % ana karşılaştırma metriğidir; Net, Soru, puan ve sıralama bağlam olarak gösterilir."
+            density="compact"
+            getRowKey={(row) => row.rowKey}
+            rows={rows}
+          />
         </div>
       ) : (
         <EmptyState
@@ -1831,7 +2126,7 @@ function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
           description="Hazır rapor geldiğinde katılan öğrenci listesi burada görünür."
         />
       )}
-    </section>
+    </Panel>
   );
 }
 
@@ -1847,8 +2142,35 @@ function getReportReadinessMessage(
   return `${evaluationStatus.evaluatedCount} öğrenci için rapor hazır.`;
 }
 
+function quarantineStatusTone(status: string): "danger" | "info" | "neutral" | "success" | "warning" {
+  if (status === "RESOLVED") return "success";
+  if (status === "OPEN" || status === "PENDING") return "warning";
+  return "neutral";
+}
+
+function formatQuarantineStatus(status: string): string {
+  if (status === "RESOLVED") return "Çözüldü";
+  if (status === "OPEN" || status === "PENDING") return "Bekliyor";
+  return status;
+}
+
+function reportSnapshotStatusTone(status: string): "danger" | "info" | "neutral" | "success" | "warning" {
+  if (status === "READY") return "success";
+  if (status === "STALE") return "warning";
+  if (status === "FAILED") return "danger";
+  return "neutral";
+}
+
+function isReportSnapshotReady(snapshot: ReportSnapshotRecord): boolean {
+  return snapshot.status === "READY";
+}
+
 function formatReportStatus(status: string): string {
-  return status === "READY" ? "Hazır" : status;
+  if (status === "READY") return "Hazır";
+  if (status === "STALE") return "Eski";
+  if (status === "PENDING") return "Bekliyor";
+  if (status === "FAILED") return "Hatalı";
+  return status;
 }
 
 function formatReportResultCount(snapshot: ReportSnapshotRecord): string {
@@ -1885,6 +2207,12 @@ function formatResultStatus(row: ReportAnalysisRow): string {
   if (row.resultStatus === "READY") return "Sonuç var";
   if (row.resultStatus === "ABSENT") return "Katılmadı";
   return "Sonuç yok";
+}
+
+function resultStatusTone(row: ReportAnalysisRow): "danger" | "info" | "neutral" | "success" | "warning" {
+  if (row.resultStatus === "READY") return "success";
+  if (row.resultStatus === "ABSENT") return "warning";
+  return "neutral";
 }
 
 function readRowScore(row: ReportAnalysisRow): number | undefined {
@@ -2263,24 +2591,14 @@ function downloadBase64File(file: ReportSnapshotExportResult) {
 function renderOpticalFormPreview(rows: OpticalFormPreviewRow[]) {
   return (
     <div className="next-optical-form-preview">
-      <table className="uh-data-table">
-        <thead>
-          <tr>
-            <th>Bölüm</th>
-            <th>Başlangıç</th>
-            <th>Bitiş</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={`${row.section}-${row.start}-${row.end}`}>
-              <td>{row.section}</td>
-              <td>{row.start}</td>
-              <td>{row.end}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <DataTable
+        caption="Optik form alan önizlemesi"
+        columns={opticalFormPreviewColumns}
+        density="compact"
+        description="Bölüm alanlarının başlangıç ve bitiş konumları."
+        getRowKey={(row) => `${row.section}-${row.start}-${row.end}`}
+        rows={rows}
+      />
     </div>
   );
 }

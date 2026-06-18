@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { SegmentedControl } from "@uzman-hocam/ui";
 import type {
   AcademicTermRecord,
   AnnouncementRecord,
@@ -30,9 +31,20 @@ import { AnnouncementsPanel } from "./_shared/announcements-panel.js";
 import { DevelopmentTrendPanel, type DevelopmentTrendItem } from "./_shared/development-panel.js";
 import { GuardianRelationshipSummaryPanel, NotificationPreferencesPanel, PaymentPlansPanel } from "./_shared/guardian-panels.js";
 import { HomeworkAssignmentsPanel } from "./_shared/homework-panels.js";
-import { AccessPanel, MetricGrid, PortalFrame } from "./_shared/portal-shell.js";
+import {
+  AccessPanel,
+  MetricGrid,
+  PortalActionStrip,
+  PortalDailyBrief,
+  PortalFrame,
+  PortalStatePanel,
+  PortalWorkspace,
+  RolePreviewNotice,
+  type PortalActionItem,
+  readRolePreviewToken,
+} from "./_shared/portal-shell.js";
 import { ReportPanel } from "./_shared/report-panel.js";
-import { ProfilePanel, StudentHistoryPanel } from "./_shared/student-panels.js";
+import { ProfilePanel, StudentFocusPanel, StudentHistoryPanel } from "./_shared/student-panels.js";
 import { SupportTicketsPanel } from "./_shared/support-tickets-panel.js";
 import { readReportExamId, fallbackReportExamId } from "../_shared/report-exam-selection.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
@@ -40,7 +52,7 @@ import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../
 export function GuardianPortalPage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
-  const rolePreviewToken = searchParams.get("rolePreviewToken")?.trim() ?? "";
+  const rolePreviewToken = readRolePreviewToken(searchParams);
   const reportExamId = readReportExamId(searchParams);
   const isRolePreview = Boolean(rolePreviewToken);
   const canReadPortal = Boolean(auth && (auth.session.subjectType === "GUARDIAN" || isRolePreview));
@@ -74,14 +86,165 @@ export function GuardianPortalPage() {
     return <AccessPanel title="Veli Portalı" demoEmail="guardian-a@example.test" demoLabel="Demo veli" />;
   }
 
+  if (studentsQuery.isPending) {
+    return (
+      <PortalFrame title="Veli Portalı" subtitle="Bağlı öğrenci özeti">
+        <PortalStatePanel
+          state="loading"
+          title="Veli öğrenci kapsamı hazırlanıyor"
+          description="Bağlı öğrenciler ve izin kapsamı güvenli oturumdan yükleniyor."
+        />
+      </PortalFrame>
+    );
+  }
+
+  if (studentsQuery.isError) {
+    return (
+      <PortalFrame title="Veli Portalı" subtitle="Bağlı öğrenci özeti">
+        <PortalStatePanel
+          state="error"
+          title="Veli öğrenci kapsamı alınamadı"
+          description="Bağlı öğrenci listesi gösterilemiyor. Finans ve iletişim bilgileri hata durumunda açılmaz."
+        />
+      </PortalFrame>
+    );
+  }
+
+  if (!resolvedStudentId) {
+    return (
+      <PortalFrame title="Veli Portalı" subtitle="Bağlı öğrenci özeti">
+        <PortalStatePanel
+          state="empty"
+          title="Bağlı öğrenci bulunamadı"
+          description="Bu veli hesabı için görüntülenebilir öğrenci ilişkisi yok."
+        />
+      </PortalFrame>
+    );
+  }
+
+  if (studentQuery.isPending) {
+    return (
+      <PortalFrame title="Veli Portalı" subtitle={selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "Bağlı öğrenci özeti"}>
+        <PortalStatePanel
+          state="loading"
+          title="Seçili öğrenci verileri hazırlanıyor"
+          description="Duyuru, ödev, rapor ve izin verilen finans bağlamı seçili öğrenci için yükleniyor."
+        />
+      </PortalFrame>
+    );
+  }
+
+  if (studentQuery.isError) {
+    return (
+      <PortalFrame title="Veli Portalı" subtitle={selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "Bağlı öğrenci özeti"}>
+        <PortalStatePanel
+          state="error"
+          title="Seçili öğrenci verisi alınamadı"
+          description="Bu durumda finans, iletişim veya rapor detayı ham olarak açılmaz."
+        />
+      </PortalFrame>
+    );
+  }
+
   const data = studentQuery.data;
   const courseNameById = new Map((data?.courses ?? []).map((course) => [course.id, course.name]));
   const termNameById = new Map((data?.terms ?? []).map((term) => [term.id, term.name]));
-  const canViewFinance = data?.notificationPreferences?.canViewFinance !== false;
+  const canViewFinance = data?.notificationPreferences?.canViewFinance === true;
   const reportTotal = data?.report?.total;
+  const reportSuccess = reportSuccessRate(reportTotal);
+  const unreadAnnouncements = (data?.announcements ?? []).filter((announcement) => !announcement.readAt).length;
+  const openSupportTickets = (data?.supportTickets ?? []).filter(isOpenSupportTicket).length;
+  const canOpenSupportTickets = data?.notificationPreferences?.canOpenSupportTickets !== false;
+  const announcementStatus = unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel";
+  const homeworkStatus = `${data?.homeworkAssignments.length ?? 0} atama`;
+  const attendanceStatus = `${data?.attendanceSummary.total ?? 0} kayıt`;
+  const supportStatus = canOpenSupportTickets ? (openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok") : "Kapalı";
+  const financeStatus = canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Kapalı";
+  const supportReadOnly = isRolePreview || !canOpenSupportTickets;
+  const selectedStudentLabel = selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "Seçilmedi";
+  const selectedStudentDetail = data?.profile?.className ?? "Bağlı öğrenci";
+  const guardianActionItems: PortalActionItem[] = [
+    {
+      actionLabel: "İzle",
+      contextLabel: "Öğrenci",
+      detail: selectedStudentDetail,
+      href: "#portal-student-picker",
+      key: "student",
+      label: "Öğrenci seç",
+      statusLabel: selectedStudent ? "Seçili" : "Bekliyor",
+      tone: selectedStudent ? "info" : "neutral",
+      value: selectedStudentLabel,
+    },
+    {
+      actionLabel: unreadAnnouncements > 0 ? "Oku" : "Hazır",
+      contextLabel: "Duyuru",
+      detail: unreadAnnouncements > 0 ? "Veli duyurusunu kontrol et" : "Okunmamış duyuru yok",
+      href: "#portal-announcements",
+      key: "announcement",
+      label: "Duyuruları oku",
+      statusLabel: unreadAnnouncements > 0 ? "Bekliyor" : "Güncel",
+      tone: unreadAnnouncements > 0 ? "warning" : "success",
+      value: announcementStatus,
+    },
+    {
+      actionLabel: (data?.homeworkAssignments.length ?? 0) > 0 ? "Kontrol" : "Hazır",
+      contextLabel: "Ödev",
+      detail: "Öğrenci çalışma takibi",
+      href: "#portal-homework",
+      key: "homework",
+      label: "Ödevi kontrol et",
+      statusLabel: (data?.homeworkAssignments.length ?? 0) > 0 ? "Takip" : "Tamam",
+      tone: (data?.homeworkAssignments.length ?? 0) > 0 ? "info" : "success",
+      value: homeworkStatus,
+    },
+    {
+      actionLabel: canViewFinance ? "Takip" : "Kapalı",
+      contextLabel: "Finans",
+      detail: canViewFinance ? "İzinli finans görünümü" : "Finans görünürlüğü kapalı",
+      href: "#portal-payments",
+      key: "finance",
+      label: "Ödeme durumunu gör",
+      statusLabel: canViewFinance ? "İzinli" : "Kapalı",
+      tone: canViewFinance && (data?.paymentPlans.length ?? 0) > 0 ? "warning" : "neutral",
+      value: canViewFinance ? financeStatus : "Ödeme izni kapalı",
+    },
+    {
+      actionLabel: supportReadOnly ? (isRolePreview ? "Salt-okuma" : "Kapalı") : openSupportTickets > 0 ? "Takip et" : "Talep aç",
+      contextLabel: "Destek",
+      detail: supportReadOnly ? (isRolePreview ? "Destek talebi açma kapalı" : "Destek talebi izni kapalı") : "Veli destek kapsamı",
+      href: "#portal-support",
+      key: "support",
+      label: "Destek talebini takip et",
+      statusLabel: supportReadOnly ? (isRolePreview ? "Salt-okuma" : "Kapalı") : openSupportTickets > 0 ? "Açık" : "Hazır",
+      tone: !supportReadOnly && openSupportTickets > 0 ? "warning" : "neutral",
+      value: supportStatus,
+    },
+    {
+      actionLabel: "İncele",
+      contextLabel: "Rapor",
+      detail: `${formatNetNumber(reportTotal?.net)} net / ${formatNetNumber(reportQuestionCount(reportTotal))} soru`,
+      href: "#portal-report",
+      key: "report",
+      label: "Son sınavı incele",
+      statusLabel: "Başarı %",
+      tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
+      value: formatPercentNumber(reportSuccess),
+    },
+    {
+      actionLabel: isRolePreview ? "Salt-okuma" : "Canlı",
+      contextLabel: "Erişim",
+      detail: isRolePreview ? "Yazma işlemleri kapalı" : "İzinli veli işlemleri açık",
+      href: isRolePreview ? "#portal-preview" : "#portal-focus",
+      key: "preview",
+      label: "Önizleme durumu",
+      statusLabel: isRolePreview ? "Salt-okuma" : "Canlı",
+      tone: isRolePreview ? "neutral" : "info",
+      value: isRolePreview ? "Salt-okuma" : "Canlı hesap",
+    },
+  ];
   return (
     <PortalFrame title="Veli Portalı" subtitle={selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "Bağlı öğrenci özeti"}>
-      <div className="next-segmented" aria-label="Öğrenci seçimi">
+      <SegmentedControl className="next-segmented" id="portal-student-picker" label="Öğrenci seçimi">
         {students.map((student) => (
           <button
             aria-pressed={student.id === resolvedStudentId}
@@ -92,7 +255,49 @@ export function GuardianPortalPage() {
             {student.firstName} {student.lastName}
           </button>
         ))}
-      </div>
+      </SegmentedControl>
+      <PortalDailyBrief
+        summary="Veli için bugün izlenecek başlıklar seçili öğrenciye göre daraltılır; finans ve destek alanları yalnız izin verilen kapsamda görünür."
+        items={[
+          {
+            label: "Öğrenci",
+            value: selectedStudentLabel,
+            detail: selectedStudentDetail,
+            tone: selectedStudent ? "info" : "neutral",
+          },
+          {
+            label: "Duyuru",
+            value: unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel",
+            detail: unreadAnnouncements > 0 ? "Veli duyurusu bekliyor" : "Okunmamış duyuru yok",
+            tone: unreadAnnouncements > 0 ? "warning" : "success",
+          },
+          {
+            label: "Ödev",
+            value: `${data?.homeworkAssignments.length ?? 0} atama`,
+            detail: "Öğrenci çalışma takibi",
+            tone: (data?.homeworkAssignments.length ?? 0) > 0 ? "info" : "neutral",
+          },
+          {
+            label: "Ödeme",
+            value: canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Ödeme izni kapalı",
+            detail: canViewFinance ? "Bekleyen veya geciken tutar" : "Finans görünürlüğü kapalı",
+            tone: canViewFinance && (data?.paymentPlans.length ?? 0) > 0 ? "warning" : "neutral",
+          },
+          {
+            label: "Destek",
+            value: canOpenSupportTickets ? (openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok") : "Kapalı",
+            detail: canOpenSupportTickets ? "Veli destek kapsamı" : "Destek talebi izni kapalı",
+            tone: canOpenSupportTickets && openSupportTickets > 0 ? "warning" : "success",
+          },
+          {
+            label: "Son sınav",
+            value: formatPercentNumber(reportSuccess),
+            detail: `${formatNetNumber(reportTotal?.net)} net / ${formatNetNumber(reportQuestionCount(reportTotal))} soru`,
+            tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
+          },
+        ]}
+      />
+      <PortalActionStrip ariaLabel="Veli günlük aksiyonları" items={guardianActionItems} />
       <MetricGrid
         items={[
           { label: "Devamsızlık", value: data?.attendanceSummary.total ?? 0 },
@@ -101,85 +306,126 @@ export function GuardianPortalPage() {
           { label: "Başarı", value: formatPercentNumber(reportSuccessRate(reportTotal)) },
           { label: "Net", value: formatNetNumber(reportTotal?.net) },
           { label: "Soru", value: formatNetNumber(reportQuestionCount(reportTotal)) },
-          { label: "Ödeme planı", value: data?.paymentPlans.length ?? 0 },
+          { label: "Ödeme planı", value: canViewFinance ? data?.paymentPlans.length ?? 0 : "Kapalı" },
           { label: "Bekleyen ödeme", value: canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Kapalı" },
         ]}
       />
       {isRolePreview ? (
-        <section className="next-list-panel" aria-label="Rol önizleme modu">
-          <h2>Salt-okuma Önizleme</h2>
-          <p>Bu ekran kurum yöneticisi için geçici rol önizleme modunda açıldı.</p>
-        </section>
+        <div id="portal-preview">
+          <RolePreviewNotice />
+        </div>
       ) : null}
-      <ProfilePanel profile={data?.profile} />
-      <StudentHistoryPanel
-        classHistory={data?.classHistory ?? []}
-        enrollments={data?.enrollments ?? []}
-        termNames={termNameById}
-      />
-      <GuardianRelationshipSummaryPanel relationship={data?.notificationPreferences} />
-      <NotificationPreferencesPanel
-        preferences={data?.notificationPreferences}
-        readOnly={isRolePreview}
-        onUpdate={(input) =>
-          auth && resolvedStudentId && !isRolePreview
-            ? updateGuardianNotificationPreferences(
-                auth.accessToken,
-                resolvedStudentId,
-                input,
-              ).then(() => studentQuery.refetch())
-            : undefined
+      <div id="portal-focus">
+        <StudentFocusPanel
+          announcementStatus={announcementStatus}
+          attendanceStatus={attendanceStatus}
+          financeStatus={financeStatus}
+          homeworkStatus={homeworkStatus}
+          mode={isRolePreview ? "read-only" : "guardian"}
+          net={formatNetNumber(reportTotal?.net)}
+          profile={data?.profile}
+          questionCount={formatNetNumber(reportQuestionCount(reportTotal))}
+          scopeLabel={data?.notificationPreferences ? guardianRelationshipLabel(data.notificationPreferences.relationshipType) : "Veli kapsamı"}
+          successRate={formatPercentNumber(reportSuccess)}
+          supportStatus={supportStatus}
+        />
+      </div>
+      <PortalWorkspace
+        ariaLabel="Veli portal çalışma alanı"
+        main={
+          <>
+            <div id="portal-report">
+              <ReportPanel
+                context={data?.report ?? undefined}
+                courseNames={courseNameById}
+                errorBooklet={data?.errorBooklet ?? null}
+                progress={data?.progress ?? null}
+                report={data?.report ?? null}
+                termNames={termNameById}
+              />
+            </div>
+            <div id="portal-payments">
+              <PaymentPlansPanel canViewFinance={canViewFinance} plans={data?.paymentPlans ?? []} />
+            </div>
+            <div id="portal-homework">
+              <HomeworkAssignmentsPanel
+                assignments={data?.homeworkAssignments ?? []}
+                courseNames={courseNameById}
+                termNames={termNameById}
+              />
+            </div>
+            <div id="portal-announcements">
+              <AnnouncementsPanel
+                announcements={data?.announcements ?? []}
+                readOnly={isRolePreview}
+                onMarkRead={(announcement) =>
+                  auth && resolvedStudentId && !isRolePreview
+                    ? markAnnouncementRead(
+                        auth.accessToken,
+                        `me/guardian/students/${encodeURIComponent(resolvedStudentId)}/announcements/${encodeURIComponent(announcement.id)}/read`,
+                      ).then(() => studentQuery.refetch())
+                    : undefined
+                }
+              />
+            </div>
+            <div id="portal-support">
+              <SupportTicketsPanel
+                readOnly={supportReadOnly}
+                readOnlyMessage={isRolePreview ? undefined : "Veli destek talebi izni kapalı."}
+                tickets={data?.supportTickets ?? []}
+                onCreate={(input) =>
+                  auth && resolvedStudentId && !isRolePreview && data?.notificationPreferences?.canOpenSupportTickets !== false
+                    ? createPortalSupportTicket(
+                        auth.accessToken,
+                        `me/guardian/students/${encodeURIComponent(resolvedStudentId)}/support-tickets`,
+                        input,
+                      ).then(() => studentQuery.refetch())
+                    : undefined
+                }
+              />
+            </div>
+          </>
+        }
+        side={
+          <>
+            <ProfilePanel profile={data?.profile} />
+            <StudentHistoryPanel
+              classHistory={data?.classHistory ?? []}
+              enrollments={data?.enrollments ?? []}
+              termNames={termNameById}
+            />
+            <GuardianRelationshipSummaryPanel relationship={data?.notificationPreferences} />
+            <NotificationPreferencesPanel
+              preferences={data?.notificationPreferences}
+              readOnly={isRolePreview}
+              onUpdate={(input) =>
+                auth && resolvedStudentId && !isRolePreview
+                  ? updateGuardianNotificationPreferences(
+                      auth.accessToken,
+                      resolvedStudentId,
+                      input,
+                    ).then(() => studentQuery.refetch())
+                  : undefined
+              }
+            />
+            <DevelopmentTrendPanel assessments={data?.developmentAssessments ?? []} />
+            <TeacherNotesPanel notes={data?.teacherNotes ?? []} courseNames={courseNameById} termNames={termNameById} />
+            <AttendancePanel records={data?.attendance ?? []} />
+          </>
         }
       />
-      <AnnouncementsPanel
-        announcements={data?.announcements ?? []}
-        readOnly={isRolePreview}
-        onMarkRead={(announcement) =>
-          auth && resolvedStudentId && !isRolePreview
-            ? markAnnouncementRead(
-                auth.accessToken,
-                `me/guardian/students/${encodeURIComponent(resolvedStudentId)}/announcements/${encodeURIComponent(announcement.id)}/read`,
-              ).then(() => studentQuery.refetch())
-            : undefined
-        }
-      />
-      <HomeworkAssignmentsPanel
-        assignments={data?.homeworkAssignments ?? []}
-        courseNames={courseNameById}
-        termNames={termNameById}
-      />
-      <SupportTicketsPanel
-        readOnly={isRolePreview}
-        tickets={data?.supportTickets ?? []}
-        onCreate={(input) =>
-          auth && resolvedStudentId && !isRolePreview && data?.notificationPreferences?.canOpenSupportTickets !== false
-            ? createPortalSupportTicket(
-                auth.accessToken,
-                `me/guardian/students/${encodeURIComponent(resolvedStudentId)}/support-tickets`,
-                input,
-              ).then(() => studentQuery.refetch())
-            : undefined
-        }
-      />
-      <ReportPanel
-        context={data?.report ?? undefined}
-        courseNames={courseNameById}
-        errorBooklet={data?.errorBooklet ?? null}
-        progress={data?.progress ?? null}
-        report={data?.report ?? null}
-        termNames={termNameById}
-      />
-      <PaymentPlansPanel canViewFinance={canViewFinance} plans={data?.paymentPlans ?? []} />
-      <DevelopmentTrendPanel assessments={data?.developmentAssessments ?? []} />
-      <TeacherNotesPanel notes={data?.teacherNotes ?? []} />
-      <AttendancePanel records={data?.attendance ?? []} />
-      {studentsQuery.isError || studentQuery.isError ? <p className="next-form-error">Veli portal verisi alınamadı.</p> : null}
     </PortalFrame>
   );
 }
 
 async function loadGuardianStudentPortal(accessToken: string, studentId: string, rolePreviewToken = "", reportExamId = fallbackReportExamId) {
-  const [profile, classHistory, enrollments, notificationPreferences, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, paymentPlans, report, errorBooklet, progress, courses, terms] = await Promise.all([
+  const notificationPreferences = await readOnlyRequest<GuardianStudentRecord>(
+    accessToken,
+    `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/notification-preferences`,
+    rolePreviewToken,
+  );
+  const canViewFinance = notificationPreferences.canViewFinance === true;
+  const [profile, classHistory, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, paymentPlans, report, errorBooklet, progress, courses, terms] = await Promise.all([
     readOnlyRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/profile`, rolePreviewToken),
     readOnlyRequest<StudentClassHistoryRecord[]>(
       accessToken,
@@ -191,15 +437,10 @@ async function loadGuardianStudentPortal(accessToken: string, studentId: string,
       `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/enrollments`,
       rolePreviewToken,
     ),
-    readOnlyRequest<GuardianStudentRecord>(
-      accessToken,
-      `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/notification-preferences`,
-      rolePreviewToken,
-    ),
     readOnlyRequest<AnnouncementRecord[]>(accessToken, `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/announcements`, rolePreviewToken),
     readOnlyRequest<HomeworkMaterialAssignmentRecord[]>(
       accessToken,
-      `${apiBaseUrl}/me/guardian/homework/material-assignments`,
+      `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/homework/material-assignments`,
       rolePreviewToken,
     ),
     apiRequestOrEmptySupportTickets(
@@ -219,11 +460,13 @@ async function loadGuardianStudentPortal(accessToken: string, studentId: string,
       `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/development-assessments`,
       rolePreviewToken,
     ),
-    apiRequestOrEmptyPaymentPlans(
-      accessToken,
-      `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/payment-plans`,
-      rolePreviewToken,
-    ),
+    canViewFinance
+      ? apiRequestOrEmptyPaymentPlans(
+          accessToken,
+          `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/payment-plans`,
+          rolePreviewToken,
+        )
+      : Promise.resolve([]),
     apiRequestOrNull<ReportStudentSnapshot>(
       accessToken,
       `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${encodeURIComponent(reportExamId)}/latest`,
@@ -249,7 +492,7 @@ async function loadGuardianStudentPortal(accessToken: string, studentId: string,
     enrollments,
     notificationPreferences,
     announcements,
-    homeworkAssignments: homeworkAssignments.filter((assignment) => assignment.studentId === studentId),
+    homeworkAssignments,
     supportTickets,
     attendance,
     attendanceSummary,
@@ -338,6 +581,17 @@ function toHeaderRecord(headers: HeadersInit | undefined): Record<string, string
   return headers;
 }
 
+function guardianRelationshipLabel(value: GuardianStudentRecord["relationshipType"]) {
+  const labels: Record<GuardianStudentRecord["relationshipType"], string> = {
+    EMERGENCY_CONTACT: "Acil kişi",
+    FATHER: "Baba",
+    GUARDIAN: "Vasi",
+    MOTHER: "Anne",
+    OTHER: "Diğer",
+  };
+  return labels[value];
+}
+
 function formatMoney(amount: number, currency: string) {
   return `${(amount / 100).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currency}`;
 }
@@ -355,4 +609,8 @@ function formatPendingPayment(plans: PaymentPlanWithInstallmentsRecord[]) {
 
 function formatNetNumber(value: number | undefined) {
   return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+}
+
+function isOpenSupportTicket(ticket: SupportTicketRecord) {
+  return ticket.status === "OPEN" || ticket.status === "IN_PROGRESS";
 }

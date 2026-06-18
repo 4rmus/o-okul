@@ -1,13 +1,40 @@
 "use client";
 
+import { DataTable, Panel, type DataTableColumn } from "@uzman-hocam/ui";
 import type { DevelopmentTrendItem } from "@uzman-hocam/shared-types";
 
 export type { DevelopmentTrendItem } from "@uzman-hocam/shared-types";
 
 export function DevelopmentTrendPanel({ assessments }: { assessments: DevelopmentTrendItem[] }) {
+  const scoreColumns: Array<DataTableColumn<DevelopmentTrendItem["scores"][number]>> = [
+    {
+      header: "Kriter",
+      key: "criterion",
+      priority: "primary",
+      render: (score) => score.criterionName,
+      sticky: "left",
+    },
+    {
+      align: "right",
+      header: "Puan",
+      key: "score",
+      priority: "primary",
+      render: (score) => score.score,
+    },
+    {
+      header: "Ölçek",
+      key: "scale",
+      priority: "secondary",
+      render: (score) => `${score.scaleMin}-${score.scaleMax}`,
+    },
+  ];
+
   return (
-    <section className="next-list-panel" aria-label="Gelişim trendi">
-      <h2>Gelişim ve Mentorluk</h2>
+    <Panel
+      aria-label="Gelişim trendi"
+      description="Mentorluk değerlendirmeleri, dönem notları ve kriter puanları."
+      title="Gelişim ve Mentorluk"
+    >
       {assessments.length === 0 ? (
         <p className="next-status-note">Henüz görünür gelişim değerlendirmesi yok.</p>
       ) : (
@@ -17,31 +44,20 @@ export function DevelopmentTrendPanel({ assessments }: { assessments: Developmen
               <strong>{assessment.periodLabel}</strong>
               <span className="next-field-hint">{assessment.createdAt ? formatDate(assessment.createdAt) : "Tarih yok"}</span>
               {assessment.mentorNote ? <p>{assessment.mentorNote}</p> : null}
-              <table className="uh-data-table">
-                <thead>
-                  <tr>
-                    <th>Kriter</th>
-                    <th>Puan</th>
-                    <th>Ölçek</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {assessment.scores.map((score) => (
-                    <tr key={`${assessment.id}-${score.criterionId}`}>
-                      <td>{score.criterionName}</td>
-                      <td>{score.score}</td>
-                      <td>
-                        {score.scaleMin}-{score.scaleMax}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <DataTable
+                caption={`${assessment.periodLabel} gelişim puanları`}
+                columns={scoreColumns}
+                description="Mentorluk değerlendirmesindeki kriter puanları ve kullanılan ölçek."
+                density="compact"
+                emptyText="Gelişim kriteri yok."
+                getRowKey={(score) => `${assessment.id}-${score.criterionId}`}
+                rows={assessment.scores}
+              />
             </article>
           ))}
         </div>
       )}
-    </section>
+    </Panel>
   );
 }
 

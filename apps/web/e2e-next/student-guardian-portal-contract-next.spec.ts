@@ -1,0 +1,834 @@
+import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
+
+const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
+const rawPiiValues = ["12345678901", "+905551234567", "ada.kaya@example.test", "bora.yilmaz@example.test"];
+const rawInternalValues = ["student-a", "student-b", "teacher-math", "course-math", "term-2026"];
+
+const corsHeaders = {
+  "access-control-allow-credentials": "true",
+  "access-control-allow-headers": "authorization,content-type,x-csrf-token,x-role-preview-token",
+  "access-control-allow-methods": "DELETE,GET,PATCH,POST,OPTIONS",
+  "access-control-allow-origin": appOrigin,
+};
+
+test.describe("Öğrenci veli portalı sözleşmesi", () => {
+  for (const viewport of [
+    { height: 844, width: 390 },
+    { height: 1024, width: 768 },
+  ]) {
+    test(`öğrenci portalı ${viewport.width}px görünümde kapsamı ve PII güvenliğini korur`, async ({ page }) => {
+      const requestedPaths: string[] = [];
+      await openStudentPortal(page, viewport, { requestedPaths });
+
+      await expect(page.getByRole("heading", { level: 1, name: "Öğrenci Portalı" })).toBeVisible();
+      const portalSummary = page.getByRole("region", { exact: true, name: "Portal özeti" });
+      await expectPortalSummaryMetrics(
+        portalSummary,
+        ["Toplam devamsızlık", "Geç kalma", "Not", "Ödev", "Başarı", "Net", "Soru", "Gelişim"],
+        rawPiiValues,
+      );
+      await expect(portalSummary).toContainText("Başarı % ana metrik");
+      await expect(portalSummary).toContainText("Soru sayısı bağlamıyla okunur");
+      const focus = page.getByLabel("Öğrenci operasyon bağlamı");
+      await expect(focus).toContainText("Öğrenci Odağı");
+      await expect(focus).toContainText("Canlı öğrenci");
+      await expect(focus).toContainText("Öğrenci hesabı");
+      await expect(focus).toContainText("Başarı %");
+      await expect(focus).toContainText("%81,7");
+      await expect(focus).toContainText("Soru");
+      await expect(focus).toContainText("30");
+      await expect(focus).toContainText("Net");
+      await expect(focus).toContainText("24,5");
+      const studentActions = page.getByRole("region", { name: "Öğrenci günlük aksiyonları" });
+      await expect(studentActions).toContainText("Günlük iş kuyruğu");
+      await expect(studentActions).toContainText("Öncelikli aksiyonlar");
+      await expect(studentActions).toContainText("6 aksiyon");
+      await expect(studentActions.getByRole("link", { name: /Duyuruları oku: 1 okunmamış/ })).toHaveAttribute("href", "#portal-announcements");
+      await expect(studentActions.getByRole("link", { name: /Ödevi aç: 1 atama/ })).toHaveAttribute("href", "#portal-homework");
+      await expect(studentActions.getByRole("link", { name: /Devamsızlığı kontrol et: 30 kayıt/ })).toHaveAttribute("href", "#portal-attendance");
+      await expect(studentActions.getByRole("link", { name: /Destek talebini takip et: 1 açık/ })).toHaveAttribute("href", "#portal-support");
+      await expect(
+        studentActions.getByRole("link", { name: /Son sınavı incele: %81,7.*Rapor.*İncele.*Başarı %.*24,5 net \/ 30 soru/ }),
+      ).toHaveAttribute("href", "#portal-report");
+      await expect(studentActions.getByRole("link", { name: /Son sınavı incele: %81,7/ })).toContainText("24,5 net / 30 soru");
+      await expect(studentActions.getByRole("link", { name: /Önizleme durumu: Canlı hesap/ })).toHaveAttribute("href", "#portal-focus");
+      await expect(studentActions.getByRole("link")).toHaveCount(6);
+      await expectNoPortalActionPiiLeak(studentActions, rawPiiValues);
+      await expectAnchorsAttached(page, [
+        "#portal-announcements",
+        "#portal-homework",
+        "#portal-attendance",
+        "#portal-support",
+        "#portal-report",
+        "#portal-focus",
+      ]);
+      await expectPortalActionFocus(page, studentActions, /Son sınavı incele: %81,7/, page.locator("#portal-report"), "#portal-report");
+      await expect(page.getByRole("region", { exact: true, name: "Öğrenci portal çalışma alanı" })).toBeVisible();
+      await expectStudentProfileAndHistoryPanels(page);
+      await expectGuardianRelationsPanel(page);
+      await expectPortalActivityPanels(page);
+      await expect(page.getByRole("region", { name: "Portal rapor özeti" })).toContainText("Başarı %");
+      await expectHomeworkAssignmentsPanel(page);
+      await expectPortalAnnouncementsTable(page, { readOnly: false });
+      await expectPortalSupportPanel(page, { formVisible: true });
+
+      for (const value of rawPiiValues) {
+        await expect(page.locator("body")).not.toContainText(value);
+      }
+      expect(requestedPaths.filter((path) => path === "/students" || path.startsWith("/students/"))).toEqual([]);
+      await expectNoHorizontalOverflow(page, `student-portal-${viewport.width}`);
+      await expectNoUnlabeledControls(page, `student-portal-${viewport.width}`);
+      await expectNoClippedVisibleText(page, `student-portal-${viewport.width}`);
+    });
+  }
+
+  test("öğrenci rol önizlemesi salt-okuma kalır", async ({ page }) => {
+    const mutationRequests: string[] = [];
+    await openStudentPortal(page, { height: 844, width: 390 }, { mode: "role-preview", mutationRequests });
+
+    await expect(page).toHaveURL(/\/ogrenci\?rolePreview=1$/);
+    expect(page.url()).not.toContain("preview-token");
+    await expect(page.getByLabel("Rol önizleme modu")).toContainText("Salt-okuma Önizleme");
+    await expect(page.getByLabel("Öğrenci operasyon bağlamı")).toContainText("Salt-okuma");
+    const studentPreviewActions = page.getByRole("region", { name: "Öğrenci günlük aksiyonları" });
+    await expect(studentPreviewActions).toContainText("Önizleme durumu");
+    await expect(studentPreviewActions).toContainText("Salt-okuma");
+    await expect(studentPreviewActions.getByRole("link", { name: /Önizleme durumu: Salt-okuma/ })).toHaveAttribute("href", "#portal-preview");
+    await clickAllPortalActionLinks(studentPreviewActions);
+    await expectStudentProfileAndHistoryPanels(page);
+    await expectGuardianRelationsPanel(page);
+    await expectPortalActivityPanels(page);
+    await expectHomeworkAssignmentsPanel(page);
+    await expectPortalAnnouncementsTable(page, { readOnly: true });
+    await expect(page.getByLabel("Destek talepleri")).toContainText("Salt-okuma önizlemede destek talebi açılamaz.");
+    await expectPortalSupportPanel(page, { formVisible: false });
+    await expect(page.getByRole("button", { name: "Destek talebi aç" })).toHaveCount(0);
+    await expect.poll(() => mutationRequests).toEqual([]);
+  });
+
+  for (const viewport of [
+    { height: 844, width: 390 },
+    { height: 1024, width: 768 },
+  ]) {
+    test(`veli portalı ${viewport.width}px görünümde öğrenci kapsamı ve finans iznini korur`, async ({ page }) => {
+      const paymentPlanRequests: string[] = [];
+      const requestedPaths: string[] = [];
+      await openGuardianPortal(page, viewport, { financeVisibility: "false", paymentPlanRequests, requestedPaths });
+
+      await expect(page.getByRole("heading", { level: 1, name: "Veli Portalı" })).toBeVisible();
+      const portalSummary = page.getByRole("region", { exact: true, name: "Portal özeti" });
+      await expectPortalSummaryMetrics(
+        portalSummary,
+        ["Devamsızlık", "Öğretmen notu", "Ödev", "Başarı", "Net", "Soru", "Ödeme planı", "Bekleyen ödeme"],
+        rawPiiValues,
+      );
+      await expect(portalSummary).toContainText("Başarı % ana metrik");
+      await expect(portalSummary).toContainText("Finans görünürlüğü izin kapsamına bağlıdır");
+      await expect(portalSummary).toContainText("Kapalı");
+      await expect(portalSummary).not.toContainText("500,00 TRY");
+      const focus = page.getByLabel("Öğrenci operasyon bağlamı");
+      await expect(focus).toContainText("Öğrenci Odağı");
+      await expect(focus).toContainText("Veli kapsamı");
+      await expect(focus).toContainText("Anne");
+      await expect(focus).toContainText("Finans");
+      await expect(focus).toContainText("Kapalı");
+      const guardianActions = page.getByRole("region", { name: "Veli günlük aksiyonları" });
+      await expect(guardianActions).toContainText("Günlük iş kuyruğu");
+      await expect(guardianActions).toContainText("Öncelikli aksiyonlar");
+      await expect(guardianActions).toContainText("7 aksiyon");
+      await expect(guardianActions.getByRole("link", { name: /Öğrenci seç: Ada Kaya/ })).toHaveAttribute("href", "#portal-student-picker");
+      await expect(guardianActions.getByRole("link", { name: /Ödevi kontrol et: 1 atama/ })).toHaveAttribute("href", "#portal-homework");
+      await expect(
+        guardianActions.getByRole("link", { name: /Ödeme durumunu gör: Ödeme izni kapalı.*Finans.*Kapalı.*Finans görünürlüğü kapalı/ }),
+      ).toHaveAttribute("href", "#portal-payments");
+      await expect(guardianActions).toContainText("Finans görünürlüğü kapalı");
+      await expect(
+        guardianActions.getByRole("link", { name: /Son sınavı incele: %81,7.*Rapor.*İncele.*Başarı %.*24,5 net \/ 30 soru/ }),
+      ).toHaveAttribute("href", "#portal-report");
+      await expect(guardianActions.getByRole("link", { name: /Son sınavı incele: %81,7/ })).toContainText("24,5 net / 30 soru");
+      await expect(guardianActions.getByRole("link", { name: /Önizleme durumu: Canlı hesap/ })).toHaveAttribute("href", "#portal-focus");
+      await expect(guardianActions.getByRole("link")).toHaveCount(7);
+      await expectNoPortalActionPiiLeak(guardianActions, rawPiiValues);
+      await expect(guardianActions).not.toContainText("500,00 TRY");
+      await expectAnchorsAttached(page, [
+        "#portal-student-picker",
+        "#portal-announcements",
+        "#portal-homework",
+        "#portal-payments",
+        "#portal-support",
+        "#portal-report",
+        "#portal-focus",
+      ]);
+      await expectPortalActionFocus(page, guardianActions, /Öğrenci seç: Ada Kaya/, page.locator("#portal-student-picker"), "#portal-student-picker");
+      await expect(page.getByRole("region", { exact: true, name: "Veli portal çalışma alanı" })).toBeVisible();
+      await expectStudentProfileAndHistoryPanels(page);
+      await expectPortalActivityPanels(page);
+      await expect(page.getByLabel("Destek talepleri")).toContainText("Veli destek talebi izni kapalı.");
+      await expectHomeworkAssignmentsPanel(page);
+      await expectPortalAnnouncementsTable(page, { readOnly: false });
+      await expectPortalSupportPanel(page, { formVisible: false });
+      await expect(page.getByRole("button", { name: "Destek talebi aç" })).toHaveCount(0);
+      await expect(page.getByLabel("Ödeme planları")).toContainText("Ödeme görünümü kapalı.");
+      await expect(page.getByText("500,00 TRY")).toHaveCount(0);
+      await expect.poll(() => paymentPlanRequests).toEqual([]);
+
+      await page.getByRole("button", { name: "Bora Yilmaz" }).click();
+      await expect(page.getByLabel("Öğrenci operasyon bağlamı")).toContainText("Bora Yilmaz");
+      await expect(page.getByRole("region", { name: "Veli günlük aksiyonları" })).toContainText("Bora Yilmaz");
+      await expect(page.getByRole("table", { name: "Ödev ve materyal atamaları" })).toContainText("Bora tekrar");
+      await expect(page.getByRole("table", { name: "Ödev ve materyal atamaları" })).not.toContainText("Ada tekrar");
+      expect(requestedPaths).toContain("/me/guardian/students/student-a/homework/material-assignments");
+      expect(requestedPaths).toContain("/me/guardian/students/student-b/homework/material-assignments");
+      expect(requestedPaths.filter((path) => path === "/me/guardian/homework/material-assignments")).toEqual([]);
+      await expectNoHorizontalOverflow(page, `guardian-portal-${viewport.width}`);
+      await expectNoUnlabeledControls(page, `guardian-portal-${viewport.width}`);
+      await expectNoClippedVisibleText(page, `guardian-portal-${viewport.width}`);
+    });
+  }
+
+  test("veli rol önizlemesi salt-okuma kalır", async ({ page }) => {
+    const mutationRequests: string[] = [];
+    await openGuardianPortal(page, { height: 844, width: 390 }, { mode: "role-preview", mutationRequests });
+
+    await expect(page).toHaveURL(/\/veli\?rolePreview=1$/);
+    expect(page.url()).not.toContain("preview-token");
+    await expect(page.getByLabel("Rol önizleme modu")).toContainText("Salt-okuma Önizleme");
+    await expect(page.getByLabel("Öğrenci operasyon bağlamı")).toContainText("Salt-okuma");
+    const guardianPreviewActions = page.getByRole("region", { name: "Veli günlük aksiyonları" });
+    await expect(guardianPreviewActions).toContainText("Önizleme durumu");
+    await expect(guardianPreviewActions).toContainText("Salt-okuma");
+    await expect(guardianPreviewActions.getByRole("link", { name: /Önizleme durumu: Salt-okuma/ })).toHaveAttribute("href", "#portal-preview");
+    await expect(guardianPreviewActions.getByRole("link", { name: /Destek talebini takip et: .*Salt-okuma.*Destek talebi açma kapalı/ })).toHaveAttribute("href", "#portal-support");
+    await clickAllPortalActionLinks(guardianPreviewActions);
+    const preferenceCheckboxes = page.getByLabel("Bildirim tercihleri").locator('input[type="checkbox"]');
+    await expect(preferenceCheckboxes).toHaveCount(3);
+    await expect(preferenceCheckboxes.nth(0)).toBeDisabled();
+    await expect(preferenceCheckboxes.nth(1)).toBeDisabled();
+    await expect(preferenceCheckboxes.nth(2)).toBeDisabled();
+    await expectStudentProfileAndHistoryPanels(page);
+    await expectPortalActivityPanels(page);
+    await expectHomeworkAssignmentsPanel(page);
+    await expectPortalAnnouncementsTable(page, { readOnly: true });
+    await expect(page.getByLabel("Destek talepleri")).toContainText("Salt-okuma önizlemede destek talebi açılamaz.");
+    await expectPortalSupportPanel(page, { formVisible: false });
+    await expect(page.getByRole("button", { name: "Destek talebi aç" })).toHaveCount(0);
+    await expect.poll(() => mutationRequests).toEqual([]);
+  });
+});
+
+async function expectStudentProfileAndHistoryPanels(page: Page) {
+  const profile = page.getByRole("region", { exact: true, name: "Profil" });
+  await expect(profile.getByRole("heading", { name: "Profil" })).toBeVisible();
+  await expect(profile).toContainText("Ad soyad");
+  await expect(profile).toContainText("Sınıf");
+  await expect(profile).toContainText("Sorumlu öğretmen");
+  await expect(profile).toContainText("12*******01");
+  await expect(profile).toContainText("••• ••• ••67");
+
+  const history = page.getByRole("region", { exact: true, name: "Sınıf ve kayıt geçmişi" });
+  await expect(history.getByRole("heading", { name: "Sınıf ve Kayıt Geçmişi" })).toBeVisible();
+  const historyTable = history.getByRole("table", { name: "Sınıf ve kayıt geçmişi" });
+  await expect(historyTable).toBeVisible();
+  await expect(historyTable.locator("thead th")).toHaveText(["Tür", "Sınıf", "Organizasyon", "Dönem", "Başlangıç", "Durum", "Neden"]);
+  await expect(history).toContainText("Sınıf bilgisi yok");
+  await expect(history).toContainText("Dönem bilgisi yok");
+
+  for (const value of ["class-8a", "class-missing", "term-2026", "term-missing"]) {
+    await expect(history).not.toContainText(value);
+  }
+}
+
+async function expectGuardianRelationsPanel(page: Page) {
+  const relations = page.getByRole("region", { exact: true, name: "Veli ilişkileri" });
+  await expect(relations.getByRole("heading", { name: "Veliler" })).toBeVisible();
+  const table = relations.getByRole("table", { name: "Veli ilişkileri" });
+  await expect(table).toBeVisible();
+  await expect(table.locator("thead th")).toHaveText(["Veli", "İlişki", "Birincil", "İzinler"]);
+  await expect(relations).toContainText("Ayşe Kaya");
+  await expect(relations).toContainText("Bilinmeyen veli");
+  await expect(relations).not.toContainText("guardian-a");
+  await expect(relations).not.toContainText("guardian-missing");
+}
+
+async function expectHomeworkAssignmentsPanel(page: Page) {
+  const homework = page.getByRole("region", { exact: true, name: "Ödevler" });
+  await expect(homework.getByRole("heading", { name: "Ödevler" })).toBeVisible();
+  const table = homework.getByRole("table", { name: "Ödev ve materyal atamaları" });
+  await expect(table).toBeVisible();
+  await expect(table.getByRole("columnheader", { name: "Materyal" })).toBeVisible();
+  await expect(table.getByRole("columnheader", { name: "Bağlam" })).toBeVisible();
+  for (const value of ["material-a", "course-math", "term-2026", "student-a", "student-b"]) {
+    await expect(homework).not.toContainText(value);
+  }
+}
+
+async function expectPortalActivityPanels(page: Page) {
+  const notes = page.getByRole("region", { exact: true, name: "Öğretmen notları" });
+  const notesTable = notes.getByRole("table", { name: "Öğretmen notları" });
+  await expect(notesTable).toBeVisible();
+  await expect(notesTable.locator("thead th")).toHaveText(["Bağlam", "Branş", "Dönem", "Not"]);
+  await expect(notes).toContainText("Problem çözüm adımları takip edilecek.");
+  await expect(notes).toContainText("Matematik");
+  await expect(notes).toContainText("2026 Bahar");
+
+  const attendance = page.getByRole("region", { exact: true, name: "Devamsızlık" });
+  await expect(attendance.getByRole("table", { name: "Devamsızlık kayıtları" })).toBeVisible();
+
+  for (const value of rawInternalValues) {
+    await expect(notes).not.toContainText(value);
+    await expect(attendance).not.toContainText(value);
+  }
+}
+
+async function expectPortalAnnouncementsTable(page: Page, options: { readOnly: boolean }) {
+  const announcements = page.getByRole("region", { name: "Duyurular" });
+  const table = page.getByRole("table", { name: "Portal duyuruları" });
+  await expect(table).toBeVisible();
+  await expect(table.getByRole("columnheader", { name: "Başlık" })).toBeVisible();
+  await expect(table.getByRole("columnheader", { name: "Hedef" })).toBeVisible();
+  await expect(table.getByRole("columnheader", { name: "Okunma" })).toBeVisible();
+  if (options.readOnly) {
+    await expect(announcements.getByRole("button", { name: "Okundu işaretle" })).toHaveCount(0);
+    await expect(announcements).toContainText("Salt-okuma");
+  } else {
+    await expect(announcements.getByRole("button", { name: "Okundu işaretle" })).toBeVisible();
+  }
+}
+
+async function expectPortalSupportPanel(page: Page, options: { formVisible: boolean }) {
+  const support = page.getByRole("region", { name: "Destek talepleri" });
+  const table = page.getByRole("table", { name: "Destek talepleri" });
+  await expect(table).toBeVisible();
+  await expect(table.getByRole("columnheader", { name: "Konu" })).toBeVisible();
+  await expect(table.getByRole("columnheader", { name: "Öncelik" })).toBeVisible();
+  await expect(table.getByRole("columnheader", { name: "Durum" })).toBeVisible();
+  await expect(support.locator(".uh-status-badge", { hasText: "Normal" })).toBeVisible();
+  await expect(support.locator(".uh-status-badge", { hasText: "Açık" })).toBeVisible();
+  if (options.formVisible) {
+    await expect(support.getByLabel("Konu")).toBeVisible();
+    await expect(support.getByLabel("Mesaj")).toBeVisible();
+    await expect(support.getByLabel("Öncelik")).toBeVisible();
+  } else {
+    await expect(support.getByLabel("Konu")).toHaveCount(0);
+    await expect(support.getByLabel("Mesaj")).toHaveCount(0);
+    await expect(support.getByLabel("Öncelik")).toHaveCount(0);
+  }
+}
+
+async function openStudentPortal(
+  page: Page,
+  viewport: { height: number; width: number },
+  options: { mode?: "student" | "role-preview"; mutationRequests?: string[]; requestedPaths?: string[] } = {},
+) {
+  await page.setViewportSize(viewport);
+  await installStudentApiMocks(page, options);
+  await page.addInitScript((mode) => {
+    document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
+    if (mode === "role-preview") {
+      window.sessionStorage.setItem("uzman-hocam.role-preview-token", "preview-token-student");
+    }
+  }, options.mode ?? "student");
+  await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
+  await page.goto(options.mode === "role-preview" ? "/ogrenci?rolePreview=1" : "/ogrenci");
+  await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+}
+
+async function openGuardianPortal(
+  page: Page,
+  viewport: { height: number; width: number },
+  options: {
+    financeVisibility?: "false" | "true";
+    mode?: "guardian" | "role-preview";
+    mutationRequests?: string[];
+    paymentPlanRequests?: string[];
+    requestedPaths?: string[];
+  } = {},
+) {
+  await page.setViewportSize(viewport);
+  await installGuardianApiMocks(page, options);
+  await page.addInitScript((mode) => {
+    document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
+    if (mode === "role-preview") {
+      window.sessionStorage.setItem("uzman-hocam.role-preview-token", "preview-token-guardian");
+    }
+  }, options.mode ?? "guardian");
+  await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
+  await page.goto(options.mode === "role-preview" ? "/veli?rolePreview=1" : "/veli");
+  await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+}
+
+async function installStudentApiMocks(
+  page: Page,
+  options: { mode?: "student" | "role-preview"; mutationRequests?: string[]; requestedPaths?: string[] },
+) {
+  await page.route("**/api/v1/**", async (route) => {
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({ headers: corsHeadersFor(route), status: 204 });
+      return;
+    }
+
+    const method = route.request().method();
+    const pathName = new URL(route.request().url()).pathname.replace(/^\/api\/v1/, "");
+    options.requestedPaths?.push(pathName);
+    if (method !== "GET" && method !== "OPTIONS" && pathName !== "/auth/refresh") {
+      options.mutationRequests?.push(`${method} ${pathName}`);
+    }
+    await fulfillData(route, studentApiResponse(pathName, options.mode ?? "student"));
+  });
+}
+
+async function installGuardianApiMocks(
+  page: Page,
+  options: {
+    financeVisibility?: "false" | "true";
+    mode?: "guardian" | "role-preview";
+    mutationRequests?: string[];
+    paymentPlanRequests?: string[];
+    requestedPaths?: string[];
+  },
+) {
+  await page.route("**/api/v1/**", async (route) => {
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({ headers: corsHeadersFor(route), status: 204 });
+      return;
+    }
+
+    const method = route.request().method();
+    const pathName = new URL(route.request().url()).pathname.replace(/^\/api\/v1/, "");
+    options.requestedPaths?.push(pathName);
+    if (pathName.includes("/payment-plans")) {
+      options.paymentPlanRequests?.push(pathName);
+    }
+    if (method !== "GET" && method !== "OPTIONS" && pathName !== "/auth/refresh") {
+      options.mutationRequests?.push(`${method} ${pathName}`);
+    }
+    await fulfillData(route, guardianApiResponse(pathName, options));
+  });
+}
+
+function studentApiResponse(pathName: string, mode: "student" | "role-preview"): unknown {
+  if (pathName === "/auth/refresh") return createStudentAuthResponse(mode);
+  if (pathName === "/me/tenant") return createTenantResponse();
+  if (pathName === "/me/notification-devices") return [];
+  if (pathName === "/me/student/profile") return createStudentProfile("student-a");
+  if (pathName === "/me/student/guardians") return createStudentGuardians();
+  if (pathName === "/me/student/guardian-links") return createStudentGuardianLinks();
+  if (pathName === "/me/student/class-history") return createClassHistory("student-a");
+  if (pathName === "/me/student/enrollments") return createEnrollments("student-a");
+  if (pathName === "/me/student/announcements") return createAnnouncements();
+  if (pathName === "/me/student/homework/material-assignments") return createHomeworkAssignments("student-a");
+  if (pathName === "/me/student/support-tickets") return createSupportTickets();
+  if (pathName === "/me/student/attendance") return createAttendance("student-a");
+  if (pathName === "/me/student/attendance/summary") return createAttendanceSummary("student-a");
+  if (pathName === "/me/student/teacher-notes") return createTeacherNotes("student-a");
+  if (pathName === "/me/student/development-assessments") return createDevelopmentAssessments("student-a");
+  if (pathName === "/me/student/reports/exam-demo-isem-lgs-1/latest") return createStudentReport("student-a");
+  if (pathName === "/me/student/reports/exam-demo-isem-lgs-1/latest/error-booklet") return createErrorBooklet("student-a");
+  if (pathName === "/me/student/reports/exam-demo-isem-lgs-1/progress") return createProgress("student-a");
+  if (pathName === "/courses") return createCourses();
+  if (pathName === "/academic-terms") return createTerms();
+  return [];
+}
+
+function guardianApiResponse(
+  pathName: string,
+  options: { financeVisibility?: "false" | "true"; mode?: "guardian" | "role-preview" },
+): unknown {
+  if (pathName === "/auth/refresh") return createGuardianAuthResponse(options.mode ?? "guardian");
+  if (pathName === "/me/tenant") return createTenantResponse();
+  if (pathName === "/me/notification-devices") return [];
+  if (pathName === "/me/guardian/students") return createGuardianStudents();
+  for (const studentId of ["student-a", "student-b"] as const) {
+    if (pathName === `/me/guardian/students/${studentId}/notification-preferences`) {
+      return createGuardianPreferences(studentId, options.financeVisibility !== "false", options.mode === "role-preview");
+    }
+    if (pathName === `/me/guardian/students/${studentId}/profile`) return createStudentProfile(studentId);
+    if (pathName === `/me/guardian/students/${studentId}/class-history`) return createClassHistory(studentId);
+    if (pathName === `/me/guardian/students/${studentId}/enrollments`) return createEnrollments(studentId);
+    if (pathName === `/me/guardian/students/${studentId}/announcements`) return createAnnouncements();
+    if (pathName === `/me/guardian/students/${studentId}/support-tickets`) return createSupportTickets();
+    if (pathName === `/me/guardian/students/${studentId}/homework/material-assignments`) return createHomeworkAssignments(studentId);
+    if (pathName === `/me/guardian/students/${studentId}/attendance`) return createAttendance(studentId);
+    if (pathName === `/me/guardian/students/${studentId}/attendance/summary`) return createAttendanceSummary(studentId);
+    if (pathName === `/me/guardian/students/${studentId}/teacher-notes`) return createTeacherNotes(studentId);
+    if (pathName === `/me/guardian/students/${studentId}/development-assessments`) return createDevelopmentAssessments(studentId);
+    if (pathName === `/me/guardian/students/${studentId}/payment-plans`) return createPaymentPlans();
+    if (pathName === `/me/guardian/students/${studentId}/reports/exam-demo-isem-lgs-1/latest`) return createStudentReport(studentId);
+    if (pathName === `/me/guardian/students/${studentId}/reports/exam-demo-isem-lgs-1/latest/error-booklet`) return createErrorBooklet(studentId);
+    if (pathName === `/me/guardian/students/${studentId}/reports/exam-demo-isem-lgs-1/progress`) return createProgress(studentId);
+  }
+  if (pathName === "/me/guardian/homework/material-assignments") return [];
+  if (pathName === "/courses") return createCourses();
+  if (pathName === "/academic-terms") return createTerms();
+  return [];
+}
+
+function createStudentAuthResponse(mode: "student" | "role-preview") {
+  return {
+    accessToken: "student-portal-contract-token",
+    session: {
+      id: "session-student-contract",
+      membershipVersion: 1,
+      roles: mode === "role-preview" ? ["TENANT_ADMIN"] : ["STUDENT"],
+      status: "ACTIVE",
+      subjectId: mode === "role-preview" ? undefined : "student-a",
+      subjectType: mode === "role-preview" ? undefined : "STUDENT",
+      tenantId: "tenant-portal-contract",
+      userId: mode === "role-preview" ? "admin-a" : "student-a",
+    },
+  };
+}
+
+function createGuardianAuthResponse(mode: "guardian" | "role-preview") {
+  return {
+    accessToken: "guardian-portal-contract-token",
+    session: {
+      id: "session-guardian-contract",
+      membershipVersion: 1,
+      roles: mode === "role-preview" ? ["TENANT_ADMIN"] : ["GUARDIAN"],
+      status: "ACTIVE",
+      subjectId: mode === "role-preview" ? undefined : "guardian-a",
+      subjectType: mode === "role-preview" ? undefined : "GUARDIAN",
+      tenantId: "tenant-portal-contract",
+      userId: mode === "role-preview" ? "admin-a" : "guardian-a",
+    },
+  };
+}
+
+function createTenantResponse() {
+  return { contactEmail: "bilgi@portal-contract.example", id: "tenant-portal-contract", institutionType: "Dershane", name: "Portal Sözleşme Akademi" };
+}
+
+function createGuardianStudents() {
+  return [
+    { classId: "class-8a", firstName: "Ada", id: "student-a", lastName: "Kaya", status: "ACTIVE", studentNo: "8001", tenantId: "tenant-portal-contract" },
+    { classId: "class-8a", firstName: "Bora", id: "student-b", lastName: "Yilmaz", status: "ACTIVE", studentNo: "8002", tenantId: "tenant-portal-contract" },
+  ];
+}
+
+function createStudentProfile(studentId: "student-a" | "student-b") {
+  const isAda = studentId === "student-a";
+  return {
+    campusName: "Ana Kampüs",
+    classId: "class-8a",
+    className: "8-A",
+    email: isAda ? "ada.kaya@example.test" : "bora.yilmaz@example.test",
+    firstName: isAda ? "Ada" : "Bora",
+    gradeLevelName: "8. Sınıf",
+    id: studentId,
+    lastName: isAda ? "Kaya" : "Yilmaz",
+    nationalId: "12345678901",
+    nationalIdMasked: "12*******01",
+    phone: "+905551234567",
+    responsibleTeacherName: "Zeynep Arslan",
+    section: "A",
+    status: "ACTIVE",
+    studentNo: isAda ? "8001" : "8002",
+    tenantId: "tenant-portal-contract",
+  };
+}
+
+function createStudentGuardians() {
+  return [{ firstName: "Ayşe", id: "guardian-a", lastName: "Kaya", tenantId: "tenant-portal-contract" }];
+}
+
+function createStudentGuardianLinks() {
+  return [
+    {
+      canOpenSupportTickets: true,
+      canReceiveAnnouncements: true,
+      canReceiveSms: true,
+      canViewFinance: false,
+      guardianId: "guardian-a",
+      id: "guardian-link-a",
+      isPrimary: true,
+      relationshipType: "MOTHER",
+      studentId: "student-a",
+      tenantId: "tenant-portal-contract",
+    },
+    {
+      canOpenSupportTickets: false,
+      canReceiveAnnouncements: true,
+      canReceiveSms: false,
+      canViewFinance: false,
+      guardianId: "guardian-missing",
+      id: "guardian-link-missing",
+      isPrimary: false,
+      relationshipType: "OTHER",
+      studentId: "student-a",
+      tenantId: "tenant-portal-contract",
+    },
+  ];
+}
+
+function createGuardianPreferences(studentId: "student-a" | "student-b", canViewFinance: boolean, rolePreview = false) {
+  return {
+    canOpenSupportTickets: rolePreview ? true : false,
+    canReceiveAnnouncements: true,
+    canReceiveSms: true,
+    canViewFinance,
+    guardianId: "guardian-a",
+    id: `guardian-link-${studentId}`,
+    isPrimary: studentId === "student-a",
+    relationshipType: "MOTHER",
+    studentId,
+    tenantId: "tenant-portal-contract",
+  };
+}
+
+function createCourses() {
+  return [{ id: "course-math", name: "Matematik", tenantId: "tenant-portal-contract" }];
+}
+
+function createTerms() {
+  return [{ id: "term-2026", name: "2026 Bahar", tenantId: "tenant-portal-contract" }];
+}
+
+function createAnnouncements() {
+  return [{ audience: "STUDENTS", body: "Haftalık çalışma planı yayınlandı.", id: "announcement-a", readAt: null, tenantId: "tenant-portal-contract", title: "Haftalık plan" }];
+}
+
+function createHomeworkAssignments(studentId: "student-a" | "student-b") {
+  return [
+    {
+      courseId: "course-math",
+      dueAt: "2026-06-21T12:00:00.000Z",
+      id: `assignment-${studentId}`,
+      materialId: "material-a",
+      materialTitle: studentId === "student-a" ? "Ada tekrar föyü" : "Bora tekrar föyü",
+      note: studentId === "student-a" ? "Ada tekrar" : "Bora tekrar",
+      studentId,
+      tenantId: "tenant-portal-contract",
+      termId: "term-2026",
+    },
+  ];
+}
+
+function createSupportTickets() {
+  return [{ id: "ticket-a", priority: "NORMAL", status: "OPEN", subject: "Portal destek talebi", tenantId: "tenant-portal-contract" }];
+}
+
+function createAttendance(studentId: string) {
+  return [{ courseId: "course-math", date: "2026-06-17", id: `attendance-${studentId}`, status: "PRESENT", studentId, tenantId: "tenant-portal-contract", termId: "term-2026" }];
+}
+
+function createAttendanceSummary(studentId: string) {
+  return { absent: 0, excused: 0, late: 0, present: 30, studentId, total: 30 };
+}
+
+function createTeacherNotes(studentId: string) {
+  return [{ body: "Problem çözüm adımları takip edilecek.", courseId: "course-math", id: `note-${studentId}`, studentId, teacherId: "teacher-math", tenantId: "tenant-portal-contract", termId: "term-2026", visibility: "GUARDIAN_STUDENT" }];
+}
+
+function createDevelopmentAssessments(studentId: string) {
+  return [{ createdAt: "2026-06-10T09:00:00.000Z", id: `development-${studentId}`, mentorNote: "Çalışma disiplini güçleniyor.", periodLabel: "Haziran", scores: [], studentId, tenantId: "tenant-portal-contract" }];
+}
+
+function createClassHistory(studentId: string) {
+  return [
+    { classId: "class-8a", className: "8-A", id: `history-${studentId}`, startsAt: "2026-09-01T00:00:00.000Z", studentId, tenantId: "tenant-portal-contract", termId: "term-2026" },
+    { classId: "class-missing", id: `history-missing-${studentId}`, startsAt: "2026-01-01T00:00:00.000Z", studentId, tenantId: "tenant-portal-contract", termId: "term-missing" },
+  ];
+}
+
+function createEnrollments(studentId: string) {
+  return [{ classId: "class-8a", className: "8-A", id: `enrollment-${studentId}`, startsAt: "2026-09-01T00:00:00.000Z", status: "ACTIVE", studentId, tenantId: "tenant-portal-contract", termId: "term-2026" }];
+}
+
+function createStudentReport(studentId: "student-a" | "student-b") {
+  const isAda = studentId === "student-a";
+  return {
+    branches: [
+      { blank: 1, branch: "Matematik", classNetAverage: 10.5, correct: isAda ? 12 : 9, generalNetAverage: 9.8, net: isAda ? 11 : 8.5, questionCount: 15, schoolNetAverage: 10.8, successRate: isAda ? 73.3 : 60, wrong: isAda ? 2 : 5 },
+      { blank: 0, branch: "Turkce", classNetAverage: 11.2, correct: isAda ? 13 : 11, generalNetAverage: 10.1, net: isAda ? 13 : 10.5, questionCount: 15, schoolNetAverage: 11.9, successRate: isAda ? 86.7 : 66.7, wrong: 2 },
+    ],
+    classId: "class-8a",
+    className: "8-A",
+    courseId: "course-math",
+    examId: "exam-demo-isem-lgs-1",
+    examStartsAt: "2026-06-10T09:00:00.000Z",
+    examTitle: "LGS Hazırlık Denemesi",
+    generatedAt: "2026-06-10T12:00:00.000Z",
+    institutionName: "Portal Sözleşme Akademi",
+    outcomes: [{ branch: "Matematik", correct: isAda ? 8 : 6, net: isAda ? 7.5 : 5.5, outcomeCode: "M.8.1", questionCount: 10, successRate: isAda ? 75 : 60, wrong: isAda ? 2 : 4 }],
+    participantNo: isAda ? "176" : "177",
+    questions: createQuestionSummaries(),
+    resultKey: studentId,
+    snapshotId: "snapshot-ready",
+    statistics: {
+      branches: [],
+      class: { outOf: 2, percentile: isAda ? 100 : 50, rank: isAda ? 1 : 2 },
+      general: { outOf: 2, percentile: isAda ? 100 : 50, rank: isAda ? 1 : 2 },
+      standardScore: isAda ? 440 : 395,
+    },
+    studentId,
+    studentName: isAda ? "Ada Kaya" : "Bora Yilmaz",
+    tenantId: "tenant-portal-contract",
+    termId: "term-2026",
+    total: { blank: isAda ? 1 : 2, correct: isAda ? 25 : 20, estimatedRawScore: isAda ? 440 : 395, net: isAda ? 24.5 : 19, questionCount: 30, standardScore: isAda ? 440 : 395, successRate: isAda ? 81.7 : 63.3, wrong: isAda ? 4 : 8 },
+  };
+}
+
+function createQuestionSummaries() {
+  return [
+    { answer: "A", branch: "Matematik", correctAnswer: "A", outcomeCode: "M.8.1", questionNo: 1, status: "CORRECT" },
+    { answer: "B", branch: "Matematik", correctAnswer: "C", outcomeCode: "M.8.1", questionNo: 2, status: "WRONG" },
+  ];
+}
+
+function createErrorBooklet(studentId: string) {
+  return { examId: "exam-demo-isem-lgs-1", generatedAt: "2026-06-10T12:00:00.000Z", items: createQuestionSummaries().filter((question) => question.status !== "CORRECT"), snapshotId: "snapshot-ready", studentId, tenantId: "tenant-portal-contract" };
+}
+
+function createProgress(studentId: string) {
+  return {
+    examId: "exam-demo-isem-lgs-1",
+    netDelta: 3.5,
+    points: [{ examTitle: "LGS Hazırlık Denemesi", generatedAt: "2026-06-10T12:00:00.000Z", snapshotId: "snapshot-ready", total: createStudentReport(studentId as "student-a" | "student-b").total }],
+    standardScoreDelta: 35,
+    studentId,
+    tenantId: "tenant-portal-contract",
+  };
+}
+
+function createPaymentPlans() {
+  return [
+    {
+      currency: "TRY",
+      id: "payment-plan-a",
+      installments: [{ amount: 50_000, dueDate: "2026-06-30", id: "installment-a", installmentNo: 1, status: "PENDING" }],
+      studentId: "student-a",
+      tenantId: "tenant-portal-contract",
+      title: "LGS ödeme planı",
+      totalAmount: 50_000,
+    },
+  ];
+}
+
+async function expectNoHorizontalOverflow(page: Page, label: string) {
+  const overflow = await page.evaluate(() => {
+    const documentElement = document.documentElement;
+    return documentElement.scrollWidth - documentElement.clientWidth;
+  });
+  expect(overflow, `${label}: horizontal overflow`).toBeLessThanOrEqual(2);
+}
+
+async function expectAnchorsAttached(page: Page, hrefs: string[]) {
+  for (const href of hrefs) {
+    await expect(page.locator(href), `missing portal anchor ${href}`).toBeAttached();
+  }
+}
+
+async function clickAllPortalActionLinks(actionStrip: Locator) {
+  for (const link of await actionStrip.getByRole("link").all()) {
+    await link.click();
+  }
+}
+
+async function expectNoPortalActionPiiLeak(actionStrip: Locator, values: readonly string[]) {
+  const leakedLabels = await actionStrip.getByRole("link").evaluateAll((links, rawValues) =>
+    links
+      .map((link) => link.getAttribute("aria-label") ?? "")
+      .filter((label) => rawValues.some((value) => label.includes(value))),
+    values,
+  );
+  expect(leakedLabels, "PortalActionStrip aria-label PII leak").toEqual([]);
+  for (const value of values) {
+    await expect(actionStrip).not.toContainText(value);
+  }
+}
+
+async function expectPortalSummaryMetrics(summary: Locator, labels: string[], rawValues: readonly string[]) {
+  await expect(summary.locator("article")).toHaveCount(labels.length);
+  await expect(summary.locator(".uh-metric-card__label")).toHaveText(labels);
+  await expect(summary.locator("a, button, input, select, textarea")).toHaveCount(0);
+  for (const value of rawValues) {
+    await expect(summary).not.toContainText(value);
+  }
+}
+
+async function expectPortalActionFocus(page: Page, actionStrip: Locator, linkName: RegExp, target: Locator, href: string) {
+  const action = actionStrip.getByRole("link", { name: linkName });
+  await action.click();
+  await expect(target).toHaveAttribute("tabindex", "-1");
+  await expect(target).toHaveClass(/next-portal-focus-target/);
+  await expect(target).toBeFocused();
+  await expect(page).toHaveURL(new RegExp(`${href}$`));
+
+  await action.focus();
+  await action.press("Enter");
+  await expect(target).toHaveAttribute("tabindex", "-1");
+  await expect(target).toHaveClass(/next-portal-focus-target/);
+  await expect(target).toBeFocused();
+  await expect(page).toHaveURL(new RegExp(`${href}$`));
+}
+
+async function expectNoUnlabeledControls(page: Page, label: string) {
+  const unlabeledControls = await page.evaluate(() => {
+    function isVisible(element: Element) {
+      const htmlElement = element as HTMLElement;
+      const rect = htmlElement.getBoundingClientRect();
+      const style = window.getComputedStyle(htmlElement);
+      return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+    }
+
+    return Array.from(document.querySelectorAll("button, input, select, textarea"))
+      .filter((element) => element.getAttribute("aria-hidden") !== "true")
+      .filter((element) => isVisible(element))
+      .filter((element) => {
+        const htmlElement = element as HTMLElement;
+        const text = htmlElement.textContent?.trim();
+        const ariaLabel = htmlElement.getAttribute("aria-label")?.trim();
+        const labelledBy = htmlElement.getAttribute("aria-labelledby")?.trim();
+        const id = htmlElement.getAttribute("id");
+        const labelElement = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : null;
+        const wrappingLabel = htmlElement.closest("label");
+        return !text && !ariaLabel && !labelledBy && !labelElement && !wrappingLabel;
+      })
+      .map((element) => element.outerHTML.slice(0, 120));
+  });
+  expect(unlabeledControls, `${label}: unlabeled controls`).toEqual([]);
+}
+
+async function expectNoClippedVisibleText(page: Page, label: string) {
+  const clippedTexts = await page.evaluate(() => {
+    function isVisible(element: Element) {
+      const htmlElement = element as HTMLElement;
+      const rect = htmlElement.getBoundingClientRect();
+      const style = window.getComputedStyle(htmlElement);
+      return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+    }
+
+    return Array.from(document.querySelectorAll("a, label, button, .uh-status-badge, .next-portal-summary-card, .next-portal-action-strip__item"))
+      .filter((element) => isVisible(element))
+      .filter((element) => element.textContent?.trim())
+      .filter((element) => {
+        const htmlElement = element as HTMLElement;
+        const style = window.getComputedStyle(htmlElement);
+        if (style.overflow === "visible" && style.overflowX === "visible" && style.overflowY === "visible") return false;
+        return htmlElement.scrollWidth - htmlElement.clientWidth > 1 || htmlElement.scrollHeight - htmlElement.clientHeight > 1;
+      })
+      .map((element) => element.textContent?.trim().replace(/\s+/g, " ").slice(0, 120))
+      .filter(Boolean);
+  });
+
+  expect(clippedTexts, `${label}: kırpılmış görünen metin`).toEqual([]);
+}
+
+async function fulfillData(route: Route, data: unknown) {
+  await route.fulfill({
+    body: JSON.stringify({ data }),
+    headers: {
+      ...corsHeadersFor(route),
+      "content-type": "application/json",
+    },
+    status: 200,
+  });
+}
+
+function corsHeadersFor(route: Route) {
+  return {
+    ...corsHeaders,
+    "access-control-allow-origin": new URL(route.request().url()).origin === appOrigin ? appOrigin : corsHeaders["access-control-allow-origin"],
+  };
+}

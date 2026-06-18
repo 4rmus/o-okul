@@ -4,12 +4,24 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import type { AcademicTermRecord, AcademicYearRecord, ClassRecord, CourseRecord } from "@uzman-hocam/shared-types";
+import { Button, Field, Input, MetricCard, Panel, SegmentedControl, Select, StatusBadge, TabButton, Tabs } from "@uzman-hocam/ui";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, queryClient } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
 
 type StepId = "general" | "term" | "courses" | "classes" | "people";
 type StageId = "7" | "8-LGS" | "10" | "11" | "12" | "TYT/AYT";
+type SetupImportFileExtension = "CSV" | "XLS" | "XLSX";
+type SetupUploadStatusState = "idle" | "ready" | "error";
+
+interface SetupUploadStatus {
+  badge: string;
+  detail: string;
+  meta: string;
+  state: SetupUploadStatusState;
+  title: string;
+  tone: "info" | "success" | "danger";
+}
 
 interface OnboardingDraft {
   classes: {
@@ -220,6 +232,8 @@ const courseGroups: Array<{ title: string; source: string; courses: Array<{ id: 
 ];
 
 const allCourseOptions = courseGroups.flatMap((group) => group.courses);
+const setupImportMaxBytes = 5 * 1024 * 1024;
+const setupImportAllowedExtensions = new Set<SetupImportFileExtension>(["CSV", "XLS", "XLSX"]);
 
 export function SetupWizard() {
   const { auth } = useAuth();
@@ -234,6 +248,12 @@ export function SetupWizard() {
   const [saveError, setSaveError] = useState("");
   const [savedSummary, setSavedSummary] = useState("");
   const [studentImportFileBase64, setStudentImportFileBase64] = useState("");
+  const [studentImportUploadStatus, setStudentImportUploadStatus] = useState<SetupUploadStatus>(() =>
+    createIdleUploadStatus(),
+  );
+  const [teacherImportUploadStatus, setTeacherImportUploadStatus] = useState<SetupUploadStatus>(() =>
+    createIdleUploadStatus(),
+  );
   const [loadedDraftKey, setLoadedDraftKey] = useState("");
   const tenantProfileQuery = useQuery({
     queryKey: ["next-current-tenant", tenantId],
@@ -255,7 +275,7 @@ export function SetupWizard() {
 
   useEffect(() => {
     if (!auth || typeof window === "undefined") return;
-    const storedDraft = readCookie(draftStorageKey);
+    const storedDraft = readDraftFromSession(draftStorageKey);
     if (storedDraft) {
       setDraft(mergeDraft(storedDraft));
     } else {
@@ -267,7 +287,7 @@ export function SetupWizard() {
 
   useEffect(() => {
     if (!auth || loadedDraftKey !== draftStorageKey || typeof window === "undefined") return;
-    writeCookie(draftStorageKey, JSON.stringify(draft));
+    writeDraftToSession(draftStorageKey, sanitizeDraftForStorage(draft));
   }, [auth, draft, draftStorageKey, loadedDraftKey]);
 
   useEffect(() => {
@@ -309,16 +329,51 @@ export function SetupWizard() {
   }
 
   async function changeStudentImportFile(file: File | undefined) {
-    updateDraft("people", { studentImportFileName: file?.name ?? "" });
     setStudentImportFileBase64("");
     setSaveError("");
-    if (!file) return;
+    if (!file) {
+      setStudentImportUploadStatus(createIdleUploadStatus());
+      updateDraft("people", { studentImportFileName: "" });
+      return;
+    }
+
+    const validation = validateSetupImportFile(file);
+    setStudentImportUploadStatus(validation.status);
+    updateDraft("people", { studentImportFileName: validation.accepted ? validation.notice : "" });
+    if (!validation.accepted) return;
 
     try {
       setStudentImportFileBase64(await readFileAsBase64(file));
     } catch {
+      setStudentImportUploadStatus(createErrorUploadStatus(file, "Dosya okunamadı. Lütfen dosyayı yeniden seçin."));
+      updateDraft("people", { studentImportFileName: "" });
       setSaveError("Öğrenci aktarım dosyası okunamadı.");
     }
+  }
+
+  function changeTeacherImportFile(file: File | undefined) {
+    if (!file) {
+      setTeacherImportUploadStatus(createIdleUploadStatus());
+      updateDraft("people", { teacherImportFileName: "" });
+      return;
+    }
+    const validation = validateSetupImportFile(file, {
+      detail: "Öğretmen dosyası bu adımda sisteme yüklenmez; tür ve boyut yalnız hazırlık kontrolü için gösterilir.",
+      suffix: "Şablon hazırlığı",
+    });
+    setTeacherImportUploadStatus(validation.status);
+    updateDraft("people", { teacherImportFileName: validation.accepted ? validation.notice : "" });
+  }
+
+  function changeStudentModel(model: OnboardingDraft["people"]["studentModel"]) {
+    setStudentImportFileBase64("");
+    setStudentImportUploadStatus(createIdleUploadStatus());
+    updateDraft("people", { studentImportFileName: "", studentModel: model });
+  }
+
+  function changeTeacherModel(model: OnboardingDraft["people"]["teacherModel"]) {
+    setTeacherImportUploadStatus(createIdleUploadStatus());
+    updateDraft("people", { teacherImportFileName: "", teacherModel: model });
   }
 
   async function finishSetup() {
@@ -331,6 +386,11 @@ export function SetupWizard() {
       const firstInvalidStep = steps.find((step) => Object.keys(validateStep(step.id, draft)).length > 0);
       if (firstInvalidStep) setActiveStepId(firstInvalidStep.id);
       setErrors(allErrors);
+      return;
+    }
+    if (studentImportUploadStatus.state === "error") {
+      setActiveStepId("people");
+      setSaveError("Öğrenci aktarım dosyasını desteklenen tür ve boyutla yeniden seçin.");
       return;
     }
     if (!auth?.accessToken) {
@@ -365,6 +425,10 @@ export function SetupWizard() {
       setIsSaving(false);
     }
     writeCookie(completedCookieName, "true");
+    window.sessionStorage.removeItem(draftStorageKey);
+    setStudentImportFileBase64("");
+    setStudentImportUploadStatus(createIdleUploadStatus());
+    setTeacherImportUploadStatus(createIdleUploadStatus());
     setIsFinished(true);
   }
 
@@ -376,40 +440,34 @@ export function SetupWizard() {
           <h2>{draft.general.institutionName || "Kurumunu birlikte hazırlayalım"}</h2>
           <p>Genel bilgilerden kişi yönetimine kadar temel kararları tek akışta toparla.</p>
         </div>
-        <div className="next-onboarding-score" aria-label="Kurulum ilerleme durumu">
-          <strong>{progressPercent}%</strong>
-          <span>{completedStepCount} / {steps.length} adım doğrulandı</span>
+        <div className="next-onboarding-metrics" aria-label="Kurulum operasyon metrikleri">
+          <MetricCard label="İlerleme" value={`${progressPercent}%`} description={`${completedStepCount} / ${steps.length} adım doğrulandı`} tone={progressPercent === 100 ? "success" : "info"} />
+          <MetricCard label="Ders" value={courseCount} description="Seçili ders" />
+          <MetricCard label="Sınıf" value={classCount} description="Oluşturulacak şube" />
         </div>
       </section>
 
-      <section className="next-onboarding-progress" aria-label="Adım ilerlemesi">
+      <section className="next-onboarding-progress">
         <div className="next-onboarding-progress__bar">
           <span style={{ width: `${progressPercent}%` }} />
         </div>
-        <ol>
+        <Tabs label="Adım ilerlemesi" className="next-onboarding-tabs">
           {steps.map((step, index) => {
             const stepErrors = stepValidation.get(step.id) ?? {};
             const isComplete = Object.keys(stepErrors).length === 0;
             return (
-              <li key={step.id}>
-                <button
-                  type="button"
-                  className="next-onboarding-step-tab"
-                  aria-current={step.id === activeStepId ? "step" : undefined}
-                  onClick={() => goToStep(step.id)}
-                >
-                  <span>{index + 1}</span>
-                  <strong>{step.title}</strong>
-                  <small>{isComplete ? "Hazır" : "Eksik"}</small>
-                </button>
-              </li>
+              <TabButton key={step.id} selected={step.id === activeStepId} onClick={() => goToStep(step.id)}>
+                <span className="next-onboarding-step-index">{index + 1}</span>
+                <strong>{step.title}</strong>
+                <small>{isComplete ? "Hazır" : "Eksik"}</small>
+              </TabButton>
             );
           })}
-        </ol>
+        </Tabs>
       </section>
 
       <section className="next-onboarding-layout" aria-label="Kurulum formu">
-        <div className="next-onboarding-panel" key={activeStep.id}>
+        <Panel className="next-onboarding-panel" key={activeStep.id}>
           <header>
             <span>{activeStep.kicker}</span>
             <h2>{activeStep.title}</h2>
@@ -431,29 +489,34 @@ export function SetupWizard() {
             <PeopleStep
               draft={draft}
               errors={errors}
+              onStudentModelChange={changeStudentModel}
+              onTeacherImportFileChange={changeTeacherImportFile}
+              onTeacherModelChange={changeTeacherModel}
               onStudentImportFileChange={(file) => void changeStudentImportFile(file)}
+              studentImportUploadStatus={studentImportUploadStatus}
+              teacherImportUploadStatus={teacherImportUploadStatus}
               updateDraft={updateDraft}
             />
           ) : null}
           <footer className="next-onboarding-actions">
-            <button className="uh-button uh-button--secondary uh-button--md" type="button" onClick={goBack} disabled={activeStepIndex === 0}>
+            <Button variant="secondary" type="button" onClick={goBack} disabled={activeStepIndex === 0}>
               Geri
-            </button>
+            </Button>
             {activeStepIndex < steps.length - 1 ? (
-              <button className="uh-button uh-button--primary uh-button--md" type="button" onClick={goNext}>
+              <Button type="button" onClick={goNext}>
                 İleri
-              </button>
+              </Button>
             ) : (
-              <button className="uh-button uh-button--primary uh-button--md" type="button" onClick={() => void finishSetup()} disabled={isSaving}>
+              <Button type="button" onClick={() => void finishSetup()} disabled={isSaving}>
                 {isSaving ? "Kaydediliyor" : "Kaydet ve bitir"}
-              </button>
+              </Button>
             )}
           </footer>
           {saveError ? <p className="next-form-error">{saveError}</p> : null}
           {savedSummary ? <p className="next-onboarding-success">{savedSummary}</p> : null}
-        </div>
+        </Panel>
 
-        <aside className="next-onboarding-aside" aria-label="Kurulum özeti">
+        <Panel as="aside" className="next-onboarding-aside" aria-label="Kurulum özeti">
           <h2>Akış Özeti</h2>
           <dl>
             <div>
@@ -485,7 +548,7 @@ export function SetupWizard() {
               </Link>
             </div>
           ) : null}
-        </aside>
+        </Panel>
       </section>
     </PageFrame>
   );
@@ -502,44 +565,40 @@ function GeneralStep({
 }) {
   return (
     <div className="next-onboarding-fields">
-      <label>
-        Kurum adı
-        <input
+      <Field label="Kurum adı" error={errors.institutionName ?? errors["general.institutionName"]}>
+        <Input
+          invalid={Boolean(errors.institutionName ?? errors["general.institutionName"])}
           value={draft.general.institutionName}
           onChange={(event) => updateDraft("general", { institutionName: event.target.value })}
           placeholder="Uzman Hocam Eğitim Kurumu"
         />
-        <FieldError message={errors.institutionName ?? errors["general.institutionName"]} />
-      </label>
-      <label>
-        Kurum türü
-        <select
+      </Field>
+      <Field label="Kurum türü">
+        <Select
           value={draft.general.institutionType}
           onChange={(event) => updateDraft("general", { institutionType: event.target.value as OnboardingDraft["general"]["institutionType"] })}
         >
           <option value="course-center">Kurs merkezi</option>
           <option value="school">Okul</option>
           <option value="study-center">Etüt merkezi</option>
-        </select>
-      </label>
-      <label>
-        Logo adresi
-        <input
+        </Select>
+      </Field>
+      <Field label="Logo adresi" error={errors.logoUrl ?? errors["general.logoUrl"]}>
+        <Input
+          invalid={Boolean(errors.logoUrl ?? errors["general.logoUrl"])}
           value={draft.general.logoUrl}
           onChange={(event) => updateDraft("general", { logoUrl: event.target.value })}
           placeholder="https://..."
         />
-        <FieldError message={errors.logoUrl ?? errors["general.logoUrl"]} />
-      </label>
-      <label>
-        İletişim e-postası
-        <input
+      </Field>
+      <Field label="İletişim e-postası" error={errors.contactEmail ?? errors["general.contactEmail"]}>
+        <Input
+          invalid={Boolean(errors.contactEmail ?? errors["general.contactEmail"])}
           value={draft.general.contactEmail}
           onChange={(event) => updateDraft("general", { contactEmail: event.target.value })}
           placeholder="info@kurum.test"
         />
-        <FieldError message={errors.contactEmail ?? errors["general.contactEmail"]} />
-      </label>
+      </Field>
     </div>
   );
 }
@@ -555,60 +614,54 @@ function TermStep({
 }) {
   return (
     <div className="next-onboarding-fields next-onboarding-fields--two">
-      <label>
-        Akademik yıl adı
-        <input
+      <Field label="Akademik yıl adı" error={errors.academicYearName ?? errors["term.academicYearName"]}>
+        <Input
+          invalid={Boolean(errors.academicYearName ?? errors["term.academicYearName"])}
           value={draft.term.academicYearName}
           onChange={(event) => updateDraft("term", { academicYearName: event.target.value })}
           placeholder="2026-2027"
         />
-        <FieldError message={errors.academicYearName ?? errors["term.academicYearName"]} />
-      </label>
-      <label>
-        Aktif dönem
-        <input
+      </Field>
+      <Field label="Aktif dönem" error={errors.termName ?? errors["term.termName"]}>
+        <Input
+          invalid={Boolean(errors.termName ?? errors["term.termName"])}
           value={draft.term.termName}
           onChange={(event) => updateDraft("term", { termName: event.target.value })}
           placeholder="1. Dönem"
         />
-        <FieldError message={errors.termName ?? errors["term.termName"]} />
-      </label>
-      <label>
-        Yıl başlangıcı
-        <input
+      </Field>
+      <Field label="Yıl başlangıcı" error={errors.startsAt ?? errors["term.startsAt"]}>
+        <Input
+          invalid={Boolean(errors.startsAt ?? errors["term.startsAt"])}
           type="date"
           value={draft.term.startsAt}
           onChange={(event) => updateDraft("term", { startsAt: event.target.value })}
         />
-        <FieldError message={errors.startsAt ?? errors["term.startsAt"]} />
-      </label>
-      <label>
-        Yıl bitişi
-        <input
+      </Field>
+      <Field label="Yıl bitişi" error={errors.endsAt ?? errors["term.endsAt"]}>
+        <Input
+          invalid={Boolean(errors.endsAt ?? errors["term.endsAt"])}
           type="date"
           value={draft.term.endsAt}
           onChange={(event) => updateDraft("term", { endsAt: event.target.value })}
         />
-        <FieldError message={errors.endsAt ?? errors["term.endsAt"]} />
-      </label>
-      <label>
-        Dönem başlangıcı
-        <input
+      </Field>
+      <Field label="Dönem başlangıcı" error={errors.termStartsAt ?? errors["term.termStartsAt"]}>
+        <Input
+          invalid={Boolean(errors.termStartsAt ?? errors["term.termStartsAt"])}
           type="date"
           value={draft.term.termStartsAt}
           onChange={(event) => updateDraft("term", { termStartsAt: event.target.value })}
         />
-        <FieldError message={errors.termStartsAt ?? errors["term.termStartsAt"]} />
-      </label>
-      <label>
-        Dönem bitişi
-        <input
+      </Field>
+      <Field label="Dönem bitişi" error={errors.termEndsAt ?? errors["term.termEndsAt"]}>
+        <Input
+          invalid={Boolean(errors.termEndsAt ?? errors["term.termEndsAt"])}
           type="date"
           value={draft.term.termEndsAt}
           onChange={(event) => updateDraft("term", { termEndsAt: event.target.value })}
         />
-        <FieldError message={errors.termEndsAt ?? errors["term.termEndsAt"]} />
-      </label>
+      </Field>
     </div>
   );
 }
@@ -641,9 +694,9 @@ function CoursesStep({
   return (
     <div className="next-onboarding-fields">
       <div className="next-onboarding-course-actions">
-        <button className="uh-button uh-button--secondary uh-button--md" type="button" onClick={selectAllCourses} disabled={allCoursesSelected}>
+        <Button variant="secondary" type="button" onClick={selectAllCourses} disabled={allCoursesSelected}>
           Hepsini Seç
-        </button>
+        </Button>
       </div>
       {courseGroups.map((group) => (
         <section className="next-onboarding-course-group" key={group.title}>
@@ -722,12 +775,22 @@ function ClassesStep({
 function PeopleStep({
   draft,
   errors,
+  onStudentModelChange,
+  onTeacherImportFileChange,
+  onTeacherModelChange,
   onStudentImportFileChange,
+  studentImportUploadStatus,
+  teacherImportUploadStatus,
   updateDraft,
 }: {
   draft: OnboardingDraft;
   errors: StepErrors;
+  onStudentModelChange(model: OnboardingDraft["people"]["studentModel"]): void;
+  onTeacherImportFileChange(file: File | undefined): void;
+  onTeacherModelChange(model: OnboardingDraft["people"]["teacherModel"]): void;
   onStudentImportFileChange(file: File | undefined): void;
+  studentImportUploadStatus: SetupUploadStatus;
+  teacherImportUploadStatus: SetupUploadStatus;
   updateDraft: (section: "people", nextValue: Partial<OnboardingDraft["people"]>) => void;
 }) {
   function downloadTeacherTemplate() {
@@ -767,73 +830,86 @@ function PeopleStep({
 
   return (
     <div className="next-onboarding-fields">
-      <fieldset className="next-onboarding-choice">
-        <legend>Öğretmen veri girişi</legend>
-        <ChoiceButton
-          active={draft.people.teacherModel === "manual"}
-          label="Tek tek giriş"
-          onClick={() => updateDraft("people", { teacherModel: "manual" })}
-        />
-        <ChoiceButton
-          active={draft.people.teacherModel === "excel"}
-          label="Excel aktarımı"
-          onClick={() => updateDraft("people", { teacherModel: "excel" })}
-        />
-      </fieldset>
-      <fieldset className="next-onboarding-choice">
-        <legend>Öğrenci veri girişi</legend>
-        <ChoiceButton
-          active={draft.people.studentModel === "manual"}
-          label="Tek tek giriş"
-          onClick={() => updateDraft("people", { studentModel: "manual" })}
-        />
-        <ChoiceButton
-          active={draft.people.studentModel === "excel"}
-          label="Excel aktarımı"
-          onClick={() => updateDraft("people", { studentModel: "excel" })}
-        />
-      </fieldset>
+      <section className="next-onboarding-choice" aria-labelledby="teacher-model-label">
+        <span className="next-onboarding-choice__label" id="teacher-model-label">Öğretmen veri girişi</span>
+        <SegmentedControl label="Öğretmen veri girişi">
+          <button type="button" aria-pressed={draft.people.teacherModel === "manual"} onClick={() => onTeacherModelChange("manual")}>
+            Tek tek giriş
+          </button>
+          <button type="button" aria-pressed={draft.people.teacherModel === "excel"} onClick={() => onTeacherModelChange("excel")}>
+            Excel aktarımı
+          </button>
+        </SegmentedControl>
+      </section>
+      <section className="next-onboarding-choice" aria-labelledby="student-model-label">
+        <span className="next-onboarding-choice__label" id="student-model-label">Öğrenci veri girişi</span>
+        <SegmentedControl label="Öğrenci veri girişi">
+          <button type="button" aria-pressed={draft.people.studentModel === "manual"} onClick={() => onStudentModelChange("manual")}>
+            Tek tek giriş
+          </button>
+          <button type="button" aria-pressed={draft.people.studentModel === "excel"} onClick={() => onStudentModelChange("excel")}>
+            Excel aktarımı
+          </button>
+        </SegmentedControl>
+      </section>
       <section className="next-onboarding-template-panel">
         <div>
           <h3>Excel şablonları</h3>
           <p>Öğretmen ve öğrenci aktarımı için ayrı, sade ve uygulama alanlarına uyumlu dosyalar.</p>
         </div>
         <div className="next-onboarding-template-actions">
-          <button className="uh-button uh-button--secondary uh-button--md" type="button" onClick={downloadTeacherTemplate}>
+          <Button variant="secondary" type="button" onClick={downloadTeacherTemplate}>
             Öğretmen şablonu
-          </button>
-          <button className="uh-button uh-button--secondary uh-button--md" type="button" onClick={downloadStudentTemplate}>
+          </Button>
+          <Button variant="secondary" type="button" onClick={downloadStudentTemplate}>
             Öğrenci şablonu
-          </button>
+          </Button>
         </div>
       </section>
-      <label>
-        Öğretmen aktarım dosyası
-        <input
+      <Field
+        label="Öğretmen aktarım dosyası"
+        description={describeSelectedUploadFileNotice(
+          draft.people.teacherImportFileName,
+          "Öğretmen Excel veya CSV dosyası seçilebilir.",
+        )}
+      >
+        <Input
           type="file"
           accept=".xls,.xlsx,.csv"
-          onChange={(event) => updateDraft("people", { teacherImportFileName: event.target.files?.[0]?.name ?? "" })}
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            onTeacherImportFileChange(file);
+            event.currentTarget.value = "";
+          }}
         />
-        <span className="next-field-help">{draft.people.teacherImportFileName || "Öğretmen Excel veya CSV dosyası seçilebilir."}</span>
-      </label>
-      <label>
-        Öğrenci aktarım dosyası
-        <input
+      </Field>
+      <ImportUploadStatus label="Öğretmen aktarım güven durumu" status={teacherImportUploadStatus} />
+      <Field
+        label="Öğrenci aktarım dosyası"
+        description={describeSelectedUploadFileNotice(
+          draft.people.studentImportFileName,
+          "Öğrenci Excel veya CSV dosyası seçilebilir.",
+        )}
+      >
+        <Input
           type="file"
           accept=".xls,.xlsx,.csv"
-          onChange={(event) => onStudentImportFileChange(event.target.files?.[0])}
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            onStudentImportFileChange(file);
+            event.currentTarget.value = "";
+          }}
         />
-        <span className="next-field-help">{draft.people.studentImportFileName || "Öğrenci Excel veya CSV dosyası seçilebilir."}</span>
-      </label>
-      <label>
-        Veri sorumlusu
-        <input
+      </Field>
+      <ImportUploadStatus label="Öğrenci aktarım güven durumu" status={studentImportUploadStatus} />
+      <Field label="Veri sorumlusu" error={errors.importOwner ?? errors["people.importOwner"]}>
+        <Input
+          invalid={Boolean(errors.importOwner ?? errors["people.importOwner"])}
           value={draft.people.importOwner}
           onChange={(event) => updateDraft("people", { importOwner: event.target.value })}
           placeholder="Operasyon sorumlusu"
         />
-        <FieldError message={errors.importOwner ?? errors["people.importOwner"]} />
-      </label>
+      </Field>
       <label className="next-onboarding-check">
         <input
           type="checkbox"
@@ -854,11 +930,21 @@ function PeopleStep({
   );
 }
 
-function ChoiceButton({ active, label, onClick }: { active: boolean; label: string; onClick(): void }) {
+function ImportUploadStatus({ label, status }: { label: string; status: SetupUploadStatus }) {
   return (
-    <button type="button" aria-pressed={active} onClick={onClick}>
-      {label}
-    </button>
+    <div
+      className="next-onboarding-upload-status"
+      data-state={status.state}
+      aria-label={label}
+      role={status.state === "error" ? "alert" : "status"}
+    >
+      <StatusBadge tone={status.tone}>{status.badge}</StatusBadge>
+      <div>
+        <strong>{status.title}</strong>
+        <span>{status.meta}</span>
+      </div>
+      <p>{status.detail}</p>
+    </div>
   );
 }
 
@@ -936,6 +1022,95 @@ function validateDateRange(startsAt: string, endsAt: string, startField: string,
 function dataModelLabel(model: OnboardingDraft["people"]["studentModel"]) {
   if (model === "manual") return "Tek tek giriş";
   return "Excel aktarımı";
+}
+
+function formatSelectedUploadFileNotice(fileName: string) {
+  const extension = fileName.split(".").pop()?.replace(/[^a-z0-9]/gi, "").toLocaleUpperCase("tr-TR");
+  return extension ? `${extension} dosyası seçildi` : "Dosya seçildi";
+}
+
+function validateSetupImportFile(
+  file: File,
+  options: { detail?: string; suffix?: string } = {},
+): { accepted: boolean; notice: string; status: SetupUploadStatus } {
+  const extension = inferSetupImportExtension(file);
+  if (!extension || !setupImportAllowedExtensions.has(extension)) {
+    return {
+      accepted: false,
+      notice: "",
+      status: createErrorUploadStatus(file, "CSV, XLS veya XLSX dosyası seçin."),
+    };
+  }
+  if (file.size <= 0) {
+    return {
+      accepted: false,
+      notice: "",
+      status: createErrorUploadStatus(file, "Dosya boş görünüyor. Dolu bir aktarım dosyası seçin."),
+    };
+  }
+  if (file.size > setupImportMaxBytes) {
+    return {
+      accepted: false,
+      notice: "",
+      status: createErrorUploadStatus(file, `Dosya en fazla ${formatUploadByteSize(setupImportMaxBytes)} olabilir.`),
+    };
+  }
+
+  return {
+    accepted: true,
+    notice: formatSelectedUploadFileNotice(`upload.${extension.toLocaleLowerCase("tr-TR")}`),
+    status: {
+      badge: "Yerel kontrol",
+      detail: options.detail ?? "Ham dosya adı ve kişi bilgisi ekranda veya saklı taslakta gösterilmez.",
+      meta: `${extension} • ${formatUploadByteSize(file.size)} • ${options.suffix ?? "Sunucu dry-run bekliyor"}`,
+      state: "ready",
+      title: "Yerel kontrol tamam",
+      tone: "success",
+    },
+  };
+}
+
+function inferSetupImportExtension(file: File): SetupImportFileExtension | undefined {
+  const extension = file.name.split(".").pop()?.replace(/[^a-z0-9]/gi, "").toLocaleUpperCase("tr-TR");
+  if (extension === "CSV" || extension === "XLS" || extension === "XLSX") return extension;
+  if (file.type === "text/csv" || file.type === "text/plain") return "CSV";
+  if (file.type === "application/vnd.ms-excel") return "XLS";
+  if (file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") return "XLSX";
+  return undefined;
+}
+
+function createIdleUploadStatus(): SetupUploadStatus {
+  return {
+    badge: "Bekliyor",
+    detail: "Dosya adı saklanmaz; yalnız tür, boyut ve yerel kontrol sonucu gösterilir.",
+    meta: `CSV/XLS/XLSX • en fazla ${formatUploadByteSize(setupImportMaxBytes)}`,
+    state: "idle",
+    title: "Dosya bekleniyor",
+    tone: "info",
+  };
+}
+
+function createErrorUploadStatus(file: File, detail: string): SetupUploadStatus {
+  const extension = inferSetupImportExtension(file) ?? "DESTEKLENMEYEN";
+  return {
+    badge: "Kontrol hatası",
+    detail,
+    meta: `${extension} • ${formatUploadByteSize(file.size)}`,
+    state: "error",
+    title: "Dosya kabul edilmedi",
+    tone: "danger",
+  };
+}
+
+function formatUploadByteSize(byteSize: number) {
+  if (byteSize < 1024) return `${byteSize} B`;
+  if (byteSize < 1024 * 1024) return `${(byteSize / 1024).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} KB`;
+  return `${(byteSize / (1024 * 1024)).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} MB`;
+}
+
+function describeSelectedUploadFileNotice(value: string, fallback: string) {
+  if (value === "Dosya seçildi" || /^[A-Z0-9]+ dosyası seçildi$/.test(value)) return value;
+  return fallback;
 }
 
 function selectedCourseOptions(selectedCourseIds: string[]) {
@@ -1078,8 +1253,7 @@ function studentImportErrorMessage(dryRun: StudentImportDryRunResult) {
 
   const classError = dryRun.errors.find((error) => error.code === "CLASS_NOT_FOUND");
   if (classError) {
-    const className = classError.value ? ` (${classError.value})` : "";
-    return `Öğrenci dosyasında sistemde olmayan sınıf var${className}. Satır: ${classError.row}.`;
+    return `Öğrenci dosyasında sistemde olmayan sınıf var. Satır: ${classError.row}.`;
   }
 
   const requiredError = dryRun.errors.find((error) => error.code === "REQUIRED");
@@ -1090,8 +1264,7 @@ function studentImportErrorMessage(dryRun: StudentImportDryRunResult) {
 
   const duplicateStudentNo = dryRun.errors.find((error) => error.code === "STUDENT_NO_DUPLICATE");
   if (duplicateStudentNo) {
-    const studentNo = duplicateStudentNo.value ? ` (${duplicateStudentNo.value})` : "";
-    return `Öğrenci dosyasında tekrar eden veya sistemde zaten kayıtlı okul no var${studentNo}. Satır: ${duplicateStudentNo.row}.`;
+    return `Öğrenci dosyasında tekrar eden veya sistemde zaten kayıtlı okul no var. Satır: ${duplicateStudentNo.row}.`;
   }
 
   return "Öğrenci aktarım dosyası içe aktarılamadı. Dosyayı kontrol edip tekrar deneyin.";
@@ -1180,6 +1353,22 @@ function mergeDraft(rawDraft: string): OnboardingDraft {
   }
 }
 
+function sanitizeDraftForStorage(draft: OnboardingDraft): OnboardingDraft {
+  return {
+    ...draft,
+    general: {
+      ...draft.general,
+      contactEmail: "",
+    },
+    people: {
+      ...draft.people,
+      importOwner: "",
+      studentImportFileName: "",
+      teacherImportFileName: "",
+    },
+  };
+}
+
 function normalizeInstitutionType(value: unknown): OnboardingDraft["general"]["institutionType"] {
   if (value === "school" || value === "study-center" || value === "course-center") return value;
   return initialDraft.general.institutionType;
@@ -1238,6 +1427,22 @@ function readCookie(name: string) {
     .split("; ")
     .find((cookie) => cookie.startsWith(prefix));
   return match ? decodeURIComponent(match.slice(prefix.length)) : "";
+}
+
+function readDraftFromSession(key: string) {
+  try {
+    return window.sessionStorage.getItem(key) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeDraftToSession(key: string, draft: OnboardingDraft) {
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(draft));
+  } catch {
+    // Draft persistence is a convenience; setup can continue without it.
+  }
 }
 
 function writeCookie(name: string, value: string): void {

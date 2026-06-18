@@ -27,9 +27,20 @@ import { AttendancePanel, TeacherNotesPanel } from "./_shared/activity-panels.js
 import { AnnouncementsPanel } from "./_shared/announcements-panel.js";
 import { DevelopmentTrendPanel, type DevelopmentTrendItem } from "./_shared/development-panel.js";
 import { HomeworkAssignmentsPanel } from "./_shared/homework-panels.js";
-import { AccessPanel, MetricGrid, PortalFrame } from "./_shared/portal-shell.js";
+import {
+  AccessPanel,
+  MetricGrid,
+  PortalActionStrip,
+  PortalDailyBrief,
+  PortalFrame,
+  PortalStatePanel,
+  PortalWorkspace,
+  RolePreviewNotice,
+  type PortalActionItem,
+  readRolePreviewToken,
+} from "./_shared/portal-shell.js";
 import { ReportPanel } from "./_shared/report-panel.js";
-import { GuardianRelationsPanel, ProfilePanel, StudentHistoryPanel } from "./_shared/student-panels.js";
+import { GuardianRelationsPanel, ProfilePanel, StudentFocusPanel, StudentHistoryPanel } from "./_shared/student-panels.js";
 import { SupportTicketsPanel } from "./_shared/support-tickets-panel.js";
 import { readReportExamId, fallbackReportExamId } from "../_shared/report-exam-selection.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
@@ -37,7 +48,7 @@ import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../
 export function StudentPortalPage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
-  const rolePreviewToken = searchParams.get("rolePreviewToken")?.trim() ?? "";
+  const rolePreviewToken = readRolePreviewToken(searchParams);
   const reportExamId = readReportExamId(searchParams);
   const isRolePreview = Boolean(rolePreviewToken);
   const canReadPortal = Boolean(auth && (auth.session.subjectType === "STUDENT" || isRolePreview));
@@ -53,12 +64,153 @@ export function StudentPortalPage() {
     return <AccessPanel title="Öğrenci Portalı" demoEmail="student-a@example.test" demoLabel="Demo öğrenci" />;
   }
 
+  if (query.isPending) {
+    return (
+      <PortalFrame title="Öğrenci Portalı" subtitle="Öğrenci özeti">
+        <PortalStatePanel
+          state="loading"
+          title="Öğrenci portal verileri hazırlanıyor"
+          description="Devamsızlık, ödev, duyuru ve son sınav bağlamı güvenli oturum kapsamından yükleniyor."
+        />
+      </PortalFrame>
+    );
+  }
+
+  if (query.isError) {
+    return (
+      <PortalFrame title="Öğrenci Portalı" subtitle="Öğrenci özeti">
+        <PortalStatePanel
+          state="error"
+          title="Öğrenci portal verisi alınamadı"
+          description="Portal verileri şu anda gösterilemiyor. Bu ekran ham kişisel veri açmadan güvenli hata durumunda kalır."
+        />
+      </PortalFrame>
+    );
+  }
+
   const data = query.data;
   const courseNameById = new Map((data?.courses ?? []).map((course) => [course.id, course.name]));
   const termNameById = new Map((data?.terms ?? []).map((term) => [term.id, term.name]));
   const reportTotal = data?.report?.total;
+  const reportSuccess = reportSuccessRate(reportTotal);
+  const unreadAnnouncements = (data?.announcements ?? []).filter((announcement) => !announcement.readAt).length;
+  const openSupportTickets = (data?.supportTickets ?? []).filter(isOpenSupportTicket).length;
+  const announcementStatus = unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel";
+  const homeworkStatus = `${data?.homeworkAssignments.length ?? 0} atama`;
+  const attendanceStatus = `${data?.attendanceSummary.total ?? 0} kayıt`;
+  const supportStatus = openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok";
+  const studentActionItems: PortalActionItem[] = [
+    {
+      actionLabel: unreadAnnouncements > 0 ? "Oku" : "Hazır",
+      contextLabel: "Duyuru",
+      detail: unreadAnnouncements > 0 ? "Okul duyurusunu kontrol et" : "Okunmamış duyuru yok",
+      href: "#portal-announcements",
+      key: "announcement",
+      label: "Duyuruları oku",
+      statusLabel: unreadAnnouncements > 0 ? "Bekliyor" : "Güncel",
+      tone: unreadAnnouncements > 0 ? "warning" : "success",
+      value: unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel",
+    },
+    {
+      actionLabel: (data?.homeworkAssignments.length ?? 0) > 0 ? "Tamamla" : "Hazır",
+      contextLabel: "Ödev",
+      detail: "Materyal ve tekrar çalışması",
+      href: "#portal-homework",
+      key: "homework",
+      label: "Ödevi aç",
+      statusLabel: (data?.homeworkAssignments.length ?? 0) > 0 ? "Çalışma var" : "Tamam",
+      tone: (data?.homeworkAssignments.length ?? 0) > 0 ? "info" : "success",
+      value: `${data?.homeworkAssignments.length ?? 0} atama`,
+    },
+    {
+      actionLabel: "Kontrol",
+      contextLabel: "Devamsızlık",
+      detail: `${data?.attendanceSummary.absent ?? 0} yok, ${data?.attendanceSummary.late ?? 0} geç`,
+      href: "#portal-attendance",
+      key: "attendance",
+      label: "Devamsızlığı kontrol et",
+      statusLabel: (data?.attendanceSummary.absent ?? 0) > 0 || (data?.attendanceSummary.late ?? 0) > 0 ? "Dikkat" : "Düzenli",
+      tone: (data?.attendanceSummary.absent ?? 0) > 0 || (data?.attendanceSummary.late ?? 0) > 0 ? "warning" : "success",
+      value: attendanceStatus,
+    },
+    {
+      actionLabel: openSupportTickets > 0 ? "Takip et" : isRolePreview ? "Salt-okuma" : "Talep aç",
+      contextLabel: "Destek",
+      detail: isRolePreview ? "Destek talebi açma kapalı" : "Öğrenci destek takibi",
+      href: "#portal-support",
+      key: "support",
+      label: "Destek talebini takip et",
+      statusLabel: openSupportTickets > 0 ? "Açık" : isRolePreview ? "Salt-okuma" : "Hazır",
+      tone: openSupportTickets > 0 ? "warning" : "neutral",
+      value: supportStatus,
+    },
+    {
+      actionLabel: "İncele",
+      contextLabel: "Rapor",
+      detail: `${formatNumber(reportTotal?.net)} net / ${formatNumber(reportQuestionCount(reportTotal))} soru`,
+      href: "#portal-report",
+      key: "report",
+      label: "Son sınavı incele",
+      statusLabel: "Başarı %",
+      tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
+      value: formatPercentNumber(reportSuccess),
+    },
+    {
+      actionLabel: isRolePreview ? "Salt-okuma" : "Canlı",
+      contextLabel: "Erişim",
+      detail: isRolePreview ? "Yazma işlemleri kapalı" : "Okuma ve destek işlemleri açık",
+      href: isRolePreview ? "#portal-preview" : "#portal-focus",
+      key: "preview",
+      label: "Önizleme durumu",
+      statusLabel: isRolePreview ? "Salt-okuma" : "Canlı",
+      tone: isRolePreview ? "neutral" : "info",
+      value: isRolePreview ? "Salt-okuma" : "Canlı hesap",
+    },
+  ];
   return (
     <PortalFrame title="Öğrenci Portalı" subtitle={data?.profile ? `${data.profile.firstName} ${data.profile.lastName}` : "Öğrenci özeti"}>
+      <PortalDailyBrief
+        summary="Devamsızlık, ödev, duyuru ve son sınav durumu tek bakışta; öğrencinin bugün öncelik vermesi gereken işler burada toplanır."
+        items={[
+          {
+            label: "Duyuru",
+            value: unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel",
+            detail: unreadAnnouncements > 0 ? "Okunmamış okul duyurusu var" : "Okunmamış duyuru yok",
+            tone: unreadAnnouncements > 0 ? "warning" : "success",
+          },
+          {
+            label: "Ödev",
+            value: `${data?.homeworkAssignments.length ?? 0} atama`,
+            detail: "Materyal ve tekrar çalışmaları",
+            tone: (data?.homeworkAssignments.length ?? 0) > 0 ? "info" : "neutral",
+          },
+          {
+            label: "Devamsızlık",
+            value: `${data?.attendanceSummary.total ?? 0} kayıt`,
+            detail: `${data?.attendanceSummary.absent ?? 0} yok, ${data?.attendanceSummary.late ?? 0} geç`,
+            tone: (data?.attendanceSummary.absent ?? 0) > 0 || (data?.attendanceSummary.late ?? 0) > 0 ? "warning" : "success",
+          },
+          {
+            label: "Son sınav",
+            value: formatPercentNumber(reportSuccess),
+            detail: `${formatNumber(reportTotal?.net)} net / ${formatNumber(reportQuestionCount(reportTotal))} soru`,
+            tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
+          },
+          {
+            label: "Destek",
+            value: openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok",
+            detail: "Öğrenci destek takibi",
+            tone: openSupportTickets > 0 ? "warning" : "success",
+          },
+          {
+            label: "Önizleme",
+            value: isRolePreview ? "Salt-okuma" : "Canlı hesap",
+            detail: isRolePreview ? "İşlem düğmeleri kapalıdır" : "Okuma ve destek işlemleri açık",
+            tone: isRolePreview ? "neutral" : "info",
+          },
+        ]}
+      />
+      <PortalActionStrip ariaLabel="Öğrenci günlük aksiyonları" items={studentActionItems} />
       <MetricGrid
         items={[
           { label: "Toplam devamsızlık", value: data?.attendanceSummary.total ?? 0 },
@@ -72,49 +224,82 @@ export function StudentPortalPage() {
         ]}
       />
       {isRolePreview ? (
-        <section className="next-list-panel" aria-label="Rol önizleme modu">
-          <h2>Salt-okuma Önizleme</h2>
-          <p>Bu ekran kurum yöneticisi için geçici rol önizleme modunda açıldı.</p>
-        </section>
+        <div id="portal-preview">
+          <RolePreviewNotice />
+        </div>
       ) : null}
-      <ProfilePanel profile={data?.profile} />
-      <GuardianRelationsPanel guardians={data?.guardians ?? []} links={data?.guardianLinks ?? []} />
-      <StudentHistoryPanel
-        classHistory={data?.classHistory ?? []}
-        enrollments={data?.enrollments ?? []}
-        termNames={termNameById}
-      />
-      <AnnouncementsPanel
-        announcements={data?.announcements ?? []}
-        readOnly={isRolePreview}
-        onMarkRead={(announcement) =>
-          auth && !isRolePreview ? markAnnouncementRead(auth.accessToken, `me/student/announcements/${encodeURIComponent(announcement.id)}/read`).then(() => query.refetch()) : undefined
+      <div id="portal-focus">
+        <StudentFocusPanel
+          announcementStatus={announcementStatus}
+          attendanceStatus={attendanceStatus}
+          homeworkStatus={homeworkStatus}
+          mode={isRolePreview ? "read-only" : "student"}
+          net={formatNumber(reportTotal?.net)}
+          profile={data?.profile}
+          questionCount={formatNumber(reportQuestionCount(reportTotal))}
+          scopeLabel="Öğrenci hesabı"
+          successRate={formatPercentNumber(reportSuccess)}
+          supportStatus={supportStatus}
+        />
+      </div>
+      <PortalWorkspace
+        ariaLabel="Öğrenci portal çalışma alanı"
+        main={
+          <>
+            <div id="portal-report">
+              <ReportPanel
+                context={data?.report ?? undefined}
+                courseNames={courseNameById}
+                errorBooklet={data?.errorBooklet ?? null}
+                progress={data?.progress ?? null}
+                report={data?.report ?? null}
+                termNames={termNameById}
+              />
+            </div>
+            <div id="portal-homework">
+              <HomeworkAssignmentsPanel
+                assignments={data?.homeworkAssignments ?? []}
+                courseNames={courseNameById}
+                termNames={termNameById}
+              />
+            </div>
+            <div id="portal-announcements">
+              <AnnouncementsPanel
+                announcements={data?.announcements ?? []}
+                readOnly={isRolePreview}
+                onMarkRead={(announcement) =>
+                  auth && !isRolePreview ? markAnnouncementRead(auth.accessToken, `me/student/announcements/${encodeURIComponent(announcement.id)}/read`).then(() => query.refetch()) : undefined
+                }
+              />
+            </div>
+            <div id="portal-support">
+              <SupportTicketsPanel
+                readOnly={isRolePreview}
+                tickets={data?.supportTickets ?? []}
+                onCreate={(input) =>
+                  auth && !isRolePreview ? createPortalSupportTicket(auth.accessToken, "me/student/support-tickets", input).then(() => query.refetch()) : undefined
+                }
+              />
+            </div>
+          </>
+        }
+        side={
+          <>
+            <ProfilePanel profile={data?.profile} />
+            <GuardianRelationsPanel guardians={data?.guardians ?? []} links={data?.guardianLinks ?? []} />
+            <StudentHistoryPanel
+              classHistory={data?.classHistory ?? []}
+              enrollments={data?.enrollments ?? []}
+              termNames={termNameById}
+            />
+            <div id="portal-attendance">
+              <AttendancePanel records={data?.attendance ?? []} />
+            </div>
+            <DevelopmentTrendPanel assessments={data?.developmentAssessments ?? []} />
+            <TeacherNotesPanel notes={data?.teacherNotes ?? []} courseNames={courseNameById} termNames={termNameById} />
+          </>
         }
       />
-      <HomeworkAssignmentsPanel
-        assignments={data?.homeworkAssignments ?? []}
-        courseNames={courseNameById}
-        termNames={termNameById}
-      />
-      <SupportTicketsPanel
-        readOnly={isRolePreview}
-        tickets={data?.supportTickets ?? []}
-        onCreate={(input) =>
-          auth && !isRolePreview ? createPortalSupportTicket(auth.accessToken, "me/student/support-tickets", input).then(() => query.refetch()) : undefined
-        }
-      />
-      <ReportPanel
-        context={data?.report ?? undefined}
-        courseNames={courseNameById}
-        errorBooklet={data?.errorBooklet ?? null}
-        progress={data?.progress ?? null}
-        report={data?.report ?? null}
-        termNames={termNameById}
-      />
-      <AttendancePanel records={data?.attendance ?? []} />
-      <DevelopmentTrendPanel assessments={data?.developmentAssessments ?? []} />
-      <TeacherNotesPanel notes={data?.teacherNotes ?? []} />
-      {query.isError ? <p className="next-form-error">Öğrenci portal verisi alınamadı.</p> : null}
     </PortalFrame>
   );
 }
@@ -197,4 +382,8 @@ function toHeaderRecord(headers: HeadersInit | undefined): Record<string, string
 
 function formatNumber(value: number | undefined) {
   return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+}
+
+function isOpenSupportTicket(ticket: SupportTicketRecord) {
+  return ticket.status === "OPEN" || ticket.status === "IN_PROGRESS";
 }

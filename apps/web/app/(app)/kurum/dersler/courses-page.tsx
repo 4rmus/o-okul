@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CourseRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, Field, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -16,6 +16,7 @@ import {
   type CourseFormState,
 } from "../../../../src/form-validation.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 const emptyForm: CourseFormState = {
   name: "",
@@ -41,6 +42,66 @@ export function CoursesPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
   const rows = coursesQuery.data?.data ?? [];
+  const codedCourseCount = rows.filter((record) => Boolean(record.code)).length;
+  const courseSummaryItems: OperationSummaryItem[] = [
+    {
+      description: "Filtrelenmiş toplam kayıt",
+      key: "total",
+      label: "Ders toplamı",
+      value: formatCount(coursesQuery.data?.meta?.total ?? rows.length),
+    },
+    {
+      description: "Bu sayfada kodu olan ders",
+      key: "code",
+      label: "Kod kapsamı",
+      tone: codedCourseCount > 0 ? "info" : "warning",
+      value: `${codedCourseCount}/${rows.length}`,
+    },
+    {
+      description: "Program, öğretmen ve rapor eşleşmesi",
+      key: "usage",
+      label: "Operasyon bağlamı",
+      value: "Program/Rapor",
+    },
+  ];
+  const courseSummaryBadges: OperationSummaryBadge[] = [
+    {
+      key: "sort",
+      label: `Sıralama: ${formatCourseSort(listQuery.sort)}`,
+      tone: "neutral",
+    },
+    {
+      key: "code",
+      label: codedCourseCount === rows.length && rows.length > 0 ? "Kod alanı tamam" : "Kod alanı opsiyonel",
+      tone: codedCourseCount === rows.length && rows.length > 0 ? "success" : "neutral",
+    },
+  ];
+  const courseSummaryActions: OperationSummaryAction[] = [
+    {
+      detail: "Kısa kod program ve kazanım eşleşmesini hızlandırır",
+      key: "code-readiness",
+      label: "Kod temizliği",
+      status: codedCourseCount === rows.length && rows.length > 0 ? "Hazır" : "Opsiyonel",
+      tone: codedCourseCount > 0 ? "info" : "neutral",
+      value: `${codedCourseCount}/${rows.length}`,
+    },
+    {
+      detail: "Ders programı, öğretmen ataması ve yoklama",
+      key: "program-context",
+      label: "Program bağı",
+      status: "Bağlam",
+      tone: "info",
+      value: "Program",
+    },
+    {
+      detail: "Sınav branşı ve kazanım raporu için kullanılır",
+      key: "report-context",
+      label: "Rapor eşleşmesi",
+      status: "İzleniyor",
+      tone: "neutral",
+      value: "Sınav/Kazanım",
+    },
+  ];
 
   useEffect(() => {
     if (searchParams.get("new") === "1") openCreateForm();
@@ -50,16 +111,25 @@ export function CoursesPage() {
     {
       key: "name",
       header: "Ders",
+      mobilePriority: "primary",
+      priority: "primary",
       render: (record) => formatCourseName(record.name),
+      sticky: "left",
     },
     {
       key: "code",
       header: "Kod",
+      mobilePriority: "secondary",
+      priority: "secondary",
       render: (record) => formatOutcomeCode(record.code),
     },
     {
       key: "actions",
+      align: "center",
       header: "İşlem",
+      mobilePriority: "primary",
+      priority: "primary",
+      sticky: "right",
       render: (record) => (
         <span className="next-row-actions">
           <button type="button" onClick={() => openEditForm(record)} aria-label={`${formatCourseName(record.name)} düzenle`}>
@@ -156,6 +226,7 @@ export function CoursesPage() {
         }
         aria-label="Ders yönetimi"
         columns={columns}
+        density="compact"
         description="Kurum derslerini aynı CRUD kalıbıyla yönet."
         emptyState={
           <EmptyState
@@ -170,6 +241,16 @@ export function CoursesPage() {
         getRowKey={(record) => record.id}
         loading={coursesQuery.isPending}
         rows={rows}
+        summary={
+          <OperationSummary
+            actions={courseSummaryActions}
+            ariaLabel="Ders operasyon özeti"
+            badges={courseSummaryBadges}
+            items={courseSummaryItems}
+          />
+        }
+        tableCaption="Ders eğitim yapısı"
+        tableDescription="Ders adı, kısa kod ve ders aksiyonları."
         title="Dersler"
       />
       <FormModal
@@ -180,21 +261,19 @@ export function CoursesPage() {
         submitLabel={editingCourse ? "Kaydet" : "Ekle"}
         title={editingCourse ? "Ders düzenle" : "Ders ekle"}
       >
-        <label>
-          Ders adı
+        <Field label="Ders adı">
           <Input
             required
             value={form.name}
             onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
           />
-        </label>
-        <label>
-          Kod
+        </Field>
+        <Field label="Kod" description="Kısa kod program, sınav ve kazanım eşleşmelerinde kullanılır.">
           <Input
             value={form.code ?? ""}
             onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
           />
-        </label>
+        </Field>
       </FormModal>
       {confirmationDialog}
     </>
@@ -236,4 +315,12 @@ async function deleteCourse(accessToken: string, id: string) {
   if (!response.ok) {
     throw new Error("COURSE_DELETE_FAILED");
   }
+}
+
+function formatCount(value: number) {
+  return value.toLocaleString("tr-TR");
+}
+
+function formatCourseSort(value: string) {
+  return courseSortOptions.find((option) => option.value === value)?.label ?? "Varsayılan";
 }

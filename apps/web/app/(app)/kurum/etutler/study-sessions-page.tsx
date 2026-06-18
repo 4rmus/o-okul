@@ -1,9 +1,10 @@
 "use client";
 
 import { type FormEvent, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, StudySessionRecord, TeacherRecord } from "@uzman-hocam/shared-types";
-import { Button, CrudPage, EmptyState, FormModal, Input, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
+import { Button, CrudPage, EmptyState, Field, FormModal, Input, Select, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -14,7 +15,8 @@ import {
   type StudySessionFormPayload,
   type StudySessionFormState,
 } from "../../../../src/form-validation.js";
-import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 const emptyForm: StudySessionFormState = {
   classId: "",
@@ -30,9 +32,10 @@ const emptyForm: StudySessionFormState = {
 
 export function StudySessionsPage() {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useConfirmDialog();
-  const [listQuery, setListQuery] = useState<ListQueryState>(initialListQuery);
+  const [listQuery, setListQuery] = useUrlListState(searchParams, { sortOptions: studySessionSortOptions });
   const queryKey = ["next-study-sessions", auth?.session.tenantId ?? "anonymous", listQuery];
   const listQueryKey = ["next-study-sessions", auth?.session.tenantId ?? "anonymous"];
   const sessionsQuery = useQuery({
@@ -64,19 +67,88 @@ export function StudySessionsPage() {
     () => new Map(references.students.map((record) => [record.id, `${record.firstName} ${record.lastName}`])),
     [references.students],
   );
+  const listTotal = sessionsQuery.data?.meta?.total ?? rows.length;
+  const assignedStudentCount = rows.reduce((total, record) => total + record.studentIds.length, 0);
+  const totalCapacity = rows.reduce((total, record) => total + record.capacity, 0);
+  const openCapacityCount = rows.filter((record) => record.studentIds.length < record.capacity).length;
+  const fullSessionCount = rows.filter((record) => record.capacity > 0 && record.studentIds.length >= record.capacity).length;
+  const teacherCount = new Set(rows.map((record) => record.teacherId)).size;
+  const studySummaryItems: OperationSummaryItem[] = [
+    {
+      description: "Etüt planlama kayıtları",
+      key: "total",
+      label: "Etüt toplamı",
+      value: formatCount(listTotal),
+    },
+    {
+      description: "Kontenjanı dolan oturumlar",
+      key: "full",
+      label: "Dolu oturum",
+      tone: fullSessionCount > 0 ? "success" : "default",
+      value: formatCount(fullSessionCount),
+    },
+    {
+      description: "Atanan öğrenci / toplam kapasite",
+      key: "capacity",
+      label: "Kapasite kullanımı",
+      tone: assignedStudentCount > totalCapacity ? "warning" : "info",
+      value: `${formatCount(assignedStudentCount)}/${formatCount(totalCapacity)}`,
+    },
+  ];
+  const studySummaryBadges: OperationSummaryBadge[] = [
+    {
+      key: "sort",
+      label: `Sıralama: ${formatStudySessionSort(listQuery.sort)}`,
+      tone: "neutral",
+    },
+    {
+      key: "teachers",
+      label: `${formatCount(teacherCount)} öğretmen bağlı`,
+      tone: teacherCount > 0 ? "info" : "neutral",
+    },
+  ];
+  const studySummaryActions: OperationSummaryAction[] = [
+    {
+      detail: "Kontenjanı açık kalan oturumları planlama ekibi takip eder",
+      key: "capacity-review",
+      label: "Kapasite kontrolü",
+      status: openCapacityCount > 0 ? "Takip" : "Hazır",
+      tone: openCapacityCount > 0 ? "warning" : "success",
+      value: `${formatCount(openCapacityCount)} açık`,
+    },
+    {
+      detail: "Liste satırında öğrenci adı yerine operasyon sayısı gösterilir",
+      key: "student-assignment",
+      label: "Öğrenci ataması",
+      status: assignedStudentCount > 0 ? "Bağlı" : "Bekliyor",
+      tone: assignedStudentCount > 0 ? "info" : "neutral",
+      value: `${formatCount(assignedStudentCount)} öğrenci`,
+    },
+    {
+      detail: "Sınıf, ders, dönem ve öğretmen bağlamı programla aynı sözleşmede tutulur",
+      key: "program-context",
+      label: "Program bağı",
+      status: "Bağlam",
+      tone: "neutral",
+      value: "Etüt",
+    },
+  ];
 
   const columns: Array<DataTableColumn<StudySessionRecord>> = [
-    { key: "title", header: "Etüt", render: (record) => record.title },
-    { key: "classId", header: "Sınıf", render: (record) => classNames.get(record.classId) ?? record.classId },
-    { key: "courseId", header: "Branş", render: (record) => courseLabel(record.courseId, courseNames) },
-    { key: "termId", header: "Dönem", render: (record) => termLabel(record.termId, termNames) },
-    { key: "teacherId", header: "Öğretmen", render: (record) => teacherNames.get(record.teacherId) ?? record.teacherId },
-    { key: "studentIds", header: "Öğrenci", render: (record) => studentLabel(record.studentIds, studentNames) },
-    { key: "capacity", header: "Kapasite", render: (record) => `${record.studentIds.length}/${record.capacity}` },
-    { key: "startsAt", header: "Başlangıç", render: (record) => formatDateTime(record.startsAt) },
+    { key: "title", header: "Etüt", mobilePriority: "primary", priority: "primary", render: (record) => record.title, sticky: "left" },
+    { key: "classId", header: "Sınıf", mobilePriority: "secondary", priority: "secondary", render: (record) => classLabel(record.classId, classNames) },
+    { key: "courseId", header: "Branş", mobilePriority: "hidden", priority: "optional", render: (record) => courseLabel(record.courseId, courseNames) },
+    { key: "termId", header: "Dönem", mobilePriority: "hidden", priority: "optional", render: (record) => termLabel(record.termId, termNames) },
+    { key: "teacherId", header: "Öğretmen", mobilePriority: "hidden", priority: "secondary", render: (record) => teacherLabel(record.teacherId, teacherNames) },
+    { key: "studentIds", header: "Öğrenci", mobilePriority: "hidden", priority: "optional", render: (record) => studentCountLabel(record.studentIds, studentNames) },
+    { key: "capacity", align: "right", header: "Kapasite", mobilePriority: "primary", priority: "secondary", render: (record) => `${formatCount(record.studentIds.length)}/${formatCount(record.capacity)}` },
+    { key: "startsAt", header: "Başlangıç", mobilePriority: "secondary", priority: "secondary", render: (record) => formatDateTime(record.startsAt) },
     {
       key: "actions",
+      align: "center",
       header: "İşlem",
+      mobilePriority: "primary",
+      priority: "primary",
       render: (record) => (
         <span className="next-row-actions">
           <button type="button" onClick={() => openEditForm(record)} aria-label={`${record.title} düzenle`}>
@@ -87,6 +159,7 @@ export function StudySessionsPage() {
           </button>
         </span>
       ),
+      sticky: "right",
     },
   ];
 
@@ -186,6 +259,7 @@ export function StudySessionsPage() {
         }
         aria-label="Etüt yönetimi"
         columns={columns}
+        density="compact"
         description="Kurum etütlerini sınıf, öğretmen, ders ve öğrenci bağlantısıyla yönet."
         emptyState={
           <EmptyState
@@ -207,6 +281,16 @@ export function StudySessionsPage() {
         getRowKey={(record) => record.id}
         loading={sessionsQuery.isPending || referenceQuery.isPending}
         rows={rows}
+        summary={
+          <OperationSummary
+            actions={studySummaryActions}
+            ariaLabel="Etüt operasyon özeti"
+            badges={studySummaryBadges}
+            items={studySummaryItems}
+          />
+        }
+        tableCaption="Etüt operasyon listesi"
+        tableDescription="Etüt adı, sınıf, kontenjan ve başlangıç bilgisi."
         title="Etütler"
       />
       <FormModal
@@ -217,76 +301,67 @@ export function StudySessionsPage() {
         submitLabel={editingSession ? "Kaydet" : "Ekle"}
         title={editingSession ? "Etüt düzenle" : "Etüt ekle"}
       >
-        <label>
-          Sınıf
-          <select value={form.classId} onChange={(event) => setForm((current) => ({ ...current, classId: event.target.value }))}>
+        <Field label="Sınıf">
+          <Select value={form.classId} onChange={(event) => setForm((current) => ({ ...current, classId: event.target.value }))}>
             <option value="">Seçiniz</option>
             {references.classes.map((record) => (
               <option key={record.id} value={record.id}>
                 {record.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Öğretmen
-          <select value={form.teacherId} onChange={(event) => setForm((current) => ({ ...current, teacherId: event.target.value }))}>
+          </Select>
+        </Field>
+        <Field label="Öğretmen">
+          <Select value={form.teacherId} onChange={(event) => setForm((current) => ({ ...current, teacherId: event.target.value }))}>
             <option value="">Seçiniz</option>
             {references.teachers.map((record) => (
               <option key={record.id} value={record.id}>
                 {record.firstName} {record.lastName}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Branş
-          <select value={form.courseId ?? ""} onChange={(event) => setForm((current) => ({ ...current, courseId: event.target.value }))}>
+          </Select>
+        </Field>
+        <Field label="Branş">
+          <Select value={form.courseId ?? ""} onChange={(event) => setForm((current) => ({ ...current, courseId: event.target.value }))}>
             <option value="">Seçiniz</option>
             {references.courses.map((record) => (
               <option key={record.id} value={record.id}>
                 {formatCourseName(record.name)}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Dönem
-          <select value={form.termId ?? ""} onChange={(event) => setForm((current) => ({ ...current, termId: event.target.value }))}>
+          </Select>
+        </Field>
+        <Field label="Dönem">
+          <Select value={form.termId ?? ""} onChange={(event) => setForm((current) => ({ ...current, termId: event.target.value }))}>
             <option value="">Seçiniz</option>
             {references.terms.map((record) => (
               <option key={record.id} value={record.id}>
                 {record.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Öğrenciler
-          <select multiple value={form.studentIds} onChange={(event) => handleStudentIdsChange(event.currentTarget)}>
+          </Select>
+        </Field>
+        <Field label="Öğrenciler" description="Birden çok öğrenci seçilebilir.">
+          <Select multiple value={form.studentIds} onChange={(event) => handleStudentIdsChange(event.currentTarget)}>
             {references.students.map((record) => (
               <option key={record.id} value={record.id}>
                 {record.firstName} {record.lastName}
               </option>
             ))}
-          </select>
-        </label>
-        <label>
-          Etüt başlığı
+          </Select>
+        </Field>
+        <Field label="Etüt başlığı">
           <Input required value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
-        </label>
-        <label>
-          Kapasite
+        </Field>
+        <Field label="Kapasite">
           <Input required type="number" min={1} value={String(form.capacity ?? "")} onChange={(event) => setForm((current) => ({ ...current, capacity: Number(event.target.value) }))} />
-        </label>
-        <label>
-          Başlangıç
+        </Field>
+        <Field label="Başlangıç">
           <Input required type="datetime-local" value={form.startsAt} onChange={(event) => setForm((current) => ({ ...current, startsAt: event.target.value }))} />
-        </label>
-        <label>
-          Bitiş
+        </Field>
+        <Field label="Bitiş">
           <Input required type="datetime-local" value={form.endsAt} onChange={(event) => setForm((current) => ({ ...current, endsAt: event.target.value }))} />
-        </label>
+        </Field>
       </FormModal>
       {confirmationDialog}
     </>
@@ -370,15 +445,24 @@ function selectedValues(select: HTMLSelectElement): string[] {
 }
 
 function courseLabel(courseId: string | undefined, courseNames: Map<string, string>): string {
-  return courseId ? courseNames.get(courseId) ?? courseId : "-";
+  return courseId ? courseNames.get(courseId) ?? "Ders eşleşmedi" : "-";
 }
 
 function termLabel(termId: string | undefined, termNames: Map<string, string>): string {
-  return termId ? termNames.get(termId) ?? termId : "-";
+  return termId ? termNames.get(termId) ?? "Dönem eşleşmedi" : "-";
 }
 
-function studentLabel(studentIds: string[], studentNames: Map<string, string>): string {
-  return studentIds.map((studentId) => studentNames.get(studentId) ?? studentId).join(", ");
+function classLabel(classId: string, classNames: Map<string, string>): string {
+  return classNames.get(classId) ?? "Sınıf eşleşmedi";
+}
+
+function teacherLabel(teacherId: string, teacherNames: Map<string, string>): string {
+  return teacherNames.get(teacherId) ?? "Öğretmen eşleşmedi";
+}
+
+function studentCountLabel(studentIds: string[], studentNames: Map<string, string>): string {
+  const knownStudentCount = studentIds.filter((studentId) => studentNames.has(studentId)).length;
+  return `${formatCount(studentIds.length)} öğrenci${knownStudentCount < studentIds.length ? " · eşleşme kontrolü" : ""}`;
 }
 
 function toDateTimeInput(value: string): string {
@@ -391,4 +475,12 @@ function toIsoDateTime(value: string): string {
 
 function formatDateTime(value: string): string {
   return value.slice(0, 16).replace("T", " ");
+}
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat("tr-TR").format(value);
+}
+
+function formatStudySessionSort(value: string) {
+  return studySessionSortOptions.find((option) => option.value === value)?.label ?? "Varsayılan";
 }
