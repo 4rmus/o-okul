@@ -1,3 +1,6 @@
+import { Panel, StatusBadge, type StatusBadgeProps } from "@uzman-hocam/ui";
+import type { ReactNode } from "react";
+
 interface EvidenceGate {
   command: string;
   detail: string;
@@ -23,10 +26,75 @@ interface OperationDecisionNoticeProps {
   reason: string;
 }
 
+type EvidenceTrustTone = NonNullable<StatusBadgeProps["tone"]>;
+type EvidenceTrustScope = "configured-api" | "live-required" | "local-static" | "server-audit" | "staging-prod" | "ui-safe";
+
+interface EvidenceTrustItem {
+  detail: ReactNode;
+  label: string;
+  scope: EvidenceTrustScope;
+  tone?: EvidenceTrustTone;
+  value: ReactNode;
+}
+
+interface EvidenceTrustPanelProps {
+  ariaLabel: string;
+  description: ReactNode;
+  items: readonly EvidenceTrustItem[];
+  title: ReactNode;
+}
+
+export function EvidenceTrustPanel({ ariaLabel, description, items, title }: EvidenceTrustPanelProps) {
+  return (
+    <Panel
+      aria-label={ariaLabel}
+      className="next-evidence-trust"
+      description={
+        <span className="next-evidence-trust__description">
+          <span className="next-section-eyebrow">Güven durumu</span>
+          <span>{description}</span>
+        </span>
+      }
+      title={title}
+    >
+      <div className="next-evidence-trust__grid">
+        {items.map((item) => (
+          <article key={item.label} data-evidence-scope={item.scope}>
+            <span>{item.label}</span>
+            <StatusBadge tone={item.tone ?? "neutral"}>{item.value}</StatusBadge>
+            <div className="next-evidence-trust__scope" aria-label={`Kanıt kapsamı: ${evidenceTrustScopeLabels[item.scope]}`}>
+              <span>{evidenceTrustScopeLabels[item.scope]}</span>
+              <small>{evidenceTrustScopeDescriptions[item.scope]}</small>
+            </div>
+            <p>{item.detail}</p>
+          </article>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+const evidenceTrustScopeLabels: Record<EvidenceTrustScope, string> = {
+  "configured-api": "Yapılandırılmış API",
+  "live-required": "Canlı kanıt",
+  "local-static": "Yerel/statik",
+  "server-audit": "Sunucu/audit",
+  "staging-prod": "Staging/prod",
+  "ui-safe": "UI güvenli",
+};
+
+const evidenceTrustScopeDescriptions: Record<EvidenceTrustScope, string> = {
+  "configured-api": "Ortam kaynağı görünür",
+  "live-required": "Canlı kanıt gerekir",
+  "local-static": "Release kararına yetmez",
+  "server-audit": "Server sonucu esas",
+  "staging-prod": "Release kanıtı ayrı",
+  "ui-safe": "PII ham gösterilmez",
+};
+
 export function EvidenceGateSection({ ariaLabel, gates, title }: EvidenceGateSectionProps) {
   return (
-    <section className="next-report-list" aria-label={ariaLabel}>
-      <h2>{title}</h2>
+    <Panel aria-label={ariaLabel} className="next-evidence-list" title={title}>
       {gates.map((gate) => (
         <article key={gate.title}>
           <h3>{gate.title}</h3>
@@ -35,18 +103,17 @@ export function EvidenceGateSection({ ariaLabel, gates, title }: EvidenceGateSec
           <code>{gate.command}</code>
         </article>
       ))}
-    </section>
+    </Panel>
   );
 }
 
 export function EvidenceListSection({ ariaLabel, items, title }: EvidenceListSectionProps) {
   return (
-    <section className="next-report-list" aria-label={ariaLabel}>
-      <h2>{title}</h2>
+    <Panel aria-label={ariaLabel} className="next-evidence-list" title={title}>
       {items.map((item) => (
         <p key={item}>{item}</p>
       ))}
-    </section>
+    </Panel>
   );
 }
 
@@ -56,10 +123,14 @@ export function ReferenceBadge() {
 
 export function OperationDecisionNotice({ decision, nextStep, reason }: OperationDecisionNoticeProps) {
   return (
-    <section className="next-operation-decision" aria-label="Operasyon kararı">
-      <strong>{decision}</strong>
-      <p>{reason}</p>
+    <Panel
+      aria-label="Operasyon kararı"
+      className="next-operation-decision"
+      description={reason}
+      title={decision}
+      tone="muted"
+    >
       <p>{nextStep}</p>
-    </section>
+    </Panel>
   );
 }

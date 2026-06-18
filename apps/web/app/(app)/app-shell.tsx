@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, Search, type LucideIcon } from "lucide-react";
+import { ChevronDown, Menu, Search, X, type LucideIcon } from "lucide-react";
+import { Button, Dialog, Input, Panel, StatusBadge, type StatusBadgeProps } from "@uzman-hocam/ui";
 import type { ClassRecord, GuardianRecord, NotificationDeviceTokenRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../src/api-client.js";
 import { useAuth } from "../providers.js";
+import { readRolePreviewToken } from "./portals/_shared/portal-shell.js";
 import {
   canAccessInstitutionPath,
   getInstitutionNavGroups,
@@ -63,6 +65,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [expandedSidebarGroups, setExpandedSidebarGroups] = useState<Record<string, boolean>>({});
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const commandOpenerRef = useRef<HTMLButtonElement | null>(null);
+  const mobileNavTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const mobileNavCloseRef = useRef<HTMLButtonElement | null>(null);
   const visiblePortalItems = useMemo(
     () => auth?.session ? rolePortalItems.filter((item) => hasSubjectPortalAccess(auth.session, item.role, item.subjectType)) : [],
     [auth],
@@ -77,6 +83,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     [auth?.session.roles, visibleInstitutionNavGroups, visiblePortalItems, visibleSystemNavGroups],
   );
   const canUsePushDevices = auth?.session ? hasInstitutionAccess(auth.session.roles) || visiblePortalItems.length > 0 : false;
+  const isAuthorizedPath = auth ? canAccessPath(auth.session, pathname, searchParams) : false;
 
   useEffect(() => {
     if (!isBootstrapping && !auth) {
@@ -84,10 +91,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (!isBootstrapping && auth && !canAccessPath(auth.session, pathname, searchParams)) {
+    if (!isBootstrapping && auth && !isAuthorizedPath) {
       router.replace(getHomePath(auth.session));
     }
-  }, [auth, isBootstrapping, pathname, router, searchParams]);
+  }, [auth, isAuthorizedPath, isBootstrapping, router]);
 
   useEffect(() => {
     if (!auth) return;
@@ -114,6 +121,31 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  useEffect(() => {
+    setIsMobileNavOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (isCommandOpen || !commandOpenerRef.current) return;
+
+    window.setTimeout(() => focusCommandOpener(commandOpenerRef.current), 0);
+  }, [isCommandOpen]);
+
+  useEffect(() => {
+    if (!isMobileNavOpen) return undefined;
+
+    window.setTimeout(() => mobileNavCloseRef.current?.focus(), 0);
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        closeMobileNav();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isMobileNavOpen]);
+
   if (isBootstrapping) {
     return (
       <main className="next-auth-layout">
@@ -124,6 +156,14 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   if (!auth) {
     return null;
+  }
+
+  if (!isAuthorizedPath) {
+    return (
+      <main className="next-auth-layout">
+        <p className="next-status-note">Yetkili ana sayfaya yönlendiriliyor</p>
+      </main>
+    );
   }
 
   async function handleLogout() {
@@ -145,10 +185,35 @@ export function AppShell({ children }: { children: ReactNode }) {
     return isActive(href) ? "page" : undefined;
   }
 
-  function navigateCommand(href: string) {
+  function openCommandPalette(opener: HTMLButtonElement) {
+    commandOpenerRef.current = opener;
+    opener.focus();
+    setIsCommandOpen(true);
+  }
+
+  function closeCommandPalette(options: { restoreFocus?: boolean } = {}) {
+    if (options.restoreFocus !== false) {
+      focusCommandOpener(commandOpenerRef.current);
+    }
     setIsCommandOpen(false);
     setCommandQuery("");
-    router.replace(href);
+    if (options.restoreFocus === false) {
+      commandOpenerRef.current = null;
+    }
+  }
+
+  function navigateFromCommandPalette(href: string) {
+    closeCommandPalette({ restoreFocus: false });
+    router.push(href);
+  }
+
+  function openMobileNav() {
+    setIsMobileNavOpen(true);
+  }
+
+  function closeMobileNav() {
+    setIsMobileNavOpen(false);
+    window.setTimeout(() => mobileNavTriggerRef.current?.focus(), 0);
   }
 
   function isGroupActive(group: NavigationGroup) {
@@ -169,14 +234,42 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <main className="next-app-shell">
-      <aside className="next-sidebar" aria-label="Ana menü">
+      <header className="next-mobile-topbar">
+        <button
+          aria-controls="next-sidebar"
+          aria-expanded={isMobileNavOpen}
+          aria-label="Ana menüyü aç"
+          className="next-mobile-nav-toggle"
+          onClick={openMobileNav}
+          ref={mobileNavTriggerRef}
+          type="button"
+        >
+          <Menu size={18} aria-hidden="true" />
+        </button>
+        <div className="next-brand">
+          <span className="next-brand-mark">UH</span>
+          <span>Uzman Hocam</span>
+        </div>
+        <button className="next-command-open" type="button" onClick={(event) => openCommandPalette(event.currentTarget)} aria-label="Komut paleti" title="Komut paleti">
+          <Search size={16} aria-hidden="true" />
+        </button>
+      </header>
+      <aside
+        className="next-sidebar"
+        data-mobile-open={isMobileNavOpen ? "true" : "false"}
+        id="next-sidebar"
+        aria-label="Ana menü"
+      >
         <header className="next-sidebar-header">
           <div className="next-brand">
             <span className="next-brand-mark">UH</span>
             <span>Uzman Hocam</span>
           </div>
-          <button className="next-command-open" type="button" onClick={() => setIsCommandOpen(true)} aria-label="Komut paleti" title="Komut paleti">
+          <button className="next-command-open" type="button" onClick={(event) => openCommandPalette(event.currentTarget)} aria-label="Komut paleti" title="Komut paleti">
             <Search size={16} aria-hidden="true" />
+          </button>
+          <button className="next-sidebar-close" type="button" onClick={closeMobileNav} ref={mobileNavCloseRef} aria-label="Ana menüyü kapat">
+            <X size={16} aria-hidden="true" />
           </button>
         </header>
         <nav className="next-sidebar-nav" aria-label="Ana menü">
@@ -184,7 +277,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             ? visibleInstitutionNavGroups.map((group) => (
                 <SidebarGroup
                   key={group.label}
-                  expanded={Boolean(expandedSidebarGroups[`institution:${group.label}`])}
+                  expanded={Boolean(expandedSidebarGroups[`institution:${group.label}`]) || isGroupActive(group)}
                   group={group}
                   groupKey={`institution:${group.label}`}
                   isActive={isGroupActive(group)}
@@ -197,7 +290,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             ? visibleSystemNavGroups.map((group) => (
                 <SidebarGroup
                   key={group.label}
-                  expanded={Boolean(expandedSidebarGroups[`system:${group.label}`])}
+                  expanded={Boolean(expandedSidebarGroups[`system:${group.label}`]) || isGroupActive(group)}
                   group={group}
                   groupKey={`system:${group.label}`}
                   isActive={isGroupActive(group)}
@@ -208,7 +301,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             : null}
           {visiblePortalItems.length > 0 ? (
             <SidebarGroup
-              expanded={Boolean(expandedSidebarGroups.portal)}
+              expanded={Boolean(expandedSidebarGroups.portal) || visiblePortalItems.some((item) => isActive(item.href))}
               group={{ label: "Portal", items: visiblePortalItems }}
               groupKey="portal"
               isActive={visiblePortalItems.some((item) => isActive(item.href))}
@@ -222,22 +315,40 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
         {canUsePushDevices ? <PushDevicePanel accessToken={auth.accessToken} /> : null}
       </aside>
+      <button
+        aria-hidden={!isMobileNavOpen}
+        aria-label="Menü arka planını kapat"
+        className="next-sidebar-backdrop"
+        onClick={closeMobileNav}
+        tabIndex={isMobileNavOpen ? 0 : -1}
+        type="button"
+      />
       <section className="next-workspace">
         <RouteBreadcrumb pathname={pathname} />
         {children}
       </section>
       <CommandPalette
         accessToken={auth.accessToken}
-        enableEntitySearch={hasInstitutionAccess(auth.session.roles)}
+        enableEntitySearch={canUseEntitySearch(auth.session.roles)}
+        entitySearchRoles={auth.session.roles}
         items={commandItems}
-        onClose={() => setIsCommandOpen(false)}
-        onNavigate={navigateCommand}
+        onClose={closeCommandPalette}
+        onNavigate={navigateFromCommandPalette}
         open={isCommandOpen}
         query={commandQuery}
         setQuery={setCommandQuery}
       />
     </main>
   );
+}
+
+function focusCommandOpener(preferredOpener: HTMLButtonElement | null) {
+  const candidates = [
+    preferredOpener,
+    ...Array.from(document.querySelectorAll<HTMLButtonElement>('.next-command-open[aria-label="Komut paleti"]')),
+  ];
+  const opener = candidates.find((candidate) => candidate && candidate.getClientRects().length > 0 && !candidate.disabled);
+  opener?.focus();
 }
 
 function SidebarGroup({
@@ -298,6 +409,7 @@ function SidebarLink({ current, item }: { current?: "page"; item: SidebarItem })
 function CommandPalette({
   accessToken,
   enableEntitySearch,
+  entitySearchRoles,
   items,
   onClose,
   onNavigate,
@@ -307,6 +419,7 @@ function CommandPalette({
 }: {
   accessToken: string;
   enableEntitySearch: boolean;
+  entitySearchRoles: readonly string[];
   items: CommandPaletteItem[];
   onClose(): void;
   onNavigate(href: string): void;
@@ -317,6 +430,16 @@ function CommandPalette({
   const filteredItems = filterCommandItems(items, query).slice(0, 10);
   const [entityResults, setEntityResults] = useState<EntitySearchResult[]>([]);
   const [isEntitySearchLoading, setIsEntitySearchLoading] = useState(false);
+
+  function handleCommandItemClick(event: MouseEvent<HTMLAnchorElement>, href: string) {
+    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+      onClose();
+      return;
+    }
+
+    event.preventDefault();
+    onNavigate(href);
+  }
 
   useEffect(() => {
     const normalizedQuery = normalizeCommandText(query);
@@ -329,7 +452,7 @@ function CommandPalette({
     let isStale = false;
     setIsEntitySearchLoading(true);
     const timeoutId = window.setTimeout(() => {
-      void searchEntities(accessToken, query)
+      void searchEntities(accessToken, query, entitySearchRoles)
         .then((results) => {
           if (!isStale) setEntityResults(results);
         })
@@ -345,41 +468,29 @@ function CommandPalette({
       isStale = true;
       window.clearTimeout(timeoutId);
     };
-  }, [accessToken, enableEntitySearch, query]);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose, open]);
-
-  if (!open) return null;
+  }, [accessToken, enableEntitySearch, entitySearchRoles, query]);
 
   return (
-    <div className="next-command-palette" role="dialog" aria-modal="true" aria-labelledby="next-command-title">
+    <Dialog
+      className="next-command-palette"
+      description="Yetkili olduğunuz modüller ve kurum kayıtları içinde hızlı geçiş yapın."
+      footer={<Button onClick={onClose} variant="secondary">Kapat</Button>}
+      onClose={onClose}
+      open={open}
+      title="Komut paleti"
+    >
       <div className="next-command-panel">
-        <div className="next-command-header">
-          <h2 id="next-command-title">Komut paleti</h2>
-          <button type="button" onClick={onClose}>
-            Kapat
-          </button>
-        </div>
-        <label>
-          Komut ara
-          <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} />
+        <label className="next-command-search">
+          <span>Komut ara</span>
+          <Input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} />
         </label>
         <div className="next-command-results">
           {filteredItems.length > 0 ? (
             filteredItems.map((item) => (
-              <button key={item.id} type="button" onClick={() => onNavigate(item.href)}>
+              <Link key={item.id} href={item.href} onClick={(event) => handleCommandItemClick(event, item.href)}>
                 <span>{item.label}</span>
                 <small>{item.group}</small>
-              </button>
+              </Link>
             ))
           ) : (
             <p>Sonuç yok</p>
@@ -391,15 +502,15 @@ function CommandPalette({
             {isEntitySearchLoading ? <p>Aranıyor...</p> : null}
             {!isEntitySearchLoading && entityResults.length === 0 ? <p>Varlık sonucu yok</p> : null}
             {entityResults.map((item) => (
-              <button key={item.id} type="button" onClick={() => onNavigate(item.href)}>
+              <Link key={item.id} href={item.href} onClick={(event) => handleCommandItemClick(event, item.href)}>
                 <span>{item.label}</span>
                 <small>{item.group}</small>
-              </button>
+              </Link>
             ))}
           </div>
         ) : null}
       </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -482,24 +593,43 @@ function PushDevicePanel({ accessToken }: { accessToken: string }) {
 
   const activeDevices = devices.filter((device) => !device.disabledAt);
   const latestDevice = activeDevices[0];
+  const statusLabel = isSaving ? "İşleniyor" : status;
+  const statusTone = getPushStatusTone(status, activeDevices.length, isSaving);
 
   return (
-    <section className="next-push-panel" aria-label="Bildirim cihazı">
-      <div>
-        <h2>Bildirim cihazı</h2>
-        <p>{activeDevices.length} aktif cihaz</p>
+    <Panel
+      actions={<StatusBadge tone={statusTone}>{statusLabel}</StatusBadge>}
+      aria-label="Bildirim cihazı"
+      as="aside"
+      className="next-push-panel"
+      description={`${activeDevices.length} aktif cihaz`}
+      title="Bildirim cihazı"
+    >
+      <div className="next-push-panel__actions">
+        <Button disabled={isSaving} onClick={() => void handleRegister()} size="sm">
+          Push iznini aç
+        </Button>
+        {latestDevice ? (
+          <Button
+            disabled={isSaving}
+            onClick={() => void handleDisable(latestDevice.id)}
+            size="sm"
+            variant="secondary"
+          >
+            Cihazı kapat
+          </Button>
+        ) : null}
       </div>
-      <button type="button" disabled={isSaving} onClick={() => void handleRegister()}>
-        Push iznini aç
-      </button>
-      {latestDevice ? (
-        <button type="button" disabled={isSaving} onClick={() => void handleDisable(latestDevice.id)}>
-          Cihazı kapat
-        </button>
-      ) : null}
-      <p>{status}</p>
-    </section>
+    </Panel>
   );
+}
+
+function getPushStatusTone(status: string, activeDeviceCount: number, isSaving: boolean): StatusBadgeProps["tone"] {
+  if (isSaving) return "info";
+  if (status === "Push açık" || (status === "Hazır" && activeDeviceCount > 0)) return "success";
+  if (status === "Cihaz kapatıldı") return "warning";
+  if (status !== "Hazır") return "danger";
+  return "neutral";
 }
 
 type AppSession = NonNullable<ReturnType<typeof useAuth>["auth"]>["session"];
@@ -512,25 +642,29 @@ function canAccessPath(session: AppSession, pathname: string, searchParams?: Pic
     return hasInstitutionAccess(session.roles) && canAccessInstitutionPath(session.roles, pathname);
   }
   if (pathname.startsWith("/ogretmen")) {
-    if (searchParams?.get("rolePreviewToken") && hasInstitutionAccess(session.roles)) {
+    if (hasRolePreviewAccess(searchParams) && hasInstitutionAccess(session.roles)) {
       return true;
     }
     return hasSubjectPortalAccess(session, "TEACHER", "TEACHER");
   }
   if (pathname.startsWith("/ogrenci")) {
-    if (searchParams?.get("rolePreviewToken") && hasInstitutionAccess(session.roles)) {
+    if (hasRolePreviewAccess(searchParams) && hasInstitutionAccess(session.roles)) {
       return true;
     }
     return hasSubjectPortalAccess(session, "STUDENT", "STUDENT");
   }
   if (pathname.startsWith("/veli")) {
-    if (searchParams?.get("rolePreviewToken") && hasInstitutionAccess(session.roles)) {
+    if (hasRolePreviewAccess(searchParams) && hasInstitutionAccess(session.roles)) {
       return true;
     }
     return hasSubjectPortalAccess(session, "GUARDIAN", "GUARDIAN");
   }
 
   return true;
+}
+
+function hasRolePreviewAccess(searchParams?: Pick<URLSearchParams, "get">) {
+  return Boolean(searchParams && readRolePreviewToken(searchParams));
 }
 
 function getBreadcrumbs(pathname: string) {
@@ -602,7 +736,7 @@ function buildCommandItems(
   ];
   const actionItems = hasInstitutionAccess(roles)
     ? [
-        commandItem("/kurum/kurulum", "Yeni dönem açılışı", "İş akışı"),
+        hasCapabilityForRoles(roles, "operation:manage") ? commandItem("/kurum/kurulum", "Yeni dönem açılışı", "İş akışı") : null,
         hasCapabilityForRoles(roles, "academic:manage") ? commandItem("/kurum/raporlar", "Sınav sonrası kapanış", "İş akışı") : null,
         hasCapabilityForRoles(roles, "class:manage") ? commandItem("/kurum/kampusler?new=1", "Kampüs ekle", "Hızlı işlem") : null,
         hasCapabilityForRoles(roles, "class:manage") ? commandItem("/kurum/seviyeler?new=1", "Seviye ekle", "Hızlı işlem") : null,
@@ -615,6 +749,10 @@ function buildCommandItems(
   const systemActions = hasSystemAccess(roles) ? [commandItem("/sistem/kurumlar", "Kurum oluştur", "Hızlı işlem")] : [];
 
   return dedupeCommandItems([...navigationItems, ...actionItems, ...systemActions]);
+}
+
+function canUseEntitySearch(roles: readonly string[]) {
+  return ["student:manage", "staff:manage", "class:manage"].some((capability) => hasCapabilityForRoles(roles, capability));
 }
 
 function commandItem(href: string, label: string, group: string): CommandPaletteItem {
@@ -638,12 +776,12 @@ function filterCommandItems(items: CommandPaletteItem[], query: string) {
   );
 }
 
-async function searchEntities(accessToken: string, query: string): Promise<EntitySearchResult[]> {
+async function searchEntities(accessToken: string, query: string, roles: readonly string[]): Promise<EntitySearchResult[]> {
   const [students, teachers, guardians, classes] = await Promise.all([
-    safeEntityList<StudentRecord>(accessToken, "students", query),
-    safeEntityList<TeacherRecord>(accessToken, "teachers", query),
-    safeEntityList<GuardianRecord>(accessToken, "guardians", query),
-    safeEntityList<ClassRecord>(accessToken, "classes", query),
+    hasCapabilityForRoles(roles, "student:manage") ? safeEntityList<StudentRecord>(accessToken, "students", query) : Promise.resolve([]),
+    hasCapabilityForRoles(roles, "staff:manage") ? safeEntityList<TeacherRecord>(accessToken, "teachers", query) : Promise.resolve([]),
+    hasCapabilityForRoles(roles, "student:manage") ? safeEntityList<GuardianRecord>(accessToken, "guardians", query) : Promise.resolve([]),
+    hasCapabilityForRoles(roles, "class:manage") ? safeEntityList<ClassRecord>(accessToken, "classes", query) : Promise.resolve([]),
   ]);
 
   return [

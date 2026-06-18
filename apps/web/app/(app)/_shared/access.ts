@@ -14,10 +14,10 @@ type SessionLike = {
 
 const hiddenInstitutionPathCapabilities: Record<string, string> = {
   "/kurum/canli-yayin": "system:operations",
-  "/kurum/denetim": "system:operations",
+  "/kurum/denetim": "audit:read",
   "/kurum/gozlemlenebilirlik": "system:operations",
   "/kurum/guvenlik-denetimi": "system:operations",
-  "/kurum/kvkk": "system:operations",
+  "/kurum/kvkk": "privacy:manage",
   "/kurum/sistem-sagligi": "system:operations",
   "/kurum/uat-rollback": "system:operations",
 };
@@ -44,16 +44,25 @@ export function getInstitutionNavGroups(roles: readonly string[]) {
 }
 
 export function canAccessInstitutionPath(roles: readonly string[], pathname: string) {
-  const hiddenCapability = findHiddenInstitutionPathCapability(pathname);
+  const normalizedPathname = normalizeInstitutionPath(pathname);
+  const hiddenCapability = findHiddenInstitutionPathCapability(normalizedPathname);
   if (hiddenCapability) return hasCapabilityForRoles(roles, hiddenCapability);
 
-  const item = findInstitutionNavigationItem(pathname);
-  return item ? canAccessNavigationItem(roles, item) : true;
+  const item = findInstitutionNavigationItem(normalizedPathname);
+  if (!item) return false;
+  if (item.href === "/kurum" && normalizedPathname !== "/kurum") return false;
+  return canAccessNavigationItem(roles, item);
 }
 
 export function canAccessHref(roles: readonly string[], href: string) {
-  const item = findInstitutionNavigationItem(href);
-  return item ? canAccessNavigationItem(roles, item) : true;
+  const normalizedHref = normalizeInstitutionPath(href);
+  const hiddenCapability = findHiddenInstitutionPathCapability(normalizedHref);
+  if (hiddenCapability) return hasCapabilityForRoles(roles, hiddenCapability);
+
+  const item = findInstitutionNavigationItem(normalizedHref);
+  if (!item) return false;
+  if (item.href === "/kurum" && normalizedHref !== "/kurum") return false;
+  return canAccessNavigationItem(roles, item);
 }
 
 export function canAccessNavigationItem(roles: readonly string[], item: NavigationItem) {
@@ -75,4 +84,8 @@ function findHiddenInstitutionPathCapability(pathname: string) {
   return Object.entries(hiddenInstitutionPathCapabilities)
     .filter(([href]) => pathname === href || pathname.startsWith(`${href}/`))
     .sort(([left], [right]) => right.length - left.length)[0]?.[1];
+}
+
+function normalizeInstitutionPath(pathname: string) {
+  return pathname.split(/[?#]/)[0] || "/";
 }

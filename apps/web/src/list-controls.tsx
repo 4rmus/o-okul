@@ -23,6 +23,7 @@ interface ListSearchParamsLike {
 }
 
 interface UrlListStateOptions {
+  defaultState?: ListQueryState;
   namespace?: string;
   sortOptions: SortOption[];
 }
@@ -47,13 +48,13 @@ export function buildListUrl(baseUrl: string, state: ListQueryState): string {
 
 export function useUrlListState(
   searchParams: ListSearchParamsLike,
-  { namespace = "", sortOptions }: UrlListStateOptions,
+  { defaultState = initialListQuery, namespace = "", sortOptions }: UrlListStateOptions,
 ): [ListQueryState, (state: ListQueryState) => void] {
   const searchParamsKey = searchParams.toString();
   const sortValues = useMemo(() => new Set(sortOptions.map((option) => option.value)), [sortOptions]);
   const urlState = useMemo(
-    () => readListQueryFromUrl(new URLSearchParams(searchParamsKey), namespace, sortValues),
-    [namespace, searchParamsKey, sortValues],
+    () => readListQueryFromUrl(new URLSearchParams(searchParamsKey), namespace, sortValues, defaultState),
+    [defaultState, namespace, searchParamsKey, sortValues],
   );
   const [state, setState] = useState<ListQueryState>(urlState);
 
@@ -64,7 +65,7 @@ export function useUrlListState(
   return [
     state,
     (nextState) => {
-      const normalizedState = normalizeListQuery(nextState, sortValues);
+      const normalizedState = normalizeListQuery(nextState, sortValues, defaultState);
       setState(normalizedState);
       writeListQueryToUrl(normalizedState, namespace);
     },
@@ -151,13 +152,14 @@ function readListQueryFromUrl(
   searchParams: ListSearchParamsLike,
   namespace: string,
   sortValues: ReadonlySet<string>,
+  defaultState: ListQueryState,
 ): ListQueryState {
   return normalizeListQuery({
-    page: readPositiveInteger(searchParams.get(listQueryParamName("page", namespace))) ?? initialListQuery.page,
-    limit: readListLimit(searchParams.get(listQueryParamName("limit", namespace))) ?? initialListQuery.limit,
-    q: searchParams.get(listQueryParamName("q", namespace)) ?? initialListQuery.q,
-    sort: searchParams.get(listQueryParamName("sort", namespace)) ?? initialListQuery.sort,
-  }, sortValues);
+    page: readPositiveInteger(searchParams.get(listQueryParamName("page", namespace))) ?? defaultState.page,
+    limit: readListLimit(searchParams.get(listQueryParamName("limit", namespace))) ?? defaultState.limit,
+    q: searchParams.get(listQueryParamName("q", namespace)) ?? defaultState.q,
+    sort: searchParams.get(listQueryParamName("sort", namespace)) ?? defaultState.sort,
+  }, sortValues, defaultState);
 }
 
 function writeListQueryToUrl(state: ListQueryState, namespace: string) {
@@ -171,12 +173,16 @@ function writeListQueryToUrl(state: ListQueryState, namespace: string) {
   window.history.replaceState(window.history.state, "", `${url.pathname}?${url.searchParams.toString()}${url.hash}`);
 }
 
-function normalizeListQuery(state: ListQueryState, sortValues: ReadonlySet<string>): ListQueryState {
+function normalizeListQuery(
+  state: ListQueryState,
+  sortValues: ReadonlySet<string>,
+  defaultState: ListQueryState = initialListQuery,
+): ListQueryState {
   return {
-    page: readPositiveInteger(String(state.page)) ?? initialListQuery.page,
-    limit: readListLimit(String(state.limit)) ?? initialListQuery.limit,
+    page: readPositiveInteger(String(state.page)) ?? defaultState.page,
+    limit: readListLimit(String(state.limit)) ?? defaultState.limit,
     q: state.q.trim(),
-    sort: sortValues.has(state.sort) ? state.sort : initialListQuery.sort,
+    sort: sortValues.has(state.sort) ? state.sort : defaultState.sort,
   };
 }
 

@@ -60,7 +60,7 @@ export const institutionNavGroups: readonly InstitutionNavGroup[] = [
     label: "Başlangıç",
     items: [
       { href: "/kurum", icon: LayoutDashboard, label: "Özet" },
-      { href: "/kurum/kurulum", icon: Settings, label: "Kurulum" },
+      { href: "/kurum/kurulum", icon: Settings, label: "Kurulum", requiredCapability: "operation:manage" },
     ],
   },
   {

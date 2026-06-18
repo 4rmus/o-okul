@@ -349,7 +349,7 @@ export const quarantineResolveFormSchema = z.object({
 });
 
 export const reportQueryFormSchema = z.object({
-  examId: requiredText("Rapor sınav ID"),
+  examId: requiredText("Sınav"),
 });
 
 export const supportTicketAttachmentFormSchema = z.object({
