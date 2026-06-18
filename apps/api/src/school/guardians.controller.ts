@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
-import type { GuardianRecord, GuardianStudentRecord } from "@uzman-hocam/shared-types";
+import type { GuardianRecord, GuardianStudentDetailsResponse, GuardianStudentRecord } from "@uzman-hocam/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
@@ -39,6 +39,12 @@ export class GuardiansController {
   @Roles("TEACHER")
   listStudents(@Param("id") id: string): Promise<GuardianStudentRecord[]> {
     return this.school.listGuardianStudents(getRequestContext(), id);
+  }
+
+  @Get(":id/student-details")
+  @RequireCapability("student:manage")
+  listStudentDetails(@Param("id") id: string): Promise<GuardianStudentDetailsResponse> {
+    return this.school.listGuardianStudentDetails(getRequestContext(), id);
   }
 
   @Post()

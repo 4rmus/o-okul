@@ -8,6 +8,8 @@ import type {
   GradeLevelRecord as SharedGradeLevelRecord,
   GuardianRecord as SharedGuardianRecord,
   GuardianRelationshipType,
+  GuardianStudentDetailStudentRecord,
+  GuardianStudentDetailsResponse,
   GuardianStudentRecord,
   LearningOutcomeRecord as SharedLearningOutcomeRecord,
   StudentRecord as SharedStudentRecord,
@@ -98,6 +100,23 @@ export type TeacherAssignmentRelationInput = Partial<Pick<
 
 const guardianRelationshipTypes: GuardianRelationshipType[] = ["MOTHER", "FATHER", "GUARDIAN", "EMERGENCY_CONTACT", "OTHER"];
 const teacherAssignmentRoles: TeacherAssignmentRole[] = ["CLASS_TEACHER", "BRANCH_TEACHER", "GUIDANCE_COUNSELOR", "RESPONSIBLE_TEACHER"];
+
+function toGuardianStudentDetailStudent(
+  student: SharedStudentRecord,
+  classNameById: ReadonlyMap<string, string>,
+): GuardianStudentDetailStudentRecord {
+  const className = student.classId ? classNameById.get(student.classId) : undefined;
+  return {
+    id: student.id,
+    ...(student.studentNo ? { studentNo: student.studentNo } : {}),
+    firstName: student.firstName,
+    lastName: student.lastName,
+    ...(student.classId ? { classId: student.classId } : {}),
+    ...(className ? { className } : {}),
+    status: student.status,
+    hasPortalUser: Boolean(student.userId),
+  };
+}
 
 @Injectable()
 export class SchoolService {
@@ -901,6 +920,32 @@ export class SchoolService {
   async listGuardianStudents(context: RequestContext, guardianId: string): Promise<GuardianStudentRecord[]> {
     const guardian = await this.findGuardian(context, guardianId);
     return filterTenantResources(context, await this.guardianStudentStore.listByGuardian(guardian.id));
+  }
+
+  async listGuardianStudentDetails(context: RequestContext, guardianId: string): Promise<GuardianStudentDetailsResponse> {
+    const guardian = await this.findGuardian(context, guardianId);
+    const links = filterTenantResources(context, await this.guardianStudentStore.listByGuardian(guardian.id));
+    const linkedStudentIds = new Set(links.map((link) => link.studentId));
+    const students = filterTenantResources(context, await this.studentStore.list());
+    await Promise.all(students.map((student) => this.assertTeacherScope(context, student)));
+
+    const classNameById = new Map(
+      filterTenantResources(context, await this.classStore.list())
+        .filter((record) => !record.deletedAt)
+        .map((record) => [record.id, record.name]),
+    );
+    const studentById = new Map(
+      students.map((student) => [student.id, toGuardianStudentDetailStudent(student, classNameById)]),
+    );
+    const linkedStudents = links
+      .map((link) => studentById.get(link.studentId))
+      .filter((student): student is GuardianStudentDetailStudentRecord => Boolean(student));
+    const availableStudents = students
+      .filter((student) => !linkedStudentIds.has(student.id))
+      .map((student) => studentById.get(student.id))
+      .filter((student): student is GuardianStudentDetailStudentRecord => Boolean(student));
+
+    return { availableStudents, linkedStudents, links };
   }
 
   async listStudentGuardians(context: RequestContext, studentId: string): Promise<GuardianRecord[]> {

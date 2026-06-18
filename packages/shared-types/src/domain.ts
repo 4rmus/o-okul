@@ -193,6 +193,23 @@ export interface StudentRecord {
 
 export type StudentStatus = "ACTIVE" | "PASSIVE" | "GRADUATED" | "TRANSFERRED";
 
+export interface GuardianStudentDetailStudentRecord {
+  id: string;
+  studentNo?: string;
+  firstName: string;
+  lastName: string;
+  classId?: string;
+  className?: string;
+  status: StudentStatus;
+  hasPortalUser: boolean;
+}
+
+export interface GuardianStudentDetailsResponse {
+  links: GuardianStudentRecord[];
+  linkedStudents: GuardianStudentDetailStudentRecord[];
+  availableStudents: GuardianStudentDetailStudentRecord[];
+}
+
 export interface StudentClassHistoryRecord {
   id: string;
   tenantId: string;
@@ -539,6 +556,23 @@ export interface AuditLogRecord {
   entityId?: string;
   action: string;
   diff?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export type AuditLogCategory = "academic" | "finance" | "identity" | "invitation" | "kvkk" | "operation" | "report" | "tenant" | "user";
+
+export interface AuditLogListItemRecord {
+  id: string;
+  actionLabel: string;
+  actorLabel: string;
+  category: AuditLogCategory;
+  entityLabel: string;
+  createdAt: string;
+}
+
+export interface StudentAuditSummaryRecord {
+  id: string;
+  actionLabel: string;
   createdAt: string;
 }
 

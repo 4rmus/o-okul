@@ -310,6 +310,14 @@ export class HomeworkService {
     return this.listStudentMaterialAssignments(context, students.map((student) => student.id));
   }
 
+  async listCurrentGuardianStudentMaterialAssignments(
+    context: RequestContext,
+    studentId: string,
+  ): Promise<HomeworkMaterialAssignmentRecord[]> {
+    const student = await this.students.findOneForViewer(context, studentId);
+    return this.listStudentMaterialAssignments(context, [student.id]);
+  }
+
   async assignMaterial(
     context: RequestContext,
     materialId: string,

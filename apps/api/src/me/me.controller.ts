@@ -2,6 +2,8 @@ import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, 
 import type {
   DevelopmentTrendItem,
   HomeworkMaterialAssignmentRecord,
+  HomeworkMaterialRecord,
+  HomeworkRecord,
   GuardianRecord,
   MeProfileResponse,
   ReportErrorBooklet,
@@ -302,6 +304,14 @@ export class MeController {
     return this.homework.listCurrentGuardianMaterialAssignments(getRequestContext());
   }
 
+  @Get("guardian/students/:studentId/homework/material-assignments")
+  @Roles("GUARDIAN")
+  guardianStudentHomeworkMaterialAssignments(@Param("studentId") studentId: string): Promise<HomeworkMaterialAssignmentRecord[]> {
+    const context = getRequestContext();
+    assertGuardianContext(context);
+    return this.homework.listCurrentGuardianStudentMaterialAssignments(context, studentId);
+  }
+
   @Get("guardian/students/:studentId/attendance")
   @Roles("GUARDIAN")
   guardianStudentAttendance(@Param("studentId") studentId: string): Promise<AttendanceRecord[]> {
@@ -389,6 +399,54 @@ export class MeController {
     @Body(zodBody(supportTicketCreateBodySchema)) body: SupportTicketCreateBody,
   ): Promise<SupportTicketRecord> {
     return this.supportTickets.createCurrentTeacher(getRequestContext(), body);
+  }
+
+  @Get("teacher/students")
+  @Roles("TEACHER")
+  teacherStudents(): Promise<StudentRecord[]> {
+    const context = getRequestContext();
+    assertTeacherContext(context);
+    return this.students.list(context);
+  }
+
+  @Get("teacher/attendance")
+  @Roles("TEACHER")
+  teacherAttendance(): Promise<AttendanceRecord[]> {
+    const context = getRequestContext();
+    assertTeacherContext(context);
+    return this.attendance.list(context);
+  }
+
+  @Get("teacher/homework")
+  @Roles("TEACHER")
+  teacherHomework(): Promise<HomeworkRecord[]> {
+    const context = getRequestContext();
+    assertTeacherContext(context);
+    return this.homework.list(context);
+  }
+
+  @Get("teacher/homework/materials")
+  @Roles("TEACHER")
+  teacherHomeworkMaterials(): Promise<HomeworkMaterialRecord[]> {
+    const context = getRequestContext();
+    assertTeacherContext(context);
+    return this.homework.listMaterials(context);
+  }
+
+  @Get("teacher/homework/materials/:id/assignments")
+  @Roles("TEACHER")
+  teacherHomeworkMaterialAssignments(@Param("id") id: string): Promise<HomeworkMaterialAssignmentRecord[]> {
+    const context = getRequestContext();
+    assertTeacherContext(context);
+    return this.homework.listMaterialAssignments(context, id);
+  }
+
+  @Get("teacher/teacher-notes")
+  @Roles("TEACHER")
+  teacherTeacherNotes(): Promise<TeacherNoteRecord[]> {
+    const context = getRequestContext();
+    assertTeacherContext(context);
+    return this.teacherNotes.list(context);
   }
 
   @Get("guardian/students/:studentId/reports/:examId/snapshots/:snapshotId")
@@ -489,6 +547,12 @@ function assertGuardianContext(context: RequestContext): void {
 
 function assertStudentContext(context: RequestContext): asserts context is RequestContext & { subjectType: "STUDENT"; subjectId: string } {
   if (context.subjectType !== "STUDENT" || !context.subjectId) {
+    throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
+  }
+}
+
+function assertTeacherContext(context: RequestContext): asserts context is RequestContext & { subjectType: "TEACHER"; subjectId: string } {
+  if (context.subjectType !== "TEACHER" || !context.subjectId) {
     throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
   }
 }

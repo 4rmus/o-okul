@@ -366,10 +366,56 @@ describe("API auth + tenant isolation", () => {
           },
         ]);
       });
+    await request(server)
+      .get("/me/teacher/students")
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.map((student: { id: string }) => student.id)).toEqual(["student-a"]);
+      });
+    await request(server)
+      .get("/me/teacher/attendance")
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.map((record: { id: string; studentId: string }) => `${record.id}:${record.studentId}`)).toEqual(["attendance-a:student-a"]);
+      });
+    await request(server)
+      .get("/me/teacher/homework")
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.map((record: { id: string }) => record.id)).toEqual(["homework-a"]);
+      });
+    await request(server)
+      .get("/me/teacher/homework/materials")
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.map((record: { id: string }) => record.id)).toEqual(["material-a"]);
+      });
+    await request(server)
+      .get("/me/teacher/homework/materials/material-a/assignments")
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.map((assignment: { id: string; studentId: string }) => `${assignment.id}:${assignment.studentId}`)).toEqual(["material-assignment-a:student-a"]);
+      });
+    await request(server)
+      .get("/me/teacher/teacher-notes")
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.map((note: { id: string; studentId: string }) => `${note.id}:${note.studentId}`)).toEqual([
+          "teacher-note-internal-a:student-a",
+          "teacher-note-visible-a:student-a",
+        ]);
+      });
 
     const admin = await login("admin-a@example.test");
     await request(server).get("/me/teacher").set("Authorization", `Bearer ${admin.accessToken}`).expect(403);
     await request(server).get("/me/teacher/schedule").set("Authorization", `Bearer ${admin.accessToken}`).expect(403);
+    await request(server).get("/me/teacher/students").set("Authorization", `Bearer ${admin.accessToken}`).expect(403);
 
     const student = await login("student-a@example.test");
     await request(server).get("/me/teacher").set("Authorization", `Bearer ${student.accessToken}`).expect(403);
@@ -408,6 +454,17 @@ describe("API auth + tenant isolation", () => {
       .expect(({ body }) => {
         expect(body.map((assignment: { studentId: string }) => assignment.studentId)).toEqual(["student-a"]);
       });
+    await request(server)
+      .get("/me/guardian/students/student-a/homework/material-assignments")
+      .set("Authorization", `Bearer ${guardian.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.map((assignment: { studentId: string }) => assignment.studentId)).toEqual(["student-a"]);
+      });
+    await request(server)
+      .get("/me/guardian/students/student-b/homework/material-assignments")
+      .set("Authorization", `Bearer ${guardian.accessToken}`)
+      .expect(403);
 
     const teacher = await login("teacher-a@example.test");
     await request(server)
@@ -416,6 +473,10 @@ describe("API auth + tenant isolation", () => {
       .expect(403);
     await request(server)
       .get("/me/guardian/homework/material-assignments")
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .expect(403);
+    await request(server)
+      .get("/me/guardian/students/student-a/homework/material-assignments")
       .set("Authorization", `Bearer ${teacher.accessToken}`)
       .expect(403);
   });

@@ -73,6 +73,7 @@ describe("Me access matrix", () => {
       "/me/guardian/students/student-a/profile",
       "/me/guardian/students/student-a/class-history",
       "/me/guardian/students/student-a/enrollments",
+      "/me/guardian/students/student-a/homework/material-assignments",
       "/me/guardian/students/student-a/attendance",
       "/me/guardian/students/student-a/attendance/summary",
       "/me/guardian/students/student-a/teacher-notes",
@@ -100,6 +101,7 @@ describe("Me access matrix", () => {
       "/me/guardian/students/student-b/profile",
       "/me/guardian/students/student-b/class-history",
       "/me/guardian/students/student-b/enrollments",
+      "/me/guardian/students/student-b/homework/material-assignments",
       "/me/guardian/students/student-b/attendance",
       "/me/guardian/students/student-b/attendance/summary",
       "/me/guardian/students/student-b/teacher-notes",
@@ -123,13 +125,27 @@ describe("Me access matrix", () => {
   });
 
   it("öğretmen /me yüzeylerini yalnız öğretmen subject'i açar", async () => {
-    const teacherEndpoints = ["/me/teacher", "/me/teacher/schedule", "/me/teacher/announcements"];
+    const teacherEndpoints = [
+      "/me/teacher",
+      "/me/teacher/schedule",
+      "/me/teacher/announcements",
+      "/me/teacher/students",
+      "/me/teacher/attendance",
+      "/me/teacher/homework",
+      "/me/teacher/homework/materials",
+      "/me/teacher/homework/materials/material-a/assignments",
+      "/me/teacher/teacher-notes",
+    ];
 
     for (const endpoint of teacherEndpoints) {
-      await request(server).get(endpoint).set("Authorization", `Bearer ${teacherToken}`).expect(200);
-      await request(server).get(endpoint).set("Authorization", `Bearer ${studentToken}`).expect(403);
-      await request(server).get(endpoint).set("Authorization", `Bearer ${guardianToken}`).expect(403);
-      await request(server).get(endpoint).set("Authorization", `Bearer ${adminToken}`).expect(403);
+      const teacherResponse = await request(server).get(endpoint).set("Authorization", `Bearer ${teacherToken}`);
+      expect(teacherResponse.status, `${endpoint} should be teacher-only readable`).toBe(200);
+      const studentResponse = await request(server).get(endpoint).set("Authorization", `Bearer ${studentToken}`);
+      expect(studentResponse.status, `${endpoint} should reject student`).toBe(403);
+      const guardianResponse = await request(server).get(endpoint).set("Authorization", `Bearer ${guardianToken}`);
+      expect(guardianResponse.status, `${endpoint} should reject guardian`).toBe(403);
+      const adminResponse = await request(server).get(endpoint).set("Authorization", `Bearer ${adminToken}`);
+      expect(adminResponse.status, `${endpoint} should reject tenant admin without role preview`).toBe(403);
     }
   });
 

@@ -757,6 +757,34 @@ describe("School management API", () => {
         expect(body).toEqual([expect.objectContaining({ guardianId, studentId: "student-a", canViewFinance: false })]);
       });
     await request(server)
+      .get(`/guardians/${guardianId}/student-details`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.links).toEqual([expect.objectContaining({ guardianId, studentId: "student-a", canViewFinance: false })]);
+        expect(body.linkedStudents).toEqual([
+          {
+            classId: "class-a",
+            className: "8-A",
+            firstName: "Ada",
+            hasPortalUser: true,
+            id: "student-a",
+            lastName: "A",
+            status: "ACTIVE",
+            studentNo: "100",
+          },
+        ]);
+        expect(body.availableStudents).toEqual(expect.not.arrayContaining([expect.objectContaining({ id: "student-a" })]));
+        expect(JSON.stringify(body)).not.toContain("student-b");
+        expect(JSON.stringify(body)).not.toContain("class-b");
+        expect(JSON.stringify(body)).not.toContain("responsibleTeacherId");
+        expect(JSON.stringify(body)).not.toContain("userId");
+      });
+    await request(server)
+      .get(`/guardians/${guardianId}/student-details`)
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(403);
+    await request(server)
       .get("/students/student-a/guardian-links")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(200)

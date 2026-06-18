@@ -392,6 +392,58 @@ describe("Audit log API", () => {
     expect(JSON.stringify(response.body)).not.toContain("5000000099");
   });
 
+  it("öğrenci detay denetim özeti raw audit alanlarını döndürmeden daraltır", async () => {
+    const guardian = await request(server)
+      .post("/guardians")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Filtre", lastName: "Veli", phone: "5000000101" })
+      .expect(201);
+    const guardianId = (guardian.body as { id: string }).id;
+
+    const linked = await request(server)
+      .post(`/guardians/${guardianId}/students`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ studentId: "student-a", relationshipType: "MOTHER", isPrimary: true, canViewFinance: true })
+      .expect(201);
+
+    await request(server)
+      .patch(`/guardians/${guardianId}/students/student-a`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ canReceiveSms: false })
+      .expect(200);
+
+    const response = await request(server)
+      .get("/audit-logs/student-summary?studentId=student-a&limit=5")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        actionLabel: "Veli ilişkisi kuruldu",
+        createdAt: expect.any(String),
+        id: expect.any(String),
+      }),
+      expect.objectContaining({
+        actionLabel: "Veli ilişkisi güncellendi",
+        createdAt: expect.any(String),
+        id: expect.any(String),
+      }),
+    ]));
+    for (const record of response.body as Array<Record<string, unknown>>) {
+      expect(Object.keys(record).sort()).toEqual(["actionLabel", "createdAt", "id"]);
+    }
+    expect(JSON.stringify(response.body)).not.toContain(linked.body.id);
+    expect(JSON.stringify(response.body)).not.toContain(guardianId);
+    expect(JSON.stringify(response.body)).not.toContain("student-a");
+    expect(JSON.stringify(response.body)).not.toContain("actorUserId");
+    expect(JSON.stringify(response.body)).not.toContain("entityId");
+    expect(JSON.stringify(response.body)).not.toContain("entityType");
+    expect(JSON.stringify(response.body)).not.toContain("diff");
+    expect(JSON.stringify(response.body)).not.toContain("support_ticket.created");
+    expect(JSON.stringify(response.body)).not.toContain("Teacher");
+    expect(JSON.stringify(response.body)).not.toContain("guardian.created");
+  });
+
   it("ders programı ve etüt CRUD işlemleri audit kaydı üretir", async () => {
     const lesson = await request(server)
       .post("/schedule-lessons")
