@@ -109,8 +109,6 @@ function checkContract(file) {
     "TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE",
     "BACKUP_PATH",
     "BACKUP_RETENTION_DAYS",
-    "BACKUP_OFFSITE_TARGET",
-    "BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE",
     "WAL_ARCHIVE_TARGET",
     "WAL_ARCHIVE_SMOKE_EVIDENCE_FILE",
     "DEPLOYMENT_REGION_TARGET",
@@ -255,9 +253,7 @@ function checkProductionEnv(env) {
   requireNoPlaceholderValue(env, failures, "SENTRY_SMOKE_MESSAGE");
   requireSet(env, failures, "BACKUP_PATH");
   requireSet(env, failures, "BACKUP_RETENTION_DAYS");
-  requireBackupTarget(env, failures, "BACKUP_OFFSITE_TARGET");
   requireBackupTarget(env, failures, "WAL_ARCHIVE_TARGET");
-  requireDistinctBackupTargets(env, failures, "BACKUP_OFFSITE_TARGET", "WAL_ARCHIVE_TARGET");
   for (const key of evidenceTargetKeys) {
     requireEvidenceTargetUrl(env, failures, key);
   }

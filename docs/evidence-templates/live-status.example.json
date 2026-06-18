@@ -55,14 +55,6 @@
       "evidenceReference": "go-live.example.json"
     },
     {
-      "label": "Off-host backup hedefi",
-      "status": "PASS",
-      "command": "pnpm backup:offsite:smoke",
-      "source": "productionEvidenceSummary.smokeEvidence.backupOffsite",
-      "checkedAt": "2026-06-15T09:25:00.000Z",
-      "evidenceReference": "production-evidence-summary.example.json#/smokeEvidence/backupOffsite"
-    },
-    {
       "label": "Alert bildirim kanalı",
       "status": "PASS",
       "command": "pnpm alert:webhook:smoke",

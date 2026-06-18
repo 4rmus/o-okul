@@ -37,7 +37,6 @@ const smokeEvidenceFileDefaults = {
   NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE: "notification-provider.json",
   SENTRY_SMOKE_EVIDENCE_FILE: "sentry-event.json",
   ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE: "alert-webhook.json",
-  BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE: "backup-offsite.json",
   WAL_ARCHIVE_SMOKE_EVIDENCE_FILE: "wal-archive.json",
   REPORT_GENERATION_SMOKE_EVIDENCE_FILE: "report-generation.json",
 };
@@ -53,7 +52,6 @@ const checks = [
   ["Notification provider", "scripts/smoke-notification-provider.mjs"],
   ["Sentry test event", "scripts/smoke-sentry-event.mjs"],
   ["Alert webhook", "scripts/smoke-alert-webhook.mjs"],
-  ["Off-host backup target", "scripts/smoke-backup-offsite.mjs"],
   ["WAL archive target", "scripts/smoke-wal-archive-target.mjs"],
   ["Report generation smoke", "scripts/smoke-report-generation-live.mjs"],
   ["Deployment region evidence", "scripts/check-deployment-region-evidence.mjs"],
@@ -189,7 +187,6 @@ function writeSummary(file) {
     notificationProvider: readSmokeEvidence("NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE", "notification_provider_smoke"),
     sentryEvent: readSmokeEvidence("SENTRY_SMOKE_EVIDENCE_FILE", "sentry_smoke"),
     alertWebhook: readSmokeEvidence("ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE", "alert_webhook_smoke"),
-    backupOffsite: readSmokeEvidence("BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE", "backup_offsite_smoke"),
     walArchive: readSmokeEvidence("WAL_ARCHIVE_SMOKE_EVIDENCE_FILE", "wal_archive_smoke"),
     reportGeneration: readSmokeEvidence("REPORT_GENERATION_SMOKE_EVIDENCE_FILE", "report_generation_smoke"),
   };

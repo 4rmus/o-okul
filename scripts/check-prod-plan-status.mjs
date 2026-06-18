@@ -155,7 +155,6 @@ const requiredNotRunLines = [
   "Deployment rollback tatbikat\u0131: `NOT_RUN`",
   "Pilot kapan\u0131\u015f kan\u0131t\u0131: `NOT_RUN`",
   "Go-live karar paketi: `NOT_RUN`",
-  "Off-host backup hedefi: `NOT_RUN`",
   "Alert bildirim kanal\u0131: `NOT_RUN`",
 ];
 

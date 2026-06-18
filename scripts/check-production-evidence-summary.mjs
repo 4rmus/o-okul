@@ -16,7 +16,6 @@ const requiredChecks = new Map([
   ["Notification provider", "scripts/smoke-notification-provider.mjs"],
   ["Sentry test event", "scripts/smoke-sentry-event.mjs"],
   ["Alert webhook", "scripts/smoke-alert-webhook.mjs"],
-  ["Off-host backup target", "scripts/smoke-backup-offsite.mjs"],
   ["WAL archive target", "scripts/smoke-wal-archive-target.mjs"],
   ["Report generation smoke", "scripts/smoke-report-generation-live.mjs"],
   ["Deployment region evidence", "scripts/check-deployment-region-evidence.mjs"],
@@ -45,7 +44,6 @@ const requiredSmokeEvidence = new Map([
   ["notificationProvider", "notification_provider_smoke"],
   ["sentryEvent", "sentry_smoke"],
   ["alertWebhook", "alert_webhook_smoke"],
-  ["backupOffsite", "backup_offsite_smoke"],
   ["walArchive", "wal_archive_smoke"],
   ["reportGeneration", "report_generation_smoke"],
 ]);

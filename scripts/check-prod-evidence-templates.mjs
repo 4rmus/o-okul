@@ -1490,7 +1490,7 @@ runProductionSummarySymlinkParentTargetNegativeCheck();
 runProductionSummaryNegativeCheck({
   label: "Production summary extra check negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-check.tmp.json",
-  expectedFailure: "checks tam 27 madde içermeli.",
+  expectedFailure: "checks tam 26 madde içermeli.",
   mutate: (fixture) => {
     fixture.checks.push({
       label: "Beklenmeyen production check",
@@ -1542,7 +1542,7 @@ runProductionSummaryNegativeCheck({
 runProductionSummaryNegativeCheck({
   label: "Production summary extra smoke evidence negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-smoke-evidence.tmp.json",
-  expectedFailure: "smokeEvidence tam 8 alan içermeli.",
+  expectedFailure: "smokeEvidence tam 7 alan içermeli.",
   mutate: (fixture) => {
     fixture.smokeEvidence.unexpectedSmoke = { ...fixture.smokeEvidence.alertWebhook };
   },
@@ -1853,7 +1853,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra gatesPassed negative",
   path: "docs/evidence-templates/go-live.extra-gates-passed.tmp.json",
-  expectedFailure: "liveStatusEvidence.gatesPassed tam 8 gate içermeli.",
+  expectedFailure: "liveStatusEvidence.gatesPassed tam 7 gate içermeli.",
   mutate: (fixture) => {
     fixture.liveStatusEvidence.gatesPassed.push("Beklenmeyen gate");
   },
@@ -1877,7 +1877,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra deployment field negative",
   path: "docs/evidence-templates/go-live.extra-deployment-field.tmp.json",
-  expectedFailure: "deployment tam 15 alan icermeli.",
+  expectedFailure: "deployment tam 14 alan icermeli.",
   mutate: (fixture) => {
     fixture.deployment.unexpectedField = true;
   },
@@ -1906,7 +1906,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra checksPassed negative",
   path: "docs/evidence-templates/go-live.extra-checks-passed.tmp.json",
-  expectedFailure: "productionEvidenceSummary.checksPassed tam 27 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.checksPassed tam 26 madde icermeli.",
   mutate: (fixture) => {
     fixture.productionEvidenceSummary.checksPassed.push("Beklenmeyen production check");
   },
@@ -1972,7 +1972,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked duplicate summary check negative",
   path: "docs/evidence-templates/go-live.linked-duplicate-summary-check.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.checks tam 27 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.checks tam 26 madde icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.duplicate-check-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -2011,7 +2011,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked extra summary smoke negative",
   path: "docs/evidence-templates/go-live.linked-extra-summary-smoke.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.smokeEvidence tam 8 alan icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.smokeEvidence tam 7 alan icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.extra-smoke-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -2161,7 +2161,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked duplicate gate negative",
   path: "docs/evidence-templates/go-live.linked-duplicate-gate.tmp.json",
-  expectedFailure: "liveStatusEvidence.gates tam 8 gate içermeli.",
+  expectedFailure: "liveStatusEvidence.gates tam 7 gate içermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/live-status.duplicate-gate-for-go-live.tmp.json";
     const linkedLiveStatus = structuredClone(liveStatusFixture);
@@ -4494,7 +4494,6 @@ function runStagingReleaseArtifactsBundleCheck() {
       notificationProvider: "notification-provider.json",
       sentryEvent: "sentry-event.json",
       alertWebhook: "alert-webhook.json",
-      backupOffsite: "backup-offsite.json",
       walArchive: "wal-archive.json",
       reportGeneration: "report-generation.json",
     })) {
@@ -4532,17 +4531,6 @@ function runStagingReleaseArtifactsBundleCheck() {
         commandsPassed: ["pnpm alert:webhook:smoke"],
         gaps: [],
       },
-      "backup-offsite.json": {
-        generatedAt: evidenceTime,
-        result: "PASS",
-        check: "backup_offsite_smoke",
-        environment: summary.smokeEvidence.backupOffsite.environment,
-        checkedAt: evidenceTime,
-        target: { protocol: "file", pathRedacted: true },
-        markerSha256: "a".repeat(64),
-        commandsPassed: ["pnpm backup:offsite:smoke"],
-        gaps: [],
-      },
     };
     for (const [file, payload] of Object.entries(firstGatePayloads)) {
       writeFileSync(`${firstGatesDir}/${file}`, `${JSON.stringify(payload, null, 2)}\n`);
@@ -4565,12 +4553,6 @@ function runStagingReleaseArtifactsBundleCheck() {
               label: "Alert webhook smoke",
               script: "scripts/smoke-alert-webhook.mjs",
               evidenceFile: "alert-webhook.json",
-              status: "PASS",
-            },
-            {
-              label: "Off-site backup smoke",
-              script: "scripts/smoke-backup-offsite.mjs",
-              evidenceFile: "backup-offsite.json",
               status: "PASS",
             },
           ],
@@ -5435,7 +5417,6 @@ function createValidProdEnvForNegativeCheck() {
     TRAEFIK_HTTPS_SMOKE_URL: "https://app.uzmanhocam.com/",
     BACKUP_PATH: "/var/backups/uzman-hocam",
     BACKUP_RETENTION_DAYS: "7",
-    BACKUP_OFFSITE_TARGET: "s3://prod-offsite-archive/uzman-hocam/base",
     WAL_ARCHIVE_TARGET: "s3://prod-wal-archive/uzman-hocam/wal",
     ALERT_WEBHOOK_URL: "https://alerts.uzmanhocam.com/webhook",
     ALERT_WEBHOOK_TOKEN: "alert-webhook-token-123456789012345",
@@ -5448,7 +5429,6 @@ function createValidProdEnvForNegativeCheck() {
     "NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE",
     "SENTRY_SMOKE_EVIDENCE_FILE",
     "ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE",
-    "BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE",
     "WAL_ARCHIVE_SMOKE_EVIDENCE_FILE",
     "REPORT_GENERATION_SMOKE_EVIDENCE_FILE",
   ]) {

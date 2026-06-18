@@ -498,16 +498,16 @@ Beklenen akış:
 - Staging host ayağa kalktıktan sonra evidence job ilk dış gate'leri tam release evidence zincirinden
   önce ayrı artifact seti olarak üretir:
   `pnpm staging:first-gates:smoke -- --env-file .staging-evidence.env --output-dir artifacts/staging/first-gates`.
-  Bu komut Traefik HTTPS, alert webhook ve off-site backup smoke dosyalarını yazar, her dosyayı
+  Bu komut Traefik HTTPS ve alert webhook smoke dosyalarını yazar, her dosyayı
   ortak smoke evidence sözleşmesiyle doğrular ve `first-gates-manifest.json` manifest'i üretir.
   Output dizini lokal temp path (`/tmp`, `/var/tmp`) altında olamaz ve yalnız
-  `first-gates-manifest.json`, `traefik-https.json`, `alert-webhook.json`
-  ve `backup-offsite.json` dosyalarını içerebilir; beklenmeyen dosya veya symlink varsa smoke
+  `first-gates-manifest.json`, `traefik-https.json` ve `alert-webhook.json`
+  dosyalarını içerebilir; beklenmeyen dosya veya symlink varsa smoke
   çalışmadan önce kırılır. Tekil smoke komutlarında kullanılan `*_SMOKE_EVIDENCE_FILE`
   çıktıları da lokal temp path'e veya symlink file/parent directory üzerinden yazılamaz.
   Workflow aynı job içinde
   `STAGING_FIRST_GATES_TARGET=file://$PWD/artifacts/staging/first-gates/first-gates-manifest.json pnpm staging:first-gates:check`
-  komutuyla manifest'i, üç artifact'i, artifact ortamlarının manifest ortamıyla eşleştiğini ve manifest
+  komutuyla manifest'i, iki artifact'i, artifact ortamlarının manifest ortamıyla eşleştiğini ve manifest
   zamanının artifact `generatedAt`/`checkedAt` zamanlarından önce olmadığını tekrar doğrular. Artifact upload adımı `if: always()` ile çalışır ve
   full production evidence zinciri sonradan düşse bile üretilen first-gates artifact'lerini saklar.
 - GitHub runner, doğrulanmış production evidence env sözleşmesiyle
@@ -787,8 +787,8 @@ Minimum kanıt içeriği:
   çözülmelidir.
 - Canlı Durum transition bundle'ı `Traefik HTTPS smoke`, `TR datacenter/provider kanıtı`,
   `Staging/prod UAT`, `Deployment rollback tatbikatı`, `Pilot kapanış kanıtı`,
-  `Go-live karar paketi`, `Off-host backup hedefi` ve `Alert bildirim kanalı` satırlarını
-  readiness dokümanındaki durumla birebir eşleştirir. Liste tam sekiz satırdan oluşmalı, beklenmeyen
+  `Go-live karar paketi` ve `Alert bildirim kanalı` satırlarını
+  readiness dokümanındaki durumla birebir eşleştirir. Liste tam yedi satırdan oluşmalı, beklenmeyen
   veya tekrarlı gate içermemelidir. Bundle top-level alanları ve her gate item alan seti tam ve
   beklenmeyen alansız olmalıdır. Her gate `command` ve `source` değeri kanonik listeyle
   eşleşmelidir; `checkedAt` geçerli tarih, `evidenceReference` source artifact referansıyla eşleşen
@@ -892,14 +892,14 @@ Minimum kanıt içeriği:
 - `SUSPENDED` veya `DELETED` tenant'lar read-only moda alınmaz; request context kurulmadan
   `TENANT_INACTIVE_OR_EXPIRED` ile reddedilir.
 
-## Kurum Veri Export ve Off-host Backup Smoke
+## Kurum Veri Export ve Opsiyonel Backup Smoke
 
-İlk pilotta off-host yedek hedefi basit tutulur: kurum yetkilisi `/kurum/yedek-restore`
+İlk pilotta off-host yedek hedefi release planından çıkarılmıştır: kurum yetkilisi `/kurum/yedek-restore`
 ekranındaki "Kurum verisini indir" aksiyonuyla kendi eklediği öğrenci, veli, öğretmen, sınıf,
 finans, sınav, rapor, duyuru ve destek kayıtlarını JSON olarak bilgisayarına indirir. Bu dosyanın
 sunucu dışındaki kurum cihazında saklanması pilot yedek kanıtıdır.
 
-Ops seviyesinde kalıcı `BACKUP_OFFSITE_TARGET` hedefi açılırsa hedefin yalnız yazılı değil,
+Ops seviyesinde kalıcı `BACKUP_OFFSITE_TARGET` hedefi ileride tekrar açılırsa hedefin yalnız yazılı değil,
 gerçekten yaz/oku/sil döngüsünü tamamladığı ayrıca kanıtlanır.
 
 Komut:
@@ -925,8 +925,9 @@ Desteklenen hedefler:
 
 - `file:///...`: lokal veya mount edilmiş off-host path'e test dosyası yazar, hash doğrular ve siler.
 - `s3://bucket/prefix`: S3 uyumlu hedefe test nesnesi yazar, geri okur, hash doğrular ve siler.
-- Production env kontrolü placeholder/test bucket, lokal temp path, geçersiz URL ve
-  boş/placeholder S3 credential değerlerini reddeder.
+- Opsiyonel smoke aracı placeholder/test bucket, lokal temp path, geçersiz URL ve
+  boş/placeholder S3 credential değerlerini reddeder; bu hedef pilot release env sözleşmesinde
+  zorunlu değildir.
 
 S3 hedefi için `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` ve gerekirse
 `S3_FORCE_PATH_STYLE=true` staging/prod env içinde ayarlanır. `S3_BUCKET`,
@@ -991,10 +992,10 @@ Staging kanıtı repo artifact'i olarak saklanacaksa:
 WAL_ARCHIVE_SMOKE_EVIDENCE_FILE=artifacts/staging/wal-archive.json pnpm wal:archive:smoke
 ```
 
-Desteklenen hedefler `BACKUP_OFFSITE_TARGET` ile aynıdır: `file:///...` veya `s3://bucket/prefix`.
+Desteklenen hedefler `file:///...` veya `s3://bucket/prefix` değerleridir.
 `file://` hedef root, lokal temp path (`/tmp`, `/var/tmp`) veya symlink dizin/parent path
 olamaz; mount hedefi kalıcı, symlink olmayan dizin olmalıdır.
-Production env kontrolü WAL hedefinin base backup hedefinden ayrı bucket veya path olmasını zorunlu tutar.
+Production env kontrolü WAL hedefinin geçerli, placeholder olmayan bir hedef olmasını zorunlu tutar.
 Bu smoke Postgres'in gerçek WAL üretimini test etmez; arşiv hedefinin erişilebilirliğini kanıtlar.
 Artifact `checkedAt`, target özeti, marker sha256, tek
 `commandsPassed=["pnpm wal:archive:smoke"]` ve boş `gaps` listesi taşır.
@@ -1047,8 +1048,9 @@ archive_timeout = 60s
 
 Zorunlu operasyon sözleşmesi:
 
-- Günlük base backup alınır ve immutable/off-host hedefte saklanır.
-- WAL arşivi base backup hedefinden ayrı path veya bucket altında tutulur.
+- Günlük base backup alınır ve lokal kalıcı backup path'inde saklanır; off-host hedef pilot
+  release gate'i değildir.
+- WAL arşivi ayrı kalıcı path veya bucket altında tutulur.
 - En az haftada bir restore denemesi yapılır.
 - Panel/API/worker backup işi yalnız `s3://bucket/prefix` veya kalıcı `file://` dizin hedefi
   kabul eder; root, lokal temp path, symlink dizin veya symlink parent zinciri altındaki hedefler

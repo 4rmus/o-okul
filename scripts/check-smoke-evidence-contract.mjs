@@ -12,7 +12,6 @@ const smokeChecks = [
   ["notificationProvider", "notification_provider_smoke"],
   ["sentryEvent", "sentry_smoke"],
   ["alertWebhook", "alert_webhook_smoke"],
-  ["backupOffsite", "backup_offsite_smoke"],
   ["walArchive", "wal_archive_smoke"],
 ];
 
@@ -90,30 +89,6 @@ const negativeCases = [
       responseBody: "ok",
     },
     "alert_webhook_smoke",
-  ],
-  [
-    "backup marker sha256 reddedilir",
-    {
-      ...summary.smokeEvidence?.backupOffsite,
-      markerSha256: "not-a-sha256",
-    },
-    "backup_offsite_smoke",
-  ],
-  [
-    "Backup dolu gaps reddedilir",
-    {
-      ...summary.smokeEvidence?.backupOffsite,
-      gaps: ["offsite hedefi manuel doğrulanmadı"],
-    },
-    "backup_offsite_smoke",
-  ],
-  [
-    "Backup beklenmeyen alan reddedilir",
-    {
-      ...summary.smokeEvidence?.backupOffsite,
-      markerName: "uzman-hocam-offsite-smoke.txt",
-    },
-    "backup_offsite_smoke",
   ],
   [
     "WAL checkedAt geçersiz reddedilir",

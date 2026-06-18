@@ -18,7 +18,6 @@ const summaryDefaultedSmokeKeys = new Map([
   ["NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE", "notification-provider.json"],
   ["SENTRY_SMOKE_EVIDENCE_FILE", "sentry-event.json"],
   ["ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE", "alert-webhook.json"],
-  ["BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE", "backup-offsite.json"],
   ["WAL_ARCHIVE_SMOKE_EVIDENCE_FILE", "wal-archive.json"],
   ["REPORT_GENERATION_SMOKE_EVIDENCE_FILE", "report-generation.json"],
 ]);

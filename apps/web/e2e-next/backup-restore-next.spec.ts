@@ -170,9 +170,14 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
 
   await loginAsTenantAdmin(page);
   await expandSidebarGroup(page, "Yönetim");
-  await page.getByRole("link", { name: "Yedekleme" }).click();
+  const backupLink = page.getByRole("link", { name: "Yedekleme" });
+  await expect(backupLink).toHaveAttribute("href", "/kurum/yedek-restore");
+  await backupLink.focus();
+  await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/kurum\/yedek-restore$/);
   await expect(page.getByRole("heading", { name: "Yedek / Restore" })).toBeVisible();
+  await expect(page.getByLabel("Yedek restore güven durumu").getByText("Yedek Kanıt Gücü")).toBeVisible();
+  await expect(page.getByLabel("Yedek restore güven durumu").getByText("Maskeli")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Kurum Veri Yedeği" })).toBeVisible();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Kurum verisini indir" }).click();
@@ -192,6 +197,10 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
   await page.getByLabel("Panel restore drill işi").getByLabel("Onay metni").fill("YEDEK AL");
   await page.getByLabel("Panel restore drill işi").getByRole("button", { name: "Yedek alma işi başlat" }).click();
   await expect(page.getByLabel("Yedek restore işleri").getByRole("heading", { name: "Yedek alma" })).toBeVisible();
+  await expect(page.getByLabel("Yedek restore işleri").getByText("file://<redacted>")).toBeVisible();
+  await expect(page.getByLabel("Yedek restore işleri").getByText("file:///mnt/backups/tenant-a")).toHaveCount(0);
+  await expect(page.getByLabel("Yedek restore işleri").getByText("backup-restore-job-created_backup")).toHaveCount(0);
+  await expect(page.getByLabel("Yedek restore işleri").getByText("İş referansı maskeli")).toBeVisible();
   expect(backupRestorePostCount).toBe(1);
 
   await page.getByLabel("Panel restore drill işi").getByLabel("İş tipi").selectOption("RESTORE_DRILL");
@@ -205,6 +214,7 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
   await page.getByLabel("Panel restore drill işi").getByLabel("Onay metni").fill("RESTORE DRILL");
   await page.getByLabel("Panel restore drill işi").getByRole("button", { name: "Restore drill işi başlat" }).click();
   await expect(page.getByLabel("Yedek restore işleri").getByRole("heading", { name: "Restore drill" })).toBeVisible();
+  await expect(page.getByLabel("Yedek restore işleri").getByText("file:///mnt/restore-drills/restore-drill.json")).toHaveCount(0);
   expect(backupRestorePostCount).toBe(2);
 });
 

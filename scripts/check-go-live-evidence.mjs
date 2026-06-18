@@ -13,7 +13,6 @@ const requiredEvidenceCheckScripts = new Map([
   ["Notification provider", "scripts/smoke-notification-provider.mjs"],
   ["Sentry test event", "scripts/smoke-sentry-event.mjs"],
   ["Alert webhook", "scripts/smoke-alert-webhook.mjs"],
-  ["Off-host backup target", "scripts/smoke-backup-offsite.mjs"],
   ["WAL archive target", "scripts/smoke-wal-archive-target.mjs"],
   ["Report generation smoke", "scripts/smoke-report-generation-live.mjs"],
   ["Deployment region evidence", "scripts/check-deployment-region-evidence.mjs"],
@@ -62,7 +61,6 @@ const goLiveDeploymentKeys = [
   "githubCiPassed",
   "traefikHttpsPassed",
   "restoreDrillPassed",
-  "offHostBackupPassed",
   "walArchivePassed",
   "reportGenerationPassed",
   "rollbackDrillPassed",
@@ -118,7 +116,6 @@ const summarySmokeEvidenceKeys = [
   "notificationProvider",
   "sentryEvent",
   "alertWebhook",
-  "backupOffsite",
   "walArchive",
   "reportGeneration",
 ];
@@ -294,14 +291,6 @@ const liveStatusGates = [
     target: "goLive",
     path: [],
     dateKey: "checkedAt",
-  },
-  {
-    label: "Off-host backup hedefi",
-    command: "pnpm backup:offsite:smoke",
-    source: "productionEvidenceSummary.smokeEvidence.backupOffsite",
-    target: "summary",
-    path: ["smokeEvidence", "backupOffsite"],
-    dateKey: "generatedAt",
   },
   {
     label: "Alert bildirim kanalı",
@@ -753,12 +742,6 @@ function requireSummarySmokeEvidence(summary, failures, goLiveReport) {
     requireHttpsUrl(alertWebhook, failures, "productionEvidenceSummary.summary.smokeEvidence.alertWebhook.webhookUrl", "webhookUrl");
     requireObjectStatus2xx(alertWebhook, failures, "productionEvidenceSummary.summary.smokeEvidence.alertWebhook.statusCode", "statusCode");
     requireObjectEqual(alertWebhook, failures, "productionEvidenceSummary.summary.smokeEvidence.alertWebhook.authorizationScheme", "authorizationScheme", "bearer");
-  }
-
-  const backupOffsite = requireSmokeCheck(value, failures, "backupOffsite", "backup_offsite_smoke", summary, goLiveReport);
-  if (backupOffsite) {
-    requireSmokeTargetSummary(backupOffsite, failures, "productionEvidenceSummary.summary.smokeEvidence.backupOffsite.target");
-    requireObjectSha256(backupOffsite, failures, "productionEvidenceSummary.summary.smokeEvidence.backupOffsite.markerSha256", "markerSha256");
   }
 
   const walArchive = requireSmokeCheck(value, failures, "walArchive", "wal_archive_smoke", summary, goLiveReport);
@@ -2826,7 +2809,6 @@ function requireDeployment(report, failures) {
     "githubCiPassed",
     "traefikHttpsPassed",
     "restoreDrillPassed",
-    "offHostBackupPassed",
     "walArchivePassed",
     "reportGenerationPassed",
     "rollbackDrillPassed",

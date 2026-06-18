@@ -24,7 +24,6 @@ pnpm deployment:region:check
 pnpm deployment:rollback:check
 pnpm github-ci:check
 pnpm alert:webhook:smoke
-pnpm backup:offsite:smoke
 pnpm wal:archive:smoke
 pnpm restore:drill:check
 pnpm privacy:inventory:check
@@ -110,14 +109,14 @@ pnpm backup:restore:smoke
   placeholder/redacted/example değer reddi bu kapıda korunur; check status/script/duplicate sapmaları ve smoke/report kanıtlarının summary
   `generatedAt` sonrasına taşması `prod:evidence:templates:check` negatifleriyle kırmızıya düşer.
 - `--summary-file` verildiğinde Traefik HTTPS, SMS, notification, Sentry, alert webhook,
-  off-host backup, WAL archive ve report generation smoke kanıtları summary dosyasının yanındaki `smoke/`
+  WAL archive ve report generation smoke kanıtları summary dosyasının yanındaki `smoke/`
   klasörüne secret içermeyen JSON artifact'leri olarak otomatik yazılır. Override edilen raw smoke
   dosya path'leri de kalıcı, symlink olmayan artifact dosyası olmalıdır.
 - Summary yazımı smoke kanıtlarında `result=PASS`, beklenen `check` adı, `environment=production`,
   gelecekte olmayan `generatedAt` ve her smoke tipine özgü alanları doğrular: Traefik smoke URL origin'i
   summary `webUrl` origin'iyle eşleşmeli; external monitoring monitor URL origin'leri de summary
   `webUrl` origin'inden sapmamalı; Traefik/Sentry/alert HTTPS URL ve 2xx/HSTS,
-  SMS/notification gerçek provider, off-host backup/WAL `target` ve sha256 marker.
+  SMS/notification gerçek provider, WAL `target` ve sha256 marker.
   Bu payload sözleşmesi `pnpm smoke:evidence:check` ve `pnpm prod:evidence:templates:check`
   zincirinde örnek summary üstünden korunur.
 - Staging deploy GitHub Actions'ta yalnız elle tetiklenen `.github/workflows/staging-deploy.yml`
@@ -282,6 +281,10 @@ pnpm backup:restore:smoke
   URL'lerinin origin'i summary `webUrl` public edge origin'iyle eşleşmelidir.
 - `S3_ENDPOINT` production'da gerçek HTTPS object-storage host'u olmalıdır; MinIO/local/example
   endpoint'ler production env kontrolünden geçmez.
+- İlk tek-sunucu pilot fazında runtime upload arşivi için internal MinIO kullanılabilir:
+  container'lar `DOCKER_S3_ENDPOINT=http://minio:9000` ile backend network içinde kalır, MinIO
+  yalnız loopback'e bind edilir. Bu mod staging
+  kolaylaştırmasıdır; go-live paketi için external HTTPS S3 veya onaylı object-storage kanıtı gerekir.
 - `S3_BUCKET`, `S3_ACCESS_KEY_ID` ve `S3_SECRET_ACCESS_KEY` gerçek staging/prod env içinde
   boş veya placeholder/example/test değer olamaz; `pnpm prod:env:check` S3 hedefini bu
   credential seti olmadan geçirmez.
@@ -408,24 +411,19 @@ pnpm backup:restore:smoke
 - Canlı bakım dry-run olarak `AUDIT_LOG_PARTITION_EVIDENCE_FILE=artifacts/staging/audit-log-partition.json pnpm audit-log-partition:maintain`
   ile planlanır; gerçek uygulama yalnız `AUDIT_LOG_PARTITION_APPLY=1` ve `DIRECT_DATABASE_URL`
   ile yapılır. Evidence output lokal temp path, symlink dosya veya symlink parent dizin olamaz.
-- İlk pilotta off-host hedef basit tutulur: kurum kullanıcısı `/kurum/yedek-restore` ekranından
+- İlk pilotta ops seviyesinde off-host backup hedefi release planından çıkarılmıştır. Kurum kullanıcısı `/kurum/yedek-restore` ekranından
   kendi eklediği kurum verilerini JSON olarak bilgisayarına indirir ve sunucu dışındaki kopyayı orada
-  saklar. Bu kullanıcı export modeli pilot için yeterlidir; S3/provider off-host hedefi bu turda
-  blokaj değildir.
-- Ops seviyesinde kalıcı off-host hedef istenirse `pnpm backup:offsite:smoke` ile yaz/oku/sil olarak
-  doğrulanır; bu smoke release checker zincirinde desteklenmeye devam eder.
-- Staging kanıt dosyası için `BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE=artifacts/staging/backup-offsite.json`
-  verilir; dosya hedef protokolünü, marker hash'ini, `checkedAt`, tek
-  `commandsPassed=["pnpm backup:offsite:smoke"]` ve boş `gaps` listesini secret içermeden yazar.
+  saklar. Bu kullanıcı export modeli pilot için yeterlidir; `pnpm backup:offsite:smoke`
+  opsiyonel manuel araç olarak kalır ama release/golive kanıt zincirinde zorunlu değildir.
 - WAL archive hedefi `pnpm wal:archive:smoke` ile yaz/oku/sil olarak doğrulanır.
 - Staging kanıt dosyası için `WAL_ARCHIVE_SMOKE_EVIDENCE_FILE=artifacts/staging/wal-archive.json`
   verilir; dosya hedef protokolünü, marker hash'ini, `checkedAt`, tek
   `commandsPassed=["pnpm wal:archive:smoke"]` ve boş `gaps` listesini secret içermeden yazar.
-- Production env kontrolü `BACKUP_OFFSITE_TARGET` ve `WAL_ARCHIVE_TARGET` için `s3://bucket/prefix`
-  veya mount edilmiş `file://` hedefi ister; placeholder/test hedefleri ve aynı backup/WAL hedefi reddedilir.
+- Production env kontrolü `WAL_ARCHIVE_TARGET` için `s3://bucket/prefix`
+  veya mount edilmiş `file://` hedefi ister; placeholder/test hedefleri reddedilir.
   Tekil smoke üreticileri `file://` hedefte root, lokal temp path veya symlink dizin/parent path
   kabul etmez; mount hedefi kalıcı, symlink olmayan dizin olmalıdır.
-- Günlük base backup ve WAL arşivi off-host hedefe gider.
+- Günlük base backup lokal kalıcı backup path'ine, WAL arşivi ayrı kalıcı hedefe gider.
 - Panel/API/worker üzerinden tetiklenen backup işi yalnız `s3://bucket/prefix` veya kalıcı
   `file://` dizin hedefi kabul eder; root, lokal temp path, symlink dizin veya symlink parent
   zinciri altındaki hedefler panel preflight/queue producer/API/worker tarafından reddedilir;
@@ -572,10 +570,10 @@ pnpm backup:restore:smoke
 - Ham import, rapor üretimi, SMS provider, e-posta/push provider ve Traefik HTTPS smoke'ları çalıştırılır.
 - Staging ortamında ilk dış gate'ler tek komutla arşivlenebilir:
   `pnpm staging:first-gates:smoke -- --env-file /path/to/staging-evidence.env --output-dir artifacts/staging/first-gates`
-  Traefik HTTPS, alert webhook ve off-site backup smoke artifact'lerini yazar ve ortak smoke evidence
+  Traefik HTTPS ve alert webhook smoke artifact'lerini yazar ve ortak smoke evidence
   sözleşmesiyle doğrular. Output dizini lokal temp path (`/tmp`, `/var/tmp`) altında olamaz ve
   yalnız `first-gates-manifest.json`, `traefik-https.json`,
-  `alert-webhook.json` ve `backup-offsite.json` dosyalarını içerebilir; beklenmeyen dosya veya
+  `alert-webhook.json` dosyalarını içerebilir; beklenmeyen dosya veya
   symlink varsa smoke çalışmadan önce kırılır. Tekil smoke komutlarında kullanılan
   `*_SMOKE_EVIDENCE_FILE` çıktıları da provider, HTTP, S3 veya DB yan etkisine başlamadan önce
   doğrulanır; lokal temp path'e veya symlink file/parent directory üzerinden yazılamaz. Üretilen
@@ -583,7 +581,7 @@ pnpm backup:restore:smoke
   `STAGING_FIRST_GATES_TARGET=file:///path/to/first-gates-manifest.json pnpm staging:first-gates:check`
   ile yeniden doğrulanır; artifact `environment` değerleri manifest `environment` değeriyle eşleşmeli,
   manifest zamanı içerdiği artifact `generatedAt`/`checkedAt`
-  zamanlarından önce olamaz. Bu komutlar gerçek staging host, gerçek webhook ve gerçek off-site backup
+  zamanlarından önce olamaz. Bu komutlar gerçek staging host ve gerçek webhook
   hedefi olmadan Canlı Durum satırlarını `PASS` yapmaz.
 - Full staging evidence artifact seti indirildikten sonra:
   `STAGING_RELEASE_ARTIFACTS_TARGET=/path/to/artifacts/staging pnpm staging:release-artifacts:check`
@@ -691,5 +689,4 @@ summary/pilot/go-live kaynak ve go-live linked pilot gaps negatif fixture'ların
 - Deployment rollback tatbikatı: `NOT_RUN`
 - Pilot kapanış kanıtı: `NOT_RUN`
 - Go-live karar paketi: `NOT_RUN`
-- Off-host backup hedefi: `NOT_RUN`
 - Alert bildirim kanalı: `NOT_RUN`

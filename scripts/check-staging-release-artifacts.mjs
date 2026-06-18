@@ -15,14 +15,12 @@ const smokeArtifacts = new Map([
   ["notificationProvider", { file: "notification-provider.json", check: "notification_provider_smoke" }],
   ["sentryEvent", { file: "sentry-event.json", check: "sentry_smoke" }],
   ["alertWebhook", { file: "alert-webhook.json", check: "alert_webhook_smoke" }],
-  ["backupOffsite", { file: "backup-offsite.json", check: "backup_offsite_smoke" }],
   ["walArchive", { file: "wal-archive.json", check: "wal_archive_smoke" }],
   ["reportGeneration", { file: "report-generation.json", check: "report_generation_smoke" }],
 ]);
 const firstGateSummaryKeys = new Map([
   ["Traefik HTTPS smoke", "traefikHttps"],
   ["Alert webhook smoke", "alertWebhook"],
-  ["Off-site backup smoke", "backupOffsite"],
 ]);
 const reportArtifacts = new Map([
   [

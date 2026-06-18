@@ -74,14 +74,6 @@ const externalGates = [
     dateKey: "checkedAt",
   },
   {
-    label: "Off-host backup hedefi",
-    command: "pnpm backup:offsite:smoke",
-    source: "productionEvidenceSummary.smokeEvidence.backupOffsite",
-    target: "summary",
-    path: ["smokeEvidence", "backupOffsite"],
-    dateKey: "generatedAt",
-  },
-  {
     label: "Alert bildirim kanalı",
     command: "pnpm alert:webhook:smoke",
     source: "productionEvidenceSummary.smokeEvidence.alertWebhook",

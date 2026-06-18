@@ -12,7 +12,6 @@
     { "label": "Notification provider", "script": "scripts/smoke-notification-provider.mjs", "status": "PASS" },
     { "label": "Sentry test event", "script": "scripts/smoke-sentry-event.mjs", "status": "PASS" },
     { "label": "Alert webhook", "script": "scripts/smoke-alert-webhook.mjs", "status": "PASS" },
-    { "label": "Off-host backup target", "script": "scripts/smoke-backup-offsite.mjs", "status": "PASS" },
     { "label": "WAL archive target", "script": "scripts/smoke-wal-archive-target.mjs", "status": "PASS" },
     { "label": "Report generation smoke", "script": "scripts/smoke-report-generation-live.mjs", "status": "PASS" },
     { "label": "Deployment region evidence", "script": "scripts/check-deployment-region-evidence.mjs", "status": "PASS" },
@@ -98,21 +97,6 @@
       "statusCode": 200,
       "authorizationScheme": "bearer",
       "commandsPassed": ["pnpm alert:webhook:smoke"],
-      "gaps": []
-    },
-    "backupOffsite": {
-      "result": "PASS",
-      "check": "backup_offsite_smoke",
-      "generatedAt": "2026-06-15T09:25:00.000Z",
-      "environment": "production",
-      "checkedAt": "2026-06-15T09:25:00.000Z",
-      "target": {
-        "protocol": "s3",
-        "bucket": "backup-bucket-example",
-        "prefix": "staging"
-      },
-      "markerSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-      "commandsPassed": ["pnpm backup:offsite:smoke"],
       "gaps": []
     },
     "walArchive": {

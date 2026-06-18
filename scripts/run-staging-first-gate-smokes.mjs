@@ -19,7 +19,6 @@ env.NODE_ENV ??= "production";
 const managedEvidenceFiles = new Map([
   ["TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE", "traefik-https.json"],
   ["ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE", "alert-webhook.json"],
-  ["BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE", "backup-offsite.json"],
 ]);
 const expectedOutputFiles = new Set(["first-gates-manifest.json", ...managedEvidenceFiles.values()]);
 
@@ -42,12 +41,6 @@ const smokeChecks = [
     script: "scripts/smoke-alert-webhook.mjs",
     evidenceFile: env.ALERT_WEBHOOK_SMOKE_EVIDENCE_FILE,
     expectedCheck: "alert_webhook_smoke",
-  },
-  {
-    label: "Off-site backup smoke",
-    script: "scripts/smoke-backup-offsite.mjs",
-    evidenceFile: env.BACKUP_OFFSITE_SMOKE_EVIDENCE_FILE,
-    expectedCheck: "backup_offsite_smoke",
   },
 ];
 

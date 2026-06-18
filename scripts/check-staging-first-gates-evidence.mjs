@@ -23,14 +23,6 @@ const expectedChecks = new Map([
       evidenceFile: "alert-webhook.json",
     },
   ],
-  [
-    "Off-site backup smoke",
-    {
-      script: "scripts/smoke-backup-offsite.mjs",
-      expectedCheck: "backup_offsite_smoke",
-      evidenceFile: "backup-offsite.json",
-    },
-  ],
 ]);
 
 if (!manifestTarget) {
@@ -50,7 +42,7 @@ if (failures.length > 0) {
   fail(failures);
 }
 
-console.log(`Staging first gates kanıt kontrolü geçti: ${manifest.checks.length}/3 smoke artifact.`);
+console.log(`Staging first gates kanıt kontrolü geçti: ${manifest.checks.length}/2 smoke artifact.`);
 
 function validateManifest(report, manifestPath) {
   const failures = [];

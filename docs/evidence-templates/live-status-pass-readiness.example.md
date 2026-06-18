@@ -14,5 +14,4 @@ template dogrulamasina pass-readiness fixture'i saglar. Gercek readiness belgesi
 - Deployment rollback tatbikatı: `PASS`
 - Pilot kapanış kanıtı: `PASS`
 - Go-live karar paketi: `PASS`
-- Off-host backup hedefi: `PASS`
 - Alert bildirim kanalı: `PASS`
