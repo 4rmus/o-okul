@@ -3,9 +3,19 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Alert,
   Button,
+  DataTable,
   EmptyState,
+  Field,
   Input,
+  MetricCard,
+  Panel,
+  Select,
+  StatusBadge,
+  TabButton,
+  Tabs,
+  type DataTableColumn,
 } from "@uzman-hocam/ui";
 import type {
   AcademicTermRecord,
@@ -29,7 +39,6 @@ import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import { firstFormError, reportQueryFormSchema } from "../../../../src/form-validation.js";
 import { PageFrame } from "../_shared/page-frame.js";
-import { MetricPanelGrid } from "../_shared/metric-panel-grid.js";
 import { formatCourseName, formatOutcomeCode, shortCourseName } from "../../_shared/academic-labels.js";
 import { ClassCompareBar, ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
 import { formatNetNumber, OutcomeNetTable } from "../../_shared/outcome-net-table.js";
@@ -74,6 +83,16 @@ const emptyReferences: ReportReferences = {
   terms: [],
 };
 
+type ReportWorkspaceTab = "query" | "analytics" | "students" | "karne" | "exports";
+
+const reportWorkspaceTabs: Array<{ id: ReportWorkspaceTab; label: string }> = [
+  { id: "query", label: "Sorgu / Üretim" },
+  { id: "analytics", label: "Kurum Analitiği" },
+  { id: "students", label: "Öğrenci Sonuçları" },
+  { id: "karne", label: "Karne Önizleme" },
+  { id: "exports", label: "Çıktılar" },
+];
+
 export function ReportsPage() {
   const { auth } = useAuth();
   const [examId, setExamId] = useState("");
@@ -83,6 +102,7 @@ export function ReportsPage() {
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [error, setError] = useState("");
   const [queueMessage, setQueueMessage] = useState("");
+  const [activeTab, setActiveTab] = useState<ReportWorkspaceTab>("query");
   const tenantId = auth?.session.tenantId ?? "anonymous";
   const referencesQuery = useQuery({
     queryKey: ["next-report-refs", tenantId],
@@ -116,6 +136,25 @@ export function ReportsPage() {
   const classBars = toClassBars(latestSnapshot);
   const examResult = toExamResult(latestSnapshot);
   const progressPoints = toProgressPoints(reportData?.studentProgress ?? null);
+  const snapshotContext = latestSnapshot
+    ? formatReportContext(latestSnapshot, {
+        campusNameById,
+        classNameById,
+        courseNameById,
+        gradeLevelNameById,
+        termNameById,
+      })
+    : "-";
+  const isSnapshotReady = latestSnapshot?.status === "READY";
+  const snapshotGeneratedAt = formatSnapshotGeneratedAt(latestSnapshot);
+  const snapshotInputRefs = latestSnapshot ? formatSnapshotInputRefs(latestSnapshot.inputRefs) : "-";
+  const snapshotExportReadiness = latestSnapshot
+    ? isSnapshotReady
+      ? "Excel/PDF hazır"
+      : "READY snapshot gerekli"
+    : "Hazır rapor yok";
+  const selectedExamLabel = formatSelectedExamLabel(loadedExamId || examId, exams);
+  const selectedExamExists = exams.some((exam) => exam.id === examId);
 
   useEffect(() => {
     if (!examId && exams.length > 0) {
@@ -136,6 +175,7 @@ export function ReportsPage() {
     try {
       setReportData(await loadReportData(auth.accessToken, parsedForm.data.examId, filters, { classes, students }));
       setLoadedExamId(parsedForm.data.examId);
+      setActiveTab("analytics");
     } catch (loadError) {
       setReportData(null);
       setError(apiErrorMessage(loadError, "Rapor alınamadı."));
@@ -158,11 +198,12 @@ export function ReportsPage() {
       return;
     }
     try {
-      const result = await enqueueReportGenerationJob(auth.accessToken, parsedForm.data.examId, {
+      await enqueueReportGenerationJob(auth.accessToken, parsedForm.data.examId, {
         ...filters,
         contentHash: normalizedContentHash,
       });
-      setQueueMessage(`${result.jobId} kuyruğa alındı.`);
+      setQueueMessage("Rapor üretimi kuyruğa alındı.");
+      setActiveTab("query");
     } catch (queueError) {
       setError(apiErrorMessage(queueError, "Rapor üretimi kuyruğa alınamadı."));
     }
@@ -181,6 +222,7 @@ export function ReportsPage() {
             selectedStudentId: studentId,
           }
         : current);
+      setActiveTab("karne");
     } catch (selectError) {
       setError(apiErrorMessage(selectError, "Öğrenci raporu alınamadı."));
     }
@@ -205,179 +247,302 @@ export function ReportsPage() {
       title="Sınav Raporu"
       subtitle="Raporu sorgula, üret ve Excel/PDF olarak dışa aktar."
     >
-      <form className="next-support-tool" onSubmit={(event) => void loadReports(event)}>
-        <h2>Rapor sorgusu</h2>
-        <label>
-          Rapor sınav ID
-          <Input
-            list="report-exam-options"
-            required
-            value={examId}
-            onChange={(event) => setExamId(event.target.value)}
-          />
-          <datalist id="report-exam-options">
-            {exams.map((exam) => (
-              <option key={exam.id} value={exam.id}>{exam.title}</option>
-            ))}
-          </datalist>
-        </label>
-        <label>
-          Sonuç anahtarı
-          <Input required value={contentHash} onChange={(event) => setContentHash(event.target.value)} />
-        </label>
-        <div className="next-list-controls" aria-label="Rapor filtreleri">
-          <label>
-            Kampüs
-            <select
-              value={filters.campusId}
-              onChange={(event) => setFilters((current) => ({ ...current, campusId: event.target.value }))}
-            >
-              <option value="">Tümü</option>
-              {campuses.map((campus) => (
-                <option key={campus.id} value={campus.id}>{campus.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Seviye
-            <select
-              value={filters.gradeLevelId}
-              onChange={(event) => setFilters((current) => ({ ...current, gradeLevelId: event.target.value }))}
-            >
-              <option value="">Tümü</option>
-              {gradeLevels.map((level) => (
-                <option key={level.id} value={level.id}>{level.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Sınıf
-            <select
-              value={filters.classId}
-              onChange={(event) => setFilters((current) => ({ ...current, classId: event.target.value }))}
-            >
-              <option value="">Tümü</option>
-              {classes.map((klass) => (
-                <option key={klass.id} value={klass.id}>{klass.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Ders
-            <select
-              value={filters.courseId}
-              onChange={(event) => setFilters((current) => ({ ...current, courseId: event.target.value }))}
-            >
-              <option value="">Tümü</option>
-              {courses.map((course) => (
-                <option key={course.id} value={course.id}>{formatCourseName(course.name)}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Dönem
-            <select
-              value={filters.termId}
-              onChange={(event) => setFilters((current) => ({ ...current, termId: event.target.value }))}
-            >
-              <option value="">Tümü</option>
-              {terms.map((term) => (
-                <option key={term.id} value={term.id}>{term.name}</option>
-              ))}
-            </select>
-          </label>
+      <section className="next-report-workspace" aria-label="Rapor çalışma alanı">
+        <div className="next-report-context-strip">
+          <div>
+            <span>Seçili sınav</span>
+            <strong>{selectedExamLabel}</strong>
+          </div>
+          <div>
+            <span>Snapshot</span>
+            <StatusBadge tone={snapshotStatusTone(latestSnapshot?.status)}>{formatSnapshotStatus(latestSnapshot?.status)}</StatusBadge>
+          </div>
+          <div>
+            <span>Üretim zamanı</span>
+            <strong>{snapshotGeneratedAt}</strong>
+          </div>
+          <div>
+            <span>Bağlam</span>
+            <strong>{snapshotContext}</strong>
+          </div>
+          <div>
+            <span>Girdi referansı</span>
+            <strong>{snapshotInputRefs}</strong>
+          </div>
+          <div>
+            <span>Çıktı hazırlığı</span>
+            <strong>{snapshotExportReadiness}</strong>
+          </div>
         </div>
-        {error ? <p className="uh-crud-page__error">{error}</p> : null}
-        {queueMessage ? <p className="uh-crud-page__success">{queueMessage}</p> : null}
-        <Button type="submit">
-          <RefreshCw size={17} aria-hidden="true" />
-          Raporu getir
-        </Button>
-        <Button type="button" variant="secondary" onClick={() => void enqueueReportGeneration()}>
-          <RefreshCw size={17} aria-hidden="true" />
-          Rapor üret
-        </Button>
-      </form>
-      <section className="next-report-panel" aria-label="Rapor özeti">
-            <h2>Rapor Özeti</h2>
-            {latestSnapshot ? (
-              <>
-            <MetricPanelGrid
-              ariaLabel="Rapor özeti"
-              metrics={[
-                { label: "Durum", value: latestSnapshot.status },
-                { label: "Sonuç", value: latestSnapshot.snapshotData?.resultCount ?? "-" },
-                { label: "Soru", value: formatNumber(reportQuestionCount(latestSnapshot.snapshotData?.averages)) },
-                { label: "Başarı", value: formatPercentNumber(reportSuccessRate(latestSnapshot.snapshotData?.averages)) },
-                { label: "Ortalama net", value: formatNetNumber(latestSnapshot.snapshotData?.averages?.net) },
-                { label: "LGS puanı", value: formatNumber(readLgsScore(latestSnapshot.snapshotData?.averages)) },
-                { label: "Standart puan", value: formatNumber(latestSnapshot.snapshotData?.averages?.standardScore) },
-                {
-                  label: "Bağlam",
-                  value: formatReportContext(latestSnapshot, {
-                    campusNameById,
-                    classNameById,
-                    courseNameById,
-                    gradeLevelNameById,
-                    termNameById,
-                  }),
-                },
-              ]}
+        <Tabs label="Rapor çalışma alanı">
+          {reportWorkspaceTabs.map((tab) => (
+            <TabButton
+              aria-controls={activeTab === tab.id ? `report-tabpanel-${tab.id}` : undefined}
+              id={`report-tab-${tab.id}`}
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              selected={activeTab === tab.id}
+            >
+              {tab.label}
+            </TabButton>
+          ))}
+        </Tabs>
+        <div
+          aria-labelledby={`report-tab-${activeTab}`}
+          className="next-report-tab-panel"
+          id={`report-tabpanel-${activeTab}`}
+          role="tabpanel"
+          tabIndex={0}
+        >
+          {activeTab === "query" ? (
+            <Panel
+              as="form"
+              aria-label="Rapor sorgusu ve üretim"
+              className="next-report-query-panel"
+              description="Sınav, sonuç anahtarı ve kurum filtreleriyle mevcut snapshot veya yeni üretim işini yönet."
+              title="Rapor sorgusu ve üretim"
+              onSubmit={(event) => void loadReports(event)}
+            >
+              <Field label="Sınav">
+                <Select required value={examId} onChange={(event) => setExamId(event.target.value)}>
+                  <option value="">Sınav seç</option>
+                  {exams.map((exam) => (
+                    <option key={exam.id} value={exam.id}>{exam.title}</option>
+                  ))}
+                  {examId && !selectedExamExists ? <option value={examId}>Sınav seçildi</option> : null}
+                </Select>
+              </Field>
+              <details className="next-advanced-details">
+                <summary>Gelişmiş sınav referansı</summary>
+                <Field label="Manuel sınav referansı">
+                  <Input value={examId} onChange={(event) => setExamId(event.target.value)} />
+                </Field>
+              </details>
+              <Field label="Sonuç anahtarı">
+                <Input required value={contentHash} onChange={(event) => setContentHash(event.target.value)} />
+              </Field>
+              <div className="next-list-controls" aria-label="Rapor filtreleri">
+                <Field label="Kampüs">
+                  <Select
+                    value={filters.campusId}
+                    onChange={(event) => setFilters((current) => ({ ...current, campusId: event.target.value }))}
+                  >
+                    <option value="">Tümü</option>
+                    {campuses.map((campus) => (
+                      <option key={campus.id} value={campus.id}>{campus.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Seviye">
+                  <Select
+                    value={filters.gradeLevelId}
+                    onChange={(event) => setFilters((current) => ({ ...current, gradeLevelId: event.target.value }))}
+                  >
+                    <option value="">Tümü</option>
+                    {gradeLevels.map((level) => (
+                      <option key={level.id} value={level.id}>{level.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Sınıf">
+                  <Select
+                    value={filters.classId}
+                    onChange={(event) => setFilters((current) => ({ ...current, classId: event.target.value }))}
+                  >
+                    <option value="">Tümü</option>
+                    {classes.map((klass) => (
+                      <option key={klass.id} value={klass.id}>{klass.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Ders">
+                  <Select
+                    value={filters.courseId}
+                    onChange={(event) => setFilters((current) => ({ ...current, courseId: event.target.value }))}
+                  >
+                    <option value="">Tümü</option>
+                    {courses.map((course) => (
+                      <option key={course.id} value={course.id}>{formatCourseName(course.name)}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Dönem">
+                  <Select
+                    value={filters.termId}
+                    onChange={(event) => setFilters((current) => ({ ...current, termId: event.target.value }))}
+                  >
+                    <option value="">Tümü</option>
+                    {terms.map((term) => (
+                      <option key={term.id} value={term.id}>{term.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+              {error ? <p className="uh-crud-page__error">{error}</p> : null}
+              {queueMessage ? <p className="uh-crud-page__success">{queueMessage}</p> : null}
+              <div className="next-report-actions">
+                <Button type="submit">
+                  <RefreshCw size={17} aria-hidden="true" />
+                  Raporu getir
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => void enqueueReportGeneration()}>
+                  <RefreshCw size={17} aria-hidden="true" />
+                  Rapor üret
+                </Button>
+              </div>
+            </Panel>
+          ) : null}
+          {activeTab !== "query" && !latestSnapshot ? (
+            <EmptyState
+              title="Hazır rapor yok"
+              description="Sorgu / Üretim sekmesinden sınav seçimiyle raporları getir veya rapor üretimini kuyruğa al."
             />
-            <div className="next-report-visual-grid">
-              <ReportChartPanel description="Soru sayısına göre başarı ve doğruluk dağılımı" title="Sınav Sonuç Dağılımı">
-                <ExamResultDonut result={examResult} />
-              </ReportChartPanel>
-              <ReportChartPanel description="Branş soru sayılarına göre başarı yüzdesi" title="Branş Başarıları">
-                <TopicRadarChart branches={branchRadar} caption="Rapor branş başarıları" />
-              </ReportChartPanel>
-              <ReportChartPanel description="Kazanım bazlı başarı ve net karşılaştırması" title="Kazanım Başarıları">
-                <OutcomeNetTable caption="Rapor kazanım başarıları" rows={outcomeRows} />
-              </ReportChartPanel>
-              <ReportChartPanel description="Sınıf ortalamalarının soru sayısına göre başarı yüzdesi" title="Sınıf Karşılaştırması">
-                <ClassCompareBar caption="Sınıf ortalama başarıları" classes={classBars} />
-              </ReportChartPanel>
-              <ReportChartPanel description="Başarı yüzdesi, net ve standart puan gelişimi" title="Öğrenci Gelişim Eğrisi">
-                <ProgressLineChart caption="Öğrenci başarı gelişimi" points={progressPoints} />
-              </ReportChartPanel>
-            </div>
+          ) : null}
+          {activeTab === "analytics" && latestSnapshot ? (
+            <section className="next-report-analytics-section" aria-label="Kurum analitiği">
+              <h2>Kurum analitiği</h2>
+              {!isSnapshotReady ? (
+                <Alert tone="warning" title="Snapshot çıktıya hazır değil">
+                  Bu snapshot {formatSnapshotStatus(latestSnapshot.status)} durumunda. Analiz görüntülenebilir, Excel/PDF çıktı hazır olduğunda açılır.
+                </Alert>
+              ) : null}
+              <section className="next-report-summary-grid" aria-label="Rapor özeti">
+                <MetricCard
+                  className="next-report-summary-card"
+                  description={isSnapshotReady ? "READY snapshot" : "Çıktı için READY snapshot gerekli"}
+                  label="Durum"
+                  tone={metricStatusTone(latestSnapshot.status)}
+                  value={formatSnapshotStatus(latestSnapshot.status)}
+                />
+                <MetricCard
+                  className="next-report-summary-card"
+                  description="Öğrenci sonuç sayısı"
+                  label="Sonuç"
+                  value={latestSnapshot.snapshotData?.resultCount ?? "-"}
+                />
+                <MetricCard
+                  className="next-report-summary-card"
+                  description="Sınav kapsamı"
+                  label="Soru"
+                  tone="info"
+                  value={formatNumber(reportQuestionCount(latestSnapshot.snapshotData?.averages))}
+                />
+                <MetricCard
+                  className="next-report-summary-card"
+                  description="Ana karşılaştırma metriği"
+                  label="Başarı %"
+                  tone="success"
+                  value={formatPercentNumber(reportSuccessRate(latestSnapshot.snapshotData?.averages))}
+                />
+                <MetricCard
+                  className="next-report-summary-card"
+                  description="Net, soru kapsamıyla okunur"
+                  label="Ortalama net"
+                  tone="info"
+                  value={formatNetNumber(latestSnapshot.snapshotData?.averages?.net)}
+                />
+                <MetricCard
+                  className="next-report-summary-card"
+                  description="LGS bağlam metriği"
+                  label="LGS puanı"
+                  value={formatNumber(readLgsScore(latestSnapshot.snapshotData?.averages))}
+                />
+                <MetricCard
+                  className="next-report-summary-card"
+                  description="Psikometrik bağlam"
+                  label="Standart puan"
+                  value={formatNumber(latestSnapshot.snapshotData?.averages?.standardScore)}
+                />
+                <MetricCard
+                  className="next-report-summary-card next-report-summary-card--wide"
+                  description="Filtre ve sınav bağlamı"
+                  label="Bağlam"
+                  value={snapshotContext}
+                />
+              </section>
+              <div className="next-report-visual-grid">
+                <ReportChartPanel description="Soru sayısına göre başarı ve doğruluk dağılımı" title="Sınav Sonuç Dağılımı">
+                  <ExamResultDonut result={examResult} />
+                </ReportChartPanel>
+                <ReportChartPanel description="Branş soru sayılarına göre başarı yüzdesi" title="Branş Başarıları">
+                  <TopicRadarChart branches={branchRadar} caption="Rapor branş başarıları" />
+                </ReportChartPanel>
+                <ReportChartPanel description="Kazanım bazlı başarı ve net karşılaştırması" title="Kazanım Başarıları">
+                  <OutcomeNetTable caption="Rapor kazanım başarıları" rows={outcomeRows} />
+                </ReportChartPanel>
+                <ReportChartPanel description="Sınıf ortalamalarının soru sayısına göre başarı yüzdesi" title="Sınıf Karşılaştırması">
+                  <ClassCompareBar caption="Sınıf ortalama başarıları" classes={classBars} />
+                </ReportChartPanel>
+                <ReportChartPanel description="Başarı yüzdesi, net ve standart puan gelişimi" title="Öğrenci Gelişim Eğrisi">
+                  <ProgressLineChart caption="Öğrenci başarı gelişimi" points={progressPoints} />
+                </ReportChartPanel>
+              </div>
+            </section>
+          ) : null}
+          {activeTab === "students" && latestSnapshot ? (
             <StudentResultsTable
               rows={studentRows}
               selectedStudentId={reportData?.selectedStudentId ?? ""}
               onSelect={(studentId) => void selectStudentReport(studentId)}
             />
-            <StudentReportCard
-              report={studentReport}
-              progress={reportData?.studentProgress ?? null}
-              errorBooklet={reportData?.errorBooklet ?? null}
-            />
-            {reportData?.errorBooklet ? (
-              <section className="next-report-list" aria-label="Hata kitapçığı">
-                <h3>Hata kitapçığı</h3>
-                <ErrorBookletTable
-                  caption="Seçili öğrenci hata kitapçığı"
-                  emptyLabel="Hata kaydı yok"
-                  items={reportData.errorBooklet.items}
-                />
-              </section>
-            ) : null}
-            <div className="next-report-actions">
-              <Button onClick={() => void exportReport("xlsx")}>
-                <Download size={17} aria-hidden="true" />
-                Excel indir
-              </Button>
-              <Button onClick={() => void exportReport("pdf")}>
-                <Download size={17} aria-hidden="true" />
-                PDF indir
-              </Button>
-            </div>
-          </>
-        ) : (
-          <EmptyState
-            title="Hazır rapor yok"
-            description="Sınav ID ile raporları getir veya rapor üretimini kuyruğa al."
-          />
-        )}
+          ) : null}
+          {activeTab === "karne" && latestSnapshot ? (
+            <>
+              <StudentReportCard
+                report={studentReport}
+                progress={reportData?.studentProgress ?? null}
+                errorBooklet={reportData?.errorBooklet ?? null}
+                outputStatusLabel={snapshotExportReadiness}
+              />
+              {reportData?.errorBooklet ? (
+                <Panel
+                  aria-label="Hata kitapçığı"
+                  className="next-report-output-panel"
+                  description="Seçili öğrencinin soru cevap inceleme bağlamı."
+                  title="Hata kitapçığı"
+                >
+                  <ErrorBookletTable
+                    caption="Seçili öğrenci hata kitapçığı"
+                    emptyLabel="Hata kaydı yok"
+                    items={reportData.errorBooklet.items}
+                  />
+                </Panel>
+              ) : null}
+            </>
+          ) : null}
+          {activeTab === "exports" && latestSnapshot ? (
+            <Panel
+              aria-label="Rapor çıktıları"
+              className="next-report-output-panel"
+              description={
+                <>
+                  Excel ve PDF çıktıları yalnız READY snapshot üzerinden alınır. Mevcut durum:{" "}
+                  <StatusBadge tone={snapshotStatusTone(latestSnapshot.status)}>{formatSnapshotStatus(latestSnapshot.status)}</StatusBadge>
+                </>
+              }
+              title="Çıktılar"
+            >
+              <div className="next-report-export-grid">
+                <div>
+                  <strong>Kurum Excel</strong>
+                  <span>Özet, branş, sınıf ve öğrenci metrikleri.</span>
+                  <Button disabled={!isSnapshotReady} onClick={() => void exportReport("xlsx")}>
+                    <Download size={17} aria-hidden="true" />
+                    Excel indir
+                  </Button>
+                </div>
+                <div>
+                  <strong>Kurum PDF özeti</strong>
+                  <span>Nötr rapor şablonu ve seçili snapshot verisi.</span>
+                  <Button disabled={!isSnapshotReady} onClick={() => void exportReport("pdf")}>
+                    <Download size={17} aria-hidden="true" />
+                    PDF indir
+                  </Button>
+                </div>
+              </div>
+            </Panel>
+          ) : null}
+        </div>
       </section>
     </PageFrame>
   );
@@ -474,6 +639,11 @@ function preferredExamId(exams: ExamRecord[]) {
   return exams.find((exam) => exam.status === "PUBLISHED")?.id ?? exams[0]?.id ?? "";
 }
 
+function formatSelectedExamLabel(examId: string, exams: ExamRecord[]) {
+  if (!examId) return "-";
+  return exams.find((exam) => exam.id === examId)?.title ?? "Sınav seçildi";
+}
+
 async function enqueueReportGenerationJob(
   accessToken: string,
   examId: string,
@@ -516,6 +686,39 @@ function formatNumber(value: number | undefined) {
   return value === undefined ? "-" : new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }).format(value);
 }
 
+function formatSnapshotStatus(status: string | undefined) {
+  if (status === "READY") return "Hazır";
+  if (status === "STALE") return "Eski";
+  if (status === "PENDING") return "Bekliyor";
+  if (status === "FAILED") return "Hatalı";
+  return status ?? "Yok";
+}
+
+function snapshotStatusTone(status: string | undefined) {
+  if (status === "READY") return "success";
+  if (status === "STALE" || status === "PENDING") return "warning";
+  if (status === "FAILED") return "danger";
+  return "neutral";
+}
+
+function metricStatusTone(status: string | undefined) {
+  if (status === "READY") return "success";
+  if (status === "FAILED") return "danger";
+  if (status === "STALE" || status === "PENDING") return "warning";
+  return "default";
+}
+
+function formatSnapshotGeneratedAt(snapshot: ReportSnapshotRecord | null) {
+  const generatedAt = snapshot?.snapshotData?.generatedAt;
+  if (!generatedAt) return "-";
+  const parsedDate = new Date(generatedAt);
+  if (Number.isNaN(parsedDate.getTime())) return generatedAt;
+  return new Intl.DateTimeFormat("tr-TR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(parsedDate);
+}
+
 function readLgsScore(total: { estimatedRawScore?: number; standardScore?: number } | undefined) {
   return total?.estimatedRawScore ?? total?.standardScore;
 }
@@ -542,13 +745,31 @@ function formatReportContext(
   },
 ) {
   const parts = [
-    snapshot.campusId ? (maps.campusNameById.get(snapshot.campusId) ?? snapshot.campusId) : "",
-    snapshot.gradeLevelId ? (maps.gradeLevelNameById.get(snapshot.gradeLevelId) ?? snapshot.gradeLevelId) : "",
-    snapshot.classId ? (maps.classNameById.get(snapshot.classId) ?? snapshot.classId) : "",
-    snapshot.courseId ? (maps.courseNameById.get(snapshot.courseId) ?? snapshot.courseId) : "",
-    snapshot.termId ? (maps.termNameById.get(snapshot.termId) ?? snapshot.termId) : "",
+    snapshot.campusId ? (maps.campusNameById.get(snapshot.campusId) ?? "Kampüs bilgisi yok") : "",
+    snapshot.gradeLevelId ? (maps.gradeLevelNameById.get(snapshot.gradeLevelId) ?? "Seviye bilgisi yok") : "",
+    snapshot.classId ? (maps.classNameById.get(snapshot.classId) ?? "Sınıf bilgisi yok") : "",
+    snapshot.courseId ? (maps.courseNameById.get(snapshot.courseId) ?? "Ders bilgisi yok") : "",
+    snapshot.termId ? (maps.termNameById.get(snapshot.termId) ?? "Dönem bilgisi yok") : "",
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(" / ") : "-";
+}
+
+function formatSnapshotInputRefs(inputRefs: Record<string, unknown> | undefined) {
+  if (!inputRefs) return "-";
+
+  const resultKeys = Array.isArray(inputRefs.resultKeys) ? inputRefs.resultKeys.length : 0;
+  const namedRefs = [
+    inputRefs.rawImportId ? "ham optik" : "",
+    inputRefs.answerKeyId ? "cevap anahtarı" : "",
+    inputRefs.parserConfigId ? "parser" : "",
+    inputRefs.staleReason ? "yenileme nedeni" : "",
+  ].filter(Boolean);
+  const parts = [
+    resultKeys > 0 ? `${resultKeys} sonuç girdisi` : "",
+    ...namedRefs,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(" / ") : `${Object.keys(inputRefs).length} referans`;
 }
 
 function toBranchRadar(snapshot: ReportSnapshotRecord | null) {
@@ -668,6 +889,137 @@ function StudentResultsTable({
   selectedStudentId: string;
   onSelect: (studentId: string) => void;
 }) {
+  const tableRows = rows.map((row, index) => ({ ...row, displayIndex: index + 1 }));
+  const columns: Array<DataTableColumn<StudentResultTableRow>> = [
+    {
+      align: "right",
+      header: "#",
+      key: "index",
+      priority: "primary",
+      render: (row) => row.displayIndex,
+    },
+    {
+      header: "Öğrenci",
+      key: "student",
+      priority: "primary",
+      render: (row) => (
+        <>
+          <span className="next-report-student-name">{row.studentName}</span>
+          {row.studentNo ? <small>#{row.studentNo}</small> : null}
+        </>
+      ),
+      sticky: "left",
+    },
+    {
+      header: "Sınıf",
+      key: "class",
+      priority: "primary",
+      render: (row) => row.className,
+    },
+    {
+      header: "Katılım",
+      key: "participation",
+      priority: "optional",
+      render: (row) => formatParticipantMeta(row),
+    },
+    {
+      header: "Durum",
+      key: "status",
+      priority: "primary",
+      render: (row) => formatResultStatus(row),
+    },
+    {
+      align: "right",
+      header: "Başarı %",
+      key: "successRate",
+      priority: "primary",
+      render: (row) => formatPercentNumber(reportSuccessRate(row)),
+    },
+    {
+      align: "right",
+      header: "Net",
+      key: "net",
+      priority: "primary",
+      render: (row) => formatNetNumber(row.net),
+    },
+    {
+      align: "right",
+      header: "Soru",
+      key: "questionCount",
+      priority: "primary",
+      render: (row) => formatNumber(reportQuestionCount(row)),
+    },
+    {
+      align: "right",
+      header: "Doğru",
+      key: "correct",
+      priority: "optional",
+      render: (row) => formatNumber(row.correct),
+    },
+    {
+      align: "right",
+      header: "Yanlış",
+      key: "wrong",
+      priority: "optional",
+      render: (row) => formatNumber(row.wrong),
+    },
+    {
+      align: "right",
+      header: "Boş",
+      key: "blank",
+      priority: "optional",
+      render: (row) => formatNumber(row.blank),
+    },
+    {
+      align: "right",
+      header: "Puan",
+      key: "score",
+      priority: "secondary",
+      render: (row) => formatNumber(readRowScore(row)),
+    },
+    {
+      align: "right",
+      header: "Genel sıra",
+      key: "generalRank",
+      priority: "primary",
+      render: (row) => formatRank(row.generalRank),
+    },
+    {
+      align: "right",
+      header: "Sınıf sıra",
+      key: "classRank",
+      priority: "optional",
+      render: (row) => formatRank(row.classRank),
+    },
+    {
+      align: "right",
+      header: "Yüzdelik",
+      key: "percentile",
+      priority: "optional",
+      render: (row) => formatPercentile(row.percentile),
+    },
+    {
+      align: "center",
+      header: "Karne",
+      key: "actions",
+      priority: "primary",
+      render: (row) => (
+        <div className="next-row-actions">
+          <button
+            aria-label={`${row.studentName} karnesini aç`}
+            disabled={!row.hasResult}
+            onClick={() => onSelect(row.studentId)}
+            title="Karneyi aç"
+            type="button"
+          >
+            <Eye size={17} aria-hidden="true" />
+          </button>
+        </div>
+      ),
+      sticky: "right",
+    },
+  ];
+
   return (
     <section className="next-report-table-section" aria-label="Öğrenci sonuç listesi">
       <div className="next-report-table-header">
@@ -677,107 +1029,59 @@ function StudentResultsTable({
         </div>
       </div>
       <div className="next-grid-scroll">
-        <table className="uh-data-table next-report-analysis-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Öğrenci</th>
-              <th>Sınıf</th>
-              <th>Katılım</th>
-              <th>Durum</th>
-              <th>Doğru</th>
-              <th>Yanlış</th>
-              <th>Boş</th>
-              <th>Soru</th>
-              <th>Başarı</th>
-              <th>Net</th>
-              <th>Puan</th>
-              <th>Genel sıra</th>
-              <th>Sınıf sıra</th>
-              <th>Yüzdelik</th>
-              <th>Karne</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, index) => (
-              <tr key={row.rowKey} className={row.studentId === selectedStudentId ? "next-report-row--selected" : undefined}>
-                <td>{index + 1}</td>
-                <td>
-                  <span className="next-report-student-name">{row.studentName}</span>
-                  {row.studentNo ? <small>#{row.studentNo}</small> : null}
-                </td>
-                <td>{row.className}</td>
-                <td>{formatParticipantMeta(row)}</td>
-                <td>{formatResultStatus(row)}</td>
-                <td>{formatNumber(row.correct)}</td>
-                <td>{formatNumber(row.wrong)}</td>
-                <td>{formatNumber(row.blank)}</td>
-                <td>{formatNumber(reportQuestionCount(row))}</td>
-                <td>{formatPercentNumber(reportSuccessRate(row))}</td>
-                <td>{formatNetNumber(row.net)}</td>
-                <td>{formatNumber(readRowScore(row))}</td>
-                <td>{formatRank(row.generalRank)}</td>
-                <td>{formatRank(row.classRank)}</td>
-                <td>{formatPercentile(row.percentile)}</td>
-                <td>
-                  <div className="next-row-actions">
-                    <button
-                      aria-label={`${row.studentName} karnesini aç`}
-                      disabled={!row.hasResult}
-                      onClick={() => onSelect(row.studentId)}
-                      title="Karneyi aç"
-                      type="button"
-                    >
-                      <Eye size={17} aria-hidden="true" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={16}>
-                  <EmptyState
-                    title="Öğrenci sonucu yok"
-                    description="Bu snapshot içinde öğrenci sonucu veya katılımcı kaydı bulunamadı."
-                  />
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+        <DataTable<StudentResultTableRow>
+          caption="Öğrenci sıralamaları"
+          className="next-report-analysis-table"
+          columns={columns}
+          density="compact"
+          description="Başarı % ana karşılaştırma metriğidir; net, soru, puan ve sıralama bağlam olarak gösterilir."
+          emptyText={
+            <EmptyState
+              title="Öğrenci sonucu yok"
+              description="Bu snapshot içinde öğrenci sonucu veya katılımcı kaydı bulunamadı."
+            />
+          }
+          getRowKey={(row) => row.rowKey}
+          rowClassName={(row) => (row.studentId === selectedStudentId ? "next-report-row--selected" : undefined)}
+          rows={tableRows}
+        />
       </div>
     </section>
   );
 }
 
+type StudentResultTableRow = ReportAnalysisRow & { displayIndex: number };
+
 function StudentReportCard({
   report,
   progress,
   errorBooklet,
+  outputStatusLabel,
 }: {
   report: ReportStudentSnapshot | null;
   progress: ReportStudentProgress | null;
   errorBooklet: ReportErrorBooklet | null;
+  outputStatusLabel: string;
 }) {
   return (
     <KarneSheet
       ariaLabel="Öğrenci karne özeti"
       branchCaption="Öğrenci branş karne tablosu"
-      emptyClassName="next-report-list"
+      emptyClassName="next-report-karne-empty"
       emptyTitle="Öğrenci Karne Özeti"
       emptyTitleLevel="h3"
       errorBooklet={errorBooklet}
       outcomeAriaLabel="Kazanım radar grafiği"
       outcomeCaption="Kazanım radar tablosu"
       outcomeHeadingLevel="h3"
-      outcomeSectionClassName="next-report-list"
+      outcomeSectionClassName="next-karne-block next-karne-block--wide next-karne-outcome-block"
+      outputStatusLabel={outputStatusLabel}
       progress={progress}
       rankFormat="simple"
       report={report}
       reportLabel="Öğrenci Karne Özeti"
       scoreGeneralLabel="SIRA"
-      sheetClassName="next-report-list next-karne-sheet"
+      sheetClassName="next-report-karne-sheet next-karne-sheet next-karne-sheet--workspace"
       showEmptyOutcomes
       summaryExtra={`Gelişim ${formatTrend(progress)}`}
       titleLevel="h3"

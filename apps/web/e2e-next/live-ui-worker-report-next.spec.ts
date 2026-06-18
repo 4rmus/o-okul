@@ -26,7 +26,7 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
   await loginAs(page, evidence.email, evidence.password);
   await expect(page).toHaveURL(/\/kurum$/);
   await page.getByRole("link", { name: "Raporlar" }).click();
-  await page.getByLabel("Rapor sınav ID").fill(evidence.examId);
+  await fillReportExamReference(page, evidence.examId);
   await page.getByRole("button", { name: "Raporu getir" }).click();
 
   await expect(page.getByLabel("Rapor özeti").getByText("READY")).toBeVisible();
@@ -61,6 +61,14 @@ async function loginAs(page: Page, email: string, password: string) {
 async function logout(page: Page) {
   await page.getByRole("button", { name: "Çıkış" }).click();
   await expect(page).toHaveURL(/\/login$/);
+}
+
+async function fillReportExamReference(page: Page, examId: string) {
+  const manualExamReference = page.getByLabel("Manuel sınav referansı");
+  if (!(await manualExamReference.isVisible())) {
+    await page.getByText("Gelişmiş sınav referansı", { exact: true }).click();
+  }
+  await manualExamReference.fill(examId);
 }
 
 async function expectReportDownload(

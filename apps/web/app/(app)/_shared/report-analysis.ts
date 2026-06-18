@@ -6,6 +6,7 @@ import type {
   ReportStudentStatistics,
   StudentRecord,
 } from "@uzman-hocam/shared-types";
+import { reportSuccessRate } from "./report-metrics.js";
 
 type SnapshotStudent = NonNullable<NonNullable<ReportSnapshotRecord["snapshotData"]>["students"]>[number] & {
   statistics?: ReportStudentStatistics;
@@ -112,10 +113,11 @@ export function buildReportAnalysisRows({
 }
 
 export function compareReportAnalysisRows(first: ReportAnalysisRow, second: ReportAnalysisRow): number {
-  return compareNumber(first.generalRank?.rank, second.generalRank?.rank, "asc") ||
+  return compareNumber(reportSuccessRate(first), reportSuccessRate(second), "desc") ||
     compareNumber(first.standardScore, second.standardScore, "desc") ||
     compareNumber(first.estimatedRawScore, second.estimatedRawScore, "desc") ||
     compareNumber(first.net, second.net, "desc") ||
+    compareNumber(first.generalRank?.rank, second.generalRank?.rank, "asc") ||
     first.studentName.localeCompare(second.studentName, "tr-TR", { sensitivity: "base" }) ||
     first.studentId.localeCompare(second.studentId);
 }

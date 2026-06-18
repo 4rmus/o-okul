@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+import { StatusBadge, type StatusBadgeProps } from "@uzman-hocam/ui";
 import type {
   ReportErrorBooklet,
   ReportScopeRank,
@@ -22,6 +24,7 @@ interface KarneSheetProps {
   outcomeCaption: string;
   outcomeHeadingLevel: KarneHeadingLevel;
   outcomeSectionClassName: string;
+  outputStatusLabel: string;
   progress: ReportStudentProgress | null;
   rankFormat: "simple" | "percentile";
   report: ReportStudentSnapshot | null;
@@ -45,6 +48,7 @@ export function KarneSheet({
   outcomeCaption,
   outcomeHeadingLevel,
   outcomeSectionClassName,
+  outputStatusLabel,
   progress,
   rankFormat,
   report,
@@ -61,6 +65,7 @@ export function KarneSheet({
       <section className={emptyClassName} aria-label={ariaLabel}>
         <KarneHeading level={emptyTitleLevel}>{emptyTitle}</KarneHeading>
         <p>Öğrenci raporu bekleniyor.</p>
+        <p>Çıktı: {outputStatusLabel}</p>
       </section>
     );
   }
@@ -75,12 +80,31 @@ export function KarneSheet({
     ? `${report.bookletType.toLocaleUpperCase("tr-TR")} KİTAPÇIĞI${reportDate ? ` / ${reportDate}` : ""}`
     : reportDate ? `TARİH : ${reportDate}` : reportLabel;
   const scoreExtra = showProgressHistory ? "" : summaryExtra.replace(/^Gelişim\s+/u, "");
+  const contextExtra = showProgressHistory ? formatKarneSummaryExtra(summaryExtra) : "";
   const institutionName = report.institutionName ?? reportLabel;
   const lgsScore = report.total.estimatedRawScore ?? report.total.standardScore;
   const totalQuestionCount = reportQuestionCount(report.total);
   const totalSuccessRate = reportSuccessRate(report.total);
   const outcomeRows = (report.outcomes ?? []).filter((outcome) => outcome.outcomeCode || outcome.branch);
   const questionRows = [...(report.questions ?? [])].sort((left, right) => left.questionNo - right.questionNo);
+  const contextItems = [
+    { label: "Rapor kaydı", value: formatKarneSnapshotLabel(report.snapshotId) },
+    { label: "Üretim", value: formatKarneDateTime(report.generatedAt) },
+    { label: "Sınav", value: reportDate ?? "-" },
+    { label: "Kitapçık", value: formatBookletContext(report.bookletType) },
+    ...(contextExtra ? [{ label: "Bağlam", value: contextExtra }] : []),
+    { label: "Soru", value: formatNumber(totalQuestionCount) },
+    { label: "Çıktı", value: outputStatusLabel },
+  ];
+  const summaryItems = [
+    { label: "Başarı %", value: formatPercentNumber(totalSuccessRate) },
+    { label: "Soru", value: formatNumber(totalQuestionCount) },
+    { label: "Net", value: formatNetNumber(report.total.net) },
+    { label: "LGS puanı", value: formatNumber(lgsScore) },
+    { label: "Standart puan", value: formatNumber(report.total.standardScore) },
+    { label: "Genel sıra", value: formatRank(report.statistics?.general, rankFormat) },
+    { label: "Sınıf sıra", value: formatRank(report.statistics?.class, rankFormat) },
+  ];
 
   return (
     <section className="next-karne-document" aria-label={ariaLabel}>
@@ -92,176 +116,183 @@ export function KarneSheet({
           report={report}
           titleLevel={titleLevel}
         />
+        <KarneContextStrip items={contextItems} />
+        <KarneSummaryStrip items={summaryItems} />
         <div className="next-karne-grid">
-        <section className="next-karne-block next-karne-block--wide">
-          <h4>BÖLÜM ANALİZİ</h4>
-          <table className="next-karne-table">
-            <caption>{branchCaption}</caption>
-            <thead>
-              <tr>
-                <th>No</th>
-                <th>Branş</th>
-                <th>Soru sayısı</th>
-                <th>Başarı %</th>
-                <th>Doğru</th>
-                <th>Yanlış</th>
-                <th>Boş</th>
-                <th>Net</th>
-                <th>Sınıf net ort</th>
-                <th>Okul net ort</th>
-                <th>Genel net ort</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.branches.map((branch, index) => (
-                <tr key={branch.branch}>
-                  <td>{index + 1}</td>
-                  <td>{formatCourseName(branch.branch)}</td>
-                  <td>{formatNumber(branchQuestionCount(branch))}</td>
-                  <td><SuccessMeter value={branchSuccessRate(branch)} /></td>
-                  <td>{formatNumber(branch.correct)}</td>
-                  <td>{formatNumber(branch.wrong)}</td>
-                  <td>{formatNumber(branch.blank)}</td>
-                  <td>{formatNetNumber(branch.net)}</td>
-                  <td>{formatNetNumber(branch.classNetAverage)}</td>
-                  <td>{formatNetNumber(branch.schoolNetAverage)}</td>
-                  <td>{formatNetNumber(branch.generalNetAverage)}</td>
-                </tr>
-              ))}
-              <tr>
-                <td></td>
-                <td>TOPLAM</td>
-                <td>{formatNumber(totalQuestionCount)}</td>
-                <td><SuccessMeter value={totalSuccessRate} /></td>
-                <td>{formatNumber(report.total.correct)}</td>
-                <td>{formatNumber(report.total.wrong)}</td>
-                <td>{formatNumber(report.total.blank)}</td>
-                <td>{formatNetNumber(report.total.net)}</td>
-                <td>-</td>
-                <td>-</td>
-                <td>-</td>
-              </tr>
-            </tbody>
-          </table>
-        </section>
-        <section className="next-karne-block">
-          <h4>PUAN - SIRA ANALİZİ</h4>
-          <table className="next-karne-score-table">
-            <thead>
-              <tr>
-                <th colSpan={2}>PUAN TİPİ</th>
-                <th>LGS</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th>LGS PUANI</th>
-                <td colSpan={2}>{formatNumber(lgsScore)}</td>
-              </tr>
-              <tr>
-                <th>BAŞARI %</th>
-                <td colSpan={2}>{formatPercentNumber(totalSuccessRate)}</td>
-              </tr>
-              <tr>
-                <th className="next-karne-score-scope" rowSpan={2}>{scoreGeneralLabel === "SIRA" ? "GENEL" : scoreGeneralLabel}</th>
-                <th>SIRA</th>
-                <td>{formatRank(report.statistics?.general, rankFormat)}</td>
-              </tr>
-              <tr>
-                <th>KATILIM</th>
-                <td>{formatRankOutOf(report.statistics?.general)}</td>
-              </tr>
-              <tr>
-                <th className="next-karne-score-scope" rowSpan={2}>SINIF</th>
-                <th>SIRA</th>
-                <td>{formatRank(report.statistics?.class, rankFormat)}</td>
-              </tr>
-              <tr>
-                <th>KATILIM</th>
-                <td>{formatRankOutOf(report.statistics?.class)}</td>
-              </tr>
-              <tr>
-                <th colSpan={2}>GELİŞİM</th>
-                <td>{showProgressHistory ? formatDelta(progress?.netDelta) : scoreExtra}</td>
-              </tr>
-            </tbody>
-          </table>
-        </section>
-      </div>
-      <KarneOutcomeRadar
-        ariaLabel={outcomeAriaLabel}
-        caption={outcomeCaption}
-        headingLevel={outcomeHeadingLevel}
-        outcomes={report.outcomes ?? []}
-        sectionClassName={outcomeSectionClassName}
-        showEmpty={showEmptyOutcomes}
-      />
-      <section className="next-karne-block">
-        <h4>SON SINAV NETLERİ</h4>
-        <div className="next-karne-last-grid">
-          <div className="next-karne-last-stack">
-            {showProgressHistory && recentProgressPoints.length ? (
-              <div className="next-report-progress">
-                <h3>Öğrenci gelişim grafiği</h3>
-              </div>
-            ) : null}
+          <KarneBlock className="next-karne-block next-karne-block--wide" title="BÖLÜM ANALİZİ">
             <table className="next-karne-table">
+              <caption>{branchCaption}</caption>
               <thead>
                 <tr>
                   <th>No</th>
-                  <th>Deneme</th>
-                  <th>Başarı</th>
+                  <th>Branş</th>
+                  <th>Başarı %</th>
+                  <th>Soru sayısı</th>
+                  <th>Doğru</th>
+                  <th>Yanlış</th>
+                  <th>Boş</th>
                   <th>Net</th>
-                  <th>Soru</th>
-                  <th>Tarih</th>
+                  <th>Sınıf net ort</th>
+                  <th>Okul net ort</th>
+                  <th>Genel net ort</th>
                 </tr>
               </thead>
               <tbody>
-                {(recentProgressPoints.length ? recentProgressPoints : [buildCurrentProgressPoint(report)]).map((point, index) => (
-                  <tr key={point.snapshotId ?? point.generatedAt ?? index}>
+                {report.branches.map((branch, index) => (
+                  <tr key={branch.branch}>
                     <td>{index + 1}</td>
-                    <td>{point.examTitle ?? (recentProgressPoints.length ? `Deneme ${index + 1}` : "Son rapor")}</td>
-                    <td>{formatPercentNumber(reportSuccessRate(point.total))}</td>
-                    <td>{formatNetNumber(point.total.net)}</td>
-                    <td>{formatNumber(reportQuestionCount(point.total))}</td>
-                    <td>{formatProgressDate(point.generatedAt, index)}</td>
+                    <td>{formatCourseName(branch.branch)}</td>
+                    <td>
+                      <SuccessMeter value={branchSuccessRate(branch)} />
+                    </td>
+                    <td>{formatNumber(branchQuestionCount(branch))}</td>
+                    <td>{formatNumber(branch.correct)}</td>
+                    <td>{formatNumber(branch.wrong)}</td>
+                    <td>{formatNumber(branch.blank)}</td>
+                    <td>{formatNetNumber(branch.net)}</td>
+                    <td>{formatNetNumber(branch.classNetAverage)}</td>
+                    <td>{formatNetNumber(branch.schoolNetAverage)}</td>
+                    <td>{formatNetNumber(branch.generalNetAverage)}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td></td>
+                  <td>TOPLAM</td>
+                  <td>
+                    <SuccessMeter value={totalSuccessRate} />
+                  </td>
+                  <td>{formatNumber(totalQuestionCount)}</td>
+                  <td>{formatNumber(report.total.correct)}</td>
+                  <td>{formatNumber(report.total.wrong)}</td>
+                  <td>{formatNumber(report.total.blank)}</td>
+                  <td>{formatNetNumber(report.total.net)}</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>-</td>
+                </tr>
+              </tbody>
+            </table>
+          </KarneBlock>
+          <KarneBlock className="next-karne-block" title="PUAN - SIRA ANALİZİ">
+            <table className="next-karne-score-table">
+              <thead>
+                <tr>
+                  <th colSpan={2}>PUAN TİPİ</th>
+                  <th>LGS</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th>LGS PUANI</th>
+                  <td colSpan={2}>{formatNumber(lgsScore)}</td>
+                </tr>
+                <tr>
+                  <th>BAŞARI %</th>
+                  <td colSpan={2}>{formatPercentNumber(totalSuccessRate)}</td>
+                </tr>
+                <tr>
+                  <th className="next-karne-score-scope" rowSpan={2}>
+                    {scoreGeneralLabel === "SIRA" ? "GENEL" : scoreGeneralLabel}
+                  </th>
+                  <th>SIRA</th>
+                  <td>{formatRank(report.statistics?.general, rankFormat)}</td>
+                </tr>
+                <tr>
+                  <th>KATILIM</th>
+                  <td>{formatRankOutOf(report.statistics?.general)}</td>
+                </tr>
+                <tr>
+                  <th className="next-karne-score-scope" rowSpan={2}>
+                    SINIF
+                  </th>
+                  <th>SIRA</th>
+                  <td>{formatRank(report.statistics?.class, rankFormat)}</td>
+                </tr>
+                <tr>
+                  <th>KATILIM</th>
+                  <td>{formatRankOutOf(report.statistics?.class)}</td>
+                </tr>
+                <tr>
+                  <th colSpan={2}>GELİŞİM</th>
+                  <td>{showProgressHistory ? formatDelta(progress?.netDelta) : scoreExtra}</td>
+                </tr>
+              </tbody>
+            </table>
+          </KarneBlock>
+        </div>
+        <KarneOutcomeRadar
+          ariaLabel={outcomeAriaLabel}
+          caption={outcomeCaption}
+          headingLevel={outcomeHeadingLevel}
+          outcomes={report.outcomes ?? []}
+          sectionClassName={outcomeSectionClassName}
+          showEmpty={showEmptyOutcomes}
+        />
+        <KarneBlock className="next-karne-block" title="SON SINAV NETLERİ">
+          <div className="next-karne-last-grid">
+            <div className="next-karne-last-stack">
+              {showProgressHistory && recentProgressPoints.length ? (
+                <div className="next-report-progress">
+                  <h3>Öğrenci gelişim grafiği</h3>
+                </div>
+              ) : null}
+              <table className="next-karne-table">
+                <thead>
+                  <tr>
+                    <th>No</th>
+                    <th>Deneme</th>
+                    <th>Başarı</th>
+                    <th>Net</th>
+                    <th>Soru</th>
+                    <th>Tarih</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(recentProgressPoints.length ? recentProgressPoints : [buildCurrentProgressPoint(report)]).map((point, index) => (
+                    <tr key={point.snapshotId ?? point.generatedAt ?? index}>
+                      <td>{index + 1}</td>
+                      <td>{point.examTitle ?? (recentProgressPoints.length ? `Deneme ${index + 1}` : "Son rapor")}</td>
+                      <td>{formatPercentNumber(reportSuccessRate(point.total))}</td>
+                      <td>{formatNetNumber(point.total.net)}</td>
+                      <td>{formatNumber(reportQuestionCount(point.total))}</td>
+                      <td>{formatProgressDate(point.generatedAt, index)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <table className="next-karne-table" aria-label="Son sınav branş netleri">
+              <thead>
+                <tr>
+                  <th>Branş</th>
+                  {branchProgressPoints.length > 0 ? (
+                    branchProgressPoints.map((point, index) => (
+                      <th key={point.snapshotId ?? point.generatedAt ?? index}>{index + 1}</th>
+                    ))
+                  ) : (
+                    <th>Son net</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {report.branches.map((branch) => (
+                  <tr key={branch.branch}>
+                    <td>{formatCourseName(branch.branch)}</td>
+                    {branchProgressPoints.length > 0 ? (
+                      branchProgressPoints.map((point, index) => (
+                        <td key={`${point.snapshotId ?? point.generatedAt ?? index}-${branch.branch}`}>
+                          {formatNetNumber(findBranchNet(point, branch.branch))}
+                        </td>
+                      ))
+                    ) : (
+                      <td>{formatNetNumber(branch.net)}</td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <table className="next-karne-table" aria-label="Son sınav branş netleri">
-            <thead>
-              <tr>
-                <th>Branş</th>
-                {branchProgressPoints.length > 0 ? (
-                  branchProgressPoints.map((point, index) => (
-                    <th key={point.snapshotId ?? point.generatedAt ?? index}>{index + 1}</th>
-                  ))
-                ) : (
-                  <th>Son net</th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {report.branches.map((branch) => (
-                <tr key={branch.branch}>
-                  <td>{formatCourseName(branch.branch)}</td>
-                  {branchProgressPoints.length > 0 ? (
-                    branchProgressPoints.map((point, index) => (
-                      <td key={`${point.snapshotId ?? point.generatedAt ?? index}-${branch.branch}`}>
-                        {formatNetNumber(findBranchNet(point, branch.branch))}
-                      </td>
-                    ))
-                  ) : (
-                    <td>{formatNetNumber(branch.net)}</td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+        </KarneBlock>
         <p>{errorBooklet ? `${errorBooklet.items.length} soru inceleme gerektiriyor.` : "Hata kitapçığı bekleniyor."}</p>
       </section>
       <section className={`${sheetClassName} next-karne-sheet--analysis`} aria-label={`${ariaLabel} detaylı deneme analizi`}>
@@ -273,8 +304,8 @@ export function KarneSheet({
           report={report}
           titleLevel={titleLevel}
         />
-        <section className="next-karne-block next-karne-block--wide">
-          <h4>DETAYLI DENEME ANALİZİ</h4>
+        <KarneContextStrip items={contextItems} />
+        <KarneBlock className="next-karne-block next-karne-block--wide" title="DETAYLI DENEME ANALİZİ">
           <table className="next-karne-table next-karne-detail-table">
             <caption>Kazanım ve soru cevap özeti</caption>
             <thead>
@@ -298,9 +329,8 @@ export function KarneSheet({
               </tr>
             </tbody>
           </table>
-        </section>
-        <section className="next-karne-block next-karne-block--wide">
-          <h4>KAZANIM DETAYI</h4>
+        </KarneBlock>
+        <KarneBlock className="next-karne-block next-karne-block--wide" title="KAZANIM DETAYI">
           {outcomeRows.length ? (
             <table className="next-karne-table next-karne-detail-table">
               <caption>Deneme kazanımları</caption>
@@ -334,9 +364,8 @@ export function KarneSheet({
           ) : (
             <p className="next-karne-empty-note">Kazanım verisi bekleniyor.</p>
           )}
-        </section>
-        <section className="next-karne-block next-karne-block--wide">
-          <h4>SORU CEVAP ANALİZİ</h4>
+        </KarneBlock>
+        <KarneBlock className="next-karne-block next-karne-block--wide" title="SORU CEVAP ANALİZİ">
           {questionRows.length ? (
             <table className="next-karne-table next-karne-detail-table">
               <caption>Öğrencinin cevap durumu</caption>
@@ -359,9 +388,12 @@ export function KarneSheet({
                     <td>{formatAnswer(question.answer)}</td>
                     <td>{formatAnswer(question.correctAnswer)}</td>
                     <td>
-                      <span className={`next-karne-status ${questionStatusClassName(question.status)}`}>
+                      <StatusBadge
+                        className={`next-karne-status ${questionStatusClassName(question.status)}`}
+                        tone={questionStatusTone(question.status)}
+                      >
                         {formatQuestionStatus(question.status)}
-                      </span>
+                      </StatusBadge>
                     </td>
                   </tr>
                 ))}
@@ -370,8 +402,37 @@ export function KarneSheet({
           ) : (
             <p className="next-karne-empty-note">Soru cevap analizi bekleniyor.</p>
           )}
-        </section>
+        </KarneBlock>
       </section>
+    </section>
+  );
+}
+
+function KarneContextStrip({ items }: { items: Array<{ label: string; value: string }> }) {
+  return (
+    <section className="next-karne-context-strip" aria-label="Karne rapor bağlamı">
+      <strong>Rapor bağlamı</strong>
+      <div>
+        {items.map((item) => (
+          <span key={item.label}>
+            <small>{item.label}</small>
+            <b>{item.value || "-"}</b>
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function KarneSummaryStrip({ items }: { items: Array<{ label: string; value: string }> }) {
+  return (
+    <section className="next-karne-summary-strip" aria-label="Karne başarı özeti">
+      {items.map((item) => (
+        <span key={item.label}>
+          <small>{item.label}</small>
+          <b>{item.value || "-"}</b>
+        </span>
+      ))}
     </section>
   );
 }
@@ -396,16 +457,14 @@ function KarneOutcomeRadar({
 
   if (rows.length === 0) {
     return (
-      <section className={sectionClassName} aria-label={ariaLabel}>
-        <KarneHeading level={headingLevel}>Kazanım Radar</KarneHeading>
+      <KarneBlock ariaLabel={ariaLabel} className={sectionClassName} title="Kazanım Radar" titleLevel={headingLevel}>
         <p>Kazanım verisi bekleniyor.</p>
-      </section>
+      </KarneBlock>
     );
   }
 
   return (
-    <section className={sectionClassName} aria-label={ariaLabel}>
-      <KarneHeading level={headingLevel}>BÖLÜM BAŞARI YÜZDELERİ</KarneHeading>
+    <KarneBlock ariaLabel={ariaLabel} className={sectionClassName} title="BÖLÜM BAŞARI YÜZDELERİ" titleLevel={headingLevel}>
       <table className="uh-chart-table uh-outcome-net-table">
         <caption>{caption}</caption>
         <thead>
@@ -426,7 +485,9 @@ function KarneOutcomeRadar({
               <th scope="row">{formatOutcomeCode(outcome.outcomeCode)}</th>
               <td>{formatCourseName(outcome.branch)}</td>
               <td>{formatNumber(branchQuestionCount(outcome))}</td>
-              <td><SuccessMeter value={branchSuccessRate(outcome)} /></td>
+              <td>
+                <SuccessMeter value={branchSuccessRate(outcome)} />
+              </td>
               <td>{formatNumber(outcome.correct)}</td>
               <td>{formatNumber(outcome.wrong)}</td>
               <td>{formatNumber(outcome.blank)}</td>
@@ -435,6 +496,27 @@ function KarneOutcomeRadar({
           ))}
         </tbody>
       </table>
+    </KarneBlock>
+  );
+}
+
+function KarneBlock({
+  ariaLabel,
+  children,
+  className,
+  title,
+  titleLevel = "h4",
+}: {
+  ariaLabel?: string;
+  children: ReactNode;
+  className: string;
+  title: string;
+  titleLevel?: KarneHeadingLevel;
+}) {
+  return (
+    <section className={className} aria-label={ariaLabel}>
+      <KarneHeading level={titleLevel}>{title}</KarneHeading>
+      {children}
     </section>
   );
 }
@@ -509,6 +591,12 @@ function formatQuestionStatus(status: NonNullable<ReportStudentSnapshot["questio
   return "Doğru";
 }
 
+function questionStatusTone(status: NonNullable<ReportStudentSnapshot["questions"]>[number]["status"]): StatusBadgeProps["tone"] {
+  if (status === "WRONG") return "danger";
+  if (status === "BLANK") return "neutral";
+  return "success";
+}
+
 function questionStatusClassName(status: NonNullable<ReportStudentSnapshot["questions"]>[number]["status"]) {
   if (status === "WRONG") return "next-karne-status--wrong";
   if (status === "BLANK") return "next-karne-status--blank";
@@ -556,6 +644,23 @@ function buildCurrentProgressPoint(report: ReportStudentSnapshot): ReportStudent
 
 function formatKarneDate(value: string | undefined) {
   return value ? new Date(value).toLocaleDateString("tr-TR") : undefined;
+}
+
+function formatKarneDateTime(value: string | undefined) {
+  return value ? new Date(value).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" }) : "-";
+}
+
+function formatKarneSnapshotLabel(value: string | undefined) {
+  return value ? "Rapor kaydı hazır" : "-";
+}
+
+function formatKarneSummaryExtra(value: string) {
+  const normalized = value.trim();
+  return normalized && normalized !== "-" ? normalized : "";
+}
+
+function formatBookletContext(value: string | undefined) {
+  return value ? `${value.toLocaleUpperCase("tr-TR")} kitapçık` : "-";
 }
 
 function branchQuestionCount(value: { blank?: number; correct?: number; questionCount?: number; wrong?: number }) {
