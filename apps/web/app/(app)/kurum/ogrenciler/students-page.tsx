@@ -33,9 +33,11 @@ import {
   type StudentFormState,
 } from "../../../../src/form-validation.js";
 import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
+import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { readReportExamId } from "../../_shared/report-exam-selection.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { RevealablePhone } from "../_shared/revealable-phone.js";
 
 interface StudentProfilePayload {
   nationalId?: string;
@@ -142,6 +144,7 @@ const emptyBulkEnrollmentAction: BulkEnrollmentActionState = {
 
 export function StudentsPage() {
   const { auth } = useAuth();
+  const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useConfirmDialog();
@@ -831,8 +834,8 @@ export function StudentsPage() {
                 <ul>
                   {detail.guardians.map((guardian) => (
                     <li key={guardian.id}>
-                      {guardian.firstName} {guardian.lastName}
-                      {guardian.phone ? ` · ${maskPhoneNumber(guardian.phone)}` : ""}
+                      <span>{guardian.firstName} {guardian.lastName}</span>
+                      <RevealablePhone canReveal={canRevealPhone} value={guardian.phone} />
                     </li>
                   ))}
                 </ul>

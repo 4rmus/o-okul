@@ -11,7 +11,6 @@ import {
   Field,
   FormModal,
   Input,
-  StatusBadge,
   type DataTableColumn,
   useConfirmDialog,
 } from "@uzman-hocam/ui";
@@ -26,7 +25,9 @@ import {
   type GuardianFormState,
 } from "../../../../src/form-validation.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { RevealablePhone } from "../_shared/revealable-phone.js";
 
 const emptyForm: GuardianFormState = {
   firstName: "",
@@ -53,6 +54,7 @@ export function GuardiansPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
   const rows = guardiansQuery.data?.data ?? [];
+  const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
   const guardianPhoneReadyCount = rows.filter((guardian) => Boolean(guardian.phone)).length;
   const guardianPortalReadyCount = rows.filter((guardian) => Boolean(guardian.userId)).length;
   const guardianSummaryItems: OperationSummaryItem[] = [
@@ -87,7 +89,7 @@ export function GuardiansPage() {
   const guardianSummaryBadges: OperationSummaryBadge[] = [
     {
       key: "phone",
-      label: "Telefon ham gösterilmez",
+      label: "Telefon varsayılan maskeli",
       tone: "success",
     },
     {
@@ -98,7 +100,7 @@ export function GuardiansPage() {
   ];
   const guardianSummaryActions: OperationSummaryAction[] = [
     {
-      detail: "Liste telefonları maskeli tutar",
+      detail: "Liste telefonları varsayılan maskeli tutar",
       key: "masked-contact",
       label: "İletişim temizliği",
       status: guardianPhoneReadyCount === rows.length && rows.length > 0 ? "Hazır" : "Kontrol",
@@ -139,12 +141,7 @@ export function GuardiansPage() {
       key: "phone",
       header: "İletişim",
       priority: "secondary",
-      render: (guardian) =>
-        guardian.phone ? (
-          <StatusBadge tone="info">{maskPhoneNumber(guardian.phone)}</StatusBadge>
-        ) : (
-          <StatusBadge tone="neutral">Telefon yok</StatusBadge>
-        ),
+      render: (guardian) => <RevealablePhone canReveal={canRevealPhone} value={guardian.phone} />,
     },
     {
       key: "actions",
@@ -351,13 +348,6 @@ async function deleteGuardian(accessToken: string, id: string) {
   if (!response.ok) {
     throw new Error("GUARDIAN_DELETE_FAILED");
   }
-}
-
-function maskPhoneNumber(value: string) {
-  const digits = value.replace(/\D/g, "");
-  if (digits.length === 0) return "Telefon kayıtlı";
-  const suffix = digits.slice(-2).padStart(2, "•");
-  return `••• ••• ••${suffix}`;
 }
 
 function formatCount(value: number) {

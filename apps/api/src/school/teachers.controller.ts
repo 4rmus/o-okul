@@ -1,7 +1,13 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
-import type { TeacherAssignmentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
+import type {
+  TeacherAssignmentRecord,
+  TeacherImportDryRunResult,
+  TeacherImportResult,
+  TeacherRecord,
+} from "@uzman-hocam/shared-types";
+import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
-import { zodBody } from "../http/zod-validation.js";
+import { requiredTrimmedString, zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
@@ -17,11 +23,19 @@ import {
   type TeacherCreateBody,
   type TeacherUpdateBody,
 } from "./school-validation.js";
+import { TeacherImportService } from "./teacher-import.service.js";
+
+const teacherImportBodySchema = z.object({
+  fileBase64: requiredTrimmedString,
+}).strict();
 
 @Controller("teachers")
 @UseGuards(RolesGuard)
 export class TeachersController {
-  constructor(private readonly school: SchoolService) {}
+  constructor(
+    private readonly school: SchoolService,
+    private readonly imports: TeacherImportService,
+  ) {}
 
   @Get()
   @Roles("TEACHER")
@@ -45,6 +59,18 @@ export class TeachersController {
   @RequireCapability("staff:manage")
   create(@Body(zodBody(teacherCreateBodySchema)) body: TeacherCreateBody): Promise<TeacherRecord> {
     return this.school.createTeacher(getRequestContext(), body);
+  }
+
+  @Post("imports/dry-run")
+  @RequireCapability("staff:manage")
+  dryRunImport(@Body(zodBody(teacherImportBodySchema)) body: { fileBase64: string }): Promise<TeacherImportDryRunResult> {
+    return this.imports.dryRun(getRequestContext(), body);
+  }
+
+  @Post("imports")
+  @RequireCapability("staff:manage")
+  import(@Body(zodBody(teacherImportBodySchema)) body: { fileBase64: string }): Promise<TeacherImportResult> {
+    return this.imports.import(getRequestContext(), body);
   }
 
   @Post(":id/assignments")

@@ -28,6 +28,7 @@ import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { RevealablePhone } from "../_shared/revealable-phone.js";
 
 interface GuardianDetailData {
   availableStudents: GuardianStudentDetailStudentRecord[];
@@ -62,7 +63,8 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
   const guardianName = detail ? `${detail.guardian.firstName} ${detail.guardian.lastName}` : "Veli detayı";
   const availableStudents = detail?.availableStudents ?? [];
   const canManageUsers = auth ? hasCapabilityForRoles(auth.session.roles, "user:manage") : false;
-  const guardianSummaryItems = detail ? buildGuardianSummaryItems(detail) : [];
+  const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
+  const guardianSummaryItems = detail ? buildGuardianSummaryItems(detail, { canRevealPhone }) : [];
   const guardianSummaryBadges = detail ? buildGuardianSummaryBadges(detail) : [];
   const guardianSummaryActions = detail ? buildGuardianSummaryActions(detail) : [];
   const guardianStudentColumns = detail ? buildGuardianStudentColumns(detail) : [];
@@ -106,11 +108,11 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
             />
             <Panel
               aria-label="Veli profili"
-              description="Telefon ve portal durumu maskeli gösterilir; ham iletişim bilgisi bu yüzeyde açılmaz."
+              description="Telefon varsayılan maskeli gösterilir; yetkili kullanıcı aynı satırda açıp tekrar gizleyebilir."
               title="Veli profili"
             >
               <InfoGrid className="next-guardian-profile-info" aria-label="Veli profil özeti" role="region">
-                <InfoItem label="Telefon" value={maskPhoneNumber(detail.guardian.phone)} />
+                <InfoItem label="Telefon" value={<RevealablePhone canReveal={canRevealPhone} value={detail.guardian.phone} />} />
                 <InfoItem label="Portal" value={detail.guardian.userId ? "Bağlı" : "Yok"} />
                 <InfoItem label="Öğrenci bağlantısı" value={`${formatCount(detail.links.length)} bağlantı`} />
                 <InfoItem label="Finans görünürlüğü" value={formatPermissionCount(detail.links, "canViewFinance")} />
@@ -263,7 +265,7 @@ async function linkGuardianStudent(
   });
 }
 
-function buildGuardianSummaryItems(detail: GuardianDetailData): OperationSummaryItem[] {
+function buildGuardianSummaryItems(detail: GuardianDetailData, options: { canRevealPhone: boolean }): OperationSummaryItem[] {
   const activeStudentCount = activeGuardianStudentCount(detail.links, detail.studentById);
   return [
     {
@@ -271,7 +273,7 @@ function buildGuardianSummaryItems(detail: GuardianDetailData): OperationSummary
       key: "phone",
       label: "Telefon",
       tone: "info",
-      value: maskPhoneNumber(detail.guardian.phone),
+      value: <RevealablePhone canReveal={options.canRevealPhone} value={detail.guardian.phone} />,
     },
     {
       description: `${formatCount(activeStudentCount)} aktif öğrenci`,
@@ -484,13 +486,6 @@ function guardianEnabledPermissionCount(links: GuardianStudentRecord[]) {
 
 function formatCount(value: number) {
   return new Intl.NumberFormat("tr-TR").format(value);
-}
-
-function maskPhoneNumber(value: string | undefined) {
-  if (!value) return "-";
-  const digits = value.replace(/\D/g, "");
-  if (digits.length === 0) return "Telefon kayıtlı";
-  return `••• ••• ••${digits.slice(-2).padStart(2, "•")}`;
 }
 
 function permissionBadges(link: GuardianStudentRecord) {

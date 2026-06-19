@@ -127,8 +127,9 @@ export class AuthController {
 
   @Post("password-reset/request")
   @HttpCode(200)
-  requestPasswordReset(@Body(zodBody(passwordResetRequestBodySchema)) body: PasswordResetRequestBody) {
-    return this.auth.requestPasswordReset(body.email);
+  async requestPasswordReset(@Body(zodBody(passwordResetRequestBodySchema)) body: PasswordResetRequestBody) {
+    await this.auth.requestPasswordReset(body.email);
+    return { status: "ACCEPTED" };
   }
 
   @Post("password-reset/confirm")

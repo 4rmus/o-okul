@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -41,6 +41,7 @@ import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { fallbackReportExamId, readReportExamId } from "../../_shared/report-exam-selection.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
+import { RevealablePhone } from "../_shared/revealable-phone.js";
 
 interface StudentBaseDetail {
   attendanceSummary: AttendanceSummaryRecord | null;
@@ -76,7 +77,7 @@ interface StudentReportData {
 type StudentDetailMode = "dashboard" | "exams";
 
 interface StudentDetailTableRow {
-  detail: string;
+  detail: ReactNode;
   id: string;
   meta?: string;
   primary: string;
@@ -134,6 +135,7 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
   const searchParams = useSearchParams();
   const requestedReportExamId = readReportExamId(searchParams);
   const canViewFinance = hasCapabilityForRoles(auth?.session.roles ?? [], "finance:manage");
+  const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
   const [selectedExamId, setSelectedExamId] = useState("");
   const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
 
@@ -254,6 +256,7 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
       ) : detail ? (
         <StudentDashboard
           classNameById={classNameById}
+          canRevealPhone={canRevealPhone}
           canViewFinance={canViewFinance}
           courseNameById={courseNameById}
           detail={detail}
@@ -276,6 +279,7 @@ export function StudentDetailPage({ mode = "dashboard", studentId }: { mode?: St
 
 function StudentDashboard({
   classNameById,
+  canRevealPhone,
   canViewFinance,
   courseNameById,
   detail,
@@ -292,6 +296,7 @@ function StudentDashboard({
   termNameById,
 }: {
   classNameById: ReadonlyMap<string, string>;
+  canRevealPhone: boolean;
   canViewFinance: boolean;
   courseNameById: ReadonlyMap<string, string>;
   detail: StudentBaseDetail;
@@ -429,13 +434,13 @@ function StudentDashboard({
         <Panel
           aria-label="İletişim ve veli"
           className="next-student-detail-panel next-student-detail-panel--wide"
-          description="Telefon ve e-posta yalnız maskeli gösterilir; veli iletişimi ham PII açmadan listelenir."
+          description="Öğrenci telefonu ve e-postası maskeli kalır; veli telefonu yetkili kullanıcı isterse açılıp gizlenebilir."
           title="İletişim ve veli"
         >
           <StudentDetailRowsTable
             caption="İletişim ve veli kayıtları"
             emptyText="İletişim kaydı yok"
-            rows={buildContactRows(detail)}
+            rows={buildContactRows(detail, { canRevealPhone })}
           />
         </Panel>
 
@@ -579,7 +584,7 @@ function StudentDetailRowsTable({
   );
 }
 
-function buildContactRows(detail: StudentBaseDetail): StudentDetailTableRow[] {
+function buildContactRows(detail: StudentBaseDetail, options: { canRevealPhone: boolean }): StudentDetailTableRow[] {
   return [
     {
       detail: maskPhoneNumber(detail.profile.phone),
@@ -598,7 +603,7 @@ function buildContactRows(detail: StudentBaseDetail): StudentDetailTableRow[] {
       tone: "success",
     },
     ...detail.guardians.map((guardian): StudentDetailTableRow => ({
-      detail: guardian.phone ? maskPhoneNumber(guardian.phone) : "Telefon yok",
+      detail: <RevealablePhone canReveal={options.canRevealPhone} value={guardian.phone} />,
       id: `guardian-contact-${guardian.id}`,
       meta: "Veli iletişimi",
       primary: `${guardian.firstName} ${guardian.lastName}`,

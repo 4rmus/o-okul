@@ -18,6 +18,7 @@ import { createLearningOutcomeStore, learningOutcomeStoreToken } from "./learnin
 import { LearningOutcomesController } from "./learning-outcomes.controller.js";
 import { SchoolService } from "./school.service.js";
 import { createTeacherAssignmentStore, teacherAssignmentStoreToken } from "./teacher-assignment-store.js";
+import { TeacherImportService } from "./teacher-import.service.js";
 import { createTeacherStore, teacherStoreToken } from "./teacher-store.js";
 import { TeachersController } from "./teachers.controller.js";
 
@@ -76,7 +77,7 @@ const schoolStoreProviders = [
     LearningOutcomesController,
     TeachersController,
   ],
-  providers: [...schoolStoreProviders, SchoolService],
+  providers: [...schoolStoreProviders, SchoolService, TeacherImportService],
   exports: [
     StudentPersistenceModule,
     academicCalendarStoreToken,
@@ -90,6 +91,7 @@ const schoolStoreProviders = [
     teacherStoreToken,
     teacherAssignmentStoreToken,
     SchoolService,
+    TeacherImportService,
   ],
 })
 export class SchoolModule {}

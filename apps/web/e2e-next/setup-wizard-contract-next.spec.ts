@@ -88,7 +88,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
       mimeType: "text/csv",
       name: "ogrenci-ada-kaya-tckn-12345678901.csv",
     });
-    await expect(page.getByLabel("Öğretmen aktarım güven durumu")).toContainText("Şablon hazırlığı");
+    await expect(page.getByLabel("Öğretmen aktarım güven durumu")).toContainText("Sunucu dry-run bekliyor");
     await expect(setupForm).toContainText("XLSX dosyası seçildi");
     await expect(setupForm).toContainText("CSV dosyası seçildi");
     await expect(studentUploadStatus).toContainText("Yerel kontrol tamam");
@@ -149,6 +149,29 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expectNoVisibleTextValues(page, "setup-dry-run-error", hostileUploadValues);
     await expectDraftStorageDoesNotContain(page, "setup-dry-run-error-storage", hostileUploadValues);
   });
+
+  test("öğretmen Excel dosyasını zorunlu tutar ve import sonucunu özetler", async ({ page }) => {
+    await openSetupWizard(page, { height: 844, width: 390 }, { roles: ["TENANT_ADMIN"] });
+
+    const setupForm = page.getByLabel("Kurulum formu");
+    await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
+    await setupForm.getByRole("group", { name: "Öğretmen veri girişi" }).getByRole("button", { name: "Excel aktarımı" }).click();
+    await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+    await setupForm.getByLabel("Veri sorumlusu").fill("Operasyon sorumlusu");
+    await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
+    await expect(setupForm).toContainText("Öğretmen aktarım dosyası zorunludur.");
+
+    await setupForm.getByLabel("Öğretmen aktarım dosyası").setInputFiles({
+      buffer: Buffer.from("\uFEFFad;soyad;brans;atanacak_sinif;ders\nAyse;Yilmaz;Matematik;8 LGS A;Matematik\n", "utf8"),
+      mimeType: "text/csv",
+      name: "ogretmen-zeynep-5551112233.csv",
+    });
+    await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
+
+    await expect(setupForm).toContainText("2 sınıf, 3 ders, 1 öğretmen, 1 öğretmen ataması");
+    await expectNoVisibleTextValues(page, "setup-teacher-import-summary", hostileUploadValues);
+    await expectDraftStorageDoesNotContain(page, "setup-teacher-import-storage", hostileUploadValues);
+  });
 });
 
 async function openSetupWizard(
@@ -201,6 +224,18 @@ function mockSetupApiResponse(
   if (method === "POST" && pathName === "/academic-terms") return { id: "academic-term-setup", name: "1. Dönem" };
   if (method === "POST" && pathName === "/courses") return { id: "course-setup", code: "LGS-TUR", name: "Türkçe" };
   if (method === "POST" && pathName === "/classes") return { id: "class-setup", level: "8-LGS", name: "8-A", section: "A" };
+  if (method === "POST" && pathName === "/teachers/imports/dry-run") {
+    return {
+      dryRun: true,
+      errors: [],
+      totalRows: 1,
+      validRows: [{ classId: "class-setup", className: "8-A", firstName: "Ayse", lastName: "Yilmaz", row: 2 }],
+      wouldImport: true,
+    };
+  }
+  if (method === "POST" && pathName === "/teachers/imports") {
+    return { assignments: [], createdAssignments: 1, createdTeachers: 1, importedRows: 1, teachers: [] };
+  }
   if (method === "POST" && pathName === "/students/imports/dry-run") {
     if (options.studentDryRun === "duplicate") {
       return {

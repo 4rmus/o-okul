@@ -25,7 +25,7 @@ export class RequestContextMiddleware implements NestMiddleware {
       return;
     }
 
-    const payload = this.auth.verifyAccessToken(authHeader.slice("Bearer ".length));
+    const payload = await this.auth.verifyActiveAccessToken(authHeader.slice("Bearer ".length));
     const tenantId = payload.tenantId === "system" ? null : payload.tenantId;
     const tenantAccessMode = tenantId ? await this.resolveTenantAccessMode(tenantId, request.method) : "active";
 

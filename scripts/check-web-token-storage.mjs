@@ -13,6 +13,40 @@ const allowedLocalStorageKeys = {
     sidebarGroupStorageKey: "des.sidebar.expandedGroups.v2",
   },
 };
+const allowedStorageSnippets = {
+  "apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx": [
+    "window.sessionStorage.removeItem(draftStorageKey)",
+    "window.sessionStorage.getItem(key)",
+    "window.sessionStorage.setItem(key, JSON.stringify(draft))",
+  ],
+  "apps/web/app/(app)/portals/_shared/portal-shell.tsx": [
+    "window.sessionStorage.setItem(rolePreviewTokenStorageKey, token)",
+    "window.sessionStorage.getItem(rolePreviewTokenStorageKey)",
+  ],
+  "apps/web/e2e-next/role-preview-contract-next.spec.ts": [
+    'window.sessionStorage.setItem("uzman-hocam.role-preview-token", "preview-token-student")',
+    "localStorage:",
+    "localStorage.length",
+    "localStorage.key(index)",
+    "localStorage.getItem(key)",
+    "sessionStorage:",
+    "sessionStorage.length",
+    "sessionStorage.key(index)",
+    "sessionStorage.getItem(key)",
+  ],
+  "apps/web/e2e-next/setup-wizard-contract-next.spec.ts": [
+    'window.sessionStorage.getItem("uh_onboarding_tenant-setup_draft")',
+    "Object.keys(window.sessionStorage)",
+    "window.sessionStorage.clear()",
+  ],
+  "apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts": [
+    'window.sessionStorage.setItem("uzman-hocam.role-preview-token", "preview-token-student")',
+    'window.sessionStorage.setItem("uzman-hocam.role-preview-token", "preview-token-guardian")',
+  ],
+  "apps/web/e2e-next/teacher-portal-contract-next.spec.ts": [
+    'window.sessionStorage.setItem("uzman-hocam.role-preview-token", "preview-token-teacher")',
+  ],
+};
 const failures = [];
 
 for (const root of roots) {
@@ -47,7 +81,8 @@ function listFiles(root) {
 
 function collectAllowedRanges(file, content) {
   const allowedKeys = allowedLocalStorageKeys[file];
-  if (!allowedKeys) return [];
+  const ranges = collectSnippetRanges(file, content);
+  if (!allowedKeys) return ranges;
 
   const keyDeclarations = Object.entries(allowedKeys).map(([identifier, literal]) => {
     const escapedIdentifier = escapeRegExp(identifier);
@@ -57,16 +92,32 @@ function collectAllowedRanges(file, content) {
   for (const declaration of keyDeclarations) {
     if (!declaration.test(content)) {
       failures.push(`${file}: izinli storage anahtarı beklenen sabit değerle tanımlı değil`);
-      return [];
+      return ranges;
     }
   }
 
-  const ranges = [];
   for (const match of content.matchAll(allowedLocalStorageCall)) {
     const keyExpression = (match[2] ?? "").trim();
     if (!Object.hasOwn(allowedKeys, keyExpression)) continue;
     const start = match.index ?? 0;
     ranges.push({ start, end: start + match[0].length });
+  }
+  return ranges;
+}
+
+function collectSnippetRanges(file, content) {
+  const snippets = allowedStorageSnippets[file] ?? [];
+  const ranges = [];
+  for (const snippet of snippets) {
+    let start = content.indexOf(snippet);
+    if (start === -1) {
+      failures.push(`${file}: izinli storage kullanımı beklenen kalıpla bulunamadı: ${snippet}`);
+      continue;
+    }
+    while (start !== -1) {
+      ranges.push({ start, end: start + snippet.length });
+      start = content.indexOf(snippet, start + snippet.length);
+    }
   }
   return ranges;
 }

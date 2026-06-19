@@ -382,7 +382,7 @@ async function loadGradeLevels(accessToken: string) {
 
 async function createClass(accessToken: string, input: ClassFormPayload) {
   return apiRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes`, {
-    body: JSON.stringify(input),
+    body: JSON.stringify(toClassRequestPayload(input)),
     headers: { "content-type": "application/json" },
     method: "POST",
   });
@@ -390,10 +390,20 @@ async function createClass(accessToken: string, input: ClassFormPayload) {
 
 async function updateClass(accessToken: string, id: string, input: ClassFormPayload) {
   return apiRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes/${encodeURIComponent(id)}`, {
-    body: JSON.stringify(input),
+    body: JSON.stringify(toClassRequestPayload(input)),
     headers: { "content-type": "application/json" },
     method: "PATCH",
   });
+}
+
+function toClassRequestPayload(input: ClassFormPayload) {
+  return {
+    level: input.level,
+    name: input.name,
+    section: input.section,
+    ...(input.campusId ? { campusId: input.campusId } : {}),
+    ...(input.gradeLevelId ? { gradeLevelId: input.gradeLevelId } : {}),
+  };
 }
 
 async function deleteClass(accessToken: string, id: string) {

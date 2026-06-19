@@ -326,7 +326,7 @@ export function RolePreviewPage() {
         <Panel
           aria-label="Aktif rol önizleme kaydı"
           className="next-role-preview-active"
-          description="Preview token ekranda veya URL'de gösterilmez; portal linki salt-okuma context'i sessionStorage üzerinden taşır."
+          description="Preview token ekranda veya URL'de gösterilmez; portal linki salt-okuma context'i oturum saklama alanı üzerinden taşır."
           title="Aktif Önizleme"
         >
           <div className="next-role-preview-badges" aria-label="Aktif önizleme güven durumu">

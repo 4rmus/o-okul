@@ -126,8 +126,14 @@ export async function authenticatedFetch(accessToken: string, input: RequestInfo
     return response;
   }
 
-  const refreshed = await refreshSession();
-  return fetch(input, withAuthorization(init, refreshed.accessToken));
+  try {
+    const refreshed = await refreshSession();
+    return fetch(input, withAuthorization(init, refreshed.accessToken));
+  } catch {
+    activeAuth = null;
+    queryClient.clear();
+    return response;
+  }
 }
 
 export async function apiRequest<T>(accessToken: string, input: RequestInfo | URL, init: RequestInit = {}): Promise<T> {

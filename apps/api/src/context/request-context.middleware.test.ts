@@ -135,7 +135,7 @@ function createMiddleware(input: {
 }) {
   return new RequestContextMiddleware(
     {
-      verifyAccessToken: () => ({
+      verifyActiveAccessToken: () => ({
         sub: input.tenantId ? "user-tenant" : "user-system",
         tenantId: input.tenantId ?? "system",
         roles: input.roles,

@@ -645,7 +645,7 @@ function formatKarneDateTime(value: string | undefined) {
 }
 
 function formatKarneSnapshotLabel(value: string | undefined) {
-  return value ? "Rapor kaydı hazır" : "-";
+  return value ? "Rapor kaydı hazır · READY snapshot" : "-";
 }
 
 function formatKarneSummaryExtra(value: string) {

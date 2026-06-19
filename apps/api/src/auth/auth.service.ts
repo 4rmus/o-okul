@@ -303,7 +303,7 @@ export class AuthService {
       entityType: "Auth",
       entityId: user.id,
       action: "auth.password_reset_requested",
-      diff: { email: user.email },
+      diff: { emailProvided: true },
     });
     return { status: "ISSUED", resetToken, expiresAt };
   }
@@ -379,6 +379,30 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException("ACCESS_TOKEN_INVALID");
     }
+  }
+
+  async verifyActiveAccessToken(accessToken: string): Promise<AccessTokenPayload> {
+    const payload = this.verifyAccessToken(accessToken);
+    const session = await this.sessions.findById(payload.sessionId);
+
+    if (!session || session.status !== "ACTIVE") {
+      throw new UnauthorizedException("ACCESS_SESSION_INACTIVE");
+    }
+    if (
+      session.userId !== payload.sub ||
+      session.tenantId !== payload.tenantId ||
+      session.membershipVersion !== payload.membershipVersion
+    ) {
+      throw new UnauthorizedException("ACCESS_SESSION_MISMATCH");
+    }
+
+    return {
+      ...payload,
+      roles: [...session.roles],
+      subjectType: session.subjectType,
+      subjectId: session.subjectId,
+      membershipVersion: session.membershipVersion,
+    };
   }
 
   private shouldChallengeWithTotp(user: { roles: string[]; totpSecretEncrypted?: string; totpEnabledAt?: string }): boolean {

@@ -494,7 +494,7 @@ test.describe("Liste URL state", () => {
       await expect(guardianSummary).toContainText("Maskeli iletişim");
       await expect(guardianSummary).toContainText("Portal hazır");
       await expect(guardianSummary).toContainText("PII modu");
-      await expect(guardianSummary).toContainText("Telefon ham gösterilmez");
+      await expect(guardianSummary).toContainText("Telefon varsayılan maskeli");
       await expect(guardianSummary).toContainText("İletişim temizliği");
       await expect(guardianSummary).toContainText("Portal bağlantısı");
       await expect(guardiansRegion.getByRole("table", { name: "Veli operasyon listesi" })).toBeVisible();
@@ -722,7 +722,7 @@ test.describe("Liste URL state", () => {
     const guardiansRegion = page.getByLabel("Veli yönetimi");
     const guardianSummary = guardiansRegion.getByRole("region", { exact: true, name: "Veli operasyon özeti" });
     await expect(guardianSummary).toContainText("PII modu");
-    await expect(guardianSummary).toContainText("Telefon ham gösterilmez");
+    await expect(guardianSummary).toContainText("Telefon varsayılan maskeli");
     await expect(guardianSummary.getByLabel("Veli operasyon özeti aksiyon kuyruğu")).toBeVisible();
     await expect(guardianSummary).toContainText("İletişim temizliği");
     await expect(guardianSummary).toContainText("Portal bağlantısı");

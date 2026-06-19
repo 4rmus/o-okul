@@ -4,6 +4,7 @@ import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
+import { upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
 
 describe("Tenant user management", () => {
   let app: INestApplication;
@@ -108,6 +109,56 @@ describe("Tenant user management", () => {
       .expect(({ body }) => {
         expect(JSON.stringify(body)).not.toContain("created-user-a@example.test");
       });
+  });
+
+  it("rol düşürülünce eski access token ve audit PII sızıntısı engellenir", async () => {
+    const tenantA = await login("admin-a@example.test");
+    const email = "revoked-admin-a@example.test";
+    const created = await request(server)
+      .post("/tenant-users")
+      .set("Authorization", `Bearer ${tenantA}`)
+      .send({
+        email,
+        name: "Revoked Admin A",
+        password: "password1",
+        roles: ["TENANT_ADMIN"],
+      })
+      .expect(201);
+
+    const userId = (created.body as { id: string }).id;
+    upsertInMemoryAuthUser({
+      id: userId,
+      email,
+      name: "Revoked Admin A",
+      password: "password1",
+      roles: ["TENANT_ADMIN"],
+      tenantId: "tenant-a",
+    });
+
+    const auditResponse = await request(server)
+      .get("/audit-logs")
+      .query({ entityId: userId, entityType: "User" })
+      .set("Authorization", `Bearer ${tenantA}`)
+      .expect(200);
+
+    expect(auditResponse.body).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        action: "user.membership_created",
+        diff: expect.objectContaining({ emailProvided: true, roles: ["TENANT_ADMIN"] }),
+      }),
+    ]));
+    expect(JSON.stringify(auditResponse.body)).not.toContain(email);
+
+    const elevatedToken = await login(email, "password1");
+    await request(server).get("/tenant-users").set("Authorization", `Bearer ${elevatedToken}`).expect(200);
+
+    await request(server)
+      .patch(`/tenant-users/${userId}/roles`)
+      .set("Authorization", `Bearer ${tenantA}`)
+      .send({ roles: ["TEACHER"] })
+      .expect(200);
+
+    await request(server).get("/tenant-users").set("Authorization", `Bearer ${elevatedToken}`).expect(401);
   });
 
   it("koltuk limiti dolu tenantta yeni kullanıcı oluşturmaz", async () => {

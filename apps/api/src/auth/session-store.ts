@@ -31,6 +31,7 @@ export interface SessionIssueInput {
 
 export interface SessionStore {
   create(input: SessionIssueInput): Promise<SessionRecord>;
+  findById(sessionId: string): Promise<SessionRecord | null>;
   findByRefreshToken(refreshToken: string): Promise<SessionRecord | null>;
   updateRefreshToken(sessionId: string, refreshToken: string): Promise<SessionRecord>;
   markFamilyCompromised(tokenFamilyId: string): Promise<void>;
@@ -65,6 +66,10 @@ export class InMemorySessionStore implements SessionStore {
 
     this.sessions.set(session.id, session);
     return cloneSession(session);
+  }
+
+  async findById(sessionId: string): Promise<SessionRecord | null> {
+    return cloneSession(this.sessions.get(sessionId) ?? null);
   }
 
   async findByRefreshToken(refreshToken: string): Promise<SessionRecord | null> {
@@ -164,6 +169,15 @@ export class PostgresSessionStore implements SessionStore {
         throw new Error("SESSION_CREATE_FAILED");
       }
       return toSessionRecord(record);
+    });
+  }
+
+  async findById(sessionId: string): Promise<SessionRecord | null> {
+    return this.withClient(async (client) => {
+      const result = await client.query<SessionRow>(`SELECT * FROM "AuthSession" WHERE "id" = $1 LIMIT 1`, [
+        sessionId,
+      ]);
+      return result.rows[0] ? toSessionRecord(result.rows[0]) : null;
     });
   }
 
@@ -333,6 +347,10 @@ function toSessionRecord(row: SessionRow): SessionRecord {
   };
 }
 
-function cloneSession(session: SessionRecord): SessionRecord {
+function cloneSession(session: SessionRecord): SessionRecord;
+function cloneSession(session: null): null;
+function cloneSession(session: SessionRecord | null): SessionRecord | null;
+function cloneSession(session: SessionRecord | null): SessionRecord | null {
+  if (!session) return null;
   return { ...session, roles: [...session.roles] };
 }

@@ -1,13 +1,16 @@
 import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
+import ExcelJS from "exceljs";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
+import { TeacherImportService } from "./teacher-import.service.js";
 
 describe("School management API", () => {
   let app: INestApplication;
   let server: Parameters<typeof request>[0];
+  let teacherImports: TeacherImportService;
   let tenantAAccessToken: string;
   let teacherAAccessToken: string;
   let studentAAccessToken: string;
@@ -23,6 +26,7 @@ describe("School management API", () => {
     app = moduleRef.createNestApplication();
     await app.init();
     server = app.getHttpServer() as Parameters<typeof request>[0];
+    teacherImports = app.get(TeacherImportService);
 
     const login = await request(server)
       .post("/auth/login")
@@ -889,6 +893,229 @@ describe("School management API", () => {
       .expect(204);
   });
 
+  it("öğretmen import dry-run sınıf ve ders eşleşmesini doğrular", async () => {
+    await request(server)
+      .post("/teachers/imports/dry-run")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        fileBase64: createCsvBase64("ad;soyad;brans;atanacak_sinif;ders\nMerve;Import;Matematik;8-A;Matematik\n"),
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual({
+          dryRun: true,
+          errors: [],
+          totalRows: 1,
+          validRows: [
+            expect.objectContaining({
+              branch: "Matematik",
+              classId: "class-a",
+              className: "8-A",
+              courseId: "course-math",
+              courseName: "Matematik",
+              firstName: "Merve",
+              lastName: "Import",
+              row: 2,
+            }),
+          ],
+          wouldImport: true,
+        });
+      });
+  });
+
+  it("öğretmen import eski şablonda bransı ders olarak eşleştirir", async () => {
+    await request(server)
+      .post("/teachers/imports/dry-run")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        fileBase64: createCsvBase64("ad;soyad;brans;atanacak_sinif\nMerve;Import;Matematik;8-A\n"),
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual({
+          dryRun: true,
+          errors: [],
+          totalRows: 1,
+          validRows: [
+            expect.objectContaining({
+              branch: "Matematik",
+              classId: "class-a",
+              className: "8-A",
+              courseId: "course-math",
+              courseName: "Matematik",
+              firstName: "Merve",
+              lastName: "Import",
+              row: 2,
+            }),
+          ],
+          wouldImport: true,
+        });
+      });
+  });
+
+  it("öğretmen import XLSX şablonunu dry-run ile doğrular", async () => {
+    await request(server)
+      .post("/teachers/imports/dry-run")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        fileBase64: await createTeacherWorkbookBase64(
+          [["Xlsx", "Import", "Matematik", "8-A", "Matematik"]],
+          ["ad", "soyad", "brans", "atanacak_sinif", "ders"],
+          [["ogretmen-aktarim-sablonu"]],
+        ),
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual({
+          dryRun: true,
+          errors: [],
+          totalRows: 1,
+          validRows: [
+            expect.objectContaining({
+              branch: "Matematik",
+              classId: "class-a",
+              className: "8-A",
+              courseId: "course-math",
+              courseName: "Matematik",
+              firstName: "Xlsx",
+              lastName: "Import",
+              row: 3,
+            }),
+          ],
+          wouldImport: true,
+        });
+      });
+  });
+
+  it("öğretmen import dry-run eksik ad soyad ve bilinmeyen sınıf/ders hatası verir", async () => {
+    await request(server)
+      .post("/teachers/imports/dry-run")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        fileBase64: createCsvBase64("ad;soyad;brans;atanacak_sinif;ders\n; ;Matematik;Bilinmeyen Sınıf;Bilinmeyen Ders\n"),
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body.wouldImport).toBe(false);
+        expect(body.validRows).toEqual([]);
+        expect(body.errors).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ code: "REQUIRED", field: "firstName", row: 2 }),
+            expect.objectContaining({ code: "REQUIRED", field: "lastName", row: 2 }),
+            expect.objectContaining({ code: "CLASS_NOT_FOUND", field: "className", row: 2, value: "Bilinmeyen Sınıf" }),
+            expect.objectContaining({ code: "COURSE_NOT_FOUND", field: "courseName", row: 2, value: "Bilinmeyen Ders" }),
+          ]),
+        );
+      });
+  });
+
+  it("öğretmen import dry-run büyük dosyayı parse etmeden reddeder", async () => {
+    await expect(
+      teacherImports.dryRun(
+        {
+          bypassRls: false,
+          capabilities: ["staff:manage"],
+          roles: ["TENANT_ADMIN"],
+          tenantAccessMode: "active",
+          tenantId: "tenant-a",
+          userId: "user-tenant-a",
+        },
+        { fileBase64: Buffer.alloc((5 * 1024 * 1024) + 1).toString("base64") },
+      ),
+    ).rejects.toThrow("IMPORT_FILE_TOO_LARGE");
+  });
+
+  it("öğretmen import commit hatalı dosyada kayıt oluşturmaz", async () => {
+    const fileBase64 = createCsvBase64("ad;soyad;brans;atanacak_sinif;ders\nRiskli;Aktarim;Matematik;Bilinmeyen Sınıf;Bilinmeyen Ders\n");
+
+    await request(server)
+      .post("/teachers/imports")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ fileBase64 })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(JSON.stringify(body)).toContain("TEACHER_IMPORT_INVALID");
+      });
+
+    await request(server)
+      .get("/teachers")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).not.toEqual(expect.arrayContaining([expect.objectContaining({ firstName: "Riskli", lastName: "Aktarim" })]));
+      });
+  });
+
+  it("öğretmen import commit tek öğretmen ve sınıf/ders atamaları oluşturur", async () => {
+    const fileBase64 = createCsvBase64([
+      "ad;soyad;brans;atanacak_sinif;ders",
+      "Nehir;Import;Matematik;8-A;Matematik",
+      "Nehir;Import;Matematik;8-A;",
+    ].join("\n"));
+
+    const imported = await request(server)
+      .post("/teachers/imports")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ fileBase64 })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body.importedRows).toBe(2);
+        expect(body.createdTeachers).toBe(1);
+        expect(body.createdAssignments).toBe(2);
+        expect(body.teachers).toHaveLength(1);
+        expect(body.assignments).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ classId: "class-a", courseId: "course-math", role: "BRANCH_TEACHER" }),
+            expect.objectContaining({ classId: "class-a", role: "CLASS_TEACHER" }),
+          ]),
+        );
+      });
+
+    await request(server)
+      .post("/teachers/imports")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ fileBase64 })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body.createdTeachers).toBe(0);
+        expect(body.createdAssignments).toBe(0);
+        expect(body.teachers).toEqual([expect.objectContaining({ id: imported.body.teachers[0].id })]);
+      });
+
+    await request(server)
+      .get("/students/student-a/teacher-assignments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              classId: "class-a",
+              courseId: "course-math",
+              role: "BRANCH_TEACHER",
+              teacherId: imported.body.teachers[0].id,
+            }),
+            expect.objectContaining({
+              classId: "class-a",
+              role: "CLASS_TEACHER",
+              teacherId: imported.body.teachers[0].id,
+            }),
+          ]),
+        );
+      });
+
+    for (const assignment of imported.body.assignments as Array<{ id: string }>) {
+      await request(server)
+        .delete(`/teachers/${imported.body.teachers[0].id}/assignments/${assignment.id}`)
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .expect(204);
+    }
+    await request(server)
+      .delete(`/teachers/${imported.body.teachers[0].id}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(204);
+  });
+
   it("öğrenciyi sınıf ve sorumlu öğretmen ile oluşturur", async () => {
     const nextClass = await request(server)
       .post("/classes")
@@ -1298,4 +1525,23 @@ function expectValidationFields(response: { body: { error?: unknown } }, paths: 
       fields: expect.arrayContaining(paths.map((path) => expect.objectContaining({ path }))),
     },
   });
+}
+
+function createCsvBase64(content: string): string {
+  return Buffer.from(`\uFEFF${content}`, "utf8").toString("base64");
+}
+
+async function createTeacherWorkbookBase64(rows: string[][], headers: string[], leadingRows: string[][] = []): Promise<string> {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Teachers");
+  for (const row of leadingRows) {
+    worksheet.addRow(row);
+  }
+  worksheet.addRow(headers);
+  for (const row of rows) {
+    worksheet.addRow(row);
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer).toString("base64");
 }

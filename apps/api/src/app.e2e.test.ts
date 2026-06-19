@@ -93,38 +93,19 @@ describe("API auth + tenant isolation", () => {
     await request(server).post("/auth/logout").set("Cookie", [issued.refreshCookie, issued.csrfCookie]).expect(403);
   });
 
-  it("şifre reset tokenı şifreyi değiştirir ve eski oturumları iptal eder", async () => {
-    const issued = await login("system@example.test");
+  it("şifre reset isteği token sızdırmadan nötr yanıt döner", async () => {
+    await login("system@example.test");
     const resetRequest = await request(server)
       .post("/auth/password-reset/request")
       .send({ email: "system@example.test" })
       .expect(200);
-    const resetToken = (resetRequest.body as { resetToken?: string }).resetToken;
-    expect(resetRequest.body).toMatchObject({ status: "ISSUED" });
-    expect(resetToken).toBeTruthy();
 
-    await request(server)
-      .post("/auth/password-reset/confirm")
-      .send({ token: resetToken, password: "new-password" })
-      .expect(200)
-      .expect(({ body }) => {
-        expect(Date.parse((body as { resetAt: string }).resetAt)).not.toBeNaN();
-      });
-
-    await request(server)
-      .post("/auth/refresh")
-      .set("Cookie", [issued.refreshCookie, issued.csrfCookie])
-      .set("X-CSRF-Token", issued.csrfToken)
-      .expect(401);
-    await request(server)
-      .post("/auth/password-reset/confirm")
-      .send({ token: resetToken, password: "another-password" })
-      .expect(400);
-    await request(server).post("/auth/login").send({ email: "system@example.test", password: "password" }).expect(401);
-    await request(server)
-      .post("/auth/login")
-      .send({ email: "system@example.test", password: "new-password" })
-      .expect(200);
+    expect(resetRequest.body).toEqual({ status: "ACCEPTED" });
+    expect(JSON.stringify(resetRequest.body)).not.toContain("resetToken");
+    expect(JSON.stringify(resetRequest.body)).not.toContain("expiresAt");
+    await request(server).post("/auth/password-reset/request").send({ email: "missing@example.test" }).expect(200).expect({
+      status: "ACCEPTED",
+    });
   });
 
   it("tenant A liste endpointinde tenant B öğrencisini göremez", async () => {

@@ -171,6 +171,40 @@ export interface TeacherAssignmentRecord {
   updatedAt?: string;
 }
 
+export interface TeacherImportError {
+  row: number;
+  field: "className" | "courseName" | "firstName" | "lastName";
+  code: "CLASS_NOT_FOUND" | "COURSE_NOT_FOUND" | "REQUIRED";
+  value?: string;
+}
+
+export interface TeacherImportPreviewRow {
+  row: number;
+  classId?: string;
+  className?: string;
+  courseId?: string;
+  courseName?: string;
+  firstName: string;
+  lastName: string;
+  branch?: string;
+}
+
+export interface TeacherImportDryRunResult {
+  dryRun: true;
+  totalRows: number;
+  validRows: TeacherImportPreviewRow[];
+  errors: TeacherImportError[];
+  wouldImport: boolean;
+}
+
+export interface TeacherImportResult {
+  importedRows: number;
+  createdTeachers: number;
+  createdAssignments: number;
+  teachers: TeacherRecord[];
+  assignments: TeacherAssignmentRecord[];
+}
+
 export interface GuardianRecord {
   id: string;
   tenantId: string;

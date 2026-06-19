@@ -86,16 +86,23 @@ describe("AuthService", () => {
         return { ...user, roles: [...user.roles] };
       }),
     });
+    const auditLogs = { record: vi.fn(async () => undefined) };
     const auth = new AuthService(
       users,
       new InMemorySessionStore(),
       new InMemoryPasswordResetStore(),
       { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
+      auditLogs as never,
     );
 
     const issued = await auth.requestPasswordReset("db-a@example.test");
     expect(issued.status).toBe("ISSUED");
     expect(issued.resetToken).toBeTruthy();
+    expect(auditLogs.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "auth.password_reset_requested",
+      diff: { emailProvided: true },
+    }));
+    expect(JSON.stringify(auditLogs.record.mock.calls)).not.toContain("db-a@example.test");
 
     await auth.confirmPasswordReset(issued.resetToken ?? "", "new-password");
 
@@ -106,6 +113,37 @@ describe("AuthService", () => {
     await expect(auth.login("db-a@example.test", "new-password")).resolves.toMatchObject({
       session: { userId: "user-db-a" },
     });
+  });
+
+  it("access token session iptalinden sonra aktif kabul edilmez", async () => {
+    const sessions = new InMemorySessionStore();
+    const users = createUserStoreMock({
+      findByEmail: vi.fn(async () => ({
+        id: "user-db-a",
+        email: "db-a@example.test",
+        name: "DB User",
+        passwordHash: hashPassword("password", "test-salt"),
+        tenantId: "tenant-a",
+        roles: ["TENANT_ADMIN"],
+        membershipVersion: 1,
+      })),
+    });
+    const auth = new AuthService(
+      users,
+      sessions,
+      new InMemoryPasswordResetStore(),
+      { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
+    );
+    const issued = await auth.login("db-a@example.test", "password");
+    if ("status" in issued) throw new Error("MFA challenge beklenmiyordu.");
+
+    await expect(auth.verifyActiveAccessToken(issued.accessToken)).resolves.toMatchObject({
+      roles: ["TENANT_ADMIN"],
+      sessionId: issued.session.id,
+    });
+    await sessions.revoke(issued.session.id);
+
+    await expect(auth.verifyActiveAccessToken(issued.accessToken)).rejects.toThrow("ACCESS_SESSION_INACTIVE");
   });
 
   it("admin TOTP etkinleştikten sonra login'i MFA challenge'a böler ve TOTP reuse'u reddeder", async () => {

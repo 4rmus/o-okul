@@ -62,7 +62,7 @@ export class UserManagementService {
       entityType: "User",
       entityId: record.id,
       action: "user.membership_created",
-      diff: { email: record.email, roles: record.roles },
+      diff: { emailProvided: true, roles: record.roles },
     });
     return record;
   }
