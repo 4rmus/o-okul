@@ -8,6 +8,8 @@ import {
   Checkbox,
   DataTable,
   Field,
+  InfoGrid,
+  InfoItem,
   Panel,
   Select,
   StatusBadge,
@@ -107,32 +109,14 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
               description="Telefon ve portal durumu maskeli gösterilir; ham iletişim bilgisi bu yüzeyde açılmaz."
               title="Veli profili"
             >
-              <dl className="next-definition-list">
-                <div>
-                  <dt>Telefon</dt>
-                  <dd>{maskPhoneNumber(detail.guardian.phone)}</dd>
-                </div>
-                <div>
-                  <dt>Portal</dt>
-                  <dd>{detail.guardian.userId ? "Bağlı" : "Yok"}</dd>
-                </div>
-                <div>
-                  <dt>Öğrenci bağlantısı</dt>
-                  <dd>{formatCount(detail.links.length)} bağlantı</dd>
-                </div>
-                <div>
-                  <dt>Finans görünürlüğü</dt>
-                  <dd>{formatPermissionCount(detail.links, "canViewFinance")}</dd>
-                </div>
-                <div>
-                  <dt>SMS izni</dt>
-                  <dd>{formatPermissionCount(detail.links, "canReceiveSms")}</dd>
-                </div>
-                <div>
-                  <dt>Destek izni</dt>
-                  <dd>{formatPermissionCount(detail.links, "canOpenSupportTickets")}</dd>
-                </div>
-              </dl>
+              <InfoGrid className="next-guardian-profile-info" aria-label="Veli profil özeti" role="region">
+                <InfoItem label="Telefon" value={maskPhoneNumber(detail.guardian.phone)} />
+                <InfoItem label="Portal" value={detail.guardian.userId ? "Bağlı" : "Yok"} />
+                <InfoItem label="Öğrenci bağlantısı" value={`${formatCount(detail.links.length)} bağlantı`} />
+                <InfoItem label="Finans görünürlüğü" value={formatPermissionCount(detail.links, "canViewFinance")} />
+                <InfoItem label="SMS izni" value={formatPermissionCount(detail.links, "canReceiveSms")} />
+                <InfoItem label="Destek izni" value={formatPermissionCount(detail.links, "canOpenSupportTickets")} />
+              </InfoGrid>
             </Panel>
             <Panel
               aria-label="Öğrenci bağlantıları"

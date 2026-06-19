@@ -25,6 +25,7 @@ import type {
   StudentRecord,
   SupportTicketRecord,
   TeacherNoteRecord,
+  TeacherPortalLookupsResponse,
   TeacherRecord,
 } from "@uzman-hocam/shared-types";
 import { apiBaseUrl, apiRequest, authenticatedFetch, readData } from "../../../src/api-client.js";
@@ -961,7 +962,7 @@ async function apiRequestOrNull<T>(accessToken: string, input: RequestInfo | URL
 }
 
 async function loadTeacherPortal(accessToken: string, rolePreviewToken = "", reportExamId = fallbackReportExamId): Promise<TeacherPortalData> {
-  const [teacher, announcements, schedule, students, attendance, homework, materials, teacherNotes, supportTickets, snapshots, campuses, classes, courses, gradeLevels, terms] = await Promise.all([
+  const [teacher, announcements, schedule, students, attendance, homework, materials, teacherNotes, supportTickets, snapshots, lookups] = await Promise.all([
     readOnlyRequest<TeacherRecord>(accessToken, `${apiBaseUrl}/me/teacher`, rolePreviewToken),
     readOnlyRequest<AnnouncementRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/announcements`, rolePreviewToken),
     readOnlyRequest<ScheduleLessonRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/schedule`, rolePreviewToken),
@@ -971,12 +972,8 @@ async function loadTeacherPortal(accessToken: string, rolePreviewToken = "", rep
     readOnlyRequest<HomeworkMaterialRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/homework/materials`, rolePreviewToken),
     readOnlyRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/teacher-notes`, rolePreviewToken),
     readOnlyRequest<SupportTicketRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/support-tickets`, rolePreviewToken),
-    readOnlyRequest<ReportSnapshotRecord[]>(accessToken, `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/snapshots`, rolePreviewToken),
-    readOnlyRequest<CampusRecord[]>(accessToken, `${apiBaseUrl}/campuses`, rolePreviewToken),
-    readOnlyRequest<ClassRecord[]>(accessToken, `${apiBaseUrl}/classes`, rolePreviewToken),
-    readOnlyRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`, rolePreviewToken),
-    readOnlyRequest<GradeLevelRecord[]>(accessToken, `${apiBaseUrl}/grade-levels`, rolePreviewToken),
-    readOnlyRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`, rolePreviewToken),
+    readOnlyRequest<ReportSnapshotRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/reports/${encodeURIComponent(reportExamId)}/snapshots`, rolePreviewToken),
+    readOnlyRequest<TeacherPortalLookupsResponse>(accessToken, `${apiBaseUrl}/me/teacher/lookups`, rolePreviewToken),
   ]);
   const materialAssignments = (
     await Promise.all(
@@ -999,11 +996,11 @@ async function loadTeacherPortal(accessToken: string, rolePreviewToken = "", rep
     homework,
     materials,
     materialAssignments,
-    campuses,
-    classes,
-    courses,
-    gradeLevels,
-    terms,
+    campuses: lookups.campuses,
+    classes: lookups.classes,
+    courses: lookups.courses,
+    gradeLevels: lookups.gradeLevels,
+    terms: lookups.terms,
     classReports: selectTeacherClassReports(snapshots, students),
     supportTickets,
     teacherNotes,
@@ -1075,7 +1072,7 @@ async function loadTeacherStudentReport(
 ): Promise<TeacherStudentReportData> {
   const snapshots = await readOnlyRequest<ReportSnapshotRecord[]>(
     accessToken,
-    `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/snapshots`,
+    `${apiBaseUrl}/me/teacher/reports/${encodeURIComponent(reportExamId)}/snapshots`,
     rolePreviewToken,
   );
   const snapshot = selectLatestReadySnapshot(snapshots);
@@ -1086,17 +1083,17 @@ async function loadTeacherStudentReport(
   const [report, errorBooklet, progress] = await Promise.all([
     apiRequestOrNull<ReportStudentSnapshot>(
       accessToken,
-      `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}`,
+      `${apiBaseUrl}/me/teacher/reports/${encodeURIComponent(reportExamId)}/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}`,
       rolePreviewToken,
     ),
     apiRequestOrNull<ReportErrorBooklet>(
       accessToken,
-      `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}/error-booklet`,
+      `${apiBaseUrl}/me/teacher/reports/${encodeURIComponent(reportExamId)}/snapshots/${encodeURIComponent(snapshot.id)}/students/${encodeURIComponent(studentId)}/error-booklet`,
       rolePreviewToken,
     ),
     apiRequestOrNull<ReportStudentProgress>(
       accessToken,
-      `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/students/${encodeURIComponent(studentId)}/progress?scope=all`,
+      `${apiBaseUrl}/me/teacher/reports/${encodeURIComponent(reportExamId)}/students/${encodeURIComponent(studentId)}/progress?scope=all`,
       rolePreviewToken,
     ),
   ]);

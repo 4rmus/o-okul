@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
-import { Button, DataTable, EmptyState, Field, Input, MetricCard, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, DataTable, EmptyState, Field, InfoGrid, InfoItem, Input, MetricCard, MetricGrid, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn } from "@uzman-hocam/ui";
 import type {
   AnswerChoice,
   AnswerKeyRecord,
@@ -1208,29 +1208,25 @@ function OpticalFormatSetup({
             ))}
           </Select>
         </Field>
-        <div className="next-optical-form-meta" aria-label="Seçili form özeti">
-          <span>{selectedPresetForm.sourceType}</span>
-          <span>{selectedPresetForm.rowLength} karakter</span>
-          <span>{selectedPresetForm.questionCount} soru</span>
-          <span>Sürüm: {selectedPresetVersion}</span>
-        </div>
+        <InfoGrid className="next-optical-form-meta" aria-label="Seçili form özeti">
+          <InfoItem label="Kaynak" value={selectedPresetForm.sourceType} />
+          <InfoItem label="Satır uzunluğu" value={`${selectedPresetForm.rowLength} karakter`} />
+          <InfoItem label="Soru" value={`${selectedPresetForm.questionCount} soru`} />
+          <InfoItem label="Sürüm" value={selectedPresetVersion} />
+        </InfoGrid>
         {renderOpticalFormPreview(selectedPresetForm.rows)}
-        <div className="next-parser-summary" aria-live="polite">
+        <InfoGrid className="next-parser-summary" aria-live="polite">
           {suggestion ? (
             <>
-              <span>Ayraç</span>
-              <strong>{suggestion.delimiter}</strong>
-              <span>Başlık satırı</span>
-              <strong>{suggestion.skipHeaderLines}</strong>
-              <span>Güven</span>
-              <strong>{suggestion.confidence}</strong>
-              <span>Soru tahmini</span>
-              <strong>{suggestion.fieldMapping.answers.estimatedQuestionCount}</strong>
+              <InfoItem label="Ayraç" value={suggestion.delimiter} />
+              <InfoItem label="Başlık satırı" value={suggestion.skipHeaderLines} />
+              <InfoItem label="Güven" value={suggestion.confidence} />
+              <InfoItem label="Soru tahmini" value={suggestion.fieldMapping.answers.estimatedQuestionCount} />
             </>
           ) : (
-            <strong>Format seçimi bekliyor</strong>
+            <InfoItem label="Format" value="Format seçimi bekliyor" />
           )}
-        </div>
+        </InfoGrid>
         <Button disabled={!examId} type="submit">
           <CheckCircle2 size={17} aria-hidden="true" />
           Seç ve ilerle
@@ -1631,16 +1627,12 @@ function OpticalUploadPanel({
           <p>TXT/DAT dosyasını seçip yükleyin; kontrol sonucu burada görünecek.</p>
         )}
         {rawImportSummary ? (
-          <div className="next-parser-summary" aria-live="polite">
-            <span>Toplam</span>
-            <strong>{rawImportSummary.totalRows}</strong>
-            <span>Eşleşen</span>
-            <strong>{rawImportSummary.matchedCount}</strong>
-            <span>Eşleşmeyen</span>
-            <strong>{rawImportSummary.quarantinedCount}</strong>
-            <span>Sebep</span>
-            <strong>{formatQuarantineReasons(rawImportSummary)}</strong>
-          </div>
+          <InfoGrid className="next-parser-summary" aria-live="polite">
+            <InfoItem label="Toplam" value={rawImportSummary.totalRows} />
+            <InfoItem label="Eşleşen" value={rawImportSummary.matchedCount} />
+            <InfoItem label="Eşleşmeyen" value={rawImportSummary.quarantinedCount} />
+            <InfoItem label="Sebep" value={formatQuarantineReasons(rawImportSummary)} />
+          </InfoGrid>
         ) : null}
         {evaluationJobs ? (
           <p>
@@ -1935,7 +1927,7 @@ function OpticalReportPanel({
         title="Rapor üretimi"
         onSubmit={(event) => void onSubmit(event)}
       >
-        <div className="next-report-status-grid" aria-label="Rapor üretim durumu">
+        <MetricGrid aria-label="Rapor üretim durumu" role="region">
           <MetricCard
             label="Analiz"
             tone={evaluationStatus?.status === "COMPLETED" ? "success" : "warning"}
@@ -1952,7 +1944,7 @@ function OpticalReportPanel({
             tone={reportSnapshots.some((snapshot) => snapshot.status === "READY") ? "success" : "default"}
             value={reportSnapshots.length}
           />
-        </div>
+        </MetricGrid>
         <div className="next-optical-step-actions">
           <Button disabled={!canGenerateReport} type="submit">
             <RefreshCw size={17} aria-hidden="true" />

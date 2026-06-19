@@ -16,6 +16,9 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await page.getByRole("button", { name: "Ada düzenle" }).click();
 
     const student360 = page.getByLabel("Öğrenci 360");
+    const student360Summary = student360.getByRole("region", { name: "Öğrenci 360 özeti" });
+    await expect(student360Summary).toHaveClass(/uh-info-grid/);
+    await expect(student360Summary.locator(".uh-info-item")).toHaveCount(11);
     await expect(student360.getByText("Devamsızlık")).toBeVisible();
     await expect(student360.getByText("Problem çözüm adımlarında takip yapılacak.")).toBeVisible();
 
@@ -81,10 +84,12 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(announcementTable.getByRole("row", { name: /Haftalık sınav duyurusu/ })).toHaveClass(/next-announcement-row--selected/);
 
     const reportRegion = page.getByLabel("Duyuru alıcı raporu");
+    await expect(reportRegion.locator(".uh-panel__body").first()).toBeVisible();
     const recipientMetrics = reportRegion.getByRole("region", { name: "Alıcı raporu özeti" });
     await expect(recipientMetrics.locator(".uh-metric-card")).toHaveCount(3);
     await expect(recipientMetrics).toContainText("Duyuru kapsamındaki kişi");
     await expect(recipientMetrics).toContainText("Bekleyen");
+    await expect(reportRegion.locator(".next-announcement-recipient-metrics")).toHaveCount(0);
     const recipientsTable = reportRegion.getByRole("table", { name: "Duyuru alıcıları" });
     await expect(recipientsTable.getByRole("columnheader", { name: "Alıcı" })).toBeVisible();
     await expect(recipientsTable.getByText("Bekliyor")).toBeVisible();
@@ -94,7 +99,9 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await smsRegion.getByRole("button", { name: "SMS gönder" }).click();
     await expect(smsRegion.getByRole("status").filter({ hasText: "SMS kuyruğa alındı" })).toContainText("1 alıcı");
     const announcementDeliveryReport = smsRegion.getByLabel("SMS teslim raporu");
-    await expect(announcementDeliveryReport.getByRole("region", { name: "SMS teslim metrikleri" }).locator(".uh-metric-card")).toHaveCount(5);
+    const announcementDeliveryMetrics = announcementDeliveryReport.getByRole("region", { name: "SMS teslim metrikleri" });
+    await expect(announcementDeliveryMetrics.locator(".uh-metric-card")).toHaveCount(5);
+    await expect(announcementDeliveryReport.locator(".next-sms-delivery-metrics")).toHaveCount(0);
     await expect(announcementDeliveryReport).toContainText("Kuyrukta");
     await expect(announcementDeliveryReport).toContainText("Provider kabulü");
 
@@ -134,6 +141,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
     const smsMetrics = smsWorkflow.getByRole("region", { name: "SMS gönderim özeti" });
     await expect(smsMetrics.locator(".uh-metric-card")).toHaveCount(3);
     await expect(smsMetrics).toContainText("Gönderimde kullanılacak mesaj");
+    await expect(smsWorkflow.locator(".next-sms-workflow-metrics")).toHaveCount(0);
     await expect(smsWorkflow.locator("form.next-form")).toHaveCount(0);
     await expect(smsWorkflow.locator(".uh-filter-bar")).toBeVisible();
     await expect(smsWorkflow.locator(".uh-field")).toHaveCount(9);
@@ -170,7 +178,9 @@ test.describe("DataTable mobil sözleşmesi", () => {
     });
     await expect(smsWorkflow.getByRole("status").filter({ hasText: "SMS durumu" })).toContainText("1 alıcı");
     const templateDeliveryReport = smsWorkflow.getByLabel("SMS teslim raporu");
-    await expect(templateDeliveryReport.getByRole("region", { name: "SMS teslim metrikleri" }).locator(".uh-metric-card")).toHaveCount(5);
+    const templateDeliveryMetrics = templateDeliveryReport.getByRole("region", { name: "SMS teslim metrikleri" });
+    await expect(templateDeliveryMetrics.locator(".uh-metric-card")).toHaveCount(5);
+    await expect(templateDeliveryReport.locator(".next-sms-delivery-metrics")).toHaveCount(0);
     await expect(templateDeliveryReport).toContainText("Kuyrukta");
 
     await expectNoVisibleTextValues(page, "sablon-mobile", [
@@ -194,8 +204,11 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(financeSummary).toContainText("Bekleyen ödeme");
     await expect(financeSummary).toContainText("Kurum finans görünümü");
     await expect(financeSummary.getByLabel("Finans operasyon özeti aksiyon kuyruğu")).toBeVisible();
-    await expect(financeRegion.getByLabel("Finans filtreleri")).toBeVisible();
-    await expect(financeRegion.locator(".uh-field")).toHaveCount(6);
+    const listControls = financeRegion.locator(".next-list-controls").last();
+    const financeFilters = financeRegion.getByLabel("Finans filtreleri");
+    await expect(listControls.locator(".uh-field")).toHaveCount(3);
+    await expect(financeFilters).toBeVisible();
+    await expect(financeFilters.locator(".uh-field")).toHaveCount(6);
     const installmentsTable = financeRegion.getByRole("table", { name: "Ödeme taksitleri" });
     await expect(installmentsTable.getByRole("columnheader", { name: "Öğrenci" })).toBeVisible();
     await expect(installmentsTable.getByRole("columnheader", { name: "Tutar" })).toBeVisible();
@@ -388,8 +401,12 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(detailSummary).toContainText("Portal bağlı");
     await expect(detailSummary).toContainText("eşleşme kontrolü");
     await expect(detailSummary.getByLabel("Öğretmen detay operasyon özeti aksiyon kuyruğu")).toBeVisible();
-    await expect(page.getByLabel("Öğretmen profil kartı")).toContainText("Matematik");
-    await expect(page.getByLabel("Öğretmen profil kartı")).toContainText("Bağlı");
+    const teacherProfile = page.getByLabel("Öğretmen profil kartı");
+    await expect(teacherProfile).toContainText("Matematik");
+    await expect(teacherProfile).toContainText("Bağlı");
+    const teacherProfileInfo = teacherProfile.getByRole("region", { name: "Öğretmen profil özeti" });
+    await expect(teacherProfileInfo).toHaveClass(/uh-info-grid/);
+    await expect(teacherProfileInfo.locator(".uh-info-item")).toHaveCount(3);
     await expect(page.getByRole("link", { name: "Portal daveti gönder" })).toHaveAttribute("href", /invite=teacher&subjectId=teacher-a/);
 
     const assignmentsTable = page.getByRole("table", { name: "Öğretmen atama ilişkileri" });
@@ -483,6 +500,9 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(detailSummary.getByLabel("Sınıf detay operasyon özeti aksiyon kuyruğu")).toBeVisible();
 
     const reportContext = detailRegion.getByLabel("Sınıf rapor bağlamı");
+    const classReportContext = reportContext.getByRole("region", { name: "Sınıf rapor bağlam özeti" });
+    await expect(classReportContext).toHaveClass(/uh-info-grid/);
+    await expect(classReportContext.locator(".uh-info-item")).toHaveCount(4);
     await expect(reportContext).toContainText("LGS Denemesi");
     await expect(reportContext).toContainText("10.06.2026");
     await expect(reportContext).toContainText("%76,7");
@@ -562,6 +582,10 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(examTable).toContainText("TYT Provasi");
     await expect(selectedExamDetail.getByLabel("Seçili sınav durumu")).toContainText("Yayında");
     await expect(selectedExamDetail.getByLabel("Sınav hazırlık durumu")).toContainText("1 sınıf kapsamı");
+    const selectedExamMetrics = selectedExamDetail.getByRole("region", { name: "Seçili sınav metrikleri" });
+    await expect(selectedExamMetrics).toHaveClass(/uh-info-grid/);
+    await expect(selectedExamMetrics.locator(".uh-info-item")).toHaveCount(4);
+    await expect(selectedExamDetail.locator(".next-support-ticket-meta")).toHaveCount(0);
     const lgsParticipants = selectedExamDetail.getByRole("table", { name: "LGS Denemesi katılımcıları" });
     await expect(lgsParticipants).toContainText("Ada Kaya");
     await expect(lgsParticipants).not.toContainText("Bora Kaya");
@@ -575,12 +599,21 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await tytParticipantRequest;
     await expect(selectedExamDetail).toContainText("TYT Provasi");
     await expect(selectedExamDetail.getByLabel("Seçili sınav durumu")).toContainText("Taslak");
-    await expect(selectedExamDetail.getByLabel("Seçili sınav metrikleri")).toContainText("B");
+    await expect(selectedExamMetrics).toContainText("B");
     const tytParticipants = selectedExamDetail.getByRole("table", { name: "TYT Provasi katılımcıları" });
     await expect(tytParticipants).toContainText("Bora Kaya");
     await expect(tytParticipants).not.toContainText("Ada Kaya");
     await expect(selectedExamDetail.getByRole("columnheader", { exact: true, name: "Öğrenci no" })).toHaveCount(0);
     await expect(selectedExamDetail.getByRole("columnheader", { exact: true, name: "Kitapçık" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Sınav ekle" }).click();
+    const examDialog = page.getByRole("dialog", { name: "Sınav ekle" });
+    await expect(examDialog.locator(".uh-field")).toHaveCount(2);
+    await expect(examDialog.getByLabel("Sınıf ara")).toBeVisible();
+    await expect(examDialog.locator(".next-checkbox-list .uh-checkbox")).toHaveCount(2);
+    await expect(examDialog.getByRole("checkbox", { name: /8-A/ })).toBeVisible();
+    await expectNoUnlabeledControls(page, "exam-form-mobile");
+    await examDialog.getByRole("button", { name: "Vazgeç" }).click();
 
     await expectNoVisibleTextValues(page, "exams-mobile", [
       "student-a",
@@ -623,6 +656,10 @@ test.describe("DataTable mobil sözleşmesi", () => {
     const selectedTicketControl = selectedDetail.getByRole("combobox", { name: "Bildirim" });
     await expect(selectedTicketControl).toHaveValue("ticket-a");
     await expect(selectedDetail.locator(".next-support-ticket-context")).toContainText("Optik dosya okunmuyor");
+    const selectedTicketMetrics = selectedDetail.getByRole("region", { name: "Seçili bildirim metrikleri" });
+    await expect(selectedTicketMetrics).toHaveClass(/uh-info-grid/);
+    await expect(selectedTicketMetrics.locator(".uh-info-item")).toHaveCount(3);
+    await expect(selectedTicketMetrics).toContainText("Ana Kampüs / 8. Sınıf / 8-A / Matematik / 2026 Bahar");
     await expect(selectedDetail).toContainText("İlk mesaj");
     await expect(selectedDetail).toContainText("Ekler");
     await expect(selectedDetail).toContainText("Yorum akışı");
@@ -707,6 +744,11 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(selectedMaterialDetail.locator(".uh-textarea")).toHaveCount(1);
     await expect(selectedMaterialDetail.locator(".next-material-selected-context")).toContainText("Kesirler Çalışma Kağıdı");
     await expect(selectedMaterialDetail.getByLabel("Seçili materyal durumu")).toContainText("Dosyalı");
+    const selectedMaterialMetrics = selectedMaterialDetail.getByRole("region", { name: "Seçili materyal metrikleri" });
+    await expect(selectedMaterialMetrics).toHaveClass(/uh-info-grid/);
+    await expect(selectedMaterialMetrics.locator(".uh-info-item")).toHaveCount(3);
+    await expect(selectedMaterialMetrics).toContainText("1 dosya");
+    await expect(selectedMaterialMetrics).toContainText("1 öğrenci");
     await expect(page.getByLabel("Seçili materyal dosyaları")).toContainText("Dosya: kesirler.txt");
     await expect(page.getByLabel("Seçili materyal atamaları")).toContainText("Atama: Ada Kaya");
     await expect(materialTools.getByRole("button", { name: "Dosya yükle" })).toBeVisible();

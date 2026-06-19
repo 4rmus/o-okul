@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
+  ActionCard,
   DataTable,
   LoadingState,
   MetricCard,
+  MetricGrid,
   Panel,
   StatusBadge,
   type DataTableColumn,
@@ -146,7 +148,7 @@ export function KurumDashboard() {
     >
       {dashboardQuery.isPending ? <LoadingState label="Kurum özeti yükleniyor…" /> : null}
       {tenantProfile ? <TenantProfileSummary tenant={tenantProfile} /> : null}
-      <section aria-label="Kurum özeti" className="next-dashboard-overview-grid">
+      <MetricGrid aria-label="Kurum özeti" className="next-dashboard-overview-grid" role="region">
         {overviewMetrics.map((metric) => (
           <MetricCard
             className="next-dashboard-overview-card"
@@ -157,7 +159,7 @@ export function KurumDashboard() {
             value={metric.value}
           />
         ))}
-      </section>
+      </MetricGrid>
       <OperationSummary
         actions={dashboardSummaryActions}
         ariaLabel="Kurum dashboard operasyon özeti"
@@ -193,11 +195,17 @@ export function KurumDashboard() {
         {visibleAttentionItems.length > 0 ? (
           <div className="next-attention-list">
             {visibleAttentionItems.map((item) => (
-              <Link className="next-attention-item" href={item.href} key={item.href}>
-                <span>{item.title}</span>
-                <strong>{item.value}</strong>
-                <small>{item.description}</small>
-              </Link>
+              <ActionCard
+                as="a"
+                aria-label={`${item.title} ${item.value}: ${item.description}`}
+                className="next-attention-item"
+                detail={item.description}
+                href={item.href}
+                key={item.href}
+                label={item.title}
+                tone={attentionCardTone(item)}
+                value={item.value}
+              />
             ))}
           </div>
         ) : (
@@ -328,13 +336,18 @@ const dashboardDecisionColumns: Array<DataTableColumn<DashboardDecisionRow>> = [
   },
 ];
 
-function DashboardTableLink({ row }: { row: DashboardLinkCard }) {
+function DashboardTableLink({ row }: { row: DashboardLinkCard & { tone?: StatusBadgeProps["tone"] } }) {
   return (
-    <Link className="next-dashboard-link-cell" href={row.href}>
-      <span>{row.title}</span>
-      <strong>{row.value}</strong>
-      <small>{row.description}</small>
-    </Link>
+    <ActionCard
+      as="a"
+      aria-label={`${row.title} ${row.value}: ${row.description}`}
+      className="next-dashboard-link-cell"
+      detail={row.description}
+      href={row.href}
+      label={row.title}
+      tone={row.tone ?? "neutral"}
+      value={row.value}
+    />
   );
 }
 
@@ -597,6 +610,11 @@ function summaryCardTone(card: DashboardLinkCard): StatusBadgeProps["tone"] {
   }
   if (card.title === "Son duyuru") return card.value === "Duyuru yok" ? "neutral" : "info";
   return "neutral";
+}
+
+function attentionCardTone(card: DashboardLinkCard): StatusBadgeProps["tone"] {
+  if (Number(card.value) > 0 || card.value === "Bekliyor") return "warning";
+  return "success";
 }
 
 function systemHealthStatusLabel(systemHealth: KurumSystemHealthSummary) {

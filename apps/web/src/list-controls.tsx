@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Button, Input } from "@uzman-hocam/ui";
+import { Button, Field, Input, Select } from "@uzman-hocam/ui";
 import type { ListMeta } from "./api-client.js";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
@@ -93,7 +93,7 @@ export function ListControls({
 
   return (
     <div className="next-list-controls">
-      <label className="next-list-search">
+      <Field className="next-list-search" label="Ara">
         <Search size={17} aria-hidden="true" />
         <Input
           aria-label="Ara"
@@ -101,29 +101,27 @@ export function ListControls({
           value={state.q}
           onChange={(event) => onChange({ ...state, page: 1, q: event.target.value })}
         />
-      </label>
-      <label>
-        Sırala
-        <select value={state.sort} onChange={(event) => onChange({ ...state, page: 1, sort: event.target.value })}>
+      </Field>
+      <Field label="Sırala">
+        <Select value={state.sort} onChange={(event) => onChange({ ...state, page: 1, sort: event.target.value })}>
           <option value="">Varsayılan</option>
           {sortOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
-        </select>
-      </label>
-      <label>
-        Göster
-        <select
+        </Select>
+      </Field>
+      <Field label="Göster">
+        <Select
           value={state.limit}
           onChange={(event) => onChange({ ...state, page: 1, limit: Number(event.target.value) })}
         >
           <option value={5}>5</option>
           <option value={10}>10</option>
           <option value={20}>20</option>
-        </select>
-      </label>
+        </Select>
+      </Field>
       <span className="next-list-status">{total} kayıt</span>
       <Button
         aria-label="Önceki sayfa"

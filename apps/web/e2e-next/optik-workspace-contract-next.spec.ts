@@ -21,7 +21,14 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
 
     await expect(page.getByRole("heading", { level: 1, name: "Optik İşlemleri" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "1. Format" })).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByLabel("Seçili form özeti")).toContainText("90 soru");
+    const selectedFormSummary = page.getByLabel("Seçili form özeti");
+    await expect(selectedFormSummary).toHaveClass(/uh-info-grid/);
+    await expect(selectedFormSummary.locator(".uh-info-item")).toHaveCount(4);
+    await expect(selectedFormSummary).toContainText("90 soru");
+    const parserSummary = page.locator(".next-parser-summary").first();
+    await expect(parserSummary).toHaveClass(/uh-info-grid/);
+    await expect(parserSummary.locator(".uh-info-item")).toHaveCount(1);
+    await expect(parserSummary).toContainText("Format seçimi bekliyor");
     const formPreviewTable = page.getByRole("table", { name: "Optik form alan önizlemesi" });
     await expect(formPreviewTable.getByRole("columnheader", { name: "Bölüm" })).toBeVisible();
     await expect(formPreviewTable.locator('th[data-column-key="section"]')).toHaveAttribute("data-mobile-priority", "primary");
@@ -67,6 +74,10 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await uploadPanel.getByRole("button", { name: "Yükle ve kontrol et" }).click();
     const uploadResult = page.getByLabel("Optik yükleme sonucu");
     await expect(uploadResult).toContainText("Kontrol tamamlandı");
+    const uploadSummary = uploadResult.locator(".next-parser-summary");
+    await expect(uploadSummary).toHaveClass(/uh-info-grid/);
+    await expect(uploadSummary.locator(".uh-info-item")).toHaveCount(4);
+    await expect(uploadSummary).toContainText("Eşleşmeyen");
     await uploadResult.getByText("Teknik yükleme bilgisi").click();
     await expect(uploadResult).toContainText("Dosya ref: maskeli");
     await expect(uploadResult).toContainText("Kuyruk ref: maskeli");
@@ -79,6 +90,11 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await page.getByRole("tab", { name: "4. Eşleşmeyen satırlar" }).click();
     const optikReportPanel = page.getByRole("tabpanel", { name: "4. Eşleşmeyen satırlar" });
     await expect(optikReportPanel).toContainText("Rapor üretimi");
+    const reportStatus = optikReportPanel.getByRole("region", { name: "Rapor üretim durumu" });
+    await expect(reportStatus).toHaveClass(/uh-metric-grid/);
+    await expect(reportStatus.locator(".uh-metric-card")).toHaveCount(3);
+    await expect(reportStatus).toContainText("Analiz");
+    await expect(optikReportPanel.locator(".next-report-status-grid")).toHaveCount(0);
     await expect(optikReportPanel).toContainText("Hazır rapor yok");
 
     await optikReportPanel.getByRole("button", { name: "Raporları getir" }).click();
@@ -104,6 +120,7 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
 
     await expectNoHorizontalOverflow(page, "optik-mobile");
     await expectNoUnlabeledControls(page, "optik-mobile");
+    await expectNoClippedVisibleText(page, "optik-mobile");
   });
 });
 
@@ -468,6 +485,42 @@ async function expectNoHorizontalOverflow(page: Page, label: string) {
   });
 
   expect(overflow, `${label}: yatay taşma ${overflow}px`).toBeLessThanOrEqual(1);
+}
+
+async function expectNoClippedVisibleText(page: Page, label: string) {
+  const clippedTexts = await page.evaluate(() => {
+    function isVisible(element: Element) {
+      const htmlElement = element as HTMLElement;
+      const rect = htmlElement.getBoundingClientRect();
+      const style = window.getComputedStyle(htmlElement);
+      return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+    }
+
+    const textSelectors = [
+      "label",
+      "button",
+      ".uh-status-badge",
+      ".uh-info-item__label",
+      ".uh-info-item__value",
+      ".uh-metric-card__label",
+      ".uh-metric-card__value",
+      ".uh-data-table th",
+      ".uh-data-table td",
+    ].join(", ");
+
+    return Array.from(document.querySelectorAll(textSelectors))
+      .filter((element) => isVisible(element))
+      .filter((element) => {
+        const htmlElement = element as HTMLElement;
+        const style = window.getComputedStyle(htmlElement);
+        if (style.overflow === "visible" && style.overflowX === "visible" && style.overflowY === "visible") return false;
+        return htmlElement.scrollWidth - htmlElement.clientWidth > 1 || htmlElement.scrollHeight - htmlElement.clientHeight > 1;
+      })
+      .map((element) => element.textContent?.trim().replace(/\s+/g, " ").slice(0, 120))
+      .filter(Boolean);
+  });
+
+  expect(clippedTexts, `${label}: kırpılmış görünen metin`).toEqual([]);
 }
 
 async function expectNoUnlabeledControls(page: Page, label: string) {

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { DataTable, Field, Panel, Select, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@uzman-hocam/ui";
+import { DataTable, Field, InfoGrid, InfoItem, Panel, Select, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@uzman-hocam/ui";
 import type { CampusRecord, ClassRecord, ExamRecord, GradeLevelRecord, ReportSnapshotRecord, StudentRecord } from "@uzman-hocam/shared-types";
 import { ArrowLeft } from "lucide-react";
 import { useAuth } from "../../../providers.js";
@@ -201,24 +201,12 @@ export function ClassDetailPage({ classId }: { classId: string }) {
               description="Kampüs, seviye ve şube bağlamı ham kayıt anahtarı göstermeden okunur."
               title="Sınıf profili"
             >
-              <dl className="next-definition-list">
-                <div>
-                  <dt>Seviye</dt>
-                  <dd>{gradeLevelLabel(detail)}</dd>
-                </div>
-                <div>
-                  <dt>Şube</dt>
-                  <dd>{detail.record.section ?? "Şube yok"}</dd>
-                </div>
-                <div>
-                  <dt>Kampüs</dt>
-                  <dd>{campusLabel(detail)}</dd>
-                </div>
-                <div>
-                  <dt>Öğrenci kapsamı</dt>
-                  <dd>{formatCount(detail.students.length)} öğrenci</dd>
-                </div>
-              </dl>
+              <InfoGrid className="next-class-profile-info" aria-label="Sınıf profil özeti" role="region">
+                <InfoItem label="Seviye" value={gradeLevelLabel(detail)} />
+                <InfoItem label="Şube" value={detail.record.section ?? "Şube yok"} />
+                <InfoItem label="Kampüs" value={campusLabel(detail)} />
+                <InfoItem label="Öğrenci kapsamı" value={`${formatCount(detail.students.length)} öğrenci`} />
+              </InfoGrid>
             </Panel>
             <Panel
               actions={<StatusBadge tone={reportState.tone}>{reportState.label}</StatusBadge>}
@@ -260,24 +248,12 @@ export function ClassDetailPage({ classId }: { classId: string }) {
                   </Select>
                 </Field>
               </div>
-              <dl className="next-definition-list">
-                <div>
-                  <dt>Sınav</dt>
-                  <dd>{selectedExam?.title ?? "Sınav seçilmedi"}</dd>
-                </div>
-                <div>
-                  <dt>Rapor tarihi</dt>
-                  <dd>{selectedSnapshot ? formatSnapshotLabel(selectedSnapshot) : "Hazır rapor yok"}</dd>
-                </div>
-                <div>
-                  <dt>Başarı %</dt>
-                  <dd>{formatPercentNumber(reportSuccessRate(classReport?.averages))}</dd>
-                </div>
-                <div>
-                  <dt>Soru</dt>
-                  <dd>{formatNumber(reportQuestionCount(classReport?.averages))}</dd>
-                </div>
-              </dl>
+              <InfoGrid className="next-class-report-context" aria-label="Sınıf rapor bağlam özeti" role="region">
+                <InfoItem label="Sınav" value={selectedExam?.title ?? "Sınav seçilmedi"} />
+                <InfoItem label="Rapor tarihi" value={selectedSnapshot ? formatSnapshotLabel(selectedSnapshot) : "Hazır rapor yok"} />
+                <InfoItem label="Başarı %" value={formatPercentNumber(reportSuccessRate(classReport?.averages))} />
+                <InfoItem label="Soru" value={formatNumber(reportQuestionCount(classReport?.averages))} />
+              </InfoGrid>
             </Panel>
             <Panel
               aria-label="Sınıf öğrencileri"

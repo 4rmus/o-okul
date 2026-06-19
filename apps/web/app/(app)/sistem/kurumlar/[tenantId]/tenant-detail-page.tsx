@@ -8,9 +8,12 @@ import {
   Button,
   Field,
   FormModal,
+  InfoGrid,
+  InfoItem,
   Input,
   LoadingState,
   MetricCard,
+  MetricGrid,
   Panel,
   Select,
   StatusBadge,
@@ -133,7 +136,7 @@ export function TenantDetailPage() {
         </Alert>
       ) : null}
       {tenant ? (
-        <section className="next-system-summary-grid" aria-label="Kurum detayı">
+        <MetricGrid className="next-system-summary-grid" aria-label="Kurum detayı" role="region">
           <MetricCard
             className="next-system-summary-card"
             description="Sistem teknik kısa adı"
@@ -168,7 +171,7 @@ export function TenantDetailPage() {
             tone={tenantCapacityTone(tenant)}
             value={formatDate(tenant.licenseEndsAt)}
           />
-        </section>
+        </MetricGrid>
       ) : null}
       {tenant ? (
         <Panel
@@ -177,27 +180,23 @@ export function TenantDetailPage() {
           title="Lisans ve kapasite"
           tone={tenantCapacityTone(tenant)}
         >
-          <div className="next-tenant-capacity-grid">
-            <div>
-              <span>Lisans penceresi</span>
-              <strong>{formatLicenseWindow(tenant)}</strong>
-            </div>
-            <div>
-              <span>Kalan gün</span>
-              <strong>{formatLicenseDays(licenseDays)}</strong>
-            </div>
-            <div>
-              <span>Koltuk kullanımı</span>
-              <strong>
-                {formatSeatUsage(tenant)}
-                {seatPercent === null ? "" : ` · %${seatPercent}`}
-              </strong>
-            </div>
-            <div>
-              <span>Önerilen aksiyon</span>
-              <StatusBadge tone={tenantCapacityTone(tenant)}>{tenantRecommendedAction(tenant)}</StatusBadge>
-            </div>
-          </div>
+          <InfoGrid className="next-tenant-capacity-grid">
+            <InfoItem label="Lisans penceresi" value={formatLicenseWindow(tenant)} />
+            <InfoItem label="Kalan gün" value={formatLicenseDays(licenseDays)} />
+            <InfoItem
+              label="Koltuk kullanımı"
+              value={
+                <>
+                  {formatSeatUsage(tenant)}
+                  {seatPercent === null ? "" : ` · %${seatPercent}`}
+                </>
+              }
+            />
+            <InfoItem
+              label="Önerilen aksiyon"
+              value={<StatusBadge tone={tenantCapacityTone(tenant)}>{tenantRecommendedAction(tenant)}</StatusBadge>}
+            />
+          </InfoGrid>
         </Panel>
       ) : null}
       {error ? (

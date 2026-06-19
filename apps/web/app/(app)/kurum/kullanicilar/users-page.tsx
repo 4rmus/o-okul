@@ -5,10 +5,13 @@ import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Button,
+  Checkbox,
   CrudPage,
   EmptyState,
   Field,
   FormModal,
+  InfoGrid,
+  InfoItem,
   Input,
   Select,
   StatusBadge,
@@ -83,6 +86,14 @@ interface UserSubjectReferences {
 }
 
 const roleOptions = tenantAssignableRoles.map((role) => ({ value: role, label: tenantRoleLabel(role) }));
+
+const roleDescriptions: Record<Role, string> = {
+  TENANT_ADMIN: "Tüm kurum operasyonları",
+  ASSISTANT_ADMIN: "Akademik ve destek işlemleri",
+  TEACHER: "Atanmış sınıf ve dersler",
+  STUDENT: "Öğrenci portalı",
+  GUARDIAN: "Veli portalı",
+};
 
 const subjectTypeLabels = Object.fromEntries(
   portalSubjectRoles.map((role) => [role, tenantRoleLabel(role)]),
@@ -201,16 +212,11 @@ export function UsersPage() {
           aria-label={`${user.name} rolleri`}
           aria-describedby={hasRoleDraftChanges(user) ? `role-draft-status-${user.id}` : undefined}
         >
-          {roleOptions.map((role) => (
-            <label key={role.value}>
-              <input
-                checked={getDraftRoles(user).includes(role.value)}
-                onChange={() => toggleRole(user.id, role.value)}
-                type="checkbox"
-              />
-              {role.label}
-            </label>
-          ))}
+          <RoleCheckboxGrid
+            density="compact"
+            selectedRoles={getDraftRoles(user)}
+            onToggle={(role) => toggleRole(user.id, role)}
+          />
           {hasRoleDraftChanges(user) ? (
             <span className="next-role-draft-status" id={`role-draft-status-${user.id}`}>
               <StatusBadge tone="warning">Kaydedilmemiş rol değişikliği</StatusBadge>
@@ -624,23 +630,16 @@ export function UsersPage() {
         </Field>
         <fieldset className="next-role-fieldset">
           <legend>Roller</legend>
-          {roleOptions.map((role) => (
-            <label key={role.value}>
-              <input
-                checked={userForm.roles.includes(role.value)}
-                onChange={() =>
-                  setUserForm((current) => ({
-                    ...current,
-                    roles: current.roles.includes(role.value)
-                      ? current.roles.filter((candidate) => candidate !== role.value)
-                      : [...current.roles, role.value],
-                  }))
-                }
-                type="checkbox"
-              />
-              {role.label}
-            </label>
-          ))}
+          <p className="next-role-fieldset__hint">Kullanıcının kurum paneli veya portal kapsamını seç.</p>
+          <RoleCheckboxGrid
+            selectedRoles={userForm.roles}
+            onToggle={(role) =>
+              setUserForm((current) => ({
+                ...current,
+                roles: toggleRoleSelection(current.roles, role),
+              }))
+            }
+          />
         </fieldset>
       </FormModal>
       <FormModal
@@ -652,16 +651,20 @@ export function UsersPage() {
         title="Davet oluştur"
       >
         {invitationForm.subjectId ? (
-          <div className="next-invitation-context" aria-label="Davet bağlamı">
-            <span>Davet hedefi</span>
-            <strong>{selectedInvitationSubject?.name || invitationForm.name || "Seçili kayıt"}</strong>
-            <div>
-              <StatusBadge tone="info">{subjectTypeLabels[invitationForm.subjectType]}</StatusBadge>
-              <StatusBadge tone={invitationForm.email ? "success" : "neutral"}>
-                {invitationForm.email ? "E-posta hazır" : "E-posta bekliyor"}
-              </StatusBadge>
-            </div>
-          </div>
+          <InfoGrid className="next-invitation-context" aria-label="Davet bağlamı">
+            <InfoItem
+              description={
+                <span className="next-invitation-context__badges">
+                  <StatusBadge tone="info">{subjectTypeLabels[invitationForm.subjectType]}</StatusBadge>
+                  <StatusBadge tone={invitationForm.email ? "success" : "neutral"}>
+                    {invitationForm.email ? "E-posta hazır" : "E-posta bekliyor"}
+                  </StatusBadge>
+                </span>
+              }
+              label="Davet hedefi"
+              value={selectedInvitationSubject?.name || invitationForm.name || "Seçili kayıt"}
+            />
+          </InfoGrid>
         ) : null}
         <Field label="Kişi türü">
           <Select
@@ -714,6 +717,30 @@ export function UsersPage() {
   );
 }
 
+function RoleCheckboxGrid({
+  density = "regular",
+  selectedRoles,
+  onToggle,
+}: {
+  density?: "compact" | "regular";
+  selectedRoles: Role[];
+  onToggle: (role: Role) => void;
+}) {
+  return (
+    <div className={density === "compact" ? "next-role-grid next-role-grid--compact" : "next-role-grid"}>
+      {roleOptions.map((role) => (
+        <Checkbox
+          checked={selectedRoles.includes(role.value)}
+          description={roleDescriptions[role.value]}
+          key={role.value}
+          label={role.label}
+          onChange={() => onToggle(role.value)}
+        />
+      ))}
+    </div>
+  );
+}
+
 function buildSubjects(
   subjectType: InvitationSubjectType,
   students: StudentRecord[],
@@ -757,6 +784,10 @@ function invitationStatusTone(status: InvitationStatus) {
 
 function normalizeRoles(roles: Role[]) {
   return [...roles].sort();
+}
+
+function toggleRoleSelection(roles: Role[], role: Role) {
+  return roles.includes(role) ? roles.filter((candidate) => candidate !== role) : [...roles, role];
 }
 
 function formatCount(value: number) {

@@ -77,6 +77,8 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
 
     await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
     const contextStrip = page.locator(".next-report-context-strip");
+    await expect(contextStrip).toHaveClass(/uh-info-grid/);
+    await expect(contextStrip.locator(".uh-info-item")).toHaveCount(6);
     await expect(contextStrip).toContainText("LGS Rapor Denemesi");
     await expect(contextStrip).not.toContainText("exam-report-ready");
     await expect(contextStrip).toContainText("Hazır");
@@ -92,6 +94,8 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     const analyticsPanel = page.getByRole("tabpanel", { name: "Kurum Analitiği" });
     await expect(analyticsPanel.getByRole("region", { name: "Kurum analitiği" })).toContainText("Başarı %");
     await expect(analyticsPanel.getByRole("region", { name: "Kurum analitiği" })).toContainText("%81,7");
+    await expect(analyticsPanel.getByRole("region", { name: "Rapor özeti" }).locator(".uh-metric-card")).toHaveCount(8);
+    await expect(analyticsPanel.locator(".next-report-summary-card")).toHaveCount(0);
 
     await page.getByRole("tab", { name: "Öğrenci Sonuçları" }).click();
     const studentResultsTable = page.getByRole("table", { name: "Öğrenci sıralamaları" });
@@ -114,7 +118,10 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     const karneSheet = karnePanel.getByRole("region", { name: "Öğrenci karne özeti özet sayfası" });
     await expect(karneSheet).toHaveClass(/next-report-karne-sheet/);
     await expect(karneSheet).not.toHaveClass(/next-report-list/);
-    const karneContext = karnePanel.getByLabel("Karne rapor bağlamı").first();
+    const karneContext = karneSheet.getByRole("region", { exact: true, name: "Karne rapor bağlamı" });
+    const karneContextMetrics = karneContext.getByRole("group", { name: "Karne rapor bağlam metrikleri" });
+    await expect(karneContextMetrics).toHaveClass(/uh-info-grid/);
+    await expect(karneContextMetrics.locator(".uh-info-item")).toHaveCount(6);
     await expect(karneContext).toContainText("Rapor bağlamı");
     await expect(karneContext).toContainText("Rapor kaydı");
     await expect(karneContext).toContainText("Rapor kaydı hazır");
@@ -122,7 +129,9 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await expect(karneContext).toContainText("Excel/PDF hazır");
     await expect(karneContext).toContainText("Üretim");
     await expect(karneContext).toContainText("Soru");
-    const karneSummary = karnePanel.getByLabel("Karne başarı özeti").first();
+    const karneSummary = karneSheet.getByRole("region", { exact: true, name: "Karne başarı özeti" });
+    await expect(karneSummary).toHaveClass(/uh-metric-grid/);
+    await expect(karneSummary.locator(".uh-metric-card")).toHaveCount(7);
     await expect(karneSummary).toContainText("Başarı %");
     await expect(karneSummary).toContainText("%66,7");
     await expect(karneSummary).toContainText("Soru");
@@ -161,6 +170,8 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
 
     await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
     const contextStrip = page.locator(".next-report-context-strip");
+    await expect(contextStrip).toHaveClass(/uh-info-grid/);
+    await expect(contextStrip.locator(".uh-info-item")).toHaveCount(6);
     await expect(contextStrip).toContainText("Eski Rapor Denemesi");
     await expect(contextStrip).not.toContainText("exam-report-stale");
     await expect(contextStrip).toContainText("Eski");
@@ -191,10 +202,16 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await page.getByRole("tab", { name: "Karne Önizleme" }).click();
 
     const karnePanel = page.getByRole("tabpanel", { name: "Karne Önizleme" });
-    const karneContext = karnePanel.getByLabel("Karne rapor bağlamı").first();
+    const karneSheet = karnePanel.getByRole("region", { name: "Öğrenci karne özeti özet sayfası" });
+    const karneContext = karneSheet.getByRole("region", { exact: true, name: "Karne rapor bağlamı" });
+    const karneContextMetrics = karneContext.getByRole("group", { name: "Karne rapor bağlam metrikleri" });
+    await expect(karneContextMetrics).toHaveClass(/uh-info-grid/);
+    await expect(karneContextMetrics.locator(".uh-info-item")).toHaveCount(6);
     await expect(karneContext).toContainText("Excel/PDF hazır");
     await expect(karneContext).toContainText("Soru");
-    const karneSummary = karnePanel.getByLabel("Karne başarı özeti").first();
+    const karneSummary = karneSheet.getByRole("region", { exact: true, name: "Karne başarı özeti" });
+    await expect(karneSummary).toHaveClass(/uh-metric-grid/);
+    await expect(karneSummary.locator(".uh-metric-card")).toHaveCount(7);
     await expect(karneSummary).toContainText("Başarı %");
     await expect(karneSummary).toContainText("%66,7");
     await expect(karneSummary).toContainText("Net");
@@ -573,9 +590,10 @@ async function expectNoClippedVisibleText(page: Page, label: string) {
         "label",
         "button",
         ".uh-status-badge",
-        ".next-report-context-strip > div",
+        ".next-report-context-strip > .uh-info-item",
         ".next-report-export-grid > div",
-        ".next-karne-context-strip > div",
+        ".next-karne-context-strip .uh-info-item",
+        ".next-karne-summary-strip .uh-metric-card",
       ].join(", "),
     ))
       .filter((element) => isVisible(element))

@@ -16,7 +16,7 @@
     "test": "tsc -p tsconfig.json --noEmit",
     "test:e2e": "playwright test -c playwright.next.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "ux-contract": "playwright test -c playwright.next.config.ts --workers=1 e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts"
+    "ux-contract": "playwright test -c playwright.next.config.ts --workers=1 e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",

@@ -29,10 +29,11 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       );
       await expect(portalSummary).toContainText("Başarı % ana metrik");
       await expect(portalSummary).toContainText("Soru sayısı bağlamıyla okunur");
-      const focus = page.getByLabel("Öğrenci operasyon bağlamı");
+      const focus = page.getByRole("region", { exact: true, name: "Öğrenci operasyon bağlamı" });
       await expect(focus).toContainText("Öğrenci Odağı");
       await expect(focus).toContainText("Canlı öğrenci");
       await expect(focus).toContainText("Öğrenci hesabı");
+      await expectStudentFocusMetrics(focus, 8);
       await expect(focus).toContainText("Başarı %");
       await expect(focus).toContainText("%81,7");
       await expect(focus).toContainText("Soru");
@@ -89,7 +90,7 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
     await expect(page).toHaveURL(/\/ogrenci\?rolePreview=1$/);
     expect(page.url()).not.toContain("preview-token");
     await expect(page.getByLabel("Rol önizleme modu")).toContainText("Salt-okuma Önizleme");
-    await expect(page.getByLabel("Öğrenci operasyon bağlamı")).toContainText("Salt-okuma");
+    await expect(page.getByRole("region", { exact: true, name: "Öğrenci operasyon bağlamı" })).toContainText("Salt-okuma");
     const studentPreviewActions = page.getByRole("region", { name: "Öğrenci günlük aksiyonları" });
     await expect(studentPreviewActions).toContainText("Önizleme durumu");
     await expect(studentPreviewActions).toContainText("Salt-okuma");
@@ -126,10 +127,11 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       await expect(portalSummary).toContainText("Finans görünürlüğü izin kapsamına bağlıdır");
       await expect(portalSummary).toContainText("Kapalı");
       await expect(portalSummary).not.toContainText("500,00 TRY");
-      const focus = page.getByLabel("Öğrenci operasyon bağlamı");
+      const focus = page.getByRole("region", { exact: true, name: "Öğrenci operasyon bağlamı" });
       await expect(focus).toContainText("Öğrenci Odağı");
       await expect(focus).toContainText("Veli kapsamı");
       await expect(focus).toContainText("Anne");
+      await expectStudentFocusMetrics(focus, 9);
       await expect(focus).toContainText("Finans");
       await expect(focus).toContainText("Kapalı");
       const guardianActions = page.getByRole("region", { name: "Veli günlük aksiyonları" });
@@ -162,6 +164,7 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       await expectPortalActionFocus(page, guardianActions, /Öğrenci seç: Ada Kaya/, page.locator("#portal-student-picker"), "#portal-student-picker");
       await expect(page.getByRole("region", { exact: true, name: "Veli portal çalışma alanı" })).toBeVisible();
       await expectStudentProfileAndHistoryPanels(page);
+      await expectGuardianRelationshipSummary(page);
       await expectPortalActivityPanels(page);
       await expect(page.getByLabel("Destek talepleri")).toContainText("Veli destek talebi izni kapalı.");
       await expectHomeworkAssignmentsPanel(page);
@@ -173,7 +176,7 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       await expect.poll(() => paymentPlanRequests).toEqual([]);
 
       await page.getByRole("button", { name: "Bora Yilmaz" }).click();
-      await expect(page.getByLabel("Öğrenci operasyon bağlamı")).toContainText("Bora Yilmaz");
+      await expect(page.getByRole("region", { exact: true, name: "Öğrenci operasyon bağlamı" })).toContainText("Bora Yilmaz");
       await expect(page.getByRole("region", { name: "Veli günlük aksiyonları" })).toContainText("Bora Yilmaz");
       await expect(page.getByRole("table", { name: "Ödev ve materyal atamaları" })).toContainText("Bora tekrar");
       await expect(page.getByRole("table", { name: "Ödev ve materyal atamaları" })).not.toContainText("Ada tekrar");
@@ -193,7 +196,7 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
     await expect(page).toHaveURL(/\/veli\?rolePreview=1$/);
     expect(page.url()).not.toContain("preview-token");
     await expect(page.getByLabel("Rol önizleme modu")).toContainText("Salt-okuma Önizleme");
-    await expect(page.getByLabel("Öğrenci operasyon bağlamı")).toContainText("Salt-okuma");
+    await expect(page.getByRole("region", { exact: true, name: "Öğrenci operasyon bağlamı" })).toContainText("Salt-okuma");
     const guardianPreviewActions = page.getByRole("region", { name: "Veli günlük aksiyonları" });
     await expect(guardianPreviewActions).toContainText("Önizleme durumu");
     await expect(guardianPreviewActions).toContainText("Salt-okuma");
@@ -206,6 +209,7 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
     await expect(preferenceCheckboxes.nth(1)).toBeDisabled();
     await expect(preferenceCheckboxes.nth(2)).toBeDisabled();
     await expectStudentProfileAndHistoryPanels(page);
+    await expectGuardianRelationshipSummary(page);
     await expectPortalActivityPanels(page);
     await expectHomeworkAssignmentsPanel(page);
     await expectPortalAnnouncementsTable(page, { readOnly: true });
@@ -216,9 +220,18 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
   });
 });
 
+async function expectStudentFocusMetrics(focus: Locator, itemCount: number) {
+  const focusMetrics = focus.getByRole("region", { name: "Öğrenci operasyon bağlam metrikleri" });
+  await expect(focusMetrics).toHaveClass(/uh-info-grid/);
+  await expect(focusMetrics.locator(".uh-info-item")).toHaveCount(itemCount);
+}
+
 async function expectStudentProfileAndHistoryPanels(page: Page) {
   const profile = page.getByRole("region", { exact: true, name: "Profil" });
   await expect(profile.getByRole("heading", { name: "Profil" })).toBeVisible();
+  const profileInfo = profile.getByRole("region", { name: "Portal öğrenci profil özeti" });
+  await expect(profileInfo).toHaveClass(/uh-info-grid/);
+  await expect(profileInfo.locator(".uh-info-item")).toHaveCount(8);
   await expect(profile).toContainText("Ad soyad");
   await expect(profile).toContainText("Sınıf");
   await expect(profile).toContainText("Sorumlu öğretmen");
@@ -248,6 +261,13 @@ async function expectGuardianRelationsPanel(page: Page) {
   await expect(relations).toContainText("Bilinmeyen veli");
   await expect(relations).not.toContainText("guardian-a");
   await expect(relations).not.toContainText("guardian-missing");
+}
+
+async function expectGuardianRelationshipSummary(page: Page) {
+  const relationship = page.getByRole("region", { exact: true, name: "Veli ilişki özeti" });
+  const relationshipInfo = relationship.getByRole("region", { name: "Veli ilişki metrikleri" });
+  await expect(relationshipInfo).toHaveClass(/uh-info-grid/);
+  await expect(relationshipInfo.locator(".uh-info-item")).toHaveCount(4);
 }
 
 async function expectHomeworkAssignmentsPanel(page: Page) {
@@ -739,7 +759,9 @@ async function expectNoPortalActionPiiLeak(actionStrip: Locator, values: readonl
 }
 
 async function expectPortalSummaryMetrics(summary: Locator, labels: string[], rawValues: readonly string[]) {
+  await expect(summary).toHaveClass(/uh-metric-grid/);
   await expect(summary.locator("article")).toHaveCount(labels.length);
+  await expect(summary.locator(".uh-metric-card")).toHaveCount(labels.length);
   await expect(summary.locator(".uh-metric-card__label")).toHaveText(labels);
   await expect(summary.locator("a, button, input, select, textarea")).toHaveCount(0);
   for (const value of rawValues) {

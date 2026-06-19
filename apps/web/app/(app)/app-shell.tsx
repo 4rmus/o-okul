@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode }
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, Menu, Search, X, type LucideIcon } from "lucide-react";
-import { Button, Dialog, Input, Panel, StatusBadge, type StatusBadgeProps } from "@uzman-hocam/ui";
+import { Button, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps } from "@uzman-hocam/ui";
 import type { ClassRecord, GuardianRecord, NotificationDeviceTokenRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../src/api-client.js";
 import { useAuth } from "../providers.js";
@@ -480,10 +480,9 @@ function CommandPalette({
       title="Komut paleti"
     >
       <div className="next-command-panel">
-        <label className="next-command-search">
-          <span>Komut ara</span>
+        <Field className="next-command-search" label="Komut ara">
           <Input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} />
-        </label>
+        </Field>
         <div className="next-command-results">
           {filteredItems.length > 0 ? (
             filteredItems.map((item) => (
@@ -642,19 +641,19 @@ function canAccessPath(session: AppSession, pathname: string, searchParams?: Pic
     return hasInstitutionAccess(session.roles) && canAccessInstitutionPath(session.roles, pathname);
   }
   if (pathname.startsWith("/ogretmen")) {
-    if (hasRolePreviewAccess(searchParams) && hasInstitutionAccess(session.roles)) {
+    if (canAccessRolePreviewRoute(session, searchParams)) {
       return true;
     }
     return hasSubjectPortalAccess(session, "TEACHER", "TEACHER");
   }
   if (pathname.startsWith("/ogrenci")) {
-    if (hasRolePreviewAccess(searchParams) && hasInstitutionAccess(session.roles)) {
+    if (canAccessRolePreviewRoute(session, searchParams)) {
       return true;
     }
     return hasSubjectPortalAccess(session, "STUDENT", "STUDENT");
   }
   if (pathname.startsWith("/veli")) {
-    if (hasRolePreviewAccess(searchParams) && hasInstitutionAccess(session.roles)) {
+    if (canAccessRolePreviewRoute(session, searchParams)) {
       return true;
     }
     return hasSubjectPortalAccess(session, "GUARDIAN", "GUARDIAN");
@@ -665,6 +664,10 @@ function canAccessPath(session: AppSession, pathname: string, searchParams?: Pic
 
 function hasRolePreviewAccess(searchParams?: Pick<URLSearchParams, "get">) {
   return Boolean(searchParams && readRolePreviewToken(searchParams));
+}
+
+function canAccessRolePreviewRoute(session: AppSession, searchParams?: Pick<URLSearchParams, "get">) {
+  return hasRolePreviewAccess(searchParams) && hasInstitutionAccess(session.roles) && hasCapabilityForRoles(session.roles, "role-preview:manage");
 }
 
 function getBreadcrumbs(pathname: string) {

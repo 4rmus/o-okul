@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
 import { ArrowLeft, BookOpen, ClipboardList, FileText, NotebookTabs, Send } from "lucide-react";
-import { DataTable, Panel, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@uzman-hocam/ui";
+import { DataTable, InfoGrid, InfoItem, Panel, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@uzman-hocam/ui";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
@@ -65,20 +65,11 @@ export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
               description="Branş, portal ve görev kapsamı tek görünümde okunur; ham tenant veya kayıt anahtarı gösterilmez."
               title="Profil"
             >
-              <dl className="next-definition-list">
-                <div>
-                  <dt>Branş</dt>
-                  <dd>{teacherBranch}</dd>
-                </div>
-                <div>
-                  <dt>Portal</dt>
-                  <dd>{detail.teacher.userId ? "Bağlı" : "Yok"}</dd>
-                </div>
-                <div>
-                  <dt>Görev kapsamı</dt>
-                  <dd>{formatCount(detail.assignments.length)} atama</dd>
-                </div>
-              </dl>
+              <InfoGrid className="next-teacher-profile-info" aria-label="Öğretmen profil özeti" role="region">
+                <InfoItem label="Branş" value={teacherBranch} />
+                <InfoItem label="Portal" value={detail.teacher.userId ? "Bağlı" : "Yok"} />
+                <InfoItem label="Görev kapsamı" value={`${formatCount(detail.assignments.length)} atama`} />
+              </InfoGrid>
             </Panel>
             <Panel
               aria-label="Öğretmen atama ilişkileri"

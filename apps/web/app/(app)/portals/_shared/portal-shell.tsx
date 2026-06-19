@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type MouseEvent, type ReactNode } from "react";
-import { Button, MetricCard, Panel, Skeleton, StatusBadge, type MetricCardProps, type StatusBadgeProps } from "@uzman-hocam/ui";
+import { ActionCard, Button, MetricCard, MetricGrid as UiMetricGrid, Panel, Skeleton, type MetricCardProps, type StatusBadgeProps } from "@uzman-hocam/ui";
 import { useAuth } from "../../../providers.js";
 import { PageFrame } from "../../_shared/page-frame.js";
 
@@ -65,7 +65,7 @@ export function AccessPanel({ title, demoEmail, demoLabel }: { title: string; de
 
 export function MetricGrid({ items }: { items: PortalMetricItem[] }) {
   return (
-    <section aria-label="Portal özeti" className="next-portal-summary-grid">
+    <UiMetricGrid aria-label="Portal özeti" className="next-portal-summary-grid" role="region">
       {items.map((item) => (
         <MetricCard
           className="next-portal-summary-card"
@@ -76,7 +76,7 @@ export function MetricGrid({ items }: { items: PortalMetricItem[] }) {
           value={item.value}
         />
       ))}
-    </section>
+    </UiMetricGrid>
   );
 }
 
@@ -172,21 +172,27 @@ export function PortalDailyBrief({
       description={<span className="next-section-eyebrow">Bugünün odağı</span>}
       title={title}
     >
-      <div className="next-portal-brief__grid">
+      <UiMetricGrid aria-label={`${title} metrikleri`} className="next-portal-brief__grid" role="group">
         {items.map((item) => (
-          <article
+          <MetricCard
             className="next-portal-brief__item"
-            data-tone={item.tone ?? "neutral"}
+            description={item.detail}
             key={`${item.label}-${item.value}`}
-          >
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-            {item.detail ? <small>{item.detail}</small> : null}
-          </article>
+            label={item.label}
+            tone={portalDailyBriefMetricTone(item.tone)}
+            value={item.value}
+          />
         ))}
-      </div>
+      </UiMetricGrid>
     </Panel>
   );
+}
+
+function portalDailyBriefMetricTone(tone: PortalDailyBriefItem["tone"]): MetricCardProps["tone"] {
+  if (tone === "critical" || tone === "warning") return "warning";
+  if (tone === "success") return "success";
+  if (tone === "info") return "info";
+  return "default";
 }
 
 export function PortalActionStrip({
@@ -219,25 +225,22 @@ export function PortalActionStrip({
     >
       <div className="next-portal-action-strip__grid">
         {items.map((item) => (
-          <a
+          <ActionCard
+            as="a"
             aria-label={portalActionAriaLabel(item)}
+            badge={item.actionLabel}
+            badgeTone={item.tone ?? "neutral"}
             className="next-portal-action-strip__item"
-            data-tone={item.tone ?? "neutral"}
+            context={item.contextLabel ?? "Portal"}
+            detail={item.detail}
             href={item.href}
             key={item.key}
+            label={item.label}
             onClick={(event) => focusPortalActionTarget(event, item.href)}
-          >
-            <span className="next-portal-action-strip__context">{item.contextLabel ?? "Portal"}</span>
-            <div>
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-              <small>{item.detail}</small>
-            </div>
-            <div className="next-portal-action-strip__badges">
-              <StatusBadge tone={item.tone ?? "neutral"}>{item.actionLabel}</StatusBadge>
-              {item.statusLabel ? <span className="next-portal-action-strip__state">{item.statusLabel}</span> : null}
-            </div>
-          </a>
+            state={item.statusLabel}
+            tone={item.tone ?? "neutral"}
+            value={item.value}
+          />
         ))}
       </div>
     </Panel>

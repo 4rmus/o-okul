@@ -1,8 +1,8 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, EmptyState, StatusBadge, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
-import type { GuardianRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
+import { CrudPage, EmptyState, StatusBadge, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
+import type { KvkkInventoryKind, KvkkInventoryRecord } from "@uzman-hocam/shared-types";
 import { ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../../../providers.js";
@@ -10,60 +10,31 @@ import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-cli
 import { EvidenceTrustPanel } from "../_shared/evidence-panels.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
-type KvkkRecord =
-  | { kind: "student"; record: StudentRecord }
-  | { kind: "teacher"; record: TeacherRecord }
-  | { kind: "guardian"; record: GuardianRecord };
-
-type KvkkCategoryProbe = {
-  email?: string;
-  nationalId?: string;
-  phone?: string;
-};
-
 export function KvkkPage() {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useConfirmDialog();
   const [error, setError] = useState("");
-  const studentsKey = ["next-students", auth?.session.tenantId ?? "anonymous"];
-  const teachersKey = ["next-teachers", auth?.session.tenantId ?? "anonymous"];
-  const guardiansKey = ["next-guardians", auth?.session.tenantId ?? "anonymous"];
-  const studentsQuery = useQuery({
-    queryKey: studentsKey,
-    queryFn: () => apiRequest<StudentRecord[]>(auth?.accessToken ?? "", `${apiBaseUrl}/students`),
+  const inventoryKey = ["next-kvkk-inventory", auth?.session.tenantId ?? "anonymous"];
+  const inventoryQuery = useQuery({
+    queryKey: inventoryKey,
+    queryFn: () => apiRequest<KvkkInventoryRecord[]>(auth?.accessToken ?? "", `${apiBaseUrl}/privacy/inventory`),
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
-  const teachersQuery = useQuery({
-    queryKey: teachersKey,
-    queryFn: () => apiRequest<TeacherRecord[]>(auth?.accessToken ?? "", `${apiBaseUrl}/teachers`),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const guardiansQuery = useQuery({
-    queryKey: guardiansKey,
-    queryFn: () => apiRequest<GuardianRecord[]>(auth?.accessToken ?? "", `${apiBaseUrl}/guardians`),
-    enabled: Boolean(auth),
-    refetchOnWindowFocus: false,
-  });
-  const rows: KvkkRecord[] = [
-    ...(studentsQuery.data ?? []).map((record) => ({ kind: "student" as const, record })),
-    ...(teachersQuery.data ?? []).map((record) => ({ kind: "teacher" as const, record })),
-    ...(guardiansQuery.data ?? []).map((record) => ({ kind: "guardian" as const, record })),
-  ];
-  const isLoading = studentsQuery.isPending || teachersQuery.isPending || guardiansQuery.isPending;
-  const hasError = studentsQuery.isError || teachersQuery.isError || guardiansQuery.isError || Boolean(error);
+  const rows = inventoryQuery.data ?? [];
+  const isLoading = inventoryQuery.isPending;
+  const hasError = inventoryQuery.isError || Boolean(error);
   const summaryItems = buildKvkkSummaryItems(rows, isLoading, hasError);
   const summaryBadges = buildKvkkSummaryBadges(rows);
   const summaryActions = buildKvkkSummaryActions(rows);
-  const columns: Array<DataTableColumn<KvkkRecord>> = [
+  const columns: Array<DataTableColumn<KvkkInventoryRecord>> = [
     {
       key: "name",
       header: "Kayıt",
       mobilePriority: "primary",
       priority: "primary",
-      render: (item) => `${item.record.firstName} ${item.record.lastName}`,
+      render: (item) => item.displayRef,
       sticky: "left",
     },
     {
@@ -91,8 +62,8 @@ export function KvkkPage() {
           <button
             type="button"
             onClick={() => void handlePurge(item)}
-            aria-label={`${item.record.firstName} PII temizle`}
-            disabled={item.record.firstName === "Anonim"}
+            aria-label={`${item.displayRef} PII temizle`}
+            disabled={!item.purgeAvailable}
           >
             <ShieldCheck size={17} aria-hidden="true" />
           </button>
@@ -101,36 +72,20 @@ export function KvkkPage() {
     },
   ];
 
-  async function handlePurge(item: KvkkRecord) {
+  async function handlePurge(item: KvkkInventoryRecord) {
     if (!auth) return;
     const confirmed = await confirm({
       confirmLabel: "PII temizle",
       description: "Bu işlem server tarafında uygulanır ve audit kaydı esas alınır; panel ham PII kanıtı göstermez.",
-      message: `${kindLabel(item.kind)} kaydında geri alınamaz PII temizleme işlemi başlatılsın mı?`,
+      message: `${item.displayRef} için geri alınamaz PII temizleme işlemi başlatılsın mı?`,
       title: "PII temizlemeyi onayla",
     });
     if (!confirmed) return;
 
     setError("");
     try {
-      if (item.kind === "student") {
-        const purged = await purgeRecord<StudentRecord>(auth.accessToken, "students", item.record.id);
-        queryClient.setQueryData<StudentRecord[]>(studentsKey, (current = []) =>
-          current.map((record) => (record.id === purged.id ? purged : record)),
-        );
-        return;
-      }
-      if (item.kind === "teacher") {
-        const purged = await purgeRecord<TeacherRecord>(auth.accessToken, "teachers", item.record.id);
-        queryClient.setQueryData<TeacherRecord[]>(teachersKey, (current = []) =>
-          current.map((record) => (record.id === purged.id ? purged : record)),
-        );
-        return;
-      }
-      const purged = await purgeRecord<GuardianRecord>(auth.accessToken, "guardians", item.record.id);
-      queryClient.setQueryData<GuardianRecord[]>(guardiansKey, (current = []) =>
-        current.map((record) => (record.id === purged.id ? purged : record)),
-      );
+      await purgeRecord(auth.accessToken, kindResource(item.kind), item.id);
+      await queryClient.invalidateQueries({ queryKey: inventoryKey });
     } catch (purgeError) {
       setError(apiErrorMessage(purgeError, "PII temizlenemedi."));
     }
@@ -187,15 +142,11 @@ export function KvkkPage() {
         emptyText="Temizlenecek kayıt yok"
         error={
           error ||
-          (studentsQuery.isError
-            ? apiErrorMessage(studentsQuery.error, "KVKK kayıtları alınamadı.")
-            : teachersQuery.isError
-              ? apiErrorMessage(teachersQuery.error, "KVKK kayıtları alınamadı.")
-              : guardiansQuery.isError
-                ? apiErrorMessage(guardiansQuery.error, "KVKK kayıtları alınamadı.")
-                : undefined)
+          (inventoryQuery.isError
+            ? apiErrorMessage(inventoryQuery.error, "KVKK kayıtları alınamadı.")
+            : undefined)
         }
-        getRowKey={(item) => `${item.kind}:${item.record.id}`}
+        getRowKey={(item) => `${item.kind}:${item.id}`}
         loading={isLoading}
         rows={rows}
         tableCaption="KVKK PII temizleme kayıtları"
@@ -207,7 +158,7 @@ export function KvkkPage() {
   );
 }
 
-function buildKvkkSummaryItems(rows: KvkkRecord[], isLoading: boolean, hasError: boolean): OperationSummaryItem[] {
+function buildKvkkSummaryItems(rows: KvkkInventoryRecord[], isLoading: boolean, hasError: boolean): OperationSummaryItem[] {
   return [
     {
       description: "Öğrenci, öğretmen ve veli kayıtları",
@@ -240,7 +191,7 @@ function buildKvkkSummaryItems(rows: KvkkRecord[], isLoading: boolean, hasError:
   ];
 }
 
-function buildKvkkSummaryBadges(rows: KvkkRecord[]): OperationSummaryBadge[] {
+function buildKvkkSummaryBadges(rows: KvkkInventoryRecord[]): OperationSummaryBadge[] {
   const guardianCount = rows.filter((row) => row.kind === "guardian").length;
   return [
     {
@@ -271,7 +222,7 @@ function buildKvkkSummaryBadges(rows: KvkkRecord[]): OperationSummaryBadge[] {
   ];
 }
 
-function buildKvkkSummaryActions(rows: KvkkRecord[]): OperationSummaryAction[] {
+function buildKvkkSummaryActions(rows: KvkkInventoryRecord[]): OperationSummaryAction[] {
   return [
     {
       detail: "POST yalnız dialog onayından sonra gönderilir",
@@ -300,37 +251,38 @@ function buildKvkkSummaryActions(rows: KvkkRecord[]): OperationSummaryAction[] {
   ];
 }
 
-async function purgeRecord<TRecord>(accessToken: string, resource: string, id: string) {
-  return apiRequest<TRecord>(accessToken, `${apiBaseUrl}/${resource}/${encodeURIComponent(id)}/purge-pii`, {
+async function purgeRecord(accessToken: string, resource: string, id: string) {
+  return apiRequest<unknown>(accessToken, `${apiBaseUrl}/${resource}/${encodeURIComponent(id)}/purge-pii`, {
     method: "POST",
   });
 }
 
-function kindLabel(kind: KvkkRecord["kind"]) {
+function kindResource(kind: KvkkInventoryKind) {
+  if (kind === "student") return "students";
+  if (kind === "teacher") return "teachers";
+  return "guardians";
+}
+
+function kindLabel(kind: KvkkInventoryKind) {
   if (kind === "student") return "Öğrenci";
   if (kind === "teacher") return "Öğretmen";
   return "Veli";
 }
 
-function kindTone(kind: KvkkRecord["kind"]) {
+function kindTone(kind: KvkkInventoryKind) {
   if (kind === "guardian") return "warning";
   if (kind === "teacher") return "info";
   return "neutral";
 }
 
-function piiSummary(item: KvkkRecord) {
-  return piiCategories(item).join(", ");
+function piiSummary(item: KvkkInventoryRecord) {
+  return piiCategories(item).join(", ") || "Temiz";
 }
 
-function piiSummaryTone(item: KvkkRecord) {
+function piiSummaryTone(item: KvkkInventoryRecord) {
   return piiCategories(item).length > 2 || item.kind === "guardian" ? "warning" : "info";
 }
 
-function piiCategories(item: KvkkRecord) {
-  const categories = ["Ad", "soyad"];
-  const record = item.record as KvkkCategoryProbe;
-  if (record.nationalId) categories.push("TC");
-  if (record.email) categories.push("e-posta");
-  if (record.phone) categories.push("telefon");
-  return categories;
+function piiCategories(item: KvkkInventoryRecord) {
+  return item.piiCategories;
 }

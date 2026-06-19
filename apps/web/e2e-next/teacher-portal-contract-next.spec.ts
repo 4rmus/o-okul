@@ -1,7 +1,25 @@
 import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
-const forbiddenTeacherPortalReadPaths = ["/students", "/attendance", "/homework", "/homework/materials", "/teacher-notes"];
+const forbiddenTeacherPortalReadPaths = [
+  "/students",
+  "/attendance",
+  "/homework",
+  "/homework/materials",
+  "/teacher-notes",
+  "/campuses",
+  "/classes",
+  "/courses",
+  "/grade-levels",
+  "/academic-terms",
+  "/exams/exam-demo-isem-lgs-1/reports/snapshots",
+  "/exams/exam-demo-isem-lgs-1/reports/snapshots/snapshot-ready/students/student-a",
+  "/exams/exam-demo-isem-lgs-1/reports/snapshots/snapshot-ready/students/student-b",
+  "/exams/exam-demo-isem-lgs-1/reports/snapshots/snapshot-ready/students/student-a/error-booklet",
+  "/exams/exam-demo-isem-lgs-1/reports/snapshots/snapshot-ready/students/student-b/error-booklet",
+  "/exams/exam-demo-isem-lgs-1/reports/students/student-a/progress",
+  "/exams/exam-demo-isem-lgs-1/reports/students/student-b/progress",
+];
 const expectedTeacherScopedReadPaths = [
   "/me/teacher",
   "/me/teacher/schedule",
@@ -9,8 +27,17 @@ const expectedTeacherScopedReadPaths = [
   "/me/teacher/attendance",
   "/me/teacher/homework",
   "/me/teacher/homework/materials",
+  "/me/teacher/homework/materials/material-a/assignments",
   "/me/teacher/teacher-notes",
   "/me/teacher/support-tickets",
+  "/me/teacher/lookups",
+  "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots",
+  "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-a",
+  "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-b",
+  "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-a/error-booklet",
+  "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-b/error-booklet",
+  "/me/teacher/reports/exam-demo-isem-lgs-1/students/student-a/progress",
+  "/me/teacher/reports/exam-demo-isem-lgs-1/students/student-b/progress",
 ];
 const rawInternalValues = [
   "teacher-math",
@@ -57,12 +84,13 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       await expect(workspace).toContainText("Öğrenci Takibi");
       await expect(workspace).toContainText("Ada Kaya / 8-A");
 
-      const focus = workspace.getByRole("region", { name: "Öğretmen operasyon bağlamı" });
+      const focus = workspace.getByRole("region", { exact: true, name: "Öğretmen operasyon bağlamı" });
       await expect(focus).toContainText("Öğrenci Odağı");
       await expect(focus).toContainText("İşlem açık");
       await expect(focus).toContainText("Ana Kampüs");
       await expect(focus).toContainText("Matematik");
       await expect(focus).toContainText("2026 Bahar");
+      await expectTeacherFocusMetrics(focus);
       await expect(focus).toContainText("Başarı %");
       await expect(focus).toContainText("%81,7");
       await expect(focus).toContainText("Soru");
@@ -176,7 +204,7 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     );
     await clickAllPortalActionLinks(previewActions);
     await expect(page.getByRole("region", { name: "Öğretmen günlük işlemleri" })).toHaveCount(0);
-    await expect(page.getByLabel("Öğretmen operasyon bağlamı")).toContainText("Salt-okuma");
+    await expect(page.getByRole("region", { exact: true, name: "Öğretmen operasyon bağlamı" })).toContainText("Salt-okuma");
     await expectTeacherDisplayPanels(page);
     await expectTeacherActivityPanels(page);
     await expectPortalAnnouncementsTable(page, { readOnly: true });
@@ -202,6 +230,12 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
   });
 });
 
+async function expectTeacherFocusMetrics(focus: Locator) {
+  const focusMetrics = focus.getByRole("region", { name: "Öğretmen operasyon bağlam metrikleri" });
+  await expect(focusMetrics).toHaveClass(/uh-info-grid/);
+  await expect(focusMetrics.locator(".uh-info-item")).toHaveCount(8);
+}
+
 async function expectTeacherDisplayPanels(page: Page) {
   const today = page.getByRole("region", { exact: true, name: "Bugünkü dersler" });
   await expect(today.getByRole("heading", { name: "Bugünkü Dersler" })).toBeVisible();
@@ -209,6 +243,9 @@ async function expectTeacherDisplayPanels(page: Page) {
 
   const profile = page.getByRole("region", { exact: true, name: "Öğretmen profil özeti" });
   await expect(profile.getByRole("heading", { name: "Profil Özeti" })).toBeVisible();
+  const profileInfo = profile.getByRole("region", { name: "Öğretmen portal profil metrikleri" });
+  await expect(profileInfo).toHaveClass(/uh-info-grid/);
+  await expect(profileInfo.locator(".uh-info-item")).toHaveCount(8);
   await expect(profile).toContainText("Ad soyad");
   await expect(profile).toContainText("Branş");
   await expect(profile).toContainText("Dersler");
@@ -386,6 +423,17 @@ async function installTeacherApiMocks(
         return;
       }
     }
+    if (method === "GET" && forbiddenTeacherPortalReadPaths.includes(pathName)) {
+      await route.fulfill({
+        body: JSON.stringify({ error: { code: "BROAD_TEACHER_PORTAL_READ_FORBIDDEN" } }),
+        headers: {
+          ...corsHeadersFor(route),
+          "content-type": "application/json",
+        },
+        status: 500,
+      });
+      return;
+    }
 
     const response = teacherApiResponse(pathName, options.mode ?? "teacher");
     await fulfillData(route, response);
@@ -406,18 +454,14 @@ function teacherApiResponse(pathName: string, mode: "teacher" | "role-preview"):
   if (pathName === "/me/teacher/homework/materials/material-a/assignments") return createMaterialAssignments();
   if (pathName === "/me/teacher/teacher-notes") return createTeacherNotes();
   if (pathName === "/me/teacher/support-tickets") return createSupportTickets();
-  if (pathName === "/campuses") return createCampuses();
-  if (pathName === "/classes") return createClasses();
-  if (pathName === "/courses") return createCourses();
-  if (pathName === "/grade-levels") return createGradeLevels();
-  if (pathName === "/academic-terms") return createTerms();
-  if (pathName === "/exams/exam-demo-isem-lgs-1/reports/snapshots") return createReportSnapshots();
-  if (pathName === "/exams/exam-demo-isem-lgs-1/reports/snapshots/snapshot-ready/students/student-a") return createStudentReport("student-a");
-  if (pathName === "/exams/exam-demo-isem-lgs-1/reports/snapshots/snapshot-ready/students/student-b") return createStudentReport("student-b");
-  if (pathName === "/exams/exam-demo-isem-lgs-1/reports/snapshots/snapshot-ready/students/student-a/error-booklet") return createErrorBooklet("student-a");
-  if (pathName === "/exams/exam-demo-isem-lgs-1/reports/snapshots/snapshot-ready/students/student-b/error-booklet") return createErrorBooklet("student-b");
-  if (pathName === "/exams/exam-demo-isem-lgs-1/reports/students/student-a/progress") return createProgress("student-a");
-  if (pathName === "/exams/exam-demo-isem-lgs-1/reports/students/student-b/progress") return createProgress("student-b");
+  if (pathName === "/me/teacher/lookups") return createTeacherLookups();
+  if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots") return createReportSnapshots();
+  if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-a") return createStudentReport("student-a");
+  if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-b") return createStudentReport("student-b");
+  if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-a/error-booklet") return createErrorBooklet("student-a");
+  if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-b/error-booklet") return createErrorBooklet("student-b");
+  if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/students/student-a/progress") return createProgress("student-a");
+  if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/students/student-b/progress") return createProgress("student-b");
   if (pathName === "/students/student-a/class-history" || pathName === "/students/student-b/class-history") return createClassHistory();
   if (pathName === "/students/student-a/enrollments" || pathName === "/students/student-b/enrollments") return createEnrollments();
   return [];
@@ -477,6 +521,16 @@ function createGradeLevels() {
 
 function createTerms() {
   return [{ id: "term-2026", name: "2026 Bahar", tenantId: "tenant-teacher" }];
+}
+
+function createTeacherLookups() {
+  return {
+    campuses: createCampuses(),
+    classes: createClasses(),
+    courses: createCourses(),
+    gradeLevels: createGradeLevels(),
+    terms: createTerms(),
+  };
 }
 
 function createScheduleLessons() {
@@ -661,7 +715,9 @@ async function clickAllPortalActionLinks(actionStrip: Locator) {
 }
 
 async function expectPortalSummaryMetrics(summary: Locator, labels: string[], rawValues: readonly string[]) {
+  await expect(summary).toHaveClass(/uh-metric-grid/);
   await expect(summary.locator("article")).toHaveCount(labels.length);
+  await expect(summary.locator(".uh-metric-card")).toHaveCount(labels.length);
   await expect(summary.locator(".uh-metric-card__label")).toHaveText(labels);
   await expect(summary.locator("a, button, input, select, textarea")).toHaveCount(0);
   for (const value of rawValues) {

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AuthResponse, MfaChallengeResponse } from "@uzman-hocam/shared-types";
+import { Button, Checkbox, Field, Input, SegmentedControl } from "@uzman-hocam/ui";
 import { useAuth } from "../../providers.js";
 import { MfaRequiredError } from "../../../src/api-client.js";
 
@@ -40,7 +41,7 @@ export default function LoginPage() {
     }
   }, [auth, isBootstrapping, router]);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setIsSubmitting(true);
@@ -95,21 +96,19 @@ export default function LoginPage() {
         <span className="next-brand-mark">UH</span>
         <span>Uzman Hocam</span>
       </div>
-      <form className="next-form" onSubmit={(event) => void handleSubmit(event)}>
+      <form className="next-form" aria-label="Giriş formu" onSubmit={(event) => void handleSubmit(event)}>
         <h1 id="login-title">Giriş</h1>
-        <label>
-          E-posta
-          <input
+        <Field label="E-posta" description="Kurum hesabınız veya portal e-postanız.">
+          <Input
             name="email"
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             autoComplete="username"
           />
-        </label>
-        <label>
-          Şifre
-          <input
+        </Field>
+        <Field label="Şifre">
+          <Input
             name="password"
             type="password"
             value={password}
@@ -117,10 +116,10 @@ export default function LoginPage() {
             autoComplete="current-password"
             disabled={Boolean(pendingMfa)}
           />
-        </label>
+        </Field>
         {pendingMfa ? (
           <div className="next-form-section">
-            <div className="next-segmented" role="group" aria-label="Doğrulama yöntemi">
+            <SegmentedControl className="next-segmented" label="Doğrulama yöntemi">
               <button
                 type="button"
                 aria-pressed={mfaMethod === "totp"}
@@ -135,10 +134,9 @@ export default function LoginPage() {
               >
                 Kurtarma
               </button>
-            </div>
-            <label>
-              {mfaMethod === "totp" ? "Doğrulama kodu" : "Kurtarma kodu"}
-              <input
+            </SegmentedControl>
+            <Field label={mfaMethod === "totp" ? "Doğrulama kodu" : "Kurtarma kodu"}>
+              <Input
                 name="mfaCode"
                 type="text"
                 value={mfaCode}
@@ -146,22 +144,20 @@ export default function LoginPage() {
                 autoComplete="one-time-code"
                 inputMode={mfaMethod === "totp" ? "numeric" : "text"}
               />
-            </label>
+            </Field>
           </div>
         ) : null}
-        <label className="next-checkbox-row">
-          <input
-            name="rememberMe"
-            type="checkbox"
-            checked={rememberMe}
-            onChange={(event) => setRememberMe(event.target.checked)}
-          />
-          Beni hatırla
-        </label>
+        <Checkbox
+          checked={rememberMe}
+          description="Bu tarayıcıda yalnız e-posta adresi saklanır."
+          label="Beni hatırla"
+          name="rememberMe"
+          onChange={(event) => setRememberMe(event.target.checked)}
+        />
         {error ? <p className="next-form-error">{error}</p> : null}
-        <button className="next-button" type="submit" disabled={isSubmitting || isBootstrapping}>
+        <Button type="submit" disabled={isSubmitting || isBootstrapping}>
           {isSubmitting ? "Giriş yapılıyor" : pendingMfa ? "Doğrula" : "Giriş yap"}
-        </button>
+        </Button>
       </form>
       <div className="next-demo-accounts">
         <h2>Demo hesapları (şifre: password)</h2>

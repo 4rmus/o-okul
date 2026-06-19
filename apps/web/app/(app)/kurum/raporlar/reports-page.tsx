@@ -8,8 +8,11 @@ import {
   DataTable,
   EmptyState,
   Field,
+  InfoGrid,
+  InfoItem,
   Input,
   MetricCard,
+  MetricGrid,
   Panel,
   Select,
   StatusBadge,
@@ -248,32 +251,17 @@ export function ReportsPage() {
       subtitle="Raporu sorgula, üret ve Excel/PDF olarak dışa aktar."
     >
       <section className="next-report-workspace" aria-label="Rapor çalışma alanı">
-        <div className="next-report-context-strip">
-          <div>
-            <span>Seçili sınav</span>
-            <strong>{selectedExamLabel}</strong>
-          </div>
-          <div>
-            <span>Snapshot</span>
-            <StatusBadge tone={snapshotStatusTone(latestSnapshot?.status)}>{formatSnapshotStatus(latestSnapshot?.status)}</StatusBadge>
-          </div>
-          <div>
-            <span>Üretim zamanı</span>
-            <strong>{snapshotGeneratedAt}</strong>
-          </div>
-          <div>
-            <span>Bağlam</span>
-            <strong>{snapshotContext}</strong>
-          </div>
-          <div>
-            <span>Girdi referansı</span>
-            <strong>{snapshotInputRefs}</strong>
-          </div>
-          <div>
-            <span>Çıktı hazırlığı</span>
-            <strong>{snapshotExportReadiness}</strong>
-          </div>
-        </div>
+        <InfoGrid aria-label="Rapor bağlam özeti" className="next-report-context-strip" role="region">
+          <InfoItem label="Seçili sınav" value={selectedExamLabel} />
+          <InfoItem
+            label="Snapshot"
+            value={<StatusBadge tone={snapshotStatusTone(latestSnapshot?.status)}>{formatSnapshotStatus(latestSnapshot?.status)}</StatusBadge>}
+          />
+          <InfoItem label="Üretim zamanı" value={snapshotGeneratedAt} />
+          <InfoItem label="Bağlam" value={snapshotContext} />
+          <InfoItem label="Girdi referansı" value={snapshotInputRefs} />
+          <InfoItem label="Çıktı hazırlığı" value={snapshotExportReadiness} />
+        </InfoGrid>
         <Tabs label="Rapor çalışma alanı">
           {reportWorkspaceTabs.map((tab) => (
             <TabButton
@@ -406,60 +394,53 @@ export function ReportsPage() {
                   Bu snapshot {formatSnapshotStatus(latestSnapshot.status)} durumunda. Analiz görüntülenebilir, Excel/PDF çıktı hazır olduğunda açılır.
                 </Alert>
               ) : null}
-              <section className="next-report-summary-grid" aria-label="Rapor özeti">
+              <MetricGrid aria-label="Rapor özeti" role="region">
                 <MetricCard
-                  className="next-report-summary-card"
                   description={isSnapshotReady ? "READY snapshot" : "Çıktı için READY snapshot gerekli"}
                   label="Durum"
                   tone={metricStatusTone(latestSnapshot.status)}
                   value={formatSnapshotStatus(latestSnapshot.status)}
                 />
                 <MetricCard
-                  className="next-report-summary-card"
                   description="Öğrenci sonuç sayısı"
                   label="Sonuç"
                   value={latestSnapshot.snapshotData?.resultCount ?? "-"}
                 />
                 <MetricCard
-                  className="next-report-summary-card"
                   description="Sınav kapsamı"
                   label="Soru"
                   tone="info"
                   value={formatNumber(reportQuestionCount(latestSnapshot.snapshotData?.averages))}
                 />
                 <MetricCard
-                  className="next-report-summary-card"
                   description="Ana karşılaştırma metriği"
                   label="Başarı %"
                   tone="success"
                   value={formatPercentNumber(reportSuccessRate(latestSnapshot.snapshotData?.averages))}
                 />
                 <MetricCard
-                  className="next-report-summary-card"
                   description="Net, soru kapsamıyla okunur"
                   label="Ortalama net"
                   tone="info"
                   value={formatNetNumber(latestSnapshot.snapshotData?.averages?.net)}
                 />
                 <MetricCard
-                  className="next-report-summary-card"
                   description="LGS bağlam metriği"
                   label="LGS puanı"
                   value={formatNumber(readLgsScore(latestSnapshot.snapshotData?.averages))}
                 />
                 <MetricCard
-                  className="next-report-summary-card"
                   description="Psikometrik bağlam"
                   label="Standart puan"
                   value={formatNumber(latestSnapshot.snapshotData?.averages?.standardScore)}
                 />
                 <MetricCard
-                  className="next-report-summary-card next-report-summary-card--wide"
                   description="Filtre ve sınav bağlamı"
                   label="Bağlam"
+                  span="wide"
                   value={snapshotContext}
                 />
-              </section>
+              </MetricGrid>
               <div className="next-report-visual-grid">
                 <ReportChartPanel description="Soru sayısına göre başarı ve doğruluk dağılımı" title="Sınav Sonuç Dağılımı">
                   <ExamResultDonut result={examResult} />

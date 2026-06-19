@@ -13,6 +13,7 @@ import {
   FormModal,
   Input,
   MetricCard,
+  MetricGrid,
   Panel,
   Select,
   StatusBadge,
@@ -300,16 +301,16 @@ export function AnnouncementsPage() {
         title="Duyurular"
       />
       {selectedReportId ? (
-        <section aria-label="Duyuru alıcı raporu" className="uh-panel">
-          <header className="uh-panel__header">
-            <div>
-              <h2>Alıcı raporu</h2>
-              <p>{selectedAnnouncement?.title ?? "Seçili duyuru listede yok"}</p>
-            </div>
+        <Panel
+          aria-label="Duyuru alıcı raporu"
+          title="Alıcı raporu"
+          description={selectedAnnouncement?.title ?? "Seçili duyuru listede yok"}
+          actions={
             <Button type="button" variant="secondary" onClick={closeRecipientReport}>
               Kapat
             </Button>
-          </header>
+          }
+        >
           {reportDataQuery.isPending ? (
             <Alert title="Rapor yükleniyor">Alıcı raporu hazırlanıyor.</Alert>
           ) : reportDataQuery.isError ? (
@@ -363,7 +364,7 @@ export function AnnouncementsPage() {
               ) : null}
             </Panel>
           ) : null}
-        </section>
+        </Panel>
       ) : null}
       <FormModal
         description="Başlık ve duyuru metni zorunludur."
@@ -758,11 +759,11 @@ function AnnouncementRecipientReportPanel({ report }: { report: AnnouncementReci
 
   return (
     <>
-      <section className="next-announcement-recipient-metrics" aria-label="Alıcı raporu özeti">
+      <MetricGrid aria-label="Alıcı raporu özeti" role="region">
         <MetricCard label="Toplam" value={report.total} description="Duyuru kapsamındaki kişi" />
         <MetricCard label="Okundu" tone="success" value={report.read} description="Okuma zamanı kaydedildi" />
         <MetricCard label="Bekleyen" tone="warning" value={report.unread} description="Okuma bekliyor" />
-      </section>
+      </MetricGrid>
       <DataTable
         caption="Duyuru alıcıları"
         columns={columns}

@@ -9,6 +9,8 @@ import {
   EmptyState,
   Field,
   FormModal,
+  InfoGrid,
+  InfoItem,
   Input,
   Panel,
   Select,
@@ -615,20 +617,11 @@ export function SupportTicketsPage() {
                 <StatusBadge tone={priorityTone(selectedTicket.priority)}>{priorityLabel(selectedTicket.priority)}</StatusBadge>
                 <StatusBadge tone={supportStatusTone(selectedTicket.status)}>{statusLabel(selectedTicket.status)}</StatusBadge>
               </div>
-              <dl className="next-support-ticket-meta">
-                <div>
-                  <dt>Bağlam</dt>
-                  <dd>{selectedTicketContext}</dd>
-                </div>
-                <div>
-                  <dt>Ek</dt>
-                  <dd>{formatCount(selectedTicketAttachments.length)} ek</dd>
-                </div>
-                <div>
-                  <dt>Yorum</dt>
-                  <dd>{formatCount(selectedTicketComments.length)} yorum</dd>
-                </div>
-              </dl>
+              <InfoGrid className="next-support-ticket-meta" aria-label="Seçili bildirim metrikleri" role="region">
+                <InfoItem label="Bağlam" value={selectedTicketContext} />
+                <InfoItem label="Ek" value={`${formatCount(selectedTicketAttachments.length)} ek`} />
+                <InfoItem label="Yorum" value={`${formatCount(selectedTicketComments.length)} yorum`} />
+              </InfoGrid>
               <p className="next-support-ticket-message">
                 <strong>İlk mesaj</strong>
                 <span>{selectedTicket.message}</span>

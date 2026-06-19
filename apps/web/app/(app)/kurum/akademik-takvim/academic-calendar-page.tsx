@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AcademicTermRecord, AcademicYearRecord } from "@uzman-hocam/shared-types";
 import {
   Button,
+  Checkbox,
   CrudPage,
   EmptyState,
   Field,
@@ -553,9 +554,10 @@ export function AcademicCalendarPage() {
           />
         </Field>
         <Field label="Aktif" description="Aktif yıl ders programı, yoklama ve rapor bağlamını etkiler.">
-          <input
+          <Checkbox
             checked={yearForm.isActive}
-            type="checkbox"
+            label="Aktif akademik yıl"
+            description="Ders programı, yoklama ve rapor bağlamında varsayılan yıl olur."
             onChange={(event) => setYearForm((current) => ({ ...current, isActive: event.target.checked }))}
           />
         </Field>
@@ -606,9 +608,10 @@ export function AcademicCalendarPage() {
           />
         </Field>
         <Field label="Aktif" description="Aktif dönem not, yoklama ve karne bağlamında öne çıkar.">
-          <input
+          <Checkbox
             checked={termForm.isActive}
-            type="checkbox"
+            label="Aktif dönem"
+            description="Not, yoklama ve karne akışlarında varsayılan dönem olur."
             onChange={(event) => setTermForm((current) => ({ ...current, isActive: event.target.checked }))}
           />
         </Field>

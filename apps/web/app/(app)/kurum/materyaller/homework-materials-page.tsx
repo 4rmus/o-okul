@@ -9,6 +9,8 @@ import {
   EmptyState,
   Field,
   FormModal,
+  InfoGrid,
+  InfoItem,
   Input,
   Panel,
   Select,
@@ -568,20 +570,11 @@ export function HomeworkMaterialsPage() {
                   {selectedMaterialAssignments.length > 0 ? "Atanmış" : "Atama bekliyor"}
                 </StatusBadge>
               </div>
-              <dl className="next-material-selected-meta">
-                <div>
-                  <dt>Açıklama</dt>
-                  <dd>{selectedMaterial.description || "Açıklama yok"}</dd>
-                </div>
-                <div>
-                  <dt>Dosya</dt>
-                  <dd>{formatCount(selectedMaterialFiles.length)} dosya</dd>
-                </div>
-                <div>
-                  <dt>Atama</dt>
-                  <dd>{formatCount(selectedMaterialAssignments.length)} öğrenci</dd>
-                </div>
-              </dl>
+              <InfoGrid className="next-material-selected-meta" aria-label="Seçili materyal metrikleri" role="region">
+                <InfoItem label="Açıklama" value={selectedMaterial.description || "Açıklama yok"} />
+                <InfoItem label="Dosya" value={`${formatCount(selectedMaterialFiles.length)} dosya`} />
+                <InfoItem label="Atama" value={`${formatCount(selectedMaterialAssignments.length)} öğrenci`} />
+              </InfoGrid>
             </div>
           ) : (
             <p>Dosya ve atama işlemi için listeden bir materyal seç.</p>

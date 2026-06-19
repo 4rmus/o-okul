@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { StatusBadge, type StatusBadgeProps } from "@uzman-hocam/ui";
+import { InfoGrid, InfoItem, MetricCard, MetricGrid, StatusBadge, type StatusBadgeProps } from "@uzman-hocam/ui";
 import type {
   ReportErrorBooklet,
   ReportScopeRank,
@@ -412,28 +412,22 @@ function KarneContextStrip({ items }: { items: Array<{ label: string; value: str
   return (
     <section className="next-karne-context-strip" aria-label="Karne rapor bağlamı">
       <strong>Rapor bağlamı</strong>
-      <div>
+      <InfoGrid className="next-karne-context-strip__grid" aria-label="Karne rapor bağlam metrikleri" role="group">
         {items.map((item) => (
-          <span key={item.label}>
-            <small>{item.label}</small>
-            <b>{item.value || "-"}</b>
-          </span>
+          <InfoItem key={item.label} label={item.label} value={item.value || "-"} />
         ))}
-      </div>
+      </InfoGrid>
     </section>
   );
 }
 
 function KarneSummaryStrip({ items }: { items: Array<{ label: string; value: string }> }) {
   return (
-    <section className="next-karne-summary-strip" aria-label="Karne başarı özeti">
+    <MetricGrid className="next-karne-summary-strip" aria-label="Karne başarı özeti" role="region">
       {items.map((item) => (
-        <span key={item.label}>
-          <small>{item.label}</small>
-          <b>{item.value || "-"}</b>
-        </span>
+        <MetricCard key={item.label} label={item.label} value={item.value || "-"} tone={item.label === "Başarı %" ? "info" : "default"} />
       ))}
-    </section>
+    </MetricGrid>
   );
 }
 

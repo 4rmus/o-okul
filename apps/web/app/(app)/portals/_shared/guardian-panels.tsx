@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Checkbox, DataTable, Panel, type DataTableColumn } from "@uzman-hocam/ui";
+import { Checkbox, DataTable, InfoGrid, InfoItem, Panel, type DataTableColumn } from "@uzman-hocam/ui";
 import type { GuardianStudentRecord, PaymentPlanWithInstallmentsRecord } from "@uzman-hocam/shared-types";
 
 export function NotificationPreferencesPanel({
@@ -55,24 +55,12 @@ export function NotificationPreferencesPanel({
 export function GuardianRelationshipSummaryPanel({ relationship }: { relationship?: GuardianStudentRecord }) {
   return (
     <Panel aria-label="Veli ilişki özeti" title="Veli İlişki Özeti">
-      <dl className="next-definition-list">
-        <div>
-          <dt>İlişki</dt>
-          <dd>{relationship ? guardianRelationshipLabel(relationship.relationshipType) : "-"}</dd>
-        </div>
-        <div>
-          <dt>Birincil kişi</dt>
-          <dd>{relationship?.isPrimary ? "Evet" : "Hayır"}</dd>
-        </div>
-        <div>
-          <dt>Ödeme görünümü</dt>
-          <dd>{relationship?.canViewFinance ? "Açık" : "Kapalı"}</dd>
-        </div>
-        <div>
-          <dt>İzinler</dt>
-          <dd>{relationship ? formatGuardianPermissions(relationship) : "-"}</dd>
-        </div>
-      </dl>
+      <InfoGrid className="next-guardian-relationship-info" aria-label="Veli ilişki metrikleri" role="region">
+        <InfoItem label="İlişki" value={relationship ? guardianRelationshipLabel(relationship.relationshipType) : "-"} />
+        <InfoItem label="Birincil kişi" value={relationship?.isPrimary ? "Evet" : "Hayır"} />
+        <InfoItem label="Ödeme görünümü" value={relationship?.canViewFinance ? "Açık" : "Kapalı"} />
+        <InfoItem label="İzinler" value={relationship ? formatGuardianPermissions(relationship) : "-"} />
+      </InfoGrid>
     </Panel>
   );
 }

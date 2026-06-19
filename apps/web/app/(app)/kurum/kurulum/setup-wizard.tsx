@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import type { AcademicTermRecord, AcademicYearRecord, ClassRecord, CourseRecord } from "@uzman-hocam/shared-types";
-import { Button, Field, Input, MetricCard, Panel, SegmentedControl, Select, StatusBadge, TabButton, Tabs } from "@uzman-hocam/ui";
+import { Button, Checkbox, Field, Input, MetricCard, MetricGrid, Panel, SegmentedControl, Select, StatusBadge, TabButton, Tabs } from "@uzman-hocam/ui";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, queryClient } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
@@ -440,11 +440,11 @@ export function SetupWizard() {
           <h2>{draft.general.institutionName || "Kurumunu birlikte hazırlayalım"}</h2>
           <p>Genel bilgilerden kişi yönetimine kadar temel kararları tek akışta toparla.</p>
         </div>
-        <div className="next-onboarding-metrics" aria-label="Kurulum operasyon metrikleri">
+        <MetricGrid className="next-onboarding-metrics" aria-label="Kurulum operasyon metrikleri" role="region">
           <MetricCard label="İlerleme" value={`${progressPercent}%`} description={`${completedStepCount} / ${steps.length} adım doğrulandı`} tone={progressPercent === 100 ? "success" : "info"} />
           <MetricCard label="Ders" value={courseCount} description="Seçili ders" />
           <MetricCard label="Sınıf" value={classCount} description="Oluşturulacak şube" />
-        </div>
+        </MetricGrid>
       </section>
 
       <section className="next-onboarding-progress">
@@ -739,25 +739,27 @@ function ClassesStep({
     <div className="next-onboarding-fields">
       <fieldset className="next-onboarding-class-counts">
         <legend>Kademeye göre sınıf sayısı</legend>
-        {stageOptions.map((stage) => (
-          <label key={stage.id}>
-            {stage.label}
-            <input
-              inputMode="numeric"
-              value={draft.classes.classCounts[stage.id]}
-              onChange={(event) =>
-                updateDraft("classes", {
-                  classCounts: {
-                    ...draft.classes.classCounts,
-                    [stage.id]: event.target.value,
-                  },
-                })
-              }
-              placeholder="0"
-            />
-            <FieldError message={errors[`classCounts.${stage.id}`] ?? errors[`classes.classCounts.${stage.id}`]} />
-          </label>
-        ))}
+        {stageOptions.map((stage) => {
+          const fieldError = errors[`classCounts.${stage.id}`] ?? errors[`classes.classCounts.${stage.id}`];
+          return (
+            <Field key={stage.id} label={stage.label} error={fieldError}>
+              <Input
+                invalid={Boolean(fieldError)}
+                inputMode="numeric"
+                value={draft.classes.classCounts[stage.id]}
+                onChange={(event) =>
+                  updateDraft("classes", {
+                    classCounts: {
+                      ...draft.classes.classCounts,
+                      [stage.id]: event.target.value,
+                    },
+                  })
+                }
+                placeholder="0"
+              />
+            </Field>
+          );
+        })}
       </fieldset>
       <FieldError message={errors.classCounts ?? errors["classes.classCounts"]} />
       <section className="next-onboarding-auto-classes" aria-label="Otomatik atanacak sınıflar">
@@ -910,22 +912,18 @@ function PeopleStep({
           placeholder="Operasyon sorumlusu"
         />
       </Field>
-      <label className="next-onboarding-check">
-        <input
-          type="checkbox"
-          checked={draft.people.inviteTeachers}
-          onChange={(event) => updateDraft("people", { inviteTeachers: event.target.checked })}
-        />
-        Öğretmen portal davetleri hazırlansın
-      </label>
-      <label className="next-onboarding-check">
-        <input
-          type="checkbox"
-          checked={draft.people.inviteGuardians}
-          onChange={(event) => updateDraft("people", { inviteGuardians: event.target.checked })}
-        />
-        Veli portal davetleri öğrenci kayıtlarından sonra hazırlansın
-      </label>
+      <Checkbox
+        className="next-onboarding-check"
+        checked={draft.people.inviteTeachers}
+        label="Öğretmen portal davetleri hazırlansın"
+        onChange={(event) => updateDraft("people", { inviteTeachers: event.target.checked })}
+      />
+      <Checkbox
+        className="next-onboarding-check"
+        checked={draft.people.inviteGuardians}
+        label="Veli portal davetleri öğrenci kayıtlarından sonra hazırlansın"
+        onChange={(event) => updateDraft("people", { inviteGuardians: event.target.checked })}
+      />
     </div>
   );
 }

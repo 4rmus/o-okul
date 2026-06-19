@@ -6,7 +6,7 @@ import type {
   ReportStudentProgress,
   ReportStudentSnapshot,
 } from "@uzman-hocam/shared-types";
-import { Alert, Button, DataTable, MetricCard, Panel, StatusBadge, type DataTableColumn } from "@uzman-hocam/ui";
+import { Alert, Button, DataTable, MetricCard, MetricGrid, Panel, StatusBadge, type DataTableColumn } from "@uzman-hocam/ui";
 import { formatCourseName } from "../../_shared/academic-labels.js";
 import { KarneSheet } from "../../_shared/karne-sheet.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
@@ -107,12 +107,12 @@ export function ReportPanel({
           </>
         }
       >
-        <section className="next-portal-report-metrics" aria-label="Portal rapor metrikleri">
+        <MetricGrid aria-label="Portal rapor metrikleri" role="region">
           <MetricCard label="Başarı %" value={formatPercentNumber(totalSuccessRate)} description="Ana karşılaştırma metriği" tone={successTone(totalSuccessRate)} />
           <MetricCard label="Net" value={formatNetNumber(report.total.net)} description="Soru sayısı bağlamıyla okunur" />
           <MetricCard label="Soru" value={formatNumber(totalQuestionCount)} description="Sınav kapsamı" />
           <MetricCard label="Standart puan" value={formatNumber(score)} description={formatGeneratedAt(report.generatedAt)} tone="info" />
-        </section>
+        </MetricGrid>
         <DataTable
           caption="Portal branş başarıları"
           columns={branchColumns}

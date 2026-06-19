@@ -1,6 +1,6 @@
 "use client";
 
-import { DataTable, Panel, StatusBadge, type DataTableColumn } from "@uzman-hocam/ui";
+import { DataTable, InfoGrid, InfoItem, Panel, StatusBadge, type DataTableColumn } from "@uzman-hocam/ui";
 import type {
   GuardianRecord,
   GuardianStudentRecord,
@@ -62,14 +62,11 @@ export function StudentFocusPanel({
           <strong>{studentName}</strong>
           <small>{className}</small>
         </div>
-        <dl className="next-portal-focus__grid">
+        <InfoGrid className="next-portal-focus__grid" aria-label="Öğrenci operasyon bağlam metrikleri" role="region">
           {details.map((item) => (
-            <div key={item.label}>
-              <dt>{item.label}</dt>
-              <dd>{item.value}</dd>
-            </div>
+            <InfoItem key={item.label} label={item.label} value={item.value} />
           ))}
-        </dl>
+        </InfoGrid>
       </div>
     </Panel>
   );
@@ -82,40 +79,16 @@ export function ProfilePanel({ profile }: { profile?: StudentProfileRecord }) {
       description="Öğrencinin portaldaki güvenli profil özeti."
       title="Profil"
     >
-      <dl className="next-definition-list">
-        <div>
-          <dt>Ad soyad</dt>
-          <dd>{profile ? `${profile.firstName} ${profile.lastName}` : "-"}</dd>
-        </div>
-        <div>
-          <dt>Sınıf</dt>
-          <dd>{profile?.className ?? "Sınıf bilgisi yok"}</dd>
-        </div>
-        <div>
-          <dt>Kampüs</dt>
-          <dd>{profile?.campusName ?? "-"}</dd>
-        </div>
-        <div>
-          <dt>Seviye</dt>
-          <dd>{profile?.gradeLevelName ?? "-"}</dd>
-        </div>
-        <div>
-          <dt>Şube</dt>
-          <dd>{profile?.section ?? "-"}</dd>
-        </div>
-        <div>
-          <dt>Sorumlu öğretmen</dt>
-          <dd>{profile?.responsibleTeacherName ?? "Öğretmen bilgisi yok"}</dd>
-        </div>
-        <div>
-          <dt>TC</dt>
-          <dd>{profile?.nationalIdMasked ?? "-"}</dd>
-        </div>
-        <div>
-          <dt>Telefon</dt>
-          <dd>{profile?.phone ? maskPhoneNumber(profile.phone) : "-"}</dd>
-        </div>
-      </dl>
+      <InfoGrid className="next-portal-profile-info" aria-label="Portal öğrenci profil özeti" role="region">
+        <InfoItem label="Ad soyad" value={profile ? `${profile.firstName} ${profile.lastName}` : "-"} />
+        <InfoItem label="Sınıf" value={profile?.className ?? "Sınıf bilgisi yok"} />
+        <InfoItem label="Kampüs" value={profile?.campusName ?? "-"} />
+        <InfoItem label="Seviye" value={profile?.gradeLevelName ?? "-"} />
+        <InfoItem label="Şube" value={profile?.section ?? "-"} />
+        <InfoItem label="Sorumlu öğretmen" value={profile?.responsibleTeacherName ?? "Öğretmen bilgisi yok"} />
+        <InfoItem label="TC" value={profile?.nationalIdMasked ?? "-"} />
+        <InfoItem label="Telefon" value={profile?.phone ? maskPhoneNumber(profile.phone) : "-"} />
+      </InfoGrid>
     </Panel>
   );
 }

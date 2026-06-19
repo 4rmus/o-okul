@@ -14,6 +14,7 @@ import {
   FormModal,
   Input,
   MetricCard,
+  MetricGrid,
   Panel,
   Select,
   Textarea,
@@ -377,7 +378,7 @@ export function MessageTemplatesPage() {
         tone="muted"
       >
         <form className="next-sms-workflow" onSubmit={(event) => void handleSendSms(event)}>
-          <section className="next-sms-workflow-metrics" aria-label="SMS gönderim özeti">
+          <MetricGrid aria-label="SMS gönderim özeti" role="region">
             <MetricCard
               label="Şablon"
               value={selectedSmsTemplate?.name ?? "Yok"}
@@ -395,7 +396,7 @@ export function MessageTemplatesPage() {
               description="Son alıcı sorgusu"
               tone={recipientPreview ? "info" : "default"}
             />
-          </section>
+          </MetricGrid>
           <FilterBar role="group" aria-label="SMS alıcı filtreleri">
             <Field label="Duyuru hedefi">
               <Select

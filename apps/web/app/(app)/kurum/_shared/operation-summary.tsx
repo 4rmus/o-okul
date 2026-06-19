@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { StatusBadge, type StatusBadgeProps } from "@uzman-hocam/ui";
+import { ActionCard, MetricCard, MetricGrid, StatusBadge, type StatusBadgeProps } from "@uzman-hocam/ui";
 
 export interface OperationSummaryItem {
   description?: ReactNode;
@@ -34,15 +34,18 @@ interface OperationSummaryProps {
 export function OperationSummary({ actions = [], ariaLabel, badges = [], items }: OperationSummaryProps) {
   return (
     <section aria-label={ariaLabel} className="next-operation-summary" role="region">
-      <dl className="next-operation-summary__grid">
+      <MetricGrid className="next-operation-summary__grid" role="group" aria-label={`${ariaLabel} metrikleri`}>
         {items.map((item) => (
-          <div className="next-operation-summary__item" data-tone={item.tone ?? "default"} key={item.key}>
-            <dt>{item.label}</dt>
-            <dd>{item.value}</dd>
-            {item.description ? <span>{item.description}</span> : null}
-          </div>
+          <MetricCard
+            className="next-operation-summary__item"
+            description={item.description}
+            key={item.key}
+            label={item.label}
+            tone={item.tone ?? "default"}
+            value={item.value}
+          />
         ))}
-      </dl>
+      </MetricGrid>
       {badges.length > 0 ? (
         <div aria-label={`${ariaLabel} durum etiketleri`} className="next-operation-summary__badges">
           {badges.map((badge) => (
@@ -55,14 +58,17 @@ export function OperationSummary({ actions = [], ariaLabel, badges = [], items }
       {actions.length > 0 ? (
         <div aria-label={`${ariaLabel} aksiyon kuyruğu`} className="next-operation-summary__actions" role="list">
           {actions.map((action) => (
-            <div className="next-operation-summary__action" data-tone={action.tone ?? "neutral"} key={action.key} role="listitem">
-              <div className="next-operation-summary__action-copy">
-                <span>{action.label}</span>
-                <strong>{action.value}</strong>
-                {action.detail ? <small>{action.detail}</small> : null}
-              </div>
-              <StatusBadge tone={action.tone ?? "neutral"}>{action.status}</StatusBadge>
-            </div>
+            <ActionCard
+              as="div"
+              badge={action.status}
+              className="next-operation-summary__action"
+              detail={action.detail}
+              key={action.key}
+              label={action.label}
+              role="listitem"
+              tone={action.tone ?? "neutral"}
+              value={action.value}
+            />
           ))}
         </div>
       ) : null}

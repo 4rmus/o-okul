@@ -93,12 +93,15 @@ test.describe("Liste URL state", () => {
     const usersRegion = page.getByLabel("Kullanıcı ve rol yönetimi");
     const summary = usersRegion.getByRole("region", { exact: true, name: "Kullanıcı ve davet operasyon özeti" });
     const saveButton = page.getByRole("button", { name: "Admin Kullanıcı rollerini kaydet" });
+    const adminRoles = usersRegion.getByLabel("Admin Kullanıcı rolleri", { exact: true });
     await expect(summary).toContainText("Kullanıcı toplamı");
     await expect(summary).toContainText("Davet bekliyor");
     await expect(summary).toContainText("Rol taslağı");
+    await expect(adminRoles.locator(".next-role-grid--compact .uh-checkbox")).toHaveCount(5);
+    await expect(adminRoles).toContainText("Tüm kurum operasyonları");
     await expect(saveButton).toBeDisabled();
 
-    await usersRegion.getByLabel("Admin Kullanıcı rolleri").getByLabel("Kurum admin").check();
+    await adminRoles.getByRole("checkbox", { name: /Kurum admin/ }).check();
     expect(captured.roleUpdates).toEqual([]);
     await expect(summary).toContainText("Henüz kaydedilmemiş rol satırı");
     await expect(summary).toContainText("1");
@@ -115,6 +118,13 @@ test.describe("Liste URL state", () => {
     await expect(saveButton).toBeDisabled();
     await expect(usersRegion.getByText("Kaydedilmemiş rol değişikliği")).toHaveCount(0);
 
+    await usersRegion.getByRole("button", { name: "Kullanıcı ekle" }).click();
+    const userDialog = page.getByRole("dialog", { name: "Kullanıcı ekle" });
+    await expect(userDialog.locator(".next-role-fieldset .uh-checkbox")).toHaveCount(5);
+    await expect(userDialog).toContainText("Kullanıcının kurum paneli veya portal kapsamını seç.");
+    await expect(userDialog.getByRole("checkbox", { name: /Öğretmen/ })).toBeChecked();
+    await userDialog.getByRole("button", { name: "Vazgeç" }).click();
+
     for (const value of ["12345678901", "+905551234567", "guardian-private@example.test"]) {
       await expect(page.locator("body")).not.toContainText(value);
     }
@@ -128,7 +138,10 @@ test.describe("Liste URL state", () => {
     const dialog = page.getByRole("dialog", { name: "Davet oluştur" });
     await dialog.getByLabel("Kişi türü").selectOption("STUDENT");
     await dialog.getByRole("combobox", { name: "Kişi", exact: true }).selectOption("student-a");
-    await expect(dialog.getByLabel("Davet bağlamı")).toContainText("Ada Kaya");
+    const invitationContext = dialog.getByLabel("Davet bağlamı");
+    await expect(invitationContext).toHaveClass(/uh-info-grid/);
+    await expect(invitationContext.locator(".uh-info-item")).toHaveCount(1);
+    await expect(invitationContext).toContainText("Ada Kaya");
     await dialog.getByLabel("E-posta").fill("ada.portal@example.test");
     await dialog.getByLabel("Ad Soyad").fill("Ada Portal");
     await page.getByRole("button", { name: "Oluştur", exact: true }).click();
@@ -228,6 +241,7 @@ test.describe("Liste URL state", () => {
 
     const financeRegion = page.getByLabel("Finans yönetimi");
     const financeSummary = financeRegion.getByRole("region", { exact: true, name: "Finans operasyon özeti" });
+    const financeListControls = financeRegion.locator(".next-list-controls").last();
     const filters = financeRegion.getByLabel("Finans filtreleri");
     const installmentsTable = financeRegion.getByRole("table", { name: "Ödeme taksitleri" });
 
@@ -236,6 +250,7 @@ test.describe("Liste URL state", () => {
     await expect(financeSummary).toContainText("Kurum finans görünümü");
     await expect(financeSummary).toContainText("6 filtre aktif");
     await expect(financeSummary.getByLabel("Finans operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(financeListControls.locator(".uh-field")).toHaveCount(3);
     await expect(financeRegion.getByLabel("Ara")).toHaveValue("haziran");
     await expect(financeRegion.getByLabel("Sırala")).toHaveValue("-dueDate");
     await expect(financeRegion.getByLabel("Göster")).toHaveValue("20");
@@ -550,6 +565,13 @@ test.describe("Liste URL state", () => {
       await expect(yearsRegion.getByRole("button", { name: "2025-2026 yılını düzenle" })).toBeVisible();
       await expect(yearsRegion.getByRole("button", { name: "2025-2026 yılını sil" })).toBeVisible();
 
+      await yearsRegion.getByRole("button", { name: "Akademik yıl ekle" }).click();
+      const yearDialog = page.getByRole("dialog", { name: "Akademik yıl ekle" });
+      await expect(yearDialog.locator(".uh-checkbox")).toHaveCount(1);
+      await expect(yearDialog.getByRole("checkbox", { name: "Aktif akademik yıl" })).toBeVisible();
+      await expect(yearDialog).toContainText("Ders programı, yoklama ve rapor bağlamında varsayılan yıl olur.");
+      await yearDialog.getByRole("button", { name: "Vazgeç" }).click();
+
       await expect(termsRegion.getByRole("heading", { name: "Dönemler" })).toBeVisible();
       await expect(termSummary).toContainText("Dönem toplamı");
       await expect(termSummary).toContainText("Aktif dönem kontrolü");
@@ -572,7 +594,9 @@ test.describe("Liste URL state", () => {
       await expect(termDialog.getByLabel("Dönem adı")).toBeVisible();
       await expect(termDialog.getByLabel("Başlangıç")).toBeVisible();
       await expect(termDialog.getByLabel("Bitiş")).toBeVisible();
-      await expect(termDialog.getByLabel("Aktif")).toBeVisible();
+      await expect(termDialog.locator(".uh-checkbox")).toHaveCount(1);
+      await expect(termDialog.getByRole("checkbox", { name: "Aktif dönem" })).toBeVisible();
+      await expect(termDialog).toContainText("Not, yoklama ve karne akışlarında varsayılan dönem olur.");
 
       await expect.poll(() => captured.academicYears.at(-1)?.get("page")).toBe("2");
       await expect.poll(() => captured.academicYears.at(-1)?.get("q")).toBe("2025");

@@ -5,9 +5,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ClassRecord, ExamParticipantRecord, ExamRecord, StudentRecord } from "@uzman-hocam/shared-types";
 import {
   Button,
+  Checkbox,
   DataTable,
   EmptyState,
+  Field,
   FormModal,
+  InfoGrid,
+  InfoItem,
   Input,
   Panel,
   StatusBadge,
@@ -393,7 +397,7 @@ export function ExamsPage() {
           title={`${selectedExam.title} katılımcıları`}
         >
           <section className="next-exam-selected-context" aria-label="Sınav seçili detay">
-            <div className="next-support-ticket-badges" aria-label="Seçili sınav durumu">
+            <div className="next-exam-selected-badges" aria-label="Seçili sınav durumu">
               <StatusBadge tone={examStatusTone(selectedExam.status)}>{examStatusLabel(selectedExam.status)}</StatusBadge>
               <StatusBadge tone={participants.length > 0 ? "success" : "warning"}>
                 {participants.length > 0 ? "Katılım listesi hazır" : "Katılımcı bekleniyor"}
@@ -402,26 +406,12 @@ export function ExamsPage() {
                 {selectedExam.status === "PUBLISHED" ? "Rapor zinciri açık" : "Rapor için yayın bekliyor"}
               </StatusBadge>
             </div>
-            <dl className="next-support-ticket-meta" aria-label="Seçili sınav metrikleri">
-              <div>
-                <dt>Başlangıç</dt>
-                <dd>{formatDateTime(selectedExam.startsAt)}</dd>
-              </div>
-              <div>
-                <dt>Katılımcı</dt>
-                <dd>{formatCount(participants.length)} öğrenci</dd>
-              </div>
-              <div>
-                <dt>Katılan</dt>
-                <dd>
-                  {formatCount(selectedAttendedCount)}/{formatCount(participants.length)}
-                </dd>
-              </div>
-              <div>
-                <dt>Kitapçık</dt>
-                <dd>{selectedBookletSummary}</dd>
-              </div>
-            </dl>
+            <InfoGrid className="next-exam-selected-meta" aria-label="Seçili sınav metrikleri" role="region">
+              <InfoItem label="Başlangıç" value={formatDateTime(selectedExam.startsAt)} />
+              <InfoItem label="Katılımcı" value={`${formatCount(participants.length)} öğrenci`} />
+              <InfoItem label="Katılan" value={`${formatCount(selectedAttendedCount)}/${formatCount(participants.length)}`} />
+              <InfoItem label="Kitapçık" value={selectedBookletSummary} />
+            </InfoGrid>
             <section className="next-exam-readiness" aria-label="Sınav hazırlık durumu">
               <span>{formatCount(selectedRegisteredCount)} kayıtlı katılımcı</span>
               <span>{formatCount(selectedAbsentCount)} gelmeyen katılımcı</span>
@@ -455,22 +445,20 @@ export function ExamsPage() {
         submitLabel={editingExam ? "Kaydet" : "Ekle"}
         title={editingExam ? "Sınav düzenle" : "Sınav ekle"}
       >
-        <label>
-          Sınav adı
+        <Field label="Sınav adı" description="Rapor, optik import ve karne çıktılarında görünecek sınav adı.">
           <Input
             required
             value={form.title}
             onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
           />
-        </label>
-        <label>
-          Başlangıç
+        </Field>
+        <Field label="Başlangıç" description="Sınav başlangıcı rapor ve katılım hazırlığında tarih bağlamı sağlar.">
           <Input
             type="datetime-local"
             value={form.startsAt ?? ""}
             onChange={(event) => setForm((current) => ({ ...current, startsAt: event.target.value }))}
           />
-        </label>
+        </Field>
         <div className="next-field-group">
           <div className="next-class-picker-header">
             <span>Sınıflar</span>
@@ -517,19 +505,16 @@ export function ExamsPage() {
               const meta = classMeta(klass);
               const studentCount = studentCountByClassId.get(klass.id) ?? 0;
               return (
-                <label key={klass.id} className="next-checkbox-option">
-                  <input
-                    checked={checked}
-                    name="classIds"
-                    onChange={(event) => toggleClassSelection(klass.id, event.target.checked)}
-                    type="checkbox"
-                    value={klass.id}
-                  />
-                  <span className="next-checkbox-option__content">
-                    <span>{klass.name}</span>
-                    <small>{[meta, `${studentCount} öğrenci`].filter(Boolean).join(" / ")}</small>
-                  </span>
-                </label>
+                <Checkbox
+                  className="next-checkbox-option"
+                  checked={checked}
+                  description={[meta, `${studentCount} öğrenci`].filter(Boolean).join(" / ")}
+                  key={klass.id}
+                  label={klass.name}
+                  name="classIds"
+                  onChange={(event) => toggleClassSelection(klass.id, event.target.checked)}
+                  value={klass.id}
+                />
               );
             })}
             {classes.length === 0 && !referencesQuery.isPending ? <p className="next-class-picker-empty">Sınıf bulunamadı.</p> : null}

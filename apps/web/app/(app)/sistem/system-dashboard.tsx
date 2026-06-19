@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { EmptyState, LoadingState, MetricCard } from "@uzman-hocam/ui";
+import { EmptyState, LoadingState, MetricCard, MetricGrid } from "@uzman-hocam/ui";
 import { useAuth } from "../../providers.js";
 import { initialListQuery } from "../../../src/list-controls.js";
 import { PageFrame } from "../kurum/_shared/page-frame.js";
@@ -22,7 +22,7 @@ export function SystemDashboard() {
   return (
     <PageFrame title="Sistem Paneli" subtitle="Platform kurumlarını ve sistem yönetimi başlangıcını izle.">
       {tenantsQuery.isPending ? <LoadingState label="Sistem özeti yükleniyor…" /> : null}
-      <section className="next-system-summary-grid" aria-label="Sistem özeti">
+      <MetricGrid className="next-system-summary-grid" aria-label="Sistem özeti" role="region">
         <MetricCard
           className="next-system-summary-card"
           description="Platformdaki toplam kurum"
@@ -43,7 +43,7 @@ export function SystemDashboard() {
           tone="warning"
           value={trialCount}
         />
-      </section>
+      </MetricGrid>
       {tenantsQuery.isError ? <p className="next-form-error">Sistem özeti alınamadı.</p> : null}
       {!tenantsQuery.isPending && !tenantsQuery.isError && tenants.length === 0 ? (
         <section aria-label="Sistem başlangıcı">

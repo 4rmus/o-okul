@@ -1,11 +1,7 @@
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const artifactDir = path.join(repoRoot, "artifacts/ui-smoke");
+const fallbackStudentReportExamId = "exam-demo-isem-lgs-1";
 
 const corsHeaders = {
   "access-control-allow-credentials": "true",
@@ -14,10 +10,21 @@ const corsHeaders = {
   "access-control-allow-origin": appOrigin,
 };
 
+const rawStudentDetailPiiValues = [
+  "ada@example.test",
+  "+905551112233",
+  "+905551110001",
+  "+905551110002",
+  "12345678901",
+  "guardian-mother",
+  "guardian-father",
+] as const;
+
 test.describe("Öğrenci ilişki haritası", () => {
   test("React Flow alanı dolu render olur ve liste fallback korunur", async ({ page }) => {
     const auditLogRequests: URL[] = [];
-    await openStudentDetail(page, { width: 1280, height: 900 }, auditLogRequests);
+    const requestedPaths: string[] = [];
+    await openStudentDetail(page, { width: 1280, height: 900 }, { auditLogRequests, requestedPaths });
 
     const operationSummary = page.getByRole("region", { exact: true, name: "Öğrenci detay operasyon özeti" });
     await expect(operationSummary).toContainText("Kayıt durumu");
@@ -25,8 +32,15 @@ test.describe("Öğrenci ilişki haritası", () => {
     await expect(operationSummary).toContainText("Net - / Soru -");
     await expect(operationSummary).toContainText("PII maskeli");
     await expect(operationSummary.getByLabel("Öğrenci detay operasyon özeti aksiyon kuyruğu")).toBeVisible();
-    await expect(page.getByLabel("Öğrenci profil kartı")).toContainText("Aktif");
-    await expect(page.getByLabel("Öğrenci karar kartları")).toContainText("Sınav performansı");
+    const studentProfile = page.getByLabel("Öğrenci profil kartı");
+    await expect(studentProfile).toContainText("Aktif");
+    const studentProfileInfo = studentProfile.getByRole("region", { name: "Öğrenci profil özeti" });
+    await expect(studentProfileInfo).toHaveClass(/uh-info-grid/);
+    await expect(studentProfileInfo.locator(".uh-info-item")).toHaveCount(4);
+    const decisionCards = page.getByLabel("Öğrenci karar kartları");
+    await expect(decisionCards.locator(".next-student-decision-card.uh-action-card")).toHaveCount(4);
+    await expect(decisionCards.locator(".next-dashboard-summary-card")).toHaveCount(0);
+    await expect(decisionCards).toContainText("Sınav performansı");
 
     const flow = page.locator(".next-student-relationship-flow");
     await expect(flow).toHaveAttribute("data-node-count", "6");
@@ -45,6 +59,7 @@ test.describe("Öğrenci ilişki haritası", () => {
     await expect(page.getByLabel("İlişki haritası liste görünümü")).not.toContainText("Ödeme kapalı");
 
     const relationshipHistory = page.getByLabel("İlişki geçmişi");
+    await expect(relationshipHistory.getByRole("table", { name: "Veli ilişki geçmişi" })).toBeVisible();
     await expect(relationshipHistory).toContainText("Finans görünürlüğü ve bildirim izinleri");
     await expect(relationshipHistory).toContainText("Finans görünürlüğü: açık");
     await expect(relationshipHistory).toContainText("Finans görünürlüğü: kapalı");
@@ -68,9 +83,16 @@ test.describe("Öğrenci ilişki haritası", () => {
     expect(auditLogRequests[0]?.pathname).toBe("/api/v1/audit-logs/student-summary");
     expect(auditLogRequests[0]?.searchParams.get("studentId")).toBe("student-a");
     expect(auditLogRequests[0]?.searchParams.get("limit")).toBe("5");
-
-    await mkdir(artifactDir, { recursive: true });
-    await page.screenshot({ fullPage: true, path: path.join(artifactDir, "faz7-student-relationship-flow.png") });
+    const scopedSnapshotsPath = `/exams/${fallbackStudentReportExamId}/reports/students/student-a/snapshots`;
+    const broadSnapshotsPath = `/exams/${fallbackStudentReportExamId}/reports/snapshots`;
+    await expect.poll(() => requestedPaths.includes(scopedSnapshotsPath)).toBe(true);
+    expect(requestedPaths).not.toContain(broadSnapshotsPath);
+    await expect(page.getByLabel("İletişim ve veli").getByRole("table", { name: "İletişim ve veli kayıtları" })).toBeVisible();
+    await expect(page.getByLabel("İletişim ve veli")).toContainText("••• ••• ••33");
+    await expect(page.getByLabel("İletişim ve veli")).toContainText("ad••@•••.test");
+    await expectNoVisibleTextValues(page, "student-detail-pii-desktop", rawStudentDetailPiiValues);
+    await expectNoHorizontalOverflow(page, "student-relationship-desktop");
+    await expectNoUnlabeledControls(page, "student-relationship-desktop");
   });
 
   test("mobilde flow gizlenir, liste fallback taşmadan kalır", async ({ page }) => {
@@ -81,15 +103,42 @@ test.describe("Öğrenci ilişki haritası", () => {
     await expect(page.getByLabel("İlişki haritası liste görünümü")).toBeVisible();
     await expect(page.getByLabel("İlişki haritası liste görünümü")).toContainText("11-A");
     await expectNoHorizontalOverflow(page, "student-relationship-mobile");
+    await expectNoUnlabeledControls(page, "student-relationship-mobile");
+    await expectNoVisibleTextValues(page, "student-detail-pii-mobile", rawStudentDetailPiiValues);
+  });
 
-    await mkdir(artifactDir, { recursive: true });
-    await page.screenshot({ fullPage: true, path: path.join(artifactDir, "faz7-student-relationship-mobile.png") });
+  test("tablette ilişki dashboard taşmadan ve erişilebilir adlarla kalır", async ({ page }) => {
+    await openStudentDetail(page, { width: 768, height: 1024 });
+
+    const studentDashboard = page.getByLabel("Öğrenci dashboard");
+    await expect(studentDashboard).toBeVisible();
+    await expect(studentDashboard.getByRole("region", { exact: true, name: "Öğrenci detay operasyon özeti" })).toBeVisible();
+    await expect(studentDashboard.getByRole("region", { name: "Öğrenci profil özeti" })).toHaveClass(/uh-info-grid/);
+    await expect(page.getByRole("heading", { name: "İlişki haritası" })).toBeVisible();
+    await expect(page.getByLabel("İlişki haritası liste görünümü")).toBeVisible();
+    await expect(page.getByLabel("Öğretmen ilişkileri").getByRole("table", { name: "Öğretmen ilişki kayıtları" })).toBeVisible();
+    await expectNoVisibleTextValues(page, "student-detail-pii-tablet", rawStudentDetailPiiValues);
+    await expectNoHorizontalOverflow(page, "student-relationship-tablet");
+    await expectNoUnlabeledControls(page, "student-relationship-tablet");
+  });
+
+  test("finance yetkisi olmayan rolde ödeme ve finans görünürlüğü açılmaz", async ({ page }) => {
+    const requestedPaths: string[] = [];
+    await openStudentDetail(page, { width: 768, height: 1024 }, { requestedPaths, roles: ["ASSISTANT_ADMIN"] });
+
+    expect(requestedPaths).not.toContain("/payment-plans");
+    await expect(page.locator("body")).not.toContainText("Finans görünürlüğü");
+    await expect(page.locator("body")).not.toContainText("bekleyen ödeme");
   });
 });
 
-async function openStudentDetail(page: Page, viewport: { width: number; height: number }, auditLogRequests: URL[] = []) {
+async function openStudentDetail(
+  page: Page,
+  viewport: { width: number; height: number },
+  options: { auditLogRequests?: URL[]; requestedPaths?: string[]; roles?: string[] } = {},
+) {
   await page.setViewportSize(viewport);
-  await installStudentApiMocks(page, auditLogRequests);
+  await installStudentApiMocks(page, options);
   await page.addInitScript(() => {
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
   });
@@ -100,7 +149,10 @@ async function openStudentDetail(page: Page, viewport: { width: number; height: 
   await expect(page.getByRole("heading", { level: 2, name: "İlişki haritası" })).toBeVisible();
 }
 
-async function installStudentApiMocks(page: Page, auditLogRequests: URL[]) {
+async function installStudentApiMocks(
+  page: Page,
+  options: { auditLogRequests?: URL[]; requestedPaths?: string[]; roles?: string[] } = {},
+) {
   await page.route("**/api/v1/**", async (route) => {
     if (route.request().method() === "OPTIONS") {
       await route.fulfill({ headers: corsHeadersFor(route), status: 204 });
@@ -109,13 +161,18 @@ async function installStudentApiMocks(page: Page, auditLogRequests: URL[]) {
 
     const url = new URL(route.request().url());
     const pathName = url.pathname.replace(/^\/api\/v1/, "");
-    const response = mockApiResponse(pathName, url, auditLogRequests);
+    options.requestedPaths?.push(pathName);
+    const response = mockApiResponse(pathName, url, options);
     await fulfillData(route, response.data, response.meta);
   });
 }
 
-function mockApiResponse(pathName: string, url: URL, auditLogRequests: URL[]): { data: unknown; meta?: { limit: number; page: number; total: number; totalPages: number } } {
-  if (pathName === "/auth/refresh") return { data: createAuthResponse() };
+function mockApiResponse(
+  pathName: string,
+  url: URL,
+  options: { auditLogRequests?: URL[]; roles?: string[] },
+): { data: unknown; meta?: { limit: number; page: number; total: number; totalPages: number } } {
+  if (pathName === "/auth/refresh") return { data: createAuthResponse(options.roles) };
   if (pathName === "/me/tenant") return { data: createTenantResponse() };
   if (pathName === "/me/notification-devices") return { data: [] };
   if (pathName === "/students/student-a/profile") return { data: createStudentProfile() };
@@ -126,7 +183,7 @@ function mockApiResponse(pathName: string, url: URL, auditLogRequests: URL[]): {
   if (pathName === "/students/student-a/teacher-assignments") return { data: createTeacherAssignments() };
   if (pathName === "/attendance/summary") return { data: { absent: 1, excused: 0, late: 1, present: 28, studentId: "student-a", total: 30 } };
   if (pathName === "/audit-logs/student-summary") {
-    auditLogRequests.push(url);
+    options.auditLogRequests?.push(url);
     return { data: createAuditSummaries() };
   }
   if (pathName === "/audit-logs") return { data: [{ action: "unscoped.audit_call", createdAt: "2026-06-18T08:20:00.000Z", id: "audit-unscoped" }] };
@@ -138,10 +195,11 @@ function mockApiResponse(pathName: string, url: URL, auditLogRequests: URL[]): {
   if (pathName === "/courses") return { data: createCourses() };
   if (pathName === "/academic-terms") return { data: createAcademicTerms() };
   if (pathName === "/exams") return { data: [] };
+  if (pathName === `/exams/${fallbackStudentReportExamId}/reports/students/student-a/snapshots`) return { data: [] };
   if (pathName.endsWith("/reports/students/student-a/progress")) {
     return {
       data: {
-        examId: "fallback-report-exam",
+        examId: fallbackStudentReportExamId,
         points: [],
         studentId: "student-a",
         tenantId: "tenant-flow",
@@ -168,13 +226,13 @@ function createAuditSummaries() {
   ];
 }
 
-function createAuthResponse() {
+function createAuthResponse(roles = ["TENANT_ADMIN"]) {
   return {
     accessToken: "student-flow-access-token",
     session: {
       id: "session-student-flow",
       membershipVersion: 1,
-      roles: ["TENANT_ADMIN"],
+      roles,
       status: "ACTIVE",
       tenantId: "tenant-flow",
       userId: "user-flow-admin",
@@ -350,6 +408,41 @@ async function expectNoHorizontalOverflow(page: Page, label: string) {
   });
 
   expect(overflow, `${label}: yatay taşma ${overflow}px`).toBeLessThanOrEqual(1);
+}
+
+async function expectNoVisibleTextValues(page: Page, label: string, values: readonly string[]) {
+  const body = page.locator("body");
+  for (const value of values) {
+    await expect(body, `${label}: ${value} görünür metinde yer almamalı`).not.toContainText(value);
+  }
+}
+
+async function expectNoUnlabeledControls(page: Page, label: string) {
+  const unlabeledControls = await page.evaluate(() => {
+    function isVisible(element: Element) {
+      const htmlElement = element as HTMLElement;
+      const rect = htmlElement.getBoundingClientRect();
+      const style = window.getComputedStyle(htmlElement);
+      return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+    }
+
+    return Array.from(document.querySelectorAll("button, input, select, textarea"))
+      .filter((element) => isVisible(element))
+      .filter((element) => {
+        const htmlElement = element as HTMLElement;
+        const text = htmlElement.textContent?.trim();
+        const ariaLabel = htmlElement.getAttribute("aria-label")?.trim();
+        const labelledBy = htmlElement.getAttribute("aria-labelledby")?.trim();
+        const title = htmlElement.getAttribute("title")?.trim();
+        const id = htmlElement.getAttribute("id");
+        const label = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : null;
+        const wrappingLabel = htmlElement.closest("label");
+        return !text && !ariaLabel && !labelledBy && !title && !label && !wrappingLabel;
+      })
+      .map((element) => element.outerHTML.slice(0, 120));
+  });
+
+  expect(unlabeledControls, `${label}: etiketsiz kontrol`).toEqual([]);
 }
 
 async function readViewportTransform(locator: ReturnType<Page["locator"]>) {

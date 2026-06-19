@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Checkbox, CrudPage, DataTable, EmptyState, Field, FormModal, Input, Select, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
+import { Button, Checkbox, CrudPage, DataTable, EmptyState, Field, FormModal, InfoGrid, InfoItem, Input, Select, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
 import type {
   AttendanceSummaryRecord,
   ClassRecord,
@@ -985,52 +985,19 @@ function StudentDetailPanel({
   return (
     <section className="next-form-section" aria-label="Öğrenci 360">
       <p className="next-form-section-title">Öğrenci 360</p>
-      <dl className="next-definition-list">
-        <div>
-          <dt>Kayıt durumu</dt>
-          <dd>{detail?.profile.status ? formatStudentStatus(detail.profile.status) : "-"}</dd>
-        </div>
-        <div>
-          <dt>Devamsızlık</dt>
-          <dd>{detail?.attendanceSummary?.total ?? 0}</dd>
-        </div>
-        <div>
-          <dt>Öğretmen notu</dt>
-          <dd>{detail?.teacherNotes.length ?? 0}</dd>
-        </div>
-        <div>
-          <dt>Ödev</dt>
-          <dd>{detail?.homeworkAssignments.length ?? 0}</dd>
-        </div>
-        <div>
-          <dt>Bekleyen ödeme</dt>
-          <dd>{formatPendingPayment(detail?.paymentPlans ?? [])}</dd>
-        </div>
-        <div>
-          <dt>Başarı</dt>
-          <dd>{formatPercentNumber(reportSuccessRate(detail?.report?.total))}</dd>
-        </div>
-        <div>
-          <dt>Soru</dt>
-          <dd>{formatNumber(reportQuestionCount(detail?.report?.total))}</dd>
-        </div>
-        <div>
-          <dt>LGS puanı</dt>
-          <dd>{formatNumber(readLgsScore(detail?.report?.total))}</dd>
-        </div>
-        <div>
-          <dt>Son net</dt>
-          <dd>{formatNumber(detail?.report?.total?.net)}</dd>
-        </div>
-        <div>
-          <dt>Hata kitapçığı</dt>
-          <dd>{detail?.errorBooklet?.items ? `${detail.errorBooklet.items.length} soru` : "-"}</dd>
-        </div>
-        <div>
-          <dt>Net gelişimi</dt>
-          <dd>{formatDelta(detail?.progress?.netDelta)}</dd>
-        </div>
-      </dl>
+      <InfoGrid className="next-student-360-summary" aria-label="Öğrenci 360 özeti" role="region">
+        <InfoItem label="Kayıt durumu" value={detail?.profile.status ? formatStudentStatus(detail.profile.status) : "-"} />
+        <InfoItem label="Devamsızlık" value={detail?.attendanceSummary?.total ?? 0} />
+        <InfoItem label="Öğretmen notu" value={detail?.teacherNotes.length ?? 0} />
+        <InfoItem label="Ödev" value={detail?.homeworkAssignments.length ?? 0} />
+        <InfoItem label="Bekleyen ödeme" value={formatPendingPayment(detail?.paymentPlans ?? [])} />
+        <InfoItem label="Başarı" value={formatPercentNumber(reportSuccessRate(detail?.report?.total))} />
+        <InfoItem label="Soru" value={formatNumber(reportQuestionCount(detail?.report?.total))} />
+        <InfoItem label="LGS puanı" value={formatNumber(readLgsScore(detail?.report?.total))} />
+        <InfoItem label="Son net" value={formatNumber(detail?.report?.total?.net)} />
+        <InfoItem label="Hata kitapçığı" value={detail?.errorBooklet?.items ? `${detail.errorBooklet.items.length} soru` : "-"} />
+        <InfoItem label="Net gelişimi" value={formatDelta(detail?.progress?.netDelta)} />
+      </InfoGrid>
       {detail && detail.teacherNotes.length > 0 ? (
         <div className="next-form-guardians">
           <span className="next-field-hint">Son öğretmen notu</span>

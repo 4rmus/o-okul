@@ -18,8 +18,8 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "tsc -p tsconfig.json --noEmit",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "test": "tsc -p tsconfig.contract.json --noEmit",
+    "typecheck": "tsc -p tsconfig.contract.json --noEmit"
   },
   "peerDependencies": {
     "react": "^19.2.6"

@@ -15,7 +15,10 @@ test.describe("Rol önizleme UI sözleşmesi", () => {
     await openRolePreview(page, { height: 844, width: 390 }, unexpectedMutations);
 
     await expect(page.getByRole("heading", { level: 1, name: "Rol Önizleme" })).toBeVisible();
-    await expect(page.getByLabel("Rol önizleme özeti")).toContainText("3 rol");
+    const rolePreviewMetrics = page.getByRole("region", { name: "Rol önizleme özeti" });
+    await expect(rolePreviewMetrics).toContainText("3 rol");
+    await expect(rolePreviewMetrics.locator(".uh-metric-card")).toHaveCount(3);
+    await expect(page.locator(".next-role-preview-metrics")).toHaveCount(0);
     const operationSummary = page.getByRole("region", { exact: true, name: "Rol önizleme operasyon özeti" });
     await expect(operationSummary).toContainText("Token");
     await expect(operationSummary).toContainText("URL'de yok");
@@ -33,9 +36,12 @@ test.describe("Rol önizleme UI sözleşmesi", () => {
     await expect(portalCards).toContainText("/veli");
     await expect(portalCards.getByText("Demo hesap bilgisi görünüm kanıtlarında gösterilmez.")).toHaveCount(3);
     await expect(portalCards.getByLabel("Önizleme kişisi")).toHaveCount(3);
-    await expect(portalCards.getByText("Branş: Matematik")).toBeVisible();
-    await expect(portalCards.getByText("Öğrenci no: 1001")).toBeVisible();
-    await expect(portalCards.getByText("Portal kullanıcısı bağlı veli kaydı")).toBeVisible();
+    await expect(portalCards).toContainText("Öğretmen kaydı 1");
+    await expect(portalCards).toContainText("Öğrenci kaydı 1");
+    await expect(portalCards).toContainText("Veli kaydı 1");
+    await expect(portalCards).toContainText("Maskeli öğretmen referansı");
+    await expect(portalCards).toContainText("Maskeli öğrenci referansı");
+    await expect(portalCards).toContainText("Maskeli veli referansı");
     await expect(portalCards.getByRole("table", { name: "Öğretmen Portalı kapsam özeti" })).toContainText("/me/teacher");
     await expect(portalCards.getByRole("table", { name: "Öğrenci Portalı kapsam özeti" })).toContainText("/me/student");
     await expect(portalCards.getByRole("table", { name: "Veli Portalı kapsam özeti" })).toContainText("/me/guardian");
@@ -47,6 +53,14 @@ test.describe("Rol önizleme UI sözleşmesi", () => {
       "teacher-preview-main",
       "student-preview-main",
       "guardian-preview-main",
+      "Ayse Ogretmen",
+      "Ada Ogrenci",
+      "Zeynep Veli",
+      "Branş: Matematik",
+      "Öğrenci no: 1001",
+      "Portal kullanıcısı bağlı veli kaydı",
+      "1001",
+      "Matematik",
       "teacher-a@example.test",
       "student-a@example.test",
       "guardian-a@example.test",
@@ -159,9 +173,31 @@ test.describe("Rol önizleme UI sözleşmesi", () => {
     await commandPalette.getByRole("button", { name: "Kapat" }).click();
     expect(unexpectedMutations.filter((mutation) => mutation.includes("/role-previews"))).toEqual([]);
   });
+
+  test("portal önizleme route'u role-preview capability olmadan tokenla açılmaz", async ({ page }) => {
+    const unexpectedMutations: string[] = [];
+    const requestedPaths: string[] = [];
+    await page.setViewportSize({ height: 844, width: 390 });
+    await installRolePreviewApiMocks(page, unexpectedMutations, { requestedPaths, roles: ["ASSISTANT_ADMIN"] });
+    await page.addInitScript(() => {
+      document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
+      window.sessionStorage.setItem("uzman-hocam.role-preview-token", "preview-token-student");
+    });
+    await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
+
+    await page.goto("/ogrenci?rolePreview=1");
+    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+
+    await expect(page).toHaveURL(/\/kurum$/);
+    await expect(page.getByLabel("Rol önizleme modu")).toHaveCount(0);
+    await expect(page.getByRole("region", { exact: true, name: "Öğrenci operasyon bağlamı" })).toHaveCount(0);
+    expect(requestedPaths.filter((path) => path.startsWith("/me/student"))).toEqual([]);
+    expect(unexpectedMutations.filter((mutation) => mutation.includes("/role-previews"))).toEqual([]);
+  });
 });
 
 interface RolePreviewMockOptions {
+  requestedPaths?: string[];
   roles?: string[];
 }
 
@@ -219,6 +255,7 @@ async function installRolePreviewApiMocks(page: Page, unexpectedMutations: strin
     const url = new URL(route.request().url());
     const pathName = url.pathname.replace(/^\/api\/v1/, "");
     const method = route.request().method();
+    options.requestedPaths?.push(pathName);
     if (method !== "GET" && !(method === "POST" && (pathName === "/auth/refresh" || pathName === "/role-previews"))) {
       unexpectedMutations.push(`${method} ${pathName}`);
     }

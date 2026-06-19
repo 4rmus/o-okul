@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Button, DataTable, Field, MetricCard, Panel, Select, StatusBadge, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, DataTable, Field, MetricCard, MetricGrid, Panel, Select, StatusBadge, type DataTableColumn } from "@uzman-hocam/ui";
 import {
   tenantAssignableRoles,
   tenantRoleLabel,
@@ -298,7 +298,7 @@ export function RolePreviewPage() {
       title="Rol Önizleme"
       subtitle="Kurum admin için öğretmen, öğrenci ve veli portal kapsamlarını güvenli şekilde izle."
     >
-      <section className="next-role-preview-metrics" aria-label="Rol önizleme özeti">
+      <MetricGrid aria-label="Rol önizleme özeti" role="region">
         {rolePreviewMetrics.map((metric) => (
           <MetricCard
             description={metric.description}
@@ -308,7 +308,7 @@ export function RolePreviewPage() {
             value={metric.value}
           />
         ))}
-      </section>
+      </MetricGrid>
       <OperationSummary
         actions={rolePreviewSummaryActions}
         ariaLabel="Rol önizleme operasyon özeti"
@@ -477,22 +477,36 @@ async function loadPreviewSubjects(accessToken: string): Promise<PreviewSubjectO
   ]);
 
   return {
-    GUARDIAN: guardians.data.map((guardian) => ({
-      description: guardian.userId ? "Portal kullanıcısı bağlı veli kaydı" : "Portal kullanıcısı bekleyen veli kaydı",
-      id: guardian.id,
-      label: `${guardian.firstName} ${guardian.lastName}`,
-    })),
-    STUDENT: students.data.map((student) => ({
-      description: student.studentNo ? `Öğrenci no: ${student.studentNo}` : "Öğrenci no tanımlı değil",
-      id: student.id,
-      label: `${student.firstName} ${student.lastName}`,
-    })),
-    TEACHER: teachers.data.map((teacher) => ({
-      description: teacher.branch ? `Branş: ${teacher.branch}` : "Branş tanımlı değil",
-      id: teacher.id,
-      label: `${teacher.firstName} ${teacher.lastName}`,
-    })),
+    GUARDIAN: buildPreviewSubjectOptions(guardians.data, "GUARDIAN"),
+    STUDENT: buildPreviewSubjectOptions(students.data, "STUDENT"),
+    TEACHER: buildPreviewSubjectOptions(teachers.data, "TEACHER"),
   };
+}
+
+function buildPreviewSubjectOptions(records: Array<{ id: string }>, role: RolePreviewSession["targetRole"]): PreviewSubjectOption[] {
+  return records.map((record, index) => ({
+    description: previewSubjectDescription(role),
+    id: record.id,
+    label: `${previewSubjectLabel(role)} ${index + 1}`,
+  }));
+}
+
+function previewSubjectLabel(role: RolePreviewSession["targetRole"]): string {
+  const labels: Record<RolePreviewSession["targetRole"], string> = {
+    GUARDIAN: "Veli kaydı",
+    STUDENT: "Öğrenci kaydı",
+    TEACHER: "Öğretmen kaydı",
+  };
+  return labels[role];
+}
+
+function previewSubjectDescription(role: RolePreviewSession["targetRole"]): string {
+  const descriptions: Record<RolePreviewSession["targetRole"], string> = {
+    GUARDIAN: "Maskeli veli referansı",
+    STUDENT: "Maskeli öğrenci referansı",
+    TEACHER: "Maskeli öğretmen referansı",
+  };
+  return descriptions[role];
 }
 
 function selectedSubjectIdOrFirst(currentId: string, options: PreviewSubjectOption[]): string {

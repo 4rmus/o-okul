@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, MetricCard, Panel, StatusBadge, type StatusBadgeProps } from "@uzman-hocam/ui";
+import { Alert, Button, MetricCard, MetricGrid, Panel, StatusBadge, type StatusBadgeProps } from "@uzman-hocam/ui";
 
 export interface SmsBatchDeliveryReportRecord {
   id: string;
@@ -49,7 +49,7 @@ export function SmsDeliveryReportPanel({
         </Alert>
       ) : report ? (
         <>
-          <section className="next-sms-delivery-metrics" aria-label="SMS teslim metrikleri">
+          <MetricGrid aria-label="SMS teslim metrikleri" role="region">
             <MetricCard
               label="Durum"
               tone={smsDeliveryMetricTone(report.status)}
@@ -69,7 +69,7 @@ export function SmsDeliveryReportPanel({
               description={report.failedCount > 0 ? "Müdahale gerekli" : "Hata yok"}
             />
             <MetricCard label="Segment" value={report.billableSegments} description="Faturalandırılabilir" />
-          </section>
+          </MetricGrid>
           {report.providerErrorCode ? (
             <Alert tone="danger" title="Provider hatası">
               {report.providerErrorCode}

@@ -63,28 +63,27 @@ test.describe("Governance evidence sözleşmesi", () => {
     await expect(kvkkSummary).toContainText("Server/audit esas");
     await expect(kvkkSummary.getByLabel("KVKK operasyon özeti aksiyon kuyruğu")).toBeVisible();
     const kvkkTable = page.getByRole("region", { name: "KVKK yönetimi" }).getByRole("table", { name: "KVKK PII temizleme kayıtları" });
-    await expect(kvkkTable.getByRole("columnheader", { name: "Kayıt" })).toBeVisible();
-    await expect(kvkkTable.getByRole("columnheader", { name: "Tür" })).toBeVisible();
-    await expect(kvkkTable.getByRole("columnheader", { name: "PII" })).toBeVisible();
+    await expect(kvkkTable).toContainText("Öğrenci kaydı 1");
     await expect(kvkkTable).toContainText("Ad, soyad, TC, e-posta");
     await expect(kvkkTable).toContainText("Ad, soyad, telefon");
     for (const value of [...hostileEvidenceValues, ...hostileAuditValues]) {
       await expect(page.locator("body")).not.toContainText(value);
     }
 
-    await page.getByRole("button", { name: "Ada PII temizle" }).click();
+    await page.getByRole("button", { name: "Öğrenci kaydı 1 PII temizle" }).click();
     const purgeDialog = page.getByRole("dialog", { name: "PII temizlemeyi onayla" });
-    await expect(purgeDialog).toContainText("Öğrenci kaydında geri alınamaz PII temizleme işlemi başlatılsın mı?");
+    await expect(purgeDialog).toContainText("Öğrenci kaydı 1 için geri alınamaz PII temizleme işlemi başlatılsın mı?");
     await expect(purgeDialog).toContainText("panel ham PII kanıtı göstermez");
     await expect(purgeDialog.getByRole("button", { name: "PII temizle" })).toBeVisible();
     expect(kvkkPurgeRequests).toHaveLength(0);
     await purgeDialog.getByRole("button", { name: "Vazgeç" }).click();
     expect(kvkkPurgeRequests).toHaveLength(0);
 
-    await page.getByRole("button", { name: "Ada PII temizle" }).click();
+    await page.getByRole("button", { name: "Öğrenci kaydı 1 PII temizle" }).click();
     await page.getByRole("dialog", { name: "PII temizlemeyi onayla" }).getByRole("button", { name: "PII temizle" }).click();
     await expect.poll(() => kvkkPurgeRequests.length).toBe(1);
-    await expect(kvkkTable).toContainText("Anonim Ogrenci");
+    await expect(kvkkTable).toContainText("Öğrenci kaydı 1");
+    await expect(kvkkTable).toContainText("Temiz");
 
     await expectNoHorizontalOverflow(page, "kvkk-governance-mobile");
     await expectNoUnlabeledControls(page, "kvkk-governance-mobile");
@@ -506,6 +505,7 @@ async function openWithGovernanceMocks(
 
 async function installGovernanceApiMocks(page: Page, options: GovernanceMockOptions = {}) {
   await page.unroute("**/api/v1/**").catch(() => undefined);
+  let kvkkInventory = createKvkkInventory();
   await page.route("**/api/v1/**", async (route) => {
     if (route.request().method() === "OPTIONS") {
       await route.fulfill({ headers: corsHeadersFor(route), status: 204 });
@@ -514,6 +514,18 @@ async function installGovernanceApiMocks(page: Page, options: GovernanceMockOpti
 
     const url = new URL(route.request().url());
     const pathName = url.pathname.replace(/^\/api\/v1/, "");
+    if (pathName === "/privacy/inventory") {
+      await fulfillData(route, kvkkInventory);
+      return;
+    }
+    if (pathName === "/students/student-a/purge-pii" && route.request().method() === "POST") {
+      kvkkInventory = kvkkInventory.map((item) =>
+        item.id === "student-a" ? { ...item, piiCategories: [], purgeAvailable: false } : item,
+      );
+      await fulfillData(route, createPurgedStudent());
+      return;
+    }
+
     const response = mockGovernanceApiResponse(pathName, options);
     await fulfillData(route, response.data, response.meta, response.status);
   });
@@ -558,6 +570,25 @@ function mockGovernanceApiResponse(pathName: string, options: GovernanceMockOpti
   if (pathName === "/backup-restore-jobs") return { data: createBackupRestoreJobs() };
 
   return { data: [] };
+}
+
+function createKvkkInventory() {
+  return [
+    {
+      displayRef: "Öğrenci kaydı 1",
+      id: "student-a",
+      kind: "student",
+      piiCategories: ["Ad", "soyad", "TC", "e-posta"],
+      purgeAvailable: true,
+    },
+    {
+      displayRef: "Veli kaydı 1",
+      id: "guardian-a",
+      kind: "guardian",
+      piiCategories: ["Ad", "soyad", "telefon"],
+      purgeAvailable: false,
+    },
+  ];
 }
 
 function createAuthResponse(roles = ["TENANT_ADMIN"]) {

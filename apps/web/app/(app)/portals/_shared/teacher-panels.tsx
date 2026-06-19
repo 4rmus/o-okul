@@ -1,6 +1,6 @@
 "use client";
 
-import { DataTable, Panel, StatusBadge, type DataTableColumn } from "@uzman-hocam/ui";
+import { DataTable, InfoGrid, InfoItem, Panel, StatusBadge, type DataTableColumn } from "@uzman-hocam/ui";
 import type { ClassRecord, ScheduleLessonRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 
@@ -142,40 +142,16 @@ export function TeacherProfileSummaryPanel({
       description="Öğretmenin ders, sınıf, dönem ve organizasyon kapsamı."
       title="Profil Özeti"
     >
-      <dl className="next-definition-list">
-        <div>
-          <dt>Ad soyad</dt>
-          <dd>{teacher ? `${teacher.firstName} ${teacher.lastName}` : "-"}</dd>
-        </div>
-        <div>
-          <dt>Branş</dt>
-          <dd>{teacher?.branch ?? "-"}</dd>
-        </div>
-        <div>
-          <dt>Dersler</dt>
-          <dd>{courseScope}</dd>
-        </div>
-        <div>
-          <dt>Dönemler</dt>
-          <dd>{termScope}</dd>
-        </div>
-        <div>
-          <dt>Sınıf kapsamı</dt>
-          <dd>{classScope}</dd>
-        </div>
-        <div>
-          <dt>Organizasyon</dt>
-          <dd>{organizationScope}</dd>
-        </div>
-        <div>
-          <dt>Sorumlu öğrenci</dt>
-          <dd>{formatCount(students.length, "öğrenci")}</dd>
-        </div>
-        <div>
-          <dt>Program</dt>
-          <dd>{formatCount(schedule.length, "ders")}</dd>
-        </div>
-      </dl>
+      <InfoGrid className="next-teacher-portal-profile-info" aria-label="Öğretmen portal profil metrikleri" role="region">
+        <InfoItem label="Ad soyad" value={teacher ? `${teacher.firstName} ${teacher.lastName}` : "-"} />
+        <InfoItem label="Branş" value={teacher?.branch ?? "-"} />
+        <InfoItem label="Dersler" value={courseScope} />
+        <InfoItem label="Dönemler" value={termScope} />
+        <InfoItem label="Sınıf kapsamı" value={classScope} />
+        <InfoItem label="Organizasyon" value={organizationScope} />
+        <InfoItem label="Sorumlu öğrenci" value={formatCount(students.length, "öğrenci")} />
+        <InfoItem label="Program" value={formatCount(schedule.length, "ders")} />
+      </InfoGrid>
     </Panel>
   );
 }
@@ -296,6 +272,7 @@ export function TeacherFocusPanel({
   const campusName = selectedClass?.campusId ? campusNames.get(selectedClass.campusId) ?? selectedClass.campusId : "-";
   const gradeLevelName = selectedClass?.gradeLevelId ? gradeLevelNames.get(selectedClass.gradeLevelId) ?? selectedClass.gradeLevelId : "-";
   const modeLabel = mode === "read-only" ? "Salt-okuma" : "İşlem açık";
+  const supportTicketStatus = openSupportTicketCount > 0 ? `${openSupportTicketCount} açık` : "Açık talep yok";
 
   return (
     <Panel
@@ -311,40 +288,16 @@ export function TeacherFocusPanel({
           <strong>{studentName}</strong>
           <small>{className}</small>
         </div>
-        <dl className="next-teacher-focus__grid">
-          <div>
-            <dt>Kampüs</dt>
-            <dd>{campusName}</dd>
-          </div>
-          <div>
-            <dt>Seviye</dt>
-            <dd>{gradeLevelName}</dd>
-          </div>
-          <div>
-            <dt>Branş</dt>
-            <dd>{courseName ?? "-"}</dd>
-          </div>
-          <div>
-            <dt>Dönem</dt>
-            <dd>{termName ?? "-"}</dd>
-          </div>
-          <div>
-            <dt>Başarı %</dt>
-            <dd>{formatPercentNumber(successRate)}</dd>
-          </div>
-          <div>
-            <dt>Soru</dt>
-            <dd>{formatNumber(questionCount)}</dd>
-          </div>
-          <div>
-            <dt>Net</dt>
-            <dd>{formatNumber(net)}</dd>
-          </div>
-          <div>
-            <dt>Destek</dt>
-            <dd>{openSupportTicketCount > 0 ? `${openSupportTicketCount} açık` : "Açık talep yok"}</dd>
-          </div>
-        </dl>
+        <InfoGrid className="next-teacher-focus__grid" aria-label="Öğretmen operasyon bağlam metrikleri" role="region">
+          <InfoItem label="Kampüs" value={campusName} />
+          <InfoItem label="Seviye" value={gradeLevelName} />
+          <InfoItem label="Branş" value={courseName ?? "-"} />
+          <InfoItem label="Dönem" value={termName ?? "-"} />
+          <InfoItem label="Başarı %" value={formatPercentNumber(successRate)} />
+          <InfoItem label="Soru" value={formatNumber(questionCount)} />
+          <InfoItem label="Net" value={formatNumber(net)} />
+          <InfoItem label="Destek" value={supportTicketStatus} />
+        </InfoGrid>
       </div>
     </Panel>
   );

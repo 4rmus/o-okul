@@ -25,6 +25,12 @@ test.describe("Next erişilebilirlik smoke", () => {
 
     await page.goto("/login");
     await expect(page.getByRole("heading", { name: "Giriş" })).toBeVisible();
+    const loginForm = page.getByRole("form", { name: "Giriş formu" });
+    await expect(loginForm.getByRole("textbox", { name: /E-posta/ })).toHaveValue("admin@demo.local");
+    await expect(loginForm.getByLabel("Şifre", { exact: true })).toBeVisible();
+    await expect(loginForm.getByRole("checkbox", { name: /Beni hatırla/ })).toBeVisible();
+    await expect(loginForm).toContainText("Bu tarayıcıda yalnız e-posta adresi saklanır.");
+    await expect(loginForm.getByRole("button", { name: "Giriş yap" })).toBeVisible();
     await expectNoCriticalA11yViolations(page, "login");
   });
 
@@ -43,8 +49,15 @@ test.describe("Next erişilebilirlik smoke", () => {
   test("kurum dashboard gövdesi mobil viewport'ta taşmadan açılır", async ({ page }) => {
     await page.setViewportSize({ height: 844, width: 390 });
     await openInstitutionDashboard(page, { expectNavigationVisible: false });
-    await expect(page.getByRole("region", { exact: true, name: "Kurum özeti" })).toBeVisible();
-    await expect(page.getByRole("region", { exact: true, name: "Kurum dashboard operasyon özeti" })).toBeVisible();
+    const overviewRegion = page.getByRole("region", { exact: true, name: "Kurum özeti" });
+    await expect(overviewRegion).toBeVisible();
+    await expect(overviewRegion).toHaveClass(/uh-metric-grid/);
+    await expect(overviewRegion.locator(".uh-metric-card")).toHaveCount(4);
+    const dashboardSummary = page.getByRole("region", { exact: true, name: "Kurum dashboard operasyon özeti" });
+    await expect(dashboardSummary).toBeVisible();
+    const dashboardSummaryMetrics = dashboardSummary.getByRole("group", { name: "Kurum dashboard operasyon özeti metrikleri" });
+    await expect(dashboardSummaryMetrics).toHaveClass(/uh-metric-grid/);
+    await expect(dashboardSummaryMetrics.locator(".uh-metric-card")).toHaveCount(4);
     await expect(page.getByRole("region", { exact: true, name: "Operasyon özeti" })).toBeVisible();
     await expect(page.getByRole("region", { exact: true, name: "Karar sinyalleri" })).toBeVisible();
     await expectNoHorizontalOverflow(page, "kurum-dashboard-mobile-body");

@@ -22,7 +22,10 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await openSetupWizard(page, { height: 844, width: 390 }, { roles: ["TENANT_ADMIN"] });
 
     await expect(page.getByRole("heading", { level: 1, name: "Kurulum Sihirbazı" })).toBeVisible();
-    await expect(page.getByLabel("Kurulum operasyon metrikleri")).toContainText("İlerleme");
+    const setupMetrics = page.getByRole("region", { name: "Kurulum operasyon metrikleri" });
+    await expect(setupMetrics).toContainText("İlerleme");
+    await expect(setupMetrics).toHaveClass(/uh-metric-grid/);
+    await expect(setupMetrics.locator(".uh-metric-card")).toHaveCount(3);
     await expect(page.getByLabel("Adım ilerlemesi")).toBeVisible();
     await expect(page.getByRole("tablist", { name: "Adım ilerlemesi" }).locator(".uh-tab-button")).toHaveCount(5);
     await expect(page.getByLabel("Kurulum formu")).toBeVisible();
@@ -41,9 +44,19 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expect(setupForm).toContainText("E-posta geçerli olmalıdır.");
 
     const stepNavigation = page.getByLabel("Adım ilerlemesi");
+    await stepNavigation.getByRole("tab", { name: /Sınıf ve Şubeler/ }).click();
+    const classCounts = setupForm.locator(".next-onboarding-class-counts");
+    await expect(classCounts.locator(".uh-field")).toHaveCount(6);
+    await expect(classCounts.locator(".uh-input")).toHaveCount(6);
+    await expect(classCounts.getByLabel("8. sınıf / LGS")).toHaveValue("2");
+
     await stepNavigation.getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
     await expect(setupForm.getByRole("group", { name: "Öğretmen veri girişi" })).toHaveClass(/uh-segmented-control/);
     await expect(setupForm.getByRole("group", { name: "Öğrenci veri girişi" })).toHaveClass(/uh-segmented-control/);
+    await expect(setupForm.locator(".next-onboarding-check.uh-checkbox")).toHaveCount(2);
+    await expect(setupForm.locator(".next-onboarding-check .uh-checkbox__input")).toHaveCount(2);
+    await expect(setupForm.getByLabel("Öğretmen portal davetleri hazırlansın")).toBeChecked();
+    await expect(setupForm.getByLabel("Veli portal davetleri öğrenci kayıtlarından sonra hazırlansın")).toBeChecked();
     await setupForm.getByLabel("Öğrenci aktarım dosyası").setInputFiles({
       buffer: Buffer.from("%PDF-1.7"),
       mimeType: "application/pdf",
