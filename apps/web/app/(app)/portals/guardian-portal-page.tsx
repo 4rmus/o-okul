@@ -49,7 +49,9 @@ import { SupportTicketsPanel } from "./_shared/support-tickets-panel.js";
 import { readReportExamId, fallbackReportExamId } from "../_shared/report-exam-selection.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
 
-export function GuardianPortalPage() {
+export type GuardianPortalView = "announcements" | "homework" | "notifications" | "overview" | "payments" | "reports" | "student" | "support";
+
+export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPortalView } = {}) {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const rolePreviewToken = readRolePreviewToken(searchParams);
@@ -168,7 +170,7 @@ export function GuardianPortalPage() {
       actionLabel: "İzle",
       contextLabel: "Öğrenci",
       detail: selectedStudentDetail,
-      href: "#portal-student-picker",
+      href: guardianPortalHref("/veli/ogrenci", isRolePreview),
       key: "student",
       label: "Öğrenci seç",
       statusLabel: selectedStudent ? "Seçili" : "Bekliyor",
@@ -179,7 +181,7 @@ export function GuardianPortalPage() {
       actionLabel: unreadAnnouncements > 0 ? "Oku" : "Hazır",
       contextLabel: "Duyuru",
       detail: unreadAnnouncements > 0 ? "Veli duyurusunu kontrol et" : "Okunmamış duyuru yok",
-      href: "#portal-announcements",
+      href: guardianPortalHref("/veli/duyurular", isRolePreview),
       key: "announcement",
       label: "Duyuruları oku",
       statusLabel: unreadAnnouncements > 0 ? "Bekliyor" : "Güncel",
@@ -190,7 +192,7 @@ export function GuardianPortalPage() {
       actionLabel: (data?.homeworkAssignments.length ?? 0) > 0 ? "Kontrol" : "Hazır",
       contextLabel: "Ödev",
       detail: "Öğrenci çalışma takibi",
-      href: "#portal-homework",
+      href: guardianPortalHref("/veli/odevler", isRolePreview),
       key: "homework",
       label: "Ödevi kontrol et",
       statusLabel: (data?.homeworkAssignments.length ?? 0) > 0 ? "Takip" : "Tamam",
@@ -201,7 +203,7 @@ export function GuardianPortalPage() {
       actionLabel: canViewFinance ? "Takip" : "Kapalı",
       contextLabel: "Finans",
       detail: canViewFinance ? "İzinli finans görünümü" : "Finans görünürlüğü kapalı",
-      href: "#portal-payments",
+      href: guardianPortalHref("/veli/odemeler", isRolePreview),
       key: "finance",
       label: "Ödeme durumunu gör",
       statusLabel: canViewFinance ? "İzinli" : "Kapalı",
@@ -212,7 +214,7 @@ export function GuardianPortalPage() {
       actionLabel: supportReadOnly ? (isRolePreview ? "Salt-okuma" : "Kapalı") : openSupportTickets > 0 ? "Takip et" : "Talep aç",
       contextLabel: "Destek",
       detail: supportReadOnly ? (isRolePreview ? "Destek talebi açma kapalı" : "Destek talebi izni kapalı") : "Veli destek kapsamı",
-      href: "#portal-support",
+      href: guardianPortalHref("/veli/destek", isRolePreview),
       key: "support",
       label: "Destek talebini takip et",
       statusLabel: supportReadOnly ? (isRolePreview ? "Salt-okuma" : "Kapalı") : openSupportTickets > 0 ? "Açık" : "Hazır",
@@ -223,7 +225,7 @@ export function GuardianPortalPage() {
       actionLabel: "İncele",
       contextLabel: "Rapor",
       detail: `${formatNetNumber(reportTotal?.net)} net / ${formatNetNumber(reportQuestionCount(reportTotal))} soru`,
-      href: "#portal-report",
+      href: guardianPortalHref("/veli/raporlar", isRolePreview),
       key: "report",
       label: "Son sınavı incele",
       statusLabel: "Başarı %",
@@ -234,7 +236,7 @@ export function GuardianPortalPage() {
       actionLabel: isRolePreview ? "Salt-okuma" : "Canlı",
       contextLabel: "Erişim",
       detail: isRolePreview ? "Yazma işlemleri kapalı" : "İzinli veli işlemleri açık",
-      href: isRolePreview ? "#portal-preview" : "#portal-focus",
+      href: guardianPortalHref(isRolePreview ? "/veli" : "/veli/bildirimler", isRolePreview),
       key: "preview",
       label: "Önizleme durumu",
       statusLabel: isRolePreview ? "Salt-okuma" : "Canlı",
@@ -243,7 +245,7 @@ export function GuardianPortalPage() {
     },
   ];
   return (
-    <PortalFrame title="Veli Portalı" subtitle={selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "Bağlı öğrenci özeti"}>
+    <PortalFrame title="Veli Portalı" subtitle={guardianPortalSubtitle(view, selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "Bağlı öğrenci özeti")}>
       <SegmentedControl className="next-segmented" id="portal-student-picker" label="Öğrenci seçimi">
         {students.map((student) => (
           <button
@@ -256,66 +258,70 @@ export function GuardianPortalPage() {
           </button>
         ))}
       </SegmentedControl>
-      <PortalDailyBrief
-        summary="Veli için bugün izlenecek başlıklar seçili öğrenciye göre daraltılır; finans ve destek alanları yalnız izin verilen kapsamda görünür."
-        items={[
-          {
-            label: "Öğrenci",
-            value: selectedStudentLabel,
-            detail: selectedStudentDetail,
-            tone: selectedStudent ? "info" : "neutral",
-          },
-          {
-            label: "Duyuru",
-            value: unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel",
-            detail: unreadAnnouncements > 0 ? "Veli duyurusu bekliyor" : "Okunmamış duyuru yok",
-            tone: unreadAnnouncements > 0 ? "warning" : "success",
-          },
-          {
-            label: "Ödev",
-            value: `${data?.homeworkAssignments.length ?? 0} atama`,
-            detail: "Öğrenci çalışma takibi",
-            tone: (data?.homeworkAssignments.length ?? 0) > 0 ? "info" : "neutral",
-          },
-          {
-            label: "Ödeme",
-            value: canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Ödeme izni kapalı",
-            detail: canViewFinance ? "Bekleyen veya geciken tutar" : "Finans görünürlüğü kapalı",
-            tone: canViewFinance && (data?.paymentPlans.length ?? 0) > 0 ? "warning" : "neutral",
-          },
-          {
-            label: "Destek",
-            value: canOpenSupportTickets ? (openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok") : "Kapalı",
-            detail: canOpenSupportTickets ? "Veli destek kapsamı" : "Destek talebi izni kapalı",
-            tone: canOpenSupportTickets && openSupportTickets > 0 ? "warning" : "success",
-          },
-          {
-            label: "Son sınav",
-            value: formatPercentNumber(reportSuccess),
-            detail: `${formatNetNumber(reportTotal?.net)} net / ${formatNetNumber(reportQuestionCount(reportTotal))} soru`,
-            tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
-          },
-        ]}
-      />
-      <PortalActionStrip ariaLabel="Veli günlük aksiyonları" items={guardianActionItems} />
-      <MetricGrid
-        items={[
-          { label: "Devamsızlık", value: data?.attendanceSummary.total ?? 0 },
-          { label: "Öğretmen notu", value: data?.teacherNotes.length ?? 0 },
-          { label: "Ödev", value: data?.homeworkAssignments.length ?? 0 },
-          { label: "Başarı", value: formatPercentNumber(reportSuccessRate(reportTotal)) },
-          { label: "Net", value: formatNetNumber(reportTotal?.net) },
-          { label: "Soru", value: formatNetNumber(reportQuestionCount(reportTotal)) },
-          { label: "Ödeme planı", value: canViewFinance ? data?.paymentPlans.length ?? 0 : "Kapalı" },
-          { label: "Bekleyen ödeme", value: canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Kapalı" },
-        ]}
-      />
+      {view === "overview" ? (
+        <>
+          <PortalDailyBrief
+            summary="Veli için bugün izlenecek başlıklar seçili öğrenciye göre daraltılır; finans ve destek alanları yalnız izin verilen kapsamda görünür."
+            items={[
+              {
+                label: "Öğrenci",
+                value: selectedStudentLabel,
+                detail: selectedStudentDetail,
+                tone: selectedStudent ? "info" : "neutral",
+              },
+              {
+                label: "Duyuru",
+                value: unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel",
+                detail: unreadAnnouncements > 0 ? "Veli duyurusu bekliyor" : "Okunmamış duyuru yok",
+                tone: unreadAnnouncements > 0 ? "warning" : "success",
+              },
+              {
+                label: "Ödev",
+                value: `${data?.homeworkAssignments.length ?? 0} atama`,
+                detail: "Öğrenci çalışma takibi",
+                tone: (data?.homeworkAssignments.length ?? 0) > 0 ? "info" : "neutral",
+              },
+              {
+                label: "Ödeme",
+                value: canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Ödeme izni kapalı",
+                detail: canViewFinance ? "Bekleyen veya geciken tutar" : "Finans görünürlüğü kapalı",
+                tone: canViewFinance && (data?.paymentPlans.length ?? 0) > 0 ? "warning" : "neutral",
+              },
+              {
+                label: "Destek",
+                value: canOpenSupportTickets ? (openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok") : "Kapalı",
+                detail: canOpenSupportTickets ? "Veli destek kapsamı" : "Destek talebi izni kapalı",
+                tone: canOpenSupportTickets && openSupportTickets > 0 ? "warning" : "success",
+              },
+              {
+                label: "Son sınav",
+                value: formatPercentNumber(reportSuccess),
+                detail: `${formatNetNumber(reportTotal?.net)} net / ${formatNetNumber(reportQuestionCount(reportTotal))} soru`,
+                tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
+              },
+            ]}
+          />
+          <PortalActionStrip ariaLabel="Veli günlük aksiyonları" items={guardianActionItems} />
+          <MetricGrid
+            items={[
+              { label: "Devamsızlık", value: data?.attendanceSummary.total ?? 0 },
+              { label: "Öğretmen notu", value: data?.teacherNotes.length ?? 0 },
+              { label: "Ödev", value: data?.homeworkAssignments.length ?? 0 },
+              { label: "Başarı", value: formatPercentNumber(reportSuccessRate(reportTotal)) },
+              { label: "Net", value: formatNetNumber(reportTotal?.net) },
+              { label: "Soru", value: formatNetNumber(reportQuestionCount(reportTotal)) },
+              { label: "Ödeme planı", value: canViewFinance ? data?.paymentPlans.length ?? 0 : "Kapalı" },
+              { label: "Bekleyen ödeme", value: canViewFinance ? formatPendingPayment(data?.paymentPlans ?? []) : "Kapalı" },
+            ]}
+          />
+        </>
+      ) : null}
       {isRolePreview ? (
         <div id="portal-preview">
           <RolePreviewNotice />
         </div>
       ) : null}
-      <div id="portal-focus">
+      {view === "overview" || view === "student" ? <div id="portal-focus">
         <StudentFocusPanel
           announcementStatus={announcementStatus}
           attendanceStatus={attendanceStatus}
@@ -329,12 +335,12 @@ export function GuardianPortalPage() {
           successRate={formatPercentNumber(reportSuccess)}
           supportStatus={supportStatus}
         />
-      </div>
+      </div> : null}
       <PortalWorkspace
         ariaLabel="Veli portal çalışma alanı"
         main={
           <>
-            <div id="portal-report">
+            {view === "overview" || view === "reports" ? <div id="portal-report">
               <ReportPanel
                 context={data?.report ?? undefined}
                 courseNames={courseNameById}
@@ -343,18 +349,18 @@ export function GuardianPortalPage() {
                 report={data?.report ?? null}
                 termNames={termNameById}
               />
-            </div>
-            <div id="portal-payments">
+            </div> : null}
+            {view === "overview" || view === "payments" ? <div id="portal-payments">
               <PaymentPlansPanel canViewFinance={canViewFinance} plans={data?.paymentPlans ?? []} />
-            </div>
-            <div id="portal-homework">
+            </div> : null}
+            {view === "overview" || view === "homework" ? <div id="portal-homework">
               <HomeworkAssignmentsPanel
                 assignments={data?.homeworkAssignments ?? []}
                 courseNames={courseNameById}
                 termNames={termNameById}
               />
-            </div>
-            <div id="portal-announcements">
+            </div> : null}
+            {view === "overview" || view === "announcements" ? <div id="portal-announcements">
               <AnnouncementsPanel
                 announcements={data?.announcements ?? []}
                 readOnly={isRolePreview}
@@ -367,8 +373,8 @@ export function GuardianPortalPage() {
                     : undefined
                 }
               />
-            </div>
-            <div id="portal-support">
+            </div> : null}
+            {view === "overview" || view === "support" ? <div id="portal-support">
               <SupportTicketsPanel
                 readOnly={supportReadOnly}
                 readOnlyMessage={isRolePreview ? undefined : "Veli destek talebi izni kapalı."}
@@ -383,19 +389,19 @@ export function GuardianPortalPage() {
                     : undefined
                 }
               />
-            </div>
+            </div> : null}
           </>
         }
         side={
           <>
-            <ProfilePanel profile={data?.profile} />
-            <StudentHistoryPanel
+            {view === "overview" || view === "student" ? <ProfilePanel profile={data?.profile} /> : null}
+            {view === "overview" || view === "student" ? <StudentHistoryPanel
               classHistory={data?.classHistory ?? []}
               enrollments={data?.enrollments ?? []}
               termNames={termNameById}
-            />
-            <GuardianRelationshipSummaryPanel relationship={data?.notificationPreferences} />
-            <NotificationPreferencesPanel
+            /> : null}
+            {view === "overview" || view === "student" || view === "notifications" ? <GuardianRelationshipSummaryPanel relationship={data?.notificationPreferences} /> : null}
+            {view === "overview" || view === "notifications" ? <NotificationPreferencesPanel
               preferences={data?.notificationPreferences}
               readOnly={isRolePreview}
               onUpdate={(input) =>
@@ -407,10 +413,10 @@ export function GuardianPortalPage() {
                     ).then(() => studentQuery.refetch())
                   : undefined
               }
-            />
-            <DevelopmentTrendPanel assessments={data?.developmentAssessments ?? []} />
-            <TeacherNotesPanel notes={data?.teacherNotes ?? []} courseNames={courseNameById} termNames={termNameById} />
-            <AttendancePanel records={data?.attendance ?? []} />
+            /> : null}
+            {view === "overview" || view === "student" ? <DevelopmentTrendPanel assessments={data?.developmentAssessments ?? []} /> : null}
+            {view === "overview" || view === "student" ? <TeacherNotesPanel notes={data?.teacherNotes ?? []} courseNames={courseNameById} termNames={termNameById} /> : null}
+            {view === "overview" || view === "student" ? <AttendancePanel records={data?.attendance ?? []} /> : null}
           </>
         }
       />
@@ -613,4 +619,23 @@ function formatNetNumber(value: number | undefined) {
 
 function isOpenSupportTicket(ticket: SupportTicketRecord) {
   return ticket.status === "OPEN" || ticket.status === "IN_PROGRESS";
+}
+
+function guardianPortalHref(path: string, isRolePreview: boolean) {
+  return isRolePreview ? `${path}?rolePreview=1` : path;
+}
+
+function guardianPortalSubtitle(view: GuardianPortalView, fallback: string) {
+  const subtitleByView: Record<GuardianPortalView, string> = {
+    announcements: "Duyurular",
+    homework: "Ödevler",
+    notifications: "Bildirim tercihleri",
+    overview: fallback,
+    payments: "Ödemeler",
+    reports: "Sınav raporu",
+    student: "Bağlı öğrenci",
+    support: "Destek talepleri",
+  };
+
+  return subtitleByView[view];
 }

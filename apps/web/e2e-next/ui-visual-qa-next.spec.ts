@@ -502,9 +502,9 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expectPortalDailyBrief(page.getByRole("region", { name: "Günlük durum" }), 6);
     const studentActionStrip = page.getByRole("region", { name: "Öğrenci günlük aksiyonları" });
     await expectRolePortalActionStrip(studentActionStrip, 6, [
-      { href: "#portal-announcements", name: /Duyuruları oku: 1 okunmamış/ },
-      { href: "#portal-attendance", name: /Devamsızlığı kontrol et: 30 kayıt/ },
-      { href: "#portal-report", name: /Son sınavı incele: %81,7/ },
+      { href: "/ogrenci/duyurular", name: /Duyuruları oku: 1 okunmamış/ },
+      { href: "/ogrenci/devamsizlik", name: /Devamsızlığı kontrol et: 30 kayıt/ },
+      { href: "/ogrenci/raporlar", name: /Son sınavı incele: %81,7/ },
     ]);
     const homeworkTable = page.getByRole("table", { name: "Ödev ve materyal atamaları" });
     await expect(homeworkTable.getByRole("columnheader", { name: "Materyal" })).toBeVisible();
@@ -534,8 +534,8 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
     await expect(page.getByRole("heading", { level: 1, name: "Öğrenci Portalı" })).toBeVisible();
     await expectRolePortalActionStrip(page.getByRole("region", { name: "Öğrenci günlük aksiyonları" }), 6, [
-      { href: "#portal-homework", name: /Ödevi aç: 1 atama/ },
-      { href: "#portal-support", name: /Destek talebini takip et: 1 açık/ },
+      { href: "/ogrenci/odevler", name: /Ödevi aç: 1 atama/ },
+      { href: "/ogrenci/destek", name: /Destek talebini takip et: 1 açık/ },
     ]);
     const mobileStudentReportSummary = page.getByRole("region", { name: "Portal rapor özeti" });
     await expect(mobileStudentReportSummary).toContainText("Başarı %");
@@ -564,9 +564,9 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(guardianFocusMetrics.locator(".uh-info-item")).toHaveCount(9);
     await expectPortalDailyBrief(page.getByRole("region", { name: "Günlük durum" }), 6);
     await expectRolePortalActionStrip(page.getByRole("region", { name: "Veli günlük aksiyonları" }), 7, [
-      { href: "#portal-student-picker", name: /Öğrenci seç: Ada Kaya/ },
-      { href: "#portal-payments", name: /Ödeme durumunu gör: 1\.200,00 TRY/ },
-      { href: "#portal-report", name: /Son sınavı incele: %81,7/ },
+      { href: "/veli/ogrenci", name: /Öğrenci seç: Ada Kaya/ },
+      { href: "/veli/odemeler", name: /Ödeme durumunu gör: 1\.200,00 TRY/ },
+      { href: "/veli/raporlar", name: /Son sınavı incele: %81,7/ },
     ]);
     const paymentTable = page.getByRole("table", { name: "Ödeme planları" });
     await expect(paymentTable.getByRole("columnheader", { name: "Bekleyen" })).toBeVisible();
@@ -593,9 +593,9 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(teacherFocusMetrics.locator(".uh-info-item")).toHaveCount(8);
     await expectPortalDailyBrief(page.getByRole("region", { name: "Günlük ders akışı" }), 6);
     await expectRolePortalActionStrip(page.getByRole("region", { name: "Öğretmen günlük aksiyonları" }), 8, [
-      { href: "#portal-teacher-attendance", name: /Yoklama kaydet: 2 kayıt/ },
-      { href: "#portal-teacher-material", name: /Materyal ata: 1 materyal/ },
-      { href: "#portal-teacher-report", name: /Raporu incele: %81,7/ },
+      { href: "/ogretmen/ogrenci-takibi", name: /Yoklama kaydet: 2 kayıt/ },
+      { href: "/ogretmen/ogrenci-takibi", name: /Materyal ata: 1 materyal/ },
+      { href: "/ogretmen/raporlar", name: /Raporu incele: %81,7/ },
     ]);
     const classReportsTable = page.getByRole("table", { name: "Öğretmen sınıf raporları" });
     await expect(classReportsTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
@@ -619,8 +619,8 @@ test.describe("Faz 9 UI görsel smoke", () => {
         authProfile: "student",
         count: 6,
         hrefs: [
-          { href: "#portal-announcements", name: /Duyuruları oku: 1 okunmamış/ },
-          { href: "#portal-report", name: /Son sınavı incele: %81,7/ },
+          { href: "/ogrenci/duyurular", name: /Duyuruları oku: 1 okunmamış/ },
+          { href: "/ogrenci/raporlar", name: /Son sınavı incele: %81,7/ },
         ],
         key: "student",
         path: "/ogrenci",
@@ -630,8 +630,8 @@ test.describe("Faz 9 UI görsel smoke", () => {
         authProfile: "guardian",
         count: 7,
         hrefs: [
-          { href: "#portal-student-picker", name: /Öğrenci seç: Ada Kaya/ },
-          { href: "#portal-payments", name: /Ödeme durumunu gör: 1\.200,00 TRY/ },
+          { href: "/veli/ogrenci", name: /Öğrenci seç: Ada Kaya/ },
+          { href: "/veli/odemeler", name: /Ödeme durumunu gör: 1\.200,00 TRY/ },
         ],
         key: "guardian",
         path: "/veli",
@@ -641,8 +641,8 @@ test.describe("Faz 9 UI görsel smoke", () => {
         authProfile: "teacher",
         count: 8,
         hrefs: [
-          { href: "#portal-teacher-attendance", name: /Yoklama kaydet: 2 kayıt/ },
-          { href: "#portal-teacher-report", name: /Raporu incele: %81,7/ },
+          { href: "/ogretmen/ogrenci-takibi", name: /Yoklama kaydet: 2 kayıt/ },
+          { href: "/ogretmen/raporlar", name: /Raporu incele: %81,7/ },
         ],
         key: "teacher",
         path: "/ogretmen",

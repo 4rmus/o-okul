@@ -31,6 +31,10 @@ const expectedTeacherScopedReadPaths = [
   "/me/teacher/teacher-notes",
   "/me/teacher/support-tickets",
   "/me/teacher/lookups",
+  "/me/teacher/students/student-a/class-history",
+  "/me/teacher/students/student-a/enrollments",
+  "/me/teacher/students/student-b/class-history",
+  "/me/teacher/students/student-b/enrollments",
   "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots",
   "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-a",
   "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-b",
@@ -108,34 +112,33 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       await expect(actionStrip).toContainText("8 aksiyon");
       await expect(actionStrip.getByRole("link", { name: /Öğrenci seç: Ada Kaya \/ 8-A/ })).toHaveAttribute(
         "href",
-        "#portal-teacher-student-picker",
+        "/ogretmen/ogrenci-takibi",
       );
       await expect(actionStrip.getByRole("link", { name: /Yoklama kaydet: 2 kayıt.*Yoklama.*Kaydet.*Bugün.*2026-06-17 için yoklama/ })).toHaveAttribute(
         "href",
-        "#portal-teacher-attendance",
+        "/ogretmen/ogrenci-takibi",
       );
-      await expect(actionStrip.getByRole("link", { name: /Not ekle: 2 not/ })).toHaveAttribute("href", "#portal-teacher-note");
+      await expect(actionStrip.getByRole("link", { name: /Not ekle: 2 not/ })).toHaveAttribute("href", "/ogretmen/ogrenci-takibi");
       await expect(actionStrip.getByRole("link", { name: /Materyal ata: 1 materyal/ })).toHaveAttribute(
         "href",
-        "#portal-teacher-material",
+        "/ogretmen/ogrenci-takibi",
       );
       await expect(actionStrip.getByRole("link", { name: /Ödev kontrol et: 1 bekliyor/ })).toHaveAttribute(
         "href",
-        "#portal-teacher-homework",
+        "/ogretmen/odevler",
       );
       await expect(
         actionStrip.getByRole("link", { name: /Raporu incele: %81,7.*Rapor.*İncele.*Başarı %.*24,5 net \/ 30 soru/ }),
-      ).toHaveAttribute("href", "#portal-teacher-report");
+      ).toHaveAttribute("href", "/ogretmen/raporlar");
       await expect(actionStrip.getByRole("link", { name: /Destek talebini takip et: 1 açık/ })).toHaveAttribute(
         "href",
-        "#portal-teacher-support",
+        "/ogretmen/destek",
       );
       await expect(actionStrip.getByRole("link", { name: /Önizleme durumu: İşlem açık/ })).toHaveAttribute(
         "href",
-        "#portal-teacher-focus",
+        "/ogretmen/ogrenci-takibi",
       );
       await expect(actionStrip.getByRole("link")).toHaveCount(8);
-      await expectPortalActionFocus(page, actionStrip, /Yoklama kaydet: 2 kayıt/, page.locator("#portal-teacher-attendance"), "#portal-teacher-attendance");
       const studentScope = page.getByRole("region", { exact: true, name: "Öğretmen öğrenci kapsamı" });
       await expect(studentScope.getByRole("heading", { name: "Öğrenciler" })).toBeVisible();
       await expect(studentScope.getByRole("button", { name: "Ada Kaya / 8-A" })).toHaveAttribute("aria-pressed", "true");
@@ -175,7 +178,7 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       await expectNoHorizontalOverflow(page, `teacher-portal-${viewport.width}`);
       await expectNoUnlabeledControls(page, `teacher-portal-${viewport.width}`);
       await expectNoClippedVisibleText(page, `teacher-portal-${viewport.width}`);
-      expect(requestedPaths.filter((path) => forbiddenTeacherPortalReadPaths.includes(path))).toEqual([]);
+      expect(requestedPaths.filter((path) => forbiddenTeacherPortalReadPaths.includes(path) || path.startsWith("/students/"))).toEqual([]);
       for (const path of expectedTeacherScopedReadPaths) {
         expect(requestedPaths).toContain(path);
       }
@@ -195,14 +198,14 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     await expect(previewActions).toContainText("Yoklama, not ve materyal kapalı");
     await expect(previewActions.getByRole("link", { name: /Yoklama kaydet: Salt-okuma/ })).toHaveAttribute(
       "href",
-      "#portal-teacher-preview",
+      "/ogretmen?rolePreview=1",
     );
-    await expect(previewActions.getByRole("link", { name: /Not ekle: Salt-okuma/ })).toHaveAttribute("href", "#portal-teacher-preview");
+    await expect(previewActions.getByRole("link", { name: /Not ekle: Salt-okuma/ })).toHaveAttribute("href", "/ogretmen?rolePreview=1");
     await expect(previewActions.getByRole("link", { name: /Materyal ata: Salt-okuma/ })).toHaveAttribute(
       "href",
-      "#portal-teacher-preview",
+      "/ogretmen?rolePreview=1",
     );
-    await clickAllPortalActionLinks(previewActions);
+    await expect(previewActions.getByRole("link", { name: /Raporu incele/ })).toHaveAttribute("href", "/ogretmen/raporlar?rolePreview=1");
     await expect(page.getByRole("region", { name: "Öğretmen günlük işlemleri" })).toHaveCount(0);
     await expect(page.getByRole("region", { exact: true, name: "Öğretmen operasyon bağlamı" })).toContainText("Salt-okuma");
     await expectTeacherDisplayPanels(page);
@@ -215,6 +218,27 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     await expectNoUnlabeledControls(page, "teacher-portal-role-preview");
     await expectNoClippedVisibleText(page, "teacher-portal-role-preview");
     await expect.poll(() => mutationRequests).toEqual([]);
+  });
+
+  test("öğretmen sidebar alt rotaları gerçek sayfaları açar", async ({ page }) => {
+    await openTeacherPortal(page, { height: 900, width: 1024 });
+
+    const routeCases = [
+      { label: "Ders Akışı", path: "/ogretmen/ders-akisi", panel: () => page.getByRole("region", { exact: true, name: "Bugünkü dersler" }) },
+      { label: "Öğrenci Takibi", path: "/ogretmen/ogrenci-takibi", panel: () => page.getByRole("region", { name: "Öğrenci çalışma alanı" }) },
+      { label: "Ödev Kontrolü", path: "/ogretmen/odevler", panel: () => page.getByRole("region", { exact: true, name: "Öğretmen ödev kontrolü" }) },
+      { label: "Sınav Raporu", path: "/ogretmen/raporlar", panel: () => page.getByRole("region", { name: "Portal rapor özeti" }) },
+      { label: "Duyurular", path: "/ogretmen/duyurular", panel: () => page.getByRole("region", { exact: true, name: "Duyurular" }) },
+      { label: "Destek", path: "/ogretmen/destek", panel: () => page.getByRole("region", { name: "Destek talepleri" }) },
+    ];
+
+    for (const routeCase of routeCases) {
+      await clickSidebarRoute(page, "Öğretmen Paneli", routeCase.label);
+      await expect(page).toHaveURL(new RegExp(`${routeCase.path}$`));
+      await expect(page.getByRole("heading", { level: 1, name: "Öğretmen Portalı" })).toBeVisible();
+      await expect(routeCase.panel()).toBeVisible();
+      await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { exact: true, name: "Özet" })).not.toHaveAttribute("aria-current", "page");
+    }
   });
 
   test("öğretmen işlem hatasını alert olarak duyurur", async ({ page }) => {
@@ -395,6 +419,16 @@ async function openTeacherPortal(
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 
+async function clickSidebarRoute(page: Page, groupName: string, linkName: string) {
+  const navigation = page.getByRole("navigation", { name: "Ana menü" });
+  const groupButton = navigation.getByRole("button", { exact: true, name: groupName });
+  if ((await groupButton.getAttribute("aria-expanded")) !== "true") {
+    await groupButton.click();
+  }
+  await navigation.getByRole("link", { exact: true, name: linkName }).click();
+  await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+}
+
 async function installTeacherApiMocks(
   page: Page,
   options: { failMutationPath?: string; mode?: "teacher" | "role-preview"; mutationRequests?: string[]; requestedPaths?: string[] },
@@ -462,8 +496,8 @@ function teacherApiResponse(pathName: string, mode: "teacher" | "role-preview"):
   if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-b/error-booklet") return createErrorBooklet("student-b");
   if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/students/student-a/progress") return createProgress("student-a");
   if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/students/student-b/progress") return createProgress("student-b");
-  if (pathName === "/students/student-a/class-history" || pathName === "/students/student-b/class-history") return createClassHistory();
-  if (pathName === "/students/student-a/enrollments" || pathName === "/students/student-b/enrollments") return createEnrollments();
+  if (pathName === "/me/teacher/students/student-a/class-history" || pathName === "/me/teacher/students/student-b/class-history") return createClassHistory();
+  if (pathName === "/me/teacher/students/student-a/enrollments" || pathName === "/me/teacher/students/student-b/enrollments") return createEnrollments();
   return [];
 }
 

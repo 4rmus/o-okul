@@ -44,15 +44,15 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       await expect(studentActions).toContainText("Günlük iş kuyruğu");
       await expect(studentActions).toContainText("Öncelikli aksiyonlar");
       await expect(studentActions).toContainText("6 aksiyon");
-      await expect(studentActions.getByRole("link", { name: /Duyuruları oku: 1 okunmamış/ })).toHaveAttribute("href", "#portal-announcements");
-      await expect(studentActions.getByRole("link", { name: /Ödevi aç: 1 atama/ })).toHaveAttribute("href", "#portal-homework");
-      await expect(studentActions.getByRole("link", { name: /Devamsızlığı kontrol et: 30 kayıt/ })).toHaveAttribute("href", "#portal-attendance");
-      await expect(studentActions.getByRole("link", { name: /Destek talebini takip et: 1 açık/ })).toHaveAttribute("href", "#portal-support");
+      await expect(studentActions.getByRole("link", { name: /Duyuruları oku: 1 okunmamış/ })).toHaveAttribute("href", "/ogrenci/duyurular");
+      await expect(studentActions.getByRole("link", { name: /Ödevi aç: 1 atama/ })).toHaveAttribute("href", "/ogrenci/odevler");
+      await expect(studentActions.getByRole("link", { name: /Devamsızlığı kontrol et: 30 kayıt/ })).toHaveAttribute("href", "/ogrenci/devamsizlik");
+      await expect(studentActions.getByRole("link", { name: /Destek talebini takip et: 1 açık/ })).toHaveAttribute("href", "/ogrenci/destek");
       await expect(
         studentActions.getByRole("link", { name: /Son sınavı incele: %81,7.*Rapor.*İncele.*Başarı %.*24,5 net \/ 30 soru/ }),
-      ).toHaveAttribute("href", "#portal-report");
+      ).toHaveAttribute("href", "/ogrenci/raporlar");
       await expect(studentActions.getByRole("link", { name: /Son sınavı incele: %81,7/ })).toContainText("24,5 net / 30 soru");
-      await expect(studentActions.getByRole("link", { name: /Önizleme durumu: Canlı hesap/ })).toHaveAttribute("href", "#portal-focus");
+      await expect(studentActions.getByRole("link", { name: /Önizleme durumu: Canlı hesap/ })).toHaveAttribute("href", "/ogrenci/profil");
       await expect(studentActions.getByRole("link")).toHaveCount(6);
       await expectNoPortalActionPiiLeak(studentActions, rawPiiValues);
       await expectAnchorsAttached(page, [
@@ -63,7 +63,6 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
         "#portal-report",
         "#portal-focus",
       ]);
-      await expectPortalActionFocus(page, studentActions, /Son sınavı incele: %81,7/, page.locator("#portal-report"), "#portal-report");
       await expect(page.getByRole("region", { exact: true, name: "Öğrenci portal çalışma alanı" })).toBeVisible();
       await expectStudentProfileAndHistoryPanels(page);
       await expectGuardianRelationsPanel(page);
@@ -94,8 +93,8 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
     const studentPreviewActions = page.getByRole("region", { name: "Öğrenci günlük aksiyonları" });
     await expect(studentPreviewActions).toContainText("Önizleme durumu");
     await expect(studentPreviewActions).toContainText("Salt-okuma");
-    await expect(studentPreviewActions.getByRole("link", { name: /Önizleme durumu: Salt-okuma/ })).toHaveAttribute("href", "#portal-preview");
-    await clickAllPortalActionLinks(studentPreviewActions);
+    await expect(studentPreviewActions.getByRole("link", { name: /Önizleme durumu: Salt-okuma/ })).toHaveAttribute("href", "/ogrenci?rolePreview=1");
+    await expect(studentPreviewActions.getByRole("link", { name: /Duyuruları oku/ })).toHaveAttribute("href", "/ogrenci/duyurular?rolePreview=1");
     await expectStudentProfileAndHistoryPanels(page);
     await expectGuardianRelationsPanel(page);
     await expectPortalActivityPanels(page);
@@ -105,6 +104,27 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
     await expectPortalSupportPanel(page, { formVisible: false });
     await expect(page.getByRole("button", { name: "Destek talebi aç" })).toHaveCount(0);
     await expect.poll(() => mutationRequests).toEqual([]);
+  });
+
+  test("öğrenci sidebar alt rotaları gerçek sayfaları açar", async ({ page }) => {
+    await openStudentPortal(page, { height: 900, width: 1024 });
+
+    const routeCases = [
+      { label: "Sınav Raporu", path: "/ogrenci/raporlar", panel: () => page.getByRole("region", { name: "Portal rapor özeti" }) },
+      { label: "Ödevler", path: "/ogrenci/odevler", panel: () => page.getByRole("region", { exact: true, name: "Ödevler" }) },
+      { label: "Duyurular", path: "/ogrenci/duyurular", panel: () => page.getByRole("region", { exact: true, name: "Duyurular" }) },
+      { label: "Devamsızlık", path: "/ogrenci/devamsizlik", panel: () => page.getByRole("region", { exact: true, name: "Devamsızlık" }) },
+      { label: "Profil", path: "/ogrenci/profil", panel: () => page.getByRole("region", { exact: true, name: "Profil" }) },
+      { label: "Destek", path: "/ogrenci/destek", panel: () => page.getByRole("region", { name: "Destek talepleri" }) },
+    ];
+
+    for (const routeCase of routeCases) {
+      await clickSidebarRoute(page, "Öğrenci Paneli", routeCase.label);
+      await expect(page).toHaveURL(new RegExp(`${routeCase.path}$`));
+      await expect(page.getByRole("heading", { level: 1, name: "Öğrenci Portalı" })).toBeVisible();
+      await expect(routeCase.panel()).toBeVisible();
+      await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { exact: true, name: "Özet" })).not.toHaveAttribute("aria-current", "page");
+    }
   });
 
   for (const viewport of [
@@ -138,17 +158,17 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       await expect(guardianActions).toContainText("Günlük iş kuyruğu");
       await expect(guardianActions).toContainText("Öncelikli aksiyonlar");
       await expect(guardianActions).toContainText("7 aksiyon");
-      await expect(guardianActions.getByRole("link", { name: /Öğrenci seç: Ada Kaya/ })).toHaveAttribute("href", "#portal-student-picker");
-      await expect(guardianActions.getByRole("link", { name: /Ödevi kontrol et: 1 atama/ })).toHaveAttribute("href", "#portal-homework");
+      await expect(guardianActions.getByRole("link", { name: /Öğrenci seç: Ada Kaya/ })).toHaveAttribute("href", "/veli/ogrenci");
+      await expect(guardianActions.getByRole("link", { name: /Ödevi kontrol et: 1 atama/ })).toHaveAttribute("href", "/veli/odevler");
       await expect(
         guardianActions.getByRole("link", { name: /Ödeme durumunu gör: Ödeme izni kapalı.*Finans.*Kapalı.*Finans görünürlüğü kapalı/ }),
-      ).toHaveAttribute("href", "#portal-payments");
+      ).toHaveAttribute("href", "/veli/odemeler");
       await expect(guardianActions).toContainText("Finans görünürlüğü kapalı");
       await expect(
         guardianActions.getByRole("link", { name: /Son sınavı incele: %81,7.*Rapor.*İncele.*Başarı %.*24,5 net \/ 30 soru/ }),
-      ).toHaveAttribute("href", "#portal-report");
+      ).toHaveAttribute("href", "/veli/raporlar");
       await expect(guardianActions.getByRole("link", { name: /Son sınavı incele: %81,7/ })).toContainText("24,5 net / 30 soru");
-      await expect(guardianActions.getByRole("link", { name: /Önizleme durumu: Canlı hesap/ })).toHaveAttribute("href", "#portal-focus");
+      await expect(guardianActions.getByRole("link", { name: /Önizleme durumu: Canlı hesap/ })).toHaveAttribute("href", "/veli/bildirimler");
       await expect(guardianActions.getByRole("link")).toHaveCount(7);
       await expectNoPortalActionPiiLeak(guardianActions, rawPiiValues);
       await expect(guardianActions).not.toContainText("500,00 TRY");
@@ -161,7 +181,6 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
         "#portal-report",
         "#portal-focus",
       ]);
-      await expectPortalActionFocus(page, guardianActions, /Öğrenci seç: Ada Kaya/, page.locator("#portal-student-picker"), "#portal-student-picker");
       await expect(page.getByRole("region", { exact: true, name: "Veli portal çalışma alanı" })).toBeVisible();
       await expectStudentProfileAndHistoryPanels(page);
       await expectGuardianRelationshipSummary(page);
@@ -200,9 +219,8 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
     const guardianPreviewActions = page.getByRole("region", { name: "Veli günlük aksiyonları" });
     await expect(guardianPreviewActions).toContainText("Önizleme durumu");
     await expect(guardianPreviewActions).toContainText("Salt-okuma");
-    await expect(guardianPreviewActions.getByRole("link", { name: /Önizleme durumu: Salt-okuma/ })).toHaveAttribute("href", "#portal-preview");
-    await expect(guardianPreviewActions.getByRole("link", { name: /Destek talebini takip et: .*Salt-okuma.*Destek talebi açma kapalı/ })).toHaveAttribute("href", "#portal-support");
-    await clickAllPortalActionLinks(guardianPreviewActions);
+    await expect(guardianPreviewActions.getByRole("link", { name: /Önizleme durumu: Salt-okuma/ })).toHaveAttribute("href", "/veli?rolePreview=1");
+    await expect(guardianPreviewActions.getByRole("link", { name: /Destek talebini takip et: .*Salt-okuma.*Destek talebi açma kapalı/ })).toHaveAttribute("href", "/veli/destek?rolePreview=1");
     const preferenceCheckboxes = page.getByLabel("Bildirim tercihleri").locator('input[type="checkbox"]');
     await expect(preferenceCheckboxes).toHaveCount(3);
     await expect(preferenceCheckboxes.nth(0)).toBeDisabled();
@@ -217,6 +235,28 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
     await expectPortalSupportPanel(page, { formVisible: false });
     await expect(page.getByRole("button", { name: "Destek talebi aç" })).toHaveCount(0);
     await expect.poll(() => mutationRequests).toEqual([]);
+  });
+
+  test("veli sidebar alt rotaları gerçek sayfaları açar", async ({ page }) => {
+    await openGuardianPortal(page, { height: 900, width: 1024 });
+
+    const routeCases = [
+      { label: "Öğrenci", path: "/veli/ogrenci", panel: () => page.getByRole("region", { exact: true, name: "Öğrenci operasyon bağlamı" }) },
+      { label: "Sınav Raporu", path: "/veli/raporlar", panel: () => page.getByRole("region", { name: "Portal rapor özeti" }) },
+      { label: "Ödemeler", path: "/veli/odemeler", panel: () => page.getByRole("region", { exact: true, name: "Ödeme planları" }) },
+      { label: "Ödevler", path: "/veli/odevler", panel: () => page.getByRole("region", { exact: true, name: "Ödevler" }) },
+      { label: "Duyurular", path: "/veli/duyurular", panel: () => page.getByRole("region", { exact: true, name: "Duyurular" }) },
+      { label: "Bildirimler", path: "/veli/bildirimler", panel: () => page.getByRole("region", { exact: true, name: "Bildirim tercihleri" }) },
+      { label: "Destek", path: "/veli/destek", panel: () => page.getByRole("region", { name: "Destek talepleri" }) },
+    ];
+
+    for (const routeCase of routeCases) {
+      await clickSidebarRoute(page, "Veli Paneli", routeCase.label);
+      await expect(page).toHaveURL(new RegExp(`${routeCase.path}$`));
+      await expect(page.getByRole("heading", { level: 1, name: "Veli Portalı" })).toBeVisible();
+      await expect(routeCase.panel()).toBeVisible();
+      await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { exact: true, name: "Özet" })).not.toHaveAttribute("aria-current", "page");
+    }
   });
 });
 
@@ -374,6 +414,16 @@ async function openGuardianPortal(
   }, options.mode ?? "guardian");
   await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
   await page.goto(options.mode === "role-preview" ? "/veli?rolePreview=1" : "/veli");
+  await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+}
+
+async function clickSidebarRoute(page: Page, groupName: string, linkName: string) {
+  const navigation = page.getByRole("navigation", { name: "Ana menü" });
+  const groupButton = navigation.getByRole("button", { exact: true, name: groupName });
+  if ((await groupButton.getAttribute("aria-expanded")) !== "true") {
+    await groupButton.click();
+  }
+  await navigation.getByRole("link", { exact: true, name: linkName }).click();
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 

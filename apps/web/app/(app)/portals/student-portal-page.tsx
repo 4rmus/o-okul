@@ -45,7 +45,9 @@ import { SupportTicketsPanel } from "./_shared/support-tickets-panel.js";
 import { readReportExamId, fallbackReportExamId } from "../_shared/report-exam-selection.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
 
-export function StudentPortalPage() {
+export type StudentPortalView = "announcements" | "attendance" | "homework" | "overview" | "profile" | "reports" | "support";
+
+export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalView } = {}) {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const rolePreviewToken = readRolePreviewToken(searchParams);
@@ -99,12 +101,13 @@ export function StudentPortalPage() {
   const homeworkStatus = `${data?.homeworkAssignments.length ?? 0} atama`;
   const attendanceStatus = `${data?.attendanceSummary.total ?? 0} kayıt`;
   const supportStatus = openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok";
+  const profileSubtitle = data?.profile ? `${data.profile.firstName} ${data.profile.lastName}` : "Öğrenci özeti";
   const studentActionItems: PortalActionItem[] = [
     {
       actionLabel: unreadAnnouncements > 0 ? "Oku" : "Hazır",
       contextLabel: "Duyuru",
       detail: unreadAnnouncements > 0 ? "Okul duyurusunu kontrol et" : "Okunmamış duyuru yok",
-      href: "#portal-announcements",
+      href: studentPortalHref("/ogrenci/duyurular", isRolePreview),
       key: "announcement",
       label: "Duyuruları oku",
       statusLabel: unreadAnnouncements > 0 ? "Bekliyor" : "Güncel",
@@ -115,7 +118,7 @@ export function StudentPortalPage() {
       actionLabel: (data?.homeworkAssignments.length ?? 0) > 0 ? "Tamamla" : "Hazır",
       contextLabel: "Ödev",
       detail: "Materyal ve tekrar çalışması",
-      href: "#portal-homework",
+      href: studentPortalHref("/ogrenci/odevler", isRolePreview),
       key: "homework",
       label: "Ödevi aç",
       statusLabel: (data?.homeworkAssignments.length ?? 0) > 0 ? "Çalışma var" : "Tamam",
@@ -126,7 +129,7 @@ export function StudentPortalPage() {
       actionLabel: "Kontrol",
       contextLabel: "Devamsızlık",
       detail: `${data?.attendanceSummary.absent ?? 0} yok, ${data?.attendanceSummary.late ?? 0} geç`,
-      href: "#portal-attendance",
+      href: studentPortalHref("/ogrenci/devamsizlik", isRolePreview),
       key: "attendance",
       label: "Devamsızlığı kontrol et",
       statusLabel: (data?.attendanceSummary.absent ?? 0) > 0 || (data?.attendanceSummary.late ?? 0) > 0 ? "Dikkat" : "Düzenli",
@@ -137,7 +140,7 @@ export function StudentPortalPage() {
       actionLabel: openSupportTickets > 0 ? "Takip et" : isRolePreview ? "Salt-okuma" : "Talep aç",
       contextLabel: "Destek",
       detail: isRolePreview ? "Destek talebi açma kapalı" : "Öğrenci destek takibi",
-      href: "#portal-support",
+      href: studentPortalHref("/ogrenci/destek", isRolePreview),
       key: "support",
       label: "Destek talebini takip et",
       statusLabel: openSupportTickets > 0 ? "Açık" : isRolePreview ? "Salt-okuma" : "Hazır",
@@ -148,7 +151,7 @@ export function StudentPortalPage() {
       actionLabel: "İncele",
       contextLabel: "Rapor",
       detail: `${formatNumber(reportTotal?.net)} net / ${formatNumber(reportQuestionCount(reportTotal))} soru`,
-      href: "#portal-report",
+      href: studentPortalHref("/ogrenci/raporlar", isRolePreview),
       key: "report",
       label: "Son sınavı incele",
       statusLabel: "Başarı %",
@@ -159,7 +162,7 @@ export function StudentPortalPage() {
       actionLabel: isRolePreview ? "Salt-okuma" : "Canlı",
       contextLabel: "Erişim",
       detail: isRolePreview ? "Yazma işlemleri kapalı" : "Okuma ve destek işlemleri açık",
-      href: isRolePreview ? "#portal-preview" : "#portal-focus",
+      href: studentPortalHref(isRolePreview ? "/ogrenci" : "/ogrenci/profil", isRolePreview),
       key: "preview",
       label: "Önizleme durumu",
       statusLabel: isRolePreview ? "Salt-okuma" : "Canlı",
@@ -168,67 +171,71 @@ export function StudentPortalPage() {
     },
   ];
   return (
-    <PortalFrame title="Öğrenci Portalı" subtitle={data?.profile ? `${data.profile.firstName} ${data.profile.lastName}` : "Öğrenci özeti"}>
-      <PortalDailyBrief
-        summary="Devamsızlık, ödev, duyuru ve son sınav durumu tek bakışta; öğrencinin bugün öncelik vermesi gereken işler burada toplanır."
-        items={[
-          {
-            label: "Duyuru",
-            value: unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel",
-            detail: unreadAnnouncements > 0 ? "Okunmamış okul duyurusu var" : "Okunmamış duyuru yok",
-            tone: unreadAnnouncements > 0 ? "warning" : "success",
-          },
-          {
-            label: "Ödev",
-            value: `${data?.homeworkAssignments.length ?? 0} atama`,
-            detail: "Materyal ve tekrar çalışmaları",
-            tone: (data?.homeworkAssignments.length ?? 0) > 0 ? "info" : "neutral",
-          },
-          {
-            label: "Devamsızlık",
-            value: `${data?.attendanceSummary.total ?? 0} kayıt`,
-            detail: `${data?.attendanceSummary.absent ?? 0} yok, ${data?.attendanceSummary.late ?? 0} geç`,
-            tone: (data?.attendanceSummary.absent ?? 0) > 0 || (data?.attendanceSummary.late ?? 0) > 0 ? "warning" : "success",
-          },
-          {
-            label: "Son sınav",
-            value: formatPercentNumber(reportSuccess),
-            detail: `${formatNumber(reportTotal?.net)} net / ${formatNumber(reportQuestionCount(reportTotal))} soru`,
-            tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
-          },
-          {
-            label: "Destek",
-            value: openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok",
-            detail: "Öğrenci destek takibi",
-            tone: openSupportTickets > 0 ? "warning" : "success",
-          },
-          {
-            label: "Önizleme",
-            value: isRolePreview ? "Salt-okuma" : "Canlı hesap",
-            detail: isRolePreview ? "İşlem düğmeleri kapalıdır" : "Okuma ve destek işlemleri açık",
-            tone: isRolePreview ? "neutral" : "info",
-          },
-        ]}
-      />
-      <PortalActionStrip ariaLabel="Öğrenci günlük aksiyonları" items={studentActionItems} />
-      <MetricGrid
-        items={[
-          { label: "Toplam devamsızlık", value: data?.attendanceSummary.total ?? 0 },
-          { label: "Geç kalma", value: data?.attendanceSummary.late ?? 0 },
-          { label: "Not", value: data?.teacherNotes.length ?? 0 },
-          { label: "Ödev", value: data?.homeworkAssignments.length ?? 0 },
-          { label: "Başarı", value: formatPercentNumber(reportSuccessRate(reportTotal)) },
-          { label: "Net", value: formatNumber(reportTotal?.net) },
-          { label: "Soru", value: formatNumber(reportQuestionCount(reportTotal)) },
-          { label: "Gelişim", value: data?.developmentAssessments.length ?? 0 },
-        ]}
-      />
+    <PortalFrame title="Öğrenci Portalı" subtitle={studentPortalSubtitle(view, profileSubtitle)}>
+      {view === "overview" ? (
+        <>
+          <PortalDailyBrief
+            summary="Devamsızlık, ödev, duyuru ve son sınav durumu tek bakışta; öğrencinin bugün öncelik vermesi gereken işler burada toplanır."
+            items={[
+              {
+                label: "Duyuru",
+                value: unreadAnnouncements > 0 ? `${unreadAnnouncements} okunmamış` : "Güncel",
+                detail: unreadAnnouncements > 0 ? "Okunmamış okul duyurusu var" : "Okunmamış duyuru yok",
+                tone: unreadAnnouncements > 0 ? "warning" : "success",
+              },
+              {
+                label: "Ödev",
+                value: `${data?.homeworkAssignments.length ?? 0} atama`,
+                detail: "Materyal ve tekrar çalışmaları",
+                tone: (data?.homeworkAssignments.length ?? 0) > 0 ? "info" : "neutral",
+              },
+              {
+                label: "Devamsızlık",
+                value: `${data?.attendanceSummary.total ?? 0} kayıt`,
+                detail: `${data?.attendanceSummary.absent ?? 0} yok, ${data?.attendanceSummary.late ?? 0} geç`,
+                tone: (data?.attendanceSummary.absent ?? 0) > 0 || (data?.attendanceSummary.late ?? 0) > 0 ? "warning" : "success",
+              },
+              {
+                label: "Son sınav",
+                value: formatPercentNumber(reportSuccess),
+                detail: `${formatNumber(reportTotal?.net)} net / ${formatNumber(reportQuestionCount(reportTotal))} soru`,
+                tone: (reportSuccess ?? 0) >= 75 ? "success" : "info",
+              },
+              {
+                label: "Destek",
+                value: openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok",
+                detail: "Öğrenci destek takibi",
+                tone: openSupportTickets > 0 ? "warning" : "success",
+              },
+              {
+                label: "Önizleme",
+                value: isRolePreview ? "Salt-okuma" : "Canlı hesap",
+                detail: isRolePreview ? "İşlem düğmeleri kapalıdır" : "Okuma ve destek işlemleri açık",
+                tone: isRolePreview ? "neutral" : "info",
+              },
+            ]}
+          />
+          <PortalActionStrip ariaLabel="Öğrenci günlük aksiyonları" items={studentActionItems} />
+          <MetricGrid
+            items={[
+              { label: "Toplam devamsızlık", value: data?.attendanceSummary.total ?? 0 },
+              { label: "Geç kalma", value: data?.attendanceSummary.late ?? 0 },
+              { label: "Not", value: data?.teacherNotes.length ?? 0 },
+              { label: "Ödev", value: data?.homeworkAssignments.length ?? 0 },
+              { label: "Başarı", value: formatPercentNumber(reportSuccessRate(reportTotal)) },
+              { label: "Net", value: formatNumber(reportTotal?.net) },
+              { label: "Soru", value: formatNumber(reportQuestionCount(reportTotal)) },
+              { label: "Gelişim", value: data?.developmentAssessments.length ?? 0 },
+            ]}
+          />
+        </>
+      ) : null}
       {isRolePreview ? (
         <div id="portal-preview">
           <RolePreviewNotice />
         </div>
       ) : null}
-      <div id="portal-focus">
+      {view === "overview" || view === "profile" ? <div id="portal-focus">
         <StudentFocusPanel
           announcementStatus={announcementStatus}
           attendanceStatus={attendanceStatus}
@@ -241,12 +248,12 @@ export function StudentPortalPage() {
           successRate={formatPercentNumber(reportSuccess)}
           supportStatus={supportStatus}
         />
-      </div>
+      </div> : null}
       <PortalWorkspace
         ariaLabel="Öğrenci portal çalışma alanı"
         main={
           <>
-            <div id="portal-report">
+            {view === "overview" || view === "reports" ? <div id="portal-report">
               <ReportPanel
                 context={data?.report ?? undefined}
                 courseNames={courseNameById}
@@ -255,15 +262,15 @@ export function StudentPortalPage() {
                 report={data?.report ?? null}
                 termNames={termNameById}
               />
-            </div>
-            <div id="portal-homework">
+            </div> : null}
+            {view === "overview" || view === "homework" ? <div id="portal-homework">
               <HomeworkAssignmentsPanel
                 assignments={data?.homeworkAssignments ?? []}
                 courseNames={courseNameById}
                 termNames={termNameById}
               />
-            </div>
-            <div id="portal-announcements">
+            </div> : null}
+            {view === "overview" || view === "announcements" ? <div id="portal-announcements">
               <AnnouncementsPanel
                 announcements={data?.announcements ?? []}
                 readOnly={isRolePreview}
@@ -271,8 +278,8 @@ export function StudentPortalPage() {
                   auth && !isRolePreview ? markAnnouncementRead(auth.accessToken, `me/student/announcements/${encodeURIComponent(announcement.id)}/read`).then(() => query.refetch()) : undefined
                 }
               />
-            </div>
-            <div id="portal-support">
+            </div> : null}
+            {view === "overview" || view === "support" ? <div id="portal-support">
               <SupportTicketsPanel
                 readOnly={isRolePreview}
                 tickets={data?.supportTickets ?? []}
@@ -280,23 +287,23 @@ export function StudentPortalPage() {
                   auth && !isRolePreview ? createPortalSupportTicket(auth.accessToken, "me/student/support-tickets", input).then(() => query.refetch()) : undefined
                 }
               />
-            </div>
+            </div> : null}
           </>
         }
         side={
           <>
-            <ProfilePanel profile={data?.profile} />
-            <GuardianRelationsPanel guardians={data?.guardians ?? []} links={data?.guardianLinks ?? []} />
-            <StudentHistoryPanel
+            {view !== "announcements" && view !== "homework" && view !== "reports" && view !== "support" ? <ProfilePanel profile={data?.profile} /> : null}
+            {view === "overview" || view === "profile" ? <GuardianRelationsPanel guardians={data?.guardians ?? []} links={data?.guardianLinks ?? []} /> : null}
+            {view === "overview" || view === "profile" ? <StudentHistoryPanel
               classHistory={data?.classHistory ?? []}
               enrollments={data?.enrollments ?? []}
               termNames={termNameById}
-            />
-            <div id="portal-attendance">
+            /> : null}
+            {view === "overview" || view === "attendance" ? <div id="portal-attendance">
               <AttendancePanel records={data?.attendance ?? []} />
-            </div>
-            <DevelopmentTrendPanel assessments={data?.developmentAssessments ?? []} />
-            <TeacherNotesPanel notes={data?.teacherNotes ?? []} courseNames={courseNameById} termNames={termNameById} />
+            </div> : null}
+            {view === "overview" || view === "profile" ? <DevelopmentTrendPanel assessments={data?.developmentAssessments ?? []} /> : null}
+            {view === "overview" || view === "profile" || view === "attendance" ? <TeacherNotesPanel notes={data?.teacherNotes ?? []} courseNames={courseNameById} termNames={termNameById} /> : null}
           </>
         }
       />
@@ -386,4 +393,22 @@ function formatNumber(value: number | undefined) {
 
 function isOpenSupportTicket(ticket: SupportTicketRecord) {
   return ticket.status === "OPEN" || ticket.status === "IN_PROGRESS";
+}
+
+function studentPortalHref(path: string, isRolePreview: boolean) {
+  return isRolePreview ? `${path}?rolePreview=1` : path;
+}
+
+function studentPortalSubtitle(view: StudentPortalView, fallback: string) {
+  const subtitleByView: Record<StudentPortalView, string> = {
+    announcements: "Duyurular",
+    attendance: "Devamsızlık",
+    homework: "Ödevler",
+    overview: fallback,
+    profile: "Profil ve kayıt bilgileri",
+    reports: "Sınav raporu",
+    support: "Destek talepleri",
+  };
+
+  return subtitleByView[view];
 }

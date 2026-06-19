@@ -120,7 +120,9 @@ interface ReportContext {
   termId?: string;
 }
 
-export function TeacherPortalPage() {
+export type TeacherPortalView = "announcements" | "homework" | "overview" | "reports" | "schedule" | "student" | "support";
+
+export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalView } = {}) {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -421,7 +423,7 @@ export function TeacherPortalPage() {
       actionLabel: "Seç",
       contextLabel: "Öğrenci",
       detail: selectedCourseName && selectedTermName ? `${selectedCourseName} / ${selectedTermName}` : "Öğrenci çalışma bağlamı",
-      href: "#portal-teacher-student-picker",
+      href: teacherPortalHref("/ogretmen/ogrenci-takibi", isRolePreview),
       key: "student",
       label: "Öğrenci seç",
       statusLabel: selectedStudent ? "Seçili" : "Bekliyor",
@@ -432,7 +434,7 @@ export function TeacherPortalPage() {
       actionLabel: isRolePreview ? "Salt-okuma" : "Kaydet",
       contextLabel: "Yoklama",
       detail: isRolePreview ? "Yoklama formu kapalı" : `${attendanceForm.date} için yoklama`,
-      href: isRolePreview ? "#portal-teacher-preview" : "#portal-teacher-attendance",
+      href: teacherPortalHref(isRolePreview ? "/ogretmen" : "/ogretmen/ogrenci-takibi", isRolePreview),
       key: "attendance",
       label: "Yoklama kaydet",
       statusLabel: isRolePreview ? "Salt-okuma" : "Bugün",
@@ -443,7 +445,7 @@ export function TeacherPortalPage() {
       actionLabel: isRolePreview ? "Salt-okuma" : "Ekle",
       contextLabel: "Not",
       detail: isRolePreview ? "Not formu kapalı" : selectedStudentLabel,
-      href: isRolePreview ? "#portal-teacher-preview" : "#portal-teacher-note",
+      href: teacherPortalHref(isRolePreview ? "/ogretmen" : "/ogretmen/ogrenci-takibi", isRolePreview),
       key: "note",
       label: "Not ekle",
       statusLabel: isRolePreview ? "Salt-okuma" : "Günlük takip",
@@ -454,7 +456,7 @@ export function TeacherPortalPage() {
       actionLabel: isRolePreview ? "Salt-okuma" : "Ata",
       contextLabel: "Materyal",
       detail: isRolePreview ? "Materyal atama kapalı" : selectedMaterial?.title ?? "Materyal seçimi",
-      href: isRolePreview ? "#portal-teacher-preview" : "#portal-teacher-material",
+      href: teacherPortalHref(isRolePreview ? "/ogretmen" : "/ogretmen/ogrenci-takibi", isRolePreview),
       key: "material",
       label: "Materyal ata",
       statusLabel: isRolePreview ? "Salt-okuma" : "Atama",
@@ -465,7 +467,7 @@ export function TeacherPortalPage() {
       actionLabel: uncheckedHomework > 0 ? "Kontrol" : "Tamam",
       contextLabel: "Ödev",
       detail: "Kontrol edilmeyen ödevler",
-      href: "#portal-teacher-homework",
+      href: teacherPortalHref("/ogretmen/odevler", isRolePreview),
       key: "homework",
       label: "Ödev kontrol et",
       statusLabel: uncheckedHomework > 0 ? "Bekliyor" : "Tamam",
@@ -476,7 +478,7 @@ export function TeacherPortalPage() {
       actionLabel: "İncele",
       contextLabel: "Rapor",
       detail: `${formatNetNumber(selectedReportTotal?.net)} net / ${formatNetNumber(reportQuestionCount(selectedReportTotal))} soru`,
-      href: "#portal-teacher-report",
+      href: teacherPortalHref("/ogretmen/raporlar", isRolePreview),
       key: "report",
       label: "Raporu incele",
       statusLabel: "Başarı %",
@@ -487,7 +489,7 @@ export function TeacherPortalPage() {
       actionLabel: openSupportTickets > 0 ? "Takip" : "Hazır",
       contextLabel: "Destek",
       detail: "Öğretmen destek takibi",
-      href: "#portal-teacher-support",
+      href: teacherPortalHref("/ogretmen/destek", isRolePreview),
       key: "support",
       label: "Destek talebini takip et",
       statusLabel: openSupportTickets > 0 ? "Açık" : "Hazır",
@@ -498,7 +500,7 @@ export function TeacherPortalPage() {
       actionLabel: isRolePreview ? "Salt-okuma" : "Canlı",
       contextLabel: "Erişim",
       detail: isRolePreview ? "Yoklama, not ve materyal kapalı" : "Yoklama, not ve materyal açık",
-      href: isRolePreview ? "#portal-teacher-preview" : "#portal-teacher-focus",
+      href: teacherPortalHref(isRolePreview ? "/ogretmen" : "/ogretmen/ogrenci-takibi", isRolePreview),
       key: "preview",
       label: "Önizleme durumu",
       statusLabel: isRolePreview ? "Salt-okuma" : "Canlı",
@@ -506,70 +508,77 @@ export function TeacherPortalPage() {
       value: isRolePreview ? "Salt-okuma" : "İşlem açık",
     },
   ];
+  const showOverview = view === "overview";
+  const showStudentWorkspace = view === "overview" || view === "student" || view === "homework" || view === "reports" || view === "support";
+  const showStudentTracking = view === "overview" || view === "student";
 
   return (
-    <PortalFrame title="Öğretmen Portalı" subtitle={data?.teacher ? `${data.teacher.firstName} ${data.teacher.lastName}` : "Ders programı"}>
-      <PortalDailyBrief
-        title="Günlük ders akışı"
-        summary="Ders akışı, seçili öğrenci ve sınıf içi takip işleri aynı yüzeyde kalır; öğretmen portali günün operasyonlarını öne alır."
-        items={[
-          {
-            label: "Sıradaki ders",
-            value: nextLesson ? nextLesson.title : "Planlı ders yok",
-            detail: nextLesson ? formatDateTime(nextLesson.startsAt) : `${todayLessons.length} bugünkü ders`,
-            tone: nextLesson ? "info" : "neutral",
-          },
-          {
-            label: "Öğrenci kapsamı",
-            value: `${students.length} öğrenci`,
-            detail: selectedStudent ? formatTeacherStudentLabel(selectedStudent, classNameById) : "Seçili öğrenci yok",
-            tone: students.length > 0 ? "info" : "neutral",
-          },
-          {
-            label: "Ödev kontrolü",
-            value: uncheckedHomework > 0 ? `${uncheckedHomework} bekliyor` : "Tamam",
-            detail: "Kontrol edilmeyen ödevler",
-            tone: uncheckedHomework > 0 ? "warning" : "success",
-          },
-          {
-            label: "Destek",
-            value: openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok",
-            detail: "Öğretmen destek takibi",
-            tone: openSupportTickets > 0 ? "warning" : "success",
-          },
-          {
-            label: "Seçili başarı",
-            value: formatPercentNumber(selectedReportSuccess),
-            detail: `${formatNetNumber(selectedReportTotal?.net)} net / ${formatNetNumber(reportQuestionCount(selectedReportTotal))} soru`,
-            tone: (selectedReportSuccess ?? 0) >= 75 ? "success" : "info",
-          },
-          {
-            label: "Önizleme",
-            value: isRolePreview ? "Salt-okuma" : "İşlem açık",
-            detail: isRolePreview ? "Yoklama, not ve materyal kapalı" : "Yoklama, not ve materyal formları aktif",
-            tone: isRolePreview ? "neutral" : "info",
-          },
-        ]}
-      />
-      <PortalActionStrip ariaLabel="Öğretmen günlük aksiyonları" items={teacherActionItems} />
-      <MetricGrid
-        items={[
-          { label: "Ders", value: data?.schedule.length ?? 0 },
-          { label: "Öğrenci", value: students.length },
-          { label: "Yoklama", value: data?.attendance.length ?? 0 },
-          { label: "Ödev", value: data?.homework.length ?? 0 },
-          { label: "Başarı", value: formatPercentNumber(reportSuccessRate(selectedReportTotal)) },
-          { label: "Net", value: formatNetNumber(selectedReportTotal?.net) },
-          { label: "Soru", value: formatNetNumber(reportQuestionCount(selectedReportTotal)) },
-          { label: "Destek", value: data?.supportTickets.length ?? 0 },
-        ]}
-      />
+    <PortalFrame title="Öğretmen Portalı" subtitle={teacherPortalSubtitle(view, data?.teacher ? `${data.teacher.firstName} ${data.teacher.lastName}` : "Ders programı")}>
+      {showOverview ? (
+        <>
+          <PortalDailyBrief
+            title="Günlük ders akışı"
+            summary="Ders akışı, seçili öğrenci ve sınıf içi takip işleri aynı yüzeyde kalır; öğretmen portali günün operasyonlarını öne alır."
+            items={[
+              {
+                label: "Sıradaki ders",
+                value: nextLesson ? nextLesson.title : "Planlı ders yok",
+                detail: nextLesson ? formatDateTime(nextLesson.startsAt) : `${todayLessons.length} bugünkü ders`,
+                tone: nextLesson ? "info" : "neutral",
+              },
+              {
+                label: "Öğrenci kapsamı",
+                value: `${students.length} öğrenci`,
+                detail: selectedStudent ? formatTeacherStudentLabel(selectedStudent, classNameById) : "Seçili öğrenci yok",
+                tone: students.length > 0 ? "info" : "neutral",
+              },
+              {
+                label: "Ödev kontrolü",
+                value: uncheckedHomework > 0 ? `${uncheckedHomework} bekliyor` : "Tamam",
+                detail: "Kontrol edilmeyen ödevler",
+                tone: uncheckedHomework > 0 ? "warning" : "success",
+              },
+              {
+                label: "Destek",
+                value: openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok",
+                detail: "Öğretmen destek takibi",
+                tone: openSupportTickets > 0 ? "warning" : "success",
+              },
+              {
+                label: "Seçili başarı",
+                value: formatPercentNumber(selectedReportSuccess),
+                detail: `${formatNetNumber(selectedReportTotal?.net)} net / ${formatNetNumber(reportQuestionCount(selectedReportTotal))} soru`,
+                tone: (selectedReportSuccess ?? 0) >= 75 ? "success" : "info",
+              },
+              {
+                label: "Önizleme",
+                value: isRolePreview ? "Salt-okuma" : "İşlem açık",
+                detail: isRolePreview ? "Yoklama, not ve materyal kapalı" : "Yoklama, not ve materyal formları aktif",
+                tone: isRolePreview ? "neutral" : "info",
+              },
+            ]}
+          />
+          <PortalActionStrip ariaLabel="Öğretmen günlük aksiyonları" items={teacherActionItems} />
+          <MetricGrid
+            items={[
+              { label: "Ders", value: data?.schedule.length ?? 0 },
+              { label: "Öğrenci", value: students.length },
+              { label: "Yoklama", value: data?.attendance.length ?? 0 },
+              { label: "Ödev", value: data?.homework.length ?? 0 },
+              { label: "Başarı", value: formatPercentNumber(reportSuccessRate(selectedReportTotal)) },
+              { label: "Net", value: formatNetNumber(selectedReportTotal?.net) },
+              { label: "Soru", value: formatNetNumber(reportQuestionCount(selectedReportTotal)) },
+              { label: "Destek", value: data?.supportTickets.length ?? 0 },
+            ]}
+          />
+        </>
+      ) : null}
       {isRolePreview ? (
         <div id="portal-teacher-preview">
           <RolePreviewNotice />
         </div>
       ) : null}
-      <div id="portal-teacher-profile">
+      {view === "overview" ? <div id="portal-teacher-profile">
         <TeacherProfileSummaryPanel
           campusNames={campusNameById}
           classes={classById}
@@ -581,8 +590,8 @@ export function TeacherPortalPage() {
           teacher={data?.teacher}
           termNames={termNameById}
         />
-      </div>
-      <div id="portal-teacher-today-schedule">
+      </div> : null}
+      {view === "overview" || view === "schedule" ? <div id="portal-teacher-today-schedule">
         <TeacherTodaySchedulePanel
           classNames={classNameById}
           courseNames={courseNameById}
@@ -590,8 +599,8 @@ export function TeacherPortalPage() {
           nextLesson={nextLesson}
           termNames={termNameById}
         />
-      </div>
-      <div id="portal-teacher-announcements">
+      </div> : null}
+      {view === "overview" || view === "announcements" ? <div id="portal-teacher-announcements">
         <AnnouncementsPanel
           announcements={data?.announcements ?? []}
           readOnly={isRolePreview}
@@ -603,16 +612,16 @@ export function TeacherPortalPage() {
               : undefined
           }
         />
-      </div>
-      <section className="next-teacher-workspace" aria-label="Öğrenci çalışma alanı" id="portal-teacher-workspace">
-        <header className="next-teacher-workspace__header">
+      </div> : null}
+      {showStudentWorkspace ? <section className="next-teacher-workspace" aria-label="Öğrenci çalışma alanı" id="portal-teacher-workspace">
+        {showStudentTracking ? <header className="next-teacher-workspace__header">
           <div>
             <p className="next-section-eyebrow">Öğrenci çalışma alanı</p>
             <h2>Öğrenci Takibi</h2>
           </div>
           <p>{selectedStudent ? formatTeacherStudentLabel(selectedStudent, classNameById) : "Seçili öğrenci yok"}</p>
-        </header>
-        <Panel
+        </header> : null}
+        {showStudentTracking ? <Panel
           aria-label="Öğretmen öğrenci kapsamı"
           description="Öğretmenin işlem yapabildiği öğrenci kapsamı."
           id="portal-teacher-student-picker"
@@ -630,8 +639,8 @@ export function TeacherPortalPage() {
               </button>
             ))}
           </SegmentedControl>
-        </Panel>
-        <div id="portal-teacher-focus">
+        </Panel> : null}
+        {showStudentTracking ? <div id="portal-teacher-focus">
           <TeacherFocusPanel
             campusNames={campusNameById}
             courseName={selectedCourseName}
@@ -645,8 +654,8 @@ export function TeacherPortalPage() {
             successRate={selectedReportSuccess}
             termName={selectedTermName}
           />
-        </div>
-        {!isRolePreview ? (
+        </div> : null}
+        {showStudentTracking && !isRolePreview ? (
           <section className="next-teacher-action-grid" aria-label="Öğretmen günlük işlemleri" id="portal-teacher-actions">
             <Panel
               as="form"
@@ -881,7 +890,7 @@ export function TeacherPortalPage() {
             ) : null}
           </section>
         ) : null}
-        <div id="portal-teacher-support">
+        {view === "overview" || view === "support" ? <div id="portal-teacher-support">
           <SupportTicketsPanel
             readOnly={isRolePreview}
             tickets={data?.supportTickets ?? []}
@@ -899,24 +908,24 @@ export function TeacherPortalPage() {
                 : undefined
             }
           />
-        </div>
-        <div id="portal-teacher-homework">
+        </div> : null}
+        {view === "overview" || view === "homework" ? <div id="portal-teacher-homework">
           <TeacherHomeworkPanel homework={data?.homework ?? []} onToggle={(homework) => void toggleHomeworkCheck(homework)} readOnly={isRolePreview} />
-        </div>
-        <TeacherMaterialAssignmentsPanel
+        </div> : null}
+        {view === "overview" || view === "homework" || view === "student" ? <TeacherMaterialAssignmentsPanel
           assignments={(data?.materialAssignments ?? []).filter((assignment) => assignment.studentId === selectedStudentId)}
           courseNames={courseNameById}
           materials={data?.materials ?? []}
           students={students}
           termNames={termNameById}
-        />
-        <StudentHistoryPanel
+        /> : null}
+        {showStudentTracking ? <StudentHistoryPanel
           classHistory={historyQuery.data?.classHistory ?? []}
           enrollments={historyQuery.data?.enrollments ?? []}
           termNames={termNameById}
-        />
+        /> : null}
         {historyQuery.isError ? <p className="next-form-error">Öğrenci geçmişi alınamadı.</p> : null}
-        <div id="portal-teacher-report">
+        {view === "overview" || view === "reports" ? <div id="portal-teacher-report">
           <ReportPanel
             context={reportQuery.data?.reportContext}
             courseNames={courseNameById}
@@ -925,17 +934,17 @@ export function TeacherPortalPage() {
             report={reportQuery.data?.report ?? null}
             termNames={termNameById}
           />
-        </div>
+        </div> : null}
         {reportQuery.isError ? <p className="next-form-error">Öğrenci raporu alınamadı.</p> : null}
-      </section>
-      <TeacherClassReportsPanel
+      </section> : null}
+      {view === "overview" || view === "reports" ? <TeacherClassReportsPanel
         courseNames={courseNameById}
         reports={data?.classReports ?? []}
         termNames={termNameById}
-      />
-      <TeacherAttendancePanel records={data?.attendance ?? []} students={students} courseNames={courseNameById} termNames={termNameById} />
-      <TeacherNotesPanel notes={data?.teacherNotes ?? []} students={students} courseNames={courseNameById} termNames={termNameById} />
-      <Panel
+      /> : null}
+      {showStudentTracking ? <TeacherAttendancePanel records={data?.attendance ?? []} students={students} courseNames={courseNameById} termNames={termNameById} /> : null}
+      {showStudentTracking ? <TeacherNotesPanel notes={data?.teacherNotes ?? []} students={students} courseNames={courseNameById} termNames={termNameById} /> : null}
+      {view === "overview" || view === "schedule" ? <Panel
         aria-label="Ders programı"
         description="Öğretmenin portaldan izlediği ders, sınıf, branş ve dönem akışı."
         title="Program"
@@ -949,7 +958,7 @@ export function TeacherPortalPage() {
           getRowKey={(lesson) => lesson.id}
           rows={data?.schedule ?? []}
         />
-      </Panel>
+      </Panel> : null}
     </PortalFrame>
   );
 }
@@ -1110,11 +1119,15 @@ async function loadTeacherStudentReport(
 }
 
 async function loadTeacherStudentHistory(accessToken: string, studentId: string, rolePreviewToken = ""): Promise<TeacherStudentHistoryData> {
+  const teacherStudentBasePath = `${apiBaseUrl}/me/teacher/students/${encodeURIComponent(studentId)}`;
   const [classHistory, enrollments] = await Promise.all([
-    readOnlyRequest<StudentClassHistoryRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(studentId)}/class-history`, rolePreviewToken),
-    readOnlyRequest<StudentEnrollmentRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(studentId)}/enrollments`, rolePreviewToken),
+    apiRequestOrNull<StudentClassHistoryRecord[]>(accessToken, `${teacherStudentBasePath}/class-history`, rolePreviewToken),
+    apiRequestOrNull<StudentEnrollmentRecord[]>(accessToken, `${teacherStudentBasePath}/enrollments`, rolePreviewToken),
   ]);
-  return { classHistory, enrollments };
+  return {
+    classHistory: classHistory ?? [],
+    enrollments: enrollments ?? [],
+  };
 }
 
 function readOnlyRequest<T>(accessToken: string, input: RequestInfo | URL, rolePreviewToken = ""): Promise<T> {
@@ -1208,6 +1221,24 @@ function formatNetNumber(value: number | undefined) {
 
 function isOpenSupportTicket(ticket: SupportTicketRecord) {
   return ticket.status === "OPEN" || ticket.status === "IN_PROGRESS";
+}
+
+function teacherPortalHref(path: string, isRolePreview: boolean) {
+  return isRolePreview ? `${path}?rolePreview=1` : path;
+}
+
+function teacherPortalSubtitle(view: TeacherPortalView, fallback: string) {
+  const subtitleByView: Record<TeacherPortalView, string> = {
+    announcements: "Duyurular",
+    homework: "Ödev kontrolü",
+    overview: fallback,
+    reports: "Sınav raporu",
+    schedule: "Ders akışı",
+    student: "Öğrenci takibi",
+    support: "Destek talepleri",
+  };
+
+  return subtitleByView[view];
 }
 
 function todayInputValue() {

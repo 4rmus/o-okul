@@ -55,6 +55,19 @@ type RolePortalItem = {
   subjectType: "TEACHER" | "STUDENT" | "GUARDIAN";
 };
 
+type RolePortalNavGroup = {
+  label: string;
+  role: "TEACHER" | "STUDENT" | "GUARDIAN";
+  subjectType: "TEACHER" | "STUDENT" | "GUARDIAN";
+  items: RolePortalNavigationItem[];
+};
+
+type RolePortalNavigationItem = {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+};
+
 export const institutionNavGroups: readonly InstitutionNavGroup[] = [
   {
     label: "Başlangıç",
@@ -143,6 +156,52 @@ export const rolePortalItems: readonly RolePortalItem[] = [
   { href: "/veli", icon: Users, label: "Veli Portalı", role: "GUARDIAN", subjectType: "GUARDIAN" },
 ];
 
+export const rolePortalNavGroups: readonly RolePortalNavGroup[] = [
+  {
+    label: "Öğretmen Paneli",
+    role: "TEACHER",
+    subjectType: "TEACHER",
+    items: [
+      { href: "/ogretmen", icon: LayoutDashboard, label: "Özet" },
+      { href: "/ogretmen/ders-akisi", icon: CalendarDays, label: "Ders Akışı" },
+      { href: "/ogretmen/ogrenci-takibi", icon: GraduationCap, label: "Öğrenci Takibi" },
+      { href: "/ogretmen/odevler", icon: NotebookTabs, label: "Ödev Kontrolü" },
+      { href: "/ogretmen/raporlar", icon: BarChart3, label: "Sınav Raporu" },
+      { href: "/ogretmen/duyurular", icon: Megaphone, label: "Duyurular" },
+      { href: "/ogretmen/destek", icon: LifeBuoy, label: "Destek" },
+    ],
+  },
+  {
+    label: "Öğrenci Paneli",
+    role: "STUDENT",
+    subjectType: "STUDENT",
+    items: [
+      { href: "/ogrenci", icon: LayoutDashboard, label: "Özet" },
+      { href: "/ogrenci/raporlar", icon: BarChart3, label: "Sınav Raporu" },
+      { href: "/ogrenci/odevler", icon: NotebookTabs, label: "Ödevler" },
+      { href: "/ogrenci/duyurular", icon: Megaphone, label: "Duyurular" },
+      { href: "/ogrenci/devamsizlik", icon: ClipboardCheck, label: "Devamsızlık" },
+      { href: "/ogrenci/profil", icon: GraduationCap, label: "Profil" },
+      { href: "/ogrenci/destek", icon: LifeBuoy, label: "Destek" },
+    ],
+  },
+  {
+    label: "Veli Paneli",
+    role: "GUARDIAN",
+    subjectType: "GUARDIAN",
+    items: [
+      { href: "/veli", icon: LayoutDashboard, label: "Özet" },
+      { href: "/veli/ogrenci", icon: GraduationCap, label: "Öğrenci" },
+      { href: "/veli/raporlar", icon: BarChart3, label: "Sınav Raporu" },
+      { href: "/veli/odemeler", icon: CreditCard, label: "Ödemeler" },
+      { href: "/veli/odevler", icon: NotebookTabs, label: "Ödevler" },
+      { href: "/veli/duyurular", icon: Megaphone, label: "Duyurular" },
+      { href: "/veli/bildirimler", icon: MessageSquareText, label: "Bildirimler" },
+      { href: "/veli/destek", icon: LifeBuoy, label: "Destek" },
+    ],
+  },
+];
+
 export const staticBreadcrumbLabels: Record<string, string> = {
   "/": "Ana Sayfa",
   "/sistem": "Sistem Özeti",
@@ -153,8 +212,27 @@ export const staticBreadcrumbLabels: Record<string, string> = {
   "/kurum": "Kurum Özeti",
   "/kurum/kurulum": "Kurulum",
   "/ogretmen": "Öğretmen Portalı",
+  "/ogretmen/ders-akisi": "Ders Akışı",
+  "/ogretmen/ogrenci-takibi": "Öğrenci Takibi",
+  "/ogretmen/odevler": "Ödev Kontrolü",
+  "/ogretmen/raporlar": "Sınav Raporu",
+  "/ogretmen/duyurular": "Duyurular",
+  "/ogretmen/destek": "Destek",
   "/ogrenci": "Öğrenci Portalı",
+  "/ogrenci/raporlar": "Sınav Raporu",
+  "/ogrenci/odevler": "Ödevler",
+  "/ogrenci/duyurular": "Duyurular",
+  "/ogrenci/devamsizlik": "Devamsızlık",
+  "/ogrenci/profil": "Profil",
+  "/ogrenci/destek": "Destek",
   "/veli": "Veli Portalı",
+  "/veli/ogrenci": "Öğrenci",
+  "/veli/raporlar": "Sınav Raporu",
+  "/veli/odemeler": "Ödemeler",
+  "/veli/odevler": "Ödevler",
+  "/veli/duyurular": "Duyurular",
+  "/veli/bildirimler": "Bildirimler",
+  "/veli/destek": "Destek",
   "/kurum/akademik-takvim": "Takvim",
   "/kurum/canli-yayin": "Canlı Yayın",
   "/kurum/denetim": "Denetim",

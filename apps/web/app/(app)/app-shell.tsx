@@ -17,11 +17,12 @@ import {
   hasSubjectPortalAccess,
   hasSystemAccess,
 } from "./_shared/access.js";
-import { dynamicDetailParents, institutionNavGroups, rolePortalItems, staticBreadcrumbLabels, systemNavGroups } from "./_shared/navigation.js";
+import { dynamicDetailParents, institutionNavGroups, rolePortalItems, rolePortalNavGroups, staticBreadcrumbLabels, systemNavGroups } from "./_shared/navigation.js";
 const allNavigationItems = [
   ...systemNavGroups.flatMap((group) => group.items),
   ...institutionNavGroups.flatMap((group) => group.items),
   ...rolePortalItems,
+  ...rolePortalNavGroups.flatMap((group) => group.items),
 ];
 
 const breadcrumbLabelByPath = {
@@ -69,8 +70,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const commandOpenerRef = useRef<HTMLButtonElement | null>(null);
   const mobileNavTriggerRef = useRef<HTMLButtonElement | null>(null);
   const mobileNavCloseRef = useRef<HTMLButtonElement | null>(null);
-  const visiblePortalItems = useMemo(
-    () => auth?.session ? rolePortalItems.filter((item) => hasSubjectPortalAccess(auth.session, item.role, item.subjectType)) : [],
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const visiblePortalNavGroups = useMemo(
+    () => auth?.session ? rolePortalNavGroups.filter((group) => hasSubjectPortalAccess(auth.session, group.role, group.subjectType)) : [],
     [auth],
   );
   const visibleInstitutionNavGroups = useMemo(() => auth?.session ? getInstitutionNavGroups(auth.session.roles) : [], [auth]);
@@ -79,10 +81,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     [auth],
   );
   const commandItems = useMemo(
-    () => buildCommandItems(visibleInstitutionNavGroups, visibleSystemNavGroups, visiblePortalItems, auth?.session.roles ?? []),
-    [auth?.session.roles, visibleInstitutionNavGroups, visiblePortalItems, visibleSystemNavGroups],
+    () => buildCommandItems(visibleInstitutionNavGroups, visibleSystemNavGroups, visiblePortalNavGroups, auth?.session.roles ?? []),
+    [auth?.session.roles, visibleInstitutionNavGroups, visiblePortalNavGroups, visibleSystemNavGroups],
   );
-  const canUsePushDevices = auth?.session ? hasInstitutionAccess(auth.session.roles) || visiblePortalItems.length > 0 : false;
+  const canUsePushDevices = auth?.session ? hasInstitutionAccess(auth.session.roles) || visiblePortalNavGroups.length > 0 : false;
+  const isRolePreviewRoute = hasRolePreviewAccess(searchParams);
   const isAuthorizedPath = auth ? canAccessPath(auth.session, pathname, searchParams) : false;
 
   useEffect(() => {
@@ -139,6 +142,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         closeMobileNav();
+        return;
+      }
+      if (event.key === "Tab") {
+        keepFocusInMobileNav(event, sidebarRef.current);
       }
     }
 
@@ -172,13 +179,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   function isActive(href: string) {
-    if (href === "/kurum") {
+    const hrefPath = href.split(/[?#]/)[0] || href;
+    if (hrefPath === "/kurum") {
       return pathname === "/kurum";
     }
-    if (href === "/sistem") {
+    if (hrefPath === "/sistem") {
       return pathname === "/sistem";
     }
-    return pathname === href || pathname.startsWith(`${href}/`);
+    if (isPortalRootPath(hrefPath)) {
+      return pathname === hrefPath;
+    }
+    return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
   }
 
   function navCurrent(href: string) {
@@ -259,6 +270,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         data-mobile-open={isMobileNavOpen ? "true" : "false"}
         id="next-sidebar"
         aria-label="Ana menü"
+        ref={sidebarRef}
       >
         <header className="next-sidebar-header">
           <div className="next-brand">
@@ -299,21 +311,24 @@ export function AppShell({ children }: { children: ReactNode }) {
                 />
               ))
             : null}
-          {visiblePortalItems.length > 0 ? (
-            <SidebarGroup
-              expanded={Boolean(expandedSidebarGroups.portal) || visiblePortalItems.some((item) => isActive(item.href))}
-              group={{ label: "Portal", items: visiblePortalItems }}
-              groupKey="portal"
-              isActive={visiblePortalItems.some((item) => isActive(item.href))}
-              navCurrent={navCurrent}
-              onToggle={toggleSidebarGroup}
-            />
-          ) : null}
+          {visiblePortalNavGroups.length > 0
+            ? visiblePortalNavGroups.map((group) => (
+                <SidebarGroup
+                  key={group.label}
+                  expanded={Boolean(expandedSidebarGroups[`portal:${group.label}`]) || isGroupActive(group)}
+                  group={group}
+                  groupKey={`portal:${group.label}`}
+                  isActive={isGroupActive(group)}
+                  navCurrent={navCurrent}
+                  onToggle={toggleSidebarGroup}
+                />
+              ))
+            : null}
           <button className="next-sidebar-logout" type="button" onClick={() => void handleLogout()}>
             Çıkış
           </button>
         </nav>
-        {canUsePushDevices ? <PushDevicePanel accessToken={auth.accessToken} /> : null}
+        {canUsePushDevices && !isRolePreviewRoute ? <PushDevicePanel accessToken={auth.accessToken} /> : null}
       </aside>
       <button
         aria-hidden={!isMobileNavOpen}
@@ -323,7 +338,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         tabIndex={isMobileNavOpen ? 0 : -1}
         type="button"
       />
-      <section className="next-workspace">
+      <section className="next-workspace" aria-hidden={isMobileNavOpen ? "true" : undefined}>
         <RouteBreadcrumb pathname={pathname} />
         {children}
       </section>
@@ -349,6 +364,35 @@ function focusCommandOpener(preferredOpener: HTMLButtonElement | null) {
   ];
   const opener = candidates.find((candidate) => candidate && candidate.getClientRects().length > 0 && !candidate.disabled);
   opener?.focus();
+}
+
+function isPortalRootPath(pathname: string) {
+  return pathname === "/ogretmen" || pathname === "/ogrenci" || pathname === "/veli";
+}
+
+function keepFocusInMobileNav(event: KeyboardEvent, sidebar: HTMLElement | null) {
+  if (!sidebar) return;
+  const focusableElements = Array.from(
+    sidebar.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((element) => element.getClientRects().length > 0 && window.getComputedStyle(element).visibility !== "hidden");
+  if (focusableElements.length === 0) return;
+
+  const first = focusableElements[0];
+  const last = focusableElements[focusableElements.length - 1];
+  if (!first || !last) return;
+
+  const activeElement = document.activeElement;
+  if (event.shiftKey && activeElement === first) {
+    event.preventDefault();
+    last.focus();
+    return;
+  }
+  if (!event.shiftKey && activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function SidebarGroup({
@@ -399,7 +443,7 @@ function SidebarLink({ current, item }: { current?: "page"; item: SidebarItem })
   const Icon = item.icon;
 
   return (
-    <Link className="next-sidebar-link" href={item.href} aria-current={current}>
+    <Link className="next-sidebar-link" href={item.href} aria-current={current} title={item.label}>
       {Icon ? <Icon className="next-sidebar-link-icon" size={16} aria-hidden="true" /> : null}
       <span>{item.label}</span>
     </Link>
@@ -729,13 +773,13 @@ function getHomePath(session: AppSession) {
 function buildCommandItems(
   institutionGroups: readonly NavigationGroup[],
   systemGroups: readonly NavigationGroup[],
-  portalItems: readonly { href: string; label: string }[],
+  portalGroups: readonly NavigationGroup[],
   roles: readonly string[],
 ): CommandPaletteItem[] {
   const navigationItems = [
     ...institutionGroups.flatMap((group) => group.items.map((item) => commandItem(item.href, item.label, group.label))),
     ...systemGroups.flatMap((group) => group.items.map((item) => commandItem(item.href, item.label, group.label))),
-    ...portalItems.map((item) => commandItem(item.href, item.label, "Portal")),
+    ...portalGroups.flatMap((group) => group.items.map((item) => commandItem(item.href, item.label, group.label))),
   ];
   const actionItems = hasInstitutionAccess(roles)
     ? [
