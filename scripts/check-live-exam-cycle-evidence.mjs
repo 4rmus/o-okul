@@ -11,6 +11,7 @@ const requiredCommands = [
   "pnpm report-generation:smoke",
   "pnpm live:ui-worker:smoke",
 ];
+const allowedEvidenceReferencePrefixes = ["artifact:", "run:", "log:", "url:", "https://", "file://", "s3://"];
 const liveExamCycleTopLevelKeys = [
   "result",
   "environment",
@@ -448,10 +449,20 @@ function requireEvidenceReferences(report, failures, key) {
       failures.push(`${key}[${index}] bos olmayan metin olmali.`);
       continue;
     }
+    if (!hasAllowedEvidenceReferencePrefix(reference)) {
+      failures.push(
+        `${key}[${index}] artifact:, run:, log:, url:, https://, file:// veya s3:// ile baslayan kalici referans olmali.`,
+      );
+    }
     if (!allowExampleEvidence && hasPlaceholderToken(reference)) {
       failures.push(`${key}[${index}] gercek kanit icin ornek/placeholder/redacted deger olmamali.`);
     }
   }
+}
+
+function hasAllowedEvidenceReferencePrefix(value) {
+  const normalized = value.trim().toLowerCase();
+  return allowedEvidenceReferencePrefixes.some((prefix) => normalized.startsWith(prefix));
 }
 
 function fail(failures) {

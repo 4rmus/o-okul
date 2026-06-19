@@ -41,8 +41,10 @@ pnpm security:audit:check
 pnpm pilot:check
 pnpm go-live:check
 pnpm live:onboarding:smoke
+pnpm isem-optical-pipeline:evidence-check
 pnpm live:exam-cycle:check
 pnpm live:ui-worker:smoke
+pnpm live:ui-worker:result-check
 pnpm uat:check
 pnpm sms:smoke
 pnpm notification:smoke
@@ -125,6 +127,9 @@ pnpm backup:restore:smoke
   deploy öncesi üretip doğrular, ardından `pnpm run ci` sonrası web/api/worker imajlarını GHCR'a push eder,
   staging VPS'te `docker-compose.release.yml` override'ı ile imajları çeker, migration çalıştırır,
   Traefik'li stack'i ayağa kaldırır ve `prod:evidence:check --summary-file` çıktısını artifact olarak saklar.
+- GitHub `staging` environment hazır olmadan deploy tetiklenmez; `pnpm staging:github-env:check`
+  environment varlığını, `STAGING_DEPLOY_DIR=/root/uzman-hocam`, `STAGING_NEXT_PUBLIC_API_URL`, opsiyonel
+  `STAGING_EDGE_MODE` değerlerini ve required secret isimlerini secret değerlerini yazdırmadan doğrular.
 - Staging production evidence secret sözleşmesi `docs/evidence-templates/staging-evidence.env.example`
   ve `pnpm staging:evidence-env:check` ile deploy başlamadan önce decode edilip doğrulanır; zorunlu
   env anahtarları eksik veya boş değerli olamaz ve decode edilen `.staging-evidence.env` dosyası
@@ -134,6 +139,8 @@ pnpm backup:restore:smoke
   altındaki `smoke/` klasöründe toplar. Secret env dosyası `TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE`
   benzeri raw smoke path'lerini ve `REPORT_GENERATION_SMOKE_EVIDENCE_FILE` değerini içeremez;
   bunlar summary hedefinden türeyen `artifacts/staging/smoke/*.json` dosyalarıdır.
+  `pnpm staging:evidence-env:secret:set` aynı doğrulamayı çalıştırır, repo/temp/symlink dosyalarını
+  reddeder ve `STAGING_EVIDENCE_ENV_B64` değerini GitHub environment secret'a stdin üzerinden yazar.
 - Production kanıt şablonları `pnpm prod:evidence:templates:check` ile repo içinde doğrulanır.
 - KVKK, kimlik göçü, finansal saklama, upload AV, deployment region, observability UAT ve security
   audit gerçek kanıtlarında `checkedAt` gelecekte olamaz.
@@ -203,7 +210,7 @@ pnpm backup:restore:smoke
   `pilot`, `legal`, `operations`, `cutover`, `approvals` ve `openRisks` bloklarının anahtar setleri
   tam ve beklenmeyen alansız olmalıdır; approval rolleri product/technical/operations/dataProtection
   olarak tam ve tekrarsız taşınır.
-  `liveStatusEvidence.evidenceTarget` bağlı `live-status` JSON'unu gösterir ve bu JSON'daki sekiz
+  `liveStatusEvidence.evidenceTarget` bağlı `live-status` JSON'unu gösterir ve bu JSON'daki yedi
   dış Canlı Durum satırının `PASS`, beklenen komut/source değerleriyle kanıtlı ve
   production summary, pilot ve go-live artifact hedefleriyle aynı dosyalara bağlı olduğunu doğrular.
   `productionEvidenceSummary.summaryTarget` bağlı
@@ -571,7 +578,9 @@ pnpm backup:restore:smoke
 - Staging ortamında ilk dış gate'ler tek komutla arşivlenebilir:
   `pnpm staging:first-gates:smoke -- --env-file /path/to/staging-evidence.env --output-dir artifacts/staging/first-gates`
   Traefik HTTPS ve alert webhook smoke artifact'lerini yazar ve ortak smoke evidence
-  sözleşmesiyle doğrular. Output dizini lokal temp path (`/tmp`, `/var/tmp`) altında olamaz ve
+  sözleşmesiyle doğrular. Bu manifest sözleşmesi
+  `docs/evidence-templates/staging-first-gates/first-gates-manifest.json` fixture'ı üzerinden
+  `pnpm prod:evidence:templates:check` zincirinde de korunur. Output dizini lokal temp path (`/tmp`, `/var/tmp`) altında olamaz ve
   yalnız `first-gates-manifest.json`, `traefik-https.json`,
   `alert-webhook.json` dosyalarını içerebilir; beklenmeyen dosya veya
   symlink varsa smoke çalışmadan önce kırılır. Tekil smoke komutlarında kullanılan
@@ -603,6 +612,8 @@ pnpm backup:restore:smoke
 - Gerçek UAT raporunda `checkedAt` gelecekte olamaz; `tester`, `rollbackImageTag`,
   `restoreBackupReference` ve her
   `journeyScenariosVerified[].evidence` maddesi gerçek release/artifact/run/log referansı olmalıdır.
+  Evidence maddeleri serbest açıklama yerine `artifact:`, `run:`, `log:`, `url:`, `https://`,
+  `file://` veya `s3://` ile başlayan kalıcı referans taşır.
   UAT raporu top-level alan kümesi, `flowsVerified` ve `commandsPassed` tam setleri, 21 V1 journey
   scenario seti ve her scenario item shape'i `prod:evidence:templates:check` içindeki fazla
   alan/komut/senaryo negatifleriyle korunur.
@@ -618,15 +629,36 @@ pnpm backup:restore:smoke
 - Tam sınav döngüsü staging/prod kanıtı `LIVE_EXAM_CYCLE_TARGET` ile `pnpm live:exam-cycle:check`
   üzerinden doğrulanır; iSEM cevap anahtarı, optik pipeline, raw import, report-generation ve
   mock'suz UI-worker/portal kanıtları aynı release candidate'a bağlanır. Rapor top-level 11
-  alanı, `examCycle` 26 alanı, 5 komutluk `commandsPassed` seti ve boş `gaps` listesi
-  `prod:evidence:templates:check` içindeki fazla alan/komut ve invalid/non-empty gaps negatifleriyle korunur.
+  alanı, `examCycle` 26 alanı, 5 komutluk `commandsPassed` seti, kalıcı artifact/run/log/url
+  `evidenceReferences` maddeleri ve boş `gaps` listesi `prod:evidence:templates:check` içindeki
+  fazla alan/komut, zayıf evidence reference ve invalid/non-empty gaps negatifleriyle korunur.
+- iSEM optik pipeline kanıtı `ISEM_OPTICAL_PIPELINE_TARGET` ile
+  `pnpm isem-optical-pipeline:evidence-check` üzerinden doğrulanır ve birleşik
+  `pnpm prod:evidence:check` zincirinde zorunlu release raporu olarak okunur. Bu kanıt gerçek iSEM TXT,
+  cevap anahtarı, raw import arşivi, evaluation, `ReportSnapshot READY` ve örnek skorları kapsar;
+  PDF/Excel indirme ve öğrenci/veli portal görünümü doğrulanmadan tam sınav döngüsü PASS sayılmaz.
+  Aynı smoke `ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_FILE` verildiğinde private
+  `LIVE_UI_WORKER_EVIDENCE_PATH` girdisini de yazar; bu dosya gerçek credential içerdiği için
+  public/redacted iSEM kanıtından ayrı tutulur. Gerçek staging koşusunda
+  `ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL_DOMAIN` `.test` veya `example` içermeyen kurum kontrollü bir
+  domain olmalıdır.
+- `prod:evidence:check --summary-file` çıktısı `reports/isem-optical-pipeline.json` dosyasını
+  üretir; `pnpm staging:release-artifacts:check` bu dosyayı bundle içinde zorunlu tutar ve
+  summary ile ham raporun birebir uyumunu denetler.
 - Worker tarafından üretilen rapor staging'de `pnpm live:ui-worker:smoke` ile kurum UI'da açılır,
   Excel/PDF dışa aktarılır ve kanıt dosyasında portal credential'ı varsa öğrenci/veli portalında görüntülenir.
   Smoke komutu tarayıcı açmadan önce `NEXT_E2E_LIVE_UI_WORKER=1` ve gerçek
-  `LIVE_UI_WORKER_EVIDENCE_PATH` ister; `pnpm live:ui-worker:evidence-contract` bu preflight'ı lokal
-  CI'da doğrular. Evidence JSON'u exact rapor admin credential, `examId`, `firstStudentId` ve opsiyonel
+  `LIVE_UI_WORKER_EVIDENCE_PATH` ister; opsiyonel `LIVE_UI_WORKER_RESULT_EVIDENCE_FILE` ise secret
+  içermeyen Excel/PDF/portal sonucunu kalıcı artifact olarak yazar. Bu result artifact
+  `LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET=file:///... pnpm live:ui-worker:result-check` ile
+  doğrulanır; `reportStatus=READY`, `xlsx/pdf` indirme, öğrenci/veli portal görünümü, hashli
+  sınav/öğrenci referansları ve boş `gaps` zorunludur. Result artifact ham e-posta, parola veya
+  öğrenci id'si taşımaz; result yazılacaksa smoke preflight `STAGING_ENVIRONMENT` ya da `NODE_ENV`
+  değerinin `staging/production` olmasını ister. `pnpm live:ui-worker:evidence-contract` bu preflight
+  ve result negatiflerini lokal CI'da doğrular. Evidence JSON'u exact rapor admin credential, `examId`, `firstStudentId` ve opsiyonel
   öğrenci/veli portal credential shape'i taşır; placeholder/test değer, lokal temp path, symlink dosya
-  veya symlink parent zinciri kabul edilmez.
+  veya symlink parent zinciri kabul edilmez. Result artifact tam sınav döngüsündeki mock'suz
+  UI-worker/portal kanıtı için referans verilebilir.
 - Rollback hedefi son başarılı image tag'i ve restore edilebilir backup olarak yazılır.
 
 ## Canlı Durum
@@ -644,7 +676,7 @@ Normal production çalışmasında üretici `--output` hedefinin go-live raporun
 Bundle sözleşmesi `docs/evidence-templates/live-status.example.json` ve
 `docs/evidence-templates/live-status-pass-readiness.example.md` fixture'ı ile
 `pnpm prod:evidence:templates:check` zincirinde korunur; bundle top-level alanları ve her gate
-item alan seti tam ve beklenmeyen alansız olmalı, sekiz gate satırı tam ve tekrarsız taşınmalı,
+item alan seti tam ve beklenmeyen alansız olmalı, yedi gate satırı tam ve tekrarsız taşınmalı,
 her gate `command` ve `source` değeri kanonik listeyle eşleşmeli, `checkedAt` geçerli tarih olmalı,
 `evidenceReference` ilgili source artifact referansından türemeli, `checkedAt` ilgili
 smoke/report/pilot/go-live kaynak tarihinden türemeli ve bundle `generatedAt` sonrasına düşmemelidir.

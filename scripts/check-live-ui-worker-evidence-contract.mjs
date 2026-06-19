@@ -1,10 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const artifactRoot = "artifacts/live-ui-worker-evidence-contract";
 const validEvidencePath = join(artifactRoot, "valid-live-ui-worker.json");
+const validResultEvidencePath = join(artifactRoot, "result", "live-ui-worker-result.json");
 const failures = [];
 
 await rm(artifactRoot, { force: true, recursive: true });
@@ -15,9 +17,17 @@ try {
   const positive = runPreflight({
     NEXT_E2E_LIVE_UI_WORKER: "1",
     LIVE_UI_WORKER_EVIDENCE_PATH: validEvidencePath,
+    LIVE_UI_WORKER_RESULT_EVIDENCE_FILE: validResultEvidencePath,
+    STAGING_ENVIRONMENT: "staging",
   });
   if (positive.status !== 0) {
     failures.push(`positive preflight failed: ${positive.stderr || positive.stdout}`);
+  }
+
+  writeJson(validResultEvidencePath, createValidResultEvidence());
+  const positiveResult = runResultCheck(validResultEvidencePath);
+  if (positiveResult.status !== 0) {
+    failures.push(`positive result check failed: ${positiveResult.stderr || positiveResult.stdout}`);
   }
 
   runNegativeCheck(
@@ -38,6 +48,27 @@ try {
     "LIVE_UI_WORKER_EVIDENCE_PATH lokal temp path olmamalı.",
   );
 
+  runNegativeCheck(
+    "live UI-worker temp result evidence path negative",
+    {
+      NEXT_E2E_LIVE_UI_WORKER: "1",
+      LIVE_UI_WORKER_EVIDENCE_PATH: validEvidencePath,
+      LIVE_UI_WORKER_RESULT_EVIDENCE_FILE: "/tmp/live-ui-worker-result-negative.json",
+      STAGING_ENVIRONMENT: "staging",
+    },
+    "LIVE_UI_WORKER_RESULT_EVIDENCE_FILE lokal temp path olmamalı.",
+  );
+
+  runNegativeCheck(
+    "live UI-worker result environment negative",
+    {
+      NEXT_E2E_LIVE_UI_WORKER: "1",
+      LIVE_UI_WORKER_EVIDENCE_PATH: validEvidencePath,
+      LIVE_UI_WORKER_RESULT_EVIDENCE_FILE: validResultEvidencePath,
+    },
+    "LIVE_UI_WORKER_RESULT_EVIDENCE_FILE için STAGING_ENVIRONMENT veya NODE_ENV staging/production olmalı.",
+  );
+
   const symlinkRealPath = join(artifactRoot, "symlink-real.json");
   const symlinkPath = join(artifactRoot, "symlink-live-ui-worker.json");
   writeJson(symlinkRealPath, createValidEvidence());
@@ -51,11 +82,29 @@ try {
     "LIVE_UI_WORKER_EVIDENCE_PATH symlink olmayan file artifact olmalı.",
   );
 
+  const symlinkResultRealPath = join(artifactRoot, "symlink-result-real.json");
+  const symlinkResultPath = join(artifactRoot, "symlink-live-ui-worker-result.json");
+  writeJson(symlinkResultRealPath, {
+    result: "PASS",
+  });
+  symlinkSync(symlinkResultRealPath, symlinkResultPath);
+  runNegativeCheck(
+    "live UI-worker symlink result evidence file negative",
+    {
+      NEXT_E2E_LIVE_UI_WORKER: "1",
+      LIVE_UI_WORKER_EVIDENCE_PATH: validEvidencePath,
+      LIVE_UI_WORKER_RESULT_EVIDENCE_FILE: symlinkResultPath,
+      STAGING_ENVIRONMENT: "staging",
+    },
+    "LIVE_UI_WORKER_RESULT_EVIDENCE_FILE symlink olmayan file artifact olmalı.",
+  );
+
   const realDirectory = join(artifactRoot, "real-dir");
   const symlinkDirectory = join(artifactRoot, "symlink-dir");
   const realNestedDirectory = join(realDirectory, "nested");
   mkdirSync(realNestedDirectory, { recursive: true });
   writeJson(join(realNestedDirectory, "live-ui-worker.json"), createValidEvidence());
+  writeJson(join(realNestedDirectory, "live-ui-worker-result.json"), createValidResultEvidence());
   symlinkSync(realDirectory, symlinkDirectory, "dir");
   runNegativeCheck(
     "live UI-worker symlink parent negative",
@@ -64,6 +113,17 @@ try {
       LIVE_UI_WORKER_EVIDENCE_PATH: join(symlinkDirectory, "nested", "live-ui-worker.json"),
     },
     "LIVE_UI_WORKER_EVIDENCE_PATH parent dizini symlink olmayan dizin olmalı.",
+  );
+
+  runNegativeCheck(
+    "live UI-worker symlink result evidence parent negative",
+    {
+      NEXT_E2E_LIVE_UI_WORKER: "1",
+      LIVE_UI_WORKER_EVIDENCE_PATH: validEvidencePath,
+      LIVE_UI_WORKER_RESULT_EVIDENCE_FILE: join(symlinkDirectory, "nested", "live-ui-worker-result.json"),
+      STAGING_ENVIRONMENT: "staging",
+    },
+    "LIVE_UI_WORKER_RESULT_EVIDENCE_FILE parent dizini symlink olmayan dizin olmalı.",
   );
 
   const missingFieldPath = join(artifactRoot, "missing-field.json");
@@ -104,9 +164,78 @@ try {
     },
     "studentPortal.unexpected beklenmeyen alan.",
   );
+
+  runResultNegativeCheck(
+    "live UI-worker result temp target negative",
+    "/tmp/live-ui-worker-result-target-negative.json",
+    "LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET production kanıtı için lokal temp path olmamalı.",
+  );
+
+  runResultNegativeCheck(
+    "live UI-worker result symlink target negative",
+    symlinkResultPath,
+    "LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET symlink olmayan file:// artifact olmalı.",
+  );
+
+  runResultNegativeCheck(
+    "live UI-worker result symlink parent target negative",
+    join(symlinkDirectory, "nested", "live-ui-worker-result.json"),
+    "LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET parent dizini symlink olmayan dizin olmalı.",
+  );
+
+  const resultMissingStatusPath = join(artifactRoot, "result-missing-status.json");
+  const resultMissingStatus = createValidResultEvidence();
+  delete resultMissingStatus.reportStatus;
+  writeJson(resultMissingStatusPath, resultMissingStatus);
+  runResultNegativeCheck(
+    "live UI-worker result missing status negative",
+    resultMissingStatusPath,
+    "liveUiWorkerResultEvidence.reportStatus eksik.",
+  );
+
+  const resultPlaceholderPath = join(artifactRoot, "result-placeholder.json");
+  const resultPlaceholder = createValidResultEvidence();
+  resultPlaceholder.examHash = "exam-redacted-example";
+  writeJson(resultPlaceholderPath, resultPlaceholder);
+  runResultNegativeCheck(
+    "live UI-worker result placeholder negative",
+    resultPlaceholderPath,
+    "liveUiWorkerResultEvidence.examHash 64 karakter hex sha256 olmalı.",
+  );
+
+  const resultRawStudentPath = join(artifactRoot, "result-raw-student.json");
+  const resultRawStudent = createValidResultEvidence();
+  resultRawStudent.firstStudentId = "student-report-smoke-20260614-00001";
+  writeJson(resultRawStudentPath, resultRawStudent);
+  runResultNegativeCheck(
+    "live UI-worker result raw student id negative",
+    resultRawStudentPath,
+    "liveUiWorkerResultEvidence.firstStudentId beklenmeyen alan.",
+  );
+
+  const resultIncompletePortalPath = join(artifactRoot, "result-incomplete-portal.json");
+  const resultIncompletePortal = createValidResultEvidence();
+  resultIncompletePortal.guardianPortalViewed = false;
+  writeJson(resultIncompletePortalPath, resultIncompletePortal);
+  runResultNegativeCheck(
+    "live UI-worker result portal negative",
+    resultIncompletePortalPath,
+    "liveUiWorkerResultEvidence.guardianPortalViewed true olmalı.",
+  );
+
+  const resultUnexpectedFieldPath = join(artifactRoot, "result-extra-field.json");
+  const resultUnexpectedField = createValidResultEvidence();
+  resultUnexpectedField.password = "must-not-leak";
+  writeJson(resultUnexpectedFieldPath, resultUnexpectedField);
+  runResultNegativeCheck(
+    "live UI-worker result extra field negative",
+    resultUnexpectedFieldPath,
+    "liveUiWorkerResultEvidence.password beklenmeyen alan.",
+  );
 } finally {
   await rm(artifactRoot, { force: true, recursive: true });
   rmSync("/tmp/live-ui-worker-evidence-negative.json", { force: true });
+  rmSync("/tmp/live-ui-worker-result-negative.json", { force: true });
 }
 
 if (failures.length > 0) {
@@ -126,7 +255,23 @@ function runPreflight(env) {
       LIVE_UI_WORKER_ALLOW_EXAMPLE_EVIDENCE: "",
       NEXT_E2E_LIVE_UI_WORKER: "",
       LIVE_UI_WORKER_EVIDENCE_PATH: "",
+      LIVE_UI_WORKER_RESULT_EVIDENCE_FILE: "",
+      LIVE_UI_WORKER_RESULT_EVIDENCE_PATH: "",
+      STAGING_ENVIRONMENT: "",
+      NODE_ENV: "",
       ...env,
+    },
+  });
+}
+
+function runResultCheck(target) {
+  return spawnSync(process.execPath, ["scripts/check-live-ui-worker-result-evidence.mjs"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      LIVE_UI_WORKER_RESULT_ALLOW_EXAMPLE_EVIDENCE: "",
+      LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET: target.startsWith("/tmp/") ? target : pathToFileURL(resolve(target)).href,
     },
   });
 }
@@ -142,7 +287,19 @@ function runNegativeCheck(label, env, expectedMessage) {
   }
 }
 
+function runResultNegativeCheck(label, target, expectedMessage) {
+  const result = runResultCheck(target);
+  const output = `${result.stdout}\n${result.stderr}`;
+  if (result.status === 0) {
+    failures.push(`${label}: komut başarısız olmalıydı.`);
+  }
+  if (!output.includes(expectedMessage)) {
+    failures.push(`${label}: beklenen hata yok: ${expectedMessage}`);
+  }
+}
+
 function writeJson(path, value) {
+  mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
   if (!existsSync(path)) {
     failures.push(`${path} yazılamadı.`);
@@ -165,5 +322,25 @@ function createValidEvidence() {
       email: "student.portal@staging.uzmanhocam.com",
       password: "Str0ngStudent!2026",
     },
+  };
+}
+
+function createValidResultEvidence() {
+  return {
+    result: "PASS",
+    check: "live_ui_worker_report_smoke",
+    generatedAt: new Date(Date.now() - 60_000).toISOString(),
+    environment: "staging",
+    checkedAt: new Date(Date.now() - 60_000).toISOString(),
+    examHash: "1111111111111111111111111111111111111111111111111111111111111111",
+    firstStudentHash: "2222222222222222222222222222222222222222222222222222222222222222",
+    reportStatus: "READY",
+    downloadedArtifacts: ["xlsx", "pdf"],
+    karnePdfDownloaded: true,
+    excelDownloaded: true,
+    studentPortalViewed: true,
+    guardianPortalViewed: true,
+    commandsPassed: ["pnpm live:ui-worker:smoke"],
+    gaps: [],
   };
 }

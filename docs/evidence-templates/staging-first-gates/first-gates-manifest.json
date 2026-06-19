@@ -1,0 +1,21 @@
+{
+  "result": "PASS",
+  "generatedAt": "2026-06-15T09:10:00.000Z",
+  "environment": "staging",
+  "checks": [
+    {
+      "label": "Traefik HTTPS smoke",
+      "script": "scripts/smoke-traefik-https.mjs",
+      "evidenceFile": "traefik-https.json",
+      "status": "PASS"
+    },
+    {
+      "label": "Alert webhook smoke",
+      "script": "scripts/smoke-alert-webhook.mjs",
+      "evidenceFile": "alert-webhook.json",
+      "status": "PASS"
+    }
+  ],
+  "commandsPassed": ["pnpm staging:first-gates:smoke"],
+  "gaps": []
+}

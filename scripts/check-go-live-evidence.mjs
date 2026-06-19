@@ -29,6 +29,7 @@ const requiredEvidenceCheckScripts = new Map([
   ["AI report summary evidence", "scripts/check-ai-report-summary-evidence.mjs"],
   ["Security audit evidence", "scripts/check-security-audit-evidence.mjs"],
   ["Live exam cycle evidence", "scripts/check-live-exam-cycle-evidence.mjs"],
+  ["iSEM optical pipeline evidence", "scripts/check-isem-optical-pipeline-evidence.mjs"],
   ["Inline upload migration evidence", "scripts/check-inline-upload-content-migration-evidence.mjs"],
   ["Rate limit Redis evidence", "scripts/check-rate-limit-evidence.mjs"],
   ["RLS live evidence", "scripts/check-rls-live-evidence.mjs"],
@@ -134,6 +135,7 @@ const summaryReportKeys = [
   "aiReportSummary",
   "securityAudit",
   "liveExamCycle",
+  "isemOpticalPipeline",
   "inlineUploadMigration",
   "rateLimit",
   "rlsLive",
@@ -213,6 +215,22 @@ const summaryRequiredReportKeys = {
     "commandsPassed",
     "examCycle",
     "evidenceReferences",
+  ],
+  isemOpticalPipeline: [
+    "generatedAt",
+    "environment",
+    "checkedAt",
+    "parserConfigVersion",
+    "answerKeyVersion",
+    "answerKeyQuestionCount",
+    "bookletVariantCount",
+    "counts",
+    "pipeline",
+    "sampleScores",
+    "hashes",
+    "thresholds",
+    "pipelineDurationMs",
+    "commandsPassed",
   ],
   inlineUploadMigration: ["environment", "checkedAt", "storageMode", "dryRun", "migration", "commandsPassed", "evidenceReferences"],
   rateLimit: ["environment", "checkedAt", "config", "instances", "apiRateLimit", "loginAttemptLimiter", "commandsPassed", "evidenceReferences"],
@@ -1271,6 +1289,54 @@ function requireSummaryReports(summary, failures, goLiveReport) {
       }
     }
     requireSummaryLiveExamCycle(liveExamCycle, failures);
+  }
+
+  const isemOpticalPipeline = requireNestedObject(
+    reports,
+    failures,
+    "productionEvidenceSummary.summary.reports.isemOpticalPipeline",
+    "isemOpticalPipeline",
+  );
+  if (isemOpticalPipeline) {
+    requireObjectEqual(
+      isemOpticalPipeline,
+      failures,
+      "productionEvidenceSummary.summary.reports.isemOpticalPipeline.environment",
+      "environment",
+      "production",
+    );
+    requireSummaryReportDateNotAfter(
+      isemOpticalPipeline,
+      failures,
+      "productionEvidenceSummary.summary.reports.isemOpticalPipeline.generatedAt",
+      "generatedAt",
+      summary,
+      goLiveReport,
+    );
+    requireSummaryReportDateNotAfter(
+      isemOpticalPipeline,
+      failures,
+      "productionEvidenceSummary.summary.reports.isemOpticalPipeline.checkedAt",
+      "checkedAt",
+      summary,
+      goLiveReport,
+    );
+    requireObjectStringList(
+      isemOpticalPipeline,
+      failures,
+      "productionEvidenceSummary.summary.reports.isemOpticalPipeline.commandsPassed",
+      "commandsPassed",
+      1,
+      false,
+    );
+    if (
+      !Array.isArray(isemOpticalPipeline.commandsPassed) ||
+      !isemOpticalPipeline.commandsPassed.includes("pnpm isem-optical-pipeline:smoke")
+    ) {
+      failures.push(
+        "productionEvidenceSummary.summary.reports.isemOpticalPipeline.commandsPassed eksik: pnpm isem-optical-pipeline:smoke",
+      );
+    }
   }
 
   const inlineUploadMigration = requireNestedObject(

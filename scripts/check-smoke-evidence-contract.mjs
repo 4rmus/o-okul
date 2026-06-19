@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { validateSmokeEvidenceOutputTarget, validateSmokeEvidencePayload, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const summary = JSON.parse(readFileSync("docs/evidence-templates/production-evidence-summary.example.json", "utf8"));
+const isemOpticalPipeline = JSON.parse(readFileSync("docs/evidence-templates/isem-optical-pipeline.example.json", "utf8"));
 
 const smokeChecks = [
   ["traefikHttps", "traefik_https_smoke"],
@@ -31,6 +32,23 @@ if (!summary.smokeEvidence || typeof summary.smokeEvidence !== "object" || Array
     );
   }
 }
+
+failures.push(
+  ...validateSmokeEvidencePayload(isemOpticalPipeline, {
+    expectedCheck: "isem_optical_pipeline_smoke",
+    allowedEnvironments: ["staging", "production"],
+    label: "isemOpticalPipeline",
+    allowExampleEvidence: true,
+  }),
+);
+failures.push(
+  ...validateSmokeEvidencePayload(liveUiWorkerResultPayload(), {
+    expectedCheck: "live_ui_worker_report_smoke",
+    allowedEnvironments: ["staging", "production"],
+    label: "liveUiWorkerResult",
+    allowExampleEvidence: true,
+  }),
+);
 
 const negativeCases = [
   [
@@ -221,6 +239,22 @@ const negativeCases = [
     "rls_load_smoke",
   ],
   [
+    "iSEM optik ham examId reddedilir",
+    {
+      ...isemOpticalPipeline,
+      examId: "exam-isem-optical-smoke-example",
+    },
+    "isem_optical_pipeline_smoke",
+  ],
+  [
+    "iSEM optik eksik skor reddedilir",
+    {
+      ...isemOpticalPipeline,
+      sampleScores: [isemOpticalPipeline.sampleScores[0]],
+    },
+    "isem_optical_pipeline_smoke",
+  ],
+  [
     "RLS load dolu gaps reddedilir",
     {
       ...rlsLoadSmokePayload(),
@@ -337,6 +371,30 @@ const negativeCases = [
       dumpPath: "/tmp/uzman_hocam_restore_smoke.dump",
     },
     "backup_restore_smoke",
+  ],
+  [
+    "Live UI-worker result raw student id reddedilir",
+    {
+      ...liveUiWorkerResultPayload(),
+      firstStudentId: "student-report-smoke-20260614-00001",
+    },
+    "live_ui_worker_report_smoke",
+  ],
+  [
+    "Live UI-worker result portal eksigi reddedilir",
+    {
+      ...liveUiWorkerResultPayload(),
+      studentPortalViewed: false,
+    },
+    "live_ui_worker_report_smoke",
+  ],
+  [
+    "Live UI-worker result eksik download reddedilir",
+    {
+      ...liveUiWorkerResultPayload(),
+      downloadedArtifacts: ["xlsx"],
+    },
+    "live_ui_worker_report_smoke",
   ],
 ];
 
@@ -528,6 +586,26 @@ function backupRestoreSmokePayload() {
     },
     durationMs: 1250,
     commandsPassed: ["pnpm backup:restore:smoke"],
+    gaps: [],
+  };
+}
+
+function liveUiWorkerResultPayload() {
+  return {
+    result: "PASS",
+    check: "live_ui_worker_report_smoke",
+    generatedAt: "2026-06-15T09:45:00.000Z",
+    environment: "staging",
+    checkedAt: "2026-06-15T09:45:00.000Z",
+    examHash: "1111111111111111111111111111111111111111111111111111111111111111",
+    firstStudentHash: "2222222222222222222222222222222222222222222222222222222222222222",
+    reportStatus: "READY",
+    downloadedArtifacts: ["xlsx", "pdf"],
+    karnePdfDownloaded: true,
+    excelDownloaded: true,
+    studentPortalViewed: true,
+    guardianPortalViewed: true,
+    commandsPassed: ["pnpm live:ui-worker:smoke"],
     gaps: [],
   };
 }

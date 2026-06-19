@@ -188,6 +188,7 @@ export function FinancePage() {
       key: "actions",
       align: "center",
       header: "İşlem",
+      mobileLabel: "İşlem",
       mobilePriority: "primary",
       priority: "primary",
       render: (row) => (

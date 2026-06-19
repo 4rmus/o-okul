@@ -268,6 +268,10 @@ export class StudentService {
     if ((await this.list(context)).filter((student) => student.tenantId === tenantId).length >= this.maxStudentsPerTenant) {
       throw new ConflictException("STUDENT_QUOTA_EXCEEDED");
     }
+    await this.assertStudentRelationTargets(context, tenantId, {
+      classId: input.classId,
+      responsibleTeacherId: input.responsibleTeacherId,
+    });
 
     const student = await this.store.create({
       tenantId,
@@ -392,11 +396,17 @@ export class StudentService {
     const previous = { ...existing };
     const changedFields = changedInputFields(input, ["firstName", "lastName", "classId", "responsibleTeacherId", "status"]);
     const nextStatus = input.status !== undefined ? resolveStudentStatus(input.status) : undefined;
+    const nextClassId = input.classId !== undefined ? optionalText(input.classId) : undefined;
+    const nextResponsibleTeacherId = input.responsibleTeacherId !== undefined ? optionalText(input.responsibleTeacherId) : undefined;
+    await this.assertStudentRelationTargets(context, existing.tenantId, {
+      classId: nextClassId,
+      responsibleTeacherId: nextResponsibleTeacherId,
+    });
     const updated = await this.store.update(id, {
       firstName: input.firstName,
       lastName: input.lastName,
-      classId: input.classId,
-      responsibleTeacherId: input.responsibleTeacherId,
+      classId: nextClassId,
+      responsibleTeacherId: nextResponsibleTeacherId,
       status: nextStatus,
     });
     if (!updated) {
@@ -442,6 +452,7 @@ export class StudentService {
     const startsAt = input.startsAt ? enrollmentDate(input.startsAt) : todayDateString();
     const academicContext = await this.resolveEnrollmentAcademicContext(context, input);
     const classId = input.classId !== undefined ? optionalText(input.classId) : existing.classId;
+    await this.assertStudentRelationTargets(context, existing.tenantId, { classId });
     const updated = await this.store.update(id, {
       classId,
       status: "ACTIVE",
@@ -569,10 +580,11 @@ export class StudentService {
     id: string,
     input: StudentEnrollmentActionInput,
   ): Promise<StudentEnrollmentRecord | null> {
-    await this.findOne(context, id);
+    const existing = await this.findOne(context, id);
     const startsAt = input.startsAt ? enrollmentDate(input.startsAt) : todayDateString();
     const academicContext = await this.resolveEnrollmentAcademicContext(context, input);
     const classId = input.classId !== undefined ? optionalText(input.classId) : undefined;
+    await this.assertStudentRelationTargets(context, existing.tenantId, { classId });
     const nextStatus: StudentStatus = classId ? "ACTIVE" : "TRANSFERRED";
     const updated = await this.store.update(id, {
       classId: classId ?? "",
@@ -687,6 +699,39 @@ export class StudentService {
     } catch (error) {
       const message = error instanceof Error ? error.message : "FORBIDDEN_TENANT";
       throw new ForbiddenException(message);
+    }
+  }
+
+  private async assertStudentRelationTargets(
+    context: RequestContext,
+    tenantId: string,
+    input: { classId?: string; responsibleTeacherId?: string },
+  ): Promise<void> {
+    if (input.classId) {
+      const schoolClass = await this.classStore.findById(input.classId);
+      if (!schoolClass || schoolClass.deletedAt) {
+        throw new NotFoundException("CLASS_NOT_FOUND");
+      }
+      this.assertSameTenantRelationTarget(context, tenantId, schoolClass);
+    }
+
+    if (input.responsibleTeacherId) {
+      const teacher = await this.teacherStore.findById(input.responsibleTeacherId);
+      if (!teacher) {
+        throw new NotFoundException("TEACHER_NOT_FOUND");
+      }
+      this.assertSameTenantRelationTarget(context, tenantId, teacher);
+    }
+  }
+
+  private assertSameTenantRelationTarget(
+    context: RequestContext,
+    tenantId: string,
+    target: { tenantId: string },
+  ): void {
+    this.assertAccess(context, target);
+    if (target.tenantId !== tenantId) {
+      throw new ForbiddenException("FORBIDDEN_TENANT");
     }
   }
 

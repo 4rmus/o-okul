@@ -1,0 +1,73 @@
+{
+  "generatedAt": "2026-06-15T09:40:00.000Z",
+  "result": "PASS",
+  "check": "isem_optical_pipeline_smoke",
+  "environment": "staging",
+  "checkedAt": "2026-06-15T09:40:00.000Z",
+  "parserConfigVersion": "optik-7108-lgs-v1",
+  "answerKeyVersion": "isem-lgs-1-v1",
+  "answerKeyQuestionCount": 90,
+  "bookletVariantCount": 1,
+  "counts": {
+    "studentCount": 254,
+    "participantCount": 254,
+    "matchedCount": 254,
+    "quarantineCount": 0,
+    "examResultCount": 254,
+    "reportResultCount": 254,
+    "studentPortalUserLinkCount": 2,
+    "guardianPortalUserLinkCount": 2,
+    "guardianLinkCount": 2
+  },
+  "pipeline": {
+    "answerKeyImported": true,
+    "opticalImportCommitted": true,
+    "rawImportArchived": true,
+    "evaluationQueued": true,
+    "quarantinePathVerified": true,
+    "reportGenerated": true,
+    "reportReady": true
+  },
+  "sampleScores": [
+    {
+      "studentNoHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "correct": 56,
+      "wrong": 32,
+      "blank": 2,
+      "net": 45.3333
+    },
+    {
+      "studentNoHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "correct": 44,
+      "wrong": 31,
+      "blank": 15,
+      "net": 33.6667
+    }
+  ],
+  "hashes": {
+    "tenantHash": "1111111111111111111111111111111111111111111111111111111111111111",
+    "userHash": "2222222222222222222222222222222222222222222222222222222222222222",
+    "emailHash": "3333333333333333333333333333333333333333333333333333333333333333",
+    "examHash": "4444444444444444444444444444444444444444444444444444444444444444",
+    "rawImportHash": "5555555555555555555555555555555555555555555555555555555555555555",
+    "answerKeyHash": "6666666666666666666666666666666666666666666666666666666666666666",
+    "reportSnapshotHash": "7777777777777777777777777777777777777777777777777777777777777777",
+    "firstStudentHash": "8888888888888888888888888888888888888888888888888888888888888888",
+    "opticalTxtSha256": "9999999999999999999999999999999999999999999999999999999999999999",
+    "answerKeyFileSha256": "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+    "parseJobHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "reportJobHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "thresholds": {
+    "participantCountMatches": true,
+    "matchedCountMatches": true,
+    "examResultCountMatches": true,
+    "reportResultCountMatches": true,
+    "sampleScoreCountMatches": true,
+    "pipelineDurationMsMax": 60000,
+    "pipelineDurationPassed": true
+  },
+  "pipelineDurationMs": 12000,
+  "commandsPassed": ["pnpm isem-optical-pipeline:smoke"],
+  "gaps": []
+}

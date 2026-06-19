@@ -192,6 +192,7 @@ export function UsersPage() {
     {
       key: "name",
       header: "Ad Soyad",
+      mobilePriority: "primary",
       priority: "primary",
       render: (user) => user.name,
       sticky: "left",
@@ -199,12 +200,14 @@ export function UsersPage() {
     {
       key: "email",
       header: "E-posta",
+      mobilePriority: "secondary",
       priority: "secondary",
       render: (user) => user.email,
     },
     {
       key: "roles",
       header: "Roller",
+      mobilePriority: "secondary",
       priority: "primary",
       render: (user) => (
         <div
@@ -232,6 +235,8 @@ export function UsersPage() {
       key: "actions",
       align: "center",
       header: "İşlem",
+      mobileLabel: "Kaydet",
+      mobilePriority: "primary",
       priority: "primary",
       render: (user) => (
         <span className="next-row-actions">
@@ -253,6 +258,7 @@ export function UsersPage() {
     {
       key: "name",
       header: "Ad Soyad",
+      mobilePriority: "primary",
       priority: "primary",
       render: (invitation) => invitation.name,
       sticky: "left",
@@ -260,24 +266,28 @@ export function UsersPage() {
     {
       key: "email",
       header: "E-posta",
+      mobilePriority: "secondary",
       priority: "secondary",
       render: (invitation) => invitation.email,
     },
     {
       key: "subject",
       header: "Kişi",
+      mobilePriority: "secondary",
       priority: "secondary",
       render: (invitation) => subjectTypeLabels[invitation.subjectType],
     },
     {
       key: "role",
       header: "Rol",
+      mobilePriority: "secondary",
       priority: "secondary",
       render: (invitation) => tenantRoleLabel(invitation.role),
     },
     {
       key: "status",
       header: "Durum",
+      mobilePriority: "primary",
       priority: "primary",
       render: (invitation) => (
         <StatusBadge tone={invitationStatusTone(invitation.status)}>
@@ -288,6 +298,7 @@ export function UsersPage() {
     {
       key: "expiresAt",
       header: "Bitiş",
+      mobilePriority: "hidden",
       priority: "optional",
       render: (invitation) => formatDate(invitation.expiresAt),
     },
@@ -295,6 +306,8 @@ export function UsersPage() {
       key: "actions",
       align: "center",
       header: "İşlem",
+      mobileLabel: "Yenile",
+      mobilePriority: "primary",
       priority: "primary",
       render: (invitation) =>
         invitation.status === "PENDING" ? (

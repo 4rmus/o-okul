@@ -40,8 +40,8 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   const onboardingInstitutionName = evidence.onboarding?.institutionName ?? tenantName;
 
   await page.goto("/login");
-  await page.getByLabel("E-posta").fill(evidence.systemAdmin.email);
-  await page.getByLabel("Şifre").fill(evidence.systemAdmin.password);
+  await page.locator('input[name="email"]').fill(evidence.systemAdmin.email);
+  await page.locator('input[name="password"]').fill(evidence.systemAdmin.password);
   await page.getByRole("button", { name: "Giriş yap" }).click();
 
   await expect(page).toHaveURL(/\/sistem$/);
@@ -62,8 +62,8 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   await expect(page.getByRole("row", { name: new RegExp(escapeRegExp(tenantName)) })).toBeVisible();
   await page.getByRole("button", { name: "Çıkış" }).click();
 
-  await page.getByLabel("E-posta").fill(firstAdminEmail);
-  await page.getByLabel("Şifre").fill(evidence.firstAdmin.password);
+  await page.locator('input[name="email"]').fill(firstAdminEmail);
+  await page.locator('input[name="password"]').fill(evidence.firstAdmin.password);
   await page.getByRole("button", { name: "Giriş yap" }).click();
   await expect(page).toHaveURL(/\/kurum$/);
 

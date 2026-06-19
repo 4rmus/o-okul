@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const files = {
   journeys: readFileSync("docs/product-journeys-v1.md", "utf8"),
@@ -9,15 +9,26 @@ const files = {
 
 const failures = [];
 const journeyMatrix = parseJourneyMatrix(files.journeys);
-const journeySkeletonIds = parseJourneySkeletonIds(files.journeys);
+const journeySkeleton = parseJourneySkeleton(files.journeys);
+const moduleOwnershipIds = extractScenarioIds(sectionBody(files.journeys, "## Modul Sahipligi"));
 const checkerScenarios = parseCheckerScenarios(files.uatChecker);
 const templateScenarios = parseTemplateScenarios(files.uatTemplate);
 const uatPageIds = extractScenarioIds(files.uatPage);
+const repoEvidenceRefs = parseRepoEvidenceRefs(files.journeys);
 
-compareSets("Yolculuk matrisi", journeyMatrix.ids, "UAT senaryo iskeleti", journeySkeletonIds, failures);
+compareSets("Yolculuk matrisi", journeyMatrix.ids, "UAT senaryo iskeleti", journeySkeleton.ids, failures);
+compareSets("UAT senaryo iskeleti", journeySkeleton.ids, "Modul sahipligi", moduleOwnershipIds, failures);
 compareSets("Yolculuk matrisi", journeyMatrix.ids, "UAT checker", new Set(checkerScenarios.keys()), failures);
 compareSets("Yolculuk matrisi", journeyMatrix.ids, "UAT template", new Set(templateScenarios.keys()), failures);
 compareSets("Yolculuk matrisi", journeyMatrix.ids, "UAT rollback ekranı", uatPageIds, failures);
+compareScenarioStatuses(journeyMatrix.statusById, journeySkeleton.statusById, failures);
+
+for (const ref of repoEvidenceRefs) {
+  const path = refToExistingPath(ref);
+  if (!existsSync(path)) {
+    failures.push(`Repo kanıt yolu bulunamadı: ${ref}`);
+  }
+}
 
 for (const [id, persona] of checkerScenarios) {
   const acceptedPersonas = journeyMatrix.personasById.get(id);
@@ -47,20 +58,22 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`Product journeys kontrolü geçti: ${journeyMatrix.ids.size} UAT senaryosu doğrulandı.`);
+console.log(`Product journeys kontrolü geçti: ${journeyMatrix.ids.size} UAT senaryosu, ${repoEvidenceRefs.size} repo kanıt yolu doğrulandı.`);
 
 function parseJourneyMatrix(markdown) {
   const ids = new Set();
   const personasById = new Map();
+  const statusById = new Map();
 
   for (const row of tableRows(markdown)) {
     if (row.length !== 6) continue;
-    const [personaCell, , , , scenarioCell] = row;
+    const [personaCell, , statusCell, , scenarioCell] = row;
     if (!personaCell || personaCell === "Persona" || personaCell.startsWith("---")) continue;
     const scenarioId = firstScenarioId(scenarioCell);
     if (!scenarioId) continue;
 
     ids.add(scenarioId);
+    statusById.set(scenarioId, statusCell);
     const personas = personasById.get(scenarioId) ?? new Set();
     for (const persona of personaCell.split("/").map((value) => value.trim()).filter(Boolean)) {
       personas.add(persona);
@@ -68,16 +81,19 @@ function parseJourneyMatrix(markdown) {
     personasById.set(scenarioId, personas);
   }
 
-  return { ids, personasById };
+  return { ids, personasById, statusById };
 }
 
-function parseJourneySkeletonIds(markdown) {
+function parseJourneySkeleton(markdown) {
   const ids = new Set();
+  const statusById = new Map();
   for (const row of tableRows(markdown)) {
     const id = firstScenarioId(row[0] ?? "");
-    if (id) ids.add(id);
+    if (!id) continue;
+    ids.add(id);
+    statusById.set(id, row[3]);
   }
-  return ids;
+  return { ids, statusById };
 }
 
 function parseCheckerScenarios(source) {
@@ -103,6 +119,32 @@ function extractScenarioIds(source) {
   return new Set([...source.matchAll(/UAT-[A-Z]+-\d{2}/g)].map((match) => match[0]));
 }
 
+function parseRepoEvidenceRefs(markdown) {
+  const refs = new Set();
+  const pathLikePrefixes = ["apps/", "packages/", "scripts/", "docs/", "claudedocs/", ".github/"];
+  for (const match of markdown.matchAll(/`([^`]+)`/g)) {
+    const ref = match[1];
+    if (pathLikePrefixes.some((prefix) => ref.startsWith(prefix))) {
+      refs.add(ref);
+    }
+  }
+  return refs;
+}
+
+function refToExistingPath(ref) {
+  const wildcardIndex = ref.indexOf("*");
+  if (wildcardIndex === -1) return ref;
+  return ref.slice(0, wildcardIndex).replace(/\/+$/, "");
+}
+
+function sectionBody(markdown, heading) {
+  const start = markdown.indexOf(heading);
+  if (start === -1) return "";
+  const rest = markdown.slice(start + heading.length);
+  const nextHeading = rest.search(/\n##\s+/);
+  return nextHeading === -1 ? rest : rest.slice(0, nextHeading);
+}
+
 function tableRows(markdown) {
   return markdown
     .split(/\r?\n/)
@@ -120,5 +162,15 @@ function compareSets(leftLabel, left, rightLabel, right, output) {
   }
   for (const id of right) {
     if (!left.has(id)) output.push(`${rightLabel} fazladan senaryo içeriyor: ${id} (${leftLabel} içinde yok)`);
+  }
+}
+
+function compareScenarioStatuses(matrixStatuses, skeletonStatuses, output) {
+  for (const [id, matrixStatus] of matrixStatuses.entries()) {
+    const skeletonStatus = skeletonStatuses.get(id);
+    if (!skeletonStatus) continue;
+    if (matrixStatus !== skeletonStatus) {
+      output.push(`${id} status uyumsuz: Yolculuk matrisi ${matrixStatus}; UAT senaryo iskeleti ${skeletonStatus}`);
+    }
   }
 }

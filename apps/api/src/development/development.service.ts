@@ -108,7 +108,7 @@ export class DevelopmentService {
     if (!student) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
-    assertTenantResourceAccess(context, student);
+    assertDevelopmentStudentTenantAccess(context, student);
     const links = await this.guardianStudents.listByStudent(student.id);
     if (!links.some((link) => link.guardianId === context.subjectId)) {
       throw new ForbiddenException("FORBIDDEN_SUBJECT");
@@ -191,7 +191,7 @@ export class DevelopmentService {
     if (!student) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
-    assertTenantResourceAccess(context, student);
+    assertDevelopmentStudentTenantAccess(context, student);
     const assessments = filterTenantResources(context, await this.store.listAssessments(student.id))
       .filter((assessment) => assessment.visibility === "GUARDIAN");
     const criteriaById = new Map(
@@ -232,6 +232,14 @@ export class DevelopmentService {
     } catch {
       throw new ForbiddenException("FORBIDDEN_TENANT");
     }
+  }
+}
+
+function assertDevelopmentStudentTenantAccess(context: RequestContext, student: { tenantId: string }): void {
+  try {
+    assertTenantResourceAccess(context, student);
+  } catch {
+    throw new ForbiddenException("FORBIDDEN_TENANT");
   }
 }
 

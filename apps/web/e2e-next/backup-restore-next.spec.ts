@@ -220,8 +220,8 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
 
 async function loginAsTenantAdmin(page: Page) {
   await page.goto("/login");
-  await page.getByLabel("E-posta").fill("admin-a@example.test");
-  await page.getByLabel("Şifre").fill("password");
+  await page.locator('input[name="email"]').fill("admin-a@example.test");
+  await page.locator('input[name="password"]').fill("password");
   await page.getByRole("button", { name: "Giriş yap" }).click();
   await expect(page).toHaveURL(/\/kurum$/);
 }

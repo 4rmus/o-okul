@@ -30,15 +30,18 @@ export class AuditLogService {
   constructor(@Inject(auditLogStoreToken) private readonly store: AuditLogStore) {}
 
   async list(context: RequestContext, filters: AuditLogListFilters = {}): Promise<AuditLogRecord[]> {
+    let records: AuditLogRecord[];
     if (isSystemAdmin(context.roles)) {
-      return filterAuditLogs(this.store.listForAdmin ? await this.store.listForAdmin() : await this.store.list(), filters);
+      records = this.store.listForAdmin ? await this.store.listForAdmin() : await this.store.list();
+    } else {
+      records = await this.store.list();
+      if (!context.tenantId) {
+        throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+      }
+      records = records.filter((record) => record.tenantId === context.tenantId);
     }
 
-    const records = await this.store.list();
-    if (!context.tenantId) {
-      throw new ForbiddenException("TENANT_CONTEXT_MISSING");
-    }
-    return filterAuditLogs(records.filter((record) => record.tenantId === context.tenantId), filters);
+    return filterAuditLogs(records, filters).map(sanitizeAuditLogRecord);
   }
 
   async safeList(context: RequestContext): Promise<AuditLogListItemRecord[]> {
@@ -46,10 +49,11 @@ export class AuditLogService {
   }
 
   async record(input: CreateAuditLogInput): Promise<AuditLogRecord> {
-    return this.store.create({
+    return sanitizeAuditLogRecord(await this.store.create({
       ...input,
+      diff: sanitizeAuditDiff(input.diff),
       createdAt: input.createdAt ?? new Date().toISOString(),
-    });
+    }));
   }
 
   async studentSummary(context: RequestContext, studentId: string | undefined, limit = 5): Promise<StudentAuditSummaryRecord[]> {
@@ -174,6 +178,123 @@ function filterAuditLogs(records: AuditLogRecord[], filters: AuditLogListFilters
 function isStudentAuditLog(record: AuditLogRecord, studentId: string) {
   return (record.entityType === "Student" && record.entityId === studentId) ||
     (record.entityType === "GuardianStudent" && record.diff?.studentId === studentId);
+}
+
+function sanitizeAuditLogRecord(record: AuditLogRecord): AuditLogRecord {
+  return {
+    ...record,
+    diff: sanitizeAuditDiff(record.diff),
+  };
+}
+
+function sanitizeAuditDiff(diff: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!diff) return undefined;
+  return sanitizeAuditValue(diff, "") as Record<string, unknown>;
+}
+
+function sanitizeAuditValue(value: unknown, key: string): unknown {
+  if (key && !allowedAuditDiffKey(key)) {
+    return "[REDACTED]";
+  }
+  if (Array.isArray(value)) {
+    return sensitiveAuditKey(key) ? "[REDACTED]" : value.map((item) => sanitizeAuditValue(item, key));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([entryKey, entryValue]) => [
+        entryKey,
+        sanitizeAuditValue(entryValue, entryKey),
+      ]),
+    );
+  }
+  if (typeof value === "string" && (sensitiveAuditKey(key) || sensitiveAuditValue(value))) {
+    return "[REDACTED]";
+  }
+  return value;
+}
+
+function allowedAuditDiffKey(key: string): boolean {
+  const normalized = key.toLowerCase();
+  if (sensitiveAuditKey(key)) return true;
+  return allowedAuditDiffKeys.has(normalized) ||
+    normalized.endsWith("id") ||
+    normalized.endsWith("ids") ||
+    normalized.endsWith("at") ||
+    normalized.endsWith("count") ||
+    normalized.endsWith("length") ||
+    normalized.endsWith("present") ||
+    normalized.endsWith("rows") ||
+    normalized.endsWith("size") ||
+    normalized.endsWith("type") ||
+    normalized.startsWith("can") ||
+    normalized.startsWith("is");
+}
+
+const allowedAuditDiffKeys = new Set([
+  "after",
+  "audience",
+  "before",
+  "branch",
+  "capacity",
+  "channel",
+  "checked",
+  "code",
+  "course",
+  "date",
+  "disabled",
+  "emailprovided",
+  "error",
+  "errorcode",
+  "fieldschanged",
+  "fieldspresent",
+  "fieldspurged",
+  "fieldsset",
+  "grade",
+  "level",
+  "maskedfields",
+  "methods",
+  "mode",
+  "priority",
+  "reason",
+  "recoverycodesissued",
+  "recoverycodesremaining",
+  "relationshiptype",
+  "reporttype",
+  "role",
+  "roles",
+  "section",
+  "sha256",
+  "status",
+  "target",
+  "visibility",
+]);
+
+function sensitiveAuditKey(key: string): boolean {
+  const normalized = key.toLowerCase();
+  return [
+    "body",
+    "contentbase64",
+    "downloadurl",
+    "email",
+    "filebase64",
+    "firstname",
+    "lastname",
+    "message",
+    "nationalidencrypted",
+    "nationalidhash",
+    "password",
+    "phone",
+    "secret",
+    "subject",
+    "token",
+  ].includes(normalized);
+}
+
+function sensitiveAuditValue(value: string): boolean {
+  return /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(value) ||
+    /\b\d{11}\b/.test(value) ||
+    /(?:rolePreviewToken|accessToken|refreshToken|bearer|password|secret)=?/i.test(value) ||
+    /^\+?\d[\d\s().-]{8,}\d$/.test(value.trim());
 }
 
 function normalizeText(value: string | undefined) {

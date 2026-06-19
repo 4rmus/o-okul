@@ -25,6 +25,8 @@ interface PortalMetricItem {
   value: number | string;
 }
 
+const demoLoginEnabled = process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN === "true" || process.env.NODE_ENV !== "production";
+
 export function PortalFrame({ actions, children, subtitle, title }: PortalFrameProps) {
   return (
     <PageFrame title={title} subtitle={subtitle} actions={actions}>
@@ -50,13 +52,21 @@ export function AccessPanel({ title, demoEmail, demoLabel }: { title: string; de
     <PortalFrame title={title} subtitle="Bu portal kişiye özeldir; kurum hesabıyla içerik görünmez.">
       <Panel
         aria-label="Portal erişimi"
-        description="Portalı görmek için ilgili kişi hesabıyla giriş yapın. Demo ortamda hızlı önizleme için aşağıdaki düğmeyi kullanın."
+        description={
+          demoLoginEnabled
+            ? "Portalı görmek için ilgili kişi hesabıyla giriş yapın. Demo/local ortamda hızlı önizleme için aşağıdaki düğmeyi kullanın."
+            : "Portalı görmek için ilgili kişi hesabıyla giriş yapın."
+        }
         title="Portal erişimi"
       >
-        <div className="next-portal-preview-action">
-          <Button onClick={() => void previewAs()}>{demoLabel} olarak önizle</Button>
-        </div>
-        <p className="next-status-note">Demo giriş bilgisi yalnız hızlı önizleme düğmesine bağlıdır.</p>
+        {demoLoginEnabled ? (
+          <>
+            <div className="next-portal-preview-action" aria-label="Demo ortam portal önizleme">
+              <Button onClick={() => void previewAs()}>{demoLabel} olarak önizle</Button>
+            </div>
+            <p className="next-status-note">Demo giriş bilgisi yalnız demo/local hızlı önizleme düğmesine bağlıdır.</p>
+          </>
+        ) : null}
         {error ? <p className="next-form-error">{error}</p> : null}
       </Panel>
     </PortalFrame>

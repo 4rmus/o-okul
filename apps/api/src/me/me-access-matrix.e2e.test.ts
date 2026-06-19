@@ -49,6 +49,7 @@ describe("Me access matrix", () => {
       "/me/student/attendance",
       "/me/student/attendance/summary",
       "/me/student/teacher-notes",
+      "/me/student/development-assessments",
       "/me/student/announcements",
       "/me/student/support-tickets",
       "/me/student/reports/exam-demo/latest",
@@ -77,6 +78,7 @@ describe("Me access matrix", () => {
       "/me/guardian/students/student-a/attendance",
       "/me/guardian/students/student-a/attendance/summary",
       "/me/guardian/students/student-a/teacher-notes",
+      "/me/guardian/students/student-a/development-assessments",
       "/me/guardian/students/student-a/announcements",
       "/me/guardian/students/student-a/notification-preferences",
       "/me/guardian/students/student-a/support-tickets",
@@ -105,6 +107,7 @@ describe("Me access matrix", () => {
       "/me/guardian/students/student-b/attendance",
       "/me/guardian/students/student-b/attendance/summary",
       "/me/guardian/students/student-b/teacher-notes",
+      "/me/guardian/students/student-b/development-assessments",
       "/me/guardian/students/student-b/announcements",
       "/me/guardian/students/student-b/notification-preferences",
       "/me/guardian/students/student-b/support-tickets",
@@ -124,6 +127,58 @@ describe("Me access matrix", () => {
     }
   });
 
+  it("veli aynı tenant içinde bağlı olmayan öğrencinin portal alt kaynaklarını okuyamaz ve değiştiremez", async () => {
+    const otherStudent = await request(server)
+      .post("/students")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ firstName: "BagliOlmayan", lastName: "Ogrenci" })
+      .expect(201);
+    const otherStudentId = (otherStudent.body as { id: string }).id;
+    const endpointPrefix = `/me/guardian/students/${otherStudentId}`;
+    const idorEndpoints: PortalEndpoint[] = [
+      { method: "get", path: `${endpointPrefix}/profile` },
+      { method: "get", path: `${endpointPrefix}/class-history` },
+      { method: "get", path: `${endpointPrefix}/enrollments` },
+      { method: "get", path: `${endpointPrefix}/homework/material-assignments` },
+      { method: "get", path: `${endpointPrefix}/attendance` },
+      { method: "get", path: `${endpointPrefix}/attendance/summary` },
+      { method: "get", path: `${endpointPrefix}/teacher-notes` },
+      { method: "get", path: `${endpointPrefix}/development-assessments` },
+      { method: "get", path: `${endpointPrefix}/announcements` },
+      { method: "post", path: `${endpointPrefix}/announcements/announcement-a/read` },
+      { method: "get", path: `${endpointPrefix}/notification-preferences` },
+      {
+        body: { canOpenSupportTickets: true, canReceiveAnnouncements: true, canReceiveSms: true },
+        method: "patch",
+        path: `${endpointPrefix}/notification-preferences`,
+      },
+      { method: "get", path: `${endpointPrefix}/support-tickets` },
+      {
+        body: { message: "Bağlı olmayan öğrenci için açılmamalı.", priority: "LOW", subject: "IDOR denemesi" },
+        method: "post",
+        path: `${endpointPrefix}/support-tickets`,
+      },
+      { method: "get", path: `${endpointPrefix}/payment-plans` },
+      { method: "get", path: `${endpointPrefix}/reports/exam-demo/latest` },
+      { method: "get", path: `${endpointPrefix}/reports/exam-demo/latest/error-booklet` },
+      { method: "get", path: `${endpointPrefix}/reports/exam-demo/progress` },
+    ];
+
+    for (const endpoint of idorEndpoints) {
+      const response = await requestForEndpoint(endpoint)
+        .set("Authorization", `Bearer ${guardianToken}`)
+        .send(endpoint.body ?? {})
+        .expect(403);
+      const serialized = JSON.stringify(response.body);
+      expect(serialized).not.toContain(otherStudentId);
+      expect(serialized).not.toContain("BagliOlmayan");
+      expect(serialized).not.toContain("payment-plan");
+      expect(serialized).not.toContain("support-ticket");
+      expect(serialized).not.toContain("announcement-a");
+      expect(serialized).not.toContain("snapshot");
+    }
+  });
+
   it("öğretmen /me yüzeylerini yalnız öğretmen subject'i açar", async () => {
     const teacherEndpoints = [
       "/me/teacher",
@@ -135,6 +190,10 @@ describe("Me access matrix", () => {
       "/me/teacher/homework/materials",
       "/me/teacher/homework/materials/material-a/assignments",
       "/me/teacher/teacher-notes",
+      "/me/teacher/reports/exam-demo/snapshots",
+      "/me/teacher/reports/exam-demo/snapshots/snapshot-demo/students/student-a",
+      "/me/teacher/reports/exam-demo/snapshots/snapshot-demo/students/student-a/error-booklet",
+      "/me/teacher/reports/exam-demo/students/student-a/progress",
     ];
 
     for (const endpoint of teacherEndpoints) {
@@ -187,6 +246,82 @@ describe("Me access matrix", () => {
       .expect(403);
   });
 
+  it("portal mutasyonları yanlış rol ve role-preview ile kapalı kalır", async () => {
+    const portalMutations: PortalMutation[] = [
+      {
+        method: "post",
+        path: "/me/student/announcements/announcement-a/read",
+        previewRole: "STUDENT",
+        previewSubjectId: "student-a",
+        wrongTokens: [guardianToken, teacherToken, adminToken],
+      },
+      {
+        body: { message: "Yanlış rol açamamalı.", priority: "LOW", subject: "Kapsam dışı" },
+        method: "post",
+        path: "/me/student/support-tickets",
+        previewRole: "STUDENT",
+        previewSubjectId: "student-a",
+        wrongTokens: [guardianToken, teacherToken, adminToken],
+      },
+      {
+        method: "post",
+        path: "/me/guardian/students/student-a/announcements/announcement-a/read",
+        previewRole: "GUARDIAN",
+        previewSubjectId: "guardian-a",
+        wrongTokens: [studentToken, teacherToken, adminToken],
+      },
+      {
+        body: { canOpenSupportTickets: true, canReceiveAnnouncements: true, canReceiveSms: true },
+        method: "patch",
+        path: "/me/guardian/students/student-a/notification-preferences",
+        previewRole: "GUARDIAN",
+        previewSubjectId: "guardian-a",
+        wrongTokens: [studentToken, teacherToken, adminToken],
+      },
+      {
+        body: { message: "Yanlış rol açamamalı.", priority: "LOW", subject: "Kapsam dışı" },
+        method: "post",
+        path: "/me/guardian/students/student-a/support-tickets",
+        previewRole: "GUARDIAN",
+        previewSubjectId: "guardian-a",
+        wrongTokens: [studentToken, teacherToken, adminToken],
+      },
+      {
+        method: "post",
+        path: "/me/teacher/announcements/announcement-a/read",
+        previewRole: "TEACHER",
+        previewSubjectId: "teacher-a",
+        wrongTokens: [studentToken, guardianToken, adminToken],
+      },
+      {
+        body: { message: "Yanlış rol açamamalı.", priority: "LOW", subject: "Kapsam dışı" },
+        method: "post",
+        path: "/me/teacher/support-tickets",
+        previewRole: "TEACHER",
+        previewSubjectId: "teacher-a",
+        wrongTokens: [studentToken, guardianToken, adminToken],
+      },
+    ];
+
+    for (const mutation of portalMutations) {
+      for (const token of mutation.wrongTokens) {
+        const response = await mutableRequest(mutation).set("Authorization", `Bearer ${token}`).send(mutation.body ?? {}).expect(403);
+        expect(JSON.stringify(response.body)).not.toContain("Yanlış rol");
+        expect(JSON.stringify(response.body)).not.toContain("announcement-a");
+      }
+
+      const previewToken = await createRolePreviewToken(mutation.previewRole, mutation.previewSubjectId);
+      const previewResponse = await mutableRequest(mutation)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .set("x-role-preview-token", previewToken)
+        .send(mutation.body ?? {})
+        .expect(403);
+      expect(JSON.stringify(previewResponse.body)).toContain("ROLE_PREVIEW_READ_ONLY");
+      expect(JSON.stringify(previewResponse.body)).not.toContain("Yanlış rol");
+      expect(JSON.stringify(previewResponse.body)).not.toContain("announcement-a");
+    }
+  });
+
   it("öğretmen rapor yüzeyleri yanlış rol ve başka tenant öğrenci denemesinde veri sızdırmaz", async () => {
     const teacherReportEndpoints = [
       "/exams/exam-demo/reports/snapshots",
@@ -207,6 +342,17 @@ describe("Me access matrix", () => {
       .set("Authorization", `Bearer ${teacherToken}`)
       .expect(403);
     expect(JSON.stringify(response.body)).not.toContain("student-b");
+
+    const scopedIdorEndpoints = [
+      "/me/teacher/reports/exam-demo/snapshots/snapshot-demo/students/student-b",
+      "/me/teacher/reports/exam-demo/snapshots/snapshot-demo/students/student-b/error-booklet",
+      "/me/teacher/reports/exam-demo/students/student-b/progress",
+    ];
+
+    for (const endpoint of scopedIdorEndpoints) {
+      const scopedResponse = await request(server).get(endpoint).set("Authorization", `Bearer ${teacherToken}`).expect(403);
+      expect(JSON.stringify(scopedResponse.body)).not.toContain("student-b");
+    }
   });
 
   it("parametresiz /me/profile sadece oturum context'i döner, kaynak kaydı döndürmez", async () => {
@@ -286,4 +432,40 @@ describe("Me access matrix", () => {
       .get("/me/notification-devices")
       .expect(401);
   });
+
+  async function createRolePreviewToken(targetRole: "GUARDIAN" | "STUDENT" | "TEACHER", targetSubjectId: string): Promise<string> {
+    const created = await request(server)
+      .post("/role-previews")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ targetRole, targetSubjectId })
+      .expect(201);
+    return (created.body as { previewToken: string }).previewToken;
+  }
+
+  function mutableRequest(mutation: PortalMutation) {
+    return requestForEndpoint(mutation);
+  }
+
+  function requestForEndpoint(endpoint: PortalEndpoint) {
+    if (endpoint.method === "get") {
+      return request(server).get(endpoint.path);
+    }
+    if (endpoint.method === "patch") {
+      return request(server).patch(endpoint.path);
+    }
+    return request(server).post(endpoint.path);
+  }
 });
+
+interface PortalEndpoint {
+  body?: Record<string, unknown>;
+  method: "get" | "patch" | "post";
+  path: string;
+}
+
+interface PortalMutation extends PortalEndpoint {
+  method: "patch" | "post";
+  previewRole: "GUARDIAN" | "STUDENT" | "TEACHER";
+  previewSubjectId: string;
+  wrongTokens: string[];
+}
