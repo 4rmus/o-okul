@@ -1725,7 +1725,6 @@ requireNoTokens("apps/web/app/(app)/kurum/ogrenciler/student-detail-page.tsx", [
   "record.actionLabel ||",
   "record.action)",
   '`${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots`',
-  '<div className="next-student-relationship-flow-shell" aria-hidden="true">',
   '<Link className="next-student-decision-card"',
   '<article className="next-student-decision-card"',
   "<span>Sınav performansı</span>",

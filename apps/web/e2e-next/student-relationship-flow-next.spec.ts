@@ -21,7 +21,7 @@ const rawStudentDetailPiiValues = [
 ] as const;
 
 test.describe("Öğrenci ilişki haritası", () => {
-  test("React Flow alanı dolu render olur ve liste fallback korunur", async ({ page }) => {
+  test("liste görünümü ilişki haritasını PII sızdırmadan gösterir", async ({ page }) => {
     const auditLogRequests: URL[] = [];
     const requestedPaths: string[] = [];
     await openStudentDetail(page, { width: 1280, height: 900 }, { auditLogRequests, requestedPaths });
@@ -41,17 +41,6 @@ test.describe("Öğrenci ilişki haritası", () => {
     await expect(decisionCards.locator(".next-student-decision-card.uh-action-card")).toHaveCount(4);
     await expect(decisionCards.locator(".next-dashboard-summary-card")).toHaveCount(0);
     await expect(decisionCards).toContainText("Sınav performansı");
-
-    const flow = page.locator(".next-student-relationship-flow");
-    await expect(flow).toHaveAttribute("data-node-count", "6");
-    await expect(flow).toHaveAttribute("data-edge-count", "5");
-    await expect(page.locator(".next-student-relationship-flow .react-flow__node")).toHaveCount(6);
-    await expect(page.locator(".next-student-relationship-flow .react-flow__edge")).toHaveCount(5);
-
-    const viewport = page.locator(".next-student-relationship-flow .react-flow__viewport");
-    const initialTransform = await readViewportTransform(viewport);
-    await page.locator(".next-student-relationship-flow .react-flow__controls-zoomin").click();
-    await expect.poll(() => readViewportTransform(viewport)).not.toBe(initialTransform);
 
     await expect(page.getByLabel("İlişki haritası liste görünümü")).toContainText("Ayşe Yılmaz");
     await expect(page.getByLabel("İlişki haritası liste görünümü")).toContainText("Mehmet Demir");
@@ -95,11 +84,10 @@ test.describe("Öğrenci ilişki haritası", () => {
     await expectNoUnlabeledControls(page, "student-relationship-desktop");
   });
 
-  test("mobilde flow gizlenir, liste fallback taşmadan kalır", async ({ page }) => {
+  test("mobilde liste görünümü taşmadan kalır", async ({ page }) => {
     await openStudentDetail(page, { width: 390, height: 844 });
 
     await expect(page.getByRole("region", { exact: true, name: "Öğrenci detay operasyon özeti" })).toBeVisible();
-    await expect(page.locator(".next-student-relationship-flow-shell")).toBeHidden();
     await expect(page.getByLabel("İlişki haritası liste görünümü")).toBeVisible();
     await expect(page.getByLabel("İlişki haritası liste görünümü")).toContainText("11-A");
     await expectNoHorizontalOverflow(page, "student-relationship-mobile");
@@ -443,11 +431,4 @@ async function expectNoUnlabeledControls(page: Page, label: string) {
   });
 
   expect(unlabeledControls, `${label}: etiketsiz kontrol`).toEqual([]);
-}
-
-async function readViewportTransform(locator: ReturnType<Page["locator"]>) {
-  return locator.evaluate((element) => {
-    const htmlElement = element as HTMLElement;
-    return htmlElement.style.transform || getComputedStyle(htmlElement).transform;
-  });
 }

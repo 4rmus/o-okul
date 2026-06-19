@@ -456,7 +456,6 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
     await expect(page.getByRole("region", { exact: true, name: "Öğrenci detay operasyon özeti" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "İlişki haritası" })).toBeVisible();
-    await expect(page.locator(".next-student-relationship-flow-shell")).toBeHidden();
     await expect(page.getByLabel("İlişki haritası liste görünümü")).toBeVisible();
     await expectStudentDetailNoRawIds(page, "student-dashboard-mobile");
     await expectUiStable(page, "faz9-student-detail-mobile", consoleErrors);

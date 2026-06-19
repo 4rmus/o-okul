@@ -1,6 +1,6 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -41,9 +41,6 @@ import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { fallbackReportExamId, readReportExamId } from "../../_shared/report-exam-selection.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
-import type { StudentRelationshipFlowData } from "./student-relationship-flow.js";
-
-const LazyStudentRelationshipFlow = lazy(() => import("./student-relationship-flow.js"));
 
 interface StudentBaseDetail {
   attendanceSummary: AttendanceSummaryRecord | null;
@@ -85,6 +82,19 @@ interface StudentDetailTableRow {
   primary: string;
   status?: string;
   tone?: StatusBadgeProps["tone"];
+}
+
+interface StudentRelationshipItem {
+  detail: string;
+  id: string;
+  label: string;
+}
+
+interface StudentRelationshipData {
+  classNode: StudentRelationshipItem;
+  guardians: StudentRelationshipItem[];
+  student: StudentRelationshipItem;
+  teachers: StudentRelationshipItem[];
 }
 
 const studentDetailTableColumns: Array<DataTableColumn<StudentDetailTableRow>> = [
@@ -312,7 +322,7 @@ function StudentDashboard({
     report,
     selectedSnapshot,
   });
-  const relationshipFlowData = buildStudentRelationshipFlowData({
+  const relationshipData = buildStudentRelationshipData({
     activeEnrollment,
     classNameById,
     courseNameById,
@@ -360,18 +370,14 @@ function StudentDashboard({
       <Panel
         aria-label="Öğrenci ilişki haritası"
         className="next-student-relationship-section"
-        description="Sınıf, veli ve öğretmen bağları öğrenci merkezli gösterilir; aynı bilgi liste görünümünde de korunur."
+        description="Sınıf, veli ve öğretmen bağları öğrenci merkezli ve liste görünümünde gösterilir."
         title="İlişki haritası"
       >
-        <div className="next-student-relationship-flow-shell">
-          <Suspense fallback={<p className="next-status-note">İlişki haritası yükleniyor...</p>}>
-            <LazyStudentRelationshipFlow data={relationshipFlowData} />
-          </Suspense>
-        </div>
         <div className="next-student-relationship-fallback" aria-label="İlişki haritası liste görünümü">
-          <RelationshipList title="Sınıf" items={[relationshipFlowData.classNode]} />
-          <RelationshipList title="Veliler" items={relationshipFlowData.guardians} />
-          <RelationshipList title="Öğretmenler" items={relationshipFlowData.teachers} />
+          <RelationshipList title="Öğrenci" items={[relationshipData.student]} />
+          <RelationshipList title="Sınıf" items={[relationshipData.classNode]} />
+          <RelationshipList title="Veliler" items={relationshipData.guardians} />
+          <RelationshipList title="Öğretmenler" items={relationshipData.teachers} />
         </div>
       </Panel>
 
@@ -532,7 +538,7 @@ function StudentDashboard({
   );
 }
 
-function RelationshipList({ items, title }: { items: StudentRelationshipFlowData["guardians"]; title: string }) {
+function RelationshipList({ items, title }: { items: StudentRelationshipItem[]; title: string }) {
   return (
     <section>
       <h3>{title}</h3>
@@ -828,7 +834,7 @@ function buildStudentDashboardSummaryActions({
   ];
 }
 
-function buildStudentRelationshipFlowData({
+function buildStudentRelationshipData({
   activeEnrollment,
   classNameById,
   courseNameById,
@@ -846,7 +852,7 @@ function buildStudentRelationshipFlowData({
   guardianNameById: ReadonlyMap<string, string>;
   teacherNameById: ReadonlyMap<string, string>;
   termNameById: ReadonlyMap<string, string>;
-}): StudentRelationshipFlowData {
+}): StudentRelationshipData {
   return {
     student: {
       id: detail.profile.id,
