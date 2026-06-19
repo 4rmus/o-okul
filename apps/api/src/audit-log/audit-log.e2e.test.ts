@@ -192,7 +192,7 @@ describe("Audit log API", () => {
         entityType: "Class",
         entityId: classId,
         action: "class.created",
-        diff: { name: "Audit 6-A", level: "6" },
+        diff: { name: "[REDACTED]", level: "6" },
       }),
       expect.objectContaining({
         tenantId: "tenant-a",
@@ -201,8 +201,8 @@ describe("Audit log API", () => {
         entityId: classId,
         action: "class.updated",
         diff: {
-          before: { name: "Audit 6-A", level: "6" },
-          after: { name: "Audit 6 Fen", level: "6" },
+          before: { name: "[REDACTED]", level: "6" },
+          after: { name: "[REDACTED]", level: "6" },
         },
       }),
       expect.objectContaining({
@@ -212,11 +212,13 @@ describe("Audit log API", () => {
         entityId: classId,
         action: "class.deleted",
         diff: expect.objectContaining({
-          name: "Audit 6 Fen",
+          name: "[REDACTED]",
           deletedAt: expect.any(String),
         }),
       }),
     ]));
+    expect(JSON.stringify(response.body)).not.toContain("Audit 6-A");
+    expect(JSON.stringify(response.body)).not.toContain("Audit 6 Fen");
     expect(JSON.stringify(response.body)).not.toContain("Gizli Audit Sınıfı");
   });
 
@@ -760,7 +762,7 @@ describe("Audit log API", () => {
       .post("/announcements")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
-        title: "Audit duyurusu",
+        title: "Ali Yilmaz audit duyurusu",
         body: "Audit akışı kontrol ediliyor.",
         audience: "TEACHERS",
       })
@@ -770,7 +772,7 @@ describe("Audit log API", () => {
       .post("/message-templates")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
-        name: "Audit SMS",
+        name: "Ali Yilmaz Audit SMS",
         channel: "SMS",
         body: "Sayın veli, audit testi yapılmaktadır.",
       })
@@ -781,7 +783,7 @@ describe("Audit log API", () => {
       .patch(`/message-templates/${templateId}`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
-        name: "Audit SMS Güncel",
+        name: "Ali Yilmaz Audit SMS Güncel",
         body: "Sayın veli, audit testi güncellendi.",
       })
       .expect(200);
@@ -803,7 +805,7 @@ describe("Audit log API", () => {
         entityType: "Announcement",
         entityId: (announcement.body as { id: string }).id,
         action: "announcement.created",
-        diff: { audience: "TEACHERS", title: "Audit duyurusu" },
+        diff: { audience: "TEACHERS", title: "[REDACTED]" },
       }),
       expect.objectContaining({
         tenantId: "tenant-a",
@@ -811,7 +813,7 @@ describe("Audit log API", () => {
         entityType: "MessageTemplate",
         entityId: templateId,
         action: "message_template.created",
-        diff: { channel: "SMS", name: "Audit SMS" },
+        diff: { channel: "SMS", name: "[REDACTED]" },
       }),
       expect.objectContaining({
         tenantId: "tenant-a",
@@ -822,13 +824,13 @@ describe("Audit log API", () => {
         diff: {
           before: {
             channel: "SMS",
-            name: "Audit SMS",
-            body: "Sayın veli, audit testi yapılmaktadır.",
+            name: "[REDACTED]",
+            body: "[REDACTED]",
           },
           after: {
             channel: "SMS",
-            name: "Audit SMS Güncel",
-            body: "Sayın veli, audit testi güncellendi.",
+            name: "[REDACTED]",
+            body: "[REDACTED]",
           },
         },
       }),
@@ -839,11 +841,14 @@ describe("Audit log API", () => {
         entityId: templateId,
         action: "message_template.deleted",
         diff: expect.objectContaining({
-          name: "Audit SMS Güncel",
+          name: "[REDACTED]",
           deletedAt: expect.any(String),
         }),
       }),
     ]));
+    expect(JSON.stringify(response.body)).not.toContain("Ali Yilmaz");
+    expect(JSON.stringify(response.body)).not.toContain("Sayın veli, audit testi yapılmaktadır.");
+    expect(JSON.stringify(response.body)).not.toContain("Sayın veli, audit testi güncellendi.");
   });
 
   it("veli PII purge işlemi ham ad soyad ve telefonu saklamadan audit kaydı üretir", async () => {

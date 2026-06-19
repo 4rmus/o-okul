@@ -11,10 +11,12 @@ const kvkkInventoryTopLevelKeys = [
   "dataSubjectCounts",
   "purgeCoverage",
   "auditActionsVerified",
+  "auditDiffRedactionVerified",
   "gaps",
 ];
 const dataSubjectCountKeys = ["student", "teacher", "guardian", "user"];
 const purgeCoverageKeys = ["student", "teacher", "guardian", "user"];
+const auditDiffRedactionKeys = ["endpoint", "negativeControls", "actionsSampled", "command"];
 const expectedPurgeCoverage = {
   student: ["firstName", "lastName", "phone", "email"],
   teacher: ["firstName", "lastName"],
@@ -24,6 +26,30 @@ const expectedPurgeCoverage = {
 const expectedAuditActions = [
   "kvkk.student_pii_purged",
   "kvkk.teacher_pii_purged",
+  "kvkk.guardian_pii_purged",
+  "kvkk.user_pii_purged",
+];
+const expectedAuditDiffNegativeControls = [
+  "body",
+  "contentBase64",
+  "email",
+  "fileBase64",
+  "firstName",
+  "lastName",
+  "message",
+  "name",
+  "nationalId",
+  "phone",
+  "subject",
+  "title",
+  "token",
+];
+const expectedAuditDiffActions = [
+  "announcement.created",
+  "message_template.created",
+  "support_ticket.created",
+  "support_ticket_comment.created",
+  "kvkk.student_pii_purged",
   "kvkk.guardian_pii_purged",
   "kvkk.user_pii_purged",
 ];
@@ -160,6 +186,7 @@ function validateReport(report) {
   requirePositiveTotal(report.dataSubjectCounts, failures);
   requirePurgeCoverage(report.purgeCoverage, failures);
   requireExactStringSet(report.auditActionsVerified, failures, "auditActionsVerified", expectedAuditActions, "action");
+  requireAuditDiffRedaction(report.auditDiffRedactionVerified, failures);
   requireEmptyArray(report, failures, "gaps");
 
   return failures;
@@ -226,6 +253,17 @@ function requirePurgeCoverage(coverage, failures) {
 
   for (const [subject, expectedFields] of Object.entries(expectedPurgeCoverage)) {
     requireExactStringSet(coverage[subject], failures, `purgeCoverage.${subject}`, expectedFields, "alan");
+  }
+}
+
+function requireAuditDiffRedaction(redaction, failures) {
+  if (!requireObjectKeySet(redaction, auditDiffRedactionKeys, failures, "auditDiffRedactionVerified")) return;
+
+  requireEqual(redaction, failures, "endpoint", "/audit-logs");
+  requireExactStringSet(redaction.negativeControls, failures, "auditDiffRedactionVerified.negativeControls", expectedAuditDiffNegativeControls, "kontrol");
+  requireExactStringSet(redaction.actionsSampled, failures, "auditDiffRedactionVerified.actionsSampled", expectedAuditDiffActions, "action");
+  if (typeof redaction.command !== "string" || !redaction.command.includes("audit-log")) {
+    failures.push("auditDiffRedactionVerified.command audit-log doğrulama komutu içermeli.");
   }
 }
 

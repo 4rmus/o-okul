@@ -156,6 +156,52 @@ describe("AuditLogService", () => {
     expect(JSON.stringify(summary)).not.toContain("guardian_student.updated");
     expect(JSON.stringify(summary)).not.toContain("student.profile_updated");
   });
+
+  it("audit diff değerlerini yazarken ve okurken redakte eder", async () => {
+    const service = new AuditLogService(new FakeAuditLogStore([]));
+
+    const created = await service.record({
+      action: "support_ticket.created",
+      actorUserId: "user-a",
+      diff: {
+        email: "veli@example.test",
+        fieldsChanged: ["phone"],
+        firstName: "Sakli",
+        nested: {
+          message: "Gizli destek metni",
+          status: "OPEN",
+        },
+        path: "/tmp/export/12345678901",
+        phone: "+905551110001",
+        subject: "Gizli konu",
+        unsafePayload: {
+          firstName: "SakliNested",
+          status: "OPEN",
+        },
+      },
+      entityId: "support-ticket-a",
+      entityType: "SupportTicket",
+      tenantId: "tenant-a",
+    });
+    const listed = await service.list(tenantAdminContext);
+
+    expect(created.diff).toEqual({
+      email: "[REDACTED]",
+      fieldsChanged: ["phone"],
+      firstName: "[REDACTED]",
+      nested: "[REDACTED]",
+      path: "[REDACTED]",
+      phone: "[REDACTED]",
+      subject: "[REDACTED]",
+      unsafePayload: "[REDACTED]",
+    });
+    expect(listed[0]?.diff).toEqual(created.diff);
+    expect(JSON.stringify(listed)).not.toContain("veli@example.test");
+    expect(JSON.stringify(listed)).not.toContain("+905551110001");
+    expect(JSON.stringify(listed)).not.toContain("12345678901");
+    expect(JSON.stringify(listed)).not.toContain("Gizli destek metni");
+    expect(JSON.stringify(listed)).not.toContain("Sakli");
+  });
 });
 
 const tenantAdminContext: RequestContext = {

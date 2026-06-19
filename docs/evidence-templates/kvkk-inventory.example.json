@@ -21,5 +21,33 @@
     "kvkk.guardian_pii_purged",
     "kvkk.user_pii_purged"
   ],
+  "auditDiffRedactionVerified": {
+    "endpoint": "/audit-logs",
+    "negativeControls": [
+      "body",
+      "contentBase64",
+      "email",
+      "fileBase64",
+      "firstName",
+      "lastName",
+      "message",
+      "name",
+      "nationalId",
+      "phone",
+      "subject",
+      "title",
+      "token"
+    ],
+    "actionsSampled": [
+      "announcement.created",
+      "message_template.created",
+      "support_ticket.created",
+      "support_ticket_comment.created",
+      "kvkk.student_pii_purged",
+      "kvkk.guardian_pii_purged",
+      "kvkk.user_pii_purged"
+    ],
+    "command": "pnpm --filter @uzman-hocam/api exec vitest run src/audit-log/audit-log.service.test.ts src/audit-log/audit-log.e2e.test.ts"
+  },
   "gaps": []
 }
