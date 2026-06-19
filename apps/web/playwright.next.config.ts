@@ -9,7 +9,7 @@ export default defineConfig({
     baseURL,
   },
   webServer: {
-    command: "pnpm --filter @uzman-hocam/ui build && pnpm --filter @uzman-hocam/web next:dev",
+    command: "pnpm --filter @uzman-hocam/shared-types build && pnpm --filter @uzman-hocam/ui build && pnpm --filter @uzman-hocam/web next:dev",
     env: {
       ...process.env,
       NEXT_E2E_PORT: port,
