@@ -310,6 +310,11 @@ test.describe("Governance evidence sözleşmesi", () => {
       "Kanıt kapsamı: Staging/prod": 1,
       "Kanıt kapsamı: Canlı kanıt": 1,
     });
+    await expectEvidenceTiers(page.getByLabel("Canlı yayın güven durumu"), {
+      evidence: 1,
+      live: 1,
+      reference: 1,
+    });
     await expect(page.getByLabel("Canlı yayın güven durumu")).toContainText("Release kararına yetmez");
     await expect(page.getByLabel("Canlı yayın güven durumu")).toContainText("Canlı kanıt gerekir");
     const liveSummary = page.getByRole("region", { exact: true, name: "Canlı yayın operasyon özeti" });
@@ -815,6 +820,12 @@ async function expectNoHorizontalOverflow(page: Page, label: string) {
 async function expectEvidenceScopes(region: Locator, expectedCounts: Record<string, number>) {
   for (const [label, count] of Object.entries(expectedCounts)) {
     await expect(region.getByLabel(label)).toHaveCount(count);
+  }
+}
+
+async function expectEvidenceTiers(region: Locator, expectedCounts: Record<string, number>) {
+  for (const [tier, count] of Object.entries(expectedCounts)) {
+    await expect(region.locator(`[data-evidence-tier="${tier}"]`)).toHaveCount(count);
   }
 }
 

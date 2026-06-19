@@ -28,6 +28,7 @@ interface OperationDecisionNoticeProps {
 
 type EvidenceTrustTone = NonNullable<StatusBadgeProps["tone"]>;
 type EvidenceTrustScope = "configured-api" | "live-required" | "local-static" | "server-audit" | "staging-prod" | "ui-safe";
+type EvidenceTrustTier = "evidence" | "live" | "reference";
 
 interface EvidenceTrustItem {
   detail: ReactNode;
@@ -58,20 +59,52 @@ export function EvidenceTrustPanel({ ariaLabel, description, items, title }: Evi
       title={title}
     >
       <div className="next-evidence-trust__grid">
-        {items.map((item) => (
-          <article key={item.label} data-evidence-scope={item.scope}>
-            <span>{item.label}</span>
-            <StatusBadge tone={item.tone ?? "neutral"}>{item.value}</StatusBadge>
-            <div className="next-evidence-trust__scope" aria-label={`Kanıt kapsamı: ${evidenceTrustScopeLabels[item.scope]}`}>
-              <span>{evidenceTrustScopeLabels[item.scope]}</span>
-              <small>{evidenceTrustScopeDescriptions[item.scope]}</small>
-            </div>
-            <p>{item.detail}</p>
-          </article>
-        ))}
+        {items.map((item) => {
+          const tier = evidenceTrustTierByScope[item.scope];
+          return (
+            <article key={item.label} data-evidence-scope={item.scope}>
+              <span>{item.label}</span>
+              <StatusBadge
+                aria-label={`Kanıt türü: ${evidenceTrustTierLabels[tier]}`}
+                className="next-evidence-trust__tier"
+                data-evidence-tier={tier}
+                tone={evidenceTrustTierTone(tier)}
+              >
+                {evidenceTrustTierLabels[tier]}
+              </StatusBadge>
+              <StatusBadge tone={item.tone ?? "neutral"}>{item.value}</StatusBadge>
+              <div className="next-evidence-trust__scope" aria-label={`Kanıt kapsamı: ${evidenceTrustScopeLabels[item.scope]}`}>
+                <span>{evidenceTrustScopeLabels[item.scope]}</span>
+                <small>{evidenceTrustScopeDescriptions[item.scope]}</small>
+              </div>
+              <p>{item.detail}</p>
+            </article>
+          );
+        })}
       </div>
     </Panel>
   );
+}
+
+const evidenceTrustTierByScope: Record<EvidenceTrustScope, EvidenceTrustTier> = {
+  "configured-api": "reference",
+  "live-required": "live",
+  "local-static": "reference",
+  "server-audit": "evidence",
+  "staging-prod": "evidence",
+  "ui-safe": "evidence",
+};
+
+const evidenceTrustTierLabels: Record<EvidenceTrustTier, string> = {
+  evidence: "Kanıt",
+  live: "Canlı",
+  reference: "Referans",
+};
+
+function evidenceTrustTierTone(tier: EvidenceTrustTier): EvidenceTrustTone {
+  if (tier === "live") return "warning";
+  if (tier === "evidence") return "info";
+  return "neutral";
 }
 
 const evidenceTrustScopeLabels: Record<EvidenceTrustScope, string> = {

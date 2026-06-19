@@ -276,6 +276,7 @@ export function SupportTicketsPage() {
       key: "actions",
       align: "center",
       header: "İşlem",
+      mobileLabel: "Triage",
       mobilePriority: "primary",
       priority: "primary",
       render: (ticket) => (

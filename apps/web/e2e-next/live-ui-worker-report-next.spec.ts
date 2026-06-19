@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, parse, resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 interface LiveReportEvidence {
@@ -16,6 +18,7 @@ interface LiveReportPortalCredentials {
 }
 
 const evidencePath = process.env.LIVE_UI_WORKER_EVIDENCE_PATH;
+const resultEvidencePath = process.env.LIVE_UI_WORKER_RESULT_EVIDENCE_FILE ?? process.env.LIVE_UI_WORKER_RESULT_EVIDENCE_PATH;
 const enabled = process.env.NEXT_E2E_LIVE_UI_WORKER === "1" && Boolean(evidencePath);
 
 test.skip(!enabled, "NEXT_E2E_LIVE_UI_WORKER=1 ve LIVE_UI_WORKER_EVIDENCE_PATH gerekir.");
@@ -34,27 +37,49 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
   await expectReportDownload(page, "Excel indir", /\.xlsx$/);
   await expectReportDownload(page, "PDF indir", /\.pdf$/);
 
+  let studentPortalViewed = false;
   if (evidence.studentPortal) {
     await logout(page);
     await loginAs(page, evidence.studentPortal.email, evidence.studentPortal.password);
     await page.goto(`/ogrenci?examId=${encodeURIComponent(evidence.examId)}`);
     await expect(page.getByRole("heading", { name: "Öğrenci Portalı" })).toBeVisible();
     await expect(page.getByLabel("Sınav raporu").getByText(evidence.firstStudentId)).toBeVisible();
+    studentPortalViewed = true;
   }
 
+  let guardianPortalViewed = false;
   if (evidence.guardianPortal) {
     await logout(page);
     await loginAs(page, evidence.guardianPortal.email, evidence.guardianPortal.password);
     await page.goto(`/veli?examId=${encodeURIComponent(evidence.examId)}`);
     await expect(page.getByRole("heading", { name: "Veli Portalı" })).toBeVisible();
     await expect(page.getByLabel("Sınav raporu").getByText(evidence.firstStudentId)).toBeVisible();
+    guardianPortalViewed = true;
   }
+
+  writeResultEvidence(resultEvidencePath, {
+    result: "PASS",
+    check: "live_ui_worker_report_smoke",
+    generatedAt: new Date().toISOString(),
+    environment: process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown",
+    checkedAt: new Date().toISOString(),
+    examHash: hashIdentifier(evidence.examId),
+    firstStudentHash: hashIdentifier(evidence.firstStudentId),
+    reportStatus: "READY",
+    downloadedArtifacts: ["xlsx", "pdf"],
+    karnePdfDownloaded: true,
+    excelDownloaded: true,
+    studentPortalViewed,
+    guardianPortalViewed,
+    commandsPassed: ["pnpm live:ui-worker:smoke"],
+    gaps: [],
+  });
 });
 
 async function loginAs(page: Page, email: string, password: string) {
   await page.goto("/login");
-  await page.getByLabel("E-posta").fill(email);
-  await page.getByLabel("Şifre").fill(password);
+  await page.locator('input[name="email"]').fill(email);
+  await page.locator('input[name="password"]').fill(password);
   await page.getByRole("button", { name: "Giriş yap" }).click();
 }
 
@@ -112,4 +137,54 @@ function validatePortalCredentials(
   if (!value) return;
   if (!value.email) failures.push(`${label}.email`);
   if (!value.password) failures.push(`${label}.password`);
+}
+
+function writeResultEvidence(path: string | undefined, payload: Record<string, unknown>) {
+  if (!path) return;
+  const resolvedPath = resolve(path);
+  validateResultEvidenceOutputPath(resolvedPath);
+  mkdirSync(dirname(resolvedPath), { recursive: true });
+  validateParentPath(dirname(resolvedPath));
+  validateExistingFileArtifact(resolvedPath);
+  writeFileSync(resolvedPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  validateExistingFileArtifact(resolvedPath);
+}
+
+function hashIdentifier(value: string) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function validateResultEvidenceOutputPath(path: string) {
+  if (isLocalTempPath(path)) {
+    throw new Error("LIVE_UI_WORKER_RESULT_EVIDENCE_FILE lokal temp path olmamalı.");
+  }
+  validateParentPath(dirname(path));
+  validateExistingFileArtifact(path);
+}
+
+function validateParentPath(parentPath: string) {
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+    if (!existsSync(current)) return;
+    const stat = lstatSync(current);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new Error("LIVE_UI_WORKER_RESULT_EVIDENCE_FILE parent dizini symlink olmayan dizin olmalı.");
+    }
+  }
+}
+
+function validateExistingFileArtifact(path: string) {
+  if (!existsSync(path)) return;
+  const stat = lstatSync(path);
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new Error("LIVE_UI_WORKER_RESULT_EVIDENCE_FILE symlink olmayan file artifact olmalı.");
+  }
+}
+
+function isLocalTempPath(path: string) {
+  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
 }

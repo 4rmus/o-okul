@@ -38,7 +38,9 @@ const uatFlows = [
   "guardian workflow",
   "raw import smoke",
   "report generation smoke",
+  "live exam cycle evidence",
   "sms batch smoke",
+  "notification provider smoke",
   "privacy purge",
 ] as const;
 
@@ -48,8 +50,12 @@ const requiredCommands = [
   "pnpm db:rls:check:live",
   "pnpm raw-import:smoke",
   "pnpm report-generation:smoke",
+  "pnpm live:exam-cycle:check",
   "pnpm queue:smoke",
+  "pnpm live:onboarding:smoke",
+  "pnpm live:ui-worker:smoke",
   "pnpm sms:smoke",
+  "pnpm notification:smoke",
   "pnpm traefik:https:smoke",
 ] as const;
 

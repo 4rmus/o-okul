@@ -1318,6 +1318,7 @@ const answerKeyBranchColumns: Array<DataTableColumn<AnswerKeyBranchRow>> = [
   {
     header: "Branş",
     key: "branch",
+    mobilePriority: "primary",
     priority: "primary",
     render: (branch) => formatCourseName(branch.branch),
   },
@@ -1325,6 +1326,7 @@ const answerKeyBranchColumns: Array<DataTableColumn<AnswerKeyBranchRow>> = [
     align: "right",
     header: "Soru",
     key: "questionCount",
+    mobilePriority: "secondary",
     priority: "primary",
     render: (branch) => branch.questionCount,
   },
@@ -1676,18 +1678,21 @@ function QuarantineResolutionPanel({
       align: "right",
       header: "Satır",
       key: "rowNumber",
+      mobilePriority: "secondary",
       priority: "primary",
       render: (record) => record.rowNumber,
     },
     {
       header: "Sebep",
       key: "reason",
+      mobilePriority: "primary",
       priority: "primary",
       render: (record) => record.reason,
     },
     {
       header: "Durum",
       key: "status",
+      mobilePriority: "primary",
       priority: "primary",
       render: (record) => (
         <StatusBadge tone={quarantineStatusTone(record.status)}>{formatQuarantineStatus(record.status)}</StatusBadge>
@@ -1696,6 +1701,7 @@ function QuarantineResolutionPanel({
     {
       header: "Öğrenci",
       key: "student",
+      mobilePriority: "secondary",
       priority: "secondary",
       render: (record) => (
         <Select
@@ -1717,6 +1723,8 @@ function QuarantineResolutionPanel({
     {
       header: "İşlem",
       key: "action",
+      mobileLabel: "Çöz",
+      mobilePriority: "primary",
       priority: "primary",
       render: (record) =>
         record.status === "RESOLVED" ? (
@@ -1811,6 +1819,7 @@ function OpticalReportPanel({
     {
       header: "Durum",
       key: "status",
+      mobilePriority: "primary",
       priority: "primary",
       render: (snapshot) => (
         <StatusBadge tone={reportSnapshotStatusTone(snapshot.status)}>{formatReportStatus(snapshot.status)}</StatusBadge>
@@ -1819,6 +1828,7 @@ function OpticalReportPanel({
     {
       header: "Çıktı",
       key: "exportReadiness",
+      mobilePriority: "primary",
       priority: "primary",
       render: (snapshot) => (
         <StatusBadge tone={isReportSnapshotReady(snapshot) ? "success" : "warning"}>
@@ -1830,6 +1840,7 @@ function OpticalReportPanel({
       align: "right",
       header: "Sonuç",
       key: "resultCount",
+      mobilePriority: "secondary",
       priority: "secondary",
       render: (snapshot) => formatReportResultCount(snapshot),
     },
@@ -1837,6 +1848,7 @@ function OpticalReportPanel({
       align: "right",
       header: "Başarı %",
       key: "successRate",
+      mobilePriority: "primary",
       priority: "primary",
       render: (snapshot) => formatPercentNumber(reportSuccessRate(snapshot.snapshotData?.averages)),
     },
@@ -1844,6 +1856,7 @@ function OpticalReportPanel({
       align: "right",
       header: "Net",
       key: "net",
+      mobilePriority: "secondary",
       priority: "primary",
       render: (snapshot) => formatReportNumber(snapshot.snapshotData?.averages?.net),
     },
@@ -1851,6 +1864,7 @@ function OpticalReportPanel({
       align: "right",
       header: "Soru",
       key: "questionCount",
+      mobilePriority: "secondary",
       priority: "primary",
       render: (snapshot) => formatReportNumber(reportQuestionCount(snapshot.snapshotData?.averages)),
     },
@@ -1858,6 +1872,7 @@ function OpticalReportPanel({
       align: "right",
       header: "Doğru",
       key: "correct",
+      mobilePriority: "hidden",
       priority: "optional",
       render: (snapshot) => formatReportAverage(snapshot, "correct"),
     },
@@ -1865,6 +1880,7 @@ function OpticalReportPanel({
       align: "right",
       header: "Yanlış",
       key: "wrong",
+      mobilePriority: "hidden",
       priority: "optional",
       render: (snapshot) => formatReportAverage(snapshot, "wrong"),
     },
@@ -1872,6 +1888,7 @@ function OpticalReportPanel({
       align: "right",
       header: "Boş",
       key: "blank",
+      mobilePriority: "hidden",
       priority: "optional",
       render: (snapshot) => formatReportAverage(snapshot, "blank"),
     },
@@ -1879,18 +1896,22 @@ function OpticalReportPanel({
       align: "right",
       header: "Sınıf",
       key: "classCount",
+      mobilePriority: "hidden",
       priority: "secondary",
       render: (snapshot) => formatReportClassCount(snapshot),
     },
     {
       header: "Oluşturulma",
       key: "generatedAt",
+      mobilePriority: "hidden",
       priority: "optional",
       render: (snapshot) => formatReportGeneratedAt(snapshot),
     },
     {
       header: "İndirme",
       key: "download",
+      mobileLabel: "İndir",
+      mobilePriority: "primary",
       priority: "primary",
       render: (snapshot) => (
         <div className="next-row-actions">
@@ -1994,6 +2015,7 @@ function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
     {
       header: "Öğrenci",
       key: "student",
+      mobilePriority: "primary",
       priority: "primary",
       render: (row) => (
         <>
@@ -2006,18 +2028,21 @@ function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
     {
       header: "Sınıf",
       key: "class",
+      mobilePriority: "secondary",
       priority: "primary",
       render: (row) => row.className,
     },
     {
       header: "Katılım",
       key: "participation",
+      mobilePriority: "hidden",
       priority: "optional",
       render: (row) => formatParticipantMeta(row),
     },
     {
       header: "Durum",
       key: "status",
+      mobilePriority: "secondary",
       priority: "primary",
       render: (row) => <StatusBadge tone={resultStatusTone(row)}>{formatResultStatus(row)}</StatusBadge>,
     },
@@ -2025,6 +2050,7 @@ function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
       align: "right",
       header: "Başarı %",
       key: "successRate",
+      mobilePriority: "primary",
       priority: "primary",
       render: (row) => formatPercentNumber(reportSuccessRate(row)),
     },
@@ -2032,6 +2058,7 @@ function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
       align: "right",
       header: "Net",
       key: "net",
+      mobilePriority: "secondary",
       priority: "primary",
       render: (row) => formatReportNumber(row.net),
     },
@@ -2039,6 +2066,7 @@ function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
       align: "right",
       header: "Soru",
       key: "questionCount",
+      mobilePriority: "secondary",
       priority: "primary",
       render: (row) => formatReportNumber(reportQuestionCount(row)),
     },
@@ -2046,6 +2074,7 @@ function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
       align: "right",
       header: "Doğru",
       key: "correct",
+      mobilePriority: "hidden",
       priority: "optional",
       render: (row) => formatReportNumber(row.correct),
     },
@@ -2053,6 +2082,7 @@ function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
       align: "right",
       header: "Yanlış",
       key: "wrong",
+      mobilePriority: "hidden",
       priority: "optional",
       render: (row) => formatReportNumber(row.wrong),
     },
@@ -2060,6 +2090,7 @@ function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
       align: "right",
       header: "Boş",
       key: "blank",
+      mobilePriority: "hidden",
       priority: "optional",
       render: (row) => formatReportNumber(row.blank),
     },
@@ -2067,6 +2098,7 @@ function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
       align: "right",
       header: "Puan",
       key: "score",
+      mobilePriority: "hidden",
       priority: "secondary",
       render: (row) => formatReportNumber(readRowScore(row)),
     },
@@ -2074,6 +2106,7 @@ function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
       align: "right",
       header: "Genel sıra",
       key: "generalRank",
+      mobilePriority: "hidden",
       priority: "optional",
       render: (row) => formatRank(row.generalRank),
     },
@@ -2081,6 +2114,7 @@ function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
       align: "right",
       header: "Sınıf sıra",
       key: "classRank",
+      mobilePriority: "hidden",
       priority: "optional",
       render: (row) => formatRank(row.classRank),
     },
@@ -2088,6 +2122,7 @@ function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
       align: "right",
       header: "Yüzdelik",
       key: "percentile",
+      mobilePriority: "hidden",
       priority: "optional",
       render: (row) => formatPercentile(row.percentile),
     },

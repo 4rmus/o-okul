@@ -15,12 +15,13 @@ const demoAccounts = [
 ] as const;
 
 const rememberedEmailStorageKey = "des.rememberedLoginEmail";
+const demoLoginEnabled = process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN === "true" || process.env.NODE_ENV !== "production";
 
 export default function LoginPage() {
   const router = useRouter();
   const { auth, isBootstrapping, login, verifyMfa } = useAuth();
-  const [email, setEmail] = useState("admin@demo.local");
-  const [password, setPassword] = useState("password");
+  const [email, setEmail] = useState(demoLoginEnabled ? "admin@demo.local" : "");
+  const [password, setPassword] = useState(demoLoginEnabled ? "password" : "");
   const [rememberMe, setRememberMe] = useState(false);
   const [pendingMfa, setPendingMfa] = useState<MfaChallengeResponse | null>(null);
   const [mfaMethod, setMfaMethod] = useState<"totp" | "recovery_code">("totp");
@@ -159,22 +160,24 @@ export default function LoginPage() {
           {isSubmitting ? "Giriş yapılıyor" : pendingMfa ? "Doğrula" : "Giriş yap"}
         </Button>
       </form>
-      <div className="next-demo-accounts">
-        <h2>Demo hesapları (şifre: password)</h2>
-        <p>Hızlı önizleme için bir rol seçin.</p>
-        {demoAccounts.map((account) => (
-          <button
-            key={account.email}
-            type="button"
-            className="next-demo-account"
-            onClick={() => void loginAs(account.email, account.path)}
-            disabled={isSubmitting || isBootstrapping}
-          >
-            <span>{account.label}</span>
-            <span>{account.email}</span>
-          </button>
-        ))}
-      </div>
+      {demoLoginEnabled ? (
+        <div className="next-demo-accounts" aria-label="Demo ortam hesapları">
+          <h2>Demo ortam hesapları</h2>
+          <p>Yalnız demo/local ortamda hızlı önizleme için bir rol seçin.</p>
+          {demoAccounts.map((account) => (
+            <button
+              key={account.email}
+              type="button"
+              className="next-demo-account"
+              onClick={() => void loginAs(account.email, account.path)}
+              disabled={isSubmitting || isBootstrapping}
+            >
+              <span>{account.label}</span>
+              <span>{account.email}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }

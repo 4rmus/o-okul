@@ -224,6 +224,11 @@ yürütür; subagent'lar tasarım kilidi, uzman inceleme ve test üretimi için 
 > tamamlandı (bkz. `docs/phase-0..6-report.md`). Buradan sonraki **ürün arayüzü** (Next.js rol
 > portalları + Chart.js raporlama) ve gereksinim-boşluğu modülleri için devam yol haritası
 > **§10**'dadır.
+>
+> **V1 kapsam notu (2026-06-19):** Bu bolum tarihsel yol haritasidir. V1 icin kanonik kapsam
+> kilidi `docs/product-journeys-v1.md` ve `docs/DECISIONS.md` `DEC-20260613-01` altindadir.
+> Salon/oturma plani, online deneme, odeme saglayici/fatura ve OMR/fotograf optik okuma v1
+> kapsam disidir; buradaki eski faz metinleri kapsam genisletme kaynagi sayilmaz.
 
 ### 6.0 Ortak Yürütme Protokolü
 
@@ -395,6 +400,10 @@ sonraki faza geçiş için açık onay maddelerini içerir.
 > orkestrasyonu, mevcut kod tabanı üzerinden sentez · Durum: onaylandı · Önkoşul: Faz 0–6
 > tamamlandı. Bu bölüm §6'nın (Faz 0–6) yerini almaz; onun **üstüne** gelen, ürün arayüzü eksenli
 > devam fazlarıdır (Faz A–E)._
+>
+> _V1 kapsam notu (2026-06-19): Bu bolum eski bosluk analizini korur. Rol portallari,
+> kisi-duzeyi erisim ve panel kanitlari icin guncel kaynak `docs/product-journeys-v1.md` ve
+> ilgili Faz A-E raporlaridir._
 
 ### 10.1 Bağlam: Nereden devam ediyoruz (kanıt)
 

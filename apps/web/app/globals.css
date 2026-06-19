@@ -3075,6 +3075,10 @@ a {
   font-weight: 800;
 }
 
+.next-evidence-trust__tier {
+  justify-self: start;
+}
+
 .next-evidence-trust__scope {
   display: grid;
   gap: 2px;
