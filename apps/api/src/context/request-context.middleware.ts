@@ -1,6 +1,5 @@
-import { ForbiddenException, Inject, Injectable, NestMiddleware, Optional } from "@nestjs/common";
+import { ForbiddenException, Inject, Injectable, NestMiddleware } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
-import { AuditLogService } from "../audit-log/audit-log.service.js";
 import { AuthService } from "../auth/auth.service.js";
 import { setApiLogContext } from "../observability/log-context.js";
 import { capabilitiesForRoles } from "../rbac/role-capabilities.js";
@@ -15,7 +14,6 @@ export class RequestContextMiddleware implements NestMiddleware {
     private readonly auth: AuthService,
     private readonly rolePreviews: RolePreviewService,
     @Inject(tenantStoreToken) private readonly tenants: TenantStore,
-    @Optional() private readonly auditLogs?: AuditLogService,
   ) {}
 
   async use(request: Request, _response: Response, next: NextFunction): Promise<void> {
@@ -63,21 +61,6 @@ export class RequestContextMiddleware implements NestMiddleware {
     }
 
     setApiLogContext({ tenantId, userId: payload.sub });
-    const rlsBypass = resolveRlsBypass(request, payload.roles);
-    if (rlsBypass.enabled) {
-      await this.auditLogs?.record({
-        actorUserId: payload.sub,
-        entityType: "RequestContext",
-        entityId: request.path || request.url,
-        action: "system.rls_bypass_requested",
-        diff: {
-          method: request.method,
-          path: request.path || request.url,
-          reason: rlsBypass.reason,
-        },
-      });
-    }
-
     runWithRequestContext(
       {
         userId: payload.sub,
@@ -85,8 +68,7 @@ export class RequestContextMiddleware implements NestMiddleware {
         tenantAccessMode,
         roles: payload.roles,
         capabilities: capabilitiesForRoles(payload.roles),
-        bypassRls: rlsBypass.enabled,
-        rlsBypassReason: rlsBypass.reason,
+        bypassRls: false,
         subjectType: payload.subjectType,
         subjectId: payload.subjectId,
       },
@@ -121,15 +103,4 @@ function isTenantLicenseExpired(tenant: Pick<TenantRecord, "licenseEndsAt">): bo
   if (!tenant.licenseEndsAt) return false;
   const licenseEndsAt = Date.parse(tenant.licenseEndsAt);
   return !Number.isFinite(licenseEndsAt) || licenseEndsAt < Date.now();
-}
-
-function resolveRlsBypass(request: Request, roles: string[]): { enabled: boolean; reason?: string } {
-  const reason = request.header("x-rls-bypass-reason")?.trim();
-  if (!reason) return { enabled: false };
-
-  if (!isSystemAdmin(roles)) {
-    throw new ForbiddenException("RLS_BYPASS_SYSTEM_ADMIN_REQUIRED");
-  }
-
-  return { enabled: true, reason };
 }

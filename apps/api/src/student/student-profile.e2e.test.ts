@@ -107,6 +107,67 @@ describe("Student profile + TC API", () => {
       .expect(409);
   });
 
+  it("cross-tenant classId ve responsibleTeacherId iliskilerini yazamaz", async () => {
+    const beforeStudents = await request(server)
+      .get("/students")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200);
+    const beforeHistory = await request(server)
+      .get("/me/student/class-history")
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .expect(200);
+
+    await request(server)
+      .post("/students")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Yanlis", lastName: "Sinif", classId: "class-b" })
+      .expect(403);
+
+    await request(server)
+      .post("/students")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Yanlis", lastName: "Ogretmen", responsibleTeacherId: "teacher-b" })
+      .expect(403);
+
+    await request(server)
+      .patch("/students/student-a")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ classId: "class-b" })
+      .expect(403);
+
+    await request(server)
+      .patch("/students/student-a")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ responsibleTeacherId: "teacher-b" })
+      .expect(403);
+
+    await request(server)
+      .get("/students")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toHaveLength(beforeStudents.body.length);
+      });
+
+    await request(server)
+      .get("/me/student/profile")
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.className).toBe("8-A");
+        expect(body.responsibleTeacherName).toBe("Ayse Ogretmen");
+      });
+
+    await request(server)
+      .get("/me/student/class-history")
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toHaveLength(beforeHistory.body.length);
+        expect(JSON.stringify(body)).not.toContain("7-B");
+      });
+  });
+
   it("öğrenci, veli ve kapsamlı öğretmen profili maskeli görür", async () => {
     await request(server)
       .get("/me/student/profile")

@@ -17,7 +17,7 @@
     "db:audit-log-partition:maintain": "node scripts/maintain-audit-log-partitions.mjs",
     "db:audit-log-partition:maintain-contract": "node scripts/check-audit-log-partition-maintenance-contract.mjs",
     "db:migrate": "prisma migrate dev --config prisma.config.ts",
-    "db:rls:check": "node scripts/check-rls.mjs",
+    "db:rls:check": "tsx scripts/check-tenant-models-parity.ts && node scripts/check-rls.mjs && node scripts/check-tenant-relation-fks.mjs",
     "db:rls:check:live": "node scripts/check-rls-live.mjs",
     "db:seed": "tsx prisma/seed.ts",
     "dev": "tsc -p tsconfig.json --watch",

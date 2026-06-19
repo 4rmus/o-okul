@@ -1,12 +1,10 @@
-import { ForbiddenException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { getRequestContext } from "./request-context.js";
 import { RequestContextMiddleware } from "./request-context.middleware.js";
 
 describe("RequestContextMiddleware", () => {
   it("does not enable RLS bypass for SYSTEM_ADMIN by default", async () => {
-    const auditLogs = { record: vi.fn() };
-    const middleware = createMiddleware({ roles: ["SYSTEM_ADMIN"], auditLogs });
+    const middleware = createMiddleware({ roles: ["SYSTEM_ADMIN"] });
     let captured;
 
     await middleware.use(createRequest({ authorization: "Bearer system-token" }), {} as never, () => {
@@ -19,12 +17,10 @@ describe("RequestContextMiddleware", () => {
       roles: ["SYSTEM_ADMIN"],
       bypassRls: false,
     });
-    expect(auditLogs.record).not.toHaveBeenCalled();
   });
 
-  it("enables explicit audited RLS bypass only for SYSTEM_ADMIN", async () => {
-    const auditLogs = { record: vi.fn() };
-    const middleware = createMiddleware({ roles: ["SYSTEM_ADMIN"], auditLogs });
+  it("leaves explicit RLS bypass headers for the route metadata guard", async () => {
+    const middleware = createMiddleware({ roles: ["SYSTEM_ADMIN"] });
     let captured;
 
     await middleware.use(
@@ -39,36 +35,9 @@ describe("RequestContextMiddleware", () => {
     );
 
     expect(captured).toMatchObject({
-      bypassRls: true,
-      rlsBypassReason: "tenant support investigation",
+      bypassRls: false,
     });
-    expect(auditLogs.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        actorUserId: "user-system",
-        entityType: "RequestContext",
-        action: "system.rls_bypass_requested",
-        diff: expect.objectContaining({
-          method: "GET",
-          path: "/api/v1/students",
-          reason: "tenant support investigation",
-        }),
-      }),
-    );
-  });
-
-  it("rejects explicit RLS bypass from non-system roles", async () => {
-    const middleware = createMiddleware({ roles: ["TENANT_ADMIN"], tenantId: "tenant-a" });
-
-    await expect(
-      middleware.use(
-        createRequest({
-          authorization: "Bearer tenant-token",
-          rlsBypassReason: "not allowed",
-        }),
-        {} as never,
-        vi.fn(),
-      ),
-    ).rejects.toThrow(ForbiddenException);
+    expect(captured).not.toHaveProperty("rlsBypassReason");
   });
 
   it("keeps tenant scoped users on normal non-bypass context", async () => {
@@ -131,7 +100,6 @@ function createMiddleware(input: {
   roles: string[];
   tenantId?: string;
   licenseEndsAt?: string;
-  auditLogs?: { record: ReturnType<typeof vi.fn> };
 }) {
   return new RequestContextMiddleware(
     {
@@ -145,7 +113,6 @@ function createMiddleware(input: {
     {
       findForAdmin: async (tenantId: string) => ({ id: tenantId, status: "ACTIVE", licenseEndsAt: input.licenseEndsAt }),
     } as never,
-    input.auditLogs as never,
   );
 }
 

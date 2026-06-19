@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
 import { InMemoryTeacherAssignmentStore } from "../school/teacher-assignment-store.js";
@@ -109,6 +109,13 @@ describe("DevelopmentService", () => {
     expect(guardianTrend[0]).not.toHaveProperty("studentId");
     expect(guardianTrend[0]).not.toHaveProperty("teacherId");
   });
+
+  it("veli bağlı olmayan veya başka tenant öğrencinin gelişim trendini okuyamaz", async () => {
+    const setup = createService();
+
+    await expect(setup.service.listCurrentGuardianStudent(guardianContext, "student-unlinked")).rejects.toThrow(ForbiddenException);
+    await expect(setup.service.listCurrentGuardianStudent(guardianContext, "student-b")).rejects.toThrow(ForbiddenException);
+  });
 });
 
 function createService() {
@@ -116,9 +123,18 @@ function createService() {
   const service = new DevelopmentService(
     new InMemoryDevelopmentStore(),
     {
-      findById: async (id: string) => id === "student-a"
-        ? { id: "student-a", tenantId: "tenant-a", firstName: "Ada", lastName: "A", classId: "class-a", status: "ACTIVE" }
-        : undefined,
+      findById: async (id: string) => {
+        if (id === "student-a") {
+          return { id: "student-a", tenantId: "tenant-a", firstName: "Ada", lastName: "A", classId: "class-a", status: "ACTIVE" };
+        }
+        if (id === "student-unlinked") {
+          return { id: "student-unlinked", tenantId: "tenant-a", firstName: "Unlinked", lastName: "A", status: "ACTIVE" };
+        }
+        if (id === "student-b") {
+          return { id: "student-b", tenantId: "tenant-b", firstName: "Bora", lastName: "B", status: "ACTIVE" };
+        }
+        return undefined;
+      },
     } as never,
     {
       findById: async (id: string) => id === "teacher-a"

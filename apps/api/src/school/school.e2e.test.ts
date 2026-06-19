@@ -1254,6 +1254,12 @@ describe("School management API", () => {
     await request(server)
       .post(`/students/${studentId}/enrollments/renew`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ ...renewRequest, classId: "class-b" })
+      .expect(403);
+
+    await request(server)
+      .post(`/students/${studentId}/enrollments/renew`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ ...renewRequest, startsAt: "2026-02-29" })
       .expect(422)
       .expect(({ body }) => {
@@ -1323,6 +1329,12 @@ describe("School management API", () => {
       termId: "term-2026-spring",
       startsAt: "2026-06-06",
     };
+    await request(server)
+      .post(`/students/${studentId}/enrollments/transfer`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ ...transferRequest, classId: "class-b" })
+      .expect(403);
+
     const transferred = await request(server)
       .post(`/students/${studentId}/enrollments/transfer`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
@@ -1375,6 +1387,20 @@ describe("School management API", () => {
       termId: "term-2026-spring",
       startsAt: "2026-06-07",
     };
+    await request(server)
+      .post("/students/enrollments/bulk-renew")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ ...bulkRenewRequest, classIdBySourceClassId: undefined, classId: "class-b" })
+      .expect(403);
+
+    await request(server)
+      .get(`/students/${studentId}/enrollments`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(JSON.stringify(body)).not.toContain("class-b");
+      });
+
     const bulkRenewed = await request(server)
       .post("/students/enrollments/bulk-renew")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
