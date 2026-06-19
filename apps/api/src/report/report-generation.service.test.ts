@@ -189,6 +189,45 @@ describe("ReportGenerationService", () => {
     expect(result).toEqual([fakeSnapshot]);
   });
 
+  it("öğrenci snapshot listesini sadece öğrenci özet metadata'sı ile döner", async () => {
+    const producer = new FakeProducer();
+    const store = new FakeReportSnapshotStore([createMixedStudentSnapshot(), fakePreviousSnapshot]);
+    const service = new ReportGenerationService(producer, store);
+
+    const result = await service.listStudentSnapshots(
+      {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        roles: ["TENANT_ADMIN"],
+        bypassRls: false,
+      },
+      "exam-a",
+      "student-a",
+    );
+
+    expect(store.inputs).toEqual([{ tenantId: "tenant-a", examId: "exam-a" }]);
+    expect(result).toHaveLength(2);
+    expect(result[0]?.snapshotData).toEqual({
+      reportType: examResultSummaryReportType,
+      generatedAt: "2026-06-06T09:00:00.000Z",
+      resultCount: 1,
+      students: [
+        expect.objectContaining({
+          studentId: "student-a",
+          classId: "class-a",
+          className: "8-A",
+          resultKey: "result-a",
+          total: expect.objectContaining({ net: 17.5 }),
+        }),
+      ],
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("student-b");
+    expect(serialized).not.toContain("correctAnswer");
+    expect(serialized).not.toContain("\"questions\"");
+    expect(serialized).not.toContain("\"outcomes\"");
+  });
+
   it("teacher snapshot listesini kendi sınıf ve öğrencileriyle sınırlar", async () => {
     const producer = new FakeProducer();
     const store = new FakeReportSnapshotStore([fakeMixedSnapshot]);
@@ -1109,6 +1148,34 @@ const fakeOtherExamSnapshot: ReportSnapshotRecord = {
   createdAt: "2026-06-07T09:00:00.000Z",
   updatedAt: "2026-06-07T09:00:00.000Z",
 };
+
+function createMixedStudentSnapshot(): ReportSnapshotRecord {
+  return {
+    ...fakeSnapshot,
+    snapshotData: {
+      ...fakeSnapshot.snapshotData,
+      students: [
+        ...((fakeSnapshot.snapshotData?.students as Record<string, unknown>[] | undefined) ?? []),
+        {
+          studentId: "student-b",
+          classId: "class-a",
+          className: "8-A",
+          resultKey: "result-b",
+          total: {
+            correct: 10,
+            wrong: 8,
+            blank: 2,
+            net: 8,
+            rawScore: 40,
+            standardScore: 55,
+          },
+          outcomes: [{ outcomeCode: "M.8.1", branch: "Matematik", correct: 1, wrong: 1, blank: 0, net: 0.75 }],
+          questions: [{ questionNo: 1, branch: "Matematik", answer: "D", correctAnswer: "A", status: "WRONG" }],
+        },
+      ],
+    },
+  };
+}
 
 class FakeReportSnapshotStore implements ReportSnapshotStore {
   readonly inputs: Array<{ tenantId: string; examId: string }> = [];

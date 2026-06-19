@@ -157,6 +157,35 @@ describe("ReportGenerationController", () => {
     expect(response.body).toEqual([fakeSnapshot]);
   });
 
+  it("TENANT_ADMIN öğrenci snapshot listesini tek öğrenci metadata'sı olarak alır", async () => {
+    const issued = await login("admin-a@example.test");
+    snapshotStore.useRecords([createMixedStudentSnapshot(), fakePreviousSnapshot]);
+
+    try {
+      const response = await request(server)
+        .get("/exams/exam-a/reports/students/student-a/snapshots")
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .expect(200);
+
+      expect(snapshotStore.inputs).toContainEqual({ tenantId: "tenant-a", examId: "exam-a" });
+      expect(response.body).toHaveLength(2);
+      expect(response.body[0].snapshotData.students).toEqual([
+        expect.objectContaining({
+          studentId: "student-a",
+          resultKey: "result-a",
+          total: expect.objectContaining({ net: 17.5 }),
+        }),
+      ]);
+      const serialized = JSON.stringify(response.body);
+      expect(serialized).not.toContain("student-b");
+      expect(serialized).not.toContain("correctAnswer");
+      expect(serialized).not.toContain("\"questions\"");
+      expect(serialized).not.toContain("\"outcomes\"");
+    } finally {
+      snapshotStore.resetRecords();
+    }
+  });
+
   it("TEACHER hazır rapor snapshotlarını okuyabilir", async () => {
     const issued = await login("teacher-a@example.test");
 
@@ -660,11 +689,47 @@ const fakeOtherExamSnapshot: ReportSnapshotRecord = {
   updatedAt: "2026-06-07T09:00:00.000Z",
 };
 
+function createMixedStudentSnapshot(): ReportSnapshotRecord {
+  return {
+    ...fakeSnapshot,
+    snapshotData: {
+      ...fakeSnapshot.snapshotData,
+      students: [
+        ...((fakeSnapshot.snapshotData?.["students"] as Array<Record<string, unknown>> | undefined) ?? []),
+        {
+          studentId: "student-b",
+          classId: "class-a",
+          className: "8-A",
+          resultKey: "result-b",
+          total: {
+            correct: 10,
+            wrong: 8,
+            blank: 2,
+            net: 8,
+            rawScore: 40,
+            standardScore: 55,
+          },
+          outcomes: [{ outcomeCode: "M.8.1", branch: "Matematik", correct: 1, wrong: 1, blank: 0, net: 0.75 }],
+          questions: [{ questionNo: 1, branch: "Matematik", answer: "D", correctAnswer: "A", status: "WRONG" }],
+        },
+      ],
+    },
+  };
+}
+
 class FakeReportSnapshotStore implements ReportSnapshotStore {
   readonly inputs: Array<{ tenantId: string; examId: string }> = [];
   readonly tenantInputs: string[] = [];
   readonly findInputs: Array<{ tenantId: string; examId: string; snapshotId: string }> = [];
-  private readonly records = [fakeSnapshot, fakePreviousSnapshot, fakeOtherExamSnapshot];
+  private records = [fakeSnapshot, fakePreviousSnapshot, fakeOtherExamSnapshot];
+
+  useRecords(records: ReportSnapshotRecord[]): void {
+    this.records = records;
+  }
+
+  resetRecords(): void {
+    this.records = [fakeSnapshot, fakePreviousSnapshot, fakeOtherExamSnapshot];
+  }
 
   async listByExam(tenantId: string, examId: string): Promise<ReportSnapshotRecord[]> {
     this.inputs.push({ tenantId, examId });

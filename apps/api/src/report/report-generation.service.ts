@@ -213,6 +213,35 @@ export class ReportGenerationService implements OnModuleDestroy {
     return Promise.all(filterReportSnapshots(snapshots, filters).map((snapshot) => this.scopeSnapshotForTeacher(context, snapshot)));
   }
 
+  async listStudentSnapshots(
+    context: RequestContext,
+    examId: string | undefined,
+    studentId: string | undefined,
+  ): Promise<ReportSnapshotRecord[]> {
+    if (!context.tenantId) {
+      throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+    }
+
+    const resolvedExamId = required(examId, "REPORT_EXAM_REQUIRED");
+    const resolvedStudentId = required(studentId, "REPORT_STUDENT_REQUIRED");
+    await this.assertTeacherStudentReportScope(context, resolvedStudentId);
+    const snapshots = await this.snapshots.listByExam(context.tenantId, resolvedExamId);
+    const summaries: ReportSnapshotRecord[] = [];
+
+    for (const snapshot of snapshots) {
+      if (snapshot.status !== "READY" || !snapshot.snapshotData) continue;
+      if (isTeacherSubjectContext(context) && !(await this.canTeacherAccessStudentReport(context, resolvedStudentId, snapshot))) {
+        continue;
+      }
+      const student = readRecords(snapshot.snapshotData.students)
+        .find((candidate) => readText(candidate.studentId) === resolvedStudentId);
+      if (!student) continue;
+      summaries.push(createStudentScopedSnapshotSummary(snapshot, student));
+    }
+
+    return summaries.sort((left, right) => toTime(right.generatedAt ?? right.createdAt) - toTime(left.generatedAt ?? left.createdAt));
+  }
+
   async exportSnapshotExcel(
     context: RequestContext,
     examId: string | undefined,
@@ -684,6 +713,32 @@ function filterReportSnapshots(records: ReportSnapshotRecord[], filters: ReportS
     .filter((snapshot) => !filters.classId || snapshot.classId === filters.classId)
     .filter((snapshot) => !filters.courseId || snapshot.courseId === filters.courseId)
     .filter((snapshot) => !filters.termId || snapshot.termId === filters.termId);
+}
+
+function createStudentScopedSnapshotSummary(
+  snapshot: ReportSnapshotRecord,
+  student: Record<string, unknown>,
+): ReportSnapshotRecord {
+  const snapshotData = snapshot.snapshotData ?? {};
+  const generatedAt = readText(snapshotData.generatedAt) || snapshot.generatedAt;
+  const studentId = readText(student.studentId);
+  return {
+    ...snapshot,
+    snapshotData: {
+      reportType: readText(snapshotData.reportType) || snapshot.reportType,
+      ...(generatedAt ? { generatedAt } : {}),
+      resultCount: 1,
+      students: [
+        {
+          studentId,
+          ...(readText(student.classId) ? { classId: readText(student.classId) } : {}),
+          ...(readText(student.className) ? { className: readText(student.className) } : {}),
+          resultKey: readText(student.resultKey) || `${snapshot.id}:${studentId}`,
+          total: readScoreSummary(student.total),
+        },
+      ],
+    },
+  };
 }
 
 async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<ReportSnapshotExportResult> {

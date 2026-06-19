@@ -9,11 +9,13 @@ import type {
   ReportErrorBooklet,
   ReportStudentProgress,
   ReportStudentSnapshot,
+  ReportSnapshotRecord,
   ScheduleLessonRecord,
   StudentRecord,
   StudentClassHistoryRecord,
   StudentEnrollmentRecord,
   StudentProfileRecord,
+  TeacherPortalLookupsResponse,
   TeacherRecord,
   AttendanceRecord,
   AttendanceSummaryRecord,
@@ -40,7 +42,7 @@ import { ScheduleService } from "../program/schedule.service.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
-import { ReportGenerationService } from "../report/report-generation.service.js";
+import { ReportGenerationService, type ReportSnapshotListFilters } from "../report/report-generation.service.js";
 import { SchoolService } from "../school/school.service.js";
 import {
   guardianNotificationPreferenceBodySchema,
@@ -449,6 +451,129 @@ export class MeController {
     return this.teacherNotes.list(context);
   }
 
+  @Get("teacher/lookups")
+  @Roles("TEACHER")
+  async teacherLookups(): Promise<TeacherPortalLookupsResponse> {
+    const context = getRequestContext();
+    assertTeacherContext(context);
+
+    const [schedule, students, attendance, homework, materials, teacherNotes, supportTickets] = await Promise.all([
+      this.schedules.listCurrentTeacherLessons(context),
+      this.students.list(context),
+      this.attendance.list(context),
+      this.homework.list(context),
+      this.homework.listMaterials(context),
+      this.teacherNotes.list(context),
+      this.supportTickets.listCurrentTeacher(context),
+    ]);
+    const materialAssignments = (
+      await Promise.all(materials.map((material) => this.homework.listMaterialAssignments(context, material.id)))
+    ).flat();
+
+    const classIds = new Set<string>();
+    const campusIds = new Set<string>();
+    const courseIds = new Set<string>();
+    const gradeLevelIds = new Set<string>();
+    const termIds = new Set<string>();
+
+    for (const student of students) addOptionalId(classIds, student.classId);
+    for (const lesson of schedule) {
+      addOptionalId(classIds, lesson.classId);
+      addOptionalId(courseIds, lesson.courseId);
+      addOptionalId(termIds, lesson.termId);
+    }
+    for (const record of attendance) {
+      addOptionalId(courseIds, record.courseId);
+      addOptionalId(termIds, record.termId);
+    }
+    for (const record of homework) addOptionalId(classIds, record.classId);
+    for (const record of materialAssignments) {
+      addOptionalId(courseIds, record.courseId);
+      addOptionalId(termIds, record.termId);
+    }
+    for (const record of teacherNotes) {
+      addOptionalId(courseIds, record.courseId);
+      addOptionalId(termIds, record.termId);
+    }
+    for (const record of supportTickets) {
+      addOptionalId(campusIds, record.campusId);
+      addOptionalId(classIds, record.classId);
+      addOptionalId(courseIds, record.courseId);
+      addOptionalId(gradeLevelIds, record.gradeLevelId);
+      addOptionalId(termIds, record.termId);
+    }
+
+    const classes = filterByIds(await this.school.listClasses(context), classIds);
+    for (const record of classes) {
+      addOptionalId(campusIds, record.campusId);
+      addOptionalId(gradeLevelIds, record.gradeLevelId);
+    }
+
+    const [campuses, courses, gradeLevels, terms] = await Promise.all([
+      this.school.listCampuses(context),
+      this.school.listCourses(context),
+      this.school.listGradeLevels(context),
+      this.school.listAcademicTerms(context),
+    ]);
+
+    return {
+      campuses: filterByIds(campuses, campusIds),
+      classes,
+      courses: filterByIds(courses, courseIds),
+      gradeLevels: filterByIds(gradeLevels, gradeLevelIds),
+      terms: filterByIds(terms, termIds),
+    };
+  }
+
+  @Get("teacher/reports/:examId/snapshots")
+  @Roles("TEACHER")
+  teacherReportSnapshots(
+    @Param("examId") examId: string,
+    @Query() query: ReportSnapshotListFilters,
+  ): Promise<ReportSnapshotRecord[]> {
+    const context = getRequestContext();
+    assertTeacherContext(context);
+    return this.reports.listSnapshots(context, examId, query);
+  }
+
+  @Get("teacher/reports/:examId/snapshots/:snapshotId/students/:studentId")
+  @Roles("TEACHER")
+  teacherStudentReport(
+    @Param("examId") examId: string,
+    @Param("snapshotId") snapshotId: string,
+    @Param("studentId") studentId: string,
+  ): Promise<ReportStudentSnapshot> {
+    const context = getRequestContext();
+    assertTeacherContext(context);
+    return this.reports.getStudentReport(context, examId, snapshotId, studentId);
+  }
+
+  @Get("teacher/reports/:examId/snapshots/:snapshotId/students/:studentId/error-booklet")
+  @Roles("TEACHER")
+  teacherStudentErrorBooklet(
+    @Param("examId") examId: string,
+    @Param("snapshotId") snapshotId: string,
+    @Param("studentId") studentId: string,
+  ): Promise<ReportErrorBooklet> {
+    const context = getRequestContext();
+    assertTeacherContext(context);
+    return this.reports.getStudentErrorBooklet(context, examId, snapshotId, studentId);
+  }
+
+  @Get("teacher/reports/:examId/students/:studentId/progress")
+  @Roles("TEACHER")
+  teacherStudentProgress(
+    @Param("examId") examId: string,
+    @Param("studentId") studentId: string,
+    @Query("scope") scope?: string,
+  ): Promise<ReportStudentProgress> {
+    const context = getRequestContext();
+    assertTeacherContext(context);
+    return this.reports.getStudentProgress(context, examId, studentId, {
+      scope: scope === "all" ? "all" : "exam",
+    });
+  }
+
   @Get("guardian/students/:studentId/reports/:examId/snapshots/:snapshotId")
   @Roles("GUARDIAN")
   async guardianStudentReport(
@@ -555,4 +680,12 @@ function assertTeacherContext(context: RequestContext): asserts context is Reque
   if (context.subjectType !== "TEACHER" || !context.subjectId) {
     throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
   }
+}
+
+function addOptionalId(target: Set<string>, value: string | undefined): void {
+  if (value) target.add(value);
+}
+
+function filterByIds<TRecord extends { id: string }>(records: TRecord[], ids: ReadonlySet<string>): TRecord[] {
+  return records.filter((record) => ids.has(record.id));
 }

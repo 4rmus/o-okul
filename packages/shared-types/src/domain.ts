@@ -53,6 +53,24 @@ export interface MeProfileResponse {
   subjectId?: string;
 }
 
+export interface TeacherPortalLookupsResponse {
+  campuses: CampusRecord[];
+  classes: ClassRecord[];
+  courses: CourseRecord[];
+  gradeLevels: GradeLevelRecord[];
+  terms: AcademicTermRecord[];
+}
+
+export type KvkkInventoryKind = "student" | "teacher" | "guardian";
+
+export interface KvkkInventoryRecord {
+  id: string;
+  kind: KvkkInventoryKind;
+  displayRef: string;
+  piiCategories: string[];
+  purgeAvailable: boolean;
+}
+
 export interface NotificationDeviceTokenRecord {
   id: string;
   tenantId: string;

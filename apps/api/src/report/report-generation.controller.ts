@@ -41,6 +41,15 @@ export class ReportGenerationController {
     return this.reports.listSnapshots(getRequestContext(), examId, query);
   }
 
+  @Get("students/:studentId/snapshots")
+  @Roles("TENANT_ADMIN", "TEACHER")
+  listStudentSnapshots(
+    @Param("examId") examId: string,
+    @Param("studentId") studentId: string,
+  ): Promise<ReportSnapshotRecord[]> {
+    return this.reports.listStudentSnapshots(getRequestContext(), examId, studentId);
+  }
+
   @Get("snapshots/:snapshotId/export.xlsx")
   @Roles("TENANT_ADMIN", "TEACHER")
   exportSnapshotExcel(
