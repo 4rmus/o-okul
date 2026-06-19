@@ -110,6 +110,13 @@ const templateChecks = [
     { LIVE_EXAM_CYCLE_ALLOW_EXAMPLE_EVIDENCE: "1" },
   ],
   [
+    "iSEM optical pipeline template",
+    "ISEM_OPTICAL_PIPELINE_TARGET",
+    "docs/evidence-templates/isem-optical-pipeline.example.json",
+    "scripts/check-isem-optical-pipeline-evidence.mjs",
+    { ISEM_OPTICAL_PIPELINE_ALLOW_EXAMPLE_EVIDENCE: "1" },
+  ],
+  [
     "Inline upload content migration template",
     "INLINE_UPLOAD_CONTENT_MIGRATION_TARGET",
     "docs/evidence-templates/inline-upload-content-migration.example.json",
@@ -336,6 +343,7 @@ runInlineUploadMigrationReportOutputNegativeChecks();
 runGithubCiGeneratorOutputNegativeChecks();
 await runGithubCiGeneratorContractCheck();
 runStagingEvidenceEnvNegativeCheck();
+runStagingFirstGatesFixtureCheck();
 runStagingFirstGatesOutputDirNegativeCheck();
 runProdEnvHttpEvidenceTargetNegativeCheck();
 runProdEvidenceSummaryOutputNegativeChecks();
@@ -661,7 +669,7 @@ runIdentityMigrationSymlinkParentTargetNegativeCheck();
 runKvkkInventoryNegativeCheck({
   label: "KVKK inventory extra top-level key negative",
   path: "docs/evidence-templates/kvkk-inventory.extra-top-level.tmp.json",
-  expectedFailure: "kvkkInventory tam 8 alan içermeli.",
+  expectedFailure: "kvkkInventory tam 9 alan içermeli.",
   mutate: (fixture) => {
     fixture.unexpectedTopLevel = true;
   },
@@ -696,6 +704,22 @@ runKvkkInventoryNegativeCheck({
   expectedFailure: "auditActionsVerified tam 4 action içermeli.",
   mutate: (fixture) => {
     fixture.auditActionsVerified.push("kvkk.unexpected_pii_purged");
+  },
+});
+runKvkkInventoryNegativeCheck({
+  label: "KVKK inventory missing audit diff redaction control negative",
+  path: "docs/evidence-templates/kvkk-inventory.missing-audit-diff-redaction-control.tmp.json",
+  expectedFailure: "auditDiffRedactionVerified.negativeControls tam 13 kontrol içermeli.",
+  mutate: (fixture) => {
+    fixture.auditDiffRedactionVerified.negativeControls = fixture.auditDiffRedactionVerified.negativeControls.filter((item) => item !== "title");
+  },
+});
+runKvkkInventoryNegativeCheck({
+  label: "KVKK inventory invalid audit diff redaction command negative",
+  path: "docs/evidence-templates/kvkk-inventory.invalid-audit-diff-command.tmp.json",
+  expectedFailure: "auditDiffRedactionVerified.command audit-log doğrulama komutu içermeli.",
+  mutate: (fixture) => {
+    fixture.auditDiffRedactionVerified.command = "pnpm test";
   },
 });
 runKvkkInventoryNegativeCheck({
@@ -1100,6 +1124,15 @@ runLiveExamCycleNegativeCheck({
   },
 });
 runLiveExamCycleNegativeCheck({
+  label: "Live exam cycle weak evidence reference negative",
+  path: "docs/evidence-templates/live-exam-cycle.weak-evidence-reference.tmp.json",
+  expectedFailure:
+    "evidenceReferences[0] artifact:, run:, log:, url:, https://, file:// veya s3:// ile baslayan kalici referans olmali.",
+  mutate: (fixture) => {
+    fixture.evidenceReferences[0] = "manual staging note";
+  },
+});
+runLiveExamCycleNegativeCheck({
   label: "Live exam cycle invalid gaps negative",
   path: "docs/evidence-templates/live-exam-cycle.invalid-gaps.tmp.json",
   expectedFailure: "gaps listesi zorunlu.",
@@ -1348,6 +1381,18 @@ runUatNegativeCheck({
     fixture.journeyScenariosVerified[0].unexpectedField = true;
   },
 });
+runUatNegativeCheck({
+  label: "UAT plain evidence reference negative",
+  path: "docs/evidence-templates/uat.plain-evidence-reference.tmp.json",
+  expectedFailure: "UAT-SYS-01.evidence production kanıtı kalıcı artifact/run/log/url referansı içermeli.",
+  allowExampleEvidence: false,
+  mutate: (fixture) => {
+    fixture.tester = "release-owner";
+    fixture.rollbackImageTag = "ghcr.io/uzman-hocam/api:rollback-2026-05-30";
+    fixture.restoreBackupReference = "s3://uzman-hocam-prod-backups/base/2026-05-30.dump";
+    fixture.journeyScenariosVerified[0].evidence = ["release owner observed staging screen"];
+  },
+});
 runUatSymlinkParentTargetNegativeCheck();
 runPilotNegativeCheck({
   label: "Pilot extra top-level key negative",
@@ -1490,7 +1535,7 @@ runProductionSummarySymlinkParentTargetNegativeCheck();
 runProductionSummaryNegativeCheck({
   label: "Production summary extra check negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-check.tmp.json",
-  expectedFailure: "checks tam 26 madde içermeli.",
+  expectedFailure: "checks tam 27 madde içermeli.",
   mutate: (fixture) => {
     fixture.checks.push({
       label: "Beklenmeyen production check",
@@ -1608,7 +1653,7 @@ runProductionSummaryNegativeCheck({
 runProductionSummaryNegativeCheck({
   label: "Production summary extra report negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-report.tmp.json",
-  expectedFailure: "reports tam 18 alan içermeli.",
+  expectedFailure: "reports tam 19 alan içermeli.",
   mutate: (fixture) => {
     fixture.reports.unexpectedReport = { ...fixture.reports.securityAudit };
   },
@@ -1906,7 +1951,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra checksPassed negative",
   path: "docs/evidence-templates/go-live.extra-checks-passed.tmp.json",
-  expectedFailure: "productionEvidenceSummary.checksPassed tam 26 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.checksPassed tam 27 madde icermeli.",
   mutate: (fixture) => {
     fixture.productionEvidenceSummary.checksPassed.push("Beklenmeyen production check");
   },
@@ -1972,7 +2017,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked duplicate summary check negative",
   path: "docs/evidence-templates/go-live.linked-duplicate-summary-check.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.checks tam 26 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.checks tam 27 madde icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.duplicate-check-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -2094,7 +2139,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked extra summary report negative",
   path: "docs/evidence-templates/go-live.linked-extra-summary-report.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.reports tam 18 alan icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.reports tam 19 alan icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.extra-report-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -3482,7 +3527,7 @@ function runRlsLiveSymlinkParentTargetNegativeCheck() {
   }
 }
 
-function runUatNegativeCheck({ label, path, expectedFailure, mutate }) {
+function runUatNegativeCheck({ label, path, expectedFailure, mutate, allowExampleEvidence = true }) {
   const fixture = structuredClone(uatFixture);
   mutate(fixture);
   writeFileSync(path, `${JSON.stringify(fixture, null, 2)}\n`);
@@ -3491,7 +3536,7 @@ function runUatNegativeCheck({ label, path, expectedFailure, mutate }) {
     const result = spawnSync(process.execPath, ["scripts/check-uat-evidence.mjs"], {
       env: {
         ...process.env,
-        UAT_ALLOW_EXAMPLE_EVIDENCE: "1",
+        ...(allowExampleEvidence ? { UAT_ALLOW_EXAMPLE_EVIDENCE: "1" } : {}),
         UAT_EVIDENCE_TARGET: pathToFileURL(path).href,
       },
       encoding: "utf8",
@@ -4193,6 +4238,21 @@ function runStagingEvidenceEnvNegativeCheck() {
   }
 }
 
+function runStagingFirstGatesFixtureCheck() {
+  const manifestPath = "docs/evidence-templates/staging-first-gates/first-gates-manifest.json";
+  const result = spawnSync(process.execPath, ["scripts/check-staging-first-gates-evidence.mjs", "--manifest", manifestPath], {
+    env: process.env,
+    encoding: "utf8",
+  });
+
+  if (result.status !== 0) {
+    console.error("Production evidence template kontrolü başarısız: staging first-gates fixture geçmedi.");
+    console.error(result.stdout);
+    console.error(result.stderr);
+    process.exit(result.status ?? 1);
+  }
+}
+
 function runStagingFirstGatesOutputDirNegativeCheck() {
   const rootParent = resolve("artifacts/prod-evidence-template-check");
   mkdirSync(rootParent, { recursive: true });
@@ -4466,6 +4526,7 @@ function runStagingReleaseArtifactsBundleCheck() {
       aiReportSummary: "ai-report-summary.example.json",
       securityAudit: "security-audit.example.json",
       liveExamCycle: "live-exam-cycle.example.json",
+      isemOpticalPipeline: "isem-optical-pipeline.example.json",
       inlineUploadMigration: "inline-upload-content-migration.example.json",
       rateLimit: "rate-limit.example.json",
       rlsLive: "rls-live.example.json",
@@ -5451,6 +5512,7 @@ function createValidProdEnvForNegativeCheck() {
     "SECURITY_AUDIT_TARGET",
     "UAT_EVIDENCE_TARGET",
     "LIVE_EXAM_CYCLE_TARGET",
+    "ISEM_OPTICAL_PIPELINE_TARGET",
     "INLINE_UPLOAD_CONTENT_MIGRATION_TARGET",
     "RATE_LIMIT_EVIDENCE_TARGET",
     "RLS_LIVE_EVIDENCE_TARGET",

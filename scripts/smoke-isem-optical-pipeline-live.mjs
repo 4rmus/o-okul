@@ -1,7 +1,10 @@
 import { Buffer } from "node:buffer";
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
+import { dirname, resolve } from "node:path";
+import { performance } from "node:perf_hooks";
 import pg from "pg";
 import {
   CreateBucketCommand,
@@ -22,6 +25,7 @@ import {
   createRedisConnectionOptions,
   createReportGenerationBullWorker,
 } from "../apps/worker/dist/queue/bullmq-worker.js";
+import { validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/uzman_hocam";
 const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/uzman_hocam";
@@ -39,11 +43,18 @@ const classAId = `class-isem-optical-smoke-a-${runId}`;
 const classBId = `class-isem-optical-smoke-b-${runId}`;
 const parserConfigVersion = "optik-7108-lgs-v1";
 const answerKeyVersion = "isem-lgs-1-v1";
-const smokeEmail = `isem-optical-smoke-${runId}@example.test`;
-const smokePassword = "password";
 const txtPath = "ornek-veriler/iSEM .txt";
 const answerKeyPath = "ornek-veriler/iSEM - LGS - 1 Detaylı Cevap Anahtarı.xlsx";
 const sampleStudentNos = ["331", "638"];
+const smokeEmailDomain = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL_DOMAIN ?? "example.test";
+const smokeEmail = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL ?? `isem-optical-smoke-${runId}@${smokeEmailDomain}`;
+const smokePassword = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD ?? "password";
+const evidencePath = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EVIDENCE_FILE ?? process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EVIDENCE_PATH;
+const uiWorkerEvidencePath =
+  process.env.ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_FILE ??
+  process.env.ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_PATH;
+const environment = process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown";
+const commandPassed = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_COMMAND ?? "pnpm isem-optical-pipeline:smoke";
 const expectedScores = new Map([
   ["331", { correct: 56, wrong: 32, blank: 2, net: 45.3333 }],
   ["638", { correct: 44, wrong: 31, blank: 15, net: 33.6667 }],
@@ -64,12 +75,16 @@ const redisConnection = createRedisConnectionOptions(redisUrl);
 const postgresUrl = new URL(directDatabaseUrl);
 const s3Url = new URL(s3Endpoint);
 const s3Port = Number(s3Url.port || (s3Url.protocol === "https:" ? 443 : 80));
+const pipelineStartedAt = performance.now();
 
+await validateSmokeEvidenceOutputTarget(evidencePath);
+await validateSmokeEvidenceOutputTarget(uiWorkerEvidencePath);
 await assertPort("Postgres", postgresUrl.hostname, Number(postgresUrl.port || 5432), "pnpm db:migrate");
 await assertPort("Redis", redisConnection.host, redisConnection.port, "docker compose up -d redis");
 await assertPort("MinIO/S3", s3Url.hostname, s3Port, "docker compose up -d minio");
 
 const opticalContent = readFileSync(txtPath, "utf8");
+const answerKeyContent = readFileSync(answerKeyPath);
 const opticalRows = readOpticalRows(opticalContent);
 assertOpticalRows(opticalRows);
 
@@ -132,6 +147,85 @@ try {
   const snapshot = await waitForSnapshot(254, 30_000);
   const evidence = await readPipelineEvidence(rawImport.id, answerKey.id, snapshot.id);
   assertPipelineEvidence(evidence);
+  const pipelineDurationMs = Math.round(performance.now() - pipelineStartedAt);
+
+  await writeSmokeEvidence(evidencePath, {
+    result: "PASS",
+    check: "isem_optical_pipeline_smoke",
+    environment,
+    checkedAt: new Date().toISOString(),
+    parserConfigVersion,
+    answerKeyVersion,
+    answerKeyQuestionCount: answerKey.questionCount,
+    bookletVariantCount: answerKey.bookletVariantCount,
+    counts: {
+      studentCount: evidence.studentCount,
+      participantCount: evidence.participantCount,
+      matchedCount: evidence.matchedCount,
+      quarantineCount: evidence.quarantineCount,
+      examResultCount: evidence.examResultCount,
+      reportResultCount: evidence.snapshotResultCount,
+      studentPortalUserLinkCount: evidence.studentUserLinkCount,
+      guardianPortalUserLinkCount: evidence.guardianUserLinkCount,
+      guardianLinkCount: evidence.guardianLinkCount,
+    },
+    pipeline: {
+      answerKeyImported: true,
+      opticalImportCommitted: true,
+      rawImportArchived: true,
+      evaluationQueued: true,
+      quarantinePathVerified: evidence.quarantineCount === 0,
+      reportGenerated: true,
+      reportReady: true,
+    },
+    sampleScores: evidence.sampleScores.map((sample) => ({
+      studentNoHash: sha256(sample.studentNo),
+      correct: sample.correct,
+      wrong: sample.wrong,
+      blank: sample.blank,
+      net: sample.net,
+    })),
+    hashes: {
+      tenantHash: sha256(tenantId),
+      userHash: sha256(userId),
+      emailHash: sha256(smokeEmail.toLowerCase()),
+      examHash: sha256(examId),
+      rawImportHash: sha256(rawImport.id),
+      answerKeyHash: sha256(answerKey.id),
+      reportSnapshotHash: sha256(snapshot.id),
+      firstStudentHash: sha256(studentId(sampleStudentNos[0])),
+      opticalTxtSha256: sha256(opticalContent),
+      answerKeyFileSha256: sha256(answerKeyContent),
+      parseJobHash: sha256(parseJob.jobId),
+      reportJobHash: sha256(reportJob.jobId),
+    },
+    thresholds: {
+      participantCountMatches: evidence.participantCount === 254,
+      matchedCountMatches: evidence.matchedCount === 254,
+      examResultCountMatches: evidence.examResultCount === 254,
+      reportResultCountMatches: evidence.snapshotResultCount === 254,
+      sampleScoreCountMatches: evidence.sampleScores.length === sampleStudentNos.length,
+      pipelineDurationMsMax: 60_000,
+      pipelineDurationPassed: pipelineDurationMs <= 60_000,
+    },
+    pipelineDurationMs,
+    commandsPassed: [commandPassed],
+    gaps: [],
+  });
+  await writeUiWorkerEvidence(uiWorkerEvidencePath, {
+    email: smokeEmail,
+    examId,
+    firstStudentId: studentId(sampleStudentNos[0]),
+    guardianPortal: {
+      email: sampleGuardianEmail(sampleStudentNos[0]),
+      password: smokePassword,
+    },
+    password: smokePassword,
+    studentPortal: {
+      email: sampleStudentEmail(sampleStudentNos[0]),
+      password: smokePassword,
+    },
+  });
 
   console.log(
     `iSEM optical pipeline live smoke passed: tenant ${tenantId}, exam ${examId}, rawImport ${rawImport.id}, parseJob ${parseJob.jobId}, evaluation jobs ${evaluation.queuedCount}, reportJob ${reportJob.jobId}, snapshot ${snapshot.id}, results ${evidence.examResultCount}, sampleScores ${formatSampleScores(evidence.sampleScores)}`,
@@ -247,11 +341,11 @@ async function seedSampleUsers(client) {
          ($5, $6, $7, $4, now())`,
       [
         sampleStudentUserId(studentNo),
-        `isem-student-${studentNo}-${runId}@example.test`,
+        sampleStudentEmail(studentNo),
         `iSEM Student ${studentNo}`,
         hashPassword(smokePassword),
         sampleGuardianUserId(studentNo),
-        `isem-guardian-${studentNo}-${runId}@example.test`,
+        sampleGuardianEmail(studentNo),
         `iSEM Guardian ${studentNo}`,
       ],
     );
@@ -317,7 +411,7 @@ async function importAnswerKey(baseUrl, token) {
   ) {
     throw new Error(`ISEM_OPTICAL_ANSWER_KEY_IMPORT_MISMATCH: ${JSON.stringify(payload)}`);
   }
-  return answerKey;
+  return { ...answerKey, bookletVariantCount: payload.bookletVariants.length };
 }
 
 async function uploadRawImport(baseUrl, token, content) {
@@ -618,6 +712,26 @@ function sampleStudentUserId(studentNo) {
 
 function sampleGuardianUserId(studentNo) {
   return `user-guardian-isem-optical-${runId}-${studentNo}`;
+}
+
+function sampleStudentEmail(studentNo) {
+  return `isem-student-${studentNo}-${runId}@${smokeEmailDomain}`;
+}
+
+function sampleGuardianEmail(studentNo) {
+  return `isem-guardian-${studentNo}-${runId}@${smokeEmailDomain}`;
+}
+
+async function writeUiWorkerEvidence(filePath, payload) {
+  if (!filePath) return;
+  const resolvedPath = resolve(filePath);
+  await mkdir(dirname(resolvedPath), { recursive: true });
+  await writeFile(resolvedPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  await validateSmokeEvidenceOutputTarget(resolvedPath);
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function formatSampleScores(samples) {

@@ -150,6 +150,15 @@ const reportArtifacts = new Map([
     },
   ],
   [
+    "isemOpticalPipeline",
+    {
+      file: "isem-optical-pipeline.json",
+      script: "scripts/check-isem-optical-pipeline-evidence.mjs",
+      targetEnv: "ISEM_OPTICAL_PIPELINE_TARGET",
+      allowEnv: "ISEM_OPTICAL_PIPELINE_ALLOW_EXAMPLE_EVIDENCE",
+    },
+  ],
+  [
     "inlineUploadMigration",
     {
       file: "inline-upload-content-migration.json",

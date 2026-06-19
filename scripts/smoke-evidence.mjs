@@ -292,6 +292,12 @@ function validateCheckSpecificPayload(payload, failures, label, allowExampleEvid
     case "report_generation_smoke":
       requireReportGenerationSmoke(payload, failures, label, allowExampleEvidence);
       break;
+    case "isem_optical_pipeline_smoke":
+      requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleEvidence);
+      break;
+    case "live_ui_worker_report_smoke":
+      requireLiveUiWorkerReportSmoke(payload, failures, label, allowExampleEvidence);
+      break;
     default:
       break;
   }
@@ -566,6 +572,218 @@ function requireReportGenerationSmoke(payload, failures, label, allowExampleEvid
       failures.push(`${label}.${forbiddenKey} ham tanımlayıcı/credential içermemeli.`);
     }
   }
+}
+
+function requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleEvidence) {
+  requireObjectKeySet(payload, failures, label, "isemOpticalPipelineSmoke", [
+    "generatedAt",
+    "result",
+    "check",
+    "environment",
+    "checkedAt",
+    "parserConfigVersion",
+    "answerKeyVersion",
+    "answerKeyQuestionCount",
+    "bookletVariantCount",
+    "counts",
+    "pipeline",
+    "sampleScores",
+    "hashes",
+    "thresholds",
+    "pipelineDurationMs",
+    "commandsPassed",
+    "gaps",
+  ]);
+  requireDateNotInFuture(payload, failures, `${label}.checkedAt`, "checkedAt", allowExampleEvidence);
+  requireString(payload, failures, `${label}.parserConfigVersion`, "parserConfigVersion");
+  requireNonPlaceholderString(payload, failures, `${label}.parserConfigVersion`, "parserConfigVersion", allowExampleEvidence);
+  requireString(payload, failures, `${label}.answerKeyVersion`, "answerKeyVersion");
+  requireNonPlaceholderString(payload, failures, `${label}.answerKeyVersion`, "answerKeyVersion", allowExampleEvidence);
+  requireIntegerAtLeast(payload, failures, `${label}.answerKeyQuestionCount`, "answerKeyQuestionCount", 90);
+  requireIntegerAtLeast(payload, failures, `${label}.bookletVariantCount`, "bookletVariantCount", 1);
+  requireIntegerAtLeast(payload, failures, `${label}.pipelineDurationMs`, "pipelineDurationMs", 0);
+
+  const counts = payload.counts;
+  if (
+    requireObjectKeySet(counts, failures, `${label}.counts`, "counts", [
+      "studentCount",
+      "participantCount",
+      "matchedCount",
+      "quarantineCount",
+      "examResultCount",
+      "reportResultCount",
+      "studentPortalUserLinkCount",
+      "guardianPortalUserLinkCount",
+      "guardianLinkCount",
+    ])
+  ) {
+    requireIntegerAtLeast(counts, failures, `${label}.counts.studentCount`, "studentCount", 1);
+    requireIntegerAtLeast(counts, failures, `${label}.counts.participantCount`, "participantCount", 1);
+    requireIntegerAtLeast(counts, failures, `${label}.counts.matchedCount`, "matchedCount", 1);
+    requireIntegerAtLeast(counts, failures, `${label}.counts.quarantineCount`, "quarantineCount", 0);
+    requireIntegerAtLeast(counts, failures, `${label}.counts.examResultCount`, "examResultCount", 1);
+    requireIntegerAtLeast(counts, failures, `${label}.counts.reportResultCount`, "reportResultCount", 1);
+    requireIntegerAtLeast(counts, failures, `${label}.counts.studentPortalUserLinkCount`, "studentPortalUserLinkCount", 1);
+    requireIntegerAtLeast(counts, failures, `${label}.counts.guardianPortalUserLinkCount`, "guardianPortalUserLinkCount", 1);
+    requireIntegerAtLeast(counts, failures, `${label}.counts.guardianLinkCount`, "guardianLinkCount", 1);
+    requireEqual(counts, failures, `${label}.counts.quarantineCount`, "quarantineCount", 0);
+
+    if (Number.isInteger(counts.participantCount) && counts.matchedCount !== counts.participantCount) {
+      failures.push(`${label}.counts.matchedCount participantCount ile eşleşmeli.`);
+    }
+    if (Number.isInteger(counts.matchedCount) && counts.examResultCount !== counts.matchedCount) {
+      failures.push(`${label}.counts.examResultCount matchedCount ile eşleşmeli.`);
+    }
+    if (Number.isInteger(counts.examResultCount) && counts.reportResultCount !== counts.examResultCount) {
+      failures.push(`${label}.counts.reportResultCount examResultCount ile eşleşmeli.`);
+    }
+  }
+
+  const pipeline = payload.pipeline;
+  if (
+    requireObjectKeySet(pipeline, failures, `${label}.pipeline`, "pipeline", [
+      "answerKeyImported",
+      "opticalImportCommitted",
+      "rawImportArchived",
+      "evaluationQueued",
+      "quarantinePathVerified",
+      "reportGenerated",
+      "reportReady",
+    ])
+  ) {
+    for (const key of [
+      "answerKeyImported",
+      "opticalImportCommitted",
+      "rawImportArchived",
+      "evaluationQueued",
+      "quarantinePathVerified",
+      "reportGenerated",
+      "reportReady",
+    ]) {
+      requireEqual(pipeline, failures, `${label}.pipeline.${key}`, key, true);
+    }
+  }
+
+  requireIsemSampleScores(payload.sampleScores, failures, `${label}.sampleScores`);
+
+  const hashes = payload.hashes;
+  if (
+    requireObjectKeySet(hashes, failures, `${label}.hashes`, "hashes", [
+      "tenantHash",
+      "userHash",
+      "emailHash",
+      "examHash",
+      "rawImportHash",
+      "answerKeyHash",
+      "reportSnapshotHash",
+      "firstStudentHash",
+      "opticalTxtSha256",
+      "answerKeyFileSha256",
+      "parseJobHash",
+      "reportJobHash",
+    ])
+  ) {
+    for (const key of [
+      "tenantHash",
+      "userHash",
+      "emailHash",
+      "examHash",
+      "rawImportHash",
+      "answerKeyHash",
+      "reportSnapshotHash",
+      "firstStudentHash",
+      "opticalTxtSha256",
+      "answerKeyFileSha256",
+      "parseJobHash",
+      "reportJobHash",
+    ]) {
+      requireSha256(hashes, failures, `${label}.hashes.${key}`, key);
+    }
+  }
+
+  const thresholds = payload.thresholds;
+  if (
+    requireObjectKeySet(thresholds, failures, `${label}.thresholds`, "thresholds", [
+      "participantCountMatches",
+      "matchedCountMatches",
+      "examResultCountMatches",
+      "reportResultCountMatches",
+      "sampleScoreCountMatches",
+      "pipelineDurationMsMax",
+      "pipelineDurationPassed",
+    ])
+  ) {
+    for (const key of [
+      "participantCountMatches",
+      "matchedCountMatches",
+      "examResultCountMatches",
+      "reportResultCountMatches",
+      "sampleScoreCountMatches",
+      "pipelineDurationPassed",
+    ]) {
+      requireEqual(thresholds, failures, `${label}.thresholds.${key}`, key, true);
+    }
+    requireIntegerAtLeast(thresholds, failures, `${label}.thresholds.pipelineDurationMsMax`, "pipelineDurationMsMax", 1);
+    if (
+      Number.isInteger(payload.pipelineDurationMs) &&
+      Number.isInteger(thresholds.pipelineDurationMsMax) &&
+      payload.pipelineDurationMs > thresholds.pipelineDurationMsMax
+    ) {
+      failures.push(`${label}.pipelineDurationMs eşik değerini aşmamalı.`);
+    }
+  }
+
+  requireExactStringList(payload.commandsPassed, failures, `${label}.commandsPassed`, ["pnpm isem-optical-pipeline:smoke"]);
+  requireEmptyArray(payload, failures, `${label}.gaps`, "gaps");
+  requireNoForbiddenKeys(payload, failures, label, ["email", "password", "tenantId", "userId", "examId", "rawImportId", "answerKeyId", "snapshotId", "studentId", "guardianId"]);
+}
+
+function requireIsemSampleScores(value, failures, label) {
+  if (!Array.isArray(value) || value.length < 2) {
+    failures.push(`${label} en az 2 örnek skor içermeli.`);
+    return;
+  }
+
+  for (const [index, sample] of value.entries()) {
+    const itemLabel = `${label}.${index}`;
+    if (!requireObjectKeySet(sample, failures, itemLabel, "sampleScore", ["studentNoHash", "correct", "wrong", "blank", "net"])) {
+      continue;
+    }
+    requireSha256(sample, failures, `${itemLabel}.studentNoHash`, "studentNoHash");
+    requireIntegerAtLeast(sample, failures, `${itemLabel}.correct`, "correct", 0);
+    requireIntegerAtLeast(sample, failures, `${itemLabel}.wrong`, "wrong", 0);
+    requireIntegerAtLeast(sample, failures, `${itemLabel}.blank`, "blank", 0);
+    requireNumberAtLeast(sample, failures, `${itemLabel}.net`, "net", 0);
+  }
+}
+
+function requireLiveUiWorkerReportSmoke(payload, failures, label, allowExampleEvidence) {
+  requireObjectKeySet(payload, failures, label, "liveUiWorkerReportSmoke", [
+    "generatedAt",
+    "result",
+    "check",
+    "environment",
+    "checkedAt",
+    "examHash",
+    "firstStudentHash",
+    "reportStatus",
+    "downloadedArtifacts",
+    "karnePdfDownloaded",
+    "excelDownloaded",
+    "studentPortalViewed",
+    "guardianPortalViewed",
+    "commandsPassed",
+    "gaps",
+  ]);
+  requireSmokeRunMetadata(payload, failures, label, "pnpm live:ui-worker:smoke", allowExampleEvidence);
+  requireSha256(payload, failures, `${label}.examHash`, "examHash");
+  requireSha256(payload, failures, `${label}.firstStudentHash`, "firstStudentHash");
+  requireLiteral(payload, failures, `${label}.reportStatus`, "reportStatus", "READY");
+  requireExactStringList(payload.downloadedArtifacts, failures, `${label}.downloadedArtifacts`, ["xlsx", "pdf"]);
+  for (const key of ["karnePdfDownloaded", "excelDownloaded", "studentPortalViewed", "guardianPortalViewed"]) {
+    requireEqual(payload, failures, `${label}.${key}`, key, true);
+  }
+  requireNoForbiddenKeys(payload, failures, label, ["email", "password", "tenantId", "userId", "examId", "firstStudentId", "guardianId"]);
 }
 
 function requireRlsLoadSmoke(payload, failures, label, allowExampleEvidence) {

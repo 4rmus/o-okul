@@ -416,7 +416,7 @@ Gerekli GitHub `staging` environment secret/var değerleri:
 
 - Secrets: `STAGING_SSH_HOST`, `STAGING_SSH_USER`, `STAGING_SSH_PRIVATE_KEY`, `GHCR_READ_TOKEN`,
   `STAGING_EVIDENCE_ENV_B64`.
-- Vars: `STAGING_DEPLOY_DIR`, `STAGING_NEXT_PUBLIC_API_URL`, opsiyonel `STAGING_EDGE_MODE`.
+- Vars: `STAGING_DEPLOY_DIR=/root/uzman-hocam`, `STAGING_NEXT_PUBLIC_API_URL`, opsiyonel `STAGING_EDGE_MODE`.
   `STAGING_EDGE_MODE=domain` varsayılandır ve `docker-compose.traefik.yml` ile ACME kullanır.
   `STAGING_EDGE_MODE=ip` bu cihazdaki geçici IP/self-signed edge için `docker-compose.traefik-ip.yml`
   dosyasını seçer.
@@ -427,6 +427,25 @@ sözleşmesinden üretilir. Gerçek değerlerle doldurulan özel env dosyası Gi
 
 ```sh
 node scripts/check-staging-evidence-env.mjs --env-file /path/to/staging-evidence.env
+```
+
+Doğrulanmış dosyayı secret değerini terminal argümanına yazmadan GitHub `staging` environment'a basmak için:
+
+```sh
+chmod 600 /secure/path/staging-evidence.env
+pnpm staging:evidence-env:secret:set -- --repo 4rmus/uzman-hocam --environment staging --env-file /secure/path/staging-evidence.env
+```
+
+Bu yardımcı repo/temp dizinindeki veya symlink üzerinden gelen dosyaları reddeder, aynı
+`pnpm staging:evidence-env:check` kapısını çalıştırır ve base64 çıktıyı `gh secret set` komutuna stdin
+üzerinden verir; secret değeri log veya shell argümanlarına yazılmaz. Ön kontrol için `--dry-run`
+kullanılabilir.
+
+GitHub `staging` environment oluşturulduktan sonra secret değerleri yazdırılmadan yalnız isim/var
+sözleşmesi şu komutla doğrulanır:
+
+```sh
+pnpm staging:github-env:check -- --repo 4rmus/uzman-hocam --environment staging
 ```
 
 Workflow aynı branch için tek staging deploy'u sıraya alır, job timeout'ları tanımlıdır ve Docker
@@ -672,24 +691,62 @@ dosya lokal temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent zi
 
 Live UI-worker/report smoke preflight:
 
+Önce iSEM optik smoke aynı run için private UI-worker input'unu üretebilir:
+
 ```sh
+STAGING_ENVIRONMENT=staging \
+ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL_DOMAIN=staging.uzmanhocam.com \
+ISEM_OPTICAL_PIPELINE_SMOKE_EVIDENCE_FILE=artifacts/staging/isem-optical-pipeline.json \
+ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_FILE=artifacts/staging/private/live-ui-worker-input.json \
+pnpm isem-optical-pipeline:smoke
+```
+
+Public/redacted ara kanıt ayrıca doğrulanır:
+
+```sh
+ISEM_OPTICAL_PIPELINE_TARGET=file://$PWD/artifacts/staging/isem-optical-pipeline.json \
+pnpm isem-optical-pipeline:evidence-check
+```
+
+`STAGING_EVIDENCE_ENV_B64` içindeki `ISEM_OPTICAL_PIPELINE_TARGET` aynı kalıcı artifact'i
+göstermelidir; `pnpm prod:evidence:check --summary-file` bu kanıtı `reports/isem-optical-pipeline.json`
+olarak release bundle'a yazar.
+
+```sh
+STAGING_ENVIRONMENT=staging \
 NEXT_E2E_LIVE_UI_WORKER=1 \
-LIVE_UI_WORKER_EVIDENCE_PATH=artifacts/staging/live-ui-worker-input.json \
+LIVE_UI_WORKER_EVIDENCE_PATH=artifacts/staging/private/live-ui-worker-input.json \
+LIVE_UI_WORKER_RESULT_EVIDENCE_FILE=artifacts/staging/live-ui-worker-result.json \
 pnpm live:ui-worker:evidence-check
 ```
 
 Smoke komutu aynı preflight'ı tarayıcı açmadan önce otomatik çalıştırır:
 
 ```sh
+STAGING_ENVIRONMENT=staging \
 NEXT_E2E_LIVE_UI_WORKER=1 \
-LIVE_UI_WORKER_EVIDENCE_PATH=artifacts/staging/live-ui-worker-input.json \
+LIVE_UI_WORKER_EVIDENCE_PATH=artifacts/staging/private/live-ui-worker-input.json \
+LIVE_UI_WORKER_RESULT_EVIDENCE_FILE=artifacts/staging/live-ui-worker-result.json \
 pnpm live:ui-worker:smoke
+```
+
+Secret içermeyen result artifact ayrıca içerik sözleşmesiyle doğrulanır:
+
+```sh
+LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET=file://$PWD/artifacts/staging/live-ui-worker-result.json \
+pnpm live:ui-worker:result-check
 ```
 
 `LIVE_UI_WORKER_EVIDENCE_PATH` JSON'u rapor admin credential'ını, `examId`, `firstStudentId` ve
 opsiyonel öğrenci/veli portal credential'larını exact shape ile taşır. Gerçek staging kanıtında
 `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder değerler kabul edilmez; dosya lokal
 temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent zinciri altında olamaz.
+Bu dosya private artifact olarak saklanır; production summary veya public evidence template içine gömülmez.
+`LIVE_UI_WORKER_RESULT_EVIDENCE_FILE` ise secret içermez; Excel/PDF indirme ve portal görüntüleme
+sonucunu kalıcı staging artifact'i olarak yazar. `pnpm live:ui-worker:result-check` bu JSON'un
+`reportStatus=READY`, `xlsx/pdf` indirme, öğrenci/veli portal görünümü, hashli sınav/öğrenci
+referansları, boş `gaps` ve temp/symlink olmayan target sözleşmesini doğrular; tam sınav döngüsü
+kanıtında referans verilebilir. Result artifact ham e-posta, parola veya öğrenci id'si taşımaz.
 `pnpm live:ui-worker:evidence-contract` bu negatifleri lokal CI'da tarayıcı açmadan korur.
 
 ## Pilot Closure Evidence
@@ -780,7 +837,7 @@ Minimum kanıt içeriği:
   tam ve beklenmeyen alansız olmalıdır; approval rolleri product/technical/operations/dataProtection
   olarak tam ve tekrarsız taşınır.
 - Go-live raporundaki `liveStatusEvidence.evidenceTarget`, aynı artifact setindeki Canlı Durum
-  transition bundle'ını göstermelidir; `pnpm go-live:check` bu bundle'ı okur, sekiz dış kapının
+  transition bundle'ını göstermelidir; `pnpm go-live:check` bu bundle'ı okur, yedi dış kapının
   `PASS` olduğunu ve summary/pilot/go-live hedeflerinin aynı dosyalara bağlandığını doğrular.
   Bundle içindeki `productionEvidenceSummaryTarget`, `goLiveEvidenceTarget` ve
   `pilotEvidenceTarget` alanları go-live paketindeki aynı summary/go-live/pilot artifact hedeflerine

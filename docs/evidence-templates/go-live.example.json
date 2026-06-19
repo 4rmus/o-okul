@@ -32,6 +32,7 @@
       "AI report summary evidence",
       "Security audit evidence",
       "Live exam cycle evidence",
+      "iSEM optical pipeline evidence",
       "Inline upload migration evidence",
       "Rate limit Redis evidence",
       "RLS live evidence",

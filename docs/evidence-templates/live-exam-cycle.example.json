@@ -42,8 +42,8 @@
     "noMockRoutes": true
   },
   "evidenceReferences": [
-    "artifacts/example/live-exam-cycle/isem-optical-pipeline.log",
-    "artifacts/example/live-exam-cycle/live-ui-worker-report.json"
+    "artifact:artifacts/example/live-exam-cycle/isem-optical-pipeline.log",
+    "artifact:artifacts/example/live-exam-cycle/live-ui-worker-report.json"
   ],
   "gaps": []
 }

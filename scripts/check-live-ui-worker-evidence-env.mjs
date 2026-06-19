@@ -3,6 +3,8 @@ import { dirname, parse, resolve } from "node:path";
 
 const enabled = process.env.NEXT_E2E_LIVE_UI_WORKER;
 const evidencePath = process.env.LIVE_UI_WORKER_EVIDENCE_PATH;
+const resultEvidencePath = process.env.LIVE_UI_WORKER_RESULT_EVIDENCE_FILE ?? process.env.LIVE_UI_WORKER_RESULT_EVIDENCE_PATH;
+const resultEvidenceEnvironment = process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV;
 const allowExampleEvidence = process.env.LIVE_UI_WORKER_ALLOW_EXAMPLE_EVIDENCE === "1";
 const failures = [];
 
@@ -24,6 +26,13 @@ if (failures.length === 0) {
   }
 }
 
+if (resultEvidencePath) {
+  if (!["staging", "production"].includes(String(resultEvidenceEnvironment).toLowerCase())) {
+    failures.push("LIVE_UI_WORKER_RESULT_EVIDENCE_FILE için STAGING_ENVIRONMENT veya NODE_ENV staging/production olmalı.");
+  }
+  await validateResultEvidencePath(resolve(resultEvidencePath), failures);
+}
+
 if (failures.length > 0) {
   console.error("Live UI-worker evidence preflight başarısız:");
   for (const failure of failures) console.error(`- ${failure}`);
@@ -38,7 +47,7 @@ async function validateEvidencePath(filePath, collectedFailures) {
     return;
   }
 
-  await assertParentPathAllowed(dirname(filePath), collectedFailures);
+  await assertParentPathAllowed(dirname(filePath), collectedFailures, "LIVE_UI_WORKER_EVIDENCE_PATH");
   if (collectedFailures.length > 0) return;
 
   let stat;
@@ -54,7 +63,31 @@ async function validateEvidencePath(filePath, collectedFailures) {
   }
 }
 
-async function assertParentPathAllowed(parentPath, collectedFailures) {
+async function validateResultEvidencePath(filePath, collectedFailures) {
+  if (isLocalTempPath(filePath)) {
+    collectedFailures.push("LIVE_UI_WORKER_RESULT_EVIDENCE_FILE lokal temp path olmamalı.");
+    return;
+  }
+
+  await assertParentPathAllowed(dirname(filePath), collectedFailures, "LIVE_UI_WORKER_RESULT_EVIDENCE_FILE", {
+    allowMissing: true,
+  });
+  if (collectedFailures.length > 0) return;
+
+  let stat;
+  try {
+    stat = await lstat(filePath);
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    throw error;
+  }
+
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    collectedFailures.push("LIVE_UI_WORKER_RESULT_EVIDENCE_FILE symlink olmayan file artifact olmalı.");
+  }
+}
+
+async function assertParentPathAllowed(parentPath, collectedFailures, label, { allowMissing = false } = {}) {
   const root = parse(parentPath).root;
   const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
   let current = root;
@@ -64,16 +97,31 @@ async function assertParentPathAllowed(parentPath, collectedFailures) {
     let stat;
     try {
       stat = await lstat(current);
-    } catch {
-      collectedFailures.push("LIVE_UI_WORKER_EVIDENCE_PATH parent dizini mevcut olmalı.");
+    } catch (error) {
+      if (allowMissing && error?.code === "ENOENT") return;
+      collectedFailures.push(parentPathMissingMessage(label));
       return;
     }
 
     if (stat.isSymbolicLink() || !stat.isDirectory()) {
-      collectedFailures.push("LIVE_UI_WORKER_EVIDENCE_PATH parent dizini symlink olmayan dizin olmalı.");
+      collectedFailures.push(parentPathInvalidMessage(label));
       return;
     }
   }
+}
+
+function parentPathMissingMessage(label) {
+  if (label === "LIVE_UI_WORKER_RESULT_EVIDENCE_FILE") {
+    return "LIVE_UI_WORKER_RESULT_EVIDENCE_FILE parent dizini mevcut olmalı.";
+  }
+  return "LIVE_UI_WORKER_EVIDENCE_PATH parent dizini mevcut olmalı.";
+}
+
+function parentPathInvalidMessage(label) {
+  if (label === "LIVE_UI_WORKER_RESULT_EVIDENCE_FILE") {
+    return "LIVE_UI_WORKER_RESULT_EVIDENCE_FILE parent dizini symlink olmayan dizin olmalı.";
+  }
+  return "LIVE_UI_WORKER_EVIDENCE_PATH parent dizini symlink olmayan dizin olmalı.";
 }
 
 function isLocalTempPath(filePath) {

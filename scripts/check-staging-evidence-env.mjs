@@ -126,6 +126,7 @@ function checkWorkflowContract(output) {
   const requiredTokens = [
     "Validate staging dispatch inputs and environment",
     "STAGING_NEXT_PUBLIC_API_URL must be an https:// URL.",
+    "STAGING_DEPLOY_DIR must be /root/uzman-hocam.",
     "validate_tag \"rollback_image_tag\"",
     "github-ci-evidence:",
     "needs: preflight",

@@ -1,0 +1,12 @@
+{
+  "generatedAt": "2026-06-15T09:05:00.000Z",
+  "result": "PASS",
+  "check": "alert_webhook_smoke",
+  "environment": "staging",
+  "checkedAt": "2026-06-15T09:05:00.000Z",
+  "webhookUrl": "https://alerts.uzmanhocam.com/hooks/staging",
+  "statusCode": 200,
+  "authorizationScheme": "bearer",
+  "commandsPassed": ["pnpm alert:webhook:smoke"],
+  "gaps": []
+}

@@ -67,6 +67,7 @@ const expectedCommandsPassed = [
   "pnpm notification:smoke",
   "pnpm traefik:https:smoke",
 ];
+const evidenceReferencePrefixes = ["artifact:", "file://", "https://", "log:", "run:", "s3://", "url:"];
 
 const templateEvidencePhrases = [
   "system dashboard opened",
@@ -439,7 +440,16 @@ function requireEvidenceList(scenario, failures, label) {
       failures.push(`${label} production kanıtı için örnek/placeholder/redacted değer içermemeli.`);
       return;
     }
+    if (!allowExampleEvidence && !hasEvidenceReference(item)) {
+      failures.push(`${label} production kanıtı kalıcı artifact/run/log/url referansı içermeli.`);
+      return;
+    }
   }
+}
+
+function hasEvidenceReference(value) {
+  const normalized = value.trim().toLowerCase();
+  return evidenceReferencePrefixes.some((prefix) => normalized.startsWith(prefix));
 }
 
 function hasPlaceholderToken(value) {
