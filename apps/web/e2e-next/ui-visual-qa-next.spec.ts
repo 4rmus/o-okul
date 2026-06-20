@@ -491,7 +491,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
 
   test("öğrenci portalı DataTable ve mobil düzen sözleşmesini korur", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
-    await openWithUiMocks(page, "/ogrenci", { height: 900, width: 1280 }, { authProfile: "student" });
+    await openWithUiMocks(page, "/ogrenci?examId=exam-demo-isem-lgs-1", { height: 900, width: 1280 }, { authProfile: "student" });
 
     await expect(page.getByRole("heading", { level: 1, name: "Öğrenci Portalı" })).toBeVisible();
     const studentFocusMetrics = page
@@ -530,7 +530,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(karneSummary.getByRole("table", { name: "Branş psikometri tablosu" }).getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
 
     await page.setViewportSize({ height: 844, width: 390 });
-    await page.goto("/ogrenci");
+    await page.goto("/ogrenci?examId=exam-demo-isem-lgs-1");
     await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
     await expect(page.getByRole("heading", { level: 1, name: "Öğrenci Portalı" })).toBeVisible();
     await expectRolePortalActionStrip(page.getByRole("region", { name: "Öğrenci günlük aksiyonları" }), 6, [
@@ -554,7 +554,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
 
   test("veli portalı finans izni açıkken DataTable sözleşmesini korur", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
-    await openWithUiMocks(page, "/veli", { height: 900, width: 1280 }, { authProfile: "guardian" });
+    await openWithUiMocks(page, "/veli?examId=exam-demo-isem-lgs-1", { height: 900, width: 1280 }, { authProfile: "guardian" });
 
     await expect(page.getByRole("heading", { level: 1, name: "Veli Portalı" })).toBeVisible();
     const guardianFocusMetrics = page
@@ -623,7 +623,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
           { href: "/ogrenci/raporlar", name: /Son sınavı incele: %81,7/ },
         ],
         key: "student",
-        path: "/ogrenci",
+        path: "/ogrenci?examId=exam-demo-isem-lgs-1",
         regionName: "Öğrenci günlük aksiyonları",
       },
       {

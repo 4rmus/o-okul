@@ -42,7 +42,7 @@ import {
 import { ReportPanel } from "./_shared/report-panel.js";
 import { GuardianRelationsPanel, ProfilePanel, StudentFocusPanel, StudentHistoryPanel } from "./_shared/student-panels.js";
 import { SupportTicketsPanel } from "./_shared/support-tickets-panel.js";
-import { readReportExamId, fallbackReportExamId } from "../_shared/report-exam-selection.js";
+import { readReportExamId } from "../_shared/report-exam-selection.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
 
 export type StudentPortalView = "announcements" | "attendance" | "homework" | "overview" | "profile" | "reports" | "support";
@@ -51,7 +51,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const rolePreviewToken = readRolePreviewToken(searchParams);
-  const reportExamId = readReportExamId(searchParams);
+  const reportExamId = readReportExamId(searchParams, "");
   const isRolePreview = Boolean(rolePreviewToken);
   const canReadPortal = Boolean(auth && (auth.session.subjectType === "STUDENT" || isRolePreview));
   const queryKey = ["next-student-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", reportExamId];
@@ -311,7 +311,21 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
   );
 }
 
-async function loadStudentPortal(accessToken: string, rolePreviewToken = "", reportExamId = fallbackReportExamId) {
+async function loadStudentPortal(accessToken: string, rolePreviewToken = "", reportExamId = "") {
+  const reportRequest = reportExamId
+    ? apiRequestOrNull<ReportStudentSnapshot>(accessToken, `${apiBaseUrl}/me/student/reports/${encodeURIComponent(reportExamId)}/latest`, rolePreviewToken)
+    : Promise.resolve(null);
+  const errorBookletRequest = reportExamId
+    ? apiRequestOrNull<ReportErrorBooklet>(
+        accessToken,
+        `${apiBaseUrl}/me/student/reports/${encodeURIComponent(reportExamId)}/latest/error-booklet`,
+        rolePreviewToken,
+      )
+    : Promise.resolve(null);
+  const progressRequest = reportExamId
+    ? apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/me/student/reports/${encodeURIComponent(reportExamId)}/progress?scope=all`, rolePreviewToken)
+    : Promise.resolve(null);
+
   const [profile, guardians, guardianLinks, classHistory, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, report, errorBooklet, progress, courses, terms] = await Promise.all([
     readOnlyRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/student/profile`, rolePreviewToken),
     readOnlyRequest<GuardianRecord[]>(accessToken, `${apiBaseUrl}/me/student/guardians`, rolePreviewToken),
@@ -329,13 +343,9 @@ async function loadStudentPortal(accessToken: string, rolePreviewToken = "", rep
     readOnlyRequest<AttendanceSummaryRecord>(accessToken, `${apiBaseUrl}/me/student/attendance/summary`, rolePreviewToken),
     readOnlyRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/me/student/teacher-notes`, rolePreviewToken),
     readOnlyRequest<DevelopmentTrendItem[]>(accessToken, `${apiBaseUrl}/me/student/development-assessments`, rolePreviewToken),
-    apiRequestOrNull<ReportStudentSnapshot>(accessToken, `${apiBaseUrl}/me/student/reports/${encodeURIComponent(reportExamId)}/latest`, rolePreviewToken),
-    apiRequestOrNull<ReportErrorBooklet>(
-      accessToken,
-      `${apiBaseUrl}/me/student/reports/${encodeURIComponent(reportExamId)}/latest/error-booklet`,
-      rolePreviewToken,
-    ),
-    apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/me/student/reports/${encodeURIComponent(reportExamId)}/progress?scope=all`, rolePreviewToken),
+    reportRequest,
+    errorBookletRequest,
+    progressRequest,
     readOnlyRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`, rolePreviewToken),
     readOnlyRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`, rolePreviewToken),
   ]);

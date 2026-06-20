@@ -80,7 +80,7 @@ test.describe("Portal rapor paneli sözleşmesi", () => {
     await expect(page.getByRole("region", { name: "Sınav raporu detaylı deneme analizi" })).toContainText("Öğrenci cevabı");
 
     await page.setViewportSize({ height: 844, width: 390 });
-    await page.goto("/ogrenci");
+    await page.goto("/ogrenci?examId=exam-demo-isem-lgs-1");
     await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
     const mobileReportSummary = page.getByRole("region", { name: "Portal rapor özeti" });
     await expect(mobileReportSummary).toContainText("Başarı %");
@@ -115,7 +115,7 @@ async function openStudentPortal(page: Page, viewport: { height: number; width: 
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
   });
   await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
-  await page.goto("/ogrenci");
+  await page.goto("/ogrenci?examId=exam-demo-isem-lgs-1");
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 

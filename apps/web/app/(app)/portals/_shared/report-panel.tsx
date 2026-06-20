@@ -69,7 +69,8 @@ export function ReportPanel({
   if (!report) {
     return (
       <Panel
-        aria-label="Sınav raporu"
+        aria-label="Portal rapor özeti"
+        className="next-portal-report-summary"
         title="Sınav Raporu"
         description={reportContext === "-" ? "Son sınav raporu bekleniyor." : reportContext}
         tone="warning"

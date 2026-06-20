@@ -106,6 +106,19 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
     await expect.poll(() => mutationRequests).toEqual([]);
   });
 
+  test("öğrenci ve veli portalları examId yokken demo rapor endpointine gitmez", async ({ page }) => {
+    const studentPaths: string[] = [];
+    await openStudentPortal(page, { height: 844, width: 390 }, { requestedPaths: studentPaths, withReport: false });
+    expect(studentPaths.filter((path) => path.includes("/reports/"))).toEqual([]);
+    await expect(page.getByRole("region", { name: "Portal rapor özeti" })).toContainText("Rapor bekleniyor");
+
+    await page.unroute("**/api/v1/**");
+    const guardianPaths: string[] = [];
+    await openGuardianPortal(page, { height: 844, width: 390 }, { requestedPaths: guardianPaths, withReport: false });
+    expect(guardianPaths.filter((path) => path.includes("/reports/"))).toEqual([]);
+    await expect(page.getByRole("region", { name: "Portal rapor özeti" })).toContainText("Rapor bekleniyor");
+  });
+
   test("öğrenci sidebar alt rotaları gerçek sayfaları açar", async ({ page }) => {
     await openStudentPortal(page, { height: 900, width: 1024 });
 
@@ -378,7 +391,7 @@ async function expectPortalSupportPanel(page: Page, options: { formVisible: bool
 async function openStudentPortal(
   page: Page,
   viewport: { height: number; width: number },
-  options: { mode?: "student" | "role-preview"; mutationRequests?: string[]; requestedPaths?: string[] } = {},
+  options: { mode?: "student" | "role-preview"; mutationRequests?: string[]; requestedPaths?: string[]; withReport?: boolean } = {},
 ) {
   await page.setViewportSize(viewport);
   await installStudentApiMocks(page, options);
@@ -389,7 +402,7 @@ async function openStudentPortal(
     }
   }, options.mode ?? "student");
   await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
-  await page.goto(options.mode === "role-preview" ? "/ogrenci?rolePreview=1" : "/ogrenci");
+  await page.goto(options.mode === "role-preview" ? "/ogrenci?rolePreview=1" : options.withReport === false ? "/ogrenci" : "/ogrenci?examId=exam-demo-isem-lgs-1");
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 
@@ -402,6 +415,7 @@ async function openGuardianPortal(
     mutationRequests?: string[];
     paymentPlanRequests?: string[];
     requestedPaths?: string[];
+    withReport?: boolean;
   } = {},
 ) {
   await page.setViewportSize(viewport);
@@ -413,7 +427,7 @@ async function openGuardianPortal(
     }
   }, options.mode ?? "guardian");
   await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
-  await page.goto(options.mode === "role-preview" ? "/veli?rolePreview=1" : "/veli");
+  await page.goto(options.mode === "role-preview" ? "/veli?rolePreview=1" : options.withReport === false ? "/veli" : "/veli?examId=exam-demo-isem-lgs-1");
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 

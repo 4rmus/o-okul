@@ -46,7 +46,7 @@ import {
 import { ReportPanel } from "./_shared/report-panel.js";
 import { ProfilePanel, StudentFocusPanel, StudentHistoryPanel } from "./_shared/student-panels.js";
 import { SupportTicketsPanel } from "./_shared/support-tickets-panel.js";
-import { readReportExamId, fallbackReportExamId } from "../_shared/report-exam-selection.js";
+import { readReportExamId } from "../_shared/report-exam-selection.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
 
 export type GuardianPortalView = "announcements" | "homework" | "notifications" | "overview" | "payments" | "reports" | "student" | "support";
@@ -55,7 +55,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const rolePreviewToken = readRolePreviewToken(searchParams);
-  const reportExamId = readReportExamId(searchParams);
+  const reportExamId = readReportExamId(searchParams, "");
   const isRolePreview = Boolean(rolePreviewToken);
   const canReadPortal = Boolean(auth && (auth.session.subjectType === "GUARDIAN" || isRolePreview));
   const studentsQuery = useQuery({
@@ -424,13 +424,34 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
   );
 }
 
-async function loadGuardianStudentPortal(accessToken: string, studentId: string, rolePreviewToken = "", reportExamId = fallbackReportExamId) {
+async function loadGuardianStudentPortal(accessToken: string, studentId: string, rolePreviewToken = "", reportExamId = "") {
   const notificationPreferences = await readOnlyRequest<GuardianStudentRecord>(
     accessToken,
     `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/notification-preferences`,
     rolePreviewToken,
   );
   const canViewFinance = notificationPreferences.canViewFinance === true;
+  const reportRequest = reportExamId
+    ? apiRequestOrNull<ReportStudentSnapshot>(
+        accessToken,
+        `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${encodeURIComponent(reportExamId)}/latest`,
+        rolePreviewToken,
+      )
+    : Promise.resolve(null);
+  const errorBookletRequest = reportExamId
+    ? apiRequestOrNull<ReportErrorBooklet>(
+        accessToken,
+        `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${encodeURIComponent(reportExamId)}/latest/error-booklet`,
+        rolePreviewToken,
+      )
+    : Promise.resolve(null);
+  const progressRequest = reportExamId
+    ? apiRequestOrNull<ReportStudentProgress>(
+        accessToken,
+        `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${encodeURIComponent(reportExamId)}/progress?scope=all`,
+        rolePreviewToken,
+      )
+    : Promise.resolve(null);
   const [profile, classHistory, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, paymentPlans, report, errorBooklet, progress, courses, terms] = await Promise.all([
     readOnlyRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/profile`, rolePreviewToken),
     readOnlyRequest<StudentClassHistoryRecord[]>(
@@ -473,21 +494,9 @@ async function loadGuardianStudentPortal(accessToken: string, studentId: string,
           rolePreviewToken,
         )
       : Promise.resolve([]),
-    apiRequestOrNull<ReportStudentSnapshot>(
-      accessToken,
-      `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${encodeURIComponent(reportExamId)}/latest`,
-      rolePreviewToken,
-    ),
-    apiRequestOrNull<ReportErrorBooklet>(
-      accessToken,
-      `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${encodeURIComponent(reportExamId)}/latest/error-booklet`,
-      rolePreviewToken,
-    ),
-    apiRequestOrNull<ReportStudentProgress>(
-      accessToken,
-      `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/reports/${encodeURIComponent(reportExamId)}/progress?scope=all`,
-      rolePreviewToken,
-    ),
+    reportRequest,
+    errorBookletRequest,
+    progressRequest,
     readOnlyRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`, rolePreviewToken),
     readOnlyRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`, rolePreviewToken),
   ]);
