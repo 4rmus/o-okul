@@ -255,6 +255,28 @@ const negativeCases = [
     "isem_optical_pipeline_smoke",
   ],
   [
+    "iSEM optik eksik katilimci sayisi reddedilir",
+    {
+      ...isemOpticalPipeline,
+      counts: {
+        ...isemOpticalPipeline.counts,
+        participantCount: 253,
+      },
+    },
+    "isem_optical_pipeline_smoke",
+  ],
+  [
+    "iSEM optik quarantine sapmasi reddedilir",
+    {
+      ...isemOpticalPipeline,
+      counts: {
+        ...isemOpticalPipeline.counts,
+        quarantineCount: 1,
+      },
+    },
+    "isem_optical_pipeline_smoke",
+  ],
+  [
     "RLS load dolu gaps reddedilir",
     {
       ...rlsLoadSmokePayload(),
