@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ScheduleLessonCreateRequest, ScheduleLessonUpdateRequest } from "@uzman-hocam/shared-types";
 import { optionalIsoDateTime, requiredIsoDateTime, requiredTrimmedString } from "../http/zod-validation.js";
 
 const optionalNonEmptyString = requiredTrimmedString.optional();
@@ -14,7 +15,7 @@ export const scheduleLessonCreateBodySchema = z.object({
   termId: optionalNonEmptyString,
   title: requiredTrimmedString,
   startsAt: scheduleDateTimeSchema,
-}).strict();
+}).strict().superRefine(validateScheduleTimeRange) satisfies z.ZodType<ScheduleLessonCreateRequest>;
 
 export const scheduleLessonUpdateBodySchema = z.object({
   classId: optionalNonEmptyString,
@@ -24,7 +25,30 @@ export const scheduleLessonUpdateBodySchema = z.object({
   termId: optionalNonEmptyString,
   title: optionalNonEmptyString,
   startsAt: optionalScheduleDateTimeSchema,
-}).strict();
+}).strict().refine(hasAtLeastOneField, {
+  message: "UPDATE_BODY_EMPTY",
+}).superRefine(validateScheduleTimeRange) satisfies z.ZodType<ScheduleLessonUpdateRequest>;
 
-export type ScheduleLessonCreateBody = z.infer<typeof scheduleLessonCreateBodySchema>;
-export type ScheduleLessonUpdateBody = z.infer<typeof scheduleLessonUpdateBodySchema>;
+export type ScheduleLessonCreateBody = ScheduleLessonCreateRequest;
+export type ScheduleLessonUpdateBody = ScheduleLessonUpdateRequest;
+
+function hasAtLeastOneField(value: Record<string, unknown>): boolean {
+  return Object.keys(value).length > 0;
+}
+
+function validateScheduleTimeRange(
+  value: { startsAt?: string; endsAt?: string },
+  context: z.RefinementCtx,
+): void {
+  if (!value.startsAt || !value.endsAt) return;
+
+  const startsAt = Date.parse(value.startsAt);
+  const endsAt = Date.parse(value.endsAt);
+  if (Number.isNaN(startsAt) || Number.isNaN(endsAt) || endsAt > startsAt) return;
+
+  context.addIssue({
+    code: "custom",
+    message: "SCHEDULE_LESSON_TIME_RANGE_INVALID",
+    path: ["endsAt"],
+  });
+}

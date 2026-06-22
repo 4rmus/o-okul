@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { DevelopmentAssessmentCreateRequest, DevelopmentCriterionCreateRequest } from "@uzman-hocam/shared-types";
 import { optionalTrimmedString, requiredTrimmedString } from "../http/zod-validation.js";
 
 const integerSchema = z.number().int();
@@ -8,7 +9,7 @@ export const developmentCriterionBodySchema = z.object({
   scaleMax: integerSchema.optional(),
   scaleMin: integerSchema.optional(),
   sortOrder: integerSchema.optional(),
-}).strict();
+}).strict() satisfies z.ZodType<DevelopmentCriterionCreateRequest>;
 
 const developmentAssessmentScoreBodySchema = z.object({
   criterionId: requiredTrimmedString,
@@ -25,7 +26,7 @@ export const developmentAssessmentBodySchema = z.object({
   teacherId: optionalTrimmedString,
   termId: optionalTrimmedString,
   visibility: developmentAssessmentVisibilitySchema.optional(),
-}).strict();
+}).strict() satisfies z.ZodType<DevelopmentAssessmentCreateRequest>;
 
-export type DevelopmentCriterionBody = z.infer<typeof developmentCriterionBodySchema>;
-export type DevelopmentAssessmentBody = z.infer<typeof developmentAssessmentBodySchema>;
+export type DevelopmentCriterionBody = DevelopmentCriterionCreateRequest;
+export type DevelopmentAssessmentBody = DevelopmentAssessmentCreateRequest;

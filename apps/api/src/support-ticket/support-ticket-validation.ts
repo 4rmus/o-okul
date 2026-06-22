@@ -1,4 +1,10 @@
 import { z } from "zod";
+import type {
+  SupportTicketAttachmentCreateRequest,
+  SupportTicketCommentCreateRequest,
+  SupportTicketCreateRequest,
+  SupportTicketUpdateRequest,
+} from "@uzman-hocam/shared-types";
 import { optionalTrimmedString, requiredTrimmedString } from "../http/zod-validation.js";
 
 const supportTicketPrioritySchema = z.enum(["LOW", "NORMAL", "HIGH"]);
@@ -16,26 +22,26 @@ export const supportTicketCreateBodySchema = z.object({
   subject: requiredTrimmedString,
   tenantId: optionalTrimmedString,
   termId: optionalTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<SupportTicketCreateRequest>;
 
 export const supportTicketUpdateBodySchema = z.object({
   priority: supportTicketPrioritySchema.optional(),
   status: supportTicketStatusSchema.optional(),
 }).strict().refine((body) => body.priority !== undefined || body.status !== undefined, {
   message: "SUPPORT_TICKET_UPDATE_REQUIRED",
-});
+}) satisfies z.ZodType<SupportTicketUpdateRequest>;
 
 export const supportTicketAttachmentCreateBodySchema = z.object({
   contentType: uploadContentTypeSchema,
   fileBase64: requiredTrimmedString,
   fileName: requiredTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<SupportTicketAttachmentCreateRequest>;
 
 export const supportTicketCommentCreateBodySchema = z.object({
   body: requiredTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<SupportTicketCommentCreateRequest>;
 
-export type SupportTicketCreateBody = z.infer<typeof supportTicketCreateBodySchema>;
-export type SupportTicketUpdateBody = z.infer<typeof supportTicketUpdateBodySchema>;
-export type SupportTicketAttachmentCreateBody = z.infer<typeof supportTicketAttachmentCreateBodySchema>;
-export type SupportTicketCommentCreateBody = z.infer<typeof supportTicketCommentCreateBodySchema>;
+export type SupportTicketCreateBody = SupportTicketCreateRequest;
+export type SupportTicketUpdateBody = SupportTicketUpdateRequest;
+export type SupportTicketAttachmentCreateBody = SupportTicketAttachmentCreateRequest;
+export type SupportTicketCommentCreateBody = SupportTicketCommentCreateRequest;

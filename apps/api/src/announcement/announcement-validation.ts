@@ -1,4 +1,9 @@
 import { z } from "zod";
+import type {
+  AnnouncementCreateRequest,
+  AnnouncementDeliveryResultRequest,
+  AnnouncementDeliverySendRequest,
+} from "@uzman-hocam/shared-types";
 import { optionalTrimmedString, requiredTrimmedString } from "../http/zod-validation.js";
 
 const announcementAudienceSchema = z.enum(["SCHOOL", "TEACHERS", "STUDENTS", "GUARDIANS"]);
@@ -31,6 +36,6 @@ export const announcementDeliverySendBodySchema = z.object({
   channel: announcementDeliveryChannelSchema,
 }).strict();
 
-export type AnnouncementCreateBody = z.infer<typeof announcementCreateBodySchema>;
-export type AnnouncementDeliveryResultBody = z.infer<typeof announcementDeliveryResultBodySchema>;
-export type AnnouncementDeliverySendBody = z.infer<typeof announcementDeliverySendBodySchema>;
+export type AnnouncementCreateBody = AnnouncementCreateRequest;
+export type AnnouncementDeliveryResultBody = AnnouncementDeliveryResultRequest;
+export type AnnouncementDeliverySendBody = AnnouncementDeliverySendRequest;

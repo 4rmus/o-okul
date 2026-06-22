@@ -213,6 +213,71 @@ describe("Study Session API", () => {
       },
     });
 
+    const invalidRange = await request(server)
+      .post("/study-sessions")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        capacity: 1,
+        classId: "class-a",
+        teacherId: "teacher-a",
+        studentIds: ["student-a"],
+        title: "Ters Saatli Etüt",
+        startsAt: "2026-06-01T16:00:00.000Z",
+        endsAt: "2026-06-01T15:00:00.000Z",
+      })
+      .expect(422);
+
+    expect(invalidRange.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [
+          expect.objectContaining({
+            message: "STUDY_SESSION_TIME_RANGE_INVALID",
+            path: "endsAt",
+          }),
+        ],
+      },
+    });
+
+    const emptyUpdate = await request(server)
+      .patch("/study-sessions/study-a")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({})
+      .expect(422);
+
+    expect(emptyUpdate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [
+          expect.objectContaining({
+            message: "UPDATE_BODY_EMPTY",
+            path: "$",
+          }),
+        ],
+      },
+    });
+
+    const invalidUpdateRange = await request(server)
+      .patch("/study-sessions/study-a")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        startsAt: "2026-06-01T17:00:00.000Z",
+        endsAt: "2026-06-01T16:00:00.000Z",
+      })
+      .expect(422);
+
+    expect(invalidUpdateRange.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [
+          expect.objectContaining({
+            message: "STUDY_SESSION_TIME_RANGE_INVALID",
+            path: "endsAt",
+          }),
+        ],
+      },
+    });
+
     const invalidUpdate = await request(server)
       .patch("/study-sessions/study-a")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
@@ -353,7 +418,7 @@ describe("Study Session API", () => {
   });
 
   it("geçersiz saat aralığını reddeder", async () => {
-    await request(server)
+    const response = await request(server)
       .post("/study-sessions")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
@@ -365,7 +430,19 @@ describe("Study Session API", () => {
         startsAt: "2026-06-02T16:00:00.000Z",
         endsAt: "2026-06-02T15:00:00.000Z",
       })
-      .expect(400);
+      .expect(422);
+
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [
+          expect.objectContaining({
+            message: "STUDY_SESSION_TIME_RANGE_INVALID",
+            path: "endsAt",
+          }),
+        ],
+      },
+    });
   });
 
   it("tenant A tenant B etüt kaydına erişemez", async () => {

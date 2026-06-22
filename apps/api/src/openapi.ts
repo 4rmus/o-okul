@@ -1,5 +1,6 @@
 import type { INestApplication } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule, type OpenAPIObject } from "@nestjs/swagger";
+import { applyOpenApiContracts } from "./openapi-contracts.js";
 
 export const openApiUiPath = "docs";
 
@@ -19,9 +20,10 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
     )
     .build();
 
-  return SwaggerModule.createDocument(app, config, {
+  const document = SwaggerModule.createDocument(app, config, {
     operationIdFactory: (controllerKey, methodKey) => `${controllerKey.replace(/Controller$/, "")}_${methodKey}`,
   });
+  return applyOpenApiContracts(document);
 }
 
 export function mountOpenApi(app: INestApplication, env = process.env): void {

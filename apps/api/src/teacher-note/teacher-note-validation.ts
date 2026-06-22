@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { TeacherNoteCreateRequest, TeacherNoteUpdateRequest } from "@uzman-hocam/shared-types";
 import { optionalTrimmedString, requiredTrimmedString } from "../http/zod-validation.js";
 
 const teacherNoteVisibilitySchema = z.enum(["INTERNAL", "GUARDIAN_STUDENT"]);
@@ -11,7 +12,7 @@ export const teacherNoteCreateBodySchema = z.object({
   teacherId: optionalTrimmedString,
   termId: optionalTrimmedString,
   visibility: teacherNoteVisibilitySchema,
-}).strict();
+}).strict() satisfies z.ZodType<TeacherNoteCreateRequest>;
 
 export const teacherNoteUpdateBodySchema = z.object({
   body: requiredTrimmedString.optional(),
@@ -19,7 +20,9 @@ export const teacherNoteUpdateBodySchema = z.object({
   developmentStatus: optionalTrimmedString,
   termId: optionalTrimmedString,
   visibility: teacherNoteVisibilitySchema.optional(),
-}).strict();
+}).strict().refine((value) => Object.keys(value).length > 0, {
+  message: "UPDATE_BODY_EMPTY",
+}) satisfies z.ZodType<TeacherNoteUpdateRequest>;
 
-export type TeacherNoteCreateBody = z.infer<typeof teacherNoteCreateBodySchema>;
-export type TeacherNoteUpdateBody = z.infer<typeof teacherNoteUpdateBodySchema>;
+export type TeacherNoteCreateBody = TeacherNoteCreateRequest;
+export type TeacherNoteUpdateBody = TeacherNoteUpdateRequest;

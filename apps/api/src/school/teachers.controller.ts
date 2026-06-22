@@ -1,13 +1,12 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type {
   TeacherAssignmentRecord,
   TeacherImportDryRunResult,
   TeacherImportResult,
   TeacherRecord,
 } from "@uzman-hocam/shared-types";
-import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
-import { requiredTrimmedString, zodBody } from "../http/zod-validation.js";
+import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
@@ -17,17 +16,15 @@ import {
   teacherAssignmentCreateBodySchema,
   teacherAssignmentUpdateBodySchema,
   teacherCreateBodySchema,
+  teacherImportBodySchema,
   teacherUpdateBodySchema,
   type TeacherAssignmentCreateBody,
   type TeacherAssignmentUpdateBody,
   type TeacherCreateBody,
+  type TeacherImportBody,
   type TeacherUpdateBody,
 } from "./school-validation.js";
 import { TeacherImportService } from "./teacher-import.service.js";
-
-const teacherImportBodySchema = z.object({
-  fileBase64: requiredTrimmedString,
-}).strict();
 
 @Controller("teachers")
 @UseGuards(RolesGuard)
@@ -40,13 +37,13 @@ export class TeachersController {
   @Get()
   @Roles("TEACHER")
   async list(@Query() query: ListQuery): Promise<TeacherRecord[]> {
-    return applyListQuery(await this.school.listTeachers(getRequestContext()), query, teacherListFields);
+    return applyListQuery(await this.school.listTeachers(getRequestContext()), query, teacherListFields).map(toTeacherResponse);
   }
 
   @Get(":id")
   @Roles("TEACHER")
-  findOne(@Param("id") id: string): Promise<TeacherRecord> {
-    return this.school.findTeacher(getRequestContext(), id);
+  async findOne(@Param("id") id: string): Promise<TeacherRecord> {
+    return toTeacherResponse(await this.school.findTeacher(getRequestContext(), id));
   }
 
   @Get(":id/assignments")
@@ -57,20 +54,23 @@ export class TeachersController {
 
   @Post()
   @RequireCapability("staff:manage")
-  create(@Body(zodBody(teacherCreateBodySchema)) body: TeacherCreateBody): Promise<TeacherRecord> {
-    return this.school.createTeacher(getRequestContext(), body);
+  async create(@Body(zodBody(teacherCreateBodySchema)) body: TeacherCreateBody): Promise<TeacherRecord> {
+    return toTeacherResponse(await this.school.createTeacher(getRequestContext(), body));
   }
 
   @Post("imports/dry-run")
   @RequireCapability("staff:manage")
-  dryRunImport(@Body(zodBody(teacherImportBodySchema)) body: { fileBase64: string }): Promise<TeacherImportDryRunResult> {
+  dryRunImport(@Body(zodBody(teacherImportBodySchema)) body: TeacherImportBody): Promise<TeacherImportDryRunResult> {
     return this.imports.dryRun(getRequestContext(), body);
   }
 
   @Post("imports")
   @RequireCapability("staff:manage")
-  import(@Body(zodBody(teacherImportBodySchema)) body: { fileBase64: string }): Promise<TeacherImportResult> {
-    return this.imports.import(getRequestContext(), body);
+  import(
+    @Body(zodBody(teacherImportBodySchema)) body: TeacherImportBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<TeacherImportResult> {
+    return this.imports.import(getRequestContext(), body, idempotencyKey);
   }
 
   @Post(":id/assignments")
@@ -84,8 +84,8 @@ export class TeachersController {
 
   @Patch(":id")
   @RequireCapability("staff:manage")
-  update(@Param("id") id: string, @Body(zodBody(teacherUpdateBodySchema)) body: TeacherUpdateBody): Promise<TeacherRecord> {
-    return this.school.updateTeacher(getRequestContext(), id, body);
+  async update(@Param("id") id: string, @Body(zodBody(teacherUpdateBodySchema)) body: TeacherUpdateBody): Promise<TeacherRecord> {
+    return toTeacherResponse(await this.school.updateTeacher(getRequestContext(), id, body));
   }
 
   @Patch(":id/assignments/:assignmentId")
@@ -100,8 +100,8 @@ export class TeachersController {
 
   @Post(":id/purge-pii")
   @RequireCapability("privacy:manage")
-  purgePii(@Param("id") id: string): Promise<TeacherRecord> {
-    return this.school.purgeTeacherPii(getRequestContext(), id);
+  async purgePii(@Param("id") id: string): Promise<TeacherRecord> {
+    return toTeacherResponse(await this.school.purgeTeacherPii(getRequestContext(), id));
   }
 
   @Delete(":id")
@@ -124,3 +124,9 @@ const teacherListFields = [
   { name: "lastName", read: (record: TeacherRecord) => record.lastName },
   { name: "branch", read: (record: TeacherRecord) => record.branch },
 ];
+
+function toTeacherResponse(record: TeacherRecord): TeacherRecord {
+  const response = { ...record };
+  delete response.userId;
+  return response;
+}

@@ -172,6 +172,7 @@ describe("Attendance API", () => {
         fields: [expect.objectContaining({ path: "status" })],
       },
     });
+
   });
 
   it("başka tenant öğrencisine devamsızlık yazmayı ve mükerrer tarihi reddeder", async () => {

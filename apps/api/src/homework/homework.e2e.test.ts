@@ -663,6 +663,26 @@ describe("Homework API", () => {
     });
   });
 
+  it("boş materyal güncellemesini reddeder", async () => {
+    const response = await request(server)
+      .patch("/homework/materials/material-a")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({})
+      .expect(422);
+
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [
+          expect.objectContaining({
+            message: "UPDATE_BODY_EMPTY",
+            path: "$",
+          }),
+        ],
+      },
+    });
+  });
+
   it("ödev CRUD akışını tenant içinde tamamlar", async () => {
     const created = await request(server)
       .post("/homework")
@@ -832,6 +852,26 @@ describe("Homework API", () => {
           expect.objectContaining({ path: "dueAt" }),
           expect.objectContaining({ path: "title" }),
         ]),
+      },
+    });
+  });
+
+  it("boş ödev güncellemesini reddeder", async () => {
+    const response = await request(server)
+      .patch("/homework/homework-a")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({})
+      .expect(422);
+
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [
+          expect.objectContaining({
+            message: "UPDATE_BODY_EMPTY",
+            path: "$",
+          }),
+        ],
       },
     });
   });

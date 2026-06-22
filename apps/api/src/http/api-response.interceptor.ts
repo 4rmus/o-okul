@@ -1,21 +1,8 @@
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from "@nestjs/common";
 import type { Request } from "express";
 import { map, Observable } from "rxjs";
+import type { ApiItemResponse, ApiListResponse } from "@uzman-hocam/shared-types";
 import { readListMeta } from "../listing/list-query.js";
-
-export interface ListResponse<TItem> {
-  data: TItem[];
-  meta: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  };
-}
-
-export interface ItemResponse<TItem> {
-  data: TItem;
-}
 
 @Injectable()
 export class ApiResponseInterceptor implements NestInterceptor {
@@ -45,8 +32,8 @@ function envelope(body: unknown): unknown {
     return {
       data: body,
       meta,
-    } satisfies ListResponse<unknown>;
+    } satisfies ApiListResponse<unknown>;
   }
 
-  return { data: body } satisfies ItemResponse<unknown>;
+  return { data: body } satisfies ApiItemResponse<unknown>;
 }

@@ -7,9 +7,15 @@ import {
   type NotificationSendResult,
 } from "@uzman-hocam/notification-adapter";
 import type {
+  AnnouncementAudience,
+  AnnouncementCreateRequest,
   AnnouncementDeliveryChannel,
+  AnnouncementDeliveryQueueResult,
   AnnouncementDeliveryReportRecord,
+  AnnouncementDeliveryResultRequest,
+  AnnouncementDeliverySendRequest,
   AnnouncementDeliveryStatus,
+  AnnouncementRecord as SharedAnnouncementRecord,
   AnnouncementRecipientRecord,
   AnnouncementRecipientReport,
   ClassRecord,
@@ -44,51 +50,10 @@ import {
 } from "./announcement-delivery-report-store.js";
 import { announcementStoreToken, type AnnouncementStore } from "./announcement-store.js";
 
-export type AnnouncementAudience = "SCHOOL" | "TEACHERS" | "STUDENTS" | "GUARDIANS";
-
-export interface AnnouncementRecord {
-  id: string;
-  tenantId: string;
-  title: string;
-  body: string;
-  audience: AnnouncementAudience;
-  campusId?: string;
-  gradeLevelId?: string;
-  classId?: string;
-  courseId?: string;
-  termId?: string;
-  publishedAt: string;
-  readAt?: string;
-  deletedAt?: string;
-}
-
-export interface AnnouncementDeliveryResultInput {
-  channel?: AnnouncementDeliveryChannel;
-  recipientCount?: number;
-  deliveredCount?: number;
-  failedCount?: number;
-  status?: Exclude<AnnouncementDeliveryStatus, "queued">;
-  providerErrorCode?: string;
-}
-
-export interface AnnouncementDeliverySendInput {
-  channel?: AnnouncementDeliveryChannel;
-}
+export type AnnouncementRecord = SharedAnnouncementRecord;
 
 export interface AnnouncementDeliveryQueueProducer {
   enqueue(input: TenantQueueJobInput): Promise<ProducedJob>;
-}
-
-export interface AnnouncementDeliveryQueueResult {
-  tenantId: string;
-  announcementId: string;
-  channel: AnnouncementDeliveryChannel;
-  recipientCount: number;
-  deliveredCount: number;
-  failedCount: number;
-  queueName: "announcement-delivery";
-  jobId: string;
-  status: "queued";
 }
 
 export const announcementDeliveryQueueProducerToken = Symbol("AnnouncementDeliveryQueueProducer");
@@ -167,7 +132,7 @@ export class AnnouncementService {
   async enqueueDeliveryResult(
     context: RequestContext,
     id: string,
-    input: AnnouncementDeliveryResultInput,
+    input: Partial<AnnouncementDeliveryResultRequest>,
     idempotencyKey?: string,
   ): Promise<AnnouncementDeliveryQueueResult> {
     if (idempotencyKey && this.idempotency) {
@@ -188,7 +153,7 @@ export class AnnouncementService {
   private async enqueueDeliveryResultOnce(
     context: RequestContext,
     id: string,
-    input: AnnouncementDeliveryResultInput,
+    input: Partial<AnnouncementDeliveryResultRequest>,
   ): Promise<AnnouncementDeliveryQueueResult> {
     const announcement = await this.findOne(context, id);
     const result = parseDeliveryResultInput(input);
@@ -198,7 +163,7 @@ export class AnnouncementService {
   async sendExternalDelivery(
     context: RequestContext,
     id: string,
-    input: AnnouncementDeliverySendInput,
+    input: Partial<AnnouncementDeliverySendRequest>,
     idempotencyKey?: string,
   ): Promise<AnnouncementDeliveryQueueResult> {
     if (idempotencyKey && this.idempotency) {
@@ -219,7 +184,7 @@ export class AnnouncementService {
   private async sendExternalDeliveryOnce(
     context: RequestContext,
     id: string,
-    input: AnnouncementDeliverySendInput,
+    input: Partial<AnnouncementDeliverySendRequest>,
   ): Promise<AnnouncementDeliveryQueueResult> {
     const announcement = await this.findOne(context, id);
     const channel = resolveDeliveryChannel(input.channel);
@@ -235,7 +200,7 @@ export class AnnouncementService {
   private async enqueueDeliveryReport(
     context: RequestContext,
     announcement: AnnouncementRecord,
-    result: Required<Omit<AnnouncementDeliveryResultInput, "providerErrorCode">> & Pick<AnnouncementDeliveryResultInput, "providerErrorCode">,
+    result: Required<Omit<AnnouncementDeliveryResultRequest, "providerErrorCode">> & Pick<AnnouncementDeliveryResultRequest, "providerErrorCode">,
   ): Promise<AnnouncementDeliveryQueueResult> {
     const contentHash = createAnnouncementDeliveryContentHash(result);
     const job = await this.deliveryProducer.enqueue({
@@ -333,7 +298,27 @@ export class AnnouncementService {
     return this.markRead(context, announcement);
   }
 
-  async create(context: RequestContext, input: Partial<AnnouncementRecord>): Promise<AnnouncementRecord> {
+  async create(
+    context: RequestContext,
+    input: Partial<AnnouncementCreateRequest>,
+    idempotencyKey?: string,
+  ): Promise<AnnouncementRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        {
+          key: idempotencyKey,
+          operation: "announcement.create",
+          request: input,
+        },
+        () => this.createOnce(context, input),
+      );
+    }
+
+    return this.createOnce(context, input);
+  }
+
+  private async createOnce(context: RequestContext, input: Partial<AnnouncementCreateRequest>): Promise<AnnouncementRecord> {
     const tenantId = this.resolveTenantId(context, input.tenantId);
     const title = requiredText(input.title, "ANNOUNCEMENT_TITLE_REQUIRED");
     const body = requiredText(input.body, "ANNOUNCEMENT_BODY_REQUIRED");
@@ -665,8 +650,8 @@ function receiptKey(subjectType: string, subjectId: string): string {
 }
 
 function parseDeliveryResultInput(
-  input: AnnouncementDeliveryResultInput,
-): Required<Omit<AnnouncementDeliveryResultInput, "providerErrorCode">> & Pick<AnnouncementDeliveryResultInput, "providerErrorCode"> {
+  input: Partial<AnnouncementDeliveryResultRequest>,
+): Required<Omit<AnnouncementDeliveryResultRequest, "providerErrorCode">> & Pick<AnnouncementDeliveryResultRequest, "providerErrorCode"> {
   const channel = resolveDeliveryChannel(input.channel);
   const status = resolveDeliveryStatus(input.status);
   const recipientCount = resolveCount(input.recipientCount, "ANNOUNCEMENT_DELIVERY_RECIPIENT_COUNT_INVALID");
@@ -723,7 +708,7 @@ function createAnnouncementDeliveryContentHash(input: {
 function summarizeNotificationResults(
   channel: AnnouncementDeliveryChannel,
   results: NotificationSendResult[],
-): Required<Omit<AnnouncementDeliveryResultInput, "providerErrorCode">> & Pick<AnnouncementDeliveryResultInput, "providerErrorCode"> {
+): Required<Omit<AnnouncementDeliveryResultRequest, "providerErrorCode">> & Pick<AnnouncementDeliveryResultRequest, "providerErrorCode"> {
   const deliveredCount = results.filter((result) => result.status === "sent").length;
   const failedResults = results.filter((result) => result.status === "failed");
   return {

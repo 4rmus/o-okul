@@ -37,6 +37,7 @@ describe("API auth + tenant isolation", () => {
     const csrfCookie = getCookie(response.headers["set-cookie"], "csrfToken");
 
     expect(refreshCookie).toContain("HttpOnly");
+    expectPublicSession(response.body.session);
 
     return {
       ...(response.body as {
@@ -63,6 +64,7 @@ describe("API auth + tenant isolation", () => {
     const rotatedCsrfToken = readCookieValue(rotatedCsrfCookie, "csrfToken");
     expect(rotatedCookie).toContain("HttpOnly");
     expect(rotatedCookie).not.toBe(issued.refreshCookie);
+    expectPublicSession(rotated.body.session);
 
     await request(server)
       .post("/auth/refresh")
@@ -280,8 +282,8 @@ describe("API auth + tenant isolation", () => {
           tenantId: "tenant-a",
           firstName: "Ada",
           lastName: "A",
-          userId: "student-tenant-a",
         });
+        expect(body).not.toHaveProperty("userId");
       });
     await request(server).get("/me/guardian/students").set("Authorization", `Bearer ${student.accessToken}`).expect(403);
 
@@ -301,9 +303,9 @@ describe("API auth + tenant isolation", () => {
             classId: "class-a",
             responsibleTeacherId: "teacher-a",
             status: "ACTIVE",
-            userId: "student-tenant-a",
           },
         ]);
+        expect(JSON.stringify(body)).not.toContain("student-tenant-a");
       });
     await request(server).get("/me/student").set("Authorization", `Bearer ${guardian.accessToken}`).expect(403);
 
@@ -325,8 +327,8 @@ describe("API auth + tenant isolation", () => {
           firstName: "Ayse",
           lastName: "Ogretmen",
           branch: "Matematik",
-          userId: "teacher-tenant-a",
         });
+        expect(body).not.toHaveProperty("userId");
       });
     await request(server)
       .get("/me/teacher/schedule")
@@ -742,6 +744,73 @@ describe("API auth + tenant isolation", () => {
     await request(server).get(`/students/${studentId}`).set("Authorization", `Bearer ${issued.accessToken}`).expect(404);
   });
 
+  it("student create işlemini Idempotency-Key ile tekilleştirir", async () => {
+    const issued = await login("admin-a@example.test");
+    const body = { firstName: "Idempotent", lastName: "Ogrenci", classId: "class-a", status: "ACTIVE" };
+    const key = "student-create-idempotency-a";
+
+    const first = await request(server)
+      .post("/students")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+    const studentId = (first.body as { id: string }).id;
+
+    const second = await request(server)
+      .post("/students")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+
+    await request(server)
+      .post("/students")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send({ ...body, lastName: "Farkli" })
+      .expect(409)
+      .expect(({ body: errorBody }) => {
+        expect(JSON.stringify(errorBody)).toContain("IDEMPOTENCY_KEY_BODY_MISMATCH");
+      });
+
+    await request(server)
+      .get("/students")
+      .query({ q: "Idempotent" })
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200)
+      .expect(({ body: students }) => {
+        expect(students).toEqual([expect.objectContaining({ id: studentId, firstName: "Idempotent" })]);
+      });
+
+    await request(server).delete(`/students/${studentId}`).set("Authorization", `Bearer ${issued.accessToken}`).expect(204);
+  });
+
+  it("student create guardian hatasında yan etki oluşturmaz", async () => {
+    const issued = await login("admin-a@example.test");
+
+    await request(server)
+      .post("/students")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", "student-create-invalid-guardian-a")
+      .send({ firstName: "YanEtki", lastName: "Ogrenci", guardian: {} })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(JSON.stringify(body)).toContain("GUARDIAN_CONTACT_REQUIRED");
+      });
+
+    await request(server)
+      .get("/students")
+      .query({ q: "YanEtki" })
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([]);
+      });
+  });
+
   it("student Excel dry-run geçerli satırları yazmadan raporlar", async () => {
     const issued = await login("admin-a@example.test");
     const fileBase64 = await createStudentWorkbookBase64([["Ece", "Import"]]);
@@ -1150,6 +1219,21 @@ describe("API auth + tenant isolation", () => {
 
 function getRefreshCookie(header: string | string[] | undefined): string {
   return getCookie(header, "refreshToken");
+}
+
+function expectPublicSession(session: unknown): void {
+  expect(session).toEqual(expect.objectContaining({
+    id: expect.any(String),
+    userId: expect.any(String),
+    tenantId: expect.any(String),
+    roles: expect.any(Array),
+    membershipVersion: expect.any(Number),
+    status: expect.any(String),
+  }));
+  expect(session).not.toHaveProperty("refreshTokenHash");
+  expect(session).not.toHaveProperty("tokenFamilyId");
+  expect(session).not.toHaveProperty("createdAt");
+  expect(session).not.toHaveProperty("updatedAt");
 }
 
 function getCookie(header: string | string[] | undefined, name: string): string {

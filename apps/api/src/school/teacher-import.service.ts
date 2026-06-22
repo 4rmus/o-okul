@@ -1,4 +1,5 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, PayloadTooLargeException } from "@nestjs/common";
+import { createHash } from "node:crypto";
+import { BadRequestException, ForbiddenException, Inject, Injectable, Optional, PayloadTooLargeException } from "@nestjs/common";
 import type {
   TeacherAssignmentRecord,
   TeacherImportDryRunResult,
@@ -9,6 +10,7 @@ import type {
 } from "@uzman-hocam/shared-types";
 import ExcelJS from "exceljs";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import { type ClassStore, classStoreToken } from "./class-store.js";
 import { type CourseStore, courseStoreToken } from "./course-store.js";
 import { SchoolService } from "./school.service.js";
@@ -34,6 +36,7 @@ export class TeacherImportService {
     @Inject(courseStoreToken) private readonly courses: CourseStore,
     @Inject(teacherStoreToken) private readonly teachers: TeacherStore,
     @Inject(teacherAssignmentStoreToken) private readonly teacherAssignments: TeacherAssignmentStore,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async dryRun(context: RequestContext, input: TeacherImportInput): Promise<TeacherImportDryRunResult> {
@@ -52,7 +55,22 @@ export class TeacherImportService {
     };
   }
 
-  async import(context: RequestContext, input: TeacherImportInput): Promise<TeacherImportResult> {
+  async import(context: RequestContext, input: TeacherImportInput, idempotencyKey?: string): Promise<TeacherImportResult> {
+    const idempotencyRequest = {
+      fileSha256: input.fileBase64 ? createSha256(Buffer.from(input.fileBase64, "base64")) : undefined,
+    };
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "teacher.import.commit", request: idempotencyRequest },
+        () => this.importOnce(context, input),
+      );
+    }
+
+    return this.importOnce(context, input);
+  }
+
+  private async importOnce(context: RequestContext, input: TeacherImportInput): Promise<TeacherImportResult> {
     const dryRun = await this.dryRun(context, input);
     if (dryRun.errors.length > 0) {
       throw new BadRequestException({
@@ -202,6 +220,10 @@ export class TeacherImportService {
 
     return errors;
   }
+}
+
+function createSha256(bytes: Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 function toPreviewRow(row: ParsedTeacherImportRow): TeacherImportPreviewRow {

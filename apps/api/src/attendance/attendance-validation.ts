@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { AttendanceCreateRequest, AttendanceUpdateRequest } from "@uzman-hocam/shared-types";
 import { optionalTrimmedString, requiredDateString, requiredTrimmedString } from "../http/zod-validation.js";
 
 const attendanceStatusSchema = z.enum(["PRESENT", "ABSENT", "LATE", "EXCUSED"]);
@@ -10,13 +11,13 @@ export const attendanceCreateBodySchema = z.object({
   status: attendanceStatusSchema,
   studentId: requiredTrimmedString,
   termId: optionalTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<AttendanceCreateRequest>;
 
 export const attendanceUpdateBodySchema = z.object({
   courseId: optionalTrimmedString,
   status: attendanceStatusSchema,
   termId: optionalTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<AttendanceUpdateRequest>;
 
-export type AttendanceCreateBody = z.infer<typeof attendanceCreateBodySchema>;
-export type AttendanceUpdateBody = z.infer<typeof attendanceUpdateBodySchema>;
+export type AttendanceCreateBody = AttendanceCreateRequest;
+export type AttendanceUpdateBody = AttendanceUpdateRequest;

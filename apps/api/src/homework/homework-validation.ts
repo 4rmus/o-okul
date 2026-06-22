@@ -1,4 +1,14 @@
 import { z } from "zod";
+import type {
+  HomeworkCheckStatusRequest,
+  HomeworkCreateRequest,
+  HomeworkFromMaterialCreateRequest,
+  HomeworkMaterialAssignmentCreateRequest,
+  HomeworkMaterialCreateRequest,
+  HomeworkMaterialFileCreateRequest,
+  HomeworkMaterialUpdateRequest,
+  HomeworkUpdateRequest,
+} from "@uzman-hocam/shared-types";
 import { optionalIsoDateTime, optionalTrimmedString, requiredTrimmedString } from "../http/zod-validation.js";
 
 const optionalNonEmptyString = requiredTrimmedString.optional();
@@ -8,7 +18,7 @@ export const homeworkMaterialFileCreateBodySchema = z.object({
   contentType: uploadContentTypeSchema,
   fileBase64: requiredTrimmedString,
   fileName: requiredTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<HomeworkMaterialFileCreateRequest>;
 
 export const homeworkMaterialAssignmentCreateBodySchema = z.object({
   courseId: optionalNonEmptyString,
@@ -16,18 +26,20 @@ export const homeworkMaterialAssignmentCreateBodySchema = z.object({
   note: optionalTrimmedString,
   studentId: requiredTrimmedString,
   termId: optionalNonEmptyString,
-}).strict();
+}).strict() satisfies z.ZodType<HomeworkMaterialAssignmentCreateRequest>;
 
 export const homeworkMaterialCreateBodySchema = z.object({
   description: optionalTrimmedString,
   tenantId: optionalNonEmptyString,
   title: requiredTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<HomeworkMaterialCreateRequest>;
 
 export const homeworkMaterialUpdateBodySchema = z.object({
   description: optionalTrimmedString,
   title: optionalNonEmptyString,
-}).strict();
+}).strict().refine(hasAtLeastOneField, {
+  message: "UPDATE_BODY_EMPTY",
+}) satisfies z.ZodType<HomeworkMaterialUpdateRequest>;
 
 export const homeworkCreateBodySchema = z.object({
   classId: requiredTrimmedString,
@@ -35,31 +47,37 @@ export const homeworkCreateBodySchema = z.object({
   dueAt: optionalIsoDateTime("HOMEWORK_DUE_DATE_INVALID"),
   tenantId: optionalNonEmptyString,
   title: requiredTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<HomeworkCreateRequest>;
 
 export const homeworkFromMaterialCreateBodySchema = z.object({
   classId: requiredTrimmedString,
   dueAt: optionalIsoDateTime("HOMEWORK_DUE_DATE_INVALID"),
   materialId: requiredTrimmedString,
   tenantId: optionalNonEmptyString,
-}).strict();
+}).strict() satisfies z.ZodType<HomeworkFromMaterialCreateRequest>;
 
 export const homeworkUpdateBodySchema = z.object({
   classId: optionalNonEmptyString,
   description: optionalTrimmedString,
   dueAt: optionalIsoDateTime("HOMEWORK_DUE_DATE_INVALID"),
   title: optionalNonEmptyString,
-}).strict();
+}).strict().refine(hasAtLeastOneField, {
+  message: "UPDATE_BODY_EMPTY",
+}) satisfies z.ZodType<HomeworkUpdateRequest>;
 
 export const homeworkCheckStatusBodySchema = z.object({
   checked: z.boolean(),
-}).strict();
+}).strict() satisfies z.ZodType<HomeworkCheckStatusRequest>;
 
-export type HomeworkMaterialFileCreateBody = z.infer<typeof homeworkMaterialFileCreateBodySchema>;
-export type HomeworkMaterialAssignmentCreateBody = z.infer<typeof homeworkMaterialAssignmentCreateBodySchema>;
-export type HomeworkMaterialCreateBody = z.infer<typeof homeworkMaterialCreateBodySchema>;
-export type HomeworkMaterialUpdateBody = z.infer<typeof homeworkMaterialUpdateBodySchema>;
-export type HomeworkCreateBody = z.infer<typeof homeworkCreateBodySchema>;
-export type HomeworkFromMaterialCreateBody = z.infer<typeof homeworkFromMaterialCreateBodySchema>;
-export type HomeworkUpdateBody = z.infer<typeof homeworkUpdateBodySchema>;
-export type HomeworkCheckStatusBody = z.infer<typeof homeworkCheckStatusBodySchema>;
+export type HomeworkMaterialFileCreateBody = HomeworkMaterialFileCreateRequest;
+export type HomeworkMaterialAssignmentCreateBody = HomeworkMaterialAssignmentCreateRequest;
+export type HomeworkMaterialCreateBody = HomeworkMaterialCreateRequest;
+export type HomeworkMaterialUpdateBody = HomeworkMaterialUpdateRequest;
+export type HomeworkCreateBody = HomeworkCreateRequest;
+export type HomeworkFromMaterialCreateBody = HomeworkFromMaterialCreateRequest;
+export type HomeworkUpdateBody = HomeworkUpdateRequest;
+export type HomeworkCheckStatusBody = HomeworkCheckStatusRequest;
+
+function hasAtLeastOneField(value: Record<string, unknown>): boolean {
+  return Object.keys(value).length > 0;
+}

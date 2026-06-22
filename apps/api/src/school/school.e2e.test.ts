@@ -305,6 +305,7 @@ describe("School management API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ firstName: "Ziya", lastName: "Ogretmen", branch: "Fen" })
       .expect(201);
+    expect(teacherCreated.body).not.toHaveProperty("userId");
     const guardianCreated = await request(server)
       .post("/guardians")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
@@ -331,6 +332,7 @@ describe("School management API", () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body).toEqual([expect.objectContaining({ id: teacherCreated.body.id, firstName: "Ziya" })]);
+        expect(body[0]).not.toHaveProperty("userId");
       });
     await request(server)
       .get("/guardians")
@@ -396,6 +398,25 @@ describe("School management API", () => {
         expect(body.name).toBe("9 Fen");
         expect(body.campusId).toBe("campus-main");
         expect(body.gradeLevelId).toBe("grade-8");
+      });
+
+    await request(server)
+      .patch(`/classes/${classId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({})
+      .expect(422)
+      .expect(({ body }) => {
+        expect(body.error).toMatchObject({
+          code: "VALIDATION_FAILED",
+          details: {
+            fields: [
+              expect.objectContaining({
+                message: "UPDATE_BODY_EMPTY",
+                path: "$",
+              }),
+            ],
+          },
+        });
       });
 
     await request(server).delete(`/classes/${classId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
@@ -617,6 +638,7 @@ describe("School management API", () => {
       .send({ firstName: "Gizli", lastName: "Ogretmen", branch: "Matematik" })
       .expect(201);
     const teacherId = (created.body as { id: string }).id;
+    expect(created.body).not.toHaveProperty("userId");
 
     await request(server)
       .post(`/teachers/${teacherId}/purge-pii`)
@@ -626,6 +648,7 @@ describe("School management API", () => {
         expect(body.firstName).toBe("Anonim");
         expect(body.lastName).toBe("Ogretmen");
         expect(body.branch).toBe("Matematik");
+        expect(body).not.toHaveProperty("userId");
       });
 
     await request(server)
@@ -635,6 +658,7 @@ describe("School management API", () => {
       .expect(({ body }) => {
         expect(body.firstName).toBe("Anonim");
         expect(body.lastName).toBe("Ogretmen");
+        expect(body).not.toHaveProperty("userId");
       });
 
     await request(server).delete(`/teachers/${teacherId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
@@ -857,6 +881,25 @@ describe("School management API", () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body.role).toBe("GUIDANCE_COUNSELOR");
+      });
+
+    await request(server)
+      .patch(`/teachers/teacher-a/assignments/${assignmentId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({})
+      .expect(422)
+      .expect(({ body }) => {
+        expect(body.error).toMatchObject({
+          code: "VALIDATION_FAILED",
+          details: {
+            fields: [
+              expect.objectContaining({
+                message: "UPDATE_BODY_EMPTY",
+                path: "$",
+              }),
+            ],
+          },
+        });
       });
 
     await request(server)
@@ -1114,6 +1157,68 @@ describe("School management API", () => {
       .delete(`/teachers/${imported.body.teachers[0].id}`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(204);
+  });
+
+  it("öğretmen import commit işlemini Idempotency-Key ile tekilleştirir", async () => {
+    const key = "teacher-import-idempotency-a";
+    const fileBase64 = createCsvBase64([
+      "ad;soyad;brans;atanacak_sinif;ders",
+      "Defne;Idempotent;Matematik;8-A;Matematik",
+    ].join("\n"));
+    let teacherId = "";
+    let assignmentIds: string[] = [];
+
+    try {
+      const first = await request(server)
+        .post("/teachers/imports")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ fileBase64 })
+        .expect(201);
+      teacherId = first.body.teachers[0].id;
+      assignmentIds = (first.body.assignments as Array<{ id: string }>).map((assignment) => assignment.id);
+
+      const second = await request(server)
+        .post("/teachers/imports")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ fileBase64 })
+        .expect(201);
+
+      expect(second.body).toEqual(first.body);
+
+      await request(server)
+        .post("/teachers/imports")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({
+          fileBase64: createCsvBase64([
+            "ad;soyad;brans;atanacak_sinif;ders",
+            "Defne;Farkli;Matematik;8-A;Matematik",
+          ].join("\n")),
+        })
+        .expect(409);
+
+      await request(server)
+        .get("/teachers")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .expect(200)
+        .expect(({ body }) => {
+          expect((body as Array<{ firstName: string; lastName: string }>).filter((teacher) => teacher.firstName === "Defne" && teacher.lastName === "Idempotent")).toHaveLength(1);
+          expect((body as Array<{ firstName: string; lastName: string }>).filter((teacher) => teacher.firstName === "Defne" && teacher.lastName === "Farkli")).toHaveLength(0);
+        });
+    } finally {
+      for (const assignmentId of assignmentIds) {
+        await request(server)
+          .delete(`/teachers/${teacherId}/assignments/${assignmentId}`)
+          .set("Authorization", `Bearer ${tenantAAccessToken}`);
+      }
+      if (teacherId) {
+        await request(server)
+          .delete(`/teachers/${teacherId}`)
+          .set("Authorization", `Bearer ${tenantAAccessToken}`);
+      }
+    }
   });
 
   it("öğrenciyi sınıf ve sorumlu öğretmen ile oluşturur", async () => {

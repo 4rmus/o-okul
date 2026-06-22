@@ -177,6 +177,24 @@ describe("TeacherNote API", () => {
         ]),
       },
     });
+
+    const emptyUpdate = await request(server)
+      .patch("/teacher-notes/teacher-note-visible-a")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({})
+      .expect(422);
+
+    expect(emptyUpdate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [
+          expect.objectContaining({
+            message: "UPDATE_BODY_EMPTY",
+            path: "$",
+          }),
+        ],
+      },
+    });
   });
 
   it("başka tenant öğrenci veya öğretmen referansını reddeder", async () => {
