@@ -7,12 +7,40 @@ const target = process.env.RLS_LIVE_EVIDENCE_TARGET;
 const allowExampleEvidence = process.env.RLS_LIVE_ALLOW_EXAMPLE_EVIDENCE === "1";
 
 const expectedTenantTables = getTenantScopedTables();
+const requiredTenantCompositeRelations = [
+  "AnnouncementReceipt.announcement",
+  "AnnouncementDeliveryReport.announcement",
+  "Homework.class",
+  "ScheduleLesson.class",
+  "StudySession.class",
+  "StudySessionStudent.studySession",
+  "StudySessionStudent.student",
+  "TeacherAssignment.class",
+  "TeacherAssignment.student",
+  "GuardianStudent.guardian",
+  "GuardianStudent.student",
+  "DevelopmentAssessment.teacher",
+  "TeacherAssignment.teacher",
+  "TeacherNote.teacher",
+  "ScheduleLesson.teacher",
+  "StudySession.teacher",
+  "Homework.sourceMaterial",
+  "SupportTicket.class",
+  "PaymentPlan.class",
+  "ReportSnapshot.class",
+  "StudentClassHistory.class",
+  "StudentEnrollment.class",
+  "Student.class",
+  "Student.responsibleTeacher",
+];
+const requiredTenantFkInsertRejects = requiredTenantCompositeRelations.map((relation) => `${relation} cross tenant insert`);
 const rlsLiveTopLevelKeys = [
   "result",
   "environment",
   "checkedAt",
   "schema",
   "isolation",
+  "tenantFkPreflight",
   "loadSmoke",
   "commandsPassed",
   "evidenceReferences",
@@ -28,6 +56,15 @@ const isolationKeys = [
   "systemAdminBypassDefaultOff",
   "bypassRequiresReason",
   "auditBypassAction",
+];
+const tenantFkPreflightKeys = [
+  "requiredCompositeRelations",
+  "relationsVerified",
+  "legacyAllowlistCount",
+  "orphanRows",
+  "crossTenantParentRows",
+  "crossTenantInsertRejects",
+  "migrationPreflightCommand",
 ];
 const loadSmokeKeys = ["targetRps", "actualRps", "durationSeconds", "concurrency", "queriesCompleted", "failures"];
 const requiredCommands = [
@@ -178,6 +215,7 @@ function validateReport(report) {
   requireDateNotInFuture(report, failures, "checkedAt");
   requireSchema(report.schema, failures);
   requireIsolation(report.isolation, failures);
+  requireTenantFkPreflight(report.tenantFkPreflight, failures);
   requireLoadSmoke(report.loadSmoke, failures);
   requireCommands(report, failures);
   requireEvidenceReferences(report.evidenceReferences, failures);
@@ -245,6 +283,37 @@ function requireIsolation(isolation, failures) {
     "auditBypassAction",
     "system.rls_bypass_requested",
   );
+}
+
+function requireTenantFkPreflight(value, failures) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    failures.push("tenantFkPreflight nesnesi zorunlu.");
+    return;
+  }
+
+  requireObjectKeySet(value, tenantFkPreflightKeys, failures, "tenantFkPreflight");
+  requireObjectEqual(
+    value,
+    failures,
+    "tenantFkPreflight.requiredCompositeRelations",
+    "requiredCompositeRelations",
+    requiredTenantCompositeRelations.length,
+  );
+  requireExactStringSet(value.relationsVerified, failures, "tenantFkPreflight.relationsVerified", requiredTenantCompositeRelations, "relation");
+  requireObjectEqual(value, failures, "tenantFkPreflight.legacyAllowlistCount", "legacyAllowlistCount", 0);
+  requireObjectEqual(value, failures, "tenantFkPreflight.orphanRows", "orphanRows", 0);
+  requireObjectEqual(value, failures, "tenantFkPreflight.crossTenantParentRows", "crossTenantParentRows", 0);
+  requireExactStringSet(
+    value.crossTenantInsertRejects,
+    failures,
+    "tenantFkPreflight.crossTenantInsertRejects",
+    requiredTenantFkInsertRejects,
+    "negatif",
+  );
+  requireObjectString(value, failures, "tenantFkPreflight.migrationPreflightCommand", "migrationPreflightCommand");
+  if (typeof value.migrationPreflightCommand === "string" && !value.migrationPreflightCommand.includes("pnpm tenant-db:check")) {
+    failures.push("tenantFkPreflight.migrationPreflightCommand pnpm tenant-db:check icermeli.");
+  }
 }
 
 function requireLoadSmoke(loadSmoke, failures) {

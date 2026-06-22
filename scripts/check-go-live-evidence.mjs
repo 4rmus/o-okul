@@ -141,6 +141,38 @@ const summaryReportKeys = [
   "rlsLive",
   "uat",
 ];
+const expectedKvkkAuditDiffNegativeControls = [
+  "body",
+  "contentBase64",
+  "email",
+  "fileBase64",
+  "fileName",
+  "firstName",
+  "lastName",
+  "message",
+  "name",
+  "nationalId",
+  "objectKey",
+  "phone",
+  "rawLine",
+  "rawRow",
+  "rawText",
+  "s3Key",
+  "sourceFileName",
+  "sourceFilePath",
+  "subject",
+  "title",
+  "token",
+];
+const expectedKvkkAuditDiffActions = [
+  "announcement.created",
+  "message_template.created",
+  "support_ticket.created",
+  "support_ticket_comment.created",
+  "kvkk.student_pii_purged",
+  "kvkk.guardian_pii_purged",
+  "kvkk.user_pii_purged",
+];
 const summaryRequiredReportKeys = {
   restoreDrill: ["environment", "drillDate", "sourceBackup", "targetDatabase", "tableCounts"],
   deploymentRegion: [
@@ -177,7 +209,15 @@ const summaryRequiredReportKeys = {
     "commandsPassed",
     "evidenceReferences",
   ],
-  kvkkInventory: ["environment", "checkedAt", "inventorySource", "dataSubjectCounts", "purgeCoverage", "auditActionsVerified"],
+  kvkkInventory: [
+    "environment",
+    "checkedAt",
+    "inventorySource",
+    "dataSubjectCounts",
+    "purgeCoverage",
+    "auditActionsVerified",
+    "auditDiffRedactionVerified",
+  ],
   identityMigration: ["environment", "checkedAt", "migrationDecision", "subjects", "invitationFlow", "verifications"],
   financialRetention: ["environment", "checkedAt", "policyDecision", "financialRecords", "purgeBehaviorVerified"],
   uploadAv: ["environment", "checkedAt", "scannerDecision", "uploadSurfaces", "scanResults"],
@@ -234,7 +274,16 @@ const summaryRequiredReportKeys = {
   ],
   inlineUploadMigration: ["environment", "checkedAt", "storageMode", "dryRun", "migration", "commandsPassed", "evidenceReferences"],
   rateLimit: ["environment", "checkedAt", "config", "instances", "apiRateLimit", "loginAttemptLimiter", "commandsPassed", "evidenceReferences"],
-  rlsLive: ["environment", "checkedAt", "schema", "isolation", "loadSmoke", "commandsPassed", "evidenceReferences"],
+  rlsLive: [
+    "environment",
+    "checkedAt",
+    "schema",
+    "isolation",
+    "tenantFkPreflight",
+    "loadSmoke",
+    "commandsPassed",
+    "evidenceReferences",
+  ],
   uat: [
     "environment",
     "checkedAt",
@@ -261,6 +310,33 @@ const requiredRlsWriteRejects = [
   "ParsedAnswer cross exam mismatch",
   "ParsedAnswer duplicate raw import participant parser",
 ];
+const expectedTenantCompositeRelations = [
+  "AnnouncementReceipt.announcement",
+  "AnnouncementDeliveryReport.announcement",
+  "Homework.class",
+  "ScheduleLesson.class",
+  "StudySession.class",
+  "StudySessionStudent.studySession",
+  "StudySessionStudent.student",
+  "TeacherAssignment.class",
+  "TeacherAssignment.student",
+  "GuardianStudent.guardian",
+  "GuardianStudent.student",
+  "DevelopmentAssessment.teacher",
+  "TeacherAssignment.teacher",
+  "TeacherNote.teacher",
+  "ScheduleLesson.teacher",
+  "StudySession.teacher",
+  "Homework.sourceMaterial",
+  "SupportTicket.class",
+  "PaymentPlan.class",
+  "ReportSnapshot.class",
+  "StudentClassHistory.class",
+  "StudentEnrollment.class",
+  "Student.class",
+  "Student.responsibleTeacher",
+];
+const expectedTenantFkInsertRejects = expectedTenantCompositeRelations.map((relation) => `${relation} cross tenant insert`);
 const liveStatusGates = [
   {
     label: "Traefik HTTPS smoke",
@@ -1651,6 +1727,43 @@ function requireSummaryKvkkInventory(report, failures) {
       failures.push(`productionEvidenceSummary.summary.reports.kvkkInventory.auditActionsVerified eksik: ${action}`);
     }
   }
+
+  const redaction = requireNestedObject(
+    report,
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.auditDiffRedactionVerified",
+    "auditDiffRedactionVerified",
+  );
+  if (!redaction) return;
+
+  requireSummaryObjectKeySet(
+    redaction,
+    ["endpoint", "negativeControls", "actionsSampled", "command"],
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.auditDiffRedactionVerified",
+  );
+  requireObjectEqual(
+    redaction,
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.auditDiffRedactionVerified.endpoint",
+    "endpoint",
+    "/audit-logs",
+  );
+  requireExactStringSet(
+    redaction.negativeControls,
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.auditDiffRedactionVerified.negativeControls",
+    expectedKvkkAuditDiffNegativeControls,
+  );
+  requireExactStringSet(
+    redaction.actionsSampled,
+    failures,
+    "productionEvidenceSummary.summary.reports.kvkkInventory.auditDiffRedactionVerified.actionsSampled",
+    expectedKvkkAuditDiffActions,
+  );
+  if (typeof redaction.command !== "string" || !redaction.command.includes("audit-log")) {
+    failures.push("productionEvidenceSummary.summary.reports.kvkkInventory.auditDiffRedactionVerified.command audit-log doğrulama komutu içermeli.");
+  }
 }
 
 function requireSummaryKvkkDataSubjectCounts(report, failures) {
@@ -2638,6 +2751,75 @@ function requireSummaryRlsLive(report, failures) {
       "auditBypassAction",
       "system.rls_bypass_requested",
     );
+  }
+
+  const tenantFkPreflight = requireNestedObject(
+    report,
+    failures,
+    "productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight",
+    "tenantFkPreflight",
+  );
+  if (tenantFkPreflight) {
+    requireSummaryObjectKeySet(
+      tenantFkPreflight,
+      [
+        "requiredCompositeRelations",
+        "relationsVerified",
+        "legacyAllowlistCount",
+        "orphanRows",
+        "crossTenantParentRows",
+        "crossTenantInsertRejects",
+        "migrationPreflightCommand",
+      ],
+      failures,
+      "productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight",
+    );
+    requireObjectEqual(
+      tenantFkPreflight,
+      failures,
+      "productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight.requiredCompositeRelations",
+      "requiredCompositeRelations",
+      expectedTenantCompositeRelations.length,
+    );
+    requireExactStringSet(
+      tenantFkPreflight.relationsVerified,
+      failures,
+      "productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight.relationsVerified",
+      expectedTenantCompositeRelations,
+    );
+    requireObjectEqual(
+      tenantFkPreflight,
+      failures,
+      "productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight.legacyAllowlistCount",
+      "legacyAllowlistCount",
+      0,
+    );
+    requireObjectEqual(
+      tenantFkPreflight,
+      failures,
+      "productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight.orphanRows",
+      "orphanRows",
+      0,
+    );
+    requireObjectEqual(
+      tenantFkPreflight,
+      failures,
+      "productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight.crossTenantParentRows",
+      "crossTenantParentRows",
+      0,
+    );
+    requireExactStringSet(
+      tenantFkPreflight.crossTenantInsertRejects,
+      failures,
+      "productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight.crossTenantInsertRejects",
+      expectedTenantFkInsertRejects,
+    );
+    if (
+      typeof tenantFkPreflight.migrationPreflightCommand !== "string" ||
+      !tenantFkPreflight.migrationPreflightCommand.includes("pnpm tenant-db:check")
+    ) {
+      failures.push("productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight.migrationPreflightCommand pnpm tenant-db:check icermeli.");
+    }
   }
 
   const loadSmoke = requireNestedObject(report, failures, "productionEvidenceSummary.summary.reports.rlsLive.loadSmoke", "loadSmoke");
@@ -3794,6 +3976,33 @@ function requireObjectArrayAtLeast(report, failures, label, key, minLength) {
   const value = report[key];
   if (!Array.isArray(value) || value.length < minLength) {
     failures.push(`${label} en az ${minLength} maddelik liste olmali.`);
+  }
+}
+
+function requireExactStringSet(value, failures, label, expected) {
+  if (!Array.isArray(value)) {
+    failures.push(`${label} listesi zorunlu.`);
+    return;
+  }
+
+  if (value.length !== expected.length) {
+    failures.push(`${label} tam ${expected.length} madde icermeli.`);
+  }
+
+  for (const item of value) {
+    if (typeof item !== "string" || item.trim() === "") {
+      failures.push(`${label} bos olmayan metinlerden olusmali.`);
+      continue;
+    }
+    if (!expected.includes(item)) {
+      failures.push(`${label} beklenmeyen madde iceriyor: ${item}`);
+    }
+  }
+
+  for (const expectedItem of expected) {
+    if (!value.includes(expectedItem)) {
+      failures.push(`${label} eksik: ${expectedItem}`);
+    }
   }
 }
 

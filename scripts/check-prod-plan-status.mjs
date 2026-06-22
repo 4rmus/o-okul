@@ -3,11 +3,15 @@ import { readFileSync } from "node:fs";
 const planPath = "claudedocs/prod-plan-2026-06-12.md";
 const readinessPath = "docs/phase-6-production-readiness.md";
 const developmentPlanPath = "docs/development-plan-2026-06-02.md";
+const architecturePlanPath = "docs/architecture-improvement-plan-2026-06-21.md";
+const tenantRelationFkCheckerPath = "packages/db/scripts/check-tenant-relation-fks.mjs";
 const packagePath = "package.json";
 
 const plan = readFileSync(planPath, "utf8");
 const readiness = readFileSync(readinessPath, "utf8");
 const developmentPlan = readFileSync(developmentPlanPath, "utf8");
+const architecturePlan = readFileSync(architecturePlanPath, "utf8");
+const tenantRelationFkChecker = readFileSync(tenantRelationFkCheckerPath, "utf8");
 const packageJson = JSON.parse(readFileSync(packagePath, "utf8"));
 
 const failures = [];
@@ -173,9 +177,40 @@ checkNoRawPnpmCiReferences(
   failures,
 );
 
+const tenantLegacyFkCount = countLegacyFkExceptions(tenantRelationFkChecker);
+const tenantLegacyCountRows = [
+  ["bulgular", "Tenant relation FK checker bu turdan sonra", `${tenantLegacyFkCount} legacy istisna`],
+  ["oncelik", "Kalan tenant composite FK legacy borcunu azaltmak", `diger ${tenantLegacyFkCount} legacy iliski`],
+  ["faz-durumu", "Faz 3 - Tenant FK ve DB Butunlugu", `Kalan ${tenantLegacyFkCount} legacy FK istisnasi`],
+  ["bilinen-kalan", "legacy FK istisnasi hala allowlist", `${tenantLegacyFkCount} legacy FK istisnasi`],
+  ["plan-kaydi", "izlenen legacy istisna", `${tenantLegacyFkCount} izlenen legacy istisna`],
+];
+
+for (const [label, rowToken, countToken] of tenantLegacyCountRows) {
+  const rows = architecturePlan
+    .split(/\r?\n/)
+    .filter((line) => line.includes(rowToken));
+  if (rows.length === 0) {
+    failures.push(`${architecturePlanPath} tenant legacy FK count row missing: ${label}`);
+    continue;
+  }
+  const hasCount = label === "plan-kaydi"
+    ? rows.some((line) => line.includes(countToken))
+    : rows[0].includes(countToken);
+  if (!hasCount) {
+    failures.push(`${architecturePlanPath} tenant legacy FK count mismatch in ${label}: expected ${countToken}`);
+  }
+}
+
 const scripts = packageJson.scripts ?? {};
 if (scripts["prod:plan:check"] !== "node scripts/check-prod-plan-status.mjs") {
   failures.push(`${packagePath} prod:plan:check must run node scripts/check-prod-plan-status.mjs.`);
+}
+if (scripts["idempotency:inventory:check"] !== "node scripts/check-idempotency-inventory.mjs") {
+  failures.push(`${packagePath} idempotency:inventory:check must run node scripts/check-idempotency-inventory.mjs.`);
+}
+if (!scripts.ci?.includes("pnpm idempotency:inventory:check")) {
+  failures.push(`${packagePath} ci script must run idempotency:inventory:check after OpenAPI generation.`);
 }
 if (!scripts["ops:check"]?.includes("pnpm prod:plan:check")) {
   failures.push(`${packagePath} ops:check must run prod:plan:check.`);
@@ -189,6 +224,18 @@ if (!scripts["ops:check"]?.includes("pnpm live:status:check")) {
 if (!scripts.ci?.includes("pnpm ops:check")) {
   failures.push(`${packagePath} ci script must run ops:check.`);
 }
+
+requireTokens(
+  architecturePlanPath,
+  architecturePlan,
+  [
+    "scripts/check-idempotency-inventory.mjs",
+    "30 idempotency operation",
+    "OpenAPI response envelope",
+    "corepack pnpm idempotency:inventory:check",
+  ],
+  failures,
+);
 
 if (failures.length > 0) {
   console.error("Prod plan status check failed:");
@@ -235,6 +282,15 @@ function checkNoRawPnpmCiReferences(files, output) {
       output.push(`${path}:${index + 1} contains raw ${rawPnpmCiCommand} reference; use ${runPnpmCiCommand}.`);
     }
   }
+}
+
+function countLegacyFkExceptions(source) {
+  const allowlist = source.match(/allowedLegacyRelations\s*=\s*new Map\(\[([\s\S]*?)\]\);/);
+  if (!allowlist) {
+    failures.push(`${tenantRelationFkCheckerPath} allowedLegacyRelations map not found.`);
+    return 0;
+  }
+  return [...allowlist[1].matchAll(/"[A-Z]\w+\.[a-z]\w+"/g)].length;
 }
 
 function escapeRegExp(value) {
