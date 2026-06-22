@@ -18,10 +18,10 @@ interface AxeViolationSummary {
 }
 
 test.describe("Next erişilebilirlik smoke", () => {
-  test("public landing ve login sayfalarında kritik axe ihlali yok", async ({ page }) => {
+  test("public landing ve login sayfalarında yüksek etkili axe ihlali yok", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Uzman Hocam" })).toBeVisible();
-    await expectNoCriticalA11yViolations(page, "landing");
+    await expectNoHighImpactA11yViolations(page, "landing");
 
     await page.goto("/login");
     await expect(page.getByRole("heading", { name: "Giriş" })).toBeVisible();
@@ -31,19 +31,19 @@ test.describe("Next erişilebilirlik smoke", () => {
     await expect(loginForm.getByRole("checkbox", { name: /Beni hatırla/ })).toBeVisible();
     await expect(loginForm).toContainText("Bu tarayıcıda yalnız e-posta adresi saklanır.");
     await expect(loginForm.getByRole("button", { name: "Giriş yap" })).toBeVisible();
-    await expectNoCriticalA11yViolations(page, "login");
+    await expectNoHighImpactA11yViolations(page, "login");
   });
 
-  test("kurum dashboard shell'inde kritik axe ihlali yok", async ({ page }) => {
+  test("kurum dashboard shell'inde yüksek etkili axe ihlali yok", async ({ page }) => {
     await openInstitutionDashboard(page);
-    await expectNoCriticalA11yViolations(page, "kurum-dashboard");
+    await expectNoHighImpactA11yViolations(page, "kurum-dashboard");
   });
 
   test("kurum dashboard shell'i tablet viewport'ta taşmadan açılır", async ({ page }) => {
     await page.setViewportSize({ height: 1024, width: 768 });
     await openInstitutionDashboard(page);
     await expectNoHorizontalOverflow(page, "kurum-dashboard-tablet");
-    await expectNoCriticalA11yViolations(page, "kurum-dashboard-tablet");
+    await expectNoHighImpactA11yViolations(page, "kurum-dashboard-tablet");
   });
 
   test("kurum dashboard gövdesi mobil viewport'ta taşmadan açılır", async ({ page }) => {
@@ -61,10 +61,10 @@ test.describe("Next erişilebilirlik smoke", () => {
     await expect(page.getByRole("region", { exact: true, name: "Operasyon özeti" })).toBeVisible();
     await expect(page.getByRole("region", { exact: true, name: "Karar sinyalleri" })).toBeVisible();
     await expectNoHorizontalOverflow(page, "kurum-dashboard-mobile-body");
-    await expectNoCriticalA11yViolations(page, "kurum-dashboard-mobile-body");
+    await expectNoHighImpactA11yViolations(page, "kurum-dashboard-mobile-body");
   });
 
-  test("shell komut paleti kritik axe ihlali olmadan klavye akışını korur", async ({ page }) => {
+  test("shell komut paleti yüksek etkili axe ihlali olmadan klavye akışını korur", async ({ page }) => {
     await openInstitutionDashboard(page);
 
     const commandTrigger = page.getByRole("button", { name: "Komut paleti" }).first();
@@ -72,12 +72,12 @@ test.describe("Next erişilebilirlik smoke", () => {
     const commandDialog = page.getByRole("dialog", { name: "Komut paleti" });
     await expect(commandDialog).toBeVisible();
     await expect(commandDialog.getByLabel("Komut ara")).toBeFocused();
-    await expectNoCriticalA11yViolations(page, "kurum-command-palette");
+    await expectNoHighImpactA11yViolations(page, "kurum-command-palette");
     await page.keyboard.press("Escape");
     await expect(commandDialog).toHaveCount(0);
   });
 
-  test("mobil ana menü kritik axe ihlali olmadan açılıp kapanır", async ({ page }) => {
+  test("mobil ana menü yüksek etkili axe ihlali olmadan açılıp kapanır", async ({ page }) => {
     await page.setViewportSize({ height: 844, width: 390 });
     await openInstitutionDashboard(page, { expectNavigationVisible: false });
     await page.getByRole("button", { name: "Ana menüyü aç" }).click();
@@ -85,24 +85,28 @@ test.describe("Next erişilebilirlik smoke", () => {
     await expect(page.getByRole("button", { name: "Ana menüyü kapat" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Menü arka planını kapat" })).toBeVisible();
     await expectNoHorizontalOverflow(page, "kurum-mobile-menu");
-    await expectNoCriticalA11yViolations(page, "kurum-mobile-menu");
+    await expectNoHighImpactA11yViolations(page, "kurum-mobile-menu");
     await page.getByRole("button", { name: "Ana menüyü kapat" }).click();
     await expect(page.getByRole("button", { name: "Ana menüyü aç" })).toHaveAttribute("aria-expanded", "false");
   });
 });
 
-async function expectNoCriticalA11yViolations(page: Page, label: string) {
-  const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
-  const criticalViolations = (results.violations as AxeViolationSummary[]).filter((violation) => violation.impact === "critical");
+const blockedA11yImpacts = new Set(["critical", "serious"]);
 
-  expect(criticalViolations, formatViolations(label, criticalViolations)).toEqual([]);
+async function expectNoHighImpactA11yViolations(page: Page, label: string) {
+  const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+  const highImpactViolations = (results.violations as AxeViolationSummary[]).filter(
+    (violation) => violation.impact != null && blockedA11yImpacts.has(violation.impact),
+  );
+
+  expect(highImpactViolations, formatViolations(label, highImpactViolations)).toEqual([]);
 }
 
 function formatViolations(label: string, violations: AxeViolationSummary[]) {
-  if (violations.length === 0) return `${label}: kritik axe ihlali yok`;
+  if (violations.length === 0) return `${label}: yüksek etkili axe ihlali yok`;
 
   return [
-    `${label}: ${violations.length} kritik axe ihlali bulundu`,
+    `${label}: ${violations.length} yüksek etkili axe ihlali bulundu`,
     ...violations.map((violation) => `- ${violation.id}: ${violation.help} (${violation.nodes.map((node) => node.target.join(" ")).join(", ")})`),
   ].join("\n");
 }
