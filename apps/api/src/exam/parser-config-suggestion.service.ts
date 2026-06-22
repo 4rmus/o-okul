@@ -3,23 +3,17 @@ import {
   FormatAnalyzerService,
   getParserConfigPresetSuggestion,
   type ParserConfigPreset,
+  type ParserConfigSuggestionRequest,
+  type ParserConfigSuggestionResult as SharedParserConfigSuggestionResult,
   type ParserConfigSuggestion,
 } from "@uzman-hocam/shared-types";
 import type { RequestContext } from "../context/request-context.js";
 
-export interface ParserConfigSuggestionInput {
+export interface ParserConfigSuggestionInput extends ParserConfigSuggestionRequest {
   examId?: string;
-  sampleText?: string;
-  fileBase64?: string;
-  sampleSize?: number;
-  preset?: ParserConfigPreset;
 }
 
-export interface ParserConfigSuggestionResult {
-  examId: string;
-  suggestion: ParserConfigSuggestion;
-  status: "suggested";
-}
+export type ParserConfigSuggestionResult = SharedParserConfigSuggestionResult;
 
 @Injectable()
 export class ParserConfigSuggestionService {

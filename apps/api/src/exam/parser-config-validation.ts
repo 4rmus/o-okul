@@ -1,4 +1,9 @@
 import { z } from "zod";
+import type {
+  ParserConfigApprovalRequest,
+  ParserConfigSuggestion,
+  ParserConfigSuggestionRequest,
+} from "@uzman-hocam/shared-types";
 import { optionalTrimmedString, requiredTrimmedString } from "../http/zod-validation.js";
 
 const parserFieldSpecSchema = z.discriminatedUnion("kind", [
@@ -50,19 +55,19 @@ export const parserConfigSuggestionSchema = z.object({
   skipHeaderLines: z.number().int().nonnegative(),
   version: z.literal(1),
   warnings: z.array(z.string()),
-}).strict();
+}).strict() satisfies z.ZodType<ParserConfigSuggestion>;
 
 export const parserConfigSuggestionBodySchema = z.object({
   fileBase64: optionalTrimmedString,
   preset: z.enum(["OPTIK_7108_LGS"]).optional(),
   sampleSize: z.number().int().positive().optional(),
   sampleText: optionalTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<ParserConfigSuggestionRequest>;
 
 export const parserConfigApprovalBodySchema = z.object({
   suggestion: parserConfigSuggestionSchema,
   version: requiredTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<ParserConfigApprovalRequest>;
 
 export type ParserConfigSuggestionBody = z.infer<typeof parserConfigSuggestionBodySchema>;
 export type ParserConfigApprovalBody = z.infer<typeof parserConfigApprovalBodySchema>;

@@ -74,6 +74,7 @@ model Tenant {
   reportSnapshots ReportSnapshot[]
   backupRestoreJobs BackupRestoreJob[]
   announcements Announcement[]
+  announcementReceipts AnnouncementReceipt[]
   announcementDeliveryReports AnnouncementDeliveryReport[]
   messageTemplates MessageTemplate[]
   smsBatchDeliveryReports SmsBatchDeliveryReport[]
@@ -116,7 +117,7 @@ model DevelopmentAssessment {
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "DevelopmentAssessment_tenantId_fkey")
   student Student @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction, map: "DevelopmentAssessment_student_fkey")
-  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "DevelopmentAssessment_teacher_fkey")
+  teacher Teacher @relation(fields: [tenantId, teacherId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "DevelopmentAssessment_teacher_fkey")
   scores DevelopmentScore[]
 
   @@unique([tenantId, id])
@@ -446,8 +447,8 @@ model Student {
   createdById String?
   updatedById String?
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  class       Class?    @relation(fields: [classId], references: [id], onDelete: SetNull)
-  responsibleTeacher Teacher? @relation("StudentResponsibleTeacher", fields: [responsibleTeacherId], references: [id], onDelete: SetNull)
+  class       Class?    @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  responsibleTeacher Teacher? @relation("StudentResponsibleTeacher", fields: [tenantId, responsibleTeacherId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   accountUser User?     @relation("StudentAccountUser", fields: [userId], references: [id], onDelete: SetNull)
   createdBy   User?     @relation("StudentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   updatedBy   User?     @relation("StudentUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
@@ -487,7 +488,7 @@ model StudentClassHistory {
   updatedAt DateTime  @updatedAt
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   student   Student   @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
-  class     Class?    @relation(fields: [classId], references: [id], onDelete: SetNull)
+  class     Class?    @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   academicYear AcademicYear? @relation(fields: [tenantId, academicYearId], references: [tenantId, id], onDelete: Restrict)
   term      AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
 
@@ -515,7 +516,7 @@ model StudentEnrollment {
   student   Student   @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
   academicYear AcademicYear? @relation(fields: [tenantId, academicYearId], references: [tenantId, id], onDelete: Restrict)
   term      AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
-  class     Class?    @relation(fields: [classId], references: [id], onDelete: SetNull)
+  class     Class?    @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([tenantId, studentId, startsAt])
   @@index([tenantId, academicYearId])
@@ -543,6 +544,7 @@ model Teacher {
   responsibleStudents Student[] @relation("StudentResponsibleTeacher")
   teacherAssignments TeacherAssignment[]
 
+  @@unique([tenantId, id])
   @@index([tenantId, deletedAt])
 }
 
@@ -560,9 +562,9 @@ model TeacherAssignment {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  teacher   Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  class     Class?    @relation(fields: [classId], references: [id], onDelete: Cascade)
-  student   Student?  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher   Teacher   @relation(fields: [tenantId, teacherId], references: [tenantId, id], onDelete: Cascade)
+  class     Class?    @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Cascade)
+  student   Student?  @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
   course    Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
   term      AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
 
@@ -588,6 +590,7 @@ model Guardian {
   accountUser User?   @relation("GuardianAccountUser", fields: [userId], references: [id], onDelete: SetNull)
   students  GuardianStudent[]
 
+  @@unique([tenantId, id])
   @@index([tenantId, deletedAt])
 }
 
@@ -605,8 +608,8 @@ model GuardianStudent {
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
   tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  guardian                Guardian @relation(fields: [guardianId], references: [id], onDelete: Cascade)
-  student                 Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  guardian                Guardian @relation(fields: [tenantId, guardianId], references: [tenantId, id], onDelete: Cascade)
+  student                 Student  @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
 
   @@unique([tenantId, guardianId, studentId])
   @@index([tenantId, studentId])
@@ -650,7 +653,7 @@ model TeacherNote {
   updatedAt         DateTime  @updatedAt
   tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   student           Student   @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
-  teacher           Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  teacher           Teacher   @relation(fields: [tenantId, teacherId], references: [tenantId, id], onDelete: Cascade)
   course            Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
   term              AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
 
@@ -679,7 +682,7 @@ model PaymentPlan {
   student     Student   @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
   campus      Campus?   @relation(fields: [tenantId, campusId], references: [tenantId, id], onDelete: Restrict)
   gradeLevel  GradeLevel? @relation(fields: [tenantId, gradeLevelId], references: [tenantId, id], onDelete: Restrict)
-  class       Class?    @relation(fields: [classId], references: [id], onDelete: SetNull)
+  class       Class?    @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   course      Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
   term        AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
   installments PaymentInstallment[]
@@ -726,8 +729,8 @@ model ScheduleLesson {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  class     Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
-  teacher   Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  class     Class     @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Cascade)
+  teacher   Teacher   @relation(fields: [tenantId, teacherId], references: [tenantId, id], onDelete: Cascade)
   course    Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
   term      AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
 
@@ -753,8 +756,8 @@ model StudySession {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  class     Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
-  teacher   Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  class     Class     @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Cascade)
+  teacher   Teacher   @relation(fields: [tenantId, teacherId], references: [tenantId, id], onDelete: Cascade)
   course    Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
   term      AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
   students  StudySessionStudent[]
@@ -764,6 +767,7 @@ model StudySession {
   @@index([tenantId, classId, startsAt])
   @@index([tenantId, courseId])
   @@index([tenantId, termId])
+  @@unique([tenantId, id])
 }
 
 model StudySessionStudent {
@@ -774,8 +778,8 @@ model StudySessionStudent {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  studySession   StudySession @relation(fields: [studySessionId], references: [id], onDelete: Cascade)
-  student        Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studySession   StudySession @relation(fields: [tenantId, studySessionId], references: [tenantId, id], onDelete: Cascade)
+  student        Student      @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
 
   @@unique([tenantId, studySessionId, studentId])
   @@index([tenantId, studentId])
@@ -859,8 +863,8 @@ model Homework {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   tenant              Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  class               Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
-  sourceMaterial      HomeworkMaterial? @relation(fields: [sourceMaterialId], references: [id], onDelete: SetNull)
+  class               Class     @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Cascade)
+  sourceMaterial      HomeworkMaterial? @relation(fields: [tenantId, sourceMaterialId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   checkedBy           User?     @relation("HomeworkCheckedBy", fields: [checkedById], references: [id], onDelete: SetNull)
 
   @@index([tenantId, deletedAt])
@@ -1147,7 +1151,7 @@ model ReportSnapshot {
   exam         Exam      @relation(fields: [tenantId, examId], references: [tenantId, id], onDelete: Cascade)
   campus       Campus?   @relation(fields: [tenantId, campusId], references: [tenantId, id], onDelete: Restrict)
   gradeLevel   GradeLevel? @relation(fields: [tenantId, gradeLevelId], references: [tenantId, id], onDelete: Restrict)
-  class        Class?    @relation(fields: [classId], references: [id], onDelete: SetNull)
+  class        Class?    @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   course       Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
   term         AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
 
@@ -1178,7 +1182,9 @@ model Announcement {
   updatedAt   DateTime  @updatedAt
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   deliveryReports AnnouncementDeliveryReport[]
+  receipts    AnnouncementReceipt[]
 
+  @@unique([tenantId, id])
   @@index([tenantId, deletedAt])
   @@index([tenantId, audience, publishedAt])
   @@index([tenantId, campusId])
@@ -1198,6 +1204,8 @@ model AnnouncementReceipt {
   readAt         DateTime
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade, map: "AnnouncementReceipt_tenantId_fkey")
+  announcement   Announcement @relation(fields: [tenantId, announcementId], references: [tenantId, id], onDelete: Cascade, map: "AnnouncementReceipt_announcement_fkey")
 
   @@unique([tenantId, announcementId, userId, subjectType, subjectId], map: "AnnouncementReceipt_tenantId_announcementId_userId_subjectType_")
   @@index([tenantId, userId, subjectType, subjectId])
@@ -1217,7 +1225,7 @@ model AnnouncementDeliveryReport {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  announcement      Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  announcement      Announcement @relation(fields: [tenantId, announcementId], references: [tenantId, id], onDelete: Cascade, map: "AnnouncementDeliveryReport_announcement_fkey")
 
   @@unique([tenantId, announcementId, channel])
   @@index([tenantId, announcementId])
@@ -1301,7 +1309,7 @@ model SupportTicket {
   tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   campus       Campus?   @relation(fields: [tenantId, campusId], references: [tenantId, id], onDelete: Restrict)
   gradeLevel   GradeLevel? @relation(fields: [tenantId, gradeLevelId], references: [tenantId, id], onDelete: Restrict)
-  class        Class?    @relation(fields: [classId], references: [id], onDelete: SetNull)
+  class        Class?    @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   course       Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
   term         AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
   attachments  SupportTicketAttachment[]

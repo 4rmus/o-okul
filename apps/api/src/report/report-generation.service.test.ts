@@ -166,7 +166,36 @@ describe("ReportGenerationService", () => {
     );
 
     expect(store.inputs).toEqual([{ tenantId: "tenant-a", examId: "exam-a" }]);
-    expect(result).toEqual([fakeSnapshot, fakePreviousSnapshot]);
+    expect(result.map((snapshot) => snapshot.id)).toEqual(["snapshot-a", "snapshot-previous"]);
+    expect(result[0]?.snapshotData).toEqual(expect.objectContaining({
+      reportType: examResultSummaryReportType,
+      generatedAt: "2026-06-06T09:00:00.000Z",
+      resultCount: 1,
+      averages: expect.objectContaining({ net: 17.5 }),
+      branches: [
+        expect.objectContaining({ branch: "Matematik", net: 17.5 }),
+      ],
+      classes: [
+        expect.objectContaining({
+          classId: "class-a",
+          className: "8-A",
+          averages: expect.objectContaining({ net: 17.5 }),
+        }),
+      ],
+      students: [
+        expect.objectContaining({
+          studentId: "student-a",
+          resultKey: "result-a",
+          total: expect.objectContaining({ net: 17.5 }),
+        }),
+      ],
+    }));
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("\"questions\"");
+    expect(serialized).not.toContain("\"answer\"");
+    expect(serialized).not.toContain("\"correctAnswer\"");
+    expect(serialized).not.toContain("\"outcomes\"");
+    expect(serialized).not.toContain("\"statistics\"");
     expect(producer.inputs).toHaveLength(0);
   });
 
@@ -186,7 +215,9 @@ describe("ReportGenerationService", () => {
       { courseId: "course-math", termId: "term-2026-spring" },
     );
 
-    expect(result).toEqual([fakeSnapshot]);
+    expect(result.map((snapshot) => snapshot.id)).toEqual(["snapshot-a"]);
+    expect(JSON.stringify(result)).not.toContain("\"questions\"");
+    expect(JSON.stringify(result)).not.toContain("\"correctAnswer\"");
   });
 
   it("öğrenci snapshot listesini sadece öğrenci özet metadata'sı ile döner", async () => {
@@ -253,7 +284,7 @@ describe("ReportGenerationService", () => {
     );
 
     expect(result).toHaveLength(1);
-    expect(result[0]?.snapshotData).toEqual({
+    expect(result[0]?.snapshotData).toEqual(expect.objectContaining({
       reportType: examResultSummaryReportType,
       generatedAt: "2026-06-06T09:00:00.000Z",
       resultCount: 1,
@@ -261,12 +292,20 @@ describe("ReportGenerationService", () => {
         expect.objectContaining({ classId: "class-a", className: "8-A" }),
       ],
       students: [
-        expect.objectContaining({ studentId: "student-a", classId: "class-a" }),
+        expect.objectContaining({
+          studentId: "student-a",
+          classId: "class-a",
+          total: expect.objectContaining({ net: 17.5 }),
+        }),
       ],
-    });
-    expect(JSON.stringify(result)).not.toContain("student-c");
-    expect(JSON.stringify(result)).not.toContain("class-c");
-    expect(JSON.stringify(result)).not.toContain("Genel Matematik");
+    }));
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("student-c");
+    expect(serialized).not.toContain("class-c");
+    expect(serialized).not.toContain("Genel Matematik");
+    expect(serialized).not.toContain("\"questions\"");
+    expect(serialized).not.toContain("\"answer\"");
+    expect(serialized).not.toContain("\"correctAnswer\"");
   });
 
   it("teacher ders ve dönem sınırlı assignment ile başka bağlamdaki rapor öğrencisini okuyamaz", async () => {
@@ -315,6 +354,8 @@ describe("ReportGenerationService", () => {
     expect(snapshots.find((snapshot) => snapshot.id === "snapshot-a")?.snapshotData?.resultCount).toBe(1);
     expect(snapshots.find((snapshot) => snapshot.id === "snapshot-previous")?.snapshotData?.resultCount).toBe(0);
     expect(JSON.stringify(snapshots.find((snapshot) => snapshot.id === "snapshot-previous"))).not.toContain("student-a");
+    expect(JSON.stringify(snapshots)).not.toContain("\"questions\"");
+    expect(JSON.stringify(snapshots)).not.toContain("\"correctAnswer\"");
   });
 
   it("tenant context olmadan snapshot listelemez", async () => {

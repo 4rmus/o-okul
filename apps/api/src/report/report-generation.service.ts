@@ -210,7 +210,8 @@ export class ReportGenerationService implements OnModuleDestroy {
     }
 
     const snapshots = await this.snapshots.listByExam(context.tenantId, required(examId, "REPORT_EXAM_REQUIRED"));
-    return Promise.all(filterReportSnapshots(snapshots, filters).map((snapshot) => this.scopeSnapshotForTeacher(context, snapshot)));
+    const scopedSnapshots = await Promise.all(filterReportSnapshots(snapshots, filters).map((snapshot) => this.scopeSnapshotForTeacher(context, snapshot)));
+    return scopedSnapshots.map(createSnapshotListSummary);
   }
 
   async listStudentSnapshots(
@@ -738,6 +739,52 @@ function createStudentScopedSnapshotSummary(
         },
       ],
     },
+  };
+}
+
+function createSnapshotListSummary(snapshot: ReportSnapshotRecord): ReportSnapshotRecord {
+  const snapshotData = snapshot.snapshotData ?? {};
+  const generatedAt = readText(snapshotData.generatedAt) || snapshot.generatedAt;
+  const averages = readRecord(snapshotData.averages);
+  const branches = readRecords(snapshotData.branches);
+  const classes = readRecords(snapshotData.classes);
+  const students = readRecords(snapshotData.students);
+  const resultCount = readOptionalNumber(snapshotData.resultCount) ?? students.length;
+
+  return {
+    ...snapshot,
+    snapshotData: {
+      reportType: readText(snapshotData.reportType) || snapshot.reportType,
+      ...(generatedAt ? { generatedAt } : {}),
+      resultCount,
+      ...(Object.keys(averages).length > 0 ? { averages: readScoreSummary(averages) } : {}),
+      ...(branches.length > 0 ? { branches: branches.map((branch) => readBranchSummary(branch)) } : {}),
+      ...(classes.length > 0 ? { classes: classes.map(createSnapshotClassListSummary) } : {}),
+      ...(students.length > 0 ? { students: students.map(createSnapshotStudentListSummary) } : {}),
+    },
+  };
+}
+
+function createSnapshotClassListSummary(classSummary: Record<string, unknown>): Record<string, unknown> {
+  const averages = readRecord(classSummary.averages);
+  const branches = readRecords(classSummary.branches);
+  return {
+    classId: readText(classSummary.classId),
+    ...(readText(classSummary.className) ? { className: readText(classSummary.className) } : {}),
+    resultCount: readOptionalNumber(classSummary.resultCount) ?? 0,
+    ...(Object.keys(averages).length > 0 ? { averages: readScoreSummary(averages) } : {}),
+    ...(branches.length > 0 ? { branches: branches.map((branch) => readBranchSummary(branch)) } : {}),
+  };
+}
+
+function createSnapshotStudentListSummary(student: Record<string, unknown>): Record<string, unknown> {
+  const studentId = readText(student.studentId);
+  return {
+    studentId,
+    ...(readText(student.classId) ? { classId: readText(student.classId) } : {}),
+    ...(readText(student.className) ? { className: readText(student.className) } : {}),
+    resultKey: readText(student.resultKey) || studentId,
+    total: readScoreSummary(student.total),
   };
 }
 

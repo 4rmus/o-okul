@@ -1,7 +1,7 @@
 :root {
   --color-text: #18202f;
   --color-text-secondary: #2b3547;
-  --color-text-muted: #667085;
+  --color-text-muted: #5b6678;
   --color-primary: #155eef;
   --color-primary-subtle: #e6edff;
   --color-success: #0f766e;
@@ -98,6 +98,7 @@ a {
   display: grid;
   align-content: start;
   isolation: isolate;
+  background: #0a1422;
   color: #ffffff;
   padding-bottom: 42px;
 }

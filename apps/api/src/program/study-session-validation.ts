@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { StudySessionCreateRequest, StudySessionUpdateRequest } from "@uzman-hocam/shared-types";
 import { optionalIsoDateTime, requiredIsoDateTime, requiredTrimmedString } from "../http/zod-validation.js";
 
 const optionalNonEmptyString = requiredTrimmedString.optional();
@@ -18,7 +19,7 @@ export const studySessionCreateBodySchema = z.object({
   tenantId: optionalNonEmptyString,
   termId: optionalNonEmptyString,
   title: requiredTrimmedString,
-}).strict();
+}).strict().superRefine(validateStudySessionTimeRange) satisfies z.ZodType<StudySessionCreateRequest>;
 
 export const studySessionUpdateBodySchema = z.object({
   capacity: positiveIntegerSchema.optional(),
@@ -30,7 +31,30 @@ export const studySessionUpdateBodySchema = z.object({
   teacherId: optionalNonEmptyString,
   termId: optionalNonEmptyString,
   title: optionalNonEmptyString,
-}).strict();
+}).strict().refine(hasAtLeastOneField, {
+  message: "UPDATE_BODY_EMPTY",
+}).superRefine(validateStudySessionTimeRange) satisfies z.ZodType<StudySessionUpdateRequest>;
 
-export type StudySessionCreateBody = z.infer<typeof studySessionCreateBodySchema>;
-export type StudySessionUpdateBody = z.infer<typeof studySessionUpdateBodySchema>;
+export type StudySessionCreateBody = StudySessionCreateRequest;
+export type StudySessionUpdateBody = StudySessionUpdateRequest;
+
+function hasAtLeastOneField(value: Record<string, unknown>): boolean {
+  return Object.keys(value).length > 0;
+}
+
+function validateStudySessionTimeRange(
+  value: { startsAt?: string; endsAt?: string },
+  context: z.RefinementCtx,
+): void {
+  if (!value.startsAt || !value.endsAt) return;
+
+  const startsAt = Date.parse(value.startsAt);
+  const endsAt = Date.parse(value.endsAt);
+  if (Number.isNaN(startsAt) || Number.isNaN(endsAt) || endsAt > startsAt) return;
+
+  context.addIssue({
+    code: "custom",
+    message: "STUDY_SESSION_TIME_RANGE_INVALID",
+    path: ["endsAt"],
+  });
+}

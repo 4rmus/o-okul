@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import pg from "pg";
-import type { ParserConfigSuggestion } from "@uzman-hocam/shared-types";
+import type { ParserConfigSuggestion, ParserDelimiter, ParserEncoding } from "@uzman-hocam/shared-types";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 import type {
   ApprovedParserConfigInput,
@@ -97,12 +97,26 @@ function toSavedParserConfig(row: ParserConfigRow): SavedParserConfig {
     examId: row.examId,
     ...(row.templateId ? { templateId: row.templateId } : {}),
     version: row.version,
-    encoding: row.encoding,
-    delimiter: row.delimiter,
+    encoding: parseEncoding(row.encoding),
+    delimiter: parseDelimiter(row.delimiter),
     skipHeaderLines: row.skipHeaderLines,
     fieldMapping: parseFieldMapping(row.fieldMapping),
     status: "APPROVED",
   };
+}
+
+function parseEncoding(value: string): ParserEncoding {
+  if (value === "UTF-8" || value === "ISO-8859-9" || value === "CP1254") {
+    return value;
+  }
+  throw new Error("PARSER_CONFIG_ENCODING_INVALID");
+}
+
+function parseDelimiter(value: string): ParserDelimiter {
+  if (value === "TAB" || value === "COMMA" || value === "PIPE" || value === "FIXED") {
+    return value;
+  }
+  throw new Error("PARSER_CONFIG_DELIMITER_INVALID");
 }
 
 function matchesApprovedConfig(row: ParserConfigRow, input: ApprovedParserConfigInput): boolean {

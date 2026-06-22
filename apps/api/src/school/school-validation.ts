@@ -1,4 +1,29 @@
 import { z } from "zod";
+import type {
+  AcademicTermCreateRequest,
+  AcademicTermUpdateRequest,
+  AcademicYearCreateRequest,
+  AcademicYearUpdateRequest,
+  CampusCreateRequest,
+  CampusUpdateRequest,
+  ClassCreateRequest,
+  ClassUpdateRequest,
+  CourseCreateRequest,
+  CourseUpdateRequest,
+  GradeLevelCreateRequest,
+  GradeLevelUpdateRequest,
+  GuardianCreateRequest,
+  GuardianStudentLinkRequest,
+  GuardianStudentRelationRequest,
+  GuardianUpdateRequest,
+  LearningOutcomeCreateRequest,
+  LearningOutcomeUpdateRequest,
+  TeacherAssignmentCreateRequest,
+  TeacherAssignmentUpdateRequest,
+  TeacherCreateRequest,
+  TeacherImportRequest,
+  TeacherUpdateRequest,
+} from "@uzman-hocam/shared-types";
 import {
   optionalDateString as optionalCalendarDateString,
   optionalTrimmedString,
@@ -16,23 +41,23 @@ export const campusCreateBodySchema = z.object({
   code: optionalTrimmedString,
   name: requiredTrimmedString,
   tenantId: optionalNonEmptyString,
-}).strict();
+}).strict() satisfies z.ZodType<CampusCreateRequest>;
 
 export const campusUpdateBodySchema = z.object({
   code: optionalTrimmedString,
   name: optionalNonEmptyString,
-}).strict();
+}).strict() satisfies z.ZodType<CampusUpdateRequest>;
 
 export const gradeLevelCreateBodySchema = z.object({
   code: optionalTrimmedString,
   name: requiredTrimmedString,
   tenantId: optionalNonEmptyString,
-}).strict();
+}).strict() satisfies z.ZodType<GradeLevelCreateRequest>;
 
 export const gradeLevelUpdateBodySchema = z.object({
   code: optionalTrimmedString,
   name: optionalNonEmptyString,
-}).strict();
+}).strict() satisfies z.ZodType<GradeLevelUpdateRequest>;
 
 export const classCreateBodySchema = z.object({
   campusId: optionalNonEmptyString,
@@ -41,7 +66,7 @@ export const classCreateBodySchema = z.object({
   name: requiredTrimmedString,
   section: optionalTrimmedString,
   tenantId: optionalNonEmptyString,
-}).strict();
+}).strict() satisfies z.ZodType<ClassCreateRequest>;
 
 export const classUpdateBodySchema = z.object({
   campusId: optionalNonEmptyString,
@@ -49,18 +74,20 @@ export const classUpdateBodySchema = z.object({
   level: optionalTrimmedString,
   name: optionalNonEmptyString,
   section: optionalTrimmedString,
-}).strict();
+}).strict().refine(hasAtLeastOneField, {
+  message: "UPDATE_BODY_EMPTY",
+}) satisfies z.ZodType<ClassUpdateRequest>;
 
 export const courseCreateBodySchema = z.object({
   code: optionalTrimmedString,
   name: requiredTrimmedString,
   tenantId: optionalNonEmptyString,
-}).strict();
+}).strict() satisfies z.ZodType<CourseCreateRequest>;
 
 export const courseUpdateBodySchema = z.object({
   code: optionalTrimmedString,
   name: optionalNonEmptyString,
-}).strict();
+}).strict() satisfies z.ZodType<CourseUpdateRequest>;
 
 export const learningOutcomeCreateBodySchema = z.object({
   branch: requiredTrimmedString,
@@ -68,14 +95,14 @@ export const learningOutcomeCreateBodySchema = z.object({
   level: optionalTrimmedString,
   tenantId: optionalNonEmptyString,
   title: requiredTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<LearningOutcomeCreateRequest>;
 
 export const learningOutcomeUpdateBodySchema = z.object({
   branch: optionalNonEmptyString,
   code: optionalNonEmptyString,
   level: optionalTrimmedString,
   title: optionalNonEmptyString,
-}).strict();
+}).strict() satisfies z.ZodType<LearningOutcomeUpdateRequest>;
 
 export const academicYearCreateBodySchema = z.object({
   endsAt: dateString,
@@ -83,14 +110,14 @@ export const academicYearCreateBodySchema = z.object({
   name: requiredTrimmedString,
   startsAt: dateString,
   tenantId: optionalNonEmptyString,
-}).strict();
+}).strict() satisfies z.ZodType<AcademicYearCreateRequest>;
 
 export const academicYearUpdateBodySchema = z.object({
   endsAt: optionalDateString,
   isActive: z.boolean().optional(),
   name: optionalNonEmptyString,
   startsAt: optionalDateString,
-}).strict();
+}).strict() satisfies z.ZodType<AcademicYearUpdateRequest>;
 
 export const academicTermCreateBodySchema = z.object({
   academicYearId: requiredTrimmedString,
@@ -99,7 +126,7 @@ export const academicTermCreateBodySchema = z.object({
   name: requiredTrimmedString,
   startsAt: dateString,
   tenantId: optionalNonEmptyString,
-}).strict();
+}).strict() satisfies z.ZodType<AcademicTermCreateRequest>;
 
 export const academicTermUpdateBodySchema = z.object({
   academicYearId: optionalNonEmptyString,
@@ -107,20 +134,20 @@ export const academicTermUpdateBodySchema = z.object({
   isActive: z.boolean().optional(),
   name: optionalNonEmptyString,
   startsAt: optionalDateString,
-}).strict();
+}).strict() satisfies z.ZodType<AcademicTermUpdateRequest>;
 
 export const teacherCreateBodySchema = z.object({
   branch: optionalTrimmedString,
   firstName: requiredTrimmedString,
   lastName: requiredTrimmedString,
   tenantId: optionalNonEmptyString,
-}).strict();
+}).strict() satisfies z.ZodType<TeacherCreateRequest>;
 
 export const teacherUpdateBodySchema = z.object({
   branch: optionalTrimmedString,
   firstName: optionalNonEmptyString,
   lastName: optionalNonEmptyString,
-}).strict();
+}).strict() satisfies z.ZodType<TeacherUpdateRequest>;
 
 const teacherAssignmentBodyFields = {
   classId: optionalNonEmptyString,
@@ -135,22 +162,28 @@ const teacherAssignmentBodyFields = {
 export const teacherAssignmentCreateBodySchema = z.object(teacherAssignmentBodyFields).strict().refine(
   (body) => body.classId !== undefined || body.studentId !== undefined,
   { message: "TEACHER_ASSIGNMENT_TARGET_REQUIRED", path: ["classId"] },
-);
+) satisfies z.ZodType<TeacherAssignmentCreateRequest>;
 
-export const teacherAssignmentUpdateBodySchema = z.object(teacherAssignmentBodyFields).strict();
+export const teacherAssignmentUpdateBodySchema = z.object(teacherAssignmentBodyFields).strict().refine(hasAtLeastOneField, {
+  message: "UPDATE_BODY_EMPTY",
+}) satisfies z.ZodType<TeacherAssignmentUpdateRequest>;
+
+export const teacherImportBodySchema = z.object({
+  fileBase64: requiredTrimmedString,
+}).strict() satisfies z.ZodType<TeacherImportRequest>;
 
 export const guardianCreateBodySchema = z.object({
   firstName: requiredTrimmedString,
   lastName: requiredTrimmedString,
   phone: optionalTrimmedString,
   tenantId: optionalNonEmptyString,
-}).strict();
+}).strict() satisfies z.ZodType<GuardianCreateRequest>;
 
 export const guardianUpdateBodySchema = z.object({
   firstName: optionalNonEmptyString,
   lastName: optionalNonEmptyString,
   phone: optionalTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<GuardianUpdateRequest>;
 
 const guardianStudentRelationFields = {
   canOpenSupportTickets: z.boolean().optional(),
@@ -164,9 +197,9 @@ const guardianStudentRelationFields = {
 export const guardianStudentLinkBodySchema = z.object({
   ...guardianStudentRelationFields,
   studentId: requiredTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<GuardianStudentLinkRequest>;
 
-export const guardianStudentRelationBodySchema = z.object(guardianStudentRelationFields).strict();
+export const guardianStudentRelationBodySchema = z.object(guardianStudentRelationFields).strict() satisfies z.ZodType<GuardianStudentRelationRequest>;
 
 export const guardianNotificationPreferenceBodySchema = z.object({
   canOpenSupportTickets: z.boolean().optional(),
@@ -174,26 +207,31 @@ export const guardianNotificationPreferenceBodySchema = z.object({
   canReceiveSms: z.boolean().optional(),
 }).strict();
 
-export type CampusCreateBody = z.infer<typeof campusCreateBodySchema>;
-export type CampusUpdateBody = z.infer<typeof campusUpdateBodySchema>;
-export type GradeLevelCreateBody = z.infer<typeof gradeLevelCreateBodySchema>;
-export type GradeLevelUpdateBody = z.infer<typeof gradeLevelUpdateBodySchema>;
-export type ClassCreateBody = z.infer<typeof classCreateBodySchema>;
-export type ClassUpdateBody = z.infer<typeof classUpdateBodySchema>;
-export type CourseCreateBody = z.infer<typeof courseCreateBodySchema>;
-export type CourseUpdateBody = z.infer<typeof courseUpdateBodySchema>;
-export type LearningOutcomeCreateBody = z.infer<typeof learningOutcomeCreateBodySchema>;
-export type LearningOutcomeUpdateBody = z.infer<typeof learningOutcomeUpdateBodySchema>;
-export type AcademicYearCreateBody = z.infer<typeof academicYearCreateBodySchema>;
-export type AcademicYearUpdateBody = z.infer<typeof academicYearUpdateBodySchema>;
-export type AcademicTermCreateBody = z.infer<typeof academicTermCreateBodySchema>;
-export type AcademicTermUpdateBody = z.infer<typeof academicTermUpdateBodySchema>;
+export type CampusCreateBody = CampusCreateRequest;
+export type CampusUpdateBody = CampusUpdateRequest;
+export type GradeLevelCreateBody = GradeLevelCreateRequest;
+export type GradeLevelUpdateBody = GradeLevelUpdateRequest;
+export type ClassCreateBody = ClassCreateRequest;
+export type ClassUpdateBody = ClassUpdateRequest;
+export type CourseCreateBody = CourseCreateRequest;
+export type CourseUpdateBody = CourseUpdateRequest;
+export type LearningOutcomeCreateBody = LearningOutcomeCreateRequest;
+export type LearningOutcomeUpdateBody = LearningOutcomeUpdateRequest;
+export type AcademicYearCreateBody = AcademicYearCreateRequest;
+export type AcademicYearUpdateBody = AcademicYearUpdateRequest;
+export type AcademicTermCreateBody = AcademicTermCreateRequest;
+export type AcademicTermUpdateBody = AcademicTermUpdateRequest;
 export type TeacherCreateBody = z.infer<typeof teacherCreateBodySchema>;
 export type TeacherUpdateBody = z.infer<typeof teacherUpdateBodySchema>;
-export type TeacherAssignmentCreateBody = z.infer<typeof teacherAssignmentCreateBodySchema>;
-export type TeacherAssignmentUpdateBody = z.infer<typeof teacherAssignmentUpdateBodySchema>;
+export type TeacherAssignmentCreateBody = TeacherAssignmentCreateRequest;
+export type TeacherAssignmentUpdateBody = TeacherAssignmentUpdateRequest;
+export type TeacherImportBody = TeacherImportRequest;
 export type GuardianCreateBody = z.infer<typeof guardianCreateBodySchema>;
 export type GuardianUpdateBody = z.infer<typeof guardianUpdateBodySchema>;
 export type GuardianStudentLinkBody = z.infer<typeof guardianStudentLinkBodySchema>;
 export type GuardianStudentRelationBody = z.infer<typeof guardianStudentRelationBodySchema>;
 export type GuardianNotificationPreferenceBody = z.infer<typeof guardianNotificationPreferenceBodySchema>;
+
+function hasAtLeastOneField(value: Record<string, unknown>): boolean {
+  return Object.keys(value).length > 0;
+}

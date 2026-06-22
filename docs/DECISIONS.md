@@ -47,15 +47,19 @@ Son kontrol: 2026-05-29
 ### DEC-20260529-04 — Sınav kapsamı
 
 Durum: Onaylı
-Karar: TXT/DAT optik değerlendirme hedef kapsamda; gerçek örnek dosya gelene kadar parser kontrollü
-beta kabul edilir.
+Karar: TXT/DAT optik değerlendirme hedef kapsamda kalır. iSEM/OPTİK-7108 gerçek TXT ve cevap
+anahtarı dosyaları repo fixture'ı olarak kabul edilmiştir; bu kabul online sınav, OMR/foto optik
+okuma veya yeni optik format ailesi kapsamı açmaz.
 Kaynak: Kullanıcı görüşmesi / master plan §2 ve §5.
 Kanıt: `MASTER_PLAN.md` §2/§5; `docs/phase-3-report.md` sentetik pilot fixture notu;
-`apps/worker/src/jobs/optical-pilot-fixture.test.ts`.
+`apps/worker/src/jobs/optical-pilot-fixture.test.ts`;
+`apps/api/src/exam/answer-key-excel-import.service.test.ts`;
+`apps/worker/src/jobs/optik-7108-real-pipeline.test.ts`;
+`scripts/smoke-isem-optical-pipeline-live.mjs`.
 Etkilenen ADR: Yok
-Açık soru: Gerçek cihazdan alınmış TXT/DAT örneği ve cevap anahtarı formatı geldiğinde gerçek cihaz
-fixture'ı eklenmeli.
-Son kontrol: 2026-06-02
+Açık soru: iSEM fixture tarafı kapandı; staging/prod tam sınav döngüsü, pilot kabulü ve farklı pilot
+format isteği ayrı evidence/DEC kapısıdır.
+Son kontrol: 2026-06-21
 
 ### DEC-20260529-05 — Kota davranışı
 
@@ -236,9 +240,29 @@ Açık soru: Real staging/prod KVKK inventory, KVKK aydınlatma metni/DPA ve huk
 onayı üretim çıkışından önce ayrıca alınacak; repo kararı bu gerçek kanıtların yerine geçmez.
 Son kontrol: 2026-06-13
 
+### DEC-20260623-01 — Karne soru detayı veri sınırı
+
+Durum: Onaylı
+Karar: V1 karne ekranı ve PDF/Excel raporları, yetkili kurum yöneticisi, kapsamı doğrulanmış öğretmen,
+öğrenci ve bağlı veli için soru bazlı `answer`, `correctAnswer` ve `status` alanlarını gösterebilir.
+Bu alanlar yalnız karne/soru analizi ve hata kitapçığı amacıyla response body'de bulunur; audit log,
+smoke/evidence artifact'i, liste endpoint'i veya üretim kanıtında ham cevap seti olarak yazılamaz.
+Ana öğrenci raporu, soru detayı taşısa bile kimlik, iletişim, storage key, raw import row veya dosya
+içeriği alanlarını taşıyamaz. Hata kitapçığı, yanlış/boş soru remediation yüzeyi olarak daha dar kalır
+ve öğrenci kimliği/bağlam/puan alanlarını genişletmez.
+Kaynak: V1 rapor/karne kapsamı ve mevcut karne UI soru analizi.
+Kanıt: `apps/api/src/report/report-generation.service.ts`,
+`apps/api/src/report/report-generation.controller.e2e.test.ts`,
+`apps/api/src/openapi-contracts.ts`, `apps/web/app/(app)/_shared/karne-sheet.tsx`,
+`scripts/generate-openapi.mjs`.
+Etkilenen ADR: Yok
+Açık soru: Gerçek staging/prod KVKK inventory ve pilot veli/öğrenci aydınlatma metni onayı Faz 5/Faz 10
+kapısında ayrıca üretilmelidir; bu karar local/static evidence yerine geçmez.
+Son kontrol: 2026-06-23
+
 ## Faz Öncesi Onay Gerektirenler
 
 | ID | Faz | Bloklar mı? | Soru | Beklenen kanıt |
 |---|---|---|---|---|
-| OPEN-20260529-03 | Faz 3 | Evet | Gerçek cihaz TXT/DAT ve cevap anahtarı formatı nedir? | Gerçek cihaz örnek dosyası + sentetik pilot fixture yanına gerçek parser fixture |
+| OPEN-20260529-03 | Faz 4 / Faz 10 | Hayır | iSEM fixture geldi; staging/pilot sınav döngüsü kanıtı üretildi mi? | Gerçek iSEM fixture testleri + `pnpm live:exam-cycle:check` staging artifact'i + pilot UAT kanıtı |
 | OPEN-20260529-04 | Faz 5 | Hayır | Netgsm test credential/canlı hesap doğrulaması nasıl yapılacak? | Test hesabı secretları + `pnpm sms:smoke` canlı/staging sonucu |

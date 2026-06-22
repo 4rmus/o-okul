@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
   Alert,
@@ -96,8 +97,12 @@ const reportWorkspaceTabs: Array<{ id: ReportWorkspaceTab; label: string }> = [
   { id: "exports", label: "Çıktılar" },
 ];
 
+const defaultReportWorkspaceTab: ReportWorkspaceTab = "query";
+
 export function ReportsPage() {
   const { auth } = useAuth();
+  const searchParams = useSearchParams();
+  const searchParamsKey = searchParams.toString();
   const [examId, setExamId] = useState("");
   const [loadedExamId, setLoadedExamId] = useState("");
   const [contentHash, setContentHash] = useState("results-v1");
@@ -105,7 +110,7 @@ export function ReportsPage() {
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [error, setError] = useState("");
   const [queueMessage, setQueueMessage] = useState("");
-  const [activeTab, setActiveTab] = useState<ReportWorkspaceTab>("query");
+  const [activeTab, setActiveTab] = useState<ReportWorkspaceTab>(() => readReportWorkspaceTab(searchParams));
   const tenantId = auth?.session.tenantId ?? "anonymous";
   const referencesQuery = useQuery({
     queryKey: ["next-report-refs", tenantId],
@@ -165,6 +170,16 @@ export function ReportsPage() {
     }
   }, [examId, exams]);
 
+  useEffect(() => {
+    const nextTab = readReportWorkspaceTab(searchParams);
+    setActiveTab((current) => (current === nextTab ? current : nextTab));
+  }, [searchParams, searchParamsKey]);
+
+  function selectReportTab(tab: ReportWorkspaceTab) {
+    setActiveTab(tab);
+    writeWorkspaceTabToUrl(tab, defaultReportWorkspaceTab);
+  }
+
   async function loadReports(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!auth) return;
@@ -178,7 +193,7 @@ export function ReportsPage() {
     try {
       setReportData(await loadReportData(auth.accessToken, parsedForm.data.examId, filters, { classes, students }));
       setLoadedExamId(parsedForm.data.examId);
-      setActiveTab("analytics");
+      selectReportTab("analytics");
     } catch (loadError) {
       setReportData(null);
       setError(apiErrorMessage(loadError, "Rapor alınamadı."));
@@ -206,7 +221,7 @@ export function ReportsPage() {
         contentHash: normalizedContentHash,
       });
       setQueueMessage("Rapor üretimi kuyruğa alındı.");
-      setActiveTab("query");
+      selectReportTab("query");
     } catch (queueError) {
       setError(apiErrorMessage(queueError, "Rapor üretimi kuyruğa alınamadı."));
     }
@@ -225,7 +240,7 @@ export function ReportsPage() {
             selectedStudentId: studentId,
           }
         : current);
-      setActiveTab("karne");
+      selectReportTab("karne");
     } catch (selectError) {
       setError(apiErrorMessage(selectError, "Öğrenci raporu alınamadı."));
     }
@@ -268,7 +283,7 @@ export function ReportsPage() {
               aria-controls={activeTab === tab.id ? `report-tabpanel-${tab.id}` : undefined}
               id={`report-tab-${tab.id}`}
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => selectReportTab(tab.id)}
               selected={activeTab === tab.id}
             >
               {tab.label}
@@ -366,8 +381,8 @@ export function ReportsPage() {
                   </Select>
                 </Field>
               </div>
-              {error ? <p className="uh-crud-page__error">{error}</p> : null}
-              {queueMessage ? <p className="uh-crud-page__success">{queueMessage}</p> : null}
+              {error ? <p className="uh-crud-page__error" role="alert">{error}</p> : null}
+              {queueMessage ? <p aria-live="polite" className="uh-crud-page__success" role="status">{queueMessage}</p> : null}
               <div className="next-report-actions">
                 <Button type="submit">
                   <RefreshCw size={17} aria-hidden="true" />
@@ -618,6 +633,28 @@ async function loadExamParticipants(accessToken: string, examId: string) {
 
 function preferredExamId(exams: ExamRecord[]) {
   return exams.find((exam) => exam.status === "PUBLISHED")?.id ?? exams[0]?.id ?? "";
+}
+
+function readReportWorkspaceTab(searchParams: Pick<URLSearchParams, "get">): ReportWorkspaceTab {
+  const tab = searchParams.get("tab");
+  return reportWorkspaceTabs.some((candidate) => candidate.id === tab) ? tab as ReportWorkspaceTab : defaultReportWorkspaceTab;
+}
+
+function writeWorkspaceTabToUrl(tab: string, defaultTab: string) {
+  if (typeof window === "undefined") return;
+
+  const url = new URL(window.location.href);
+  if (tab === defaultTab) {
+    url.searchParams.delete("tab");
+  } else {
+    url.searchParams.set("tab", tab);
+  }
+  window.history.replaceState(window.history.state, "", formatUrlForReplaceState(url));
+}
+
+function formatUrlForReplaceState(url: URL) {
+  const query = url.searchParams.toString();
+  return `${url.pathname}${query ? `?${query}` : ""}${url.hash}`;
 }
 
 function formatSelectedExamLabel(examId: string, exams: ExamRecord[]) {

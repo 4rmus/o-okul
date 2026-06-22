@@ -20,7 +20,7 @@ describe("S3RawImportArchiveStore", () => {
     });
 
     await store.put({
-      s3Key: "raw-imports/tenant-a/exam-a/parser-v1/hash/answers.dat",
+      s3Key: "raw-imports/tenant-a/exam-a/parser-v1/hash/source",
       body,
       contentType: "text/plain",
     });
@@ -28,7 +28,7 @@ describe("S3RawImportArchiveStore", () => {
     expect(commands).toHaveLength(1);
     expect(commands[0]?.input).toMatchObject({
       Bucket: "raw-imports",
-      Key: "raw-imports/tenant-a/exam-a/parser-v1/hash/answers.dat",
+      Key: "raw-imports/tenant-a/exam-a/parser-v1/hash/source",
       Body: body,
       ContentType: "text/plain",
     });

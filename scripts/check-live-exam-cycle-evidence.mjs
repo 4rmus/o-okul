@@ -11,7 +11,33 @@ const requiredCommands = [
   "pnpm report-generation:smoke",
   "pnpm live:ui-worker:smoke",
 ];
+const expectedIsemFixture = {
+  answerKeyQuestionCount: 90,
+  bookletVariantCount: 1,
+  participantCount: 254,
+  matchedCount: 254,
+  quarantineCount: 0,
+  examResultCount: 254,
+  reportResultCount: 254,
+};
 const allowedEvidenceReferencePrefixes = ["artifact:", "run:", "log:", "url:", "https://", "file://", "s3://"];
+const forbiddenRawEvidenceKeyFragments = [
+  "contentbase64",
+  "filebase64",
+  "filename",
+  "identitynumber",
+  "nationalid",
+  "objectkey",
+  "rawline",
+  "rawrow",
+  "rawtext",
+  "s3key",
+  "sourcefilename",
+  "sourcefilepath",
+  "studentname",
+  "tckn",
+  "tcno",
+];
 const liveExamCycleTopLevelKeys = [
   "result",
   "environment",
@@ -37,6 +63,7 @@ const examCycleKeys = [
   "bookletVariantCount",
   "participantCount",
   "matchedCount",
+  "quarantineCount",
   "examResultCount",
   "reportResultCount",
   "downloadedArtifacts",
@@ -194,6 +221,7 @@ function validateReport(report) {
 
   requireExamCycle(report, failures);
   requireEvidenceReferences(report, failures, "evidenceReferences");
+  requireNoRawPiiEvidence(report, failures);
   requireEmptyArray(report, failures, "gaps");
 
   return failures;
@@ -218,12 +246,13 @@ function requireExamCycle(report, failures) {
     requireObjectNonPlaceholderString(value, failures, `examCycle.${key}`, key);
   }
 
-  requireObjectIntegerAtLeast(value, failures, "examCycle.answerKeyQuestionCount", "answerKeyQuestionCount", 90);
-  requireObjectIntegerAtLeast(value, failures, "examCycle.bookletVariantCount", "bookletVariantCount", 1);
-  requireObjectIntegerAtLeast(value, failures, "examCycle.participantCount", "participantCount", 1);
-  requireObjectIntegerAtLeast(value, failures, "examCycle.matchedCount", "matchedCount", 1);
-  requireObjectIntegerAtLeast(value, failures, "examCycle.examResultCount", "examResultCount", 1);
-  requireObjectIntegerAtLeast(value, failures, "examCycle.reportResultCount", "reportResultCount", 1);
+  requireObjectEqual(value, failures, "examCycle.answerKeyQuestionCount", "answerKeyQuestionCount", expectedIsemFixture.answerKeyQuestionCount);
+  requireObjectEqual(value, failures, "examCycle.bookletVariantCount", "bookletVariantCount", expectedIsemFixture.bookletVariantCount);
+  requireObjectEqual(value, failures, "examCycle.participantCount", "participantCount", expectedIsemFixture.participantCount);
+  requireObjectEqual(value, failures, "examCycle.matchedCount", "matchedCount", expectedIsemFixture.matchedCount);
+  requireObjectEqual(value, failures, "examCycle.quarantineCount", "quarantineCount", expectedIsemFixture.quarantineCount);
+  requireObjectEqual(value, failures, "examCycle.examResultCount", "examResultCount", expectedIsemFixture.examResultCount);
+  requireObjectEqual(value, failures, "examCycle.reportResultCount", "reportResultCount", expectedIsemFixture.reportResultCount);
   requireObjectIntegerAtLeast(value, failures, "examCycle.downloadedArtifacts", "downloadedArtifacts", 2);
 
   if (Number.isInteger(value.matchedCount) && Number.isInteger(value.participantCount) && value.matchedCount > value.participantCount) {
@@ -257,6 +286,12 @@ function requireExamCycle(report, failures) {
 function requireEqual(report, failures, key, expected) {
   if (report[key] !== expected) {
     failures.push(`${key} ${expected} olmali.`);
+  }
+}
+
+function requireObjectEqual(report, failures, label, key, expected) {
+  if (report[key] !== expected) {
+    failures.push(`${label} ${expected} olmali.`);
   }
 }
 
@@ -457,6 +492,44 @@ function requireEvidenceReferences(report, failures, key) {
     if (!allowExampleEvidence && hasPlaceholderToken(reference)) {
       failures.push(`${key}[${index}] gercek kanit icin ornek/placeholder/redacted deger olmamali.`);
     }
+  }
+}
+
+function requireNoRawPiiEvidence(value, failures, path = "liveExamCycle") {
+  if (value === null || value === undefined) return;
+
+  if (Array.isArray(value)) {
+    for (const [index, item] of value.entries()) {
+      requireNoRawPiiEvidence(item, failures, `${path}[${index}]`);
+    }
+    return;
+  }
+
+  if (typeof value === "object") {
+    for (const [key, item] of Object.entries(value)) {
+      const normalizedKey = key.toLowerCase();
+      if (forbiddenRawEvidenceKeyFragments.some((fragment) => normalizedKey.includes(fragment))) {
+        failures.push(`${path}.${key} ham PII/TXT evidence alani tasimamali.`);
+      }
+      requireNoRawPiiEvidence(item, failures, `${path}.${key}`);
+    }
+    return;
+  }
+
+  if (typeof value !== "string") return;
+
+  const normalized = value.toLowerCase();
+  if (normalized.includes("ornek-veriler") || /\bisem\s*\.txt\b/.test(normalized) || /\.txt(\b|$)/.test(normalized)) {
+    failures.push(`${path} ham TXT dosya adi veya yolu tasimamali.`);
+  }
+  if (/\b\d{11}\b/.test(value)) {
+    failures.push(`${path} TCKN benzeri 11 haneli deger tasimamali.`);
+  }
+  if (/[^\s@]+@[^\s@]+\.[^\s@]+/.test(value)) {
+    failures.push(`${path} ham e-posta tasimamali.`);
+  }
+  if (/(?:\+?90[\s-]?)?5\d{2}[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}/.test(value)) {
+    failures.push(`${path} ham telefon tasimamali.`);
   }
 }
 

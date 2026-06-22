@@ -5,10 +5,13 @@ import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
-import type { AnnouncementDeliveryReportRecord, AnnouncementRecipientReport } from "@uzman-hocam/shared-types";
+import type {
+  AnnouncementDeliveryQueueResult,
+  AnnouncementDeliveryReportRecord,
+  AnnouncementRecipientReport,
+} from "@uzman-hocam/shared-types";
 import {
   AnnouncementService,
-  type AnnouncementDeliveryQueueResult,
   type AnnouncementRecord,
 } from "./announcement.service.js";
 import {
@@ -71,8 +74,11 @@ export class AnnouncementController {
 
   @Post()
   @RequireCapability("announcement:manage")
-  create(@Body(zodBody(announcementCreateBodySchema)) body: AnnouncementCreateBody): Promise<AnnouncementRecord> {
-    return this.announcements.create(getRequestContext(), body);
+  create(
+    @Body(zodBody(announcementCreateBodySchema)) body: AnnouncementCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<AnnouncementRecord> {
+    return this.announcements.create(getRequestContext(), body, idempotencyKey);
   }
 }
 

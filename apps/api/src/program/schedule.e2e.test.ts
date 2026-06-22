@@ -181,6 +181,69 @@ describe("Schedule API", () => {
       },
     });
 
+    const invalidRange = await request(server)
+      .post("/schedule-lessons")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        classId: "class-a",
+        teacherId: "teacher-a",
+        title: "Ters Saatli Ders",
+        startsAt: "2026-06-01T10:00:00.000Z",
+        endsAt: "2026-06-01T09:00:00.000Z",
+      })
+      .expect(422);
+
+    expect(invalidRange.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [
+          expect.objectContaining({
+            message: "SCHEDULE_LESSON_TIME_RANGE_INVALID",
+            path: "endsAt",
+          }),
+        ],
+      },
+    });
+
+    const emptyUpdate = await request(server)
+      .patch("/schedule-lessons/lesson-a")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({})
+      .expect(422);
+
+    expect(emptyUpdate.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [
+          expect.objectContaining({
+            message: "UPDATE_BODY_EMPTY",
+            path: "$",
+          }),
+        ],
+      },
+    });
+
+    const invalidUpdateRange = await request(server)
+      .patch("/schedule-lessons/lesson-a")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        startsAt: "2026-06-01T11:00:00.000Z",
+        endsAt: "2026-06-01T10:00:00.000Z",
+      })
+      .expect(422);
+
+    expect(invalidUpdateRange.body.error).toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: {
+        fields: [
+          expect.objectContaining({
+            message: "SCHEDULE_LESSON_TIME_RANGE_INVALID",
+            path: "endsAt",
+          }),
+        ],
+      },
+    });
+
     const invalidUpdate = await request(server)
       .patch("/schedule-lessons/lesson-a")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)

@@ -168,8 +168,11 @@ export class StudentController {
 
   @Post()
   @RequireCapability("student:manage")
-  create(@Body(zodBody(studentCreateBodySchema)) body: StudentCreateInput): Promise<StudentRecord> {
-    return this.students.create(getRequestContext(), body);
+  create(
+    @Body(zodBody(studentCreateBodySchema)) body: StudentCreateInput,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<StudentRecord> {
+    return this.students.create(getRequestContext(), body, idempotencyKey);
   }
 
   @Post("enrollments/bulk-renew")

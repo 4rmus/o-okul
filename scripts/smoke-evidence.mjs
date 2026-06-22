@@ -575,6 +575,17 @@ function requireReportGenerationSmoke(payload, failures, label, allowExampleEvid
 }
 
 function requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleEvidence) {
+  const expectedIsemFixture = {
+    answerKeyQuestionCount: 90,
+    bookletVariantCount: 1,
+    studentCount: 254,
+    participantCount: 254,
+    matchedCount: 254,
+    quarantineCount: 0,
+    examResultCount: 254,
+    reportResultCount: 254,
+  };
+
   requireObjectKeySet(payload, failures, label, "isemOpticalPipelineSmoke", [
     "generatedAt",
     "result",
@@ -599,8 +610,14 @@ function requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleE
   requireNonPlaceholderString(payload, failures, `${label}.parserConfigVersion`, "parserConfigVersion", allowExampleEvidence);
   requireString(payload, failures, `${label}.answerKeyVersion`, "answerKeyVersion");
   requireNonPlaceholderString(payload, failures, `${label}.answerKeyVersion`, "answerKeyVersion", allowExampleEvidence);
-  requireIntegerAtLeast(payload, failures, `${label}.answerKeyQuestionCount`, "answerKeyQuestionCount", 90);
-  requireIntegerAtLeast(payload, failures, `${label}.bookletVariantCount`, "bookletVariantCount", 1);
+  requireEqual(
+    payload,
+    failures,
+    `${label}.answerKeyQuestionCount`,
+    "answerKeyQuestionCount",
+    expectedIsemFixture.answerKeyQuestionCount,
+  );
+  requireEqual(payload, failures, `${label}.bookletVariantCount`, "bookletVariantCount", expectedIsemFixture.bookletVariantCount);
   requireIntegerAtLeast(payload, failures, `${label}.pipelineDurationMs`, "pipelineDurationMs", 0);
 
   const counts = payload.counts;
@@ -617,16 +634,15 @@ function requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleE
       "guardianLinkCount",
     ])
   ) {
-    requireIntegerAtLeast(counts, failures, `${label}.counts.studentCount`, "studentCount", 1);
-    requireIntegerAtLeast(counts, failures, `${label}.counts.participantCount`, "participantCount", 1);
-    requireIntegerAtLeast(counts, failures, `${label}.counts.matchedCount`, "matchedCount", 1);
-    requireIntegerAtLeast(counts, failures, `${label}.counts.quarantineCount`, "quarantineCount", 0);
-    requireIntegerAtLeast(counts, failures, `${label}.counts.examResultCount`, "examResultCount", 1);
-    requireIntegerAtLeast(counts, failures, `${label}.counts.reportResultCount`, "reportResultCount", 1);
+    requireEqual(counts, failures, `${label}.counts.studentCount`, "studentCount", expectedIsemFixture.studentCount);
+    requireEqual(counts, failures, `${label}.counts.participantCount`, "participantCount", expectedIsemFixture.participantCount);
+    requireEqual(counts, failures, `${label}.counts.matchedCount`, "matchedCount", expectedIsemFixture.matchedCount);
+    requireEqual(counts, failures, `${label}.counts.quarantineCount`, "quarantineCount", expectedIsemFixture.quarantineCount);
+    requireEqual(counts, failures, `${label}.counts.examResultCount`, "examResultCount", expectedIsemFixture.examResultCount);
+    requireEqual(counts, failures, `${label}.counts.reportResultCount`, "reportResultCount", expectedIsemFixture.reportResultCount);
     requireIntegerAtLeast(counts, failures, `${label}.counts.studentPortalUserLinkCount`, "studentPortalUserLinkCount", 1);
     requireIntegerAtLeast(counts, failures, `${label}.counts.guardianPortalUserLinkCount`, "guardianPortalUserLinkCount", 1);
     requireIntegerAtLeast(counts, failures, `${label}.counts.guardianLinkCount`, "guardianLinkCount", 1);
-    requireEqual(counts, failures, `${label}.counts.quarantineCount`, "quarantineCount", 0);
 
     if (Number.isInteger(counts.participantCount) && counts.matchedCount !== counts.participantCount) {
       failures.push(`${label}.counts.matchedCount participantCount ile eşleşmeli.`);

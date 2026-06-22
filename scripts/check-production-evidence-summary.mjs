@@ -1,6 +1,7 @@
 import { lstat, readFile } from "node:fs/promises";
 import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { getTenantScopedTables } from "../packages/db/scripts/tenant-models.mjs";
 import { validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
 
 const target = process.env.PRODUCTION_EVIDENCE_SUMMARY_TARGET ?? process.argv[2];
@@ -8,6 +9,7 @@ const allowExampleEvidence = process.env.PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMP
 
 const requiredSummaryKeys = ["result", "generatedAt", "nodeEnv", "appUrl", "apiUrl", "webUrl", "checks", "smokeEvidence", "reports"];
 const requiredCheckItemKeys = ["label", "script", "status"];
+const expectedTenantTables = getTenantScopedTables();
 
 const requiredChecks = new Map([
   ["Production env", "scripts/check-prod-env.mjs"],
@@ -85,7 +87,15 @@ const requiredReports = {
     "commandsPassed",
     "evidenceReferences",
   ],
-  kvkkInventory: ["environment", "checkedAt", "inventorySource", "dataSubjectCounts", "purgeCoverage", "auditActionsVerified"],
+  kvkkInventory: [
+    "environment",
+    "checkedAt",
+    "inventorySource",
+    "dataSubjectCounts",
+    "purgeCoverage",
+    "auditActionsVerified",
+    "auditDiffRedactionVerified",
+  ],
   identityMigration: ["environment", "checkedAt", "migrationDecision", "subjects", "invitationFlow", "verifications"],
   financialRetention: ["environment", "checkedAt", "policyDecision", "financialRecords", "purgeBehaviorVerified"],
   uploadAv: ["environment", "checkedAt", "scannerDecision", "uploadSurfaces", "scanResults"],
@@ -142,7 +152,16 @@ const requiredReports = {
   ],
   inlineUploadMigration: ["environment", "checkedAt", "storageMode", "dryRun", "migration", "commandsPassed", "evidenceReferences"],
   rateLimit: ["environment", "checkedAt", "config", "instances", "apiRateLimit", "loginAttemptLimiter", "commandsPassed", "evidenceReferences"],
-  rlsLive: ["environment", "checkedAt", "schema", "isolation", "loadSmoke", "commandsPassed", "evidenceReferences"],
+  rlsLive: [
+    "environment",
+    "checkedAt",
+    "schema",
+    "isolation",
+    "tenantFkPreflight",
+    "loadSmoke",
+    "commandsPassed",
+    "evidenceReferences",
+  ],
   uat: [
     "environment",
     "checkedAt",
@@ -192,6 +211,75 @@ const expectedUatCommandsPassed = [
   "pnpm sms:smoke",
   "pnpm notification:smoke",
   "pnpm traefik:https:smoke",
+];
+const expectedKvkkAuditDiffNegativeControls = [
+  "body",
+  "contentBase64",
+  "email",
+  "fileBase64",
+  "fileName",
+  "firstName",
+  "lastName",
+  "message",
+  "name",
+  "nationalId",
+  "objectKey",
+  "phone",
+  "rawLine",
+  "rawRow",
+  "rawText",
+  "s3Key",
+  "sourceFileName",
+  "sourceFilePath",
+  "subject",
+  "title",
+  "token",
+];
+const expectedKvkkAuditDiffActions = [
+  "announcement.created",
+  "message_template.created",
+  "support_ticket.created",
+  "support_ticket_comment.created",
+  "kvkk.student_pii_purged",
+  "kvkk.guardian_pii_purged",
+  "kvkk.user_pii_purged",
+];
+const expectedTenantCompositeRelations = [
+  "AnnouncementReceipt.announcement",
+  "AnnouncementDeliveryReport.announcement",
+  "Homework.class",
+  "ScheduleLesson.class",
+  "StudySession.class",
+  "StudySessionStudent.studySession",
+  "StudySessionStudent.student",
+  "TeacherAssignment.class",
+  "TeacherAssignment.student",
+  "GuardianStudent.guardian",
+  "GuardianStudent.student",
+  "DevelopmentAssessment.teacher",
+  "TeacherAssignment.teacher",
+  "TeacherNote.teacher",
+  "ScheduleLesson.teacher",
+  "StudySession.teacher",
+  "Homework.sourceMaterial",
+  "SupportTicket.class",
+  "PaymentPlan.class",
+  "ReportSnapshot.class",
+  "StudentClassHistory.class",
+  "StudentEnrollment.class",
+  "Student.class",
+  "Student.responsibleTeacher",
+];
+const expectedTenantFkInsertRejects = expectedTenantCompositeRelations.map((relation) => `${relation} cross tenant insert`);
+const expectedRlsWriteRejects = [
+  "Student wrong tenant insert",
+  "Homework wrong tenant insert",
+  "Announcement wrong tenant insert",
+  "MessageTemplate wrong tenant insert",
+  "ExamResult foreign tenant RawImport",
+  "ParsedAnswer foreign tenant RawImport",
+  "ParsedAnswer cross exam mismatch",
+  "ParsedAnswer duplicate raw import participant parser",
 ];
 const externalMonitoringPublicEdgeMonitors = ["API /health", "API /health/ready", "Web login", "Traefik TLS certificate"];
 
@@ -468,6 +556,8 @@ function requireReports(summary, failures) {
   requireObjectTrue(reports.securityAudit, failures, "reports.securityAudit.httpsOk", "httpsOk");
   requireObjectTrue(reports.securityAudit, failures, "reports.securityAudit.rlsLiveCheckOk", "rlsLiveCheckOk");
   requireObjectTrue(reports.securityAudit, failures, "reports.securityAudit.noCriticalFindings", "noCriticalFindings");
+  requireRlsLiveReport(reports.rlsLive, failures);
+  requireKvkkInventoryReport(reports.kvkkInventory, failures);
   requireUatJourneyScenarios(reports.uat, failures);
   requireObjectTrue(reports.uat, failures, "reports.uat.liveExamCyclePassed", "liveExamCyclePassed");
   requireMatchingString(
@@ -497,6 +587,7 @@ function requireReports(summary, failures) {
     "apiUrl",
     "apiUrl",
   );
+  requireIsemLiveExamCycleConsistency(reports, failures);
   requireMatchingString(
     reports.uat,
     failures,
@@ -525,6 +616,201 @@ function requireReports(summary, failures) {
     "sourceBackup",
   );
   requireExactStringSet(reports.uat?.commandsPassed, failures, "reports.uat.commandsPassed", expectedUatCommandsPassed);
+}
+
+function requireKvkkInventoryReport(scope, failures) {
+  const redaction = requireObject(scope, failures, "reports.kvkkInventory.auditDiffRedactionVerified", "auditDiffRedactionVerified");
+  if (!redaction) return;
+
+  requireExpectedObjectKeys(
+    redaction,
+    ["endpoint", "negativeControls", "actionsSampled", "command"],
+    failures,
+    "reports.kvkkInventory.auditDiffRedactionVerified",
+  );
+  requireObjectEqual(redaction, failures, "reports.kvkkInventory.auditDiffRedactionVerified.endpoint", "endpoint", "/audit-logs");
+  requireExactStringSet(
+    redaction.negativeControls,
+    failures,
+    "reports.kvkkInventory.auditDiffRedactionVerified.negativeControls",
+    expectedKvkkAuditDiffNegativeControls,
+  );
+  requireExactStringSet(
+    redaction.actionsSampled,
+    failures,
+    "reports.kvkkInventory.auditDiffRedactionVerified.actionsSampled",
+    expectedKvkkAuditDiffActions,
+  );
+  if (typeof redaction.command !== "string" || !redaction.command.includes("audit-log")) {
+    failures.push("reports.kvkkInventory.auditDiffRedactionVerified.command audit-log doğrulama komutu içermeli.");
+  }
+}
+
+function requireRlsLiveReport(scope, failures) {
+  const schema = requireObject(scope, failures, "reports.rlsLive.schema", "schema");
+  if (schema) {
+    requireExpectedObjectKeys(
+      schema,
+      ["tenantScopedTables", "derivedFromSchema", "staticCheckPassed", "liveCheckPassed", "tablesVerified"],
+      failures,
+      "reports.rlsLive.schema",
+    );
+    requireObjectEqual(schema, failures, "reports.rlsLive.schema.tenantScopedTables", "tenantScopedTables", expectedTenantTables.length);
+    requireObjectTrue(schema, failures, "reports.rlsLive.schema.derivedFromSchema", "derivedFromSchema");
+    requireObjectTrue(schema, failures, "reports.rlsLive.schema.staticCheckPassed", "staticCheckPassed");
+    requireObjectTrue(schema, failures, "reports.rlsLive.schema.liveCheckPassed", "liveCheckPassed");
+    requireExactStringSet(schema.tablesVerified, failures, "reports.rlsLive.schema.tablesVerified", expectedTenantTables);
+  }
+
+  const isolation = requireObject(scope, failures, "reports.rlsLive.isolation", "isolation");
+  if (isolation) {
+    requireExpectedObjectKeys(
+      isolation,
+      [
+        "tenantAHash",
+        "tenantBHash",
+        "crossTenantReadRows",
+        "crossTenantReadChecks",
+        "withCheckRejects",
+        "systemAdminBypassDefaultOff",
+        "bypassRequiresReason",
+        "auditBypassAction",
+      ],
+      failures,
+      "reports.rlsLive.isolation",
+    );
+    requireObjectEqual(isolation, failures, "reports.rlsLive.isolation.crossTenantReadRows", "crossTenantReadRows", 0);
+    requireObjectEqual(isolation, failures, "reports.rlsLive.isolation.crossTenantReadChecks", "crossTenantReadChecks", expectedTenantTables.length);
+    requireExactStringSet(isolation.withCheckRejects, failures, "reports.rlsLive.isolation.withCheckRejects", expectedRlsWriteRejects);
+    requireObjectTrue(isolation, failures, "reports.rlsLive.isolation.systemAdminBypassDefaultOff", "systemAdminBypassDefaultOff");
+    requireObjectTrue(isolation, failures, "reports.rlsLive.isolation.bypassRequiresReason", "bypassRequiresReason");
+    requireObjectEqual(isolation, failures, "reports.rlsLive.isolation.auditBypassAction", "auditBypassAction", "system.rls_bypass_requested");
+  }
+
+  const tenantFkPreflight = requireObject(scope, failures, "reports.rlsLive.tenantFkPreflight", "tenantFkPreflight");
+  if (tenantFkPreflight) {
+    requireExpectedObjectKeys(
+      tenantFkPreflight,
+      [
+        "requiredCompositeRelations",
+        "relationsVerified",
+        "legacyAllowlistCount",
+        "orphanRows",
+        "crossTenantParentRows",
+        "crossTenantInsertRejects",
+        "migrationPreflightCommand",
+      ],
+      failures,
+      "reports.rlsLive.tenantFkPreflight",
+    );
+    requireObjectEqual(
+      tenantFkPreflight,
+      failures,
+      "reports.rlsLive.tenantFkPreflight.requiredCompositeRelations",
+      "requiredCompositeRelations",
+      expectedTenantCompositeRelations.length,
+    );
+    requireExactStringSet(
+      tenantFkPreflight.relationsVerified,
+      failures,
+      "reports.rlsLive.tenantFkPreflight.relationsVerified",
+      expectedTenantCompositeRelations,
+    );
+    requireObjectEqual(tenantFkPreflight, failures, "reports.rlsLive.tenantFkPreflight.legacyAllowlistCount", "legacyAllowlistCount", 0);
+    requireObjectEqual(tenantFkPreflight, failures, "reports.rlsLive.tenantFkPreflight.orphanRows", "orphanRows", 0);
+    requireObjectEqual(tenantFkPreflight, failures, "reports.rlsLive.tenantFkPreflight.crossTenantParentRows", "crossTenantParentRows", 0);
+    requireExactStringSet(
+      tenantFkPreflight.crossTenantInsertRejects,
+      failures,
+      "reports.rlsLive.tenantFkPreflight.crossTenantInsertRejects",
+      expectedTenantFkInsertRejects,
+    );
+    if (
+      typeof tenantFkPreflight.migrationPreflightCommand !== "string" ||
+      !tenantFkPreflight.migrationPreflightCommand.includes("pnpm tenant-db:check")
+    ) {
+      failures.push("reports.rlsLive.tenantFkPreflight.migrationPreflightCommand pnpm tenant-db:check içermeli.");
+    }
+  }
+
+  const loadSmoke = requireObject(scope, failures, "reports.rlsLive.loadSmoke", "loadSmoke");
+  if (loadSmoke) {
+    requireExpectedObjectKeys(
+      loadSmoke,
+      ["targetRps", "actualRps", "durationSeconds", "concurrency", "queriesCompleted", "failures"],
+      failures,
+      "reports.rlsLive.loadSmoke",
+    );
+    requireObjectNumberAtLeast(loadSmoke, failures, "reports.rlsLive.loadSmoke.targetRps", "targetRps", 200);
+    requireObjectNumberAtLeast(loadSmoke, failures, "reports.rlsLive.loadSmoke.actualRps", "actualRps", loadSmoke.targetRps ?? 200);
+    requireObjectEqual(loadSmoke, failures, "reports.rlsLive.loadSmoke.failures", "failures", 0);
+  }
+
+  requireExactStringSet(
+    scope?.commandsPassed,
+    failures,
+    "reports.rlsLive.commandsPassed",
+    ["pnpm db:rls:check", "pnpm db:rls:check:live", "pnpm rls:load:smoke", "pnpm rls:live:check"],
+  );
+}
+
+function requireIsemLiveExamCycleConsistency(reports, failures) {
+  const liveExamCycle = reports.liveExamCycle?.examCycle;
+  const isemOpticalPipeline = reports.isemOpticalPipeline;
+  const isemCounts = isemOpticalPipeline?.counts;
+
+  if (!liveExamCycle || typeof liveExamCycle !== "object" || Array.isArray(liveExamCycle)) return;
+  if (!isemOpticalPipeline || typeof isemOpticalPipeline !== "object" || Array.isArray(isemOpticalPipeline)) return;
+  if (!isemCounts || typeof isemCounts !== "object" || Array.isArray(isemCounts)) return;
+
+  requireMatchingValue(
+    liveExamCycle,
+    failures,
+    "reports.liveExamCycle.examCycle.answerKeyVersion",
+    "answerKeyVersion",
+    isemOpticalPipeline,
+    "reports.isemOpticalPipeline.answerKeyVersion",
+    "answerKeyVersion",
+  );
+  requireMatchingValue(
+    liveExamCycle,
+    failures,
+    "reports.liveExamCycle.examCycle.parserConfigVersion",
+    "parserConfigVersion",
+    isemOpticalPipeline,
+    "reports.isemOpticalPipeline.parserConfigVersion",
+    "parserConfigVersion",
+  );
+  requireMatchingValue(
+    liveExamCycle,
+    failures,
+    "reports.liveExamCycle.examCycle.answerKeyQuestionCount",
+    "answerKeyQuestionCount",
+    isemOpticalPipeline,
+    "reports.isemOpticalPipeline.answerKeyQuestionCount",
+    "answerKeyQuestionCount",
+  );
+  requireMatchingValue(
+    liveExamCycle,
+    failures,
+    "reports.liveExamCycle.examCycle.bookletVariantCount",
+    "bookletVariantCount",
+    isemOpticalPipeline,
+    "reports.isemOpticalPipeline.bookletVariantCount",
+    "bookletVariantCount",
+  );
+
+  for (const key of ["participantCount", "matchedCount", "quarantineCount", "examResultCount", "reportResultCount"]) {
+    requireMatchingValue(
+      liveExamCycle,
+      failures,
+      `reports.liveExamCycle.examCycle.${key}`,
+      key,
+      isemCounts,
+      `reports.isemOpticalPipeline.counts.${key}`,
+      key,
+    );
+  }
 }
 
 function requireNoPlaceholderValues(value, failures, label) {
@@ -575,7 +861,20 @@ function requireObjectTrue(scope, failures, label, key) {
   }
 }
 
+function requireObjectNumberAtLeast(scope, failures, label, key, min) {
+  const value = scope?.[key];
+  if (typeof value !== "number" || Number.isNaN(value) || value < min) {
+    failures.push(`${label} en az ${min} olmalı.`);
+  }
+}
+
 function requireMatchingString(firstScope, failures, firstLabel, firstKey, secondScope, secondLabel, secondKey) {
+  if (firstScope?.[firstKey] !== secondScope?.[secondKey]) {
+    failures.push(`${firstLabel} ${secondLabel} ile eşleşmeli.`);
+  }
+}
+
+function requireMatchingValue(firstScope, failures, firstLabel, firstKey, secondScope, secondLabel, secondKey) {
   if (firstScope?.[firstKey] !== secondScope?.[secondKey]) {
     failures.push(`${firstLabel} ${secondLabel} ile eşleşmeli.`);
   }

@@ -25,6 +25,7 @@ import type {
   SupportTicketRecord,
   GuardianStudentRecord,
   NotificationDeviceTokenRecord,
+  PublicNotificationDeviceTokenRecord,
 } from "@uzman-hocam/shared-types";
 import { AnnouncementService } from "../announcement/announcement.service.js";
 import { AttendanceService } from "../attendance/attendance.service.js";
@@ -108,22 +109,22 @@ export class MeController {
 
   @Get("notification-devices")
   @Roles("TENANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN")
-  notificationDevicesList(): Promise<NotificationDeviceTokenRecord[]> {
-    return this.notificationDevices.listCurrentUser(getRequestContext());
+  async notificationDevicesList(): Promise<PublicNotificationDeviceTokenRecord[]> {
+    return (await this.notificationDevices.listCurrentUser(getRequestContext())).map(toPublicNotificationDeviceResponse);
   }
 
   @Post("notification-devices")
   @Roles("TENANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN")
-  registerNotificationDevice(
+  async registerNotificationDevice(
     @Body(zodBody(notificationDeviceRegisterBodySchema)) body: NotificationDeviceRegisterBody,
-  ): Promise<NotificationDeviceTokenRecord> {
-    return this.notificationDevices.registerCurrentUser(getRequestContext(), body);
+  ): Promise<PublicNotificationDeviceTokenRecord> {
+    return toPublicNotificationDeviceResponse(await this.notificationDevices.registerCurrentUser(getRequestContext(), body));
   }
 
   @Delete("notification-devices/:id")
   @Roles("TENANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN")
-  disableNotificationDevice(@Param("id") id: string): Promise<NotificationDeviceTokenRecord> {
-    return this.notificationDevices.disableCurrentUser(getRequestContext(), id);
+  async disableNotificationDevice(@Param("id") id: string): Promise<PublicNotificationDeviceTokenRecord> {
+    return toPublicNotificationDeviceResponse(await this.notificationDevices.disableCurrentUser(getRequestContext(), id));
   }
 
   @Get("student")
@@ -641,8 +642,8 @@ export class MeController {
 
   @Get("teacher")
   @Roles("TEACHER")
-  teacher(): Promise<TeacherRecord> {
-    return this.school.findCurrentTeacher(getRequestContext());
+  async teacher(): Promise<TeacherRecord> {
+    return toPublicTeacherResponse(await this.school.findCurrentTeacher(getRequestContext()));
   }
 
   @Get("teacher/schedule")
@@ -662,6 +663,17 @@ export class MeController {
   markTeacherAnnouncementRead(@Param("id") id: string): Promise<AnnouncementRecord> {
     return this.announcements.markCurrentTeacherRead(getRequestContext(), id);
   }
+}
+
+function toPublicTeacherResponse(record: TeacherRecord): TeacherRecord {
+  const response = { ...record };
+  delete response.userId;
+  return response;
+}
+
+function toPublicNotificationDeviceResponse(record: NotificationDeviceTokenRecord): PublicNotificationDeviceTokenRecord {
+  const { token: _token, userId: _userId, ...response } = record;
+  return response;
 }
 
 function assertGuardianContext(context: RequestContext): void {

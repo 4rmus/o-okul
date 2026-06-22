@@ -2,6 +2,9 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundEx
 import type {
   PaymentInstallmentRecord,
   PaymentInstallmentStatus,
+  PaymentInstallmentUpdateRequest,
+  PaymentPlanCreateRequest,
+  PaymentPlanInstallmentInput,
   PaymentPlanWithInstallmentsRecord,
 } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
@@ -17,36 +20,8 @@ import { type StudentStore, studentStoreToken } from "../student/student-store.j
 import { assertTenantResourceAccess, filterTenantResources } from "../tenant/tenant-access.js";
 import { type PaymentPlanListFilters as StorePaymentPlanListFilters, type PaymentPlanStore, paymentPlanStoreToken } from "./payment-store.js";
 
-export interface PaymentInstallmentInput {
-  installmentNo: number;
-  amount: number;
-  dueDate: string;
-  status?: PaymentInstallmentStatus;
-  paidAt?: string;
-}
-
-export interface PaymentPlanInput {
-  studentId: string;
-  campusId?: string;
-  gradeLevelId?: string;
-  classId?: string;
-  courseId?: string;
-  termId?: string;
-  title: string;
-  totalAmount: number;
-  currency?: string;
-  installments: PaymentInstallmentInput[];
-}
-
 export interface PaymentPlanListFilters extends StorePaymentPlanListFilters {
   studentId?: string;
-}
-
-export interface PaymentInstallmentUpdateInput {
-  amount?: number;
-  dueDate?: string;
-  status?: PaymentInstallmentStatus;
-  paidAt?: string;
 }
 
 type PaymentPlanContextFields = Required<Pick<StorePaymentPlanListFilters, "campusId" | "gradeLevelId" | "classId" | "courseId" | "termId">>;
@@ -101,7 +76,7 @@ export class PaymentService {
 
   async create(
     context: RequestContext,
-    input: Partial<PaymentPlanInput>,
+    input: Partial<PaymentPlanCreateRequest>,
     idempotencyKey?: string,
   ): Promise<PaymentPlanWithInstallmentsRecord> {
     return this.idempotency.run(
@@ -111,7 +86,7 @@ export class PaymentService {
     );
   }
 
-  private async createPaymentPlan(context: RequestContext, input: Partial<PaymentPlanInput>): Promise<PaymentPlanWithInstallmentsRecord> {
+  private async createPaymentPlan(context: RequestContext, input: Partial<PaymentPlanCreateRequest>): Promise<PaymentPlanWithInstallmentsRecord> {
     this.assertTenantAdmin(context);
     const student = await this.findStudentForTenant(context, requiredText(input.studentId, "PAYMENT_PLAN_STUDENT_REQUIRED"));
     const paymentContext = await this.resolvePaymentContext(student.tenantId, student, input);
@@ -152,7 +127,7 @@ export class PaymentService {
     context: RequestContext,
     planId: string,
     installmentId: string,
-    input: Partial<PaymentInstallmentUpdateInput>,
+    input: PaymentInstallmentUpdateRequest,
     idempotencyKey?: string,
   ): Promise<PaymentPlanWithInstallmentsRecord> {
     return this.idempotency.run(
@@ -166,7 +141,7 @@ export class PaymentService {
     context: RequestContext,
     planId: string,
     installmentId: string,
-    input: Partial<PaymentInstallmentUpdateInput>,
+    input: PaymentInstallmentUpdateRequest,
   ): Promise<PaymentPlanWithInstallmentsRecord> {
     this.assertTenantAdmin(context);
     const existingPlan = await this.findPlanForTenant(context, planId);
@@ -214,7 +189,7 @@ export class PaymentService {
   private async resolvePaymentContext(
     tenantId: string,
     student: { classId?: string },
-    input: Partial<PaymentPlanInput>,
+    input: Partial<PaymentPlanCreateRequest>,
   ): Promise<Partial<PaymentPlanContextFields>> {
     const explicitClassId = optionalText(input.classId);
     const contextFields: Partial<PaymentPlanContextFields> = {
@@ -314,7 +289,7 @@ export class PaymentService {
 }
 
 function resolveInstallments(
-  input: PaymentInstallmentInput[] | undefined,
+  input: PaymentPlanInstallmentInput[] | undefined,
 ): Array<Omit<PaymentInstallmentRecord, "id" | "tenantId" | "planId" | "createdAt">> {
   if (!input || input.length === 0) {
     throw new BadRequestException("PAYMENT_PLAN_INSTALLMENTS_REQUIRED");

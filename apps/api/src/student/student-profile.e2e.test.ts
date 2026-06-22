@@ -181,6 +181,7 @@ describe("Student profile + TC API", () => {
         expect(body.section).toBe("A");
         expect(body.responsibleTeacherName).toBe("Ayse Ogretmen");
         expect(JSON.stringify(body)).not.toContain("10000000146");
+        expect(JSON.stringify(body)).not.toContain("userId");
       });
     await request(server)
       .get("/me/student/class-history")

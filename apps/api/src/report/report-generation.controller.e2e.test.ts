@@ -143,7 +143,33 @@ describe("ReportGenerationController", () => {
       .expect(200);
 
     expect(snapshotStore.inputs).toContainEqual({ tenantId: "tenant-a", examId: "exam-a" });
-    expect(response.body).toEqual([fakeSnapshot, fakePreviousSnapshot]);
+    expect(response.body.map((snapshot: ReportSnapshotRecord) => snapshot.id)).toEqual(["snapshot-a", "snapshot-previous"]);
+    expect(response.body[0].snapshotData).toEqual(expect.objectContaining({
+      resultCount: 1,
+      averages: expect.objectContaining({ net: 17.5 }),
+      branches: [
+        expect.objectContaining({ branch: "Matematik", net: 17.5 }),
+      ],
+      classes: [
+        expect.objectContaining({
+          classId: "class-a",
+          className: "8-A",
+          averages: expect.objectContaining({ net: 17.5 }),
+        }),
+      ],
+      students: [
+        expect.objectContaining({
+          studentId: "student-a",
+          resultKey: "result-a",
+          total: expect.objectContaining({ net: 17.5 }),
+        }),
+      ],
+    }));
+    const serialized = JSON.stringify(response.body);
+    expect(serialized).not.toContain("\"questions\"");
+    expect(serialized).not.toContain("\"answer\"");
+    expect(serialized).not.toContain("\"correctAnswer\"");
+    expect(serialized).not.toContain("\"statistics\"");
   });
 
   it("TENANT_ADMIN rapor snapshotlarını akademik bağlam filtresiyle listeler", async () => {
@@ -154,7 +180,9 @@ describe("ReportGenerationController", () => {
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .expect(200);
 
-    expect(response.body).toEqual([fakeSnapshot]);
+    expect(response.body.map((snapshot: ReportSnapshotRecord) => snapshot.id)).toEqual(["snapshot-a"]);
+    expect(JSON.stringify(response.body)).not.toContain("\"questions\"");
+    expect(JSON.stringify(response.body)).not.toContain("\"correctAnswer\"");
   });
 
   it("TENANT_ADMIN öğrenci snapshot listesini tek öğrenci metadata'sı olarak alır", async () => {
@@ -189,10 +217,15 @@ describe("ReportGenerationController", () => {
   it("TEACHER hazır rapor snapshotlarını okuyabilir", async () => {
     const issued = await login("teacher-a@example.test");
 
-    await request(server)
+    const response = await request(server)
       .get("/exams/exam-a/reports/snapshots")
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .expect(200);
+    const serialized = JSON.stringify(response.body);
+    expect(serialized).not.toContain("\"questions\"");
+    expect(serialized).not.toContain("\"answer\"");
+    expect(serialized).not.toContain("\"correctAnswer\"");
+    expect(serialized).not.toContain("\"rawRow\"");
   });
 
   it("TEACHER hazır rapor snapshotını Excel olarak alabilir", async () => {
@@ -436,6 +469,35 @@ describe("ReportGenerationController", () => {
       .get("/exams/exam-a/reports/snapshots/snapshot-a/export.xlsx")
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .expect(404);
+  });
+
+  it("başka tenant öğrenci raporu ve hata kitapçığı okuyamaz", async () => {
+    const issued = await login("admin-b@example.test");
+
+    await request(server)
+      .get("/exams/exam-a/reports/snapshots/snapshot-a/students/student-a")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(404);
+    await request(server)
+      .get("/exams/exam-a/reports/snapshots/snapshot-a/students/student-a/error-booklet")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(404);
+  });
+
+  it("TEACHER kapsam dışı öğrenci raporu ve hata kitapçığını okuyamaz", async () => {
+    const issued = await login("teacher-a@example.test");
+
+    const reportResponse = await request(server)
+      .get("/exams/exam-a/reports/snapshots/snapshot-a/students/student-b")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(403);
+    const bookletResponse = await request(server)
+      .get("/exams/exam-a/reports/snapshots/snapshot-a/students/student-b/error-booklet")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(403);
+
+    expect(JSON.stringify(reportResponse.body)).not.toContain("student-b");
+    expect(JSON.stringify(bookletResponse.body)).not.toContain("student-b");
   });
 
   it("TEACHER rapor üretim işi başlatamaz", async () => {

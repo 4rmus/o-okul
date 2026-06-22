@@ -1,4 +1,9 @@
-import type { ParserConfigSuggestion, ParserDelimiter } from "./format-analyzer.js";
+import type {
+  ParserConfigPreset,
+  ParserConfigSuggestion,
+  ParserDelimiter,
+  ParserEncoding,
+} from "./format-analyzer.js";
 
 export interface Session {
   id: string;
@@ -16,6 +21,11 @@ export interface AuthResponse {
   session: Session;
 }
 
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
 export interface MfaChallengeResponse {
   status: "MFA_REQUIRED";
   challengeToken: string;
@@ -25,12 +35,44 @@ export interface MfaChallengeResponse {
 
 export type LoginResponse = AuthResponse | MfaChallengeResponse;
 
+export interface AuthRefreshRequest {
+  refreshToken?: string;
+}
+
+export interface PasswordResetRequest {
+  email: string;
+}
+
+export interface PasswordResetAcceptedResponse {
+  status: "ACCEPTED";
+}
+
+export interface PasswordResetConfirmRequest {
+  token: string;
+  password: string;
+}
+
+export interface PasswordResetConfirmResponse {
+  resetAt: string;
+}
+
+export interface TotpChallengeVerifyRequest {
+  challengeToken: string;
+  totpCode?: string;
+  recoveryCode?: string;
+}
+
 export interface TotpSetupResponse {
   secret: string;
   keyUri: string;
   setupToken: string;
   setupExpiresAt: string;
   recoveryCodes: string[];
+}
+
+export interface TotpSetupConfirmRequest {
+  setupToken: string;
+  totpCode: string;
 }
 
 export interface TotpSetupConfirmResponse {
@@ -43,6 +85,15 @@ export interface TotpStatusResponse {
   enabled: boolean;
   enabledAt?: string;
   recoveryCodesRemaining: number;
+}
+
+export interface TotpDisableRequest {
+  totpCode?: string;
+  recoveryCode?: string;
+}
+
+export interface TotpDisableResponse {
+  disabledAt: string;
 }
 
 export interface MeProfileResponse {
@@ -86,10 +137,29 @@ export interface NotificationDeviceTokenRecord {
   updatedAt?: string;
 }
 
+export type PublicNotificationDeviceTokenRecord = Omit<NotificationDeviceTokenRecord, "token" | "userId">;
+
 export interface ClassRecord {
   id: string;
   tenantId: string;
   name: string;
+  level?: string;
+  campusId?: string;
+  gradeLevelId?: string;
+  section?: string;
+}
+
+export interface ClassCreateRequest {
+  tenantId?: string;
+  name: string;
+  level?: string;
+  campusId?: string;
+  gradeLevelId?: string;
+  section?: string;
+}
+
+export interface ClassUpdateRequest {
+  name?: string;
   level?: string;
   campusId?: string;
   gradeLevelId?: string;
@@ -103,6 +173,17 @@ export interface CampusRecord {
   code?: string;
 }
 
+export interface CampusCreateRequest {
+  tenantId?: string;
+  name: string;
+  code?: string;
+}
+
+export interface CampusUpdateRequest {
+  name?: string;
+  code?: string;
+}
+
 export interface GradeLevelRecord {
   id: string;
   tenantId: string;
@@ -110,10 +191,32 @@ export interface GradeLevelRecord {
   code?: string;
 }
 
+export interface GradeLevelCreateRequest {
+  tenantId?: string;
+  name: string;
+  code?: string;
+}
+
+export interface GradeLevelUpdateRequest {
+  name?: string;
+  code?: string;
+}
+
 export interface CourseRecord {
   id: string;
   tenantId: string;
   name: string;
+  code?: string;
+}
+
+export interface CourseCreateRequest {
+  tenantId?: string;
+  name: string;
+  code?: string;
+}
+
+export interface CourseUpdateRequest {
+  name?: string;
   code?: string;
 }
 
@@ -126,6 +229,21 @@ export interface LearningOutcomeRecord {
   level?: string;
 }
 
+export interface LearningOutcomeCreateRequest {
+  tenantId?: string;
+  code: string;
+  branch: string;
+  title: string;
+  level?: string;
+}
+
+export interface LearningOutcomeUpdateRequest {
+  code?: string;
+  branch?: string;
+  title?: string;
+  level?: string;
+}
+
 export interface AcademicYearRecord {
   id: string;
   tenantId: string;
@@ -133,6 +251,21 @@ export interface AcademicYearRecord {
   startsAt: string;
   endsAt: string;
   isActive: boolean;
+}
+
+export interface AcademicYearCreateRequest {
+  tenantId?: string;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  isActive?: boolean;
+}
+
+export interface AcademicYearUpdateRequest {
+  name?: string;
+  startsAt?: string;
+  endsAt?: string;
+  isActive?: boolean;
 }
 
 export interface AcademicTermRecord {
@@ -145,6 +278,23 @@ export interface AcademicTermRecord {
   isActive: boolean;
 }
 
+export interface AcademicTermCreateRequest {
+  tenantId?: string;
+  academicYearId: string;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  isActive?: boolean;
+}
+
+export interface AcademicTermUpdateRequest {
+  academicYearId?: string;
+  name?: string;
+  startsAt?: string;
+  endsAt?: string;
+  isActive?: boolean;
+}
+
 export interface TeacherRecord {
   id: string;
   tenantId: string;
@@ -152,6 +302,19 @@ export interface TeacherRecord {
   lastName: string;
   branch?: string;
   userId?: string;
+}
+
+export interface TeacherCreateRequest {
+  tenantId?: string;
+  firstName: string;
+  lastName: string;
+  branch?: string;
+}
+
+export interface TeacherUpdateRequest {
+  firstName?: string;
+  lastName?: string;
+  branch?: string;
 }
 
 export type TeacherAssignmentRole = "CLASS_TEACHER" | "BRANCH_TEACHER" | "GUIDANCE_COUNSELOR" | "RESPONSIBLE_TEACHER";
@@ -169,6 +332,30 @@ export interface TeacherAssignmentRecord {
   endsAt?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface TeacherAssignmentCreateRequest {
+  classId?: string;
+  studentId?: string;
+  courseId?: string;
+  termId?: string;
+  role?: TeacherAssignmentRole;
+  startsAt?: string;
+  endsAt?: string;
+}
+
+export interface TeacherAssignmentUpdateRequest {
+  classId?: string;
+  studentId?: string;
+  courseId?: string;
+  termId?: string;
+  role?: TeacherAssignmentRole;
+  startsAt?: string;
+  endsAt?: string;
+}
+
+export interface TeacherImportRequest {
+  fileBase64: string;
 }
 
 export interface TeacherImportError {
@@ -216,6 +403,32 @@ export interface GuardianRecord {
 
 export type GuardianRelationshipType = "MOTHER" | "FATHER" | "GUARDIAN" | "EMERGENCY_CONTACT" | "OTHER";
 
+export interface GuardianCreateRequest {
+  tenantId?: string;
+  firstName: string;
+  lastName: string;
+  phone?: string;
+}
+
+export interface GuardianUpdateRequest {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+}
+
+export interface GuardianStudentRelationRequest {
+  relationshipType?: GuardianRelationshipType;
+  isPrimary?: boolean;
+  canViewFinance?: boolean;
+  canReceiveSms?: boolean;
+  canReceiveAnnouncements?: boolean;
+  canOpenSupportTickets?: boolean;
+}
+
+export interface GuardianStudentLinkRequest extends GuardianStudentRelationRequest {
+  studentId: string;
+}
+
 export interface GuardianStudentRecord {
   id: string;
   tenantId: string;
@@ -243,7 +456,32 @@ export interface StudentRecord {
   userId?: string;
 }
 
+export type PublicStudentRecord = Omit<StudentRecord, "userId">;
+
 export type StudentStatus = "ACTIVE" | "PASSIVE" | "GRADUATED" | "TRANSFERRED";
+
+export interface StudentGuardianProvisionRequest {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  email?: string;
+  relationshipType?: GuardianRelationshipType;
+  isPrimary?: boolean;
+  canViewFinance?: boolean;
+  canReceiveSms?: boolean;
+  canReceiveAnnouncements?: boolean;
+  canOpenSupportTickets?: boolean;
+}
+
+export interface StudentCreateRequest {
+  tenantId?: string;
+  firstName: string;
+  lastName: string;
+  classId?: string;
+  responsibleTeacherId?: string;
+  status?: StudentStatus;
+  guardian?: StudentGuardianProvisionRequest;
+}
 
 export interface GuardianStudentDetailStudentRecord {
   id: string;
@@ -312,6 +550,8 @@ export interface StudentProfileRecord extends StudentRecord {
   photoKey?: string;
 }
 
+export type PublicStudentProfileRecord = Omit<StudentProfileRecord, "userId">;
+
 export interface ScheduleLessonRecord {
   id: string;
   tenantId: string;
@@ -322,6 +562,27 @@ export interface ScheduleLessonRecord {
   title: string;
   startsAt: string;
   endsAt: string;
+}
+
+export interface ScheduleLessonCreateRequest {
+  tenantId?: string;
+  classId: string;
+  teacherId: string;
+  courseId?: string;
+  termId?: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+}
+
+export interface ScheduleLessonUpdateRequest {
+  classId?: string;
+  teacherId?: string;
+  courseId?: string;
+  termId?: string;
+  title?: string;
+  startsAt?: string;
+  endsAt?: string;
 }
 
 export interface StudySessionRecord {
@@ -336,6 +597,31 @@ export interface StudySessionRecord {
   capacity: number;
   startsAt: string;
   endsAt: string;
+}
+
+export interface StudySessionCreateRequest {
+  tenantId?: string;
+  classId: string;
+  teacherId: string;
+  courseId?: string;
+  termId?: string;
+  studentIds: string[];
+  title: string;
+  capacity: number;
+  startsAt: string;
+  endsAt: string;
+}
+
+export interface StudySessionUpdateRequest {
+  classId?: string;
+  teacherId?: string;
+  courseId?: string;
+  termId?: string;
+  studentIds?: string[];
+  title?: string;
+  capacity?: number;
+  startsAt?: string;
+  endsAt?: string;
 }
 
 export interface HomeworkRecord {
@@ -360,6 +646,17 @@ export interface HomeworkMaterialRecord {
 
 export type UploadContentType = "application/pdf" | "image/jpeg" | "image/png" | "text/plain";
 
+export interface HomeworkMaterialCreateRequest {
+  tenantId?: string;
+  title: string;
+  description?: string;
+}
+
+export interface HomeworkMaterialUpdateRequest {
+  title?: string;
+  description?: string;
+}
+
 export interface HomeworkMaterialFileRecord {
   id: string;
   tenantId: string;
@@ -370,6 +667,12 @@ export interface HomeworkMaterialFileRecord {
   byteSize: number;
   sha256: string;
   createdAt: string;
+}
+
+export interface HomeworkMaterialFileCreateRequest {
+  contentType: UploadContentType;
+  fileBase64: string;
+  fileName: string;
 }
 
 export interface HomeworkMaterialFileDownloadResult {
@@ -398,12 +701,60 @@ export interface HomeworkMaterialAssignmentRecord {
   createdAt: string;
 }
 
+export interface HomeworkMaterialAssignmentCreateRequest {
+  studentId: string;
+  courseId?: string;
+  termId?: string;
+  note?: string;
+  dueAt?: string;
+}
+
+export interface HomeworkCreateRequest {
+  tenantId?: string;
+  classId: string;
+  title: string;
+  description?: string;
+  dueAt?: string;
+}
+
+export interface HomeworkFromMaterialCreateRequest {
+  tenantId?: string;
+  classId: string;
+  materialId: string;
+  dueAt?: string;
+}
+
+export interface HomeworkUpdateRequest {
+  classId?: string;
+  title?: string;
+  description?: string;
+  dueAt?: string;
+}
+
+export interface HomeworkCheckStatusRequest {
+  checked: boolean;
+}
+
+export type AnnouncementAudience = "SCHOOL" | "TEACHERS" | "STUDENTS" | "GUARDIANS";
+
+export interface AnnouncementCreateRequest {
+  audience?: AnnouncementAudience;
+  body: string;
+  campusId?: string;
+  classId?: string;
+  courseId?: string;
+  gradeLevelId?: string;
+  tenantId?: string;
+  termId?: string;
+  title: string;
+}
+
 export interface AnnouncementRecord {
   id: string;
   tenantId: string;
   title: string;
   body: string;
-  audience: "SCHOOL" | "TEACHERS" | "STUDENTS" | "GUARDIANS";
+  audience: AnnouncementAudience;
   campusId?: string;
   gradeLevelId?: string;
   classId?: string;
@@ -411,6 +762,7 @@ export interface AnnouncementRecord {
   termId?: string;
   publishedAt: string;
   readAt?: string;
+  deletedAt?: string;
 }
 
 export interface AnnouncementRecipientRecord {
@@ -435,6 +787,31 @@ export interface AnnouncementRecipientReport {
 export type AnnouncementDeliveryChannel = "EMAIL" | "PUSH";
 export type AnnouncementDeliveryStatus = "queued" | "completed" | "failed";
 
+export interface AnnouncementDeliveryResultRequest {
+  channel: AnnouncementDeliveryChannel;
+  deliveredCount: number;
+  failedCount: number;
+  providerErrorCode?: string;
+  recipientCount: number;
+  status: Exclude<AnnouncementDeliveryStatus, "queued">;
+}
+
+export interface AnnouncementDeliverySendRequest {
+  channel: AnnouncementDeliveryChannel;
+}
+
+export interface AnnouncementDeliveryQueueResult {
+  tenantId: string;
+  announcementId: string;
+  channel: AnnouncementDeliveryChannel;
+  recipientCount: number;
+  deliveredCount: number;
+  failedCount: number;
+  queueName: "announcement-delivery";
+  jobId: string;
+  status: "queued";
+}
+
 export interface AnnouncementDeliveryReportRecord {
   id: string;
   tenantId: string;
@@ -447,6 +824,22 @@ export interface AnnouncementDeliveryReportRecord {
   providerErrorCode?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface ApiListMeta {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface ApiItemResponse<TItem> {
+  data: TItem;
+}
+
+export interface ApiListResponse<TItem> {
+  data: TItem[];
+  meta: ApiListMeta;
 }
 
 export interface MessageTemplateRecord {
@@ -471,6 +864,20 @@ export interface AttendanceRecord {
   deletedAt?: string;
 }
 
+export interface AttendanceCreateRequest {
+  studentId: string;
+  date: string;
+  status: AttendanceStatus;
+  courseId?: string;
+  termId?: string;
+}
+
+export interface AttendanceUpdateRequest {
+  status: AttendanceStatus;
+  courseId?: string;
+  termId?: string;
+}
+
 export interface AttendanceSummaryRecord {
   studentId: string;
   total: number;
@@ -481,6 +888,24 @@ export interface AttendanceSummaryRecord {
 }
 
 export type TeacherNoteVisibility = "INTERNAL" | "GUARDIAN_STUDENT";
+
+export interface TeacherNoteCreateRequest {
+  studentId: string;
+  teacherId?: string;
+  courseId?: string;
+  termId?: string;
+  visibility: TeacherNoteVisibility;
+  body: string;
+  developmentStatus?: string;
+}
+
+export interface TeacherNoteUpdateRequest {
+  courseId?: string;
+  termId?: string;
+  visibility?: TeacherNoteVisibility;
+  body?: string;
+  developmentStatus?: string;
+}
 
 export interface TeacherNoteRecord {
   id: string;
@@ -497,6 +922,28 @@ export interface TeacherNoteRecord {
 }
 
 export type DevelopmentAssessmentVisibility = "INTERNAL" | "GUARDIAN";
+
+export interface DevelopmentCriterionCreateRequest {
+  name: string;
+  scaleMin?: number;
+  scaleMax?: number;
+  sortOrder?: number;
+}
+
+export interface DevelopmentAssessmentScoreInput {
+  criterionId: string;
+  score: number;
+}
+
+export interface DevelopmentAssessmentCreateRequest {
+  studentId: string;
+  teacherId?: string;
+  termId?: string;
+  periodLabel: string;
+  mentorNote?: string;
+  visibility?: DevelopmentAssessmentVisibility;
+  scores: DevelopmentAssessmentScoreInput[];
+}
 
 export interface DevelopmentTrendScore {
   criterionId: string;
@@ -516,6 +963,34 @@ export interface DevelopmentTrendItem {
 }
 
 export type PaymentInstallmentStatus = "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
+
+export interface PaymentPlanInstallmentInput {
+  installmentNo: number;
+  amount: number;
+  dueDate: string;
+  status?: PaymentInstallmentStatus;
+  paidAt?: string;
+}
+
+export interface PaymentPlanCreateRequest {
+  studentId: string;
+  campusId?: string;
+  gradeLevelId?: string;
+  classId?: string;
+  courseId?: string;
+  termId?: string;
+  title: string;
+  totalAmount: number;
+  currency?: string;
+  installments: PaymentPlanInstallmentInput[];
+}
+
+export interface PaymentInstallmentUpdateRequest {
+  amount?: number;
+  dueDate?: string;
+  status?: PaymentInstallmentStatus;
+  paidAt?: string;
+}
 
 export interface PaymentInstallmentRecord {
   id: string;
@@ -550,6 +1025,27 @@ export interface PaymentPlanWithInstallmentsRecord extends PaymentPlanRecord {
   installments: PaymentInstallmentRecord[];
 }
 
+export type SupportTicketPriority = "LOW" | "NORMAL" | "HIGH";
+export type SupportTicketStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
+
+export interface SupportTicketCreateRequest {
+  tenantId?: string;
+  studentId?: string;
+  campusId?: string;
+  gradeLevelId?: string;
+  classId?: string;
+  courseId?: string;
+  termId?: string;
+  subject: string;
+  message: string;
+  priority?: SupportTicketPriority;
+}
+
+export interface SupportTicketUpdateRequest {
+  priority?: SupportTicketPriority;
+  status?: SupportTicketStatus;
+}
+
 export interface SupportTicketRecord {
   id: string;
   tenantId: string;
@@ -562,9 +1058,15 @@ export interface SupportTicketRecord {
   termId?: string;
   subject: string;
   message: string;
-  priority: "LOW" | "NORMAL" | "HIGH";
-  status: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
+  priority: SupportTicketPriority;
+  status: SupportTicketStatus;
   createdAt: string;
+}
+
+export interface SupportTicketAttachmentCreateRequest {
+  fileName: string;
+  contentType: UploadContentType;
+  fileBase64: string;
 }
 
 export interface SupportTicketAttachmentRecord {
@@ -589,6 +1091,10 @@ export interface SupportTicketAttachmentDownloadResult {
   downloadUrl?: string;
   downloadUrlExpiresAt?: string;
   downloadUrlExpiresInSeconds?: number;
+}
+
+export interface SupportTicketCommentCreateRequest {
+  body: string;
 }
 
 export interface SupportTicketCommentRecord {
@@ -928,6 +1434,149 @@ export interface ReportErrorBooklet {
   studentId: string;
   items: ReportStudentQuestionSummary[];
   generatedAt?: string;
+}
+
+export interface RawImportUploadRequest {
+  contentType?: string;
+  fileBase64: string;
+  fileName: string;
+  parserConfigVersion: string;
+  sourceType: string;
+}
+
+export interface RawImportRecord {
+  id: string;
+  tenantId: string;
+  examId: string;
+  sha256: string;
+  s3Key: string;
+  parserConfigVersion: string;
+}
+
+export interface RawImportParseJobRecord {
+  jobId: string;
+  queueName: string;
+}
+
+export interface RawImportUploadResult {
+  rawImport: RawImportRecord;
+  parseJob: RawImportParseJobRecord;
+  status: "uploaded";
+}
+
+export interface RawImportQuarantineReasonSummary {
+  reason: string;
+  count: number;
+}
+
+export interface RawImportParseSummary {
+  tenantId: string;
+  examId: string;
+  rawImportId: string;
+  matchedCount: number;
+  quarantinedCount: number;
+  totalRows: number;
+  quarantineReasons: RawImportQuarantineReasonSummary[];
+}
+
+export interface RawImportEvaluationRequest {
+  answerKeyId?: string;
+}
+
+export interface RawImportEvaluationJobRecord {
+  participantId: string;
+  jobId: string;
+  status: "queued";
+}
+
+export interface RawImportEvaluationQueueResult {
+  tenantId: string;
+  examId: string;
+  rawImportId: string;
+  answerKeyId?: string;
+  rawImportSha256?: string;
+  matchedCount: number;
+  queuedCount: number;
+  queueName: "exam-evaluation";
+  jobs: RawImportEvaluationJobRecord[];
+}
+
+export interface RawImportEvaluationStatus {
+  tenantId: string;
+  examId: string;
+  rawImportId: string;
+  answerKeyId?: string;
+  matchedCount: number;
+  evaluatedCount: number;
+  pendingCount: number;
+  status: "COMPLETED" | "RUNNING";
+}
+
+export interface RawImportQuarantineResolveRequest {
+  resolvedStudentId: string;
+}
+
+export interface RawImportQuarantineEvaluationJob {
+  tenantId: string;
+  examId: string;
+  rawImportId: string;
+  participantId: string;
+  answerKeyId: string;
+  queueName: "exam-evaluation";
+  jobId: string;
+  status: "queued";
+}
+
+export interface RawImportQuarantineRecord {
+  id: string;
+  tenantId: string;
+  examId: string;
+  rawImportId: string;
+  rowNumber: number;
+  rawRow: Record<string, unknown>;
+  reason: string;
+  status: "OPEN" | "RESOLVED" | string;
+  resolvedStudentId?: string;
+  resolvedParticipantId?: string;
+  answerKeyId?: string;
+  rawImportSha256?: string;
+  evaluationJob?: RawImportQuarantineEvaluationJob;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RawImportQuarantineSummary {
+  openCount: number;
+}
+
+export interface ParserConfigSuggestionRequest {
+  fileBase64?: string;
+  preset?: ParserConfigPreset;
+  sampleSize?: number;
+  sampleText?: string;
+}
+
+export interface ParserConfigSuggestionResult {
+  examId: string;
+  suggestion: ParserConfigSuggestion;
+  status: "suggested";
+}
+
+export interface ParserConfigApprovalRequest {
+  suggestion: ParserConfigSuggestion;
+  version: string;
+}
+
+export interface ParserConfigRecord {
+  tenantId: string;
+  examId: string;
+  templateId?: string;
+  version: string;
+  encoding: ParserEncoding;
+  delimiter: ParserDelimiter;
+  skipHeaderLines: number;
+  fieldMapping: ParserConfigSuggestion["fieldMapping"];
+  status: "APPROVED";
 }
 
 export type ExamStatus = "DRAFT" | "PUBLISHED";

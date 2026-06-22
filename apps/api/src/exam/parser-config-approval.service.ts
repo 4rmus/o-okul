@@ -1,5 +1,9 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Optional } from "@nestjs/common";
-import type { ParserConfigSuggestion } from "@uzman-hocam/shared-types";
+import type {
+  ParserConfigApprovalRequest,
+  ParserConfigRecord,
+  ParserConfigSuggestion,
+} from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
@@ -15,26 +19,14 @@ export interface ApprovedParserConfigInput {
   suggestion: ParserConfigSuggestion;
 }
 
-export interface SavedParserConfig {
-  tenantId: string;
-  examId: string;
-  templateId?: string;
-  version: string;
-  encoding: string;
-  delimiter: string;
-  skipHeaderLines: number;
-  fieldMapping: ParserConfigSuggestion["fieldMapping"];
-  status: "APPROVED";
-}
+export interface SavedParserConfig extends ParserConfigRecord {}
 
 export interface ParserConfigRepository {
   saveApproved(input: ApprovedParserConfigInput): Promise<SavedParserConfig>;
 }
 
-export interface ParserConfigApprovalInput {
+export interface ParserConfigApprovalInput extends Partial<ParserConfigApprovalRequest> {
   examId?: string;
-  version?: string;
-  suggestion?: ParserConfigSuggestion;
 }
 
 @Injectable()

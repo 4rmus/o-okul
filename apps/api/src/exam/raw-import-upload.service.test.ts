@@ -48,6 +48,7 @@ describe("RawImportUploadService", () => {
       body,
       contentType: "text/plain",
     }]);
+    expect(expectedS3Key).not.toContain("answers.dat");
     expect(repository.creates).toEqual([{
       tenantId: "tenant-a",
       examId: "exam-a",
@@ -122,14 +123,19 @@ describe("RawImportUploadService", () => {
     expect(parseQueue.inputs).toHaveLength(0);
   });
 
-  it("S3 key segmentlerini encode eder", () => {
-    expect(createRawImportS3Key({
+  it("S3 key segmentlerini encode eder ve ham dosya adını taşımaz", () => {
+    const key = createRawImportS3Key({
       tenantId: "tenant a",
       examId: "exam/a",
       parserConfigVersion: "parser v1",
       sha256: "hash",
-      fileName: "cevap anahtari.dat",
-    })).toBe("raw-imports/tenant%20a/exam%2Fa/parser%20v1/hash/cevap%20anahtari.dat");
+      fileName: "8-A Ada 12345678901 iSEM .txt",
+    });
+
+    expect(key).toBe("raw-imports/tenant%20a/exam%2Fa/parser%20v1/hash/source");
+    expect(key).not.toContain("Ada");
+    expect(key).not.toContain("12345678901");
+    expect(key).not.toContain("iSEM");
   });
 });
 

@@ -2,7 +2,11 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import type {
   GuardianRelationshipType,
   StudentClassHistoryRecord,
+  StudentCreateRequest,
   StudentEnrollmentRecord,
+  StudentGuardianProvisionRequest,
+  PublicStudentProfileRecord,
+  PublicStudentRecord,
   StudentProfileRecord,
   StudentRecord as SharedStudentRecord,
   StudentStatus,
@@ -84,22 +88,8 @@ export interface StudentBulkEnrollmentResult {
   enrollments: StudentEnrollmentRecord[];
 }
 
-export interface StudentGuardianProvisionInput {
-  firstName?: string;
-  lastName?: string;
-  phone?: string;
-  email?: string;
-  relationshipType?: GuardianRelationshipType;
-  isPrimary?: boolean;
-  canViewFinance?: boolean;
-  canReceiveSms?: boolean;
-  canReceiveAnnouncements?: boolean;
-  canOpenSupportTickets?: boolean;
-}
-
-export interface StudentCreateInput extends Partial<StudentRecord> {
-  guardian?: StudentGuardianProvisionInput;
-}
+export type StudentGuardianProvisionInput = StudentGuardianProvisionRequest;
+export type StudentCreateInput = StudentCreateRequest;
 
 @Injectable()
 export class StudentService {
@@ -142,7 +132,7 @@ export class StudentService {
     return student;
   }
 
-  async findOneForViewer(context: RequestContext, id: string): Promise<StudentRecord> {
+  async findOneForViewer(context: RequestContext, id: string): Promise<PublicStudentRecord> {
     const student = await this.store.findById(id);
     if (!student) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
@@ -151,14 +141,14 @@ export class StudentService {
     const guardianIds = (await this.guardianStudentStore.listByStudent(student.id)).map((link) => link.guardianId);
     if (isTeacherSubjectContext(context)) {
       await this.assertTeacherAssignmentScope(context, student);
-      return student;
+      return toPublicStudentRecord(student);
     }
 
     this.assertSubjectAccess(context, { ...student, guardianIds });
-    return student;
+    return toPublicStudentRecord(student);
   }
 
-  async findCurrentStudent(context: RequestContext): Promise<StudentRecord> {
+  async findCurrentStudent(context: RequestContext): Promise<PublicStudentRecord> {
     if (context.subjectType !== "STUDENT" || !context.subjectId) {
       throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
     }
@@ -166,7 +156,7 @@ export class StudentService {
     return this.findOneForViewer(context, context.subjectId);
   }
 
-  async findProfileForViewer(context: RequestContext, id: string): Promise<StudentProfileRecord> {
+  async findProfileForViewer(context: RequestContext, id: string): Promise<PublicStudentProfileRecord> {
     const student = await this.store.findProfileById(id);
     if (!student) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
@@ -184,7 +174,7 @@ export class StudentService {
     return this.toStudentProfile(student);
   }
 
-  async findCurrentStudentProfile(context: RequestContext): Promise<StudentProfileRecord> {
+  async findCurrentStudentProfile(context: RequestContext): Promise<PublicStudentProfileRecord> {
     if (context.subjectType !== "STUDENT" || !context.subjectId) {
       throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
     }
@@ -243,7 +233,7 @@ export class StudentService {
     return this.toStudentProfile(updated);
   }
 
-  async listCurrentGuardianStudents(context: RequestContext): Promise<StudentRecord[]> {
+  async listCurrentGuardianStudents(context: RequestContext): Promise<PublicStudentRecord[]> {
     if (context.subjectType !== "GUARDIAN" || !context.subjectId) {
       throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
     }
@@ -254,17 +244,32 @@ export class StudentService {
       .filter((student): student is StudentRecord => Boolean(student && !student.deletedAt))
       .map((student) => {
         this.assertSubjectAccess(context, { ...student, guardianIds: [context.subjectId!] });
-        return student;
+        return toPublicStudentRecord(student);
       });
   }
 
-  async create(context: RequestContext, input: StudentCreateInput): Promise<StudentRecord> {
+  async create(context: RequestContext, input: StudentCreateInput, idempotencyKey?: string): Promise<StudentRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "student.create", request: input },
+        () => this.createOnce(context, input),
+      );
+    }
+
+    return this.createOnce(context, input);
+  }
+
+  private async createOnce(context: RequestContext, input: StudentCreateInput): Promise<StudentRecord> {
     const tenantId = input.tenantId ?? context.tenantId;
     if (!tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }
 
     this.assertAccess(context, { tenantId });
+    if (input.guardian) {
+      parseGuardianProvisionInput(input.guardian, { lastName: input.lastName });
+    }
     if ((await this.list(context)).filter((student) => student.tenantId === tenantId).length >= this.maxStudentsPerTenant) {
       throw new ConflictException("STUDENT_QUOTA_EXCEEDED");
     }
@@ -330,6 +335,11 @@ export class StudentService {
     }
 
     this.assertAccess(context, { tenantId });
+    for (const input of inputs) {
+      if (input.guardian) {
+        parseGuardianProvisionInput(input.guardian, { lastName: input.lastName });
+      }
+    }
     const quota = await this.previewQuota(context, inputs.length);
     if (quota.wouldExceed) {
       throw new ConflictException("STUDENT_QUOTA_EXCEEDED");
@@ -1035,6 +1045,11 @@ function nextGradeCode(code: string | undefined): string | undefined {
   return String(Number.parseInt(code, 10) + 1);
 }
 
+function toPublicStudentRecord(student: StudentRecord): PublicStudentRecord {
+  const { deletedAt: _deletedAt, userId: _userId, ...response } = student;
+  return response;
+}
+
 function toStudentProfile(student: {
   id: string;
   tenantId: string;
@@ -1043,13 +1058,12 @@ function toStudentProfile(student: {
   classId?: string;
   responsibleTeacherId?: string;
   status: StudentStatus;
-  userId?: string;
   nationalIdEncrypted?: string;
   birthDate?: string;
   phone?: string;
   email?: string;
   photoKey?: string;
-}, labels: { campusName?: string; className?: string; gradeLevelName?: string; responsibleTeacherName?: string; section?: string } = {}): StudentProfileRecord {
+}, labels: { campusName?: string; className?: string; gradeLevelName?: string; responsibleTeacherName?: string; section?: string } = {}): PublicStudentProfileRecord {
   return {
     id: student.id,
     tenantId: student.tenantId,
@@ -1058,7 +1072,6 @@ function toStudentProfile(student: {
     classId: student.classId,
     responsibleTeacherId: student.responsibleTeacherId,
     status: student.status,
-    userId: student.userId,
     ...(labels.className ? { className: labels.className } : {}),
     ...(labels.campusName ? { campusName: labels.campusName } : {}),
     ...(labels.gradeLevelName ? { gradeLevelName: labels.gradeLevelName } : {}),
@@ -1126,7 +1139,7 @@ function todayDateString(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function parseGuardianProvisionInput(input: StudentGuardianProvisionInput, student: StudentRecord) {
+function parseGuardianProvisionInput(input: StudentGuardianProvisionInput, student: Pick<StudentRecord, "lastName">) {
   const phone = optionalGuardianText(input.phone);
   const email = optionalGuardianEmail(input.email);
   if (!phone && !email) {

@@ -709,9 +709,17 @@ runKvkkInventoryNegativeCheck({
 runKvkkInventoryNegativeCheck({
   label: "KVKK inventory missing audit diff redaction control negative",
   path: "docs/evidence-templates/kvkk-inventory.missing-audit-diff-redaction-control.tmp.json",
-  expectedFailure: "auditDiffRedactionVerified.negativeControls tam 13 kontrol içermeli.",
+  expectedFailure: "auditDiffRedactionVerified.negativeControls tam 21 kontrol içermeli.",
   mutate: (fixture) => {
     fixture.auditDiffRedactionVerified.negativeControls = fixture.auditDiffRedactionVerified.negativeControls.filter((item) => item !== "title");
+  },
+});
+runKvkkInventoryNegativeCheck({
+  label: "KVKK inventory missing raw row redaction control negative",
+  path: "docs/evidence-templates/kvkk-inventory.missing-raw-row-redaction-control.tmp.json",
+  expectedFailure: "auditDiffRedactionVerified.negativeControls tam 21 kontrol içermeli.",
+  mutate: (fixture) => {
+    fixture.auditDiffRedactionVerified.negativeControls = fixture.auditDiffRedactionVerified.negativeControls.filter((item) => item !== "rawRow");
   },
 });
 runKvkkInventoryNegativeCheck({
@@ -1110,9 +1118,25 @@ runLiveExamCycleNegativeCheck({
 runLiveExamCycleNegativeCheck({
   label: "Live exam cycle extra examCycle field negative",
   path: "docs/evidence-templates/live-exam-cycle.extra-exam-cycle-field.tmp.json",
-  expectedFailure: "examCycle tam 26 alan icermeli.",
+  expectedFailure: "examCycle tam 27 alan icermeli.",
   mutate: (fixture) => {
     fixture.examCycle.unexpectedField = true;
+  },
+});
+runLiveExamCycleNegativeCheck({
+  label: "Live exam cycle participant count exact negative",
+  path: "docs/evidence-templates/live-exam-cycle.participant-count.tmp.json",
+  expectedFailure: "examCycle.participantCount 254 olmali.",
+  mutate: (fixture) => {
+    fixture.examCycle.participantCount = 253;
+  },
+});
+runLiveExamCycleNegativeCheck({
+  label: "Live exam cycle quarantine count exact negative",
+  path: "docs/evidence-templates/live-exam-cycle.quarantine-count.tmp.json",
+  expectedFailure: "examCycle.quarantineCount 0 olmali.",
+  mutate: (fixture) => {
+    fixture.examCycle.quarantineCount = 1;
   },
 });
 runLiveExamCycleNegativeCheck({
@@ -1138,6 +1162,46 @@ runLiveExamCycleNegativeCheck({
   expectedFailure: "gaps listesi zorunlu.",
   mutate: (fixture) => {
     fixture.gaps = "none";
+  },
+});
+runLiveExamCycleNegativeCheck({
+  label: "Live exam cycle raw TXT path negative",
+  path: "docs/evidence-templates/live-exam-cycle.raw-txt-path.tmp.json",
+  expectedFailure: "evidenceReferences[0] ham TXT dosya adi veya yolu tasimamali.",
+  mutate: (fixture) => {
+    fixture.evidenceReferences[0] = "artifact:ornek-veriler/iSEM .txt";
+  },
+});
+runLiveExamCycleNegativeCheck({
+  label: "Live exam cycle TCKN-like value negative",
+  path: "docs/evidence-templates/live-exam-cycle.tckn-like.tmp.json",
+  expectedFailure: "examCycle.firstStudentId TCKN benzeri 11 haneli deger tasimamali.",
+  mutate: (fixture) => {
+    fixture.examCycle.firstStudentId = "12345678901";
+  },
+});
+runLiveExamCycleNegativeCheck({
+  label: "Live exam cycle raw PII field negative",
+  path: "docs/evidence-templates/live-exam-cycle.raw-pii-field.tmp.json",
+  expectedFailure: "examCycle.studentName ham PII/TXT evidence alani tasimamali.",
+  mutate: (fixture) => {
+    fixture.examCycle.studentName = "Ogrenci Adi";
+  },
+});
+runLiveExamCycleNegativeCheck({
+  label: "Live exam cycle raw row field negative",
+  path: "docs/evidence-templates/live-exam-cycle.raw-row-field.tmp.json",
+  expectedFailure: "examCycle.rawRow ham PII/TXT evidence alani tasimamali.",
+  mutate: (fixture) => {
+    fixture.examCycle.rawRow = "0000000000012345678901AABCDE";
+  },
+});
+runLiveExamCycleNegativeCheck({
+  label: "Live exam cycle file name field negative",
+  path: "docs/evidence-templates/live-exam-cycle.file-name-field.tmp.json",
+  expectedFailure: "examCycle.fileName ham PII/TXT evidence alani tasimamali.",
+  mutate: (fixture) => {
+    fixture.examCycle.fileName = "iSEM .txt";
   },
 });
 runLiveExamCycleSymlinkParentTargetNegativeCheck();
@@ -1282,7 +1346,7 @@ runRateLimitSymlinkParentTargetNegativeCheck();
 runRlsLiveNegativeCheck({
   label: "RLS live extra top-level key negative",
   path: "docs/evidence-templates/rls-live.extra-top-level.tmp.json",
-  expectedFailure: "rlsLive tam 9 alan icermeli.",
+  expectedFailure: "rlsLive tam 10 alan icermeli.",
   mutate: (fixture) => {
     fixture.unexpectedTopLevel = true;
   },
@@ -1309,6 +1373,32 @@ runRlsLiveNegativeCheck({
   expectedFailure: "loadSmoke tam 6 alan icermeli.",
   mutate: (fixture) => {
     fixture.loadSmoke.unexpectedField = true;
+  },
+});
+runRlsLiveNegativeCheck({
+  label: "RLS live extra tenant FK preflight field negative",
+  path: "docs/evidence-templates/rls-live.extra-tenant-fk-preflight-field.tmp.json",
+  expectedFailure: "tenantFkPreflight tam 7 alan icermeli.",
+  mutate: (fixture) => {
+    fixture.tenantFkPreflight.unexpectedField = true;
+  },
+});
+runRlsLiveNegativeCheck({
+  label: "RLS live tenant FK missing relation negative",
+  path: "docs/evidence-templates/rls-live.missing-tenant-fk-relation.tmp.json",
+  expectedFailure: "tenantFkPreflight.relationsVerified tam 24 relation icermeli.",
+  mutate: (fixture) => {
+    fixture.tenantFkPreflight.relationsVerified = fixture.tenantFkPreflight.relationsVerified.filter(
+      (relation) => relation !== "Student.responsibleTeacher",
+    );
+  },
+});
+runRlsLiveNegativeCheck({
+  label: "RLS live tenant FK orphan rows negative",
+  path: "docs/evidence-templates/rls-live.tenant-fk-orphan-rows.tmp.json",
+  expectedFailure: "tenantFkPreflight.orphanRows 0 olmali.",
+  mutate: (fixture) => {
+    fixture.tenantFkPreflight.orphanRows = 1;
   },
 });
 runRlsLiveNegativeCheck({
@@ -1691,6 +1781,25 @@ runProductionSummaryNegativeCheck({
   },
 });
 runProductionSummaryNegativeCheck({
+  label: "Production summary KVKK raw row redaction control negative",
+  path: "docs/evidence-templates/production-evidence-summary.kvkk-raw-row-redaction-control.tmp.json",
+  expectedFailure: "reports.kvkkInventory.auditDiffRedactionVerified.negativeControls tam 21 madde içermeli.",
+  mutate: (fixture) => {
+    fixture.reports.kvkkInventory.auditDiffRedactionVerified.negativeControls =
+      fixture.reports.kvkkInventory.auditDiffRedactionVerified.negativeControls.filter((item) => item !== "rawRow");
+  },
+});
+runProductionSummaryNegativeCheck({
+  label: "Production summary RLS tenant FK missing relation negative",
+  path: "docs/evidence-templates/production-evidence-summary.rls-tenant-fk-missing-relation.tmp.json",
+  expectedFailure: "reports.rlsLive.tenantFkPreflight.relationsVerified tam 24 madde içermeli.",
+  mutate: (fixture) => {
+    fixture.reports.rlsLive.tenantFkPreflight.relationsVerified = fixture.reports.rlsLive.tenantFkPreflight.relationsVerified.filter(
+      (relation) => relation !== "Student.responsibleTeacher",
+    );
+  },
+});
+runProductionSummaryNegativeCheck({
   label: "Production summary UAT live exam cycle flag negative",
   path: "docs/evidence-templates/production-evidence-summary.uat-live-exam-cycle-flag.tmp.json",
   expectedFailure: "reports.uat.liveExamCyclePassed true olmalı.",
@@ -1720,6 +1829,24 @@ runProductionSummaryNegativeCheck({
   expectedFailure: "reports.liveExamCycle.apiUrl apiUrl ile eşleşmeli.",
   mutate: (fixture) => {
     fixture.reports.liveExamCycle.apiUrl = "https://other-staging-api.example.test";
+  },
+});
+runProductionSummaryNegativeCheck({
+  label: "Production summary live exam cycle iSEM count mismatch negative",
+  path: "docs/evidence-templates/production-evidence-summary.live-exam-cycle-isem-count-mismatch.tmp.json",
+  expectedFailure:
+    "reports.liveExamCycle.examCycle.participantCount reports.isemOpticalPipeline.counts.participantCount ile eşleşmeli.",
+  mutate: (fixture) => {
+    fixture.reports.liveExamCycle.examCycle.participantCount = 253;
+  },
+});
+runProductionSummaryNegativeCheck({
+  label: "Production summary live exam cycle parser version mismatch negative",
+  path: "docs/evidence-templates/production-evidence-summary.live-exam-cycle-parser-version-mismatch.tmp.json",
+  expectedFailure:
+    "reports.liveExamCycle.examCycle.parserConfigVersion reports.isemOpticalPipeline.parserConfigVersion ile eşleşmeli.",
+  mutate: (fixture) => {
+    fixture.reports.liveExamCycle.examCycle.parserConfigVersion = "optik-7108-lgs-v2";
   },
 });
 runProductionSummaryNegativeCheck({
@@ -2171,6 +2298,38 @@ runGoLiveNegativeCheck({
     const linkedSummary = structuredClone(productionSummaryFixture);
     linkedSummary.reports.uat.liveExamCyclePassed = false;
     fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.uat-live-exam-cycle-flag-for-go-live.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live linked summary KVKK raw row redaction control negative",
+  path: "docs/evidence-templates/go-live.linked-summary-kvkk-raw-row-redaction-control.tmp.json",
+  expectedFailure:
+    "productionEvidenceSummary.summary.reports.kvkkInventory.auditDiffRedactionVerified.negativeControls tam 21 madde icermeli.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.kvkk-raw-row-for-go-live.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.reports.kvkkInventory.auditDiffRedactionVerified.negativeControls =
+      linkedSummary.reports.kvkkInventory.auditDiffRedactionVerified.negativeControls.filter((item) => item !== "rawRow");
+    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.kvkk-raw-row-for-go-live.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live linked summary RLS tenant FK missing relation negative",
+  path: "docs/evidence-templates/go-live.linked-summary-rls-tenant-fk-missing-relation.tmp.json",
+  expectedFailure:
+    "productionEvidenceSummary.summary.reports.rlsLive.tenantFkPreflight.relationsVerified tam 24 madde icermeli.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.rls-tenant-fk-for-go-live.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.reports.rlsLive.tenantFkPreflight.relationsVerified =
+      linkedSummary.reports.rlsLive.tenantFkPreflight.relationsVerified.filter(
+        (relation) => relation !== "Student.responsibleTeacher",
+      );
+    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.rls-tenant-fk-for-go-live.tmp.json";
     writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
     cleanupPaths.push(linkedPath);
   },

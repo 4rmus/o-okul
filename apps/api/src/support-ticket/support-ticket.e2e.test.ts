@@ -386,6 +386,7 @@ describe("Support ticket API", () => {
       sha256: "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
     });
     expect(created.body.contentBase64).toBeUndefined();
+    expect(created.body.fileBase64).toBeUndefined();
   });
 
   it("destek eki yüklemeyi Idempotency-Key ile tekilleştirir", async () => {

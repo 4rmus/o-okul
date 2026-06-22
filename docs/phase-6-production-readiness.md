@@ -192,15 +192,19 @@ pnpm backup:restore:smoke
   tek JSON'da toplar. `schema.tablesVerified` schema'dan türeyen 54 tenant tablosunu,
   `isolation.crossTenantReadRows=0` çapraz-tenant okuma sonucunu, `withCheckRejects` yanlış
   tenant yazım/referans negatiflerini ve `loadSmoke.actualRps >= targetRps >= 200` sonucunu
-  kanıtlamalıdır. `pnpm rls:load:smoke`, `RLS_LOAD_SMOKE_EVIDENCE_FILE` verildiğinde
+  kanıtlamalıdır. `tenantFkPreflight` bloğu 24 zorunlu tenant composite relation'ı exact listeler,
+  legacy allowlist'in 0 olduğunu, orphan/cross-tenant parent satırlarının 0 olduğunu ve her relation
+  için cross-tenant insert negatifinin reddedildiğini kanıtlar; `migrationPreflightCommand`
+  `pnpm tenant-db:check` içermelidir. `pnpm rls:load:smoke`, `RLS_LOAD_SMOKE_EVIDENCE_FILE` verildiğinde
   `rls-load-smoke.json` artifact'i üretir; `pnpm rls:live:check` bu artifact referansını
   `evidenceReferences` içinde zorunlu tutar. Load smoke artifact'i `checkedAt`, hash'li tenant referansları,
   tam `commandsPassed=["pnpm rls:load:smoke"]` ve boş `gaps` listesi taşır; ham tenant/student id
   alanları ortak smoke evidence sözleşmesinde reddedilir. Gerçek kanıtta tenant hash ve artifact referansları `redacted`, `example`,
   `.test`, `localhost`, `__SET` veya placeholder değer içeremez; bu gevşetme yalnız template
-  kontrolünde `RLS_LIVE_ALLOW_EXAMPLE_EVIDENCE=1` ile açılır. RLS live raporu top-level 9 alanı,
-  `schema`/`isolation`/`loadSmoke` blok shape'leri, 54 tabloluk `tablesVerified` exact seti,
-  `withCheckRejects` negatif seti, tam `commandsPassed` seti ve boş `gaps` listesi
+  kontrolünde `RLS_LIVE_ALLOW_EXAMPLE_EVIDENCE=1` ile açılır. RLS live raporu top-level 10 alanı,
+  `schema`/`isolation`/`tenantFkPreflight`/`loadSmoke` blok shape'leri, 54 tabloluk
+  `tablesVerified` exact seti, 24 relation'lık tenant FK exact seti, `withCheckRejects`
+  negatif seti, tam `commandsPassed` seti ve boş `gaps` listesi
   `prod:evidence:templates:check` içindeki fazla alan/tablo/komut ve invalid/non-empty gaps negatifleriyle korunur.
 - Go-live karar paketi `GO_LIVE_EVIDENCE_TARGET` ve `pnpm go-live:check` ile doğrulanır; bu
   rapor production evidence summary, GitHub Actions remote CI, staging/prod UAT, bağlı pilot kapanış JSON'u,
@@ -527,9 +531,12 @@ pnpm backup:restore:smoke
   üzerinden doğrulanır.
 - KVKK `purgeCoverage` içinde öğrenci için `firstName`, `lastName`, `phone`, `email`; veli için
   `firstName`, `lastName`, `phone`; kullanıcı hesabı için `email`, `name` alanları doğrulanır.
-  Rapor top-level 8 alanı, dört `dataSubjectCounts` alanı, dört `purgeCoverage` subject'i,
-  subject field setleri, dört audit action seti ve boş `gaps` listesi
+  Rapor top-level 9 alanı, dört `dataSubjectCounts` alanı, dört `purgeCoverage` subject'i,
+  subject field setleri, dört audit action seti, `/audit-logs` audit diff redaction bloğu ve boş `gaps` listesi
   `prod:evidence:templates:check` içindeki fazla alan/madde ve invalid/non-empty gaps negatifleriyle korunur.
+  Audit diff negatif kontrolleri `body`, `contentBase64`, `fileBase64`, `fileName`, `objectKey`,
+  `rawLine`, `rawRow`, `rawText`, `s3Key`, `sourceFileName`, `sourceFilePath`, kişi adı,
+  iletişim, TCKN-benzeri ve token alanlarının audit/evidence çıktısında redakte edildiğini kanıtlar.
 - Kimlik göç kanıtı: öğrenci/veli/öğretmen user bağları, tenant membership ve negatif erişim
   kontrolleri `pnpm identity-migration:check` üzerinden doğrulanır. Gerçek kanıtta onay sahibi ve
   onay referansı `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder değer içeremez;
@@ -629,14 +636,21 @@ pnpm backup:restore:smoke
 - Tam sınav döngüsü staging/prod kanıtı `LIVE_EXAM_CYCLE_TARGET` ile `pnpm live:exam-cycle:check`
   üzerinden doğrulanır; iSEM cevap anahtarı, optik pipeline, raw import, report-generation ve
   mock'suz UI-worker/portal kanıtları aynı release candidate'a bağlanır. Rapor top-level 11
-  alanı, `examCycle` 26 alanı, 5 komutluk `commandsPassed` seti, kalıcı artifact/run/log/url
+  alanı, `examCycle` 27 alanı, 5 komutluk `commandsPassed` seti, kalıcı artifact/run/log/url
   `evidenceReferences` maddeleri ve boş `gaps` listesi `prod:evidence:templates:check` içindeki
   fazla alan/komut, zayıf evidence reference ve invalid/non-empty gaps negatifleriyle korunur.
+  Aynı kontrol iSEM LGS fixture'ı için 90 soru, 254 katılımcı, 254 eşleşme, 0 quarantine,
+  254 sınav sonucu ve 254 rapor sonucunu exact sayıyla ister; `fileName`, `rawRow`,
+  `contentBase64`, `fileBase64`, ham `ornek-veriler/iSEM .txt` yolu, TCKN-benzeri 11 haneli
+  değer, ham e-posta veya telefon evidence JSON'unda yer alamaz.
 - iSEM optik pipeline kanıtı `ISEM_OPTICAL_PIPELINE_TARGET` ile
   `pnpm isem-optical-pipeline:evidence-check` üzerinden doğrulanır ve birleşik
   `pnpm prod:evidence:check` zincirinde zorunlu release raporu olarak okunur. Bu kanıt gerçek iSEM TXT,
   cevap anahtarı, raw import arşivi, evaluation, `ReportSnapshot READY` ve örnek skorları kapsar;
   PDF/Excel indirme ve öğrenci/veli portal görünümü doğrulanmadan tam sınav döngüsü PASS sayılmaz.
+  Production summary içindeki `reports.liveExamCycle.examCycle` count/version alanları
+  `reports.isemOpticalPipeline` ile çapraz eşleşir; iki ayrı PASS artifact'i farklı iSEM sayıları
+  veya parser/answer-key versiyonu taşıyamaz.
   Aynı smoke `ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_FILE` verildiğinde private
   `LIVE_UI_WORKER_EVIDENCE_PATH` girdisini de yazar; bu dosya gerçek credential içerdiği için
   public/redacted iSEM kanıtından ayrı tutulur. Gerçek staging koşusunda

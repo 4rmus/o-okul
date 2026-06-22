@@ -3040,7 +3040,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
             examId: "exam-a",
             sourceType: "OPTICAL_ANSWER_TXT",
             fileName: "optik-a.txt",
-            s3Key: `raw-imports/tenant-a/exam-a/${parserConfigVersion}/hash/optik-a.txt`,
+            s3Key: `raw-imports/tenant-a/exam-a/${parserConfigVersion}/hash/source`,
             sha256: "abcdef1234567890",
             parserConfigVersion,
           },

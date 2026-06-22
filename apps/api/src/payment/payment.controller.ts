@@ -1,12 +1,16 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
-import type { PaymentPlanWithInstallmentsRecord } from "@uzman-hocam/shared-types";
+import type {
+  PaymentInstallmentUpdateRequest,
+  PaymentPlanCreateRequest,
+  PaymentPlanWithInstallmentsRecord,
+} from "@uzman-hocam/shared-types";
 import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
 import { optionalTrimmedString, requiredDateString, requiredTrimmedString, zodBody } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { CapabilityGuard } from "../rbac/capability.guard.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
-import { PaymentService, type PaymentInstallmentUpdateInput, type PaymentPlanInput } from "./payment.service.js";
+import { PaymentService } from "./payment.service.js";
 
 const paymentInstallmentStatusSchema = z.enum(["PENDING", "PAID", "OVERDUE", "CANCELED"]);
 const paymentDateString = requiredDateString("PAYMENT_DATE_INVALID");
@@ -57,7 +61,7 @@ export class PaymentController {
   @Post()
   @RequireCapability("finance:manage")
   create(
-    @Body(zodBody(paymentPlanBodySchema)) body: PaymentPlanInput,
+    @Body(zodBody(paymentPlanBodySchema)) body: PaymentPlanCreateRequest,
     @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<PaymentPlanWithInstallmentsRecord> {
     return this.payments.create(getRequestContext(), body, idempotencyKey);
@@ -68,7 +72,7 @@ export class PaymentController {
   updateInstallment(
     @Param("planId") planId: string,
     @Param("installmentId") installmentId: string,
-    @Body(zodBody(paymentInstallmentUpdateBodySchema)) body: Partial<PaymentInstallmentUpdateInput>,
+    @Body(zodBody(paymentInstallmentUpdateBodySchema)) body: PaymentInstallmentUpdateRequest,
     @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<PaymentPlanWithInstallmentsRecord> {
     return this.payments.updateInstallment(getRequestContext(), planId, installmentId, body, idempotencyKey);

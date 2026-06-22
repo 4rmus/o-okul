@@ -141,6 +141,46 @@ describe("Announcement API", () => {
     expect(typeof (response.body as { publishedAt?: unknown }).publishedAt).toBe("string");
   });
 
+  it("tenant admin duyuru oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const body = {
+      title: "Idempotent duyuru",
+      body: "Aynı istek tekrarlandığında tek duyuru kalmalıdır.",
+      audience: "STUDENTS",
+      classId: "class-a",
+    };
+    const key = "announcement-create-idempotency-a";
+
+    const first = await request(server)
+      .post("/announcements")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+    const second = await request(server)
+      .post("/announcements")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    expect(second.body).toEqual(first.body);
+
+    await request(server)
+      .post("/announcements")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", key)
+      .send({ ...body, body: "Farklı gövde" })
+      .expect(409);
+
+    await request(server)
+      .get("/announcements?q=Idempotent%20duyuru")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body: announcements }) => {
+        expect(announcements).toHaveLength(1);
+      });
+  });
+
   it("tenant admin duyuru alıcı ve okunma raporunu görür", async () => {
     await request(server)
       .post("/me/student/announcements/announcement-a/read")

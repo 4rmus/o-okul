@@ -127,6 +127,24 @@ describe("Me access matrix", () => {
     }
   });
 
+  it("öğrenci ve veli public öğrenci kayıtlarında subject userId dönmez", async () => {
+    const responses = [
+      await request(server).get("/me/student").set("Authorization", `Bearer ${studentToken}`).expect(200),
+      await request(server).get("/me/student/profile").set("Authorization", `Bearer ${studentToken}`).expect(200),
+      await request(server).get("/me/guardian/students").set("Authorization", `Bearer ${guardianToken}`).expect(200),
+      await request(server).get("/me/guardian/students/student-a/profile").set("Authorization", `Bearer ${guardianToken}`).expect(200),
+    ];
+
+    for (const response of responses) {
+      const serialized = JSON.stringify(response.body);
+      expect(serialized).not.toContain("userId");
+      expect(serialized).not.toContain("student-tenant-a");
+      expect(serialized).not.toContain("nationalIdEncrypted");
+      expect(serialized).not.toContain("nationalIdHash");
+      expect(serialized).not.toContain("token");
+    }
+  });
+
   it("veli aynı tenant içinde bağlı olmayan öğrencinin portal alt kaynaklarını okuyamaz ve değiştiremez", async () => {
     const otherStudent = await request(server)
       .post("/students")
@@ -205,6 +223,33 @@ describe("Me access matrix", () => {
       expect(guardianResponse.status, `${endpoint} should reject guardian`).toBe(403);
       const adminResponse = await request(server).get(endpoint).set("Authorization", `Bearer ${adminToken}`);
       expect(adminResponse.status, `${endpoint} should reject tenant admin without role preview`).toBe(403);
+    }
+  });
+
+  it("öğretmen profil cevabı public teacher alanlarıyla sınırlıdır", async () => {
+    const response = await request(server)
+      .get("/me/teacher")
+      .set("Authorization", `Bearer ${teacherToken}`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      id: "teacher-a",
+      tenantId: "tenant-a",
+      firstName: expect.any(String),
+      lastName: expect.any(String),
+    });
+    const serialized = JSON.stringify(response.body);
+    for (const forbidden of [
+      "userId",
+      "email",
+      "phone",
+      "nationalId",
+      "nationalIdEncrypted",
+      "nationalIdHash",
+      "photoKey",
+      "token",
+    ]) {
+      expect(serialized).not.toContain(forbidden);
     }
   });
 
@@ -378,13 +423,13 @@ describe("Me access matrix", () => {
 
     expect(create.body).toMatchObject({
       tenantId: "tenant-a",
-      userId: "student-tenant-a",
       subjectType: "STUDENT",
       subjectId: "student-a",
       provider: "fcm",
-      token: "student-access-matrix-device",
       platform: "web",
     });
+    expect(JSON.stringify(create.body)).not.toContain("student-access-matrix-device");
+    expect(JSON.stringify(create.body)).not.toContain("student-tenant-a");
 
     await request(server)
       .get("/me/notification-devices")
@@ -394,9 +439,12 @@ describe("Me access matrix", () => {
         expect(body).toEqual([
           expect.objectContaining({
             id: create.body.id,
-            token: "student-access-matrix-device",
+            provider: "fcm",
+            platform: "web",
           }),
         ]);
+        expect(JSON.stringify(body)).not.toContain("student-access-matrix-device");
+        expect(JSON.stringify(body)).not.toContain("student-tenant-a");
       });
 
     await request(server)
@@ -408,6 +456,8 @@ describe("Me access matrix", () => {
           id: create.body.id,
           disabledAt: expect.any(String),
         });
+        expect(JSON.stringify(body)).not.toContain("student-access-matrix-device");
+        expect(JSON.stringify(body)).not.toContain("student-tenant-a");
       });
 
     await request(server)
