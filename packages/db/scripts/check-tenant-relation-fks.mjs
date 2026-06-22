@@ -6,42 +6,33 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const schemaPath = join(__dirname, "../prisma/schema.prisma");
 const repoRoot = join(__dirname, "../../..");
 
-const allowedLegacyRelations = new Map([
-  ["DevelopmentAssessment.teacher", legacy("service tests keep teacher scope until composite migration", ["apps/api/src/development/development.service.test.ts"])],
-  [
-    "Student.class",
-    legacy("student flows are tenant-filtered until composite migration", ["apps/api/src/student/student-profile.e2e.test.ts"], ["cross-tenant classId"]),
-  ],
-  [
-    "Student.responsibleTeacher",
-    legacy("teacher scope tests cover access until composite migration", ["apps/api/src/student/student-profile.e2e.test.ts"], ["responsibleTeacherId"]),
-  ],
-  [
-    "StudentClassHistory.class",
-    legacy("history writes are service-filtered until composite migration", ["apps/api/src/school/school.e2e.test.ts"], ["enrollments/renew", "enrollments/transfer", "class-b"]),
-  ],
-  [
-    "StudentEnrollment.class",
-    legacy("enrollment writes are service-filtered until composite migration", ["apps/api/src/school/school.e2e.test.ts"], ["enrollments/renew", "bulk-renew", "class-b"]),
-  ],
-  ["TeacherAssignment.teacher", legacy("assignment tests cover tenant scope until composite migration", ["apps/api/src/school/teacher-assignment-store.test.ts"])],
-  ["TeacherAssignment.class", legacy("assignment tests cover tenant scope until composite migration", ["apps/api/src/school/teacher-assignment-store.test.ts"])],
-  ["TeacherAssignment.student", legacy("assignment tests cover tenant scope until composite migration", ["apps/api/src/school/teacher-assignment-store.test.ts"])],
-  ["GuardianStudent.guardian", legacy("guardian-student tests cover tenant scope until composite migration", ["apps/api/src/school/guardian-student-store.test.ts"])],
-  ["GuardianStudent.student", legacy("guardian-student tests cover tenant scope until composite migration", ["apps/api/src/school/guardian-student-store.test.ts"])],
-  ["TeacherNote.teacher", legacy("teacher note tests cover tenant scope until composite migration", ["apps/api/src/teacher-note/teacher-note.e2e.test.ts"])],
-  ["PaymentPlan.class", legacy("payment tests cover tenant scope until composite migration", ["apps/api/src/payment/payment.e2e.test.ts"])],
-  ["ScheduleLesson.class", legacy("schedule tests cover tenant scope until composite migration", ["apps/api/src/program/schedule.e2e.test.ts"])],
-  ["ScheduleLesson.teacher", legacy("schedule tests cover tenant scope until composite migration", ["apps/api/src/program/schedule.e2e.test.ts"])],
-  ["StudySession.class", legacy("study-session tests cover tenant scope until composite migration", ["apps/api/src/program/study-session.e2e.test.ts"])],
-  ["StudySession.teacher", legacy("study-session tests cover tenant scope until composite migration", ["apps/api/src/program/study-session.e2e.test.ts"])],
-  ["StudySessionStudent.studySession", legacy("study-session tests cover tenant scope until composite migration", ["apps/api/src/program/study-session.e2e.test.ts"])],
-  ["StudySessionStudent.student", legacy("study-session tests cover tenant scope until composite migration", ["apps/api/src/program/study-session.e2e.test.ts"])],
-  ["Homework.class", legacy("homework tests cover tenant scope until composite migration", ["apps/api/src/homework/homework.e2e.test.ts"])],
-  ["Homework.sourceMaterial", legacy("homework tests cover tenant scope until composite migration", ["apps/api/src/homework/homework.e2e.test.ts"])],
-  ["ReportSnapshot.class", legacy("report service tests cover tenant scope until composite migration", ["apps/api/src/report/report-generation.service.test.ts"])],
-  ["AnnouncementDeliveryReport.announcement", legacy("announcement delivery tests cover tenant scope until composite migration", ["apps/api/src/announcement/announcement-delivery-report-store.test.ts"])],
-  ["SupportTicket.class", legacy("support-ticket tests cover tenant scope until composite migration", ["apps/api/src/support-ticket/support-ticket.e2e.test.ts"])],
+const allowedLegacyRelations = new Map([]);
+
+const requiredCompositeRelations = new Set([
+  "AnnouncementReceipt.announcement",
+  "AnnouncementDeliveryReport.announcement",
+  "Homework.class",
+  "ScheduleLesson.class",
+  "StudySession.class",
+  "StudySessionStudent.studySession",
+  "StudySessionStudent.student",
+  "TeacherAssignment.class",
+  "TeacherAssignment.student",
+  "GuardianStudent.guardian",
+  "GuardianStudent.student",
+  "DevelopmentAssessment.teacher",
+  "TeacherAssignment.teacher",
+  "TeacherNote.teacher",
+  "ScheduleLesson.teacher",
+  "StudySession.teacher",
+  "Homework.sourceMaterial",
+  "SupportTicket.class",
+  "PaymentPlan.class",
+  "ReportSnapshot.class",
+  "StudentClassHistory.class",
+  "StudentEnrollment.class",
+  "Student.class",
+  "Student.responsibleTeacher",
 ]);
 
 const schema = readFileSync(schemaPath, "utf8");
@@ -79,6 +70,17 @@ for (const model of models.values()) {
 for (const relationKey of allowedLegacyRelations.keys()) {
   if (!relationExists(models, relationKey)) {
     failures.push(`${relationKey}: legacy FK istisnasi artik schema'da yok; allowlist'ten kaldirilmali.`);
+  }
+}
+
+for (const relationKey of requiredCompositeRelations) {
+  const relation = findRelation(models, relationKey);
+  if (!relation) {
+    failures.push(`${relationKey}: zorunlu tenant composite FK relation'i schema'da yok.`);
+  } else if (!hasAlignedTenantId(relation)) {
+    failures.push(
+      `${relationKey}: zorunlu tenant composite FK degil; fields=[${relation.fields.join(",")}] references=[${relation.references.join(",")}]`,
+    );
   }
 }
 
@@ -160,8 +162,12 @@ function validateLegacyException(relationKey, exception, output) {
 }
 
 function relationExists(models, relationKey) {
+  return Boolean(findRelation(models, relationKey));
+}
+
+function findRelation(models, relationKey) {
   const [modelName, fieldName] = relationKey.split(".");
   const model = models.get(modelName);
-  if (!model) return false;
-  return parseOwningRelations(model.body).some((relation) => relation.fieldName === fieldName);
+  if (!model) return undefined;
+  return parseOwningRelations(model.body).find((relation) => relation.fieldName === fieldName);
 }
