@@ -95,6 +95,11 @@ describe("RawImportController", () => {
     expect(archiveStore.puts).toHaveLength(1);
     expect(repository.creates).toHaveLength(1);
     expect(producer.inputs).toHaveLength(1);
+    const expectedS3Key = `raw-imports/tenant-a/exam-a/parser-v1/${repository.creates[0]?.sha256}/source`;
+    expect(archiveStore.puts[0]?.s3Key).toBe(expectedS3Key);
+    expect(repository.creates[0]?.s3Key).toBe(expectedS3Key);
+    expect((response.body as { rawImport: { s3Key: string } }).rawImport.s3Key).toBe(expectedS3Key);
+    expect(expectedS3Key).not.toContain("answers.dat");
     expect(response.body).toMatchObject({
       rawImport: {
         id: "raw-import-a",
@@ -476,7 +481,7 @@ describe("RawImportController", () => {
       .post("/exams/exam-a/raw-imports/raw-import-a/quarantines/quarantine-a/resolve")
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .send({})
-      .expect(400);
+      .expect(422);
 
     expect(quarantineStore.resolves).toHaveLength(0);
   });

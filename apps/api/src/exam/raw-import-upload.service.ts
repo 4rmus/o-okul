@@ -209,7 +209,7 @@ export function createRawImportS3Key(input: {
     input.examId,
     input.parserConfigVersion,
     input.sha256,
-    input.fileName,
+    "source",
   ].map(encodeURIComponent).join("/");
 }
 

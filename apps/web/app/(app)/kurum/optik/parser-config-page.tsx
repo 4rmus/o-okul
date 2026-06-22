@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button, DataTable, EmptyState, Field, InfoGrid, InfoItem, Input, MetricCard, MetricGrid, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn } from "@uzman-hocam/ui";
 import type {
   AnswerChoice,
@@ -175,6 +176,8 @@ const tabs: Array<{ id: OpticalTab; label: string }> = [
   { id: "quarantine", label: "4. Eşleşmeyen satırlar" },
 ];
 
+const defaultOpticalTab: OpticalTab = "format";
+
 const answerChoices: AnswerChoice[] = ["A", "B", "C", "D", "E"];
 
 interface OpticalFormPreviewRow {
@@ -288,10 +291,39 @@ function formatEvidenceSafeReference(value: string | undefined, label: string) {
   return value?.trim() ? `${label}: maskeli` : `${label}: yok`;
 }
 
+function readOpticalTab(searchParams: Pick<URLSearchParams, "get">): OpticalTab {
+  const tab = searchParams.get("tab");
+  return tabs.some((candidate) => candidate.id === tab) ? tab as OpticalTab : defaultOpticalTab;
+}
+
+function writeOpticalWorkspaceToUrl(input: { examId: string; tab: OpticalTab }) {
+  if (typeof window === "undefined") return;
+
+  const url = new URL(window.location.href);
+  if (input.examId) {
+    url.searchParams.set("examId", input.examId);
+  } else {
+    url.searchParams.delete("examId");
+  }
+  if (input.tab === defaultOpticalTab) {
+    url.searchParams.delete("tab");
+  } else {
+    url.searchParams.set("tab", input.tab);
+  }
+  window.history.replaceState(window.history.state, "", formatUrlForReplaceState(url));
+}
+
+function formatUrlForReplaceState(url: URL) {
+  const query = url.searchParams.toString();
+  return `${url.pathname}${query ? `?${query}` : ""}${url.hash}`;
+}
+
 export function ParserConfigPage() {
   const { auth } = useAuth();
-  const [activeTab, setActiveTab] = useState<OpticalTab>("format");
-  const [examId, setExamId] = useState("");
+  const searchParams = useSearchParams();
+  const searchParamsKey = searchParams.toString();
+  const [activeTab, setActiveTab] = useState<OpticalTab>(() => readOpticalTab(searchParams));
+  const [examId, setExamId] = useState(() => searchParams.get("examId") ?? "");
   const [exams, setExams] = useState<ExamRecord[]>([]);
   const [newExamTitle, setNewExamTitle] = useState("");
   const [newExamStartsAt, setNewExamStartsAt] = useState("");
@@ -367,9 +399,33 @@ export function ParserConfigPage() {
   }, [auth]);
 
   useEffect(() => {
+    const nextTab = readOpticalTab(searchParams);
+    const nextExamId = searchParams.get("examId") ?? "";
+    setActiveTab((current) => (current === nextTab ? current : nextTab));
+    if (nextExamId) {
+      setExamId((current) => (current === nextExamId ? current : nextExamId));
+    }
+  }, [searchParams, searchParamsKey]);
+
+  useEffect(() => {
     if (answerKeyVersionTouched) return;
     setAnswerKeyVersion(createAnswerKeyVersion(selectedExam?.title, answerKeyUploadedAt));
   }, [answerKeyUploadedAt, answerKeyVersionTouched, selectedExam?.title]);
+
+  function selectOpticalTab(tab: OpticalTab, nextExamId = examId) {
+    setActiveTab(tab);
+    writeOpticalWorkspaceToUrl({ examId: nextExamId, tab });
+  }
+
+  function selectOpticalExam(nextExamId: string) {
+    setExamId(nextExamId);
+    setReportSnapshots([]);
+    setReportParticipants([]);
+    setReportJob(null);
+    setSuggestion(null);
+    setSavedConfig(null);
+    writeOpticalWorkspaceToUrl({ examId: nextExamId, tab: activeTab });
+  }
 
   async function submitCreateExam(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -389,6 +445,7 @@ export function ParserConfigPage() {
       const created = await createOpticalExam(auth.accessToken, parsedForm.data);
       setExams((current) => [created, ...current.filter((exam) => exam.id !== created.id)]);
       setExamId(created.id);
+      writeOpticalWorkspaceToUrl({ examId: created.id, tab: activeTab });
       setNewExamTitle("");
       setNewExamStartsAt("");
     } catch (examError) {
@@ -426,7 +483,7 @@ export function ParserConfigPage() {
       setVersion(approved.version);
       setRawImportParserVersion(approved.version);
       setTemplateApplyVersion(approved.version);
-      setActiveTab("answer-key");
+      selectOpticalTab("answer-key", result.examId);
     } catch (suggestionError) {
       setError(apiErrorMessage(suggestionError, "Optik dosya formatı kaydedilemedi."));
     }
@@ -454,7 +511,7 @@ export function ParserConfigPage() {
       setFileBase64("");
       setRawImportParserVersion(approved.version);
       setTemplateApplyVersion(approved.version);
-      setActiveTab("answer-key");
+      selectOpticalTab("answer-key", result.examId);
     } catch (presetError) {
       setError(apiErrorMessage(presetError, "TXT/DAT form yapısı seçilemedi."));
     }
@@ -771,7 +828,7 @@ export function ParserConfigPage() {
         expectedCount: jobs.queuedCount,
       });
       setEvaluationStatus(status);
-      setActiveTab("quarantine");
+      selectOpticalTab("quarantine");
     } catch (evaluationError) {
       setError(apiErrorMessage(evaluationError, "Analiz işleri kuyruğa alındı ancak tamamlanma sonucu alınamadı. Birazdan tekrar deneyin."));
     } finally {
@@ -908,14 +965,7 @@ export function ParserConfigPage() {
         newExamStartsAt={newExamStartsAt}
         newExamTitle={newExamTitle}
         selectedExam={selectedExam}
-        onExamChange={(value) => {
-          setExamId(value);
-          setReportSnapshots([]);
-          setReportParticipants([]);
-          setReportJob(null);
-          setSuggestion(null);
-          setSavedConfig(null);
-        }}
+        onExamChange={selectOpticalExam}
         onNewExamStartsAtChange={setNewExamStartsAt}
         onNewExamTitleChange={setNewExamTitle}
         onSubmit={submitCreateExam}
@@ -933,13 +983,13 @@ export function ParserConfigPage() {
               aria-controls={activeTab === tab.id ? `optical-panel-${tab.id}` : undefined}
               id={`optical-tab-${tab.id}`}
               selected={activeTab === tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => selectOpticalTab(tab.id)}
             >
               {tab.label}
             </TabButton>
           ))}
         </Tabs>
-        {error ? <p className="uh-crud-page__error">{error}</p> : null}
+        {error ? <p className="uh-crud-page__error" role="alert">{error}</p> : null}
         <div
           aria-labelledby={`optical-tab-${activeTab}`}
           className="next-optical-tab-panel"
@@ -1215,7 +1265,7 @@ function OpticalFormatSetup({
           <InfoItem label="Sürüm" value={selectedPresetVersion} />
         </InfoGrid>
         {renderOpticalFormPreview(selectedPresetForm.rows)}
-        <InfoGrid className="next-parser-summary" aria-live="polite">
+        <InfoGrid aria-live="polite" className="next-parser-summary" role="status">
           {suggestion ? (
             <>
               <InfoItem label="Ayraç" value={suggestion.delimiter} />
@@ -1459,7 +1509,7 @@ function AnswerKeySetup({
       >
         {answerKeyDryRun ? (
           <>
-            <p>{answerKeyDryRun.questionCount} soru doğrulandı.</p>
+            <p aria-live="polite" role="status">{answerKeyDryRun.questionCount} soru doğrulandı.</p>
             <p>{answerKeyDryRun.bookletVariants.map((variant) => `${variant.code}: ${variant.questionCount} soru`).join(", ")}</p>
             <DataTable
               caption="Cevap anahtarı branş dağılımı"
@@ -1472,7 +1522,7 @@ function AnswerKeySetup({
         ) : (
           <p>Excel dosyası ön kontrol bekliyor.</p>
         )}
-        {answerKeyImport ? <p>Excel cevap anahtarı içe aktarıldı.</p> : null}
+        {answerKeyImport ? <p aria-live="polite" role="status">Excel cevap anahtarı içe aktarıldı.</p> : null}
       </Panel>
       <Panel
         aria-label="Manuel cevap anahtarı"
@@ -1523,14 +1573,14 @@ function AnswerKeySetup({
           </Button>
         </div>
         {manualDryRun ? (
-          <p>
+          <p aria-live="polite" role="status">
             {manualDryRun.questionCount} manuel soru doğrulandı.
             {manualDryRun.bookletVariants.length
               ? ` ${manualDryRun.bookletVariants.map((variant) => `${variant.code}: ${variant.questionCount} soru`).join(", ")}`
               : ""}
           </p>
         ) : null}
-        {manualAnswerKey ? <p>Manuel cevap anahtarı kaydedildi.</p> : null}
+        {manualAnswerKey ? <p aria-live="polite" role="status">Manuel cevap anahtarı kaydedildi.</p> : null}
       </Panel>
     </section>
   );
@@ -1629,7 +1679,7 @@ function OpticalUploadPanel({
           <p>TXT/DAT dosyasını seçip yükleyin; kontrol sonucu burada görünecek.</p>
         )}
         {rawImportSummary ? (
-          <InfoGrid className="next-parser-summary" aria-live="polite">
+          <InfoGrid aria-live="polite" className="next-parser-summary" role="status">
             <InfoItem label="Toplam" value={rawImportSummary.totalRows} />
             <InfoItem label="Eşleşen" value={rawImportSummary.matchedCount} />
             <InfoItem label="Eşleşmeyen" value={rawImportSummary.quarantinedCount} />
@@ -1637,13 +1687,13 @@ function OpticalUploadPanel({
           </InfoGrid>
         ) : null}
         {evaluationJobs ? (
-          <p>
+          <p aria-live="polite" role="status">
             {evaluationJobs.queuedCount}/{evaluationJobs.matchedCount} analiz işi kuyruğa alındı.
             {isEvaluationSubmitting ? " Sonuçlar bekleniyor." : ""}
           </p>
         ) : null}
         {evaluationStatus ? (
-          <p>
+          <p aria-live="polite" role="status">
             {evaluationStatus.evaluatedCount}/{evaluationStatus.matchedCount} analiz sonucu tamamlandı.
           </p>
         ) : null}
@@ -1977,11 +2027,14 @@ function OpticalReportPanel({
           </Button>
         </div>
         {reportJob ? (
-          <details className="next-advanced-details">
-            <summary>Rapor işi kuyruğa alındı.</summary>
-            <p>{formatEvidenceSafeReference(reportJob.jobId, "Rapor kuyruk ref")}</p>
-            <p>Ham kuyruk id ekran görüntülerinde gösterilmez.</p>
-          </details>
+          <>
+            <p aria-live="polite" role="status">Rapor işi kuyruğa alındı.</p>
+            <details className="next-advanced-details">
+              <summary>Teknik rapor işi bilgisi</summary>
+              <p>{formatEvidenceSafeReference(reportJob.jobId, "Rapor kuyruk ref")}</p>
+              <p>Ham kuyruk id ekran görüntülerinde gösterilmez.</p>
+            </details>
+          </>
         ) : null}
       </Panel>
       <Panel

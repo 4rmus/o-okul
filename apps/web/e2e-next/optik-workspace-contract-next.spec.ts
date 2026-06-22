@@ -11,11 +11,31 @@ const corsHeaders = {
 
 const rawImportId = "raw-import-optik-12345678901";
 const rawParseJobId = "parse-job-optik-admin-a@example.test";
+const rawEvaluationJobId = "evaluation-job-optik-admin-a@example.test";
+const reportGenerationJobId = "report-job-optik-admin-a@example.test";
 const rawImportHash = "abcdef1234567890fedcba0987654321";
 const rawImportFileName = "optik-12345678901-admin-a@example.test.txt";
-const hostileOptikReferences = [rawImportId, rawParseJobId, rawImportHash, rawImportFileName] as const;
+const hostileOptikReferences = [rawImportId, rawParseJobId, rawEvaluationJobId, reportGenerationJobId, rawImportHash, rawImportFileName] as const;
 
 test.describe("Optik çalışma alanı sözleşmesi", () => {
+  test("aktif sınav ve adım URL state ile korunur", async ({ page }) => {
+    await openWithOptikMocks(page, "/kurum/optik?examId=exam-optik&tab=upload");
+
+    await expect(page.getByRole("tab", { name: "3. Optik yükleme" })).toHaveAttribute("aria-selected", "true");
+    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-optik");
+    await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("upload");
+
+    await page.getByRole("tab", { name: "4. Eşleşmeyen satırlar" }).click();
+    await expect(page.getByRole("tab", { name: "4. Eşleşmeyen satırlar" })).toHaveAttribute("aria-selected", "true");
+    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-optik");
+    await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("quarantine");
+
+    await page.getByRole("tab", { name: "1. Format" }).click();
+    await expect(page.getByRole("tab", { name: "1. Format" })).toHaveAttribute("aria-selected", "true");
+    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-optik");
+    await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBeNull();
+  });
+
   test("mobilde rapor snapshot çıktıları READY durumuna göre kilitlenir", async ({ page }) => {
     await openWithOptikMocks(page, "/kurum/optik");
 
@@ -45,9 +65,11 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await answerKeyPanel.getByRole("button", { name: "Ön kontrol" }).first().click();
     const answerKeySummary = answerKeyPanel.getByLabel("Cevap anahtarı özeti");
     await expect(answerKeySummary).toContainText("90 soru doğrulandı.");
+    await expect(answerKeySummary.getByRole("status").filter({ hasText: "90 soru doğrulandı." })).toBeVisible();
     await expect(answerKeySummary.getByRole("table", { name: "Cevap anahtarı branş dağılımı" })).toBeVisible();
     await answerKeyPanel.getByRole("button", { name: "İçe aktar" }).click();
     await expect(answerKeySummary).toContainText("Excel cevap anahtarı içe aktarıldı.");
+    await expect(answerKeySummary.getByRole("status").filter({ hasText: "Excel cevap anahtarı içe aktarıldı." })).toBeVisible();
     await expect(answerKeySummary).not.toContainText("optik-answer-key-v1");
 
     const manualAnswerKeyPanel = answerKeyPanel.getByLabel("Manuel cevap anahtarı");
@@ -59,8 +81,10 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await manualAnswerKeyPanel.getByRole("button", { name: "Gridi doldur" }).click();
     await manualAnswerKeyPanel.getByRole("button", { name: "Ön kontrol" }).click();
     await expect(manualAnswerKeyPanel).toContainText("90 manuel soru doğrulandı. B: 90 soru");
+    await expect(manualAnswerKeyPanel.getByRole("status").filter({ hasText: "90 manuel soru doğrulandı. B: 90 soru" })).toBeVisible();
     await manualAnswerKeyPanel.getByRole("button", { name: "Kaydet" }).click();
     await expect(manualAnswerKeyPanel).toContainText("Manuel cevap anahtarı kaydedildi.");
+    await expect(manualAnswerKeyPanel.getByRole("status").filter({ hasText: "Manuel cevap anahtarı kaydedildi." })).toBeVisible();
     await expect(manualAnswerKeyPanel).not.toContainText("manual-key-v1");
 
     await page.getByRole("tab", { name: "3. Optik yükleme" }).click();
@@ -78,6 +102,7 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await expect(uploadSummary).toHaveClass(/uh-info-grid/);
     await expect(uploadSummary.locator(".uh-info-item")).toHaveCount(4);
     await expect(uploadSummary).toContainText("Eşleşmeyen");
+    await expect(uploadResult.getByRole("status").filter({ hasText: "Eşleşmeyen" })).toBeVisible();
     await uploadResult.getByText("Teknik yükleme bilgisi").click();
     await expect(uploadResult).toContainText("Dosya ref: maskeli");
     await expect(uploadResult).toContainText("Kuyruk ref: maskeli");
@@ -86,6 +111,11 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     for (const value of hostileOptikReferences) {
       await expect(page.locator("body")).not.toContainText(value);
     }
+    await uploadResult.getByRole("button", { name: "Analizi başlat" }).click();
+    await expect(page.getByRole("tab", { name: "4. Eşleşmeyen satırlar" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", { name: "3. Optik yükleme" }).click();
+    await expect(uploadResult.getByRole("status").filter({ hasText: "1/1 analiz işi kuyruğa alındı." })).toBeVisible();
+    await expect(uploadResult.getByRole("status").filter({ hasText: "1/1 analiz sonucu tamamlandı." })).toBeVisible();
 
     await page.getByRole("tab", { name: "4. Eşleşmeyen satırlar" }).click();
     const optikReportPanel = page.getByRole("tabpanel", { name: "4. Eşleşmeyen satırlar" });
@@ -97,6 +127,10 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await expect(optikReportPanel.locator(".next-report-status-grid")).toHaveCount(0);
     await expect(optikReportPanel).toContainText("Hazır rapor yok");
 
+    await optikReportPanel.getByRole("button", { name: "Rapor üret" }).click();
+    await expect(optikReportPanel.getByRole("status").filter({ hasText: "Rapor işi kuyruğa alındı." })).toBeVisible();
+    await optikReportPanel.getByText("Teknik rapor işi bilgisi").click();
+    await expect(optikReportPanel).toContainText("Rapor kuyruk ref: maskeli");
     await optikReportPanel.getByRole("button", { name: "Raporları getir" }).click();
     const readyReportsTable = page.getByRole("table", { name: "Hazır optik raporlar" });
     await expect(readyReportsTable.getByRole("columnheader", { name: "Çıktı" })).toBeVisible();
@@ -117,6 +151,9 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await expect(studentResultsTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
     await expect(studentResultsTable.getByRole("columnheader", { name: "Net" })).toBeVisible();
     await expect(studentResultsTable.getByRole("columnheader", { name: "Soru" })).toBeVisible();
+    for (const value of hostileOptikReferences) {
+      await expect(page.locator("body")).not.toContainText(value);
+    }
 
     await expectNoHorizontalOverflow(page, "optik-mobile");
     await expectNoUnlabeledControls(page, "optik-mobile");
@@ -148,6 +185,10 @@ async function installOptikApiMocks(page: Page) {
       await fulfillData(route, createRawImportUploadResult());
       return;
     }
+    if (route.request().method() === "POST" && pathName === `/exams/exam-optik/raw-imports/${rawImportId}/evaluation-jobs`) {
+      await fulfillData(route, createRawImportEvaluationQueueResult());
+      return;
+    }
     if (route.request().method() === "POST" && pathName === "/exams/exam-optik/answer-keys/imports/dry-run") {
       await fulfillData(route, createAnswerKeyDryRunResult());
       return;
@@ -159,6 +200,10 @@ async function installOptikApiMocks(page: Page) {
     if (route.request().method() === "POST" && pathName === "/exams/exam-optik/answer-keys") {
       const payload = JSON.parse(route.request().postData() ?? "{}") as { dryRun?: boolean; version?: string };
       await fulfillData(route, payload.dryRun ? createManualAnswerKeyDryRunResult(payload.version) : createManualAnswerKeyResult(payload.version));
+      return;
+    }
+    if (route.request().method() === "POST" && pathName === "/exams/exam-optik/reports/generation-jobs") {
+      await fulfillData(route, createReportGenerationJob());
       return;
     }
     const response = mockOptikApiResponse(pathName);
@@ -176,6 +221,7 @@ function mockOptikApiResponse(pathName: string): { data: unknown; meta?: ListMet
   if (pathName === "/exams/exam-optik/participants") return { data: createExamParticipants() };
   if (pathName === "/exams/exam-optik/reports/snapshots") return { data: createReportSnapshots() };
   if (pathName === `/exams/exam-optik/raw-imports/${rawImportId}/summary`) return { data: createRawImportSummary() };
+  if (pathName === `/exams/exam-optik/raw-imports/${rawImportId}/evaluation-status`) return { data: createRawImportEvaluationStatus() };
   if (pathName === `/exams/exam-optik/raw-imports/${rawImportId}/quarantines`) return { data: [] };
 
   return { data: [] };
@@ -358,6 +404,44 @@ function createRawImportSummary() {
     rawImportId,
     tenantId: "tenant-optik",
     totalRows: 1,
+  };
+}
+
+function createRawImportEvaluationQueueResult() {
+  return {
+    answerKeyId: "answer-key-optik-answer-key-v1",
+    examId: "exam-optik",
+    jobs: [{ jobId: rawEvaluationJobId, participantId: "participant-a", status: "queued" }],
+    matchedCount: 1,
+    queueName: "exam-evaluation",
+    queuedCount: 1,
+    rawImportId,
+    rawImportSha256: rawImportHash,
+    tenantId: "tenant-optik",
+  };
+}
+
+function createRawImportEvaluationStatus() {
+  return {
+    answerKeyId: "answer-key-optik-answer-key-v1",
+    evaluatedCount: 1,
+    examId: "exam-optik",
+    matchedCount: 1,
+    pendingCount: 0,
+    rawImportId,
+    status: "COMPLETED",
+    tenantId: "tenant-optik",
+  };
+}
+
+function createReportGenerationJob() {
+  return {
+    examId: "exam-optik",
+    jobId: reportGenerationJobId,
+    queueName: "report-generation",
+    reportType: "EXAM_RESULT_SUMMARY",
+    status: "queued",
+    tenantId: "tenant-optik",
   };
 }
 

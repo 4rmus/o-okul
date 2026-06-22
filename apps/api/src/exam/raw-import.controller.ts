@@ -1,4 +1,10 @@
 import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from "@nestjs/common";
+import type {
+  RawImportEvaluationRequest,
+  RawImportQuarantineResolveRequest,
+  RawImportUploadRequest,
+  RawImportUploadResult,
+} from "@uzman-hocam/shared-types";
 import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
 import { optionalTrimmedString, requiredTrimmedString, zodBody } from "../http/zod-validation.js";
@@ -6,10 +12,7 @@ import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { RawImportQuarantineService } from "./raw-import-quarantine.service.js";
 import { RawImportAnalysisService } from "./raw-import-analysis.service.js";
-import {
-  RawImportUploadService,
-  type RawImportUploadResult,
-} from "./raw-import-upload.service.js";
+import { RawImportUploadService } from "./raw-import-upload.service.js";
 
 const rawImportUploadBodySchema = z.object({
   contentType: optionalTrimmedString,
@@ -17,17 +20,17 @@ const rawImportUploadBodySchema = z.object({
   fileName: requiredTrimmedString,
   parserConfigVersion: requiredTrimmedString,
   sourceType: requiredTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<RawImportUploadRequest>;
 const rawImportEvaluationBodySchema = z.preprocess((value) => value ?? {}, z.object({
   answerKeyId: optionalTrimmedString,
-}).strict());
-const rawImportResolveBodySchema = z.preprocess((value) => value ?? {}, z.object({
-  resolvedStudentId: optionalTrimmedString,
-}).strict());
+}).strict()) satisfies z.ZodType<RawImportEvaluationRequest>;
+const rawImportResolveBodySchema = z.object({
+  resolvedStudentId: requiredTrimmedString,
+}).strict() satisfies z.ZodType<RawImportQuarantineResolveRequest>;
 
-type RawImportUploadBody = z.infer<typeof rawImportUploadBodySchema>;
-type RawImportEvaluationBody = z.infer<typeof rawImportEvaluationBodySchema>;
-type RawImportResolveBody = z.infer<typeof rawImportResolveBodySchema>;
+type RawImportUploadBody = RawImportUploadRequest;
+type RawImportEvaluationBody = RawImportEvaluationRequest;
+type RawImportResolveBody = RawImportQuarantineResolveRequest;
 
 @Controller("exams/:examId/raw-imports")
 @UseGuards(RolesGuard)

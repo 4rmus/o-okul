@@ -10,6 +10,21 @@ const corsHeaders = {
 };
 
 test.describe("Rapor çalışma alanı sözleşmesi", () => {
+  test("aktif rapor sekmesi URL state ile korunur", async ({ page }) => {
+    await openWithReportMocks(page, "/kurum/raporlar?tab=exports", { height: 960, width: 1440 });
+
+    await expect(page.getByRole("tab", { name: "Çıktılar" })).toHaveAttribute("aria-selected", "true");
+    await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("exports");
+
+    await page.getByRole("tab", { name: "Kurum Analitiği" }).click();
+    await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
+    await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("analytics");
+
+    await page.getByRole("tab", { name: "Sorgu / Üretim" }).click();
+    await expect(page.getByRole("tab", { name: "Sorgu / Üretim" })).toHaveAttribute("aria-selected", "true");
+    await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBeNull();
+  });
+
   test("rapor sekmeleri klavyede roving focus ve panel odağını korur", async ({ page }) => {
     await openWithReportMocks(page, "/kurum/raporlar", { height: 960, width: 1440 });
 
