@@ -1,5 +1,5 @@
-import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const files = {
   journeys: readFileSync("docs/product-journeys-v1.md", "utf8"),
@@ -107,10 +107,11 @@ function extractOperations(root) {
 }
 
 function readFileSyncRecursiveManifest(root) {
-  const files = execFileSync("rg", ["--files", root, "-g", "*.ts"], { encoding: "utf8" })
-    .split(/\r?\n/)
-    .filter(Boolean);
-  return files.map((file) => readFileSync(file, "utf8")).join("\n");
+  const entries = readdirSync(root, { withFileTypes: true, recursive: true });
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
+    .map((entry) => readFileSync(join(entry.parentPath ?? entry.path, entry.name), "utf8"))
+    .join("\n");
 }
 
 function checkFileTokens(path, tokens, label, output) {

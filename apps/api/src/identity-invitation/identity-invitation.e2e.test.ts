@@ -81,11 +81,18 @@ describe("Identity invitations", () => {
     expect(accepted.body.acceptedUserId).toEqual(expect.any(String));
 
     await request(server)
-      .get(`/students/${studentId}`)
+      .get("/identity-invitations")
+      .query({ q: "invite-student", sort: "email", page: "1", limit: "1" })
       .set("Authorization", `Bearer ${admin}`)
       .expect(200)
       .expect(({ body }) => {
-        expect(body.userId).toBe(accepted.body.acceptedUserId);
+        expect(body).toEqual([
+          expect.objectContaining({
+            id: invite.body.invitation.id,
+            status: "ACCEPTED",
+            acceptedUserId: accepted.body.acceptedUserId,
+          }),
+        ]);
       });
   });
 
