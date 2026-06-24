@@ -253,6 +253,20 @@ describe("PaymentPlan API", () => {
             { id: "payment-installment-a-2", installmentNo: 2, status: "PENDING" },
           ],
         });
+        const serialized = JSON.stringify(body);
+        for (const forbidden of [
+          "userId",
+          "email",
+          "phone",
+          "nationalId",
+          "nationalIdEncrypted",
+          "nationalIdHash",
+          "photoKey",
+          "token",
+          "storageKey",
+        ]) {
+          expect(serialized).not.toContain(forbidden);
+        }
       });
 
     await request(server)

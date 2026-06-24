@@ -1,5 +1,9 @@
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
-import { isPortalSubjectRoleName } from "@uzman-hocam/shared-types";
+import {
+  isPortalSubjectRoleName,
+  type IdentityInvitationAcceptRequest,
+  type IdentityInvitationCreateRequest,
+} from "@uzman-hocam/shared-types";
 import { createHash, randomBytes } from "node:crypto";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
@@ -24,18 +28,8 @@ import {
   identityInvitationStoreToken,
 } from "./identity-invitation-store.js";
 
-export interface CreateIdentityInvitationBody {
-  subjectType?: string;
-  subjectId?: string;
-  email?: string;
-  name?: string;
-}
-
-export interface AcceptIdentityInvitationBody {
-  token?: string;
-  password?: string;
-  name?: string;
-}
+export type CreateIdentityInvitationBody = IdentityInvitationCreateRequest;
+export type AcceptIdentityInvitationBody = IdentityInvitationAcceptRequest;
 
 export interface IdentityInvitationIssueResult {
   invitation: IdentityInvitationRecord;

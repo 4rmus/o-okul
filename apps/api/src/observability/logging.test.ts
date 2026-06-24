@@ -85,6 +85,9 @@ describe("api structured logging", () => {
       },
     });
     expect(entry.durationMs).toEqual(expect.any(Number));
+    expect(lines[0]).not.toContain("veli@example.test");
+    expect(lines[0]).not.toContain("Bearer secret");
+    expect(lines[0]).not.toContain("authorization");
     expect(JSON.stringify(entry)).not.toContain("veli@example.test");
     expect(JSON.stringify(entry)).not.toContain("Bearer secret");
   });

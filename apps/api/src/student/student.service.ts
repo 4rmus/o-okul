@@ -2,9 +2,13 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import type {
   GuardianRelationshipType,
   StudentClassHistoryRecord,
+  StudentBulkEnrollmentRequest,
+  StudentBulkEnrollmentResult as SharedStudentBulkEnrollmentResult,
   StudentCreateRequest,
+  StudentEnrollmentActionRequest,
   StudentEnrollmentRecord,
   StudentGuardianProvisionRequest,
+  StudentUpdateRequest,
   PublicStudentProfileRecord,
   PublicStudentRecord,
   StudentProfileRecord,
@@ -70,24 +74,9 @@ export interface StudentProfileInput {
   photoKey?: string;
 }
 
-export interface StudentEnrollmentActionInput {
-  academicYearId?: string;
-  termId?: string;
-  classId?: string;
-  startsAt?: string;
-}
-
-export interface StudentBulkEnrollmentInput extends StudentEnrollmentActionInput {
-  studentIds?: string[];
-  classIdBySourceClassId?: Record<string, string>;
-  useAutomaticClassMapping?: boolean;
-}
-
-export interface StudentBulkEnrollmentResult {
-  updatedCount: number;
-  enrollments: StudentEnrollmentRecord[];
-}
-
+export type StudentEnrollmentActionInput = StudentEnrollmentActionRequest;
+export type StudentBulkEnrollmentInput = StudentBulkEnrollmentRequest;
+export type StudentBulkEnrollmentResult = SharedStudentBulkEnrollmentResult;
 export type StudentGuardianProvisionInput = StudentGuardianProvisionRequest;
 export type StudentCreateInput = StudentCreateRequest;
 
@@ -120,6 +109,10 @@ export class StudentService {
 
     const assignments = filterTenantResources(context, await this.teacherAssignmentStore.listByTeacher(context.subjectId));
     return students.filter((student) => this.isTeacherScopedStudent(context.subjectId, student, assignments));
+  }
+
+  async listForViewer(context: RequestContext): Promise<PublicStudentRecord[]> {
+    return (await this.list(context)).map(toPublicStudentRecord);
   }
 
   async findOne(context: RequestContext, id: string): Promise<StudentRecord> {
@@ -192,13 +185,13 @@ export class StudentService {
     return this.withClassNames(filterTenantResources(context, await this.enrollmentStore.listByStudent(id)));
   }
 
-  async updateProfile(context: RequestContext, id: string, input: StudentProfileInput): Promise<StudentProfileRecord> {
+  async updateProfile(context: RequestContext, id: string, input: StudentProfileInput): Promise<PublicStudentProfileRecord> {
     const student = await this.findOne(context, id);
     const profileUpdate = {
       birthDate: input.birthDate !== undefined ? optionalDate(input.birthDate) : undefined,
       phone: input.phone !== undefined ? optionalText(input.phone) : undefined,
       email: input.email !== undefined ? optionalEmail(input.email) : undefined,
-      photoKey: input.photoKey !== undefined ? optionalText(input.photoKey) : undefined,
+      photoKey: input.photoKey !== undefined ? optionalStudentPhotoKey(student.id, input.photoKey) : undefined,
       nationalIdEncrypted: undefined as string | undefined,
       nationalIdHash: undefined as string | undefined,
     };
@@ -401,7 +394,7 @@ export class StudentService {
     };
   }
 
-  async update(context: RequestContext, id: string, input: Partial<StudentRecord>): Promise<StudentRecord> {
+  async update(context: RequestContext, id: string, input: StudentUpdateRequest): Promise<PublicStudentRecord> {
     const existing = await this.findOne(context, id);
     const previous = { ...existing };
     const changedFields = changedInputFields(input, ["firstName", "lastName", "classId", "responsibleTeacherId", "status"]);
@@ -433,7 +426,7 @@ export class StudentService {
       action: "student.updated",
       diff: { fieldsChanged: changedFields },
     });
-    return updated;
+    return toPublicStudentRecord(updated);
   }
 
   async renewEnrollment(
@@ -525,16 +518,26 @@ export class StudentService {
       throw new BadRequestException("STUDENT_BULK_ENROLLMENT_STUDENTS_REQUIRED");
     }
 
+    const students = await Promise.all(studentIds.map((studentId) => this.findOne(context, studentId)));
     const automaticClassMapping = input.useAutomaticClassMapping ? await this.buildAutomaticClassMapping(context) : {};
-    const enrollments: StudentEnrollmentRecord[] = [];
-    for (const studentId of studentIds) {
-      const student = await this.findOne(context, studentId);
+    const renewals = students.map((student) => {
       const mappedClassId = student.classId ? input.classIdBySourceClassId?.[student.classId] : undefined;
       const automaticClassId = student.classId ? automaticClassMapping[student.classId] : undefined;
-      enrollments.push(await this.renewEnrollment(context, studentId, {
+      return {
+        student,
+        classId: mappedClassId ?? automaticClassId ?? input.classId,
+      };
+    });
+    await Promise.all(
+      renewals.map(({ student, classId }) => this.assertStudentRelationTargets(context, student.tenantId, { classId })),
+    );
+
+    const enrollments: StudentEnrollmentRecord[] = [];
+    for (const { student, classId } of renewals) {
+      enrollments.push(await this.renewEnrollment(context, student.id, {
         academicYearId: input.academicYearId,
         termId: input.termId,
-        classId: mappedClassId ?? automaticClassId ?? input.classId,
+        classId,
         startsAt: input.startsAt,
       }));
     }
@@ -662,7 +665,7 @@ export class StudentService {
     });
   }
 
-  async purgePii(context: RequestContext, id: string): Promise<StudentRecord> {
+  async purgePii(context: RequestContext, id: string): Promise<PublicStudentRecord> {
     const student = await this.findOne(context, id);
     const hadFirstName = student.firstName.length > 0;
     const hadLastName = student.lastName.length > 0;
@@ -681,10 +684,10 @@ export class StudentService {
         before: { firstNamePresent: hadFirstName, lastNamePresent: hadLastName },
       },
     });
-    return purged;
+    return toPublicStudentRecord(purged);
   }
 
-  async updateTenant(context: RequestContext, id: string, tenantId: string): Promise<StudentRecord> {
+  async updateTenant(context: RequestContext, id: string, tenantId: string): Promise<PublicStudentRecord> {
     const student = await this.findOne(context, id);
     const previousTenantId = student.tenantId;
     this.assertAccess(context, { tenantId });
@@ -700,7 +703,7 @@ export class StudentService {
       action: "student.tenant_updated",
       diff: { before: { tenantId: previousTenantId }, after: { tenantId } },
     });
-    return updated;
+    return toPublicStudentRecord(updated);
   }
 
   private assertAccess(context: RequestContext, resource: { tenantId: string }): void {
@@ -1046,8 +1049,16 @@ function nextGradeCode(code: string | undefined): string | undefined {
 }
 
 function toPublicStudentRecord(student: StudentRecord): PublicStudentRecord {
-  const { deletedAt: _deletedAt, userId: _userId, ...response } = student;
-  return response;
+  return {
+    id: student.id,
+    tenantId: student.tenantId,
+    studentNo: student.studentNo,
+    firstName: student.firstName,
+    lastName: student.lastName,
+    classId: student.classId,
+    responsibleTeacherId: student.responsibleTeacherId,
+    status: student.status,
+  };
 }
 
 function toStudentProfile(student: {
@@ -1112,6 +1123,21 @@ function optionalEmail(value: string | undefined): string | undefined {
   if (trimmed === undefined) return undefined;
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed)) {
     throw new BadRequestException("STUDENT_EMAIL_INVALID");
+  }
+  return trimmed;
+}
+
+function optionalStudentPhotoKey(studentId: string, value: string | undefined): string | undefined {
+  const trimmed = optionalText(value);
+  if (trimmed === undefined) return undefined;
+  if (
+    trimmed.startsWith("/") ||
+    trimmed.includes("\\") ||
+    trimmed.includes("..") ||
+    /^(https?:|s3:|gs:)/i.test(trimmed) ||
+    !trimmed.startsWith(`students/${studentId}/`)
+  ) {
+    throw new BadRequestException("STUDENT_PHOTO_KEY_INVALID");
   }
   return trimmed;
 }

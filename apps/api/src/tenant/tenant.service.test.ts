@@ -1,7 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
-import { hashResetToken } from "../auth/auth.service.js";
-import { InMemoryPasswordResetStore } from "../auth/password-reset-store.js";
+import type { PasswordResetRecord, PasswordResetStore } from "../auth/password-reset-store.js";
 import type { RequestContext } from "../context/request-context.js";
 import { InMemoryTenantStore } from "./tenant-store.js";
 import { TenantService } from "./tenant.service.js";
@@ -106,8 +105,58 @@ describe("TenantService", () => {
     });
   });
 
-  it("SystemAdmin ilk tenant admin için davet tokenı üretebilir", async () => {
-    const passwordResets = new InMemoryPasswordResetStore();
+  it("ilk tenant admin audit kaydı raw e-posta yazmaz", async () => {
+    const records: unknown[] = [];
+    const auditLogs = {
+      record: async (input: unknown) => {
+        records.push(input);
+      },
+    };
+    const service = new TenantService(new InMemoryTenantStore(), auditLogs as never);
+
+    await service.create(systemContext, {
+      id: "tenant-first-admin-audit",
+      name: "İlk Admin Audit Kurum",
+      slug: "ilk-admin-audit-kurum",
+      firstAdmin: {
+        name: "Audit Yönetici",
+        email: "audit.admin@example.test",
+        mode: "password",
+        password: "password1",
+      },
+    });
+
+    expect(records).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        action: "tenant.first_admin_created",
+        diff: expect.objectContaining({
+          emailProvided: true,
+          roles: ["TENANT_ADMIN"],
+        }),
+      }),
+    ]));
+    expect(JSON.stringify(records)).not.toContain("audit.admin@example.test");
+  });
+
+  it("SystemAdmin ilk tenant admin için davet token kaydı üretir ama ham token döndürmez", async () => {
+    const passwordResetCreates: Array<{ userId: string; tokenHash: string; expiresAt: string }> = [];
+    const passwordResets: PasswordResetStore = {
+      create: async (input) => {
+        passwordResetCreates.push(input);
+        return {
+          id: "password-reset-test",
+          userId: input.userId,
+          tokenHash: input.tokenHash,
+          status: "PENDING",
+          expiresAt: input.expiresAt,
+          createdAt: input.expiresAt,
+          updatedAt: input.expiresAt,
+        } satisfies PasswordResetRecord;
+      },
+      findByTokenHash: async () => undefined,
+      markUsed: async () => undefined,
+      revokePendingForUser: async () => undefined,
+    };
     const service = new TenantService(new InMemoryTenantStore(), undefined, undefined, passwordResets);
 
     const result = await service.create(systemContext, {
@@ -124,18 +173,24 @@ describe("TenantService", () => {
     expect(result).toEqual({
       tenant: expect.objectContaining({ id: "tenant-invited-admin" }),
       admin: expect.objectContaining({
-        activationToken: expect.any(String),
+        activationTokenExpiresAt: expect.any(String),
+        activationTokenIssued: true,
         email: "invited.admin@example.test",
         roles: ["TENANT_ADMIN"],
         tenantId: "tenant-invited-admin",
       }),
     });
-    if (!("admin" in result) || !result.admin.activationToken) {
-      throw new Error("ACTIVATION_TOKEN_MISSING");
+    if (!("admin" in result)) {
+      throw new Error("FIRST_ADMIN_RESULT_MISSING");
     }
-    await expect(passwordResets.findByTokenHash(hashResetToken(result.admin.activationToken))).resolves.toEqual(
-      expect.objectContaining({ userId: result.admin.id, status: "PENDING" }),
-    );
+    expect(result.admin).not.toHaveProperty("activationToken");
+    expect(passwordResetCreates).toEqual([
+      expect.objectContaining({
+        userId: result.admin.id,
+        tokenHash: expect.any(String),
+        expiresAt: result.admin.activationTokenExpiresAt,
+      }),
+    ]);
   });
 
   it("slug çakışmasını anlaşılır tenant hatasına çevirir", async () => {

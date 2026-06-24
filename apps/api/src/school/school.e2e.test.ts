@@ -1630,12 +1630,27 @@ describe("School management API", () => {
 
   it("student PII purge ad soyadı anonimleştirir", async () => {
     await request(server)
+      .patch("/students/student-a/profile")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        nationalId: "10000000146",
+        birthDate: "2012-05-10",
+        phone: "5551234567",
+        email: "ada-purge@example.test",
+        photoKey: "students/student-a/purge-photo.jpg",
+      })
+      .expect(200);
+
+    await request(server)
       .post("/students/student-a/purge-pii")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(201)
       .expect(({ body }) => {
         expect(body.firstName).toBe("Anonim");
         expect(body.lastName).toBe("Ogrenci");
+        expect(JSON.stringify(body)).not.toContain("student-tenant-a");
+        expect(JSON.stringify(body)).not.toContain("10000000146");
+        expect(JSON.stringify(body)).not.toContain("ada-purge@example.test");
       });
 
     await request(server)
@@ -1645,6 +1660,20 @@ describe("School management API", () => {
       .expect(({ body }) => {
         expect(body.firstName).toBe("Anonim");
         expect(body.lastName).toBe("Ogrenci");
+      });
+
+    await request(server)
+      .get("/students/student-a/profile")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.nationalIdMasked).toBeUndefined();
+        expect(body.birthDate).toBeUndefined();
+        expect(body.phone).toBeUndefined();
+        expect(body.email).toBeUndefined();
+        expect(body.photoKey).toBeUndefined();
+        expect(JSON.stringify(body)).not.toContain("10000000146");
+        expect(JSON.stringify(body)).not.toContain("ada-purge@example.test");
       });
   });
 });

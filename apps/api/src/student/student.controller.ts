@@ -8,9 +8,6 @@ import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
   StudentImportService,
-  type StudentExportResult,
-  type StudentImportDryRunResult,
-  type StudentImportResult,
 } from "./student-import.service.js";
 import {
   StudentService,
@@ -25,9 +22,17 @@ import { SchoolService } from "../school/school.service.js";
 import type {
   GuardianRecord,
   GuardianStudentRecord,
+  PublicStudentProfileRecord,
+  PublicStudentRecord,
   StudentEnrollmentRecord,
   StudentClassHistoryRecord,
-  StudentProfileRecord,
+  StudentExportResult,
+  StudentImportDryRunResult,
+  StudentImportRequest,
+  StudentImportResult,
+  StudentProfileUpdateRequest,
+  StudentTenantUpdateRequest,
+  StudentUpdateRequest,
   TeacherAssignmentRecord,
 } from "@uzman-hocam/shared-types";
 
@@ -76,14 +81,14 @@ const studentUpdateBodySchema = z.object({
   lastName: requiredTrimmedString.optional(),
   responsibleTeacherId: optionalTrimmedString,
   status: studentStatusSchema.optional(),
-}).strict();
+}).strict() satisfies z.ZodType<StudentUpdateRequest>;
 const studentProfileBodySchema = z.object({
   birthDate: optionalStudentBirthDateSchema,
   email: optionalTrimmedString,
   nationalId: optionalTrimmedString,
   phone: optionalTrimmedString,
   photoKey: optionalTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<StudentProfileUpdateRequest>;
 const studentEnrollmentActionBodySchema = z.object({
   academicYearId: optionalTrimmedString,
   classId: optionalTrimmedString,
@@ -97,10 +102,10 @@ const studentBulkEnrollmentBodySchema = studentEnrollmentActionBodySchema.extend
 }).strict();
 const studentImportBodySchema = z.object({
   fileBase64: requiredTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<StudentImportRequest>;
 const studentTenantUpdateBodySchema = z.object({
   tenantId: requiredTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<StudentTenantUpdateRequest>;
 
 @Controller("students")
 @UseGuards(RolesGuard)
@@ -113,8 +118,8 @@ export class StudentController {
 
   @Get()
   @Roles("TEACHER")
-  async list(@Query(zodQuery(studentListQuerySchema)) query: StudentListQuery): Promise<StudentRecord[]> {
-    const records = await this.filterStudents(await this.students.list(getRequestContext()), query);
+  async list(@Query(zodQuery(studentListQuerySchema)) query: StudentListQuery): Promise<PublicStudentRecord[]> {
+    const records = await this.filterStudents(await this.students.listForViewer(getRequestContext()), query);
     return applyListQuery(records, query, studentListFields);
   }
 
@@ -126,13 +131,13 @@ export class StudentController {
 
   @Get(":id")
   @Roles("GUARDIAN")
-  findOne(@Param("id") id: string): Promise<StudentRecord> {
+  findOne(@Param("id") id: string): Promise<PublicStudentRecord> {
     return this.students.findOneForViewer(getRequestContext(), id);
   }
 
   @Get(":id/profile")
   @Roles("GUARDIAN")
-  profile(@Param("id") id: string): Promise<StudentProfileRecord> {
+  profile(@Param("id") id: string): Promise<PublicStudentProfileRecord> {
     return this.students.findProfileForViewer(getRequestContext(), id);
   }
 
@@ -186,14 +191,14 @@ export class StudentController {
 
   @Post("imports/dry-run")
   @RequireCapability("student:manage")
-  dryRunImport(@Body(zodBody(studentImportBodySchema)) body: { fileBase64: string }): Promise<StudentImportDryRunResult> {
+  dryRunImport(@Body(zodBody(studentImportBodySchema)) body: StudentImportRequest): Promise<StudentImportDryRunResult> {
     return this.imports.dryRun(getRequestContext(), body);
   }
 
   @Post("imports")
   @RequireCapability("student:manage")
   import(
-    @Body(zodBody(studentImportBodySchema)) body: { fileBase64: string },
+    @Body(zodBody(studentImportBodySchema)) body: StudentImportRequest,
     @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<StudentImportResult> {
     return this.imports.import(getRequestContext(), body, idempotencyKey);
@@ -201,13 +206,13 @@ export class StudentController {
 
   @Patch(":id")
   @RequireCapability("student:manage")
-  update(@Param("id") id: string, @Body(zodBody(studentUpdateBodySchema)) body: Partial<StudentRecord>): Promise<StudentRecord> {
+  update(@Param("id") id: string, @Body(zodBody(studentUpdateBodySchema)) body: StudentUpdateRequest): Promise<PublicStudentRecord> {
     return this.students.update(getRequestContext(), id, body);
   }
 
   @Patch(":id/profile")
   @RequireCapability("student:manage")
-  updateProfile(@Param("id") id: string, @Body(zodBody(studentProfileBodySchema)) body: StudentProfileInput): Promise<StudentProfileRecord> {
+  updateProfile(@Param("id") id: string, @Body(zodBody(studentProfileBodySchema)) body: StudentProfileInput): Promise<PublicStudentProfileRecord> {
     return this.students.updateProfile(getRequestContext(), id, body);
   }
 
@@ -233,7 +238,7 @@ export class StudentController {
 
   @Post(":id/purge-pii")
   @RequireCapability("privacy:manage")
-  purgePii(@Param("id") id: string): Promise<StudentRecord> {
+  purgePii(@Param("id") id: string): Promise<PublicStudentRecord> {
     return this.students.purgePii(getRequestContext(), id);
   }
 
@@ -246,11 +251,11 @@ export class StudentController {
 
   @Patch(":id/tenant")
   @Roles("TENANT_ADMIN")
-  updateTenant(@Param("id") id: string, @Body(zodBody(studentTenantUpdateBodySchema)) body: Pick<StudentRecord, "tenantId">): Promise<StudentRecord> {
+  updateTenant(@Param("id") id: string, @Body(zodBody(studentTenantUpdateBodySchema)) body: StudentTenantUpdateRequest): Promise<PublicStudentRecord> {
     return this.students.updateTenant(getRequestContext(), id, body.tenantId);
   }
 
-  private async filterStudents(records: StudentRecord[], query: StudentListQuery): Promise<StudentRecord[]> {
+  private async filterStudents<TRecord extends PublicStudentRecord>(records: TRecord[], query: StudentListQuery): Promise<TRecord[]> {
     let filtered = records;
     if (query.classId) {
       filtered = filtered.filter((student) => student.classId === query.classId);
@@ -285,10 +290,10 @@ export class StudentController {
 }
 
 const studentListFields = [
-  { name: "studentNo", read: (record: StudentRecord) => Number(record.studentNo) || undefined },
-  { name: "firstName", read: (record: StudentRecord) => record.firstName },
-  { name: "lastName", read: (record: StudentRecord) => record.lastName },
-  { name: "classId", read: (record: StudentRecord) => record.classId },
-  { name: "responsibleTeacherId", read: (record: StudentRecord) => record.responsibleTeacherId },
-  { name: "status", read: (record: StudentRecord) => record.status },
+  { name: "studentNo", read: (record: PublicStudentRecord) => Number(record.studentNo) || undefined },
+  { name: "firstName", read: (record: PublicStudentRecord) => record.firstName },
+  { name: "lastName", read: (record: PublicStudentRecord) => record.lastName },
+  { name: "classId", read: (record: PublicStudentRecord) => record.classId },
+  { name: "responsibleTeacherId", read: (record: PublicStudentRecord) => record.responsibleTeacherId },
+  { name: "status", read: (record: PublicStudentRecord) => record.status },
 ];

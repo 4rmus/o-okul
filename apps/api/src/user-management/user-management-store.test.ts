@@ -54,8 +54,8 @@ describe("PostgresUserManagementStore", () => {
 
     expect(queries.some((query) => query.sql.includes("set_config('app.current_tenant_id'"))).toBe(true);
     const insertUser = queries.find((query) => query.sql.includes('INSERT INTO "User"'));
-    expect(insertUser?.sql).toContain('ON CONFLICT ("email") DO UPDATE');
-    expect(insertUser?.sql).toContain('"passwordHash" = EXCLUDED."passwordHash"');
+    expect(insertUser?.sql).toContain('ON CONFLICT ("email") DO NOTHING');
+    expect(insertUser?.sql).not.toContain('"passwordHash" = EXCLUDED."passwordHash"');
     expect(insertUser?.values).toEqual([
       expect.any(String),
       "created@example.test",
@@ -67,6 +67,65 @@ describe("PostgresUserManagementStore", () => {
     const tenantMembershipInserts = queries.filter((query) => query.sql.includes('INSERT INTO "TenantMembership"'));
     expect(tenantMembershipInserts[0]?.values).toEqual([expect.any(String), "tenant-a", "user-created", "TEACHER"]);
     expect(tenantMembershipInserts[1]?.values).toEqual([expect.any(String), "tenant-a", "user-created", "STUDENT"]);
+  });
+
+  it("mevcut global e-postayı tenant'a eklerken parolayı güncellemez", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const now = new Date("2026-06-01T12:00:00.000Z");
+    const pool = {
+      async query<T>() {
+        return { rows: [] as T[] };
+      },
+      async connect() {
+        return {
+          async query<T>(sql: string, values?: unknown[]) {
+            queries.push({ sql, values });
+            if (sql.includes('INSERT INTO "User"')) {
+              return { rows: [] as T[] };
+            }
+            if (sql.includes('SELECT "id" FROM "User" WHERE lower("email")')) {
+              return { rows: [{ id: "user-existing" }] as T[] };
+            }
+            if (sql.includes('SELECT "id" FROM "TenantMembership"')) {
+              return { rows: [] as T[] };
+            }
+            if (sql.includes('JOIN "User" u') && sql.includes('GROUP BY')) {
+              return {
+                rows: [
+                  {
+                    id: values?.[1] ?? "user-existing",
+                    email: "existing@example.test",
+                    name: "Existing User",
+                    tenantId: values?.[0],
+                    roles: ["TEACHER"],
+                    createdAt: now,
+                    updatedAt: now,
+                  },
+                ] as T[],
+              };
+            }
+            return { rows: [] as T[] };
+          },
+          release() {},
+        };
+      },
+    };
+    const store = new PostgresUserManagementStore(pool);
+
+    const record = await store.createOrAttachTenantUser({
+      tenantId: "tenant-a",
+      email: "EXISTING@example.test",
+      name: "Attacker Supplied Name",
+      password: "attacker-password",
+      roles: ["TEACHER"],
+    });
+
+    const insertUser = queries.find((query) => query.sql.includes('INSERT INTO "User"'));
+    expect(insertUser?.sql).toContain('ON CONFLICT ("email") DO NOTHING');
+    expect(insertUser?.sql).not.toContain('"passwordHash" = EXCLUDED."passwordHash"');
+    expect(queries.some((query) => query.sql.includes('UPDATE "User"'))).toBe(false);
+    expect(queries.some((query) => query.sql.includes('SELECT "id" FROM "User" WHERE lower("email")'))).toBe(true);
+    expect(record).toMatchObject({ id: "user-existing", tenantId: "tenant-a", roles: ["TEACHER"] });
   });
 
   it("yeni üyelik eklerken koltuk limiti doluysa transaction'ı geri alır", async () => {

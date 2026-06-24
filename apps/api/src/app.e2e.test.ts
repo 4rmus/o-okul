@@ -128,9 +128,9 @@ describe("API auth + tenant isolation", () => {
         classId: "class-a",
         responsibleTeacherId: "teacher-a",
         status: "ACTIVE",
-        userId: "student-tenant-a",
       },
     ]);
+    expectStudentCoreResponseIsPublic(response.body);
   });
 
   it("öğrenci liste query validasyon hatalarını 422 alan listesiyle döner", async () => {
@@ -841,7 +841,6 @@ describe("API auth + tenant isolation", () => {
         classId: "class-a",
         responsibleTeacherId: "teacher-a",
         status: "ACTIVE",
-        userId: "student-tenant-a",
       },
     ]);
   });
@@ -1064,7 +1063,6 @@ describe("API auth + tenant isolation", () => {
         classId: "class-a",
         responsibleTeacherId: "teacher-a",
         status: "ACTIVE",
-        userId: "student-tenant-a",
       },
     ]);
   });
@@ -1106,7 +1104,6 @@ describe("API auth + tenant isolation", () => {
         classId: "class-a",
         responsibleTeacherId: "teacher-a",
         status: "ACTIVE",
-        userId: "student-tenant-a",
       },
     ]);
 
@@ -1127,7 +1124,6 @@ describe("API auth + tenant isolation", () => {
         classId: "class-a",
         responsibleTeacherId: "teacher-a",
         status: "ACTIVE",
-        userId: "student-tenant-a",
       },
     ]);
 
@@ -1141,6 +1137,7 @@ describe("API auth + tenant isolation", () => {
       importedRows: 1,
       students: [{ tenantId: "tenant-a", studentNo: "320", firstName: "Ece", lastName: "Import", classId: "class-a" }],
     });
+    expectStudentCoreResponseIsPublic(imported.body.students);
 
     await request(server)
       .get(`/students/${encodeURIComponent(imported.body.students[0].id)}/class-history`)
@@ -1234,6 +1231,22 @@ function expectPublicSession(session: unknown): void {
   expect(session).not.toHaveProperty("tokenFamilyId");
   expect(session).not.toHaveProperty("createdAt");
   expect(session).not.toHaveProperty("updatedAt");
+}
+
+function expectStudentCoreResponseIsPublic(body: unknown): void {
+  const serialized = JSON.stringify(body);
+  for (const forbidden of [
+    "student-tenant-a",
+    "userId",
+    "birthDate",
+    "nationalId",
+    "nationalIdEncrypted",
+    "nationalIdHash",
+    "phone",
+    "photoKey",
+  ]) {
+    expect(serialized).not.toContain(forbidden);
+  }
 }
 
 function getCookie(header: string | string[] | undefined, name: string): string {

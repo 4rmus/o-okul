@@ -6,53 +6,17 @@ import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import { StudentService, type StudentGuardianProvisionInput, type StudentRecord } from "./student.service.js";
+import type {
+  PublicStudentRecord,
+  StudentExportResult,
+  StudentImportDryRunResult,
+  StudentImportError,
+  StudentImportPreviewRow,
+  StudentImportRequest,
+  StudentImportResult,
+} from "@uzman-hocam/shared-types";
 
-export interface StudentImportError {
-  row: number;
-  field: "className" | "firstName" | "lastName" | "quota" | "studentNo";
-  code: "CLASS_NOT_FOUND" | "REQUIRED" | "STUDENT_NO_DUPLICATE" | "STUDENT_QUOTA_EXCEEDED";
-  value?: string;
-}
-
-export interface StudentImportPreviewRow {
-  row: number;
-  classId?: string;
-  className?: string;
-  firstName: string;
-  guardian?: StudentGuardianProvisionInput;
-  lastName: string;
-  studentNo?: string;
-}
-
-export interface StudentImportDryRunResult {
-  dryRun: true;
-  totalRows: number;
-  validRows: StudentImportPreviewRow[];
-  errors: StudentImportError[];
-  quota: {
-    limit: number;
-    current: number;
-    incoming: number;
-    wouldExceed: boolean;
-  };
-  wouldImport: boolean;
-}
-
-export interface StudentImportResult {
-  importedRows: number;
-  students: StudentRecord[];
-}
-
-export interface StudentExportResult {
-  fileName: string;
-  contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-  fileBase64: string;
-  rowCount: number;
-}
-
-interface StudentImportDryRunInput {
-  fileBase64?: string;
-}
+type StudentImportDryRunInput = Partial<StudentImportRequest>;
 
 @Injectable()
 export class StudentImportService {
@@ -134,7 +98,7 @@ export class StudentImportService {
     });
     return {
       importedRows: students.length,
-      students,
+      students: students.map(toPublicImportedStudent),
     };
   }
 
@@ -302,6 +266,19 @@ export class StudentImportService {
 
     return String(value).trim();
   }
+}
+
+function toPublicImportedStudent(student: StudentRecord): PublicStudentRecord {
+  return {
+    id: student.id,
+    tenantId: student.tenantId,
+    studentNo: student.studentNo,
+    firstName: student.firstName,
+    lastName: student.lastName,
+    classId: student.classId,
+    responsibleTeacherId: student.responsibleTeacherId,
+    status: student.status,
+  };
 }
 
 function isXlsx(bytes: Buffer): boolean {

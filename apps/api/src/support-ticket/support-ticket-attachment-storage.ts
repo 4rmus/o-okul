@@ -148,17 +148,7 @@ export function createSupportTicketAttachmentStorageFromEnv(
 }
 
 function createSupportAttachmentStorageKey(input: StoreSupportTicketAttachmentInput): string {
-  return [
-    "support-ticket-attachments",
-    cleanKeySegment(input.tenantId),
-    cleanKeySegment(input.ticketId),
-    input.sha256,
-    cleanKeySegment(input.fileName),
-  ].join("/");
-}
-
-function cleanKeySegment(value: string): string {
-  return value.trim().replace(/[^A-Za-z0-9._-]/g, "_");
+  return ["support-ticket-attachments", input.sha256].join("/");
 }
 
 function presignS3GetObjectUrl(

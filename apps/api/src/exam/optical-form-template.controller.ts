@@ -1,5 +1,9 @@
 import { Body, Controller, Get, Headers, Param, Post, UseGuards } from "@nestjs/common";
-import type { OpticalFormTemplateRecord } from "@uzman-hocam/shared-types";
+import type {
+  OpticalFormTemplateApplyRequest,
+  OpticalFormTemplateCreateRequest,
+  OpticalFormTemplateRecord,
+} from "@uzman-hocam/shared-types";
 import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
 import { requiredTrimmedString, zodBody } from "../http/zod-validation.js";
@@ -14,14 +18,14 @@ const opticalFormTemplateCreateBodySchema = z.object({
   name: requiredTrimmedString,
   suggestion: parserConfigSuggestionSchema,
   version: requiredTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<OpticalFormTemplateCreateRequest>;
 const opticalFormTemplateApplyBodySchema = z.object({
   examId: requiredTrimmedString,
   version: requiredTrimmedString,
-}).strict();
+}).strict() satisfies z.ZodType<OpticalFormTemplateApplyRequest>;
 
-type OpticalFormTemplateCreateBody = z.infer<typeof opticalFormTemplateCreateBodySchema>;
-type OpticalFormTemplateApplyBody = z.infer<typeof opticalFormTemplateApplyBodySchema>;
+type OpticalFormTemplateCreateBody = OpticalFormTemplateCreateRequest;
+type OpticalFormTemplateApplyBody = OpticalFormTemplateApplyRequest;
 
 @Controller("optical-form-templates")
 @UseGuards(RolesGuard)

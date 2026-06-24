@@ -49,13 +49,26 @@ const tenantAdminWritableFields = {
   status: optionalTrimmedString,
 };
 
+const tenantAdminUpdateWritableFields = {
+  contactEmail: optionalTenantEmailSchema,
+  institutionType: optionalTrimmedString,
+  licenseEndsAt: optionalTenantLicenseEndsAtSchema,
+  licenseStartsAt: optionalTenantLicenseStartsAtSchema,
+  logoUrl: optionalTenantUrlSchema,
+  name: optionalTrimmedString,
+  plan: optionalTrimmedString,
+  seatLimit: positiveIntegerSchema.optional(),
+  slug: optionalTrimmedString,
+  status: optionalTrimmedString,
+};
+
 export const tenantCreateBodySchema = z.object({
   ...tenantAdminWritableFields,
   name: requiredTrimmedString,
   slug: requiredTrimmedString,
 }).strict();
 
-export const tenantUpdateBodySchema = z.object(tenantAdminWritableFields).strict();
+export const tenantUpdateBodySchema = z.object(tenantAdminUpdateWritableFields).strict();
 
 export const tenantCurrentProfileBodySchema = z.object({
   contactEmail: optionalTenantEmailSchema,

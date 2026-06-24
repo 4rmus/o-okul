@@ -1,12 +1,14 @@
 import type { OpenAPIObject } from "@nestjs/swagger";
 
 type JsonSchema = Record<string, unknown>;
-type JsonContent = { "application/json": { schema: JsonSchema } };
+type JsonContent = Record<string, { schema: JsonSchema }>;
 
 interface OperationContract {
   requestBody?: JsonSchema;
   requestBodyRequired?: boolean;
   responseBody?: JsonSchema;
+  rawResponseBody?: JsonSchema;
+  rawResponseContentType?: string;
   listResponse?: boolean;
   noContent?: boolean;
   idempotent?: boolean;
@@ -28,6 +30,18 @@ const listMetaSchema = objectSchema({
   totalPages: integerSchema({ minimum: 0 }),
 }, ["total", "page", "limit", "totalPages"]);
 
+const healthStatusSchema = objectSchema({
+  status: { type: "string", enum: ["ok"] },
+}, ["status"]);
+
+const readyStatusSchema = objectSchema({
+  status: { type: "string", enum: ["ready"] },
+  dependencies: objectSchema({
+    postgres: { type: "string", enum: ["ok"] },
+    redis: { type: "string", enum: ["ok"] },
+  }, ["postgres", "redis"]),
+}, ["status", "dependencies"]);
+
 const sessionSchema = objectSchema({
   id: stringSchema(),
   userId: stringSchema(),
@@ -38,6 +52,131 @@ const sessionSchema = objectSchema({
   subjectType: { type: "string", enum: ["STUDENT", "GUARDIAN", "TEACHER"] },
   subjectId: stringSchema(),
 }, ["id", "userId", "tenantId", "roles", "membershipVersion", "status"]);
+
+const meProfileResponseSchema = objectSchema({
+  userId: stringSchema(),
+  tenantId: { type: "string", nullable: true },
+  roles: arraySchema(stringSchema(), { minItems: 1 }),
+  subjectType: { type: "string", enum: ["STUDENT", "GUARDIAN", "TEACHER"] },
+  subjectId: stringSchema(),
+}, ["userId", "tenantId", "roles"]);
+
+const tenantRecordSchema = objectSchema({
+  id: stringSchema(),
+  name: stringSchema(),
+  slug: stringSchema(),
+  plan: stringSchema(),
+  licenseStartsAt: stringSchema({ format: "date-time" }),
+  licenseEndsAt: stringSchema({ format: "date-time" }),
+  institutionType: stringSchema(),
+  contactEmail: stringSchema({ format: "email" }),
+  logoUrl: stringSchema(),
+  seatLimit: integerSchema({ minimum: 1 }),
+  activeSeatCount: integerSchema({ minimum: 0 }),
+  status: stringSchema(),
+}, ["id", "name", "slug", "plan", "status"]);
+
+const tenantFirstAdminCreateRequestSchema = objectSchema({
+  email: stringSchema({ format: "email" }),
+  mode: { type: "string", enum: ["invitation", "password"] },
+  name: stringSchema({ minLength: 1 }),
+  password: stringSchema({ minLength: 8 }),
+}, ["email", "name"]);
+
+const tenantCreateRequestSchema = objectSchema({
+  contactEmail: stringSchema({ format: "email" }),
+  firstAdmin: tenantFirstAdminCreateRequestSchema,
+  id: stringSchema(),
+  institutionType: stringSchema(),
+  licenseEndsAt: stringSchema({ format: "date-time" }),
+  licenseStartsAt: stringSchema({ format: "date-time" }),
+  logoUrl: stringSchema(),
+  name: stringSchema({ minLength: 1 }),
+  plan: stringSchema(),
+  seatLimit: integerSchema({ minimum: 1 }),
+  slug: stringSchema({ minLength: 1 }),
+  status: stringSchema(),
+}, ["name", "slug"]);
+
+const tenantCurrentProfileUpdateRequestSchema = objectSchema({
+  contactEmail: stringSchema({ format: "email" }),
+  institutionType: stringSchema(),
+  logoUrl: stringSchema(),
+  name: stringSchema(),
+});
+
+const tenantAdminUpdateRequestSchema = objectSchema({
+  contactEmail: stringSchema({ format: "email" }),
+  institutionType: stringSchema(),
+  licenseEndsAt: stringSchema({ format: "date-time" }),
+  licenseStartsAt: stringSchema({ format: "date-time" }),
+  logoUrl: stringSchema(),
+  name: stringSchema(),
+  plan: stringSchema(),
+  seatLimit: integerSchema({ minimum: 1 }),
+  slug: stringSchema(),
+  status: stringSchema(),
+});
+
+const tenantAssignableRoleSchema = {
+  type: "string",
+  enum: ["TENANT_ADMIN", "ASSISTANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN"],
+};
+
+const tenantUserRecordSchema = objectSchema({
+  id: stringSchema(),
+  email: stringSchema({ format: "email" }),
+  name: stringSchema(),
+  tenantId: stringSchema(),
+  roles: arraySchema(tenantAssignableRoleSchema, { minItems: 1 }),
+  createdAt: stringSchema({ format: "date-time" }),
+  updatedAt: stringSchema({ format: "date-time" }),
+}, ["id", "email", "name", "tenantId", "roles", "createdAt", "updatedAt"]);
+
+const tenantFirstAdminProvisionResultSchema = objectSchema({
+  ...(tenantUserRecordSchema.properties as Record<string, JsonSchema>),
+  activationTokenIssued: { type: "boolean" },
+  activationTokenExpiresAt: stringSchema({ format: "date-time" }),
+}, ["id", "email", "name", "tenantId", "roles", "createdAt", "updatedAt"]);
+
+const tenantCreateWithAdminResponseSchema = objectSchema({
+  tenant: tenantRecordSchema,
+  admin: tenantFirstAdminProvisionResultSchema,
+}, ["tenant", "admin"]);
+
+const tenantUserCreateRequestSchema = objectSchema({
+  email: stringSchema({ format: "email" }),
+  name: stringSchema({ minLength: 1 }),
+  password: stringSchema({ minLength: 8 }),
+  roles: arraySchema(tenantAssignableRoleSchema, { minItems: 1 }),
+}, ["email", "name", "password", "roles"]);
+
+const tenantUserRoleUpdateRequestSchema = objectSchema({
+  roles: arraySchema(tenantAssignableRoleSchema, { minItems: 1 }),
+}, ["roles"]);
+
+const portalSubjectRoleSchema = {
+  type: "string",
+  enum: ["TEACHER", "STUDENT", "GUARDIAN"],
+};
+
+const rolePreviewStartRequestSchema = objectSchema({
+  targetRole: portalSubjectRoleSchema,
+  targetSubjectId: stringSchema({ minLength: 1 }),
+}, ["targetRole", "targetSubjectId"]);
+
+const rolePreviewSessionSchema = objectSchema({
+  id: stringSchema(),
+  tenantId: stringSchema(),
+  actorUserId: stringSchema(),
+  targetRole: portalSubjectRoleSchema,
+  targetSubjectType: portalSubjectRoleSchema,
+  targetSubjectId: stringSchema(),
+  mode: { type: "string", enum: ["READ_ONLY"] },
+  expiresAt: stringSchema({ format: "date-time" }),
+  createdAt: stringSchema({ format: "date-time" }),
+  previewToken: stringSchema({ minLength: 1 }),
+}, ["id", "tenantId", "actorUserId", "targetRole", "targetSubjectType", "targetSubjectId", "mode", "expiresAt", "createdAt", "previewToken"]);
 
 const authResponseSchema = objectSchema({
   accessToken: stringSchema(),
@@ -131,6 +270,20 @@ const publicNotificationDeviceRecordSchema = objectSchema({
   createdAt: stringSchema({ format: "date-time" }),
   updatedAt: stringSchema({ format: "date-time" }),
 }, ["id", "tenantId", "provider", "lastSeenAt"]);
+
+const kvkkInventoryRecordSchema = objectSchema({
+  id: stringSchema(),
+  kind: { type: "string", enum: ["student", "teacher", "guardian"] },
+  displayRef: stringSchema(),
+  piiCategories: arraySchema(stringSchema()),
+  purgeAvailable: { type: "boolean" },
+}, ["id", "kind", "displayRef", "piiCategories", "purgeAvailable"]);
+
+const selfPurgeResultSchema = objectSchema({
+  userId: stringSchema(),
+  tenantId: stringSchema(),
+  purgedAt: stringSchema({ format: "date-time" }),
+}, ["userId", "purgedAt"]);
 
 const answerChoiceSchema = {
   type: "string",
@@ -310,6 +463,18 @@ const uploadContentTypeSchema = {
   type: "string",
   enum: ["application/pdf", "image/jpeg", "image/png", "text/plain"],
 };
+
+const fileDownloadResultSchema = objectSchema({
+  fileName: stringSchema(),
+  contentType: uploadContentTypeSchema,
+  byteSize: integerSchema({ minimum: 1 }),
+  sha256: stringSchema(),
+  downloadMode: { type: "string", enum: ["inline", "signed-url"] },
+  fileBase64: stringSchema({ format: "byte" }),
+  downloadUrl: stringSchema(),
+  downloadUrlExpiresAt: stringSchema({ format: "date-time" }),
+  downloadUrlExpiresInSeconds: integerSchema({ minimum: 0 }),
+}, ["fileName", "contentType", "byteSize", "sha256", "downloadMode"]);
 
 const attendanceStatusSchema = {
   type: "string",
@@ -492,6 +657,14 @@ const classRecordSchema = objectSchema({
   gradeLevelId: stringSchema(),
   section: stringSchema(),
 }, ["id", "tenantId", "name"]);
+
+const teacherPortalLookupsResponseSchema = objectSchema({
+  campuses: arraySchema(namedSchoolReferenceRecordSchema),
+  classes: arraySchema(classRecordSchema),
+  courses: arraySchema(namedSchoolReferenceRecordSchema),
+  gradeLevels: arraySchema(namedSchoolReferenceRecordSchema),
+  terms: arraySchema(academicTermRecordSchema),
+}, ["campuses", "classes", "courses", "gradeLevels", "terms"]);
 
 const classCreateRequestSchema = objectSchema({
   campusId: stringSchema(),
@@ -840,6 +1013,38 @@ const supportTicketRecordSchema = objectSchema({
   createdAt: stringSchema({ format: "date-time" }),
 }, ["id", "tenantId", "subject", "message", "priority", "status", "createdAt"]);
 
+const portalSupportTicketRecordSchema = objectSchema({
+  id: stringSchema(),
+  tenantId: stringSchema(),
+  studentId: stringSchema(),
+  campusId: stringSchema(),
+  gradeLevelId: stringSchema(),
+  classId: stringSchema(),
+  courseId: stringSchema(),
+  termId: stringSchema(),
+  subject: stringSchema(),
+  message: stringSchema(),
+  priority: supportTicketPrioritySchema,
+  status: supportTicketStatusSchema,
+  createdAt: stringSchema({ format: "date-time" }),
+}, ["id", "tenantId", "subject", "message", "priority", "status", "createdAt"]);
+
+const portalStudentSupportTicketRecordSchema = objectSchema({
+  id: stringSchema(),
+  tenantId: stringSchema(),
+  studentId: stringSchema(),
+  campusId: stringSchema(),
+  gradeLevelId: stringSchema(),
+  classId: stringSchema(),
+  courseId: stringSchema(),
+  termId: stringSchema(),
+  subject: stringSchema(),
+  message: stringSchema(),
+  priority: supportTicketPrioritySchema,
+  status: supportTicketStatusSchema,
+  createdAt: stringSchema({ format: "date-time" }),
+}, ["id", "tenantId", "studentId", "subject", "message", "priority", "status", "createdAt"]);
+
 const supportTicketCreateRequestSchema = objectSchema({
   campusId: stringSchema(),
   classId: stringSchema(),
@@ -850,6 +1055,29 @@ const supportTicketCreateRequestSchema = objectSchema({
   studentId: stringSchema(),
   subject: stringSchema(),
   tenantId: stringSchema(),
+  termId: stringSchema(),
+}, ["message", "subject"]);
+
+const portalSupportTicketCreateRequestSchema = objectSchema({
+  campusId: stringSchema(),
+  classId: stringSchema(),
+  courseId: stringSchema(),
+  gradeLevelId: stringSchema(),
+  message: stringSchema({ minLength: 1 }),
+  priority: supportTicketPrioritySchema,
+  subject: stringSchema({ minLength: 1 }),
+  termId: stringSchema(),
+}, ["message", "subject"]);
+
+const teacherPortalSupportTicketCreateRequestSchema = objectSchema({
+  campusId: stringSchema(),
+  classId: stringSchema(),
+  courseId: stringSchema(),
+  gradeLevelId: stringSchema(),
+  message: stringSchema({ minLength: 1 }),
+  priority: supportTicketPrioritySchema,
+  studentId: stringSchema(),
+  subject: stringSchema({ minLength: 1 }),
   termId: stringSchema(),
 }, ["message", "subject"]);
 
@@ -1101,6 +1329,18 @@ const studentRecordSchema = objectSchema({
   userId: stringSchema(),
 }, ["id", "tenantId", "firstName", "lastName", "status"]);
 
+const studentUpdateRequestSchema = objectSchema({
+  classId: stringSchema(),
+  firstName: stringSchema(),
+  lastName: stringSchema(),
+  responsibleTeacherId: stringSchema(),
+  status: studentStatusSchema,
+});
+
+const studentTenantUpdateRequestSchema = objectSchema({
+  tenantId: stringSchema(),
+}, ["tenantId"]);
+
 const publicStudentRecordSchema = objectSchema({
   id: stringSchema(),
   tenantId: stringSchema(),
@@ -1132,6 +1372,14 @@ const publicStudentProfileRecordSchema = objectSchema({
   email: stringSchema({ format: "email" }),
   photoKey: stringSchema(),
 }, ["id", "tenantId", "firstName", "lastName", "status"]);
+
+const studentProfileUpdateRequestSchema = objectSchema({
+  birthDate: stringSchema({ format: "date" }),
+  email: stringSchema({ format: "email" }),
+  nationalId: stringSchema(),
+  phone: stringSchema(),
+  photoKey: stringSchema(),
+});
 
 const guardianStudentDetailStudentRecordSchema = objectSchema({
   id: stringSchema(),
@@ -1247,8 +1495,8 @@ const opticalFormTemplateRecordSchema = objectSchema({
   tenantId: stringSchema(),
   name: stringSchema(),
   version: stringSchema(),
-  encoding: stringSchema(),
-  delimiter: stringSchema(),
+  encoding: { type: "string", enum: ["UTF-8"] },
+  delimiter: { type: "string", enum: ["TAB", "COMMA", "PIPE", "FIXED"] },
   skipHeaderLines: integerSchema({ minimum: 0 }),
   fieldMapping: looseObjectSchema(),
   status: { type: "string", enum: ["APPROVED", "DRAFT"] },
@@ -1646,7 +1894,7 @@ const studentBulkEnrollmentRequestSchema = objectSchema({
   classId: stringSchema(),
   classIdBySourceClassId: looseObjectSchema(),
   startsAt: stringSchema({ format: "date" }),
-  studentIds: arraySchema(stringSchema()),
+  studentIds: arraySchema(stringSchema(), { minItems: 1 }),
   termId: stringSchema(),
   useAutomaticClassMapping: { type: "boolean" },
 });
@@ -1688,6 +1936,11 @@ const studentEnrollmentRecordSchema = objectSchema({
   updatedAt: stringSchema({ format: "date-time" }),
 }, ["id", "tenantId", "studentId", "status", "startsAt"]);
 
+const nullableStudentEnrollmentRecordSchema = {
+  ...studentEnrollmentRecordSchema,
+  nullable: true,
+};
+
 const studentBulkEnrollmentResultSchema = objectSchema({
   updatedCount: integerSchema({ minimum: 0 }),
   enrollments: arraySchema(studentEnrollmentRecordSchema),
@@ -1697,16 +1950,56 @@ const studentImportRequestSchema = objectSchema({
   fileBase64: stringSchema({ minLength: 1 }),
 }, ["fileBase64"]);
 
+const studentImportErrorSchema = objectSchema({
+  row: integerSchema({ minimum: 0 }),
+  field: { type: "string", enum: ["className", "firstName", "lastName", "quota", "studentNo"] },
+  code: { type: "string", enum: ["CLASS_NOT_FOUND", "REQUIRED", "STUDENT_NO_DUPLICATE", "STUDENT_QUOTA_EXCEEDED"] },
+  value: stringSchema(),
+}, ["row", "field", "code"]);
+
+const studentImportPreviewRowSchema = objectSchema({
+  row: integerSchema({ minimum: 1 }),
+  classId: stringSchema(),
+  className: stringSchema(),
+  firstName: stringSchema(),
+  guardian: studentGuardianProvisionRequestSchema,
+  lastName: stringSchema(),
+  studentNo: stringSchema(),
+}, ["row", "firstName", "lastName"]);
+
+const studentImportQuotaSchema = objectSchema({
+  limit: integerSchema({ minimum: 0 }),
+  current: integerSchema({ minimum: 0 }),
+  incoming: integerSchema({ minimum: 0 }),
+  wouldExceed: { type: "boolean" },
+}, ["limit", "current", "incoming", "wouldExceed"]);
+
+const studentImportDryRunResultSchema = objectSchema({
+  dryRun: { type: "boolean", enum: [true] },
+  totalRows: integerSchema({ minimum: 0 }),
+  validRows: arraySchema(studentImportPreviewRowSchema),
+  errors: arraySchema(studentImportErrorSchema),
+  quota: studentImportQuotaSchema,
+  wouldImport: { type: "boolean" },
+}, ["dryRun", "totalRows", "validRows", "errors", "quota", "wouldImport"]);
+
 const studentImportResultSchema = objectSchema({
   importedRows: integerSchema({ minimum: 0 }),
-  students: arraySchema(studentRecordSchema),
+  students: arraySchema(publicStudentRecordSchema),
 }, ["importedRows", "students"]);
 
+const studentExportResultSchema = objectSchema({
+  fileName: stringSchema(),
+  contentType: { type: "string", enum: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"] },
+  fileBase64: stringSchema({ format: "byte" }),
+  rowCount: integerSchema({ minimum: 0 }),
+}, ["fileName", "contentType", "fileBase64", "rowCount"]);
+
 const backupRestoreJobCreateRequestSchema = objectSchema({
-  confirmationText: stringSchema(),
+  confirmationText: stringSchema({ minLength: 1 }),
   operationType: { type: "string", enum: ["BACKUP", "RESTORE_DRILL"] },
   reason: stringSchema(),
-  targetReference: stringSchema(),
+  targetReference: stringSchema({ minLength: 1 }),
 }, ["confirmationText", "operationType", "targetReference"]);
 
 const backupRestoreJobRecordSchema = objectSchema({
@@ -1724,11 +2017,82 @@ const backupRestoreJobRecordSchema = objectSchema({
   updatedAt: stringSchema({ format: "date-time" }),
 }, ["id", "tenantId", "requestedByUserId", "operationType", "targetReference", "queueName", "jobId", "status", "checkedTables", "createdAt", "updatedAt"]);
 
+const tenantDataExportPayloadSchema = objectSchema({
+  formatVersion: { type: "string", enum: ["tenant-export-v1"] },
+  tenantId: stringSchema(),
+  generatedByUserId: stringSchema(),
+  exportedAt: stringSchema({ format: "date-time" }),
+  scope: { type: "string", enum: ["tenant-user-entered-data"] },
+  rowLimitPerTable: integerSchema({ minimum: 1 }),
+  tables: looseObjectSchema(),
+  warnings: arraySchema(stringSchema()),
+}, ["formatVersion", "tenantId", "generatedByUserId", "exportedAt", "scope", "rowLimitPerTable", "tables", "warnings"]);
+
+const messageTemplateChannelSchema = { type: "string", enum: ["SMS"] };
+
+const identityInvitationSubjectTypeSchema = { type: "string", enum: ["TEACHER", "STUDENT", "GUARDIAN"] };
+const identityInvitationStatusSchema = { type: "string", enum: ["PENDING", "ACCEPTED"] };
+
+const identityInvitationRecordSchema = objectSchema({
+  id: stringSchema(),
+  tenantId: stringSchema(),
+  subjectType: identityInvitationSubjectTypeSchema,
+  subjectId: stringSchema(),
+  email: stringSchema({ format: "email" }),
+  name: stringSchema(),
+  role: identityInvitationSubjectTypeSchema,
+  status: identityInvitationStatusSchema,
+  expiresAt: stringSchema({ format: "date-time" }),
+  acceptedAt: stringSchema({ format: "date-time" }),
+  createdAt: stringSchema({ format: "date-time" }),
+  updatedAt: stringSchema({ format: "date-time" }),
+}, ["id", "tenantId", "subjectType", "subjectId", "email", "name", "role", "status", "expiresAt", "createdAt", "updatedAt"]);
+
+const identityInvitationCreateRequestSchema = objectSchema({
+  email: stringSchema({ format: "email" }),
+  name: stringSchema(),
+  subjectId: stringSchema({ minLength: 1 }),
+  subjectType: identityInvitationSubjectTypeSchema,
+}, ["email", "subjectId", "subjectType"]);
+
+const identityInvitationAcceptRequestSchema = objectSchema({
+  name: stringSchema(),
+  password: stringSchema({ minLength: 8 }),
+  token: stringSchema({ minLength: 1 }),
+}, ["password", "token"]);
+
+const identityInvitationAcceptResponseSchema = objectSchema({
+  status: { type: "string", enum: ["ACCEPTED"] },
+  acceptedAt: stringSchema({ format: "date-time" }),
+}, ["status"]);
+
+
+const messageTemplateRecordSchema = objectSchema({
+  id: stringSchema(),
+  tenantId: stringSchema(),
+  name: stringSchema(),
+  channel: messageTemplateChannelSchema,
+  body: stringSchema(),
+}, ["id", "tenantId", "name", "channel", "body"]);
+
+const messageTemplateCreateRequestSchema = objectSchema({
+  tenantId: stringSchema(),
+  name: stringSchema({ minLength: 1 }),
+  channel: messageTemplateChannelSchema,
+  body: stringSchema({ minLength: 1 }),
+}, ["name", "body"]);
+
+const messageTemplateUpdateRequestSchema = objectSchema({
+  name: stringSchema({ minLength: 1 }),
+  channel: messageTemplateChannelSchema,
+  body: stringSchema({ minLength: 1 }),
+});
+
 const smsBatchCreateRequestSchema = objectSchema({
   recipients: arraySchema(objectSchema({
-    to: stringSchema(),
+    to: stringSchema({ minLength: 1 }),
   }, ["to"]), { minItems: 1 }),
-  templateId: stringSchema(),
+  templateId: stringSchema({ minLength: 1 }),
 }, ["recipients", "templateId"]);
 
 const smsBatchQueueResultSchema = objectSchema({
@@ -1740,7 +2104,57 @@ const smsBatchQueueResultSchema = objectSchema({
   status: { type: "string", enum: ["queued"] },
 }, ["tenantId", "templateId", "recipientCount", "queueName", "jobId", "status"]);
 
+const smsBatchRecipientPreviewRequestSchema = objectSchema({
+  announcementId: stringSchema(),
+  campusId: stringSchema(),
+  classId: stringSchema(),
+  courseId: stringSchema(),
+  gradeLevelId: stringSchema(),
+  studentStatus: studentStatusSchema,
+  termId: stringSchema(),
+});
+
+const smsBatchRecipientPreviewRecordSchema = objectSchema({
+  to: stringSchema({ minLength: 1 }),
+  guardianId: stringSchema(),
+  guardianName: stringSchema(),
+  studentIds: arraySchema(stringSchema(), { minItems: 1 }),
+  studentNames: arraySchema(stringSchema(), { minItems: 1 }),
+}, ["to", "guardianId", "guardianName", "studentIds", "studentNames"]);
+
+const smsBatchRecipientPreviewResultSchema = objectSchema({
+  recipients: arraySchema(smsBatchRecipientPreviewRecordSchema),
+  recipientCount: integerSchema({ minimum: 0 }),
+}, ["recipients", "recipientCount"]);
+
+const smsBatchDeliveryReportRecordSchema = objectSchema({
+  id: stringSchema(),
+  tenantId: stringSchema(),
+  jobId: stringSchema(),
+  templateId: stringSchema(),
+  recipientCount: integerSchema({ minimum: 0 }),
+  sentCount: integerSchema({ minimum: 0 }),
+  failedCount: integerSchema({ minimum: 0 }),
+  billableSegments: integerSchema({ minimum: 0 }),
+  status: { type: "string", enum: ["queued", "completed", "failed"] },
+  providerErrorCode: stringSchema(),
+  createdAt: stringSchema({ format: "date-time" }),
+  updatedAt: stringSchema({ format: "date-time" }),
+}, ["id", "tenantId", "jobId", "templateId", "recipientCount", "sentCount", "failedCount", "billableSegments", "status"]);
+
 const operationContracts: Record<string, OperationContract> = {
+  "get /health": {
+    rawResponseBody: healthStatusSchema,
+    rawResponseContentType: jsonContentType,
+  },
+  "get /health/ready": {
+    rawResponseBody: readyStatusSchema,
+    rawResponseContentType: jsonContentType,
+  },
+  "get /api/v1/metrics": {
+    rawResponseBody: stringSchema(),
+    rawResponseContentType: "text/plain",
+  },
   "post /api/v1/auth/login": {
     requestBody: objectSchema({
       email: stringSchema({ format: "email" }),
@@ -1796,6 +2210,55 @@ const operationContracts: Record<string, OperationContract> = {
     requestBody: totpDisableRequestSchema,
     responseBody: totpDisableResponseSchema,
   },
+  "get /api/v1/tenants": {
+    responseBody: arraySchema(tenantRecordSchema),
+    listResponse: true,
+  },
+  "get /api/v1/tenants/{id}": {
+    responseBody: tenantRecordSchema,
+  },
+  "post /api/v1/tenants": {
+    requestBody: tenantCreateRequestSchema,
+    responseBody: {
+      oneOf: [
+        tenantRecordSchema,
+        tenantCreateWithAdminResponseSchema,
+      ],
+    },
+  },
+  "patch /api/v1/tenants/{id}": {
+    requestBody: tenantAdminUpdateRequestSchema,
+    responseBody: tenantRecordSchema,
+  },
+  "delete /api/v1/tenants/{id}": {
+    responseBody: tenantRecordSchema,
+  },
+  "get /api/v1/tenant-users": {
+    responseBody: arraySchema(tenantUserRecordSchema),
+    listResponse: true,
+  },
+  "post /api/v1/tenant-users": {
+    requestBody: tenantUserCreateRequestSchema,
+    responseBody: tenantUserRecordSchema,
+  },
+  "patch /api/v1/tenant-users/{userId}/roles": {
+    requestBody: tenantUserRoleUpdateRequestSchema,
+    responseBody: tenantUserRecordSchema,
+  },
+  "post /api/v1/role-previews": {
+    requestBody: rolePreviewStartRequestSchema,
+    responseBody: rolePreviewSessionSchema,
+  },
+  "get /api/v1/me/profile": {
+    responseBody: meProfileResponseSchema,
+  },
+  "get /api/v1/me/tenant": {
+    responseBody: tenantRecordSchema,
+  },
+  "patch /api/v1/me/tenant": {
+    requestBody: tenantCurrentProfileUpdateRequestSchema,
+    responseBody: tenantRecordSchema,
+  },
   "get /api/v1/me/notification-devices": {
     responseBody: arraySchema(publicNotificationDeviceRecordSchema),
     listResponse: true,
@@ -1806,6 +2269,13 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "delete /api/v1/me/notification-devices/{id}": {
     responseBody: publicNotificationDeviceRecordSchema,
+  },
+  "get /api/v1/privacy/inventory": {
+    responseBody: arraySchema(kvkkInventoryRecordSchema),
+    listResponse: true,
+  },
+  "post /api/v1/privacy/me/purge-pii": {
+    responseBody: selfPurgeResultSchema,
   },
   "get /api/v1/development/criteria": {
     responseBody: arraySchema(developmentCriterionRecordSchema),
@@ -1847,6 +2317,13 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/me/teacher": {
     responseBody: teacherRecordSchema,
   },
+  "get /api/v1/me/teacher/lookups": {
+    responseBody: teacherPortalLookupsResponseSchema,
+  },
+  "get /api/v1/me/teacher/students": {
+    responseBody: arraySchema(publicStudentRecordSchema),
+    listResponse: true,
+  },
   "get /api/v1/me/teacher/schedule": {
     responseBody: arraySchema(scheduleLessonRecordSchema),
     listResponse: true,
@@ -1879,6 +2356,10 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: arraySchema(studentEnrollmentRecordSchema),
     listResponse: true,
   },
+  "get /api/v1/me/student/homework/material-assignments": {
+    responseBody: arraySchema(homeworkMaterialAssignmentRecordSchema),
+    listResponse: true,
+  },
   "get /api/v1/me/student/attendance": {
     responseBody: arraySchema(attendanceRecordSchema),
     listResponse: true,
@@ -1898,6 +2379,14 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: arraySchema(studentEnrollmentRecordSchema),
     listResponse: true,
   },
+  "get /api/v1/me/guardian/homework/material-assignments": {
+    responseBody: arraySchema(homeworkMaterialAssignmentRecordSchema),
+    listResponse: true,
+  },
+  "get /api/v1/me/guardian/students/{studentId}/homework/material-assignments": {
+    responseBody: arraySchema(homeworkMaterialAssignmentRecordSchema),
+    listResponse: true,
+  },
   "get /api/v1/me/guardian/students/{studentId}/attendance": {
     responseBody: arraySchema(attendanceRecordSchema),
     listResponse: true,
@@ -1907,6 +2396,17 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/me/guardian/students/{studentId}/teacher-notes": {
     responseBody: arraySchema(portalTeacherNoteRecordSchema),
+    listResponse: true,
+  },
+  "get /api/v1/me/guardian/students/{studentId}/notification-preferences": {
+    responseBody: guardianStudentRecordSchema,
+  },
+  "patch /api/v1/me/guardian/students/{studentId}/notification-preferences": {
+    requestBody: guardianStudentRelationRequestSchema,
+    responseBody: guardianStudentRecordSchema,
+  },
+  "get /api/v1/me/guardian/students/{studentId}/payment-plans": {
+    responseBody: arraySchema(paymentPlanWithInstallmentsRecordSchema),
     listResponse: true,
   },
   "get /api/v1/audit-logs": {
@@ -2073,7 +2573,52 @@ const operationContracts: Record<string, OperationContract> = {
       status: studentStatusSchema,
       tenantId: stringSchema(),
     }, ["firstName", "lastName"]),
-    responseBody: studentRecordSchema,
+    responseBody: publicStudentRecordSchema,
+  },
+  "get /api/v1/students/export": {
+    responseBody: studentExportResultSchema,
+  },
+  "get /api/v1/students": {
+    responseBody: arraySchema(publicStudentRecordSchema),
+    listResponse: true,
+  },
+  "get /api/v1/students/{id}": {
+    responseBody: publicStudentRecordSchema,
+  },
+  "patch /api/v1/students/{id}": {
+    requestBody: studentUpdateRequestSchema,
+    responseBody: publicStudentRecordSchema,
+  },
+  "delete /api/v1/students/{id}": {
+    noContent: true,
+  },
+  "get /api/v1/students/{id}/class-history": {
+    responseBody: arraySchema(studentClassHistoryRecordSchema),
+    listResponse: true,
+  },
+  "get /api/v1/students/{id}/enrollments": {
+    responseBody: arraySchema(studentEnrollmentRecordSchema),
+    listResponse: true,
+  },
+  "get /api/v1/students/{id}/teacher-assignments": {
+    responseBody: arraySchema(teacherAssignmentRecordSchema),
+    listResponse: true,
+  },
+  "post /api/v1/students/{id}/purge-pii": {
+    requestBody: objectSchema({}),
+    requestBodyRequired: false,
+    responseBody: publicStudentRecordSchema,
+  },
+  "patch /api/v1/students/{id}/tenant": {
+    requestBody: studentTenantUpdateRequestSchema,
+    responseBody: publicStudentRecordSchema,
+  },
+  "get /api/v1/students/{id}/profile": {
+    responseBody: publicStudentProfileRecordSchema,
+  },
+  "patch /api/v1/students/{id}/profile": {
+    requestBody: studentProfileUpdateRequestSchema,
+    responseBody: publicStudentProfileRecordSchema,
   },
   "get /api/v1/guardians": {
     responseBody: arraySchema(guardianRecordSchema),
@@ -2349,6 +2894,9 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: arraySchema(teacherAssignmentRecordSchema),
     listResponse: true,
   },
+  "delete /api/v1/teachers/{id}/assignments/{assignmentId}": {
+    noContent: true,
+  },
   "post /api/v1/teachers/{id}/purge-pii": {
     requestBody: objectSchema({}),
     requestBodyRequired: false,
@@ -2386,6 +2934,9 @@ const operationContracts: Record<string, OperationContract> = {
     requestBody: scheduleLessonUpdateRequestSchema,
     responseBody: scheduleLessonRecordSchema,
   },
+  "delete /api/v1/schedule-lessons/{id}": {
+    noContent: true,
+  },
   "post /api/v1/study-sessions": {
     requestBody: studySessionCreateRequestSchema,
     responseBody: studySessionRecordSchema,
@@ -2401,6 +2952,9 @@ const operationContracts: Record<string, OperationContract> = {
     requestBody: studySessionUpdateRequestSchema,
     responseBody: studySessionRecordSchema,
   },
+  "delete /api/v1/study-sessions/{id}": {
+    noContent: true,
+  },
   "get /api/v1/teacher-notes": {
     responseBody: arraySchema(teacherNoteRecordSchema),
     listResponse: true,
@@ -2412,6 +2966,9 @@ const operationContracts: Record<string, OperationContract> = {
   "patch /api/v1/teacher-notes/{id}": {
     requestBody: teacherNoteUpdateRequestSchema,
     responseBody: teacherNoteRecordSchema,
+  },
+  "delete /api/v1/teacher-notes/{id}": {
+    noContent: true,
   },
   "get /api/v1/attendance": {
     responseBody: arraySchema(attendanceRecordSchema),
@@ -2446,6 +3003,30 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/support-tickets/{id}": {
     responseBody: supportTicketRecordSchema,
   },
+  "get /api/v1/me/student/support-tickets": {
+    responseBody: arraySchema(portalStudentSupportTicketRecordSchema),
+    listResponse: true,
+  },
+  "post /api/v1/me/student/support-tickets": {
+    requestBody: portalSupportTicketCreateRequestSchema,
+    responseBody: portalStudentSupportTicketRecordSchema,
+  },
+  "get /api/v1/me/guardian/students/{studentId}/support-tickets": {
+    responseBody: arraySchema(portalStudentSupportTicketRecordSchema),
+    listResponse: true,
+  },
+  "post /api/v1/me/guardian/students/{studentId}/support-tickets": {
+    requestBody: portalSupportTicketCreateRequestSchema,
+    responseBody: portalStudentSupportTicketRecordSchema,
+  },
+  "get /api/v1/me/teacher/support-tickets": {
+    responseBody: arraySchema(portalSupportTicketRecordSchema),
+    listResponse: true,
+  },
+  "post /api/v1/me/teacher/support-tickets": {
+    requestBody: teacherPortalSupportTicketCreateRequestSchema,
+    responseBody: portalSupportTicketRecordSchema,
+  },
   "post /api/v1/support-tickets/{id}/attachments": {
     idempotent: true,
     requestBody: supportTicketAttachmentCreateRequestSchema,
@@ -2454,6 +3035,9 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/support-tickets/{id}/attachments": {
     responseBody: arraySchema(supportTicketAttachmentRecordSchema),
     listResponse: true,
+  },
+  "get /api/v1/support-tickets/{id}/attachments/{attachmentId}/download": {
+    responseBody: fileDownloadResultSchema,
   },
   "post /api/v1/support-tickets/{id}/comments": {
     idempotent: true,
@@ -2479,6 +3063,9 @@ const operationContracts: Record<string, OperationContract> = {
     requestBody: homeworkMaterialUpdateRequestSchema,
     responseBody: homeworkMaterialRecordSchema,
   },
+  "delete /api/v1/homework/materials/{id}": {
+    noContent: true,
+  },
   "post /api/v1/homework/materials/{id}/files": {
     idempotent: true,
     requestBody: homeworkMaterialFileCreateRequestSchema,
@@ -2487,6 +3074,9 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/homework/materials/{id}/files": {
     responseBody: arraySchema(homeworkMaterialFileRecordSchema),
     listResponse: true,
+  },
+  "get /api/v1/homework/materials/{id}/files/{fileId}/download": {
+    responseBody: fileDownloadResultSchema,
   },
   "post /api/v1/homework/materials/{id}/assignments": {
     idempotent: true,
@@ -2519,6 +3109,9 @@ const operationContracts: Record<string, OperationContract> = {
   "patch /api/v1/homework/{id}/check-status": {
     requestBody: homeworkCheckStatusRequestSchema,
     responseBody: homeworkRecordSchema,
+  },
+  "delete /api/v1/homework/{id}": {
+    noContent: true,
   },
   "post /api/v1/payment-plans": {
     idempotent: true,
@@ -2586,6 +3179,10 @@ const operationContracts: Record<string, OperationContract> = {
     requestBody: parserConfigApprovalRequestSchema,
     responseBody: savedParserConfigSchema,
   },
+  "get /api/v1/optical-form-templates": {
+    responseBody: arraySchema(opticalFormTemplateRecordSchema),
+    listResponse: true,
+  },
   "post /api/v1/optical-form-templates": {
     idempotent: true,
     requestBody: opticalFormTemplateCreateRequestSchema,
@@ -2612,6 +3209,10 @@ const operationContracts: Record<string, OperationContract> = {
     requestBody: studentImportRequestSchema,
     responseBody: studentImportResultSchema,
   },
+  "post /api/v1/students/imports/dry-run": {
+    requestBody: studentImportRequestSchema,
+    responseBody: studentImportDryRunResultSchema,
+  },
   "post /api/v1/students/enrollments/bulk-renew": {
     idempotent: true,
     requestBody: studentBulkEnrollmentRequestSchema,
@@ -2625,17 +3226,66 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/students/{id}/enrollments/transfer": {
     idempotent: true,
     requestBody: studentEnrollmentActionRequestSchema,
-    responseBody: studentEnrollmentRecordSchema,
+    responseBody: nullableStudentEnrollmentRecordSchema,
   },
   "post /api/v1/backup-restore-jobs": {
     idempotent: true,
     requestBody: backupRestoreJobCreateRequestSchema,
     responseBody: backupRestoreJobRecordSchema,
   },
+  "get /api/v1/backup-restore-jobs": {
+    responseBody: arraySchema(backupRestoreJobRecordSchema),
+    listResponse: true,
+  },
+  "get /api/v1/backup-restore-jobs/tenant-export": {
+    rawResponseBody: tenantDataExportPayloadSchema,
+    rawResponseContentType: jsonContentType,
+  },
+  "get /api/v1/identity-invitations": {
+    responseBody: arraySchema(identityInvitationRecordSchema),
+    listResponse: true,
+  },
+  "post /api/v1/identity-invitations": {
+    requestBody: identityInvitationCreateRequestSchema,
+    responseBody: identityInvitationRecordSchema,
+  },
+  "post /api/v1/identity-invitations/accept": {
+    requestBody: identityInvitationAcceptRequestSchema,
+    responseBody: identityInvitationAcceptResponseSchema,
+  },
+  "post /api/v1/identity-invitations/{id}/resend": {
+    responseBody: identityInvitationRecordSchema,
+  },
+  "get /api/v1/message-templates": {
+    responseBody: arraySchema(messageTemplateRecordSchema),
+    listResponse: true,
+  },
+  "post /api/v1/message-templates": {
+    requestBody: messageTemplateCreateRequestSchema,
+    responseBody: messageTemplateRecordSchema,
+  },
+  "get /api/v1/message-templates/{id}": {
+    responseBody: messageTemplateRecordSchema,
+  },
+  "patch /api/v1/message-templates/{id}": {
+    requestBody: messageTemplateUpdateRequestSchema,
+    responseBody: messageTemplateRecordSchema,
+  },
+  "delete /api/v1/message-templates/{id}": {
+    noContent: true,
+  },
   "post /api/v1/sms-batches": {
     idempotent: true,
     requestBody: smsBatchCreateRequestSchema,
     responseBody: smsBatchQueueResultSchema,
+  },
+  "get /api/v1/sms-batches/{jobId}": {
+    responseBody: smsBatchDeliveryReportRecordSchema,
+  },
+  "post /api/v1/sms-batches/recipients/preview": {
+    requestBody: smsBatchRecipientPreviewRequestSchema,
+    requestBodyRequired: false,
+    responseBody: smsBatchRecipientPreviewResultSchema,
   },
 };
 
@@ -2665,6 +3315,15 @@ export function applyOpenApiContracts(document: OpenAPIObject): OpenAPIObject {
         description: operation.responses["204"]?.description ?? "No content",
       };
       delete operation.responses["204"].content;
+    }
+
+    if (contract.rawResponseBody) {
+      const successCode = operation.responses?.["201"] ? "201" : "200";
+      operation.responses ??= {};
+      operation.responses[successCode] = {
+        description: operation.responses[successCode]?.description ?? "Successful response",
+        content: jsonContent(contract.rawResponseBody, contract.rawResponseContentType ?? jsonContentType),
+      };
     }
 
     if (contract.responseBody) {
@@ -2746,9 +3405,9 @@ function listEnvelopedSchema(dataSchema: JsonSchema): JsonSchema {
   return objectSchema({ data: dataSchema, meta: listMetaSchema }, ["data", "meta"]);
 }
 
-function jsonContent(schema: JsonSchema): JsonContent {
+function jsonContent(schema: JsonSchema, contentType = jsonContentType): JsonContent {
   return {
-    [jsonContentType]: { schema },
+    [contentType]: { schema },
   };
 }
 

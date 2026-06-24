@@ -43,8 +43,8 @@ export function createApiHttpLoggerMiddleware(logger: Logger = apiLogger): (requ
     logger,
     wrapSerializers: false,
     customAttributeKeys: {
-      req: "httpRequest",
-      res: "httpResponse",
+      req: "req",
+      res: "res",
       err: "error",
       reqId: "requestId",
       responseTime: "durationMs",
@@ -62,12 +62,12 @@ export function createApiHttpLoggerMiddleware(logger: Logger = apiLogger): (requ
     customSuccessMessage: () => "http_request_completed",
     customErrorMessage: () => "http_request_failed",
     customSuccessObject: (request, response, value) => ({
-      ...value,
+      ...safePinoHttpValue(value),
       httpRequest: httpRequestFields(request),
       httpResponse: httpResponseFields(response),
     }),
     customErrorObject: (request, response, error, value) => ({
-      ...value,
+      ...safePinoHttpValue(value),
       httpRequest: httpRequestFields(request),
       httpResponse: httpResponseFields(response),
       error: redactLogValue(pino.stdSerializers.err(error), "err"),
@@ -153,6 +153,21 @@ export function redactLogValue(value: unknown, key = "", depth = 0, seen = new W
 
 function compactLogRecord(record: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined));
+}
+
+function safePinoHttpValue(value: Record<string, unknown>): Record<string, unknown> {
+  const {
+    httpRequest: _httpRequest,
+    httpResponse: _httpResponse,
+    rawHttpRequest: _rawHttpRequest,
+    rawHttpResponse: _rawHttpResponse,
+    req: _req,
+    res: _res,
+    error: _error,
+    err: _err,
+    ...rest
+  } = value;
+  return rest;
 }
 
 function readRequestId(value: string | string[] | undefined): string | undefined {

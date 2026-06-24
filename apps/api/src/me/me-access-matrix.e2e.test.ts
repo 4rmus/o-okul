@@ -200,6 +200,7 @@ describe("Me access matrix", () => {
   it("öğretmen /me yüzeylerini yalnız öğretmen subject'i açar", async () => {
     const teacherEndpoints = [
       "/me/teacher",
+      "/me/teacher/lookups",
       "/me/teacher/schedule",
       "/me/teacher/announcements",
       "/me/teacher/students",
@@ -208,6 +209,7 @@ describe("Me access matrix", () => {
       "/me/teacher/homework/materials",
       "/me/teacher/homework/materials/material-a/assignments",
       "/me/teacher/teacher-notes",
+      "/me/teacher/support-tickets",
       "/me/teacher/reports/exam-demo/snapshots",
       "/me/teacher/reports/exam-demo/snapshots/snapshot-demo/students/student-a",
       "/me/teacher/reports/exam-demo/snapshots/snapshot-demo/students/student-a/error-booklet",
@@ -237,6 +239,65 @@ describe("Me access matrix", () => {
       tenantId: "tenant-a",
       firstName: expect.any(String),
       lastName: expect.any(String),
+    });
+    const serialized = JSON.stringify(response.body);
+    for (const forbidden of [
+      "userId",
+      "email",
+      "phone",
+      "nationalId",
+      "nationalIdEncrypted",
+      "nationalIdHash",
+      "photoKey",
+      "token",
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it("öğretmen öğrenci listesi public öğrenci alanlarıyla sınırlıdır", async () => {
+    const response = await request(server)
+      .get("/me/teacher/students")
+      .set("Authorization", `Bearer ${teacherToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual([
+      expect.objectContaining({
+        id: "student-a",
+        tenantId: "tenant-a",
+        firstName: "Ada",
+        lastName: "A",
+        status: "ACTIVE",
+      }),
+    ]);
+    const serialized = JSON.stringify(response.body);
+    for (const forbidden of [
+      "userId",
+      "student-tenant-a",
+      "email",
+      "phone",
+      "nationalId",
+      "nationalIdEncrypted",
+      "nationalIdHash",
+      "photoKey",
+      "token",
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it("öğretmen lookup cevabı referans listeleriyle sınırlıdır", async () => {
+    const response = await request(server)
+      .get("/me/teacher/lookups")
+      .set("Authorization", `Bearer ${teacherToken}`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      campuses: expect.any(Array),
+      classes: expect.any(Array),
+      courses: expect.any(Array),
+      gradeLevels: expect.any(Array),
+      terms: expect.any(Array),
     });
     const serialized = JSON.stringify(response.body);
     for (const forbidden of [
