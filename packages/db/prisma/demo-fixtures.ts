@@ -8,6 +8,21 @@ export const DEMO_TEACHER_USER_ID = "user-demo-teacher";
 export const DEMO_STUDENT_USER_ID = "user-demo-student";
 export const DEMO_GUARDIAN_USER_ID = "user-demo-guardian";
 
+export type DemoCourse = {
+  id: string;
+  code: string;
+  name: string;
+};
+
+export const STANDARD_COURSES: DemoCourse[] = [
+  { id: "course-demo-turkce", code: "TUR", name: "Türkçe" },
+  { id: "course-demo-matematik", code: "MAT", name: "Matematik" },
+  { id: "course-demo-fen-bilimleri", code: "FEN", name: "Fen Bilimleri" },
+  { id: "course-demo-inkilap", code: "INK", name: "T.C. İnkılap Tarihi ve Atatürkçülük" },
+  { id: "course-demo-din-kulturu", code: "DIN", name: "Din Kültürü ve Ahlak Bilgisi" },
+  { id: "course-demo-ingilizce", code: "ING", name: "İngilizce" },
+];
+
 const studentWorkbookPath = fixturePath("ogrenci-aktarim-sablonu.xlsx");
 const teacherWorkbookPath = fixturePath("ogretmen-aktarim-sablonu.xlsx");
 const examTextFiles = ["iSEM .txt", "MUBA.txt", "3D.txt"];
@@ -44,6 +59,7 @@ export type DemoStudent = {
 };
 
 export type DemoFixtures = {
+  courses: DemoCourse[];
   classes: DemoClass[];
   teachers: DemoTeacher[];
   students: DemoStudent[];
@@ -66,11 +82,12 @@ type StudentWorkbookRow = {
 type TeacherWorkbookRow = {
   ad: string;
   soyad: string;
-  email: string;
-  telefon: string;
   brans: string;
   atanacak_sinif: string;
-  not: string;
+  ders?: string;
+  email?: string;
+  telefon?: string;
+  not?: string;
 };
 
 export async function loadDemoFixtures(): Promise<DemoFixtures> {
@@ -85,15 +102,26 @@ export async function loadDemoFixtures(): Promise<DemoFixtures> {
     "veli_soyad",
     "veli_telefon",
   ]);
-  const teacherRows = await readWorkbookRows<TeacherWorkbookRow>(teacherWorkbookPath, [
+  const teacherRows = uniqueBy(await readWorkbookRows<TeacherWorkbookRow>(teacherWorkbookPath, [
     "ad",
     "soyad",
-    "email",
-    "telefon",
     "brans",
     "atanacak_sinif",
+  ], [
+    "ders",
+    "email",
+    "telefon",
     "not",
-  ]);
+  ]), (teacher) =>
+    [
+      teacher.ad,
+      teacher.soyad,
+      normalizeCourseName(teacher.ders || teacher.brans),
+      teacher.atanacak_sinif,
+    ]
+      .join("|")
+      .toLocaleLowerCase("tr-TR"),
+  );
   const optikDirectory = readOptikStudentDirectory();
   const fallbackClassName = studentRows.at(-1)?.sinif || "8 LGS A";
   const studentRowsByNo = new Map(studentRows.map((student) => [student.okul_no, student]));
@@ -130,7 +158,7 @@ export async function loadDemoFixtures(): Promise<DemoFixtures> {
       id: index === 0 ? "teacher-demo-main" : `teacher-demo-${slugify(`${teacher.email || teacher.ad}-${index + 1}`)}`,
       firstName: teacher.ad,
       lastName: teacher.soyad,
-      branch: teacher.brans,
+      branch: normalizeCourseName(teacher.ders || teacher.brans),
       assignedClassName: assignedClass.name,
       assignedClassId: assignedClass.id,
     };
@@ -170,14 +198,43 @@ export async function loadDemoFixtures(): Promise<DemoFixtures> {
     throw new Error("DEMO_FIXTURE_ACCOUNT_SOURCE_MISSING");
   }
 
-  return { classes, teachers, students, accountTeacher, accountStudent };
+  return { courses: STANDARD_COURSES, classes, teachers, students, accountTeacher, accountStudent };
+}
+
+export function courseIdForName(name: string): string {
+  const normalized = normalizeCourseName(name);
+  return STANDARD_COURSES.find((course) => course.name === normalized)?.id ?? `course-demo-${slugify(normalized)}`;
+}
+
+export function normalizeCourseName(value: string): string {
+  const cleaned = value
+    .replace(/\s+/g, " ")
+    .replace(/^LGS\s+/i, "")
+    .trim();
+  const key = cleaned
+    .toLocaleLowerCase("tr-TR")
+    .replace(/\./g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (key.includes("türkçe") || key.includes("turkce")) return "Türkçe";
+  if (key.includes("matematik")) return "Matematik";
+  if (key.includes("fen")) return "Fen Bilimleri";
+  if (key.includes("inkılap") || key.includes("inkilap") || key.includes("sosyal")) return "T.C. İnkılap Tarihi ve Atatürkçülük";
+  if (key.includes("din kültürü") || key.includes("din kulturu")) return "Din Kültürü ve Ahlak Bilgisi";
+  if (key.includes("ingilizce") || key.includes("i̇ngilizce")) return "İngilizce";
+  return cleaned;
 }
 
 export function fixturePath(name: string): string {
   return fileURLToPath(new URL(`../../../ornek-veriler/${name}`, import.meta.url));
 }
 
-async function readWorkbookRows<Row extends Record<string, string>>(path: string, requiredHeaders: string[]): Promise<Row[]> {
+async function readWorkbookRows<Row extends Record<string, string | undefined>>(
+  path: string,
+  requiredHeaders: string[],
+  optionalHeaders: string[] = [],
+): Promise<Row[]> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(path);
   const worksheet = workbook.worksheets[0];
@@ -192,7 +249,7 @@ async function readWorkbookRows<Row extends Record<string, string>>(path: string
   for (let rowNumber = headerRowNumber + 1; rowNumber <= worksheet.rowCount; rowNumber += 1) {
     const row = worksheet.getRow(rowNumber);
     const item: Record<string, string> = {};
-    for (const header of requiredHeaders) {
+    for (const header of [...requiredHeaders, ...optionalHeaders]) {
       const colNumber = headers.get(normalizeHeader(header));
       item[header] = colNumber ? cellText(row.getCell(colNumber).value) : "";
     }
@@ -262,6 +319,18 @@ function requiredClass(classByName: Map<string, DemoClass>, name: string): DemoC
 
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort((left, right) => left.localeCompare(right, "tr"));
+}
+
+function uniqueBy<Value>(values: Value[], keyFor: (value: Value) => string): Value[] {
+  const seen = new Set<string>();
+  const result: Value[] = [];
+  for (const value of values) {
+    const key = keyFor(value);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(value);
+  }
+  return result;
 }
 
 function classId(name: string): string {

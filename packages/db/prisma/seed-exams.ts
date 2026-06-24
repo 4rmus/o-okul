@@ -15,7 +15,7 @@ import {
   type StudentAnswer,
 } from "../../../apps/worker/src/jobs/scoring-engine.ts";
 import { getParserConfigPresetSuggestion } from "../../../packages/shared-types/src/format-analyzer.ts";
-import { DEMO_TENANT_ID, type DemoFixtures, type DemoStudent, fixturePath, loadDemoFixtures } from "./demo-fixtures.ts";
+import { DEMO_TENANT_ID, type DemoFixtures, type DemoStudent, fixturePath, loadDemoFixtures, normalizeCourseName } from "./demo-fixtures.ts";
 
 loadEnv({ path: fileURLToPath(new URL("../../../.env", import.meta.url)), quiet: true });
 
@@ -200,7 +200,7 @@ async function readAnswerKey(path: string): Promise<{ questions: AnswerKeyItem[]
     }
 
     const section = cellText(row.getCell(headers.section).value);
-    const branch = cellText(row.getCell(headers.branch).value) || section;
+    const branch = normalizeCourseName(cellText(row.getCell(headers.branch).value) || section);
     if (!section || !branch) {
       throw new Error("ANSWER_KEY_BRANCH_INVALID");
     }

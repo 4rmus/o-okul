@@ -7,7 +7,9 @@ import {
   DEMO_STUDENT_USER_ID,
   DEMO_TEACHER_USER_ID,
   DEMO_TENANT_ID,
+  STANDARD_COURSES,
   type DemoFixtures,
+  courseIdForName,
   loadDemoFixtures,
 } from "./demo-fixtures.ts";
 
@@ -148,13 +150,17 @@ async function main() {
        RETURNING "id"`,
       [demoPasswordHash],
     );
+    const systemUserId = systemUser.rows[0]?.id;
+    if (!systemUserId) throw new Error("SYSTEM_USER_MISSING");
 
     await client.query(
       `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
        VALUES ('membership-system-admin', 'system', $1, 'SYSTEM_ADMIN', now())
        ON CONFLICT ("tenantId", "userId", "role") DO UPDATE SET "updatedAt" = now()`,
-      [systemUser.rows[0]?.id],
+      [systemUserId],
     );
+
+    await resetSeedData(client, systemUserId);
 
     if (seedMode === "minimal") {
       await client.query("COMMIT");
@@ -165,8 +171,6 @@ async function main() {
     if (!demoFixtures) {
       throw new Error("DEMO_FIXTURES_MISSING");
     }
-
-    await resetDemoTenant(client);
 
     const tenant = await client.query<{ id: string }>(
       `INSERT INTO "Tenant" ("id", "name", "slug", "status", "updatedAt")
@@ -195,6 +199,7 @@ async function main() {
 
     await seedDemoSubjectUsers(client, tenantId, demoFixtures);
     await seedDemoClasses(client, tenantId, demoFixtures);
+    await seedDemoCourses(client, tenantId);
     await seedDemoTeachers(client, tenantId, demoFixtures);
     await seedDemoStudentsAndGuardians(client, tenantId, demoFixtures);
     await seedDemoTeacherAssignments(client, tenantId, demoFixtures);
@@ -240,9 +245,9 @@ function parseSeedMode(value: string | undefined): SeedMode {
   throw new Error("SEED_MODE must be demo or minimal");
 }
 
-async function resetDemoTenant(client: pg.PoolClient): Promise<void> {
-  await client.query(`DELETE FROM "Tenant" WHERE "id" = $1 OR "slug" = 'demo'`, [DEMO_TENANT_ID]);
-  await client.query(`DELETE FROM "User" WHERE "id" = 'user-demo-assistant' OR "email" = 'assistant@demo.local'`);
+async function resetSeedData(client: pg.PoolClient, systemUserId: string): Promise<void> {
+  await client.query(`DELETE FROM "Tenant" WHERE "id" <> 'system'`);
+  await client.query(`DELETE FROM "User" WHERE "id" <> $1`, [systemUserId]);
 }
 
 async function seedDemoSubjectUsers(client: pg.PoolClient, tenantId: string, fixtures: DemoFixtures): Promise<void> {
@@ -301,6 +306,22 @@ async function seedDemoClasses(client: pg.PoolClient, tenantId: string, fixtures
            "deletedAt" = NULL,
            "updatedAt" = now()`,
       [demoClass.id, tenantId, demoClass.name, demoClass.level],
+    );
+  }
+}
+
+async function seedDemoCourses(client: pg.PoolClient, tenantId: string): Promise<void> {
+  for (const course of STANDARD_COURSES) {
+    await client.query(
+      `INSERT INTO "Course" ("id", "tenantId", "name", "code", "updatedAt")
+       VALUES ($1, $2, $3, $4, now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "tenantId" = EXCLUDED."tenantId",
+           "name" = EXCLUDED."name",
+           "code" = EXCLUDED."code",
+           "deletedAt" = NULL,
+           "updatedAt" = now()`,
+      [course.id, tenantId, course.name, course.code],
     );
   }
 }
@@ -440,17 +461,18 @@ async function seedDemoTeacherAssignments(client: pg.PoolClient, tenantId: strin
   for (const teacher of fixtures.teachers) {
     await client.query(
       `INSERT INTO "TeacherAssignment" (
-         "id", "tenantId", "teacherId", "classId", "studentId", "role", "updatedAt"
+         "id", "tenantId", "teacherId", "classId", "studentId", "courseId", "role", "updatedAt"
        )
-       VALUES ($1, $2, $3, $4, NULL, 'BRANCH_TEACHER', now())
+       VALUES ($1, $2, $3, $4, NULL, $5, 'BRANCH_TEACHER', now())
        ON CONFLICT ("id") DO UPDATE
        SET "tenantId" = EXCLUDED."tenantId",
            "teacherId" = EXCLUDED."teacherId",
            "classId" = EXCLUDED."classId",
            "studentId" = EXCLUDED."studentId",
+           "courseId" = EXCLUDED."courseId",
            "role" = EXCLUDED."role",
            "updatedAt" = now()`,
-      [`teacher-assignment-${teacher.id}-${teacher.assignedClassId}`, tenantId, teacher.id, teacher.assignedClassId],
+      [`teacher-assignment-${teacher.id}-${teacher.assignedClassId}`, tenantId, teacher.id, teacher.assignedClassId, courseIdForName(teacher.branch)],
     );
   }
 
