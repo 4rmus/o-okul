@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button, DataTable, EmptyState, Field, InfoGrid, InfoItem, Input, MetricCard, MetricGrid, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn } from "@uzman-hocam/ui";
 import type {
@@ -15,7 +15,7 @@ import type {
   ReportSnapshotRecord,
   StudentRecord,
 } from "@uzman-hocam/shared-types";
-import { CheckCircle2, Download, FileSpreadsheet, FileText, Play, RefreshCw, Upload, Wand2 } from "lucide-react";
+import { CheckCircle2, Download, FileSpreadsheet, FileText, Play, RefreshCw, Search, Upload, Wand2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
@@ -363,7 +363,10 @@ export function ParserConfigPage() {
   const [isEvaluationSubmitting, setIsEvaluationSubmitting] = useState(false);
   const [quarantineRawImportId, setQuarantineRawImportId] = useState("");
   const [quarantines, setQuarantines] = useState<ImportQuarantineRecord[]>([]);
-  const [students, setStudents] = useState<StudentRecord[]>([]);
+  const [quarantineStudentOptions, setQuarantineStudentOptions] = useState<StudentRecord[]>([]);
+  const [quarantineStudentQuery, setQuarantineStudentQuery] = useState("");
+  const [isQuarantineStudentSearching, setIsQuarantineStudentSearching] = useState(false);
+  const [reportStudents, setReportStudents] = useState<StudentRecord[]>([]);
   const [selectedStudentByQuarantine, setSelectedStudentByQuarantine] = useState<Record<string, string>>({});
   const [reportContentHash, setReportContentHash] = useState("");
   const [reportJob, setReportJob] = useState<ReportGenerationQueueResult | null>(null);
@@ -756,6 +759,9 @@ export function ParserConfigPage() {
     setEvaluationStatus(null);
     setQuarantineRawImportId(result.rawImport.id);
     setQuarantines([]);
+    setQuarantineStudentOptions([]);
+    setSelectedStudentByQuarantine({});
+    setReportStudents([]);
     setReportContentHash("");
     setReportJob(null);
     setIsReportSubmitting(false);
@@ -763,12 +769,8 @@ export function ParserConfigPage() {
     setIsRawImportChecking(true);
     try {
       setRawImportSummary(await waitForRawImportSummary(auth.accessToken, examId, result.rawImport.id));
-      const [records, studentRecords] = await Promise.all([
-        loadQuarantines(auth.accessToken, { examId, rawImportId: result.rawImport.id }),
-        loadStudents(auth.accessToken),
-      ]);
+      const records = await loadQuarantines(auth.accessToken, { examId, rawImportId: result.rawImport.id });
       setQuarantines(records);
-      setStudents(studentRecords);
     } catch (analysisError) {
       setError(apiErrorMessage(analysisError, "Optik analizi henüz tamamlanmadı. Özeti veya eşleşmeyen satırları yeniden getirin."));
     } finally {
@@ -847,14 +849,32 @@ export function ParserConfigPage() {
       return;
     }
     try {
-      const [records, studentRecords] = await Promise.all([
-        loadQuarantines(auth.accessToken, parsedForm.data),
-        loadStudents(auth.accessToken),
-      ]);
+      const records = await loadQuarantines(auth.accessToken, parsedForm.data);
       setQuarantines(records);
-      setStudents(studentRecords);
+      setQuarantineStudentOptions([]);
+      setSelectedStudentByQuarantine({});
     } catch (lookupError) {
       setError(apiErrorMessage(lookupError, "Karantina kayıtları alınamadı."));
+    }
+  }
+
+  async function submitQuarantineStudentSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!auth) return;
+
+    setError("");
+    const query = quarantineStudentQuery.trim();
+    if (query.length < 2) {
+      setError("Öğrenci araması için en az 2 karakter girin.");
+      return;
+    }
+    setIsQuarantineStudentSearching(true);
+    try {
+      setQuarantineStudentOptions(await loadStudents(auth.accessToken, { limit: 10, q: query }));
+    } catch (searchError) {
+      setError(apiErrorMessage(searchError, "Öğrenci araması yapılamadı."));
+    } finally {
+      setIsQuarantineStudentSearching(false);
     }
   }
 
@@ -906,13 +926,11 @@ export function ParserConfigPage() {
     try {
       const currentReadyCount = countReadyReportSnapshots(reportSnapshots);
       setReportJob(await enqueueReportGeneration(auth.accessToken, normalizedExamId, normalizedContentHash));
-      const [snapshots, context] = await Promise.all([
-        waitForReportSnapshots(auth.accessToken, normalizedExamId, currentReadyCount),
-        loadReportTableContext(auth.accessToken, normalizedExamId),
-      ]);
+      const snapshots = await waitForReportSnapshots(auth.accessToken, normalizedExamId, currentReadyCount);
+      const context = await loadReportTableContext(auth.accessToken, normalizedExamId, snapshots[0] ?? null);
       setReportSnapshots(snapshots);
       setReportParticipants(context.participants);
-      setStudents(context.students);
+      setReportStudents(context.students);
     } catch (reportError) {
       setError(apiErrorMessage(reportError, "Rapor üretimi kuyruğa alınamadı."));
     } finally {
@@ -930,13 +948,11 @@ export function ParserConfigPage() {
       return;
     }
     try {
-      const [snapshots, context] = await Promise.all([
-        loadReportSnapshots(auth.accessToken, normalizedExamId),
-        loadReportTableContext(auth.accessToken, normalizedExamId),
-      ]);
+      const snapshots = await loadReportSnapshots(auth.accessToken, normalizedExamId);
+      const context = await loadReportTableContext(auth.accessToken, normalizedExamId, snapshots[0] ?? null);
       setReportSnapshots(snapshots);
       setReportParticipants(context.participants);
-      setStudents(context.students);
+      setReportStudents(context.students);
     } catch (snapshotError) {
       setError(apiErrorMessage(snapshotError, "Rapor listesi alınamadı."));
     }
@@ -1084,11 +1100,15 @@ export function ParserConfigPage() {
               quarantineRawImportId={quarantineRawImportId}
               quarantines={quarantines}
               selectedStudentByQuarantine={selectedStudentByQuarantine}
-              students={students}
+              students={quarantineStudentOptions}
+              studentSearchQuery={quarantineStudentQuery}
+              isStudentSearchSubmitting={isQuarantineStudentSearching}
               onLookupSubmit={submitQuarantineLookup}
               onQuarantineRawImportIdChange={setQuarantineRawImportId}
               onResolve={resolveQuarantine}
               onSelectedStudentChange={setSelectedStudentByQuarantine}
+              onStudentSearchQueryChange={setQuarantineStudentQuery}
+              onStudentSearchSubmit={submitQuarantineStudentSearch}
             />
             <OpticalReportPanel
               evaluationStatus={evaluationStatus}
@@ -1097,7 +1117,7 @@ export function ParserConfigPage() {
               reportContentHash={reportContentHash}
               reportJob={reportJob}
               reportSnapshots={reportSnapshots}
-              students={students}
+              students={reportStudents}
               onDownload={downloadReportSnapshot}
               onRefreshSnapshots={refreshReportSnapshots}
               onSubmit={submitReportGeneration}
@@ -1705,87 +1725,103 @@ function OpticalUploadPanel({
 interface QuarantineResolutionPanelProps {
   quarantineRawImportId: string;
   quarantines: ImportQuarantineRecord[];
+  isStudentSearchSubmitting: boolean;
   selectedStudentByQuarantine: Record<string, string>;
+  studentSearchQuery: string;
   students: StudentRecord[];
   onLookupSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onQuarantineRawImportIdChange: (value: string) => void;
   onResolve: (record: ImportQuarantineRecord) => void | Promise<void>;
   onSelectedStudentChange: (updater: (current: Record<string, string>) => Record<string, string>) => void;
+  onStudentSearchQueryChange: (value: string) => void;
+  onStudentSearchSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }
 
 function QuarantineResolutionPanel({
   quarantineRawImportId,
   quarantines,
+  isStudentSearchSubmitting,
   selectedStudentByQuarantine,
+  studentSearchQuery,
   students,
   onLookupSubmit,
   onQuarantineRawImportIdChange,
   onResolve,
   onSelectedStudentChange,
+  onStudentSearchQueryChange,
+  onStudentSearchSubmit,
 }: QuarantineResolutionPanelProps) {
-  const quarantineColumns: Array<DataTableColumn<ImportQuarantineRecord>> = [
-    {
-      align: "right",
-      header: "Satır",
-      key: "rowNumber",
-      mobilePriority: "secondary",
-      priority: "primary",
-      render: (record) => record.rowNumber,
-    },
-    {
-      header: "Sebep",
-      key: "reason",
-      mobilePriority: "primary",
-      priority: "primary",
-      render: (record) => record.reason,
-    },
-    {
-      header: "Durum",
-      key: "status",
-      mobilePriority: "primary",
-      priority: "primary",
-      render: (record) => (
-        <StatusBadge tone={quarantineStatusTone(record.status)}>{formatQuarantineStatus(record.status)}</StatusBadge>
-      ),
-    },
-    {
-      header: "Öğrenci",
-      key: "student",
-      mobilePriority: "secondary",
-      priority: "secondary",
-      render: (record) => (
-        <Select
-          aria-label={`${record.rowNumber}. satır öğrencisi`}
-          value={selectedStudentByQuarantine[record.id] ?? record.resolvedStudentId ?? ""}
-          onChange={(event) =>
-            onSelectedStudentChange((current) => ({ ...current, [record.id]: event.target.value }))
-          }
-        >
-          <option value="">Seçiniz</option>
-          {students.map((student) => (
-            <option key={student.id} value={student.id}>
-              {student.firstName} {student.lastName}
-            </option>
-          ))}
-        </Select>
-      ),
-    },
-    {
-      header: "İşlem",
-      key: "action",
-      mobileLabel: "Çöz",
-      mobilePriority: "primary",
-      priority: "primary",
-      render: (record) =>
-        record.status === "RESOLVED" ? (
-          record.evaluationJob ? formatEvidenceSafeReference(record.evaluationJob.jobId, "Kuyruk ref") : "Çözüldü"
-        ) : (
-          <button type="button" onClick={() => void onResolve(record)} aria-label={`${record.rowNumber}. satırı çöz`}>
-            <CheckCircle2 size={17} aria-hidden="true" />
-          </button>
+  const studentSelectOptions = useMemo(
+    () =>
+      students.map((student) => (
+        <option key={student.id} value={student.id}>
+          {student.firstName} {student.lastName}
+        </option>
+      )),
+    [students],
+  );
+  const quarantineColumns = useMemo<Array<DataTableColumn<ImportQuarantineRecord>>>(
+    () => [
+      {
+        align: "right",
+        header: "Satır",
+        key: "rowNumber",
+        mobilePriority: "secondary",
+        priority: "primary",
+        render: (record) => record.rowNumber,
+      },
+      {
+        header: "Sebep",
+        key: "reason",
+        mobilePriority: "primary",
+        priority: "primary",
+        render: (record) => record.reason,
+      },
+      {
+        header: "Durum",
+        key: "status",
+        mobilePriority: "primary",
+        priority: "primary",
+        render: (record) => (
+          <StatusBadge tone={quarantineStatusTone(record.status)}>{formatQuarantineStatus(record.status)}</StatusBadge>
         ),
-    },
-  ];
+      },
+      {
+        header: "Öğrenci",
+        key: "student",
+        mobilePriority: "secondary",
+        priority: "secondary",
+        render: (record) => (
+          <Select
+            aria-label={`${record.rowNumber}. satır öğrencisi`}
+            value={selectedStudentByQuarantine[record.id] ?? record.resolvedStudentId ?? ""}
+            onChange={(event) =>
+              onSelectedStudentChange((current) => ({ ...current, [record.id]: event.target.value }))
+            }
+          >
+            <option value="">Seçiniz</option>
+            {studentSelectOptions}
+          </Select>
+        ),
+      },
+      {
+        header: "İşlem",
+        key: "action",
+        mobileLabel: "Çöz",
+        mobilePriority: "primary",
+        priority: "primary",
+        render: (record) =>
+          record.status === "RESOLVED" ? (
+            record.evaluationJob ? formatEvidenceSafeReference(record.evaluationJob.jobId, "Kuyruk ref") : "Çözüldü"
+          ) : (
+            <button type="button" onClick={() => void onResolve(record)} aria-label={`${record.rowNumber}. satırı çöz`}>
+              <CheckCircle2 size={17} aria-hidden="true" />
+            </button>
+          ),
+      },
+    ],
+    [onResolve, onSelectedStudentChange, selectedStudentByQuarantine, studentSelectOptions],
+  );
 
   return (
     <>
@@ -1814,6 +1850,15 @@ function QuarantineResolutionPanel({
         description="Öğrenciyle eşleşmeyen optik satırları çözüm durumu ve işlem aksiyonlarıyla izle."
         title="Eşleşmeyen satırlar"
       >
+        <form className="next-inline-form" onSubmit={(event) => void onStudentSearchSubmit(event)}>
+          <Field label="Öğrenci adı/no ara">
+            <Input value={studentSearchQuery} onChange={(event) => onStudentSearchQueryChange(event.target.value)} />
+          </Field>
+          <Button type="submit" disabled={isStudentSearchSubmitting}>
+            <Search size={17} aria-hidden="true" />
+            Öğrencileri ara
+          </Button>
+        </form>
         <div className="next-grid-scroll">
           <DataTable
             caption="Eşleşmeyen satır listesi"
@@ -1864,129 +1909,135 @@ function OpticalReportPanel({
   const canGenerateReport = hasReportInput && isAnalysisComplete && !isReportSubmitting;
   const reportMessage = getReportReadinessMessage(evaluationStatus, hasReportInput, isReportSubmitting);
   const latestSnapshot = reportSnapshots[0] ?? null;
-  const studentRows = buildReportAnalysisRows({ participants, snapshot: latestSnapshot, students });
-  const reportSnapshotColumns: Array<DataTableColumn<ReportSnapshotRecord>> = [
-    {
-      header: "Durum",
-      key: "status",
-      mobilePriority: "primary",
-      priority: "primary",
-      render: (snapshot) => (
-        <StatusBadge tone={reportSnapshotStatusTone(snapshot.status)}>{formatReportStatus(snapshot.status)}</StatusBadge>
-      ),
-    },
-    {
-      header: "Çıktı",
-      key: "exportReadiness",
-      mobilePriority: "primary",
-      priority: "primary",
-      render: (snapshot) => (
-        <StatusBadge tone={isReportSnapshotReady(snapshot) ? "success" : "warning"}>
-          {isReportSnapshotReady(snapshot) ? "Excel/PDF hazır" : "READY bekleniyor"}
-        </StatusBadge>
-      ),
-    },
-    {
-      align: "right",
-      header: "Sonuç",
-      key: "resultCount",
-      mobilePriority: "secondary",
-      priority: "secondary",
-      render: (snapshot) => formatReportResultCount(snapshot),
-    },
-    {
-      align: "right",
-      header: "Başarı %",
-      key: "successRate",
-      mobilePriority: "primary",
-      priority: "primary",
-      render: (snapshot) => formatPercentNumber(reportSuccessRate(snapshot.snapshotData?.averages)),
-    },
-    {
-      align: "right",
-      header: "Net",
-      key: "net",
-      mobilePriority: "secondary",
-      priority: "primary",
-      render: (snapshot) => formatReportNumber(snapshot.snapshotData?.averages?.net),
-    },
-    {
-      align: "right",
-      header: "Soru",
-      key: "questionCount",
-      mobilePriority: "secondary",
-      priority: "primary",
-      render: (snapshot) => formatReportNumber(reportQuestionCount(snapshot.snapshotData?.averages)),
-    },
-    {
-      align: "right",
-      header: "Doğru",
-      key: "correct",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (snapshot) => formatReportAverage(snapshot, "correct"),
-    },
-    {
-      align: "right",
-      header: "Yanlış",
-      key: "wrong",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (snapshot) => formatReportAverage(snapshot, "wrong"),
-    },
-    {
-      align: "right",
-      header: "Boş",
-      key: "blank",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (snapshot) => formatReportAverage(snapshot, "blank"),
-    },
-    {
-      align: "right",
-      header: "Sınıf",
-      key: "classCount",
-      mobilePriority: "hidden",
-      priority: "secondary",
-      render: (snapshot) => formatReportClassCount(snapshot),
-    },
-    {
-      header: "Oluşturulma",
-      key: "generatedAt",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (snapshot) => formatReportGeneratedAt(snapshot),
-    },
-    {
-      header: "İndirme",
-      key: "download",
-      mobileLabel: "İndir",
-      mobilePriority: "primary",
-      priority: "primary",
-      render: (snapshot) => (
-        <div className="next-row-actions">
-          <button
-            type="button"
-            disabled={!isReportSnapshotReady(snapshot)}
-            onClick={() => void onDownload(snapshot, "xlsx")}
-            aria-label={`${formatReportStatus(snapshot.status)} optik raporu Excel indir`}
-            title={isReportSnapshotReady(snapshot) ? "Excel indir" : "READY snapshot gerekli"}
-          >
-            <Download size={17} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            disabled={!isReportSnapshotReady(snapshot)}
-            onClick={() => void onDownload(snapshot, "pdf")}
-            aria-label={`${formatReportStatus(snapshot.status)} optik raporu PDF indir`}
-            title={isReportSnapshotReady(snapshot) ? "PDF indir" : "READY snapshot gerekli"}
-          >
-            <FileText size={17} aria-hidden="true" />
-          </button>
-        </div>
-      ),
-    },
-  ];
+  const studentRows = useMemo(
+    () => buildReportAnalysisRows({ participants, snapshot: latestSnapshot, students }),
+    [latestSnapshot, participants, students],
+  );
+  const reportSnapshotColumns = useMemo<Array<DataTableColumn<ReportSnapshotRecord>>>(
+    () => [
+      {
+        header: "Durum",
+        key: "status",
+        mobilePriority: "primary",
+        priority: "primary",
+        render: (snapshot) => (
+          <StatusBadge tone={reportSnapshotStatusTone(snapshot.status)}>{formatReportStatus(snapshot.status)}</StatusBadge>
+        ),
+      },
+      {
+        header: "Çıktı",
+        key: "exportReadiness",
+        mobilePriority: "primary",
+        priority: "primary",
+        render: (snapshot) => (
+          <StatusBadge tone={isReportSnapshotReady(snapshot) ? "success" : "warning"}>
+            {isReportSnapshotReady(snapshot) ? "Excel/PDF hazır" : "READY bekleniyor"}
+          </StatusBadge>
+        ),
+      },
+      {
+        align: "right",
+        header: "Sonuç",
+        key: "resultCount",
+        mobilePriority: "secondary",
+        priority: "secondary",
+        render: (snapshot) => formatReportResultCount(snapshot),
+      },
+      {
+        align: "right",
+        header: "Başarı %",
+        key: "successRate",
+        mobilePriority: "primary",
+        priority: "primary",
+        render: (snapshot) => formatPercentNumber(reportSuccessRate(snapshot.snapshotData?.averages)),
+      },
+      {
+        align: "right",
+        header: "Net",
+        key: "net",
+        mobilePriority: "secondary",
+        priority: "primary",
+        render: (snapshot) => formatReportNumber(snapshot.snapshotData?.averages?.net),
+      },
+      {
+        align: "right",
+        header: "Soru",
+        key: "questionCount",
+        mobilePriority: "secondary",
+        priority: "primary",
+        render: (snapshot) => formatReportNumber(reportQuestionCount(snapshot.snapshotData?.averages)),
+      },
+      {
+        align: "right",
+        header: "Doğru",
+        key: "correct",
+        mobilePriority: "hidden",
+        priority: "optional",
+        render: (snapshot) => formatReportAverage(snapshot, "correct"),
+      },
+      {
+        align: "right",
+        header: "Yanlış",
+        key: "wrong",
+        mobilePriority: "hidden",
+        priority: "optional",
+        render: (snapshot) => formatReportAverage(snapshot, "wrong"),
+      },
+      {
+        align: "right",
+        header: "Boş",
+        key: "blank",
+        mobilePriority: "hidden",
+        priority: "optional",
+        render: (snapshot) => formatReportAverage(snapshot, "blank"),
+      },
+      {
+        align: "right",
+        header: "Sınıf",
+        key: "classCount",
+        mobilePriority: "hidden",
+        priority: "secondary",
+        render: (snapshot) => formatReportClassCount(snapshot),
+      },
+      {
+        header: "Oluşturulma",
+        key: "generatedAt",
+        mobilePriority: "hidden",
+        priority: "optional",
+        render: (snapshot) => formatReportGeneratedAt(snapshot),
+      },
+      {
+        header: "İndirme",
+        key: "download",
+        mobileLabel: "İndir",
+        mobilePriority: "primary",
+        priority: "primary",
+        render: (snapshot) => (
+          <div className="next-row-actions">
+            <button
+              type="button"
+              disabled={!isReportSnapshotReady(snapshot)}
+              onClick={() => void onDownload(snapshot, "xlsx")}
+              aria-label={`${formatReportStatus(snapshot.status)} optik raporu Excel indir`}
+              title={isReportSnapshotReady(snapshot) ? "Excel indir" : "READY snapshot gerekli"}
+            >
+              <Download size={17} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              disabled={!isReportSnapshotReady(snapshot)}
+              onClick={() => void onDownload(snapshot, "pdf")}
+              aria-label={`${formatReportStatus(snapshot.status)} optik raporu PDF indir`}
+              title={isReportSnapshotReady(snapshot) ? "PDF indir" : "READY snapshot gerekli"}
+            >
+              <FileText size={17} aria-hidden="true" />
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [onDownload],
+  );
 
   return (
     <>
@@ -2063,124 +2114,124 @@ function OpticalReportPanel({
   );
 }
 
-function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
-  const columns: Array<DataTableColumn<ReportAnalysisRow>> = [
-    {
-      header: "Öğrenci",
-      key: "student",
-      mobilePriority: "primary",
-      priority: "primary",
-      render: (row) => (
-        <>
-          <span className="next-report-student-name">{row.studentName}</span>
-          {row.studentNo ? <small>#{row.studentNo}</small> : null}
-        </>
-      ),
-      sticky: "left",
-    },
-    {
-      header: "Sınıf",
-      key: "class",
-      mobilePriority: "secondary",
-      priority: "primary",
-      render: (row) => row.className,
-    },
-    {
-      header: "Katılım",
-      key: "participation",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (row) => formatParticipantMeta(row),
-    },
-    {
-      header: "Durum",
-      key: "status",
-      mobilePriority: "secondary",
-      priority: "primary",
-      render: (row) => <StatusBadge tone={resultStatusTone(row)}>{formatResultStatus(row)}</StatusBadge>,
-    },
-    {
-      align: "right",
-      header: "Başarı %",
-      key: "successRate",
-      mobilePriority: "primary",
-      priority: "primary",
-      render: (row) => formatPercentNumber(reportSuccessRate(row)),
-    },
-    {
-      align: "right",
-      header: "Net",
-      key: "net",
-      mobilePriority: "secondary",
-      priority: "primary",
-      render: (row) => formatReportNumber(row.net),
-    },
-    {
-      align: "right",
-      header: "Soru",
-      key: "questionCount",
-      mobilePriority: "secondary",
-      priority: "primary",
-      render: (row) => formatReportNumber(reportQuestionCount(row)),
-    },
-    {
-      align: "right",
-      header: "Doğru",
-      key: "correct",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (row) => formatReportNumber(row.correct),
-    },
-    {
-      align: "right",
-      header: "Yanlış",
-      key: "wrong",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (row) => formatReportNumber(row.wrong),
-    },
-    {
-      align: "right",
-      header: "Boş",
-      key: "blank",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (row) => formatReportNumber(row.blank),
-    },
-    {
-      align: "right",
-      header: "Puan",
-      key: "score",
-      mobilePriority: "hidden",
-      priority: "secondary",
-      render: (row) => formatReportNumber(readRowScore(row)),
-    },
-    {
-      align: "right",
-      header: "Genel sıra",
-      key: "generalRank",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (row) => formatRank(row.generalRank),
-    },
-    {
-      align: "right",
-      header: "Sınıf sıra",
-      key: "classRank",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (row) => formatRank(row.classRank),
-    },
-    {
-      align: "right",
-      header: "Yüzdelik",
-      key: "percentile",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (row) => formatPercentile(row.percentile),
-    },
-  ];
+const opticalStudentResultColumns: Array<DataTableColumn<ReportAnalysisRow>> = [
+  {
+    header: "Öğrenci",
+    key: "student",
+    mobilePriority: "primary",
+    priority: "primary",
+    render: (row) => (
+      <>
+        <span className="next-report-student-name">{row.studentName}</span>
+        {row.studentNo ? <small>#{row.studentNo}</small> : null}
+      </>
+    ),
+    sticky: "left",
+  },
+  {
+    header: "Sınıf",
+    key: "class",
+    mobilePriority: "secondary",
+    priority: "primary",
+    render: (row) => row.className,
+  },
+  {
+    header: "Katılım",
+    key: "participation",
+    mobilePriority: "hidden",
+    priority: "optional",
+    render: (row) => formatParticipantMeta(row),
+  },
+  {
+    header: "Durum",
+    key: "status",
+    mobilePriority: "secondary",
+    priority: "primary",
+    render: (row) => <StatusBadge tone={resultStatusTone(row)}>{formatResultStatus(row)}</StatusBadge>,
+  },
+  {
+    align: "right",
+    header: "Başarı %",
+    key: "successRate",
+    mobilePriority: "primary",
+    priority: "primary",
+    render: (row) => formatPercentNumber(reportSuccessRate(row)),
+  },
+  {
+    align: "right",
+    header: "Net",
+    key: "net",
+    mobilePriority: "secondary",
+    priority: "primary",
+    render: (row) => formatReportNumber(row.net),
+  },
+  {
+    align: "right",
+    header: "Soru",
+    key: "questionCount",
+    mobilePriority: "secondary",
+    priority: "primary",
+    render: (row) => formatReportNumber(reportQuestionCount(row)),
+  },
+  {
+    align: "right",
+    header: "Doğru",
+    key: "correct",
+    mobilePriority: "hidden",
+    priority: "optional",
+    render: (row) => formatReportNumber(row.correct),
+  },
+  {
+    align: "right",
+    header: "Yanlış",
+    key: "wrong",
+    mobilePriority: "hidden",
+    priority: "optional",
+    render: (row) => formatReportNumber(row.wrong),
+  },
+  {
+    align: "right",
+    header: "Boş",
+    key: "blank",
+    mobilePriority: "hidden",
+    priority: "optional",
+    render: (row) => formatReportNumber(row.blank),
+  },
+  {
+    align: "right",
+    header: "Puan",
+    key: "score",
+    mobilePriority: "hidden",
+    priority: "secondary",
+    render: (row) => formatReportNumber(readRowScore(row)),
+  },
+  {
+    align: "right",
+    header: "Genel sıra",
+    key: "generalRank",
+    mobilePriority: "hidden",
+    priority: "optional",
+    render: (row) => formatRank(row.generalRank),
+  },
+  {
+    align: "right",
+    header: "Sınıf sıra",
+    key: "classRank",
+    mobilePriority: "hidden",
+    priority: "optional",
+    render: (row) => formatRank(row.classRank),
+  },
+  {
+    align: "right",
+    header: "Yüzdelik",
+    key: "percentile",
+    mobilePriority: "hidden",
+    priority: "optional",
+    render: (row) => formatPercentile(row.percentile),
+  },
+];
 
+function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
   return (
     <Panel
       aria-label="Katılan öğrenciler"
@@ -2193,7 +2244,7 @@ function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
           <DataTable
             caption="Optik katılımcı sonuçları"
             className="next-report-analysis-table"
-            columns={columns}
+            columns={opticalStudentResultColumns}
             description="Başarı % ana karşılaştırma metriğidir; Net, Soru, puan ve sıralama bağlam olarak gösterilir."
             density="compact"
             getRowKey={(row) => row.rowKey}
@@ -2537,8 +2588,13 @@ async function loadQuarantines(accessToken: string, input: QuarantineLookupFormP
   );
 }
 
-async function loadStudents(accessToken: string) {
-  return apiRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/students`);
+async function loadStudents(accessToken: string, input: { classId?: string; limit?: number; q?: string } = {}) {
+  const query = new URLSearchParams();
+  if (input.classId?.trim()) query.set("classId", input.classId.trim());
+  if (input.q?.trim()) query.set("q", input.q.trim());
+  if (input.limit) query.set("limit", String(input.limit));
+  const queryString = query.toString();
+  return apiRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/students${queryString ? `?${queryString}` : ""}`);
 }
 
 async function loadExamParticipants(accessToken: string, examId: string) {
@@ -2548,12 +2604,40 @@ async function loadExamParticipants(accessToken: string, examId: string) {
   );
 }
 
-async function loadReportTableContext(accessToken: string, examId: string) {
-  const [participants, studentRecords] = await Promise.all([
-    loadExamParticipants(accessToken, examId).catch(() => []),
-    loadStudents(accessToken).catch(() => []),
-  ]);
+async function loadReportTableContext(accessToken: string, examId: string, snapshot: ReportSnapshotRecord | null) {
+  const participants = await loadExamParticipants(accessToken, examId).catch(() => []);
+  const studentRecords = await loadStudentsByIds(accessToken, reportStudentIds(participants, snapshot)).catch(() => []);
   return { participants, students: studentRecords };
+}
+
+async function loadStudentsByIds(accessToken: string, studentIds: string[]) {
+  const students = await Promise.all(
+    studentIds.map((studentId) =>
+      apiRequest<StudentRecord>(
+        accessToken,
+        `${apiBaseUrl}/students/${encodeURIComponent(studentId)}`,
+      ).catch(() => null),
+    ),
+  );
+  return students.filter((student): student is StudentRecord => Boolean(student));
+}
+
+function reportStudentIds(participants: ExamParticipantRecord[], snapshot: ReportSnapshotRecord | null) {
+  return uniqueStrings([
+    ...participants.map((participant) => participant.studentId),
+    ...(snapshot?.snapshotData?.students ?? []).map((student) => student.studentId),
+  ]);
+}
+
+function uniqueStrings(values: string[]) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    result.push(value);
+  }
+  return result;
 }
 
 async function resolveImportQuarantine(

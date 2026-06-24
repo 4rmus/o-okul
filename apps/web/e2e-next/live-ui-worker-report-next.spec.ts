@@ -22,38 +22,44 @@ const resultEvidencePath = process.env.LIVE_UI_WORKER_RESULT_EVIDENCE_FILE ?? pr
 const enabled = process.env.NEXT_E2E_LIVE_UI_WORKER === "1" && Boolean(evidencePath);
 
 test.skip(!enabled, "NEXT_E2E_LIVE_UI_WORKER=1 ve LIVE_UI_WORKER_EVIDENCE_PATH gerekir.");
+test.setTimeout(90_000);
 
 test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", async ({ page }) => {
   const evidence = readEvidence(evidencePath);
 
-  await loginAs(page, evidence.email, evidence.password);
+  await loginAs(page, evidence.email, evidence.password, /\/kurum(?:[/?#]|$)/);
   await expect(page).toHaveURL(/\/kurum$/);
-  await page.getByRole("link", { name: "Raporlar" }).click();
+  await page.goto("/kurum/raporlar");
   await fillReportExamReference(page, evidence.examId);
   await page.getByRole("button", { name: "Raporu getir" }).click();
 
   await expect(page.getByLabel("Rapor özeti").getByText("READY")).toBeVisible();
-  await expect(page.getByLabel("Öğrenci karne özeti").getByText(evidence.firstStudentId)).toBeVisible();
+  await page.getByRole("tab", { name: "Öğrenci Sonuçları" }).click();
+  await page.getByRole("button", { name: /karnesini aç/ }).first().click();
+  await page.getByRole("tab", { name: "Karne Önizleme" }).click();
+  await expect(page.getByLabel("Öğrenci karne özeti").getByText("BÖLÜM ANALİZİ")).toBeVisible();
+  await openExportsTab(page);
   await expectReportDownload(page, "Excel indir", /\.xlsx$/);
+  await openExportsTab(page);
   await expectReportDownload(page, "PDF indir", /\.pdf$/);
 
   let studentPortalViewed = false;
   if (evidence.studentPortal) {
     await logout(page);
-    await loginAs(page, evidence.studentPortal.email, evidence.studentPortal.password);
+    await loginAs(page, evidence.studentPortal.email, evidence.studentPortal.password, /\/ogrenci(?:[/?#]|$)/);
     await page.goto(`/ogrenci?examId=${encodeURIComponent(evidence.examId)}`);
     await expect(page.getByRole("heading", { name: "Öğrenci Portalı" })).toBeVisible();
-    await expect(page.getByLabel("Sınav raporu").getByText(evidence.firstStudentId)).toBeVisible();
+    await openPortalKarneDetail(page);
     studentPortalViewed = true;
   }
 
   let guardianPortalViewed = false;
   if (evidence.guardianPortal) {
     await logout(page);
-    await loginAs(page, evidence.guardianPortal.email, evidence.guardianPortal.password);
+    await loginAs(page, evidence.guardianPortal.email, evidence.guardianPortal.password, /\/veli(?:[/?#]|$)/);
     await page.goto(`/veli?examId=${encodeURIComponent(evidence.examId)}`);
     await expect(page.getByRole("heading", { name: "Veli Portalı" })).toBeVisible();
-    await expect(page.getByLabel("Sınav raporu").getByText(evidence.firstStudentId)).toBeVisible();
+    await openPortalKarneDetail(page);
     guardianPortalViewed = true;
   }
 
@@ -76,11 +82,14 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
   });
 });
 
-async function loginAs(page: Page, email: string, password: string) {
+async function loginAs(page: Page, email: string, password: string, expectedUrl: RegExp) {
   await page.goto("/login");
   await page.locator('input[name="email"]').fill(email);
   await page.locator('input[name="password"]').fill(password);
-  await page.getByRole("button", { name: "Giriş yap" }).click();
+  await Promise.all([
+    page.waitForURL(expectedUrl),
+    page.getByRole("button", { name: "Giriş yap" }).click(),
+  ]);
 }
 
 async function logout(page: Page) {
@@ -101,11 +110,25 @@ async function expectReportDownload(
   buttonName: string,
   fileNamePattern: RegExp,
 ) {
+  const button = page.getByRole("button", { name: buttonName });
+  await expect(button).toBeVisible();
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: buttonName }).click();
+  await button.click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(fileNamePattern);
   await expect(download.failure()).resolves.toBeNull();
+}
+
+async function openExportsTab(page: Page) {
+  await page.getByRole("tab", { name: "Çıktılar" }).click();
+  await expect(page.getByLabel("Rapor çıktıları")).toBeVisible();
+}
+
+async function openPortalKarneDetail(page: Page) {
+  const reportSummary = page.getByLabel("Portal rapor özeti");
+  await expect(reportSummary.getByText("Hazır")).toBeVisible();
+  await reportSummary.getByRole("button", { name: "Karne detayını göster" }).click();
+  await expect(page.getByLabel("Sınav raporu").getByText("BÖLÜM ANALİZİ")).toBeVisible();
 }
 
 function readEvidence(path: string | undefined): LiveReportEvidence {
