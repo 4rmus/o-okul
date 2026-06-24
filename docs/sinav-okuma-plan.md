@@ -1,11 +1,22 @@
-/Users/arair/works/des-otomasyon reposunda Sınav ve Analiz > Optik Okuma akışını gerçek iSEM verisiyle uçtan uca doğrula.
+/Users/arair/works/uzman-hocam reposunda Sınavlar > Optik İşlemleri > Raporlar akışını gerçek iSEM, 3D ve MUBA verileriyle uçtan uca doğrula.
 Dil: Türkçe, sade ve kanıt odaklı ilerle. Tahmin etme. Belirsizlik varsa önce durup sor. Gereksiz refactor yapma. Kod değişikliği yalnızca kanıtlanmış bir kırığı düzeltmek için, cerrahi ve testli olsun.
 Kullanılacak gerçek dosyalar:
 - ornek-veriler/iSEM - LGS - 1 Detaylı Cevap Anahtarı.xlsx
 - ornek-veriler/iSEM .txt
+- ornek-veriler/3D - PROVA LGS - 2 Detaylı Cevap Anahtarı.xlsx
+- ornek-veriler/3D.txt
+- ornek-veriler/MUBA - LGS - 3 Detaylı Cevap Anahtarı.xlsx
+- ornek-veriler/MUBA.txt
 - Gerekirse öğrenci/veli eşleşmesi için ornek-veriler/ogrenci-aktarim-excel.xlsx
 Başarı kriteri:
-iSEM optik dosyası başarıyla okununca cevap anahtarı, parser config, raw import, değerlendirme job’u, ExamResult, ReportSnapshot ve kurum/öğrenci/veli görünümü aynı veriye işaret etmeli. Sonuçlar yalnız raporda kalmamalı; ilgili Student.studentNo, Student.userId varsa öğrenci hesabı, GuardianStudent bağı ve Guardian.userId varsa veli hesabı üzerinden erişilebilir olmalı.
+iSEM, 3D ve MUBA optik dosyaları başarıyla okununca cevap anahtarı, parser config, raw import, değerlendirme job’u, ExamResult, ReportSnapshot ve kurum/öğrenci/veli görünümü aynı veriye işaret etmeli. Sonuçlar yalnız raporda kalmamalı; ilgili Student.studentNo, Student.userId varsa öğrenci hesabı, GuardianStudent bağı ve Guardian.userId varsa veli hesabı üzerinden erişilebilir olmalı.
+
+Mimari karar:
+- Sınav oluşturma API/UI akışı cevap anahtarı Excel dosyasını aynı create isteğinde alır; cevap anahtarı soru, branş, kazanım/konu ve kitapçık permütasyon bilgisinin sahibidir.
+- Optik İşlemleri ekranı cevap anahtarı üretmez ve yeni sınav oluşturmaz. Bu ekran yalnız cevap anahtarı hazır sınavı seçer, optik formatı bağlar, TXT/DAT yükler, karantinayı çözer ve rapor üretir.
+- Analiz başlatılırken kullanıcıdan cevap anahtarı seçmesi beklenmez. API, `answerKeyId` gönderilmezse seçili sınavın yayınlı/en güncel cevap anahtarını kullanır.
+- Cevap anahtarı importu başarısız olursa yeni oluşturulan taslak sınav geri alınır; anahtarsız sınav oluşturulamaz ve yayına alınamaz.
+
 Faz 0 - Repo ve mevcut durum
 1. Önce şu dosya/alanları oku: apps/web/app/(app)/kurum/optik/parser-config-page.tsx, apps/api/src/exam, apps/api/src/report, apps/worker/src/jobs, packages/db/prisma/schema.prisma.
 2. Mevcut endpointleri ve UI akışını çıkar: /kurum/sinavlar, /kurum/optik, /kurum/raporlar, /kurum/ogrenciler, /kurum/veliler.
@@ -22,16 +33,16 @@ Faz 2 - Öğrenci ve veli veri zemini
 4. Veli için ayrı yol icat etme; mevcut guardian provisioning ve GuardianStudent bağını kullan.
 5. Her kritik öğrenci için Student, Guardian, GuardianStudent ve varsa User bağını kanıtla.
 Faz 3 - Cevap anahtarı
-1. Excel dosyasını answer-key dry-run ile test et.
+1. Yeni sınav Sınavlar ekranında oluşturulurken Excel cevap anahtarı dosyasını ekle.
 2. 90 soru, branşlar, kazanım/konu alanları, B kitapçığı permütasyonu ve yanlış ceza kuralını doğrula.
-3. Dry-run başarılıysa import/publish akışını çalıştır.
+3. Import başarılıysa sınavın cevap anahtarı özeti görünmeli; import başarısızsa anahtarsız taslak sınav kalmamalı.
 4. Hata varsa önce dosya formatı mı kod mu ayrıştır; küçük testle kanıtlamadan patch yazma.
 Faz 4 - Optik TXT ve parser
 1. OPTİK-7108 parser config/preset önerisini doğrula ve onaylı config versiyonunu kullan.
-2. iSEM .txt dosyasını raw-import endpointinden yükle.
+2. iSEM/3D/MUBA TXT dosyasını raw-import endpointinden yükle.
 3. rawImportId, parseJobId, total/matched/quarantined sayılarını kaydet.
 4. Karantina varsa sebebini listele; eşleşebilen satırları doğru öğrenciyle çöz.
-5. Çözüm sonrası evaluation job oluştuğunu doğrula.
+5. Analiz başlatırken body içinde `answerKeyId` göndermeden evaluation job oluştuğunu ve response içinde kullanılan `answerKeyId` döndüğünü doğrula.
 Faz 5 - Değerlendirme ve rapor
 1. Exam evaluation job’un ExamResult ürettiğini DB/API ile kanıtla.
 2. Idempotency kontrolü yap: aynı veri tekrar işlendiğinde duplicate veya tutarsız sonuç oluşmamalı.

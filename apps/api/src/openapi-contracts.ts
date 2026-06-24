@@ -1403,17 +1403,29 @@ const examRecordSchema = objectSchema({
   tenantId: stringSchema(),
   title: stringSchema(),
   status: { type: "string", enum: ["DRAFT", "PUBLISHED"] },
+  answerKeySummary: objectSchema({
+    status: { type: "string", enum: ["MISSING", "DRAFT", "PUBLISHED"] },
+    version: stringSchema(),
+    questionCount: integerSchema({ minimum: 1 }),
+    branchCount: integerSchema({ minimum: 1 }),
+    updatedAt: stringSchema({ format: "date-time" }),
+  }, ["status"]),
   startsAt: stringSchema({ format: "date-time" }),
   createdAt: stringSchema({ format: "date-time" }),
   updatedAt: stringSchema({ format: "date-time" }),
-}, ["id", "tenantId", "title", "status", "createdAt", "updatedAt"]);
+}, ["id", "tenantId", "title", "status", "answerKeySummary", "createdAt", "updatedAt"]);
 
 const examCreateRequestSchema = objectSchema({
+  answerKey: objectSchema({
+    fileBase64: stringSchema(),
+    scoringConfig: looseObjectSchema(),
+    version: stringSchema(),
+  }, ["fileBase64", "version"]),
   classId: stringSchema(),
   classIds: arraySchema(stringSchema()),
   startsAt: stringSchema({ format: "date-time" }),
   title: stringSchema(),
-}, ["title"]);
+}, ["title", "answerKey"]);
 
 const examParticipantRecordSchema = objectSchema({
   id: stringSchema(),
@@ -2499,6 +2511,8 @@ const operationContracts: Record<string, OperationContract> = {
       tenantId: stringSchema(),
       examId: stringSchema(),
       rawImportId: stringSchema(),
+      answerKeyId: stringSchema(),
+      rawImportSha256: stringSchema(),
       matchedCount: integerSchema({ minimum: 0 }),
       queuedCount: integerSchema({ minimum: 0 }),
       queueName: { type: "string", enum: ["exam-evaluation"] },

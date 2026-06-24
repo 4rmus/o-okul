@@ -117,10 +117,10 @@ yolculuk matrisi, UAT senaryo iskeleti ve ilgili evidence checker/template gunce
   tek repo contract olarak kilitler.
 - Faz 4: `UAT-KURUM-05` icin `scripts/check-isem-optical-pipeline-evidence.mjs` iSEM cevap
   anahtari, optik TXT, raw import arsivi, evaluation ve report snapshot ara kanitini tutar.
-  iSEM/OPTIK-7108 repo fixture tarafi gercek Excel/TXT ornekleriyle sabitlenmistir:
+  iSEM/3D/MUBA OPTIK-7108 repo fixture tarafi gercek Excel/TXT ornekleriyle sabitlenmistir:
   `apps/api/src/exam/answer-key-excel-import.service.test.ts` 90 soruluk cevap anahtarini ve
   B kitapcik permutasyonunu, `apps/worker/src/jobs/optik-7108-real-pipeline.test.ts`
-  254 satirlik TXT parse, A/B kitapcik hizalama ve ornek skor zincirini dogrular.
+  iSEM, 3D ve MUBA TXT parse, A/B kitapcik hizalama ve ornek skor zincirini dogrular.
   `UAT-KURUM-05` ve `UAT-KURUM-06` icin `scripts/check-live-exam-cycle-evidence.mjs`
   iSEM cevap anahtari, optik pipeline, raw import, report-generation ve mock'suz
   `apps/web/e2e-next/live-ui-worker-report-next.spec.ts` kanitlarini tek JSON'da baglar.

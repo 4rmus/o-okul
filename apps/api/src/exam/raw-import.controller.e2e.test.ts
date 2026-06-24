@@ -291,6 +291,52 @@ describe("RawImportController", () => {
     });
   });
 
+  it("TENANT_ADMIN cevap anahtarı göndermeden sınavın mevcut anahtarıyla evaluation işleri üretir", async () => {
+    const issued = await login("admin-a@example.test");
+
+    const response = await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/evaluation-jobs")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({})
+      .expect(201);
+
+    expect(analysisStore.evaluationCalls).toEqual([
+      { tenantId: "tenant-a", examId: "exam-a", rawImportId: "raw-import-a", answerKeyId: undefined },
+    ]);
+    expect(producer.inputs).toEqual([
+      {
+        queueName: "exam-evaluation",
+        tenantId: "tenant-a",
+        userId: "user-tenant-a",
+        entityId: "parsed-a",
+        contentHash: "raw-sha-a-answer-key-a",
+        participantId: "participant-a",
+        rawImportId: "raw-import-a",
+        answerKeyId: "answer-key-a",
+      },
+      {
+        queueName: "exam-evaluation",
+        tenantId: "tenant-a",
+        userId: "user-tenant-a",
+        entityId: "parsed-b",
+        contentHash: "raw-sha-a-answer-key-a",
+        participantId: "participant-b",
+        rawImportId: "raw-import-a",
+        answerKeyId: "answer-key-a",
+      },
+    ]);
+    expect(response.body).toMatchObject({
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      rawImportId: "raw-import-a",
+      answerKeyId: "answer-key-a",
+      rawImportSha256: "raw-sha-a",
+      matchedCount: 2,
+      queuedCount: 2,
+      queueName: "exam-evaluation",
+    });
+  });
+
   it("TENANT_ADMIN evaluation işi üretimini Idempotency-Key ile tekilleştirir", async () => {
     const issued = await login("admin-a@example.test");
     const key = "raw-import-evaluation-idempotency-a";

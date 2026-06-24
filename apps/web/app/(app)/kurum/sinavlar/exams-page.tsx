@@ -42,6 +42,13 @@ interface ExamPageReferences {
   students: StudentRecord[];
 }
 
+type CreateExamPayload = ExamWithClassFormPayload & {
+  answerKey: {
+    version: string;
+    fileBase64: string;
+  };
+};
+
 export function ExamsPage() {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
@@ -63,6 +70,8 @@ export function ExamsPage() {
   const [editingExam, setEditingExam] = useState<ExamRecord | null>(null);
   const [classSearch, setClassSearch] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [answerKeyFileName, setAnswerKeyFileName] = useState("");
+  const [answerKeyFileBase64, setAnswerKeyFileBase64] = useState("");
   const [selectedExamId, setSelectedExamId] = useState("");
   const [error, setError] = useState("");
   const rows = examsQuery.data ?? [];
@@ -82,6 +91,7 @@ export function ExamsPage() {
   const classById = new Map(classes.map((klass) => [klass.id, klass]));
   const publishedExamCount = rows.filter((exam) => exam.status === "PUBLISHED").length;
   const draftExamCount = rows.filter((exam) => exam.status === "DRAFT").length;
+  const answerKeyReadyCount = rows.filter((exam) => exam.answerKeySummary?.status && exam.answerKeySummary.status !== "MISSING").length;
   const selectedParticipantClassCount = countParticipantClasses(participants, studentById);
   const selectedAttendedCount = participants.filter((participant) => participant.status === "ATTENDED").length;
   const selectedAbsentCount = participants.filter((participant) => participant.status === "ABSENT").length;
@@ -109,6 +119,13 @@ export function ExamsPage() {
       value: formatCount(draftExamCount),
     },
     {
+      description: "Cevap anahtarı içe aktarılmış sınav",
+      key: "answer-key-ready",
+      label: "Cevap anahtarı",
+      tone: answerKeyReadyCount === rows.length && rows.length > 0 ? "success" : "warning",
+      value: `${formatCount(answerKeyReadyCount)}/${formatCount(rows.length)}`,
+    },
+    {
       description: selectedExam ? "Seçili sınav katılımcı kapsamı" : "Seçili sınav yok",
       key: "participants",
       label: "Seçili katılımcı",
@@ -126,6 +143,11 @@ export function ExamsPage() {
       key: "participant-status",
       label: `Katılım: ${formatCount(selectedAttendedCount)} katıldı / ${formatCount(selectedAbsentCount)} gelmedi`,
       tone: selectedAttendedCount > 0 ? "success" : "neutral",
+    },
+    {
+      key: "answer-key-status",
+      label: `Cevap anahtarı: ${answerKeySummaryLabel(selectedExam?.answerKeySummary)}`,
+      tone: answerKeyReady(selectedExam) ? "success" : "warning",
     },
     {
       key: "class-scope",
@@ -162,6 +184,16 @@ export function ExamsPage() {
       render: (exam) => formatDateTime(exam.startsAt),
     },
     {
+      header: "Cevap anahtarı",
+      key: "answerKey",
+      priority: "secondary",
+      render: (exam) => (
+        <StatusBadge tone={answerKeyReady(exam) ? "success" : "warning"}>
+          {answerKeySummaryLabel(exam.answerKeySummary)}
+        </StatusBadge>
+      ),
+    },
+    {
       align: "right",
       header: "İşlem",
       key: "actions",
@@ -181,7 +213,13 @@ export function ExamsPage() {
             <Pencil size={17} aria-hidden="true" />
           </button>
           {exam.status === "DRAFT" ? (
-            <button type="button" onClick={() => void handlePublish(exam)} aria-label={`${exam.title} yayınla`}>
+            <button
+              type="button"
+              disabled={!answerKeyReady(exam)}
+              onClick={() => void handlePublish(exam)}
+              aria-label={answerKeyReady(exam) ? `${exam.title} yayınla` : `${exam.title} cevap anahtarı olmadan yayınlanamaz`}
+              title={answerKeyReady(exam) ? "Yayınla" : "Cevap anahtarı olmadan yayınlanamaz"}
+            >
               <CheckCircle2 size={17} aria-hidden="true" />
             </button>
           ) : null}
@@ -246,6 +284,8 @@ export function ExamsPage() {
     setForm(emptyForm);
     setEditingExam(null);
     setClassSearch("");
+    setAnswerKeyFileName("");
+    setAnswerKeyFileBase64("");
     setError("");
     setIsFormOpen(true);
   }
@@ -270,6 +310,8 @@ export function ExamsPage() {
       classIds: classIdsFromParticipants(examParticipants, studentById),
     });
     setClassSearch("");
+    setAnswerKeyFileName("");
+    setAnswerKeyFileBase64("");
     setIsFormOpen(true);
   }
 
@@ -277,6 +319,8 @@ export function ExamsPage() {
     setForm(emptyForm);
     setEditingExam(null);
     setClassSearch("");
+    setAnswerKeyFileName("");
+    setAnswerKeyFileBase64("");
     setIsFormOpen(false);
   }
 
@@ -301,11 +345,21 @@ export function ExamsPage() {
       setError(firstFormError(parsedForm.error));
       return;
     }
+    if (!editingExam && !answerKeyFileBase64) {
+      setError("Cevap anahtarı dosyası zorunludur.");
+      return;
+    }
 
     try {
       const savedExam = editingExam
         ? await updateExam(auth.accessToken, editingExam.id, parsedForm.data)
-        : await createExam(auth.accessToken, parsedForm.data);
+        : await createExam(auth.accessToken, {
+            ...parsedForm.data,
+            answerKey: {
+              version: createAnswerKeyVersion(parsedForm.data.title),
+              fileBase64: answerKeyFileBase64,
+            },
+          });
       queryClient.setQueryData<ExamRecord[]>(queryKey, (current) => [
         savedExam,
         ...(current ?? []).filter((exam) => exam.id !== savedExam.id),
@@ -317,6 +371,12 @@ export function ExamsPage() {
     } catch (submitError) {
       setError(apiErrorMessage(submitError, "Sınav kaydedilemedi."));
     }
+  }
+
+  async function changeAnswerKeyFile(file: File | undefined) {
+    setError("");
+    setAnswerKeyFileName(file?.name ?? "");
+    setAnswerKeyFileBase64(file ? await readFileAsBase64(file) : "");
   }
 
   async function handlePublish(exam: ExamRecord) {
@@ -459,6 +519,17 @@ export function ExamsPage() {
             onChange={(event) => setForm((current) => ({ ...current, startsAt: event.target.value }))}
           />
         </Field>
+        {!editingExam ? (
+          <Field label="Cevap anahtarı dosyası" description="Excel dosyası; soru cevapları, branş, kazanım ve B kitapçık karşılığı içermelidir.">
+            <Input
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              required
+              type="file"
+              onChange={(event) => void changeAnswerKeyFile(event.target.files?.[0])}
+            />
+            {answerKeyFileName ? <p className="next-field-help">{answerKeyFileName}</p> : null}
+          </Field>
+        ) : null}
         <div className="next-field-group">
           <div className="next-class-picker-header">
             <span>Sınıflar</span>
@@ -534,7 +605,7 @@ async function loadExams(accessToken: string) {
   return apiRequest<ExamRecord[]>(accessToken, `${apiBaseUrl}/exams`);
 }
 
-async function createExam(accessToken: string, input: ExamWithClassFormPayload) {
+async function createExam(accessToken: string, input: CreateExamPayload) {
   return apiRequest<ExamRecord>(accessToken, `${apiBaseUrl}/exams`, {
     body: JSON.stringify(input),
     headers: { "content-type": "application/json" },
@@ -587,6 +658,17 @@ function examStatusTone(status: string): StatusBadgeProps["tone"] {
   if (status === "PUBLISHED") return "success";
   if (status === "DRAFT") return "warning";
   return "neutral";
+}
+
+function answerKeyReady(exam: ExamRecord | undefined) {
+  return Boolean(exam?.answerKeySummary?.status && exam.answerKeySummary.status !== "MISSING");
+}
+
+function answerKeySummaryLabel(summary: ExamRecord["answerKeySummary"] | undefined) {
+  if (!summary || summary.status === "MISSING") return "Eksik";
+  const questionCount = summary.questionCount ? `${formatCount(summary.questionCount)} soru` : "Hazır";
+  if (summary.status === "PUBLISHED") return `Yayında / ${questionCount}`;
+  return `Hazır / ${questionCount}`;
 }
 
 function formatDateTime(value: string | undefined) {
@@ -652,6 +734,41 @@ function formatBookletSummary(participants: ExamParticipantRecord[]) {
 
 function formatCount(value: number) {
   return new Intl.NumberFormat("tr-TR").format(value);
+}
+
+function createAnswerKeyVersion(examTitle: string) {
+  const date = new Date();
+  return `${slugifyVersionPart(examTitle)}-${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function slugifyVersionPart(value: string) {
+  return value
+    .replace(/ı/g, "i")
+    .replace(/İ/g, "I")
+    .replace(/ğ/g, "g")
+    .replace(/Ğ/g, "G")
+    .replace(/ü/g, "u")
+    .replace(/Ü/g, "U")
+    .replace(/ş/g, "s")
+    .replace(/Ş/g, "S")
+    .replace(/ö/g, "o")
+    .replace(/Ö/g, "O")
+    .replace(/ç/g, "c")
+    .replace(/Ç/g, "C")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "cevap-anahtari";
+}
+
+async function readFileAsBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
 }
 
 function toDateTimeLocal(value: string | undefined) {

@@ -91,6 +91,29 @@ const fixtures: RealExamFixture[] = [
       },
     },
   },
+  {
+    id: "muba-lgs-3",
+    txtPath: "../../ornek-veriler/MUBA.txt",
+    answerKeyPath: "../../ornek-veriler/MUBA - LGS - 3 Detaylı Cevap Anahtarı.xlsx",
+    expectedRows: { total: 21, valid: 20, A: 11, B: 9 },
+    expectedStudents: { A: "102", B: "101" },
+    expectedBPermutationHead: [
+      2, 1, 4, 5, 3, 7, 8, 6, 10, 11,
+      9, 13, 12, 16, 17, 18, 14, 15, 20, 19,
+      22, 21, 24, 23, 27,
+    ],
+    expectedScores: {
+      A: { correct: 89, wrong: 1, blank: 0, net: 88.6667, first20: "DBABCDACCDCCDBDBAACD" },
+      B: {
+        correct: 43,
+        wrong: 43,
+        blank: 4,
+        net: 28.6667,
+        first20: "BBABBDACBDCCCCDBCDCA",
+        firstQuestion: { answer: "B", correctAnswer: "D", status: "WRONG" },
+      },
+    },
+  },
 ];
 
 describe("OPTİK-7108 gerçek veri pipeline fixture", () => {

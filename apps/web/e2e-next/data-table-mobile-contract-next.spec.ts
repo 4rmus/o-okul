@@ -608,7 +608,8 @@ test.describe("DataTable mobil sözleşmesi", () => {
 
     await page.getByRole("button", { name: "Sınav ekle" }).click();
     const examDialog = page.getByRole("dialog", { name: "Sınav ekle" });
-    await expect(examDialog.locator(".uh-field")).toHaveCount(2);
+    await expect(examDialog.locator(".uh-field")).toHaveCount(3);
+    await expect(examDialog.getByLabel("Cevap anahtarı dosyası")).toBeVisible();
     await expect(examDialog.getByLabel("Sınıf ara")).toBeVisible();
     await expect(examDialog.locator(".next-checkbox-list .uh-checkbox")).toHaveCount(2);
     await expect(examDialog.getByRole("checkbox", { name: /8-A/ })).toBeVisible();

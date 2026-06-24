@@ -231,6 +231,13 @@ type ExamFixture = {
   tenantId: string;
   title: string;
   status: "DRAFT" | "PUBLISHED";
+  answerKeySummary?: {
+    status: "MISSING" | "DRAFT" | "PUBLISHED";
+    version?: string;
+    questionCount?: number;
+    branchCount?: number;
+    updatedAt?: string;
+  };
   startsAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -626,6 +633,13 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       tenantId: "tenant-a",
       title: "LGS deneme sınavı",
       status: "PUBLISHED",
+      answerKeySummary: {
+        status: "PUBLISHED",
+        version: "lgs-deneme-v1",
+        questionCount: 90,
+        branchCount: 6,
+        updatedAt: "2026-06-01T09:00:00.000Z",
+      },
       startsAt: "2026-06-08T09:00:00.000Z",
       createdAt: "2026-06-01T09:00:00.000Z",
       updatedAt: "2026-06-01T09:00:00.000Z",
@@ -2994,27 +3008,46 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       return;
     }
 
-    if (path === "/exams/exam-a/answer-keys/imports" && request.method() === "POST") {
+    if (path.startsWith("/exams/") && path.endsWith("/answer-keys/imports") && request.method() === "POST") {
+      const examId = path.replace("/exams/", "").replace("/answer-keys/imports", "");
       const body = request.postDataJSON() as { version: string; fileBase64: string };
-      expect(body.version).toBe(observedAnswerKeyVersion);
+      if (examId === "exam-a") {
+        expect(body.version).toBe(observedAnswerKeyVersion);
+      } else {
+        expect(body.version).toMatch(/^haziran-genel-deneme-\d{4}-\d{2}-\d{2}$/);
+        expect(body.fileBase64).toBe(Buffer.from("answer-key").toString("base64"));
+      }
+      const importedAnswerKey = {
+        id: examId === "exam-a" ? "answer-key-a" : `answer-key-${examId}`,
+        tenantId: "tenant-a",
+        examId,
+        version: body.version,
+        questionCount: 90,
+        branches: [{ branch: "LGS TÜRKÇE", questionCount: 20 }],
+        scoringConfig: { wrongPenalty: 1 / 3 },
+        status: "DRAFT",
+        createdAt: "2026-06-09T09:15:00.000Z",
+        updatedAt: "2026-06-09T09:15:00.000Z",
+      };
+      exams = exams.map((exam) => exam.id === examId
+        ? {
+            ...exam,
+            answerKeySummary: {
+              status: "DRAFT",
+              version: body.version,
+              questionCount: 90,
+              branchCount: 1,
+              updatedAt: "2026-06-09T09:15:00.000Z",
+            },
+          }
+        : exam);
       await route.fulfill({
         contentType: "application/json",
         headers: corsHeaders,
         status: 201,
         body: JSON.stringify(envelope({
           imported: true,
-          answerKey: {
-            id: "answer-key-a",
-            tenantId: "tenant-a",
-            examId: "exam-a",
-            version: body.version,
-            questionCount: 90,
-            branches: [{ branch: "LGS TÜRKÇE", questionCount: 20 }],
-            scoringConfig: { wrongPenalty: 1 / 3 },
-            status: "DRAFT",
-            createdAt: "2026-06-09T09:15:00.000Z",
-            updatedAt: "2026-06-09T09:15:00.000Z",
-          },
+          answerKey: importedAnswerKey,
           bookletVariants: [{ code: "B", questionCount: 90 }],
         })),
       });
@@ -3071,7 +3104,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
 
     if (path === "/exams/exam-a/raw-imports/raw-import-a/evaluation-jobs" && request.method() === "POST") {
       const body = request.postDataJSON() as { answerKeyId?: string };
-      expect(body.answerKeyId).toBe("answer-key-a");
+      expect(body.answerKeyId).toBeUndefined();
       await route.fulfill({
         contentType: "application/json",
         headers: corsHeaders,
@@ -3179,12 +3212,25 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     }
 
     if (path === "/exams" && request.method() === "POST") {
-      const body = request.postDataJSON() as { title: string; startsAt?: string };
+      const body = request.postDataJSON() as {
+        title: string;
+        startsAt?: string;
+        answerKey: { version: string; fileBase64: string };
+      };
+      expect(body.answerKey.version).toMatch(/^haziran-genel-deneme-\d{4}-\d{2}-\d{2}$/);
+      expect(body.answerKey.fileBase64).toBe(Buffer.from("answer-key").toString("base64"));
       const created: ExamFixture = {
         id: exams.some((exam) => exam.id === "exam-a") ? `exam-created-${exams.length + 1}` : "exam-a",
         tenantId: "tenant-a",
         title: body.title.trim(),
         status: "DRAFT",
+        answerKeySummary: {
+          status: "DRAFT",
+          version: body.answerKey.version,
+          questionCount: 90,
+          branchCount: 1,
+          updatedAt: "2026-06-09T09:15:00.000Z",
+        },
         ...(body.startsAt ? { startsAt: body.startsAt } : {}),
         createdAt: "2026-06-09T09:00:00.000Z",
         updatedAt: "2026-06-09T09:00:00.000Z",
@@ -4551,6 +4597,11 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByText("Sınav adı zorunludur.", { exact: true })).toBeVisible();
   await page.getByLabel("Sınav adı", { exact: true }).fill("Haziran Genel Deneme");
   await page.getByLabel("Başlangıç", { exact: true }).fill("2026-06-12T09:30");
+  await page.getByLabel("Cevap anahtarı dosyası").setInputFiles({
+    name: "haziran-genel-deneme.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: Buffer.from("answer-key"),
+  });
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
   await expect(page.getByRole("cell", { name: "Haziran Genel Deneme", exact: true })).toBeVisible();
   await expect(page.getByRole("row", { name: /Haziran Genel Deneme/ }).getByText("Taslak")).toBeVisible();
@@ -4585,11 +4636,6 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await clickSidebarLink(page, "Optik", /\/kurum\/optik$/);
   await expect(heading(page, { name: "Format seç ve ilerle" })).toBeVisible();
   const opticalExamSelector = page.getByLabel("Sınav seçimi");
-  await opticalExamSelector.getByLabel("Sınav seç", { exact: true }).selectOption("");
-  await opticalExamSelector.getByLabel("Yeni sınav adı", { exact: true }).fill("Optik Yeni Deneme");
-  await opticalExamSelector.getByLabel("Başlangıç", { exact: true }).fill("2026-06-13T09:00");
-  await opticalExamSelector.getByRole("button", { name: "Sınav oluştur" }).click();
-  await expect(opticalExamSelector.getByText("Seçili sınav: Optik Yeni Deneme")).toBeVisible();
   await expect(opticalExamSelector.getByLabel("Yeni sınav adı")).toHaveCount(0);
   await expect(opticalExamSelector.getByRole("button", { name: "Sınav oluştur" })).toHaveCount(0);
   await opticalExamSelector.getByLabel("Sınav seç", { exact: true }).selectOption("exam-a");
@@ -4597,28 +4643,8 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(opticalExamSelector.getByRole("button", { name: "Sınav oluştur" })).toHaveCount(0);
   await expect(page.getByLabel("Format seç ve ilerle").getByText(`Sürüm: ${parserConfigVersion}`)).toBeVisible();
   await page.getByRole("button", { name: "Seç ve ilerle" }).click();
-  const answerKeyImportPanel = page.getByLabel("Cevap anahtarı Excel import");
-  await answerKeyImportPanel.getByLabel("Cevap anahtarı dosyası").setInputFiles({
-    name: "cevap-anahtari.xlsx",
-    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    buffer: Buffer.from("answer-key"),
-  });
-  await answerKeyImportPanel.getByRole("button", { name: "Ön kontrol" }).click();
-  await expect(page.getByLabel("Cevap anahtarı özeti").getByText("90 soru doğrulandı.")).toBeVisible();
-  await expect(page.getByLabel("Cevap anahtarı özeti").getByText("B: 90 soru")).toBeVisible();
-  await page.getByRole("button", { name: "İçe aktar" }).click();
-  await expect(page.getByLabel("Cevap anahtarı özeti").getByText(/haziran-genel-deneme-\d{4}-\d{2}-\d{2} içe aktarıldı\./)).toBeVisible();
-  const manualAnswerKeyPanel = page.getByLabel("Manuel cevap anahtarı");
-  await manualAnswerKeyPanel.getByLabel("90 şık dizisi").fill("A".repeat(90));
-  await manualAnswerKeyPanel.getByLabel("B kitapçık sırası").fill(Array.from({ length: 90 }, (_unused, index) => String(90 - index)).join(" "));
-  await manualAnswerKeyPanel.getByRole("button", { name: "Gridi doldur" }).click();
-  await manualAnswerKeyPanel.getByLabel("1. soru kazanımı", { exact: true }).fill("SÖZCÜKTE ANLAM");
-  await manualAnswerKeyPanel.getByLabel("1. soru konusu", { exact: true }).fill("KONU 1");
-  await manualAnswerKeyPanel.getByRole("button", { name: "Ön kontrol" }).click();
-  await expect(manualAnswerKeyPanel.getByText("90 manuel soru doğrulandı. B: 90 soru")).toBeVisible();
-  await manualAnswerKeyPanel.getByRole("button", { name: "Kaydet" }).click();
-  await expect(manualAnswerKeyPanel.getByText("manual-key-v1 manuel kaydedildi.")).toBeVisible();
-  await page.getByRole("tab", { name: /Optik yükleme/ }).click();
+  await expect(page.getByRole("tab", { name: /Optik yükleme/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: /Cevap anahtarı/ })).toHaveCount(0);
   await page.getByLabel("Optik cevap dosyası").setInputFiles({
     name: "optik-a.txt",
     mimeType: "text/plain",

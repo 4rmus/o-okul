@@ -6,19 +6,30 @@ import { optionalIsoDateTime, optionalTrimmedString, requiredTrimmedString, zodB
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
-import { ExamService, type CreateExamInput, type CreateExamParticipantInput } from "./exam.service.js";
+import { ExamService, type CreateExamParticipantInput } from "./exam.service.js";
 
-const examBodySchema = z.object({
+const examBaseBodySchema = z.object({
   classId: optionalTrimmedString,
   classIds: z.array(requiredTrimmedString).optional(),
   startsAt: optionalIsoDateTime("EXAM_STARTS_AT_INVALID"),
   title: requiredTrimmedString,
 }).strict();
+const examCreateBodySchema = examBaseBodySchema.extend({
+  answerKey: z.object({
+    fileBase64: requiredTrimmedString,
+    scoringConfig: z.unknown().optional(),
+    version: requiredTrimmedString,
+  }).strict(),
+}).strict();
+const examUpdateBodySchema = examBaseBodySchema;
 const examParticipantBodySchema = z.object({
   bookletType: optionalTrimmedString,
   participantNo: optionalTrimmedString,
   studentId: requiredTrimmedString,
 }).strict();
+
+type ExamCreateBody = z.infer<typeof examCreateBodySchema>;
+type ExamUpdateBody = z.infer<typeof examUpdateBodySchema>;
 
 @Controller("exams")
 @UseGuards(RolesGuard)
@@ -28,7 +39,7 @@ export class ExamController {
   @Post()
   @RequireCapability("academic:manage")
   create(
-    @Body(zodBody(examBodySchema)) body: CreateExamInput,
+    @Body(zodBody(examCreateBodySchema)) body: ExamCreateBody,
     @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<ExamRecord> {
     return this.exams.create(getRequestContext(), {
@@ -36,6 +47,7 @@ export class ExamController {
       startsAt: body.startsAt,
       classId: body.classId,
       classIds: body.classIds,
+      answerKey: body.answerKey,
     }, idempotencyKey);
   }
 
@@ -55,7 +67,7 @@ export class ExamController {
   @RequireCapability("academic:manage")
   update(
     @Param("examId") examId: string,
-    @Body(zodBody(examBodySchema)) body: CreateExamInput,
+    @Body(zodBody(examUpdateBodySchema)) body: ExamUpdateBody,
   ): Promise<ExamRecord> {
     return this.exams.update(getRequestContext(), examId, {
       title: body.title,

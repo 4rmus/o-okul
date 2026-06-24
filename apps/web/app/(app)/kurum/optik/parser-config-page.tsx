@@ -4,8 +4,6 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button, DataTable, EmptyState, Field, InfoGrid, InfoItem, Input, MetricCard, MetricGrid, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn } from "@o-okul/ui";
 import type {
-  AnswerChoice,
-  AnswerKeyRecord,
   ExamParticipantRecord,
   ExamRecord,
   OpticalFormTemplateRecord,
@@ -15,29 +13,25 @@ import type {
   ReportSnapshotRecord,
   StudentRecord,
 } from "@o-okul/shared-types";
-import { CheckCircle2, Download, FileSpreadsheet, FileText, Play, RefreshCw, Search, Upload, Wand2 } from "lucide-react";
+import { CheckCircle2, Download, FileText, Play, RefreshCw, Search, Upload, Wand2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
-import { formatCourseName } from "../../_shared/academic-labels.js";
 import { buildReportAnalysisRows, type ReportAnalysisRow } from "../../_shared/report-analysis.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import {
-  answerKeyImportFormSchema,
-  examFormSchema,
   firstFormError,
   parserConfigApprovalFormSchema,
   parserConfigSuggestionFormSchema,
   quarantineLookupFormSchema,
   quarantineResolveFormSchema,
   rawImportUploadFormSchema,
-  type AnswerKeyImportFormPayload,
   type ParserConfigSuggestionFormPayload,
   type QuarantineLookupFormPayload,
   type RawImportUploadFormPayload,
 } from "../../../../src/form-validation.js";
 
-type OpticalTab = "format" | "answer-key" | "upload" | "quarantine";
+type OpticalTab = "format" | "upload" | "quarantine";
 
 interface ParserConfigSuggestionResult {
   examId: string;
@@ -55,42 +49,6 @@ interface SavedParserConfig {
   skipHeaderLines: number;
   fieldMapping: ParserConfigSuggestion["fieldMapping"];
   status: "APPROVED";
-}
-
-interface AnswerKeyImportDryRunResult {
-  dryRun: true;
-  examId: string;
-  version: string;
-  questionCount: number;
-  branches: Array<{ branch: string; questionCount: number }>;
-  bookletVariants: Array<{ code: string; questionCount: number }>;
-  wouldImport: boolean;
-}
-
-interface AnswerKeyImportResult {
-  imported: true;
-  answerKey: AnswerKeyRecord;
-  bookletVariants: Array<{ code: string; questionCount: number }>;
-}
-
-interface ManualAnswerKeyDryRunResult {
-  tenantId: string;
-  examId: string;
-  version: string;
-  questionCount: number;
-  branches: Array<{ branch: string; questionCount: number }>;
-  bookletVariants: Array<{ code: string; questionCount: number }>;
-  status: "DRY_RUN";
-}
-
-type ManualAnswerChoice = "" | AnswerChoice;
-
-interface ManualAnswerKeyQuestion {
-  questionNo: number;
-  correctAnswer: ManualAnswerChoice;
-  branch: string;
-  outcomeCode: string;
-  topic: string;
 }
 
 interface RawImportUploadResult {
@@ -171,14 +129,11 @@ interface ReportGenerationQueueResult {
 
 const tabs: Array<{ id: OpticalTab; label: string }> = [
   { id: "format", label: "1. Format" },
-  { id: "answer-key", label: "2. Cevap anahtarı" },
-  { id: "upload", label: "3. Optik yükleme" },
-  { id: "quarantine", label: "4. Eşleşmeyen satırlar" },
+  { id: "upload", label: "2. Optik yükleme" },
+  { id: "quarantine", label: "3. Eşleşmeyen satırlar ve rapor" },
 ];
 
 const defaultOpticalTab: OpticalTab = "format";
-
-const answerChoices: AnswerChoice[] = ["A", "B", "C", "D", "E"];
 
 interface OpticalFormPreviewRow {
   section: string;
@@ -250,10 +205,6 @@ function createPresetParserVersion(form: OpticalFormPreset) {
   return `${slug}-v1`;
 }
 
-function createAnswerKeyVersion(examTitle: string | undefined, uploadedAt: Date) {
-  return `${slugifyVersionPart(examTitle || "cevap-anahtari")}-${formatLocalDate(uploadedAt)}`;
-}
-
 function slugifyVersionPart(value: string) {
   return value
     .replace(/ı/g, "i")
@@ -273,13 +224,6 @@ function slugifyVersionPart(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "cevap-anahtari";
-}
-
-function formatLocalDate(value: Date) {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
 
 function formatSelectedFileNotice(fileName: string) {
@@ -325,8 +269,6 @@ export function ParserConfigPage() {
   const [activeTab, setActiveTab] = useState<OpticalTab>(() => readOpticalTab(searchParams));
   const [examId, setExamId] = useState(() => searchParams.get("examId") ?? "");
   const [exams, setExams] = useState<ExamRecord[]>([]);
-  const [newExamTitle, setNewExamTitle] = useState("");
-  const [newExamStartsAt, setNewExamStartsAt] = useState("");
   const [version, setVersion] = useState(defaultParserConfigVersion);
   const [fileName, setFileName] = useState("");
   const [fileBase64, setFileBase64] = useState("");
@@ -338,19 +280,6 @@ export function ParserConfigPage() {
   const [templateName, setTemplateName] = useState("");
   const [templateVersion, setTemplateVersion] = useState("template-v1");
   const [templateApplyVersion, setTemplateApplyVersion] = useState(defaultParserConfigVersion);
-  const [answerKeyFileName, setAnswerKeyFileName] = useState("");
-  const [answerKeyFileBase64, setAnswerKeyFileBase64] = useState("");
-  const [answerKeyUploadedAt, setAnswerKeyUploadedAt] = useState(() => new Date());
-  const [answerKeyVersionTouched, setAnswerKeyVersionTouched] = useState(false);
-  const [answerKeyVersion, setAnswerKeyVersion] = useState(() => createAnswerKeyVersion(undefined, new Date()));
-  const [answerKeyDryRun, setAnswerKeyDryRun] = useState<AnswerKeyImportDryRunResult | null>(null);
-  const [answerKeyImport, setAnswerKeyImport] = useState<AnswerKeyImportResult | null>(null);
-  const [manualAnswerKeyVersion, setManualAnswerKeyVersion] = useState("manual-key-v1");
-  const [manualAnswerText, setManualAnswerText] = useState("");
-  const [manualBPermutationText, setManualBPermutationText] = useState("");
-  const [manualQuestions, setManualQuestions] = useState<ManualAnswerKeyQuestion[]>(() => createManualAnswerKeyGrid());
-  const [manualDryRun, setManualDryRun] = useState<ManualAnswerKeyDryRunResult | null>(null);
-  const [manualAnswerKey, setManualAnswerKey] = useState<AnswerKeyRecord | null>(null);
   const [rawImportFileName, setRawImportFileName] = useState("");
   const [rawImportFileBase64, setRawImportFileBase64] = useState("");
   const [rawImportParserVersion, setRawImportParserVersion] = useState(defaultParserConfigVersion);
@@ -410,11 +339,6 @@ export function ParserConfigPage() {
     }
   }, [searchParams, searchParamsKey]);
 
-  useEffect(() => {
-    if (answerKeyVersionTouched) return;
-    setAnswerKeyVersion(createAnswerKeyVersion(selectedExam?.title, answerKeyUploadedAt));
-  }, [answerKeyUploadedAt, answerKeyVersionTouched, selectedExam?.title]);
-
   function selectOpticalTab(tab: OpticalTab, nextExamId = examId) {
     setActiveTab(tab);
     writeOpticalWorkspaceToUrl({ examId: nextExamId, tab });
@@ -428,32 +352,6 @@ export function ParserConfigPage() {
     setSuggestion(null);
     setSavedConfig(null);
     writeOpticalWorkspaceToUrl({ examId: nextExamId, tab: activeTab });
-  }
-
-  async function submitCreateExam(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!auth) return;
-
-    setError("");
-    if (!newExamStartsAt.trim()) {
-      setError("Başlangıç zorunludur.");
-      return;
-    }
-    const parsedForm = examFormSchema.safeParse({ title: newExamTitle, startsAt: newExamStartsAt });
-    if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
-      return;
-    }
-    try {
-      const created = await createOpticalExam(auth.accessToken, parsedForm.data);
-      setExams((current) => [created, ...current.filter((exam) => exam.id !== created.id)]);
-      setExamId(created.id);
-      writeOpticalWorkspaceToUrl({ examId: created.id, tab: activeTab });
-      setNewExamTitle("");
-      setNewExamStartsAt("");
-    } catch (examError) {
-      setError(apiErrorMessage(examError, "Sınav oluşturulamadı."));
-    }
   }
 
   async function submitSuggestion(event: FormEvent<HTMLFormElement>) {
@@ -486,7 +384,7 @@ export function ParserConfigPage() {
       setVersion(approved.version);
       setRawImportParserVersion(approved.version);
       setTemplateApplyVersion(approved.version);
-      selectOpticalTab("answer-key", result.examId);
+      selectOpticalTab("upload", result.examId);
     } catch (suggestionError) {
       setError(apiErrorMessage(suggestionError, "Optik dosya formatı kaydedilemedi."));
     }
@@ -500,7 +398,7 @@ export function ParserConfigPage() {
     setSavedConfig(null);
     const normalizedExamId = examId.trim();
     if (!normalizedExamId) {
-      setError("Sınav seçilmeli veya yeni sınav oluşturulmalıdır.");
+      setError("Sınav seçilmelidir.");
       return;
     }
     try {
@@ -514,7 +412,7 @@ export function ParserConfigPage() {
       setFileBase64("");
       setRawImportParserVersion(approved.version);
       setTemplateApplyVersion(approved.version);
-      selectOpticalTab("answer-key", result.examId);
+      selectOpticalTab("upload", result.examId);
     } catch (presetError) {
       setError(apiErrorMessage(presetError, "TXT/DAT form yapısı seçilemedi."));
     }
@@ -599,119 +497,6 @@ export function ParserConfigPage() {
       setRawImportParserVersion(applied.version);
     } catch (templateError) {
       setError(apiErrorMessage(templateError, "Optik form şablonu sınava uygulanamadı."));
-    }
-  }
-
-  async function changeAnswerKeyFile(file: File | undefined) {
-    setError("");
-    setAnswerKeyDryRun(null);
-    setAnswerKeyImport(null);
-    setAnswerKeyFileName(file?.name ?? "");
-    if (!file) {
-      setAnswerKeyFileBase64("");
-      return;
-    }
-
-    const uploadedAt = new Date();
-    setAnswerKeyUploadedAt(uploadedAt);
-    if (!answerKeyVersionTouched || !answerKeyVersion.trim()) {
-      setAnswerKeyVersion(createAnswerKeyVersion(selectedExam?.title, uploadedAt));
-    }
-    setAnswerKeyFileBase64(await readFileAsBase64(file));
-  }
-
-  async function submitAnswerKeyDryRun(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!auth) return;
-
-    setError("");
-    const parsedForm = answerKeyImportFormSchema.safeParse({ examId, version: answerKeyVersion, fileBase64: answerKeyFileBase64 });
-    if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
-      return;
-    }
-    try {
-      setAnswerKeyDryRun(await dryRunAnswerKeyImport(auth.accessToken, parsedForm.data));
-      setAnswerKeyImport(null);
-    } catch (dryRunError) {
-      setError(apiErrorMessage(dryRunError, "Cevap anahtarı doğrulanamadı."));
-    }
-  }
-
-  async function submitAnswerKeyImport() {
-    if (!auth) return;
-
-    setError("");
-    const parsedForm = answerKeyImportFormSchema.safeParse({ examId, version: answerKeyVersion, fileBase64: answerKeyFileBase64 });
-    if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
-      return;
-    }
-    try {
-      setAnswerKeyImport(await importAnswerKey(auth.accessToken, parsedForm.data));
-    } catch (importError) {
-      setError(apiErrorMessage(importError, "Cevap anahtarı içe aktarılamadı."));
-    }
-  }
-
-  function applyManualAnswerText() {
-    const choices = manualAnswerText.toUpperCase().replace(/[^ABCDE]/g, "").split("") as AnswerChoice[];
-    setManualQuestions((current) =>
-      current.map((question, index) => ({
-        ...question,
-        correctAnswer: choices[index] ?? question.correctAnswer,
-      })),
-    );
-  }
-
-  function updateManualQuestion(questionNo: number, patch: Partial<ManualAnswerKeyQuestion>) {
-    setManualDryRun(null);
-    setManualAnswerKey(null);
-    setManualQuestions((current) =>
-      current.map((question) => (question.questionNo === questionNo ? { ...question, ...patch } : question)),
-    );
-  }
-
-  async function submitManualAnswerKey(dryRun: boolean) {
-    if (!auth) return;
-
-    setError("");
-    const missing = manualQuestions.find((question) => !question.correctAnswer || !question.branch.trim());
-    if (missing) {
-      setError(`${missing.questionNo}. soru için şık ve branş zorunludur.`);
-      return;
-    }
-    const questions = manualQuestions.map((question) => ({
-      questionNo: question.questionNo,
-      correctAnswer: question.correctAnswer as AnswerChoice,
-      branch: question.branch,
-      ...(question.outcomeCode.trim() ? { outcomeCode: question.outcomeCode.trim() } : {}),
-      ...(question.topic.trim() ? { topic: question.topic.trim() } : {}),
-    }));
-    let bookletVariants: Array<{ code: string; permutation: number[] }>;
-    try {
-      bookletVariants = parseManualBPermutation(manualBPermutationText, questions.length);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "B kitapçık sırası geçerli değildir.");
-      return;
-    }
-
-    try {
-      const result = await saveManualAnswerKey(auth.accessToken, {
-        examId,
-        version: manualAnswerKeyVersion,
-        questions,
-        bookletVariants,
-        dryRun,
-      });
-      if (dryRun) {
-        setManualDryRun(result as ManualAnswerKeyDryRunResult);
-        setManualAnswerKey(null);
-      } else {
-        setManualAnswerKey(result as AnswerKeyRecord);
-      }
-    } catch (manualError) {
-      setError(apiErrorMessage(manualError, dryRun ? "Manuel cevap anahtarı doğrulanamadı." : "Manuel cevap anahtarı kaydedilemedi."));
     }
   }
 
@@ -812,11 +597,9 @@ export function ParserConfigPage() {
     }
     setIsEvaluationSubmitting(true);
     try {
-      const answerKeyId = answerKeyImport?.answerKey.id ?? manualAnswerKey?.id;
       const jobs = await enqueueRawImportEvaluation(auth.accessToken, {
         examId,
         rawImportId,
-        answerKeyId,
       });
       setEvaluationJobs(jobs);
       const rawImportSha = jobs.rawImportSha256 ?? rawImport?.rawImport.sha256;
@@ -973,23 +756,18 @@ export function ParserConfigPage() {
   return (
     <PageFrame
       title="Optik İşlemleri"
-      subtitle="Sınavı seç, optik formatı kaydet, cevap anahtarını hazırla ve yüklenen satırları tek akışta kontrol et."
+      subtitle="Cevap anahtarı hazır sınavı seç, optik formatı kaydet ve TXT/DAT yüklemesini tek akışta kontrol et."
     >
       <OpticalExamSelector
         examId={examId}
         exams={exams}
-        newExamStartsAt={newExamStartsAt}
-        newExamTitle={newExamTitle}
         selectedExam={selectedExam}
         onExamChange={selectOpticalExam}
-        onNewExamStartsAtChange={setNewExamStartsAt}
-        onNewExamTitleChange={setNewExamTitle}
-        onSubmit={submitCreateExam}
       />
       <Panel
         aria-label="Optik operasyon"
         className="next-optical-workspace"
-        description="Sınav formatı, cevap anahtarı, optik yükleme, eşleşmeyen satır çözümü ve rapor üretimi aynı görev yüzeyinde ilerler."
+        description="Cevap anahtarı sınav oluşturulurken hazırlanır; bu ekran yalnız format, optik yükleme, eşleşmeyen satır çözümü ve rapor üretimini yürütür."
         title="Optik Operasyon Akışı"
       >
         <Tabs label="Optik sekmeleri" className="next-optical-tabs">
@@ -1049,33 +827,6 @@ export function ParserConfigPage() {
             onVersionChange={setVersion}
           />
         ) : null}
-        {activeTab === "answer-key" ? (
-          <AnswerKeySetup
-            answerKeyDryRun={answerKeyDryRun}
-            answerKeyFileName={answerKeyFileName}
-            answerKeyImport={answerKeyImport}
-            answerKeyVersion={answerKeyVersion}
-            manualAnswerKey={manualAnswerKey}
-            manualAnswerKeyVersion={manualAnswerKeyVersion}
-            manualAnswerText={manualAnswerText}
-            manualBPermutationText={manualBPermutationText}
-            manualDryRun={manualDryRun}
-            manualQuestions={manualQuestions}
-            onAnswerKeyDryRunSubmit={submitAnswerKeyDryRun}
-            onAnswerKeyFileChange={changeAnswerKeyFile}
-            onAnswerKeyImport={submitAnswerKeyImport}
-            onAnswerKeyVersionChange={(value) => {
-              setAnswerKeyVersionTouched(true);
-              setAnswerKeyVersion(value);
-            }}
-            onManualAnswerKeyVersionChange={setManualAnswerKeyVersion}
-            onManualAnswerTextApply={applyManualAnswerText}
-            onManualAnswerTextChange={setManualAnswerText}
-            onManualBPermutationTextChange={setManualBPermutationText}
-            onManualQuestionChange={updateManualQuestion}
-            onManualSave={submitManualAnswerKey}
-          />
-        ) : null}
         {activeTab === "upload" ? (
           <OpticalUploadPanel
             evaluationJobs={evaluationJobs}
@@ -1133,41 +884,27 @@ export function ParserConfigPage() {
 interface OpticalExamSelectorProps {
   examId: string;
   exams: ExamRecord[];
-  newExamStartsAt: string;
-  newExamTitle: string;
   selectedExam?: ExamRecord;
   onExamChange: (value: string) => void;
-  onNewExamStartsAtChange: (value: string) => void;
-  onNewExamTitleChange: (value: string) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }
 
 function OpticalExamSelector({
   examId,
   exams,
-  newExamStartsAt,
-  newExamTitle,
   selectedExam,
   onExamChange,
-  onNewExamStartsAtChange,
-  onNewExamTitleChange,
-  onSubmit,
 }: OpticalExamSelectorProps) {
-  const showCreateExamFields = !selectedExam;
-
   return (
     <section className="next-optical-selector-grid" aria-label="Sınav seçimi">
       <Panel
-        as="form"
-        aria-label="Sınav seç veya oluştur"
+        aria-label="Sınav seç"
         className="next-optical-selector-panel"
-        description="Optik iş akışını mevcut sınava bağla veya yeni sınav kaydı oluştur."
-        title="Sınav seç veya oluştur"
-        onSubmit={(event) => void onSubmit(event)}
+        description="Cevap anahtarı hazırlanmış sınavı seç. Yeni sınav ve cevap anahtarı Sınavlar ekranında oluşturulur."
+        title="Sınav seç"
       >
         <Field label="Sınav seç">
           <Select value={examId} onChange={(event) => onExamChange(event.target.value)}>
-            <option value="">Yeni sınav oluştur</option>
+            <option value="">Sınav seç</option>
             {exams.map((exam) => (
               <option key={exam.id} value={exam.id}>
                 {exam.title}
@@ -1176,26 +913,7 @@ function OpticalExamSelector({
           </Select>
         </Field>
         {selectedExam ? <p>{`Seçili sınav: ${selectedExam.title}`}</p> : null}
-        {showCreateExamFields ? (
-          <>
-            <p>Yeni sınav için ad ve başlangıç tarihi gir.</p>
-            <Field label="Yeni sınav adı">
-              <Input required value={newExamTitle} onChange={(event) => onNewExamTitleChange(event.target.value)} />
-            </Field>
-            <Field label="Başlangıç">
-              <Input
-                required
-                type="datetime-local"
-                value={newExamStartsAt}
-                onChange={(event) => onNewExamStartsAtChange(event.target.value)}
-              />
-            </Field>
-            <Button type="submit">
-              <CheckCircle2 size={17} aria-hidden="true" />
-              Sınav oluştur
-            </Button>
-          </>
-        ) : null}
+        {!selectedExam ? <p>Sınav ve cevap anahtarı hazırlandıktan sonra optik yükleme burada başlar.</p> : null}
       </Panel>
     </section>
   );
@@ -1355,253 +1073,6 @@ function OpticalFormatSetup({
           </Button>
         </div>
       </details>
-    </section>
-  );
-}
-
-interface AnswerKeySetupProps {
-  answerKeyDryRun: AnswerKeyImportDryRunResult | null;
-  answerKeyFileName: string;
-  answerKeyImport: AnswerKeyImportResult | null;
-  answerKeyVersion: string;
-  manualAnswerKey: AnswerKeyRecord | null;
-  manualAnswerKeyVersion: string;
-  manualAnswerText: string;
-  manualBPermutationText: string;
-  manualDryRun: ManualAnswerKeyDryRunResult | null;
-  manualQuestions: ManualAnswerKeyQuestion[];
-  onAnswerKeyDryRunSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onAnswerKeyFileChange: (file: File | undefined) => void | Promise<void>;
-  onAnswerKeyImport: () => void | Promise<void>;
-  onAnswerKeyVersionChange: (value: string) => void;
-  onManualAnswerKeyVersionChange: (value: string) => void;
-  onManualAnswerTextApply: () => void;
-  onManualAnswerTextChange: (value: string) => void;
-  onManualBPermutationTextChange: (value: string) => void;
-  onManualQuestionChange: (questionNo: number, patch: Partial<ManualAnswerKeyQuestion>) => void;
-  onManualSave: (dryRun: boolean) => void | Promise<void>;
-}
-
-type AnswerKeyBranchRow = AnswerKeyImportDryRunResult["branches"][number];
-
-const answerKeyBranchColumns: Array<DataTableColumn<AnswerKeyBranchRow>> = [
-  {
-    header: "Branş",
-    key: "branch",
-    mobilePriority: "primary",
-    priority: "primary",
-    render: (branch) => formatCourseName(branch.branch),
-  },
-  {
-    align: "right",
-    header: "Soru",
-    key: "questionCount",
-    mobilePriority: "secondary",
-    priority: "primary",
-    render: (branch) => branch.questionCount,
-  },
-];
-
-function AnswerKeySetup({
-  answerKeyDryRun,
-  answerKeyFileName,
-  answerKeyImport,
-  answerKeyVersion,
-  manualAnswerKey,
-  manualAnswerKeyVersion,
-  manualAnswerText,
-  manualBPermutationText,
-  manualDryRun,
-  manualQuestions,
-  onAnswerKeyDryRunSubmit,
-  onAnswerKeyFileChange,
-  onAnswerKeyImport,
-  onAnswerKeyVersionChange,
-  onManualAnswerKeyVersionChange,
-  onManualAnswerTextApply,
-  onManualAnswerTextChange,
-  onManualBPermutationTextChange,
-  onManualQuestionChange,
-  onManualSave,
-}: AnswerKeySetupProps) {
-  const manualAnswerKeyColumns: Array<DataTableColumn<ManualAnswerKeyQuestion>> = [
-    {
-      align: "right",
-      header: "Soru",
-      key: "question",
-      mobilePriority: "primary",
-      priority: "primary",
-      render: (question) => question.questionNo,
-      sticky: "left",
-    },
-    {
-      header: "Şık",
-      key: "answer",
-      mobilePriority: "primary",
-      priority: "primary",
-      render: (question) => (
-        <Select
-          aria-label={`${question.questionNo}. soru şıkkı`}
-          value={question.correctAnswer}
-          onChange={(event) => onManualQuestionChange(question.questionNo, { correctAnswer: event.target.value as ManualAnswerChoice })}
-        >
-          <option value="">Seç</option>
-          {answerChoices.map((choice) => (
-            <option key={choice} value={choice}>
-              {choice}
-            </option>
-          ))}
-        </Select>
-      ),
-    },
-    {
-      header: "Branş",
-      key: "branch",
-      mobilePriority: "secondary",
-      priority: "secondary",
-      render: (question) => (
-        <Input
-          aria-label={`${question.questionNo}. soru branşı`}
-          value={question.branch}
-          onChange={(event) => onManualQuestionChange(question.questionNo, { branch: event.target.value })}
-        />
-      ),
-    },
-    {
-      header: "Kazanım",
-      key: "outcome",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (question) => (
-        <Input
-          aria-label={`${question.questionNo}. soru kazanımı`}
-          value={question.outcomeCode}
-          onChange={(event) => onManualQuestionChange(question.questionNo, { outcomeCode: event.target.value })}
-        />
-      ),
-    },
-    {
-      header: "Konu",
-      key: "topic",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (question) => (
-        <Input
-          aria-label={`${question.questionNo}. soru konusu`}
-          value={question.topic}
-          onChange={(event) => onManualQuestionChange(question.questionNo, { topic: event.target.value })}
-        />
-      ),
-    },
-  ];
-
-  return (
-    <section className="next-optical-answer-key-grid" aria-label="Cevap anahtarı">
-      <Panel
-        as="form"
-        aria-label="Cevap anahtarı Excel import"
-        className="next-optical-answer-key-panel"
-        description="Excel cevap anahtarını ön kontrolden geçir ve doğrulanan sürümü içe aktar."
-        title="Excel ile hazırla"
-        onSubmit={(event) => void onAnswerKeyDryRunSubmit(event)}
-      >
-        <Field label="Anahtar sürümü">
-          <Input required value={answerKeyVersion} onChange={(event) => onAnswerKeyVersionChange(event.target.value)} />
-        </Field>
-        <Field label="Cevap anahtarı dosyası">
-          <Input accept=".xlsx" type="file" onChange={(event) => void onAnswerKeyFileChange(event.target.files?.[0])} />
-        </Field>
-        {answerKeyFileName ? <p>{answerKeyFileName}</p> : null}
-        <Button type="submit">
-          <FileSpreadsheet size={17} aria-hidden="true" />
-          Ön kontrol
-        </Button>
-        <Button disabled={!answerKeyDryRun} type="button" onClick={() => void onAnswerKeyImport()}>
-          <Upload size={17} aria-hidden="true" />
-          İçe aktar
-        </Button>
-      </Panel>
-      <Panel
-        aria-label="Cevap anahtarı özeti"
-        className="next-optical-answer-key-panel"
-        description="Ön kontrol sonucu, kitapçık varyantları ve branş soru dağılımı."
-        title="Anahtar özeti"
-      >
-        {answerKeyDryRun ? (
-          <>
-            <p aria-live="polite" role="status">{answerKeyDryRun.questionCount} soru doğrulandı.</p>
-            <p>{answerKeyDryRun.bookletVariants.map((variant) => `${variant.code}: ${variant.questionCount} soru`).join(", ")}</p>
-            <DataTable
-              caption="Cevap anahtarı branş dağılımı"
-              columns={answerKeyBranchColumns}
-              density="compact"
-              getRowKey={(branch) => branch.branch}
-              rows={answerKeyDryRun.branches}
-            />
-          </>
-        ) : (
-          <p>Excel dosyası ön kontrol bekliyor.</p>
-        )}
-        {answerKeyImport ? <p aria-live="polite" role="status">Excel cevap anahtarı içe aktarıldı.</p> : null}
-      </Panel>
-      <Panel
-        aria-label="Manuel cevap anahtarı"
-        className="next-optical-answer-key-panel next-optical-answer-key-panel--wide"
-        description="Şık dizisini, kitapçık sırasını ve soru bazlı branş/kazanım bağlamını elle düzenle."
-        title="Manuel giriş"
-      >
-        <div className="next-inline-form">
-          <Field label="Manuel sürüm">
-            <Input required value={manualAnswerKeyVersion} onChange={(event) => onManualAnswerKeyVersionChange(event.target.value)} />
-          </Field>
-          <Field label="Şık dizisi">
-            <Input
-              aria-label="90 şık dizisi"
-              value={manualAnswerText}
-              onChange={(event) => onManualAnswerTextChange(event.target.value)}
-              placeholder="ABCDE..."
-            />
-          </Field>
-          <Field label="B kitapçık sırası">
-            <Input
-              aria-label="B kitapçık sırası"
-              value={manualBPermutationText}
-              onChange={(event) => onManualBPermutationTextChange(event.target.value)}
-              placeholder="90 89 ... 1"
-            />
-          </Field>
-          <Button type="button" onClick={onManualAnswerTextApply}>
-            Gridi doldur
-          </Button>
-        </div>
-        <div className="next-grid-scroll">
-          <DataTable
-            caption="Manuel cevap anahtarı grid'i"
-            columns={manualAnswerKeyColumns}
-            density="compact"
-            description="Soru bazlı şık, branş, kazanım ve konu bilgisi."
-            getRowKey={(question) => String(question.questionNo)}
-            rows={manualQuestions}
-          />
-        </div>
-        <div className="next-row-actions">
-          <Button type="button" onClick={() => void onManualSave(true)}>
-            Ön kontrol
-          </Button>
-          <Button disabled={!manualDryRun} type="button" onClick={() => void onManualSave(false)}>
-            Kaydet
-          </Button>
-        </div>
-        {manualDryRun ? (
-          <p aria-live="polite" role="status">
-            {manualDryRun.questionCount} manuel soru doğrulandı.
-            {manualDryRun.bookletVariants.length
-              ? ` ${manualDryRun.bookletVariants.map((variant) => `${variant.code}: ${variant.questionCount} soru`).join(", ")}`
-              : ""}
-          </p>
-        ) : null}
-        {manualAnswerKey ? <p aria-live="polite" role="status">Manuel cevap anahtarı kaydedildi.</p> : null}
-      </Panel>
     </section>
   );
 }
@@ -2385,21 +1856,6 @@ async function loadOpticalExams(accessToken: string) {
   return apiRequest<ExamRecord[]>(accessToken, `${apiBaseUrl}/exams`);
 }
 
-async function createOpticalExam(accessToken: string, input: { title: string; startsAt?: string }) {
-  return apiRequest<ExamRecord>(
-    accessToken,
-    `${apiBaseUrl}/exams`,
-    {
-      body: JSON.stringify({
-        title: input.title,
-        ...(input.startsAt ? { startsAt: input.startsAt } : {}),
-      }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    },
-  );
-}
-
 async function approveParserConfig(
   accessToken: string,
   examId: string,
@@ -2446,63 +1902,6 @@ async function applyOpticalFormTemplate(
     `${apiBaseUrl}/optical-form-templates/${encodeURIComponent(templateId)}/apply`,
     {
       body: JSON.stringify(input),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    },
-  );
-}
-
-async function dryRunAnswerKeyImport(accessToken: string, input: AnswerKeyImportFormPayload) {
-  return apiRequest<AnswerKeyImportDryRunResult>(
-    accessToken,
-    `${apiBaseUrl}/exams/${encodeURIComponent(input.examId)}/answer-keys/imports/dry-run`,
-    {
-      body: JSON.stringify({ version: input.version, fileBase64: input.fileBase64 }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    },
-  );
-}
-
-async function importAnswerKey(accessToken: string, input: AnswerKeyImportFormPayload) {
-  return apiRequest<AnswerKeyImportResult>(
-    accessToken,
-    `${apiBaseUrl}/exams/${encodeURIComponent(input.examId)}/answer-keys/imports`,
-    {
-      body: JSON.stringify({ version: input.version, fileBase64: input.fileBase64 }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    },
-  );
-}
-
-async function saveManualAnswerKey(
-  accessToken: string,
-  input: {
-    examId: string;
-    version: string;
-    questions: Array<{
-      questionNo: number;
-      correctAnswer: AnswerChoice;
-      branch: string;
-      outcomeCode?: string;
-      topic?: string;
-    }>;
-    bookletVariants: Array<{ code: string; permutation: number[] }>;
-    dryRun: boolean;
-  },
-) {
-  return apiRequest<AnswerKeyRecord | ManualAnswerKeyDryRunResult>(
-    accessToken,
-    `${apiBaseUrl}/exams/${encodeURIComponent(input.examId)}/answer-keys`,
-    {
-      body: JSON.stringify({
-        version: input.version,
-        questions: input.questions,
-        scoringConfig: { wrongPenalty: 1 / 3 },
-        bookletVariants: input.bookletVariants,
-        dryRun: input.dryRun,
-      }),
       headers: { "content-type": "application/json" },
       method: "POST",
     },
@@ -2817,43 +2216,4 @@ function createFieldPreviewRow(section: string, field: ParserConfigSuggestion["f
     start: `Kolon ${field.column + 1}`,
     end: `Kolon ${field.column + 1}`,
   };
-}
-
-function createManualAnswerKeyGrid(): ManualAnswerKeyQuestion[] {
-  return Array.from({ length: 90 }, (_unused, index) => {
-    const questionNo = index + 1;
-    return {
-      questionNo,
-      correctAnswer: "",
-      branch: defaultCourseBranch(questionNo),
-      outcomeCode: "",
-      topic: "",
-    };
-  });
-}
-
-function defaultCourseBranch(questionNo: number): string {
-  if (questionNo <= 20) return "Türkçe";
-  if (questionNo <= 30) return "İnkılap";
-  if (questionNo <= 40) return "Din";
-  if (questionNo <= 50) return "İngilizce";
-  if (questionNo <= 70) return "Matematik";
-  return "Fen";
-}
-
-function parseManualBPermutation(value: string, questionCount: number): Array<{ code: string; permutation: number[] }> {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return [];
-  }
-  const permutation = trimmed.split(/[\s,;]+/).filter(Boolean).map((part) => Number(part));
-  const unique = new Set(permutation);
-  const valid =
-    permutation.length === questionCount &&
-    unique.size === questionCount &&
-    permutation.every((item) => Number.isInteger(item) && item >= 1 && item <= questionCount);
-  if (!valid) {
-    throw new Error(`B kitapçık sırası ${questionCount} benzersiz sayı olmalıdır.`);
-  }
-  return [{ code: "B", permutation }];
 }

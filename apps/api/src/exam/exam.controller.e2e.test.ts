@@ -4,8 +4,14 @@ import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { ExamParticipantRecord, ExamRecord } from "@o-okul/shared-types";
+import type { AnswerKeyRecord, ExamParticipantRecord, ExamRecord } from "@o-okul/shared-types";
 import { AppModule } from "../app.module.js";
+import { AnswerKeyExcelImportService } from "./answer-key-excel-import.service.js";
+import {
+  answerKeyRepositoryToken,
+  type AnswerKeyRepository,
+  type SaveAnswerKeyInput,
+} from "./answer-key.service.js";
 import {
   examParticipantRepositoryToken,
   examRepositoryToken,
@@ -21,15 +27,34 @@ describe("ExamController", () => {
   let server: Parameters<typeof request>[0];
   let repository: FakeExamRepository;
   let participants: FakeExamParticipantRepository;
+  let answerKeys: FakeAnswerKeyRepository;
 
   beforeAll(async () => {
     repository = new FakeExamRepository();
     participants = new FakeExamParticipantRepository();
+    answerKeys = new FakeAnswerKeyRepository();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(examRepositoryToken)
       .useValue(repository)
       .overrideProvider(examParticipantRepositoryToken)
       .useValue(participants)
+      .overrideProvider(answerKeyRepositoryToken)
+      .useValue(answerKeys)
+      .overrideProvider(AnswerKeyExcelImportService)
+      .useValue({
+        import(context: { tenantId?: string }, input: { examId?: string; version?: string }) {
+          const answerKey = answerKeys.add({
+            tenantId: context.tenantId ?? "tenant-a",
+            examId: input.examId ?? "exam-a",
+            version: input.version ?? "answer-key-v1",
+          });
+          return Promise.resolve({
+            imported: true,
+            answerKey,
+            bookletVariants: [],
+          });
+        },
+      })
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -40,35 +65,61 @@ describe("ExamController", () => {
   beforeEach(() => {
     repository.exams.clear();
     participants.participants.clear();
+    answerKeys.records.clear();
   });
 
   afterAll(async () => {
     await app.close();
   });
 
-  it("TENANT_ADMIN deneme sınavı oluşturur", async () => {
+  it("TENANT_ADMIN cevap anahtarı olmadan sınav oluşturamaz", async () => {
+    const issued = await login("admin-a@example.test");
+
+    await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ title: "Mart Genel Deneme", startsAt: "2026-03-15T09:00:00.000Z" })
+      .expect(422);
+
+    expect(repository.exams.size).toBe(0);
+  });
+
+  it("TENANT_ADMIN cevap anahtarıyla tek istekte deneme sınavı oluşturur", async () => {
     const issued = await login("admin-a@example.test");
 
     const response = await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ title: "Mart Genel Deneme", startsAt: "2026-03-15T09:00:00.000Z" })
+      .send({
+        title: "Anahtarlı Deneme",
+        startsAt: "2026-03-15T09:00:00.000Z",
+        answerKey: {
+          version: "anahtarli-deneme-v1",
+          fileBase64: Buffer.from("fake-xlsx").toString("base64"),
+        },
+      })
       .expect(201);
 
     expect(response.body).toMatchObject({
       tenantId: "tenant-a",
-      title: "Mart Genel Deneme",
+      title: "Anahtarlı Deneme",
       status: "DRAFT",
+      answerKeySummary: {
+        status: "DRAFT",
+        version: "anahtarli-deneme-v1",
+        questionCount: 1,
+        branchCount: 1,
+      },
       startsAt: "2026-03-15T09:00:00.000Z",
     });
-    expect(typeof response.body.id).toBe("string");
     expect(repository.exams.size).toBe(1);
+    expect(answerKeys.records.size).toBe(1);
   });
 
   it("TENANT_ADMIN sınav oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
     const issued = await login("admin-a@example.test");
     const key = "exam-create-idempotency-a";
-    const body = { title: "Idempotent Deneme", startsAt: "2026-03-15T09:00:00.000Z" };
+    const body = examCreateBody("Idempotent Deneme", { startsAt: "2026-03-15T09:00:00.000Z" });
 
     const first = await request(server)
       .post("/exams")
@@ -111,7 +162,7 @@ describe("ExamController", () => {
     const created = await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ title: "8. Sınıflar Genel Deneme", startsAt: "2026-03-15T09:00:00.000Z", classIds: ["class-a", extraClass.body.id] })
+      .send(examCreateBody("8. Sınıflar Genel Deneme", { startsAt: "2026-03-15T09:00:00.000Z", classIds: ["class-a", extraClass.body.id] }))
       .expect(201);
 
     const list = await request(server)
@@ -143,7 +194,7 @@ describe("ExamController", () => {
     const created = await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ title: "Düzeltilecek Deneme" })
+      .send(examCreateBody("Düzeltilecek Deneme"))
       .expect(201);
 
     const updated = await request(server)
@@ -174,7 +225,7 @@ describe("ExamController", () => {
     const response = await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ title: "  " })
+      .send(examCreateBody("  "))
       .expect(422);
 
     expect(response.body).toMatchObject({
@@ -196,7 +247,7 @@ describe("ExamController", () => {
     const response = await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ title: "Geçersiz tarihli deneme", startsAt: "2026-02-29T09:00" })
+      .send(examCreateBody("Geçersiz tarihli deneme", { startsAt: "2026-02-29T09:00" }))
       .expect(422);
 
     expect(response.body).toMatchObject({
@@ -220,14 +271,14 @@ describe("ExamController", () => {
     await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send({ title: "Nisan Deneme" })
+      .send(examCreateBody("Nisan Deneme"))
       .expect(201);
 
     const teacher = await login("teacher-a@example.test");
     await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${teacher.accessToken}`)
-      .send({ title: "Yetkisiz" })
+      .send(examCreateBody("Yetkisiz"))
       .expect(403);
 
     const list = await request(server)
@@ -251,12 +302,24 @@ describe("ExamController", () => {
       .expect(404);
   });
 
-  it("TENANT_ADMIN sınavı yayınlar", async () => {
+  it("TENANT_ADMIN cevap anahtarı olmayan sınavı yayınlayamaz", async () => {
+    const issued = await login("admin-a@example.test");
+    const created = await repository.create({ tenantId: "tenant-a", title: "Cevap Anahtarı Bekleyen" });
+
+    await request(server)
+      .post(`/exams/${created.id}/publish`)
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(400);
+
+    expect(repository.exams.get(created.id)?.status).toBe("DRAFT");
+  });
+
+  it("TENANT_ADMIN cevap anahtarı olan sınavı yayınlar", async () => {
     const issued = await login("admin-a@example.test");
     const created = await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ title: "Yayınlanacak" })
+      .send(examCreateBody("Yayınlanacak"))
       .expect(201);
 
     const published = await request(server)
@@ -264,7 +327,16 @@ describe("ExamController", () => {
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .expect(201);
 
-    expect(published.body).toMatchObject({ id: created.body.id, status: "PUBLISHED" });
+    expect(published.body).toMatchObject({
+      id: created.body.id,
+      status: "PUBLISHED",
+      answerKeySummary: {
+        status: "DRAFT",
+        version: "answer-key-v1",
+        questionCount: 1,
+        branchCount: 1,
+      },
+    });
   });
 
   it("TENANT_ADMIN sınav yayınlamayı Idempotency-Key ile tekilleştirir", async () => {
@@ -273,7 +345,7 @@ describe("ExamController", () => {
     const created = await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ title: "Idempotent Yayın" })
+      .send(examCreateBody("Idempotent Yayın"))
       .expect(201);
 
     const first = await request(server)
@@ -303,7 +375,7 @@ describe("ExamController", () => {
     const created = await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ title: "Silinecek Deneme" })
+      .send(examCreateBody("Silinecek Deneme"))
       .expect(201);
 
     await request(server)
@@ -323,7 +395,7 @@ describe("ExamController", () => {
     const created = await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send({ title: "Yetkisiz Silme Denemesi" })
+      .send(examCreateBody("Yetkisiz Silme Denemesi"))
       .expect(201);
 
     const teacher = await login("teacher-a@example.test");
@@ -340,7 +412,7 @@ describe("ExamController", () => {
     const created = await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send({ title: "Katılımcılı Deneme" })
+      .send(examCreateBody("Katılımcılı Deneme"))
       .expect(201);
 
     const added = await request(server)
@@ -373,7 +445,7 @@ describe("ExamController", () => {
     const created = await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send({ title: "Idempotent Katılımcı" })
+      .send(examCreateBody("Idempotent Katılımcı"))
       .expect(201);
     const body = { studentId: "student-a", participantNo: "43", bookletType: "A" };
 
@@ -407,7 +479,7 @@ describe("ExamController", () => {
     const created = await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send({ title: "Yetki Denemesi" })
+      .send(examCreateBody("Yetki Denemesi"))
       .expect(201);
 
     const teacher = await login("teacher-a@example.test");
@@ -423,7 +495,7 @@ describe("ExamController", () => {
     const created = await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${admin.accessToken}`)
-      .send({ title: "Tekil Katılımcı" })
+      .send(examCreateBody("Tekil Katılımcı"))
       .expect(201);
 
     await request(server)
@@ -443,6 +515,17 @@ describe("ExamController", () => {
   async function login(email: string) {
     const response = await request(server).post("/auth/login").send({ email, password: "password" }).expect(200);
     return response.body as { accessToken: string };
+  }
+
+  function examCreateBody(title: string, extra: Record<string, unknown> = {}) {
+    return {
+      title,
+      answerKey: {
+        version: "answer-key-v1",
+        fileBase64: Buffer.from("fake-xlsx").toString("base64"),
+      },
+      ...extra,
+    };
   }
 });
 
@@ -541,5 +624,68 @@ class FakeExamParticipantRepository implements ExamParticipantRepository {
     };
     this.participants.set(participant.id, participant);
     return participant;
+  }
+}
+
+class FakeAnswerKeyRepository implements AnswerKeyRepository {
+  records = new Map<string, AnswerKeyRecord>();
+
+  add(input: { tenantId: string; examId: string; version: string; published?: boolean }): AnswerKeyRecord {
+    const now = "2026-03-01T00:00:00.000Z";
+    const record: AnswerKeyRecord = {
+      id: randomUUID(),
+      tenantId: input.tenantId,
+      examId: input.examId,
+      version: input.version,
+      questionCount: 1,
+      branches: [{ branch: "LGS TÜRKÇE", questionCount: 1 }],
+      scoringConfig: { wrongPenalty: 0.25 },
+      status: input.published ? "PUBLISHED" : "DRAFT",
+      ...(input.published ? { publishedAt: now } : {}),
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.records.set(record.id, record);
+    return record;
+  }
+
+  async create(input: SaveAnswerKeyInput): Promise<AnswerKeyRecord> {
+    if (
+      [...this.records.values()].some(
+        (record) =>
+          record.tenantId === input.tenantId &&
+          record.examId === input.examId &&
+          record.version === input.version,
+      )
+    ) {
+      throw new Error("ANSWER_KEY_VERSION_CONFLICT");
+    }
+    return this.add({
+      tenantId: input.tenantId,
+      examId: input.examId,
+      version: input.version,
+    });
+  }
+
+  async list(tenantId: string, examId: string): Promise<AnswerKeyRecord[]> {
+    return [...this.records.values()].filter(
+      (record) => record.tenantId === tenantId && record.examId === examId,
+    );
+  }
+
+  async publish(tenantId: string, examId: string, version: string): Promise<AnswerKeyRecord | undefined> {
+    const record = [...this.records.values()].find(
+      (item) => item.tenantId === tenantId && item.examId === examId && item.version === version,
+    );
+    if (!record) return undefined;
+
+    const published: AnswerKeyRecord = {
+      ...record,
+      status: "PUBLISHED",
+      publishedAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    };
+    this.records.set(record.id, published);
+    return published;
   }
 }

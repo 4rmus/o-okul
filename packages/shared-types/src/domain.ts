@@ -1933,11 +1933,20 @@ export interface ParserConfigRecord {
 
 export type ExamStatus = "DRAFT" | "PUBLISHED";
 
+export interface ExamAnswerKeySummary {
+  status: "MISSING" | "DRAFT" | "PUBLISHED";
+  version?: string;
+  questionCount?: number;
+  branchCount?: number;
+  updatedAt?: string;
+}
+
 export interface ExamRecord {
   id: string;
   tenantId: string;
   title: string;
   status: string;
+  answerKeySummary?: ExamAnswerKeySummary;
   startsAt?: string;
   createdAt: string;
   updatedAt: string;

@@ -7,7 +7,7 @@ import {
   NotFoundException,
   Optional,
 } from "@nestjs/common";
-import type { ExamParticipantRecord, ExamRecord } from "@o-okul/shared-types";
+import type { AnswerKeyRecord, ExamParticipantRecord, ExamRecord } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
@@ -18,6 +18,8 @@ import {
   teacherAssignmentStoreToken,
 } from "../school/teacher-assignment-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
+import { AnswerKeyExcelImportService } from "./answer-key-excel-import.service.js";
+import { answerKeyRepositoryToken, type AnswerKeyRepository } from "./answer-key.service.js";
 
 export const examRepositoryToken = Symbol("ExamRepository");
 export const examParticipantRepositoryToken = Symbol("ExamParticipantRepository");
@@ -55,14 +57,26 @@ export interface ExamParticipantRepository {
   create(input: CreateExamParticipantRepositoryInput): Promise<ExamParticipantRecord>;
 }
 
+interface CreateExamAnswerKeyInput {
+  version?: string;
+  fileBase64?: string;
+  scoringConfig?: unknown;
+}
+
 export interface CreateExamInput {
   title?: string;
   startsAt?: string;
   classId?: string;
   classIds?: string[];
+  answerKey: CreateExamAnswerKeyInput;
 }
 
-export interface UpdateExamInput extends CreateExamInput {}
+export interface UpdateExamInput {
+  title?: string;
+  startsAt?: string;
+  classId?: string;
+  classIds?: string[];
+}
 
 export interface CreateExamParticipantInput {
   studentId?: string;
@@ -83,6 +97,9 @@ export class ExamService {
     private readonly classes: ClassStore,
     @Inject(teacherAssignmentStoreToken)
     private readonly teacherAssignments: TeacherAssignmentStore,
+    @Inject(answerKeyRepositoryToken)
+    private readonly answerKeys: AnswerKeyRepository,
+    private readonly answerKeyImports: AnswerKeyExcelImportService,
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
@@ -108,6 +125,7 @@ export class ExamService {
     const title = requiredString(input.title, "EXAM_TITLE_REQUIRED");
     const startsAt = optionalIso(input.startsAt, "EXAM_STARTS_AT_INVALID");
     const classIds = normalizeClassIds(input);
+    const answerKey = requireCreateAnswerKey(input.answerKey);
 
     for (const classId of classIds) {
       await this.requireClass(tenantId, classId);
@@ -125,18 +143,30 @@ export class ExamService {
     for (const classId of classIds) {
       await this.addClassParticipants(context, tenantId, exam.id, classId);
     }
-    return exam;
+    try {
+      await this.answerKeyImports.import(context, {
+        examId: exam.id,
+        version: answerKey.version,
+        fileBase64: answerKey.fileBase64,
+        scoringConfig: answerKey.scoringConfig,
+      });
+    } catch (error) {
+      await this.repository.delete(tenantId, exam.id).catch(() => undefined);
+      throw error;
+    }
+    return this.withAnswerKeySummary(tenantId, exam);
   }
 
   async list(context: RequestContext): Promise<ExamRecord[]> {
     const tenantId = requireTenant(context);
-    return this.repository.list(tenantId);
+    const exams = await this.repository.list(tenantId);
+    return Promise.all(exams.map((exam) => this.withAnswerKeySummary(tenantId, exam)));
   }
 
   async get(context: RequestContext, examId: string | undefined): Promise<ExamRecord> {
     const tenantId = requireTenant(context);
     const id = requiredString(examId, "EXAM_ID_REQUIRED");
-    return this.requireExam(tenantId, id);
+    return this.withAnswerKeySummary(tenantId, await this.requireExam(tenantId, id));
   }
 
   async update(context: RequestContext, examId: string | undefined, input: UpdateExamInput): Promise<ExamRecord> {
@@ -165,7 +195,7 @@ export class ExamService {
     for (const classId of classIds) {
       await this.addClassParticipants(context, tenantId, exam.id, classId);
     }
-    return exam;
+    return this.withAnswerKeySummary(tenantId, exam);
   }
 
   async publish(
@@ -187,6 +217,8 @@ export class ExamService {
   private async publishOnce(context: RequestContext, examId: string | undefined): Promise<ExamRecord> {
     const tenantId = requireTenant(context);
     const id = requiredString(examId, "EXAM_ID_REQUIRED");
+    await this.requireExam(tenantId, id);
+    await this.requireAnswerKey(tenantId, id);
     const exam = await this.repository.publish(tenantId, id);
     if (!exam) {
       throw new NotFoundException("EXAM_NOT_FOUND");
@@ -199,7 +231,22 @@ export class ExamService {
       action: "exam.published",
       diff: { status: exam.status },
     });
-    return exam;
+    return this.withAnswerKeySummary(tenantId, exam);
+  }
+
+  private async requireAnswerKey(tenantId: string, examId: string): Promise<void> {
+    const answerKeys = await this.answerKeys.list(tenantId, examId);
+    if (answerKeys.length === 0) {
+      throw new BadRequestException("EXAM_ANSWER_KEY_REQUIRED");
+    }
+  }
+
+  private async withAnswerKeySummary(tenantId: string, exam: ExamRecord): Promise<ExamRecord> {
+    const answerKeys = await this.answerKeys.list(tenantId, exam.id);
+    return {
+      ...exam,
+      answerKeySummary: summarizeExamAnswerKeys(answerKeys),
+    };
   }
 
   async delete(context: RequestContext, examId: string | undefined): Promise<void> {
@@ -344,6 +391,17 @@ function requiredString(value: string | undefined, errorCode: string): string {
   return trimmed;
 }
 
+function requireCreateAnswerKey(input: CreateExamInput["answerKey"] | undefined): Required<Pick<CreateExamAnswerKeyInput, "version" | "fileBase64">> & Pick<CreateExamAnswerKeyInput, "scoringConfig"> {
+  if (!input) {
+    throw new BadRequestException("EXAM_ANSWER_KEY_REQUIRED");
+  }
+  return {
+    version: requiredString(input.version, "ANSWER_KEY_VERSION_REQUIRED"),
+    fileBase64: requiredString(input.fileBase64, "ANSWER_KEY_FILE_REQUIRED"),
+    scoringConfig: input.scoringConfig,
+  };
+}
+
 function optionalIso(value: string | undefined, errorCode: string): string | undefined {
   const trimmed = value?.trim();
   if (!trimmed) {
@@ -370,9 +428,29 @@ function optionalString(value: string | undefined): string | undefined {
   return trimmed || undefined;
 }
 
-function normalizeClassIds(input: CreateExamInput): string[] {
+function normalizeClassIds(input: Pick<CreateExamInput, "classId" | "classIds">): string[] {
   const values = input.classIds ?? (input.classId ? [input.classId] : []);
   return [...new Set(values.map((value) => optionalString(value)).filter((value): value is string => Boolean(value)))];
+}
+
+function summarizeExamAnswerKeys(answerKeys: AnswerKeyRecord[]): NonNullable<ExamRecord["answerKeySummary"]> {
+  const selected = [...answerKeys].sort(compareAnswerKeysForSummary)[0];
+  if (!selected) {
+    return { status: "MISSING" };
+  }
+  return {
+    status: selected.status === "PUBLISHED" ? "PUBLISHED" : "DRAFT",
+    version: selected.version,
+    questionCount: selected.questionCount,
+    branchCount: selected.branches.length,
+    updatedAt: selected.updatedAt,
+  };
+}
+
+function compareAnswerKeysForSummary(left: AnswerKeyRecord, right: AnswerKeyRecord): number {
+  if (left.status === "PUBLISHED" && right.status !== "PUBLISHED") return -1;
+  if (right.status === "PUBLISHED" && left.status !== "PUBLISHED") return 1;
+  return Date.parse(right.updatedAt) - Date.parse(left.updatedAt);
 }
 
 function isUniqueViolation(error: unknown): boolean {

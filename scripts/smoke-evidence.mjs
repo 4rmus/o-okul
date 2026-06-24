@@ -582,12 +582,12 @@ function requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleE
   const expectedIsemFixture = {
     answerKeyQuestionCount: 90,
     bookletVariantCount: 1,
-    studentCount: 254,
-    participantCount: 254,
-    matchedCount: 254,
-    quarantineCount: 0,
-    examResultCount: 254,
-    reportResultCount: 254,
+    studentCount: 21,
+    participantCount: 21,
+    matchedCount: 20,
+    quarantineCount: 1,
+    examResultCount: 20,
+    reportResultCount: 20,
   };
 
   requireObjectKeySet(payload, failures, label, "isemOpticalPipelineSmoke", [
@@ -648,8 +648,12 @@ function requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleE
     requireIntegerAtLeast(counts, failures, `${label}.counts.guardianPortalUserLinkCount`, "guardianPortalUserLinkCount", 1);
     requireIntegerAtLeast(counts, failures, `${label}.counts.guardianLinkCount`, "guardianLinkCount", 1);
 
-    if (Number.isInteger(counts.participantCount) && counts.matchedCount !== counts.participantCount) {
-      failures.push(`${label}.counts.matchedCount participantCount ile eşleşmeli.`);
+    if (
+      Number.isInteger(counts.participantCount) &&
+      Number.isInteger(counts.quarantineCount) &&
+      counts.matchedCount + counts.quarantineCount !== counts.participantCount
+    ) {
+      failures.push(`${label}.counts.matchedCount + quarantineCount participantCount ile eşleşmeli.`);
     }
     if (Number.isInteger(counts.matchedCount) && counts.examResultCount !== counts.matchedCount) {
       failures.push(`${label}.counts.examResultCount matchedCount ile eşleşmeli.`);

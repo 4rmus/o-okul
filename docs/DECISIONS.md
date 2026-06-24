@@ -47,7 +47,7 @@ Son kontrol: 2026-05-29
 ### DEC-20260529-04 — Sınav kapsamı
 
 Durum: Onaylı
-Karar: TXT/DAT optik değerlendirme hedef kapsamda kalır. iSEM/OPTİK-7108 gerçek TXT ve cevap
+Karar: TXT/DAT optik değerlendirme hedef kapsamda kalır. iSEM/3D/MUBA OPTİK-7108 gerçek TXT ve cevap
 anahtarı dosyaları repo fixture'ı olarak kabul edilmiştir; bu kabul online sınav, OMR/foto optik
 okuma veya yeni optik format ailesi kapsamı açmaz.
 Kaynak: Kullanıcı görüşmesi / master plan §2 ve §5.
@@ -57,9 +57,9 @@ Kanıt: `MASTER_PLAN.md` §2/§5; `docs/phase-3-report.md` sentetik pilot fixtur
 `apps/worker/src/jobs/optik-7108-real-pipeline.test.ts`;
 `scripts/smoke-isem-optical-pipeline-live.mjs`.
 Etkilenen ADR: Yok
-Açık soru: iSEM fixture tarafı kapandı; staging/prod tam sınav döngüsü, pilot kabulü ve farklı pilot
+Açık soru: iSEM/3D/MUBA fixture tarafı kapandı; staging/prod tam sınav döngüsü, pilot kabulü ve farklı pilot
 format isteği ayrı evidence/DEC kapısıdır.
-Son kontrol: 2026-06-21
+Son kontrol: 2026-06-24
 
 ### DEC-20260529-05 — Kota davranışı
 

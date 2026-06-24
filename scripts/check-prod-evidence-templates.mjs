@@ -1184,17 +1184,17 @@ runLiveExamCycleNegativeCheck({
 runLiveExamCycleNegativeCheck({
   label: "Live exam cycle participant count exact negative",
   path: "docs/evidence-templates/live-exam-cycle.participant-count.tmp.json",
-  expectedFailure: "examCycle.participantCount 254 olmali.",
+  expectedFailure: "examCycle.participantCount 21 olmali.",
   mutate: (fixture) => {
-    fixture.examCycle.participantCount = 253;
+    fixture.examCycle.participantCount = 20;
   },
 });
 runLiveExamCycleNegativeCheck({
   label: "Live exam cycle quarantine count exact negative",
   path: "docs/evidence-templates/live-exam-cycle.quarantine-count.tmp.json",
-  expectedFailure: "examCycle.quarantineCount 0 olmali.",
+  expectedFailure: "examCycle.quarantineCount 1 olmali.",
   mutate: (fixture) => {
-    fixture.examCycle.quarantineCount = 1;
+    fixture.examCycle.quarantineCount = 0;
   },
 });
 runLiveExamCycleNegativeCheck({
@@ -2177,7 +2177,7 @@ runProductionSummaryNegativeCheck({
   expectedFailure:
     "reports.liveExamCycle.examCycle.participantCount reports.isemOpticalPipeline.counts.participantCount ile eşleşmeli.",
   mutate: (fixture) => {
-    fixture.reports.liveExamCycle.examCycle.participantCount = 253;
+    fixture.reports.liveExamCycle.examCycle.participantCount = 20;
   },
 });
 runProductionSummaryNegativeCheck({

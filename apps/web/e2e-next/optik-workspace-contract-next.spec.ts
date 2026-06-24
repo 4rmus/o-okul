@@ -36,12 +36,12 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
   test("aktif sınav ve adım URL state ile korunur", async ({ page }) => {
     await openWithOptikMocks(page, "/kurum/optik?examId=exam-optik&tab=upload");
 
-    await expect(page.getByRole("tab", { name: "3. Optik yükleme" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "2. Optik yükleme" })).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-optik");
     await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("upload");
 
-    await page.getByRole("tab", { name: "4. Eşleşmeyen satırlar" }).click();
-    await expect(page.getByRole("tab", { name: "4. Eşleşmeyen satırlar" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", { name: "3. Eşleşmeyen satırlar ve rapor" }).click();
+    await expect(page.getByRole("tab", { name: "3. Eşleşmeyen satırlar ve rapor" })).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-optik");
     await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("quarantine");
 
@@ -86,42 +86,11 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await expect(formPreviewTable.getByRole("columnheader", { name: "Bölüm" })).toBeVisible();
     await expect(formPreviewTable.locator('th[data-column-key="section"]')).toHaveAttribute("data-mobile-priority", "primary");
 
-    await page.getByRole("tab", { name: "2. Cevap anahtarı" }).click();
-    const answerKeyPanel = page.getByRole("tabpanel", { name: "2. Cevap anahtarı" });
-    await expect(answerKeyPanel.getByLabel("Cevap anahtarı Excel import")).toContainText("Excel ile hazırla");
-    await expect(answerKeyPanel.getByLabel("Manuel cevap anahtarı")).toContainText("Manuel giriş");
-    await answerKeyPanel.getByLabel("Cevap anahtarı dosyası").setInputFiles({
-      buffer: Buffer.from("answer-key"),
-      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      name: "cevap-anahtari.xlsx",
-    });
-    await answerKeyPanel.getByRole("button", { name: "Ön kontrol" }).first().click();
-    const answerKeySummary = answerKeyPanel.getByLabel("Cevap anahtarı özeti");
-    await expect(answerKeySummary).toContainText("90 soru doğrulandı.");
-    await expect(answerKeySummary.getByRole("status").filter({ hasText: "90 soru doğrulandı." })).toBeVisible();
-    await expect(answerKeySummary.getByRole("table", { name: "Cevap anahtarı branş dağılımı" })).toBeVisible();
-    await answerKeyPanel.getByRole("button", { name: "İçe aktar" }).click();
-    await expect(answerKeySummary).toContainText("Excel cevap anahtarı içe aktarıldı.");
-    await expect(answerKeySummary.getByRole("status").filter({ hasText: "Excel cevap anahtarı içe aktarıldı." })).toBeVisible();
-    await expect(answerKeySummary).not.toContainText("optik-answer-key-v1");
-
-    const manualAnswerKeyPanel = answerKeyPanel.getByLabel("Manuel cevap anahtarı");
-    const manualGrid = manualAnswerKeyPanel.getByRole("table", { name: "Manuel cevap anahtarı grid'i" });
-    await expect(manualGrid.getByRole("columnheader", { name: "Soru" })).toBeVisible();
-    await expect(manualGrid.locator('th[data-column-key="outcome"]')).toHaveAttribute("data-mobile-priority", "hidden");
-    await manualAnswerKeyPanel.getByLabel("90 şık dizisi").fill("A".repeat(90));
-    await manualAnswerKeyPanel.getByLabel("B kitapçık sırası").fill(Array.from({ length: 90 }, (_unused, index) => String(90 - index)).join(" "));
-    await manualAnswerKeyPanel.getByRole("button", { name: "Gridi doldur" }).click();
-    await manualAnswerKeyPanel.getByRole("button", { name: "Ön kontrol" }).click();
-    await expect(manualAnswerKeyPanel).toContainText("90 manuel soru doğrulandı. B: 90 soru");
-    await expect(manualAnswerKeyPanel.getByRole("status").filter({ hasText: "90 manuel soru doğrulandı. B: 90 soru" })).toBeVisible();
-    await manualAnswerKeyPanel.getByRole("button", { name: "Kaydet" }).click();
-    await expect(manualAnswerKeyPanel).toContainText("Manuel cevap anahtarı kaydedildi.");
-    await expect(manualAnswerKeyPanel.getByRole("status").filter({ hasText: "Manuel cevap anahtarı kaydedildi." })).toBeVisible();
-    await expect(manualAnswerKeyPanel).not.toContainText("manual-key-v1");
-
-    await page.getByRole("tab", { name: "3. Optik yükleme" }).click();
-    const uploadPanel = page.getByRole("tabpanel", { name: "3. Optik yükleme" });
+    await expect(page.getByRole("tab", { name: "2. Optik yükleme" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /Cevap anahtarı/ })).toHaveCount(0);
+    await page.getByRole("button", { name: "Seç ve ilerle" }).click();
+    await expect(page.getByRole("tab", { name: "2. Optik yükleme" })).toHaveAttribute("aria-selected", "true");
+    const uploadPanel = page.getByRole("tabpanel", { name: "2. Optik yükleme" });
     await uploadPanel.getByLabel("Optik cevap dosyası").setInputFiles({
       buffer: Buffer.from("optik cevap satiri"),
       mimeType: "text/plain",
@@ -145,13 +114,13 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
       await expect(page.locator("body")).not.toContainText(value);
     }
     await uploadResult.getByRole("button", { name: "Analizi başlat" }).click();
-    await expect(page.getByRole("tab", { name: "4. Eşleşmeyen satırlar" })).toHaveAttribute("aria-selected", "true");
-    await page.getByRole("tab", { name: "3. Optik yükleme" }).click();
+    await expect(page.getByRole("tab", { name: "3. Eşleşmeyen satırlar ve rapor" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", { name: "2. Optik yükleme" }).click();
     await expect(uploadResult.getByRole("status").filter({ hasText: "1/1 analiz işi kuyruğa alındı." })).toBeVisible();
     await expect(uploadResult.getByRole("status").filter({ hasText: "1/1 analiz sonucu tamamlandı." })).toBeVisible();
 
-    await page.getByRole("tab", { name: "4. Eşleşmeyen satırlar" }).click();
-    const optikReportPanel = page.getByRole("tabpanel", { name: "4. Eşleşmeyen satırlar" });
+    await page.getByRole("tab", { name: "3. Eşleşmeyen satırlar ve rapor" }).click();
+    const optikReportPanel = page.getByRole("tabpanel", { name: "3. Eşleşmeyen satırlar ve rapor" });
     await optikReportPanel.getByRole("button", { name: "Eşleşmeyen satırları getir" }).click();
     const quarantineTable = page.getByRole("table", { name: "Eşleşmeyen satır listesi" });
     await expect(quarantineTable).toContainText("7");
@@ -239,6 +208,14 @@ async function installOptikApiMocks(page: Page) {
 
     const url = new URL(route.request().url());
     const pathName = url.pathname.replace(/^\/api\/v1/, "");
+    if (route.request().method() === "POST" && pathName === "/exams/exam-optik/parser-configs/suggestions") {
+      await fulfillData(route, createParserConfigSuggestionResult());
+      return;
+    }
+    if (route.request().method() === "POST" && pathName === "/exams/exam-optik/parser-configs/approvals") {
+      await fulfillData(route, createSavedParserConfig());
+      return;
+    }
     if (route.request().method() === "POST" && pathName === "/exams/exam-optik/raw-imports") {
       await fulfillData(route, createRawImportUploadResult());
       return;
@@ -313,6 +290,13 @@ function createExams() {
   return [
     {
       courseId: "course-math",
+      answerKeySummary: {
+        branchCount: 6,
+        questionCount: 90,
+        status: "PUBLISHED",
+        updatedAt: "2026-06-10T09:00:00.000Z",
+        version: "optik-answer-key-v1",
+      },
       createdAt: "2026-06-10T09:00:00.000Z",
       id: "exam-optik",
       startsAt: "2026-06-17T09:00:00.000Z",
@@ -385,6 +369,31 @@ function createExamParticipants() {
       updatedAt: "2026-06-10T09:00:00.000Z",
     },
   ];
+}
+
+function createParserConfigSuggestionResult() {
+  return {
+    examId: "exam-optik",
+    status: "suggested",
+    suggestion: {
+      delimiter: "fixed",
+      encoding: "utf8",
+      fieldMapping: createOpticalTemplates()[0]!.fieldMapping,
+      skipHeaderLines: 0,
+    },
+  };
+}
+
+function createSavedParserConfig() {
+  const suggestion = createParserConfigSuggestionResult().suggestion;
+
+  return {
+    ...suggestion,
+    examId: "exam-optik",
+    status: "APPROVED",
+    tenantId: "tenant-optik",
+    version: "optik-form-7108-v1",
+  };
 }
 
 function createRawImportUploadResult() {

@@ -26,7 +26,7 @@ const s3Bucket = process.env.S3_BUCKET ?? "o-okul-local";
 const queuePrefix = process.env.QUEUE_PREFIX ?? `raw-import-smoke-${Date.now()}`;
 const s3Credentials = resolveS3Credentials();
 const runId = randomUUID();
-const tenantId = "tenant-a";
+const tenantId = `tenant-raw-import-smoke-${runId}`;
 const userId = `user-raw-import-smoke-${runId}`;
 const membershipId = `membership-raw-import-smoke-${runId}`;
 const examId = `exam-smoke-${runId}`;
@@ -130,8 +130,8 @@ async function seedExam() {
     await client.query(
       `INSERT INTO "Tenant" ("id", "name", "slug", "status", "updatedAt")
        VALUES ($1, $2, $3, 'ACTIVE', now())
-       ON CONFLICT ("id") DO UPDATE SET "updatedAt" = now()`,
-      [tenantId, "Smoke Tenant A", "smoke-tenant-a"],
+       ON CONFLICT ("id") DO UPDATE SET "status" = 'ACTIVE', "updatedAt" = now()`,
+      [tenantId, "Raw Import Smoke Tenant", `raw-import-smoke-${runId}`],
     );
     await client.query(
       `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
@@ -140,7 +140,8 @@ async function seedExam() {
     );
     await client.query(
       `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
-       VALUES ($1, $2, $3, 'TENANT_ADMIN', now())`,
+       VALUES ($1, $2, $3, 'TENANT_ADMIN', now())
+       ON CONFLICT ("tenantId", "userId", "role") DO UPDATE SET "updatedAt" = now()`,
       [membershipId, tenantId, userId],
     );
     await client.query(

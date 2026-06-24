@@ -343,7 +343,7 @@ const negativeCases = [
       ...isemOpticalPipeline,
       counts: {
         ...isemOpticalPipeline.counts,
-        participantCount: 253,
+        participantCount: 20,
       },
     },
     "isem_optical_pipeline_smoke",
@@ -354,7 +354,7 @@ const negativeCases = [
       ...isemOpticalPipeline,
       counts: {
         ...isemOpticalPipeline.counts,
-        quarantineCount: 1,
+        quarantineCount: 0,
       },
     },
     "isem_optical_pipeline_smoke",

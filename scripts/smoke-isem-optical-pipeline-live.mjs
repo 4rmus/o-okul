@@ -38,14 +38,19 @@ const runId = randomUUID();
 const tenantId = `tenant-isem-optical-smoke-${runId}`;
 const userId = `user-isem-optical-smoke-${runId}`;
 const membershipId = `membership-isem-optical-smoke-${runId}`;
-const examId = `exam-isem-optical-smoke-${runId}`;
+let examId = `exam-isem-optical-smoke-${runId}`;
 const classAId = `class-isem-optical-smoke-a-${runId}`;
 const classBId = `class-isem-optical-smoke-b-${runId}`;
 const parserConfigVersion = "optik-7108-lgs-v1";
 const answerKeyVersion = "isem-lgs-1-v1";
 const txtPath = "ornek-veriler/iSEM .txt";
 const answerKeyPath = "ornek-veriler/iSEM - LGS - 1 Detaylı Cevap Anahtarı.xlsx";
-const sampleStudentNos = ["331", "638"];
+const expectedRawRowCount = 21;
+const expectedMatchedCount = 20;
+const expectedQuarantineCount = 1;
+const expectedParticipantCount = 21;
+const expectedValidBookletCounts = { A: 11, B: 9 };
+const sampleStudentNos = ["102", "101"];
 const smokeEmailDomain = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL_DOMAIN ?? "example.test";
 const smokeEmail = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL ?? `isem-optical-smoke-${runId}@${smokeEmailDomain}`;
 const smokePassword = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_PASSWORD ?? "password";
@@ -56,8 +61,8 @@ const uiWorkerEvidencePath =
 const environment = process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown";
 const commandPassed = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_COMMAND ?? "pnpm isem-optical-pipeline:smoke";
 const expectedScores = new Map([
-  ["331", { correct: 56, wrong: 32, blank: 2, net: 45.3333 }],
-  ["638", { correct: 44, wrong: 31, blank: 15, net: 33.6667 }],
+  ["102", { correct: 79, wrong: 10, blank: 1, net: 75.6667 }],
+  ["101", { correct: 44, wrong: 31, blank: 15, net: 33.6667 }],
 ]);
 
 process.env.DATABASE_URL = databaseUrl;
@@ -121,35 +126,50 @@ try {
 
   const baseUrl = await getBaseUrl(app);
   const token = await login(baseUrl);
-  const answerKey = await importAnswerKey(baseUrl, token);
+  const answerKey = await createExamWithAnswerKey(baseUrl, token);
+  await seedExamScopedInput(opticalRows);
   const rawImportPayload = await uploadRawImport(baseUrl, token, opticalContent);
   const rawImport = rawImportPayload.rawImport;
   const parseJob = rawImportPayload.parseJob;
   await s3.send(new HeadObjectCommand({ Bucket: s3Bucket, Key: rawImport.s3Key }));
 
-  const summary = await waitForSummary(baseUrl, token, rawImport.id, 254, 20_000);
+  const summary = await waitForSummary(baseUrl, token, rawImport.id, expectedRawRowCount, 20_000);
   if (
-    summary.matchedCount !== 254 ||
-    summary.quarantinedCount !== 0 ||
-    summary.totalRows !== 254 ||
-    summary.quarantineReasons.length !== 0
+    summary.matchedCount !== expectedMatchedCount ||
+    summary.quarantinedCount !== expectedQuarantineCount ||
+    summary.totalRows !== expectedRawRowCount ||
+    summary.quarantineReasons.length !== 1 ||
+    summary.quarantineReasons[0]?.reason !== "ANSWER_PARSE_INVALID" ||
+    summary.quarantineReasons[0]?.count !== expectedQuarantineCount
   ) {
     throw new Error(
       `ISEM_OPTICAL_PARSE_SUMMARY_MISMATCH: totalRows ${summary.totalRows}, matched ${summary.matchedCount}, quarantined ${summary.quarantinedCount}`,
     );
   }
 
-  const evaluation = await enqueueEvaluation(baseUrl, token, rawImport.id, answerKey.id);
-  if (evaluation.queuedCount !== 254 || evaluation.matchedCount !== 254 || evaluation.jobs.length !== 254) {
+  const evaluation = await enqueueEvaluation(baseUrl, token, rawImport.id);
+  if (
+    evaluation.queuedCount !== expectedMatchedCount ||
+    evaluation.matchedCount !== expectedMatchedCount ||
+    evaluation.jobs.length !== expectedMatchedCount
+  ) {
     throw new Error(
       `ISEM_OPTICAL_EVALUATION_QUEUE_MISMATCH: queued ${evaluation.queuedCount}, matched ${evaluation.matchedCount}, jobs ${evaluation.jobs.length}`,
     );
   }
-  await waitForExamResultCount(254, 30_000);
+  if (!evaluation.answerKeyId) {
+    throw new Error(`ISEM_OPTICAL_EVALUATION_ANSWER_KEY_MISSING: ${JSON.stringify(evaluation)}`);
+  }
+  if (evaluation.answerKeyId !== answerKey.id) {
+    throw new Error(
+      `ISEM_OPTICAL_EVALUATION_ANSWER_KEY_MISMATCH: expected ${sha256(answerKey.id)}, got ${sha256(evaluation.answerKeyId)}`,
+    );
+  }
+  await waitForExamResultCount(expectedMatchedCount, 30_000);
 
-  const reportJob = await enqueueReportGeneration(baseUrl, token, rawImport.sha256, answerKey.id);
-  const snapshot = await waitForSnapshot(254, 30_000);
-  const evidence = await readPipelineEvidence(rawImport.id, answerKey.id, snapshot.id);
+  const reportJob = await enqueueReportGeneration(baseUrl, token, rawImport.sha256, evaluation.answerKeyId);
+  const snapshot = await waitForSnapshot(expectedMatchedCount, 30_000);
+  const evidence = await readPipelineEvidence(rawImport.id, evaluation.answerKeyId, snapshot.id);
   assertPipelineEvidence(evidence);
   const pipelineDurationMs = Math.round(performance.now() - pipelineStartedAt);
 
@@ -178,7 +198,7 @@ try {
       opticalImportCommitted: true,
       rawImportArchived: true,
       evaluationQueued: true,
-      quarantinePathVerified: evidence.quarantineCount === 0,
+      quarantinePathVerified: evidence.quarantineCount === expectedQuarantineCount,
       reportGenerated: true,
       reportReady: true,
     },
@@ -195,7 +215,7 @@ try {
       emailHash: sha256(smokeEmail.toLowerCase()),
       examHash: sha256(examId),
       rawImportHash: sha256(rawImport.id),
-      answerKeyHash: sha256(answerKey.id),
+      answerKeyHash: sha256(evaluation.answerKeyId),
       reportSnapshotHash: sha256(snapshot.id),
       firstStudentHash: sha256(studentId(sampleStudentNos[0])),
       opticalTxtSha256: sha256(opticalContent),
@@ -204,10 +224,10 @@ try {
       reportJobHash: sha256(reportJob.jobId),
     },
     thresholds: {
-      participantCountMatches: evidence.participantCount === 254,
-      matchedCountMatches: evidence.matchedCount === 254,
-      examResultCountMatches: evidence.examResultCount === 254,
-      reportResultCountMatches: evidence.snapshotResultCount === 254,
+      participantCountMatches: evidence.participantCount === expectedParticipantCount,
+      matchedCountMatches: evidence.matchedCount === expectedMatchedCount,
+      examResultCountMatches: evidence.examResultCount === expectedMatchedCount,
+      reportResultCountMatches: evidence.snapshotResultCount === expectedMatchedCount,
       sampleScoreCountMatches: evidence.sampleScores.length === sampleStudentNos.length,
       pipelineDurationMsMax: 60_000,
       pipelineDurationPassed: pipelineDurationMs <= 60_000,
@@ -246,7 +266,6 @@ try {
 }
 
 async function seedPipelineInput(rows) {
-  const parserConfig = getParserConfigPresetSuggestion("OPTIK_7108_LGS");
   const pool = new pg.Pool({ connectionString: directDatabaseUrl });
   const client = await pool.connect();
   try {
@@ -274,11 +293,39 @@ async function seedPipelineInput(rows) {
          ($3, $2, '8 LGS B', '8', now())`,
       [classAId, tenantId, classBId],
     );
-    await client.query(
-      `INSERT INTO "Exam" ("id", "tenantId", "title", "status", "updatedAt")
-       VALUES ($1, $2, 'iSEM LGS 1 Optical Smoke Exam', 'DRAFT', now())`,
-      [examId, tenantId],
+    await seedSampleUsers(client);
+    await insertRows(
+      client,
+      `INSERT INTO "Student" ("id", "tenantId", "classId", "firstName", "lastName", "studentNo", "userId", "updatedAt") VALUES `,
+      ["id", "tenantId", "classId", "firstName", "lastName", "studentNo", "userId"],
+      rows.map((row) => [
+        studentId(row.studentNo),
+        tenantId,
+        row.bookletType === "B" ? classBId : classAId,
+        "iSEM",
+        `Student ${row.studentNo}`,
+        row.studentNo,
+        sampleStudentNos.includes(row.studentNo) ? sampleStudentUserId(row.studentNo) : null,
+      ]),
     );
+    await seedSampleGuardians(client);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw new Error(`ISEM_OPTICAL_DB_SEED_FAILED: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    client.release();
+    await pool.end();
+  }
+}
+
+async function seedExamScopedInput(rows) {
+  const parserConfig = getParserConfigPresetSuggestion("OPTIK_7108_LGS");
+  const pool = new pg.Pool({ connectionString: directDatabaseUrl });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
     await client.query(
       `INSERT INTO "ParserConfig" (
          "id", "tenantId", "examId", "version", "encoding", "delimiter", "skipHeaderLines", "fieldMapping", "status", "updatedAt"
@@ -295,22 +342,6 @@ async function seedPipelineInput(rows) {
         JSON.stringify(parserConfig.fieldMapping),
       ],
     );
-
-    await seedSampleUsers(client);
-    await insertRows(
-      client,
-      `INSERT INTO "Student" ("id", "tenantId", "classId", "firstName", "lastName", "studentNo", "userId", "updatedAt") VALUES `,
-      ["id", "tenantId", "classId", "firstName", "lastName", "studentNo", "userId"],
-      rows.map((row) => [
-        studentId(row.studentNo),
-        tenantId,
-        row.bookletType === "B" ? classBId : classAId,
-        "iSEM",
-        `Student ${row.studentNo}`,
-        row.studentNo,
-        sampleStudentNos.includes(row.studentNo) ? sampleStudentUserId(row.studentNo) : null,
-      ]),
-    );
     await insertRows(
       client,
       `INSERT INTO "ExamParticipant" ("id", "tenantId", "examId", "studentId", "participantNo", "bookletType", "status", "updatedAt") VALUES `,
@@ -325,11 +356,10 @@ async function seedPipelineInput(rows) {
         "REGISTERED",
       ]),
     );
-    await seedSampleGuardians(client);
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
-    throw new Error(`ISEM_OPTICAL_DB_SEED_FAILED: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`ISEM_OPTICAL_EXAM_SCOPED_DB_SEED_FAILED: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
     client.release();
     await pool.end();
@@ -398,24 +428,72 @@ async function seedSampleGuardians(client) {
   );
 }
 
-async function importAnswerKey(baseUrl, token) {
-  const response = await postJson(baseUrl, `/api/v1/exams/${examId}/answer-keys/imports`, token, {
-    version: answerKeyVersion,
-    fileBase64: readFileSync(answerKeyPath).toString("base64"),
-    scoringConfig: { wrongPenalty: 1 / 3 },
+async function createExamWithAnswerKey(baseUrl, token) {
+  const response = await postJson(baseUrl, "/api/v1/exams", token, {
+    title: "iSEM LGS 1 Optical Smoke Exam",
+    answerKey: {
+      version: answerKeyVersion,
+      fileBase64: answerKeyContent.toString("base64"),
+      scoringConfig: { wrongPenalty: 1 / 3 },
+    },
   });
   const payload = response.data ?? response;
-  const answerKey = payload.answerKey;
+  examId = payload.id;
   if (
-    payload.imported !== true ||
-    !answerKey?.id ||
-    answerKey.questionCount !== 90 ||
-    payload.bookletVariants?.[0]?.code !== "B" ||
-    payload.bookletVariants?.[0]?.questionCount !== 90
+    !examId ||
+    payload.title !== "iSEM LGS 1 Optical Smoke Exam" ||
+    payload.answerKeySummary?.version !== answerKeyVersion ||
+    payload.answerKeySummary?.questionCount !== 90 ||
+    payload.answerKeySummary?.status !== "DRAFT"
   ) {
-    throw new Error(`ISEM_OPTICAL_ANSWER_KEY_IMPORT_MISMATCH: ${JSON.stringify(payload)}`);
+    throw new Error(`ISEM_OPTICAL_EXAM_CREATE_ANSWER_KEY_MISMATCH: ${JSON.stringify(payload)}`);
   }
-  return { ...answerKey, bookletVariantCount: payload.bookletVariants.length };
+  return readCreatedAnswerKeyEvidence();
+}
+
+async function readCreatedAnswerKeyEvidence() {
+  const pool = new pg.Pool({ connectionString: directDatabaseUrl });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
+    const result = await client.query(
+      `SELECT
+         ak."id",
+         jsonb_array_length(ak."keyData"->'questions')::int AS "questionCount",
+         count(ebv."id")::int AS "bookletVariantCount",
+         bool_or(ebv."code" = 'B') AS "hasBookletB"
+       FROM "AnswerKey" ak
+       LEFT JOIN "ExamBookletVariant" ebv
+         ON ebv."tenantId" = ak."tenantId"
+        AND ebv."examId" = ak."examId"
+        AND ebv."deletedAt" IS NULL
+       WHERE ak."tenantId" = $1
+         AND ak."examId" = $2
+         AND ak."version" = $3
+         AND ak."deletedAt" IS NULL
+       GROUP BY ak."id", ak."keyData"
+      LIMIT 1`,
+      [tenantId, examId, answerKeyVersion],
+    );
+    const answerKey = result.rows[0];
+    if (
+      !answerKey?.id ||
+      answerKey.questionCount !== 90 ||
+      answerKey.bookletVariantCount !== 1 ||
+      answerKey.hasBookletB !== true
+    ) {
+      throw new Error(`ISEM_OPTICAL_CREATED_ANSWER_KEY_DB_MISMATCH: ${JSON.stringify(answerKey)}`);
+    }
+    await client.query("COMMIT");
+    return answerKey;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+    await pool.end();
+  }
 }
 
 async function uploadRawImport(baseUrl, token, content) {
@@ -433,10 +511,8 @@ async function uploadRawImport(baseUrl, token, content) {
   return payload;
 }
 
-async function enqueueEvaluation(baseUrl, token, rawImportId, answerKeyId) {
-  const response = await postJson(baseUrl, `/api/v1/exams/${examId}/raw-imports/${rawImportId}/evaluation-jobs`, token, {
-    answerKeyId,
-  });
+async function enqueueEvaluation(baseUrl, token, rawImportId) {
+  const response = await postJson(baseUrl, `/api/v1/exams/${examId}/raw-imports/${rawImportId}/evaluation-jobs`, token, {});
   return response.data ?? response;
 }
 
@@ -591,12 +667,12 @@ async function readPipelineEvidence(rawImportId, answerKeyId, snapshotId) {
 
 function assertPipelineEvidence(evidence) {
   if (
-    evidence.studentCount !== 254 ||
-    evidence.participantCount !== 254 ||
-    evidence.matchedCount !== 254 ||
-    evidence.quarantineCount !== 0 ||
-    evidence.examResultCount !== 254 ||
-    evidence.snapshotResultCount !== 254 ||
+    evidence.studentCount !== expectedParticipantCount ||
+    evidence.participantCount !== expectedParticipantCount ||
+    evidence.matchedCount !== expectedMatchedCount ||
+    evidence.quarantineCount !== expectedQuarantineCount ||
+    evidence.examResultCount !== expectedMatchedCount ||
+    evidence.snapshotResultCount !== expectedMatchedCount ||
     evidence.studentUserLinkCount !== 2 ||
     evidence.guardianUserLinkCount !== 2 ||
     evidence.guardianLinkCount !== 2
@@ -674,10 +750,25 @@ function readOpticalRows(content) {
 
 function assertOpticalRows(rows) {
   const uniqueStudentNos = new Set(rows.map((row) => row.studentNo));
-  const aCount = rows.filter((row) => row.bookletType === "A").length;
-  const bCount = rows.filter((row) => row.bookletType === "B").length;
-  if (rows.length !== 254 || uniqueStudentNos.size !== 254 || aCount !== 128 || bCount !== 126) {
-    throw new Error(`ISEM_OPTICAL_TXT_SHAPE_MISMATCH: ${JSON.stringify({ rows: rows.length, uniqueStudentNos: uniqueStudentNos.size, aCount, bCount })}`);
+  const validRows = rows.filter((row) => row.line.length >= 171);
+  const aCount = validRows.filter((row) => row.bookletType === "A").length;
+  const bCount = validRows.filter((row) => row.bookletType === "B").length;
+  if (
+    rows.length !== expectedRawRowCount ||
+    uniqueStudentNos.size !== expectedRawRowCount ||
+    validRows.length !== expectedMatchedCount ||
+    aCount !== expectedValidBookletCounts.A ||
+    bCount !== expectedValidBookletCounts.B
+  ) {
+    throw new Error(
+      `ISEM_OPTICAL_TXT_SHAPE_MISMATCH: ${JSON.stringify({
+        rows: rows.length,
+        uniqueStudentNos: uniqueStudentNos.size,
+        validRows: validRows.length,
+        aCount,
+        bCount,
+      })}`,
+    );
   }
   for (const studentNo of sampleStudentNos) {
     if (!uniqueStudentNos.has(studentNo)) {

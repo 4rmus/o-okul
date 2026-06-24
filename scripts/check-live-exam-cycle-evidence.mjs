@@ -14,11 +14,11 @@ const requiredCommands = [
 const expectedIsemFixture = {
   answerKeyQuestionCount: 90,
   bookletVariantCount: 1,
-  participantCount: 254,
-  matchedCount: 254,
-  quarantineCount: 0,
-  examResultCount: 254,
-  reportResultCount: 254,
+  participantCount: 21,
+  matchedCount: 20,
+  quarantineCount: 1,
+  examResultCount: 20,
+  reportResultCount: 20,
 };
 const allowedEvidenceReferencePrefixes = ["artifact:", "run:", "log:", "url:", "https://", "file://", "s3://"];
 const isemOpticalPipelineEvidenceFileNames = new Set(["isem-optical-pipeline.json", "isem-optical-pipeline.log"]);
@@ -264,8 +264,13 @@ function requireExamCycle(report, failures) {
   requireObjectEqual(value, failures, "examCycle.reportResultCount", "reportResultCount", expectedIsemFixture.reportResultCount);
   requireObjectIntegerAtLeast(value, failures, "examCycle.downloadedArtifacts", "downloadedArtifacts", 2);
 
-  if (Number.isInteger(value.matchedCount) && Number.isInteger(value.participantCount) && value.matchedCount > value.participantCount) {
-    failures.push("examCycle.matchedCount participantCount degerinden buyuk olamaz.");
+  if (
+    Number.isInteger(value.matchedCount) &&
+    Number.isInteger(value.quarantineCount) &&
+    Number.isInteger(value.participantCount) &&
+    value.matchedCount + value.quarantineCount !== value.participantCount
+  ) {
+    failures.push("examCycle.matchedCount + quarantineCount participantCount ile eslesmeli.");
   }
   if (Number.isInteger(value.examResultCount) && Number.isInteger(value.matchedCount) && value.examResultCount < value.matchedCount) {
     failures.push("examCycle.examResultCount matchedCount degerinden kucuk olamaz.");
