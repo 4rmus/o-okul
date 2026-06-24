@@ -1,10 +1,42 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { loadDemoFixtures } from "./demo-fixtures.js";
 import { buildSeedExams } from "./seed-exams.js";
 
 describe("seed-exams gerçek pipeline", () => {
-  it("gerçek TXT/XLSX girdilerinden deterministik seed verisi üretir", async () => {
+  it("demo kişi fixture'larını Excel ve TXT kaynaklarından üretir", async () => {
+    const fixtures = await loadDemoFixtures();
+
+    expect(fixtures.classes.map((demoClass) => demoClass.name)).toEqual(["8 LGS A", "8 LGS B", "8 LGS C", "8 LGS D"]);
+    expect(fixtures.teachers).toHaveLength(12);
+    expect(fixtures.students).toHaveLength(21);
+    expect(fixtures.accountTeacher).toMatchObject({
+      id: "teacher-demo-main",
+      firstName: "Ayse",
+      lastName: "Hoca",
+      branch: "Matematik",
+      assignedClassName: "8 LGS A",
+    });
+    expect(fixtures.accountStudent).toMatchObject({
+      id: "student-demo-101",
+      firstName: "MEHMET",
+      lastName: "KAYA",
+      studentNo: "101",
+      className: "8 LGS A",
+      guardianFirstName: "MEHMET",
+      guardianLastName: "Veli",
+    });
+    expect(fixtures.students.slice(-2).map((student) => ({
+      firstName: student.firstName,
+      lastName: student.lastName,
+      studentNo: student.studentNo,
+      sourceClass: student.className,
+    }))).toEqual([
+      { firstName: "ALİ", lastName: "EREN", studentNo: "119", sourceClass: "8 LGS B" },
+      { firstName: "RONİ", lastName: "KAYA", studentNo: "120", sourceClass: "8 LGS B" },
+    ]);
+  });
+
+  it("gerçek TXT/XLSX girdilerinden deterministik seed sınav verisi üretir", async () => {
     const first = await buildSeedExams();
     const second = await buildSeedExams();
 
@@ -15,129 +47,64 @@ describe("seed-exams gerçek pipeline", () => {
       bPermutationHead: exam.bookletVariants[0]?.permutation.slice(0, 5),
       matchedDemoStudents: exam.matchedEntries.length,
       unmatchedRows: exam.unmatchedCount,
-      adiguzel: exam.matchedEntries.find((entry) => entry.studentNo === "176")?.score.total,
-      missing1606: exam.matchedEntries.some((entry) => entry.studentNo === "1606"),
+      hasInvalidRow100Result: exam.matchedEntries.some((entry) => entry.studentNo === "100"),
+      hasTxtOnlyStudents: ["119", "120"].every((studentNo) => exam.matchedEntries.some((entry) => entry.studentNo === studentNo)),
+      accountStudentScore: exam.matchedEntries.find((entry) => entry.studentNo === "101")?.score.total,
     }))).toEqual([
       {
         id: "exam-demo-isem-lgs-1",
         questionCount: 90,
         bPermutationHead: [20, 19, 18, 17, 16],
-        matchedDemoStudents: 17,
-        unmatchedRows: 237,
-        adiguzel: {
-          correct: 80,
-          wrong: 10,
-          blank: 0,
-          net: 76.66666666666666,
-          rawScore: 76.66666666666666,
-          standardScore: 76.66666666666666,
+        matchedDemoStudents: 20,
+        unmatchedRows: 1,
+        hasInvalidRow100Result: false,
+        hasTxtOnlyStudents: true,
+        accountStudentScore: {
+          correct: 44,
+          wrong: 31,
+          blank: 15,
+          net: 33.66666666666667,
+          rawScore: 33.66666666666667,
+          estimatedRawScore: 101.72,
+          standardScore: 33.66666666666667,
         },
-        missing1606: false,
       },
       {
         id: "exam-demo-muba-lgs-3",
         questionCount: 90,
         bPermutationHead: [2, 1, 4, 5, 3],
-        matchedDemoStudents: 17,
-        unmatchedRows: 226,
-        adiguzel: {
-          correct: 86,
-          wrong: 4,
-          blank: 0,
-          net: 84.66666666666667,
-          rawScore: 84.66666666666667,
-          standardScore: 84.66666666666667,
+        matchedDemoStudents: 20,
+        unmatchedRows: 1,
+        hasInvalidRow100Result: false,
+        hasTxtOnlyStudents: true,
+        accountStudentScore: {
+          correct: 43,
+          wrong: 43,
+          blank: 4,
+          net: 28.66666666666667,
+          rawScore: 28.66666666666667,
+          estimatedRawScore: 78.8907,
+          standardScore: 28.66666666666667,
         },
-        missing1606: false,
       },
       {
         id: "exam-demo-3d-lgs-2",
         questionCount: 90,
         bPermutationHead: [3, 4, 1, 2, 6],
-        matchedDemoStudents: 16,
-        unmatchedRows: 211,
-        adiguzel: {
-          correct: 86,
-          wrong: 4,
-          blank: 0,
-          net: 84.66666666666667,
-          rawScore: 84.66666666666667,
-          standardScore: 84.66666666666667,
+        matchedDemoStudents: 20,
+        unmatchedRows: 1,
+        hasInvalidRow100Result: false,
+        hasTxtOnlyStudents: true,
+        accountStudentScore: {
+          correct: 24,
+          wrong: 48,
+          blank: 18,
+          net: 8,
+          rawScore: 8,
+          estimatedRawScore: 20.6227,
+          standardScore: 8,
         },
-        missing1606: false,
       },
     ]);
   });
-
-  it("ADIGÜZEL seed skorlarını hedef karne PDF'leriyle karşılaştırır", async () => {
-    const seedExams = await buildSeedExams();
-
-    for (const expectedPdf of adiguzelPdfExpectations) {
-      const exam = seedExams.find((candidate) => candidate.id === expectedPdf.examId);
-      const adiguzel = exam?.matchedEntries.find((entry) => entry.studentNo === "176");
-      const pdf = readAdiguzelPdfSummary(expectedPdf.fileNameNeedle);
-
-      expect(exam?.title).toBe(pdf.title);
-      expect(pdf.studentName).toBe("AHMET İSHAK ADIGÜZEL");
-      expect(pdf.studentNo).toBe("176");
-      expect(pdf.bookletType).toBe(expectedPdf.bookletType);
-      expect(adiguzel?.bookletType).toBe(pdf.bookletType);
-      expect(adiguzel?.score.total.correct).toBe(pdf.correct);
-      expect(adiguzel?.score.total.wrong).toBe(pdf.wrong);
-      expect(adiguzel?.score.total.blank).toBe(pdf.blank);
-      expect(adiguzel?.score.total.net).toBeCloseTo(pdf.net, 2);
-    }
-  });
 });
-
-const fixtureDir = fileURLToPath(new URL("../../../ornek-veriler/", import.meta.url));
-
-const adiguzelPdfExpectations = [
-  { examId: "exam-demo-isem-lgs-1", fileNameNeedle: "iSEM", bookletType: "B" },
-  { examId: "exam-demo-muba-lgs-3", fileNameNeedle: "MUBA", bookletType: "A" },
-  { examId: "exam-demo-3d-lgs-2", fileNameNeedle: "3D", bookletType: "B" },
-];
-
-function readAdiguzelPdfSummary(fileNameNeedle: string) {
-  const fileName = readdirSync(fixtureDir).find((name) =>
-    name.startsWith("Ahmet-ishak-") && name.includes(fileNameNeedle) && name.endsWith(".pdf")
-  );
-  if (!fileName) throw new Error(`ADIGUZEL_PDF_NOT_FOUND:${fileNameNeedle}`);
-
-  const lines = extractPdfTextLines(`${fixtureDir}${fileName}`);
-  const totalIndex = lines.findIndex((line) => line === "TOPLAM");
-  const studentInfo = lines[3] ?? "";
-  const bookletLine = lines.find((line) => line.includes("KİTAPÇIĞI")) ?? "";
-  if (totalIndex < 0) throw new Error(`ADIGUZEL_PDF_TOTAL_NOT_FOUND:${fileName}`);
-
-  return {
-    title: lines[0],
-    studentName: lines[1],
-    studentNo: studentInfo.split(" - ")[1],
-    bookletType: bookletLine.slice(0, 1),
-    correct: Number(lines[totalIndex + 2]),
-    wrong: Number(lines[totalIndex + 3]),
-    blank: Number(lines[totalIndex + 4]),
-    net: Number(lines[totalIndex + 5]),
-  };
-}
-
-function extractPdfTextLines(path: string): string[] {
-  const pdf = readFileSync(path, "latin1");
-  const unicodeMap = new Map<number, string>();
-  for (const match of pdf.matchAll(/<([0-9a-fA-F]{4})>\s*<([0-9a-fA-F]{4})>/g)) {
-    unicodeMap.set(Number.parseInt(match[1] ?? "", 16), String.fromCharCode(Number.parseInt(match[2] ?? "", 16)));
-  }
-
-  const lines: string[] = [];
-  for (const match of pdf.matchAll(/<([0-9a-fA-F]{4,})>\s*Tj/g)) {
-    const hex = match[1] ?? "";
-    let text = "";
-    for (let index = 0; index < hex.length; index += 4) {
-      const code = Number.parseInt(hex.slice(index, index + 4), 16);
-      text += unicodeMap.get(code) ?? "";
-    }
-    if (text.trim()) lines.push(text);
-  }
-  return lines;
-}

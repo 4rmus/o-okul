@@ -1,5 +1,17 @@
-import "dotenv/config";
+import { fileURLToPath } from "node:url";
+import { config as loadEnv } from "dotenv";
 import pg from "pg";
+import {
+  DEMO_CLASS_START_DATE,
+  DEMO_GUARDIAN_USER_ID,
+  DEMO_STUDENT_USER_ID,
+  DEMO_TEACHER_USER_ID,
+  DEMO_TENANT_ID,
+  type DemoFixtures,
+  loadDemoFixtures,
+} from "./demo-fixtures.ts";
+
+loadEnv({ path: fileURLToPath(new URL("../../../.env", import.meta.url)), quiet: true });
 
 const databaseUrl =
   process.env.DIRECT_DATABASE_URL ??
@@ -11,13 +23,6 @@ type SeedMode = "demo" | "minimal";
 const seedMode = parseSeedMode(process.env.SEED_MODE);
 const pool = new pg.Pool({ connectionString: databaseUrl });
 const demoPasswordHash = "scrypt:demo-auth-salt:uG-yNMDIMmz8JL5XDnE2Eoc939a2mw8PcRPoJb8CXac";
-
-const demoSubjectUsers = [
-  { id: "user-demo-assistant", email: "assistant@demo.local", name: "Demo Müdür Yardımcısı", role: "ASSISTANT_ADMIN" },
-  { id: "user-demo-teacher", email: "teacher@demo.local", name: "Demo Öğretmen", role: "TEACHER" },
-  { id: "user-demo-student", email: "student@demo.local", name: "Demo Öğrenci", role: "STUDENT" },
-  { id: "user-demo-guardian", email: "guardian@demo.local", name: "Demo Veli", role: "GUARDIAN" },
-] as const;
 
 type LearningOutcomeSeed = {
   id: string;
@@ -124,6 +129,7 @@ const learningOutcomes: LearningOutcomeSeed[] = [
 ];
 
 async function main() {
+  const demoFixtures = seedMode === "demo" ? await loadDemoFixtures() : null;
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -156,12 +162,21 @@ async function main() {
       return;
     }
 
+    if (!demoFixtures) {
+      throw new Error("DEMO_FIXTURES_MISSING");
+    }
+
+    await resetDemoTenant(client);
+
     const tenant = await client.query<{ id: string }>(
       `INSERT INTO "Tenant" ("id", "name", "slug", "status", "updatedAt")
-       VALUES ('tenant-demo', 'Demo Kurum', 'demo', 'ACTIVE', now())
+       VALUES ($1, 'Demo Kurum', 'demo', 'ACTIVE', now())
        ON CONFLICT ("slug") DO UPDATE SET "updatedAt" = now()
        RETURNING "id"`,
+      [DEMO_TENANT_ID],
     );
+    const tenantId = tenant.rows[0]?.id;
+    if (!tenantId) throw new Error("DEMO_TENANT_MISSING");
 
     const user = await client.query<{ id: string }>(
       `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
@@ -178,144 +193,11 @@ async function main() {
       [tenant.rows[0]?.id, user.rows[0]?.id],
     );
 
-    const tenantId = tenant.rows[0]?.id;
-    for (const subjectUser of demoSubjectUsers) {
-      await client.query(
-        `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
-         VALUES ($1, $2, $3, $4, now())
-         ON CONFLICT ("email") DO UPDATE
-         SET "name" = EXCLUDED."name",
-             "passwordHash" = EXCLUDED."passwordHash",
-             "updatedAt" = now()`,
-        [subjectUser.id, subjectUser.email, subjectUser.name, demoPasswordHash],
-      );
-
-      await client.query(
-        `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
-         VALUES ($1, $2, $3, $4::"TenantRole", now())
-         ON CONFLICT ("tenantId", "userId", "role") DO UPDATE SET "updatedAt" = now()`,
-        [`membership-${subjectUser.id}`, tenantId, subjectUser.id, subjectUser.role],
-      );
-    }
-
-    await client.query(
-      `INSERT INTO "Class" ("id", "tenantId", "name", "level", "updatedAt")
-       VALUES ('class-demo-8-a', $1, '8-A', '8', now())
-       ON CONFLICT ("id") DO UPDATE
-       SET "tenantId" = EXCLUDED."tenantId",
-           "name" = EXCLUDED."name",
-           "level" = EXCLUDED."level",
-           "deletedAt" = NULL,
-           "updatedAt" = now()`,
-      [tenantId],
-    );
-
-    await client.query(
-      `INSERT INTO "Teacher" ("id", "tenantId", "firstName", "lastName", "branch", "userId", "updatedAt")
-       VALUES ('teacher-demo-main', $1, 'Demo', 'Öğretmen', 'Matematik', 'user-demo-teacher', now())
-       ON CONFLICT ("id") DO UPDATE
-       SET "tenantId" = EXCLUDED."tenantId",
-           "firstName" = EXCLUDED."firstName",
-           "lastName" = EXCLUDED."lastName",
-           "branch" = EXCLUDED."branch",
-           "userId" = EXCLUDED."userId",
-           "deletedAt" = NULL,
-           "updatedAt" = now()`,
-      [tenantId],
-    );
-
-    await client.query(
-      `INSERT INTO "Student" (
-         "id", "tenantId", "classId", "responsibleTeacherId", "status", "firstName", "lastName", "studentNo", "email", "userId", "updatedAt"
-       )
-       VALUES ('student-demo-main', $1, 'class-demo-8-a', 'teacher-demo-main', 'ACTIVE', 'Demo', 'Öğrenci', 'DEMO-001', 'student@demo.local', 'user-demo-student', now())
-       ON CONFLICT ("id") DO UPDATE
-       SET "tenantId" = EXCLUDED."tenantId",
-           "classId" = EXCLUDED."classId",
-           "responsibleTeacherId" = EXCLUDED."responsibleTeacherId",
-           "status" = EXCLUDED."status",
-           "firstName" = EXCLUDED."firstName",
-           "lastName" = EXCLUDED."lastName",
-           "studentNo" = EXCLUDED."studentNo",
-           "email" = EXCLUDED."email",
-           "userId" = EXCLUDED."userId",
-           "deletedAt" = NULL,
-           "updatedAt" = now()`,
-      [tenantId],
-    );
-
-    await client.query(
-      `INSERT INTO "StudentClassHistory" (
-         "id", "tenantId", "studentId", "classId", "startsAt", "reason", "updatedAt"
-       )
-       VALUES ('student-class-history-demo-main', $1, 'student-demo-main', 'class-demo-8-a', '2026-06-01'::date, 'CREATED', now())
-       ON CONFLICT ("id") DO UPDATE
-       SET "tenantId" = EXCLUDED."tenantId",
-           "studentId" = EXCLUDED."studentId",
-           "classId" = EXCLUDED."classId",
-           "startsAt" = EXCLUDED."startsAt",
-           "endsAt" = NULL,
-           "reason" = EXCLUDED."reason",
-           "updatedAt" = now()`,
-      [tenantId],
-    );
-
-    await client.query(
-      `INSERT INTO "Guardian" ("id", "tenantId", "firstName", "lastName", "phone", "userId", "updatedAt")
-       VALUES ('guardian-demo-main', $1, 'Demo', 'Veli', '5550000000', 'user-demo-guardian', now())
-       ON CONFLICT ("id") DO UPDATE
-       SET "tenantId" = EXCLUDED."tenantId",
-           "firstName" = EXCLUDED."firstName",
-           "lastName" = EXCLUDED."lastName",
-           "phone" = EXCLUDED."phone",
-           "userId" = EXCLUDED."userId",
-           "deletedAt" = NULL,
-           "updatedAt" = now()`,
-      [tenantId],
-    );
-
-    await client.query(
-      `INSERT INTO "GuardianStudent" (
-         "id",
-         "tenantId",
-         "guardianId",
-         "studentId",
-         "relationshipType",
-         "isPrimary",
-         "canViewFinance",
-         "canReceiveSms",
-         "canReceiveAnnouncements",
-         "canOpenSupportTickets",
-         "updatedAt"
-       )
-       VALUES ('guardian-student-demo-main', $1, 'guardian-demo-main', 'student-demo-main', 'MOTHER', true, true, true, true, true, now())
-       ON CONFLICT ("tenantId", "guardianId", "studentId") DO UPDATE SET
-         "relationshipType" = EXCLUDED."relationshipType",
-         "isPrimary" = EXCLUDED."isPrimary",
-         "canViewFinance" = EXCLUDED."canViewFinance",
-         "canReceiveSms" = EXCLUDED."canReceiveSms",
-         "canReceiveAnnouncements" = EXCLUDED."canReceiveAnnouncements",
-         "canOpenSupportTickets" = EXCLUDED."canOpenSupportTickets",
-         "updatedAt" = now()`,
-      [tenantId],
-    );
-
-    await client.query(
-      `INSERT INTO "TeacherAssignment" (
-         "id", "tenantId", "teacherId", "classId", "studentId", "role", "updatedAt"
-       )
-       VALUES
-         ('teacher-assignment-demo-class', $1, 'teacher-demo-main', 'class-demo-8-a', NULL, 'CLASS_TEACHER', now()),
-         ('teacher-assignment-demo-student', $1, 'teacher-demo-main', NULL, 'student-demo-main', 'RESPONSIBLE_TEACHER', now())
-       ON CONFLICT ("id") DO UPDATE
-       SET "tenantId" = EXCLUDED."tenantId",
-           "teacherId" = EXCLUDED."teacherId",
-           "classId" = EXCLUDED."classId",
-           "studentId" = EXCLUDED."studentId",
-           "role" = EXCLUDED."role",
-           "updatedAt" = now()`,
-      [tenantId],
-    );
+    await seedDemoSubjectUsers(client, tenantId, demoFixtures);
+    await seedDemoClasses(client, tenantId, demoFixtures);
+    await seedDemoTeachers(client, tenantId, demoFixtures);
+    await seedDemoStudentsAndGuardians(client, tenantId, demoFixtures);
+    await seedDemoTeacherAssignments(client, tenantId, demoFixtures);
 
     const learningOutcomeValues = learningOutcomes
       .map((_, index) => {
@@ -356,6 +238,239 @@ function parseSeedMode(value: string | undefined): SeedMode {
   if (!value || value === "demo") return "demo";
   if (value === "minimal") return "minimal";
   throw new Error("SEED_MODE must be demo or minimal");
+}
+
+async function resetDemoTenant(client: pg.PoolClient): Promise<void> {
+  await client.query(`DELETE FROM "Tenant" WHERE "id" = $1 OR "slug" = 'demo'`, [DEMO_TENANT_ID]);
+  await client.query(`DELETE FROM "User" WHERE "id" = 'user-demo-assistant' OR "email" = 'assistant@demo.local'`);
+}
+
+async function seedDemoSubjectUsers(client: pg.PoolClient, tenantId: string, fixtures: DemoFixtures): Promise<void> {
+  const accountStudent = fixtures.accountStudent;
+  const accounts = [
+    {
+      id: DEMO_TEACHER_USER_ID,
+      email: "teacher@demo.local",
+      name: `${fixtures.accountTeacher.firstName} ${fixtures.accountTeacher.lastName}`,
+      role: "TEACHER",
+    },
+    {
+      id: DEMO_STUDENT_USER_ID,
+      email: "student@demo.local",
+      name: `${accountStudent.firstName} ${accountStudent.lastName}`,
+      role: "STUDENT",
+    },
+    {
+      id: DEMO_GUARDIAN_USER_ID,
+      email: "guardian@demo.local",
+      name: `${accountStudent.guardianFirstName} ${accountStudent.guardianLastName}`,
+      role: "GUARDIAN",
+    },
+  ] as const;
+
+  for (const account of accounts) {
+    await client.query(
+      `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
+       VALUES ($1, $2, $3, $4, now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "email" = EXCLUDED."email",
+           "name" = EXCLUDED."name",
+           "passwordHash" = EXCLUDED."passwordHash",
+           "updatedAt" = now()`,
+      [account.id, account.email, account.name, demoPasswordHash],
+    );
+
+    await client.query(
+      `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
+       VALUES ($1, $2, $3, $4::"TenantRole", now())
+       ON CONFLICT ("tenantId", "userId", "role") DO UPDATE SET "updatedAt" = now()`,
+      [`membership-${account.id}`, tenantId, account.id, account.role],
+    );
+  }
+}
+
+async function seedDemoClasses(client: pg.PoolClient, tenantId: string, fixtures: DemoFixtures): Promise<void> {
+  for (const demoClass of fixtures.classes) {
+    await client.query(
+      `INSERT INTO "Class" ("id", "tenantId", "name", "level", "updatedAt")
+       VALUES ($1, $2, $3, $4, now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "tenantId" = EXCLUDED."tenantId",
+           "name" = EXCLUDED."name",
+           "level" = EXCLUDED."level",
+           "deletedAt" = NULL,
+           "updatedAt" = now()`,
+      [demoClass.id, tenantId, demoClass.name, demoClass.level],
+    );
+  }
+}
+
+async function seedDemoTeachers(client: pg.PoolClient, tenantId: string, fixtures: DemoFixtures): Promise<void> {
+  for (const teacher of fixtures.teachers) {
+    const userId = teacher.id === fixtures.accountTeacher.id ? DEMO_TEACHER_USER_ID : null;
+    await client.query(
+      `INSERT INTO "Teacher" ("id", "tenantId", "firstName", "lastName", "branch", "userId", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "tenantId" = EXCLUDED."tenantId",
+           "firstName" = EXCLUDED."firstName",
+           "lastName" = EXCLUDED."lastName",
+           "branch" = EXCLUDED."branch",
+           "userId" = EXCLUDED."userId",
+           "deletedAt" = NULL,
+           "updatedAt" = now()`,
+      [teacher.id, tenantId, teacher.firstName, teacher.lastName, teacher.branch, userId],
+    );
+  }
+}
+
+async function seedDemoStudentsAndGuardians(client: pg.PoolClient, tenantId: string, fixtures: DemoFixtures): Promise<void> {
+  for (const student of fixtures.students) {
+    const studentUserId = student.id === fixtures.accountStudent.id ? DEMO_STUDENT_USER_ID : null;
+    const guardianUserId = student.id === fixtures.accountStudent.id ? DEMO_GUARDIAN_USER_ID : null;
+
+    await client.query(
+      `INSERT INTO "Student" (
+         "id", "tenantId", "classId", "responsibleTeacherId", "status", "firstName", "lastName", "studentNo", "email", "phone", "userId", "updatedAt"
+       )
+       VALUES ($1, $2, $3, $4, 'ACTIVE', $5, $6, $7, $8, $9, $10, now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "tenantId" = EXCLUDED."tenantId",
+           "classId" = EXCLUDED."classId",
+           "responsibleTeacherId" = EXCLUDED."responsibleTeacherId",
+           "status" = EXCLUDED."status",
+           "firstName" = EXCLUDED."firstName",
+           "lastName" = EXCLUDED."lastName",
+           "studentNo" = EXCLUDED."studentNo",
+           "email" = EXCLUDED."email",
+           "phone" = EXCLUDED."phone",
+           "userId" = EXCLUDED."userId",
+           "deletedAt" = NULL,
+           "updatedAt" = now()`,
+      [
+        student.id,
+        tenantId,
+        student.classId,
+        student.responsibleTeacherId,
+        student.firstName,
+        student.lastName,
+        student.studentNo,
+        student.email,
+        student.phone,
+        studentUserId,
+      ],
+    );
+
+    await client.query(
+      `INSERT INTO "StudentClassHistory" (
+         "id", "tenantId", "studentId", "classId", "startsAt", "reason", "updatedAt"
+       )
+       VALUES ($1, $2, $3, $4, $5::date, 'CREATED', now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "tenantId" = EXCLUDED."tenantId",
+           "studentId" = EXCLUDED."studentId",
+           "classId" = EXCLUDED."classId",
+           "startsAt" = EXCLUDED."startsAt",
+           "endsAt" = NULL,
+           "reason" = EXCLUDED."reason",
+           "updatedAt" = now()`,
+      [`student-class-history-${student.id}`, tenantId, student.id, student.classId, DEMO_CLASS_START_DATE],
+    );
+
+    await client.query(
+      `INSERT INTO "StudentEnrollment" (
+         "id", "tenantId", "studentId", "classId", "status", "startsAt", "reason", "updatedAt"
+       )
+       VALUES ($1, $2, $3, $4, 'ACTIVE', $5::date, 'CREATED', now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "tenantId" = EXCLUDED."tenantId",
+           "studentId" = EXCLUDED."studentId",
+           "classId" = EXCLUDED."classId",
+           "status" = EXCLUDED."status",
+           "startsAt" = EXCLUDED."startsAt",
+           "endsAt" = NULL,
+           "reason" = EXCLUDED."reason",
+           "updatedAt" = now()`,
+      [`student-enrollment-${student.id}`, tenantId, student.id, student.classId, DEMO_CLASS_START_DATE],
+    );
+
+    await client.query(
+      `INSERT INTO "Guardian" ("id", "tenantId", "firstName", "lastName", "phone", "userId", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "tenantId" = EXCLUDED."tenantId",
+           "firstName" = EXCLUDED."firstName",
+           "lastName" = EXCLUDED."lastName",
+           "phone" = EXCLUDED."phone",
+           "userId" = EXCLUDED."userId",
+           "deletedAt" = NULL,
+           "updatedAt" = now()`,
+      [student.guardianId, tenantId, student.guardianFirstName, student.guardianLastName, student.guardianPhone, guardianUserId],
+    );
+
+    await client.query(
+      `INSERT INTO "GuardianStudent" (
+         "id",
+         "tenantId",
+         "guardianId",
+         "studentId",
+         "relationshipType",
+         "isPrimary",
+         "canViewFinance",
+         "canReceiveSms",
+         "canReceiveAnnouncements",
+         "canOpenSupportTickets",
+         "updatedAt"
+       )
+       VALUES ($1, $2, $3, $4, 'GUARDIAN', true, true, true, true, true, now())
+       ON CONFLICT ("tenantId", "guardianId", "studentId") DO UPDATE SET
+         "relationshipType" = EXCLUDED."relationshipType",
+         "isPrimary" = EXCLUDED."isPrimary",
+         "canViewFinance" = EXCLUDED."canViewFinance",
+         "canReceiveSms" = EXCLUDED."canReceiveSms",
+         "canReceiveAnnouncements" = EXCLUDED."canReceiveAnnouncements",
+         "canOpenSupportTickets" = EXCLUDED."canOpenSupportTickets",
+         "updatedAt" = now()`,
+      [`guardian-student-${student.id}`, tenantId, student.guardianId, student.id],
+    );
+  }
+}
+
+async function seedDemoTeacherAssignments(client: pg.PoolClient, tenantId: string, fixtures: DemoFixtures): Promise<void> {
+  for (const teacher of fixtures.teachers) {
+    await client.query(
+      `INSERT INTO "TeacherAssignment" (
+         "id", "tenantId", "teacherId", "classId", "studentId", "role", "updatedAt"
+       )
+       VALUES ($1, $2, $3, $4, NULL, 'BRANCH_TEACHER', now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "tenantId" = EXCLUDED."tenantId",
+           "teacherId" = EXCLUDED."teacherId",
+           "classId" = EXCLUDED."classId",
+           "studentId" = EXCLUDED."studentId",
+           "role" = EXCLUDED."role",
+           "updatedAt" = now()`,
+      [`teacher-assignment-${teacher.id}-${teacher.assignedClassId}`, tenantId, teacher.id, teacher.assignedClassId],
+    );
+  }
+
+  for (const student of fixtures.students) {
+    if (!student.responsibleTeacherId) continue;
+    await client.query(
+      `INSERT INTO "TeacherAssignment" (
+         "id", "tenantId", "teacherId", "classId", "studentId", "role", "updatedAt"
+       )
+       VALUES ($1, $2, $3, NULL, $4, 'RESPONSIBLE_TEACHER', now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "tenantId" = EXCLUDED."tenantId",
+           "teacherId" = EXCLUDED."teacherId",
+           "classId" = EXCLUDED."classId",
+           "studentId" = EXCLUDED."studentId",
+           "role" = EXCLUDED."role",
+           "updatedAt" = now()`,
+      [`teacher-assignment-${student.id}-responsible`, tenantId, student.responsibleTeacherId, student.id],
+    );
+  }
 }
 
 main()
