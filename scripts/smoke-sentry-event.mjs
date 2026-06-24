@@ -3,7 +3,7 @@ import { redactedUrl, validateSmokeEvidenceOutputTarget, writeSmokeEvidence } fr
 
 const dsn = process.env.SENTRY_DSN;
 const environment = process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown";
-const message = process.env.SENTRY_SMOKE_MESSAGE ?? "Uzman Hocam Sentry smoke";
+const message = process.env.SENTRY_SMOKE_MESSAGE ?? "o-okul Sentry smoke";
 const evidenceFile = process.env.SENTRY_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
 const checkedAt = new Date().toISOString();
 

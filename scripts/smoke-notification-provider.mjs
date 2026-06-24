@@ -7,8 +7,8 @@ const { createNotificationAdapterFromEnv } = require("../packages/notification-a
 const provider = process.env.NOTIFICATION_PROVIDER ?? "noop";
 const emailTo = process.env.NOTIFICATION_SMOKE_EMAIL_TO;
 const pushTo = process.env.NOTIFICATION_SMOKE_PUSH_TO;
-const subject = process.env.NOTIFICATION_SMOKE_SUBJECT ?? "Uzman Hocam notification smoke";
-const body = process.env.NOTIFICATION_SMOKE_BODY ?? "Uzman Hocam notification smoke";
+const subject = process.env.NOTIFICATION_SMOKE_SUBJECT ?? "o-okul notification smoke";
+const body = process.env.NOTIFICATION_SMOKE_BODY ?? "o-okul notification smoke";
 const evidenceFile = process.env.NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
 const checkedAt = new Date().toISOString();
 

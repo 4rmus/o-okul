@@ -6,8 +6,8 @@ export const openApiUiPath = "docs";
 
 export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
   const config = new DocumentBuilder()
-    .setTitle("Uzman Hocam API")
-    .setDescription("Uzman Hocam multi-tenant SaaS REST API")
+    .setTitle("o-okul API")
+    .setDescription("o-okul multi-tenant SaaS REST API")
     .setVersion(process.env.npm_package_version ?? "0.0.0")
     .addBearerAuth(
       {

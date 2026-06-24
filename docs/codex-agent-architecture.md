@@ -1,6 +1,6 @@
-# Codex Agent Architecture for Uzman Hocam
+# Codex Agent Architecture for o-okul
 
-This document defines the project-scoped Codex agent system for building Uzman Hocam professionally, securely, and with controlled scope.
+This document defines the project-scoped Codex agent system for building o-okul professionally, securely, and with controlled scope.
 
 ## Research Basis
 
@@ -16,7 +16,7 @@ The configuration follows current agent-system patterns from primary sources:
 
 ## Repo Risk Map
 
-Uzman Hocam is not a generic CRUD app. The agent split follows the highest-risk seams in the current repo:
+o-okul is not a generic CRUD app. The agent split follows the highest-risk seams in the current repo:
 
 - Multi-tenancy and security: PostgreSQL RLS, Prisma tenant context, RBAC, auth/session rotation, MFA, PII/KVKK, upload safety.
 - Auth and session hardening: refresh token family rotation, CSRF, admin MFA, rate limits, web token storage, production fail-closed behavior.

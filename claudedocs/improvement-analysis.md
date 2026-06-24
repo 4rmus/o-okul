@@ -1,4 +1,4 @@
-# Uzman Hocam — Mimari Analiz ve İyileştirme Tasarımı
+# o-okul — Mimari Analiz ve İyileştirme Tasarımı
 
 > `/sc:design` çıktısı · Tarih: 2026-06-03 · Branch: `feat/institution-modules-and-rls-hardening`
 > Kapsam: mevcut sistemin analizi + önceliklendirilmiş iyileştirme tasarımı (kod uygulaması ayrı adımdır).

@@ -7,6 +7,7 @@ import { ChevronDown, Menu, Search, X, type LucideIcon } from "lucide-react";
 import { Button, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps } from "@uzman-hocam/ui";
 import type { ClassRecord, GuardianRecord, NotificationDeviceTokenRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../src/api-client.js";
+import { appBrand } from "../../src/brand.js";
 import { useAuth } from "../providers.js";
 import { readRolePreviewToken } from "./portals/_shared/portal-shell.js";
 import {
@@ -258,8 +259,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Menu size={18} aria-hidden="true" />
         </button>
         <div className="next-brand">
-          <span className="next-brand-mark">UH</span>
-          <span>Uzman Hocam</span>
+          <span className="next-brand-mark">{appBrand.mark}</span>
+          <span>{appBrand.name}</span>
         </div>
         <button className="next-command-open" type="button" onClick={(event) => openCommandPalette(event.currentTarget)} aria-label="Komut paleti" title="Komut paleti">
           <Search size={16} aria-hidden="true" />
@@ -274,8 +275,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <header className="next-sidebar-header">
           <div className="next-brand">
-            <span className="next-brand-mark">UH</span>
-            <span>Uzman Hocam</span>
+            <span className="next-brand-mark">{appBrand.mark}</span>
+            <span>{appBrand.name}</span>
           </div>
           <button className="next-command-open" type="button" onClick={(event) => openCommandPalette(event.currentTarget)} aria-label="Komut paleti" title="Komut paleti">
             <Search size={16} aria-hidden="true" />

@@ -20,7 +20,7 @@ interface AxeViolationSummary {
 test.describe("Next erişilebilirlik smoke", () => {
   test("public landing ve login sayfalarında yüksek etkili axe ihlali yok", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Uzman Hocam" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "o-okul" })).toBeVisible();
     await expectNoHighImpactA11yViolations(page, "landing");
 
     await page.goto("/login");

@@ -4,7 +4,7 @@
   "check": "traefik_https_smoke",
   "environment": "staging",
   "checkedAt": "2026-06-15T09:00:00.000Z",
-  "url": "https://staging.uzmanhocam.com/health",
+  "url": "https://staging.o-okul.com/health",
   "expectedStatus": 200,
   "statusCode": 200,
   "strictTransportSecurity": "max-age=31536000; includeSubDomains",

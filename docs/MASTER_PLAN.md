@@ -1,4 +1,4 @@
-# Uzman Hocam — Master Geliştirme Planı
+# o-okul — Master Geliştirme Planı
 
 > _Kaynak: `prd.md` üzerinden genişletilmiş master plan · Tarih: 2026-05-29 · Durum: onaylandı_
 >

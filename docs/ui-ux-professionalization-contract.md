@@ -2,7 +2,7 @@
 
 Tarih: 2026-06-17
 
-Bu sozlesme Uzman Hocam arayuzunu operasyonel egitim SaaS'i olarak profesyonellestirmek icin
+Bu sozlesme o-okul arayuzunu operasyonel egitim SaaS'i olarak profesyonellestirmek icin
 kilitlenen tasarim, guvenlik ve kabul kurallarini tanimlar. Kapsam; mevcut Next.js app router,
 `packages/ui`, Chart.js rapor bilesenleri ve rol bazli portallar uzerinden ilerler. Yeni admin
 template, shadcn/Tremor/Recharts/TanStack Table eklenmez.

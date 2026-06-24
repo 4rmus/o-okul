@@ -253,7 +253,7 @@ function runEvidenceTargetProtocolNegativeChecks() {
       env: {
         ...process.env,
         ...extraEnv,
-        [envKey]: `http://evidence.uzmanhocam.com/${envKey.toLowerCase().replaceAll("_", "-")}.json`,
+        [envKey]: `http://evidence.o-okul.com/${envKey.toLowerCase().replaceAll("_", "-")}.json`,
       },
       encoding: "utf8",
     });
@@ -1425,7 +1425,7 @@ runInlineUploadMigrationNegativeCheck({
   expectedFailure: "evidenceReferences.0 userinfo, query veya fragment tasimamali.",
   mutate: (fixture) => {
     fixture.evidenceReferences[0] =
-      "https://user:secret@evidence.uzmanhocam.com/inline-upload-content-migration.json?token=secret#fragment";
+      "https://user:secret@evidence.o-okul.com/inline-upload-content-migration.json?token=secret#fragment";
   },
 });
 runInlineUploadMigrationNegativeCheck({
@@ -1565,7 +1565,7 @@ runRateLimitNegativeCheck({
   path: "docs/evidence-templates/rate-limit.secret-evidence-reference.tmp.json",
   expectedFailure: "evidenceReferences.0 userinfo, query veya fragment tasimamali.",
   mutate: (fixture) => {
-    fixture.evidenceReferences[0] = "https://user:secret@evidence.uzmanhocam.com/rate-limit.json?token=secret#fragment";
+    fixture.evidenceReferences[0] = "https://user:secret@evidence.o-okul.com/rate-limit.json?token=secret#fragment";
   },
 });
 runRateLimitSecretTargetNegativeCheck();
@@ -1675,7 +1675,7 @@ runRlsLiveNegativeCheck({
   path: "docs/evidence-templates/rls-live.secret-reference.tmp.json",
   expectedFailure: "evidenceReferences.0 userinfo, query veya fragment tasimamali.",
   mutate: (fixture) => {
-    fixture.evidenceReferences[0] = "https://user:secret@evidence.uzmanhocam.com/rls-live/db-rls-check.log?token=secret";
+    fixture.evidenceReferences[0] = "https://user:secret@evidence.o-okul.com/rls-live/db-rls-check.log?token=secret";
   },
 });
 runRlsLiveNegativeCheck({
@@ -1752,7 +1752,7 @@ runUatNegativeCheck({
   expectedFailure: "UAT-SYS-01.evidence userinfo, query veya fragment tasimamali.",
   mutate: (fixture) => {
     fixture.journeyScenariosVerified[0].evidence[0] =
-      "https://user:secret@evidence.uzmanhocam.com/uat/sys-01.json?token=secret#fragment";
+      "https://user:secret@evidence.o-okul.com/uat/sys-01.json?token=secret#fragment";
   },
 });
 runUatLocalArtifactTargetNegativeCheck();
@@ -1831,7 +1831,7 @@ runDeploymentRegionNegativeCheck({
   path: "docs/evidence-templates/deployment-region.secret-reference.tmp.json",
   expectedFailure: "evidenceReference userinfo, query veya fragment tasimamali.",
   mutate: (fixture) => {
-    fixture.evidenceReference = "https://user:secret@evidence.uzmanhocam.com/deployment-region.json?token=secret#fragment";
+    fixture.evidenceReference = "https://user:secret@evidence.o-okul.com/deployment-region.json?token=secret#fragment";
   },
 });
 runDeploymentRegionNegativeCheck({
@@ -1929,7 +1929,7 @@ runDeploymentRollbackNegativeCheck({
   expectedFailure: "web.evidenceReference userinfo, query veya fragment tasimamali.",
   mutate: (fixture) => {
     fixture.servicesVerified[0].evidenceReference =
-      "https://user:secret@evidence.uzmanhocam.com/rollback/web?token=secret#fragment";
+      "https://user:secret@evidence.o-okul.com/rollback/web?token=secret#fragment";
   },
 });
 runDeploymentRollbackNegativeCheck({
@@ -1937,7 +1937,7 @@ runDeploymentRollbackNegativeCheck({
   path: "docs/evidence-templates/deployment-rollback.secret-reference.tmp.json",
   expectedFailure: "evidenceReferences userinfo, query veya fragment tasimamali.",
   mutate: (fixture) => {
-    fixture.evidenceReferences[0] = "https://user:secret@evidence.uzmanhocam.com/rollback.json?token=secret#fragment";
+    fixture.evidenceReferences[0] = "https://user:secret@evidence.o-okul.com/rollback.json?token=secret#fragment";
   },
 });
 runDeploymentRollbackLocalArtifactTargetNegativeCheck();
@@ -2378,7 +2378,7 @@ runLiveStatusNegativeCheck({
   path: "docs/evidence-templates/live-status.http-summary-target.tmp.json",
   expectedFailure: "productionEvidenceSummaryTarget file:// veya https:// URL olmalı.",
   mutate: (fixture) => {
-    fixture.productionEvidenceSummaryTarget = "http://evidence.uzmanhocam.com/production-summary.json";
+    fixture.productionEvidenceSummaryTarget = "http://evidence.o-okul.com/production-summary.json";
   },
 });
 runGoLiveSecretUrlTargetNegativeCheck();
@@ -2388,7 +2388,7 @@ runGoLiveNegativeCheck({
   expectedFailure: "productionEvidenceSummary.summaryTarget target URL userinfo, query veya fragment iceremez.",
   mutate: (fixture) => {
     fixture.productionEvidenceSummary.summaryTarget =
-      "https://ops:secret@evidence.uzmanhocam.com/production-summary.json?token=secret#proof";
+      "https://ops:secret@evidence.o-okul.com/production-summary.json?token=secret#proof";
   },
 });
 runGoLiveNegativeCheck({
@@ -2396,7 +2396,7 @@ runGoLiveNegativeCheck({
   path: "docs/evidence-templates/go-live.linked-pilot-secret-url-target.tmp.json",
   expectedFailure: "pilot.pilotEvidenceReference target URL userinfo, query veya fragment iceremez.",
   mutate: (fixture) => {
-    fixture.pilot.pilotEvidenceReference = "https://ops:secret@evidence.uzmanhocam.com/pilot.json?token=secret#proof";
+    fixture.pilot.pilotEvidenceReference = "https://ops:secret@evidence.o-okul.com/pilot.json?token=secret#proof";
   },
 });
 runGoLiveNegativeCheck({
@@ -2405,7 +2405,7 @@ runGoLiveNegativeCheck({
   expectedFailure: "liveStatusEvidence.evidenceTarget target URL userinfo, query veya fragment iceremez.",
   mutate: (fixture) => {
     fixture.liveStatusEvidence.evidenceTarget =
-      "https://ops:secret@evidence.uzmanhocam.com/live-status.json?token=secret#proof";
+      "https://ops:secret@evidence.o-okul.com/live-status.json?token=secret#proof";
   },
 });
 runGoLiveNegativeCheck({
@@ -2413,7 +2413,7 @@ runGoLiveNegativeCheck({
   path: "docs/evidence-templates/go-live.http-live-status-target.tmp.json",
   expectedFailure: "liveStatusEvidence.evidenceTarget file:// veya https:// URL olmali.",
   mutate: (fixture) => {
-    fixture.liveStatusEvidence.evidenceTarget = "http://evidence.uzmanhocam.com/live-status.json";
+    fixture.liveStatusEvidence.evidenceTarget = "http://evidence.o-okul.com/live-status.json";
   },
 });
 runGoLiveNegativeCheck({
@@ -2660,7 +2660,7 @@ runGoLiveNegativeCheck({
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.notification-raw-recipient-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
-    linkedSummary.smokeEvidence.notificationProvider.recipients = ["ops@uzmanhocam.com"];
+    linkedSummary.smokeEvidence.notificationProvider.recipients = ["ops@o-okul.com"];
     fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.notification-raw-recipient-for-go-live.tmp.json";
     writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
     cleanupPaths.push(linkedPath);
@@ -3161,7 +3161,7 @@ function runProductionSummaryHttpTargetNegativeCheck() {
     env: {
       ...process.env,
       PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE: "1",
-      PRODUCTION_EVIDENCE_SUMMARY_TARGET: "http://evidence.uzmanhocam.com/release-summary.json",
+      PRODUCTION_EVIDENCE_SUMMARY_TARGET: "http://evidence.o-okul.com/release-summary.json",
     },
     encoding: "utf8",
   });
@@ -3183,7 +3183,7 @@ function runProductionSummarySecretUrlTargetNegativeCheck() {
     env: {
       ...process.env,
       PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE: "1",
-      PRODUCTION_EVIDENCE_SUMMARY_TARGET: "https://ops:secret@evidence.uzmanhocam.com/release-summary.json?token=secret#proof",
+      PRODUCTION_EVIDENCE_SUMMARY_TARGET: "https://ops:secret@evidence.o-okul.com/release-summary.json?token=secret#proof",
     },
     encoding: "utf8",
   });
@@ -3275,7 +3275,7 @@ function runDeploymentRegionSecretTargetNegativeCheck() {
     env: {
       ...process.env,
       DEPLOYMENT_REGION_ALLOW_EXAMPLE_EVIDENCE: "1",
-      DEPLOYMENT_REGION_TARGET: "https://user:secret@evidence.uzmanhocam.com/deployment-region.json?token=secret#fragment",
+      DEPLOYMENT_REGION_TARGET: "https://user:secret@evidence.o-okul.com/deployment-region.json?token=secret#fragment",
     },
     encoding: "utf8",
   });
@@ -3505,7 +3505,7 @@ function runObservabilityUatSecretTargetNegativeCheck() {
     env: {
       ...process.env,
       OBSERVABILITY_UAT_ALLOW_EXAMPLE_EVIDENCE: "1",
-      OBSERVABILITY_UAT_TARGET: "https://user:secret@evidence.uzmanhocam.com/observability-uat.json?token=secret#fragment",
+      OBSERVABILITY_UAT_TARGET: "https://user:secret@evidence.o-okul.com/observability-uat.json?token=secret#fragment",
     },
     encoding: "utf8",
   });
@@ -3548,9 +3548,9 @@ function runObservabilityUatGeneratorLocalArtifactNegativeChecks() {
   const baseEnv = {
     ...process.env,
     STAGING_ENVIRONMENT: "staging",
-    OBSERVABILITY_UAT_PROMETHEUS_URL: "https://prometheus.uzmanhocam.com",
-    OBSERVABILITY_UAT_GRAFANA_URL: "https://grafana.uzmanhocam.com",
-    OBSERVABILITY_UAT_LOKI_URL: "https://loki.uzmanhocam.com",
+    OBSERVABILITY_UAT_PROMETHEUS_URL: "https://prometheus.o-okul.com",
+    OBSERVABILITY_UAT_GRAFANA_URL: "https://grafana.o-okul.com",
+    OBSERVABILITY_UAT_LOKI_URL: "https://loki.o-okul.com",
     OBSERVABILITY_UAT_DASHBOARD_PANELS_VERIFIED: "API up,Request rate,Average duration,Readiness failures,Docker logs",
     OBSERVABILITY_UAT_ALERTS_VERIFIED:
       "UzmanHocamApiDown,UzmanHocamReadinessFailing,UzmanHocamHigh5xxRate,UzmanHocamSlowRequests",
@@ -3985,7 +3985,7 @@ function runInlineUploadMigrationSecretTargetNegativeCheck() {
     env: {
       ...process.env,
       INLINE_UPLOAD_CONTENT_MIGRATION_TARGET:
-        "https://user:secret@evidence.uzmanhocam.com/inline-upload-content-migration.json?token=secret#fragment",
+        "https://user:secret@evidence.o-okul.com/inline-upload-content-migration.json?token=secret#fragment",
     },
     encoding: "utf8",
   });
@@ -4076,7 +4076,7 @@ function runRateLimitSecretTargetNegativeCheck() {
   const result = spawnSync(process.execPath, ["scripts/check-rate-limit-evidence.mjs"], {
     env: {
       ...process.env,
-      RATE_LIMIT_EVIDENCE_TARGET: "https://user:secret@evidence.uzmanhocam.com/rate-limit.json?token=secret#fragment",
+      RATE_LIMIT_EVIDENCE_TARGET: "https://user:secret@evidence.o-okul.com/rate-limit.json?token=secret#fragment",
     },
     encoding: "utf8",
   });
@@ -4477,7 +4477,7 @@ function runRlsLiveSecretTargetNegativeCheck() {
   const result = spawnSync(process.execPath, ["scripts/check-rls-live-evidence.mjs"], {
     env: {
       ...process.env,
-      RLS_LIVE_EVIDENCE_TARGET: "https://user:secret@evidence.uzmanhocam.com/rls-live.json?token=secret#fragment",
+      RLS_LIVE_EVIDENCE_TARGET: "https://user:secret@evidence.o-okul.com/rls-live.json?token=secret#fragment",
     },
     encoding: "utf8",
   });
@@ -4603,7 +4603,7 @@ function runUatSecretTargetNegativeCheck() {
     env: {
       ...process.env,
       UAT_ALLOW_EXAMPLE_EVIDENCE: "1",
-      UAT_EVIDENCE_TARGET: "https://user:secret@evidence.uzmanhocam.com/uat.json?token=secret#fragment",
+      UAT_EVIDENCE_TARGET: "https://user:secret@evidence.o-okul.com/uat.json?token=secret#fragment",
     },
     encoding: "utf8",
   });
@@ -4799,7 +4799,7 @@ function runPilotSecretUrlTargetNegativeCheck() {
     env: {
       ...process.env,
       PILOT_ALLOW_EXAMPLE_EVIDENCE: "1",
-      PILOT_EVIDENCE_TARGET: "https://ops:secret@evidence.uzmanhocam.com/pilot.json?token=secret#proof",
+      PILOT_EVIDENCE_TARGET: "https://ops:secret@evidence.o-okul.com/pilot.json?token=secret#proof",
     },
     encoding: "utf8",
   });
@@ -4915,7 +4915,7 @@ function runDeploymentRollbackSecretTargetNegativeCheck() {
     env: {
       ...process.env,
       DEPLOYMENT_ROLLBACK_ALLOW_EXAMPLE_EVIDENCE: "1",
-      DEPLOYMENT_ROLLBACK_TARGET: "https://user:secret@evidence.uzmanhocam.com/deployment-rollback.json?token=secret#fragment",
+      DEPLOYMENT_ROLLBACK_TARGET: "https://user:secret@evidence.o-okul.com/deployment-rollback.json?token=secret#fragment",
     },
     encoding: "utf8",
   });
@@ -5038,7 +5038,7 @@ function runLiveStatusGeneratorHttpTargetNegativeCheck() {
       [
         "scripts/generate-live-status-evidence.mjs",
         "--summary-target",
-        "http://evidence.uzmanhocam.com/production-summary.json",
+        "http://evidence.o-okul.com/production-summary.json",
         "--go-live-target",
         goLiveFixturePath,
         "--pilot-target",
@@ -5372,7 +5372,7 @@ function runGoLiveSecretUrlTargetNegativeCheck() {
     env: {
       ...process.env,
       GO_LIVE_ALLOW_EXAMPLE_EVIDENCE: "1",
-      GO_LIVE_EVIDENCE_TARGET: "https://ops:secret@evidence.uzmanhocam.com/go-live.json?token=secret#proof",
+      GO_LIVE_EVIDENCE_TARGET: "https://ops:secret@evidence.o-okul.com/go-live.json?token=secret#proof",
     },
     encoding: "utf8",
   });
@@ -5986,11 +5986,11 @@ function runStagingReleaseArtifactsBundleCheck() {
       evidenceTime,
     );
     summary.generatedAt = summaryTime;
-    summary.webUrl = "https://staging.uzmanhocam.com";
-    summary.appUrl = "https://staging.uzmanhocam.com";
-    summary.apiUrl = "https://staging-api.uzmanhocam.com";
-    summary.smokeEvidence.traefikHttps.url = "https://staging.uzmanhocam.com/health";
-    summary.smokeEvidence.alertWebhook.webhookUrl = "https://alerts.uzmanhocam.com/hooks/staging";
+    summary.webUrl = "https://staging.o-okul.com";
+    summary.appUrl = "https://staging.o-okul.com";
+    summary.apiUrl = "https://staging-api.o-okul.com";
+    summary.smokeEvidence.traefikHttps.url = "https://staging.o-okul.com/health";
+    summary.smokeEvidence.alertWebhook.webhookUrl = "https://alerts.o-okul.com/hooks/staging";
     summary.reports.liveExamCycle.appUrl = summary.appUrl;
     summary.reports.liveExamCycle.apiUrl = summary.apiUrl;
     for (const monitor of summary.reports.externalMonitoring.monitorsVerified) {
@@ -6631,7 +6631,7 @@ function runStagingReleaseArtifactsBundleCheck() {
     writeFileSync(`${reportsDir}/deployment-region.json`, `${JSON.stringify(originalDeploymentRegion, null, 2)}\n`);
 
     const firstGateTargetMismatch = JSON.parse(readFileSync(`${firstGatesDir}/traefik-https.json`, "utf8"));
-    firstGateTargetMismatch.url = "https://staging-different.uzmanhocam.com/health";
+    firstGateTargetMismatch.url = "https://staging-different.o-okul.com/health";
     writeFileSync(`${firstGatesDir}/traefik-https.json`, `${JSON.stringify(firstGateTargetMismatch, null, 2)}\n`);
     const firstGateTargetMismatchNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
       env: {
@@ -6758,7 +6758,7 @@ function normalizeOutageDrillRecord(value, replacement) {
 
 function runProdEnvHttpEvidenceTargetNegativeCheck() {
   const env = createValidProdEnvForNegativeCheck();
-  env.DEPLOYMENT_REGION_TARGET = "http://evidence.uzmanhocam.com/deployment-region.json";
+  env.DEPLOYMENT_REGION_TARGET = "http://evidence.o-okul.com/deployment-region.json";
 
   const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
     env,
@@ -6779,7 +6779,7 @@ function runProdEnvHttpEvidenceTargetNegativeCheck() {
 
 function runProdEnvSecretEvidenceTargetNegativeCheck() {
   const env = createValidProdEnvForNegativeCheck();
-  env.DEPLOYMENT_REGION_TARGET = "https://ops:secret@evidence.uzmanhocam.com/deployment-region.json?token=secret#proof";
+  env.DEPLOYMENT_REGION_TARGET = "https://ops:secret@evidence.o-okul.com/deployment-region.json?token=secret#proof";
 
   const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
     env,
@@ -7093,7 +7093,7 @@ function runFinalExternalEvidenceTargetHygieneNegativeChecks() {
     runFinalExternalEvidenceTargetHygieneNegative(
       "final external evidence secret URL target negative",
       {
-        PRODUCTION_EVIDENCE_SUMMARY_TARGET: "https://ops:secret@evidence.uzmanhocam.com/final-production-summary.json?token=secret#proof",
+        PRODUCTION_EVIDENCE_SUMMARY_TARGET: "https://ops:secret@evidence.o-okul.com/final-production-summary.json?token=secret#proof",
       },
       "PRODUCTION_EVIDENCE_SUMMARY_TARGET final dış kanıt target URL userinfo, query veya fragment içeremez.",
     );
@@ -7394,7 +7394,7 @@ function runProdEvidenceSmokeEvidenceFileNegative(label, env, expectedFailure) {
 
 function runProdEvidenceHttpEvidenceTargetNegativeCheck() {
   const env = createValidProdEnvForNegativeCheck();
-  env.DEPLOYMENT_REGION_TARGET = "http://evidence.uzmanhocam.com/deployment-region.json";
+  env.DEPLOYMENT_REGION_TARGET = "http://evidence.o-okul.com/deployment-region.json";
 
   const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
     env,
@@ -7436,7 +7436,7 @@ function runProdEvidencePlaceholderEvidenceTargetNegativeCheck() {
 
 function runProdEvidenceSecretEvidenceTargetNegativeCheck() {
   const env = createValidProdEnvForNegativeCheck();
-  env.DEPLOYMENT_REGION_TARGET = "https://ops:secret@evidence.uzmanhocam.com/deployment-region.json?token=secret#proof";
+  env.DEPLOYMENT_REGION_TARGET = "https://ops:secret@evidence.o-okul.com/deployment-region.json?token=secret#proof";
 
   const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
     env,
@@ -7554,7 +7554,7 @@ function runProdEvidenceSymlinkParentEvidenceTargetNegativeCheck() {
 
 function runProdEnvTraefikOriginNegativeCheck() {
   const env = createValidProdEnvForNegativeCheck();
-  env.TRAEFIK_HTTPS_SMOKE_URL = "https://other.uzmanhocam.com/health";
+  env.TRAEFIK_HTTPS_SMOKE_URL = "https://other.o-okul.com/health";
 
   const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
     env,
@@ -7724,7 +7724,7 @@ function runAlertWebhookMissingTokenNegativeCheck() {
   const result = spawnSync(process.execPath, ["scripts/smoke-alert-webhook.mjs"], {
     env: {
       ...process.env,
-      ALERT_WEBHOOK_URL: "https://alerts.uzmanhocam.com/webhook",
+      ALERT_WEBHOOK_URL: "https://alerts.o-okul.com/webhook",
       ALERT_WEBHOOK_TOKEN: "",
     },
     encoding: "utf8",
@@ -7743,7 +7743,7 @@ function runAlertWebhookMissingTokenNegativeCheck() {
 }
 
 function runAlertWebhookHttpUrlNegativeCheck() {
-  const result = runAlertWebhookUrlNegativeCheck("http://alerts.uzmanhocam.com/webhook");
+  const result = runAlertWebhookUrlNegativeCheck("http://alerts.o-okul.com/webhook");
 
   if (result.status === 0) {
     console.error("Production evidence template kontrolü başarısız: alert webhook HTTP URL negative beklenen şekilde kırılmadı.");
@@ -7758,7 +7758,7 @@ function runAlertWebhookHttpUrlNegativeCheck() {
 }
 
 function runAlertWebhookSecretUrlNegativeCheck() {
-  const result = runAlertWebhookUrlNegativeCheck("https://user:secret@alerts.uzmanhocam.com/webhook?token=secret#fragment");
+  const result = runAlertWebhookUrlNegativeCheck("https://user:secret@alerts.o-okul.com/webhook?token=secret#fragment");
 
   if (result.status === 0) {
     console.error("Production evidence template kontrolü başarısız: alert webhook secret URL negative beklenen şekilde kırılmadı.");
@@ -7826,11 +7826,11 @@ function createValidProdEnvForNegativeCheck() {
   const env = {
     ...process.env,
     NODE_ENV: "production",
-    APP_URL: "https://app.uzmanhocam.com",
-    API_URL: "https://api.uzmanhocam.com",
-    WEB_URL: "https://app.uzmanhocam.com",
-    DATABASE_URL: "postgresql://app_user:strong-password@db.uzmanhocam.internal:5432/uzman_hocam",
-    DIRECT_DATABASE_URL: "postgresql://migration_user:strong-password@db.uzmanhocam.internal:5432/uzman_hocam",
+    APP_URL: "https://o-okul.com",
+    API_URL: "https://o-okul.com",
+    WEB_URL: "https://o-okul.com",
+    DATABASE_URL: "postgresql://app_user:strong-password@db.o-okul.internal:5432/uzman_hocam",
+    DIRECT_DATABASE_URL: "postgresql://migration_user:strong-password@db.o-okul.internal:5432/uzman_hocam",
     JWT_ACCESS_SECRET: "access-secret-123456789012345678901234",
     JWT_REFRESH_SECRET: "refresh-secret-12345678901234567890123",
     STUDENT_PII_ENCRYPTION_KEY: "student-pii-encryption-123456789012",
@@ -7839,9 +7839,9 @@ function createValidProdEnvForNegativeCheck() {
     ADMIN_MFA_SECRET_ENCRYPTION_KEY: "admin-mfa-secret-encryption-1234567",
     ADMIN_MFA_RECOVERY_HASH_KEY: "admin-mfa-recovery-hash-12345678901",
     ADMIN_MFA_CHALLENGE_SECRET: "admin-mfa-challenge-secret-123456789",
-    ADMIN_MFA_ISSUER: "Uzman Hocam",
+    ADMIN_MFA_ISSUER: "o-okul",
     AI_REPORT_SUMMARY_PROVIDER: "disabled",
-    COOKIE_DOMAIN: "uzmanhocam.com",
+    COOKIE_DOMAIN: "o-okul.com",
     COOKIE_SECURE: "true",
     LOG_LEVEL: "info",
     LOG_ENABLED: "true",
@@ -7860,19 +7860,19 @@ function createValidProdEnvForNegativeCheck() {
     SMS_PROVIDER: "netgsm",
     SMS_ALLOW_NOOP_IN_PRODUCTION: "false",
     SMS_SMOKE_TO: "+905551112233",
-    SMS_SMOKE_BODY: "Uzman Hocam production SMS smoke",
+    SMS_SMOKE_BODY: "o-okul production SMS smoke",
     SMS_SMOKE_CONFIRM: "send",
     NETGSM_USERCODE: "netgsm-usercode",
     NETGSM_PASSWORD: "netgsm-password",
-    NETGSM_MSG_HEADER: "UZMNHOCAM",
+    NETGSM_MSG_HEADER: "OOKUL",
     NOTIFICATION_PROVIDER: "http",
     NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION: "false",
-    NOTIFICATION_HTTP_ENDPOINT: "https://notify.uzmanhocam.com/send",
+    NOTIFICATION_HTTP_ENDPOINT: "https://notify.o-okul.com/send",
     NOTIFICATION_HTTP_BEARER_TOKEN: "notification-bearer-token-1234567890",
-    NOTIFICATION_SMOKE_EMAIL_TO: "ops@uzmanhocam.com",
+    NOTIFICATION_SMOKE_EMAIL_TO: "ops@o-okul.com",
     NOTIFICATION_SMOKE_PUSH_TO: "ops-device-token",
-    NOTIFICATION_SMOKE_SUBJECT: "Uzman Hocam production notification smoke",
-    NOTIFICATION_SMOKE_BODY: "Uzman Hocam production notification smoke",
+    NOTIFICATION_SMOKE_SUBJECT: "o-okul production notification smoke",
+    NOTIFICATION_SMOKE_BODY: "o-okul production notification smoke",
     NOTIFICATION_SMOKE_CONFIRM: "send",
     SUPPORT_ATTACHMENT_STORAGE: "s3",
     HOMEWORK_MATERIAL_FILE_STORAGE: "s3",
@@ -7881,7 +7881,7 @@ function createValidProdEnvForNegativeCheck() {
     CLAMAV_PORT: "3310",
     CLAMAV_TIMEOUT_MS: "5000",
     S3_BUCKET: "uzman-hocam-prod-assets",
-    S3_ENDPOINT: "https://s3.tr-storage.uzmanhocam.com",
+    S3_ENDPOINT: "https://s3.tr-storage.o-okul.com",
     S3_ACCESS_KEY_ID: "prod-access-key",
     S3_SECRET_ACCESS_KEY: "prod-secret-key",
     SENTRY_DSN: "https://1234567890abcdef@o123456.ingest.sentry.io/987654",
@@ -7889,12 +7889,12 @@ function createValidProdEnvForNegativeCheck() {
     NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: "0.05",
     SENTRY_SEND_DEFAULT_PII: "false",
     SENTRY_SMOKE_CONFIRM: "send",
-    SENTRY_SMOKE_MESSAGE: "Uzman Hocam production Sentry smoke",
-    TRAEFIK_HTTPS_SMOKE_URL: "https://app.uzmanhocam.com/",
+    SENTRY_SMOKE_MESSAGE: "o-okul production Sentry smoke",
+    TRAEFIK_HTTPS_SMOKE_URL: "https://o-okul.com/",
     BACKUP_PATH: "/var/backups/uzman-hocam",
     BACKUP_RETENTION_DAYS: "7",
     WAL_ARCHIVE_TARGET: "s3://prod-wal-archive/uzman-hocam/wal",
-    ALERT_WEBHOOK_URL: "https://alerts.uzmanhocam.com/webhook",
+    ALERT_WEBHOOK_URL: "https://alerts.o-okul.com/webhook",
     ALERT_WEBHOOK_TOKEN: "alert-webhook-token-123456789012345",
     ROLLBACK_IMAGE_TAG: "ghcr.io/uzman-hocam/uzman-hocam/api:2026-06-14.1",
   };

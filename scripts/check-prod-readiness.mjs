@@ -1006,7 +1006,7 @@ const expectations = {
     "uzman_hocam_queue_jobs",
   ],
   "docker/grafana/dashboards/api-overview.json": [
-    "Uzman Hocam API Overview",
+    "o-okul API Overview",
     "Queue Jobs by Status",
     "uzman_hocam_queue_jobs",
     "uzman_hocam_queue_metrics_scrape_error",
@@ -1726,7 +1726,7 @@ const expectations = {
     "live UI-worker result local artifact target negative",
     "LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET",
     "live_ui_worker_report_smoke",
-    "report.admin@staging.uzmanhocam.com",
+    "report.admin@staging.o-okul.com",
     "Live UI-worker evidence contract kontrolü geçti.",
   ],
   "scripts/check-live-ui-worker-result-evidence.mjs": [
@@ -3144,7 +3144,7 @@ const expectations = {
     "placeholder host target negative",
     "temp file target negative",
     "symlink file target negative",
-    "http://evidence.uzmanhocam.com",
+    "http://evidence.o-okul.com",
     "https://localhost",
     "file:///tmp",
     "gercek https host",

@@ -155,17 +155,17 @@ function createValidEvidence() {
   return {
     appendRunId: true,
     firstAdmin: {
-      email: "tenant.admin@staging.uzmanhocam.com",
+      email: "tenant.admin@staging.o-okul.com",
       name: "Canli UAT Admin",
       password: "Str0ngAdmin!2026",
     },
     onboarding: {
-      contactEmail: "kurulum@staging.uzmanhocam.com",
+      contactEmail: "kurulum@staging.o-okul.com",
       importOwner: "Canli UAT",
       institutionName: "UAT Kurumu",
     },
     systemAdmin: {
-      email: "system.admin@staging.uzmanhocam.com",
+      email: "system.admin@staging.o-okul.com",
       password: "Str0ngSystem!2026",
     },
     tenant: {

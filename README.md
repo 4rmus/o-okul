@@ -1,4 +1,4 @@
-# Uzman Hocam
+# o-okul
 
 Çok kiracılı (multi-tenant) dershane ve kurum yönetim SaaS platformu. Kurumlar birbirinin verisini asla göremez; 10.000+ öğrenci ölçeğinde tasarlanmıştır.
 
@@ -147,15 +147,15 @@ SMS_ALLOW_NOOP_IN_PRODUCTION=true \
 NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION=true \
 docker compose --env-file .env.local up -d
 
-# Bu sunucunun IP adresiyle HTTPS edge koşusu.
-# IP için Let's Encrypt/ACME kullanılmaz; Traefik self-signed TLS sunar.
-SERVER_DOMAIN=212.108.107.190 \
-APP_URL=https://212.108.107.190 \
-API_URL=https://212.108.107.190 \
-WEB_URL=https://212.108.107.190 \
-NEXT_PUBLIC_API_URL=https://212.108.107.190 \
+# Gerçek domain ile HTTPS edge koşusu.
+DOMAIN=o-okul.com \
+APP_URL=https://o-okul.com \
+API_URL=https://o-okul.com \
+WEB_URL=https://o-okul.com \
+NEXT_PUBLIC_API_URL=https://o-okul.com \
 COOKIE_SECURE=true \
-COOKIE_DOMAIN=212.108.107.190 \
+COOKIE_DOMAIN=o-okul.com \
+ACME_EMAIL=admin@o-okul.com \
 API_NODE_ENV=staging \
 WORKER_NODE_ENV=staging \
 API_RATE_LIMIT_ENABLED=true \
@@ -166,7 +166,7 @@ SUPPORT_ATTACHMENT_STORAGE=s3 \
 HOMEWORK_MATERIAL_FILE_STORAGE=s3 \
 SMS_ALLOW_NOOP_IN_PRODUCTION=true \
 NOTIFICATION_ALLOW_NOOP_IN_PRODUCTION=true \
-docker compose --env-file .env.local -f docker-compose.yml -f docker-compose.traefik-ip.yml up -d --build web api worker queue-board traefik
+docker compose --env-file .env.local -f docker-compose.yml -f docker-compose.traefik.yml up -d --build web api worker queue-board traefik
 
 # Tek-node varsayılan stack: web, api, worker, queue-board, postgres, redis, minio
 docker compose up -d
@@ -177,9 +177,8 @@ docker compose --profile av up -d
 # Traefik HTTPS kontrolü
 pnpm traefik:https:smoke
 
-# IP/self-signed HTTPS smoke için
-TRAEFIK_HTTPS_SMOKE_URL=https://212.108.107.190/health \
-TRAEFIK_HTTPS_SMOKE_ALLOW_INSECURE_TLS=true \
+# Domain HTTPS smoke için
+TRAEFIK_HTTPS_SMOKE_URL=https://o-okul.com/health \
 TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE=artifacts/single-node-2026-06-14/traefik-https-smoke.json \
 pnpm traefik:https:smoke
 
@@ -192,9 +191,8 @@ observability ve external monitoring varsayılan açılışa dahil değildir; il
 doğrulaması sırasında profil/override ile çalıştırılır. AI karne özeti bu release'te kapalıdır:
 production/staging için `AI_REPORT_SUMMARY_PROVIDER=disabled` kullanılır.
 
-Domain alınana kadar `docker-compose.traefik-ip.yml` bu sunucunun public IP'siyle HTTPS smoke
-kanıtı üretmek içindir. Gerçek domain geldiğinde `docker-compose.traefik.yml` ve `DOMAIN`/`ACME_EMAIL`
-ile Let's Encrypt moduna dönülür.
+Gerçek domain için `docker-compose.traefik.yml`, `DOMAIN=o-okul.com` ve `ACME_EMAIL`
+ile Let's Encrypt modu kullanılır.
 
 Geçici off-site backup modeli provider kullanmaz: sunucuda üretilen
 `artifacts/single-node-2026-06-14/kurum-cihazi-yedek-2026-06-14.dump` dosyası ve yanındaki
