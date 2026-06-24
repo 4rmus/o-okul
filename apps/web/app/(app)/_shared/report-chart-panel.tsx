@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Panel } from "@uzman-hocam/ui";
+import { Panel } from "@o-okul/ui";
 
 interface ReportChartPanelProps {
   title: string;

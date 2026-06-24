@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
-import type { StudySessionRecord as SharedStudySessionRecord } from "@uzman-hocam/shared-types";
+import type { StudySessionRecord as SharedStudySessionRecord } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { SchoolService } from "../school/school.service.js";

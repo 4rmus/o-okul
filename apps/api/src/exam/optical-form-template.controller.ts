@@ -3,7 +3,7 @@ import type {
   OpticalFormTemplateApplyRequest,
   OpticalFormTemplateCreateRequest,
   OpticalFormTemplateRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
 import { requiredTrimmedString, zodBody } from "../http/zod-validation.js";

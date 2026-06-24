@@ -1,5 +1,5 @@
 {
-  "name": "@uzman-hocam/shared-types",
+  "name": "@o-okul/shared-types",
   "version": "0.0.0",
   "private": true,
   "main": "./dist/index.js",

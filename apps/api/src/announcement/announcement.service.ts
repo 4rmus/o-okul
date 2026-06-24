@@ -5,7 +5,7 @@ import {
   type NotificationAdapter,
   type NotificationMessage,
   type NotificationSendResult,
-} from "@uzman-hocam/notification-adapter";
+} from "@o-okul/notification-adapter";
 import type {
   AnnouncementAudience,
   AnnouncementCreateRequest,
@@ -21,7 +21,7 @@ import type {
   ClassRecord,
   StudentRecord,
   TeacherAssignmentRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";

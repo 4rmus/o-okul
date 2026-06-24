@@ -7,8 +7,8 @@ import { hashPassword } from "../apps/api/dist/auth/auth-user-store.js";
 import { AppModule } from "../apps/api/dist/app.module.js";
 import { configureApiApp } from "../apps/api/dist/http/configure-api-app.js";
 
-const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/uzman_hocam";
-const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/uzman_hocam";
+const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/o_okul";
+const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/o_okul";
 const runId = randomUUID();
 const tenantId = `tenant-isem-answer-key-smoke-${runId}`;
 const userId = `user-isem-answer-key-smoke-${runId}`;

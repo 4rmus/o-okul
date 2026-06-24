@@ -4,7 +4,7 @@ import { Test } from "@nestjs/testing";
 import ExcelJS from "exceljs";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { AnswerKeyRecord } from "@uzman-hocam/shared-types";
+import type { AnswerKeyRecord } from "@o-okul/shared-types";
 import { AppModule } from "../app.module.js";
 import { reportSnapshotStoreToken, type ReportSnapshotStore } from "../report/report-snapshot-store.js";
 import {

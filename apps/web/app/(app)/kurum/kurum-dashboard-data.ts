@@ -13,7 +13,7 @@ import type {
   StudentRecord,
   SupportTicketRecord,
   TeacherRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { apiBaseUrl, apiListRequest, apiRequest, apiUrl } from "../../../src/api-client.js";
 
 export interface KurumReportSummary {

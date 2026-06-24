@@ -1,5 +1,5 @@
 import { Controller, Get, HttpCode, Post, UseGuards } from "@nestjs/common";
-import type { GuardianRecord, KvkkInventoryKind, KvkkInventoryRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
+import type { GuardianRecord, KvkkInventoryKind, KvkkInventoryRecord, StudentRecord, TeacherRecord } from "@o-okul/shared-types";
 import { AuthService, type SelfPurgeResult } from "../auth/auth.service.js";
 import { getRequestContext } from "../context/request-context.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";

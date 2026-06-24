@@ -20,7 +20,7 @@ import {
   TabButton,
   Tabs,
   type DataTableColumn,
-} from "@uzman-hocam/ui";
+} from "@o-okul/ui";
 import type {
   AcademicTermRecord,
   CampusRecord,
@@ -36,7 +36,7 @@ import type {
   ReportStudentProgress,
   ReportStudentSnapshot,
   StudentRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { Download, Eye, RefreshCw } from "lucide-react";
 import { KarneSheet } from "../../_shared/karne-sheet.js";
 import { useAuth } from "../../../providers.js";

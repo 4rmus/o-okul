@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/co
 import type {
   IdentityInvitationAcceptResponse,
   IdentityInvitationRecord as PublicIdentityInvitationRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";

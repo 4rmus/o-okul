@@ -3,7 +3,7 @@ import {
   isPortalSubjectRoleName,
   type IdentityInvitationAcceptRequest,
   type IdentityInvitationCreateRequest,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { createHash, randomBytes } from "node:crypto";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";

@@ -36,7 +36,7 @@
 - `sms-batch` job payload'ı şablon id, mesaj gövdesi ve alıcıları taşır; job id
   `templateId + contentHash` ile idempotent üretilir.
 - Worker `sms-batch` kuyruğunu dinleyecek şekilde genişletildi; işleyici mesajları
-  `@uzman-hocam/sms-adapter` arayüzüne verir. Gerçek sağlayıcı entegrasyonu yerine bu dilimde
+  `@o-okul/sms-adapter` arayüzüne verir. Gerçek sağlayıcı entegrasyonu yerine bu dilimde
   no-op adapter kullanılır.
 - SMS adapter GSM-7 ve Unicode metinler için tekli/çoklu SMS segment hesabı yapar; Türkçe
   GSM-7 dışı karakterler Unicode limitleriyle hesaplanır.
@@ -62,7 +62,7 @@
   teslim özetini `AnnouncementDeliveryReport` kaydına upsert eder.
 - Kurum admin `POST /announcements/:id/delivery-results` ile EMAIL/PUSH sağlayıcı teslim sonucunu
   doğrulanmış sayılarla `announcement-delivery` kuyruğuna bağlar.
-- E-posta/push sağlayıcı sözleşmesi için `@uzman-hocam/notification-adapter` eklendi; lokal no-op,
+- E-posta/push sağlayıcı sözleşmesi için `@o-okul/notification-adapter` eklendi; lokal no-op,
   üretimde no-op engeli ve Bearer token destekli HTTP sağlayıcı yolu test edildi.
 - `pnpm notification:smoke` eklendi; e-posta ve push test alıcılarıyla kontrollü provider smoke
   yapılır, gerçek sağlayıcı için `NOTIFICATION_SMOKE_CONFIRM=send` gerekir.
@@ -79,7 +79,7 @@
 - SMS adapter env factory'si eklendi; `NODE_ENV=production` ortamında gerçek sağlayıcı seçilmeden
   no-op adapter ile başlamak `SMS_PROVIDER_REQUIRED` hatasıyla engellenir.
 - Worker SMS batch processor, provider seçimini kendi içinde tekrar tanımlamak yerine
-  `@uzman-hocam/sms-adapter` paketindeki env factory'sini kullanır; Docker Compose worker env'i
+  `@o-okul/sms-adapter` paketindeki env factory'sini kullanır; Docker Compose worker env'i
   `SMS_PROVIDER` ve `SMS_ALLOW_NOOP_IN_PRODUCTION` değerlerini açıkça taşır.
 - Netgsm REST v2 SMS adapter eklendi; `SMS_PROVIDER=netgsm` seçildiğinde Basic Auth ile
   `https://api.netgsm.com.tr/sms/rest/v2/send` endpoint'ine JSON mesaj listesi gönderir,
@@ -154,50 +154,50 @@
 
 ## Çalıştırılan doğrulamalar
 
-- `corepack pnpm --filter @uzman-hocam/api test -- announcement`
-- `corepack pnpm --filter @uzman-hocam/db exec prisma validate --config prisma.config.ts`
-- `corepack pnpm --filter @uzman-hocam/db run db:rls:check`
-- `corepack pnpm --filter @uzman-hocam/shared-types typecheck`
-- `corepack pnpm --filter @uzman-hocam/api typecheck`
-- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/payment/payment.e2e.test.ts src/payment/payment-store.test.ts`
-- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/me/me-access-matrix.e2e.test.ts`
-- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/app.e2e.test.ts`
-- `corepack pnpm --filter @uzman-hocam/web typecheck`
-- `corepack pnpm --filter @uzman-hocam/api typecheck`
-- `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next login gerçek auth store ile kurum paneline geçer"`
-- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/announcement/announcement-delivery-report-store.test.ts src/announcement/announcement.e2e.test.ts`
-- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/announcement/announcement.e2e.test.ts`
-- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/me/me-access-matrix.e2e.test.ts src/announcement/announcement.e2e.test.ts`
-- `corepack pnpm --filter @uzman-hocam/web typecheck`
-- `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next rol portalları bağlı kişi verisini gösterir"`
-- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/queue/job-producer.test.ts src/queue/bullmq-producer.test.ts`
-- `corepack pnpm --filter @uzman-hocam/worker typecheck`
-- `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/announcement-delivery-job.test.ts src/jobs/announcement-delivery-processor.test.ts src/jobs/postgres-announcement-delivery-reporter.test.ts src/queue/bullmq-worker.test.ts`
-- `corepack pnpm --filter @uzman-hocam/notification-adapter typecheck`
-- `corepack pnpm --filter @uzman-hocam/notification-adapter test`
-- `corepack pnpm --filter @uzman-hocam/api test -- message-template`
-- `corepack pnpm --filter @uzman-hocam/api test -- sms-batch`
-- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/sms-batch/sms-batch.service.test.ts src/sms-batch/sms-batch.e2e.test.ts`
-- `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/sms-batch-job.test.ts src/jobs/sms-batch-processor.test.ts src/jobs/postgres-sms-batch-delivery-reporter.test.ts`
-- `corepack pnpm --filter @uzman-hocam/web typecheck`
-- `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next login gerçek auth store ile kurum paneline geçer"`
-- `corepack pnpm --filter @uzman-hocam/api test -- homework`
-- `corepack pnpm --filter @uzman-hocam/api test -- report-generation`
-- `corepack pnpm --filter @uzman-hocam/api test -- support-ticket`
-- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/support-ticket/support-ticket.e2e.test.ts src/support-ticket/support-ticket-store.test.ts`
-- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/support-ticket/support-ticket-attachment-storage.test.ts src/support-ticket/support-ticket.service.test.ts src/support-ticket/support-ticket.e2e.test.ts src/support-ticket/support-ticket-store.test.ts`
-- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/support-ticket/support-ticket.e2e.test.ts src/support-ticket/support-ticket-store.test.ts src/support-ticket/support-ticket.service.test.ts`
-- `corepack pnpm --filter @uzman-hocam/sms-adapter test`
-- `corepack pnpm --filter @uzman-hocam/sms-adapter exec vitest run src/index.test.ts`
-- `corepack pnpm --filter @uzman-hocam/worker test -- sms-batch`
-- `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/sms-batch-processor.test.ts src/jobs/sms-batch-job.test.ts`
-- `corepack pnpm --filter @uzman-hocam/worker test -- scoring-engine report-generation-job exam-evaluation-job`
-- `corepack pnpm --filter @uzman-hocam/api typecheck`
-- `corepack pnpm --filter @uzman-hocam/db lint`
-- `corepack pnpm --filter @uzman-hocam/web typecheck`
-- `corepack pnpm --filter @uzman-hocam/web test:e2e`
-- `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next login gerçek auth store ile kurum paneline geçer"`
-- `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next rol portalları bağlı kişi verisini gösterir"`
+- `corepack pnpm --filter @o-okul/api test -- announcement`
+- `corepack pnpm --filter @o-okul/db exec prisma validate --config prisma.config.ts`
+- `corepack pnpm --filter @o-okul/db run db:rls:check`
+- `corepack pnpm --filter @o-okul/shared-types typecheck`
+- `corepack pnpm --filter @o-okul/api typecheck`
+- `corepack pnpm --filter @o-okul/api exec vitest run src/payment/payment.e2e.test.ts src/payment/payment-store.test.ts`
+- `corepack pnpm --filter @o-okul/api exec vitest run src/me/me-access-matrix.e2e.test.ts`
+- `corepack pnpm --filter @o-okul/api exec vitest run src/app.e2e.test.ts`
+- `corepack pnpm --filter @o-okul/web typecheck`
+- `corepack pnpm --filter @o-okul/api typecheck`
+- `corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next login gerçek auth store ile kurum paneline geçer"`
+- `corepack pnpm --filter @o-okul/api exec vitest run src/announcement/announcement-delivery-report-store.test.ts src/announcement/announcement.e2e.test.ts`
+- `corepack pnpm --filter @o-okul/api exec vitest run src/announcement/announcement.e2e.test.ts`
+- `corepack pnpm --filter @o-okul/api exec vitest run src/me/me-access-matrix.e2e.test.ts src/announcement/announcement.e2e.test.ts`
+- `corepack pnpm --filter @o-okul/web typecheck`
+- `corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next rol portalları bağlı kişi verisini gösterir"`
+- `corepack pnpm --filter @o-okul/api exec vitest run src/queue/job-producer.test.ts src/queue/bullmq-producer.test.ts`
+- `corepack pnpm --filter @o-okul/worker typecheck`
+- `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/announcement-delivery-job.test.ts src/jobs/announcement-delivery-processor.test.ts src/jobs/postgres-announcement-delivery-reporter.test.ts src/queue/bullmq-worker.test.ts`
+- `corepack pnpm --filter @o-okul/notification-adapter typecheck`
+- `corepack pnpm --filter @o-okul/notification-adapter test`
+- `corepack pnpm --filter @o-okul/api test -- message-template`
+- `corepack pnpm --filter @o-okul/api test -- sms-batch`
+- `corepack pnpm --filter @o-okul/api exec vitest run src/sms-batch/sms-batch.service.test.ts src/sms-batch/sms-batch.e2e.test.ts`
+- `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/sms-batch-job.test.ts src/jobs/sms-batch-processor.test.ts src/jobs/postgres-sms-batch-delivery-reporter.test.ts`
+- `corepack pnpm --filter @o-okul/web typecheck`
+- `corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next login gerçek auth store ile kurum paneline geçer"`
+- `corepack pnpm --filter @o-okul/api test -- homework`
+- `corepack pnpm --filter @o-okul/api test -- report-generation`
+- `corepack pnpm --filter @o-okul/api test -- support-ticket`
+- `corepack pnpm --filter @o-okul/api exec vitest run src/support-ticket/support-ticket.e2e.test.ts src/support-ticket/support-ticket-store.test.ts`
+- `corepack pnpm --filter @o-okul/api exec vitest run src/support-ticket/support-ticket-attachment-storage.test.ts src/support-ticket/support-ticket.service.test.ts src/support-ticket/support-ticket.e2e.test.ts src/support-ticket/support-ticket-store.test.ts`
+- `corepack pnpm --filter @o-okul/api exec vitest run src/support-ticket/support-ticket.e2e.test.ts src/support-ticket/support-ticket-store.test.ts src/support-ticket/support-ticket.service.test.ts`
+- `corepack pnpm --filter @o-okul/sms-adapter test`
+- `corepack pnpm --filter @o-okul/sms-adapter exec vitest run src/index.test.ts`
+- `corepack pnpm --filter @o-okul/worker test -- sms-batch`
+- `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/sms-batch-processor.test.ts src/jobs/sms-batch-job.test.ts`
+- `corepack pnpm --filter @o-okul/worker test -- scoring-engine report-generation-job exam-evaluation-job`
+- `corepack pnpm --filter @o-okul/api typecheck`
+- `corepack pnpm --filter @o-okul/db lint`
+- `corepack pnpm --filter @o-okul/web typecheck`
+- `corepack pnpm --filter @o-okul/web test:e2e`
+- `corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next login gerçek auth store ile kurum paneline geçer"`
+- `corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next rol portalları bağlı kişi verisini gösterir"`
 - Playwright mobil görsel kontrolü: `apps/web/test-results/announcement-panel-mobile.png`
 - Playwright materyal paneli görsel kontrolü: `apps/web/test-results/material-file-panel.png`
 - Playwright hata kitapçığı görsel kontrolü: `apps/web/test-results/error-booklet-panel.png`

@@ -411,7 +411,7 @@ async function openTeacherPortal(
   await page.addInitScript((mode) => {
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
     if (mode === "role-preview") {
-      window.sessionStorage.setItem("uzman-hocam.role-preview-token", "preview-token-teacher");
+      window.sessionStorage.setItem("o-okul.role-preview-token", "preview-token-teacher");
     }
   }, options.mode ?? "teacher");
   await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);

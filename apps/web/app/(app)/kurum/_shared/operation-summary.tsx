@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ActionCard, MetricCard, MetricGrid, StatusBadge, type StatusBadgeProps } from "@uzman-hocam/ui";
+import { ActionCard, MetricCard, MetricGrid, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";
 
 export interface OperationSummaryItem {
   description?: ReactNode;

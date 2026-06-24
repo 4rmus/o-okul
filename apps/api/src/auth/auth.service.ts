@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional, UnauthorizedException } from "@nestjs/common";
-import type { SelfPurgeResult } from "@uzman-hocam/shared-types";
+import type { SelfPurgeResult } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdentityResolver } from "./identity-resolver.js";

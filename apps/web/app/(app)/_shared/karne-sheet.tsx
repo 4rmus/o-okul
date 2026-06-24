@@ -1,13 +1,13 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { InfoGrid, InfoItem, MetricCard, MetricGrid, StatusBadge, type StatusBadgeProps } from "@uzman-hocam/ui";
+import { InfoGrid, InfoItem, MetricCard, MetricGrid, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";
 import type {
   ReportErrorBooklet,
   ReportScopeRank,
   ReportStudentProgress,
   ReportStudentSnapshot,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { formatCourseName, formatOutcomeCode } from "./academic-labels.js";
 import { clampSuccessRate, formatPercentNumber, reportQuestionCount, reportSuccessRate } from "./report-metrics.js";
 

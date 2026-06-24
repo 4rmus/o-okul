@@ -67,7 +67,7 @@ export class InMemoryAuditLogStore implements AuditLogStore {
 export class PostgresAuditLogStore implements AuditLogStore {
   constructor(
     private readonly pool: TenantQueryable = new pg.Pool({
-      connectionString: process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/uzman_hocam",
+      connectionString: process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/o_okul",
     }),
   ) {}
 

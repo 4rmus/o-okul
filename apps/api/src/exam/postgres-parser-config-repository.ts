@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import pg from "pg";
-import type { ParserConfigSuggestion, ParserDelimiter, ParserEncoding } from "@uzman-hocam/shared-types";
+import type { ParserConfigSuggestion, ParserDelimiter, ParserEncoding } from "@o-okul/shared-types";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 import type {
   ApprovedParserConfigInput,

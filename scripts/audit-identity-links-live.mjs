@@ -1,7 +1,7 @@
 import { Socket } from "node:net";
 import pg from "pg";
 
-const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/uzman_hocam";
+const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/o_okul";
 const subjects = [
   { table: "Student", role: "STUDENT" },
   { table: "Guardian", role: "GUARDIAN" },

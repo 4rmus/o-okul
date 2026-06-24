@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable } from "@nestjs/common";
-import type { AuditLogCategory, AuditLogListItemRecord, StudentAuditSummaryRecord } from "@uzman-hocam/shared-types";
+import type { AuditLogCategory, AuditLogListItemRecord, StudentAuditSummaryRecord } from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
 import { isSystemAdmin } from "../rbac/roles.js";
 import { auditLogStoreToken, type AuditLogStore } from "./audit-log-store.js";

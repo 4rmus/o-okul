@@ -22,13 +22,13 @@ if (path === "repos/owner/repo/environments/staging") {
 
 if (path === "repos/owner/repo/environments/staging/variables?per_page=100") {
   const values = {
-    STAGING_DEPLOY_DIR: "/root/uzman-hocam",
+    STAGING_DEPLOY_DIR: "/root/o-okul",
     STAGING_NEXT_PUBLIC_API_URL: "https://212.108.107.190",
     STAGING_EDGE_MODE: "ip",
   };
   if (scenario === "bad-edge") values.STAGING_EDGE_MODE = "domain";
-  if (scenario === "bad-deploy-dir") values.STAGING_DEPLOY_DIR = "root/uzman-hocam";
-  if (scenario === "wrong-deploy-dir") values.STAGING_DEPLOY_DIR = "/srv/uzman-hocam";
+  if (scenario === "bad-deploy-dir") values.STAGING_DEPLOY_DIR = "root/o-okul";
+  if (scenario === "wrong-deploy-dir") values.STAGING_DEPLOY_DIR = "/srv/o-okul";
   writeJson({ variables: Object.entries(values).map(([name, value]) => ({ name, value })) });
 }
 
@@ -64,7 +64,7 @@ try {
   expectNoOutput("missing-secrets", "super-secret-value-that-must-not-leak");
   expectFailure("bad-edge", ["STAGING_EDGE_MODE ip staging host için ip olmalı."]);
   expectFailure("bad-deploy-dir", ["STAGING_DEPLOY_DIR absolute path olmalı."]);
-  expectFailure("wrong-deploy-dir", ["STAGING_DEPLOY_DIR /root/uzman-hocam olmalı."]);
+  expectFailure("wrong-deploy-dir", ["STAGING_DEPLOY_DIR /root/o-okul olmalı."]);
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

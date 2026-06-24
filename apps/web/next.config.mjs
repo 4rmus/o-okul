@@ -2,7 +2,7 @@ import { withSentryConfig } from "@sentry/nextjs";
 
 /** @type {import("next").NextConfig} */
 const nextConfig = {
-  transpilePackages: ["@uzman-hocam/ui", "@uzman-hocam/shared-types"],
+  transpilePackages: ["@o-okul/ui", "@o-okul/shared-types"],
 };
 
 export default withSentryConfig(nextConfig, {

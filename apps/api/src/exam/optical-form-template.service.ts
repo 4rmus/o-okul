@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
-import type { OpticalFormTemplateRecord, ParserConfigSuggestion } from "@uzman-hocam/shared-types";
+import type { OpticalFormTemplateRecord, ParserConfigSuggestion } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Queryable, TenantQueryable } from "@uzman-hocam/db";
+import type { Queryable, TenantQueryable } from "@o-okul/db";
 import type { ExamEvaluationJobInput, ExamEvaluationJobResult } from "./exam-evaluation-job.js";
 import { PostgresExamEvaluationAdapter } from "./postgres-exam-evaluation-adapter.js";
 import { scoringEngineVersion, type ScoringResult } from "./scoring-engine.js";

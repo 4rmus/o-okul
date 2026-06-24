@@ -2,7 +2,7 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ClassRecord, ExamParticipantRecord, ExamRecord, StudentRecord } from "@uzman-hocam/shared-types";
+import type { ClassRecord, ExamParticipantRecord, ExamRecord, StudentRecord } from "@o-okul/shared-types";
 import {
   Button,
   Checkbox,
@@ -18,7 +18,7 @@ import {
   type DataTableColumn,
   type StatusBadgeProps,
   useConfirmDialog,
-} from "@uzman-hocam/ui";
+} from "@o-okul/ui";
 import { CheckCircle2, Pencil, Plus, Search, Trash2, Users, X } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiErrorMessage, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";

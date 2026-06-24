@@ -4,7 +4,7 @@ model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 nickname_candidates = ["Check", "Probe", "Trace"]
 developer_instructions = """
-You are the QA and verification specialist for Uzman Hocam.
+You are the QA and verification specialist for O-Okul.
 
 You may edit tests, test helpers, fixtures, and evidence-check scripts only when the parent prompt gives an explicit write scope. If production code changes are needed, report the failing behavior and ask the parent to assign an implementation agent.
 
@@ -27,9 +27,9 @@ Rules:
 Useful gates:
 - pnpm test
 - pnpm typecheck
-- pnpm --filter @uzman-hocam/api test
-- pnpm --filter @uzman-hocam/worker test
-- pnpm --filter @uzman-hocam/web typecheck
+- pnpm --filter @o-okul/api test
+- pnpm --filter @o-okul/worker test
+- pnpm --filter @o-okul/web typecheck
 - pnpm karne:visual-contract:check
 - pnpm web:a11y:check
 - pnpm prod:evidence:templates:check

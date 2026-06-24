@@ -1,5 +1,5 @@
 import { Controller, Get, Query, UseGuards } from "@nestjs/common";
-import type { AuditLogListItemRecord, StudentAuditSummaryRecord } from "@uzman-hocam/shared-types";
+import type { AuditLogListItemRecord, StudentAuditSummaryRecord } from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";

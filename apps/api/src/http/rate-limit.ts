@@ -111,7 +111,7 @@ export function isApiRateLimitEnabled(env = process.env): boolean {
 
 export function rateLimitKey(request: Request, env = process.env): string {
   const ip = readClientIp(request);
-  const prefix = env.API_RATE_LIMIT_KEY_PREFIX || env.QUEUE_PREFIX || "uzman_hocam";
+  const prefix = env.API_RATE_LIMIT_KEY_PREFIX || env.QUEUE_PREFIX || "o_okul";
   const digest = createHash("sha256").update(ip).digest("hex");
   return `${prefix}:api-rate-limit:${digest}`;
 }

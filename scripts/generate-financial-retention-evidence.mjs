@@ -5,7 +5,7 @@ import pg from "pg";
 
 const outputPath = readOption("--output") ?? process.env.FINANCIAL_RETENTION_OUTPUT;
 const environment = readOption("--environment") ?? process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "staging";
-const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/uzman_hocam";
+const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/o_okul";
 
 const approvedBy = process.env.FINANCIAL_RETENTION_APPROVED_BY?.trim();
 const approvalReference = process.env.FINANCIAL_RETENTION_APPROVAL_REFERENCE?.trim();
@@ -13,7 +13,7 @@ const legalBasis = process.env.FINANCIAL_RETENTION_LEGAL_BASIS?.trim();
 const retentionPeriodYears = Number(process.env.FINANCIAL_RETENTION_PERIOD_YEARS);
 const purgeException = process.env.FINANCIAL_RETENTION_PURGE_EXCEPTION;
 
-const paymentTestCommand = "pnpm --filter @uzman-hocam/api exec vitest run src/payment/payment.e2e.test.ts";
+const paymentTestCommand = "pnpm --filter @o-okul/api exec vitest run src/payment/payment.e2e.test.ts";
 
 const failures = [];
 requireValue(outputPath, "FINANCIAL_RETENTION_OUTPUT veya --output", failures);

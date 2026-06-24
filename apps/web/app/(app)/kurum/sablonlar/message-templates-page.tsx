@@ -21,7 +21,7 @@ import {
   Toolbar,
   type DataTableColumn,
   useConfirmDialog,
-} from "@uzman-hocam/ui";
+} from "@o-okul/ui";
 import type {
   AcademicTermRecord,
   AnnouncementRecord,
@@ -31,7 +31,7 @@ import type {
   GradeLevelRecord,
   MessageTemplateRecord,
   StudentStatus,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { Pencil, Plus, Search, Send, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";

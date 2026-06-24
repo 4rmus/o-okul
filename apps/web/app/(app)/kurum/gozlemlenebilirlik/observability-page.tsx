@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Button, DataTable, Panel, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@uzman-hocam/ui";
+import { Button, DataTable, Panel, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { RefreshCw } from "lucide-react";
 import { apiUrl } from "../../../../src/api-client.js";
 import { EvidenceGateSection, EvidenceTrustPanel, OperationDecisionNotice, ReferenceBadge } from "../_shared/evidence-panels.js";
@@ -38,10 +38,10 @@ const dashboardPanels = [
 ];
 
 const alertRules = [
-  "UzmanHocamApiDown",
-  "UzmanHocamReadinessFailing",
-  "UzmanHocamHigh5xxRate",
-  "UzmanHocamSlowRequests",
+  "OOkulApiDown",
+  "OOkulReadinessFailing",
+  "OOkulHigh5xxRate",
+  "OOkulSlowRequests",
 ];
 
 const telemetryChecks = [
@@ -495,10 +495,10 @@ function failedEndpointState<TData>(): EndpointState<TData> {
 }
 
 function parseMetrics(text: string): MetricsSummary {
-  const uptime = readMetricValue(text, "uzman_hocam_process_uptime_seconds");
+  const uptime = readMetricValue(text, "o_okul_process_uptime_seconds");
   const requests = text
     .split("\n")
-    .filter((line) => line.startsWith("uzman_hocam_http_requests_total"))
+    .filter((line) => line.startsWith("o_okul_http_requests_total"))
     .reduce((total, line) => total + (Number(line.split(" ").at(-1)) || 0), 0);
   return {
     requestCount: requests,

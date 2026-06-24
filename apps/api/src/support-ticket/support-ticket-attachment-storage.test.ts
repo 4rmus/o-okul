@@ -33,7 +33,7 @@ describe("SupportTicketAttachmentStorage", () => {
       },
     };
     const storage = new S3SupportTicketAttachmentStorage({
-      bucket: "uzman-hocam-local",
+      bucket: "o-okul-local",
       client,
       async presigner(presignClient, command, expiresInSeconds) {
         expect(presignClient).toBe(client);
@@ -67,16 +67,16 @@ describe("SupportTicketAttachmentStorage", () => {
     });
     expect(new Date(signedDownload.expiresAt).getTime()).toBeGreaterThan(Date.now());
     expect(commands[0]?.input).toMatchObject({
-      Bucket: "uzman-hocam-local",
+      Bucket: "o-okul-local",
       Key: stored.storageKey,
       ContentType: "text/plain",
     });
     expect(commands[1]?.input).toMatchObject({
-      Bucket: "uzman-hocam-local",
+      Bucket: "o-okul-local",
       Key: stored.storageKey,
     });
     expect(signedCommands[0]?.input).toMatchObject({
-      Bucket: "uzman-hocam-local",
+      Bucket: "o-okul-local",
       Key: stored.storageKey,
     });
   });
@@ -87,7 +87,7 @@ describe("SupportTicketAttachmentStorage", () => {
 
     expect(createSupportTicketAttachmentStorageFromEnv({
       SUPPORT_ATTACHMENT_STORAGE: "s3",
-      S3_BUCKET: "uzman-hocam-local",
+      S3_BUCKET: "o-okul-local",
       S3_REGION: "us-east-1",
     })).toBeInstanceOf(S3SupportTicketAttachmentStorage);
 
@@ -105,7 +105,7 @@ describe("SupportTicketAttachmentStorage", () => {
 
     expect(createSupportTicketAttachmentStorageFromEnv({
       NODE_ENV: "production",
-      S3_BUCKET: "uzman-hocam-prod",
+      S3_BUCKET: "o-okul-prod",
       S3_REGION: "us-east-1",
     })).toBeInstanceOf(S3SupportTicketAttachmentStorage);
   });

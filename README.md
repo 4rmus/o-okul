@@ -5,7 +5,7 @@
 ## Mimariye Genel Bakış
 
 ```
-uzman-hocam/
+o-okul/
 ├── apps/
 │   ├── web/       # Next.js 16 (App Router) — kullanıcı arayüzü
 │   ├── api/       # NestJS 11 — REST API + BullMQ producer

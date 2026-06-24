@@ -3,8 +3,8 @@
   "environment": "staging",
   "checkedAt": "2026-05-30T10:30:00.000Z",
   "releaseCandidate": "staging-2026-05-30",
-  "failedImageTag": "ghcr.io/example/uzman-hocam/api:broken-20260530",
-  "rollbackImageTag": "ghcr.io/example/uzman-hocam/api:previous-pass",
+  "failedImageTag": "ghcr.io/example/o-okul/api:broken-20260530",
+  "rollbackImageTag": "ghcr.io/example/o-okul/api:previous-pass",
   "drillStartedAt": "2026-05-30T10:15:00.000Z",
   "drillCompletedAt": "2026-05-30T10:25:00.000Z",
   "failureInjected": true,
@@ -20,19 +20,19 @@
     {
       "service": "web",
       "status": "healthy",
-      "imageTag": "ghcr.io/example/uzman-hocam/web:previous-pass",
+      "imageTag": "ghcr.io/example/o-okul/web:previous-pass",
       "evidenceReference": "https://staging.example.test/"
     },
     {
       "service": "api",
       "status": "healthy",
-      "imageTag": "ghcr.io/example/uzman-hocam/api:previous-pass",
+      "imageTag": "ghcr.io/example/o-okul/api:previous-pass",
       "evidenceReference": "https://staging.example.test/api/v1/health"
     },
     {
       "service": "worker",
       "status": "running",
-      "imageTag": "ghcr.io/example/uzman-hocam/worker:previous-pass",
+      "imageTag": "ghcr.io/example/o-okul/worker:previous-pass",
       "evidenceReference": "docker compose ps worker"
     }
   ],

@@ -58,7 +58,7 @@ if (hasPlaceholderToken(signatureVersion)) {
 }
 
 await requireScanOk({
-  body: Buffer.from("uzman-hocam clean upload av smoke\n", "utf8"),
+  body: Buffer.from("o-okul clean upload av smoke\n", "utf8"),
   host: clamAvHost,
   port: clamAvPort,
   timeoutMs: clamAvTimeoutMs,
@@ -77,7 +77,7 @@ await requireUnavailable({
   timeoutMs: clamAvTimeoutMs,
 });
 
-runCommand("pnpm --filter @uzman-hocam/api exec vitest run src/upload/upload-av-scanner.test.ts src/homework/homework.e2e.test.ts src/support-ticket/support-ticket.service.test.ts");
+runCommand("pnpm --filter @o-okul/api exec vitest run src/upload/upload-av-scanner.test.ts src/homework/homework.e2e.test.ts src/support-ticket/support-ticket.service.test.ts");
 
 const report = {
   result: "PASS",
@@ -200,7 +200,7 @@ async function requireScanOk(input) {
 
 async function requireUnavailable(input) {
   await scanWithClamAv({
-    body: Buffer.from("uzman-hocam unavailable scanner smoke\n", "utf8"),
+    body: Buffer.from("o-okul unavailable scanner smoke\n", "utf8"),
     host: input.host,
     port: input.port,
     timeoutMs: input.timeoutMs,

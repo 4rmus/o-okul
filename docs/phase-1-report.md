@@ -21,15 +21,15 @@
 
 ## Çalıştırılan doğrulamalar
 
-- `pnpm --filter @uzman-hocam/api typecheck`
-- `pnpm --filter @uzman-hocam/api test`
-- `pnpm --filter @uzman-hocam/api test -- student-store app school homework study-session`
-- `pnpm --filter @uzman-hocam/web test`
-- `pnpm --filter @uzman-hocam/web test:e2e`
-- `pnpm --filter @uzman-hocam/web build`
+- `pnpm --filter @o-okul/api typecheck`
+- `pnpm --filter @o-okul/api test`
+- `pnpm --filter @o-okul/api test -- student-store app school homework study-session`
+- `pnpm --filter @o-okul/web test`
+- `pnpm --filter @o-okul/web test:e2e`
+- `pnpm --filter @o-okul/web build`
 - `pnpm postgres-stores:smoke`
-- `pnpm --filter @uzman-hocam/worker typecheck`
-- `pnpm --filter @uzman-hocam/worker test`
+- `pnpm --filter @o-okul/worker typecheck`
+- `pnpm --filter @o-okul/worker test`
 - `pnpm run ci`
 - Canlı lokal Playwright smoke: login -> Class/Teacher/Guardian/Student listele -> create -> update ->
   delete.

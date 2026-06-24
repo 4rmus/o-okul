@@ -14,7 +14,7 @@ import type {
   StudentImportPreviewRow,
   StudentImportRequest,
   StudentImportResult,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 
 type StudentImportDryRunInput = Partial<StudentImportRequest>;
 

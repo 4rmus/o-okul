@@ -11,7 +11,7 @@ describe("BullMQ tenant queue producer", () => {
     };
     const producer = createBullTenantQueueProducer({
       connection: { host: "127.0.0.1", port: 6379 },
-      prefix: "uzman-hocam-test",
+      prefix: "o-okul-test",
       createQueue,
     });
 
@@ -30,7 +30,7 @@ describe("BullMQ tenant queue producer", () => {
     expect(queues[0]?.name).toBe("exam-evaluation");
     expect(queues[0]?.options).toEqual({
       connection: { host: "127.0.0.1", port: 6379 },
-      prefix: "uzman-hocam-test",
+      prefix: "o-okul-test",
     });
     expect(queues[0]?.adds).toEqual([{
       name: "exam-evaluation",
@@ -63,7 +63,7 @@ describe("BullMQ tenant queue producer", () => {
     const queues: FakeQueue[] = [];
     const producer = createBullTenantQueueProducer({
       connection: { host: "127.0.0.1", port: 6379 },
-      prefix: "uzman-hocam-test",
+      prefix: "o-okul-test",
       createQueue: (name, options) => {
         const queue = new FakeQueue(name, options);
         queues.push(queue);
@@ -91,7 +91,7 @@ describe("BullMQ tenant queue producer", () => {
     const queues: FakeQueue[] = [];
     const producer = createBullTenantQueueProducer({
       connection: { host: "127.0.0.1", port: 6379 },
-      prefix: "uzman-hocam-test",
+      prefix: "o-okul-test",
       createQueue: (name, options) => {
         const queue = new FakeQueue(name, options);
         queues.push(queue);
@@ -150,7 +150,7 @@ describe("BullMQ tenant queue producer", () => {
     const queues: FakeQueue[] = [];
     const producer = createBullTenantQueueProducer({
       connection: { host: "127.0.0.1", port: 6379 },
-      prefix: "uzman-hocam-test",
+      prefix: "o-okul-test",
       createQueue: (name, options) => {
         const queue = new FakeQueue(name, options);
         queues.push(queue);
@@ -190,7 +190,7 @@ describe("BullMQ tenant queue producer", () => {
     const queues: FakeQueue[] = [];
     const producer = createBullTenantQueueProducer({
       connection: { host: "127.0.0.1", port: 6379 },
-      prefix: "uzman-hocam-test",
+      prefix: "o-okul-test",
       createQueue: (name, options) => {
         const queue = new FakeQueue(name, options);
         queues.push(queue);

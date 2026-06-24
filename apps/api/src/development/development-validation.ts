@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { DevelopmentAssessmentCreateRequest, DevelopmentCriterionCreateRequest } from "@uzman-hocam/shared-types";
+import type { DevelopmentAssessmentCreateRequest, DevelopmentCriterionCreateRequest } from "@o-okul/shared-types";
 import { optionalTrimmedString, requiredTrimmedString } from "../http/zod-validation.js";
 
 const integerSchema = z.number().int();

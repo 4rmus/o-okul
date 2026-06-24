@@ -1,8 +1,8 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CrudPage, EmptyState, StatusBadge, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
-import type { KvkkInventoryKind, KvkkInventoryRecord } from "@uzman-hocam/shared-types";
+import { CrudPage, EmptyState, StatusBadge, type DataTableColumn, useConfirmDialog } from "@o-okul/ui";
+import type { KvkkInventoryKind, KvkkInventoryRecord } from "@o-okul/shared-types";
 import { ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../../../providers.js";

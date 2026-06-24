@@ -19,7 +19,7 @@ import {
   StatusBadge,
   type StatusBadgeProps,
   useConfirmDialog,
-} from "@uzman-hocam/ui";
+} from "@o-okul/ui";
 import { useAuth } from "../../../../providers.js";
 import {
   firstFormError,

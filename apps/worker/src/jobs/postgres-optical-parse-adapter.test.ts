@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Queryable, TenantQueryable } from "@uzman-hocam/db";
+import type { Queryable, TenantQueryable } from "@o-okul/db";
 import { PostgresOpticalParseAdapter } from "./postgres-optical-parse-adapter.js";
 import type { OpticalAnswerParseResult } from "./optical-answer-parser.js";
 

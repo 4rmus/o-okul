@@ -1,4 +1,4 @@
-name: uzman-hocam
+name: o-okul
 
 x-default-logging: &default-logging
   driver: json-file
@@ -63,8 +63,8 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       PERSISTENCE_DRIVER: ${PERSISTENCE_DRIVER:-postgres}
       STUDENT_QUOTA: ${STUDENT_QUOTA:-200}
-      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://app:app@postgres:5432/uzman_hocam}
-      DIRECT_DATABASE_URL: ${DOCKER_DIRECT_DATABASE_URL:-postgresql://migration:migration@postgres:5432/uzman_hocam}
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://app:app@postgres:5432/o_okul}
+      DIRECT_DATABASE_URL: ${DOCKER_DIRECT_DATABASE_URL:-postgresql://migration:migration@postgres:5432/o_okul}
       AUTH_USER_STORE: ${AUTH_USER_STORE:-postgres}
       AUTH_SESSION_STORE: ${AUTH_SESSION_STORE:-postgres}
       USER_MANAGEMENT_STORE: ${USER_MANAGEMENT_STORE:-postgres}
@@ -141,8 +141,8 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_ENABLED: ${LOG_ENABLED:-true}
       PERSISTENCE_DRIVER: ${PERSISTENCE_DRIVER:-postgres}
-      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://app:app@postgres:5432/uzman_hocam}
-      DIRECT_DATABASE_URL: ${DOCKER_DIRECT_DATABASE_URL:-postgresql://migration:migration@postgres:5432/uzman_hocam}
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://app:app@postgres:5432/o_okul}
+      DIRECT_DATABASE_URL: ${DOCKER_DIRECT_DATABASE_URL:-postgresql://migration:migration@postgres:5432/o_okul}
       REDIS_URL: ${DOCKER_REDIS_URL:-redis://redis:6379}
       QUEUE_PREFIX: ${QUEUE_PREFIX}
       STUDENT_PII_HASH_KEY: ${STUDENT_PII_HASH_KEY}

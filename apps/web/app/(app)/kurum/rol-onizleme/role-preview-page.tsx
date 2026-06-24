@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Button, DataTable, Field, MetricCard, MetricGrid, Panel, Select, StatusBadge, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, DataTable, Field, MetricCard, MetricGrid, Panel, Select, StatusBadge, type DataTableColumn } from "@o-okul/ui";
 import {
   tenantAssignableRoles,
   tenantRoleLabel,
@@ -12,7 +12,7 @@ import {
   type StudentRecord,
   type TenantAssignableRoleName,
   type TeacherRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import { useAuth } from "../../../providers.js";
 import { getInstitutionNavGroups, hasInstitutionAccess } from "../../_shared/access.js";
@@ -65,8 +65,8 @@ const accessRules = [
 ] as const;
 
 const evidenceChecks = [
-  "pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g \"Next rol portalları bağlı kişi verisini gösterir\"",
-  "pnpm --filter @uzman-hocam/api exec vitest run src/me/me-access-matrix.e2e.test.ts",
+  "pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g \"Next rol portalları bağlı kişi verisini gösterir\"",
+  "pnpm --filter @o-okul/api exec vitest run src/me/me-access-matrix.e2e.test.ts",
   "pnpm identity-link:audit",
 ] as const;
 

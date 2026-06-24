@@ -1,4 +1,4 @@
-import { createTenantPgPool, type TenantQueryable } from "@uzman-hocam/db";
+import { createTenantPgPool, type TenantQueryable } from "@o-okul/db";
 import { type QueueJob } from "../queue/queues.js";
 import {
   processAnnouncementDeliveryJob,

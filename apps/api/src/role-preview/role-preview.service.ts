@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import { isPortalSubjectRoleName, type PortalSubjectRoleName } from "@uzman-hocam/shared-types";
+import { isPortalSubjectRoleName, type PortalSubjectRoleName } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { type GuardianStore, guardianStoreToken } from "../school/guardian-store.js";

@@ -1,4 +1,4 @@
-import { type Queryable, type TenantQueryable, withTenantDb } from "@uzman-hocam/db";
+import { type Queryable, type TenantQueryable, withTenantDb } from "@o-okul/db";
 import type {
   SmsBatchDeliveryCompletedInput,
   SmsBatchDeliveryFailedInput,

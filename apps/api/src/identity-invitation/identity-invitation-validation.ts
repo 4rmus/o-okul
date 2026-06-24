@@ -3,7 +3,7 @@ import {
   portalSubjectRoles,
   type IdentityInvitationAcceptRequest,
   type IdentityInvitationCreateRequest,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { optionalTrimmedString, requiredTrimmedString } from "../http/zod-validation.js";
 
 const invitationSubjectTypeSchema = z.enum(portalSubjectRoles);

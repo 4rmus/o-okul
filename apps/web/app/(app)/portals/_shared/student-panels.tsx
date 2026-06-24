@@ -1,13 +1,13 @@
 "use client";
 
-import { DataTable, InfoGrid, InfoItem, Panel, StatusBadge, type DataTableColumn } from "@uzman-hocam/ui";
+import { DataTable, InfoGrid, InfoItem, Panel, StatusBadge, type DataTableColumn } from "@o-okul/ui";
 import type {
   GuardianRecord,
   GuardianStudentRecord,
   StudentClassHistoryRecord,
   StudentEnrollmentRecord,
   StudentProfileRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 
 export function StudentFocusPanel({
   announcementStatus,

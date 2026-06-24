@@ -9,7 +9,7 @@ import type {
   AnnouncementDeliveryQueueResult,
   AnnouncementDeliveryReportRecord,
   AnnouncementRecipientReport,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import {
   AnnouncementService,
   type AnnouncementRecord,

@@ -1,9 +1,9 @@
 ---
-name: uzman-hocam-agent-orchestration
-description: Use when planning or running Codex expert/subagent work in the Uzman Hocam repo, including agent selection, delegation prompts, validation routing, and multi-agent handoff summaries.
+name: o-okul-agent-orchestration
+description: Use when planning or running Codex expert/subagent work in the O-Okul repo, including agent selection, delegation prompts, validation routing, and multi-agent handoff summaries.
 ---
 
-# Uzman Hocam Agent Orchestration
+# O-Okul Agent Orchestration
 
 Use this skill when the user asks for expert agents, subagents, parallel review, large feature planning, production gate triage, or coordinated development in this repo.
 

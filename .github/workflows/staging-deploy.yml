@@ -101,8 +101,8 @@ jobs:
             echo "STAGING_DEPLOY_DIR must not be /." >&2
             exit 1
           fi
-          if [ "$STAGING_DEPLOY_DIR" != "/root/uzman-hocam" ]; then
-            echo "STAGING_DEPLOY_DIR must be /root/uzman-hocam." >&2
+          if [ "$STAGING_DEPLOY_DIR" != "/root/o-okul" ]; then
+            echo "STAGING_DEPLOY_DIR must be /root/o-okul." >&2
             exit 1
           fi
           if [[ "$STAGING_DEPLOY_DIR" == *"'"* || "$STAGING_DEPLOY_DIR" == *$'\n'* || "$STAGING_DEPLOY_DIR" == *$'\r'* ]]; then
@@ -194,7 +194,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @uzman-hocam/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @o-okul/web exec playwright install --with-deps chromium
       - run: pnpm run ci
 
       - uses: docker/setup-buildx-action@v3
@@ -307,7 +307,7 @@ jobs:
           STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
           STAGING_DEPLOY_DIR: ${{ vars.STAGING_DEPLOY_DIR }}
         run: |
-          tar -czf /tmp/uzman-hocam-staging-compose.tgz \
+          tar -czf /tmp/o-okul-staging-compose.tgz \
             docker-compose.yml \
             docker-compose.release.yml \
             docker-compose.traefik.yml \
@@ -321,7 +321,7 @@ jobs:
 
           scp -i ~/.ssh/staging_deploy_key \
             -o StrictHostKeyChecking=accept-new \
-            /tmp/uzman-hocam-staging-compose.tgz \
+            /tmp/o-okul-staging-compose.tgz \
             "$STAGING_SSH_USER@$STAGING_SSH_HOST:$STAGING_DEPLOY_DIR/compose.tgz"
 
           ssh -i ~/.ssh/staging_deploy_key \
@@ -425,7 +425,7 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.release.yml \
             -f "$EDGE_COMPOSE_FILE" \
-            run --rm api pnpm --filter @uzman-hocam/db db:migrate
+            run --rm api pnpm --filter @o-okul/db db:migrate
 
           docker compose \
             --env-file .env \

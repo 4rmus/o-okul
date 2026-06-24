@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Headers, Param, Post, UseGuards } from "@nestjs/common";
-import type { AnswerKeyRecord } from "@uzman-hocam/shared-types";
+import type { AnswerKeyRecord } from "@o-okul/shared-types";
 import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
 import { optionalTrimmedString, requiredTrimmedString, zodBody } from "../http/zod-validation.js";

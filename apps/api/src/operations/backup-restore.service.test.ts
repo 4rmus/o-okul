@@ -64,7 +64,7 @@ describe("BackupRestoreService", () => {
 
     const record = await service.enqueue(tenantAdminContext, {
       operationType: "BACKUP",
-      targetReference: "s3://uzman-hocam-prod-backups/tenant-a",
+      targetReference: "s3://o-okul-prod-backups/tenant-a",
       confirmationText: "YEDEK AL",
       reason: "Panelden korumalı yedek alma",
     });
@@ -74,14 +74,14 @@ describe("BackupRestoreService", () => {
       tenantId: "tenant-a",
       userId: "user-a",
       operationType: "BACKUP",
-      targetReference: "s3://uzman-hocam-prod-backups/tenant-a",
+      targetReference: "s3://o-okul-prod-backups/tenant-a",
       reason: "Panelden korumalı yedek alma",
     })]);
     expect(record).toMatchObject({
       tenantId: "tenant-a",
       requestedByUserId: "user-a",
       operationType: "BACKUP",
-      targetReference: "s3://uzman-hocam-prod-backups/tenant-a",
+      targetReference: "s3://o-okul-prod-backups/tenant-a",
       queueName: "backup-restore",
       status: "queued",
     });

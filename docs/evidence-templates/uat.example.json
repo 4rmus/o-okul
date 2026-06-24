@@ -4,7 +4,7 @@
   "checkedAt": "2026-05-30",
   "tester": "qa-owner",
   "releaseCandidate": "staging-2026-05-30",
-  "rollbackImageTag": "uzman-hocam-api:previous-pass",
+  "rollbackImageTag": "o-okul-api:previous-pass",
   "restoreBackupReference": "s3://backup-bucket/base/2026-05-30.dump",
   "flowsVerified": [
     "tenant admin login",

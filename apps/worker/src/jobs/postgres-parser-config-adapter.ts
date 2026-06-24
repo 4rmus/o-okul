@@ -1,4 +1,4 @@
-import { type TenantQueryable, withTenantDb } from "@uzman-hocam/db";
+import { type TenantQueryable, withTenantDb } from "@o-okul/db";
 import { randomUUID } from "node:crypto";
 import { type ParserConfigSuggestion } from "./format-analyzer-service.js";
 

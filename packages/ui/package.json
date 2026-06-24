@@ -1,5 +1,5 @@
 {
-  "name": "@uzman-hocam/ui",
+  "name": "@o-okul/ui",
   "version": "0.0.0",
   "private": true,
   "main": "./dist/index.js",

@@ -14,10 +14,10 @@
     "Docker logs"
   ],
   "alertsVerified": [
-    "UzmanHocamApiDown",
-    "UzmanHocamReadinessFailing",
-    "UzmanHocamHigh5xxRate",
-    "UzmanHocamSlowRequests"
+    "OOkulApiDown",
+    "OOkulReadinessFailing",
+    "OOkulHigh5xxRate",
+    "OOkulSlowRequests"
   ],
   "evidenceReferences": [
     "artifacts/example/observability/prometheus-targets.png",

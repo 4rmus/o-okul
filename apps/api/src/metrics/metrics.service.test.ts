@@ -11,10 +11,10 @@ describe("MetricsService", () => {
 
     const output = await service.render();
 
-    expect(output).toContain("# TYPE uzman_hocam_queue_jobs gauge");
-    expect(output).toContain('uzman_hocam_queue_jobs{queue="exam-evaluation",status="waiting"} 2');
-    expect(output).toContain('uzman_hocam_queue_jobs{queue="exam-evaluation",status="failed"} 1');
-    expect(output).toContain("uzman_hocam_queue_metrics_scrape_error 0");
+    expect(output).toContain("# TYPE o_okul_queue_jobs gauge");
+    expect(output).toContain('o_okul_queue_jobs{queue="exam-evaluation",status="waiting"} 2');
+    expect(output).toContain('o_okul_queue_jobs{queue="exam-evaluation",status="failed"} 1');
+    expect(output).toContain("o_okul_queue_metrics_scrape_error 0");
   });
 
   it("keeps /metrics available when queue metrics collection fails", async () => {
@@ -29,7 +29,7 @@ describe("MetricsService", () => {
 
     const output = await service.render();
 
-    expect(output).toContain("uzman_hocam_queue_metrics_scrape_error 1");
+    expect(output).toContain("o_okul_queue_metrics_scrape_error 1");
     expect(output).not.toContain("queue=\"exam-evaluation\"");
   });
 

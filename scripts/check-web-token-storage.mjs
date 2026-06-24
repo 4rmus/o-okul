@@ -24,7 +24,7 @@ const allowedStorageSnippets = {
     "window.sessionStorage.getItem(rolePreviewTokenStorageKey)",
   ],
   "apps/web/e2e-next/role-preview-contract-next.spec.ts": [
-    'window.sessionStorage.setItem("uzman-hocam.role-preview-token", "preview-token-student")',
+    'window.sessionStorage.setItem("o-okul.role-preview-token", "preview-token-student")',
     "localStorage:",
     "localStorage.length",
     "localStorage.key(index)",
@@ -40,11 +40,11 @@ const allowedStorageSnippets = {
     "window.sessionStorage.clear()",
   ],
   "apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts": [
-    'window.sessionStorage.setItem("uzman-hocam.role-preview-token", "preview-token-student")',
-    'window.sessionStorage.setItem("uzman-hocam.role-preview-token", "preview-token-guardian")',
+    'window.sessionStorage.setItem("o-okul.role-preview-token", "preview-token-student")',
+    'window.sessionStorage.setItem("o-okul.role-preview-token", "preview-token-guardian")',
   ],
   "apps/web/e2e-next/teacher-portal-contract-next.spec.ts": [
-    'window.sessionStorage.setItem("uzman-hocam.role-preview-token", "preview-token-teacher")',
+    'window.sessionStorage.setItem("o-okul.role-preview-token", "preview-token-teacher")',
   ],
 };
 const failures = [];

@@ -643,7 +643,7 @@ Bu adımın negatif kabul testi: `ASSISTANT_ADMIN` finans endpoint'lerinde 403 a
 
 ### İlerleme notu - F6d shared-types uyumu (2026-06-03)
 
-- `DevelopmentTrendItem`, `DevelopmentTrendScore` ve `DevelopmentAssessmentVisibility` ortak `@uzman-hocam/shared-types` paketine eklendi.
+- `DevelopmentTrendItem`, `DevelopmentTrendScore` ve `DevelopmentAssessmentVisibility` ortak `@o-okul/shared-types` paketine eklendi.
 - Portal gelişim paneli yerel DTO tanımı yerine ortak tipi kullanacak şekilde sadeleştirildi.
 - Bu turda test veya build çalıştırılmadı.
 
@@ -808,7 +808,7 @@ Bu bölüm, mevcut `package.json` script'lerine göre hazırlanmıştır. Komutl
 Önerilen ilk komut:
 
 ```bash
-pnpm --filter @uzman-hocam/api test -- role-capabilities capability.guard tenant-store tenant.service student.service assert-teacher-assigned attendance.service development.service
+pnpm --filter @o-okul/api test -- role-capabilities capability.guard tenant-store tenant.service student.service assert-teacher-assigned attendance.service development.service
 ```
 
 Başarı ölçütü:
@@ -826,7 +826,7 @@ Bu komut kırılırsa önce ilgili unit test düzeltilmeli; e2e veya build'e ge�
 Önerilen ikinci komut:
 
 ```bash
-pnpm --filter @uzman-hocam/api test -- capability-access tenant.controller attendance.e2e teacher-note.e2e homework.e2e exam.controller.e2e
+pnpm --filter @o-okul/api test -- capability-access tenant.controller attendance.e2e teacher-note.e2e homework.e2e exam.controller.e2e
 ```
 
 Başarı ölçütü:
@@ -843,7 +843,7 @@ Bu komut kırılırsa önce access/tenant/teacher-scope davranışı düzeltilme
 Önerilen üçüncü komut:
 
 ```bash
-pnpm --filter @uzman-hocam/api typecheck
+pnpm --filter @o-okul/api typecheck
 ```
 
 Başarı ölçütü:
@@ -856,14 +856,14 @@ Başarı ölçütü:
 Önerilen dördüncü ve beşinci komut:
 
 ```bash
-pnpm --filter @uzman-hocam/web typecheck
-pnpm --filter @uzman-hocam/web build
+pnpm --filter @o-okul/web typecheck
+pnpm --filter @o-okul/web build
 ```
 
 Başarı ölçütü:
 
 - Öğrenci ve veli portalı ortak `DevelopmentTrendPanel` ile derlenmeli.
-- `@uzman-hocam/shared-types` içindeki `DevelopmentTrendItem` web tarafında çözümlenmeli.
+- `@o-okul/shared-types` içindeki `DevelopmentTrendItem` web tarafında çözümlenmeli.
 - Next build portal route'larını kırmadan tamamlanmalı.
 
 ### 11.5 DB/RLS kapısı
@@ -922,7 +922,7 @@ F1-F6 için yeni geliştirme işi şu an beklemeye alınmalı; çünkü ana kod 
 İlk doğrulama küçük tutulmalı ve API unit testlerinden başlamalı:
 
 ```bash
-pnpm --filter @uzman-hocam/api test -- role-capabilities capability.guard tenant-store tenant.service student.service assert-teacher-assigned attendance.service development.service
+pnpm --filter @o-okul/api test -- role-capabilities capability.guard tenant-store tenant.service student.service assert-teacher-assigned attendance.service development.service
 ```
 
 Başarı ölçütü:
@@ -968,23 +968,23 @@ F1-F6 doğrulama kapıları sırayla çalıştırıldı. İlk denemelerde çıka
 ### Çalıştırılan kapılar
 
 1. API test kapısı:
-   - Komut: `pnpm --filter @uzman-hocam/api test -- role-capabilities capability.guard tenant-store tenant.service student.service assert-teacher-assigned attendance.service development.service`
+   - Komut: `pnpm --filter @o-okul/api test -- role-capabilities capability.guard tenant-store tenant.service student.service assert-teacher-assigned attendance.service development.service`
    - Sonuç: 89 test dosyası geçti, 444 test geçti.
 
 2. API e2e/access kapısı:
-   - Komut: `pnpm --filter @uzman-hocam/api test -- capability-access tenant.controller attendance.e2e teacher-note.e2e homework.e2e exam.controller.e2e`
+   - Komut: `pnpm --filter @o-okul/api test -- capability-access tenant.controller attendance.e2e teacher-note.e2e homework.e2e exam.controller.e2e`
    - Sonuç: 89 test dosyası geçti, 444 test geçti.
 
 3. API typecheck:
-   - Komut: `pnpm --filter @uzman-hocam/api typecheck`
+   - Komut: `pnpm --filter @o-okul/api typecheck`
    - Sonuç: geçti.
 
 4. Web typecheck:
-   - Komut: `pnpm --filter @uzman-hocam/web typecheck`
+   - Komut: `pnpm --filter @o-okul/web typecheck`
    - Sonuç: geçti.
 
 5. Web build:
-   - Komut: `pnpm --filter @uzman-hocam/web build`
+   - Komut: `pnpm --filter @o-okul/web build`
    - Sonuç: geçti; `/ogrenci` ve `/veli` route'ları build çıktısında üretildi.
 
 6. DB migration/status:

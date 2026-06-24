@@ -5,7 +5,7 @@ import type {
   AnswerKeyBranchSummary,
   AnswerKeyRecord,
   AnswerKeyScoringConfig,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { learningOutcomeStoreToken, type LearningOutcomeStore } from "../school/learning-outcome-store.js";

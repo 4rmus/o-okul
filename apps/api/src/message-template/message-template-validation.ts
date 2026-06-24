@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { optionalTrimmedString, requiredTrimmedString } from "../http/zod-validation.js";
-import type { MessageTemplateCreateRequest, MessageTemplateUpdateRequest } from "@uzman-hocam/shared-types";
+import type { MessageTemplateCreateRequest, MessageTemplateUpdateRequest } from "@o-okul/shared-types";
 
 const messageTemplateChannelSchema = z.enum(["SMS"]);
 

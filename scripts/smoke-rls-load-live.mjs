@@ -3,8 +3,8 @@ import { Socket } from "node:net";
 import pg from "pg";
 import { validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
-const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/uzman_hocam";
-const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/uzman_hocam";
+const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/o_okul";
+const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/o_okul";
 const targetRps = readPositiveInt("RLS_LOAD_TARGET_RPS", 200);
 const durationSeconds = readPositiveInt("RLS_LOAD_DURATION_SECONDS", 3);
 const concurrency = readPositiveInt("RLS_LOAD_CONCURRENCY", 16);

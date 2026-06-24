@@ -9,6 +9,6 @@ BEGIN
   END IF;
 END $$;
 
-GRANT CONNECT ON DATABASE uzman_hocam TO app, migration;
+GRANT CONNECT ON DATABASE o_okul TO app, migration;
 GRANT USAGE, CREATE ON SCHEMA public TO migration;
 ALTER SCHEMA public OWNER TO migration;

@@ -22,11 +22,11 @@
 
 - `pnpm docker:check`
 - `pnpm ops:check`
-- `pnpm --filter @uzman-hocam/api test`
-- `pnpm --filter @uzman-hocam/api test -- api-error`
-- `pnpm --filter @uzman-hocam/api test -- api-response`
-- `pnpm --filter @uzman-hocam/api test -- api-version`
-- `pnpm --filter @uzman-hocam/web build`
+- `pnpm --filter @o-okul/api test`
+- `pnpm --filter @o-okul/api test -- api-error`
+- `pnpm --filter @o-okul/api test -- api-response`
+- `pnpm --filter @o-okul/api test -- api-version`
+- `pnpm --filter @o-okul/web build`
 - `pnpm test:e2e`
 - `pnpm run ci`
 

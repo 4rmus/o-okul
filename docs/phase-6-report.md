@@ -128,49 +128,49 @@
 
 ## Çalıştırılan doğrulamalar
 
-- `corepack pnpm --filter @uzman-hocam/api test -- audit-log`
-- `corepack pnpm --filter @uzman-hocam/api test -- support-ticket`
-- `corepack pnpm --filter @uzman-hocam/api test -- announcement message-template`
-- `corepack pnpm --filter @uzman-hocam/api test -- school audit-log`
-- `corepack pnpm --filter @uzman-hocam/api test -- school`
-- `corepack pnpm --filter @uzman-hocam/api test -- audit-log`
-- `corepack pnpm --filter @uzman-hocam/api test -- src/health/health.service.test.ts src/health/health.e2e.test.ts`
-- `corepack pnpm --filter @uzman-hocam/api test -- src/http/api-error.e2e.test.ts`
-- `corepack pnpm --filter @uzman-hocam/api test -- audit-log`
-- `corepack pnpm --filter @uzman-hocam/api test -- school`
-- `corepack pnpm --filter @uzman-hocam/api test -- homework`
-- `corepack pnpm --filter @uzman-hocam/api test -- audit-log auth`
-- `corepack pnpm --filter @uzman-hocam/api test -- metrics`
-- `corepack pnpm --filter @uzman-hocam/api typecheck`
+- `corepack pnpm --filter @o-okul/api test -- audit-log`
+- `corepack pnpm --filter @o-okul/api test -- support-ticket`
+- `corepack pnpm --filter @o-okul/api test -- announcement message-template`
+- `corepack pnpm --filter @o-okul/api test -- school audit-log`
+- `corepack pnpm --filter @o-okul/api test -- school`
+- `corepack pnpm --filter @o-okul/api test -- audit-log`
+- `corepack pnpm --filter @o-okul/api test -- src/health/health.service.test.ts src/health/health.e2e.test.ts`
+- `corepack pnpm --filter @o-okul/api test -- src/http/api-error.e2e.test.ts`
+- `corepack pnpm --filter @o-okul/api test -- audit-log`
+- `corepack pnpm --filter @o-okul/api test -- school`
+- `corepack pnpm --filter @o-okul/api test -- homework`
+- `corepack pnpm --filter @o-okul/api test -- audit-log auth`
+- `corepack pnpm --filter @o-okul/api test -- metrics`
+- `corepack pnpm --filter @o-okul/api typecheck`
 - `corepack pnpm docker:check`
 - `docker compose -f docker-compose.yml -f docker-compose.observability.yml config`
 - `docker run --rm -v /Users/arair/works/des-otomasyon/docker/alloy/config.alloy:/etc/alloy/config.alloy:ro grafana/alloy:v1.16.0 validate /etc/alloy/config.alloy`
-- `corepack pnpm --filter @uzman-hocam/db db:audit-log-partition:check`
-- `corepack pnpm --filter @uzman-hocam/db test`
-- `corepack pnpm --filter @uzman-hocam/db exec prisma migrate deploy --config prisma.config.ts`
-- `corepack pnpm --filter @uzman-hocam/db exec prisma migrate diff --config prisma.config.ts --from-config-datasource --to-schema prisma/schema.prisma --script`
+- `corepack pnpm --filter @o-okul/db db:audit-log-partition:check`
+- `corepack pnpm --filter @o-okul/db test`
+- `corepack pnpm --filter @o-okul/db exec prisma migrate deploy --config prisma.config.ts`
+- `corepack pnpm --filter @o-okul/db exec prisma migrate diff --config prisma.config.ts --from-config-datasource --to-schema prisma/schema.prisma --script`
 - Canlı DB partition doğrulaması: `AuditLog` için `RANGE ("createdAt")`, 12 aylık 2026 partition'ı
   ve `AuditLog_default` görüldü.
 - `corepack pnpm ops:check`
 - `corepack pnpm prod:readiness:check`
 - `node scripts/check-prod-env.mjs --contract .env.example`
 - `corepack pnpm prod:evidence:templates:check`
-- `DEPLOYMENT_REGION_TARGET=file:///private/tmp/uzman-hocam-deployment-region.json corepack pnpm deployment:region:check`
-- `corepack pnpm prod:evidence:check -- --env-file /private/tmp/uzman-hocam-release-env --summary-file /private/tmp/uzman-hocam-release-summary.json`
+- `DEPLOYMENT_REGION_TARGET=file:///private/tmp/o-okul-deployment-region.json corepack pnpm deployment:region:check`
+- `corepack pnpm prod:evidence:check -- --env-file /private/tmp/o-okul-release-env --summary-file /private/tmp/o-okul-release-summary.json`
 - `corepack pnpm alert:webhook:smoke`
-- `BACKUP_OFFSITE_TARGET=file:///private/tmp/uzman-hocam-offsite-smoke corepack pnpm backup:offsite:smoke`
-- `WAL_ARCHIVE_TARGET=file:///private/tmp/uzman-hocam-wal-smoke corepack pnpm wal:archive:smoke`
-- `RESTORE_DRILL_TARGET=file:///private/tmp/uzman-hocam-restore-drill.json corepack pnpm restore:drill:check`
-- `KVKK_INVENTORY_TARGET=file:///private/tmp/uzman-hocam-kvkk-inventory.json corepack pnpm privacy:inventory:check`
-- `OBSERVABILITY_UAT_TARGET=file:///private/tmp/uzman-hocam-observability-uat.json corepack pnpm observability:uat:check`
-- `SECURITY_AUDIT_TARGET=file:///private/tmp/uzman-hocam-security-audit.json corepack pnpm security:audit:check`
-- `UAT_EVIDENCE_TARGET=file:///private/tmp/uzman-hocam-uat.json corepack pnpm uat:check`
-- `corepack pnpm --filter @uzman-hocam/api test -- report-generation sms-batch raw-import-upload parser-config-approval`
-- `corepack pnpm --filter @uzman-hocam/api test -- school audit-log`
-- `corepack pnpm --filter @uzman-hocam/api test -- audit-log auth`
-- `corepack pnpm --filter @uzman-hocam/api test -- schedule study-session audit-log`
-- `corepack pnpm --filter @uzman-hocam/api test -- support-ticket audit-log`
-- `corepack pnpm --filter @uzman-hocam/api test -- app audit-log`
+- `BACKUP_OFFSITE_TARGET=file:///private/tmp/o-okul-offsite-smoke corepack pnpm backup:offsite:smoke`
+- `WAL_ARCHIVE_TARGET=file:///private/tmp/o-okul-wal-smoke corepack pnpm wal:archive:smoke`
+- `RESTORE_DRILL_TARGET=file:///private/tmp/o-okul-restore-drill.json corepack pnpm restore:drill:check`
+- `KVKK_INVENTORY_TARGET=file:///private/tmp/o-okul-kvkk-inventory.json corepack pnpm privacy:inventory:check`
+- `OBSERVABILITY_UAT_TARGET=file:///private/tmp/o-okul-observability-uat.json corepack pnpm observability:uat:check`
+- `SECURITY_AUDIT_TARGET=file:///private/tmp/o-okul-security-audit.json corepack pnpm security:audit:check`
+- `UAT_EVIDENCE_TARGET=file:///private/tmp/o-okul-uat.json corepack pnpm uat:check`
+- `corepack pnpm --filter @o-okul/api test -- report-generation sms-batch raw-import-upload parser-config-approval`
+- `corepack pnpm --filter @o-okul/api test -- school audit-log`
+- `corepack pnpm --filter @o-okul/api test -- audit-log auth`
+- `corepack pnpm --filter @o-okul/api test -- schedule study-session audit-log`
+- `corepack pnpm --filter @o-okul/api test -- support-ticket audit-log`
+- `corepack pnpm --filter @o-okul/api test -- app audit-log`
 - `corepack pnpm docker:check`
 - `corepack pnpm report-listing:k6:check`
 - `SMS_PROVIDER=noop SMS_SMOKE_TO=905000000001 corepack pnpm sms:smoke`
@@ -211,8 +211,8 @@
   Homework/Material store yolları canlı Postgres üzerinde tenant izolasyonuyla doğrulandı.
 - Traefik compose config sonucu: v3.7.5 entrypoint, ACME HTTP-01 ve Docker label sözdizimi compose
   seviyesinde doğrulandı; canlı TLS/ACME smoke staging domain bekliyor.
-- `corepack pnpm --filter @uzman-hocam/web typecheck`
-- `corepack pnpm --filter @uzman-hocam/web test:e2e`
+- `corepack pnpm --filter @o-okul/web typecheck`
+- `corepack pnpm --filter @o-okul/web test:e2e`
 - Playwright desktop görsel kontrolü: `apps/web/test-results/audit-log-panel.png`
 - Playwright mobil görsel kontrolü: `apps/web/test-results/audit-log-panel-mobile.png`
 - Playwright desktop görsel kontrolü: `apps/web/test-results/guardian-pii-panel.png`

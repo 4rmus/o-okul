@@ -67,8 +67,8 @@ const templateValidationKeys = [
 ];
 const disabledValidationKeys = ["piiLeakageCheckPassed", "logsExcludePromptResponse", "externalProviderNotCalled"];
 const requiredCoreCommands = [
-  "pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/report-generation-job.test.ts",
-  "pnpm --filter @uzman-hocam/api exec vitest run src/report/report-generation.service.test.ts",
+  "pnpm --filter @o-okul/worker exec vitest run src/jobs/report-generation-job.test.ts",
+  "pnpm --filter @o-okul/api exec vitest run src/report/report-generation.service.test.ts",
 ];
 
 if (!target) {

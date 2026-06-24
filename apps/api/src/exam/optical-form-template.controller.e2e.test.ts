@@ -3,7 +3,7 @@ import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { OpticalFormTemplateRecord } from "@uzman-hocam/shared-types";
+import type { OpticalFormTemplateRecord } from "@o-okul/shared-types";
 import { AppModule } from "../app.module.js";
 import {
   parserConfigRepositoryToken,

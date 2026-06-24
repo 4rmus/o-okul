@@ -2,8 +2,8 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { AuthResponse, MfaChallengeResponse } from "@uzman-hocam/shared-types";
-import { Button, Checkbox, Field, Input, SegmentedControl } from "@uzman-hocam/ui";
+import type { AuthResponse, MfaChallengeResponse } from "@o-okul/shared-types";
+import { Button, Checkbox, Field, Input, SegmentedControl } from "@o-okul/ui";
 import { useAuth } from "../../providers.js";
 import { appBrand } from "../../../src/brand.js";
 import { MfaRequiredError } from "../../../src/api-client.js";

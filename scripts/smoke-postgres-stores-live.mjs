@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { Socket } from "node:net";
 import pg from "pg";
 
-const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/uzman_hocam";
-const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/uzman_hocam";
+const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/o_okul";
+const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/o_okul";
 const runId = randomUUID();
 const tenantA = `tenant-store-smoke-a-${runId}`;
 const tenantB = `tenant-store-smoke-b-${runId}`;

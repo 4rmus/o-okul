@@ -2,7 +2,7 @@ import "reflect-metadata";
 import { randomUUID } from "node:crypto";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import type { ExamParticipantRecord, ExamRecord } from "@uzman-hocam/shared-types";
+import type { ExamParticipantRecord, ExamRecord } from "@o-okul/shared-types";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";

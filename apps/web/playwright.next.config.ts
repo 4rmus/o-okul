@@ -13,7 +13,7 @@ export default defineConfig({
   ...(useWebServer
     ? {
         webServer: {
-          command: "pnpm --filter @uzman-hocam/shared-types build && pnpm --filter @uzman-hocam/ui build && pnpm --filter @uzman-hocam/web next:dev",
+          command: "pnpm --filter @o-okul/shared-types build && pnpm --filter @o-okul/ui build && pnpm --filter @o-okul/web next:dev",
           env: {
             ...process.env,
             NEXT_E2E_PORT: port,

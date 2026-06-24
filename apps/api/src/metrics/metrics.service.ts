@@ -41,30 +41,30 @@ export class MetricsService implements OnModuleDestroy {
   async render(): Promise<string> {
     const queueMetricsResult = await this.collectQueueMetrics();
     const lines = [
-      "# HELP uzman_hocam_process_uptime_seconds API process uptime.",
-      "# TYPE uzman_hocam_process_uptime_seconds gauge",
-      `uzman_hocam_process_uptime_seconds ${Math.max(0, (Date.now() - this.startedAt) / 1000).toFixed(3)}`,
-      "# HELP uzman_hocam_http_requests_total HTTP requests by method, path and status.",
-      "# TYPE uzman_hocam_http_requests_total counter",
+      "# HELP o_okul_process_uptime_seconds API process uptime.",
+      "# TYPE o_okul_process_uptime_seconds gauge",
+      `o_okul_process_uptime_seconds ${Math.max(0, (Date.now() - this.startedAt) / 1000).toFixed(3)}`,
+      "# HELP o_okul_http_requests_total HTTP requests by method, path and status.",
+      "# TYPE o_okul_http_requests_total counter",
       ...[...this.requests.values()].map(
         (metric) =>
-          `uzman_hocam_http_requests_total{method="${escapeLabel(metric.method)}",path="${escapeLabel(metric.path)}",status="${metric.statusCode}"} ${metric.count}`,
+          `o_okul_http_requests_total{method="${escapeLabel(metric.method)}",path="${escapeLabel(metric.path)}",status="${metric.statusCode}"} ${metric.count}`,
       ),
-      "# HELP uzman_hocam_http_request_duration_seconds_sum Total HTTP request duration by method, path and status.",
-      "# TYPE uzman_hocam_http_request_duration_seconds_sum counter",
+      "# HELP o_okul_http_request_duration_seconds_sum Total HTTP request duration by method, path and status.",
+      "# TYPE o_okul_http_request_duration_seconds_sum counter",
       ...[...this.requests.values()].map(
         (metric) =>
-          `uzman_hocam_http_request_duration_seconds_sum{method="${escapeLabel(metric.method)}",path="${escapeLabel(metric.path)}",status="${metric.statusCode}"} ${metric.totalDurationSeconds.toFixed(6)}`,
+          `o_okul_http_request_duration_seconds_sum{method="${escapeLabel(metric.method)}",path="${escapeLabel(metric.path)}",status="${metric.statusCode}"} ${metric.totalDurationSeconds.toFixed(6)}`,
       ),
-      "# HELP uzman_hocam_queue_jobs BullMQ job counts by queue and status.",
-      "# TYPE uzman_hocam_queue_jobs gauge",
+      "# HELP o_okul_queue_jobs BullMQ job counts by queue and status.",
+      "# TYPE o_okul_queue_jobs gauge",
       ...queueMetricsResult.metrics.map(
         (metric) =>
-          `uzman_hocam_queue_jobs{queue="${escapeLabel(metric.queueName)}",status="${escapeLabel(metric.status)}"} ${metric.count}`,
+          `o_okul_queue_jobs{queue="${escapeLabel(metric.queueName)}",status="${escapeLabel(metric.status)}"} ${metric.count}`,
       ),
-      "# HELP uzman_hocam_queue_metrics_scrape_error Queue metrics scrape error flag.",
-      "# TYPE uzman_hocam_queue_metrics_scrape_error gauge",
-      `uzman_hocam_queue_metrics_scrape_error ${queueMetricsResult.error ? 1 : 0}`,
+      "# HELP o_okul_queue_metrics_scrape_error Queue metrics scrape error flag.",
+      "# TYPE o_okul_queue_metrics_scrape_error gauge",
+      `o_okul_queue_metrics_scrape_error ${queueMetricsResult.error ? 1 : 0}`,
     ];
 
     return `${lines.join("\n")}\n`;

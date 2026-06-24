@@ -398,7 +398,7 @@ async function openStudentPortal(
   await page.addInitScript((mode) => {
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
     if (mode === "role-preview") {
-      window.sessionStorage.setItem("uzman-hocam.role-preview-token", "preview-token-student");
+      window.sessionStorage.setItem("o-okul.role-preview-token", "preview-token-student");
     }
   }, options.mode ?? "student");
   await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
@@ -423,7 +423,7 @@ async function openGuardianPortal(
   await page.addInitScript((mode) => {
     document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
     if (mode === "role-preview") {
-      window.sessionStorage.setItem("uzman-hocam.role-preview-token", "preview-token-guardian");
+      window.sessionStorage.setItem("o-okul.role-preview-token", "preview-token-guardian");
     }
   }, options.mode ?? "guardian");
   await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);

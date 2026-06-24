@@ -55,14 +55,14 @@ bolunmustur.
 
 | Alan | Risk | Bulgu | Kullanici Etkisi | Dosya | Dogrulama |
 | --- | --- | --- | --- | --- | --- |
-| Urun/UAT | P1 | iSEM gercek TXT ve cevap anahtari geldi; risk artik "format belirsiz" degil, bu fixture'in `OPEN-20260529-03` kapanisina ve staging evidence'a dogru baglanmamasi. | Ana deger olan optik -> rapor/karne dongusu fixture'da yesil gorunup staging/pilot kaniti olmadan release edilebilir. | `docs/DECISIONS.md`, `docs/product-journeys-v1.md`, `ornek-veriler/**` | `corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/answer-key-excel-import.service.test.ts`, `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/optik-7108-real-pipeline.test.ts src/jobs/optical-pilot-fixture.test.ts` |
+| Urun/UAT | P1 | iSEM gercek TXT ve cevap anahtari geldi; risk artik "format belirsiz" degil, bu fixture'in `OPEN-20260529-03` kapanisina ve staging evidence'a dogru baglanmamasi. | Ana deger olan optik -> rapor/karne dongusu fixture'da yesil gorunup staging/pilot kaniti olmadan release edilebilir. | `docs/DECISIONS.md`, `docs/product-journeys-v1.md`, `ornek-veriler/**` | `corepack pnpm --filter @o-okul/api exec vitest run src/exam/answer-key-excel-import.service.test.ts`, `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/optik-7108-real-pipeline.test.ts src/jobs/optical-pilot-fixture.test.ts` |
 | Urun/UAT | P1 | `UAT-KURUM-05/06` tam sinav dongusu icin fixture, smoke ve staging/prod evidence seviyeleri ayrilmali. | Operator akisi fixture testinde gecer ama PDF/Excel indirme, ogrenci/veli portal gorunumu veya live worker kaniti eksik kalabilir. | `scripts/smoke-isem-optical-pipeline-live.mjs`, `scripts/check-live-exam-cycle-evidence.mjs`, `docs/phase-6-production-readiness.md` | `corepack pnpm isem-answer-key:smoke`, `corepack pnpm isem-optical-pipeline:smoke`, `corepack pnpm live:exam-cycle:check`, `corepack pnpm live:ui-worker:smoke` |
 | Privacy/Evidence | P1 | iSEM TXT gercek kisi verisi gibi ele alinmali; ham TXT, TCKN-benzeri alan, ogrenci adi veya ham dosya yolu production evidence'a giremez. | CI artifact, smoke JSON, log, S3 object key veya UAT raporu PII sizdirabilir. | `ornek-veriler/iSEM .txt`, `scripts/check-smoke-evidence-contract.mjs`, `scripts/check-prod-evidence-templates.mjs` | `corepack pnpm privacy:inventory:check`, `corepack pnpm pii:contact-policy:check`, `corepack pnpm prod:evidence:templates:check` |
-| Privacy/Evidence | P1 | Raw import object key artik yerelde ham dosya adini tasimayacak sekilde sha segmenti altinda `source` objesine yaziliyor; evidence reference'lari icin staging/prod PII-safe kanit yine ayri kapida. | Operator dosya adinda kurum/sinif/ogrenci bilgisi varsa eski object listing veya release bundle PII tasiyabilirdi. | `apps/api/src/exam/raw-import-upload.service.ts`, `apps/api/src/exam/s3-raw-import-archive-store.ts`, `scripts/check-live-exam-cycle-evidence.mjs` | `corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/raw-import-upload.service.test.ts src/exam/raw-import.controller.e2e.test.ts src/exam/s3-raw-import-archive-store.test.ts src/exam/postgres-raw-import-repository.test.ts src/exam/raw-import-quarantine-store.test.ts`, staging evidence PII negatifleri |
+| Privacy/Evidence | P1 | Raw import object key artik yerelde ham dosya adini tasimayacak sekilde sha segmenti altinda `source` objesine yaziliyor; evidence reference'lari icin staging/prod PII-safe kanit yine ayri kapida. | Operator dosya adinda kurum/sinif/ogrenci bilgisi varsa eski object listing veya release bundle PII tasiyabilirdi. | `apps/api/src/exam/raw-import-upload.service.ts`, `apps/api/src/exam/s3-raw-import-archive-store.ts`, `scripts/check-live-exam-cycle-evidence.mjs` | `corepack pnpm --filter @o-okul/api exec vitest run src/exam/raw-import-upload.service.test.ts src/exam/raw-import.controller.e2e.test.ts src/exam/s3-raw-import-archive-store.test.ts src/exam/postgres-raw-import-repository.test.ts src/exam/raw-import-quarantine-store.test.ts`, staging evidence PII negatifleri |
 | Urun/UAT | P1 | Optik, onboarding, UI-worker ve release evidence sozlesmeleri hazir ama gercek staging/prod kosusu bekliyor. | Lokal/static PASS, musteri oncesi production kaniti sayilamaz. | `docs/product-journeys-v1.md`, `docs/phase-6-production-readiness.md` | `pnpm live:onboarding:smoke`, `pnpm live:ui-worker:smoke`, `pnpm uat:check`, `pnpm go-live:check` |
 | Urun/UAT | P1 | `UAT-KURUM-07` odeme/taksit kabul satiri cok genis; baska idempotency akislari ayni PASS altinda. | Finans kabul kaniti netligini kaybeder, hatali release karari kolaylasir. | `docs/product-journeys-v1.md` | `node scripts/check-product-journeys.mjs`, `pnpm uat:check` |
 | UI/UX | P1 | A11y kapisi sadece `critical` axe ihlallerini fail ediyordu. | `serious` seviye erisilebilirlik sorunu CI'da yesil kalabilirdi. | `apps/web/e2e-next/a11y-next.spec.ts` | `pnpm web:a11y:check` |
-| Frontend | P1 | Rapor sayfasi acilista artik ogrenci listesini yuklemiyor; ogrenci listesi rapor sorgusuna, karne/progress/hata kitapcigi detaylari kullanici secimine ertelendi. Sinif filtresi veya snapshot `classId` varsa ogrenci listesi `/students?classId=...` ile daralir; sinifsiz/sinav geneli raporda yalniz katilimci/snapshot ogrenci id'leri `/students/:id` ile yuklenir. | Ilk acilis PII ve payload yuzeyi daraldi; sinifli ve sinifsiz rapor sorgulari genel ogrenci listesine dusmeden calisir. Buyuk tenant'ta ileride tek batch endpoint performans iyilestirmesi olabilir. | `apps/web/app/(app)/kurum/raporlar/reports-page.tsx`, `apps/web/e2e-next/report-workspace-contract-next.spec.ts` | `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/report-workspace-contract-next.spec.ts`, `corepack pnpm web:ux-contract:check` |
+| Frontend | P1 | Rapor sayfasi acilista artik ogrenci listesini yuklemiyor; ogrenci listesi rapor sorgusuna, karne/progress/hata kitapcigi detaylari kullanici secimine ertelendi. Sinif filtresi veya snapshot `classId` varsa ogrenci listesi `/students?classId=...` ile daralir; sinifsiz/sinav geneli raporda yalniz katilimci/snapshot ogrenci id'leri `/students/:id` ile yuklenir. | Ilk acilis PII ve payload yuzeyi daraldi; sinifli ve sinifsiz rapor sorgulari genel ogrenci listesine dusmeden calisir. Buyuk tenant'ta ileride tek batch endpoint performans iyilestirmesi olabilir. | `apps/web/app/(app)/kurum/raporlar/reports-page.tsx`, `apps/web/e2e-next/report-workspace-contract-next.spec.ts` | `corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/report-workspace-contract-next.spec.ts`, `corepack pnpm web:ux-contract:check` |
 | Frontend | P1 | Optik calisma alani tek client component icinde cok fazla sorumluluk tasiyor. | Operator refresh/back sonrasi yarim isi kaybedebilir; queue/status ayrimi zor test edilir. | `apps/web/app/(app)/kurum/optik/parser-config-page.tsx` | `pnpm web:ux-contract:check`, hedefli optik e2e |
 | Frontend | P2 | Hata/basari/queue mesajlarinda live region tutarliligi eksik. | Ekran okuyucu kullanan operator islem sonucunu kacirabilir. | `apps/web/app/(app)/kurum/raporlar/reports-page.tsx`, `apps/web/app/(app)/kurum/optik/parser-config-page.tsx` | Submit hata/basari e2e, `pnpm web:a11y:check` |
 | Backend/API | P1 | OpenAPI artifact'i path sayisi yuksek olsa da request body ve response schema kapsami bos. | Frontend/dis entegrasyon dogru body/response sozlesmesini goremez. | `apps/api/src/openapi.ts`, `artifacts/openapi.json`, `scripts/generate-openapi.mjs` | `pnpm openapi:generate` ve schema coverage check |
@@ -70,7 +70,7 @@ bolunmustur.
 | Backend/API | P1 | Idempotency kapsami tutarsiz ve bircok kritik create/send/enqueue akisi opsiyonel. | Mobil/gateway retry ile cift kayit, cift duyuru veya kirli audit olusabilir. | `apps/api/src/http/idempotency.ts`, `apps/api/src/student/student.controller.ts`, `apps/api/src/announcement/announcement.controller.ts` | Replay/conflict e2e testleri |
 | DB/RLS | P1 | Tenant relation FK checker bu turdan sonra 0 legacy istisna ile geciyor. | Lokal schema artik izlenen tenant parent iliskilerinde cross-tenant parent referansini DB seviyesinde engeller; live/staging veri preflight kaniti ayrica uretilmeli. | `packages/db/scripts/check-tenant-relation-fks.mjs`, `packages/db/prisma/schema.prisma` | `pnpm db:rls:check`, `pnpm tenant-db:check`, orphan/cross-tenant insert negatifleri |
 | DB/RLS | P1 | `AnnouncementReceipt` parent/tenant FK boslugu lokal schema ve migration ile kapatildi; live/staging veri uzerinde orphan preflight henuz kosulmadi. | Canli tabloda orphan/cross-tenant satir varsa migration otomatik backfill yapmadan durmali. | `packages/db/prisma/schema.prisma`, `packages/db/prisma/migrations/20260621164000_announcement_receipt_composite_fk/migration.sql` | Orphan scan, composite FK migration, `pnpm db:rls:check` |
-| Privacy/Optik | P1 | `ImportQuarantine.rawRow` operator icin gerekli olabilir ama audit/log/Sentry/evidence disinda tutulmali. | Karantina response'u test loguna veya artifact'e yazilirsa ham satir ve cevap dizisi sizabilir. | `packages/db/prisma/schema.prisma`, `apps/api/src/exam/raw-import-quarantine-store.ts`, `apps/api/src/exam/raw-import.controller.e2e.test.ts` | `corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/raw-import.controller.e2e.test.ts src/exam/raw-import-quarantine-store.test.ts`, `corepack pnpm privacy:inventory:check` |
+| Privacy/Optik | P1 | `ImportQuarantine.rawRow` operator icin gerekli olabilir ama audit/log/Sentry/evidence disinda tutulmali. | Karantina response'u test loguna veya artifact'e yazilirsa ham satir ve cevap dizisi sizabilir. | `packages/db/prisma/schema.prisma`, `apps/api/src/exam/raw-import-quarantine-store.ts`, `apps/api/src/exam/raw-import.controller.e2e.test.ts` | `corepack pnpm --filter @o-okul/api exec vitest run src/exam/raw-import.controller.e2e.test.ts src/exam/raw-import-quarantine-store.test.ts`, `corepack pnpm privacy:inventory:check` |
 | DB/Privacy | P2 | `contentBase64` inline dosya alani staging verisinde hala var: live dry-run `HomeworkMaterialFile` ve `SupportTicketAttachment` icin 2+2 pending satir buldu; hash audit bu satirlarda `sha256` eksikligini PII basmadan sayiyor. | DB dump/backup/KVKK yuzeyi buyur; eksik hash onarimi ve tekrar hash audit gecmeden S3 migration kaniti uretmek veri butunlugu riski tasir. | `packages/db/prisma/schema.prisma`, `scripts/migrate-inline-upload-content-to-s3-live.mjs`, `scripts/audit-inline-upload-content-hashes-live.mjs`, `scripts/repair-inline-upload-content-sha-live.mjs` | `pnpm inline-upload-content:audit`, `pnpm inline-upload-content:hash-audit`, `pnpm inline-upload-content:repair-sha`, tekrar `pnpm inline-upload-content:hash-audit`, `INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true pnpm inline-upload-content:migrate`, `pnpm inline-upload-content:check` |
 | DB/Privacy | P1 | Inline upload, homework material ve support attachment S3 `storageKey` uretimi hash-only kaliba cekildi: key artik sadece sabit prefix ve `sha256` segmentinden olusur; parent id ve ham dosya adi key'e girmez. Orphan S3 object reconciliation icin PII-safe audit komutu eklendi. | Object listing, storage log veya monitoring yuzeyinde kurum/sinif/kisi bilgisinin key'den yeniden tanimlanma riski daraldi; yarim migration sonrasi DB referansi olmayan obje sayisi gorunur oldu. | `scripts/migrate-inline-upload-content-to-s3-live.mjs`, `scripts/audit-inline-upload-orphan-s3-live.mjs`, `apps/api/src/homework/homework-material-file-storage.ts`, `apps/api/src/support-ticket/support-ticket-attachment-storage.ts` | Hash-only object-key unit testleri, `pnpm prod:readiness:check`, `pnpm ops:check`, `pnpm inline-upload-content:hash-audit`, `pnpm inline-upload-content:orphan-audit` sonrasi onayli migration dry-run |
 | DB/Audit | P2 | `AuditLog.tenantId` nullable ve tenant silmede `SET NULL`; null tenant audit satirlari artik kanit sozlesmesiyle siniflandirilmali. | Tenant bazli audit/KVKK evidence eksik gorunebilir. | `packages/db/prisma/schema.prisma`, `scripts/check-audit-null-tenant-evidence.mjs`, audit partition migration | `AUDIT_NULL_TENANT_EVIDENCE_TARGET=... pnpm audit-null-tenant:check`, live audit null siniflandirma raporu |
@@ -103,11 +103,11 @@ bolunmustur.
 
 | Faz | Durum | Bu tur kaniti | Kalan |
 | --- | --- | --- | --- |
-| Faz 1 - Gate ve Plan Netligi | `LOCAL_PASS` | `corepack pnpm --filter @uzman-hocam/web typecheck`, `corepack pnpm web:a11y:check`, `corepack pnpm web:ux-baseline:check`, `node scripts/check-product-journeys.mjs` gecti. | Broad CI ve staging kaniti Faz 5/Faz 10 kapsaminda. |
+| Faz 1 - Gate ve Plan Netligi | `LOCAL_PASS` | `corepack pnpm --filter @o-okul/web typecheck`, `corepack pnpm web:a11y:check`, `corepack pnpm web:ux-baseline:check`, `node scripts/check-product-journeys.mjs` gecti. | Broad CI ve staging kaniti Faz 5/Faz 10 kapsaminda. |
 | Faz 2 - OpenAPI ve Shared Contract Kalitesi | `LOCAL_PASS` | Kritik auth/MFA/password-reset, exam create/read/update/delete/list/participant list-create, parser-config suggestion/approval, optical-form-template list/create/apply, answer-key read/publish, raw-import upload/evaluation/quarantine/summary/status, report generation-job/snapshot list/student snapshot/export/progress/detail/error-booklet ve portal report snapshot list/detail/error-booklet/progress dar slice'i, portal development-assessments read, teacher portal read-only mirror, student/guardian academic timeline, portal student/profile public records, yonetim student core/profile read-update-delete, student import-export/enrollment lifecycle, student class-history/enrollment/teacher-assignment read ve purge/tenant update residual, message-template CRUD, identity-invitation public response/token redaction, notification-device public response, support-ticket portal mutasyonlari, student-create, payment-plan create/update/list, announcement create/delivery/read/portal, school reference CRUD/class read-delete/teacher CRUD-purge-assignment/guardian CRUD-link-read, development criteria/assessment, teacher import commit idempotency, attendance, audit-log read, program create/update/read, teacher-note create/update/list, support-ticket create/update/read, homework create/update/read, health/ready raw response, metrics raw text, download/no-content delete, sms-batch create/report/preview, backup-restore list/create/tenant-export, me profile/tenant, portal homework/notification-preference read-update, tenant admin read-update-delete, tenant create/first-admin token redaction, tenant-user list-create-role-update, role-preview token-scope, kalan teacher/guardian portal read ve privacy inventory/self-purge dilimleri ve UAT-KURUM-07 idempotency envanteri icin shared/API/OpenAPI dogrulamalari gecti. Required-operation envanteri 277 toplam operation icinde 277 covered / 0 open; idempotent UAT mutasyonlarinda `Idempotency-Key`, request body ve `{ data }` response envelope coverage'i fail-fast korunur. | Lokal contract gate kapandi; staging/dis entegrasyon ve generated schema tek-kaynaklastirma sertlestirmesi Faz 5/sonraki hardening kapsaminda izlenmeli. |
-| Faz 3 - Tenant FK ve DB Butunlugu | `STAGING_RLS_PASS_WITH_PROD_CHAIN_PENDING` | Izlenen tenant parent iliskilerinde legacy FK allowlist sifirlandi; `Student.class`, `Student.responsibleTeacher`, `StudentClassHistory.class`, `StudentEnrollment.class`, `PaymentPlan.class`, `ReportSnapshot.class`, `Homework.sourceMaterial`, `SupportTicket.class` ve onceki slice'lar tenant composite FK'ye alindi; RLS live evidence artik 24 tenant composite relation icin `tenantFkPreflight` exact setini, 0 legacy allowlist, 0 orphan, 0 cross-tenant parent ve her relation icin cross-tenant insert negatifini ister. gercek live/staging DB artifact'i remote/staging `uzman-hocam-server` uzerinde `artifacts/staging/reports/rls-live.json` olarak uretildi; 54 tenant tablo, 24 relation, 0 orphan/cross-tenant parent, 600 tenant-scope sorgu ve 316.29 rps ile `RLS_LIVE_EVIDENCE_TARGET=file://... corepack pnpm rls:live:check` kapisindan gecti. | Kalan 0 legacy FK istisnasi; RLS staging artifact'inin production summary/live-status zincirine baglanmasi ve production/pilot asamasinda tekrar kosulmasi bekliyor. |
+| Faz 3 - Tenant FK ve DB Butunlugu | `STAGING_RLS_PASS_WITH_PROD_CHAIN_PENDING` | Izlenen tenant parent iliskilerinde legacy FK allowlist sifirlandi; `Student.class`, `Student.responsibleTeacher`, `StudentClassHistory.class`, `StudentEnrollment.class`, `PaymentPlan.class`, `ReportSnapshot.class`, `Homework.sourceMaterial`, `SupportTicket.class` ve onceki slice'lar tenant composite FK'ye alindi; RLS live evidence artik 24 tenant composite relation icin `tenantFkPreflight` exact setini, 0 legacy allowlist, 0 orphan, 0 cross-tenant parent ve her relation icin cross-tenant insert negatifini ister. gercek live/staging DB artifact'i remote/staging `o-okul-server` uzerinde `artifacts/staging/reports/rls-live.json` olarak uretildi; 54 tenant tablo, 24 relation, 0 orphan/cross-tenant parent, 600 tenant-scope sorgu ve 316.29 rps ile `RLS_LIVE_EVIDENCE_TARGET=file://... corepack pnpm rls:live:check` kapisindan gecti. | Kalan 0 legacy FK istisnasi; RLS staging artifact'inin production summary/live-status zincirine baglanmasi ve production/pilot asamasinda tekrar kosulmasi bekliyor. |
 | Faz 4 - Rapor/Optik UX ve Privacy Minimizasyonu | `PARTIAL_LOCAL_PASS` | iSEM fixture testleri, raw import object key dosya adi negatifleri, live exam cycle PII/raw TXT evidence negatifleri, iSEM optik smoke karantina/raw evidence PII negatifleri, KVKK raw import/upload audit diff redaction kontrolleri, PII contact policy ve prod evidence template/smoke contract check'leri gecti; KVKK inventory checker repo fixture target ile gecti; optik/rapor URL state, alert/status live-region, optik karantina `rawRow` UI PII negatifleri ve arama disi genis `/students` yuklememe kontrati, optik rapor context tekil/dedupe ogrenci yukleme ve memoized tablo/analiz turevleri, report workspace lazy ve class/participant-scoped ogrenci liste/detay yukleme, report analytics component/perf bolme, report snapshot list summary, API smoke log Authorization/raw request redaction guardrail'i, portal development trend, student/guardian academic timeline PII yasaklari, portal student/profile userId ve ham kimlik yasaklari, yonetim student core/profile userId/ham kimlik/storage yasaklari, student purge-pii profile PII temizligi, notification-device token/userId response yasaklari, support-ticket portal requesterId/file-storage-token yasaklari, teacher profile public redaction ve progress PII/soru detayi yasak alan guardrail dilimleri lokal kontratla gecti; iSEM 254 satir staging real-data smoke ve UI-worker portal sonucu Faz 4A/Faz 5 kanitina baglandi; remote/staging `artifacts/staging/reports/kvkk-inventory.json` 845 ogrenci, 16 ogretmen, 67 veli, 61 kullanici aggregate sayimi, 21 audit redaction negatif kontrolu ve bos `gaps` ile `KVKK_INVENTORY_TARGET=file://... corepack pnpm privacy:inventory:check` kapisindan gecti. | KVKK staging artifact'inin production summary/live-status zincirine baglanmasi ve production/pilot asamasinda tekrar kosulmasi bekliyor. |
-| Faz 4A - iSEM Fixture Kapanisi | `STAGING_ISEM_AND_LIVE_EXAM_PASS_WITH_PILOT_PENDING` | `docs/DECISIONS.md` ve `docs/product-journeys-v1.md` iSEM fixture gercegine gore guncellendi; API/worker iSEM fixture testleri gecti; local Postgres/Redis/MinIO uzerinde `corepack pnpm isem-optical-pipeline:smoke` 254 matched, 0 quarantine, 254 `ExamResult`, 254 report result ve PII-safe `artifacts/local/isem-optical-pipeline.json` ile gecti; remote/staging `uzman-hocam-server` uzerinde `artifacts/staging/isem-optical-pipeline.json` 254 matched, 0 quarantine, 254 `ExamResult`, 254 report result, bos `gaps` ve PII-safe grep ile `ISEM_OPTICAL_PIPELINE_TARGET=file://... corepack pnpm isem-optical-pipeline:evidence-check` kapisindan gecti; ayni release candidate icin `artifacts/staging/live-ui-worker-result.json` PDF/XLSX indirme, ogrenci/veli portal gorunumu, `reportStatus=READY`, bos `gaps` ve PII-safe grep ile `LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET=file://... corepack pnpm live:ui-worker:result-check` kapisindan gecti; `artifacts/staging/live-exam-cycle.json` 5 komutluk staging zinciri, 254/254 iSEM sayilari, PDF/Excel ve ogrenci/veli portal gorunumu ile `LIVE_EXAM_CYCLE_TARGET=file://... corepack pnpm live:exam-cycle:check` kapisindan gecti. | Pilot UAT kaniti ve bu staging artifact'lerinin production summary/live-status zincirine baglanmasi bekliyor. |
+| Faz 4A - iSEM Fixture Kapanisi | `STAGING_ISEM_AND_LIVE_EXAM_PASS_WITH_PILOT_PENDING` | `docs/DECISIONS.md` ve `docs/product-journeys-v1.md` iSEM fixture gercegine gore guncellendi; API/worker iSEM fixture testleri gecti; local Postgres/Redis/MinIO uzerinde `corepack pnpm isem-optical-pipeline:smoke` 254 matched, 0 quarantine, 254 `ExamResult`, 254 report result ve PII-safe `artifacts/local/isem-optical-pipeline.json` ile gecti; remote/staging `o-okul-server` uzerinde `artifacts/staging/isem-optical-pipeline.json` 254 matched, 0 quarantine, 254 `ExamResult`, 254 report result, bos `gaps` ve PII-safe grep ile `ISEM_OPTICAL_PIPELINE_TARGET=file://... corepack pnpm isem-optical-pipeline:evidence-check` kapisindan gecti; ayni release candidate icin `artifacts/staging/live-ui-worker-result.json` PDF/XLSX indirme, ogrenci/veli portal gorunumu, `reportStatus=READY`, bos `gaps` ve PII-safe grep ile `LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET=file://... corepack pnpm live:ui-worker:result-check` kapisindan gecti; `artifacts/staging/live-exam-cycle.json` 5 komutluk staging zinciri, 254/254 iSEM sayilari, PDF/Excel ve ogrenci/veli portal gorunumu ile `LIVE_EXAM_CYCLE_TARGET=file://... corepack pnpm live:exam-cycle:check` kapisindan gecti. | Pilot UAT kaniti ve bu staging artifact'lerinin production summary/live-status zincirine baglanmasi bekliyor. |
 | Faz 5 - Gercek Evidence ve Provider Kapanisi | `LOCAL_SMOKE_PASS_EXTERNAL_PENDING` | `corepack pnpm prod:plan:check` gecti; live exam cycle, iSEM optical, UI-worker result, KVKK, RLS/tenant-FK, restore drill, AI karne ozeti, inline upload migration, audit null tenant, rate-limit ve GitHub CI evidence sozlesmeleri exact sayilar, PII-safe JSON, audit diff redaction, tenant FK preflight, UI-worker PDF/Excel/portal sonucu, restore critical table sayimlari, AI disabled-mode stop-rule, inline upload write-disable/TTL/pending/migrated tutarliligi, null tenant breakdown/unknown=0, iki farkli rate-limit instance URL'i, secret URL/reference reddi, staging release bundle kalici path kontrolu, provider smoke masked-recipient/providerMessageId guardrail'i, production summary projection ve production/go-live summary cross-check ile lokal olarak sertlestirildi; remote/staging iSEM optical pipeline, live UI-worker result, live exam cycle, restore drill, AI karne ozeti disabled-mode, KVKK inventory, RLS live, audit null tenant, rate-limit Redis, inline upload migration ve GitHub CI artifact'leri kalici `artifacts/staging/**` yolunda uretildi ve checker'lardan gecti ama henuz production summary/live-status zincirine baglanmadi. Remote first-gates teshisi alert secret eksigi ve self-signed TLS nedeniyle PASS manifest uretmedi. | First-gates icin gercek alert webhook secret'lari ve public TLS/domain smoke'u, provider smoke, production summary/live-status ve pilot/go-live kanitlari uretilmeli. |
 | Faz 10 - Pilot ve Go-live Kapanisi | `EXTERNAL_NOT_RUN` | Pilot, go-live, production summary ve Canli Durum sozlesmeleri `pilot:check`, `go-live:check`, `live:status:check` ve `prod:evidence:templates:check` ile lokal fixture seviyesinde korunuyor; remote/staging `artifacts/staging/smoke/report-generation.json` perf artifact'i 10.000 sonuc/ogrenci, `generationDurationMs=9271`, `generationDurationMsMax=60000`, `commandsPassed=["pnpm report-generation:perf"]` ve bos `gaps` ile smoke evidence validator'dan gecti. | Gercek pilot kapanis raporu, 18/18 Canli Durum PASS bundle'i, go-live karar paketi, production summary, UAT, rollback ve alert artifact'leri staging/prod ortamda uretilmeli; report-generation perf artifact'i production summary/live-status zincirine baglanmali. |
 
@@ -175,11 +175,11 @@ tasimaz.
 | 4 | Sinav, rapor ve UAT kanitlari | `corepack pnpm isem-optical-pipeline:evidence-check`, `corepack pnpm live:exam-cycle:check`, `corepack pnpm live:ui-worker:result-check`, `corepack pnpm report-generation:perf`, `corepack pnpm uat:check` | iSEM 254 sonuc, PDF/Excel, portal gorunumu, 10k perf ve UAT artifact'leri ayni release candidate icin uretilir. | Faz 4A/Faz 5 kapanisi ancak local smoke degil staging/prod artifact ile ilerler. |
 | 5 | Production summary ve Canli Durum terfisi | `corepack pnpm prod:evidence:check --summary-file artifacts/staging/production-summary.json`, `corepack pnpm prod:evidence:summary:check`, `LIVE_STATUS_EVIDENCE_TARGET=file:///... corepack pnpm live:status:check` | Production summary tum required check/report alanlarini toplar; Canli Durum bundle'i 18/18 dis gate PASS olur. | 18/18 altinda veya source date/reference sapmasinda Faz 5/Faz 10 ilerlemez. |
 | 6 | Pilot, rollback ve go-live karari | `PILOT_EVIDENCE_TARGET=file:///... corepack pnpm pilot:check`, `corepack pnpm deployment:rollback:check`, `GO_LIVE_EVIDENCE_TARGET=file:///... corepack pnpm go-live:check`, `corepack pnpm ops:check`, `corepack pnpm prod:plan:check` | Pilot kabul, rollback kronolojisi, onaylar, cutover ve go-live karar paketi ayni summary/live-status hedeflerine baglanir. | Faz 10 yalniz `goLiveDecision=APPROVED`, bos `gaps`, imzali onaylar ve rollback/restore referanslariyla kapanir. |
-| 7 | Faz status degisimi | `PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///... LIVE_STATUS_EVIDENCE_TARGET=file:///... PILOT_EVIDENCE_TARGET=file:///... GO_LIVE_EVIDENCE_TARGET=file:///... corepack pnpm prod:external-evidence:check`, `REMOTE_EVIDENCE_HOST=uzman-hocam-server REMOTE_EVIDENCE_ROOT=/root/uzman-hocam ... corepack pnpm prod:remote-evidence:check`, `git diff --check`, final hedefli testler ve yukaridaki artifact komutlari. | Dokuman, summary, live-status ve go-live JSON'lari birbirini isaret eder; `prod:external-evidence:check` local artifact setini, `prod:remote-evidence:check` remote/staging hostta aynı final checker ve 18/18 Canli Durum zincirini tekrarlar. | Faz 5 ancak `EXTERNAL_EVIDENCE_PASS`, Faz 10 ancak `GO_LIVE_APPROVED` statüsüne tasinir; bu statu degisikligi linked artifact'ler ve remote final readiness olmadan yapilmaz. |
+| 7 | Faz status degisimi | `PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///... LIVE_STATUS_EVIDENCE_TARGET=file:///... PILOT_EVIDENCE_TARGET=file:///... GO_LIVE_EVIDENCE_TARGET=file:///... corepack pnpm prod:external-evidence:check`, `REMOTE_EVIDENCE_HOST=o-okul-server REMOTE_EVIDENCE_ROOT=/root/o-okul ... corepack pnpm prod:remote-evidence:check`, `git diff --check`, final hedefli testler ve yukaridaki artifact komutlari. | Dokuman, summary, live-status ve go-live JSON'lari birbirini isaret eder; `prod:external-evidence:check` local artifact setini, `prod:remote-evidence:check` remote/staging hostta aynı final checker ve 18/18 Canli Durum zincirini tekrarlar. | Faz 5 ancak `EXTERNAL_EVIDENCE_PASS`, Faz 10 ancak `GO_LIVE_APPROVED` statüsüne tasinir; bu statu degisikligi linked artifact'ler ve remote final readiness olmadan yapilmaz. |
 
 ## Kalan 10 Artifact Kapanis Matrisi
 
-Remote `/root/uzman-hocam/artifacts/staging` gap raporu son kontrolde `missingCount=10`,
+Remote `/root/o-okul/artifacts/staging` gap raporu son kontrolde `missingCount=10`,
 `foundReleaseSummaryCount=0` ve `overallStatus=BLOCKED` verdi. Asagidaki tablo, her eksigin
 gercek kapanis komutunu ve neden henuz final PASS sayilamadigini sabitler; `ALLOW_EXAMPLE_EVIDENCE`
 veya fixture/local smoke bu satirlari kapatamaz.
@@ -207,7 +207,7 @@ Final bundle disi kalan diagnostik/log/calisma girdileri silinmeden
 `corepack pnpm staging:release-artifacts:archive-unexpected -- --artifacts-dir artifacts/staging --gap-report-file artifacts/local/staging-release-gap-report.json --archive-dir artifacts/local/staging-release-unexpected-<tag> --apply`
 ile `artifacts/local/**` altina tasinir; komut dry-run default'tur, taze gap raporundaki
 `unexpectedFiles[]` disinda dosya tasimaz ve `manifest.json` yazar.
-Remote `uzman-hocam-server` uzerinde bu akış `artifacts/local/staging-release-unexpected-2026-06-24-preflight`
+Remote `o-okul-server` uzerinde bu akış `artifacts/local/staging-release-unexpected-2026-06-24-preflight`
 archive dizinine 9 final disi girdiyi manifestli tasidi; taze gap raporu artik
 `unexpectedFiles=0`, `missingRequiredFiles=10`, `blockedChecks=1` gosterir. Rate-limit raw smoke
 girdisi de `artifacts/local/staging-release-unexpected-rate-limit-smoke-2026-06-24` altina
@@ -239,7 +239,7 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   - Plan dosyasi P1/P2 isleri dosya, etki ve komutla baglar.
   - UAT/urun matrisi static check gecmeye devam eder.
 - Test/dogrulama:
-  - `corepack pnpm --filter @uzman-hocam/web typecheck`
+  - `corepack pnpm --filter @o-okul/web typecheck`
   - `corepack pnpm web:a11y:check`
   - `corepack pnpm web:ux-baseline:check`
   - `node scripts/check-product-journeys.mjs`
@@ -448,8 +448,8 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
     gerekli request body ve `{ data }` response envelope coverage'iyle korunur; ancak bu,
     henuz slice'a alinmamis diger request/response sema borcunu kapatmaz.
 - Test/dogrulama:
-  - `corepack pnpm --filter @uzman-hocam/api typecheck`
-  - `corepack pnpm --filter @uzman-hocam/api test`
+  - `corepack pnpm --filter @o-okul/api typecheck`
+  - `corepack pnpm --filter @o-okul/api test`
   - `corepack pnpm openapi:generate`
   - `corepack pnpm idempotency:inventory:check`
 - Risk ve rollback:
@@ -515,7 +515,7 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   - Bu lokal migration canli/staging veri uzerinde kosulmadi; preflight artifact'i ve negatif insert
     evidence'i Faz 5/staging kapisina bagli kalir.
 - Test/dogrulama:
-  - `corepack pnpm --filter @uzman-hocam/db test`
+  - `corepack pnpm --filter @o-okul/db test`
   - `corepack pnpm db:rls:check`
   - `corepack pnpm tenant-db:check`
 - Risk ve rollback:
@@ -563,11 +563,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
     uzun optik satir/cevap dizisi gibi karantina/raw import sizintilarini ortak smoke validator
     seviyesinde reddeder.
 - Test/dogrulama:
-  - `corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/answer-key-excel-import.service.test.ts`
-  - `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/optik-7108-real-pipeline.test.ts src/jobs/optical-pilot-fixture.test.ts`
-  - `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/optik-workspace-contract-next.spec.ts`
-  - `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/report-workspace-contract-next.spec.ts`
-  - `corepack pnpm --filter @uzman-hocam/web typecheck`
+  - `corepack pnpm --filter @o-okul/api exec vitest run src/exam/answer-key-excel-import.service.test.ts`
+  - `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/optik-7108-real-pipeline.test.ts src/jobs/optical-pilot-fixture.test.ts`
+  - `corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/optik-workspace-contract-next.spec.ts`
+  - `corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/report-workspace-contract-next.spec.ts`
+  - `corepack pnpm --filter @o-okul/web typecheck`
   - `corepack pnpm web:a11y:check`
   - `corepack pnpm web:ux-contract:check`
   - `corepack pnpm karne:visual-contract:check`
@@ -595,8 +595,8 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   - En az bir bozuk/eksik ogrenci satiri quarantine negatifinde kalir; ham TCKN-benzeri alan
     evidence'a yazilmaz.
 - Test/dogrulama:
-  - `corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/answer-key-excel-import.service.test.ts`
-  - `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/optik-7108-real-pipeline.test.ts src/jobs/optical-answer-parser.test.ts`
+  - `corepack pnpm --filter @o-okul/api exec vitest run src/exam/answer-key-excel-import.service.test.ts`
+  - `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/optik-7108-real-pipeline.test.ts src/jobs/optical-answer-parser.test.ts`
   - `node scripts/check-product-journeys.mjs`
 - Risk ve rollback:
   - Risk dusuk/orta; fixture kabulu dar alanda kalir.
@@ -708,8 +708,8 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   kanitinin ayri kapida bekledigi gercegine gore guncellendi.
 - Faz 4A icin API/worker fixture testleri calistirildi ve gecti.
 - Faz 2 icin kritik auth/exam/raw-import/report OpenAPI slice'i lokal olarak dogrulandi:
-  `corepack pnpm --filter @uzman-hocam/api typecheck`, `corepack pnpm --filter @uzman-hocam/api test`,
-  `corepack pnpm --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate` gecti.
+  `corepack pnpm --filter @o-okul/api typecheck`, `corepack pnpm --filter @o-okul/api test`,
+  `corepack pnpm --filter @o-okul/api build`, `corepack pnpm openapi:generate` gecti.
 - QA subagent review'i Faz 2'nin tam kapanmadigini dogruladi: genis mutasyon coverage'i ve
   shared-types tek kaynak sozlesmesi ayri implementation slice'i olarak acik kalmali.
 - Auth/MFA/password-reset sozlesme slice'i genisletildi: `LoginRequest`, `AuthRefreshRequest`,
@@ -723,25 +723,25 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   gercek request/response davranisini tasir. Refresh/logout request body opsiyonel kalir,
   `X-CSRF-Token` zorunlu header olarak gorunur, logout `204` body tasimaz, password-reset
   request response'u `resetToken`/`expiresAt` sizdirmez ve auth success response'lari body'de
-  `refreshToken` tasimaz. `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/app.e2e.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/auth/auth.service.test.ts src/auth/token-service.test.ts src/auth/session-store.test.ts src/http/api-response.e2e.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate` gecti.
+  `refreshToken` tasimaz. `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/app.e2e.test.ts`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/auth/auth.service.test.ts src/auth/token-service.test.ts src/auth/session-store.test.ts src/http/api-response.e2e.test.ts`,
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate` gecti.
   Ilk birlesik hedefli auth test kosusunda `socket hang up` flake'i goruldu; izole rerun'lar
   temiz gecti.
 - Backend API subagent'in onerdigi `payment-plans` sozlesme slice'i uygulandi:
-  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/payment/payment.e2e.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate` gecti.
+  `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/payment/payment.e2e.test.ts`,
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate` gecti.
 - PR gate subagent payment slice'inda P0/P1 bulgu bulmadi; P2 olarak isaretledigi payment OpenAPI
   alan/enum/minItems drift riski `scripts/generate-openapi.mjs` checker detaylariyla kapatildi.
 - Announcement create/delivery sozlesme slice'i uygulandi:
-  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/announcement/announcement.e2e.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate` gecti.
+  `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/announcement/announcement.e2e.test.ts`,
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate` gecti.
 - Announcement read/portal sozlesme slice'i uygulandi: `GET /api/v1/announcements`,
   `GET /api/v1/announcements/{id}`, recipient/delivery report read endpointleri ve
   ogrenci/veli/ogretmen `/me/**/announcements` list/read endpointleri OpenAPI artifact'inde
@@ -749,29 +749,29 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   kurallariyla gorunur. API success envelope tipleri `ApiItemResponse<T>` ve
   `ApiListResponse<T>` olarak shared-types'a tasindi. Backend API subagent read-only review'i
   bu slice icin endpoint listesini ve read POST'un retry'da `readAt` guncellemesi nedeniyle
-  idempotency header eklenmemesi gerektigini dogruladi. `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/announcement/announcement.e2e.test.ts src/me/me-access-matrix.e2e.test.ts src/http/api-response.e2e.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate` gecti.
+  idempotency header eklenmemesi gerektigini dogruladi. `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/announcement/announcement.e2e.test.ts src/me/me-access-matrix.e2e.test.ts src/http/api-response.e2e.test.ts`,
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate` gecti.
 - PR gate subagent announcement create/delivery slice'inda P0/P1/P2 blocker bulmadi; kalan risk
   full idempotency envanteri ve elle yazilan OpenAPI overlay drift testi olarak plan kapsaminda kalir.
 - Announcement create replay/conflict riski kapatildi: `POST /api/v1/announcements` opsiyonel
   `Idempotency-Key` kabul eder; replay ayni response'u, farkli body ise 409 dondurur ve OpenAPI
-  artifact'inde header opsiyonel gorunur. `corepack pnpm --filter @uzman-hocam/api exec vitest run src/announcement/announcement.e2e.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate` gecti.
+  artifact'inde header opsiyonel gorunur. `corepack pnpm --filter @o-okul/api exec vitest run src/announcement/announcement.e2e.test.ts`,
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate` gecti.
 - Student create replay/conflict riski kapatildi: `POST /api/v1/students` opsiyonel
   `Idempotency-Key` kabul eder; `StudentCreateRequest` shared-types'a tasindi; replay ayni
   response'u, farkli body ise 409 dondurur ve OpenAPI artifact'inde request body, `{ data }`
-  envelope, status enum'u ve header opsiyonel gorunur. `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/app.e2e.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/student/student.service.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate` gecti.
+  envelope, status enum'u ve header opsiyonel gorunur. `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/app.e2e.test.ts`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/student/student.service.test.ts`,
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate` gecti.
 - PR gate subagent student-create slice'inda guardian validasyonunun create yan etkisinden sonra
   hata firlatabilecegini P1 buldu; guardian input parse'i store create/createMany oncesine alindi.
   `guardian: {}` + `Idempotency-Key` negatifinde ogrenci olusmadigi `src/app.e2e.test.ts` ile
   kanitlandi. Production bootstrap'in `{ data }` response envelope davranisi
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/http/api-response.e2e.test.ts`
+  `corepack pnpm --filter @o-okul/api exec vitest run src/http/api-response.e2e.test.ts`
   ile ayrica dogrulandi.
 - School class/teacher-assignment sozlesme slice'i uygulandi: `ClassCreateRequest`,
   `ClassUpdateRequest`, `TeacherAssignmentCreateRequest` ve `TeacherAssignmentUpdateRequest`
@@ -780,10 +780,10 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `PATCH /api/v1/teachers/{id}/assignments/{assignmentId}` OpenAPI artifact'inde request body
   ve `{ data }` response envelope tasir. Teacher assignment role enum'u, create icin
   `classId` veya `studentId` anyOf hedef kuralı ve class/assignment PATCH `minProperties: 1`
-  checker kapsamindadir. `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/school/school.e2e.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate` gecti.
+  checker kapsamindadir. `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/school/school.e2e.test.ts`,
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate` gecti.
 - Program/teacher-note sozlesme slice'i uygulandi: `ScheduleLessonCreateRequest`,
   `ScheduleLessonUpdateRequest`, `StudySessionCreateRequest`, `StudySessionUpdateRequest`,
   `TeacherNoteCreateRequest` ve `TeacherNoteUpdateRequest` shared-types'a tasindi.
@@ -791,9 +791,9 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `POST/PATCH /api/v1/teacher-notes` OpenAPI artifact'inde request body ve `{ data }`
   response envelope tasir. `scripts/generate-openapi.mjs` bu slice icin required alanlari,
   teacher-note visibility enum'unu, study-session `studentIds.minItems` ve `capacity.minimum`
-  kurallarini fail-fast kontrol eder. `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`, `corepack pnpm --filter @uzman-hocam/api build`,
-  `corepack pnpm openapi:generate` ve `corepack pnpm --filter @uzman-hocam/api exec vitest run src/program/schedule.e2e.test.ts src/program/study-session.e2e.test.ts src/teacher-note/teacher-note.e2e.test.ts`
+  kurallarini fail-fast kontrol eder. `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`, `corepack pnpm --filter @o-okul/api build`,
+  `corepack pnpm openapi:generate` ve `corepack pnpm --filter @o-okul/api exec vitest run src/program/schedule.e2e.test.ts src/program/study-session.e2e.test.ts src/teacher-note/teacher-note.e2e.test.ts`
   gecti.
 - Backend API subagent program/teacher-note slice'inda zaman araligi ve bos PATCH risklerini
   P1/P2 olarak isaretledi; `ScheduleLesson` ve `StudySession` create/patch body validasyonu
@@ -801,19 +801,19 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   en az bir alan kuralini uygular hale getirildi. OpenAPI PATCH semalari `minProperties: 1`
   tasir ve `scripts/generate-openapi.mjs` `requestMinProperties`, `minimum`, `minItems` ve enum
   kurallarini fail-fast kontrol eder. Re-review P0/P1/P2 bulgu vermedi.
-  `corepack pnpm --filter @uzman-hocam/api test` de gecti.
+  `corepack pnpm --filter @o-okul/api test` de gecti.
 - Support-ticket sozlesme slice'i uygulandi: `SupportTicketCreateRequest`,
   `SupportTicketUpdateRequest`, `SupportTicketAttachmentCreateRequest` ve
   `SupportTicketCommentCreateRequest` shared-types'a tasindi. `POST/PATCH /api/v1/support-tickets`,
   `POST /api/v1/support-tickets/{id}/attachments` ve `POST /api/v1/support-tickets/{id}/comments`
   OpenAPI artifact'inde request body ve `{ data }` response envelope tasir. Attachment/comment
   create endpointlerinde `Idempotency-Key` opsiyonel gorunur; attachment response semasi ham
-  `fileBase64`/`contentBase64` alanlarini yasaklar. `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/support-ticket/support-ticket.e2e.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate` gecti.
+  `fileBase64`/`contentBase64` alanlarini yasaklar. `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/support-ticket/support-ticket.e2e.test.ts`,
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate` gecti.
   Ilk tam API testinde `school.e2e.test.ts` icin tek seferlik HTTP parse flake'i goruldu;
-  hedefli `school.e2e.test.ts` rerun ve sonraki tam `corepack pnpm --filter @uzman-hocam/api test`
+  hedefli `school.e2e.test.ts` rerun ve sonraki tam `corepack pnpm --filter @o-okul/api test`
   gecti (`110` dosya, `654` test). Backend API subagent, `requesterId` request contract drift'i
   ve attachment response `fileBase64` negatif test eksigini P1/P2 olarak isaretledi; `requesterId`
   public create request sozlesmesinden cikarildi, attachment e2e hem `contentBase64` hem `fileBase64`
@@ -830,16 +830,16 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   endpointlerinde `Idempotency-Key` opsiyonel gorunur; core homework endpointlerine desteklenmeyen
   idempotency header'i eklenmez. Homework file response semasi ham `fileBase64`/`contentBase64`/`storageKey`
   alanlarini yasaklar. Material ve homework PATCH body'leri en az bir alan kuralini uygular.
-  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/homework/homework.e2e.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate` gecti.
+  `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/homework/homework.e2e.test.ts`,
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate` gecti.
 - Faz 4 raw import object key PII-safe dilimi lokal olarak kapatildi:
   `createRawImportS3Key` artik kullanici dosya adini object key'in son segmentine yazmaz;
   sha segmenti altinda sabit `source` objesi kullanir. Unit test ve HTTP e2e, `answers.dat`,
   iSEM ve TCKN-benzeri dosya adi parcalarinin `s3Key` icinde tasinmadigini dogrular.
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/raw-import-upload.service.test.ts src/exam/raw-import.controller.e2e.test.ts src/exam/s3-raw-import-archive-store.test.ts src/exam/postgres-raw-import-repository.test.ts src/exam/raw-import-quarantine-store.test.ts`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/exam/raw-import-upload.service.test.ts src/exam/raw-import.controller.e2e.test.ts src/exam/s3-raw-import-archive-store.test.ts src/exam/postgres-raw-import-repository.test.ts src/exam/raw-import-quarantine-store.test.ts`,
   `corepack pnpm pii:contact-policy:check`, `corepack pnpm prod:evidence:templates:check`
   ve `node scripts/check-smoke-evidence-contract.mjs` gecti. `corepack pnpm privacy:inventory:check`
   bu ortamda `KVKK_INVENTORY_TARGET` olmadigi icin beklenen sekilde calismadi; real staging/prod
@@ -851,29 +851,29 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `packages/db/prisma/migrations/20260621172000_homework_class_composite_fk/migration.sql`
   orphan/cross-tenant class preflight'i ekler, `Homework.class` artik `[tenantId, classId]`
   -> `Class[tenantId, id]` composite FK kullanir ve tenant relation checker sonucu
-  `65 composite, 21 izlenen legacy istisna` seviyesine iner. `corepack pnpm --filter @uzman-hocam/db exec prisma validate --config prisma.config.ts`,
+  `65 composite, 21 izlenen legacy istisna` seviyesine iner. `corepack pnpm --filter @o-okul/db exec prisma validate --config prisma.config.ts`,
   `node packages/db/scripts/check-tenant-relation-fks.mjs`, `corepack pnpm db:rls:check`,
-  `corepack pnpm --filter @uzman-hocam/db test`, `corepack pnpm tenant-db:check` ve
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/homework/homework.e2e.test.ts`
+  `corepack pnpm --filter @o-okul/db test`, `corepack pnpm tenant-db:check` ve
+  `corepack pnpm --filter @o-okul/api exec vitest run src/homework/homework.e2e.test.ts`
   gecti.
 - Faz 3 icin `ScheduleLesson.class` legacy FK istisnasi lokal olarak kapatildi:
   `packages/db/prisma/migrations/20260621175000_schedule_lesson_class_composite_fk/migration.sql`
   orphan/cross-tenant class preflight'i ekler, `ScheduleLesson.class` artik `[tenantId, classId]`
   -> `Class[tenantId, id]` composite FK kullanir ve tenant relation checker sonucu
-  `66 composite, 20 izlenen legacy istisna` seviyesine iner. `corepack pnpm --filter @uzman-hocam/db exec prisma validate --config prisma.config.ts`,
+  `66 composite, 20 izlenen legacy istisna` seviyesine iner. `corepack pnpm --filter @o-okul/db exec prisma validate --config prisma.config.ts`,
   `node packages/db/scripts/check-tenant-relation-fks.mjs`, `corepack pnpm db:rls:check`,
-  `corepack pnpm --filter @uzman-hocam/db test`, `corepack pnpm tenant-db:check` ve
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/program/schedule.e2e.test.ts`
+  `corepack pnpm --filter @o-okul/db test`, `corepack pnpm tenant-db:check` ve
+  `corepack pnpm --filter @o-okul/api exec vitest run src/program/schedule.e2e.test.ts`
   gecti.
 - Faz 3 icin study-session tenant FK dilimi lokal olarak kapatildi:
   `packages/db/prisma/migrations/20260621182000_study_session_composite_fks/migration.sql`
   `StudySession.class`, `StudySessionStudent.studySession` ve `StudySessionStudent.student`
   parent'lari icin orphan/cross-tenant preflight'i ekler. Bu uc relation artik tenant composite
   FK kullanir ve tenant relation checker sonucu `69 composite, 17 izlenen legacy istisna`
-  seviyesine iner. `corepack pnpm --filter @uzman-hocam/db exec prisma validate --config prisma.config.ts`,
+  seviyesine iner. `corepack pnpm --filter @o-okul/db exec prisma validate --config prisma.config.ts`,
   `node packages/db/scripts/check-tenant-relation-fks.mjs`, `corepack pnpm db:rls:check`,
-  `corepack pnpm --filter @uzman-hocam/db test`, `corepack pnpm tenant-db:check`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/program/study-session.e2e.test.ts`
+  `corepack pnpm --filter @o-okul/db test`, `corepack pnpm tenant-db:check`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/program/study-session.e2e.test.ts`
   ve `corepack pnpm prod:plan:check` gecti. `tenant_security_reviewer` read-only review'i
   P0/P1/P2 bulgu vermedi; staging/prod preflight ve DB-level negatif insert kaniti Faz 5
   sahibinde kalir.
@@ -882,10 +882,10 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   nullable `TeacherAssignment.class` ve `TeacherAssignment.student` parent'lari icin
   orphan/cross-tenant preflight'i ekler. Bu iki relation artik tenant composite FK kullanir ve
   tenant relation checker sonucu `71 composite, 15 izlenen legacy istisna` seviyesine iner.
-  `corepack pnpm --filter @uzman-hocam/db exec prisma validate --config prisma.config.ts`,
+  `corepack pnpm --filter @o-okul/db exec prisma validate --config prisma.config.ts`,
   `node packages/db/scripts/check-tenant-relation-fks.mjs`, `corepack pnpm db:rls:check`,
-  `corepack pnpm --filter @uzman-hocam/db test`, `corepack pnpm tenant-db:check`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/school/teacher-assignment-store.test.ts`
+  `corepack pnpm --filter @o-okul/db test`, `corepack pnpm tenant-db:check`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/school/teacher-assignment-store.test.ts`
   ve `corepack pnpm prod:plan:check` gecti. `tenant_security_reviewer` read-only review'i
   P0/P1/P2 bulgu vermedi; staging/prod preflight ve DB-level negatif insert kaniti Faz 5
   sahibinde kalir.
@@ -894,10 +894,10 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `GuardianStudent.guardian` ve `GuardianStudent.student` parent'lari icin orphan/cross-tenant
   preflight'i ekler; `Guardian` parent'i `tenantId + id` unique anahtari tasir. Bu iki relation
   artik tenant composite FK kullanir ve tenant relation checker sonucu
-  `73 composite, 13 izlenen legacy istisna` seviyesine iner. `corepack pnpm --filter @uzman-hocam/db exec prisma validate --config prisma.config.ts`,
+  `73 composite, 13 izlenen legacy istisna` seviyesine iner. `corepack pnpm --filter @o-okul/db exec prisma validate --config prisma.config.ts`,
   `node packages/db/scripts/check-tenant-relation-fks.mjs`, `corepack pnpm db:rls:check`,
-  `corepack pnpm --filter @uzman-hocam/db test`, `corepack pnpm tenant-db:check` ve
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/school/guardian-student-store.test.ts`
+  `corepack pnpm --filter @o-okul/db test`, `corepack pnpm tenant-db:check` ve
+  `corepack pnpm --filter @o-okul/api exec vitest run src/school/guardian-student-store.test.ts`
   gecti. `tenant_security_reviewer` read-only review'i P0/P1/P2 bulgu vermedi; staging/prod
   preflight ve DB-level negatif insert kaniti Faz 5 sahibinde kalir.
 - Faz 3 icin zorunlu teacher parent FK dilimi lokal olarak kapatildi:
@@ -906,10 +906,10 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `ScheduleLesson.teacher` ve `StudySession.teacher` parent'lari icin orphan/cross-tenant
   preflight'i ekler; `Teacher` parent'i `tenantId + id` unique anahtari tasir. Bu bes relation
   artik tenant composite FK kullanir ve tenant relation checker sonucu
-  `78 composite, 8 izlenen legacy istisna` seviyesine iner. `corepack pnpm --filter @uzman-hocam/db exec prisma validate --config prisma.config.ts`,
+  `78 composite, 8 izlenen legacy istisna` seviyesine iner. `corepack pnpm --filter @o-okul/db exec prisma validate --config prisma.config.ts`,
   `node packages/db/scripts/check-tenant-relation-fks.mjs`, `corepack pnpm db:rls:check`,
-  `corepack pnpm --filter @uzman-hocam/db test`, `corepack pnpm tenant-db:check`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/program/schedule.e2e.test.ts src/program/study-session.e2e.test.ts src/teacher-note/teacher-note.e2e.test.ts src/school/teacher-assignment-store.test.ts src/development/development.service.test.ts`,
+  `corepack pnpm --filter @o-okul/db test`, `corepack pnpm tenant-db:check`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/program/schedule.e2e.test.ts src/program/study-session.e2e.test.ts src/teacher-note/teacher-note.e2e.test.ts src/school/teacher-assignment-store.test.ts src/development/development.service.test.ts`,
   `corepack pnpm prod:plan:check` ve `git diff --check` gecti. `tenant_security_reviewer`
   read-only review'i P0/P1/P2 bulgu vermedi; staging/prod preflight ve DB-level negatif insert
   kaniti Faz 5 sahibinde kalir.
@@ -919,11 +919,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   preflight'i ekler. Bu iki relation artik tenant composite FK kullanir; `SetNull` hard-delete
   semantigi, mevcut soft-delete davranisiyla uyumlu ve veri kaybina daha kapali olacak sekilde
   `Restrict`e cekildi. Tenant relation checker sonucu `80 composite, 6 izlenen legacy istisna`
-  seviyesine iner. `corepack pnpm --filter @uzman-hocam/db exec prisma validate --config prisma.config.ts`,
+  seviyesine iner. `corepack pnpm --filter @o-okul/db exec prisma validate --config prisma.config.ts`,
   `node packages/db/scripts/check-tenant-relation-fks.mjs`,
-  `corepack pnpm --filter @uzman-hocam/db test`, `corepack pnpm db:rls:check`,
+  `corepack pnpm --filter @o-okul/db test`, `corepack pnpm db:rls:check`,
   `corepack pnpm tenant-db:check` ve
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/homework/homework.e2e.test.ts src/support-ticket/support-ticket.e2e.test.ts`
+  `corepack pnpm --filter @o-okul/api exec vitest run src/homework/homework.e2e.test.ts src/support-ticket/support-ticket.e2e.test.ts`
   gecti. `data_platform_engineer` read-only review'i bu iki iliskiyi en dusuk riskli siradaki
   dilim olarak onermisti; staging/prod preflight ve DB-level negatif insert kaniti Faz 5
   sahibinde kalir.
@@ -934,11 +934,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   mevcut soft-delete davranisiyla uyumlu ve rapor/finans baglaminda veri kaybina daha kapali
   olacak sekilde `Restrict`e cekildi. Tenant relation checker sonucu
   `82 composite, 4 izlenen legacy istisna` seviyesine iner.
-  `corepack pnpm --filter @uzman-hocam/db exec prisma validate --config prisma.config.ts`,
+  `corepack pnpm --filter @o-okul/db exec prisma validate --config prisma.config.ts`,
   `node packages/db/scripts/check-tenant-relation-fks.mjs`,
-  `corepack pnpm --filter @uzman-hocam/db test`, `corepack pnpm db:rls:check`,
+  `corepack pnpm --filter @o-okul/db test`, `corepack pnpm db:rls:check`,
   `corepack pnpm tenant-db:check` ve
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/payment/payment.e2e.test.ts src/payment/payment-store.test.ts src/report/report-generation.service.test.ts src/report/report-snapshot-store.test.ts`
+  `corepack pnpm --filter @o-okul/api exec vitest run src/payment/payment.e2e.test.ts src/payment/payment-store.test.ts src/report/report-generation.service.test.ts src/report/report-snapshot-store.test.ts`
   gecti. `data_platform_engineer` read-only review'i bu iki iliskiyi Student yasam dongusunden
   daha dar riskli siradaki dilim olarak onermisti; staging/prod preflight ve DB-level negatif
   insert kaniti Faz 5 sahibinde kalir.
@@ -948,11 +948,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   preflight ekler. Bu iki relation artik tenant composite FK kullanir; `SetNull` hard-delete
   semantigi, mevcut soft-delete davranisiyla uyumlu olacak sekilde `Restrict`e cekildi.
   Tenant relation checker sonucu `84 composite, 2 izlenen legacy istisna` seviyesine iner.
-  `corepack pnpm --filter @uzman-hocam/db exec prisma validate --config prisma.config.ts`,
+  `corepack pnpm --filter @o-okul/db exec prisma validate --config prisma.config.ts`,
   `node packages/db/scripts/check-tenant-relation-fks.mjs`,
-  `corepack pnpm --filter @uzman-hocam/db test`, `corepack pnpm db:rls:check`,
+  `corepack pnpm --filter @o-okul/db test`, `corepack pnpm db:rls:check`,
   `corepack pnpm tenant-db:check` ve
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/student/student-class-history-store.test.ts src/student/student-enrollment-store.test.ts src/school/school.e2e.test.ts`
+  `corepack pnpm --filter @o-okul/api exec vitest run src/student/student-class-history-store.test.ts src/student/student-enrollment-store.test.ts src/school/school.e2e.test.ts`
   gecti. Kalan `Student.class` ve `Student.responsibleTeacher` iliskileri ana ogrenci
   gorunurluk/ogretmen scope etkisi nedeniyle ayri, daha dikkatli migration diliminde kalir.
 - Faz 3 icin ana ogrenci class/responsible-teacher FK dilimi lokal olarak kapatildi:
@@ -961,12 +961,12 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   ekler. Bu iki relation artik tenant composite FK kullanir; `SetNull` hard-delete semantigi,
   mevcut soft-delete davranisiyla uyumlu olacak sekilde `Restrict`e cekildi. Tenant relation
   checker sonucu `86 composite, 0 izlenen legacy istisna` seviyesine iner.
-  `corepack pnpm --filter @uzman-hocam/db exec prisma validate --config prisma.config.ts`,
+  `corepack pnpm --filter @o-okul/db exec prisma validate --config prisma.config.ts`,
   `node packages/db/scripts/check-tenant-relation-fks.mjs`,
-  `corepack pnpm --filter @uzman-hocam/db test`, `corepack pnpm db:rls:check`,
+  `corepack pnpm --filter @o-okul/db test`, `corepack pnpm db:rls:check`,
   `corepack pnpm tenant-db:check`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck` ve
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/student/student-profile.e2e.test.ts src/school/school.e2e.test.ts`
+  `corepack pnpm --filter @o-okul/api typecheck` ve
+  `corepack pnpm --filter @o-okul/api exec vitest run src/student/student-profile.e2e.test.ts src/school/school.e2e.test.ts`
   gecti. Bu Faz 3'u lokal schema/test seviyesinde kapatir; canli/staging preflight ve
   DB-level negatif insert kaniti Faz 5 kapisinda kalir.
 - Faz 4 icin optik/rapor URL state ve live-region dilimi lokal olarak kapatildi:
@@ -975,9 +975,9 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   sekmesini URL state ile korur. Global hata mesajlari `role="alert"`, islem durum
   mesajlari `role="status"` ile okunur. `apps/web/e2e-next/optik-workspace-contract-next.spec.ts`,
   `apps/web/e2e-next/report-workspace-contract-next.spec.ts` ve
-  `scripts/check-web-ux-baseline.mjs` bu kontrati kilitler. `corepack pnpm --filter @uzman-hocam/web typecheck`,
+  `scripts/check-web-ux-baseline.mjs` bu kontrati kilitler. `corepack pnpm --filter @o-okul/web typecheck`,
   `corepack pnpm web:ux-baseline:check`,
-  `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts`,
+  `corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts`,
   `corepack pnpm web:ux-contract:check`, `corepack pnpm web:a11y:check`
   ve `git diff --check` gecti. Bu Faz 4'u tamamen kapatmaz; genis UI data-loading
   refactor'u, real KVKK staging/prod target'i ve PII negatif artifact kanitlari acik kalir.
@@ -989,8 +989,8 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   ilk acilista 0 ogrenci liste/detay istegini, sinifli sorgudan sonra 1 adet
   `/students?classId=...` istegini, sinifsiz raporda 0 genis `/students` ve dedupe edilmis
   `/students/:id` isteklerini, karne seciminden sonra 3 detay istegini dogrular.
-  `corepack pnpm --filter @uzman-hocam/web typecheck`,
-  `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/report-workspace-contract-next.spec.ts`
+  `corepack pnpm --filter @o-okul/web typecheck`,
+  `corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/report-workspace-contract-next.spec.ts`
   ve `corepack pnpm web:ux-contract:check` gecti. Kalan risk performans icin ileride tek
   batch endpoint dusunulebilmesidir; privacy acisindan genis ogrenci listesi yukleme kapisi
   lokal kontratta kapandi.
@@ -1003,9 +1003,9 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `useMemo` ile sabitlendi; mevcut lazy chart import'lari, `next-report-analytics-section`
   class'i, `Rapor özeti`, `Kurum analitiği`, `Başarı %`, `Net` ve `Soru` gorunur kontratlari
   degismedi. `scripts/check-web-ux-baseline.mjs` `function ReportAnalyticsPanel` ve memoized
-  derived-data guardrail'lerini izler. `corepack pnpm --filter @uzman-hocam/web typecheck`,
+  derived-data guardrail'lerini izler. `corepack pnpm --filter @o-okul/web typecheck`,
   `corepack pnpm web:ux-baseline:check` ve
-  `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/report-workspace-contract-next.spec.ts`
+  `corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/report-workspace-contract-next.spec.ts`
   gecti. Bu, optik workspace icin daha genis component/perf hardening'i ve real KVKK staging/prod
   target'ini kapatmaz.
 - Faz 4 icin optik rapor context privacy/perf dilimi lokal olarak kapatildi:
@@ -1023,9 +1023,9 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   sonuc gorunumunu ve tekil `/students/student-a` detay yolunu dogrular. `scripts/check-web-ux-baseline.mjs`
   bu tokenlari, `loadStudentsByIds`, `reportStudentIds`, `opticalStudentResultColumns` ve
   `loadStudents(accessToken).catch(() => [])` no-token guardrail'ini izler.
-  `corepack pnpm --filter @uzman-hocam/web typecheck`,
+  `corepack pnpm --filter @o-okul/web typecheck`,
   `corepack pnpm web:ux-baseline:check` ve
-  `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/optik-workspace-contract-next.spec.ts`
+  `corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/optik-workspace-contract-next.spec.ts`
   gecti. Bu lokal kontrat, iSEM 254 satir/staging real-data performans kaniti veya real
   KVKK staging/prod artifact'i yerine gecmez.
 - Faz 4 icin optik karantina `rawRow` UI PII negatif dilimi lokal olarak kapatildi:
@@ -1049,15 +1049,15 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `sourceFileName`, `objectKey` ve `s3Key` negatiflerini fail-fast fixture'a ekledi.
   `corepack pnpm
   smoke:evidence:check`, `corepack pnpm prod:evidence:templates:check` ve `corepack pnpm
-  --filter @uzman-hocam/web typecheck` gecti; ayrica
+  --filter @o-okul/web typecheck` gecti; ayrica
   `ISEM_OPTICAL_PIPELINE_ALLOW_EXAMPLE_EVIDENCE=1 ISEM_OPTICAL_PIPELINE_TARGET=file://$PWD/docs/evidence-templates/isem-optical-pipeline.example.json node scripts/check-isem-optical-pipeline-evidence.mjs`
   gecti. Bu lokal sozlesme gercek staging/prod evidence
   artifact'inin yerini almaz; o artifact'lerin uretilmesi Faz 5 dis kosusunda kalir.
 - Faz 4/Faz 5 icin iSEM optik local live smoke ve log/privacy hardening dilimi
   ilerletildi: local Colima/Docker uzerinde Postgres, Redis ve MinIO kaldirildi,
-  `corepack pnpm --filter @uzman-hocam/db exec prisma migrate status --config prisma.config.ts`
+  `corepack pnpm --filter @o-okul/db exec prisma migrate status --config prisma.config.ts`
   `Database schema is up to date!` dondurdu ve
-  `S3_ACCESS_KEY_ID=minioadmin S3_SECRET_ACCESS_KEY=minioadmin123 S3_BUCKET=uzman-hocam-local ISEM_OPTICAL_PIPELINE_SMOKE_EVIDENCE_FILE=artifacts/local/isem-optical-pipeline.json corepack pnpm isem-optical-pipeline:smoke`
+  `S3_ACCESS_KEY_ID=minioadmin S3_SECRET_ACCESS_KEY=minioadmin123 S3_BUCKET=o-okul-local ISEM_OPTICAL_PIPELINE_SMOKE_EVIDENCE_FILE=artifacts/local/isem-optical-pipeline.json corepack pnpm isem-optical-pipeline:smoke`
   gecti. Artifact `254 student/participant/matched`, `0 quarantine`, `254 ExamResult`,
   `254 reportResult`, `reportReady=true`, `gaps=[]` ve 2 hashli ornek skor tasir;
   direct payload validation `validateSmokeEvidencePayload(... expectedCheck: "isem_optical_pipeline_smoke")`
@@ -1141,18 +1141,18 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   tiplerine yaslar. `apps/api/src/openapi-contracts.ts` ve `scripts/generate-openapi.mjs`
   attendance list/summary/create/update/delete ile teacher import dry-run/commit
   endpoint'lerini request body, `{ data }` / `{ data, meta }`, enum, format ve 204
-  no-content kurallariyla kilitler. `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/attendance/attendance.e2e.test.ts src/school/school.e2e.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate`
+  no-content kurallariyla kilitler. `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/attendance/attendance.e2e.test.ts src/school/school.e2e.test.ts`,
+  `corepack pnpm --filter @o-okul/api build`, `corepack pnpm openapi:generate`
   ve scoped `git diff --check` gecti. Faz 2 hala tam kapanmaz; genis endpoint envanteri,
   `components.schemas` tek kaynak kaniti ve kalan bulk/idempotency karar dalgasi o turda acik kaldi.
 - Faz 2 icin teacher import commit idempotency dilimi lokal olarak kapatildi:
   `POST /api/v1/teachers/imports` opsiyonel `Idempotency-Key` kabul eder; replay ayni
   response'u, ayni key farkli dosya ise 409 dondurur. Idempotency request hash'i ham
-  `fileBase64` yerine dosya SHA-256 degeriyle olusur. `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/school/school.e2e.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate`
+  `fileBase64` yerine dosya SHA-256 degeriyle olusur. `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/school/school.e2e.test.ts`,
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate`
   gecti; artifact spot-check `POST /api/v1/teachers/imports` icin opsiyonel
   `Idempotency-Key` header'ini dogruladi. Faz 2 yine tam kapanmaz; genis endpoint
   envanteri, `components.schemas` tek kaynak kaniti ve kalan idempotency karar tablosu bu turda acik kaldi.
@@ -1170,16 +1170,16 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `backup-restore` ve `sms-batch` endpoint'leri artik OpenAPI artifact'inde request body
   semasi ve/veya `{ data }` response envelope tasir. `scripts/check-idempotency-inventory.mjs`
   bu 30 operation icin OpenAPI response envelope ve body beklenen operasyonlarda request body
-  semasini da fail-fast dogrular. `corepack pnpm --filter @uzman-hocam/api build`,
+  semasini da fail-fast dogrular. `corepack pnpm --filter @o-okul/api build`,
   `corepack pnpm openapi:generate` ve `corepack pnpm idempotency:inventory:check` gecti.
 - Faz 2 icin exam read/update/list sozlesme dilimi lokal olarak genisletildi:
   `GET /api/v1/exams`, `GET /api/v1/exams/{examId}`, `PATCH /api/v1/exams/{examId}`,
   `DELETE /api/v1/exams/{examId}` ve `GET /api/v1/exams/{examId}/participants`
   artik OpenAPI artifact'inde beklenen request body, `{ data }`, list `meta` veya `204`
   no-content sozlesmesiyle fail-fast korunur. Generator status enumlarini da dogrular.
-  `corepack pnpm --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate`,
+  `corepack pnpm --filter @o-okul/api build`, `corepack pnpm openapi:generate`,
   `corepack pnpm idempotency:inventory:check` ve
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/exam.controller.e2e.test.ts`
+  `corepack pnpm --filter @o-okul/api exec vitest run src/exam/exam.controller.e2e.test.ts`
   gecti. Bu dilim Faz 2'yi ilerletir; genis endpoint envanteri ve shared-types tek kaynak
   kaniti halen aciktir.
 - Faz 4/Faz 5 icin live exam cycle evidence kontrati PII-safe ve exact-count hale getirildi:
@@ -1292,10 +1292,10 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   Zod body semalari bu tiplere baglandi. OpenAPI overlay ve generator, kampus/ders/seviye/
   kazanim/akademik yil/akademik donem CRUD ve class read-delete endpointlerinde request body,
   `{ data }` / `{ data, meta }` envelope, 204 delete ve tarih format sozlesmesini fail-fast
-  korur. `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api build`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/school/school.e2e.test.ts`
+  korur. `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api build`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/school/school.e2e.test.ts`
   ve `corepack pnpm openapi:generate` gecti. Bu dilim Faz 2'yi ilerletir; guardian/teacher,
   portal/me, report read ve diger genis read/mutation yuzeyleri hala aciktir.
 - Faz 2 icin development criteria/assessment sozlesme dilimi lokal olarak kapatildi:
@@ -1304,11 +1304,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   baglandi. OpenAPI overlay ve generator, `GET/POST /api/v1/development/criteria` ile
   `GET/POST /api/v1/development/assessments` endpointlerinde request body,
   `{ data }` / `{ data, meta }` envelope, visibility enum'u ve `scores.minItems=1`
-  sozlesmesini fail-fast korur. `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/development/development.controller.e2e.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/http/api-response.e2e.test.ts src/http/api-version.e2e.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate` gecti.
+  sozlesmesini fail-fast korur. `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/development/development.controller.e2e.test.ts`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/http/api-response.e2e.test.ts src/http/api-version.e2e.test.ts`,
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate` gecti.
   Bu dilim Faz 2'yi ilerletir; portal `/me/.../development-assessments` read yuzeyi ayri
   PII/RBAC slice'i olarak acik kalir.
 - Faz 2 icin program/homework/payment/teacher-note read sozlesme dilimi lokal olarak
@@ -1316,10 +1316,10 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   ham icerik dondurmeyen `homework` read endpointleri mevcut record semalarina baglandi.
   OpenAPI overlay ve generator `{ data }` / `{ data, meta }` envelope, required alan,
   enum/minimum ve homework material file listesinde ham `contentBase64`/`fileBase64`/
-  `storageKey` bulunmamasi sozlesmesini fail-fast korur. `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/program/schedule.e2e.test.ts src/program/study-session.e2e.test.ts src/teacher-note/teacher-note.e2e.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/homework/homework.e2e.test.ts src/payment/payment.e2e.test.ts`,
-  `node --check scripts/generate-openapi.mjs`, `corepack pnpm --filter @uzman-hocam/api build`
+  `storageKey` bulunmamasi sozlesmesini fail-fast korur. `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/program/schedule.e2e.test.ts src/program/study-session.e2e.test.ts src/teacher-note/teacher-note.e2e.test.ts`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/homework/homework.e2e.test.ts src/payment/payment.e2e.test.ts`,
+  `node --check scripts/generate-openapi.mjs`, `corepack pnpm --filter @o-okul/api build`
   ve `corepack pnpm openapi:generate` gecti. Bu dilim Faz 2'yi ilerletir; homework download
   endpoint'i inline `fileBase64` dondurebildigi icin ayri privacy/OpenAPI sozlesmesi olarak
   acik kalir.
@@ -1328,11 +1328,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `support-tickets/{id}/comments` mevcut public record semalarina baglandi. OpenAPI overlay
   ve generator `{ data }` / `{ data, meta }` envelope, priority/status/content-type enum'u,
   attachment `byteSize.minimum=1` ve attachment listesinde ham `contentBase64`/`fileBase64`/
-  `storageKey` bulunmamasi sozlesmesini fail-fast korur. `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/support-ticket/support-ticket.e2e.test.ts`,
+  `storageKey` bulunmamasi sozlesmesini fail-fast korur. `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/support-ticket/support-ticket.e2e.test.ts`,
   `node --check scripts/generate-openapi.mjs`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/http/api-response.e2e.test.ts src/http/api-version.e2e.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate`
+  `corepack pnpm --filter @o-okul/api exec vitest run src/http/api-response.e2e.test.ts src/http/api-version.e2e.test.ts`,
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate`
   gecti. Bu dilim Faz 2'yi ilerletir; support attachment download endpoint'i inline
   `fileBase64` dondurebildigi icin ayri privacy/OpenAPI sozlesmesi olarak acik kalir.
 - Faz 2 icin answer-key read/publish sozlesme dilimi lokal olarak kapatildi:
@@ -1341,8 +1341,8 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   generator tarafinda `{ data }` / `{ data, meta }` envelope, `branches`,
   `scoringConfig`, status enum'u, publish `status=PUBLISHED`, zorunlu `publishedAt`
   ve ham cevap/PII alan yasaklariyla fail-fast korunur. `corepack pnpm --filter
-  @uzman-hocam/api typecheck`, hedefli answer-key API/repository testleri,
-  `corepack pnpm --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate`
+  @o-okul/api typecheck`, hedefli answer-key API/repository testleri,
+  `corepack pnpm --filter @o-okul/api build`, `corepack pnpm openapi:generate`
   ve `corepack pnpm idempotency:inventory:check` gecti. Bu dilim Faz 2'yi ilerletir;
   exam publish, parser-config suggestion/approval, genis kurum/teacher portal report snapshot
   listeleri ve genis portal `/me/**` yuzeyleri siradaki OpenAPI/shared-contract borcu olarak kalir.
@@ -1353,9 +1353,9 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   status, resolve ve global quarantine summary endpointlerini envelope, minimum count,
   status enum'u, resolve `evaluationJob`, raw binary/file/kimlik alan yasaklari ve
   `Idempotency-Key` header'i ile fail-fast korur. `corepack pnpm --filter
-  @uzman-hocam/shared-types typecheck`, `corepack pnpm --filter @uzman-hocam/api
+  @o-okul/shared-types typecheck`, `corepack pnpm --filter @o-okul/api
   typecheck`, hedefli raw-import API/store testleri, `corepack pnpm --filter
-  @uzman-hocam/api build`, `corepack pnpm openapi:generate` ve `corepack pnpm
+  @o-okul/api build`, `corepack pnpm openapi:generate` ve `corepack pnpm
   idempotency:inventory:check` gecti. Bu dilim raw-import/import-quarantines ozelinde
   acik operation-contract borcunu kapatir; staging evidence ve `rawRow` PII negatifleri
   Faz 4/Faz 5 sahibinde kalir.
@@ -1364,9 +1364,9 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `POST /api/v1/auth/refresh` response'lari ham `SessionRecord` yerine sadece public
   `Session` alanlarini dondurur. OpenAPI generator auth success response'larinda
   `refreshToken`, `refreshTokenHash`, `tokenFamilyId`, parola hash'i ve TOTP secret/hash
-  alanlarini deep-forbidden kontrol eder. `corepack pnpm --filter @uzman-hocam/api
+  alanlarini deep-forbidden kontrol eder. `corepack pnpm --filter @o-okul/api
   typecheck`, hedefli auth/app e2e ve auth unit testleri, `corepack pnpm --filter
-  @uzman-hocam/api build`, `corepack pnpm openapi:generate` ve `corepack pnpm
+  @o-okul/api build`, `corepack pnpm openapi:generate` ve `corepack pnpm
   idempotency:inventory:check` gecti.
 - Faz 2 icin parser-config suggestion/approval sozlesme dilimi lokal olarak kapatildi:
   parser-config suggestion/approval request ve response tipleri shared-types'a eklendi;
@@ -1375,9 +1375,9 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `OPTIK_7108_LGS` preset enum'unu, suggestion confidence/delimiter/version enum'larini,
   approval response `status=APPROVED`, skip-header minimumunu ve approval
   `Idempotency-Key` header'ini fail-fast korur. `corepack pnpm --filter
-  @uzman-hocam/shared-types typecheck`, `corepack pnpm --filter @uzman-hocam/api
+  @o-okul/shared-types typecheck`, `corepack pnpm --filter @o-okul/api
   typecheck`, hedefli parser-config API/service/repository testleri, `corepack pnpm
-  --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate` ve `corepack pnpm
+  --filter @o-okul/api build`, `corepack pnpm openapi:generate` ve `corepack pnpm
   idempotency:inventory:check` gecti. Bu dilim parser-config ozelinde acik
   operation-contract borcunu kapatir.
 - Faz 2 icin report snapshot/export/progress dar sozlesme dilimi lokal olarak kapatildi:
@@ -1390,10 +1390,10 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   progress `questionCount`/`successRate` alanlari ve student-scoped snapshot'ta ham
   cevap/file/kimlik alan yasaklariyla fail-fast korunur. `exam_reporting_engineer`
   read-only subagent'i bu dar slice'i genis snapshot/detail/error-booklet ve portal
-  rapor yuzeylerinden ayirmayi onermisti. `corepack pnpm --filter @uzman-hocam/api
-  typecheck`, `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  rapor yuzeylerinden ayirmayi onermisti. `corepack pnpm --filter @o-okul/api
+  typecheck`, `corepack pnpm --filter @o-okul/api exec vitest run
   src/report/report-generation.controller.e2e.test.ts src/report/report-generation.service.test.ts`,
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate`
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate`
   gecti. Operation-contract envanteri bu dilimden sonra 277 toplam operation icinde
   160 covered / 117 open; acik report borcu genis kurum snapshot/detail/error-booklet
   ve `/me/**` portal rapor endpointlerinde kalir.
@@ -1407,10 +1407,10 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   etti; `docs/DECISIONS.md` icindeki `DEC-20260623-01` bu verinin yalniz yetkili karne/soru analizi
   ve hata kitapcigi amaciyla tasinabilecegini, evidence/log/list yuzeylerine ham cevap seti
   yazilamayacagini kilitler. Controller e2e'ye baska tenant ve kapsam disi teacher negatifleri
-  eklendi. `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  eklendi. `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run
   src/report/report-generation.controller.e2e.test.ts src/report/report-generation.service.test.ts`
-  (36 test), `corepack pnpm --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate`,
+  (36 test), `corepack pnpm --filter @o-okul/api build`, `corepack pnpm openapi:generate`,
   `node scripts/check-product-journeys.mjs` ve `corepack pnpm prod:plan:check` gecti.
   Operation-contract envanteri bu dilimden sonra 277 toplam operation icinde 162 covered / 115 open;
   acik report borcu genis kurum snapshot listesi ve `/me/**` portal rapor endpointlerinde kalir.
@@ -1425,11 +1425,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `questionCount`/`successRate` ve PII/raw import/storage/file yasaklariyla OpenAPI overlay +
   generator kapisina alindi. `GET /api/v1/me/teacher/reports/{examId}/snapshots` bilincli olarak
   bu dilim disinda tutuldu; genis `snapshotData` listesi ayri karar/contract ister.
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run
   src/me/me-access-matrix.e2e.test.ts src/report/report-generation.controller.e2e.test.ts
   src/report/report-generation.service.test.ts` (46 test), `corepack pnpm --filter
-  @uzman-hocam/api build` ve `corepack pnpm openapi:generate` gecti. Operation-contract envanteri
+  @o-okul/api build` ve `corepack pnpm openapi:generate` gecti. Operation-contract envanteri
   bu dilimden sonra 277 toplam operation icinde 175 covered / 102 open; acik report borcu
   `GET /api/v1/exams/{examId}/reports/snapshots` ve
   `GET /api/v1/me/teacher/reports/{examId}/snapshots` endpointlerinde kalir.
@@ -1441,11 +1441,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   yuzeylerinde `questions`, `answer`, `correctAnswer`, `outcomes`, PII/raw import/storage/file
   alanlarini fail-fast yasaklar. `tenant_security_reviewer` read-only review'i teacher snapshot
   listesinin ham cevap seti tasimadan sozlesmeye alinmasini P1 on kosul olarak isaretledi.
-  `node --check scripts/generate-openapi.mjs`, `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  `node --check scripts/generate-openapi.mjs`, `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run
   src/me/me-access-matrix.e2e.test.ts src/report/report-generation.controller.e2e.test.ts
   src/report/report-generation.service.test.ts` (46 test), `corepack pnpm --filter
-  @uzman-hocam/api build` ve `corepack pnpm openapi:generate` gecti. Operation-contract envanteri
+  @o-okul/api build` ve `corepack pnpm openapi:generate` gecti. Operation-contract envanteri
   bu dilimden sonra 277 toplam operation icinde 177 covered / 100 open; acik report operation
   kalmadi. Faz 2 yine tam kapanmaz; genis portal/read/mutation yuzeyleri ve shared-types tek
   kaynak borcu devam eder.
@@ -1456,10 +1456,10 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   Generator kapisi trend item icin `id`, `periodLabel`, `visibility`, `scores` zorunlu alanlarini,
   `visibility` enum'unu, `scores.minItems`, score/scale minimumlarini ve portal response'ta
   `tenantId`, `studentId`, `teacherId`, `assessmentId`, kimlik/iletisim alanlarinin
-  bulunmamasini fail-fast korur. `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  bulunmamasini fail-fast korur. `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run
   src/development/development.service.test.ts src/development/development.controller.e2e.test.ts
-  src/me/me-access-matrix.e2e.test.ts` (17 test), `corepack pnpm --filter @uzman-hocam/api build`,
+  src/me/me-access-matrix.e2e.test.ts` (17 test), `corepack pnpm --filter @o-okul/api build`,
   `corepack pnpm openapi:generate`, artifact schema negatif kontrolu, `corepack pnpm
   prod:plan:check` ve scoped `git diff --check` gecti. Operation-contract envanteri bu dilimden
   sonra 277 toplam operation icinde 179 covered / 98 open; Faz 2 yine tam kapanmaz. Read-only QA
@@ -1478,11 +1478,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   fail-fast korur. Hedefli test `/me/teacher` cevabinda `userId`, email, telefon, nationalId,
   photoKey ve token alanlarinin donmedigini sabitler; bu test runtime'da `userId` sizdigini
   yakaladi ve `MeController.teacher()` public teacher response'a indirildi. `node --check
-  scripts/generate-openapi.mjs`, `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/me/me-access-matrix.e2e.test.ts
+  scripts/generate-openapi.mjs`, `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/me/me-access-matrix.e2e.test.ts
   src/attendance/attendance.e2e.test.ts src/homework/homework.e2e.test.ts
   src/teacher-note/teacher-note.e2e.test.ts` (55 test), `corepack pnpm --filter
-  @uzman-hocam/api build`, `corepack pnpm openapi:generate` ve artifact schema negatif
+  @o-okul/api build`, `corepack pnpm openapi:generate` ve artifact schema negatif
   kontrolu gecti. Operation-contract envanteri bu dilimden sonra 277 toplam operation icinde
   186 covered / 91 open; Faz 2 yine tam kapanmaz. Kalan portal borcu genis student/guardian
   profile, notification-device/support-ticket mutasyonlari ve shared-types tek kaynak gecisidir.
@@ -1496,11 +1496,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   email/phone/photoKey/file/storage/raw/token/userId alan yasaklarini fail-fast korur. Privacy
   review runtime RBAC/IDOR tarafini kosullu guvenli buldu; OpenAPI/evidence kapisi eklenmeden
   slice'in tamam sayilamayacagini isaret etti. `node --check scripts/generate-openapi.mjs`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/me/me-access-matrix.e2e.test.ts
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/me/me-access-matrix.e2e.test.ts
   src/student/student-profile.e2e.test.ts src/attendance/attendance.e2e.test.ts
   src/teacher-note/teacher-note.e2e.test.ts` (26 test), `corepack pnpm --filter
-  @uzman-hocam/api build`, `corepack pnpm openapi:generate` ve artifact schema negatif
+  @o-okul/api build`, `corepack pnpm openapi:generate` ve artifact schema negatif
   kontrolu gecti. Operation-contract envanteri bu dilimden sonra 277 toplam operation icinde
   196 covered / 81 open; Faz 2 yine tam kapanmaz. Kalan portal borcu profil/student ana
   kayitlari, notification-device/support-ticket portal mutasyonlari ve shared-types tek kaynak
@@ -1514,11 +1514,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   eklendi. Generator kapisi list/envelope schema'larini, student status enum'unu, profile
   birthDate formatini ve nationalId/nationalIdEncrypted/nationalIdHash/token/userId yasaklarini
   fail-fast korur. `node --check scripts/generate-openapi.mjs`,
-  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/me/me-access-matrix.e2e.test.ts
+  `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/me/me-access-matrix.e2e.test.ts
   src/student/student-profile.e2e.test.ts src/app.e2e.test.ts` (49 test),
-  `corepack pnpm --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate` ve
+  `corepack pnpm --filter @o-okul/api build`, `corepack pnpm openapi:generate` ve
   artifact schema negatif kontrolu gecti. Operation-contract envanteri bu dilimden sonra
   277 toplam operation icinde 200 covered / 77 open; Faz 2 yine tam kapanmaz. Kalan portal
   borcu notification-device/support-ticket portal mutasyonlari; kalan student borcu yonetim
@@ -1532,10 +1532,10 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   siniri token ve userId alanlarini dondurmez. Generator kapisi response list/envelope,
   `lastSeenAt`/`disabledAt` tarih formatlari ve token/userId/nationalId* yasaklarini fail-fast
   korur. `node --check scripts/generate-openapi.mjs`,
-  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/me/me-access-matrix.e2e.test.ts`
-  (12 test), `corepack pnpm --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate`
+  `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/me/me-access-matrix.e2e.test.ts`
+  (12 test), `corepack pnpm --filter @o-okul/api build`, `corepack pnpm openapi:generate`
   ve artifact schema negatif kontrolu gecti. Operation-contract envanteri bu dilimden sonra
   277 toplam operation icinde 203 covered / 74 open; Faz 2 yine tam kapanmaz. Kalan portal
   borcu support-ticket portal mutasyonlari ve genis read/mutation yuzeyleridir.
@@ -1551,10 +1551,10 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   contentBase64/storageKey/downloadUrl/token/nationalId* yasaklarini fail-fast korur. Tenant
   security review OpenAPI tek basina yeterli olmadigini, runtime redaction gerektigini P1
   olarak isaretledi ve bu runtime redaction eklendi. `node --check scripts/generate-openapi.mjs`,
-  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/support-ticket/support-ticket.e2e.test.ts
-  src/me/me-access-matrix.e2e.test.ts` (36 test), `corepack pnpm --filter @uzman-hocam/api build`,
+  `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/support-ticket/support-ticket.e2e.test.ts
+  src/me/me-access-matrix.e2e.test.ts` (36 test), `corepack pnpm --filter @o-okul/api build`,
   `corepack pnpm openapi:generate` ve artifact schema negatif kontrolu gecti. Operation-contract
   envanteri bu dilimden sonra 277 toplam operation icinde 209 covered / 68 open; Faz 2 yine
   tam kapanmaz. Kalan lokal contract borcu yonetim student ana kayitlari/profil mutasyonlari,
@@ -1570,10 +1570,10 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `students/{studentId}/...` sinirina cekildi. Tenant security subagent'i `GET /students`
   `userId` sizintisini P1 olarak isaretledi; bu runtime mapper beyaz listesiyle kapatildi.
   `node --check scripts/generate-openapi.mjs`,
-  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/student/student-profile.e2e.test.ts
-  src/app.e2e.test.ts` (37 test), `corepack pnpm --filter @uzman-hocam/api build`,
+  `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/student/student-profile.e2e.test.ts
+  src/app.e2e.test.ts` (37 test), `corepack pnpm --filter @o-okul/api build`,
   `corepack pnpm openapi:generate`, student core/profile artifact negatif kontrolu,
   `corepack pnpm prod:plan:check` ve scoped `git diff --check` gecti. Operation-contract
   envanteri bu dilimden sonra 277 toplam operation icinde 215 covered / 62 open; Faz 2
@@ -1594,10 +1594,10 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   olarak temsil edilir. QA subagent'i dry-run bos schema, transfer nullable contract, bulk
   `studentIds.minItems` ve kismi mutasyon risklerini isaretledi; bu kapilar eklendi.
   `node --check scripts/generate-openapi.mjs`,
-  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/student/student-profile.e2e.test.ts
-  src/app.e2e.test.ts` (38 test), `corepack pnpm --filter @uzman-hocam/api build`,
+  `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/student/student-profile.e2e.test.ts
+  src/app.e2e.test.ts` (38 test), `corepack pnpm --filter @o-okul/api build`,
   `corepack pnpm openapi:generate` ve student import/enrollment artifact negatif kontrolu
   gecti. Operation-contract envanteri bu dilimden sonra 277 toplam operation icinde
   221 covered / 56 open; Faz 2 yine tam kapanmaz. Kalan lokal contract borcu diger genis
@@ -1614,11 +1614,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   enrollment ve teacher-assignment liste envelope'larini, student status/teacher assignment role
   enum'larini, tarih formatlarini ve userId/nationalId*/iletisim/storage/token yasaklarini
   fail-fast korur. `node --check scripts/generate-openapi.mjs`,
-  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/student/student-store.test.ts
+  `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/student/student-store.test.ts
   src/school/school.e2e.test.ts src/student/student-profile.e2e.test.ts` (46 test),
-  `corepack pnpm --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate` ve
+  `corepack pnpm --filter @o-okul/api build`, `corepack pnpm openapi:generate` ve
   student lifecycle residual artifact negatif kontrolu gecti. Operation-contract envanteri
   bu dilimden sonra 277 toplam operation icinde 226 covered / 51 open; Faz 2 yine tam
   kapanmaz. Kalan lokal contract borcu diger genis read/mutation yuzeyleri ve shared-types
@@ -1631,11 +1631,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `SMS` channel enum'unu, `minLength: 1`, delete `204` no-body davranisini ve response'ta
   `deletedAt`, userId, nationalId*, file/storage/token alan yasaklarini fail-fast korur.
   `node --check scripts/generate-openapi.mjs`,
-  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/message-template/message-template.e2e.test.ts
+  `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run src/message-template/message-template.e2e.test.ts
   src/message-template/message-template-store.test.ts` (9 test),
-  `corepack pnpm --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate` ve
+  `corepack pnpm --filter @o-okul/api build`, `corepack pnpm openapi:generate` ve
   message-template artifact negatif kontrolu gecti. Operation-contract envanteri bu dilimden
   sonra 277 toplam operation icinde 231 covered / 46 open; Faz 2 yine tam kapanmaz.
   Kalan lokal contract borcu diger genis read/mutation yuzeyleri ve shared-types tek kaynak
@@ -1649,11 +1649,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   ile sinirlanir. Generator list/create/resend response'larinda `activationToken`, `token`,
   `tokenHash`, `password`, `refreshToken` ve `acceptedUserId` yasaklarini, accept response'unda
   tenant/subject/email/user/token alan yasaklarini fail-fast korur. `node --check
-  scripts/generate-openapi.mjs`, `corepack pnpm --filter @uzman-hocam/shared-types
-  typecheck`, `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  scripts/generate-openapi.mjs`, `corepack pnpm --filter @o-okul/shared-types
+  typecheck`, `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run
   src/identity-invitation/identity-invitation.e2e.test.ts` (5 test),
-  `corepack pnpm --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate` ve
+  `corepack pnpm --filter @o-okul/api build`, `corepack pnpm openapi:generate` ve
   identity-invitation artifact negatif kontrolu gecti. Operation-contract envanteri bu
   dilimden sonra 277 toplam operation icinde 235 covered / 42 open; Faz 2 yine tam
   kapanmaz. Kalan lokal contract borcu diger genis read/mutation yuzeyleri ve shared-types
@@ -1667,12 +1667,12 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   create/apply request body'lerini; create/apply `Idempotency-Key` header'ini; optik template
   ve applied parser-config response'larinda `fileBase64`, `sampleText`, `rawRow`, token/hash
   alan yasaklarini fail-fast korur. `node --check scripts/generate-openapi.mjs`,
-  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run
   src/exam/optical-form-template.controller.e2e.test.ts
   src/exam/optical-form-template.service.test.ts` (6 test), `corepack pnpm --filter
-  @uzman-hocam/api build`, `corepack pnpm openapi:generate` ve optical-form-template
+  @o-okul/api build`, `corepack pnpm openapi:generate` ve optical-form-template
   artifact negatif kontrolu gecti. Operation-contract envanteri bu dilimden sonra 277
   toplam operation icinde 238 covered / 39 open; Faz 2 yine tam kapanmaz. Kalan lokal
   contract borcu diger genis read/mutation yuzeyleri ve shared-types tek kaynak gecisidir.
@@ -1689,8 +1689,8 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   zarfi tasimaz; delete endpoint'leri 204/no-content; download endpoint'leri file metadata
   response'u verir ve `contentBase64`, storage/object key, token/hash alanlarini artifact
   seviyesinde yasaklar. `node --check scripts/generate-openapi.mjs`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`, hedefli 9 API e2e dosyasi
-  (127 test), `corepack pnpm --filter @uzman-hocam/api build` ve
+  `corepack pnpm --filter @o-okul/api typecheck`, hedefli 9 API e2e dosyasi
+  (127 test), `corepack pnpm --filter @o-okul/api build` ve
   `corepack pnpm openapi:generate` gecti. Required-operation envanteri bu dilimden sonra
   277 toplam operation icinde 249 covered / 28 open; Faz 2 yine tam kapanmaz.
 - Faz 2 icin SMS batch ve backup/tenant-export sozlesme dilimi lokal olarak kapatildi:
@@ -1703,10 +1703,10 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   ve token/storage/raw-content yasaklarini; backup job'larda operation/status enum'larini,
   target/confirmation minLength kurallarini, raw tenant-export required alanlarini ve
   token/storage/ham kimlik yasaklarini fail-fast korur. `node --check
-  scripts/generate-openapi.mjs`, `corepack pnpm --filter @uzman-hocam/shared-types
-  typecheck`, `corepack pnpm --filter @uzman-hocam/api typecheck`, hedefli
+  scripts/generate-openapi.mjs`, `corepack pnpm --filter @o-okul/shared-types
+  typecheck`, `corepack pnpm --filter @o-okul/api typecheck`, hedefli
   `sms-batch`, `backup-restore` ve `api-response` e2e kosusu (19 test),
-  `corepack pnpm --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate`
+  `corepack pnpm --filter @o-okul/api build`, `corepack pnpm openapi:generate`
   ve SMS/backup/export artifact negatif kontrolu gecti. Required-operation envanteri bu
   dilimden sonra 277 toplam operation icinde 255 covered / 22 open; Faz 2 yine tam kapanmaz.
 - Faz 2/Faz 4 icin `/me` profile/tenant ve portal homework/notification-preference sozlesme
@@ -1721,10 +1721,10 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   sadece `name`, `institutionType`, `contactEmail`, `logoUrl` alanlarini kabul eder;
   portal homework/preference response'larinda token, storage key, raw content ve ham kimlik
   alan yasaklarini fail-fast korur. `node --check scripts/generate-openapi.mjs`,
-  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`, hedefli `me-access-matrix`,
+  `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`, hedefli `me-access-matrix`,
   `tenant`, `support-ticket` ve `app` e2e kosusu (74 test),
-  `corepack pnpm --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate`
+  `corepack pnpm --filter @o-okul/api build`, `corepack pnpm openapi:generate`
   ve `/me` artifact negatif kontrolu gecti. Required-operation envanteri bu dilimden sonra
   277 toplam operation icinde 263 covered / 14 open; Faz 2 yine tam kapanmaz.
 - Faz 2 icin tenant admin ve tenant-user sozlesme/P0 guvenlik dilimi lokal olarak kapatildi:
@@ -1739,13 +1739,13 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   bulunmamasini, roles `minItems`, e-posta/tarih/koltuk limit formatlarini ve tenant/tenant-user
   response'larinda activation token, parola, password hash, refresh token ve token/hash alan
   yasaklarini fail-fast korur. `node --check scripts/generate-openapi.mjs`,
-  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run
   src/user-management/user-management-store.test.ts
   src/user-management/user-management.e2e.test.ts
   src/tenant/tenant.controller.e2e.test.ts` (16 test),
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate`
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate`
   gecti. Required-operation envanteri bu dilimden sonra 277 toplam operation icinde
   270 covered / 7 open; acik operation listesi:
   `GET /api/v1/me/guardian/students/{studentId}/payment-plans`,
@@ -1764,11 +1764,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   response'unda `previewToken` disinda access/refresh token ve parola/hash alanlari olmadigini,
   cross-tenant/missing subject durumunda token verilmedigini ve `SYSTEM_ADMIN` hedef rolunun
   Zod ile reddedildigini korur. `node --check scripts/generate-openapi.mjs`,
-  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run
   src/role-preview/role-preview.controller.e2e.test.ts` (3 test),
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate`
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate`
   gecti. Required-operation envanteri bu dilimden sonra 277 toplam operation icinde
   271 covered / 6 open; acik operation listesi:
   `GET /api/v1/me/guardian/students/{studentId}/payment-plans`,
@@ -1786,11 +1786,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   guardian payment-plan response'unda ham kimlik/iletisim/storage/token alanlarini; payment
   taksit status enum'u, tutar minimumlari ve tarih formatlarini fail-fast kontrol eder.
   `node --check scripts/generate-openapi.mjs`,
-  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run
   src/me/me-access-matrix.e2e.test.ts src/payment/payment.e2e.test.ts` (30 test),
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate`
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate`
   gecti. Required-operation envanteri bu dilimden sonra 277 toplam operation icinde
   274 covered / 3 open; acik operation listesi:
   `GET /api/v1/privacy/inventory`, `POST /api/v1/privacy/me/purge-pii` ve
@@ -1804,12 +1804,12 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   Self-service purge response'u sadece `userId`, opsiyonel `tenantId` ve `purgedAt`
   doner; e-posta, ad, parola/hash, refresh token ve token/hash alanlari fail-fast yasaktir.
   `node --check scripts/generate-openapi.mjs`,
-  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run
   src/privacy/privacy.controller.e2e.test.ts
   src/audit-log/audit-log.e2e.test.ts src/payment/payment.e2e.test.ts` (35 test),
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate`
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate`
   gecti. Required-operation envanteri bu dilimden sonra 277 toplam operation icinde
   276 covered / 1 open; kalan tek acik operation `POST /api/v1/tenants`.
 - Faz 2/Faz 4 icin tenant create ve first-admin token/audit PII dilimi lokal olarak kapatildi:
@@ -1822,12 +1822,12 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   seat limit kurallarini; response oneOf branch'lerinde `TenantRecord` veya
   `{ tenant, admin }` required alanlarini; activation token, parola/hash, refresh token ve
   token/hash alan yasaklarini fail-fast kontrol eder. `node --check scripts/generate-openapi.mjs`,
-  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  `corepack pnpm --filter @o-okul/shared-types typecheck`,
+  `corepack pnpm --filter @o-okul/api exec vitest run
   src/tenant/tenant.service.test.ts src/tenant/tenant.controller.e2e.test.ts
   src/user-management/user-management.e2e.test.ts` (22 test),
-  `corepack pnpm --filter @uzman-hocam/api typecheck`,
-  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate`
+  `corepack pnpm --filter @o-okul/api typecheck`,
+  `corepack pnpm --filter @o-okul/api build` ve `corepack pnpm openapi:generate`
   gecti. Required-operation envanteri bu dilimden sonra 277 toplam operation icinde
   277 covered / 0 open; Faz 2 lokal contract gate'i kapanmis sayilir.
 - Faz 5/Faz 10 icin final external evidence env/runbook baglantisi lokal olarak
@@ -1876,8 +1876,8 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   kendi `*_ALLOW_EXAMPLE_EVIDENCE=1` modunda kalır; final `prod:external-evidence:check` ise kalıcı
   staging/prod artifact veya gerçek HTTPS hedef ister. `scripts/check-prod-evidence-templates.mjs`
   bu negatif senaryoyu geçici artifact kopyalarıyla doğrular.
-- 2026-06-23 remote/staging salt-okunur kanıt audit'i: `uzman-hocam-server` erişimi çalışıyor,
-  `/root/uzman-hocam` altında Docker stack ayakta ve API `{"status":"ok"}`, web `127.0.0.1:3001`
+- 2026-06-23 remote/staging salt-okunur kanıt audit'i: `o-okul-server` erişimi çalışıyor,
+  `/root/o-okul` altında Docker stack ayakta ve API `{"status":"ok"}`, web `127.0.0.1:3001`
   HTTP 200 döndürüyor. Ancak `artifacts/` altında final zinciri için gereken
   `production-summary`/`release-summary`, `live-status`, `pilot`, `go-live`, `uat`, `isem`,
   `live-exam`, `live-ui`, `kvkk`, `audit-null` veya `inline-upload` artifact seti bulunmadı;
@@ -1902,21 +1902,21 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   geçer; invalid `artifacts/local/**` target ise SSH'e çıkmadan kırılır. Kapı artık yerel
   `*_ALLOW_EXAMPLE_EVIDENCE=1` bayraklarını SSH'e çıkmadan reddeder ve remote node komutlarını
   aynı bayrakları `env -u` ile temizleyerek çalıştırır. Gerçek
-  `uzman-hocam-server` koşusunda target env'leri verildiğinde kapı artık env eksikliğinden değil,
+  `o-okul-server` koşusunda target env'leri verildiğinde kapı artık env eksikliğinden değil,
   remote repo final checker/package script geriliği ve eksik `live-status.json` artifact'i nedeniyle
   kırılıyor. Bu nedenle kalan iş hâlâ güncel guardrail'leri remote/staging'e taşımak ve gerçek
   production summary/live-status/pilot/go-live artifact setini üretmektir.
 - Remote/staging guardrail farkı dar kapsamlı kapatıldı: `scripts/check-final-external-evidence.mjs`,
   `scripts/check-remote-final-evidence-readiness.mjs`, güncel production summary/live-status/pilot/
-  go-live checker'ları ve `docs/phase-6-production-readiness.md` remote `/root/uzman-hocam` altına
+  go-live checker'ları ve `docs/phase-6-production-readiness.md` remote `/root/o-okul` altına
   senkronlandı; remote `package.json` yalnız `prod:external-evidence:check` ve
   `prod:remote-evidence:check` script anahtarlarıyla güncellendi. Öncesinde remote backup
   `artifacts/guardrail-sync-2026-06-23/` altına alındı ve kalıcı target kökü
-  `/root/uzman-hocam/artifacts/staging` oluşturuldu. Target'lı
+  `/root/o-okul/artifacts/staging` oluşturuldu. Target'lı
   `prod:remote-evidence:check` artık checker/script geriliği nedeniyle değil,
   `release-summary.json`, `live-status.json`, `pilot.json` ve `go-live.json` gerçek artifact
   dosyaları henüz üretilmediği için kırılıyor.
-- Remote/staging iSEM optical pipeline kanıtı üretildi: `uzman-hocam-server` üzerinde
+- Remote/staging iSEM optical pipeline kanıtı üretildi: `o-okul-server` üzerinde
   `STAGING_ENVIRONMENT=staging`, kurum kontrollü smoke e-posta domain'i ve kalıcı
   `artifacts/staging/isem-optical-pipeline.json` hedefiyle `corepack pnpm isem-optical-pipeline:smoke`
   geçti. Artifact `result=PASS`, `environment=staging`, 254 student/participant/matched/
@@ -1929,7 +1929,7 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
 - Live UI-worker result staging kanıtı üretildi: remote `apps/web/playwright.next.config.ts`
   external `NEXT_E2E_BASE_URL`, webServer skip ve self-signed TLS toleransı alacak şekilde
   senkronlandı; `live-ui-worker-report-next.spec.ts` login redirect, sekmeli rapor, PDF/Excel
-  indirme ve portal karne detayı gerçek UI akışına göre sertleştirildi. `uzman-hocam-server`
+  indirme ve portal karne detayı gerçek UI akışına göre sertleştirildi. `o-okul-server`
   üzerinde `NEXT_E2E_BASE_URL=https://212.108.107.190`, `NEXT_E2E_SKIP_WEB_SERVER=1`,
   `NEXT_E2E_IGNORE_HTTPS_ERRORS=1`, private 0600 input ve kalıcı
   `artifacts/staging/live-ui-worker-result.json` hedefiyle `corepack pnpm live:ui-worker:smoke`
@@ -1940,7 +1940,7 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   geçti; public artifact için e-posta/parola/token/base64/raw satır ve 11 hane grep negatifleri
   temiz. Bu staging result, production summary/live-status zincirine henüz bağlanmadığı için
   Faz 5 final kapanışı sayılmaz.
-- Live exam cycle staging kanıtı üretildi: remote `uzman-hocam-server` üzerinde `pnpm isem-answer-key:smoke`,
+- Live exam cycle staging kanıtı üretildi: remote `o-okul-server` üzerinde `pnpm isem-answer-key:smoke`,
   `pnpm raw-import:smoke` ve `pnpm report-generation:smoke` yeniden koşturuldu; report generation
   kanıtı `artifacts/staging/smoke/report-generation.json` dosyasına yazıldı. Daha önce geçen iSEM optical pipeline ve
   live UI-worker result artifact'leriyle aynı staging release candidate altında PII-safe
@@ -1951,7 +1951,7 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   geçti; public artifact için e-posta/parola/token/base64/raw satır/object key ve 11 hane grep negatifleri
   temiz. Bu Faz 4A live-exam halkasını kapatır; production summary/live-status ve pilot/go-live
   zincirine bağlanmadığı sürece Faz 5/Faz 10 final kapanışı sayılmaz.
-- Audit null tenant staging kanıtı üretildi: remote `uzman-hocam-server` üzerinde `AuditLog`
+- Audit null tenant staging kanıtı üretildi: remote `o-okul-server` üzerinde `AuditLog`
   tablosundan yalnız aggregate sayım ve sınıflandırma okuyan PII-safe sorgu ile
   `artifacts/staging/reports/audit-null-tenant.json` oluşturuldu. Artifact `totalRows=0`,
   `tenantRows=0`, `nullTenantRows=0`, `system=0`, `deletedTenant=0`, `unknown=0`, boş `gaps`
@@ -1960,12 +1960,12 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   e-posta/parola/token/base64/raw satır/object key ve 11 hane grep negatifleri temiz. Bu Faz 5
   audit-null halkasını ilerletir; production summary/live-status zincirine bağlanmadığı sürece
   Faz 5/Faz 10 final kapanışı sayılmaz.
-- KVKK inventory staging kanıtı üretildi: remote `uzman-hocam-server` üzerinde `Student`,
+- KVKK inventory staging kanıtı üretildi: remote `o-okul-server` üzerinde `Student`,
   `Teacher`, `Guardian` ve `User` tablolarından yalnız aggregate `COUNT(*)` okuyan PII-safe
   sorgu ile `artifacts/staging/reports/kvkk-inventory.json` oluşturuldu. Artifact 845 öğrenci,
   16 öğretmen, 67 veli, 61 kullanıcı, dört canonical KVKK purge action'ı, `/audit-logs` için
   21 audit diff redaction negatif kontrolü ve boş `gaps` taşır. Remote audit-log redaction
-  testleri `corepack pnpm --filter @uzman-hocam/api exec vitest run src/audit-log/audit-log.service.test.ts src/audit-log/audit-log.e2e.test.ts`
+  testleri `corepack pnpm --filter @o-okul/api exec vitest run src/audit-log/audit-log.service.test.ts src/audit-log/audit-log.e2e.test.ts`
   ile 19/19 geçti; `KVKK_INVENTORY_TARGET=file://$PWD/artifacts/staging/reports/kvkk-inventory.json corepack pnpm privacy:inventory:check`
   geçti. Public artifact ve aggregate count log'u için e-posta/parola/token/base64/raw satır/object
   key ve 11 hane grep negatifleri temiz. Bu Faz 4 KVKK halkasını staging düzeyinde ilerletir;
@@ -1978,7 +1978,7 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   taşınamaz. `docs/phase-6-production-readiness.md` ve `docs/phase-6-ops-runbook.md` aynı sınırı
   açıklar; gerçek Faz 5 Traefik kapanışı için hâlâ domain/public TLS ve kalıcı
   `traefik_https_smoke` artifact'i gerekir.
-- RLS live staging kanıtı üretildi: remote `uzman-hocam-server` üzerinde `.env.local` ile
+- RLS live staging kanıtı üretildi: remote `o-okul-server` üzerinde `.env.local` ile
   `corepack pnpm db:rls:check`, `corepack pnpm db:rls:check:live`,
   `STAGING_ENVIRONMENT=staging RLS_LOAD_SMOKE_EVIDENCE_FILE=artifacts/staging/rls-live/rls-load-smoke.json corepack pnpm rls:load:smoke`
   ve `corepack pnpm tenant-db:check` kalıcı `artifacts/staging/rls-live/*.log|json`
@@ -2064,7 +2064,7 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   orphan audit `listedObjects=2`, `dbReferencedObjects=2`, `referencedObjectsPresent=2`,
   `orphanObjects=0`, `dbReferencedMissingObjects=0`, `invalidKeyObjects=0` ve
   `legacyDbStorageKeyRows=0` ile final migration artifact'ine bağlandı.
-- Report generation perf staging kanıtı üretildi: remote `uzman-hocam-server` üzerinde `.env.local`
+- Report generation perf staging kanıtı üretildi: remote `o-okul-server` üzerinde `.env.local`
   ile `STAGING_ENVIRONMENT=staging REPORT_GENERATION_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/report-generation.json corepack pnpm report-generation:perf`
   çalıştırıldı. Artifact `result=PASS`, `environment=staging`, `status=READY`, 10.000 result,
   10.000 student, 20 class, 2 branch, `generationDurationMs=9271`, `generationDurationMsMax=60000`,
@@ -2086,7 +2086,7 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `/tmp`, `/var/tmp` ve `/private/tmp` hedeflerini final/staging kanıt olarak reddeder;
   `prod:evidence:templates:check` hem genel target seti hem de final/prod evidence için bu
   negatifleri korur.
-- Remote final evidence kapanışı yeniden denetlendi: `uzman-hocam-server` altında mevcut kalıcı
+- Remote final evidence kapanışı yeniden denetlendi: `o-okul-server` altında mevcut kalıcı
   staging artifact'leri `isem-optical-pipeline.json`, `live-exam-cycle.json`,
   `live-ui-worker-result.json`, `reports/kvkk-inventory.json`, `reports/rls-live.json`,
   `reports/audit-null-tenant.json` ve `smoke/report-generation.json` ile sınırlı. Final
@@ -2099,7 +2099,7 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   değildir; sıradaki zorunlu iş gerçek production summary, 18/18 live-status, pilot ve go-live
   artifact setini üretmektir.
 - TR datacenter/provider kanıtı için yanlış pozitif guardrail'i güçlendirildi: remote
-  `uzman-hocam-server` üzerinde `api`, `worker`, `postgres`, `redis`, `minio/object-storage`,
+  `o-okul-server` üzerinde `api`, `worker`, `postgres`, `redis`, `minio/object-storage`,
   `web` ve `traefik` servisleri read-only olarak görüldü; public IP `212.108.107.190` için
   IP lookup `TR/Istanbul` ve `AS212219 HOSTING DUNYAM` döndürüyor. Bu yalnız teşhis sinyalidir,
   provider console/contract veya kalıcı first-party artifact yerine final kanıt sayılmaz.
@@ -2135,9 +2135,9 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   Bundle hâlâ final PASS değildir: `first-gates/first-gates-manifest.json`, deployment/
   identity/financial/upload-av/observability/external-monitoring/admin-mfa/security/
   inline-upload/rate-limit/UAT raporları ve `release-summary-*.json` eksik olduğu için
-  `STAGING_RELEASE_ARTIFACTS_TARGET=/root/uzman-hocam/artifacts/staging corepack pnpm staging:release-artifacts:check`
+  `STAGING_RELEASE_ARTIFACTS_TARGET=/root/o-okul/artifacts/staging corepack pnpm staging:release-artifacts:check`
   kırmızı kalır.
-- GitHub CI kanıtı gerçek GitHub Actions metadata'sından üretildi: `4rmus/uzman-hocam`
+- GitHub CI kanıtı gerçek GitHub Actions metadata'sından üretildi: `4rmus/o-okul`
   `89fa803bdb5ae775c64617a8fbc71f7ed58c887c` commit'i için `.github/workflows/ci.yml`
   run `27993832864` success durumunda ve job adımları içinde `pnpm run ci` var. Lokal
   `artifacts/staging/reports/github-ci.json` üretildi, remote canonical konuma kopyalandı ve
@@ -2170,11 +2170,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   sayımlarını restore edilen DB'den okur, geçici DB/dump'ı temizler ve yalnız
   `check-restore-drill-evidence.mjs` sözleşmesindeki 7 alanı `reports/restore-drill.json`
   olarak yazar. `backup:restore:smoke` hâlâ pre-evidence'tır; final restore-drill yerine geçmez.
-  Remote/staging `uzman-hocam-server` üzerinde
+  Remote/staging `o-okul-server` üzerinde
   `STAGING_ENVIRONMENT=staging RESTORE_DRILL_OUTPUT=artifacts/staging/reports/restore-drill.json corepack pnpm restore:drill:generate`
   çalıştırıldı; artifact `Tenant=13`, `AuditLog=431`, `ReportSnapshot=11`,
   `_prisma_migrations=60`, boş `errors`, gerçek `sourceBackup`/`targetDatabase` ve
-  `environment=staging` ile yazıldı. `RESTORE_DRILL_TARGET=file:///root/uzman-hocam/artifacts/staging/reports/restore-drill.json corepack pnpm restore:drill:check`
+  `environment=staging` ile yazıldı. `RESTORE_DRILL_TARGET=file:///root/o-okul/artifacts/staging/reports/restore-drill.json corepack pnpm restore:drill:check`
   geçti; secret/PII anahtar grep'i temiz. Restore sonrası remote staging gap raporu artık
   `reports/restore-drill.json` eksikliği göstermedi; o noktada 14 eksik artifact ve 0
   `release-summary-*.json` nedeniyle bundle hâlâ `NOT_RELEASE_EVIDENCE/BLOCKED` kaldı.
@@ -2185,11 +2185,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `piiSentToModel=false`, `externalProviderNotCalled=true`, yorum üretimi kapalı ve boş `gaps`
   taşıyan `reports/ai-report-summary.json` üretir. Bu kanıt AI/template yorumu açmaz; yalnız bu
   release'te dış AI çağrısı yapılmadığını ve yorum taslağı üretilmediğini release bundle'a bağlar.
-  Remote/staging `uzman-hocam-server` üzerinde
+  Remote/staging `o-okul-server` üzerinde
   `STAGING_ENVIRONMENT=staging AI_REPORT_SUMMARY_PROVIDER=disabled AI_REPORT_SUMMARY_OUTPUT=artifacts/staging/reports/ai-report-summary.json corepack pnpm ai-report-summary:generate`
   çalıştırıldı; worker `report-generation-job.test.ts` 8 test, API
   `report-generation.service.test.ts` 19 test geçti ve
-  `AI_REPORT_SUMMARY_EVIDENCE_TARGET=file:///root/uzman-hocam/artifacts/staging/reports/ai-report-summary.json corepack pnpm ai-report-summary:check`
+  `AI_REPORT_SUMMARY_EVIDENCE_TARGET=file:///root/o-okul/artifacts/staging/reports/ai-report-summary.json corepack pnpm ai-report-summary:check`
   PASS verdi. Artifact `result=PASS`, `environment=staging`, `provider.mode=disabled`,
   `kvkk.piiSentToModel=false`, `validation.externalProviderNotCalled=true`, 3 komut ve boş
   `gaps` taşıyor; dar secret/PII taraması temiz. Güncel gap raporu artık

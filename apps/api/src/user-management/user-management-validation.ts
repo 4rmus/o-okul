@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { tenantAssignableRoles } from "@uzman-hocam/shared-types";
+import { tenantAssignableRoles } from "@o-okul/shared-types";
 import { requiredTrimmedString } from "../http/zod-validation.js";
 
 const tenantUserRoleSchema = z.enum(tenantAssignableRoles);

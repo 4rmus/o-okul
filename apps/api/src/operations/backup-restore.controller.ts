@@ -26,7 +26,7 @@ export class BackupRestoreController {
     const payload = await this.tenantExports.createExport(getRequestContext());
     const date = payload.exportedAt.slice(0, 10);
     response.setHeader("content-type", "application/json; charset=utf-8");
-    response.setHeader("content-disposition", `attachment; filename="uzman-hocam-${payload.tenantId}-${date}.json"`);
+    response.setHeader("content-disposition", `attachment; filename="o-okul-${payload.tenantId}-${date}.json"`);
     response.status(200).json(payload);
   }
 

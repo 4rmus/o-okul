@@ -4,7 +4,7 @@ import { dirname, parse, resolve } from "node:path";
 
 const outputPath = readOption("--output") ?? process.env.RESTORE_DRILL_OUTPUT;
 const environment = readOption("--environment") ?? process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "staging";
-const restoreDb = `uzman_hocam_restore_drill_${Date.now()}`;
+const restoreDb = `o_okul_restore_drill_${Date.now()}`;
 const dumpPath = `/tmp/${restoreDb}.dump`;
 
 const failures = [];

@@ -2,8 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
-import { CrudPage, EmptyState, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@uzman-hocam/ui";
-import type { AuditLogListItemRecord } from "@uzman-hocam/shared-types";
+import { CrudPage, EmptyState, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
+import type { AuditLogListItemRecord } from "@o-okul/shared-types";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest } from "../../../../src/api-client.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SmsAdapter, SmsMessage, SmsSendResult } from "@uzman-hocam/sms-adapter";
+import type { SmsAdapter, SmsMessage, SmsSendResult } from "@o-okul/sms-adapter";
 import { getJobContext } from "../context/job-context.js";
 import {
   processSmsBatchJob,

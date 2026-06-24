@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, MetricCard, MetricGrid, Panel, StatusBadge, type StatusBadgeProps } from "@uzman-hocam/ui";
+import { Alert, Button, MetricCard, MetricGrid, Panel, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";
 
 export interface SmsBatchDeliveryReportRecord {
   id: string;

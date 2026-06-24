@@ -20,7 +20,7 @@ import {
   Textarea,
   type DataTableColumn,
   type StatusBadgeProps,
-} from "@uzman-hocam/ui";
+} from "@o-okul/ui";
 import type {
   AcademicTermRecord,
   AnnouncementRecipientRecord,
@@ -31,7 +31,7 @@ import type {
   CourseRecord,
   GradeLevelRecord,
   MessageTemplateRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { Plus, Send } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";

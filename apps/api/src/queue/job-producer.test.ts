@@ -180,7 +180,7 @@ describe("createTenantQueueJob", () => {
       entityId: "backup-restore-a",
       contentHash: "backup-hash-a",
       operationType: "BACKUP",
-      targetReference: "s3://uzman-hocam-prod-backups/tenant-a",
+      targetReference: "s3://o-okul-prod-backups/tenant-a",
       reason: "Günlük off-host yedek",
     });
 
@@ -193,7 +193,7 @@ describe("createTenantQueueJob", () => {
         entityId: "backup-restore-a",
         contentHash: "backup-hash-a",
         operationType: "BACKUP",
-        targetReference: "s3://uzman-hocam-prod-backups/tenant-a",
+        targetReference: "s3://o-okul-prod-backups/tenant-a",
         reason: "Günlük off-host yedek",
       },
       options: {

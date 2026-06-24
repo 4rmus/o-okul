@@ -3,7 +3,7 @@
 import { type FormEvent, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AcademicTermRecord, AcademicYearRecord } from "@uzman-hocam/shared-types";
+import type { AcademicTermRecord, AcademicYearRecord } from "@o-okul/shared-types";
 import {
   Button,
   Checkbox,
@@ -17,7 +17,7 @@ import {
   type DataTableColumn,
   type StatusBadgeProps,
   useConfirmDialog,
-} from "@uzman-hocam/ui";
+} from "@o-okul/ui";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";

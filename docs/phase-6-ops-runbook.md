@@ -23,7 +23,7 @@ pnpm backup:restore:smoke
 Beklenen sonuç:
 
 - `pg_dump` Postgres container içinde custom-format dump üretir.
-- Geçici `uzman_hocam_restore_smoke_*` veritabanı oluşturulur.
+- Geçici `o_okul_restore_smoke_*` veritabanı oluşturulur.
 - `pg_restore` dump'ı geçici veritabanına yükler.
 - `Tenant`, `AuditLog`, `ReportSnapshot` ve `_prisma_migrations` tabloları restore edilen DB'de
   okunur.
@@ -45,8 +45,8 @@ Kontroller:
   `httpRequest.path`, `httpResponse.statusCode` ve `durationMs` içerir.
 - Worker log satırlarında `worker_job_completed` ve `worker_job_failed` event'leri `queueName`,
   `jobId`, `tenantId`, `userId` ve `durationMs` ile görünür.
-- `/metrics` çıktısında `uzman_hocam_queue_jobs{queue,status}` ve
-  `uzman_hocam_queue_metrics_scrape_error` metrikleri görünür.
+- `/metrics` çıktısında `o_okul_queue_jobs{queue,status}` ve
+  `o_okul_queue_metrics_scrape_error` metrikleri görünür.
 - Authorization/cookie header'ları, request body, query string, e-posta, telefon ve TCKN loglarda
   görünmez.
 - `LOG_LEVEL=info`, `LOG_ENABLED=true`, `QUEUE_METRICS_ENABLED=true`,
@@ -125,15 +125,15 @@ Kontroller:
 Loki örnek sorguları:
 
 ```logql
-{stack="uzman-hocam"} | json | requestId="REQ_ID"
-{stack="uzman-hocam"} | json | msg="worker_job_failed"
+{stack="o-okul"} | json | requestId="REQ_ID"
+{stack="o-okul"} | json | msg="worker_job_failed"
 ```
 
 Prometheus örnek sorguları:
 
 ```promql
-sum(uzman_hocam_queue_jobs{status="failed"}) by (queue)
-max(uzman_hocam_queue_metrics_scrape_error)
+sum(o_okul_queue_jobs{status="failed"}) by (queue)
+max(o_okul_queue_metrics_scrape_error)
 ```
 
 ## Observability UAT Evidence
@@ -156,7 +156,7 @@ OBSERVABILITY_UAT_GRAFANA_URL=https://... \
 OBSERVABILITY_UAT_LOKI_URL=https://... \
 OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET=file:///.../alert-webhook.json \
 OBSERVABILITY_UAT_DASHBOARD_PANELS_VERIFIED="API up,Request rate,Average duration,Readiness failures,Docker logs" \
-OBSERVABILITY_UAT_ALERTS_VERIFIED="UzmanHocamApiDown,UzmanHocamReadinessFailing,UzmanHocamHigh5xxRate,UzmanHocamSlowRequests" \
+OBSERVABILITY_UAT_ALERTS_VERIFIED="OOkulApiDown,OOkulReadinessFailing,OOkulHigh5xxRate,OOkulSlowRequests" \
 OBSERVABILITY_UAT_PROMETHEUS_EVIDENCE_REFERENCE=... \
 OBSERVABILITY_UAT_GRAFANA_EVIDENCE_REFERENCE=... \
 OBSERVABILITY_UAT_LOKI_EVIDENCE_REFERENCE=... \
@@ -600,7 +600,7 @@ Gerekli GitHub `staging` environment secret/var değerleri:
 
 - Secrets: `STAGING_SSH_HOST`, `STAGING_SSH_USER`, `STAGING_SSH_PRIVATE_KEY`, `GHCR_READ_TOKEN`,
   `STAGING_EVIDENCE_ENV_B64`.
-- Vars: `STAGING_DEPLOY_DIR=/root/uzman-hocam`, `STAGING_NEXT_PUBLIC_API_URL`, opsiyonel `STAGING_EDGE_MODE`.
+- Vars: `STAGING_DEPLOY_DIR=/root/o-okul`, `STAGING_NEXT_PUBLIC_API_URL`, opsiyonel `STAGING_EDGE_MODE`.
   `STAGING_EDGE_MODE=domain` varsayılandır ve `docker-compose.traefik.yml` ile ACME kullanır.
   `STAGING_EDGE_MODE=ip` bu cihazdaki geçici IP/self-signed edge için `docker-compose.traefik-ip.yml`
   dosyasını seçer.
@@ -623,7 +623,7 @@ Doğrulanmış dosyayı secret değerini terminal argümanına yazmadan GitHub `
 
 ```sh
 chmod 600 /secure/path/staging-evidence.env
-pnpm staging:evidence-env:secret:set -- --repo 4rmus/uzman-hocam --environment staging --env-file /secure/path/staging-evidence.env
+pnpm staging:evidence-env:secret:set -- --repo 4rmus/o-okul --environment staging --env-file /secure/path/staging-evidence.env
 ```
 
 Bu yardımcı repo/temp dizinindeki veya symlink üzerinden gelen dosyaları reddeder, aynı
@@ -635,7 +635,7 @@ GitHub `staging` environment oluşturulduktan sonra secret değerleri yazdırıl
 sözleşmesi şu komutla doğrulanır:
 
 ```sh
-pnpm staging:github-env:check -- --repo 4rmus/uzman-hocam --environment staging
+pnpm staging:github-env:check -- --repo 4rmus/o-okul --environment staging
 ```
 
 Workflow aynı branch için tek staging deploy'u sıraya alır, job timeout'ları tanımlıdır ve Docker
@@ -662,7 +662,7 @@ Beklenen akış:
   `artifacts/staging/reports/github-ci.json` üretir, `pnpm github-ci:check` ile doğrular ve
   `staging-github-ci-evidence-<sha>` artifact'i olarak saklar. Bu job geçmeden image build veya deploy başlamaz.
 - Workflow sonra `pnpm run ci` çalıştırmadan önce web Playwright Chromium bağımlılıklarını
-  `pnpm --filter @uzman-hocam/web exec playwright install --with-deps chromium` ile kurar.
+  `pnpm --filter @o-okul/web exec playwright install --with-deps chromium` ile kurar.
 - `web`, `api`, `worker` ve `queue-board` image'ları GHCR'a commit SHA tag'i ve `staging-latest`
   tag'i ile push edilir.
 - GitHub runner `docker-compose.yml`, `docker-compose.release.yml`, `docker-compose.traefik.yml`,
@@ -675,7 +675,7 @@ Beklenen akış:
   `.ghcr_read_token` dosyasına aktarılır, `docker login --password-stdin` sonrası trap ile silinir.
 - `docker compose --env-file .env --env-file .env.release -f docker-compose.yml
   -f docker-compose.release.yml -f docker-compose.traefik.yml pull web api worker queue-board` ile imajlar çekilir.
-- `docker compose ... run --rm api pnpm --filter @uzman-hocam/db db:migrate` migration deploy'u çalıştırır.
+- `docker compose ... run --rm api pnpm --filter @o-okul/db db:migrate` migration deploy'u çalıştırır.
 - `docker compose ... up -d --remove-orphans` Traefik'li staging stack'ini ayağa kaldırır.
 - GitHub runner, `STAGING_EVIDENCE_ENV_B64` içeriğini evidence job'da yeniden decode edip
   `pnpm staging:evidence-env:check` ile tekrar doğrular.
@@ -809,7 +809,7 @@ Beklenen akış:
   `docs/evidence-templates/**` fixture hedefi, symlink target ve userinfo/query/fragment taşıyan
   URL veya placeholder/example/redacted HTTPS host kullanımı final kapıda reddedilir.
 - Remote/staging final readiness kapısı aynı target setini remote hostta salt-okunur doğrular:
-  `REMOTE_EVIDENCE_HOST=uzman-hocam-server REMOTE_EVIDENCE_ROOT=/root/uzman-hocam PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///root/uzman-hocam/artifacts/staging/release-summary.json LIVE_STATUS_EVIDENCE_TARGET=file:///root/uzman-hocam/artifacts/staging/live-status.json PILOT_EVIDENCE_TARGET=file:///root/uzman-hocam/artifacts/staging/pilot.json GO_LIVE_EVIDENCE_TARGET=file:///root/uzman-hocam/artifacts/staging/go-live.json pnpm prod:remote-evidence:check`.
+  `REMOTE_EVIDENCE_HOST=o-okul-server REMOTE_EVIDENCE_ROOT=/root/o-okul PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///root/o-okul/artifacts/staging/release-summary.json LIVE_STATUS_EVIDENCE_TARGET=file:///root/o-okul/artifacts/staging/live-status.json PILOT_EVIDENCE_TARGET=file:///root/o-okul/artifacts/staging/pilot.json GO_LIVE_EVIDENCE_TARGET=file:///root/o-okul/artifacts/staging/go-live.json pnpm prod:remote-evidence:check`.
   Bu komut deploy yapmaz; remote repo final checker'ı, 18/18 Canlı Durum ve target'lı
   `prod:external-evidence:check` sonucunu kanıtlar. Remote target'lar da placeholder HTTPS host,
   remote temp path, `artifacts/local/**`, `docs/evidence-templates/**` ve userinfo/query/fragment
@@ -1587,13 +1587,13 @@ Zorunlu operasyon sözleşmesi:
 Restore denemesi örnek akış:
 
 ```sh
-createdb uzman_hocam_restore_YYYYMMDD
-pg_restore --no-owner --no-privileges -d uzman_hocam_restore_YYYYMMDD backup.dump
-psql uzman_hocam_restore_YYYYMMDD -c 'select count(*) from "Tenant";'
-psql uzman_hocam_restore_YYYYMMDD -c 'select count(*) from "AuditLog";'
-psql uzman_hocam_restore_YYYYMMDD -c 'select count(*) from "ReportSnapshot";'
-psql uzman_hocam_restore_YYYYMMDD -c 'select count(*) from "_prisma_migrations";'
-dropdb uzman_hocam_restore_YYYYMMDD
+createdb o_okul_restore_YYYYMMDD
+pg_restore --no-owner --no-privileges -d o_okul_restore_YYYYMMDD backup.dump
+psql o_okul_restore_YYYYMMDD -c 'select count(*) from "Tenant";'
+psql o_okul_restore_YYYYMMDD -c 'select count(*) from "AuditLog";'
+psql o_okul_restore_YYYYMMDD -c 'select count(*) from "ReportSnapshot";'
+psql o_okul_restore_YYYYMMDD -c 'select count(*) from "_prisma_migrations";'
+dropdb o_okul_restore_YYYYMMDD
 ```
 
 Restore raporu örnek sözleşmesi:
@@ -1603,8 +1603,8 @@ Restore raporu örnek sözleşmesi:
   "result": "PASS",
   "environment": "staging",
   "drillDate": "2026-05-30",
-  "sourceBackup": "s3://uzman-hocam-prod-backups/base/2026-05-30.dump",
-  "targetDatabase": "uzman_hocam_restore_20260530",
+  "sourceBackup": "s3://o-okul-prod-backups/base/2026-05-30.dump",
+  "targetDatabase": "o_okul_restore_20260530",
   "tableCounts": {
     "Tenant": 5,
     "AuditLog": 1,

@@ -1,4 +1,4 @@
-import { type Queryable, type TenantQueryable, withTenantDb } from "@uzman-hocam/db";
+import { type Queryable, type TenantQueryable, withTenantDb } from "@o-okul/db";
 import type { BackupRestoreJobFailedInput, BackupRestoreJobReporter, BackupRestoreJobResult } from "./backup-restore-job.js";
 
 export class PostgresBackupRestoreJobReporter implements BackupRestoreJobReporter {

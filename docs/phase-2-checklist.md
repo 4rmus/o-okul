@@ -53,7 +53,7 @@ ortam kanıtları repo gate içinde ayrıca takip edilir.
   `Homework` tablolarını içerir.
 - Faz 2 DB tablolarında FK, tenant indeksleri, `ENABLE/FORCE ROW LEVEL SECURITY`, `USING` ve
   `WITH CHECK` policy bulunur.
-- `pnpm --filter @uzman-hocam/db db:rls:check` 12 tenant tablosunu statik olarak doğrular.
+- `pnpm --filter @o-okul/db db:rls:check` 12 tenant tablosunu statik olarak doğrular.
 - Postgres store yolları `withTenantQuery` üzerinden transaction açar, `app.bypass_rls` ve
   `app.current_tenant_id` ayarlarını request context'e göre set eder; context yoksa DB erişimi
   reddedilir.

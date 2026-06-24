@@ -1,5 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
-import type { AuthResponse, LoginResponse, MfaChallengeResponse } from "@uzman-hocam/shared-types";
+import type { AuthResponse, LoginResponse, MfaChallengeResponse } from "@o-okul/shared-types";
 
 declare const process: { env: Record<string, string | undefined> };
 

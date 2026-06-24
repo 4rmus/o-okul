@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException, Optional } 
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { authSessionStoreToken, type SessionStore } from "../auth/session-store.js";
-import { isTenantAssignableRoleName, type TenantAssignableRoleName } from "@uzman-hocam/shared-types";
+import { isTenantAssignableRoleName, type TenantAssignableRoleName } from "@o-okul/shared-types";
 import {
   assertTenantSeatCapacity,
   isTenantSeatLimitExceededError,

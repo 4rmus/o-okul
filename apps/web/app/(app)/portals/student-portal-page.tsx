@@ -19,7 +19,7 @@ import type {
   StudentProfileRecord,
   SupportTicketRecord,
   TeacherNoteRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { apiBaseUrl, apiRequest, authenticatedFetch, readData } from "../../../src/api-client.js";
 import type { SupportTicketFormPayload } from "../../../src/form-validation.js";
 import { useAuth } from "../../providers.js";

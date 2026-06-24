@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Queryable, TenantQueryable } from "@uzman-hocam/db";
+import type { Queryable, TenantQueryable } from "@o-okul/db";
 import { PostgresSmsBatchDeliveryReporter } from "./postgres-sms-batch-delivery-reporter.js";
 
 describe("PostgresSmsBatchDeliveryReporter", () => {

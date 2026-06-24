@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Socket } from "node:net";
 import pg from "pg";
 
-const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/uzman_hocam";
+const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/o_okul";
 const approval = process.env.IDENTITY_LINK_MIGRATION_APPROVED;
 const disabledPasswordHash =
   "scrypt:identity-migration-disabled:7T4oz3jIhXy5VrR95L6jqX5ZuZnEL-13aVml8Ov5vbw";

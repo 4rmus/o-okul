@@ -1,12 +1,12 @@
 "use client";
 
-import { Button, DataTable, Panel, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, DataTable, Panel, type DataTableColumn } from "@o-okul/ui";
 import type {
   HomeworkMaterialAssignmentRecord,
   HomeworkMaterialRecord,
   HomeworkRecord,
   StudentRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 
 export function HomeworkAssignmentsPanel({
   assignments,

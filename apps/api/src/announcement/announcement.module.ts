@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { createNotificationAdapterFromEnv } from "@uzman-hocam/notification-adapter";
+import { createNotificationAdapterFromEnv } from "@o-okul/notification-adapter";
 import { AuditLogModule } from "../audit-log/audit-log.module.js";
 import { NotificationDeviceModule } from "../notification-device/notification-device.module.js";
 import { createBullTenantQueueProducer } from "../queue/bullmq-producer.js";

@@ -25,10 +25,10 @@ const requiredDashboardPanels = [
   "Docker logs",
 ];
 const requiredAlerts = [
-  "UzmanHocamApiDown",
-  "UzmanHocamReadinessFailing",
-  "UzmanHocamHigh5xxRate",
-  "UzmanHocamSlowRequests",
+  "OOkulApiDown",
+  "OOkulReadinessFailing",
+  "OOkulHigh5xxRate",
+  "OOkulSlowRequests",
 ];
 
 if (!target) {

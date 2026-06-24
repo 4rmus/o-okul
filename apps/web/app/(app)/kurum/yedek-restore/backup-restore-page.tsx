@@ -2,7 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, DataTable, EmptyState, Field, Input, Panel, Select, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@uzman-hocam/ui";
+import { Button, DataTable, EmptyState, Field, Input, Panel, Select, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { apiBaseUrl, apiErrorMessage, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import { useAuth } from "../../../providers.js";
 import { EvidenceTrustPanel, OperationDecisionNotice, ReferenceBadge } from "../_shared/evidence-panels.js";
@@ -24,7 +24,7 @@ const backupGates = [
   },
   {
     title: "Teknik off-host backup smoke",
-    command: "BACKUP_OFFSITE_TARGET=s3://uzman-hocam-prod-backups/tenant-a pnpm backup:offsite:smoke",
+    command: "BACKUP_OFFSITE_TARGET=s3://o-okul-prod-backups/tenant-a pnpm backup:offsite:smoke",
     status: "Ops hedefi gerekir",
     detail: "Ops ortamında file veya S3 hedefinde yaz/oku/sil döngüsü hash ile doğrulanır.",
   },
@@ -568,7 +568,7 @@ async function downloadTenantExport(accessToken: string): Promise<void> {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = readContentDispositionFileName(response.headers.get("content-disposition")) ?? `uzman-hocam-kurum-yedegi-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = readContentDispositionFileName(response.headers.get("content-disposition")) ?? `o-okul-kurum-yedegi-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.append(link);
   link.click();
   link.remove();

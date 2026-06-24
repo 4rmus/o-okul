@@ -27,7 +27,7 @@ services:
   web:
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=uzman-hocam_frontend_net"
+      - "traefik.docker.network=o-okul_frontend_net"
       - "traefik.http.routers.web-ip.rule=Host(`${SERVER_DOMAIN:-127.0.0.1}`)"
       - "traefik.http.routers.web-ip.entrypoints=websecure"
       - "traefik.http.routers.web-ip.priority=10"
@@ -45,7 +45,7 @@ services:
   api:
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=uzman-hocam_frontend_net"
+      - "traefik.docker.network=o-okul_frontend_net"
       - "traefik.http.routers.api-ip.rule=Host(`${SERVER_DOMAIN:-127.0.0.1}`) && (PathPrefix(`/api`) || PathPrefix(`/health`))"
       - "traefik.http.routers.api-ip.entrypoints=websecure"
       - "traefik.http.routers.api-ip.priority=100"

@@ -44,8 +44,8 @@ Faz 6 - Tarayıcı kanıtı
 4. Ekran görüntüsü veya net browser kanıtı üret; yalnız HTTP 200 yeterli sayılmasın.
 Faz 7 - Test ve smoke kapıları
 Önce odaklı testleri çalıştır:
-- corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/answer-key-excel-import.service.test.ts src/exam/raw-import.controller.e2e.test.ts src/report/report-generation.controller.e2e.test.ts
-- corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/optik-7108-real-pipeline.test.ts src/jobs/exam-evaluation-job.test.ts src/jobs/report-generation-job.test.ts
+- corepack pnpm --filter @o-okul/api exec vitest run src/exam/answer-key-excel-import.service.test.ts src/exam/raw-import.controller.e2e.test.ts src/report/report-generation.controller.e2e.test.ts
+- corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/optik-7108-real-pipeline.test.ts src/jobs/exam-evaluation-job.test.ts src/jobs/report-generation-job.test.ts
 - corepack pnpm raw-import:smoke
 - corepack pnpm report-generation:smoke
 Risk genişse corepack pnpm live:smoke veya pnpm run ci çalıştır.

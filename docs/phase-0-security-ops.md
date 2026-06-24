@@ -9,13 +9,13 @@ makinede `NOT_RUN` olarak işaretlenir.
 - API her istekte `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
   `Permissions-Policy`, `Strict-Transport-Security` ve API'ye uygun dar `Content-Security-Policy`
   döner.
-- Kanıt: `pnpm --filter @uzman-hocam/api test` içindeki security header e2e testi.
+- Kanıt: `pnpm --filter @o-okul/api test` içindeki security header e2e testi.
 
 ## Login Kilidi
 
 - Hatalı login denemeleri email bazında sayılır.
 - 5 hatalı denemeden sonra aynı email için giriş geçici olarak kilitlenir.
-- Kanıt: `pnpm --filter @uzman-hocam/api test` içindeki login attempt limiter ve HTTP login kilidi
+- Kanıt: `pnpm --filter @o-okul/api test` içindeki login attempt limiter ve HTTP login kilidi
   testleri.
 
 ## TLS
@@ -31,13 +31,13 @@ makinede `NOT_RUN` olarak işaretlenir.
 
 ```sh
 mkdir -p "$BACKUP_PATH"
-pg_dump "$DIRECT_DATABASE_URL" > "$BACKUP_PATH/uzman_hocam-$(date +%F).sql"
+pg_dump "$DIRECT_DATABASE_URL" > "$BACKUP_PATH/o_okul-$(date +%F).sql"
 ```
 
 - Restore deneme komutu:
 
 ```sh
-psql "$DIRECT_DATABASE_URL" < "$BACKUP_PATH/uzman_hocam-YYYY-MM-DD.sql"
+psql "$DIRECT_DATABASE_URL" < "$BACKUP_PATH/o_okul-YYYY-MM-DD.sql"
 ```
 
 - Env sözleşmesi: `BACKUP_PATH`, `BACKUP_RETENTION_DAYS`.

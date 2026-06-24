@@ -43,7 +43,7 @@ Karar matrisi:
 | Recharts | Kullanma | Mevcut grafik ihtiyacını karşılayan Chart.js varken bundle büyütür. |
 | React Flow | Ertele | İlişki/müfredat haritası için değer kanıtı gerektiğinde lazy değerlendirilecek. |
 | @tanstack/react-table | Ertele | Basit CRUD tablolarında mevcut DataTable yeterli; öğrenci listesinde Faz 4 ihtiyaçları netleşince değerlendirilecek. |
-| shadcn/ui / Tremor | Kullanma | Mevcut `@uzman-hocam/ui` yapısıyla çakışma riski var; ilk adımda faydası net değil. |
+| shadcn/ui / Tremor | Kullanma | Mevcut `@o-okul/ui` yapısıyla çakışma riski var; ilk adımda faydası net değil. |
 
 İlk uygulama:
 - Chart bileşenleri boş veride artık boş canvas çizmez; anlaşılır empty state ve tablo satırı gösterir.
@@ -51,9 +51,9 @@ Karar matrisi:
 - Erişilebilir tablo alternatifi korunur.
 
 Kanıt:
-- `pnpm --filter @uzman-hocam/ui typecheck`
-- `pnpm --filter @uzman-hocam/web typecheck`
-- `pnpm --filter @uzman-hocam/web next:build`
+- `pnpm --filter @o-okul/ui typecheck`
+- `pnpm --filter @o-okul/web typecheck`
+- `pnpm --filter @o-okul/web next:build`
 - 3011 production smoke: dashboard, rapor ve öğrenci detayda `canvasCount=4`, chart table caption'ları göründü, `consoleErrorCount=0`.
 - Hedefli Playwright spec 3001'deki eski dev server beklemesi nedeniyle sonuç vermedi; geçildi sayılmadı.
 
@@ -64,8 +64,8 @@ Faz 4 başlangıç:
 - @tanstack/react-table yine eklenmedi; bu fazdaki ihtiyaçlar mevcut `CrudPage` + `DataTable` ile temiz çözüldü.
 
 Faz 4 kanıt:
-- `pnpm --filter @uzman-hocam/web typecheck`
-- `pnpm --filter @uzman-hocam/web next:build`
+- `pnpm --filter @o-okul/web typecheck`
+- `pnpm --filter @o-okul/web next:build`
 - 3011 production smoke: öğrenci listesinde kolon gizleme, `density=compact`, `classId=class-a`, `rowCount=1`, `consoleErrorCount=0`.
 
 Faz 5 başlangıç:
@@ -73,12 +73,12 @@ Faz 5 başlangıç:
 - Veli detayında aktif bağlı öğrenci metriği eklendi; sınıf adı için mevcut `/classes` referansı kullanıldı.
 - Öğretmen listesine detay bağlantısı eklendi.
 - Öğretmen detayında atamalar rol, sınıf/öğrenci, ders ve dönem bilgisiyle ayrıştırıldı; sınıf/öğrenci sayısı metriği ve not/yoklama/materyal/rapor çalışma alanı bağlantıları eklendi.
-- Yeni paket eklenmedi; mevcut API ve `@uzman-hocam/ui` düzeni kullanıldı.
+- Yeni paket eklenmedi; mevcut API ve `@o-okul/ui` düzeni kullanıldı.
 
 Faz 5 kanıt:
-- `pnpm --filter @uzman-hocam/ui typecheck`
-- `pnpm --filter @uzman-hocam/web typecheck`
-- `pnpm --filter @uzman-hocam/web next:build`
+- `pnpm --filter @o-okul/ui typecheck`
+- `pnpm --filter @o-okul/web typecheck`
+- `pnpm --filter @o-okul/web next:build`
 - Browser plugin `iab` bu oturumda uygun değildi; fallback olarak standalone Playwright kullanıldı.
 - 3011 production smoke: veli detayda `Ada A - Anne / Birincil`, `8-A`, `Aktif`, izin rozetleri; öğretmen listesinde `Ayse detay`; öğretmen detayda `Sınıf öğretmeni · 8-A · Matematik · 2. Donem`, çalışma alanı bağlantıları ve `consoleErrorCount=0`.
 - Smoke ekran görüntüleri: `artifacts/ui-smoke/faz5-guardian-detail.png`, `artifacts/ui-smoke/faz5-teacher-detail.png`.
@@ -91,8 +91,8 @@ Faz 6 başlangıç:
 - Mevcut Chart.js lazy grafik yapısı korundu; yeni paket eklenmedi.
 
 Faz 6 kanıt:
-- `npx --yes pnpm@11.5.0 --filter @uzman-hocam/web typecheck`
-- `npx --yes pnpm@11.5.0 --filter @uzman-hocam/web next:build`
+- `npx --yes pnpm@11.5.0 --filter @o-okul/web typecheck`
+- `npx --yes pnpm@11.5.0 --filter @o-okul/web next:build`
 - 3011 production smoke: kurum dashboard’da `Bugün dikkat gerektirenler`, `Operasyon özeti`, `Veli`, `LGS veli bilgilendirmesi`, `Rapor hazır`; `canvasCount=4`, `consoleErrorCount=0`.
 - Smoke ekran görüntüsü: `artifacts/ui-smoke/faz6-kurum-dashboard.png`.
 - Not: Yerel `pnpm` shim’i 11.5.0 binary yolunu bulamadığı için doğrulamalar aynı sürümle `npx --yes pnpm@11.5.0` üzerinden çalıştırıldı.
@@ -106,9 +106,9 @@ Faz 7 başlangıç:
 - Öğrenci detayında rapor verisi, sınav listesi yüklenmeden eski demo sınav id’siyle çağrılmayacak şekilde düzeltildi.
 
 Faz 7 kanıt:
-- `pnpm --filter @uzman-hocam/web typecheck`
-- `pnpm --filter @uzman-hocam/web build`
-- `NEXT_E2E_PORT=3018 pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/a11y-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts` -> 5 test geçti.
+- `pnpm --filter @o-okul/web typecheck`
+- `pnpm --filter @o-okul/web build`
+- `NEXT_E2E_PORT=3018 pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/a11y-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts` -> 5 test geçti.
 - Hedefli Playwright spec: öğrenci detay ilişki haritasında `nodeCount=6`, `edgeCount=5`; zoom kontrolü viewport transform değişimini doğrular; liste fallback veli/öğretmen metinlerini korur.
 - Mobil spec: React Flow shell gizlenir, “İlişki haritası liste görünümü” görünür kalır ve yatay taşma `<=1px`.
 - Smoke ekran görüntüleri: `artifacts/ui-smoke/faz7-student-relationship-flow.png`, `artifacts/ui-smoke/faz7-student-relationship-mobile.png`.
@@ -123,19 +123,19 @@ Faz 7 kanıt:
 - Kurum dashboard "Operasyon özeti" alanı son rapor, son duyuru ve `/health` + `/health/ready` kaynaklı sistem sağlığı kartını birlikte gösterir.
 - Öğrenci sınav detay ve rapor ekranlarındaki hata kitapçığı paragraf yerine okunabilir tablo olarak render edilir.
 - Öğretmen portal sınıf raporu boş state'i artık boş `<tbody>` bırakmaz; "Hazır sınıf raporu yok." satırı gösterir.
-- Liste URL kanıtı: `NEXT_E2E_PORT=3020 pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/list-url-state-next.spec.ts` -> 3 test geçti.
+- Liste URL kanıtı: `NEXT_E2E_PORT=3020 pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/list-url-state-next.spec.ts` -> 3 test geçti.
 - Yerel plan kapıları staging/UAT/provider/pilot/go-live onaylarının yerine geçmez; bu kanıtlar üretim hazırlık planında ayrı kapı olarak kalır.
 
 Faz 8 başlangıç:
-- Chart bileşenleri `@uzman-hocam/ui` ana exportundan ayrıldı; `@uzman-hocam/ui/charts` ayrı girişinden lazy yükleniyor.
-- `packages/ui/src/charts.ts` eklendi. `@uzman-hocam/ui/charts` source girişine işaret eder; `dist/` ignore altında olduğu için temiz kurulumda ek dist dosyasına bağımlı kalmaz.
+- Chart bileşenleri `@o-okul/ui` ana exportundan ayrıldı; `@o-okul/ui/charts` ayrı girişinden lazy yükleniyor.
+- `packages/ui/src/charts.ts` eklendi. `@o-okul/ui/charts` source girişine işaret eder; `dist/` ignore altında olduğu için temiz kurulumda ek dist dosyasına bağımlı kalmaz.
 - Böylece chart kullanmayan normal UI importları Chart.js uygulama kodunu ilk yüke taşımıyor.
 - React Flow lazy yapısı korundu; öğrenci listesinde flow chunk isteği oluşmadı.
 
 Faz 8 kanıt:
-- `pnpm --filter @uzman-hocam/ui typecheck`
-- `pnpm --filter @uzman-hocam/web typecheck`
-- `pnpm --filter @uzman-hocam/web build`
+- `pnpm --filter @o-okul/ui typecheck`
+- `pnpm --filter @o-okul/web typecheck`
+- `pnpm --filter @o-okul/web build`
 - Build chunk kontrolü: Chart uygulama chunk’ı `0j827pnm5ks6q.js` yaklaşık 200 KB; React Flow / öğrenci ilişki haritası chunk’ları `0ngmsdsb.18zt.js` yaklaşık 171 KB ve `0o0a63.kau~c2.js` yaklaşık 37 KB; React Flow CSS `0v~wtps5j8c53.css` yaklaşık 91 KB global CSS içinde.
 - Build manifest kontrolü: `rootMainFiles` içinde Chart/React Flow chunk isimleri yok; `apps/web/.next/server/app/page_client-reference-manifest.js` ve `apps/web/.next/server/app/page/build-manifest.json` içinde `0ngmsdsb.18zt.js`, `0j827pnm5ks6q.js`, `0o0a63.kau~c2.js` yok.
 - Not: React Flow JS lazy yükleniyor; paket CSS'i global import edildiği için JS kadar ayrışmış değildir.
@@ -146,9 +146,9 @@ Faz 9 başlangıç:
 - Görsel QA kontrolü; yatay gövde taşması, boş canvas, konsol hatası ve erişilebilir label eksikliği ölçtü.
 
 Faz 9 kanıt:
-- `pnpm --filter @uzman-hocam/web typecheck`
-- `pnpm --filter @uzman-hocam/web build`
-- `NEXT_E2E_PORT=3023 pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/ui-visual-qa-next.spec.ts` -> 4 test geçti.
+- `pnpm --filter @o-okul/web typecheck`
+- `pnpm --filter @o-okul/web build`
+- `NEXT_E2E_PORT=3023 pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/ui-visual-qa-next.spec.ts` -> 4 test geçti.
 - Standalone Playwright QA: `faz9-dashboard-desktop`, `faz9-students-mobile`, `faz9-student-detail-desktop`, `faz9-student-detail-mobile`, `faz9-reports-desktop` senaryolarında `consoleErrorCount=0`, yatay taşma `<=1px`, `blankCanvasCount=0`, `unlabeledControls=0`.
 - Dashboard desktop "Operasyon özeti / Sistem sağlığı" kartını; öğrenci sınav detay ve rapor desktop hata kitapçığı tablolarını; mobil öğrenci dashboard ilişki haritası liste fallback'ini doğrular.
 - Mobil öğrenci listesi `390x844` viewportta URL'den gelen filtre, kolon ve yoğun görünüm state'iyle taşmadan kalır.
@@ -158,7 +158,7 @@ Faz 10 kapanış raporu:
 - Değişen ana yüzeyler: kurum dashboard, öğrenci listesi, öğrenci detay, veli detay, öğretmen listesi/detayı ve rapor ekranı.
 - Güncellenen/eklenen componentler: chart empty/table fallback iyileştirmeleri, `lazy-report-charts`, `ReportChartPanel`, dashboard metrik/karar alanları, öğrenci ilişki haritası için lazy React Flow bileşenleri, öğrenci listesi kolon/yoğunluk kontrolleri.
 - Kütüphane kararı: mevcut Chart.js korundu; `@xyflow/react@12.11.0` sadece öğrenci ilişki haritası için eklendi; Recharts, shadcn/Tremor ve @tanstack/react-table eklenmedi.
-- Lazy loading: Chart bileşenleri `@uzman-hocam/ui/charts` ayrı girişinden lazy yükleniyor; React Flow öğrenci detayda lazy yükleniyor; mobilde flow yerine liste fallback korunuyor.
+- Lazy loading: Chart bileşenleri `@o-okul/ui/charts` ayrı girişinden lazy yükleniyor; React Flow öğrenci detayda lazy yükleniyor; mobilde flow yerine liste fallback korunuyor.
 - Geçen doğrulamalar: UI ve web typecheck, web `build`, Faz 4/7/9 Playwright smoke/QA kontrolleri, `pnpm web:ux-baseline:check`, `pnpm karne:visual-contract:check`, `git diff --check`.
 - Kalan bilinçli ertelemeler: müfredat/kazanım için React Flow haritası yapılmadı; @tanstack/react-table ihtiyacı mevcut öğrenci listesi davranışı yeterli olduğu için ertelendi; tam `pnpm run ci` bu fazda koşulmadı, odaklı web typecheck/build ve Playwright QA ile kapatıldı.
 
@@ -173,7 +173,7 @@ Verify:
 
 Faz 1 - Tasarım ve Kütüphane Kararı
 Aşağıdaki kararları repo gerçeklerine göre ver:
-- Genel dashboard/layout: Mevcut @uzman-hocam/ui yeterliyse onu geliştir. shadcn/ui veya Tremor sadece net fayda varsa ve mevcut stil sistemiyle çakışmayacaksa değerlendir.
+- Genel dashboard/layout: Mevcut @o-okul/ui yeterliyse onu geliştir. shadcn/ui veya Tremor sadece net fayda varsa ve mevcut stil sistemiyle çakışmayacaksa değerlendir.
 - Grafikler: Chart.js zaten varsa önce onu iyileştir. Recharts eklemek için net gerekçe gerekir; aynı işi yapan iki grafik kütüphanesini gereksiz yere birlikte büyütme.
 - Tablo: Öğrenci listeleri ve yoğun veri tabloları için @tanstack/react-table değerlendir. Basit CRUD tablolarında mevcut DataTable yeterliyse değiştirme.
 - İlişki/müfredat haritaları: React Flow’u sadece gerçekten düğüm/kenar ilişkisi gereken yerlerde kullan.
@@ -284,8 +284,8 @@ Verify:
 
 Faz 9 - Görsel QA ve Test
 Son doğrulama:
-- pnpm --filter @uzman-hocam/web typecheck
-- pnpm --filter @uzman-hocam/web next:build
+- pnpm --filter @o-okul/web typecheck
+- pnpm --filter @o-okul/web next:build
 - İlgili Playwright testleri
 - Gerekirse pnpm run ci
 - Browser/Playwright ekran görüntüsüyle masaüstü ve mobil kontrol

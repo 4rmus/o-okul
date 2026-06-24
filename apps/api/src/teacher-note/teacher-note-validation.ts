@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { TeacherNoteCreateRequest, TeacherNoteUpdateRequest } from "@uzman-hocam/shared-types";
+import type { TeacherNoteCreateRequest, TeacherNoteUpdateRequest } from "@o-okul/shared-types";
 import { optionalTrimmedString, requiredTrimmedString } from "../http/zod-validation.js";
 
 const teacherNoteVisibilitySchema = z.enum(["INTERNAL", "GUARDIAN_STUDENT"]);

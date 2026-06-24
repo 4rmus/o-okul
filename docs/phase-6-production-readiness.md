@@ -133,7 +133,7 @@ pnpm backup:restore:smoke
   staging VPS'te `docker-compose.release.yml` override'ı ile imajları çeker, migration çalıştırır,
   Traefik'li stack'i ayağa kaldırır ve `prod:evidence:check --summary-file` çıktısını artifact olarak saklar.
 - GitHub `staging` environment hazır olmadan deploy tetiklenmez; `pnpm staging:github-env:check`
-  environment varlığını, `STAGING_DEPLOY_DIR=/root/uzman-hocam`, `STAGING_NEXT_PUBLIC_API_URL`, opsiyonel
+  environment varlığını, `STAGING_DEPLOY_DIR=/root/o-okul`, `STAGING_NEXT_PUBLIC_API_URL`, opsiyonel
   `STAGING_EDGE_MODE` değerlerini ve required secret isimlerini secret değerlerini yazdırmadan doğrular.
 - Staging production evidence secret sözleşmesi `docs/evidence-templates/staging-evidence.env.example`
   ve `pnpm staging:evidence-env:check` ile deploy başlamadan önce decode edilip doğrulanır; zorunlu
@@ -600,8 +600,8 @@ pnpm backup:restore:smoke
 - Prometheus `/metrics` endpoint'ini scrape eder.
 - API down, 5xx oranı, yavaş istek, readiness, queue failed-count ve queue metrics scrape
   alert'leri aktiftir.
-- `/metrics` içinde `uzman_hocam_queue_jobs{queue,status}` ve
-  `uzman_hocam_queue_metrics_scrape_error` metrikleri görünür.
+- `/metrics` içinde `o_okul_queue_jobs{queue,status}` ve
+  `o_okul_queue_metrics_scrape_error` metrikleri görünür.
 - Grafana Alloy Docker container loglarını Loki'ye yollar.
 - API `pino-http` JSON loglarında `requestId`, `tenantId`, `userId`, `httpRequest.path`,
   `httpResponse.statusCode` ve `durationMs` alanları görünür; request body, query string,
@@ -625,7 +625,7 @@ pnpm backup:restore:smoke
   verilir; dosya webhook URL'ini credential olmadan, HTTP status'ü, `authorizationScheme="bearer"`,
   `checkedAt`, tek `commandsPassed=["pnpm alert:webhook:smoke"]` ve boş `gaps` listesiyle yazar.
 - Alert ve dashboard UAT raporu `pnpm observability:uat:check` ile doğrulanır. Staging artifact'i
-  `STAGING_ENVIRONMENT=staging OBSERVABILITY_UAT_OUTPUT=artifacts/staging/reports/observability-uat.json OBSERVABILITY_UAT_PROMETHEUS_URL=https://... OBSERVABILITY_UAT_GRAFANA_URL=https://... OBSERVABILITY_UAT_LOKI_URL=https://... OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET=file:///.../alert-webhook.json OBSERVABILITY_UAT_DASHBOARD_PANELS_VERIFIED="API up,Request rate,Average duration,Readiness failures,Docker logs" OBSERVABILITY_UAT_ALERTS_VERIFIED="UzmanHocamApiDown,UzmanHocamReadinessFailing,UzmanHocamHigh5xxRate,UzmanHocamSlowRequests" OBSERVABILITY_UAT_PROMETHEUS_EVIDENCE_REFERENCE=... OBSERVABILITY_UAT_GRAFANA_EVIDENCE_REFERENCE=... OBSERVABILITY_UAT_LOKI_EVIDENCE_REFERENCE=... OBSERVABILITY_UAT_ALERT_WEBHOOK_EVIDENCE_REFERENCE=... pnpm observability:uat:generate`
+  `STAGING_ENVIRONMENT=staging OBSERVABILITY_UAT_OUTPUT=artifacts/staging/reports/observability-uat.json OBSERVABILITY_UAT_PROMETHEUS_URL=https://... OBSERVABILITY_UAT_GRAFANA_URL=https://... OBSERVABILITY_UAT_LOKI_URL=https://... OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET=file:///.../alert-webhook.json OBSERVABILITY_UAT_DASHBOARD_PANELS_VERIFIED="API up,Request rate,Average duration,Readiness failures,Docker logs" OBSERVABILITY_UAT_ALERTS_VERIFIED="OOkulApiDown,OOkulReadinessFailing,OOkulHigh5xxRate,OOkulSlowRequests" OBSERVABILITY_UAT_PROMETHEUS_EVIDENCE_REFERENCE=... OBSERVABILITY_UAT_GRAFANA_EVIDENCE_REFERENCE=... OBSERVABILITY_UAT_LOKI_EVIDENCE_REFERENCE=... OBSERVABILITY_UAT_ALERT_WEBHOOK_EVIDENCE_REFERENCE=... pnpm observability:uat:generate`
   ile üretilir. Generator gerçek endpoint, alert smoke artifact'i ve dashboard/alert referansları
   olmadan JSON yazmaz.
 - Gerçek observability UAT raporunda Prometheus scrape, Grafana dashboard, Loki query ve alert delivery
@@ -668,7 +668,7 @@ pnpm backup:restore:smoke
 - Kritik WCAG 2 A/AA axe ihlali 0 olmalıdır; repo kapısı `pnpm web:a11y:check` ile doğrulanır.
 - Yedek/restore paneli, serbest string backup hedefi ve `s3://` restore kanıt dosyasını API çağrısı yapılmadan reddeder; bu hedefli panel sözleşmesi `pnpm web:backup-restore-panel:check` ile doğrulanır.
 - GitHub CI ve staging image build job'ları `pnpm run ci` öncesi
-  `pnpm --filter @uzman-hocam/web exec playwright install --with-deps chromium` çalıştırır; bu
+  `pnpm --filter @o-okul/web exec playwright install --with-deps chromium` çalıştırır; bu
   şart `pnpm docker:check`, `pnpm ops:check` ve `pnpm prod:readiness:check` statik kapılarıyla korunur.
 - Web UX baseline contract `pnpm web:ux-baseline:check` ile a11y spec kapsamını, 768x1024 tablet
   yatay taşma kontrolünü, landing server/no-query performans bütçesini ve hero asset sözleşmesini sabitler.

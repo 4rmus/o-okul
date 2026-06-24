@@ -13,8 +13,8 @@ import type {
   PaymentInstallmentStatus,
   PaymentPlanWithInstallmentsRecord,
   StudentRecord,
-} from "@uzman-hocam/shared-types";
-import { CrudPage, EmptyState, Field, FormModal, Input, Select, StatusBadge, type DataTableColumn } from "@uzman-hocam/ui";
+} from "@o-okul/shared-types";
+import { CrudPage, EmptyState, Field, FormModal, Input, Select, StatusBadge, type DataTableColumn } from "@o-okul/ui";
 import { CheckCircle2, Pencil, RotateCcw, TriangleAlert } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, type ListMeta } from "../../../../src/api-client.js";

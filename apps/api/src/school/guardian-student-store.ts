@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { GuardianRelationshipType, GuardianStudentRecord } from "@uzman-hocam/shared-types";
+import type { GuardianRelationshipType, GuardianStudentRecord } from "@o-okul/shared-types";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";

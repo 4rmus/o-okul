@@ -95,7 +95,7 @@ function get(url) {
         timeout: timeoutMs,
         headers: {
           accept: "application/json,text/plain,*/*",
-          "user-agent": "uzman-hocam-traefik-smoke/1.0",
+          "user-agent": "o-okul-traefik-smoke/1.0",
         },
       },
       (res) => {

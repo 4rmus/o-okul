@@ -77,7 +77,7 @@ class InMemoryTenantDataExportStore implements TenantDataExportStore {
 class PostgresTenantDataExportStore implements TenantDataExportStore {
   constructor(
     private readonly pool: TenantQueryable = new pg.Pool({
-      connectionString: process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/uzman_hocam",
+      connectionString: process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/o_okul",
     }),
   ) {}
 

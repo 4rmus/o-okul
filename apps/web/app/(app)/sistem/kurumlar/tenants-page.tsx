@@ -16,7 +16,7 @@ import {
   type DataTableColumn,
   type StatusBadgeProps,
   useConfirmDialog,
-} from "@uzman-hocam/ui";
+} from "@o-okul/ui";
 import { Plus } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError } from "../../../../src/api-client.js";

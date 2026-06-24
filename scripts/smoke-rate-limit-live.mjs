@@ -166,7 +166,7 @@ async function verifyLoginAttemptLimiter() {
 function rateLimitHeaders(ip) {
   return {
     accept: "application/json,text/plain,*/*",
-    "user-agent": "uzman-hocam-rate-limit-smoke/1.0",
+    "user-agent": "o-okul-rate-limit-smoke/1.0",
     "x-forwarded-for": ip,
     "x-real-ip": ip,
   };
@@ -258,7 +258,7 @@ function sha256(value) {
 
 async function resetApiRateLimitKey(ip) {
   const redisUrl = readRedisUrl();
-  const key = `${process.env.API_RATE_LIMIT_KEY_PREFIX || process.env.QUEUE_PREFIX || "uzman_hocam"}:api-rate-limit:${sha256(ip)}`;
+  const key = `${process.env.API_RATE_LIMIT_KEY_PREFIX || process.env.QUEUE_PREFIX || "o_okul"}:api-rate-limit:${sha256(ip)}`;
   const response = await sendRedisCommand(redisUrl, ["DEL", key]);
   if (typeof response !== "number") {
     fail("RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_LOGIN Redis DEL yaniti sayisal olmali.");

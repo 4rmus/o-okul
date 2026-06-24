@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Queryable, TenantQueryable } from "@uzman-hocam/db";
+import type { Queryable, TenantQueryable } from "@o-okul/db";
 import { createJobId, type QueueJob } from "../queue/queues.js";
 import { createExamEvaluationProcessor } from "./exam-evaluation-processor.js";
 import type { ExamEvaluationJobPayload } from "./exam-evaluation-job.js";

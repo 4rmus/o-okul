@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import type { NotificationDeviceTokenRecord } from "@uzman-hocam/shared-types";
+import type { NotificationDeviceTokenRecord } from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
 import {
   notificationDeviceTokenStoreToken,

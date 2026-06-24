@@ -3,7 +3,7 @@
   "environment": "staging",
   "drillDate": "2026-05-30",
   "sourceBackup": "s3://backup-bucket/base/2026-05-30.dump",
-  "targetDatabase": "uzman_hocam_restore_20260530",
+  "targetDatabase": "o_okul_restore_20260530",
   "tableCounts": {
     "Tenant": 5,
     "AuditLog": 1,

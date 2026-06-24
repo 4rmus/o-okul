@@ -17,7 +17,7 @@ import type {
   ReportStudentScoreSummary,
   ReportStudentSnapshot,
   ReportStudentStatistics,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { Queue, QueueEvents } from "bullmq";
 import ExcelJS from "exceljs";
 import { AuditLogService } from "../audit-log/audit-log.service.js";

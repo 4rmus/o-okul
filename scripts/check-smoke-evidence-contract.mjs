@@ -120,7 +120,7 @@ const negativeCases = [
     "WAL beklenmeyen alan reddedilir",
     {
       ...summary.smokeEvidence?.walArchive,
-      markerName: "uzman-hocam-wal-archive-smoke.wal",
+      markerName: "o-okul-wal-archive-smoke.wal",
     },
     "wal_archive_smoke",
   ],
@@ -545,7 +545,7 @@ const negativeCases = [
     "Backup restore ham DB adı reddedilir",
     {
       ...backupRestoreSmokePayload(),
-      restoreDb: "uzman_hocam_restore_smoke_20260614",
+      restoreDb: "o_okul_restore_smoke_20260614",
     },
     "backup_restore_smoke",
   ],
@@ -553,7 +553,7 @@ const negativeCases = [
     "Backup restore beklenmeyen alan reddedilir",
     {
       ...backupRestoreSmokePayload(),
-      dumpPath: "/tmp/uzman_hocam_restore_smoke.dump",
+      dumpPath: "/tmp/o_okul_restore_smoke.dump",
     },
     "backup_restore_smoke",
   ],

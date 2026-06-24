@@ -46,7 +46,7 @@
 - Token saklama davranışı değişmeyecek: access token memory, refresh cookie HttpOnly; yeni panel `localStorage/sessionStorage` token yazmayacak.
 
 ## Test Planı
-- Başlangıç gate’leri: `pnpm --filter @uzman-hocam/web typecheck`, `pnpm --filter @uzman-hocam/api test`, `pnpm --filter @uzman-hocam/db test`.
+- Başlangıç gate’leri: `pnpm --filter @o-okul/web typecheck`, `pnpm --filter @o-okul/api test`, `pnpm --filter @o-okul/db test`.
 - UI gate’leri: `pnpm web:a11y:check`, `pnpm web:ux-baseline:check`, `pnpm web:ux-contract:check`, `pnpm karne:visual-contract:check`.
 - DB/security gate’leri: `pnpm db:rls:check`, `pnpm tenant-db:check`, `pnpm db:rls:check:live`, `pnpm security:audit:check`, `pnpm web:token-storage:check`.
 - Ürün akışları: `pnpm live:onboarding:smoke`, `pnpm live:exam-cycle:check`, `pnpm live:ui-worker:smoke`, `pnpm report-generation:smoke`.

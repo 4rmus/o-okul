@@ -18,11 +18,11 @@ import {
   createRedisConnectionOptions,
 } from "../apps/worker/dist/queue/bullmq-worker.js";
 
-const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/uzman_hocam";
-const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/uzman_hocam";
+const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/o_okul";
+const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/o_okul";
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 const s3Endpoint = process.env.S3_ENDPOINT ?? "http://localhost:9000";
-const s3Bucket = process.env.S3_BUCKET ?? "uzman-hocam-local";
+const s3Bucket = process.env.S3_BUCKET ?? "o-okul-local";
 const queuePrefix = process.env.QUEUE_PREFIX ?? `raw-import-smoke-${Date.now()}`;
 const s3Credentials = resolveS3Credentials();
 const runId = randomUUID();

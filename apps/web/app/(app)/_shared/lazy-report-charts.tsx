@@ -6,16 +6,16 @@ import type {
   ExamResultDonutProps,
   ProgressLineChartProps,
   TopicRadarChartProps,
-} from "@uzman-hocam/ui/charts";
+} from "@o-okul/ui/charts";
 
 function ChartLoadingState() {
   return <div className="uh-chart-loading">Grafik yükleniyor...</div>;
 }
 
-const ClassCompareBarComponent = lazy(() => import("@uzman-hocam/ui/charts").then((module) => ({ default: module.ClassCompareBar })));
-const ExamResultDonutComponent = lazy(() => import("@uzman-hocam/ui/charts").then((module) => ({ default: module.ExamResultDonut })));
-const ProgressLineChartComponent = lazy(() => import("@uzman-hocam/ui/charts").then((module) => ({ default: module.ProgressLineChart })));
-const TopicRadarChartComponent = lazy(() => import("@uzman-hocam/ui/charts").then((module) => ({ default: module.TopicRadarChart })));
+const ClassCompareBarComponent = lazy(() => import("@o-okul/ui/charts").then((module) => ({ default: module.ClassCompareBar })));
+const ExamResultDonutComponent = lazy(() => import("@o-okul/ui/charts").then((module) => ({ default: module.ExamResultDonut })));
+const ProgressLineChartComponent = lazy(() => import("@o-okul/ui/charts").then((module) => ({ default: module.ProgressLineChart })));
+const TopicRadarChartComponent = lazy(() => import("@o-okul/ui/charts").then((module) => ({ default: module.TopicRadarChart })));
 
 export function ClassCompareBar(props: ClassCompareBarProps) {
   return (

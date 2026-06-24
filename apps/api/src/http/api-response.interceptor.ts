@@ -1,7 +1,7 @@
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from "@nestjs/common";
 import type { Request } from "express";
 import { map, Observable } from "rxjs";
-import type { ApiItemResponse, ApiListResponse } from "@uzman-hocam/shared-types";
+import type { ApiItemResponse, ApiListResponse } from "@o-okul/shared-types";
 import { readListMeta } from "../listing/list-query.js";
 
 @Injectable()

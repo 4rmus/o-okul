@@ -19,7 +19,7 @@ import { getParserConfigPresetSuggestion } from "../../../packages/shared-types/
 const databaseUrl =
   process.env.DIRECT_DATABASE_URL ??
   process.env.DATABASE_URL ??
-  "postgresql://migration:migration@localhost:5432/uzman_hocam";
+  "postgresql://migration:migration@localhost:5432/o_okul";
 
 const TENANT_ID = "tenant-demo";
 const CLASS_ID = "class-demo-cpaf-8";

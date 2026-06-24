@@ -1,5 +1,5 @@
 {
-  "name": "@uzman-hocam/api",
+  "name": "@o-okul/api",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -27,8 +27,8 @@
     "@nestjs/platform-express": "^11.1.24",
     "@nestjs/swagger": "11.4.4",
     "@sentry/node": "10.57.0",
-    "@uzman-hocam/notification-adapter": "workspace:*",
-    "@uzman-hocam/shared-types": "workspace:*",
+    "@o-okul/notification-adapter": "workspace:*",
+    "@o-okul/shared-types": "workspace:*",
     "bullmq": "^5.77.6",
     "exceljs": "^4.4.0",
     "otplib": "^12.0.1",

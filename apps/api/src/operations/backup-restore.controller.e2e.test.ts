@@ -96,7 +96,7 @@ describe("BackupRestoreController", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(200)
       .expect("content-type", /application\/json/)
-      .expect("content-disposition", /attachment; filename="uzman-hocam-tenant-a-\d{4}-\d{2}-\d{2}\.json"/)
+      .expect("content-disposition", /attachment; filename="o-okul-tenant-a-\d{4}-\d{2}-\d{2}\.json"/)
       .expect(({ body }) => {
         expect(body).toMatchObject({
           formatVersion: "tenant-export-v1",

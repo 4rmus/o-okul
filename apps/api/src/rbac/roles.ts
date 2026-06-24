@@ -1,4 +1,4 @@
-import { isTenantRoleName, tenantRoles, type TenantRoleName } from "@uzman-hocam/shared-types";
+import { isTenantRoleName, tenantRoles, type TenantRoleName } from "@o-okul/shared-types";
 
 export const roles = tenantRoles;
 

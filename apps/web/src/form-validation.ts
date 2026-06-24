@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { portalSubjectRoles, tenantAssignableRoles } from "@uzman-hocam/shared-types";
+import { portalSubjectRoles, tenantAssignableRoles } from "@o-okul/shared-types";
 
 const requiredText = (fieldName: string) => z.string().trim().min(1, `${fieldName} zorunludur.`);
 const optionalText = () => z.string().trim();

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
-import type { ExamParticipantRecord } from "@uzman-hocam/shared-types";
+import type { ExamParticipantRecord } from "@o-okul/shared-types";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 import type { CreateExamParticipantRepositoryInput, ExamParticipantRepository } from "./exam.service.js";
 

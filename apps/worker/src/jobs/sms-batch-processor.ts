@@ -1,5 +1,5 @@
-import { createSmsAdapterFromEnv, type SmsAdapter, type SmsAdapterEnvironment } from "@uzman-hocam/sms-adapter";
-import { createTenantPgPool, type TenantQueryable } from "@uzman-hocam/db";
+import { createSmsAdapterFromEnv, type SmsAdapter, type SmsAdapterEnvironment } from "@o-okul/sms-adapter";
+import { createTenantPgPool, type TenantQueryable } from "@o-okul/db";
 import { type QueueJob } from "../queue/queues.js";
 import { PostgresSmsBatchDeliveryReporter } from "./postgres-sms-batch-delivery-reporter.js";
 import {

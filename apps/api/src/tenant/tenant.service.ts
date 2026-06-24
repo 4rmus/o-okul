@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
-import type { TenantCreateResponse } from "@uzman-hocam/shared-types";
+import type { TenantCreateResponse } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import { createResetToken, hashResetToken } from "../auth/auth.service.js";
 import { type PasswordResetStore, passwordResetStoreToken } from "../auth/password-reset-store.js";

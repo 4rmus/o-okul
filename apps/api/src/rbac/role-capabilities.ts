@@ -2,7 +2,7 @@ import {
   capabilitiesForRoles as sharedCapabilitiesForRoles,
   hasCapabilityForRoles,
   type RoleCapability,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 
 export type Capability = RoleCapability;
 

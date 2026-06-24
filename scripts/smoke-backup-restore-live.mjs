@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
-const restoreDb = `uzman_hocam_restore_smoke_${Date.now()}`;
+const restoreDb = `o_okul_restore_smoke_${Date.now()}`;
 const dumpPath = `/tmp/${restoreDb}.dump`;
 const evidenceFile = process.env.BACKUP_RESTORE_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
 const environment = process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown";

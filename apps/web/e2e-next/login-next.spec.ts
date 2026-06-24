@@ -1122,11 +1122,11 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       headers: corsHeaders,
       status: 200,
       body: [
-        "# TYPE uzman_hocam_process_uptime_seconds gauge",
-        "uzman_hocam_process_uptime_seconds 123.4",
-        "# TYPE uzman_hocam_http_requests_total counter",
-        "uzman_hocam_http_requests_total{method=\"GET\",path=\"/health\",status=\"200\"} 3",
-        "uzman_hocam_http_requests_total{method=\"GET\",path=\"/api/v1/students\",status=\"200\"} 4",
+        "# TYPE o_okul_process_uptime_seconds gauge",
+        "o_okul_process_uptime_seconds 123.4",
+        "# TYPE o_okul_http_requests_total counter",
+        "o_okul_http_requests_total{method=\"GET\",path=\"/health\",status=\"200\"} 3",
+        "o_okul_http_requests_total{method=\"GET\",path=\"/api/v1/students\",status=\"200\"} 4",
         "",
       ].join("\n"),
     });
@@ -4958,7 +4958,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByLabel("Yedek restore işleri").getByText("İş referansı maskeli")).toBeVisible();
   expect(backupRestorePostCount).toBe(1);
   await page.getByLabel("Panel restore drill işi").getByLabel("İş tipi").selectOption("RESTORE_DRILL");
-  await page.getByLabel("Panel restore drill işi").getByLabel("Restore kanıt dosyası").fill("s3://uzman-hocam-prod-backups/restore-drill.json");
+  await page.getByLabel("Panel restore drill işi").getByLabel("Restore kanıt dosyası").fill("s3://o-okul-prod-backups/restore-drill.json");
   await page.getByLabel("Panel restore drill işi").getByLabel("Onay metni").fill("RESTORE DRILL");
   await page.getByLabel("Panel restore drill işi").getByRole("button", { name: "Restore drill işi başlat" }).click();
   await expect(page.getByText("Restore kanıt dosyası file:// artifact yolu olmalı.")).toBeVisible();
@@ -5605,7 +5605,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   let portalGuardianClosedFinancePaymentPlanRequests = 0;
 
   await page.addInitScript(() => {
-    Object.defineProperty(window, "__UZMAN_HOCAM_WEB_PUSH_PUBLIC_KEY__", {
+    Object.defineProperty(window, "__O_OKUL_WEB_PUSH_PUBLIC_KEY__", {
       value: "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       configurable: true,
     });

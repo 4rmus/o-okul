@@ -1,4 +1,4 @@
-name: uzman-hocam-observability
+name: o-okul-observability
 
 services:
   prometheus:

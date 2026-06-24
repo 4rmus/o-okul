@@ -7,7 +7,7 @@ import type {
   PaymentInstallmentStatus,
   PaymentPlanRecord,
   PaymentPlanWithInstallmentsRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 
 export interface CreatePaymentPlanStoreInput {
   plan: Omit<PaymentPlanRecord, "id" | "createdAt">;
