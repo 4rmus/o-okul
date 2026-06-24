@@ -1,4 +1,4 @@
-name: uzman-hocam-external-monitoring
+name: o-okul-external-monitoring
 
 services:
   uptime-kuma:

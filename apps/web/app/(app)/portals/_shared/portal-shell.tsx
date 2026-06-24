@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type MouseEvent, type ReactNode } from "react";
-import { ActionCard, Button, MetricCard, MetricGrid as UiMetricGrid, Panel, Skeleton, type MetricCardProps, type StatusBadgeProps } from "@uzman-hocam/ui";
+import { ActionCard, Button, MetricCard, MetricGrid as UiMetricGrid, Panel, Skeleton, type MetricCardProps, type StatusBadgeProps } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { PageFrame } from "../../_shared/page-frame.js";
 
@@ -305,7 +305,7 @@ function focusPortalActionTarget(event: MouseEvent<HTMLAnchorElement>, href: str
   }
 }
 
-const rolePreviewTokenStorageKey = "uzman-hocam.role-preview-token";
+const rolePreviewTokenStorageKey = "o-okul.role-preview-token";
 
 export function storeRolePreviewToken(token: string) {
   if (typeof window === "undefined") return;

@@ -10,8 +10,8 @@ import type {
   CourseRecord,
   TeacherImportDryRunResult,
   TeacherImportResult,
-} from "@uzman-hocam/shared-types";
-import { Button, Checkbox, Field, Input, MetricCard, MetricGrid, Panel, SegmentedControl, Select, StatusBadge, TabButton, Tabs } from "@uzman-hocam/ui";
+} from "@o-okul/shared-types";
+import { Button, Checkbox, Field, Input, MetricCard, MetricGrid, Panel, SegmentedControl, Select, StatusBadge, TabButton, Tabs } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, queryClient } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { OpticalFormTemplateRecord } from "@uzman-hocam/shared-types";
+import type { OpticalFormTemplateRecord } from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
 import type { ParserConfigRepository, SavedParserConfig } from "./parser-config-approval.service.js";
 import type { OpticalFormTemplateStore, SaveOpticalFormTemplateInput } from "./optical-form-template-store.js";

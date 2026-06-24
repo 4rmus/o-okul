@@ -1,4 +1,4 @@
-import { Panel, StatusBadge, type StatusBadgeProps } from "@uzman-hocam/ui";
+import { Panel, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";
 import type { ReactNode } from "react";
 
 interface EvidenceGate {

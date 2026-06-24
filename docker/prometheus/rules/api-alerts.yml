@@ -1,8 +1,8 @@
 groups:
-  - name: uzman-hocam-api
+  - name: o-okul-api
     rules:
-      - alert: UzmanHocamApiDown
-        expr: up{job="uzman-hocam-api"} == 0
+      - alert: OOkulApiDown
+        expr: up{job="o-okul-api"} == 0
         for: 2m
         labels:
           severity: critical
@@ -10,8 +10,8 @@ groups:
           summary: API metrics endpoint unreachable
           description: Prometheus cannot scrape the API /metrics endpoint.
 
-      - alert: UzmanHocamApiHighErrorRate
-        expr: sum(rate(uzman_hocam_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(uzman_hocam_http_requests_total[5m])), 1) > 0.05
+      - alert: OOkulApiHighErrorRate
+        expr: sum(rate(o_okul_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(o_okul_http_requests_total[5m])), 1) > 0.05
         for: 10m
         labels:
           severity: warning
@@ -19,8 +19,8 @@ groups:
           summary: API 5xx rate is high
           description: More than 5% of API requests returned 5xx for 10 minutes.
 
-      - alert: UzmanHocamApiSlowRequests
-        expr: sum(rate(uzman_hocam_http_request_duration_seconds_sum[5m])) / clamp_min(sum(rate(uzman_hocam_http_requests_total[5m])), 1) > 1
+      - alert: OOkulApiSlowRequests
+        expr: sum(rate(o_okul_http_request_duration_seconds_sum[5m])) / clamp_min(sum(rate(o_okul_http_requests_total[5m])), 1) > 1
         for: 10m
         labels:
           severity: warning
@@ -28,8 +28,8 @@ groups:
           summary: API average request duration is high
           description: Average API request duration stayed above 1 second for 10 minutes.
 
-      - alert: UzmanHocamReadinessFailing
-        expr: increase(uzman_hocam_http_requests_total{path="/health/ready",status!~"2.."}[5m]) > 0
+      - alert: OOkulReadinessFailing
+        expr: increase(o_okul_http_requests_total{path="/health/ready",status!~"2.."}[5m]) > 0
         for: 1m
         labels:
           severity: critical
@@ -37,8 +37,8 @@ groups:
           summary: API readiness check is failing
           description: /health/ready returned a non-2xx response in the last 5 minutes.
 
-      - alert: UzmanHocamQueueFailedJobs
-        expr: sum(uzman_hocam_queue_jobs{status="failed"}) > 0
+      - alert: OOkulQueueFailedJobs
+        expr: sum(o_okul_queue_jobs{status="failed"}) > 0
         for: 5m
         labels:
           severity: warning
@@ -46,8 +46,8 @@ groups:
           summary: BullMQ failed jobs are present
           description: At least one BullMQ queue has failed jobs for more than 5 minutes.
 
-      - alert: UzmanHocamQueueMetricsScrapeFailing
-        expr: uzman_hocam_queue_metrics_scrape_error == 1
+      - alert: OOkulQueueMetricsScrapeFailing
+        expr: o_okul_queue_metrics_scrape_error == 1
         for: 2m
         labels:
           severity: warning

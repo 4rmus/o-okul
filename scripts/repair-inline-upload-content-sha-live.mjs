@@ -4,7 +4,7 @@ import { lstat, writeFile } from "node:fs/promises";
 import { dirname, parse, resolve } from "node:path";
 import pg from "pg";
 
-const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/uzman_hocam";
+const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/o_okul";
 const approval = process.env.INLINE_UPLOAD_CONTENT_SHA_REPAIR_APPROVED;
 const batchSize = Number(process.env.INLINE_UPLOAD_CONTENT_SHA_REPAIR_BATCH_SIZE ?? 100);
 const outputPath = readOption("--output") ?? process.env.INLINE_UPLOAD_CONTENT_SHA_REPAIR_OUTPUT;

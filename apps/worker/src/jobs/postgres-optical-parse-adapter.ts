@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { type TenantQueryable, withTenantDb } from "@uzman-hocam/db";
+import { type TenantQueryable, withTenantDb } from "@o-okul/db";
 import { type OpticalAnswerParseResult } from "./optical-answer-parser.js";
 
 export interface SaveOpticalParseResultInput {

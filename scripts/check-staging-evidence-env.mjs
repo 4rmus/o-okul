@@ -131,7 +131,7 @@ function checkWorkflowContract(output) {
   const requiredTokens = [
     "Validate staging dispatch inputs and environment",
     "STAGING_NEXT_PUBLIC_API_URL must be an https:// URL.",
-    "STAGING_DEPLOY_DIR must be /root/uzman-hocam.",
+    "STAGING_DEPLOY_DIR must be /root/o-okul.",
     "validate_tag \"rollback_image_tag\"",
     "github-ci-evidence:",
     "needs: preflight",
@@ -139,7 +139,7 @@ function checkWorkflowContract(output) {
     "Check staging evidence env before deploy",
     "STAGING_EVIDENCE_ENV_B64",
     "pnpm install --frozen-lockfile",
-    "pnpm --filter @uzman-hocam/web exec playwright install --with-deps chromium",
+    "pnpm --filter @o-okul/web exec playwright install --with-deps chromium",
     "trap 'rm -f .staging-evidence.env' EXIT",
     "pnpm staging:evidence-env:check -- --env-file .staging-evidence.env",
     "base64 -d > .staging-evidence.env",
@@ -256,8 +256,8 @@ function checkResolvedProductionEnv(target) {
     env[key] = value;
   }
   env.ROLLBACK_IMAGE_TAG = "staging-evidence-preflight";
-  env.GITHUB_CI_EVIDENCE_TARGET = "file:///var/lib/uzman-hocam/staging-artifacts/github-ci.json";
-  env.PRODUCTION_EVIDENCE_SUMMARY_TARGET = "file:///var/lib/uzman-hocam/staging-artifacts/release-summary-preflight.json";
+  env.GITHUB_CI_EVIDENCE_TARGET = "file:///var/lib/o-okul/staging-artifacts/github-ci.json";
+  env.PRODUCTION_EVIDENCE_SUMMARY_TARGET = "file:///var/lib/o-okul/staging-artifacts/release-summary-preflight.json";
   for (const [key, fileName] of summaryDefaultedSmokeKeys.entries()) {
     env[key] = `artifacts/staging/smoke/${fileName}`;
   }

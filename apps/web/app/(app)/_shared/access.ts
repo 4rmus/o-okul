@@ -1,4 +1,4 @@
-import { hasCapabilityForRoles as sharedHasCapabilityForRoles } from "@uzman-hocam/shared-types";
+import { hasCapabilityForRoles as sharedHasCapabilityForRoles } from "@o-okul/shared-types";
 import { institutionNavGroups } from "./navigation.js";
 
 type NavigationItem = {

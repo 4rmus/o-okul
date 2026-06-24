@@ -3,11 +3,11 @@ services:
     extends:
       file: docker-compose.yml
       service: api
-    image: ${API_IMAGE:-uzman-hocam-api}
+    image: ${API_IMAGE:-o-okul-api}
     ports: !reset []
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=uzman-hocam_frontend_net"
+      - "traefik.docker.network=o-okul_frontend_net"
       - "traefik.http.routers.api-rate-limit-shard-ip.rule=Host(`${SERVER_DOMAIN:-127.0.0.1}`) && PathPrefix(`/__rate-limit-shard`)"
       - "traefik.http.routers.api-rate-limit-shard-ip.entrypoints=websecure"
       - "traefik.http.routers.api-rate-limit-shard-ip.priority=120"

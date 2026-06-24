@@ -11,8 +11,8 @@ loadEnvFile(".env.local");
 
 setDefault("PORT", "3100");
 setDefault("WEB_URL", "http://localhost:3001");
-setDefault("DATABASE_URL", "postgresql://app:app@localhost:5432/uzman_hocam");
-setDefault("DIRECT_DATABASE_URL", "postgresql://migration:migration@localhost:5432/uzman_hocam");
+setDefault("DATABASE_URL", "postgresql://app:app@localhost:5432/o_okul");
+setDefault("DIRECT_DATABASE_URL", "postgresql://migration:migration@localhost:5432/o_okul");
 setDefault("REDIS_URL", "redis://localhost:6379");
 setDefault("PERSISTENCE_DRIVER", "postgres");
 

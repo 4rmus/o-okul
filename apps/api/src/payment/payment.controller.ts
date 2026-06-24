@@ -3,7 +3,7 @@ import type {
   PaymentInstallmentUpdateRequest,
   PaymentPlanCreateRequest,
   PaymentPlanWithInstallmentsRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
 import { optionalTrimmedString, requiredDateString, requiredTrimmedString, zodBody } from "../http/zod-validation.js";

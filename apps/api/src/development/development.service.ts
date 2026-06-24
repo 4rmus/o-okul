@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
-import type { DevelopmentAssessmentVisibility, DevelopmentTrendItem } from "@uzman-hocam/shared-types";
+import type { DevelopmentAssessmentVisibility, DevelopmentTrendItem } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";

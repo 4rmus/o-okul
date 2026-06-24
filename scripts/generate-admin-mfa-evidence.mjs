@@ -35,8 +35,8 @@ const loginVerificationFlags = [
 ];
 
 const commandsPassed = [
-  "pnpm --filter @uzman-hocam/api exec vitest run src/auth/auth.service.test.ts src/auth/auth-user-store.test.ts",
-  "pnpm --filter @uzman-hocam/api typecheck",
+  "pnpm --filter @o-okul/api exec vitest run src/auth/auth.service.test.ts src/auth/auth-user-store.test.ts",
+  "pnpm --filter @o-okul/api typecheck",
 ];
 
 const failures = [];

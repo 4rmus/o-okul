@@ -41,7 +41,7 @@ export type {
   ReportPdfRenderJobPayload,
   ReportPdfRenderJobResult,
   ReportPdfSnapshotRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 export type {
   ReportPdfRenderInput,
   ReportPdfRenderQueueJob,

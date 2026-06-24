@@ -8,7 +8,7 @@ import type {
   HomeworkMaterialFileCreateRequest,
   HomeworkMaterialUpdateRequest,
   HomeworkUpdateRequest,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { optionalIsoDateTime, optionalTrimmedString, requiredTrimmedString } from "../http/zod-validation.js";
 
 const optionalNonEmptyString = requiredTrimmedString.optional();

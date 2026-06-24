@@ -43,7 +43,7 @@ describe("BullMQ exam evaluation worker", () => {
     createExamEvaluationBullWorker({
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker,
-      workerOptions: { prefix: "uzman-hocam-test" },
+      workerOptions: { prefix: "o-okul-test" },
       processor: async (job) => {
         processedJobs.push(job);
         return result;
@@ -54,7 +54,7 @@ describe("BullMQ exam evaluation worker", () => {
     expect(calls[0]?.name).toBe("exam-evaluation");
     expect(calls[0]?.options).toEqual({
       connection: { host: "127.0.0.1", port: 6379 },
-      prefix: "uzman-hocam-test",
+      prefix: "o-okul-test",
     });
     await expect(calls[0]?.processor(createBullJob())).resolves.toBe(result);
     expect(processedJobs).toEqual([{
@@ -114,7 +114,7 @@ describe("BullMQ excel import worker", () => {
     createExcelImportBullWorker({
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker,
-      workerOptions: { prefix: "uzman-hocam-test" },
+      workerOptions: { prefix: "o-okul-test" },
       processor: async (job) => {
         processedJobs.push(job);
         return result;
@@ -125,7 +125,7 @@ describe("BullMQ excel import worker", () => {
     expect(calls[0]?.name).toBe("excel-import");
     expect(calls[0]?.options).toEqual({
       connection: { host: "127.0.0.1", port: 6379 },
-      prefix: "uzman-hocam-test",
+      prefix: "o-okul-test",
     });
     await expect(calls[0]?.processor(createExcelImportBullJob())).resolves.toBe(result);
     expect(processedJobs).toEqual([{
@@ -197,7 +197,7 @@ describe("BullMQ report generation worker", () => {
     createReportGenerationBullWorker({
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker,
-      workerOptions: { prefix: "uzman-hocam-test" },
+      workerOptions: { prefix: "o-okul-test" },
       processor: async (job) => {
         processedJobs.push(job);
         return result;
@@ -208,7 +208,7 @@ describe("BullMQ report generation worker", () => {
     expect(calls[0]?.name).toBe("report-generation");
     expect(calls[0]?.options).toEqual({
       connection: { host: "127.0.0.1", port: 6379 },
-      prefix: "uzman-hocam-test",
+      prefix: "o-okul-test",
     });
     await expect(calls[0]?.processor(createReportGenerationBullJob())).resolves.toBe(result);
     expect(processedJobs).toEqual([{
@@ -249,7 +249,7 @@ describe("BullMQ report PDF render worker", () => {
     createReportPdfRenderBullWorker({
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker,
-      workerOptions: { prefix: "uzman-hocam-test" },
+      workerOptions: { prefix: "o-okul-test" },
       renderer: {
         async render() {
           return Buffer.from("%PDF-1.4\nworker\n%%EOF", "utf8");
@@ -261,7 +261,7 @@ describe("BullMQ report PDF render worker", () => {
     expect(calls[0]?.name).toBe("report-pdf-render");
     expect(calls[0]?.options).toEqual({
       connection: { host: "127.0.0.1", port: 6379 },
-      prefix: "uzman-hocam-test",
+      prefix: "o-okul-test",
     });
     await expect(calls[0]?.processor(createReportPdfRenderBullJob())).resolves.toMatchObject({
       contentType: "application/pdf",
@@ -288,7 +288,7 @@ describe("BullMQ SMS batch worker", () => {
     createSmsBatchBullWorker({
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker,
-      workerOptions: { prefix: "uzman-hocam-test" },
+      workerOptions: { prefix: "o-okul-test" },
       processor: async (job) => {
         processedJobs.push(job);
         return result;
@@ -299,7 +299,7 @@ describe("BullMQ SMS batch worker", () => {
     expect(calls[0]?.name).toBe("sms-batch");
     expect(calls[0]?.options).toEqual({
       connection: { host: "127.0.0.1", port: 6379 },
-      prefix: "uzman-hocam-test",
+      prefix: "o-okul-test",
     });
     await expect(calls[0]?.processor(createSmsBatchBullJob())).resolves.toBe(result);
     expect(processedJobs).toEqual([{
@@ -342,7 +342,7 @@ describe("BullMQ announcement delivery worker", () => {
     createAnnouncementDeliveryBullWorker({
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker,
-      workerOptions: { prefix: "uzman-hocam-test" },
+      workerOptions: { prefix: "o-okul-test" },
       processor: async (job) => {
         processedJobs.push(job);
         return result;
@@ -353,7 +353,7 @@ describe("BullMQ announcement delivery worker", () => {
     expect(calls[0]?.name).toBe("announcement-delivery");
     expect(calls[0]?.options).toEqual({
       connection: { host: "127.0.0.1", port: 6379 },
-      prefix: "uzman-hocam-test",
+      prefix: "o-okul-test",
     });
     await expect(calls[0]?.processor(createAnnouncementDeliveryBullJob())).resolves.toBe(result);
     expect(processedJobs).toEqual([{
@@ -396,7 +396,7 @@ describe("BullMQ backup restore worker", () => {
     createBackupRestoreBullWorker({
       connection: { host: "127.0.0.1", port: 6379 },
       createWorker,
-      workerOptions: { prefix: "uzman-hocam-test" },
+      workerOptions: { prefix: "o-okul-test" },
       processor: async (job) => {
         processedJobs.push(job);
         return result;
@@ -407,7 +407,7 @@ describe("BullMQ backup restore worker", () => {
     expect(calls[0]?.name).toBe("backup-restore");
     expect(calls[0]?.options).toEqual({
       connection: { host: "127.0.0.1", port: 6379 },
-      prefix: "uzman-hocam-test",
+      prefix: "o-okul-test",
     });
     await expect(calls[0]?.processor(createBackupRestoreBullJob())).resolves.toBe(result);
     expect(processedJobs).toEqual([{

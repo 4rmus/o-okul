@@ -3,8 +3,8 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, CrudPage, EmptyState, Field, FormModal, Input, Select, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
-import type { CampusRecord, ClassRecord, GradeLevelRecord } from "@uzman-hocam/shared-types";
+import { Button, CrudPage, EmptyState, Field, FormModal, Input, Select, type DataTableColumn, useConfirmDialog } from "@o-okul/ui";
+import type { CampusRecord, ClassRecord, GradeLevelRecord } from "@o-okul/shared-types";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";

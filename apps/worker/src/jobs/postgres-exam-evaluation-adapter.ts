@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { type Queryable, type TenantQueryable, withTenantDb } from "@uzman-hocam/db";
+import { type Queryable, type TenantQueryable, withTenantDb } from "@o-okul/db";
 import type { ParserConfigSuggestion, ParserDelimiter } from "./format-analyzer-service.js";
 import {
   type ExamEvaluationJobAdapter,

@@ -20,7 +20,7 @@ import {
   type DataTableColumn,
   type StatusBadgeProps,
   useConfirmDialog,
-} from "@uzman-hocam/ui";
+} from "@o-okul/ui";
 import type {
   HomeworkMaterialAssignmentRecord,
   HomeworkMaterialFileDownloadResult,
@@ -28,7 +28,7 @@ import type {
   HomeworkMaterialRecord,
   HomeworkRecord,
   StudentRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { CheckCircle2, Download, Eye, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch, type ListMeta } from "../../../../src/api-client.js";

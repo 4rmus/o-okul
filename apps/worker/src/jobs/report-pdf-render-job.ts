@@ -8,14 +8,14 @@ import type {
   ReportStudentBranchSummary,
   ReportStudentQuestionSummary,
   ReportStudentStatistics,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 
 export type {
   ReportPdfInstitution,
   ReportPdfRenderJobPayload,
   ReportPdfRenderJobResult,
   ReportPdfSnapshotRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 
 export interface ReportPdfRenderInput {
   fallbackLines: string[];

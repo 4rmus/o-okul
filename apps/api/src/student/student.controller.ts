@@ -34,7 +34,7 @@ import type {
   StudentTenantUpdateRequest,
   StudentUpdateRequest,
   TeacherAssignmentRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 
 const studentStatusSchema = z.enum(["ACTIVE", "PASSIVE", "GRADUATED", "TRANSFERRED"]);
 const optionalStudentStatusQuerySchema = z.preprocess((value) => value === "" ? undefined : value, studentStatusSchema.optional());

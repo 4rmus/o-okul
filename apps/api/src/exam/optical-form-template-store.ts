@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
-import type { OpticalFormTemplateRecord, ParserConfigSuggestion } from "@uzman-hocam/shared-types";
+import type { OpticalFormTemplateRecord, ParserConfigSuggestion } from "@o-okul/shared-types";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 
 export const opticalFormTemplateStoreToken = Symbol("OpticalFormTemplateStore");

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { type Queryable, type TenantQueryable, withTenantDb } from "@uzman-hocam/db";
+import { type Queryable, type TenantQueryable, withTenantDb } from "@o-okul/db";
 import type { ScoringResult } from "./scoring-engine.js";
 import {
   examResultSummaryReportType,

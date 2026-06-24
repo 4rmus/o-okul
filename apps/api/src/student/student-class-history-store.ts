@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { StudentClassHistoryRecord } from "@uzman-hocam/shared-types";
+import type { StudentClassHistoryRecord } from "@o-okul/shared-types";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";

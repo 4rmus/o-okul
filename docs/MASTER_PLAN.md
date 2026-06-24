@@ -67,7 +67,7 @@ kanıtlamaktır.
 
 ### 3.1 Monorepo (pnpm workspaces + Turborepo)
 ```
-uzman-hocam/
+o-okul/
 ├── apps/
 │   ├── web/          # Next.js (App Router) — kullanıcı arayüzü
 │   ├── api/          # NestJS — REST API + BullMQ producer

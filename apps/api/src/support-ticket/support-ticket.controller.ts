@@ -4,7 +4,7 @@ import type {
   SupportTicketAttachmentRecord,
   SupportTicketCommentRecord,
   SupportTicketRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";

@@ -1,4 +1,4 @@
-import type { AnnouncementDeliveryChannel, AnnouncementDeliveryStatus } from "@uzman-hocam/shared-types";
+import type { AnnouncementDeliveryChannel, AnnouncementDeliveryStatus } from "@o-okul/shared-types";
 import { runWithJobContext } from "../context/job-context.js";
 import { assertTenantJobPayload, type QueueJob, type TenantJobPayload } from "../queue/queues.js";
 

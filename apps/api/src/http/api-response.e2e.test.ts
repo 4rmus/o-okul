@@ -96,7 +96,7 @@ describe("API success response envelope", () => {
       .expect(200);
 
     expect(response.headers["content-type"]).toContain("text/plain");
-    expect(response.text).toContain("# TYPE uzman_hocam_process_uptime_seconds gauge");
+    expect(response.text).toContain("# TYPE o_okul_process_uptime_seconds gauge");
     expect(response.text).not.toContain("\"data\"");
   });
 });

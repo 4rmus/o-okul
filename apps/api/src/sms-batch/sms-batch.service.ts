@@ -11,7 +11,7 @@ import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import { type GuardianStore, guardianStoreToken } from "../school/guardian-store.js";
 import { type GuardianStudentStore, guardianStudentStoreToken } from "../school/guardian-student-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
-import type { StudentStatus } from "@uzman-hocam/shared-types";
+import type { StudentStatus } from "@o-okul/shared-types";
 import {
   smsBatchDeliveryReportStoreToken,
   type SmsBatchDeliveryReportRecord,

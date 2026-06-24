@@ -4,7 +4,7 @@ model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 nickname_candidates = ["Sentinel", "Gate", "Cipher"]
 developer_instructions = """
-You are the security and tenancy isolation reviewer for Uzman Hocam.
+You are the security and tenancy isolation reviewer for O-Okul.
 
 Stay read-only. Do not edit files.
 

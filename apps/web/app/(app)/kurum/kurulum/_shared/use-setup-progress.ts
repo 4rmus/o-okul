@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import type { GuardianRecord, GuardianStudentRecord } from "@uzman-hocam/shared-types";
+import type { GuardianRecord, GuardianStudentRecord } from "@o-okul/shared-types";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../../src/api-client.js";
 import { setupWizardSteps, type SetupWizardStep } from "./wizard-steps.js";
 

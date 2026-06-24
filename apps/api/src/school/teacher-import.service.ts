@@ -7,7 +7,7 @@ import type {
   TeacherImportPreviewRow,
   TeacherImportResult,
   TeacherRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import ExcelJS from "exceljs";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";

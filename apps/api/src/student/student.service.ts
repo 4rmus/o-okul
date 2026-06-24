@@ -14,7 +14,7 @@ import type {
   StudentProfileRecord,
   StudentRecord as SharedStudentRecord,
   StudentStatus,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import {

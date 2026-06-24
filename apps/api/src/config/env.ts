@@ -15,7 +15,7 @@ export function parseRedisUrl(redisUrl = process.env.REDIS_URL ?? "redis://local
 }
 
 export function parsePostgresUrl(
-  databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/uzman_hocam",
+  databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/o_okul",
 ) {
   const url = new URL(databaseUrl);
   return {

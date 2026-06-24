@@ -2,7 +2,7 @@
   "result": "PASS",
   "environment": "github-actions",
   "checkedAt": "2026-05-31T12:00:00.000Z",
-  "repository": "example/uzman-hocam",
+  "repository": "example/o-okul",
   "commitSha": "0123456789abcdef0123456789abcdef01234567",
   "branch": "main",
   "workflow": {
@@ -10,7 +10,7 @@
     "path": ".github/workflows/ci.yml",
     "runId": "1234567890",
     "runAttempt": 1,
-    "runUrl": "https://github.com/example/uzman-hocam/actions/runs/1234567890",
+    "runUrl": "https://github.com/example/o-okul/actions/runs/1234567890",
     "conclusion": "success",
     "event": "push",
     "startedAt": "2026-05-31T11:00:00.000Z",
@@ -27,7 +27,7 @@
       "conclusion": "success",
       "startedAt": "2026-05-31T11:00:00.000Z",
       "completedAt": "2026-05-31T11:45:00.000Z",
-      "logUrl": "https://github.com/example/uzman-hocam/actions/runs/1234567890/job/9876543210",
+      "logUrl": "https://github.com/example/o-okul/actions/runs/1234567890/job/9876543210",
       "stepsPassed": [
         "pnpm install --frozen-lockfile",
         "pnpm run ci"
@@ -36,7 +36,7 @@
   ],
   "commandsPassed": ["pnpm run ci", "pnpm github-ci:check"],
   "evidenceReferences": [
-    "https://github.com/example/uzman-hocam/actions/runs/1234567890",
+    "https://github.com/example/o-okul/actions/runs/1234567890",
     "artifacts/example/github-ci/ci-run-log.txt"
   ],
   "gaps": []

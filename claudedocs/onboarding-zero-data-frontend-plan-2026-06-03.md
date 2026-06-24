@@ -129,7 +129,7 @@ app/(app)/sistem/
 
 ### Bileşen yeniden kullanımı (yeni primitive YOK)
 
-Hepsi `@uzman-hocam/ui` mevcut bileşenleriyle, `campuses-page.tsx` kalıbının birebir kopyası:
+Hepsi `@o-okul/ui` mevcut bileşenleriyle, `campuses-page.tsx` kalıbının birebir kopyası:
 - Liste: `CrudPage + DataTable + ListControls` (K13 kalıbı)
 - Form: `FormModal + Input` + yeni `tenantCreateFormSchema` (Zod, `form-validation.ts`'e eklenir)
 - Doğrulama: `firstFormError`, `safeParse` (mevcut kalıp)
@@ -383,7 +383,7 @@ Backend `ASSISTANT_ADMIN`'i destekliyor (K8) ama FE atlıyor (K9). Düzeltmeler:
 - `form-validation.ts:227` `userRolesSchema` enum'una `"ASSISTANT_ADMIN"` eklenir.
 - `users-page.tsx:57-62` `roleOptions`'a `{value:"ASSISTANT_ADMIN", label:"Yardımcı yönetici"}` eklenir.
 - `Role` tipi (`users-page.tsx:22`) genişletilir.
-- `@uzman-hocam/shared-types`'ta rol enum'u tek-kaynak ise oradan türetilir (DRY; K8 backend ile eşitle).
+- `@o-okul/shared-types`'ta rol enum'u tek-kaynak ise oradan türetilir (DRY; K8 backend ile eşitle).
 
 ### Öğretmen yolunu tutarlı kıl — "kılavuzlu öğretmen ekle"
 
@@ -396,7 +396,7 @@ zinciri tek akışta görünür; admin iki ayrı modül arasında kaybolmaz. (Si
 
 ## 6. Modüller Arası Boş-Durum (Empty-State) Deseni (Faz O0/O3)
 
-### Tutarlı `EmptyState` bileşeni (`@uzman-hocam/ui`'ye eklenir)
+### Tutarlı `EmptyState` bileşeni (`@o-okul/ui`'ye eklenir)
 
 `CrudPage` bugün `emptyText` (düz metin) alıyor. Yükseltme: `emptyState?: ReactNode` prop'u
 (geriye uyumlu; `emptyText` kalır). Yeni `EmptyState` primitive:
@@ -465,7 +465,7 @@ ama doldurmaz; Faz D doldurur.** Çelişki yok, ileriye-uyumlu.
 
 - **O0.1 · Minimal seed modu** (S, 🔴, **BG-2 bağımlı**). `seed.ts` için bayrak (`SEED_MODE=minimal`)
   → yalnız `system` tenant + SYSTEM_ADMIN. FE varsayımı: boş sistem normaldir.
-- **O0.2 · `EmptyState` primitive + `CrudPage.emptyState`** (S). `@uzman-hocam/ui`'ye ekle, rebuild.
+- **O0.2 · `EmptyState` primitive + `CrudPage.emptyState`** (S). `@o-okul/ui`'ye ekle, rebuild.
 - **O0.3 · 6 çekirdek modülde onboarding-bağlı boş-durum** (M). §6 deseni.
 - **O0.4 · Dashboard onboarding kartı** (S, **B1 önkoşul**). Boş kurumda sihirbaza yönlendirme.
 
@@ -582,7 +582,7 @@ süreklilik.
 ### Teknik riskler
 
 - **UI paket rebuild zorunluluğu** (hafıza notu): `EmptyState` ve `CrudPage.emptyState` eklenince
-  `@uzman-hocam/ui` **rebuild** edilmeli, yoksa web tüketmez. Her O0.2 sonrası kapı buna dikkat etmeli.
+  `@o-okul/ui` **rebuild** edilmeli, yoksa web tüketmez. Her O0.2 sonrası kapı buna dikkat etmeli.
 - **react-query önbellek paylaşımı:** `use-setup-progress` alt sorguları modül anahtarlarını
   (`["next-campuses", tenantId]`) paylaşırsa, modülde ekleme → sihirbaz otomatik güncellenir
   (artı). Ama anahtar şekli **birebir** eşleşmeli (listQuery dahil/hariç) yoksa çift fetch olur.
@@ -604,7 +604,7 @@ süreklilik.
 - `app/(app)/sistem/_shared/system-api.ts`
 - `app/(app)/kurum/kurulum/page.tsx`, `setup-wizard.tsx`
 - `app/(app)/kurum/kurulum/_shared/wizard-steps.ts`, `use-setup-progress.ts`
-- `@uzman-hocam/ui` → `EmptyState` bileşeni (+ barrel export, rebuild)
+- `@o-okul/ui` → `EmptyState` bileşeni (+ barrel export, rebuild)
 
 **Değişen dosyalar:**
 - `app-shell.tsx` → `hasSystemAccess`, `canAccessPath`, `getHomePath`, sidebar nav seçimi
@@ -614,5 +614,5 @@ süreklilik.
 - `kurum/ogretmenler/*` → "Portal daveti gönder" satır kısayolu
 - `kurum/kurum-dashboard.tsx` → boş-durum onboarding kartı (B1 ile birlikte)
 - 6 çekirdek modül → `EmptyState` + `?new=1` deep-link
-- `@uzman-hocam/ui` `CrudPage` → `emptyState?: ReactNode` prop (geriye uyumlu)
+- `@o-okul/ui` `CrudPage` → `emptyState?: ReactNode` prop (geriye uyumlu)
 ```

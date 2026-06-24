@@ -57,7 +57,7 @@
   önce doğrular; hatalı girdi `EXAM_EVALUATION_INPUT_INVALID` ile reddedilir.
 - Adapter, `ExamResult` yazımında `tenantId + resultKey` üzerinden idempotent `ON CONFLICT DO
   NOTHING` kullanır; kayıt zaten varsa mevcut sonucu okuyup döner.
-- Worker composition katmanı `createExamEvaluationProcessor` ile eklendi; `@uzman-hocam/db`
+- Worker composition katmanı `createExamEvaluationProcessor` ile eklendi; `@o-okul/db`
   içindeki `createTenantPgPool` factory'si üzerinden `PostgresExamEvaluationAdapter` job
   processor'a bağlanır.
 - BullMQ tabanlı `exam-evaluation` worker daemon iskeleti eklendi; BullMQ job'u mevcut
@@ -167,72 +167,72 @@
 
 ## Çalıştırılan doğrulamalar
 
-- `pnpm --filter @uzman-hocam/worker test -- scoring-engine`
-- `pnpm --filter @uzman-hocam/worker test -- exam-evaluation scoring-engine`
-- `pnpm --filter @uzman-hocam/worker typecheck`
-- `pnpm --filter @uzman-hocam/api typecheck`
-- `pnpm --filter @uzman-hocam/db lint`
-- `pnpm --filter @uzman-hocam/db db:rls:check`
+- `pnpm --filter @o-okul/worker test -- scoring-engine`
+- `pnpm --filter @o-okul/worker test -- exam-evaluation scoring-engine`
+- `pnpm --filter @o-okul/worker typecheck`
+- `pnpm --filter @o-okul/api typecheck`
+- `pnpm --filter @o-okul/db lint`
+- `pnpm --filter @o-okul/db db:rls:check`
 - `node --check packages/db/scripts/check-rls-live.mjs`
-- `pnpm --filter @uzman-hocam/api test -- queue/job-producer`
-- `pnpm --filter @uzman-hocam/db typecheck`
-- `pnpm --filter @uzman-hocam/db db:rls:check`
-- `pnpm --filter @uzman-hocam/worker test -- postgres-exam-evaluation exam-evaluation`
-- `pnpm --filter @uzman-hocam/worker test -- exam-evaluation-processor postgres-exam-evaluation`
-- `pnpm --filter @uzman-hocam/worker test -- bullmq-worker`
-- `pnpm --filter @uzman-hocam/worker build`
-- `pnpm --filter @uzman-hocam/api test -- queue/bullmq-producer config/env health`
-- `pnpm --filter @uzman-hocam/api build`
-- `pnpm --filter @uzman-hocam/api test -- raw-import-queue job-producer bullmq-producer`
-- `pnpm --filter @uzman-hocam/api test -- raw-import-upload raw-import-queue`
-- `pnpm --filter @uzman-hocam/api test -- s3-raw-import-archive-store postgres-raw-import-repository raw-import-upload`
-- `pnpm --filter @uzman-hocam/api test -- raw-import.controller raw-import-upload`
-- `pnpm --filter @uzman-hocam/api test -- postgres-raw-import-repository raw-import.controller raw-import-upload`
-- `pnpm --filter @uzman-hocam/api test -- parser-config postgres-parser-config`
-- `pnpm --filter @uzman-hocam/shared-types typecheck`
-- `pnpm --filter @uzman-hocam/shared-types build`
-- `pnpm --filter @uzman-hocam/web typecheck`
-- `pnpm --filter @uzman-hocam/web build`
-- `pnpm --filter @uzman-hocam/web test:e2e`
-- `pnpm --filter @uzman-hocam/worker test`
-- `pnpm --filter @uzman-hocam/api test`
+- `pnpm --filter @o-okul/api test -- queue/job-producer`
+- `pnpm --filter @o-okul/db typecheck`
+- `pnpm --filter @o-okul/db db:rls:check`
+- `pnpm --filter @o-okul/worker test -- postgres-exam-evaluation exam-evaluation`
+- `pnpm --filter @o-okul/worker test -- exam-evaluation-processor postgres-exam-evaluation`
+- `pnpm --filter @o-okul/worker test -- bullmq-worker`
+- `pnpm --filter @o-okul/worker build`
+- `pnpm --filter @o-okul/api test -- queue/bullmq-producer config/env health`
+- `pnpm --filter @o-okul/api build`
+- `pnpm --filter @o-okul/api test -- raw-import-queue job-producer bullmq-producer`
+- `pnpm --filter @o-okul/api test -- raw-import-upload raw-import-queue`
+- `pnpm --filter @o-okul/api test -- s3-raw-import-archive-store postgres-raw-import-repository raw-import-upload`
+- `pnpm --filter @o-okul/api test -- raw-import.controller raw-import-upload`
+- `pnpm --filter @o-okul/api test -- postgres-raw-import-repository raw-import.controller raw-import-upload`
+- `pnpm --filter @o-okul/api test -- parser-config postgres-parser-config`
+- `pnpm --filter @o-okul/shared-types typecheck`
+- `pnpm --filter @o-okul/shared-types build`
+- `pnpm --filter @o-okul/web typecheck`
+- `pnpm --filter @o-okul/web build`
+- `pnpm --filter @o-okul/web test:e2e`
+- `pnpm --filter @o-okul/worker test`
+- `pnpm --filter @o-okul/api test`
 - `node --check scripts/smoke-bullmq-live.mjs`
 - `node --check scripts/smoke-raw-import-upload-live.mjs`
 - `pnpm queue:smoke` Redis çalışırken tekrar çalıştırıldı ve `exam-evaluation` ile `excel-import`
   queue'larının producer/consumer hattı geçti.
 - `pnpm raw-import:smoke` Postgres/Redis/MinIO çalışırken tekrar çalıştırıldı; upload endpoint'i,
   S3 archive, `RawImport` insert'i ve `excel-import` enqueue zinciri geçti.
-- `pnpm --filter @uzman-hocam/api test -- health api-error raw-import.controller raw-import-upload
-  raw-import-queue bullmq-producer` ve `pnpm --filter @uzman-hocam/api typecheck` canlı servisler
+- `pnpm --filter @o-okul/api test -- health api-error raw-import.controller raw-import-upload
+  raw-import-queue bullmq-producer` ve `pnpm --filter @o-okul/api typecheck` canlı servisler
   açıkken tekrar çalıştırıldı ve geçti.
-- `pnpm --filter @uzman-hocam/worker test -- format-analyzer-service`
-- `pnpm --filter @uzman-hocam/worker test -- postgres-parser-config-adapter`
-- `pnpm --filter @uzman-hocam/worker test -- optical-answer-parser`
-- `pnpm --filter @uzman-hocam/worker test -- postgres-optical-parse-adapter optical-answer-parser`
-- `pnpm --filter @uzman-hocam/worker test -- postgres-optical-parse-input-adapter`
-- `pnpm --filter @uzman-hocam/worker test -- optical-parse-workflow`
-- `pnpm --filter @uzman-hocam/worker test -- s3-raw-import-content-reader`
-- `pnpm --filter @uzman-hocam/worker test -- excel-import-job optical-parse-processor`
-- `pnpm --filter @uzman-hocam/worker test -- bullmq-worker`
-- `pnpm --filter @uzman-hocam/worker test -- postgres-parser-config-adapter`
-- `pnpm --filter @uzman-hocam/worker test -- format-analyzer-service optical-answer-parser postgres-parser-config-adapter`
-- `pnpm --filter @uzman-hocam/worker typecheck`
-- `pnpm --filter @uzman-hocam/worker build`
+- `pnpm --filter @o-okul/worker test -- format-analyzer-service`
+- `pnpm --filter @o-okul/worker test -- postgres-parser-config-adapter`
+- `pnpm --filter @o-okul/worker test -- optical-answer-parser`
+- `pnpm --filter @o-okul/worker test -- postgres-optical-parse-adapter optical-answer-parser`
+- `pnpm --filter @o-okul/worker test -- postgres-optical-parse-input-adapter`
+- `pnpm --filter @o-okul/worker test -- optical-parse-workflow`
+- `pnpm --filter @o-okul/worker test -- s3-raw-import-content-reader`
+- `pnpm --filter @o-okul/worker test -- excel-import-job optical-parse-processor`
+- `pnpm --filter @o-okul/worker test -- bullmq-worker`
+- `pnpm --filter @o-okul/worker test -- postgres-parser-config-adapter`
+- `pnpm --filter @o-okul/worker test -- format-analyzer-service optical-answer-parser postgres-parser-config-adapter`
+- `pnpm --filter @o-okul/worker typecheck`
+- `pnpm --filter @o-okul/worker build`
 - `pnpm docker:check`
 - `pnpm run ci`
 - `pnpm run ci` tekrar çalıştırıldı ve geçti.
 - `pnpm run ci` ParserConfig approval diliminden sonra tekrar çalıştırıldı ve geçti.
 - `pnpm run ci` ParserConfig suggestion diliminden sonra tekrar çalıştırıldı ve geçti.
 - `pnpm run ci` optik format web paneli diliminden sonra tekrar çalıştırıldı ve geçti.
-- `pnpm --filter @uzman-hocam/web typecheck`, `pnpm --filter @uzman-hocam/web test:e2e`,
-  `pnpm --filter @uzman-hocam/web build` ve `pnpm run ci` optik format dosya seçme diliminden sonra
+- `pnpm --filter @o-okul/web typecheck`, `pnpm --filter @o-okul/web test:e2e`,
+  `pnpm --filter @o-okul/web build` ve `pnpm run ci` optik format dosya seçme diliminden sonra
   tekrar çalıştırıldı ve geçti.
 - In-app Browser doğrulaması denenmiş olsa da bu oturumda `iab` tarayıcısı kullanılamadığı için
   görsel kontrol Playwright e2e ve production build kanıtıyla sınırlı kaldı.
 - Lokal Postgres/Redis/MinIO servisleri Colima üzerinde healthy duruma getirildi; `pnpm db:migrate`,
-  `pnpm db:seed`, `pnpm --filter @uzman-hocam/db exec prisma migrate status --config prisma.config.ts`,
-  `pnpm db:rls:check:live`, `pnpm --filter @uzman-hocam/db typecheck` ve
-  `pnpm --filter @uzman-hocam/db test` çalıştırıldı ve geçti.
+  `pnpm db:seed`, `pnpm --filter @o-okul/db exec prisma migrate status --config prisma.config.ts`,
+  `pnpm db:rls:check:live`, `pnpm --filter @o-okul/db typecheck` ve
+  `pnpm --filter @o-okul/db test` çalıştırıldı ve geçti.
 
 ## Subagent notu
 
@@ -360,7 +360,7 @@ HTTP 409'a çevirmesini önerdi. Bu turda `POST /exams/:examId/parser-configs/ap
 teacher/auth/eksik öneri/conflict durumları e2e testle doğrulandı.
 
 Sonraki subagent, `FormatAnalyzerService` davranışının API-local kopya veya worker import'u yerine
-ortak paket üzerinden paylaşılmasını önerdi. Bu turda analyzer `@uzman-hocam/shared-types`
+ortak paket üzerinden paylaşılmasını önerdi. Bu turda analyzer `@o-okul/shared-types`
 yüzeyine taşındı, worker re-export ile geriye uyumlu bırakıldı ve
 `POST /exams/:examId/parser-configs/suggestions` endpoint'i sample metin/base64 girdisiyle yan
 etkisiz öneri üretir hale getirildi.

@@ -1,4 +1,4 @@
-import { type TenantQueryable, withTenantDb } from "@uzman-hocam/db";
+import { type TenantQueryable, withTenantDb } from "@o-okul/db";
 import type { ParserConfigSuggestion, ParserDelimiter } from "./format-analyzer-service.js";
 import type { OpticalAnswerParticipant } from "./optical-answer-parser.js";
 

@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
-import type { AttendanceRecord, AttendanceStatus, AttendanceSummaryRecord } from "@uzman-hocam/shared-types";
+import type { AttendanceRecord, AttendanceStatus, AttendanceSummaryRecord } from "@o-okul/shared-types";
 import { AnnouncementService } from "../announcement/announcement.service.js";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";

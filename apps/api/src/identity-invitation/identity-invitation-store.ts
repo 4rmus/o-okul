@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
-import type { PortalSubjectRoleName } from "@uzman-hocam/shared-types";
+import type { PortalSubjectRoleName } from "@o-okul/shared-types";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withExplicitTenantQuery } from "../db/tenant-query.js";
 

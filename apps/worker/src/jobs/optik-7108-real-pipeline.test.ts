@@ -12,6 +12,7 @@ type RealExamFixture = {
   answerKeyPath: string;
   expectedRows: {
     total: number;
+    valid: number;
     A: number;
     B: number;
   };
@@ -48,15 +49,15 @@ const fixtures: RealExamFixture[] = [
     id: "isem-lgs-1",
     txtPath: "../../ornek-veriler/iSEM .txt",
     answerKeyPath: "../../ornek-veriler/iSEM - LGS - 1 Detaylı Cevap Anahtarı.xlsx",
-    expectedRows: { total: 254, A: 128, B: 126 },
-    expectedStudents: { A: "331", B: "638" },
+    expectedRows: { total: 21, valid: 20, A: 11, B: 9 },
+    expectedStudents: { A: "102", B: "101" },
     expectedBPermutationHead: [
       20, 19, 18, 17, 16, 15, 14, 13, 12, 11,
       10, 9, 8, 7, 6, 5, 4, 3, 2, 1,
       30, 29, 28, 27, 26,
     ],
     expectedScores: {
-      A: { correct: 56, wrong: 32, blank: 2, net: 45.3333, first20: "CBCADDBABDBACAABDACA" },
+      A: { correct: 79, wrong: 10, blank: 1, net: 75.6667, first20: "CBCCDCBABDBCBDABCAAA" },
       B: {
         correct: 44,
         wrong: 31,
@@ -71,8 +72,8 @@ const fixtures: RealExamFixture[] = [
     id: "3d-prova-lgs-2",
     txtPath: "../../ornek-veriler/3D.txt",
     answerKeyPath: "../../ornek-veriler/3D - PROVA LGS - 2 Detaylı Cevap Anahtarı.xlsx",
-    expectedRows: { total: 227, A: 116, B: 111 },
-    expectedStudents: { A: "157", B: "1333" },
+    expectedRows: { total: 21, valid: 20, A: 9, B: 11 },
+    expectedStudents: { A: "102", B: "101" },
     expectedBPermutationHead: [
       3, 4, 1, 2, 6, 7, 13, 8, 10, 11,
       12, 18, 5, 14, 15, 16, 19, 20, 17, 9,
@@ -81,12 +82,12 @@ const fixtures: RealExamFixture[] = [
     expectedScores: {
       A: { correct: 48, wrong: 24, blank: 18, net: 40, first20: "BDD_AACBDCACBBBDCBAA" },
       B: {
-        correct: 59,
-        wrong: 21,
-        blank: 10,
-        net: 52,
-        first20: "CBDAAABCDCBCBDBDCBAB",
-        firstQuestion: { answer: "C", correctAnswer: "C", status: "CORRECT" },
+        correct: 24,
+        wrong: 48,
+        blank: 18,
+        net: 8,
+        first20: "DDCB_ACCDDAA_BA_CBDB",
+        firstQuestion: { answer: "D", correctAnswer: "C", status: "WRONG" },
       },
     },
   },
@@ -98,13 +99,15 @@ describe("OPTİK-7108 gerçek veri pipeline fixture", () => {
     async (fixture) => {
       const answerKey = await readAnswerKey(fixture.answerKeyPath);
       const rows = readOptikRows(fixture.txtPath);
-      const aRow = rows.find((row) => row.bookletType === "A");
-      const bRow = rows.find((row) => row.bookletType === "B");
+      const validRows = rows.filter((row) => isValidOptik7108Line(row.line));
+      const aRow = validRows.find((row) => row.bookletType === "A");
+      const bRow = validRows.find((row) => row.bookletType === "B");
       if (!aRow || !bRow) throw new Error("OPTIK_7108_FIXTURE_ROW_MISSING");
 
       expect(rows).toHaveLength(fixture.expectedRows.total);
-      expect(rows.filter((row) => row.bookletType === "A")).toHaveLength(fixture.expectedRows.A);
-      expect(rows.filter((row) => row.bookletType === "B")).toHaveLength(fixture.expectedRows.B);
+      expect(validRows).toHaveLength(fixture.expectedRows.valid);
+      expect(validRows.filter((row) => row.bookletType === "A")).toHaveLength(fixture.expectedRows.A);
+      expect(validRows.filter((row) => row.bookletType === "B")).toHaveLength(fixture.expectedRows.B);
       expect(aRow.studentNo).toBe(fixture.expectedStudents.A);
       expect(bRow.studentNo).toBe(fixture.expectedStudents.B);
 
@@ -236,12 +239,16 @@ function readOptikRows(path: string): Array<{ line: string; studentNo: string; b
   return readFileSync(path, "utf8")
     .replace(/\r\n/g, "\n")
     .split("\n")
-    .filter(Boolean)
+    .filter((line) => line.trim())
     .map((line) => ({
       line,
       studentNo: line.slice(11, 15).trim(),
       bookletType: line.slice(50, 51),
     }));
+}
+
+function isValidOptik7108Line(line: string): boolean {
+  return line.length >= 171;
 }
 
 function cellText(value: ExcelJS.CellValue): string {

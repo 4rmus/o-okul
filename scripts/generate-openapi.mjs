@@ -3676,7 +3676,7 @@ try {
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   if (message.includes("Cannot find module") && message.includes("apps/api/dist")) {
-    console.error("OpenAPI üretimi için önce API build çıktısı gerekli: pnpm --filter @uzman-hocam/api build");
+    console.error("OpenAPI üretimi için önce API build çıktısı gerekli: pnpm --filter @o-okul/api build");
   }
   console.error(`OpenAPI üretimi başarısız: ${message}`);
   process.exitCode = 1;

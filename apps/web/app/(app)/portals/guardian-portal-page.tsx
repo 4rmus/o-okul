@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { SegmentedControl } from "@uzman-hocam/ui";
+import { SegmentedControl } from "@o-okul/ui";
 import type {
   AcademicTermRecord,
   AnnouncementRecord,
@@ -22,7 +22,7 @@ import type {
   StudentRecord,
   SupportTicketRecord,
   TeacherNoteRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { apiBaseUrl, apiRequest, authenticatedFetch, readData } from "../../../src/api-client.js";
 import type { SupportTicketFormPayload } from "../../../src/form-validation.js";
 import { useAuth } from "../../providers.js";

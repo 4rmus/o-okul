@@ -1,5 +1,5 @@
 {
-  "uid": "uzman-hocam-api-overview",
+  "uid": "o-okul-api-overview",
   "title": "o-okul API Overview",
   "schemaVersion": 39,
   "version": 1,
@@ -17,7 +17,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "up{job=\"uzman-hocam-api\"}",
+          "expr": "up{job=\"o-okul-api\"}",
           "refId": "A"
         }
       ]
@@ -30,7 +30,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "sum(rate(uzman_hocam_http_requests_total[5m])) by (status)",
+          "expr": "sum(rate(o_okul_http_requests_total[5m])) by (status)",
           "legendFormat": "{{status}}",
           "refId": "A"
         }
@@ -44,7 +44,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "sum(rate(uzman_hocam_http_request_duration_seconds_sum[5m])) / clamp_min(sum(rate(uzman_hocam_http_requests_total[5m])), 1)",
+          "expr": "sum(rate(o_okul_http_request_duration_seconds_sum[5m])) / clamp_min(sum(rate(o_okul_http_requests_total[5m])), 1)",
           "refId": "A"
         }
       ]
@@ -57,7 +57,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "increase(uzman_hocam_http_requests_total{path=\"/health/ready\",status!~\"2..\"}[5m])",
+          "expr": "increase(o_okul_http_requests_total{path=\"/health/ready\",status!~\"2..\"}[5m])",
           "refId": "A"
         }
       ]
@@ -70,7 +70,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "sum(uzman_hocam_queue_jobs) by (queue, status)",
+          "expr": "sum(o_okul_queue_jobs) by (queue, status)",
           "legendFormat": "{{queue}} {{status}}",
           "refId": "A"
         }
@@ -84,7 +84,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "max(uzman_hocam_queue_metrics_scrape_error)",
+          "expr": "max(o_okul_queue_metrics_scrape_error)",
           "refId": "A"
         }
       ]
@@ -97,7 +97,7 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "Loki" },
-          "expr": "{stack=\"uzman-hocam\"}",
+          "expr": "{stack=\"o-okul\"}",
           "refId": "A"
         }
       ]

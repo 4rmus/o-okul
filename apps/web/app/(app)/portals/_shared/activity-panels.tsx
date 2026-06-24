@@ -1,7 +1,7 @@
 "use client";
 
-import { DataTable, Panel, type DataTableColumn } from "@uzman-hocam/ui";
-import type { AttendanceRecord, StudentRecord, TeacherNoteRecord } from "@uzman-hocam/shared-types";
+import { DataTable, Panel, type DataTableColumn } from "@o-okul/ui";
+import type { AttendanceRecord, StudentRecord, TeacherNoteRecord } from "@o-okul/shared-types";
 
 export function AttendancePanel({ records }: { records: AttendanceRecord[] }) {
   const columns: Array<DataTableColumn<AttendanceRecord>> = [

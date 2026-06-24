@@ -15,13 +15,13 @@ import {
   StatusBadge,
   type DataTableColumn,
   type StatusBadgeProps,
-} from "@uzman-hocam/ui";
+} from "@o-okul/ui";
 import type {
   GuardianRecord,
   GuardianStudentDetailStudentRecord,
   GuardianStudentDetailsResponse,
   GuardianStudentRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { ArrowLeft, Link2, Send } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
-import type { AttendanceRecord, AttendanceStatus } from "@uzman-hocam/shared-types";
+import type { AttendanceRecord, AttendanceStatus } from "@o-okul/shared-types";
 
 export interface AttendanceStore {
   list(): Promise<AttendanceRecord[]>;

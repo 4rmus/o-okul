@@ -6,8 +6,8 @@ const outputPath = readOption("--output") ?? process.env.AI_REPORT_SUMMARY_OUTPU
 const environment = readOption("--environment") ?? process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "staging";
 const provider = process.env.AI_REPORT_SUMMARY_PROVIDER?.trim() || "disabled";
 
-const workerCommand = "pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/report-generation-job.test.ts";
-const apiCommand = "pnpm --filter @uzman-hocam/api exec vitest run src/report/report-generation.service.test.ts";
+const workerCommand = "pnpm --filter @o-okul/worker exec vitest run src/jobs/report-generation-job.test.ts";
+const apiCommand = "pnpm --filter @o-okul/api exec vitest run src/report/report-generation.service.test.ts";
 
 const failures = [];
 requireValue(outputPath, "AI_REPORT_SUMMARY_OUTPUT veya --output", failures);

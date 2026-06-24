@@ -4,7 +4,7 @@ import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { ExamParticipantRecord, ExamRecord } from "@uzman-hocam/shared-types";
+import type { ExamParticipantRecord, ExamRecord } from "@o-okul/shared-types";
 import { AppModule } from "../app.module.js";
 import {
   examParticipantRepositoryToken,

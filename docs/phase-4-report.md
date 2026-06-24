@@ -81,70 +81,70 @@
 
 ## Çalıştırılan doğrulamalar
 
-- `pnpm --filter @uzman-hocam/worker test -- report-generation postgres-report-generation bullmq-worker`
-- `pnpm --filter @uzman-hocam/worker typecheck`
-- `pnpm --filter @uzman-hocam/api test -- report-generation job-producer bullmq-producer`
-- `pnpm --filter @uzman-hocam/api typecheck`
+- `pnpm --filter @o-okul/worker test -- report-generation postgres-report-generation bullmq-worker`
+- `pnpm --filter @o-okul/worker typecheck`
+- `pnpm --filter @o-okul/api test -- report-generation job-producer bullmq-producer`
+- `pnpm --filter @o-okul/api typecheck`
 - `pnpm run ci`
-- `pnpm --filter @uzman-hocam/api test -- report-generation report-snapshot-store`
-- `pnpm --filter @uzman-hocam/api typecheck`
-- `pnpm --filter @uzman-hocam/web typecheck`
-- `pnpm --filter @uzman-hocam/web build`
-- `pnpm --filter @uzman-hocam/web test:e2e`
-- `pnpm --filter @uzman-hocam/api test -- report-generation report-snapshot-store`
-- `pnpm --filter @uzman-hocam/api typecheck`
-- `pnpm --filter @uzman-hocam/web typecheck`
-- `pnpm --filter @uzman-hocam/web build`
-- `pnpm --filter @uzman-hocam/web test:e2e`
-- `pnpm --filter @uzman-hocam/worker test -- report-generation postgres-report-generation`
-- `pnpm --filter @uzman-hocam/api test -- report-generation report-snapshot-store`
-- `pnpm --filter @uzman-hocam/worker typecheck`
-- `pnpm --filter @uzman-hocam/api typecheck`
-- `pnpm --filter @uzman-hocam/web typecheck`
-- `pnpm --filter @uzman-hocam/web test:e2e`
-- `pnpm --filter @uzman-hocam/web build`
-- `pnpm --filter @uzman-hocam/api test -- report-generation report-snapshot-store`
-- `pnpm --filter @uzman-hocam/api typecheck`
-- `pnpm --filter @uzman-hocam/web typecheck`
-- `pnpm --filter @uzman-hocam/web test:e2e`
-- `pnpm --filter @uzman-hocam/web build`
+- `pnpm --filter @o-okul/api test -- report-generation report-snapshot-store`
+- `pnpm --filter @o-okul/api typecheck`
+- `pnpm --filter @o-okul/web typecheck`
+- `pnpm --filter @o-okul/web build`
+- `pnpm --filter @o-okul/web test:e2e`
+- `pnpm --filter @o-okul/api test -- report-generation report-snapshot-store`
+- `pnpm --filter @o-okul/api typecheck`
+- `pnpm --filter @o-okul/web typecheck`
+- `pnpm --filter @o-okul/web build`
+- `pnpm --filter @o-okul/web test:e2e`
+- `pnpm --filter @o-okul/worker test -- report-generation postgres-report-generation`
+- `pnpm --filter @o-okul/api test -- report-generation report-snapshot-store`
+- `pnpm --filter @o-okul/worker typecheck`
+- `pnpm --filter @o-okul/api typecheck`
+- `pnpm --filter @o-okul/web typecheck`
+- `pnpm --filter @o-okul/web test:e2e`
+- `pnpm --filter @o-okul/web build`
+- `pnpm --filter @o-okul/api test -- report-generation report-snapshot-store`
+- `pnpm --filter @o-okul/api typecheck`
+- `pnpm --filter @o-okul/web typecheck`
+- `pnpm --filter @o-okul/web test:e2e`
+- `pnpm --filter @o-okul/web build`
 - `pnpm run ci`
-- `pnpm --filter @uzman-hocam/api test -- report-generation report-snapshot-store`
-- `pnpm --filter @uzman-hocam/api typecheck`
-- `pnpm --filter @uzman-hocam/web typecheck`
-- `pnpm --filter @uzman-hocam/web test:e2e`
-- `pnpm --filter @uzman-hocam/web build`
+- `pnpm --filter @o-okul/api test -- report-generation report-snapshot-store`
+- `pnpm --filter @o-okul/api typecheck`
+- `pnpm --filter @o-okul/web typecheck`
+- `pnpm --filter @o-okul/web test:e2e`
+- `pnpm --filter @o-okul/web build`
 - `pnpm run ci`
 - `node --check scripts/smoke-report-generation-live.mjs`
-- `pnpm --filter @uzman-hocam/api build`
-- `pnpm --filter @uzman-hocam/worker build`
+- `pnpm --filter @o-okul/api build`
+- `pnpm --filter @o-okul/worker build`
 - `pnpm report-generation:smoke`
 - `pnpm report-generation:perf` — 10.000 sonuç; seed 1241ms, snapshot generation 7273ms
-- `pnpm --filter @uzman-hocam/worker test -- report-generation`
-- `pnpm --filter @uzman-hocam/web typecheck`
-- `pnpm --filter @uzman-hocam/web test:e2e`
-- `pnpm --filter @uzman-hocam/web build`
+- `pnpm --filter @o-okul/worker test -- report-generation`
+- `pnpm --filter @o-okul/web typecheck`
+- `pnpm --filter @o-okul/web test:e2e`
+- `pnpm --filter @o-okul/web build`
 - `pnpm run ci`
-- `pnpm --filter @uzman-hocam/api test -- report-generation report-snapshot-store`
-- `pnpm --filter @uzman-hocam/api typecheck`
-- `pnpm --filter @uzman-hocam/web typecheck`
-- `pnpm --filter @uzman-hocam/web test:e2e`
-- `pnpm --filter @uzman-hocam/web build`
-- `pnpm --filter @uzman-hocam/api test -- report-generation report-snapshot-store`
-- `pnpm --filter @uzman-hocam/api typecheck`
+- `pnpm --filter @o-okul/api test -- report-generation report-snapshot-store`
+- `pnpm --filter @o-okul/api typecheck`
+- `pnpm --filter @o-okul/web typecheck`
+- `pnpm --filter @o-okul/web test:e2e`
+- `pnpm --filter @o-okul/web build`
+- `pnpm --filter @o-okul/api test -- report-generation report-snapshot-store`
+- `pnpm --filter @o-okul/api typecheck`
 - `pnpm docker:check`
-- `pnpm --filter @uzman-hocam/api typecheck`
-- `pnpm --filter @uzman-hocam/api test -- report-generation report-snapshot-store`
+- `pnpm --filter @o-okul/api typecheck`
+- `pnpm --filter @o-okul/api test -- report-generation report-snapshot-store`
 - `pnpm report-listing:k6:check`
 - `node --check scripts/k6-report-listing.js`
 - `node --check scripts/check-k6-report-listing.mjs`
 - `pnpm db:migrate`
 - `REPORT_GENERATION_SMOKE_TENANT_ID=tenant-a REPORT_GENERATION_SMOKE_USER_ID=user-tenant-a pnpm report-generation:perf` — 10.000 sonuç; seed 1255ms, snapshot generation 442ms
-- `pnpm --filter @uzman-hocam/api build`
-- `pnpm --filter @uzman-hocam/api test -- report-snapshot-store`
-- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/report/report-generation.service.test.ts src/report/report-generation.controller.e2e.test.ts src/report/report-snapshot-store.test.ts src/queue/job-producer.test.ts`
-- `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/report-generation-job.test.ts src/jobs/postgres-report-generation-adapter.test.ts`
-- `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next login gerçek auth store ile kurum paneline geçer"`
+- `pnpm --filter @o-okul/api build`
+- `pnpm --filter @o-okul/api test -- report-snapshot-store`
+- `corepack pnpm --filter @o-okul/api exec vitest run src/report/report-generation.service.test.ts src/report/report-generation.controller.e2e.test.ts src/report/report-snapshot-store.test.ts src/queue/job-producer.test.ts`
+- `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/report-generation-job.test.ts src/jobs/postgres-report-generation-adapter.test.ts`
+- `corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next login gerçek auth store ile kurum paneline geçer"`
 - `docker run --rm -v "$PWD/scripts:/scripts:ro" -e API_BASE_URL=http://host.docker.internal:3100 -e API_TOKEN=<redacted> -e EXAM_ID=exam-report-smoke-3d4c1e91-c4ef-4620-aaed-a4338823ecf8 -e STUDENT_ID=student-report-smoke-3d4c1e91-c4ef-4620-aaed-a4338823ecf8-00000 -e EXPECTED_RESULT_COUNT=10000 -e K6_VUS=1 -e K6_DURATION=5s grafana/k6:latest run /scripts/k6-report-listing.js`
 
 ## Geçiş Kontrolü

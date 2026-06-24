@@ -24,10 +24,10 @@ try {
   fail("BACKUP_OFFSITE_TARGET file:// veya s3:// URL olmalı.");
 }
 
-const markerName = `uzman-hocam-offsite-smoke-${Date.now()}.txt`;
+const markerName = `o-okul-offsite-smoke-${Date.now()}.txt`;
 const markerBody = JSON.stringify(
   {
-    source: "uzman-hocam",
+    source: "o-okul",
     event: "backup.offsite_smoke",
     sentAt: checkedAt,
   },

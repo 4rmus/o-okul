@@ -1,4 +1,4 @@
-import type { SmsAdapter, SmsMessage, SmsSendResult } from "@uzman-hocam/sms-adapter";
+import type { SmsAdapter, SmsMessage, SmsSendResult } from "@o-okul/sms-adapter";
 import { runWithJobContext } from "../context/job-context.js";
 import { assertTenantJobPayload, type QueueJob, type TenantJobPayload } from "../queue/queues.js";
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Button, Field, Input, Select } from "@uzman-hocam/ui";
+import { Button, Field, Input, Select } from "@o-okul/ui";
 import type { ListMeta } from "./api-client.js";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 

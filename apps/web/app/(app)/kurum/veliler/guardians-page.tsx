@@ -13,8 +13,8 @@ import {
   Input,
   type DataTableColumn,
   useConfirmDialog,
-} from "@uzman-hocam/ui";
-import type { GuardianRecord } from "@uzman-hocam/shared-types";
+} from "@o-okul/ui";
+import type { GuardianRecord } from "@o-okul/shared-types";
 import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";

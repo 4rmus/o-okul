@@ -168,7 +168,7 @@
       "environment": "production",
       "drillDate": "2026-05-30",
       "sourceBackup": "s3://backup-bucket/base/2026-05-30.dump",
-      "targetDatabase": "uzman_hocam_restore_drill",
+      "targetDatabase": "o_okul_restore_drill",
       "tableCounts": {
         "Tenant": 2,
         "AuditLog": 1,
@@ -188,9 +188,9 @@
     "deploymentRollback": {
       "environment": "production",
       "checkedAt": "2026-05-30",
-      "releaseCandidate": "ghcr.io/example/uzman-hocam/api:2026-06-15.1",
-      "failedImageTag": "ghcr.io/example/uzman-hocam/api:broken-20260530",
-      "rollbackImageTag": "ghcr.io/example/uzman-hocam/api:2026-06-14.2",
+      "releaseCandidate": "ghcr.io/example/o-okul/api:2026-06-15.1",
+      "failedImageTag": "ghcr.io/example/o-okul/api:broken-20260530",
+      "rollbackImageTag": "ghcr.io/example/o-okul/api:2026-06-14.2",
       "failureInjected": true,
       "failureMode": "broken image deploy rejected by healthcheck",
       "migrationRollbackSafe": true,
@@ -204,19 +204,19 @@
         {
           "service": "web",
           "status": "healthy",
-          "imageTag": "ghcr.io/example/uzman-hocam/web:2026-06-14.2",
+          "imageTag": "ghcr.io/example/o-okul/web:2026-06-14.2",
           "evidenceReference": "https://staging.example.test/"
         },
         {
           "service": "api",
           "status": "healthy",
-          "imageTag": "ghcr.io/example/uzman-hocam/api:2026-06-14.2",
+          "imageTag": "ghcr.io/example/o-okul/api:2026-06-14.2",
           "evidenceReference": "https://staging.example.test/api/v1/health"
         },
         {
           "service": "worker",
           "status": "running",
-          "imageTag": "ghcr.io/example/uzman-hocam/worker:2026-06-14.2",
+          "imageTag": "ghcr.io/example/o-okul/worker:2026-06-14.2",
           "evidenceReference": "docker compose ps worker"
         }
       ],
@@ -228,7 +228,7 @@
     "githubCi": {
       "environment": "github-actions",
       "checkedAt": "2026-05-31T12:00:00.000Z",
-      "repository": "example/uzman-hocam",
+      "repository": "example/o-okul",
       "commitSha": "0123456789abcdef0123456789abcdef01234567",
       "branch": "main",
       "workflow": {
@@ -236,7 +236,7 @@
         "path": ".github/workflows/ci.yml",
         "runId": "1234567890",
         "runAttempt": 1,
-        "runUrl": "https://github.com/example/uzman-hocam/actions/runs/1234567890",
+        "runUrl": "https://github.com/example/o-okul/actions/runs/1234567890",
         "conclusion": "success",
         "event": "push",
         "startedAt": "2026-05-31T11:00:00.000Z",
@@ -253,7 +253,7 @@
           "conclusion": "success",
           "startedAt": "2026-05-31T11:00:00.000Z",
           "completedAt": "2026-05-31T11:45:00.000Z",
-          "logUrl": "https://github.com/example/uzman-hocam/actions/runs/1234567890/job/9876543210",
+          "logUrl": "https://github.com/example/o-okul/actions/runs/1234567890/job/9876543210",
           "stepsPassed": [
             "pnpm install --frozen-lockfile",
             "pnpm run ci"
@@ -262,7 +262,7 @@
       ],
       "commandsPassed": ["pnpm run ci", "pnpm github-ci:check"],
       "evidenceReferences": [
-        "https://github.com/example/uzman-hocam/actions/runs/1234567890",
+        "https://github.com/example/o-okul/actions/runs/1234567890",
         "artifacts/example/github-ci/ci-run-log.txt"
       ]
     },
@@ -322,7 +322,7 @@
           "kvkk.guardian_pii_purged",
           "kvkk.user_pii_purged"
         ],
-        "command": "pnpm --filter @uzman-hocam/api exec vitest run src/audit-log/audit-log.service.test.ts src/audit-log/audit-log.e2e.test.ts"
+        "command": "pnpm --filter @o-okul/api exec vitest run src/audit-log/audit-log.service.test.ts src/audit-log/audit-log.e2e.test.ts"
       }
     },
     "identityMigration": {
@@ -410,10 +410,10 @@
       "lokiLogPanelOk": true,
       "alertWebhookStatus": 204,
       "alertsVerified": [
-        "UzmanHocamApiDown",
-        "UzmanHocamReadinessFailing",
-        "UzmanHocamHigh5xxRate",
-        "UzmanHocamSlowRequests"
+        "OOkulApiDown",
+        "OOkulReadinessFailing",
+        "OOkulHigh5xxRate",
+        "OOkulSlowRequests"
       ],
       "evidenceReferences": [
         "artifacts/example/observability/prometheus-targets.png",
@@ -506,8 +506,8 @@
         "sessionsRevokedOnDisable": true
       },
       "commandsPassed": [
-        "pnpm --filter @uzman-hocam/api exec vitest run src/auth/auth.service.test.ts src/auth/auth-user-store.test.ts",
-        "pnpm --filter @uzman-hocam/api typecheck"
+        "pnpm --filter @o-okul/api exec vitest run src/auth/auth.service.test.ts src/auth/auth-user-store.test.ts",
+        "pnpm --filter @o-okul/api typecheck"
       ],
       "evidenceReferences": [
         "artifacts/example/admin-mfa/login-mfa-required.json",
@@ -568,8 +568,8 @@
         "externalProviderNotCalled": true
       },
       "commandsPassed": [
-        "pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/report-generation-job.test.ts",
-        "pnpm --filter @uzman-hocam/api exec vitest run src/report/report-generation.service.test.ts",
+        "pnpm --filter @o-okul/worker exec vitest run src/jobs/report-generation-job.test.ts",
+        "pnpm --filter @o-okul/api exec vitest run src/report/report-generation.service.test.ts",
         "pnpm ai-report-summary:check"
       ],
       "evidenceReferences": [
@@ -595,7 +595,7 @@
       "environment": "production",
       "checkedAt": "2026-05-30",
       "tester": "qa-owner-redacted",
-      "releaseCandidate": "ghcr.io/example/uzman-hocam/api:2026-06-15.1",
+      "releaseCandidate": "ghcr.io/example/o-okul/api:2026-06-15.1",
       "appUrl": "https://staging.example.test",
       "apiUrl": "https://staging-api.example.test",
       "commandsPassed": [
@@ -1088,8 +1088,8 @@
       "environment": "production",
       "checkedAt": "2026-05-30",
       "tester": "qa-owner-redacted",
-      "releaseCandidate": "ghcr.io/example/uzman-hocam/api:2026-06-15.1",
-      "rollbackImageTag": "ghcr.io/example/uzman-hocam/api:2026-06-14.2",
+      "releaseCandidate": "ghcr.io/example/o-okul/api:2026-06-15.1",
+      "rollbackImageTag": "ghcr.io/example/o-okul/api:2026-06-14.2",
       "restoreBackupReference": "s3://backup-bucket/base/2026-05-30.dump",
       "liveExamCyclePassed": true,
       "flowsVerified": [

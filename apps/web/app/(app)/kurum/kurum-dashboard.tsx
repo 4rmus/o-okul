@@ -13,8 +13,8 @@ import {
   StatusBadge,
   type DataTableColumn,
   type StatusBadgeProps,
-} from "@uzman-hocam/ui";
-import type { ReportSnapshotRecord } from "@uzman-hocam/shared-types";
+} from "@o-okul/ui";
+import type { ReportSnapshotRecord } from "@o-okul/shared-types";
 import { useAuth } from "../../providers.js";
 import { apiBaseUrl, apiRequest } from "../../../src/api-client.js";
 import {

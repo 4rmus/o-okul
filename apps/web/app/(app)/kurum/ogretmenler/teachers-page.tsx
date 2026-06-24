@@ -17,8 +17,8 @@ import {
   StatusBadge,
   type DataTableColumn,
   useConfirmDialog,
-} from "@uzman-hocam/ui";
-import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
+} from "@o-okul/ui";
+import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@o-okul/shared-types";
 import { Eye, Pencil, Plus, Send, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";

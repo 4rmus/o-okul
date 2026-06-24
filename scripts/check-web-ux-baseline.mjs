@@ -124,7 +124,7 @@ requireNoTokensInFiles("apps/web/app/(app)", appSourcePaths, [
 ]);
 
 requireScript("web:ux-baseline:check", "node scripts/check-web-ux-baseline.mjs");
-requireScript("web:ux-contract:check", "pnpm --filter @uzman-hocam/web ux-contract");
+requireScript("web:ux-contract:check", "pnpm --filter @o-okul/web ux-contract");
 
 if (uiPackageJson.scripts?.test !== "tsc -p tsconfig.contract.json --noEmit") {
   failures.push("packages/ui/package.json test script must run the primitive contract tsconfig.");
@@ -191,7 +191,7 @@ requireTokens("apps/web/e2e-next/a11y-next.spec.ts", [
 ]);
 
 requireTokens("apps/web/app/(auth)/login/page.tsx", [
-  'import { Button, Checkbox, Field, Input, SegmentedControl } from "@uzman-hocam/ui";',
+  'import { Button, Checkbox, Field, Input, SegmentedControl } from "@o-okul/ui";',
   'const demoLoginEnabled = process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN === "true" || process.env.NODE_ENV !== "production";',
   'useState(demoLoginEnabled ? "admin@demo.local" : "")',
   'useState(demoLoginEnabled ? "password" : "")',
@@ -219,7 +219,7 @@ requireNoTokens("apps/web/app/(auth)/login/page.tsx", [
 ]);
 
 requireTokens("apps/web/src/list-controls.tsx", [
-  'import { Button, Field, Input, Select } from "@uzman-hocam/ui";',
+  'import { Button, Field, Input, Select } from "@o-okul/ui";',
   '<Field className="next-list-search" label="Ara">',
   '<Input',
   'aria-label="Ara"',
@@ -4803,11 +4803,11 @@ requireTokens("apps/web/app/page.tsx", [
 ]);
 
 requireTokens("apps/web/playwright.next.config.ts", [
-  "pnpm --filter @uzman-hocam/ui build && pnpm --filter @uzman-hocam/web next:dev",
+  "pnpm --filter @o-okul/ui build && pnpm --filter @o-okul/web next:dev",
 ]);
 
 for (const workflowPath of [".github/workflows/ci.yml", ".github/workflows/staging-deploy.yml"]) {
-  requireTokens(workflowPath, ["pnpm --filter @uzman-hocam/web exec playwright install --with-deps chromium"]);
+  requireTokens(workflowPath, ["pnpm --filter @o-okul/web exec playwright install --with-deps chromium"]);
 }
 
 requireTokens("docs/phase-6-production-readiness.md", [

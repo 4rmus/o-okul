@@ -55,7 +55,7 @@
       "kvkk.guardian_pii_purged",
       "kvkk.user_pii_purged"
     ],
-    "command": "pnpm --filter @uzman-hocam/api exec vitest run src/audit-log/audit-log.service.test.ts src/audit-log/audit-log.e2e.test.ts"
+    "command": "pnpm --filter @o-okul/api exec vitest run src/audit-log/audit-log.service.test.ts src/audit-log/audit-log.e2e.test.ts"
   },
   "gaps": []
 }

@@ -5,7 +5,7 @@ import type {
   AnswerKeyItemInput,
   AnswerKeyRecord,
   AnswerKeyScoringConfig,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { type Queryable, type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 import {
   summarizeAnswerKeyQuestions,

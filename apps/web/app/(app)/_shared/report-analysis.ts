@@ -5,7 +5,7 @@ import type {
   ReportSnapshotRecord,
   ReportStudentStatistics,
   StudentRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { reportSuccessRate } from "./report-metrics.js";
 
 type SnapshotStudent = NonNullable<NonNullable<ReportSnapshotRecord["snapshotData"]>["students"]>[number] & {

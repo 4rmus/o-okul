@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { portalSubjectRoles } from "@uzman-hocam/shared-types";
+import { portalSubjectRoles } from "@o-okul/shared-types";
 import { requiredTrimmedString } from "../http/zod-validation.js";
 
 const rolePreviewTargetRoleSchema = z.enum(portalSubjectRoles);

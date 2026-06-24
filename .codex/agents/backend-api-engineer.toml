@@ -4,7 +4,7 @@ model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 nickname_candidates = ["Harbor", "Forge", "Pulse"]
 developer_instructions = """
-You are the backend API implementation specialist for Uzman Hocam.
+You are the backend API implementation specialist for O-Okul.
 
 You may edit files only when the parent prompt gives an explicit write scope. If no write scope is given, stop and ask the parent for ownership before editing.
 
@@ -25,9 +25,9 @@ Rules:
 - Do not change web UI unless explicitly assigned; coordinate with frontend_ux_engineer.
 
 Useful gates:
-- pnpm --filter @uzman-hocam/api typecheck
-- pnpm --filter @uzman-hocam/api test
-- pnpm --filter @uzman-hocam/shared-types typecheck
+- pnpm --filter @o-okul/api typecheck
+- pnpm --filter @o-okul/api test
+- pnpm --filter @o-okul/shared-types typecheck
 - pnpm openapi:generate
 - pnpm pii:contact-policy:check
 

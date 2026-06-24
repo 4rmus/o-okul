@@ -105,7 +105,7 @@ Use backend_api_engineer for a scoped implementation.
 Owned paths: apps/api/src/payment/**, packages/shared-types/src/domain.ts.
 Forbidden paths: apps/web/**, packages/db/**.
 Task: add the requested payment-plan status transition and targeted tests.
-Validation: pnpm --filter @uzman-hocam/api test; pnpm --filter @uzman-hocam/shared-types typecheck.
+Validation: pnpm --filter @o-okul/api test; pnpm --filter @o-okul/shared-types typecheck.
 ```
 
 ```text

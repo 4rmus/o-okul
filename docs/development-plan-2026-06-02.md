@@ -18,10 +18,10 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - 🧱 `PostgresAnswerKeyRepository` eklendi; `AnswerKey.keyData` mevcut worker sözleşmesiyle uyumlu `{ questions }` JSON biçiminde yazılır.
 
 **Faz 0 doğrulama kanıtı:**
-- `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/optical-answer-parser.test.ts` → 1 dosya, 8 test geçti.
-- `corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/answer-key.controller.e2e.test.ts src/exam/postgres-answer-key-repository.test.ts` → 2 dosya, 9 test geçti.
-- `corepack pnpm --filter @uzman-hocam/worker typecheck` → geçti.
-- `corepack pnpm --filter @uzman-hocam/api typecheck` → geçti.
+- `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/optical-answer-parser.test.ts` → 1 dosya, 8 test geçti.
+- `corepack pnpm --filter @o-okul/api exec vitest run src/exam/answer-key.controller.e2e.test.ts src/exam/postgres-answer-key-repository.test.ts` → 2 dosya, 9 test geçti.
+- `corepack pnpm --filter @o-okul/worker typecheck` → geçti.
+- `corepack pnpm --filter @o-okul/api typecheck` → geçti.
 - `corepack pnpm db:rls:check` → 39 tenant tablosu doğrulandı, geçti.
 
 **Faz 1 backend eşiği:** gerçek veri motoru, karantina çözümü, TC(hash)+OKUL NO eşleme ve idempotent sonuç üretimi kanıtlandı. Sıradaki ana eşik Faz 2: karne/rapor yüzeyinde gerçek `ExamResult` verisini görünür yapmak.
@@ -31,8 +31,8 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - ⚙️ `OpticalAnswerParser` fixed answers alanında `segments[]` varsa ders bloklarını sırayla birleştiriyor.
 - ✅ Gerçek `ornek-veriler/iSEM .txt` ilk satırı 6 ders bloğundan 90 ardışık soruya çevriliyor; Matematik içindeki boş cevaplar `""` olarak korunuyor.
 - ✅ `PostgresOpticalParseInputAdapter` segmentli fixed ParserConfig'i kabul ediyor, öğrenci no/kitapçık alanlarında segment kullanımına izin vermiyor.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/optical-answer-parser.test.ts src/jobs/postgres-optical-parse-input-adapter.test.ts` → 2 dosya, 14 test geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/worker typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/optical-answer-parser.test.ts src/jobs/postgres-optical-parse-input-adapter.test.ts` → 2 dosya, 14 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/worker typecheck` → geçti.
 
 **Faz 1 devam — kitapçık hizalama + variant zemini tamamlandı:**
 - ⚙️ `alignAnswersToMaster(answers, bookletType, variants)` saf fonksiyonu eklendi. A kitapçığı cevapları değişmez; B gibi variantlar `permutation` dizisiyle master sıraya çevrilir.
@@ -40,9 +40,9 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - 🧱 `ExamBookletVariant` Prisma modeli ve migration eklendi: `{tenantId, examId, code, permutation, deletedAt}`; `@@unique([tenantId, examId, code])`; RLS policy ve app grant var.
 - 🧱 `packages/db/scripts/check-rls.mjs`, `check-rls-live.mjs`, `packages/db/src/index.ts` ve `scripts/check-tenant-db-access.mjs` yeni tabloyu kapsıyor.
 - ⚙️ `PostgresExamEvaluationAdapter` `ExamParticipant.bookletType` ve sınavın `ExamBookletVariant` kayıtlarını scoring input'a taşıyor.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/booklet-alignment.test.ts src/jobs/exam-evaluation-job.test.ts src/jobs/postgres-exam-evaluation-adapter.test.ts` → 3 dosya, 18 test geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/worker typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/db exec prisma validate --schema prisma/schema.prisma` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/booklet-alignment.test.ts src/jobs/exam-evaluation-job.test.ts src/jobs/postgres-exam-evaluation-adapter.test.ts` → 3 dosya, 18 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/worker typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/db exec prisma validate --schema prisma/schema.prisma` → geçti.
 - Kanıt: `corepack pnpm db:rls:check` → 40 tenant tablosu doğrulandı, geçti.
 - Kanıt: `corepack pnpm tenant-db:check` → geçti.
 
@@ -53,46 +53,46 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - ✅ Gerçek veri nüansı doğrulandı: `SORU NO` ve `B KARŞILIĞI` global 1..90 değil, ders içi yerel numaradır. Importer satır sırasını global soru numarası kabul eder, `B KARŞILIĞI` değerini ders bloğunun global başlangıcına çevirir ve 1..90 B permütasyonu üretir.
 - ⚙️ `KAZANIM` → `outcomeCode`, `KONU` → `topic`, `BRANŞ` → `branch`; `topic` scorer soru satırlarında korunur ama puan hesabını değiştirmez.
 - 🧱 Import sırasında `AnswerKey` ile birlikte `ExamBookletVariant(code="B")` aynı tenant transaction içinde upsert edilir.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/answer-key-excel-import.service.test.ts src/exam/answer-key.controller.e2e.test.ts src/exam/postgres-answer-key-repository.test.ts src/exam/parser-config-suggestion.service.test.ts` → 4 dosya, 21 test geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/optical-answer-parser.test.ts` → 1 dosya, 10 test geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api typecheck`, `--filter @uzman-hocam/worker typecheck`, `--filter @uzman-hocam/shared-types typecheck` → geçti.
-- Not: `@uzman-hocam/shared-types` runtime export'u `dist` kullandığı için `corepack pnpm --filter @uzman-hocam/shared-types build` çalıştırıldı.
+- Kanıt: `corepack pnpm --filter @o-okul/api exec vitest run src/exam/answer-key-excel-import.service.test.ts src/exam/answer-key.controller.e2e.test.ts src/exam/postgres-answer-key-repository.test.ts src/exam/parser-config-suggestion.service.test.ts` → 4 dosya, 21 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/optical-answer-parser.test.ts` → 1 dosya, 10 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api typecheck`, `--filter @o-okul/worker typecheck`, `--filter @o-okul/shared-types typecheck` → geçti.
+- Not: `@o-okul/shared-types` runtime export'u `dist` kullandığı için `corepack pnpm --filter @o-okul/shared-types build` çalıştırıldı.
 
 **Faz 1 devam — 3 gerçek deneme parse→hizala→puan fixture zinciri tamamlandı:**
 - ✅ `apps/worker/src/jobs/optik-7108-real-pipeline.test.ts` eklendi ve 3 gerçek denemeye genişletildi. Test gerçek `ornek-veriler/{iSEM .txt, 3D.txt, MUBA.txt}` dosyalarından ilk A ve ilk B satırını, ilgili gerçek `*Detaylı Cevap Anahtarı.xlsx` dosyasından cevap anahtarını ve B permütasyonunu okur.
 - ✅ Zincir: `OPTIK_7108_LGS` preset → `OpticalAnswerParser` → `alignAnswersToMaster` → `scoreExam`.
 - ✅ Kanıt skorlar (`wrongPenalty=1/3`): iSEM A `56/32/2 net≈45.3333`, iSEM B `44/31/15 net≈33.6667`; 3D A `48/24/18 net=40`, 3D B `59/21/10 net=52`; MUBA A `89/1/0 net≈88.6667`, MUBA B `82/8/0 net≈79.3333`.
 - ✅ B permütasyonu gerçek Excel'den ders içi `B KARŞILIĞI` değerleri global soru sırasına çevrilerek üretilir; iSEM ilk blok ters `20..1`, 3D ve MUBA farklı B dizilimleriyle ayrıca sabitlendi.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/optik-7108-real-pipeline.test.ts src/jobs/optical-answer-parser.test.ts src/jobs/booklet-alignment.test.ts` → 3 dosya, 18 test geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/worker typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/optik-7108-real-pipeline.test.ts src/jobs/optical-answer-parser.test.ts src/jobs/booklet-alignment.test.ts` → 3 dosya, 18 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/worker typecheck` → geçti.
 
 **Faz 1 devam — seed gerçek parser pipeline'a taşındı:**
 - ⚙️ `packages/db/prisma/seed-exams.ts` elle yazılmış cevap anahtarı/öğrenci cevapları/puan dizileri yerine gerçek `ornek-veriler/{iSEM .txt, 3D.txt, MUBA.txt}` ve ilgili gerçek `*Detaylı Cevap Anahtarı.xlsx` dosyalarını okur.
 - ⚙️ Seed zinciri artık üretim motorunu kullanır: `OPTIK_7108_LGS` preset → `OpticalAnswerParser` → `alignAnswersToMaster` → `scoreExam`. Demo öğrenci kümesi korunur; gerçek TXT'de satırı olmayan öğrenci için sahte sınav sonucu üretilmez.
 - ⚙️ `AnswerKey.keyData` gerçek `{ questions }`, `ExamBookletVariant(code="B")` gerçek B permütasyonu, `ParsedAnswer.rowNumber` gerçek optik satırı, `ExamResult.scoreData` gerçek hizalanmış puan sonucu ile yazılır. Yanlış katsayısı LGS kuralına çekildi: `wrongPenalty=1/3`.
-- ✅ Dry-run kanıtı: `corepack pnpm --filter @uzman-hocam/db exec tsx prisma/seed-exams.ts --dry-run` → iSEM 17, MUBA 17, 3D 16 demo öğrenci eşleşti; ADIGÜZEL üç denemede skorlandı.
-- ✅ Yerel DB kanıtı: `docker compose up -d postgres`; `corepack pnpm --filter @uzman-hocam/db db:migrate`; `corepack pnpm --filter @uzman-hocam/db db:seed-exams` → `Seeded 19 students across 3 real exams`.
+- ✅ Dry-run kanıtı: `corepack pnpm --filter @o-okul/db exec tsx prisma/seed-exams.ts --dry-run` → iSEM 17, MUBA 17, 3D 16 demo öğrenci eşleşti; ADIGÜZEL üç denemede skorlandı.
+- ✅ Yerel DB kanıtı: `docker compose up -d postgres`; `corepack pnpm --filter @o-okul/db db:migrate`; `corepack pnpm --filter @o-okul/db db:seed-exams` → `Seeded 19 students across 3 real exams`.
 - ✅ DB doğrulama: demo sınav sonuçları `50` adet; sınav bazında iSEM `17`, MUBA `17`, 3D `16` result; her sınavda 1 B variant. ADIGÜZEL skorları DB'de: iSEM B `80/10/0 net≈76.6667`, MUBA A `86/4/0 net≈84.6667`, 3D B `86/4/0 net≈84.6667`.
-- ✅ Tekrar seed kanıtı: `corepack pnpm --filter @uzman-hocam/db db:seed-exams` ikinci kez çalıştı; demo sınav `ExamResult` sayısı `50` kaldı.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/db typecheck` → geçti.
+- ✅ Tekrar seed kanıtı: `corepack pnpm --filter @o-okul/db db:seed-exams` ikinci kez çalıştı; demo sınav `ExamResult` sayısı `50` kaldı.
+- Kanıt: `corepack pnpm --filter @o-okul/db typecheck` → geçti.
 
 **Faz 1 devam — ReportSnapshot STALE yolu tamamlandı:**
 - ⚙️ `ReportSnapshotStore` artık `markStaleByExam(tenantId, examId, reason)` destekler. In-memory store snapshot'ı `status="STALE"` yapar; Postgres store tenant+sınav sınırıyla `ReportSnapshot.status`, `staleAt`, `inputRefs.staleReason` ve `updatedAt` günceller.
 - ⚙️ `AnswerKeyService.create()` ve `publish()` başarılı yazımdan sonra ilgili sınav snapshot'larını STALE yapar; `dryRun`, geçersiz istek ve conflict yolları snapshot'a dokunmaz.
 - ⚙️ `ParserConfigApprovalService.approve()` başarılı onaydan sonra ilgili sınav snapshot'larını STALE yapar; öneri endpoint'i ve başarısız onay yolları snapshot'a dokunmaz.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api exec vitest run src/report/report-snapshot-store.test.ts src/exam/parser-config-approval.service.test.ts src/exam/parser-config.controller.e2e.test.ts src/exam/answer-key.controller.e2e.test.ts` → 4 dosya, 27 test geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/postgres-answer-key-repository.test.ts src/exam/postgres-parser-config-repository.test.ts src/report/report-snapshot-store.test.ts` → 3 dosya, 11 test geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api exec vitest run src/report/report-snapshot-store.test.ts src/exam/parser-config-approval.service.test.ts src/exam/parser-config.controller.e2e.test.ts src/exam/answer-key.controller.e2e.test.ts` → 4 dosya, 27 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api exec vitest run src/exam/postgres-answer-key-repository.test.ts src/exam/postgres-parser-config-repository.test.ts src/report/report-snapshot-store.test.ts` → 3 dosya, 11 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api typecheck` → geçti.
 - Kanıt: `corepack pnpm db:rls:check` → 40 tenant tablosu doğrulandı, geçti.
 
 **Faz 1 devam — seed determinism/idempotency regresyonu eklendi:**
 - ✅ `packages/db/prisma/seed-exams.ts` import edilince DB bağlantısı açmaz; `buildSeedExams()` gerçek TXT/XLSX girdilerinden saf seed verisi üretir, CLI olarak çalıştırıldığında DB'ye yazar.
 - ✅ `packages/db/prisma/seed-exams.test.ts` iki kez `buildSeedExams()` çağırıp çıktının birebir aynı olduğunu doğrular. Aynı test 3 gerçek denemede `questionCount=90`, B permütasyon başları, demo eşleşme sayıları, eşleşmeyen satır sayıları ve ADIGÜZEL skorlarını sabitler.
 - ✅ Gerçek dosya karantina/eşleşmeyen satır kanıtı fixture'a bağlandı: iSEM `237`, MUBA `226`, 3D `211` eşleşmeyen satır; `studentNo=1606` için sahte sonuç üretilmiyor.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/db exec vitest run prisma/seed-exams.test.ts` → 1 dosya, 1 test geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/db exec tsx prisma/seed-exams.ts --dry-run` → deterministik özet geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/db db:seed-exams` ikinci kez geçti; DB'de demo sınav `ExamResult` sayısı `50` kaldı.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/db typecheck`, `corepack pnpm db:rls:check` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/db exec vitest run prisma/seed-exams.test.ts` → 1 dosya, 1 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/db exec tsx prisma/seed-exams.ts --dry-run` → deterministik özet geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/db db:seed-exams` ikinci kez geçti; DB'de demo sınav `ExamResult` sayısı `50` kaldı.
+- Kanıt: `corepack pnpm --filter @o-okul/db typecheck`, `corepack pnpm db:rls:check` → geçti.
 
 **Faz 1 devam — karantina listeleme/çözümleme API yüzeyi tamamlandı:**
 - ⚙️ `GET /exams/:examId/raw-imports/:rawImportId/quarantines` eklendi; yalnız `TENANT_ADMIN`, tenant+sınav+rawImport sınırıyla açık/çözülmüş karantina satırlarını listeler.
@@ -100,17 +100,17 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - 🧱 `PostgresRawImportQuarantineStore` öğrenci varlığını aynı tenant içinde `Student` tablosuyla doğrular; silinmiş öğrenciye, silinmiş karantinaya veya zaten çözülmüş satıra yazmaz.
 - ✅ Worker yazma yolu zaten `status='OPEN'` kaydı güncelliyor; çözülmüş satır tekrar parse çalışınca karantina olarak geri açılmaz.
 - Kalan sınır: çözülmüş karantina satırından otomatik `ParsedAnswer`/`ExamResult` üretimi bu dilime alınmadı; ayrı idempotent reprocess adımı olmalı.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/raw-import.controller.e2e.test.ts src/exam/raw-import-quarantine-store.test.ts` → 2 dosya, 8 test geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api typecheck`, `corepack pnpm db:rls:check` → geçti; RLS: 40 tenant tablosu doğrulandı.
+- Kanıt: `corepack pnpm --filter @o-okul/api exec vitest run src/exam/raw-import.controller.e2e.test.ts src/exam/raw-import-quarantine-store.test.ts` → 2 dosya, 8 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api typecheck`, `corepack pnpm db:rls:check` → geçti; RLS: 40 tenant tablosu doğrulandı.
 
 **Faz 1 devam — TC(hash)+OKUL NO eşleme sertleşmesi tamamlandı:**
 - ⚙️ `ParserConfig.fieldMapping` artık opsiyonel `nationalId` alanını taşıyabilir; `OPTIK_7108_LGS` preset'i TC kolonunu `{ start: 36, length: 11 }` olarak verir.
 - ⚙️ `PostgresOpticalParseInputAdapter` katılımcıları yüklerken `Student.nationalIdHash` değerini de worker'a taşır.
 - ⚙️ `OpticalAnswerParser` satırda TC varsa yalnız hash üretir ve önce `nationalIdHash` ile eşleştirir; TC yoksa eski `studentNo` / `participantNo` yolu korunur. Böylece OKUL NO çakışmasında TC hash doğru participante öncelik verir.
 - 🔐 Karantina `rawRow.line` artık `nationalId` alanı tanımlıysa TC'yi düz metin saklamaz; `*******0146` biçiminde maskeler.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/optical-answer-parser.test.ts src/jobs/postgres-optical-parse-input-adapter.test.ts src/jobs/optik-7108-real-pipeline.test.ts` → 3 dosya, 20 test geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/parser-config-suggestion.service.test.ts src/exam/parser-config.controller.e2e.test.ts` → 2 dosya, 17 test geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/worker typecheck`, `corepack pnpm --filter @uzman-hocam/shared-types typecheck`, `corepack pnpm --filter @uzman-hocam/shared-types build`, `corepack pnpm --filter @uzman-hocam/api typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/optical-answer-parser.test.ts src/jobs/postgres-optical-parse-input-adapter.test.ts src/jobs/optik-7108-real-pipeline.test.ts` → 3 dosya, 20 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api exec vitest run src/exam/parser-config-suggestion.service.test.ts src/exam/parser-config.controller.e2e.test.ts` → 2 dosya, 17 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/worker typecheck`, `corepack pnpm --filter @o-okul/shared-types typecheck`, `corepack pnpm --filter @o-okul/shared-types build`, `corepack pnpm --filter @o-okul/api typecheck` → geçti.
 
 **Faz 1 backend kapanış — çözülmüş karantinadan parse→puan reprocess tamamlandı:**
 - ⚙️ `RawImportQuarantineService.resolve()` artık çözüm sonrası `exam-evaluation` işini kuyruğa koyar. Job payload kalıcı referansları taşır: `participantId`, `rawImportId`, yayınlı `answerKeyId`, `entityId=quarantineId`, `contentHash=RawImport.sha256`.
@@ -118,72 +118,72 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - ⚙️ `OpticalAnswerParser.parseResolvedQuarantine()` eklendi; çözülmüş tek satırı tekrar öğrenci araması yapmadan verilen `participantId` ile `MATCHED` `ParsedAnswer` adayına çevirir. Cevap satırı bozuksa sessiz puan üretmez.
 - ⚙️ `PostgresExamEvaluationAdapter.loadInput()` `ParsedAnswer` bulamazsa çözülmüş `ImportQuarantine` satırından cevapları materyalize eder, `ParsedAnswer` upsert eder ve ardından mevcut puanlama yolundan `ExamResult` üretir.
 - ✅ DB sonuç idempotency kanıtı sertleşti: `ExamResult` insert conflict durumunda `DO UPDATE` yoktur; mevcut `resultKey` sonucu okunur ve yeni skorla overwrite edilmez.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/raw-import.controller.e2e.test.ts src/exam/raw-import-quarantine-store.test.ts` → 2 dosya, 10 test geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/optical-answer-parser.test.ts src/jobs/postgres-exam-evaluation-adapter.test.ts src/jobs/exam-evaluation-job.test.ts` → 3 dosya, 28 test geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/postgres-exam-evaluation-adapter.test.ts src/jobs/exam-evaluation-job.test.ts` → 2 dosya, 14 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api exec vitest run src/exam/raw-import.controller.e2e.test.ts src/exam/raw-import-quarantine-store.test.ts` → 2 dosya, 10 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/optical-answer-parser.test.ts src/jobs/postgres-exam-evaluation-adapter.test.ts src/jobs/exam-evaluation-job.test.ts` → 3 dosya, 28 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/postgres-exam-evaluation-adapter.test.ts src/jobs/exam-evaluation-job.test.ts` → 2 dosya, 14 test geçti.
 
 **Faz 2 başladı — `/kurum/raporlar` gerçek snapshot/karne yüzeyi eklendi:**
 - 🎨 `/kurum/raporlar` artık hazır `ReportSnapshot` listesinden seçilen snapshot'ın ilk öğrenci karnesini de çeker: `GET /exams/:examId/reports/snapshots/:snapshotId/students/:studentId`.
 - 🎨 Salt metin özet yerine gerçek snapshot verisinden branş net grafiği, kazanım analizi, sınıf karşılaştırması ve öğrenci karne özeti gösterilir. Karne özetinde toplam D/Y/B/net, standart puan, genel sıralama, gelişim ve hata kitapçığı sayısı görünür.
 - ✅ E2E fixture'ı `outcomes`, `statistics.general/class`, öğrenci snapshot karnesi, gelişim ve hata kitapçığı verilerini kapsayacak şekilde genişletildi.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login"` → 1 test geçti; kurum paneli, öğrenci 360 ve `/kurum/raporlar` yeni karne blokları doğrulandı.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login"` → 1 test geçti; kurum paneli, öğrenci 360 ve `/kurum/raporlar` yeni karne blokları doğrulandı.
 - Kalan sınır: ADIGÜZEL hedef PNG bazıyla UI/portal karne screenshot pixel-diff ölçümü başladı ama görsel eşik henüz geçer değil. Live UI+worker birleşik koşusu ve rol portal refactor'u kapandı.
 
 **Faz 2 devam — PDF/Excel export'a psikometri taşındı:**
 - ⚙️ `exportSnapshotExcel()` öğrenci satırlarına genel sıra, genel yüzdelik, sınıf sıra ve sınıf yüzdelik kolonlarını ekler.
 - ⚙️ Excel export'a `BranchStatistics` sayfası eklendi; öğrenci+branş bazında standart puan, genel/sınıf sıra ve yüzdelik görünür.
 - ⚙️ PDF HTML ve fallback çıktısı öğrenci özetinde genel/sınıf sırasını gösterir; böylece `statistics.general/class` yalnız API JSON'unda kalmaz.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api exec vitest run src/report/report-generation.service.test.ts src/report/report-generation.controller.e2e.test.ts` → 2 dosya, 25 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api exec vitest run src/report/report-generation.service.test.ts src/report/report-generation.controller.e2e.test.ts` → 2 dosya, 25 test geçti.
 
 **Faz 2 devam — ADIGÜZEL hedef PDF karşılaştırması otomatikleşti:**
 - ✅ `packages/db/prisma/seed-exams.test.ts` üç gerçek karne PDF'ini `/ToUnicode` haritasıyla metne çevirir ve ADIGÜZEL (`OKUL NO 176`) için sınav başlığı, öğrenci adı, kitapçık, toplam doğru/yanlış/boş/net değerlerini seed skoruyla karşılaştırır.
 - ✅ PDF hedefleriyle doğrulanan toplamlar: iSEM `80/10/0 net=76.67`, MUBA `86/4/0 net=84.67`, 3D `86/4/0 net=84.67`.
 - ✅ Görsel-diff için hedef baz kapısı eklendi: `scripts/check-adiguzel-pdf-visual-targets.mjs` üç hedef karne PDF'ini `sips` ile geçici PNG'ye render eder; her hedefin `595x842` boyutunu ve PNG SHA-256 hash'ini doğrular.
 - Kanıt: `corepack pnpm karne:visual-targets` → 3 hedef geçti; 3D `d3a54d78...`, MUBA `e7663415...`, iSEM `7fc8740c...`.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/db exec vitest run prisma/seed-exams.test.ts` → 1 dosya, 2 test geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/db typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/db exec vitest run prisma/seed-exams.test.ts` → 1 dosya, 2 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/db typecheck` → geçti.
 - Kalan sınır: bu otomatik karşılaştırma sayısal toplamı ve hedef PDF görsel bazını kapatır; UI/portal karne screenshot'ını hedef PNG ile pixel-diff eşiğinden geçirme Faz 3/4 kapsamında açık.
 
 **Faz 4 başladı — rol portallarında psikometri görünür oldu:**
 - 🎨 `apps/web/app/(app)/role-portals.tsx` içindeki ortak `ReportPanel`, öğrenci/veli/öğretmen portalında `ReportStudentSnapshot.statistics` verisini gösterir: genel sıra, sınıf sıra ve branş psikometri tablosu. Öğrenci/veli karnesinde `outcomes` verisinden kazanım radar paneli de görünür.
 - ✅ Ortak `ReportPanel` davranış değiştirmeden `apps/web/app/(app)/portals/_shared/report-panel.tsx` dosyasına taşındı; ardından öğrenci profil/veli ilişkileri/sınıf-kayıt geçmişi panelleri `apps/web/app/(app)/portals/_shared/student-panels.tsx`, duyuru paneli `apps/web/app/(app)/portals/_shared/announcements-panel.tsx`, devamsızlık/yoklama/öğretmen notu panelleri `apps/web/app/(app)/portals/_shared/activity-panels.tsx`, destek talebi paneli `apps/web/app/(app)/portals/_shared/support-tickets-panel.tsx`, ödev/materyal panelleri `apps/web/app/(app)/portals/_shared/homework-panels.tsx`, portal çerçevesi/erişim önizleme/metric grid `apps/web/app/(app)/portals/_shared/portal-shell.tsx`, veli bildirim/ilişki/ödeme panelleri `apps/web/app/(app)/portals/_shared/guardian-panels.tsx`, öğretmen bugünkü ders/profil/sınıf rapor panelleri `apps/web/app/(app)/portals/_shared/teacher-panels.tsx` içine ayrıldı. Ana sayfa bölmesi de kapandı: `StudentPortalPage`, `GuardianPortalPage` ve `TeacherPortalPage` kendi dosyalarına taşındı; `role-portals.tsx` yalnız sabit re-export köprüsü olarak kaldı ve 2374 satırdan 5 satıra indi.
 - ✅ E2E fixture'ı öğrenci/veli `latest` rapor yollarında `exam-demo-isem-lgs-1` id'sini de kapsar; böylece portal gerçek `portalExamId` ile rapor, progress ve hata kitapçığı verisini alır.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next rol portalları bağlı kişi verisini gösterir"` → 1 test geçti; öğrenci, öğretmen ve veli portalında genel/sınıf sıra ve branş psikometri tablosu doğrulandı.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next rol portalları bağlı kişi verisini gösterir"` → 1 test geçti; öğrenci, öğretmen ve veli portalında genel/sınıf sıra ve branş psikometri tablosu doğrulandı.
 - Kalan sınır: portal karne screenshot'ı hedef PDF PNG bazıyla ölçüldü ama fark oranı hâlâ kabul eşiği ilan edecek kadar düşük değil. Negatif subject-scope matrisi Faz 4'te açık.
 
 **Faz 4 devam — öğretmen rapor subject-scope sertleşti:**
 - 🔐 `ReportGenerationService` öğretmen rapor erişiminde artık yalnız öğrenci/sınıf bağını değil, `TeacherAssignment.courseId` ve `termId` sınırını da dikkate alır. Ders/dönem sınırlı öğretmen başka ders snapshot'ındaki aynı öğrencinin raporunu okuyamaz; gelişim raporunda bağlam dışı snapshot noktaları elenir; snapshot listesi/export ise kapsam dışı öğrenciyi `0 kayıt` seviyesine düşürür.
 - ✅ `me-access-matrix.e2e.test.ts` öğretmen rapor uçlarını kapsar: öğretmen ve tenant admin pozitif, öğrenci/veli negatif; öğretmenin başka tenant öğrencisine IDOR denemesinde cevap gövdesi öğrenci id'si sızdırmaz.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api exec vitest run src/report/report-generation.service.test.ts src/me/me-access-matrix.e2e.test.ts` → 2 dosya, 21 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api exec vitest run src/report/report-generation.service.test.ts src/me/me-access-matrix.e2e.test.ts` → 2 dosya, 21 test geçti.
 - Kalan sınır: kurum UI ve portal karne screenshot → hedef PDF PNG pixel-diff ölçümü mevcut ama fark oranı yüksek; live UI+worker birleşik optik→rapor koşusu kapandı.
 
 **Faz 3 başladı — `/kurum/sinavlar` yönetim yüzeyi eklendi:**
 - 🎨 Menüde `Sınav ve Rapor > Sınavlar` bağlantısı açıldı; `/kurum/sinavlar` gerçek `GET /exams`, `POST /exams` ve `POST /exams/:examId/publish` API'lerini kullanır.
 - 🎨 Kurum admin ekrandan sınav oluşturabilir, taslak/yayında durumunu görebilir ve taslak sınavı yayınlayabilir. Başlık validasyonu web formunda da yakalanır.
 - ✅ Playwright fixture'ı sınav oluşturma ve yayınlama isteklerini stateful biçimde karşılar; kurum paneli akışında boş başlık hatası, yeni sınav satırı ve yayınlama doğrulandı.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti.
 - Kalan sınır: katılımcı seçimi, fixture tabanlı optik→rapor UI smoke ve live UI+worker birleşik koşusu bağlandı; UI/portal karne screenshot → hedef PDF PNG pixel-diff hâlâ açık.
 
 **Faz 3 devam — `ExamParticipant` API yüzeyi açıldı:**
 - ⚙️ `GET /exams/:examId/participants` öğretmen rolüne açıldı; sınav yoksa `EXAM_NOT_FOUND` ile 404 döner.
 - ⚙️ `POST /exams/:examId/participants` kurum yöneticisine açıldı; `studentId` zorunlu, `participantNo` ve `bookletType` isteğe bağlıdır.
 - 🔐 Aynı tenant/sınav/öğrenci için ikinci kayıt `EXAM_PARTICIPANT_EXISTS` ile 409 döner; Postgres tarafında mevcut unique index bu kuralı korur.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/shared-types typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/exam.controller.e2e.test.ts` → 1 dosya, 9 test geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/shared-types typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api exec vitest run src/exam/exam.controller.e2e.test.ts` → 1 dosya, 9 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api typecheck` → geçti.
 - Kalan sınır: `/kurum/sinavlar` ekranında tekil ve sınıf filtreli toplu öğrenci seçici bağlandı; live UI+worker birleşik optik→rapor koşusu kapandı.
 
 **Faz 3 devam — `/kurum/sinavlar` katılımcı seçici bağlandı:**
 - 🎨 Sınav satırına `Katılımcılar` işlemi eklendi; seçili sınav için katılımcı paneli, öğrenci seçimi, katılımcı no ve kitapçık alanları görünür oldu.
 - ⚙️ Panel gerçek `GET /students`, `GET /exams/:examId/participants` ve `POST /exams/:examId/participants` uçlarını kullanır; eklenen öğrenci tekrar seçim listesinden düşer.
 - ✅ Playwright fixture'ı katılımcı GET/POST uçlarını stateful karşılar; kurum paneli akışında yeni sınava Bora B katılımcı olarak eklendi ve tabloda `201 / B / Kayıtlı` doğrulandı.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti.
 - Kalan sınır: fixture tabanlı optik→rapor UI smoke ve live UI+worker birleşik koşusu kapandı; UI/portal karne görsel yakınsaması Faz 3 açık işi.
 
 **Faz 3 devam — `/kurum/optik` sekmeli operasyon hub'ına dönüştü:**
@@ -192,57 +192,57 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - ⚙️ Optik yükleme sekmesi gerçek `POST /exams/:examId/raw-imports` ile TXT/DAT dosyasını parse kuyruğuna alır; dönen raw import id karantina sekmesine taşınır.
 - ⚙️ Karantina sekmesi gerçek `GET /exams/:examId/raw-imports/:rawImportId/quarantines` ve `POST .../resolve` uçlarıyla öğrenci seçerek çözüm yapar; çözüm sonrası exam-evaluation job bilgisini gösterir.
 - ✅ Playwright fixture'ı cevap anahtarı import, raw import upload ve karantina resolve uçlarını stateful karşılar; kurum paneli akışında `answer-key-v1`, `raw-import-a`, `quarantine-a -> student-a` ve `evaluation-job-a` doğrulandı.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti.
 - Kalan sınır: fixture tabanlı UI zinciri, geniş live smoke ve live UI+worker birleşik koşusu geçti; UI/portal karne screenshot → hedef PDF PNG pixel-diff hâlâ açık.
 
 **Faz 3 devam — cevap anahtarı için 90 satır manuel grid bağlandı:**
 - 🎨 `/kurum/optik > Cevap anahtarı` sekmesine 90 satırlık manuel grid eklendi; LGS branşları varsayılan gelir, şık/kazanım/konu hücreleri düzenlenebilir.
 - ⚙️ Grid gerçek `POST /exams/:examId/answer-keys` ucunu kullanır; `dryRun: true` ile ön kontrol yapar, ardından aynı payload'ı DB'ye kaydeder.
 - ✅ Hızlı giriş için 90 karakterlik şık dizisi grid'e işlenir; Playwright akışında 90 adet `A` şıkkı, 1. soru kazanımı ve konusu girilip `manual-key-v1` dry-run + kayıt doğrulandı.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti.
 - Kalan sınır: fixture tabanlı UI zinciri, geniş live smoke ve live UI+worker birleşik koşusu geçti; UI/portal karne screenshot → hedef PDF PNG pixel-diff hâlâ açık.
 
 **Faz 3 devam — manuel B kitapçık permütasyonu bağlandı:**
 - 🎨 Manuel cevap anahtarı grid'ine `B kitapçık sırası` alanı eklendi; kurum admin 90 adet master soru numarasını boşluk/virgül ile girebilir.
 - ⚙️ Boş bırakılırsa yalnız A anahtarı kaydedilir; doldurulursa 1..90 arası benzersiz 90 sayı zorunludur ve payload `bookletVariants: [{ code: "B", permutation }]` olarak gerçek `POST /exams/:examId/answer-keys` ucuna gider.
 - ✅ Playwright fixture'ı manuel kayıtta `90..1` permütasyonunun payload'a taşındığını doğruladı; dry-run özeti `B: 90 soru` bilgisini gösterdi.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti.
 - Kalan sınır: fixture tabanlı UI zinciri, geniş live smoke ve live UI+worker birleşik koşusu geçti; UI/portal karne screenshot → hedef PDF PNG pixel-diff hâlâ açık.
 
 **Faz 3 devam — sınıf filtreli toplu katılımcı ekleme bağlandı:**
 - 🎨 `/kurum/sinavlar` katılımcı paneline `Toplu katılımcı ekleme` formu eklendi; sınıf filtresi, çoklu öğrenci seçimi, başlangıç no ve ortak kitapçık alanı var.
 - ⚙️ Akış mevcut gerçek `POST /exams/:examId/participants` ucunu her öğrenci için çağırır; eklenen öğrenciler katılımcı listesinden düşer ve liste yeniden yüklenir.
 - ✅ Playwright akışında önce Bora B tekil `201/B` olarak eklendi; ardından Ada A sınıf filtresiyle toplu eklemede `301/A` olarak eklendi ve tabloda doğrulandı.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti.
 - Kalan sınır: fixture tabanlı UI zinciri, geniş live smoke ve live UI+worker birleşik koşusu geçti; UI/portal karne screenshot → hedef PDF PNG pixel-diff hâlâ açık.
 
 **Faz 3 devam — optik akış rapor üretim kuyruğuna bağlandı:**
 - 🎨 `/kurum/optik > Karantina çözümü` sekmesine `Rapor Üretimi` kartı eklendi; optik upload sonrası gelen hash ekranda görünür ve düzenlenebilir.
 - ⚙️ Optik upload dönüşündeki `rawImport.sha256`, `Sonuç hash` alanına otomatik aktarılır; `POST /exams/:examId/reports/generation-jobs` çağrısı `EXAM_RESULT_SUMMARY` ile yapılır.
 - ✅ Playwright fixture'ı `exam-a` için rapor üretim kuyruğunu doğrular; kurum paneli akışında `abcdef1234567890` hash'iyle `report-job-a` kuyruğa alındı.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti.
 - Kalan sınır: fixture tabanlı UI zinciri, geniş live smoke ve live UI+worker birleşik koşusu geçti; UI/portal karne screenshot → hedef PDF PNG pixel-diff hâlâ açık.
 
 **Faz 3 devam — report-generation worker kanıtı yenilendi:**
 - ⚙️ `report-generation` worker job'u `ExamResult` girdilerinden READY `ReportSnapshot` üretir; Postgres adapter `ReportSnapshot` kaydını `READY`, `inputRefs` ve `snapshotData` ile yazar.
 - ✅ BullMQ worker sarmalayıcısı `report-generation` kuyruğunu doğru processor'a taşır; yanlış job adı reddedilir.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/report-generation-job.test.ts src/jobs/postgres-report-generation-adapter.test.ts src/queue/bullmq-worker.test.ts` → 3 dosya, 22 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/report-generation-job.test.ts src/jobs/postgres-report-generation-adapter.test.ts src/queue/bullmq-worker.test.ts` → 3 dosya, 22 test geçti.
 - ✅ Canlı Postgres/Redis üstünde `corepack pnpm report-generation:smoke` geçti; `exam-report-smoke-650f9eb7-e6df-4e2c-804e-1ae7f67bd14a` için `734153a6-70f0-4963-b7b5-1457c9a0d1e8` READY snapshot üretildi.
 - ✅ Canlı raw import smoke geçti; `a2910dde-e0f6-4f27-b1a9-535a21933309` raw import arşivlendi ve parse kuyruğuna alındı.
-- ✅ Gerçek optik pipeline regresyonu yenilendi: `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/optik-7108-real-pipeline.test.ts src/jobs/optical-pilot-fixture.test.ts src/jobs/optical-parse-workflow.test.ts` → 3 dosya, 8 test geçti.
+- ✅ Gerçek optik pipeline regresyonu yenilendi: `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/optik-7108-real-pipeline.test.ts src/jobs/optical-pilot-fixture.test.ts src/jobs/optical-parse-workflow.test.ts` → 3 dosya, 8 test geçti.
 - ✅ Geniş canlı zincir geçti: `corepack pnpm live:smoke` → compose health, migrate, canlı RLS, Postgres store, BullMQ, raw import, report-generation ve backup/restore smoke yeşil. Bu koşuda `41943533-f55a-4a33-ae59-328da7a6d8cd` raw import kuyruğa alındı; `exam-report-smoke-bba6fdc0-12d8-47f4-8990-6f2080db5b5d` için `40868b81-2ca1-434e-8729-cb30ec8b3fc1` READY snapshot üretildi.
 - ✅ Kurum UI tek senaryo smoke eklendi: aynı Playwright akışı `exam-a` optik upload → karantina çözümü → `report-job-a` → `/kurum/raporlar` içinde `exam-a` READY snapshot görünürlüğünü doğrular. `snapshot-optik-a`, `inputRefs.contentHash=abcdef1234567890`, kazanım radarında `Geometri` ve `1 soru` hata kitapçığı aynı senaryoda görüldü.
 - ⚙️ Canlı worker → canlı UI köprüsü eklendi: `REPORT_GENERATION_SMOKE_EVIDENCE_PATH=<json> pnpm report-generation:smoke` artık login kullanıcı bilgisi, sınav ID, snapshot ID ve ilk öğrenci ID'si içeren kanıt JSON'u üretebilir. Yeni `pnpm live:ui-worker:smoke` Playwright spec'i bu kanıtla gerçek login yapıp `/kurum/raporlar` içinde worker'ın ürettiği READY snapshot ve ilk öğrenci karnesini arar.
-- ✅ Canlı worker → canlı UI birleşik koşusu geçti: `REPORT_GENERATION_SMOKE_EVIDENCE_PATH=/tmp/uzman-hocam-live-ui-worker-evidence.json corepack pnpm report-generation:smoke` `exam-report-smoke-0f0a9918-6203-49da-b276-90a7c29a2a3c` için `24f22ada-be74-4050-a33d-599684f93121` READY snapshot ve `student-report-smoke-0f0a9918-6203-49da-b276-90a7c29a2a3c-00000` ilk öğrenci kanıtı üretti.
-- Kanıt: `WEB_URL=http://localhost:3001 AUTH_USER_STORE=postgres REPORT_SNAPSHOT_STORE=postgres DATABASE_URL=postgresql://app:app@localhost:5432/uzman_hocam node apps/api/dist/main.js` ile API açıldı; doğrudan API probunda login `200`, snapshots `200`, count `1`, firstStatus `READY`.
-- Kanıt: `NEXT_E2E_LIVE_UI_WORKER=1 LIVE_UI_WORKER_EVIDENCE_PATH=/tmp/uzman-hocam-live-ui-worker-evidence.json NEXT_PUBLIC_API_URL=http://localhost:3100 corepack pnpm live:ui-worker:smoke` → 1 test geçti; gerçek login + `/kurum/raporlar` içinde READY snapshot + ilk öğrenci karnesi doğrulandı.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti.
+- ✅ Canlı worker → canlı UI birleşik koşusu geçti: `REPORT_GENERATION_SMOKE_EVIDENCE_PATH=/tmp/o-okul-live-ui-worker-evidence.json corepack pnpm report-generation:smoke` `exam-report-smoke-0f0a9918-6203-49da-b276-90a7c29a2a3c` için `24f22ada-be74-4050-a33d-599684f93121` READY snapshot ve `student-report-smoke-0f0a9918-6203-49da-b276-90a7c29a2a3c-00000` ilk öğrenci kanıtı üretti.
+- Kanıt: `WEB_URL=http://localhost:3001 AUTH_USER_STORE=postgres REPORT_SNAPSHOT_STORE=postgres DATABASE_URL=postgresql://app:app@localhost:5432/o_okul node apps/api/dist/main.js` ile API açıldı; doğrudan API probunda login `200`, snapshots `200`, count `1`, firstStatus `READY`.
+- Kanıt: `NEXT_E2E_LIVE_UI_WORKER=1 LIVE_UI_WORKER_EVIDENCE_PATH=/tmp/o-okul-live-ui-worker-evidence.json NEXT_PUBLIC_API_URL=http://localhost:3100 corepack pnpm live:ui-worker:smoke` → 1 test geçti; gerçek login + `/kurum/raporlar` içinde READY snapshot + ilk öğrenci karnesi doğrulandı.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti.
 - Kalan sınır: canlı UI+worker birleşik koşusu kapandı; UI/portal karne screenshot → hedef PDF PNG pixel-diff hâlâ açık.
 
 **Faz 3 devam — öğrenci karne kazanım radar yüzeyi eklendi:**
@@ -252,18 +252,18 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - ✅ UI screenshot ile hedef PDF PNG bazı arasında ilk pixel-diff ölçüm komutu eklendi: `scripts/compare-karne-visual-evidence.mjs`, hedef PDF'i `595x842` PNG/BMP bazına render eder, UI screenshot'ını aynı boyuta normalize eder ve değişen piksel oranı + ortalama kanal farkını hesaplar.
 - ✅ Playwright fixture'ı öğrenci karnesine birden fazla kazanım ekledi; kurum paneli akışında `Kazanım radar tablosu` ve `Geometri` kazanımı doğrulandı.
 - 🎨 Aynı radar dili öğrenci/veli portalındaki ortak `ReportPanel` içine taşındı; portal raporu artık net/psikometri tablosunun yanında kazanım radarını da gösterir.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
-- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti; `kurum-raporlar-ogrenci-karne` screenshot `950x550`, SHA-256 `e685aae36194fa86bd74ee360fe3890a9588543c0fb94842f86b3d8d9edd8a66`.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
+- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti; `kurum-raporlar-ogrenci-karne` screenshot `950x550`, SHA-256 `e685aae36194fa86bd74ee360fe3890a9588543c0fb94842f86b3d8d9edd8a66`.
 - Kanıt: `corepack pnpm karne:visual-diff -- --target iSEM --ui <kurum-raporlar-ogrenci-karne.png>` → normalize `595x842`, `changed=234053/500990`, `ratio=0.467181`, `meanChannelDelta=35.95`. Sentetik kontrol aynı hedef PNG ile `ratio=0` verdi.
 - 🎨 Kurum karne paneli hedef PDF'e daha yakın A4 oranlı sayfa kabuğuna çekildi: ADIGÜZEL PDF'teki siyah/sarı kenar şeridi, üst bilgi, bölüm analizi, puan-sıra bloğu, başarı yüzdesi bar alanı ve son sınav netleri düzeni UI karnesine taşındı.
-- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti; `kurum-raporlar-ogrenci-karne` screenshot `596x843`, SHA-256 `15243c11f8f8154e5c451e67b83a1206f0504d66631ab3647143376940bbfc03`.
+- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer"` → 1 test geçti; `kurum-raporlar-ogrenci-karne` screenshot `596x843`, SHA-256 `15243c11f8f8154e5c451e67b83a1206f0504d66631ab3647143376940bbfc03`.
 - Kanıt: `corepack pnpm karne:visual-diff -- --target iSEM --ui <kurum-raporlar-ogrenci-karne.png>` → normalize `595x842`, `changed=234012/500990`, `ratio=0.467099`, `meanChannelDelta=30.96`. İlk UI ölçümüne göre fark oranı küçük de olsa düştü (`0.467181 → 0.467099`), ortalama kanal farkı belirgin düştü (`35.95 → 30.96`).
 - Yürütme notu: yalnız fixture verisini ADIGÜZEL iSEM'deki 6 ders/toplam satırlarına yaklaştırmak görsel oranı düşürmedi; tablo yüksekliği ve renk dağılımı hedef PDF ile kaydığı için ölçüm kötüleşti. Bu deneme kabul edilmedi. Bir sonraki doğru adım, kurum screenshot'ını veri sayısını artırarak değil, hedef PDF layout/export bileşenini veya aynı layout'u kullanan karne bileşenini sistematik hale getirerek yakınsatmaktır.
 - ⚙️ PDF export HTML'i artık yalnız genel `Sınav Raporu` değil, ilk öğrenci için hedef karne sözlüğünü de taşır: `Öğrenci Karnesi`, `BÖLÜM ANALİZİ`, `PUAN - SIRA ANALİZİ`, `BÖLÜM BAŞARI YÜZDELERİ`, `SON SINAV NETLERİ`. Bu, UI karnesi ile export çıktısının aynı hedef başlıklarına yaklaşması için ilk ortak sözleşme adımıdır.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api exec vitest run src/report/report-generation.service.test.ts` → 1 dosya, 14 test geçti; export HTML ve fallback satırlarında yeni karne hedef başlıkları doğrulandı.
-- ✅ Portal karne screenshot kanıtı eklendi ve A4 karne kabuğuna çekildi: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next rol portalları bağlı kişi verisini gösterir"` → 1 test geçti. Portal `latest` fixture'ı artık aynı `exam-demo-isem-lgs-1` sınavı için tek branşlı eski matematik verisi değil, kurum raporundaki 6 branşlı iSEM öğrenci karnesiyle tutarlı veri döndürür.
+- Kanıt: `corepack pnpm --filter @o-okul/api typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api exec vitest run src/report/report-generation.service.test.ts` → 1 dosya, 14 test geçti; export HTML ve fallback satırlarında yeni karne hedef başlıkları doğrulandı.
+- ✅ Portal karne screenshot kanıtı eklendi ve A4 karne kabuğuna çekildi: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next rol portalları bağlı kişi verisini gösterir"` → 1 test geçti. Portal `latest` fixture'ı artık aynı `exam-demo-isem-lgs-1` sınavı için tek branşlı eski matematik verisi değil, kurum raporundaki 6 branşlı iSEM öğrenci karnesiyle tutarlı veri döndürür.
 - Kanıt: portal screenshot'ları sıkıştırılmış A4 kabukta `596x842` üretildi. SHA-256: öğrenci `7e3d7d8b854cdf3fda61b3490ee58583a057ac37fccf2680210060beb063fc71`, öğretmen `7aebb9ebb48ab5051c96fe460f2dec49dacacf63555a2d10cbf1a971ce271bbe`, veli `7e3d7d8b854cdf3fda61b3490ee58583a057ac37fccf2680210060beb063fc71`.
 - Kanıt: `corepack pnpm karne:visual-diff -- --target iSEM --ui <portal-ogrenci-sinav-raporu.png>` → normalize `595x842`, `changed=248266/500990`, `ratio=0.495551`, `meanChannelDelta=34.11`.
 - Kanıt: `corepack pnpm karne:visual-diff -- --target iSEM --ui <portal-ogretmen-sinav-raporu.png>` → normalize `595x842`, `changed=246456/500990`, `ratio=0.491938`, `meanChannelDelta=33.43`.
@@ -274,8 +274,8 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 **Faz 3/4 devam — web karne bileşeni ortaklaştırıldı:**
 - 🎨 Kurum `/kurum/raporlar` öğrenci karnesi ve öğrenci/veli/öğretmen portal `ReportPanel` artık aynı web bileşenini kullanır: `apps/web/app/(app)/_shared/karne-sheet.tsx`. Böylece bölüm analizi, puan-sıra, kazanım radar ve son sınav netleri web tarafında tek layout kaynağından gelir.
 - 🎨 Kurum ve portalın bilinçli farkları parametreyle korunur: kurum sade sıra (`1/3`) ve eski kazanım blok sınıfını, portal yüzdeli sıra (`1/3 (%100)`) ve portal A4 sıkıştırmasını kullanır. İlk ortaklaştırma kurum pixel-diff değerini bozduğu için bu farklar geri sabitlendi; final ölçüm eski iyi kurum değerine döndü.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
 - Kanıt: `kurum-raporlar-ogrenci-karne` screenshot `596x843`, SHA-256 `15243c11f8f8154e5c451e67b83a1206f0504d66631ab3647143376940bbfc03`.
 - Kanıt: portal screenshot'ları `596x842`; öğrenci `7e3d7d8b854cdf3fda61b3490ee58583a057ac37fccf2680210060beb063fc71`, öğretmen `7aebb9ebb48ab5051c96fe460f2dec49dacacf63555a2d10cbf1a971ce271bbe`, veli `7e3d7d8b854cdf3fda61b3490ee58583a057ac37fccf2680210060beb063fc71`.
 - Kanıt: kurum visual-diff `ratio=0.467099`, `meanChannelDelta=30.96`; portal öğrenci/veli `ratio=0.495551`, öğretmen `ratio=0.491938`. Bu adım fark oranını düşürmedi; yalnız web layout sapmasını tek kaynağa topladı.
@@ -285,10 +285,10 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - 🎨 Ortak web karne bileşenindeki `BÖLÜM ANALİZİ` tablosu hedef PDF'teki ilk kolon yapısına yaklaştı: `No` ve `Soru sayısı` eklendi. Böylece kurum ve portal web karneleri artık yalnız `Branş / D / Y / B / Net` değil, soru sayısını da görünür kılar.
 - ⚙️ PDF export HTML'i de aynı kolon sözlüğüne taşındı: `BÖLÜM ANALİZİ` artık `No`, `Branş`, `Soru sayısı`, `Doğru`, `Yanlış`, `Boş`, `Net` başlıklarını üretir.
 - Kapsam kararı: hedef PDF'teki `Sınıf net ort`, `Okul net ort`, `Genel net ort` kolonları bu dilime eklenmedi; mevcut `ReportStudentSnapshot.branches` öğrenci branch satırında bu üç ortalamayı taşımıyor. Veri uydurmamak için yalnız mevcut veriden kanıtlanabilir `Soru sayısı = doğru + yanlış + boş` eklendi.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api exec vitest run src/report/report-generation.service.test.ts` → 1 dosya, 14 test geçti; export HTML'de `Soru sayısı` başlığı doğrulandı.
-- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api exec vitest run src/report/report-generation.service.test.ts` → 1 dosya, 14 test geçti; export HTML'de `Soru sayısı` başlığı doğrulandı.
+- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
 - Kanıt: yeni screenshot SHA-256: kurum `ed4feb763ac83d4ee5b7c6b5407cdd24347333f7e23e57d9afd4380b909384e2`; portal öğrenci/veli `f95e033cff56f783ce6d89b8a2bbf945c4196647823b8f793f38c3f11894cbd3`; portal öğretmen `979f70159ed8f3047573112dbcbb44f63f2e669d6853fd72a218e08bdffce811`.
 - Kanıt: visual-diff ham oranı bu adımda iyileşmedi; kurum `0.467099 → 0.467103`, portal öğrenci/veli `0.495551 → 0.496110`, öğretmen `0.491938 → 0.491956`. Yorum: kolon sözlüğü doğru yönde ilerledi ama pixel farkını belirleyen büyük alanlar hâlâ hedefteki gerçek logo/öğrenci bilgi bloğu, bölüm başlığı geometrisi, başarı grafiği ve alt son-sınav matrisidir.
 - Kalan sınır: görsel kabul için sıradaki daha etkili adım, hedef PDF'teki `Sınıf/Okul/Genel net ort` kolonlarının veri modelinden güvenli beslenmesi veya alt `SON SINAV NETLERİ` matrisinin gerçek progress/branch verisiyle doldurulmasıdır; UI'de veri uydurarak metrik düşürmek kabul edilmeyecek.
@@ -298,12 +298,12 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - ⚙️ Öğrenci rapor API'si branch satırlarını snapshot verisinden zenginleştirir: `classNetAverage`, `schoolNetAverage`, `generalNetAverage`. Kaynaklar sırasıyla sınıf branch ortalaması, snapshot genel branch ortalaması ve cohort statistics branch `meanNet` alanıdır.
 - 🎨 Ortak web karne tablosu ve PDF export HTML'i hedef PDF'teki üç ortalama kolonunu gösterir: `Sınıf net ort`, `Okul net ort`, `Genel net ort`. Veri olmayan hücreler `-` kalır.
 - ✅ Portal iSEM fixture'ı ADIGÜZEL hedef PDF'teki 6 branş ortalama değerleriyle dolduruldu; Playwright artık `MATEMATİK 20 20 0 0 20 19,92 9,46 9,39` satırını doğrular.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/worker typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/report-generation-job.test.ts src/jobs/postgres-report-generation-adapter.test.ts src/queue/bullmq-worker.test.ts` → 3 dosya, 22 test geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api exec vitest run src/report/report-generation.service.test.ts` → 1 dosya, 14 test geçti.
-- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/worker typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/report-generation-job.test.ts src/jobs/postgres-report-generation-adapter.test.ts src/queue/bullmq-worker.test.ts` → 3 dosya, 22 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api exec vitest run src/report/report-generation.service.test.ts` → 1 dosya, 14 test geçti.
+- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
 - Kanıt: yeni screenshot SHA-256: kurum `0acabd2bd5c1ea8d4c565e8df94010f77f441e5feb3891fbab34b8b4d506d0d9`; portal öğrenci/veli `c6f1dcaef60fe07d7d55f1d37237131f2581bf6362394515fbf2d82a7e6c4704`; portal öğretmen `b1fdce175af4c401baf1940ffec494207fb8158c6a447d7e9c7331efaf18f896`.
 - Kanıt: portal öğrenci/veli visual-diff iyileşti: `0.496110 → 0.487229`, `meanChannelDelta=33.03`. Kurum tek ders fixture'ında tablo genişlediği için ham oran kötüleşti: `0.467103 → 0.471834`; öğretmen fixture'ında ortalama verisi olmadığı için oran fiilen aynı kaldı: `0.491956`.
 - Kalan sınır: hedef PDF'e kabul seviyesinde yaklaşmak için artık en büyük açıklar veri değil, görsel yerleşimdir: gerçek logo/öğrenci bilgi bloğu, hedefteki bölüm başlığı geometrisi, başarı grafiği lejandı ve alt `SON SINAV NETLERİ` branş matrisi.
@@ -311,8 +311,8 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 **Faz 3/4 devam — son sınav netleri başlık ağırlığı azaltıldı:**
 - 🎨 Portal karne içindeki `Öğrenci gelişim grafiği` alt başlığı erişilebilir heading olarak korunur, fakat hedef PDF'teki daha sıkı alt tablo yerleşimine yaklaşmak için küçük karne içi başlık boyutuna indirildi. Böylece alt `SON SINAV NETLERİ` bloğu hedefteki yoğunluğa daha yakın durur.
 - Deneme notu: `BÖLÜM BAŞARI YÜZDELERİ` için hedef PDF'teki renkli lejand kısa süre denendi; portal öğrenci/veli ham diff değerini kötüleştirdiği için tutulmadı.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
 - Kanıt: yeni screenshot SHA-256: kurum `0acabd2bd5c1ea8d4c565e8df94010f77f441e5feb3891fbab34b8b4d506d0d9`; portal öğrenci/veli `16dfa5df506529cf7d23febd09d9087d47b6f6e3ebc15cda0bd998b13a9e00ca`; portal öğretmen `12f8d0be2258cee32705f8903365783c86c16024046bb38f32af2afec6c144b5`.
 - Kanıt: portal öğrenci/veli visual-diff tekrar iyileşti: `0.487229 → 0.482545`, `meanChannelDelta=32.30`; öğretmen `0.491956 → 0.489112`; kurum aynı kaldı: `0.471834`.
 - Kalan sınır: kabul eşiğine yaklaşmak için artık daha büyük ama hâlâ güvenli görsel adımlar gerekiyor: hedefteki üst öğrenci bilgi bloğu/kurum-logo alanı ve alt son-sınav branch matrisi.
@@ -320,8 +320,8 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 **Faz 3/4 devam — son sınav branş netleri matrisi eklendi:**
 - 🎨 Ortak web karne bileşeninin `SON SINAV NETLERİ` bloğu artık yalnız toplam net/puan özetini değil, güncel `report.branches` verisinden `Son sınav branş netleri` tablosunu da gösterir. Bu, hedef PDF'teki alt sağ branş matrisiyle aynı bilgi sınıfına yaklaşan güvenli ara adımdır.
 - Kapsam kararı: progress modeli branch bazlı geçmiş taşımadığı için çok-sınav branş matrisi üretilmedi; veri uydurmamak için yalnız son raporun gerçek branch netleri gösterildi.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti; öğrenci/veli portalında `Son sınav branş netleri` içindeki `MATEMATİK 20` satırı doğrulandı.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti; öğrenci/veli portalında `Son sınav branş netleri` içindeki `MATEMATİK 20` satırı doğrulandı.
 - Kanıt: yeni screenshot SHA-256: kurum `de5dfdb8d3a43ce0d6f55c2889eef08d80bea0cee9cbdfc8c03be75bed79c3c2`; portal öğrenci/veli `49ea56dbba14d1d974751e08a60fe684bd05b16b8b670d60161ad1798ccabba5`; portal öğretmen `b5be97ffe99e8611641062905eff8431edc61449fdf09939f67db6444ed5cf2d`.
 - Kanıt: portal öğrenci/veli visual-diff oranı hafif kötüleşti (`0.482545 → 0.484205`), ama ortalama kanal farkı iyileşti (`32.30 → 31.76`). Kurum `0.471834 → 0.471886`; öğretmen `0.489112 → 0.489784`. Yorum: yeni gerçek branş matrisi hedefe yapısal olarak yaklaştı, fakat ham piksel oranı kabul eşiğine inmedi.
 - Kalan sınır: alt matriste hâlâ hedef PDF'teki çok-sınav kolonları yok; bunu kapatmak için `ReportStudentProgressPoint` içine branch net geçmişi taşınmalı. Görsel tarafta üst öğrenci bilgi bloğu/kurum-logo alanı da hâlâ büyük fark kaynağı.
@@ -330,21 +330,21 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - ⚙️ `ReportStudentProgressPoint` artık `branches?: ReportStudentBranchSummary[]` taşır. API `getStudentProgress()` her READY snapshot içindeki öğrenci branch satırlarını progress noktasına ekler.
 - 🎨 Ortak web karne bileşeni `progress.points[].branches` varsa alt `Son sınav branş netleri` tablosunu çok-sınav matrise çevirir: sütunlar son progress noktaları (`1`, `2`, ...), satırlar branşlardır. Branch geçmişi yoksa önceki `Son net` fallback'i korunur.
 - ✅ Portal fixture'ında iSEM progress noktaları 2 sınavlık branch geçmişiyle dolduruldu; Playwright artık `MATEMATİK 14,5 20` satırını doğrular.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api exec vitest run src/report/report-generation.service.test.ts` → 1 dosya, 14 test geçti; progress cevabında branch satırları doğrulandı.
-- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api exec vitest run src/report/report-generation.service.test.ts` → 1 dosya, 14 test geçti; progress cevabında branch satırları doğrulandı.
+- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
 - Kanıt: yeni screenshot SHA-256: kurum `0b735c9bd08465e8772bbcbc01aff15b86d609904738f9a383400cdc8c176a54`; portal öğrenci/veli `48d8dacd04ba45c773fa25609b21cdec5dcea82c29abe52fc2e1518302aa395c`; portal öğretmen `f37a808031b90e485f4fd25d11c7ef42fbf9a884b90e2e3380e2fccddf1b5267`.
 - Kanıt: portal öğrenci/veli visual-diff oranı çok az kötüleşti (`0.484205 → 0.484475`), ortalama kanal farkı `31.80`; kurum `0.471886 → 0.471870`; öğretmen `0.489784 → 0.489940`. Yorum: metrik kabul eşiği hâlâ kapanmadı, fakat hedef PDF'teki çok-sınav branch matrisinin veri ön koşulu artık gerçek API ve UI sözleşmesine bağlandı.
 - Kalan sınır: görsel kabul için sıradaki ana açık üst öğrenci bilgi bloğu/kurum-logo alanı ve hedef başlık geometrisidir; alt matriste daha fazla sınav kolonu üretmek artık progress verisi arttıkça doğal olarak mümkün.
 
 **Faz 3/4 devam — üst karne başlık geometrisi hedefe yaklaştırıldı:**
-- 🎨 Ortak karne başlığı hedef PDF'teki üst tablo yapısına yaklaştırıldı: başlık satırı ortalandı, öğrenci/sınav/sınıf satırları alt çizgili satırlara ayrıldı ve marka alanı `DNA` + `UZMAN HOCAM` blok düzenine alındı.
+- 🎨 Ortak karne başlığı hedef PDF'teki üst tablo yapısına yaklaştırıldı: başlık satırı ortalandı, öğrenci/sınav/sınıf satırları alt çizgili satırlara ayrıldı ve marka alanı `DNA` + `O-OKUL` blok düzenine alındı.
 - 🎨 Portal karne yüksekliği ayrı tutuldu: `.next-karne-sheet--portal .next-karne-header > div:first-child` `92px` oldu. Bu, portalda ana `BÖLÜM ANALİZİ` bloğunu hedef PDF'teki y-konumuna yaklaştırdı; kurum çıktısının iyileşmesi korunurken portal öğretmen diff'i de iyileşti.
 - Deneme notu: son üst satırda `className` yerine `generatedAt` tarihi kısa süre denendi; kurum `0.465257 → 0.465303`, portal öğrenci/veli `0.484840 → 0.485117`, portal öğretmen `0.489018 → 0.489281` kötüleştiği için tutulmadı.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
 - Kanıt: `git diff --check 'apps/web/app/(app)/_shared/karne-sheet.tsx' apps/web/app/globals.css` → temiz.
-- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
+- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
 - Kanıt: yeni screenshot SHA-256: kurum `31a632f85ba88a3be61564d3e518f9d8c4f8216d99774bb1fc7f1c0e2596a03e`; portal öğrenci/veli `5e5b887136c61f0f53226f58ef788115850c8ce26801b5eeb574eb6be06faedd`; portal öğretmen `e418c14fb8d8b99ccfbd474a5b3f373f447ccce3232407de5e4a79845298eb71`.
 - Kanıt: kurum visual-diff iyileşti (`0.471870 → 0.465257`, `meanChannelDelta=31.26`); portal öğretmen iyileşti (`0.489940 → 0.489018`, `meanChannelDelta=33.58`); portal öğrenci/veli önceki en iyiye çok yakın kaldı (`0.484475 → 0.484840`, `meanChannelDelta=32.13`). İlk başlık denemesinde portal öğrenci/veli `0.487323`, öğretmen `0.496760` değerine gerilediği için portal özel yüksekliği zorunlu kabul edildi.
 - Kalan sınır: hedef PDF'e daha fazla yaklaşmak için gerçek öğrenci adı/kurum satırları ve gerçek DNA Eğitim logo varlığı hâlâ eksik; `ReportStudentSnapshot` şu an yalnız `studentId`, `classId/className` ve rapor metriklerini taşıdığı için bu turda veri uydurulmadı.
@@ -353,11 +353,11 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - ⚙️ `ReportStudentSnapshot` sözleşmesine opsiyonel `studentName` eklendi. API `getStudentReport()` aynı tenant içindeki `studentStore` kaydını bulursa `firstName lastName` bilgisini yanıta ekler; store yoksa veya öğrenci bulunamazsa eski `studentId` davranışı korunur.
 - 🎨 Ortak karne bileşeni üst öğrenci satırında `report.studentName ?? report.studentId` kullanır. Böylece hedef PDF'teki öğrenci adı satırına veri uydurmadan yaklaşılır.
 - ✅ Playwright iSEM/kurum/öğretmen fixture'ları yeni API sözleşmesini taklit edecek şekilde `studentName: "Ada A"` ile güncellendi.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api exec vitest run src/report/report-generation.service.test.ts` → 1 dosya, 14 test geçti; öğrenci raporu yanıtında `studentName` doğrulandı.
+- Kanıt: `corepack pnpm --filter @o-okul/api typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api exec vitest run src/report/report-generation.service.test.ts` → 1 dosya, 14 test geçti; öğrenci raporu yanıtında `studentName` doğrulandı.
 - Kanıt: `git diff --check packages/shared-types/src/domain.ts apps/api/src/report/report-generation.service.ts apps/api/src/report/report-generation.service.test.ts 'apps/web/app/(app)/_shared/karne-sheet.tsx' apps/web/e2e-next/login-next.spec.ts apps/web/app/globals.css` → temiz.
-- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
+- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
 - Kanıt: yeni screenshot SHA-256: kurum `400ada54b709031e2e1295febd304a09947d071afcc94bdf1b54776910e15d3b`; portal öğrenci/veli `bb6b278985d88ab038fb75aad54b3da564d24de97f87c371b72055cfd14637e8`; portal öğretmen `2b455873586a81dc011d7ff5d1313ff5abec1645f8d27cc50876d2c375b07275`.
 - Kanıt: visual-diff üç yolda da iyileşti: kurum `0.465257 → 0.465103` (`meanChannelDelta=31.24`), portal öğrenci/veli `0.484840 → 0.484732` (`meanChannelDelta=32.12`), portal öğretmen `0.489018 → 0.488910` (`meanChannelDelta=33.57`).
 - Kalan sınır: hedefteki kurum adı, kitapçık/tarih satırı ve gerçek DNA Eğitim logo alanı hâlâ eksik. Bunlar için ya snapshot/API sözleşmesinin sınav/kurum meta verisi taşıması ya da güvenli asset kaynağı gerekir.
@@ -366,11 +366,11 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - ⚙️ `ReportStudentSnapshot` sözleşmesine opsiyonel `examTitle` ve `examStartsAt` eklendi. API `getStudentReport()` artık `ExamRepository.findById(tenantId, examId)` ile aynı tenant'taki sınavı bulursa başlık/tarih bilgisini yanıta ekler; repository yoksa veya sınav bulunamazsa eski davranış korunur.
 - 🎨 Ortak karne bileşeni başlıkta `report.examTitle ?? "İSEM - LGS - 1"` kullanır. Böylece hedef PDF'teki sınav adı satırı artık sabit UI metni yerine gerçek sınav kaydından beslenebilir.
 - ✅ Playwright rapor fixture'ları yeni API sözleşmesini taklit edecek şekilde `examTitle: "İSEM - LGS - 1"` ile güncellendi. Fixture başlığı önceki metinle aynı olduğu için screenshot hash'leri değişmedi; bu beklenen sonuçtur.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api exec vitest run src/report/report-generation.service.test.ts` → 1 dosya, 14 test geçti; öğrenci raporu yanıtında `examTitle` ve `examStartsAt` doğrulandı.
+- Kanıt: `corepack pnpm --filter @o-okul/api typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api exec vitest run src/report/report-generation.service.test.ts` → 1 dosya, 14 test geçti; öğrenci raporu yanıtında `examTitle` ve `examStartsAt` doğrulandı.
 - Kanıt: `git diff --check packages/shared-types/src/domain.ts apps/api/src/report/report-generation.service.ts apps/api/src/report/report-generation.service.test.ts 'apps/web/app/(app)/_shared/karne-sheet.tsx' apps/web/e2e-next/login-next.spec.ts apps/web/app/globals.css` → temiz.
-- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
+- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
 - Kanıt: screenshot SHA-256 değerleri önceki iyi seviyede kaldı: kurum `400ada54b709031e2e1295febd304a09947d071afcc94bdf1b54776910e15d3b`; portal öğrenci/veli `bb6b278985d88ab038fb75aad54b3da564d24de97f87c371b72055cfd14637e8`; portal öğretmen `2b455873586a81dc011d7ff5d1313ff5abec1645f8d27cc50876d2c375b07275`.
 - Kanıt: visual-diff değerleri korunur: kurum `0.465103` (`meanChannelDelta=31.24`), portal öğrenci/veli `0.484732` (`meanChannelDelta=32.12`), portal öğretmen `0.488910` (`meanChannelDelta=33.57`).
 - Kalan sınır: kurum adı hâlâ güvenli kaynaktan gelmiyor. Kitapçık tipi için veri kaynağı mevcut; ayrı adımda API sözleşmesine taşındı.
@@ -379,11 +379,11 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - ⚙️ `ReportStudentSnapshot` sözleşmesine opsiyonel `participantNo` ve `bookletType` eklendi. API `getStudentReport()` artık `ExamParticipantRepository.list(tenantId, examId)` içinden aynı öğrencinin participant kaydını bulursa bu alanları yanıta ekler; participant yoksa eski davranış korunur.
 - Deneme notu: `bookletType` üst sol son satırda `B KİTAPÇIĞI` olarak kısa süre gösterildi. Bu hedef PDF'e yapısal olarak doğru olsa da mevcut yerleşimde visual-diff kötüleştiği için UI gösterimi tutulmadı: kurum `0.465103 → 0.465169`, portal öğrenci/veli `0.484732 → 0.485084`, portal öğretmen `0.488910 → 0.489261`.
 - ✅ Playwright fixture'ları yeni API sözleşmesini taklit edecek şekilde `bookletType: "B"` ile güncellendi; karne UI şimdilik bu alanı göstermediği için screenshot hash'leri iyi seviyeye geri döndü.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api exec vitest run src/report/report-generation.service.test.ts` → 1 dosya, 14 test geçti; öğrenci raporu yanıtında `participantNo` ve `bookletType` doğrulandı.
+- Kanıt: `corepack pnpm --filter @o-okul/api typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api exec vitest run src/report/report-generation.service.test.ts` → 1 dosya, 14 test geçti; öğrenci raporu yanıtında `participantNo` ve `bookletType` doğrulandı.
 - Kanıt: `git diff --check packages/shared-types/src/domain.ts apps/api/src/report/report-generation.service.ts apps/api/src/report/report-generation.service.test.ts 'apps/web/app/(app)/_shared/karne-sheet.tsx' apps/web/e2e-next/login-next.spec.ts apps/web/app/globals.css docs/development-plan-2026-06-02.md` → temiz.
-- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @uzman-hocam/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
+- Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --filter @o-okul/web exec playwright test --config=playwright.next.config.ts --grep "Next login gerçek auth store ile kurum paneline geçer|Next rol portalları bağlı kişi verisini gösterir"` → 2 test geçti.
 - Kanıt: screenshot SHA-256 değerleri iyi seviyede kaldı: kurum `400ada54b709031e2e1295febd304a09947d071afcc94bdf1b54776910e15d3b`; portal öğrenci/veli `bb6b278985d88ab038fb75aad54b3da564d24de97f87c371b72055cfd14637e8`; portal öğretmen `2b455873586a81dc011d7ff5d1313ff5abec1645f8d27cc50876d2c375b07275`.
 - Kanıt: visual-diff iyi seviyede korundu: kurum `0.465103` (`meanChannelDelta=31.24`), portal öğrenci/veli `0.484732` (`meanChannelDelta=32.12`), portal öğretmen `0.488910` (`meanChannelDelta=33.57`).
 - Kalan sınır: kitapçık tipi artık gerçek API verisi olarak hazır, fakat hedef PDF'teki `B KİTAPÇIĞI / tarih` satırına taşınması için üst bilgi yerleşimi ayrıca tasarlanmalı. Kurum adı hâlâ güvenli veri kaynağına bağlı değil.
@@ -394,8 +394,8 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - ⚙️ Kurum/sınav/katılımcı metadata lookup'ları opsiyonel kaldı: store/repository hatasında rapor ana verisi döner, yalnız metadata alanı boş bırakılır.
 - 🎨 Ortak karne bileşeni kurum satırında `report.institutionName ?? reportLabel` kullanır. Header'da sınıf satırı kaldırma denemesi kurum adını görünür yapmadı ve visual-diff'i kötüleştirdiği için tutulmadı: kurum `0.465101 → 0.472081`, portal öğrenci/veli `0.484732 → 0.485427`, portal öğretmen `0.488910 → 0.489605`.
 - ✅ Playwright fixture'ları yeni API sözleşmesini taklit edecek şekilde `institutionName: "DNA EĞİTİM KURUMU"` ile güncellendi.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/api typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/api typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
 - Kanıt: `corepack pnpm --dir apps/api exec vitest run src/report/report-generation.service.test.ts src/report/report-generation.controller.e2e.test.ts` → 2 dosya, 26 test geçti; öğrenci raporu yanıtında `institutionName` doğrulandı.
 - Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --dir apps/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts` → 2 test geçti.
 - Kanıt: screenshot SHA-256: kurum `938b1b1ccdb5ccab59f625a35cd4d21e57fb530d66724cdc1d5b455d70e152c7`; portal öğrenci/veli `bb6b278985d88ab038fb75aad54b3da564d24de97f87c371b72055cfd14637e8`; portal öğretmen `2b455873586a81dc011d7ff5d1313ff5abec1645f8d27cc50876d2c375b07275`.
@@ -407,7 +407,7 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - 🎨 Karne tablo yoğunluğu hedef PDF'e yaklaştırıldı: blok iç boşlukları ve tablo hücre padding'i azaltıldı. Bu iSEM çok branşlı karnede taşmayı `1004px → 891px` seviyesine indirdi.
 - ✅ Kurum screenshot kanıtı artık tek branşlı `exam-demo` yerine hedef PDF'le aynı iSEM çok branşlı fixture üzerinden alınıyor (`exam-demo-isem-lgs-1`). Bu önceki kurum diff değerleriyle birebir kıyaslanamaz; eski ölçüm hedef PDF'e tek branşlı bir ekranı kıyaslıyordu.
 - Deneme notu: Karneyi zorla `842px` yüksekliğe sabitleme kısa süre denendi; üst bilgi satırlarını kırptığı için tutulmadı. A4 sabit yükseklik hâlâ açık borç, ama veri görünürlüğü kırpılmayacak.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
 - Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --dir apps/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts` → 2 test geçti.
 - Kanıt: screenshot SHA-256: kurum `42f6e00267a29b15644bdbd916632dbfbb6413e690917b3b4c9d95f39fb6d7bc` (`596x891`); portal öğrenci/veli `6280bed81e995ef0ee7cdd53c73246b962e7ba28b38e4ec56eaf9c29aa84d86c`; portal öğretmen `e8b218466d7a8ea230520de0f93c0d24ffe9047bd4558ffc7e6e4d1b31d468e1`.
 - Kanıt: visual-diff son değerleri: kurum `0.500255` (`meanChannelDelta=32.44`), portal öğrenci/veli `0.486303` (`meanChannelDelta=32.08`), portal öğretmen `0.491521` (`meanChannelDelta=34.31`).
@@ -416,7 +416,7 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 **Faz 3/4 devam — kurum karne alt matrisi branch geçmişiyle dolduruldu:**
 - ⚙️ Kurum rapor progress fixture'ı portal progress fixture'ıyla hizalandı: `exam-demo-isem-lgs-1` artık yalnız `Matematik` değil, `TÜRKÇE`, `İNKILAP TARİHİ`, `DİN KÜLTÜRÜ`, `İNGİLİZCE`, `MATEMATİK`, `FEN BİLİMLERİ` için iki ölçüm branch net geçmişi döndürür.
 - 🎨 `SON SINAV NETLERİ` alt sağ matrisi kurum iSEM karnesinde boş `-` hücreler yerine gerçek branch net geçmişiyle dolar. Bu hedef PDF'teki alt branş matrisiyle aynı bilgi sınıfına yaklaşır.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
 - Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --dir apps/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts` → 2 test geçti.
 - Kanıt: screenshot SHA-256: kurum `769b404d1439be15ef40dca4087b84aae53d4904c4f90f26f5dca1e42bb639e1` (`596x891`); portal öğrenci/veli `6280bed81e995ef0ee7cdd53c73246b962e7ba28b38e4ec56eaf9c29aa84d86c`; portal öğretmen `71e0ec1f41fbce46474b3c131952134da7483be59e22bb72ea6f354790963e2b`.
 - Kanıt: visual-diff son değerleri: kurum `0.501353` (`meanChannelDelta=32.55`), portal öğrenci/veli `0.486303` (`meanChannelDelta=32.08`), portal öğretmen `0.491191` (`meanChannelDelta=34.28`).
@@ -425,16 +425,16 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 **Faz 3/4 devam — kurum karne yüksekliği A4 hedefine yaklaştırıldı:**
 - 🎨 `Kazanım radar grafiği` üst boşluğu `64px → 15px` yapıldı. Bu kırpma değil, hedef PDF'teki tek sayfa akışına yaklaşmak için güvenli boşluk sıkılaştırmasıdır.
 - ✅ Kurum iSEM screenshot yüksekliği `596x891 → 596x843` seviyesine indi; pratikte hedef `595x842` A4 PNG bazıyla aynı yüksekliğe oturdu. Portal screenshot'ları `596x842` olarak korunur.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
 - Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --dir apps/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts` → 2 test geçti.
 - Kanıt: screenshot SHA-256: kurum `4c694078a7bfefe980529129e57265c518394563f765e5733c608be4a580a9f9` (`596x843`); portal öğrenci/veli `6280bed81e995ef0ee7cdd53c73246b962e7ba28b38e4ec56eaf9c29aa84d86c`; portal öğretmen `71e0ec1f41fbce46474b3c131952134da7483be59e22bb72ea6f354790963e2b`.
 - Kanıt: visual-diff son değerleri: kurum `0.501353 → 0.504028` (`meanChannelDelta=33.30`), portal öğrenci/veli `0.486303`, portal öğretmen `0.491191`.
 - Yorum: A4 boyut borcu kapandı, fakat ham pixel-diff kabul eşiği kapanmadı. Sıradaki görsel borçlar artık yükseklik değil; gerçek logo alanı, başarı grafiği lejandı ve bölüm/puan bloklarının hedef PDF geometrisidir.
 
 **Faz 3/4 devam — marka/logo alanı metin tabanlı hedefe yaklaştırıldı:**
-- 🎨 Repo içinde gerçek logo/helix bitmap veya SVG asset'i bulunmadığı için yeni görsel uydurulmadı. Mevcut metin tabanlı marka alanı hedef PDF'teki yapıya daha yakın olacak şekilde `DNA / UZMAN HOCAM` yerine `DNA / EĞİTİM / KİŞİSEL GELİŞİM KURSU` düzenine çekildi.
+- 🎨 Repo içinde gerçek logo/helix bitmap veya SVG asset'i bulunmadığı için yeni görsel uydurulmadı. Mevcut metin tabanlı marka alanı hedef PDF'teki yapıya daha yakın olacak şekilde `DNA / O-OKUL` yerine `DNA / EĞİTİM / KİŞİSEL GELİŞİM KURSU` düzenine çekildi.
 - ✅ Eski `next-karne-summary` CSS kalıntıları temizlendi; karne üst alanında kullanılmayan özet kutusu kuralları kalmadı.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
 - Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --dir apps/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts` → 2 test geçti.
 - Kanıt: screenshot SHA-256: kurum `290ca8932e195f58874e1b2598dd74710f19059acd95f0569d576afb33b57f87` (`596x843`); portal öğrenci/veli `4b7eac64c33202c778f52b672b57822850a5a80258289e1bf16063b7177be685`; portal öğretmen `2cd35ce00d4eb34e67b84a5552ba46bbd933792cf3f928103a1af299c64dc83f`.
 - Kanıt: visual-diff son değerleri: kurum `0.504028 → 0.504116` (`meanChannelDelta=33.30 → 33.28`), portal öğrenci/veli `0.486303 → 0.487080`, portal öğretmen `0.491191 → 0.491968`.
@@ -442,7 +442,7 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 
 **Faz 3/4 devam — bölüm başarı yüzdeleri lejandı eklendi:**
 - 🎨 Hedef PDF'teki `ÖĞRENCİ / SINIF / OKUL / GENEL` renk lejandı, karne başarı grafiği alanına eklendi. Erişilebilir `Kazanım radar tablosu` korunur; Playwright bu görünür tablo ve `Geometri` hücresini hâlâ doğrular.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
 - Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --dir apps/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts` → 2 test geçti.
 - Kanıt: screenshot SHA-256: kurum `2bd27f7f976718bc412f5e84563d07c4aa951551e0b1653726eecc04145ac283` (`596x843`); portal öğrenci/veli `7637b91dff4e83c17673a3cb2589c686b7bb25cb8b1e84de9c964365106b8a9f`; portal öğretmen `ae98bfa4555eb5ff8dd1eaf79b292748564b734c0939e7cac1ad557716b5bb56`.
 - Kanıt: visual-diff son değerleri: kurum `0.504116 → 0.505367`, portal öğrenci/veli `0.487080 → 0.488265`, portal öğretmen `0.491968 → 0.493337`.
@@ -452,7 +452,7 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - 🎨 `BÖLÜM BAŞARI YÜZDELERİ` alanı sabit CSS barlarından çıktı; `report.branches` verisinden 6 bölüm ve 4 seri (`ÖĞRENCİ`, `SINIF`, `OKUL`, `GENEL`) üreten bar grafiğe taşındı. Seri yüksekliği branş netinin soru sayısına oranıyla hesaplanır.
 - ♿ `Kazanım radar tablosu` görsel alandan kaldırıldı ama DOM'da erişilebilir tablo olarak tutuldu; Playwright artık görünür lejandı ve gizli tabloda `Geometri` hücresinin varlığını doğrular.
 - ✅ Portal özel grafik yüksekliği tekrar sıkılaştırıldı; öğrenci/veli portal screenshot'ı ara denemedeki `596x845` taşmasından tekrar `596x842` seviyesine indi.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
 - Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --dir apps/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts` → 2 test geçti.
 - Kanıt: screenshot SHA-256: kurum `4bc470c3192918e21760547a390e011668a8ecb933a1762624201c2541ab61a4` (`596x843`); portal öğrenci/veli `085fcd4de212775b3104e989da0a69bede3731f7662690bf1bd34766b55238d1`; portal öğretmen `f84eff2df5e5e103b8ad346d29faf61762b79ea6c49aa42e447dff80b4de8e56`.
 - Kanıt: visual-diff son değerleri: kurum `0.505367 → 0.498966`, portal öğrenci/veli `0.488265 → 0.482385`, portal öğretmen `0.493337 → 0.470135`.
@@ -461,7 +461,7 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 **Faz 3/4 devam — puan-sıra bloğu hedef tablo geometrisine yaklaştırıldı:**
 - 🎨 `PUAN - SIRA ANALİZİ` bloğu dört satırlı `dl` listesinden hedef PDF'e daha yakın `PUAN TİPİ / LGS` başlıklı tabloya taşındı. Genel ve sınıf sıra satırları artık dar turkuaz kategori hücresi + `SIRA/KATILIM` satırlarıyla gösterilir; katılım değeri `ReportScopeRank.outOf` alanından gelir.
 - ✅ Kurum ve portal screenshot yükseklikleri korundu: kurum `596x843`, portal öğrenci/veli/öğretmen `596x842`.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
 - Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --dir apps/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts` → 2 test geçti.
 - Kanıt: screenshot SHA-256: kurum `9e550522701aa5f3ece5bda5f221028ef33b2bce1d7ed466df966a66b3baf0b8` (`596x843`); portal öğrenci/veli `1684715d8c6f31f670ff5677a4d88f4cfa309afb4f608c6fd8a03e176453e40d`; portal öğretmen `0793fa7cc7702476b05d6933c3dbfc64eb378d1b9ce56e5f2947b223b7b6d756`.
 - Kanıt: visual-diff son değerleri metrikte kötüleşti: kurum `0.498966 → 0.519152`, portal öğrenci/veli `0.482385 → 0.504176`, portal öğretmen `0.470135 → 0.481898`.
@@ -472,8 +472,8 @@ Bu dosya artık yalnızca plan değil, uygulama sırasında kanıtla güncellene
 - 🎨 Karne alt bölümü tek `Son rapor` satırı yerine progress verisi varsa son 5 denemeyi `No / Deneme / Net / Tarih` tablosunda gösterir. Veri yoksa eski tek satır güvenli fallback olarak kalır.
 - 🎨 `Son sınav branş netleri` matrisi iSEM fixture'ında hedef PDF'teki 5 deneme kolonuna genişletildi; `MATEMATİK 18,67 20 17,33 18,67 18,67` satırı Playwright ile doğrulanır.
 - ✅ Portal taşması düzeltildi: ara denemede öğrenci/veli karne yüksekliği `596x851` olmuştu; grafik/alt tablo sıkılaştırmasıyla portal tekrar `596x842`, kurum `596x844` seviyesine indi.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/shared-types typecheck` → geçti.
-- Kanıt: `corepack pnpm --filter @uzman-hocam/web typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/shared-types typecheck` → geçti.
+- Kanıt: `corepack pnpm --filter @o-okul/web typecheck` → geçti.
 - Kanıt: `KARNE_VISUAL_EVIDENCE=1 corepack pnpm --dir apps/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts` → 2 test geçti.
 - Kanıt: screenshot SHA-256: kurum `7310c4e18739609a977ed847f5a4137269350a4dd3ca5777cc861da61bf78e0f` (`596x844`); portal öğrenci/veli `220d1f60b9db07b4945b1f819ebf74de9c47c359b02beb4ec12291fb4c926767`; portal öğretmen `0ea87edae069e9b8917ab74414175b9d029f2a771b933201cc2a0b829d35021b`.
 - Kanıt: visual-diff son değerleri: kurum `0.519152 → 0.520789`, portal öğrenci/veli `0.504176 → 0.502100`, portal öğretmen `0.481898 → 0.480578`.
@@ -564,7 +564,7 @@ Etiketler: ⚙️ backend/worker · 🎨 frontend · 🔐 güvenlik · 🧱 veri
 - UI kütüphanesi sözdizimi dönüşümü: `packages/ui/src/index.ts → index.tsx`, `createElement→JSX` (davranış aynı, `uh-*` sınıfları byte-sabit), `"use client"` ekle. **shadcn'e büyük-patlama göç YOK** (30 sayfa + e2e bağlı). Düzenleme sonrası **lib rebuild zorunlu**.
 - Tasarım token'ları (`--space-*`, `--font-*`, `--shadow-*`) + dark mode + tablet breakpoint (`globals.css` bugün tek 760px, dark mode yok); `:focus-visible` ring; kontrast denetimi.
 
-**Kalite kapısı:** 3 gerçek deneme A&B parse+puan fixture'ı yeşil; `corepack pnpm --filter @uzman-hocam/worker exec vitest run` + `--filter @uzman-hocam/shared-types exec vitest run format-analyzer` yeşil; `pnpm --filter @uzman-hocam/ui build` + web `typecheck` + mevcut Playwright yeşil (görsel-inert dönüşüm kanıtı).
+**Kalite kapısı:** 3 gerçek deneme A&B parse+puan fixture'ı yeşil; `corepack pnpm --filter @o-okul/worker exec vitest run` + `--filter @o-okul/shared-types exec vitest run format-analyzer` yeşil; `pnpm --filter @o-okul/ui build` + web `typecheck` + mevcut Playwright yeşil (görsel-inert dönüşüm kanıtı).
 
 ### Faz 2 — Uçtan Uca Gerçek Veri + Seed + Regresyon
 **Hedef:** 3 gerçek deneme gerçek pipeline'dan geçsin, demo gerçek sayı göstersin, fixture'a dönsün.
@@ -652,8 +652,8 @@ Etiketler: ⚙️ backend/worker · 🎨 frontend · 🔐 güvenlik · 🧱 veri
 
 ## 7. Doğrulama Kapıları (komutlar)
 
-- Birim/entegrasyon: `corepack pnpm --filter @uzman-hocam/worker exec vitest run` · `--filter @uzman-hocam/api exec vitest run` · `--filter @uzman-hocam/shared-types exec vitest run`
-- Tip/derleme: `corepack pnpm --filter @uzman-hocam/web typecheck` · `pnpm --filter @uzman-hocam/ui build`
+- Birim/entegrasyon: `corepack pnpm --filter @o-okul/worker exec vitest run` · `--filter @o-okul/api exec vitest run` · `--filter @o-okul/shared-types exec vitest run`
+- Tip/derleme: `corepack pnpm --filter @o-okul/web typecheck` · `pnpm --filter @o-okul/ui build`
 - RLS: `pnpm db:rls:check` (+ `:live`)
 - Tümü: `pnpm test` (turbo) · `pnpm run ci`
 - Canlı: `pnpm live:smoke` · `identity-link:audit → READY` · rol-bazlı UAT

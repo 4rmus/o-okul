@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { AuthResponse } from "@uzman-hocam/shared-types";
+import type { AuthResponse } from "@o-okul/shared-types";
 import {
   login as requestLogin,
   logout as requestLogout,

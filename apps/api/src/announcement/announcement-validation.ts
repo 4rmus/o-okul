@@ -3,7 +3,7 @@ import type {
   AnnouncementCreateRequest,
   AnnouncementDeliveryResultRequest,
   AnnouncementDeliverySendRequest,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { optionalTrimmedString, requiredTrimmedString } from "../http/zod-validation.js";
 
 const announcementAudienceSchema = z.enum(["SCHOOL", "TEACHERS", "STUDENTS", "GUARDIANS"]);

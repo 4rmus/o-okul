@@ -19,7 +19,7 @@ export interface ListField<TRecord> {
   read(record: TRecord): string | number | undefined;
 }
 
-const listMetaSymbol = Symbol.for("uzman-hocam.list-meta");
+const listMetaSymbol = Symbol.for("o-okul.list-meta");
 
 export function applyListQuery<TRecord>(
   records: TRecord[],

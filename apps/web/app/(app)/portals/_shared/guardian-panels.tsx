@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Checkbox, DataTable, InfoGrid, InfoItem, Panel, type DataTableColumn } from "@uzman-hocam/ui";
-import type { GuardianStudentRecord, PaymentPlanWithInstallmentsRecord } from "@uzman-hocam/shared-types";
+import { Checkbox, DataTable, InfoGrid, InfoItem, Panel, type DataTableColumn } from "@o-okul/ui";
+import type { GuardianStudentRecord, PaymentPlanWithInstallmentsRecord } from "@o-okul/shared-types";
 
 export function NotificationPreferencesPanel({
   preferences,

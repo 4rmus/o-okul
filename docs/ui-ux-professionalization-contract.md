@@ -82,9 +82,9 @@ Eski `Button`, `Input`, `CrudPage`, `DataTable` kullanimlari geriye uyumlu kalir
 
 ## Acceptance Gates
 
-- Foundation/UI: `pnpm --filter @uzman-hocam/ui typecheck`, `pnpm --filter @uzman-hocam/web typecheck`,
+- Foundation/UI: `pnpm --filter @o-okul/ui typecheck`, `pnpm --filter @o-okul/web typecheck`,
   `pnpm web:a11y:check`, `pnpm web:ux-baseline:check`.
-- Report/karne: `pnpm --filter @uzman-hocam/worker test`, `pnpm raw-import:smoke`,
+- Report/karne: `pnpm --filter @o-okul/worker test`, `pnpm raw-import:smoke`,
   `pnpm report-generation:smoke`, `pnpm karne:visual-contract:check`.
 - Security/privacy: `pnpm db:rls:check`, `pnpm tenant-db:check`, `pnpm web:token-storage:check`,
   `pnpm admin-mfa:check`, `pnpm rate-limit:check`, `pnpm security:audit:check`,

@@ -5,8 +5,8 @@ import type {
   ReportErrorBooklet,
   ReportStudentProgress,
   ReportStudentSnapshot,
-} from "@uzman-hocam/shared-types";
-import { Alert, Button, DataTable, MetricCard, MetricGrid, Panel, StatusBadge, type DataTableColumn } from "@uzman-hocam/ui";
+} from "@o-okul/shared-types";
+import { Alert, Button, DataTable, MetricCard, MetricGrid, Panel, StatusBadge, type DataTableColumn } from "@o-okul/ui";
 import { formatCourseName } from "../../_shared/academic-labels.js";
 import { KarneSheet } from "../../_shared/karne-sheet.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";

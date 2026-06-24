@@ -2,7 +2,7 @@
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Button, DataTable, EmptyState, Field, InfoGrid, InfoItem, Input, MetricCard, MetricGrid, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn } from "@uzman-hocam/ui";
+import { Button, DataTable, EmptyState, Field, InfoGrid, InfoItem, Input, MetricCard, MetricGrid, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn } from "@o-okul/ui";
 import type {
   AnswerChoice,
   AnswerKeyRecord,
@@ -14,7 +14,7 @@ import type {
   ReportSnapshotExportResult,
   ReportSnapshotRecord,
   StudentRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { CheckCircle2, Download, FileSpreadsheet, FileText, Play, RefreshCw, Search, Upload, Wand2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";

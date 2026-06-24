@@ -24,10 +24,10 @@ try {
   fail("WAL_ARCHIVE_TARGET file:// veya s3:// URL olmalı.");
 }
 
-const markerName = `uzman-hocam-wal-archive-smoke-${Date.now()}.wal`;
+const markerName = `o-okul-wal-archive-smoke-${Date.now()}.wal`;
 const markerBody = JSON.stringify(
   {
-    source: "uzman-hocam",
+    source: "o-okul",
     event: "backup.wal_archive_smoke",
     sentAt: checkedAt,
   },

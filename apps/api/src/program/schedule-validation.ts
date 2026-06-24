@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ScheduleLessonCreateRequest, ScheduleLessonUpdateRequest } from "@uzman-hocam/shared-types";
+import type { ScheduleLessonCreateRequest, ScheduleLessonUpdateRequest } from "@o-okul/shared-types";
 import { optionalIsoDateTime, requiredIsoDateTime, requiredTrimmedString } from "../http/zod-validation.js";
 
 const optionalNonEmptyString = requiredTrimmedString.optional();

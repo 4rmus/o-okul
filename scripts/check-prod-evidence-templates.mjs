@@ -1143,7 +1143,7 @@ runGithubCiNegativeCheck({
   path: "docs/evidence-templates/github-ci.run-url-repository-mismatch.tmp.json",
   expectedFailure: "workflow.runUrl repository ile eslesmeli.",
   mutate: (fixture) => {
-    fixture.workflow.runUrl = "https://github.com/other/uzman-hocam/actions/runs/1234567890";
+    fixture.workflow.runUrl = "https://github.com/other/o-okul/actions/runs/1234567890";
     fixture.evidenceReferences[0] = fixture.workflow.runUrl;
   },
 });
@@ -1152,7 +1152,7 @@ runGithubCiNegativeCheck({
   path: "docs/evidence-templates/github-ci.run-url-runid-mismatch.tmp.json",
   expectedFailure: "workflow.runUrl runId ile eslesmeli.",
   mutate: (fixture) => {
-    fixture.workflow.runUrl = "https://github.com/example/uzman-hocam/actions/runs/1234567891";
+    fixture.workflow.runUrl = "https://github.com/example/o-okul/actions/runs/1234567891";
     fixture.evidenceReferences[0] = fixture.workflow.runUrl;
   },
 });
@@ -1161,7 +1161,7 @@ runGithubCiNegativeCheck({
   path: "docs/evidence-templates/github-ci.evidence-reference-run-mismatch.tmp.json",
   expectedFailure: "evidenceReferences.0 runId ile eslesmeli.",
   mutate: (fixture) => {
-    fixture.evidenceReferences[0] = "https://github.com/example/uzman-hocam/actions/runs/1234567891";
+    fixture.evidenceReferences[0] = "https://github.com/example/o-okul/actions/runs/1234567891";
   },
 });
 runGithubCiSymlinkParentTargetNegativeCheck();
@@ -1733,8 +1733,8 @@ runUatNegativeCheck({
   allowExampleEvidence: false,
   mutate: (fixture) => {
     fixture.tester = "release-owner";
-    fixture.rollbackImageTag = "ghcr.io/uzman-hocam/api:rollback-2026-05-30";
-    fixture.restoreBackupReference = "s3://uzman-hocam-prod-backups/base/2026-05-30.dump";
+    fixture.rollbackImageTag = "ghcr.io/o-okul/api:rollback-2026-05-30";
+    fixture.restoreBackupReference = "s3://o-okul-prod-backups/base/2026-05-30.dump";
     fixture.journeyScenariosVerified[0].evidence = ["release owner observed staging screen"];
   },
 });
@@ -1870,7 +1870,7 @@ runDeploymentRollbackNegativeCheck({
     fixture.servicesVerified.push({
       service: "queue-board",
       status: "healthy",
-      imageTag: "ghcr.io/example/uzman-hocam/queue-board:previous-pass",
+      imageTag: "ghcr.io/example/o-okul/queue-board:previous-pass",
       evidenceReference: "https://staging.example.test/queues",
     });
   },
@@ -1920,7 +1920,7 @@ runDeploymentRollbackNegativeCheck({
   path: "docs/evidence-templates/deployment-rollback.service-image-version-mismatch.tmp.json",
   expectedFailure: "web.imageTag rollbackImageTag versiyonuyla eşleşmeli.",
   mutate: (fixture) => {
-    fixture.servicesVerified[0].imageTag = "ghcr.io/example/uzman-hocam/web:stale-pass";
+    fixture.servicesVerified[0].imageTag = "ghcr.io/example/o-okul/web:stale-pass";
   },
 });
 runDeploymentRollbackNegativeCheck({
@@ -2152,7 +2152,7 @@ runProductionSummaryNegativeCheck({
   path: "docs/evidence-templates/production-evidence-summary.live-exam-cycle-release-mismatch.tmp.json",
   expectedFailure: "reports.liveExamCycle.releaseCandidate reports.uat.releaseCandidate ile eşleşmeli.",
   mutate: (fixture) => {
-    fixture.reports.liveExamCycle.releaseCandidate = "ghcr.io/example/uzman-hocam/api:unexpected-live-exam-release";
+    fixture.reports.liveExamCycle.releaseCandidate = "ghcr.io/example/o-okul/api:unexpected-live-exam-release";
   },
 });
 runProductionSummaryNegativeCheck({
@@ -2194,7 +2194,7 @@ runProductionSummaryNegativeCheck({
   path: "docs/evidence-templates/production-evidence-summary.uat-release-candidate-mismatch.tmp.json",
   expectedFailure: "reports.uat.releaseCandidate reports.deploymentRollback.releaseCandidate ile eşleşmeli.",
   mutate: (fixture) => {
-    fixture.reports.uat.releaseCandidate = "ghcr.io/example/uzman-hocam/api:unexpected-release";
+    fixture.reports.uat.releaseCandidate = "ghcr.io/example/o-okul/api:unexpected-release";
   },
 });
 runProductionSummaryNegativeCheck({
@@ -2202,7 +2202,7 @@ runProductionSummaryNegativeCheck({
   path: "docs/evidence-templates/production-evidence-summary.uat-rollback-image-mismatch.tmp.json",
   expectedFailure: "reports.uat.rollbackImageTag reports.deploymentRollback.rollbackImageTag ile eşleşmeli.",
   mutate: (fixture) => {
-    fixture.reports.uat.rollbackImageTag = "ghcr.io/example/uzman-hocam/api:unexpected-rollback";
+    fixture.reports.uat.rollbackImageTag = "ghcr.io/example/o-okul/api:unexpected-rollback";
   },
 });
 runProductionSummaryNegativeCheck({
@@ -3553,7 +3553,7 @@ function runObservabilityUatGeneratorLocalArtifactNegativeChecks() {
     OBSERVABILITY_UAT_LOKI_URL: "https://loki.o-okul.com",
     OBSERVABILITY_UAT_DASHBOARD_PANELS_VERIFIED: "API up,Request rate,Average duration,Readiness failures,Docker logs",
     OBSERVABILITY_UAT_ALERTS_VERIFIED:
-      "UzmanHocamApiDown,UzmanHocamReadinessFailing,UzmanHocamHigh5xxRate,UzmanHocamSlowRequests",
+      "OOkulApiDown,OOkulReadinessFailing,OOkulHigh5xxRate,OOkulSlowRequests",
     OBSERVABILITY_UAT_PROMETHEUS_EVIDENCE_REFERENCE: "run:prometheus-ready-2026-06-24",
     OBSERVABILITY_UAT_GRAFANA_EVIDENCE_REFERENCE: "run:grafana-ready-2026-06-24",
     OBSERVABILITY_UAT_LOKI_EVIDENCE_REFERENCE: "run:loki-ready-2026-06-24",
@@ -4683,8 +4683,8 @@ function runUatGeneratorLocalArtifactNegativeChecks() {
     ...process.env,
     STAGING_ENVIRONMENT: "staging",
     UAT_TESTER: "Ayse UAT",
-    UAT_RELEASE_CANDIDATE: "ghcr.io/uzman-hocam/api:2026-06-24.1",
-    UAT_ROLLBACK_IMAGE_TAG: "ghcr.io/uzman-hocam/api:2026-06-23.1",
+    UAT_RELEASE_CANDIDATE: "ghcr.io/o-okul/api:2026-06-24.1",
+    UAT_ROLLBACK_IMAGE_TAG: "ghcr.io/o-okul/api:2026-06-23.1",
     UAT_RESTORE_BACKUP_REFERENCE: "s3://uh-prod-backups/2026-06-24/base.dump",
   };
   const cases = [
@@ -6800,7 +6800,7 @@ function runProdEnvSecretEvidenceTargetNegativeCheck() {
 
 function runProdEnvLocalEvidenceTargetNegativeCheck() {
   const env = createValidProdEnvForNegativeCheck();
-  env.RLS_LIVE_EVIDENCE_TARGET = "file:///var/lib/uzman-hocam/artifacts/local/rls-live.json";
+  env.RLS_LIVE_EVIDENCE_TARGET = "file:///var/lib/o-okul/artifacts/local/rls-live.json";
 
   const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
     env,
@@ -7209,10 +7209,10 @@ function runRemoteFinalEvidenceReadinessBehaviorChecks() {
   mkdirSync(binDir, { recursive: true });
 
   const remoteTargets = {
-    REMOTE_PRODUCTION_EVIDENCE_SUMMARY_TARGET: "/root/uzman-hocam/artifacts/staging/release-summary.json",
-    REMOTE_LIVE_STATUS_EVIDENCE_TARGET: "/root/uzman-hocam/artifacts/staging/live-status.json",
-    REMOTE_PILOT_EVIDENCE_TARGET: "/root/uzman-hocam/artifacts/staging/pilot.json",
-    REMOTE_GO_LIVE_EVIDENCE_TARGET: "/root/uzman-hocam/artifacts/staging/go-live.json",
+    REMOTE_PRODUCTION_EVIDENCE_SUMMARY_TARGET: "/root/o-okul/artifacts/staging/release-summary.json",
+    REMOTE_LIVE_STATUS_EVIDENCE_TARGET: "/root/o-okul/artifacts/staging/live-status.json",
+    REMOTE_PILOT_EVIDENCE_TARGET: "/root/o-okul/artifacts/staging/pilot.json",
+    REMOTE_GO_LIVE_EVIDENCE_TARGET: "/root/o-okul/artifacts/staging/go-live.json",
   };
 
   writeFileSync(
@@ -7234,10 +7234,10 @@ function fail(message) {
 }
 
 const expectedEnv = [
-  "PRODUCTION_EVIDENCE_SUMMARY_TARGET='file:///root/uzman-hocam/artifacts/staging/release-summary.json'",
-  "LIVE_STATUS_EVIDENCE_TARGET='file:///root/uzman-hocam/artifacts/staging/live-status.json'",
-  "PILOT_EVIDENCE_TARGET='file:///root/uzman-hocam/artifacts/staging/pilot.json'",
-  "GO_LIVE_EVIDENCE_TARGET='file:///root/uzman-hocam/artifacts/staging/go-live.json'",
+  "PRODUCTION_EVIDENCE_SUMMARY_TARGET='file:///root/o-okul/artifacts/staging/release-summary.json'",
+  "LIVE_STATUS_EVIDENCE_TARGET='file:///root/o-okul/artifacts/staging/live-status.json'",
+  "PILOT_EVIDENCE_TARGET='file:///root/o-okul/artifacts/staging/pilot.json'",
+  "GO_LIVE_EVIDENCE_TARGET='file:///root/o-okul/artifacts/staging/go-live.json'",
 ];
 
 if (command === "printf remote-ok") ok("remote-ok");
@@ -7280,7 +7280,7 @@ fail("unexpected remote command: " + command);
       console.error(positiveOutput);
       process.exit(1);
     }
-    if (!positiveOutput.includes("Remote final evidence readiness geçti: fake-remote:/root/uzman-hocam")) {
+    if (!positiveOutput.includes("Remote final evidence readiness geçti: fake-remote:/root/o-okul")) {
       console.error("Production evidence template kontrolü başarısız: remote final readiness fake SSH positive beklenen çıktı yok.");
       console.error(positiveOutput);
       process.exit(1);
@@ -7289,10 +7289,10 @@ fail("unexpected remote command: " + command);
     const sshLog = readFileSync(fakeSshLog, "utf8");
     if (
       !sshLog.includes("node scripts/check-live-status-evidence.mjs") ||
-      !sshLog.includes("LIVE_STATUS_EVIDENCE_TARGET='file:///root/uzman-hocam/artifacts/staging/live-status.json'") ||
+      !sshLog.includes("LIVE_STATUS_EVIDENCE_TARGET='file:///root/o-okul/artifacts/staging/live-status.json'") ||
       !sshLog.includes("-u RESTORE_DRILL_ALLOW_EXAMPLE_EVIDENCE") ||
       !sshLog.includes("node scripts/check-final-external-evidence.mjs") ||
-      !sshLog.includes("GO_LIVE_EVIDENCE_TARGET='file:///root/uzman-hocam/artifacts/staging/go-live.json'")
+      !sshLog.includes("GO_LIVE_EVIDENCE_TARGET='file:///root/o-okul/artifacts/staging/go-live.json'")
     ) {
       console.error("Production evidence template kontrolü başarısız: remote final readiness fake SSH env aktarımı logda yok.");
       console.error(sshLog);
@@ -7331,7 +7331,7 @@ fail("unexpected remote command: " + command);
     rmSync(fakeSshLog, { force: true });
     const invalidTargets = {
       ...remoteTargets,
-      REMOTE_LIVE_STATUS_EVIDENCE_TARGET: "file:///root/uzman-hocam/artifacts/local/live-status.json",
+      REMOTE_LIVE_STATUS_EVIDENCE_TARGET: "file:///root/o-okul/artifacts/local/live-status.json",
     };
     const negative = spawnSync(process.execPath, ["scripts/check-remote-final-evidence-readiness.mjs"], {
       env: createRemoteFinalEvidenceReadinessEnv(binDir, fakeSshLog, invalidTargets),
@@ -7369,7 +7369,7 @@ function createRemoteFinalEvidenceReadinessEnv(binDir, fakeSshLog, targetEnv) {
     PATH: `${binDir}:${process.env.PATH ?? ""}`,
     FAKE_SSH_LOG: fakeSshLog,
     REMOTE_EVIDENCE_HOST: "fake-remote",
-    REMOTE_EVIDENCE_ROOT: "/root/uzman-hocam",
+    REMOTE_EVIDENCE_ROOT: "/root/o-okul",
   };
 }
 
@@ -7829,8 +7829,8 @@ function createValidProdEnvForNegativeCheck() {
     APP_URL: "https://o-okul.com",
     API_URL: "https://o-okul.com",
     WEB_URL: "https://o-okul.com",
-    DATABASE_URL: "postgresql://app_user:strong-password@db.o-okul.internal:5432/uzman_hocam",
-    DIRECT_DATABASE_URL: "postgresql://migration_user:strong-password@db.o-okul.internal:5432/uzman_hocam",
+    DATABASE_URL: "postgresql://app_user:strong-password@db.o-okul.internal:5432/o_okul",
+    DIRECT_DATABASE_URL: "postgresql://migration_user:strong-password@db.o-okul.internal:5432/o_okul",
     JWT_ACCESS_SECRET: "access-secret-123456789012345678901234",
     JWT_REFRESH_SECRET: "refresh-secret-12345678901234567890123",
     STUDENT_PII_ENCRYPTION_KEY: "student-pii-encryption-123456789012",
@@ -7880,7 +7880,7 @@ function createValidProdEnvForNegativeCheck() {
     CLAMAV_HOST: "clamav",
     CLAMAV_PORT: "3310",
     CLAMAV_TIMEOUT_MS: "5000",
-    S3_BUCKET: "uzman-hocam-prod-assets",
+    S3_BUCKET: "o-okul-prod-assets",
     S3_ENDPOINT: "https://s3.tr-storage.o-okul.com",
     S3_ACCESS_KEY_ID: "prod-access-key",
     S3_SECRET_ACCESS_KEY: "prod-secret-key",
@@ -7891,12 +7891,12 @@ function createValidProdEnvForNegativeCheck() {
     SENTRY_SMOKE_CONFIRM: "send",
     SENTRY_SMOKE_MESSAGE: "o-okul production Sentry smoke",
     TRAEFIK_HTTPS_SMOKE_URL: "https://o-okul.com/",
-    BACKUP_PATH: "/var/backups/uzman-hocam",
+    BACKUP_PATH: "/var/backups/o-okul",
     BACKUP_RETENTION_DAYS: "7",
-    WAL_ARCHIVE_TARGET: "s3://prod-wal-archive/uzman-hocam/wal",
+    WAL_ARCHIVE_TARGET: "s3://prod-wal-archive/o-okul/wal",
     ALERT_WEBHOOK_URL: "https://alerts.o-okul.com/webhook",
     ALERT_WEBHOOK_TOKEN: "alert-webhook-token-123456789012345",
-    ROLLBACK_IMAGE_TAG: "ghcr.io/uzman-hocam/uzman-hocam/api:2026-06-14.1",
+    ROLLBACK_IMAGE_TAG: "ghcr.io/o-okul/o-okul/api:2026-06-14.1",
   };
 
   for (const key of [
@@ -7937,7 +7937,7 @@ function createValidProdEnvForNegativeCheck() {
     "GO_LIVE_EVIDENCE_TARGET",
     "LIVE_STATUS_EVIDENCE_TARGET",
   ]) {
-    env[key] = `file:///var/lib/uzman-hocam/evidence/${key.toLowerCase().replaceAll("_", "-")}.json`;
+    env[key] = `file:///var/lib/o-okul/evidence/${key.toLowerCase().replaceAll("_", "-")}.json`;
   }
 
   return env;

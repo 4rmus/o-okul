@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Queryable, TenantQueryable } from "@uzman-hocam/db";
+import type { Queryable, TenantQueryable } from "@o-okul/db";
 import { PostgresReportGenerationAdapter } from "./postgres-report-generation-adapter.js";
 import { examResultSummaryReportType, type ReportSnapshotCandidate } from "./report-generation-job.js";
 import type { ScoringResult } from "./scoring-engine.js";

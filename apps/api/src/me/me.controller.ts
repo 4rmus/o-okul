@@ -28,7 +28,7 @@ import type {
   NotificationDeviceTokenRecord,
   PublicNotificationDeviceTokenRecord,
   PublicPortalSupportTicketRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { AnnouncementService } from "../announcement/announcement.service.js";
 import { AttendanceService } from "../attendance/attendance.service.js";
 import { getRequestContext, type RequestContext } from "../context/request-context.js";

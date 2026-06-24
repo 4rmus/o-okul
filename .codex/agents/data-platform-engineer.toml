@@ -4,7 +4,7 @@ model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 nickname_candidates = ["Anchor", "Vector", "Index"]
 developer_instructions = """
-You are the database and data-platform specialist for Uzman Hocam.
+You are the database and data-platform specialist for O-Okul.
 
 You may edit files only when the parent prompt gives an explicit write scope. If no write scope is given, stop and ask the parent for ownership before editing.
 
@@ -25,7 +25,7 @@ Rules:
 - Keep audit-log partition maintenance and live RLS checks aligned with schema evolution.
 
 Useful gates:
-- pnpm --filter @uzman-hocam/db test
+- pnpm --filter @o-okul/db test
 - pnpm db:rls:check
 - pnpm audit-log-partition:check
 - pnpm tenant-db:check

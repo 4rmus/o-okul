@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, DataTable, Field, Input, Panel, SegmentedControl, Select, Textarea, type DataTableColumn } from "@uzman-hocam/ui";
+import { Alert, Button, DataTable, Field, Input, Panel, SegmentedControl, Select, Textarea, type DataTableColumn } from "@o-okul/ui";
 import type {
   AcademicTermRecord,
   AnnouncementRecord,
@@ -27,7 +27,7 @@ import type {
   TeacherNoteRecord,
   TeacherPortalLookupsResponse,
   TeacherRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { apiBaseUrl, apiRequest, authenticatedFetch, readData } from "../../../src/api-client.js";
 import {
   attendanceFormSchema,

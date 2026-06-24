@@ -39,14 +39,14 @@ describe("assertPersistenceConfig", () => {
       assertPersistenceConfig({
         NODE_ENV: "production",
         PERSISTENCE_DRIVER: "postgres",
-        DATABASE_URL: "postgresql://app:app@db:5432/uzman_hocam",
+        DATABASE_URL: "postgresql://app:app@db:5432/o_okul",
       }),
     ).not.toThrow();
   });
 
   it("production'da PERSISTENCE_DRIVER tanımsız ama DATABASE_URL varsa geçer", () => {
     expect(() =>
-      assertPersistenceConfig({ NODE_ENV: "production", DATABASE_URL: "postgresql://app:app@db:5432/uzman_hocam" }),
+      assertPersistenceConfig({ NODE_ENV: "production", DATABASE_URL: "postgresql://app:app@db:5432/o_okul" }),
     ).not.toThrow();
   });
 
@@ -55,7 +55,7 @@ describe("assertPersistenceConfig", () => {
       assertPersistenceConfig({
         NODE_ENV: "production",
         PERSISTENCE_DRIVER: "memory",
-        DATABASE_URL: "postgresql://app:app@db:5432/uzman_hocam",
+        DATABASE_URL: "postgresql://app:app@db:5432/o_okul",
       }),
     ).toThrow(/PERSISTENCE_DRIVER/);
   });

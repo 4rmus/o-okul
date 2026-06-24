@@ -40,10 +40,10 @@
 
 ## Validation By Scope
 
-- API: `pnpm --filter @uzman-hocam/api typecheck`, `pnpm --filter @uzman-hocam/api test`, `pnpm openapi:generate`.
-- Web/UI: `pnpm --filter @uzman-hocam/web typecheck`, `pnpm web:a11y:check`, `pnpm web:ux-baseline:check`.
-- Worker/report: `pnpm --filter @uzman-hocam/worker test`, `pnpm raw-import:smoke`, `pnpm report-generation:smoke`, `pnpm karne:visual-contract:check`.
-- DB/RLS: `pnpm --filter @uzman-hocam/db test`, `pnpm db:rls:check`, `pnpm audit-log-partition:check`, `pnpm tenant-db:check`.
+- API: `pnpm --filter @o-okul/api typecheck`, `pnpm --filter @o-okul/api test`, `pnpm openapi:generate`.
+- Web/UI: `pnpm --filter @o-okul/web typecheck`, `pnpm web:a11y:check`, `pnpm web:ux-baseline:check`.
+- Worker/report: `pnpm --filter @o-okul/worker test`, `pnpm raw-import:smoke`, `pnpm report-generation:smoke`, `pnpm karne:visual-contract:check`.
+- DB/RLS: `pnpm --filter @o-okul/db test`, `pnpm db:rls:check`, `pnpm audit-log-partition:check`, `pnpm tenant-db:check`.
 - Auth/security: `pnpm web:token-storage:check`, `pnpm admin-mfa:check`, `pnpm rate-limit:check`, `pnpm security:audit:check`.
 - Provider/privacy: `pnpm sms:smoke`, `pnpm notification:smoke`, `pnpm privacy:inventory:check`, `pnpm upload-av:check`, `pnpm financial-retention:check`.
 - Ops/release: `pnpm ops:check`, `pnpm prod:evidence:templates:check`, `pnpm prod:plan:check`, `pnpm prod:env:check`.

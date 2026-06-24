@@ -25,7 +25,7 @@ try {
 validateWebhookUrl(url);
 
 const body = {
-  source: "uzman-hocam",
+  source: "o-okul",
   event: "observability.alert_webhook_smoke",
   severity: "info",
   environment,

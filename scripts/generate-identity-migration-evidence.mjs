@@ -5,14 +5,14 @@ import pg from "pg";
 
 const outputPath = readOption("--output") ?? process.env.IDENTITY_MIGRATION_OUTPUT;
 const environment = readOption("--environment") ?? process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "staging";
-const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/uzman_hocam";
+const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/o_okul";
 
 const approvedBy = process.env.IDENTITY_MIGRATION_APPROVED_BY?.trim();
 const approvalReference = process.env.IDENTITY_MIGRATION_APPROVAL_REFERENCE?.trim();
 const activationMode = process.env.IDENTITY_MIGRATION_ACTIVATION_MODE?.trim();
 
-const invitationTestCommand = "pnpm --filter @uzman-hocam/api exec vitest run src/identity-invitation/identity-invitation.e2e.test.ts";
-const userManagementTestCommand = "pnpm --filter @uzman-hocam/api exec vitest run src/user-management/user-management.e2e.test.ts";
+const invitationTestCommand = "pnpm --filter @o-okul/api exec vitest run src/identity-invitation/identity-invitation.e2e.test.ts";
+const userManagementTestCommand = "pnpm --filter @o-okul/api exec vitest run src/user-management/user-management.e2e.test.ts";
 
 const subjectTables = [
   { table: "Student", role: "STUDENT" },

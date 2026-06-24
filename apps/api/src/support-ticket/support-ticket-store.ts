@@ -168,7 +168,7 @@ export class InMemorySupportTicketStore implements SupportTicketStore {
 export class PostgresSupportTicketStore implements SupportTicketStore {
   constructor(
     private readonly pool: TenantQueryable = new pg.Pool({
-      connectionString: process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/uzman_hocam",
+      connectionString: process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/o_okul",
     }),
   ) {}
 

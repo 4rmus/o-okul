@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AnnouncementDeliveryReportRecord } from "@uzman-hocam/shared-types";
+import type { AnnouncementDeliveryReportRecord } from "@o-okul/shared-types";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
@@ -96,7 +96,7 @@ export class InMemoryAnnouncementDeliveryReportStore implements AnnouncementDeli
 export class PostgresAnnouncementDeliveryReportStore implements AnnouncementDeliveryReportStore {
   constructor(
     private readonly pool: TenantQueryable = new pg.Pool({
-      connectionString: process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/uzman_hocam",
+      connectionString: process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/o_okul",
     }),
   ) {}
 

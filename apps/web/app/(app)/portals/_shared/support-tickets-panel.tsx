@@ -12,8 +12,8 @@ import {
   Textarea,
   type DataTableColumn,
   type StatusBadgeProps,
-} from "@uzman-hocam/ui";
-import type { SupportTicketRecord } from "@uzman-hocam/shared-types";
+} from "@o-okul/ui";
+import type { SupportTicketRecord } from "@o-okul/shared-types";
 import {
   firstFormError,
   supportTicketFormSchema,

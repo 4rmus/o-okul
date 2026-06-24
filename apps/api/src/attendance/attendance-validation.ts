@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AttendanceCreateRequest, AttendanceUpdateRequest } from "@uzman-hocam/shared-types";
+import type { AttendanceCreateRequest, AttendanceUpdateRequest } from "@o-okul/shared-types";
 import { optionalTrimmedString, requiredDateString, requiredTrimmedString } from "../http/zod-validation.js";
 
 const attendanceStatusSchema = z.enum(["PRESENT", "ABSENT", "LATE", "EXCUSED"]);

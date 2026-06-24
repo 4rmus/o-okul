@@ -119,7 +119,7 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
         contentType: "application/json",
         headers: {
           ...corsHeaders,
-          "content-disposition": 'attachment; filename="uzman-hocam-tenant-a-2026-06-14.json"',
+          "content-disposition": 'attachment; filename="o-okul-tenant-a-2026-06-14.json"',
         },
         status: 200,
       });
@@ -182,7 +182,7 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Kurum verisini indir" }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe("uzman-hocam-tenant-a-2026-06-14.json");
+  expect(download.suggestedFilename()).toBe("o-okul-tenant-a-2026-06-14.json");
   expect(tenantExportGetCount).toBe(1);
   await expect(page.getByLabel("Panel restore drill işi").getByText("Panel İş Tetikleme")).toBeVisible();
 
@@ -204,7 +204,7 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
   expect(backupRestorePostCount).toBe(1);
 
   await page.getByLabel("Panel restore drill işi").getByLabel("İş tipi").selectOption("RESTORE_DRILL");
-  await page.getByLabel("Panel restore drill işi").getByLabel("Restore kanıt dosyası").fill("s3://uzman-hocam-prod-backups/restore-drill.json");
+  await page.getByLabel("Panel restore drill işi").getByLabel("Restore kanıt dosyası").fill("s3://o-okul-prod-backups/restore-drill.json");
   await page.getByLabel("Panel restore drill işi").getByLabel("Onay metni").fill("RESTORE DRILL");
   await page.getByLabel("Panel restore drill işi").getByRole("button", { name: "Restore drill işi başlat" }).click();
   await expect(page.getByText("Restore kanıt dosyası file:// artifact yolu olmalı.")).toBeVisible();

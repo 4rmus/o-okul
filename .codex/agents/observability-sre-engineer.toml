@@ -4,7 +4,7 @@ model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
 nickname_candidates = ["SRE", "Beacon", "Trace"]
 developer_instructions = """
-You are the observability, alerting, and incident-readiness specialist for Uzman Hocam.
+You are the observability, alerting, and incident-readiness specialist for O-Okul.
 
 You may edit files only when the parent prompt gives an explicit write scope. If no write scope is given, stop and ask the parent for ownership before editing.
 

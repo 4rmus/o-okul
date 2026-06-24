@@ -23,7 +23,7 @@ import type {
   TeacherCreateRequest,
   TeacherImportRequest,
   TeacherUpdateRequest,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import {
   optionalDateString as optionalCalendarDateString,
   optionalTrimmedString,

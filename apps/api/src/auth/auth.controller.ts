@@ -19,7 +19,7 @@ import type {
   TotpSetupConfirmResponse,
   TotpSetupResponse,
   TotpStatusResponse,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { optionalTrimmedString, requiredTrimmedString, zodBody } from "../http/zod-validation.js";
 import { Roles } from "../rbac/roles.decorator.js";

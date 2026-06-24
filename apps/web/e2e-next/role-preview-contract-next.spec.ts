@@ -181,7 +181,7 @@ test.describe("Rol önizleme UI sözleşmesi", () => {
     await installRolePreviewApiMocks(page, unexpectedMutations, { requestedPaths, roles: ["ASSISTANT_ADMIN"] });
     await page.addInitScript(() => {
       document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
-      window.sessionStorage.setItem("uzman-hocam.role-preview-token", "preview-token-student");
+      window.sessionStorage.setItem("o-okul.role-preview-token", "preview-token-student");
     });
     await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
 

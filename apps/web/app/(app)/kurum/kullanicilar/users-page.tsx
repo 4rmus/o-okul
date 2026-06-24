@@ -16,7 +16,7 @@ import {
   Select,
   StatusBadge,
   type DataTableColumn,
-} from "@uzman-hocam/ui";
+} from "@o-okul/ui";
 import {
   isPortalSubjectRoleName,
   portalSubjectRoles,
@@ -27,7 +27,7 @@ import {
   type StudentRecord,
   type TeacherRecord,
   type TenantAssignableRoleName,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { Plus, RotateCcw, Save, Send } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest } from "../../../../src/api-client.js";

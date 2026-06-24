@@ -1,11 +1,11 @@
-import "dotenv/config";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { config as loadEnv } from "dotenv";
 import ExcelJS from "exceljs";
 import pg from "pg";
 import { alignAnswersToMaster } from "../../../apps/worker/src/jobs/booklet-alignment.ts";
-import { OpticalAnswerParser } from "../../../apps/worker/src/jobs/optical-answer-parser.ts";
+import { OpticalAnswerParser, type UnmatchedParsedAnswer } from "../../../apps/worker/src/jobs/optical-answer-parser.ts";
 import {
   scoreExam,
   scoringEngineVersion,
@@ -15,27 +15,20 @@ import {
   type StudentAnswer,
 } from "../../../apps/worker/src/jobs/scoring-engine.ts";
 import { getParserConfigPresetSuggestion } from "../../../packages/shared-types/src/format-analyzer.ts";
+import { DEMO_TENANT_ID, type DemoFixtures, type DemoStudent, fixturePath, loadDemoFixtures } from "./demo-fixtures.ts";
+
+loadEnv({ path: fileURLToPath(new URL("../../../.env", import.meta.url)), quiet: true });
 
 const databaseUrl =
   process.env.DIRECT_DATABASE_URL ??
   process.env.DATABASE_URL ??
-  "postgresql://migration:migration@localhost:5432/uzman_hocam";
+  "postgresql://migration:migration@localhost:5432/o_okul";
 
-const TENANT_ID = "tenant-demo";
-const CLASS_ID = "class-demo-cpaf-8";
-const TEACHER_ID = "teacher-demo-main";
+const TENANT_ID = DEMO_TENANT_ID;
 const ANSWER_KEY_VERSION = "v1";
 const PARSER_CONFIG_VERSION = "optik-7108-lgs-v1";
 const WRONG_PENALTY = 1 / 3;
 const COMPUTED_AT = "2026-06-02T00:00:00.000Z";
-
-type DemoStudent = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  studentNo: string;
-  phone: string;
-};
 
 type ExamSource = {
   id: string;
@@ -57,6 +50,7 @@ export type SeedExam = ExamSource & {
   questions: AnswerKeyItem[];
   bookletVariants: BookletVariant[];
   matchedEntries: SeedExamEntry[];
+  unmatchedEntries: SeedExamUnmatchedEntry[];
   unmatchedCount: number;
 };
 
@@ -71,6 +65,13 @@ type SeedExamEntry = {
   score: ScoringResult;
 };
 
+type SeedExamUnmatchedEntry = {
+  id: string;
+  rowNumber: number;
+  rawRow: UnmatchedParsedAnswer["rawRow"];
+  reason: UnmatchedParsedAnswer["reason"];
+};
+
 type WorkbookRow = {
   section: string;
   globalQuestionNo: number;
@@ -81,28 +82,6 @@ type WorkbookRow = {
   outcomeCode?: string;
   topic?: string;
 };
-
-const students: DemoStudent[] = [
-  { id: "student-cpaf-352", firstName: "ELİF GİZEM", lastName: "İLKBAHAR", studentNo: "352", phone: "5053542221" },
-  { id: "student-cpaf-470", firstName: "MUHAMMED EMİR", lastName: "ÇİÇEKÇİ", studentNo: "470", phone: "5319842762" },
-  { id: "student-cpaf-472", firstName: "YUSUF EMİR", lastName: "AKBAŞ", studentNo: "472", phone: "5357832435" },
-  { id: "student-cpaf-393", firstName: "MEHMETCAN", lastName: "ATEŞ", studentNo: "393", phone: "5070351377" },
-  { id: "student-cpaf-442", firstName: "ÖMER FARUK", lastName: "ÖZTEKİN", studentNo: "442", phone: "5352740970" },
-  { id: "student-cpaf-415", firstName: "MERVE", lastName: "DUMAN", studentNo: "415", phone: "5530732466" },
-  { id: "student-cpaf-413", firstName: "ÇINAR", lastName: "ATLI", studentNo: "413", phone: "5056615426" },
-  { id: "student-cpaf-110", firstName: "HAMİDE", lastName: "DEMİRCAN", studentNo: "110", phone: "5059533869" },
-  { id: "student-cpaf-287", firstName: "LORİN MASAL", lastName: "BOZHAN", studentNo: "287", phone: "5066803386" },
-  { id: "student-cpaf-111", firstName: "MEHMET SAİD", lastName: "AKDEMİR", studentNo: "111", phone: "5076950929" },
-  { id: "student-cpaf-176", firstName: "AHMET İSHAK", lastName: "ADIGÜZEL", studentNo: "176", phone: "5424233421" },
-  { id: "student-cpaf-140", firstName: "MUHAMMED EMİR", lastName: "GÖK", studentNo: "140", phone: "5050841347" },
-  { id: "student-cpaf-148", firstName: "MERT BATUR", lastName: "ÇOBAN", studentNo: "148", phone: "5063290182" },
-  { id: "student-cpaf-288", firstName: "TUNAHAN", lastName: "ASLAN", studentNo: "288", phone: "5386058989" },
-  { id: "student-cpaf-101", firstName: "ROBİN", lastName: "KOCAKAYA", studentNo: "101", phone: "5534661744" },
-  { id: "student-cpaf-1104", firstName: "İSMAİL", lastName: "CUŞA", studentNo: "1104", phone: "5309327735" },
-  { id: "student-cpaf-221", firstName: "MUHAMMED LAMİ", lastName: "İPEK", studentNo: "221", phone: "5375898165" },
-  { id: "student-cpaf-1597", firstName: "ENES", lastName: "CANSIZ", studentNo: "1597", phone: "5352654310" },
-  { id: "student-cpaf-1606", firstName: "AHMET", lastName: "TOPRAK", studentNo: "1606", phone: "5322614464" },
-];
 
 const examSources: ExamSource[] = [
   {
@@ -131,15 +110,16 @@ const examSources: ExamSource[] = [
   },
 ];
 
-function fixturePath(name: string): string {
-  return fileURLToPath(new URL(`../../../ornek-veriler/${name}`, import.meta.url));
-}
-
 export async function buildSeedExams(): Promise<SeedExam[]> {
-  return Promise.all(examSources.map(buildSeedExam));
+  const fixtures = await loadDemoFixtures();
+  return buildSeedExamsForStudents(fixtures.students);
 }
 
-async function buildSeedExam(source: ExamSource): Promise<SeedExam> {
+async function buildSeedExamsForStudents(students: DemoStudent[]): Promise<SeedExam[]> {
+  return Promise.all(examSources.map((source) => buildSeedExam(source, students)));
+}
+
+async function buildSeedExam(source: ExamSource, students: DemoStudent[]): Promise<SeedExam> {
   const rawContent = readFileSync(source.txtPath, "utf8");
   const answerKey = await readAnswerKey(source.answerKeyPath);
   const rowMetaByNumber = readOptikRowMeta(rawContent);
@@ -190,6 +170,12 @@ async function buildSeedExam(source: ExamSource): Promise<SeedExam> {
     questions: answerKey.questions,
     bookletVariants: answerKey.bookletVariants,
     matchedEntries,
+    unmatchedEntries: parsed.unmatched.map((row) => ({
+      id: importQuarantineId(source.id, row.rowNumber),
+      rowNumber: row.rowNumber,
+      rawRow: row.rawRow,
+      reason: row.reason,
+    })),
     unmatchedCount: parsed.unmatched.length,
   };
 }
@@ -334,6 +320,10 @@ function parsedAnswerId(examId: string, studentNo: string): string {
   return `parsed-${examId}-${studentNo}`;
 }
 
+function importQuarantineId(examId: string, rowNumber: number): string {
+  return `quarantine-${examId}-${rowNumber}`;
+}
+
 function resultId(participantIdValue: string): string {
   return `result-${participantIdValue}`;
 }
@@ -376,7 +366,7 @@ function isChoice(value: string): value is Exclude<Choice, ""> {
   return value === "A" || value === "B" || value === "C" || value === "D" || value === "E";
 }
 
-async function seedDatabase(seedExams: SeedExam[]): Promise<void> {
+async function seedDatabase(seedExams: SeedExam[], fixtures: DemoFixtures): Promise<void> {
   const pool = new pg.Pool({ connectionString: databaseUrl });
   let client: pg.PoolClient | undefined;
   try {
@@ -385,15 +375,15 @@ async function seedDatabase(seedExams: SeedExam[]): Promise<void> {
     await client.query("SELECT set_config('app.bypass_rls', 'true', true)");
 
     await cleanupExamData(client, seedExams.map((exam) => exam.id));
-    await seedClass(client);
-    await seedStudents(client);
+    await seedClasses(client, fixtures);
+    await seedStudents(client, fixtures);
 
     for (const exam of seedExams) {
       await seedExam(client, exam);
     }
 
     await client.query("COMMIT");
-    console.log(`Seeded ${students.length} students across ${seedExams.length} real exams`);
+    console.log(`Seeded ${fixtures.students.length} students across ${seedExams.length} real exams`);
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -404,6 +394,7 @@ async function seedDatabase(seedExams: SeedExam[]): Promise<void> {
 }
 
 async function cleanupExamData(client: pg.PoolClient, examIds: string[]): Promise<void> {
+  await client.query(`DELETE FROM "ReportSnapshot" WHERE "tenantId" = $1 AND "examId" = ANY($2::text[])`, [TENANT_ID, examIds]);
   await client.query(`DELETE FROM "ExamResult" WHERE "tenantId" = $1 AND "examId" = ANY($2::text[])`, [TENANT_ID, examIds]);
   await client.query(`DELETE FROM "ParsedAnswer" WHERE "tenantId" = $1 AND "examId" = ANY($2::text[])`, [TENANT_ID, examIds]);
   await client.query(`DELETE FROM "ImportQuarantine" WHERE "tenantId" = $1 AND "examId" = ANY($2::text[])`, [TENANT_ID, examIds]);
@@ -414,36 +405,58 @@ async function cleanupExamData(client: pg.PoolClient, examIds: string[]): Promis
   await client.query(`DELETE FROM "ParserConfig" WHERE "tenantId" = $1 AND "examId" = ANY($2::text[])`, [TENANT_ID, examIds]);
 }
 
-async function seedClass(client: pg.PoolClient): Promise<void> {
-  await client.query(
-    `
-      INSERT INTO "Class" ("id", "tenantId", "name", "level", "updatedAt")
-      VALUES ($1, $2, 'ÇPAFEN', '8', now())
-      ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "level" = EXCLUDED."level", "deletedAt" = NULL, "updatedAt" = now()
-    `,
-    [CLASS_ID, TENANT_ID],
-  );
-}
-
-async function seedStudents(client: pg.PoolClient): Promise<void> {
-  for (const student of students) {
+async function seedClasses(client: pg.PoolClient, fixtures: DemoFixtures): Promise<void> {
+  for (const demoClass of fixtures.classes) {
     await client.query(
       `
-        INSERT INTO "Student" ("id","tenantId","classId","responsibleTeacherId","status","firstName","lastName","studentNo","phone","updatedAt")
-        VALUES ($1,$2,$3,$4,'ACTIVE',$5,$6,$7,$8,now())
-        ON CONFLICT ("id") DO UPDATE SET "firstName"=EXCLUDED."firstName","lastName"=EXCLUDED."lastName",
-          "studentNo"=EXCLUDED."studentNo","phone"=EXCLUDED."phone","classId"=EXCLUDED."classId","deletedAt"=NULL,"updatedAt"=now()
+        INSERT INTO "Class" ("id", "tenantId", "name", "level", "updatedAt")
+        VALUES ($1, $2, $3, $4, now())
+        ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "level" = EXCLUDED."level", "deletedAt" = NULL, "updatedAt" = now()
       `,
-      [student.id, TENANT_ID, CLASS_ID, TEACHER_ID, student.firstName, student.lastName, student.studentNo, student.phone],
+      [demoClass.id, TENANT_ID, demoClass.name, demoClass.level],
+    );
+  }
+}
+
+async function seedStudents(client: pg.PoolClient, fixtures: DemoFixtures): Promise<void> {
+  for (const student of fixtures.students) {
+    await client.query(
+      `
+        INSERT INTO "Student" ("id","tenantId","classId","responsibleTeacherId","status","firstName","lastName","studentNo","email","phone","updatedAt")
+        VALUES ($1,$2,$3,$4,'ACTIVE',$5,$6,$7,$8,$9,now())
+        ON CONFLICT ("id") DO UPDATE SET "firstName"=EXCLUDED."firstName","lastName"=EXCLUDED."lastName",
+          "studentNo"=EXCLUDED."studentNo","email"=EXCLUDED."email","phone"=EXCLUDED."phone","classId"=EXCLUDED."classId",
+          "responsibleTeacherId"=EXCLUDED."responsibleTeacherId","deletedAt"=NULL,"updatedAt"=now()
+      `,
+      [
+        student.id,
+        TENANT_ID,
+        student.classId,
+        student.responsibleTeacherId,
+        student.firstName,
+        student.lastName,
+        student.studentNo,
+        student.email,
+        student.phone,
+      ],
     );
 
     await client.query(
       `
         INSERT INTO "StudentClassHistory" ("id","tenantId","studentId","classId","startsAt","reason","updatedAt")
         VALUES ($1,$2,$3,$4,'2026-06-01'::date,'CREATED',now())
-        ON CONFLICT ("id") DO UPDATE SET "updatedAt"=now()
+        ON CONFLICT ("id") DO UPDATE SET "classId"=EXCLUDED."classId","endsAt"=NULL,"updatedAt"=now()
       `,
-      [`hist-${student.id}`, TENANT_ID, student.id, CLASS_ID],
+      [`student-class-history-${student.id}`, TENANT_ID, student.id, student.classId],
+    );
+
+    await client.query(
+      `
+        INSERT INTO "StudentEnrollment" ("id","tenantId","studentId","classId","status","startsAt","reason","updatedAt")
+        VALUES ($1,$2,$3,$4,'ACTIVE','2026-06-01'::date,'CREATED',now())
+        ON CONFLICT ("id") DO UPDATE SET "classId"=EXCLUDED."classId","status"=EXCLUDED."status","endsAt"=NULL,"updatedAt"=now()
+      `,
+      [`student-enrollment-${student.id}`, TENANT_ID, student.id, student.classId],
     );
   }
 }
@@ -529,6 +542,26 @@ async function seedExam(client: pg.PoolClient, exam: SeedExam): Promise<void> {
     ],
   );
 
+  for (const unmatched of exam.unmatchedEntries) {
+    await client.query(
+      `
+        INSERT INTO "ImportQuarantine" ("id","tenantId","examId","rawImportId","rowNumber","rawRow","reason","status","updatedAt")
+        VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,'OPEN',now())
+        ON CONFLICT ("tenantId","rawImportId","rowNumber") DO UPDATE SET "rawRow"=EXCLUDED."rawRow","reason"=EXCLUDED."reason",
+          "status"='OPEN',"resolvedStudentId"=NULL,"deletedAt"=NULL,"updatedAt"=now()
+      `,
+      [
+        unmatched.id,
+        TENANT_ID,
+        exam.id,
+        exam.rawImportId,
+        unmatched.rowNumber,
+        JSON.stringify(unmatched.rawRow),
+        unmatched.reason,
+      ],
+    );
+  }
+
   for (const entry of exam.matchedEntries) {
     await client.query(
       `
@@ -582,7 +615,7 @@ async function seedExam(client: pg.PoolClient, exam: SeedExam): Promise<void> {
   }
 }
 
-function printDryRun(seedExams: SeedExam[]): void {
+function printDryRun(seedExams: SeedExam[], fixtures: DemoFixtures): void {
   const summary = seedExams.map((exam) => ({
     id: exam.id,
     title: exam.title,
@@ -590,18 +623,20 @@ function printDryRun(seedExams: SeedExam[]): void {
     bPermutationHead: exam.bookletVariants[0]?.permutation.slice(0, 5) ?? [],
     matchedDemoStudents: exam.matchedEntries.length,
     unmatchedRows: exam.unmatchedCount,
-    adiguzel: exam.matchedEntries.find((entry) => entry.studentNo === "176")?.score.total,
+    accountStudent: fixtures.accountStudent.studentNo,
+    accountStudentScore: exam.matchedEntries.find((entry) => entry.studentNo === fixtures.accountStudent.studentNo)?.score.total,
   }));
   console.log(JSON.stringify(summary, null, 2));
 }
 
 async function main(): Promise<void> {
-  const seedExams = await buildSeedExams();
+  const fixtures = await loadDemoFixtures();
+  const seedExams = await buildSeedExamsForStudents(fixtures.students);
   if (process.argv.includes("--dry-run")) {
-    printDryRun(seedExams);
+    printDryRun(seedExams, fixtures);
     return;
   }
-  await seedDatabase(seedExams);
+  await seedDatabase(seedExams, fixtures);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

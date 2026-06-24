@@ -1,9 +1,9 @@
 "use client";
 
-import { DataTable, Panel, type DataTableColumn } from "@uzman-hocam/ui";
-import type { DevelopmentTrendItem } from "@uzman-hocam/shared-types";
+import { DataTable, Panel, type DataTableColumn } from "@o-okul/ui";
+import type { DevelopmentTrendItem } from "@o-okul/shared-types";
 
-export type { DevelopmentTrendItem } from "@uzman-hocam/shared-types";
+export type { DevelopmentTrendItem } from "@o-okul/shared-types";
 
 export function DevelopmentTrendPanel({ assessments }: { assessments: DevelopmentTrendItem[] }) {
   const scoreColumns: Array<DataTableColumn<DevelopmentTrendItem["scores"][number]>> = [

@@ -1,4 +1,4 @@
-export { FormatAnalyzerService, getParserConfigPresetSuggestion } from "@uzman-hocam/shared-types";
+export { FormatAnalyzerService, getParserConfigPresetSuggestion } from "@o-okul/shared-types";
 export type {
   AnswerFieldSpec,
   AnswerSegmentSpec,
@@ -8,4 +8,4 @@ export type {
   ParserConfigSuggestion,
   ParserDelimiter,
   ParserEncoding,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";

@@ -52,27 +52,27 @@
 
 ## Çalıştırılan doğrulamalar
 
-- `pnpm --filter @uzman-hocam/api typecheck`
-- `pnpm --filter @uzman-hocam/api test`
-- `pnpm --filter @uzman-hocam/api test -- api-error`
-- `pnpm --filter @uzman-hocam/api test -- api-response`
-- `pnpm --filter @uzman-hocam/api test -- api-version`
-- `pnpm --filter @uzman-hocam/api test -- tenant-query class-store schedule-store study-session-store homework-store`
-- `pnpm --filter @uzman-hocam/api test -- schedule`
-- `pnpm --filter @uzman-hocam/api test -- schedule-store`
-- `pnpm --filter @uzman-hocam/api test -- study-session`
-- `pnpm --filter @uzman-hocam/api test -- study-session-store`
-- `pnpm --filter @uzman-hocam/api test -- homework`
-- `pnpm --filter @uzman-hocam/api test -- homework-store`
-- `pnpm --filter @uzman-hocam/db lint`
-- `pnpm --filter @uzman-hocam/db db:rls:check`
+- `pnpm --filter @o-okul/api typecheck`
+- `pnpm --filter @o-okul/api test`
+- `pnpm --filter @o-okul/api test -- api-error`
+- `pnpm --filter @o-okul/api test -- api-response`
+- `pnpm --filter @o-okul/api test -- api-version`
+- `pnpm --filter @o-okul/api test -- tenant-query class-store schedule-store study-session-store homework-store`
+- `pnpm --filter @o-okul/api test -- schedule`
+- `pnpm --filter @o-okul/api test -- schedule-store`
+- `pnpm --filter @o-okul/api test -- study-session`
+- `pnpm --filter @o-okul/api test -- study-session-store`
+- `pnpm --filter @o-okul/api test -- homework`
+- `pnpm --filter @o-okul/api test -- homework-store`
+- `pnpm --filter @o-okul/db lint`
+- `pnpm --filter @o-okul/db db:rls:check`
 - `pnpm postgres-stores:smoke`
 - `node --check packages/db/scripts/check-rls-live.mjs`
-- `pnpm --filter @uzman-hocam/web test`
-- `pnpm --filter @uzman-hocam/web test:e2e`
+- `pnpm --filter @o-okul/web test`
+- `pnpm --filter @o-okul/web test:e2e`
 - Lokal Playwright smoke: canlı local web+api ile program, etüt ve ödev kontrol panelleri görünür;
   kontrol sayacı `1/1` olur.
-- `pnpm --filter @uzman-hocam/db db:rls:check:live`
+- `pnpm --filter @o-okul/db db:rls:check:live`
 
 ## Subagent notu
 

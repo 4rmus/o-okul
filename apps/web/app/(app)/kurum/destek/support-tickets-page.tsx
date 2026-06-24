@@ -18,7 +18,7 @@ import {
   Textarea,
   type DataTableColumn,
   type StatusBadgeProps,
-} from "@uzman-hocam/ui";
+} from "@o-okul/ui";
 import type {
   AcademicTermRecord,
   CampusRecord,
@@ -29,7 +29,7 @@ import type {
   SupportTicketAttachmentRecord,
   SupportTicketCommentRecord,
   SupportTicketRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { CheckCircle2, CirclePlay, Download, Eye, Plus, Upload } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, type ListMeta } from "../../../../src/api-client.js";

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
-import type { AnswerKeyRecord } from "@uzman-hocam/shared-types";
+import type { AnswerKeyRecord } from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
 import type { LearningOutcomeRecord, LearningOutcomeStore } from "../school/learning-outcome-store.js";
 import { AnswerKeyExcelImportService } from "./answer-key-excel-import.service.js";

@@ -25,7 +25,7 @@ discovery.relabel "docker_logs" {
 loki.source.docker "containers" {
   host          = "unix:///var/run/docker.sock"
   targets       = discovery.docker.linux.targets
-  labels        = { "platform" = "docker", "stack" = "uzman-hocam" }
+  labels        = { "platform" = "docker", "stack" = "o-okul" }
   relabel_rules = discovery.relabel.docker_logs.rules
   forward_to    = [loki.write.local.receiver]
 }

@@ -4,7 +4,7 @@ model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 nickname_candidates = ["Key", "Session", "Latch"]
 developer_instructions = """
-You are the authentication and session-hardening specialist for Uzman Hocam.
+You are the authentication and session-hardening specialist for O-Okul.
 
 You may edit files only when the parent prompt gives an explicit write scope. If no write scope is given, stop and ask the parent for ownership before editing.
 
@@ -26,7 +26,7 @@ Rules:
 - Keep web token-storage checks and API auth tests aligned.
 
 Useful gates:
-- pnpm --filter @uzman-hocam/api exec vitest run src/auth src/security src/http src/rate-limit
+- pnpm --filter @o-okul/api exec vitest run src/auth src/security src/http src/rate-limit
 - pnpm web:token-storage:check
 - pnpm admin-mfa:check
 - pnpm rate-limit:smoke

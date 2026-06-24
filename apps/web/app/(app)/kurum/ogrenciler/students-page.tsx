@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Checkbox, CrudPage, DataTable, EmptyState, Field, FormModal, InfoGrid, InfoItem, Input, Select, type DataTableColumn, useConfirmDialog } from "@uzman-hocam/ui";
+import { Button, Checkbox, CrudPage, DataTable, EmptyState, Field, FormModal, InfoGrid, InfoItem, Input, Select, type DataTableColumn, useConfirmDialog } from "@o-okul/ui";
 import type {
   AttendanceSummaryRecord,
   ClassRecord,
@@ -22,7 +22,7 @@ import type {
   StudentRecord,
   TeacherNoteRecord,
   TeacherRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";

@@ -1,7 +1,7 @@
 "use client";
 
-import { DataTable, InfoGrid, InfoItem, Panel, StatusBadge, type DataTableColumn } from "@uzman-hocam/ui";
-import type { ClassRecord, ScheduleLessonRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
+import { DataTable, InfoGrid, InfoItem, Panel, StatusBadge, type DataTableColumn } from "@o-okul/ui";
+import type { ClassRecord, ScheduleLessonRecord, StudentRecord, TeacherRecord } from "@o-okul/shared-types";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 
 interface TeacherClassReportSummary {

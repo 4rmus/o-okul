@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { DataTable, Field, InfoGrid, InfoItem, Panel, Select, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@uzman-hocam/ui";
-import type { CampusRecord, ClassRecord, ExamRecord, GradeLevelRecord, ReportSnapshotRecord, StudentRecord } from "@uzman-hocam/shared-types";
+import { DataTable, Field, InfoGrid, InfoItem, Panel, Select, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
+import type { CampusRecord, ClassRecord, ExamRecord, GradeLevelRecord, ReportSnapshotRecord, StudentRecord } from "@o-okul/shared-types";
 import { ArrowLeft } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";

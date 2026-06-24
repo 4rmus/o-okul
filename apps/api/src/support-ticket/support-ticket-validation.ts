@@ -6,7 +6,7 @@ import type {
   SupportTicketCreateRequest,
   SupportTicketUpdateRequest,
   TeacherPortalSupportTicketCreateRequest,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { optionalTrimmedString, requiredTrimmedString } from "../http/zod-validation.js";
 
 const supportTicketPrioritySchema = z.enum(["LOW", "NORMAL", "HIGH"]);

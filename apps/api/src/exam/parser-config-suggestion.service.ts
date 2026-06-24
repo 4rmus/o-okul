@@ -6,7 +6,7 @@ import {
   type ParserConfigSuggestionRequest,
   type ParserConfigSuggestionResult as SharedParserConfigSuggestionResult,
   type ParserConfigSuggestion,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
 
 export interface ParserConfigSuggestionInput extends ParserConfigSuggestionRequest {

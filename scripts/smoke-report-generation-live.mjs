@@ -11,8 +11,8 @@ import {
 } from "../apps/worker/dist/queue/bullmq-worker.js";
 import { validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
-const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/uzman_hocam";
-const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/uzman_hocam";
+const databaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/o_okul";
+const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migration:migration@localhost:5432/o_okul";
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 const queuePrefix = process.env.QUEUE_PREFIX ?? `report-generation-smoke-${Date.now()}`;
 const resultCount = readResultCount();

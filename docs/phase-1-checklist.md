@@ -22,9 +22,9 @@ kanıtları ayrıca takip edilir.
 
 | PR | Hedef | Sahip | Değişecek alan | Kanıt |
 |---|---|---|---|---|
-| 1 | School CRUD API temeli | backend-architect | `apps/api/src/school`, `apps/api/src/student` | Kısmi: Class/Teacher/Guardian/Student CRUD endpointleri için opt-in Postgres store ve Student kota hard-block eklendi; `pnpm --filter @uzman-hocam/api test` geçti |
+| 1 | School CRUD API temeli | backend-architect | `apps/api/src/school`, `apps/api/src/student` | Kısmi: Class/Teacher/Guardian/Student CRUD endpointleri için opt-in Postgres store ve Student kota hard-block eklendi; `pnpm --filter @o-okul/api test` geçti |
 | 2 | Class CRUD DB-backed geçiş | backend-architect | `apps/api/src/school/class-store.ts`, Postgres bağlantısı | Tamam: `CLASS_STORE=postgres` Postgres Class store, SQL parametre testi ve `pnpm postgres-stores:smoke` canlı DB/RLS kanıtı geçti |
-| 3 | Web CRUD shell | frontend-architect | `apps/web` | Kısmi: login sonrası Class, Teacher, Guardian ve Student listele/create/update/delete ekranları eklendi; bearer token `/classes`, `/teachers`, `/guardians`, `/students` çağrıları Playwright ile doğrulandı; `pnpm --filter @uzman-hocam/web test`, `pnpm --filter @uzman-hocam/web test:e2e`, `pnpm run ci` geçti |
+| 3 | Web CRUD shell | frontend-architect | `apps/web` | Kısmi: login sonrası Class, Teacher, Guardian ve Student listele/create/update/delete ekranları eklendi; bearer token `/classes`, `/teachers`, `/guardians`, `/students` çağrıları Playwright ile doğrulandı; `pnpm --filter @o-okul/web test`, `pnpm --filter @o-okul/web test:e2e`, `pnpm run ci` geçti |
 | 4 | Excel dry-run import/export | backend-architect | API + worker import job | Kısmi: Student Excel dry-run/import/export API eklendi; satır-bazlı hata, dry-run yazmama, kota 409, `createMany` transaction rollback ve worker tenant context testleri geçti; canlı BullMQ smoke kanıtı var |
 | 5 | Kota ve kalite kapanışı | quality-engineer | testler, doküman | Kısmi: öğrenci kota aşımı create/import için 409, dry-run kota raporu, kısmi import rollback e2e kapsamı ve Teacher/Guardian Postgres store smoke kapsamı eklendi; CI yeşil |
 

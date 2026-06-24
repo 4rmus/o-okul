@@ -88,7 +88,7 @@ Mimari kural:
 - Frontend parse veya scoring motoru olmamalı; sadece API akışlarını yönetmeli.
 - Cevap anahtarı, optik parse, kitapçık hizalama, değerlendirme ve rapor üretimi backend/worker tarafında kalmalı.
 - Öğrenci, veli ve sınıf bağları tenant, RBAC ve RLS sınırlarını korumalı.
-- Yeni paket eklemek son seçenek olmalı; mevcut stack: Next.js, React Query, `@uzman-hocam/ui`, lucide icons, Chart.js/report bileşenleri.
+- Yeni paket eklemek son seçenek olmalı; mevcut stack: Next.js, React Query, `@o-okul/ui`, lucide icons, Chart.js/report bileşenleri.
 
 ## 4. Faz 0 - Hazırlık ve Sınırları Netleştirme
 
@@ -399,11 +399,11 @@ Playwright önerisi:
 Önce odaklı testler:
 
 ```bash
-corepack pnpm --filter @uzman-hocam/api exec vitest run src/student/student.service.test.ts src/school/guardian-store.test.ts src/school/class-store.test.ts
-corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/exam.controller.e2e.test.ts src/exam/answer-key-excel-import.service.test.ts src/exam/raw-import.controller.e2e.test.ts src/report/report-generation.controller.e2e.test.ts
-corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/optik-7108-real-pipeline.test.ts src/jobs/optical-parse-workflow.test.ts src/jobs/exam-evaluation-job.test.ts src/jobs/report-generation-job.test.ts
-corepack pnpm --filter @uzman-hocam/web typecheck
-corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts
+corepack pnpm --filter @o-okul/api exec vitest run src/student/student.service.test.ts src/school/guardian-store.test.ts src/school/class-store.test.ts
+corepack pnpm --filter @o-okul/api exec vitest run src/exam/exam.controller.e2e.test.ts src/exam/answer-key-excel-import.service.test.ts src/exam/raw-import.controller.e2e.test.ts src/report/report-generation.controller.e2e.test.ts
+corepack pnpm --filter @o-okul/worker exec vitest run src/jobs/optik-7108-real-pipeline.test.ts src/jobs/optical-parse-workflow.test.ts src/jobs/exam-evaluation-job.test.ts src/jobs/report-generation-job.test.ts
+corepack pnpm --filter @o-okul/web typecheck
+corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts
 ```
 
 Canlı veya lokal tam zincir gerekiyorsa:

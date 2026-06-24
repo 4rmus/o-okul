@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode }
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, Menu, Search, X, type LucideIcon } from "lucide-react";
-import { Button, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps } from "@uzman-hocam/ui";
-import type { ClassRecord, GuardianRecord, NotificationDeviceTokenRecord, StudentRecord, TeacherRecord } from "@uzman-hocam/shared-types";
+import { Button, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";
+import type { ClassRecord, GuardianRecord, NotificationDeviceTokenRecord, StudentRecord, TeacherRecord } from "@o-okul/shared-types";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../src/api-client.js";
 import { appBrand } from "../../src/brand.js";
 import { useAuth } from "../providers.js";
@@ -898,7 +898,7 @@ async function resolveWebPushToken(): Promise<string> {
 }
 
 function readWebPushPublicKey(): string {
-  const override = (window as Window & { __UZMAN_HOCAM_WEB_PUSH_PUBLIC_KEY__?: string }).__UZMAN_HOCAM_WEB_PUSH_PUBLIC_KEY__;
+  const override = (window as Window & { __O_OKUL_WEB_PUSH_PUBLIC_KEY__?: string }).__O_OKUL_WEB_PUSH_PUBLIC_KEY__;
   return override ?? process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY ?? "";
 }
 

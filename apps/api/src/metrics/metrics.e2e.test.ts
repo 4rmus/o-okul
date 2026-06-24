@@ -29,10 +29,10 @@ describe("Metrics API", () => {
     const response = await request(server).get("/metrics").expect(200);
 
     expect(response.headers["content-type"]).toContain("text/plain");
-    expect(response.text).toContain("# TYPE uzman_hocam_process_uptime_seconds gauge");
-    expect(response.text).toContain("uzman_hocam_http_requests_total");
-    expect(response.text).toContain("# TYPE uzman_hocam_queue_jobs gauge");
-    expect(response.text).toContain("uzman_hocam_queue_metrics_scrape_error 0");
+    expect(response.text).toContain("# TYPE o_okul_process_uptime_seconds gauge");
+    expect(response.text).toContain("o_okul_http_requests_total");
+    expect(response.text).toContain("# TYPE o_okul_queue_jobs gauge");
+    expect(response.text).toContain("o_okul_queue_metrics_scrape_error 0");
     expect(response.text).toContain('method="GET"');
     expect(response.text).toContain('path="/health"');
     expect(response.text).toContain('status="200"');

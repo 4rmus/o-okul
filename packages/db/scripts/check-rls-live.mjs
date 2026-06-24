@@ -5,8 +5,8 @@ const { Client } = pg;
 
 const adminDatabaseUrl =
   process.env.DIRECT_DATABASE_URL ??
-  "postgresql://migration:migration@localhost:5432/uzman_hocam";
-const appDatabaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/uzman_hocam";
+  "postgresql://migration:migration@localhost:5432/o_okul";
+const appDatabaseUrl = process.env.DATABASE_URL ?? "postgresql://app:app@localhost:5432/o_okul";
 
 const adminClient = new Client({ connectionString: adminDatabaseUrl });
 const appClient = new Client({ connectionString: appDatabaseUrl });

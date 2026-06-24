@@ -27,9 +27,9 @@ import type {
   TeacherAssignmentRecord,
   TeacherNoteRecord,
   TeacherRecord,
-} from "@uzman-hocam/shared-types";
+} from "@o-okul/shared-types";
 import { ArrowLeft, BarChart3, ChevronRight, LayoutDashboard } from "lucide-react";
-import { ActionCard, DataTable, Field, InfoGrid, InfoItem, Panel, Select, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@uzman-hocam/ui";
+import { ActionCard, DataTable, Field, InfoGrid, InfoItem, Panel, Select, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";

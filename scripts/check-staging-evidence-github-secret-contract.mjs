@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-const root = resolve("..", ".uzman-hocam-staging-secret-contract");
+const root = resolve("..", ".o-okul-staging-secret-contract");
 const repoPath = resolve("artifacts/staging-evidence-secret-contract");
 const fakeGhPath = join(root, "fake-gh.mjs");
 const validEnvPath = join(root, "staging-evidence.env");
@@ -163,7 +163,7 @@ function repoEnvFile() {
 }
 
 function tempEnvFile() {
-  const file = join(tmpdir(), `uzman-hocam-staging-secret-${Date.now()}.env`);
+  const file = join(tmpdir(), `o-okul-staging-secret-${Date.now()}.env`);
   writeFileSync(file, "NODE_ENV=production\n");
   chmodSync(file, 0o600);
   return file;
@@ -248,11 +248,11 @@ function buildValidEnvFile() {
     ["__SET_STAGING_EMAIL_TO__", "ops@o-okul.com"],
     ["__SET_STAGING_PUSH_TO__", "push-target-staging-team"],
     ["https://__SET_S3_ENDPOINT__", "https://s3.staging.o-okul.com"],
-    ["__SET_STAGING_BUCKET__", "uzman-hocam-staging"],
+    ["__SET_STAGING_BUCKET__", "o-okul-staging"],
     ["__SET_S3_ACCESS_KEY_ID__", "s3AccessKeyContractValue001"],
     ["__SET_S3_SECRET_ACCESS_KEY__", "s3SecretAccessKeyContractValue001"],
     ["https://__SET_SENTRY_DSN__", "https://contractpublickey@sentry.staging.o-okul.com/123"],
-    ["s3://__SET_WAL_ARCHIVE_BUCKET__/staging", "s3://uzman-hocam-wal/staging"],
+    ["s3://__SET_WAL_ARCHIVE_BUCKET__/staging", "s3://o-okul-wal/staging"],
     ["https://__SET_ALERT_WEBHOOK_URL__", "https://alerts.staging.o-okul.com/webhook"],
     ["__SET_ALERT_WEBHOOK_TOKEN__", "contractAlertWebhookToken00000000010"],
   ]);
