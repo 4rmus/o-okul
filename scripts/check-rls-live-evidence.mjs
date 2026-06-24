@@ -73,6 +73,11 @@ const requiredCommands = [
   "pnpm rls:load:smoke",
   "pnpm rls:live:check",
 ];
+const requiredEvidenceReferenceFileNames = [
+  "db-rls-check.log",
+  "db-rls-check-live.log",
+  "rls-load-smoke.json",
+];
 const requiredWriteRejects = [
   "Student wrong tenant insert",
   "Homework wrong tenant insert",
@@ -166,12 +171,20 @@ function requireAllowedEvidenceTargetUrl(url) {
     fail(["RLS_LIVE_EVIDENCE_TARGET file:// veya https:// URL olmali."]);
   }
 
+  if (url.username || url.password || url.search || url.hash) {
+    fail(["RLS_LIVE_EVIDENCE_TARGET userinfo, query veya fragment tasimamali."]);
+  }
+
   if (url.protocol === "https:" && isPlaceholderEvidenceTargetHost(url.hostname)) {
     fail(["RLS_LIVE_EVIDENCE_TARGET production kaniti icin gercek https host olmali."]);
   }
 
   if (url.protocol === "file:" && isLocalTempEvidenceTargetUrl(url)) {
     fail(["RLS_LIVE_EVIDENCE_TARGET production kaniti icin lokal temp path olmamali."]);
+  }
+
+  if (url.protocol === "file:" && isLocalSmokeEvidenceTargetUrl(url)) {
+    fail(["RLS_LIVE_EVIDENCE_TARGET production kaniti icin artifacts/local altinda olmamali."]);
   }
 }
 
@@ -192,7 +205,19 @@ function isPlaceholderEvidenceTargetHost(hostname) {
 
 function isLocalTempEvidenceTargetUrl(url) {
   const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
-  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+  return (
+    path === "/tmp" ||
+    path.startsWith("/tmp/") ||
+    path === "/var/tmp" ||
+    path.startsWith("/var/tmp/") ||
+    path === "/private/tmp" ||
+    path.startsWith("/private/tmp/")
+  );
+}
+
+function isLocalSmokeEvidenceTargetUrl(url) {
+  const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
+  return path.includes("/artifacts/local/");
 }
 
 function parseJson(value) {
@@ -342,11 +367,28 @@ function requireCommands(report, failures) {
 
 function requireEvidenceReferences(references, failures) {
   requireStringList(references, failures, "evidenceReferences", 3);
-  if (!Array.isArray(references) || allowExampleEvidence) return;
+  if (!Array.isArray(references)) return;
 
   for (const [index, value] of references.entries()) {
-    if (hasPlaceholderToken(value)) {
+    if (!hasAllowedEvidenceReferencePrefix(value)) {
+      failures.push(
+        `evidenceReferences.${index} artifact:, run:, log:, url:, https://, file://, s3:// veya artifacts/ ile baslayan kalici referans olmali.`,
+      );
+    }
+    if (!allowExampleEvidence && hasPlaceholderToken(value)) {
       failures.push(`evidenceReferences.${index} production kaniti icin placeholder/redacted deger olmamali.`);
+    }
+    if (isLocalSmokeEvidenceReference(value)) {
+      failures.push(`evidenceReferences.${index} local smoke artifact referansi tasimamali.`);
+    }
+    if (hasSecretBearingEvidenceReference(value)) {
+      failures.push(`evidenceReferences.${index} userinfo, query veya fragment tasimamali.`);
+    }
+  }
+
+  for (const fileName of requiredEvidenceReferenceFileNames) {
+    if (!references.some((value) => hasEvidenceReferenceFileName(value, fileName))) {
+      failures.push(`evidenceReferences ${fileName} kanıt artifact'ini içermeli.`);
     }
   }
 }
@@ -514,6 +556,52 @@ function hasPlaceholderToken(value) {
     "localhost",
     "127.0.0.1",
   ].some((token) => normalized.includes(token));
+}
+
+function hasAllowedEvidenceReferencePrefix(value) {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.startsWith("artifact:") ||
+    normalized.startsWith("run:") ||
+    normalized.startsWith("log:") ||
+    normalized.startsWith("url:") ||
+    normalized.startsWith("https://") ||
+    normalized.startsWith("file://") ||
+    normalized.startsWith("s3://") ||
+    normalized.startsWith("artifacts/")
+  );
+}
+
+function hasSecretBearingEvidenceReference(value) {
+  if (typeof value !== "string") return false;
+
+  const normalized = value.trim();
+  if (normalized.includes("?") || normalized.includes("#")) {
+    return true;
+  }
+
+  const urlCandidate = normalized.toLowerCase().startsWith("url:") ? normalized.slice(4) : normalized;
+  if (!/^(https|file|s3):\/\//i.test(urlCandidate)) {
+    return false;
+  }
+
+  try {
+    const url = new URL(urlCandidate);
+    return Boolean(url.username || url.password || url.search || url.hash);
+  } catch {
+    return false;
+  }
+}
+
+function isLocalSmokeEvidenceReference(value) {
+  return typeof value === "string" && value.replaceAll("\\", "/").includes("artifacts/local/");
+}
+
+function hasEvidenceReferenceFileName(value, fileName) {
+  if (typeof value !== "string") return false;
+  const normalized = value.split(/[?#]/)[0].replaceAll("\\", "/").replace(/\/+$/g, "");
+  return normalized.endsWith(`/${fileName}`) || normalized === fileName;
 }
 
 function fail(failures) {

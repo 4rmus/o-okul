@@ -1,6 +1,17 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -17,6 +28,7 @@ const templateChecks = [
     "KVKK_INVENTORY_TARGET",
     "docs/evidence-templates/kvkk-inventory.example.json",
     "scripts/check-kvkk-inventory-evidence.mjs",
+    { KVKK_INVENTORY_ALLOW_EXAMPLE_EVIDENCE: "1" },
   ],
   [
     "Identity migration template",
@@ -117,11 +129,25 @@ const templateChecks = [
     { ISEM_OPTICAL_PIPELINE_ALLOW_EXAMPLE_EVIDENCE: "1" },
   ],
   [
+    "Live UI-worker result template",
+    "LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET",
+    "docs/evidence-templates/live-ui-worker-result.example.json",
+    "scripts/check-live-ui-worker-result-evidence.mjs",
+    { LIVE_UI_WORKER_RESULT_ALLOW_EXAMPLE_EVIDENCE: "1" },
+  ],
+  [
     "Inline upload content migration template",
     "INLINE_UPLOAD_CONTENT_MIGRATION_TARGET",
     "docs/evidence-templates/inline-upload-content-migration.example.json",
     "scripts/check-inline-upload-content-migration-evidence.mjs",
     { INLINE_UPLOAD_CONTENT_MIGRATION_ALLOW_EXAMPLE_EVIDENCE: "1" },
+  ],
+  [
+    "Audit null tenant template",
+    "AUDIT_NULL_TENANT_EVIDENCE_TARGET",
+    "docs/evidence-templates/audit-null-tenant.example.json",
+    "scripts/check-audit-null-tenant-evidence.mjs",
+    { AUDIT_NULL_TENANT_ALLOW_EXAMPLE_EVIDENCE: "1" },
   ],
   [
     "Rate limit Redis template",
@@ -263,7 +289,7 @@ function runEvidenceTargetPlaceholderHostNegativeChecks() {
       );
       process.exit(1);
     }
-    if (!output.includes("gercek https host") && !output.includes("file:// veya https://")) {
+    if (!output.includes("gercek https host") && !output.includes("gerçek https host") && !output.includes("file:// veya https://")) {
       console.error(
         `Production evidence template kontrolü başarısız: ${label} placeholder host target negative beklenen hata yok.`,
       );
@@ -275,28 +301,30 @@ function runEvidenceTargetPlaceholderHostNegativeChecks() {
 
 function runEvidenceTargetTempFileNegativeChecks() {
   for (const [label, envKey, , script, extraEnv = {}] of templateChecks) {
-    const result = spawnSync(process.execPath, [script], {
-      env: {
-        ...process.env,
-        ...extraEnv,
-        [envKey]: `file:///tmp/${envKey.toLowerCase().replaceAll("_", "-")}.json`,
-      },
-      encoding: "utf8",
-    });
+    for (const tempRoot of ["/tmp", "/private/tmp"]) {
+      const result = spawnSync(process.execPath, [script], {
+        env: {
+          ...process.env,
+          ...extraEnv,
+          [envKey]: `file://${tempRoot}/${envKey.toLowerCase().replaceAll("_", "-")}.json`,
+        },
+        encoding: "utf8",
+      });
 
-    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-    if (result.status === 0) {
-      console.error(
-        `Production evidence template kontrolü başarısız: ${label} temp file target negative beklenen şekilde kırılmadı.`,
-      );
-      process.exit(1);
-    }
-    if (!output.includes("lokal temp path") && !output.includes("file:// veya https://")) {
-      console.error(
-        `Production evidence template kontrolü başarısız: ${label} temp file target negative beklenen hata yok.`,
-      );
-      console.error(output);
-      process.exit(1);
+      const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+      if (result.status === 0) {
+        console.error(
+          `Production evidence template kontrolü başarısız: ${label} ${tempRoot} temp file target negative beklenen şekilde kırılmadı.`,
+        );
+        process.exit(1);
+      }
+      if (!output.includes("lokal temp path") && !output.includes("file:// veya https://")) {
+        console.error(
+          `Production evidence template kontrolü başarısız: ${label} ${tempRoot} temp file target negative beklenen hata yok.`,
+        );
+        console.error(output);
+        process.exit(1);
+      }
     }
   }
 }
@@ -344,12 +372,20 @@ runGithubCiGeneratorOutputNegativeChecks();
 await runGithubCiGeneratorContractCheck();
 runStagingEvidenceEnvNegativeCheck();
 runStagingFirstGatesFixtureCheck();
+runStagingFirstGatesTargetNegativeCheck();
 runStagingFirstGatesOutputDirNegativeCheck();
 runProdEnvHttpEvidenceTargetNegativeCheck();
+runProdEnvSecretEvidenceTargetNegativeCheck();
+runProdEnvLocalEvidenceTargetNegativeCheck();
 runProdEvidenceSummaryOutputNegativeChecks();
+runFinalExternalEvidenceMissingTargetNegativeCheck();
+runFinalExternalEvidenceExampleFlagNegativeCheck();
+runFinalExternalEvidenceReadinessOverrideNegativeCheck();
+runProdEvidenceExampleFlagNegativeCheck();
 runProdEvidenceSmokeEvidenceFileNegativeChecks();
 runProdEvidenceHttpEvidenceTargetNegativeCheck();
 runProdEvidencePlaceholderEvidenceTargetNegativeCheck();
+runProdEvidenceSecretEvidenceTargetNegativeCheck();
 runProdEvidenceTempFileEvidenceTargetNegativeCheck();
 runProdEvidenceSymlinkEvidenceTargetNegativeCheck();
 runProdEvidenceSymlinkParentEvidenceTargetNegativeCheck();
@@ -358,8 +394,14 @@ runProdEnvMissingAlertWebhookTokenNegativeCheck();
 runProdEnvMissingSmsSmokeConfirmNegativeCheck();
 runProdEnvMissingSentrySmokeConfirmNegativeCheck();
 runProdEnvPlaceholderNetgsmPasswordNegativeCheck();
+runProdEnvPlaceholderNotificationEmailNegativeCheck();
+runProdEnvPlaceholderNotificationPushNegativeCheck();
 runProdEnvMissingS3SecretNegativeCheck();
 runAlertWebhookMissingTokenNegativeCheck();
+runAlertWebhookHttpUrlNegativeCheck();
+runAlertWebhookSecretUrlNegativeCheck();
+runAlertWebhookLocalHostNegativeCheck();
+runTraefikInsecureEvidenceFileNegativeCheck();
 runStagingReleaseArtifactsBundleCheck();
 
 const generatedLiveStatusPath = "docs/evidence-templates/live-status.generated.tmp.json";
@@ -372,6 +414,7 @@ const financialRetentionFixturePath = "docs/evidence-templates/financial-retenti
 const githubCiFixturePath = "docs/evidence-templates/github-ci.example.json";
 const identityMigrationFixturePath = "docs/evidence-templates/identity-migration.example.json";
 const inlineUploadMigrationFixturePath = "docs/evidence-templates/inline-upload-content-migration.example.json";
+const auditNullTenantFixturePath = "docs/evidence-templates/audit-null-tenant.example.json";
 const kvkkInventoryFixturePath = "docs/evidence-templates/kvkk-inventory.example.json";
 const liveExamCycleFixturePath = "docs/evidence-templates/live-exam-cycle.example.json";
 const observabilityUatFixturePath = "docs/evidence-templates/observability-uat.example.json";
@@ -386,6 +429,7 @@ const pilotFixturePath = "docs/evidence-templates/pilot.example.json";
 const uatFixturePath = "docs/evidence-templates/uat.example.json";
 const liveStatusFixturePath = "docs/evidence-templates/live-status.example.json";
 const liveStatusReadinessPath = "docs/evidence-templates/live-status-pass-readiness.example.md";
+runFinalExternalEvidenceTargetHygieneNegativeChecks();
 const liveStatusGeneration = spawnSync(
   process.execPath,
   [
@@ -440,6 +484,7 @@ const financialRetentionFixture = JSON.parse(readFileSync(financialRetentionFixt
 const githubCiFixture = JSON.parse(readFileSync(githubCiFixturePath, "utf8"));
 const identityMigrationFixture = JSON.parse(readFileSync(identityMigrationFixturePath, "utf8"));
 const inlineUploadMigrationFixture = JSON.parse(readFileSync(inlineUploadMigrationFixturePath, "utf8"));
+const auditNullTenantFixture = JSON.parse(readFileSync(auditNullTenantFixturePath, "utf8"));
 const kvkkInventoryFixture = JSON.parse(readFileSync(kvkkInventoryFixturePath, "utf8"));
 const liveExamCycleFixture = JSON.parse(readFileSync(liveExamCycleFixturePath, "utf8"));
 const observabilityUatFixture = JSON.parse(readFileSync(observabilityUatFixturePath, "utf8"));
@@ -452,6 +497,9 @@ const productionSummaryFixture = JSON.parse(readFileSync(productionSummaryFixtur
 const goLiveFixture = JSON.parse(readFileSync(goLiveFixturePath, "utf8"));
 const pilotFixture = JSON.parse(readFileSync(pilotFixturePath, "utf8"));
 const uatFixture = JSON.parse(readFileSync(uatFixturePath, "utf8"));
+
+runFinalExternalEvidenceTargetMismatchNegativeCheck();
+runRemoteFinalEvidenceReadinessBehaviorChecks();
 
 const nonEmptyGapsNegativeChecks = [
   {
@@ -519,6 +567,12 @@ const nonEmptyGapsNegativeChecks = [
     path: "docs/evidence-templates/inline-upload-content-migration.non-empty-gaps.tmp.json",
     expectedFailure: "gaps bos olmali.",
     runner: runInlineUploadMigrationNegativeCheck,
+  },
+  {
+    label: "Audit null tenant non-empty gaps negative",
+    path: "docs/evidence-templates/audit-null-tenant.non-empty-gaps.tmp.json",
+    expectedFailure: "gaps bos olmali.",
+    runner: runAuditNullTenantNegativeCheck,
   },
   {
     label: "Rate limit non-empty gaps negative",
@@ -666,6 +720,7 @@ runIdentityMigrationNegativeCheck({
   },
 });
 runIdentityMigrationSymlinkParentTargetNegativeCheck();
+runKvkkInventoryFixtureTargetNegativeCheck();
 runKvkkInventoryNegativeCheck({
   label: "KVKK inventory extra top-level key negative",
   path: "docs/evidence-templates/kvkk-inventory.extra-top-level.tmp.json",
@@ -788,6 +843,9 @@ runObservabilityUatNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runObservabilityUatSecretTargetNegativeCheck();
+runObservabilityUatLocalArtifactTargetNegativeCheck();
+runObservabilityUatGeneratorLocalArtifactNegativeChecks();
 runObservabilityUatSymlinkParentTargetNegativeCheck();
 runSecurityAuditNegativeCheck({
   label: "Security audit extra top-level key negative",
@@ -1157,6 +1215,49 @@ runLiveExamCycleNegativeCheck({
   },
 });
 runLiveExamCycleNegativeCheck({
+  label: "Live exam cycle missing iSEM optical reference negative",
+  path: "docs/evidence-templates/live-exam-cycle.missing-isem-reference.tmp.json",
+  expectedFailure: "evidenceReferences iSEM optical pipeline kaniti isem-optical-pipeline.json veya isem-optical-pipeline.log dosyasina baglanmali.",
+  mutate: (fixture) => {
+    fixture.evidenceReferences = fixture.evidenceReferences.map((reference) =>
+      reference.includes("isem-optical-pipeline")
+        ? "artifact:artifacts/example/live-exam-cycle/raw-import-smoke.log"
+        : reference,
+    );
+  },
+});
+runLiveExamCycleNegativeCheck({
+  label: "Live exam cycle missing UI-worker reference negative",
+  path: "docs/evidence-templates/live-exam-cycle.missing-ui-worker-reference.tmp.json",
+  expectedFailure: "evidenceReferences live-ui-worker kaniti live-ui-worker-result.json veya live-ui-worker-report.json dosyasina baglanmali.",
+  mutate: (fixture) => {
+    fixture.evidenceReferences = fixture.evidenceReferences.map((reference) =>
+      reference.includes("live-ui-worker")
+        ? "artifact:artifacts/example/live-exam-cycle/report-generation-smoke.json"
+        : reference,
+    );
+  },
+});
+runLiveExamCycleNegativeCheck({
+  label: "Live exam cycle substring-spoof evidence reference negative",
+  path: "docs/evidence-templates/live-exam-cycle.substring-spoof-reference.tmp.json",
+  expectedFailure: "evidenceReferences iSEM optical pipeline kaniti isem-optical-pipeline.json veya isem-optical-pipeline.log dosyasina baglanmali.",
+  mutate: (fixture) => {
+    fixture.evidenceReferences = [
+      "artifact:artifacts/staging/live-exam-cycle/unrelated-isem-optical-pipeline-marker.json",
+      "artifact:artifacts/staging/live-exam-cycle/unrelated-live-ui-worker-marker.json",
+    ];
+  },
+});
+runLiveExamCycleNegativeCheck({
+  label: "Live exam cycle local artifact reference negative",
+  path: "docs/evidence-templates/live-exam-cycle.local-artifact-reference.tmp.json",
+  expectedFailure: "evidenceReferences[0] local smoke artifact referansi tasimamali.",
+  mutate: (fixture) => {
+    fixture.evidenceReferences[0] = "artifact:artifacts/local/isem-optical-pipeline.json";
+  },
+});
+runLiveExamCycleNegativeCheck({
   label: "Live exam cycle invalid gaps negative",
   path: "docs/evidence-templates/live-exam-cycle.invalid-gaps.tmp.json",
   expectedFailure: "gaps listesi zorunlu.",
@@ -1205,10 +1306,11 @@ runLiveExamCycleNegativeCheck({
   },
 });
 runLiveExamCycleSymlinkParentTargetNegativeCheck();
+runIsemOpticalPipelineLocalArtifactTargetNegativeCheck();
 runInlineUploadMigrationNegativeCheck({
   label: "Inline upload migration extra top-level key negative",
   path: "docs/evidence-templates/inline-upload-content-migration.extra-top-level.tmp.json",
-  expectedFailure: "inlineUploadMigration tam 9 alan icermeli.",
+  expectedFailure: "inlineUploadMigration tam 10 alan icermeli.",
   mutate: (fixture) => {
     fixture.unexpectedTopLevel = true;
   },
@@ -1264,9 +1366,49 @@ runInlineUploadMigrationNegativeCheck({
 runInlineUploadMigrationNegativeCheck({
   label: "Inline upload migration extra command negative",
   path: "docs/evidence-templates/inline-upload-content-migration.extra-command.tmp.json",
-  expectedFailure: "commandsPassed tam 2 komut icermeli.",
+  expectedFailure: "commandsPassed tam 3 komut icermeli.",
   mutate: (fixture) => {
     fixture.commandsPassed.push("pnpm unexpected:migrate");
+  },
+});
+runInlineUploadMigrationNegativeCheck({
+  label: "Inline upload migration contentBase64 write enabled negative",
+  path: "docs/evidence-templates/inline-upload-content-migration.content-base64-enabled.tmp.json",
+  expectedFailure: "storageMode.contentBase64WriteDisabled true olmali.",
+  mutate: (fixture) => {
+    fixture.storageMode.contentBase64WriteDisabled = false;
+  },
+});
+runInlineUploadMigrationNegativeCheck({
+  label: "Inline upload migration download TTL negative",
+  path: "docs/evidence-templates/inline-upload-content-migration.download-ttl.tmp.json",
+  expectedFailure: "storageMode.downloadUrlExpiresInSeconds en fazla 300 olmali.",
+  mutate: (fixture) => {
+    fixture.storageMode.downloadUrlExpiresInSeconds = 301;
+  },
+});
+runInlineUploadMigrationNegativeCheck({
+  label: "Inline upload migration pending rows negative",
+  path: "docs/evidence-templates/inline-upload-content-migration.pending-rows.tmp.json",
+  expectedFailure: "migration.subjects.homework_material_files.pendingRows 0 olmali.",
+  mutate: (fixture) => {
+    fixture.migration.subjects[0].pendingRows = 1;
+  },
+});
+runInlineUploadMigrationNegativeCheck({
+  label: "Inline upload migration pending bytes negative",
+  path: "docs/evidence-templates/inline-upload-content-migration.pending-bytes.tmp.json",
+  expectedFailure: "migration.subjects.homework_material_files.pendingBase64Characters 0 olmali.",
+  mutate: (fixture) => {
+    fixture.migration.subjects[0].pendingBase64Characters = 1;
+  },
+});
+runInlineUploadMigrationNegativeCheck({
+  label: "Inline upload migration migrated rows less than pending negative",
+  path: "docs/evidence-templates/inline-upload-content-migration.migrated-rows-less-than-pending.tmp.json",
+  expectedFailure: "migration.migrated homework_material_files dry-run pendingRows degerinden az olamaz.",
+  mutate: (fixture) => {
+    fixture.migration.migrated[0].migratedRows = fixture.dryRun.subjects[0].pendingRows - 1;
   },
 });
 runInlineUploadMigrationNegativeCheck({
@@ -1277,7 +1419,59 @@ runInlineUploadMigrationNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runInlineUploadMigrationNegativeCheck({
+  label: "Inline upload migration secret evidence reference negative",
+  path: "docs/evidence-templates/inline-upload-content-migration.secret-reference.tmp.json",
+  expectedFailure: "evidenceReferences.0 userinfo, query veya fragment tasimamali.",
+  mutate: (fixture) => {
+    fixture.evidenceReferences[0] =
+      "https://user:secret@evidence.uzmanhocam.com/inline-upload-content-migration.json?token=secret#fragment";
+  },
+});
+runInlineUploadMigrationNegativeCheck({
+  label: "Inline upload migration raw storage key reference negative",
+  path: "docs/evidence-templates/inline-upload-content-migration.raw-storage-key-reference.tmp.json",
+  expectedFailure: "evidenceReferences.0 ham upload icerigi, storage key veya signed URL tasimamali.",
+  mutate: (fixture) => {
+    fixture.evidenceReferences[0] = "s3://bucket/support-ticket-attachments/tenant-ticket/raw-file.pdf";
+  },
+});
+runInlineUploadMigrationSecretTargetNegativeCheck();
 runInlineUploadMigrationSymlinkParentTargetNegativeCheck();
+runAuditNullTenantNegativeCheck({
+  label: "Audit null tenant extra top-level key negative",
+  path: "docs/evidence-templates/audit-null-tenant.extra-top-level.tmp.json",
+  expectedFailure: "auditNullTenantEvidence tam 7 alan icermeli.",
+  mutate: (fixture) => {
+    fixture.unexpectedTopLevel = true;
+  },
+});
+runAuditNullTenantNegativeCheck({
+  label: "Audit null tenant unknown count negative",
+  path: "docs/evidence-templates/audit-null-tenant.unknown-count.tmp.json",
+  expectedFailure: "auditNullTenant.nullTenantBreakdown.unknown.count 0 olmali.",
+  mutate: (fixture) => {
+    fixture.auditNullTenant.nullTenantBreakdown.unknown.count = 1;
+    fixture.auditNullTenant.nullTenantRows += 1;
+  },
+});
+runAuditNullTenantNegativeCheck({
+  label: "Audit null tenant total mismatch negative",
+  path: "docs/evidence-templates/audit-null-tenant.total-mismatch.tmp.json",
+  expectedFailure: "auditNullTenant.totalRows tenantRows + nullTenantRows toplamına esit olmali.",
+  mutate: (fixture) => {
+    fixture.auditNullTenant.totalRows += 1;
+  },
+});
+runAuditNullTenantNegativeCheck({
+  label: "Audit null tenant breakdown mismatch negative",
+  path: "docs/evidence-templates/audit-null-tenant.breakdown-mismatch.tmp.json",
+  expectedFailure: "auditNullTenant.nullTenantBreakdown count toplami nullTenantRows degerine esit olmali.",
+  mutate: (fixture) => {
+    fixture.auditNullTenant.nullTenantBreakdown.system.count += 1;
+  },
+});
+runAuditNullTenantSymlinkParentTargetNegativeCheck();
 runRateLimitNegativeCheck({
   label: "Rate limit extra top-level key negative",
   path: "docs/evidence-templates/rate-limit.extra-top-level.tmp.json",
@@ -1342,6 +1536,41 @@ runRateLimitNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runRateLimitNegativeCheck({
+  label: "Rate limit duplicate instance label negative",
+  path: "docs/evidence-templates/rate-limit.duplicate-instance-label.tmp.json",
+  expectedFailure: "instances iki farkli API instance label'i icermeli.",
+  mutate: (fixture) => {
+    fixture.instances[1].label = fixture.instances[0].label;
+  },
+});
+runRateLimitNegativeCheck({
+  label: "Rate limit duplicate instance URL negative",
+  path: "docs/evidence-templates/rate-limit.duplicate-instance-url.tmp.json",
+  expectedFailure: "instances iki farkli API instance URL'i icermeli.",
+  mutate: (fixture) => {
+    fixture.instances[1].baseUrl = fixture.instances[0].baseUrl;
+  },
+});
+runRateLimitNegativeCheck({
+  label: "Rate limit secret instance URL negative",
+  path: "docs/evidence-templates/rate-limit.secret-instance-url.tmp.json",
+  expectedFailure: "instances.0.baseUrl userinfo, query veya fragment tasimamali.",
+  mutate: (fixture) => {
+    fixture.instances[0].baseUrl = "https://user:secret@staging-api-a.example.test/api/v1/__rate-limit-smoke?token=secret#fragment";
+  },
+});
+runRateLimitNegativeCheck({
+  label: "Rate limit secret evidence reference negative",
+  path: "docs/evidence-templates/rate-limit.secret-evidence-reference.tmp.json",
+  expectedFailure: "evidenceReferences.0 userinfo, query veya fragment tasimamali.",
+  mutate: (fixture) => {
+    fixture.evidenceReferences[0] = "https://user:secret@evidence.uzmanhocam.com/rate-limit.json?token=secret#fragment";
+  },
+});
+runRateLimitSecretTargetNegativeCheck();
+runRateLimitLocalArtifactTargetNegativeCheck();
+runRateLimitGeneratorLocalArtifactNegativeChecks();
 runRateLimitSymlinkParentTargetNegativeCheck();
 runRlsLiveNegativeCheck({
   label: "RLS live extra top-level key negative",
@@ -1426,6 +1655,30 @@ runRlsLiveNegativeCheck({
   },
 });
 runRlsLiveNegativeCheck({
+  label: "RLS live local artifact reference negative",
+  path: "docs/evidence-templates/rls-live.local-artifact-reference.tmp.json",
+  expectedFailure: "evidenceReferences.0 local smoke artifact referansi tasimamali.",
+  mutate: (fixture) => {
+    fixture.evidenceReferences[0] = "artifacts/local/rls-live/db-rls-check.log";
+  },
+});
+runRlsLiveNegativeCheck({
+  label: "RLS live invalid evidence reference prefix negative",
+  path: "docs/evidence-templates/rls-live.invalid-reference-prefix.tmp.json",
+  expectedFailure: "evidenceReferences.0 artifact:, run:, log:, url:, https://, file://, s3:// veya artifacts/ ile baslayan kalici referans olmali.",
+  mutate: (fixture) => {
+    fixture.evidenceReferences[0] = "manual staging note db-rls-check.log";
+  },
+});
+runRlsLiveNegativeCheck({
+  label: "RLS live secret evidence reference negative",
+  path: "docs/evidence-templates/rls-live.secret-reference.tmp.json",
+  expectedFailure: "evidenceReferences.0 userinfo, query veya fragment tasimamali.",
+  mutate: (fixture) => {
+    fixture.evidenceReferences[0] = "https://user:secret@evidence.uzmanhocam.com/rls-live/db-rls-check.log?token=secret";
+  },
+});
+runRlsLiveNegativeCheck({
   label: "RLS live invalid gaps negative",
   path: "docs/evidence-templates/rls-live.invalid-gaps.tmp.json",
   expectedFailure: "gaps listesi zorunlu.",
@@ -1433,6 +1686,8 @@ runRlsLiveNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runRlsLiveLocalArtifactTargetNegativeCheck();
+runRlsLiveSecretTargetNegativeCheck();
 runRlsLiveSymlinkParentTargetNegativeCheck();
 runUatNegativeCheck({
   label: "UAT extra top-level key negative",
@@ -1483,6 +1738,26 @@ runUatNegativeCheck({
     fixture.journeyScenariosVerified[0].evidence = ["release owner observed staging screen"];
   },
 });
+runUatNegativeCheck({
+  label: "UAT secret restore backup reference negative",
+  path: "docs/evidence-templates/uat.secret-restore-reference.tmp.json",
+  expectedFailure: "restoreBackupReference userinfo, query veya fragment tasimamali.",
+  mutate: (fixture) => {
+    fixture.restoreBackupReference = "s3://backup-bucket/base/2026-05-30.dump?token=secret#fragment";
+  },
+});
+runUatNegativeCheck({
+  label: "UAT secret journey evidence reference negative",
+  path: "docs/evidence-templates/uat.secret-journey-evidence.tmp.json",
+  expectedFailure: "UAT-SYS-01.evidence userinfo, query veya fragment tasimamali.",
+  mutate: (fixture) => {
+    fixture.journeyScenariosVerified[0].evidence[0] =
+      "https://user:secret@evidence.uzmanhocam.com/uat/sys-01.json?token=secret#fragment";
+  },
+});
+runUatLocalArtifactTargetNegativeCheck();
+runUatGeneratorLocalArtifactNegativeChecks();
+runUatSecretTargetNegativeCheck();
 runUatSymlinkParentTargetNegativeCheck();
 runPilotNegativeCheck({
   label: "Pilot extra top-level key negative",
@@ -1524,6 +1799,8 @@ runPilotNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runPilotLocalArtifactTargetNegativeCheck();
+runPilotSecretUrlTargetNegativeCheck();
 runPilotSymlinkParentTargetNegativeCheck();
 runDeploymentRegionNegativeCheck({
   label: "Deployment region extra top-level key negative",
@@ -1549,6 +1826,25 @@ runDeploymentRegionNegativeCheck({
     fixture.gaps = "none";
   },
 });
+runDeploymentRegionNegativeCheck({
+  label: "Deployment region secret evidence reference negative",
+  path: "docs/evidence-templates/deployment-region.secret-reference.tmp.json",
+  expectedFailure: "evidenceReference userinfo, query veya fragment tasimamali.",
+  mutate: (fixture) => {
+    fixture.evidenceReference = "https://user:secret@evidence.uzmanhocam.com/deployment-region.json?token=secret#fragment";
+  },
+});
+runDeploymentRegionNegativeCheck({
+  label: "Deployment region public IP lookup reference negative",
+  path: "docs/evidence-templates/deployment-region.public-ip-lookup.tmp.json",
+  expectedFailure: "evidenceReference provider console, sözleşme veya kalıcı first-party artifact olmalı; public IP lookup tek başına yeterli değil.",
+  mutate: (fixture) => {
+    fixture.provider = "HOSTING DUNYAM";
+    fixture.region = "Istanbul";
+    fixture.evidenceReference = "url:https://ipinfo.io/212.108.107.190";
+  },
+});
+runDeploymentRegionSecretTargetNegativeCheck();
 runDeploymentRegionSymlinkParentTargetNegativeCheck();
 runDeploymentRollbackNegativeCheck({
   label: "Deployment rollback extra top-level key negative",
@@ -1619,13 +1915,41 @@ runDeploymentRollbackNegativeCheck({
     fixture.rollbackImageTag = fixture.releaseCandidate;
   },
 });
+runDeploymentRollbackNegativeCheck({
+  label: "Deployment rollback service image version mismatch negative",
+  path: "docs/evidence-templates/deployment-rollback.service-image-version-mismatch.tmp.json",
+  expectedFailure: "web.imageTag rollbackImageTag versiyonuyla eşleşmeli.",
+  mutate: (fixture) => {
+    fixture.servicesVerified[0].imageTag = "ghcr.io/example/uzman-hocam/web:stale-pass";
+  },
+});
+runDeploymentRollbackNegativeCheck({
+  label: "Deployment rollback secret service evidence reference negative",
+  path: "docs/evidence-templates/deployment-rollback.secret-service-reference.tmp.json",
+  expectedFailure: "web.evidenceReference userinfo, query veya fragment tasimamali.",
+  mutate: (fixture) => {
+    fixture.servicesVerified[0].evidenceReference =
+      "https://user:secret@evidence.uzmanhocam.com/rollback/web?token=secret#fragment";
+  },
+});
+runDeploymentRollbackNegativeCheck({
+  label: "Deployment rollback secret evidence reference negative",
+  path: "docs/evidence-templates/deployment-rollback.secret-reference.tmp.json",
+  expectedFailure: "evidenceReferences userinfo, query veya fragment tasimamali.",
+  mutate: (fixture) => {
+    fixture.evidenceReferences[0] = "https://user:secret@evidence.uzmanhocam.com/rollback.json?token=secret#fragment";
+  },
+});
+runDeploymentRollbackLocalArtifactTargetNegativeCheck();
+runDeploymentRollbackSecretTargetNegativeCheck();
 runDeploymentRollbackSymlinkParentTargetNegativeCheck();
 runProductionSummaryHttpTargetNegativeCheck();
+runProductionSummarySecretUrlTargetNegativeCheck();
 runProductionSummarySymlinkParentTargetNegativeCheck();
 runProductionSummaryNegativeCheck({
   label: "Production summary extra check negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-check.tmp.json",
-  expectedFailure: "checks tam 27 madde içermeli.",
+  expectedFailure: "checks tam 29 madde içermeli.",
   mutate: (fixture) => {
     fixture.checks.push({
       label: "Beklenmeyen production check",
@@ -1743,7 +2067,7 @@ runProductionSummaryNegativeCheck({
 runProductionSummaryNegativeCheck({
   label: "Production summary extra report negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-report.tmp.json",
-  expectedFailure: "reports tam 19 alan içermeli.",
+  expectedFailure: "reports tam 21 alan içermeli.",
   mutate: (fixture) => {
     fixture.reports.unexpectedReport = { ...fixture.reports.securityAudit };
   },
@@ -1797,6 +2121,22 @@ runProductionSummaryNegativeCheck({
     fixture.reports.rlsLive.tenantFkPreflight.relationsVerified = fixture.reports.rlsLive.tenantFkPreflight.relationsVerified.filter(
       (relation) => relation !== "Student.responsibleTeacher",
     );
+  },
+});
+runProductionSummaryNegativeCheck({
+  label: "Production summary RLS local artifact reference negative",
+  path: "docs/evidence-templates/production-evidence-summary.rls-local-artifact-reference.tmp.json",
+  expectedFailure: "reports.rlsLive.evidenceReferences.0 local smoke artifact referansi tasimamali.",
+  mutate: (fixture) => {
+    fixture.reports.rlsLive.evidenceReferences[0] = "artifacts/local/rls-live/db-rls-check.log";
+  },
+});
+runProductionSummaryNegativeCheck({
+  label: "Production summary RLS invalid evidence reference prefix negative",
+  path: "docs/evidence-templates/production-evidence-summary.rls-invalid-reference-prefix.tmp.json",
+  expectedFailure: "reports.rlsLive.evidenceReferences.0 artifact:, run:, log:, url:, https://, file://, s3:// veya artifacts/ ile baslayan kalici referans olmali.",
+  mutate: (fixture) => {
+    fixture.reports.rlsLive.evidenceReferences[0] = "manual staging note db-rls-check.log";
   },
 });
 runProductionSummaryNegativeCheck({
@@ -1907,6 +2247,7 @@ runLiveStatusGeneratorHttpTargetNegativeCheck();
 runLiveStatusGeneratorSymlinkTargetNegativeCheck();
 runLiveStatusGeneratorSymlinkParentTargetNegativeCheck();
 runLiveStatusGeneratorOutputTargetNegativeChecks();
+runLiveStatusEvidenceLocalArtifactTargetNegativeCheck();
 runLiveStatusEvidenceSymlinkParentTargetNegativeCheck();
 runLiveStatusNegativeCheck({
   label: "Live status duplicate gate negative",
@@ -2007,11 +2348,64 @@ runLiveStatusNegativeCheck({
   },
 });
 runLiveStatusNegativeCheck({
+  label: "Live status source result negative",
+  path: "docs/evidence-templates/live-status.source-result.tmp.json",
+  expectedFailure: "gates.Traefik HTTPS smoke.source.result PASS olmalı.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.live-status-source-result.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.smokeEvidence.traefikHttps.result = "FAIL";
+    fixture.productionEvidenceSummaryTarget = "production-evidence-summary.live-status-source-result.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runLiveStatusNegativeCheck({
+  label: "Live status source environment negative",
+  path: "docs/evidence-templates/live-status.source-environment.tmp.json",
+  expectedFailure: "gates.Traefik HTTPS smoke.source.environment production olmalı.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.live-status-source-environment.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.smokeEvidence.traefikHttps.environment = "staging";
+    fixture.productionEvidenceSummaryTarget = "production-evidence-summary.live-status-source-environment.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runLiveStatusNegativeCheck({
   label: "Live status HTTP summary target negative",
   path: "docs/evidence-templates/live-status.http-summary-target.tmp.json",
   expectedFailure: "productionEvidenceSummaryTarget file:// veya https:// URL olmalı.",
   mutate: (fixture) => {
     fixture.productionEvidenceSummaryTarget = "http://evidence.uzmanhocam.com/production-summary.json";
+  },
+});
+runGoLiveSecretUrlTargetNegativeCheck();
+runGoLiveNegativeCheck({
+  label: "Go-live linked production summary secret URL target negative",
+  path: "docs/evidence-templates/go-live.linked-summary-secret-url-target.tmp.json",
+  expectedFailure: "productionEvidenceSummary.summaryTarget target URL userinfo, query veya fragment iceremez.",
+  mutate: (fixture) => {
+    fixture.productionEvidenceSummary.summaryTarget =
+      "https://ops:secret@evidence.uzmanhocam.com/production-summary.json?token=secret#proof";
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live linked pilot secret URL target negative",
+  path: "docs/evidence-templates/go-live.linked-pilot-secret-url-target.tmp.json",
+  expectedFailure: "pilot.pilotEvidenceReference target URL userinfo, query veya fragment iceremez.",
+  mutate: (fixture) => {
+    fixture.pilot.pilotEvidenceReference = "https://ops:secret@evidence.uzmanhocam.com/pilot.json?token=secret#proof";
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live linked live-status secret URL target negative",
+  path: "docs/evidence-templates/go-live.linked-live-status-secret-url-target.tmp.json",
+  expectedFailure: "liveStatusEvidence.evidenceTarget target URL userinfo, query veya fragment iceremez.",
+  mutate: (fixture) => {
+    fixture.liveStatusEvidence.evidenceTarget =
+      "https://ops:secret@evidence.uzmanhocam.com/live-status.json?token=secret#proof";
   },
 });
 runGoLiveNegativeCheck({
@@ -2025,7 +2419,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra gatesPassed negative",
   path: "docs/evidence-templates/go-live.extra-gates-passed.tmp.json",
-  expectedFailure: "liveStatusEvidence.gatesPassed tam 7 gate içermeli.",
+  expectedFailure: "liveStatusEvidence.gatesPassed tam 18 gate içermeli.",
   mutate: (fixture) => {
     fixture.liveStatusEvidence.gatesPassed.push("Beklenmeyen gate");
   },
@@ -2078,7 +2472,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra checksPassed negative",
   path: "docs/evidence-templates/go-live.extra-checks-passed.tmp.json",
-  expectedFailure: "productionEvidenceSummary.checksPassed tam 27 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.checksPassed tam 29 madde icermeli.",
   mutate: (fixture) => {
     fixture.productionEvidenceSummary.checksPassed.push("Beklenmeyen production check");
   },
@@ -2144,7 +2538,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked duplicate summary check negative",
   path: "docs/evidence-templates/go-live.linked-duplicate-summary-check.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.checks tam 27 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.checks tam 29 madde icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.duplicate-check-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -2202,6 +2596,72 @@ runGoLiveNegativeCheck({
     const linkedSummary = structuredClone(productionSummaryFixture);
     linkedSummary.smokeEvidence.alertWebhook.authorizationScheme = "none";
     fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.alert-webhook-auth-scheme-for-go-live.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live linked summary report generation smoke command negative",
+  path: "docs/evidence-templates/go-live.linked-summary-report-generation-smoke-command.tmp.json",
+  expectedFailure: "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.commandsPassed tek pnpm report-generation:perf komutu icermeli.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.report-generation-smoke-command-for-go-live.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.smokeEvidence.reportGeneration.commandsPassed = ["pnpm report-generation:smoke"];
+    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.report-generation-smoke-command-for-go-live.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live linked summary report generation below 10k negative",
+  path: "docs/evidence-templates/go-live.linked-summary-report-generation-below-10k.tmp.json",
+  expectedFailure: "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.resultCount en az 10000 tam sayi olmali.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.report-generation-below-10k-for-go-live.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.smokeEvidence.reportGeneration.resultCount = 9_999;
+    linkedSummary.smokeEvidence.reportGeneration.studentCount = 9_999;
+    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.report-generation-below-10k-for-go-live.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live linked summary report generation max threshold negative",
+  path: "docs/evidence-templates/go-live.linked-summary-report-generation-max-threshold.tmp.json",
+  expectedFailure: "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.thresholds.generationDurationMsMax 60000 olmali.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.report-generation-max-threshold-for-go-live.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.smokeEvidence.reportGeneration.thresholds.generationDurationMsMax = 120_000;
+    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.report-generation-max-threshold-for-go-live.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live linked summary SMS raw recipient negative",
+  path: "docs/evidence-templates/go-live.linked-summary-sms-raw-recipient.tmp.json",
+  expectedFailure: "productionEvidenceSummary.summary.smokeEvidence.smsProvider.recipient maskeli recipient olmali.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.sms-raw-recipient-for-go-live.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.smokeEvidence.smsProvider.recipient = "+905551112233";
+    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.sms-raw-recipient-for-go-live.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live linked summary notification raw recipient negative",
+  path: "docs/evidence-templates/go-live.linked-summary-notification-raw-recipient.tmp.json",
+  expectedFailure: "productionEvidenceSummary.summary.smokeEvidence.notificationProvider.recipients.0 maskeli recipient olmali.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.notification-raw-recipient-for-go-live.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.smokeEvidence.notificationProvider.recipients = ["ops@uzmanhocam.com"];
+    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.notification-raw-recipient-for-go-live.tmp.json";
     writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
     cleanupPaths.push(linkedPath);
   },
@@ -2266,7 +2726,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked extra summary report negative",
   path: "docs/evidence-templates/go-live.linked-extra-summary-report.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.reports tam 19 alan icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.reports tam 21 alan icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.extra-report-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -2335,6 +2795,34 @@ runGoLiveNegativeCheck({
   },
 });
 runGoLiveNegativeCheck({
+  label: "Go-live linked summary RLS local artifact reference negative",
+  path: "docs/evidence-templates/go-live.linked-summary-rls-local-artifact-reference.tmp.json",
+  expectedFailure:
+    "productionEvidenceSummary.summary.reports.rlsLive.evidenceReferences.0 local smoke artifact referansi tasimamali.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.rls-local-artifact-for-go-live.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.reports.rlsLive.evidenceReferences[0] = "artifacts/local/rls-live/db-rls-check.log";
+    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.rls-local-artifact-for-go-live.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live linked summary RLS invalid evidence reference prefix negative",
+  path: "docs/evidence-templates/go-live.linked-summary-rls-invalid-reference-prefix.tmp.json",
+  expectedFailure:
+    "productionEvidenceSummary.summary.reports.rlsLive.evidenceReferences.0 artifact:, run:, log:, url:, https://, file://, s3:// veya artifacts/ ile baslayan kalici referans olmali.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.rls-invalid-reference-prefix-for-go-live.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.reports.rlsLive.evidenceReferences[0] = "manual staging note db-rls-check.log";
+    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.rls-invalid-reference-prefix-for-go-live.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runGoLiveNegativeCheck({
   label: "Go-live linked summary live exam cycle app URL mismatch negative",
   path: "docs/evidence-templates/go-live.linked-summary-live-exam-cycle-app-url-mismatch.tmp.json",
   expectedFailure:
@@ -2365,7 +2853,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked duplicate gate negative",
   path: "docs/evidence-templates/go-live.linked-duplicate-gate.tmp.json",
-  expectedFailure: "liveStatusEvidence.gates tam 7 gate içermeli.",
+  expectedFailure: "liveStatusEvidence.gates tam 18 gate içermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/live-status.duplicate-gate-for-go-live.tmp.json";
     const linkedLiveStatus = structuredClone(liveStatusFixture);
@@ -2484,7 +2972,7 @@ runGoLiveNegativeCheck({
     const linkedPath = "docs/evidence-templates/live-status.pilot-date-mismatch-for-go-live.tmp.json";
     const linkedLiveStatus = structuredClone(liveStatusFixture);
     linkedLiveStatus.goLiveEvidenceTarget = "go-live.linked-live-status-pilot-date-mismatch.tmp.json";
-    linkedLiveStatus.gates[4].checkedAt = "2026-06-14";
+    linkedLiveStatus.gates[15].checkedAt = "2026-06-14";
     fixture.liveStatusEvidence.evidenceTarget = "live-status.pilot-date-mismatch-for-go-live.tmp.json";
     writeFileSync(linkedPath, `${JSON.stringify(linkedLiveStatus, null, 2)}\n`);
     cleanupPaths.push(linkedPath);
@@ -2498,7 +2986,7 @@ runGoLiveNegativeCheck({
     const linkedPath = "docs/evidence-templates/live-status.go-live-date-mismatch-for-go-live.tmp.json";
     const linkedLiveStatus = structuredClone(liveStatusFixture);
     linkedLiveStatus.goLiveEvidenceTarget = "go-live.linked-live-status-go-live-date-mismatch.tmp.json";
-    linkedLiveStatus.gates[5].checkedAt = "2026-06-15T13:00:00.000Z";
+    linkedLiveStatus.gates[16].checkedAt = "2026-06-15T13:00:00.000Z";
     fixture.liveStatusEvidence.evidenceTarget = "live-status.go-live-date-mismatch-for-go-live.tmp.json";
     writeFileSync(linkedPath, `${JSON.stringify(linkedLiveStatus, null, 2)}\n`);
     cleanupPaths.push(linkedPath);
@@ -2542,7 +3030,7 @@ runGoLiveNegativeCheck({
     const linkedPath = "docs/evidence-templates/live-status.pilot-reference-mismatch-for-go-live.tmp.json";
     const linkedLiveStatus = structuredClone(liveStatusFixture);
     linkedLiveStatus.goLiveEvidenceTarget = "go-live.linked-live-status-pilot-reference-mismatch.tmp.json";
-    linkedLiveStatus.gates[4].evidenceReference = "artifacts/example/pilot/wrong-pilot-reference.json";
+    linkedLiveStatus.gates[15].evidenceReference = "artifacts/example/pilot/wrong-pilot-reference.json";
     fixture.liveStatusEvidence.evidenceTarget = "live-status.pilot-reference-mismatch-for-go-live.tmp.json";
     writeFileSync(linkedPath, `${JSON.stringify(linkedLiveStatus, null, 2)}\n`);
     cleanupPaths.push(linkedPath);
@@ -2556,12 +3044,13 @@ runGoLiveNegativeCheck({
     const linkedPath = "docs/evidence-templates/live-status.go-live-reference-mismatch-for-go-live.tmp.json";
     const linkedLiveStatus = structuredClone(liveStatusFixture);
     linkedLiveStatus.goLiveEvidenceTarget = "go-live.linked-live-status-go-live-reference-mismatch.tmp.json";
-    linkedLiveStatus.gates[5].evidenceReference = "artifacts/example/production/wrong-go-live-reference.json";
+    linkedLiveStatus.gates[16].evidenceReference = "artifacts/example/production/wrong-go-live-reference.json";
     fixture.liveStatusEvidence.evidenceTarget = "live-status.go-live-reference-mismatch-for-go-live.tmp.json";
     writeFileSync(linkedPath, `${JSON.stringify(linkedLiveStatus, null, 2)}\n`);
     cleanupPaths.push(linkedPath);
   },
 });
+runGoLiveLinkedLiveStatusLocalArtifactTargetNegativeCheck();
 runGoLiveLinkedLiveStatusSymlinkParentTargetNegativeCheck();
 
 for (const [label, script, scriptArgs, contractPath] of contractChecks) {
@@ -2590,9 +3079,9 @@ console.log("Production evidence template kontrolü geçti.");
 
 function runLiveStatusNegativeCheck({ label, path, readinessPath: readinessFixturePath, expectedFailure, mutate, mutateReadiness }) {
   const fixture = structuredClone(liveStatusFixture);
-  mutate(fixture);
-  writeFileSync(path, `${JSON.stringify(fixture, null, 2)}\n`);
   const cleanupPaths = [path];
+  mutate(fixture, cleanupPaths);
+  writeFileSync(path, `${JSON.stringify(fixture, null, 2)}\n`);
 
   let readinessPath = liveStatusReadinessPath;
   if (mutateReadiness) {
@@ -2689,6 +3178,28 @@ function runProductionSummaryHttpTargetNegativeCheck() {
   }
 }
 
+function runProductionSummarySecretUrlTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-production-evidence-summary.mjs"], {
+    env: {
+      ...process.env,
+      PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE: "1",
+      PRODUCTION_EVIDENCE_SUMMARY_TARGET: "https://ops:secret@evidence.uzmanhocam.com/release-summary.json?token=secret#proof",
+    },
+    encoding: "utf8",
+  });
+
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: production summary secret URL target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("PRODUCTION_EVIDENCE_SUMMARY_TARGET production evidence target URL userinfo, query veya fragment içeremez.")) {
+    console.error("Production evidence template kontrolü başarısız: production summary secret URL target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
 function runProductionSummarySymlinkParentTargetNegativeCheck() {
   const rootParent = resolve("artifacts/prod-evidence-template-check");
   mkdirSync(rootParent, { recursive: true });
@@ -2756,6 +3267,28 @@ function runDeploymentRegionNegativeCheck({ label, path, expectedFailure, mutate
     } catch {
       // Ignore cleanup errors; the negative-check failure above is the actionable signal.
     }
+  }
+}
+
+function runDeploymentRegionSecretTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-deployment-region-evidence.mjs"], {
+    env: {
+      ...process.env,
+      DEPLOYMENT_REGION_ALLOW_EXAMPLE_EVIDENCE: "1",
+      DEPLOYMENT_REGION_TARGET: "https://user:secret@evidence.uzmanhocam.com/deployment-region.json?token=secret#fragment",
+    },
+    encoding: "utf8",
+  });
+
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: deployment region secret target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("DEPLOYMENT_REGION_TARGET userinfo, query veya fragment tasimamali.")) {
+    console.error("Production evidence template kontrolü başarısız: deployment region secret target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
   }
 }
 
@@ -2967,6 +3500,106 @@ function runObservabilityUatNegativeCheck({ label, path, expectedFailure, mutate
   }
 }
 
+function runObservabilityUatSecretTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-observability-uat-evidence.mjs"], {
+    env: {
+      ...process.env,
+      OBSERVABILITY_UAT_ALLOW_EXAMPLE_EVIDENCE: "1",
+      OBSERVABILITY_UAT_TARGET: "https://user:secret@evidence.uzmanhocam.com/observability-uat.json?token=secret#fragment",
+    },
+    encoding: "utf8",
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: observability UAT secret target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("OBSERVABILITY_UAT_TARGET userinfo, query veya fragment tasimamali.")) {
+    console.error("Production evidence template kontrolü başarısız: observability UAT secret target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
+function runObservabilityUatLocalArtifactTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-observability-uat-evidence.mjs"], {
+    env: {
+      ...process.env,
+      OBSERVABILITY_UAT_ALLOW_EXAMPLE_EVIDENCE: "1",
+      OBSERVABILITY_UAT_TARGET: pathToFileURL(resolve("artifacts/local/observability-uat-target-negative.json")).href,
+    },
+    encoding: "utf8",
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: observability UAT local artifact target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("OBSERVABILITY_UAT_TARGET production kaniti icin artifacts/local altinda olmamali.")) {
+    console.error("Production evidence template kontrolü başarısız: observability UAT local artifact target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
+function runObservabilityUatGeneratorLocalArtifactNegativeChecks() {
+  const baseEnv = {
+    ...process.env,
+    STAGING_ENVIRONMENT: "staging",
+    OBSERVABILITY_UAT_PROMETHEUS_URL: "https://prometheus.uzmanhocam.com",
+    OBSERVABILITY_UAT_GRAFANA_URL: "https://grafana.uzmanhocam.com",
+    OBSERVABILITY_UAT_LOKI_URL: "https://loki.uzmanhocam.com",
+    OBSERVABILITY_UAT_DASHBOARD_PANELS_VERIFIED: "API up,Request rate,Average duration,Readiness failures,Docker logs",
+    OBSERVABILITY_UAT_ALERTS_VERIFIED:
+      "UzmanHocamApiDown,UzmanHocamReadinessFailing,UzmanHocamHigh5xxRate,UzmanHocamSlowRequests",
+    OBSERVABILITY_UAT_PROMETHEUS_EVIDENCE_REFERENCE: "run:prometheus-ready-2026-06-24",
+    OBSERVABILITY_UAT_GRAFANA_EVIDENCE_REFERENCE: "run:grafana-ready-2026-06-24",
+    OBSERVABILITY_UAT_LOKI_EVIDENCE_REFERENCE: "run:loki-ready-2026-06-24",
+    OBSERVABILITY_UAT_ALERT_WEBHOOK_EVIDENCE_REFERENCE: "run:alert-webhook-2026-06-24",
+  };
+  const cases = [
+    {
+      label: "Observability UAT generator local output negative",
+      env: {
+        OBSERVABILITY_UAT_OUTPUT: "artifacts/local/observability-uat-output-negative.json",
+        OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET: pathToFileURL(resolve("artifacts/staging/first-gates/alert-webhook.json")).href,
+      },
+      expectedFailure: "OBSERVABILITY_UAT_OUTPUT artifacts/local altında olmamalı.",
+    },
+    {
+      label: "Observability UAT generator local alert webhook target negative",
+      env: {
+        OBSERVABILITY_UAT_OUTPUT: "artifacts/staging/reports/observability-uat-generator-negative.json",
+        OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET: pathToFileURL(resolve("artifacts/local/alert-webhook.json")).href,
+      },
+      expectedFailure: "OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET temp veya artifacts/local altında olmamalı.",
+    },
+  ];
+
+  for (const item of cases) {
+    const result = spawnSync(process.execPath, ["scripts/generate-observability-uat-evidence.mjs"], {
+      env: {
+        ...baseEnv,
+        ...item.env,
+      },
+      encoding: "utf8",
+    });
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+    if (result.status === 0) {
+      console.error(`Production evidence template kontrolü başarısız: ${item.label} beklenen şekilde kırılmadı.`);
+      process.exit(1);
+    }
+    if (!output.includes(item.expectedFailure)) {
+      console.error(`Production evidence template kontrolü başarısız: ${item.label} beklenen hata yok.`);
+      console.error(output);
+      process.exit(1);
+    }
+  }
+}
+
 function runObservabilityUatSymlinkParentTargetNegativeCheck() {
   const rootParent = resolve("artifacts/prod-evidence-template-check");
   mkdirSync(rootParent, { recursive: true });
@@ -3047,6 +3680,7 @@ function runKvkkInventoryNegativeCheck({ label, path, expectedFailure, mutate })
       env: {
         ...process.env,
         KVKK_INVENTORY_TARGET: pathToFileURL(path).href,
+        KVKK_INVENTORY_ALLOW_EXAMPLE_EVIDENCE: "1",
       },
       encoding: "utf8",
     });
@@ -3346,6 +3980,64 @@ function runInlineUploadMigrationNegativeCheck({ label, path, expectedFailure, m
   }
 }
 
+function runInlineUploadMigrationSecretTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-inline-upload-content-migration-evidence.mjs"], {
+    env: {
+      ...process.env,
+      INLINE_UPLOAD_CONTENT_MIGRATION_TARGET:
+        "https://user:secret@evidence.uzmanhocam.com/inline-upload-content-migration.json?token=secret#fragment",
+    },
+    encoding: "utf8",
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  if (result.status === 0) {
+    console.error(
+      "Production evidence template kontrolü başarısız: Inline upload migration secret target negative beklenen şekilde kırılmadı.",
+    );
+    process.exit(1);
+  }
+  if (!output.includes("INLINE_UPLOAD_CONTENT_MIGRATION_TARGET userinfo, query veya fragment tasimamali.")) {
+    console.error("Production evidence template kontrolü başarısız: Inline upload migration secret target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
+function runAuditNullTenantNegativeCheck({ label, path, expectedFailure, mutate }) {
+  const fixture = structuredClone(auditNullTenantFixture);
+  mutate(fixture);
+  writeFileSync(path, `${JSON.stringify(fixture, null, 2)}\n`);
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-audit-null-tenant-evidence.mjs"], {
+      env: {
+        ...process.env,
+        AUDIT_NULL_TENANT_ALLOW_EXAMPLE_EVIDENCE: "1",
+        AUDIT_NULL_TENANT_EVIDENCE_TARGET: pathToFileURL(path).href,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error(`Production evidence template kontrolü başarısız: ${label} beklenen şekilde kırılmadı.`);
+      process.exit(1);
+    }
+    if (!output.includes(expectedFailure)) {
+      console.error(`Production evidence template kontrolü başarısız: ${label} beklenen hata yok.`);
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    try {
+      unlinkSync(path);
+    } catch {
+      // Ignore cleanup errors; the negative-check failure above is the actionable signal.
+    }
+  }
+}
+
 function runRateLimitNegativeCheck({ label, path, expectedFailure, mutate }) {
   const fixture = structuredClone(rateLimitFixture);
   mutate(fixture);
@@ -3376,6 +4068,91 @@ function runRateLimitNegativeCheck({ label, path, expectedFailure, mutate }) {
       unlinkSync(path);
     } catch {
       // Ignore cleanup errors; the negative-check failure above is the actionable signal.
+    }
+  }
+}
+
+function runRateLimitSecretTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-rate-limit-evidence.mjs"], {
+    env: {
+      ...process.env,
+      RATE_LIMIT_EVIDENCE_TARGET: "https://user:secret@evidence.uzmanhocam.com/rate-limit.json?token=secret#fragment",
+    },
+    encoding: "utf8",
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: Rate limit secret target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("RATE_LIMIT_EVIDENCE_TARGET userinfo, query veya fragment tasimamali.")) {
+    console.error("Production evidence template kontrolü başarısız: Rate limit secret target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
+function runRateLimitLocalArtifactTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-rate-limit-evidence.mjs"], {
+    env: {
+      ...process.env,
+      RATE_LIMIT_ALLOW_EXAMPLE_EVIDENCE: "1",
+      RATE_LIMIT_EVIDENCE_TARGET: pathToFileURL(resolve("artifacts/local/rate-limit-target-negative.json")).href,
+    },
+    encoding: "utf8",
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: Rate limit local artifact target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("RATE_LIMIT_EVIDENCE_TARGET production kaniti icin artifacts/local altinda olmamali.")) {
+    console.error("Production evidence template kontrolü başarısız: Rate limit local artifact target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
+function runRateLimitGeneratorLocalArtifactNegativeChecks() {
+  const cases = [
+    {
+      label: "Rate limit generator local smoke input negative",
+      env: {
+        RATE_LIMIT_SMOKE_EVIDENCE_TARGET: pathToFileURL(resolve("artifacts/local/rate-limit-smoke-negative.json")).href,
+        RATE_LIMIT_EVIDENCE_OUTPUT: "artifacts/staging/reports/rate-limit-generator-negative.json",
+      },
+      expectedFailure: "RATE_LIMIT_SMOKE_EVIDENCE_TARGET artifacts/local altında olmamalı.",
+    },
+    {
+      label: "Rate limit generator local output negative",
+      env: {
+        RATE_LIMIT_SMOKE_EVIDENCE_TARGET: pathToFileURL(resolve("artifacts/staging/smoke/rate-limit-generator-negative.json")).href,
+        RATE_LIMIT_EVIDENCE_OUTPUT: "artifacts/local/rate-limit-generator-output-negative.json",
+      },
+      expectedFailure: "RATE_LIMIT_EVIDENCE_OUTPUT artifacts/local altında olmamalı.",
+    },
+  ];
+
+  for (const item of cases) {
+    const result = spawnSync(process.execPath, ["scripts/generate-rate-limit-evidence.mjs"], {
+      env: {
+        ...process.env,
+        ...item.env,
+      },
+      encoding: "utf8",
+    });
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+    if (result.status === 0) {
+      console.error(`Production evidence template kontrolü başarısız: ${item.label} beklenen şekilde kırılmadı.`);
+      process.exit(1);
+    }
+    if (!output.includes(item.expectedFailure)) {
+      console.error(`Production evidence template kontrolü başarısız: ${item.label} beklenen hata yok.`);
+      console.error(output);
+      process.exit(1);
     }
   }
 }
@@ -3442,6 +4219,27 @@ function runFinancialRetentionSymlinkParentTargetNegativeCheck() {
   });
 }
 
+function runKvkkInventoryFixtureTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-kvkk-inventory-evidence.mjs"], {
+    env: {
+      ...process.env,
+      KVKK_INVENTORY_TARGET: pathToFileURL(kvkkInventoryFixturePath).href,
+    },
+    encoding: "utf8",
+  });
+
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: KVKK inventory fixture target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("KVKK_INVENTORY_TARGET production kaniti icin docs/evidence-templates fixture hedefi olmamali.")) {
+    console.error("Production evidence template kontrolü başarısız: KVKK inventory fixture target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
 function runIdentityMigrationSymlinkParentTargetNegativeCheck() {
   runSymlinkParentTargetNegativeCheck({
     label: "identity migration symlink parent target negative",
@@ -3461,7 +4259,7 @@ function runKvkkInventorySymlinkParentTargetNegativeCheck() {
     fixture: kvkkInventoryFixture,
     scriptPath: "scripts/check-kvkk-inventory-evidence.mjs",
     targetEnvName: "KVKK_INVENTORY_TARGET",
-    allowEnvName: null,
+    allowEnvName: "KVKK_INVENTORY_ALLOW_EXAMPLE_EVIDENCE",
     fileName: "kvkk-inventory.json",
     directoryPrefix: "kvkk-inventory-parent-symlink-",
     expectedFailure: "KVKK_INVENTORY_TARGET parent dizini symlink olmayan dizin olmali.",
@@ -3530,6 +4328,19 @@ function runInlineUploadMigrationSymlinkParentTargetNegativeCheck() {
     fileName: "inline-upload-content-migration.json",
     directoryPrefix: "inline-upload-migration-parent-symlink-",
     expectedFailure: "INLINE_UPLOAD_CONTENT_MIGRATION_TARGET parent dizini symlink olmayan dizin olmali.",
+  });
+}
+
+function runAuditNullTenantSymlinkParentTargetNegativeCheck() {
+  runSymlinkParentTargetNegativeCheck({
+    label: "audit null tenant symlink parent target negative",
+    fixture: auditNullTenantFixture,
+    scriptPath: "scripts/check-audit-null-tenant-evidence.mjs",
+    targetEnvName: "AUDIT_NULL_TENANT_EVIDENCE_TARGET",
+    allowEnvName: "AUDIT_NULL_TENANT_ALLOW_EXAMPLE_EVIDENCE",
+    fileName: "audit-null-tenant.json",
+    directoryPrefix: "audit-null-tenant-parent-symlink-",
+    expectedFailure: "AUDIT_NULL_TENANT_EVIDENCE_TARGET parent dizini symlink olmayan dizin olmali.",
   });
 }
 
@@ -3613,6 +4424,73 @@ function runLiveExamCycleSymlinkParentTargetNegativeCheck() {
     }
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function runIsemOpticalPipelineLocalArtifactTargetNegativeCheck() {
+  const localTargetPath = resolve("artifacts/local/isem-optical-pipeline-target-negative.json");
+  const result = spawnSync(process.execPath, ["scripts/check-isem-optical-pipeline-evidence.mjs"], {
+    env: {
+      ...process.env,
+      ISEM_OPTICAL_PIPELINE_ALLOW_EXAMPLE_EVIDENCE: "1",
+      ISEM_OPTICAL_PIPELINE_TARGET: pathToFileURL(localTargetPath).href,
+    },
+    encoding: "utf8",
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: iSEM optical local artifact target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("ISEM_OPTICAL_PIPELINE_TARGET production kaniti icin artifacts/local altinda olmamali.")) {
+    console.error("Production evidence template kontrolü başarısız: iSEM optical local artifact target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
+function runRlsLiveLocalArtifactTargetNegativeCheck() {
+  const localTargetPath = resolve("artifacts/local/rls-live-target-negative.json");
+  const result = spawnSync(process.execPath, ["scripts/check-rls-live-evidence.mjs"], {
+    env: {
+      ...process.env,
+      RLS_LIVE_ALLOW_EXAMPLE_EVIDENCE: "1",
+      RLS_LIVE_EVIDENCE_TARGET: pathToFileURL(localTargetPath).href,
+    },
+    encoding: "utf8",
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: RLS live local artifact target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("RLS_LIVE_EVIDENCE_TARGET production kaniti icin artifacts/local altinda olmamali.")) {
+    console.error("Production evidence template kontrolü başarısız: RLS live local artifact target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
+function runRlsLiveSecretTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-rls-live-evidence.mjs"], {
+    env: {
+      ...process.env,
+      RLS_LIVE_EVIDENCE_TARGET: "https://user:secret@evidence.uzmanhocam.com/rls-live.json?token=secret#fragment",
+    },
+    encoding: "utf8",
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: RLS live secret target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("RLS_LIVE_EVIDENCE_TARGET userinfo, query veya fragment tasimamali.")) {
+    console.error("Production evidence template kontrolü başarısız: RLS live secret target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
   }
 }
 
@@ -3720,6 +4598,28 @@ function runUatNegativeCheck({ label, path, expectedFailure, mutate, allowExampl
   }
 }
 
+function runUatSecretTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-uat-evidence.mjs"], {
+    env: {
+      ...process.env,
+      UAT_ALLOW_EXAMPLE_EVIDENCE: "1",
+      UAT_EVIDENCE_TARGET: "https://user:secret@evidence.uzmanhocam.com/uat.json?token=secret#fragment",
+    },
+    encoding: "utf8",
+  });
+
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: UAT secret target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("UAT_EVIDENCE_TARGET userinfo, query veya fragment tasimamali.")) {
+    console.error("Production evidence template kontrolü başarısız: UAT secret target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
 function runUatSymlinkParentTargetNegativeCheck() {
   const rootParent = resolve("artifacts/prod-evidence-template-check");
   mkdirSync(rootParent, { recursive: true });
@@ -3756,6 +4656,88 @@ function runUatSymlinkParentTargetNegativeCheck() {
   }
 }
 
+function runUatLocalArtifactTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-uat-evidence.mjs"], {
+    env: {
+      ...process.env,
+      UAT_ALLOW_EXAMPLE_EVIDENCE: "1",
+      UAT_EVIDENCE_TARGET: pathToFileURL(resolve("artifacts/local/uat-target-negative.json")).href,
+    },
+    encoding: "utf8",
+  });
+
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: UAT local artifact target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("UAT_EVIDENCE_TARGET production kaniti icin artifacts/local altinda olmamali.")) {
+    console.error("Production evidence template kontrolü başarısız: UAT local artifact target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
+function runUatGeneratorLocalArtifactNegativeChecks() {
+  const baseEnv = {
+    ...process.env,
+    STAGING_ENVIRONMENT: "staging",
+    UAT_TESTER: "Ayse UAT",
+    UAT_RELEASE_CANDIDATE: "ghcr.io/uzman-hocam/api:2026-06-24.1",
+    UAT_ROLLBACK_IMAGE_TAG: "ghcr.io/uzman-hocam/api:2026-06-23.1",
+    UAT_RESTORE_BACKUP_REFERENCE: "s3://uh-prod-backups/2026-06-24/base.dump",
+  };
+  const cases = [
+    {
+      label: "UAT generator local output negative",
+      env: {
+        UAT_OUTPUT: "artifacts/local/uat-output-negative.json",
+        UAT_COMMAND_EVIDENCE_TARGET: pathToFileURL(resolve("artifacts/staging/uat/commands.json")).href,
+        UAT_SCENARIOS_TARGET: pathToFileURL(resolve("artifacts/staging/uat/scenarios.json")).href,
+      },
+      expectedFailure: "UAT_OUTPUT artifacts/local altında olmamalı.",
+    },
+    {
+      label: "UAT generator local command evidence negative",
+      env: {
+        UAT_OUTPUT: "artifacts/staging/reports/uat-generator-negative.json",
+        UAT_COMMAND_EVIDENCE_TARGET: pathToFileURL(resolve("artifacts/local/uat/commands.json")).href,
+        UAT_SCENARIOS_TARGET: pathToFileURL(resolve("artifacts/staging/uat/scenarios.json")).href,
+      },
+      expectedFailure: "UAT_COMMAND_EVIDENCE_TARGET temp veya artifacts/local altında olmamalı.",
+    },
+    {
+      label: "UAT generator local scenarios negative",
+      env: {
+        UAT_OUTPUT: "artifacts/staging/reports/uat-generator-negative.json",
+        UAT_COMMAND_EVIDENCE_TARGET: pathToFileURL(resolve("artifacts/staging/uat/commands.json")).href,
+        UAT_SCENARIOS_TARGET: pathToFileURL(resolve("artifacts/local/uat/scenarios.json")).href,
+      },
+      expectedFailure: "UAT_SCENARIOS_TARGET temp veya artifacts/local altında olmamalı.",
+    },
+  ];
+
+  for (const item of cases) {
+    const result = spawnSync(process.execPath, ["scripts/generate-uat-evidence.mjs"], {
+      env: {
+        ...baseEnv,
+        ...item.env,
+      },
+      encoding: "utf8",
+    });
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error(`Production evidence template kontrolü başarısız: ${item.label} beklenen şekilde kırılmadı.`);
+      process.exit(1);
+    }
+    if (!output.includes(item.expectedFailure)) {
+      console.error(`Production evidence template kontrolü başarısız: ${item.label} beklenen hata yok.`);
+      console.error(output);
+      process.exit(1);
+    }
+  }
+}
+
 function runPilotNegativeCheck({ label, path, expectedFailure, mutate }) {
   const fixture = structuredClone(pilotFixture);
   mutate(fixture);
@@ -3787,6 +4769,50 @@ function runPilotNegativeCheck({ label, path, expectedFailure, mutate }) {
     } catch {
       // Ignore cleanup errors; the negative-check failure above is the actionable signal.
     }
+  }
+}
+
+function runPilotLocalArtifactTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-pilot-evidence.mjs"], {
+    env: {
+      ...process.env,
+      PILOT_ALLOW_EXAMPLE_EVIDENCE: "1",
+      PILOT_EVIDENCE_TARGET: pathToFileURL(resolve("artifacts/local/pilot-target-negative.json")).href,
+    },
+    encoding: "utf8",
+  });
+
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: pilot local artifact target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("PILOT_EVIDENCE_TARGET production kaniti icin artifacts/local altinda olmamali.")) {
+    console.error("Production evidence template kontrolü başarısız: pilot local artifact target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
+function runPilotSecretUrlTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-pilot-evidence.mjs"], {
+    env: {
+      ...process.env,
+      PILOT_ALLOW_EXAMPLE_EVIDENCE: "1",
+      PILOT_EVIDENCE_TARGET: "https://ops:secret@evidence.uzmanhocam.com/pilot.json?token=secret#proof",
+    },
+    encoding: "utf8",
+  });
+
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: pilot secret URL target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("PILOT_EVIDENCE_TARGET production evidence target URL userinfo, query veya fragment içeremez.")) {
+    console.error("Production evidence template kontrolü başarısız: pilot secret URL target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
   }
 }
 
@@ -3826,6 +4852,30 @@ function runPilotSymlinkParentTargetNegativeCheck() {
   }
 }
 
+function runDeploymentRollbackLocalArtifactTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-deployment-rollback-evidence.mjs"], {
+    env: {
+      ...process.env,
+      DEPLOYMENT_ROLLBACK_ALLOW_EXAMPLE_EVIDENCE: "1",
+      DEPLOYMENT_ROLLBACK_TARGET: pathToFileURL(resolve("artifacts/local/deployment-rollback-target-negative.json")).href,
+    },
+    encoding: "utf8",
+  });
+
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  if (result.status === 0) {
+    console.error(
+      "Production evidence template kontrolü başarısız: deployment rollback local artifact target negative beklenen şekilde kırılmadı.",
+    );
+    process.exit(1);
+  }
+  if (!output.includes("DEPLOYMENT_ROLLBACK_TARGET production kaniti icin artifacts/local altinda olmamali.")) {
+    console.error("Production evidence template kontrolü başarısız: deployment rollback local artifact target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
 function runDeploymentRollbackNegativeCheck({ label, path, expectedFailure, mutate }) {
   const fixture = structuredClone(deploymentRollbackFixture);
   mutate(fixture);
@@ -3857,6 +4907,28 @@ function runDeploymentRollbackNegativeCheck({ label, path, expectedFailure, muta
     } catch {
       // Ignore cleanup errors; the negative-check failure above is the actionable signal.
     }
+  }
+}
+
+function runDeploymentRollbackSecretTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-deployment-rollback-evidence.mjs"], {
+    env: {
+      ...process.env,
+      DEPLOYMENT_ROLLBACK_ALLOW_EXAMPLE_EVIDENCE: "1",
+      DEPLOYMENT_ROLLBACK_TARGET: "https://user:secret@evidence.uzmanhocam.com/deployment-rollback.json?token=secret#fragment",
+    },
+    encoding: "utf8",
+  });
+
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: deployment rollback secret target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("DEPLOYMENT_ROLLBACK_TARGET userinfo, query veya fragment tasimamali.")) {
+    console.error("Production evidence template kontrolü başarısız: deployment rollback secret target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
   }
 }
 
@@ -4132,6 +5204,18 @@ function runLiveStatusGeneratorOutputTargetNegativeChecks() {
       process.exit(1);
     }
 
+    const localArtifactResult = runLiveStatusGeneratorForOutput("artifacts/local/live-status-output-negative.json");
+    const localArtifactOutput = `${localArtifactResult.stdout ?? ""}${localArtifactResult.stderr ?? ""}`;
+    if (localArtifactResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: live status generator output local artifact negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!localArtifactOutput.includes("LIVE_STATUS_EVIDENCE_OUTPUT artifacts/local altında olmamalı.")) {
+      console.error("Production evidence template kontrolü başarısız: live status generator output local artifact negative beklenen hata yok.");
+      console.error(localArtifactOutput);
+      process.exit(1);
+    }
+
     const symlinkResult = runLiveStatusGeneratorForOutput(symlinkOutputPath);
     const symlinkOutput = `${symlinkResult.stdout ?? ""}${symlinkResult.stderr ?? ""}`;
     if (symlinkResult.status === 0) {
@@ -4157,6 +5241,29 @@ function runLiveStatusGeneratorOutputTargetNegativeChecks() {
     }
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function runLiveStatusEvidenceLocalArtifactTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-live-status-evidence.mjs"], {
+    env: {
+      ...process.env,
+      LIVE_STATUS_ALLOW_EXAMPLE_EVIDENCE: "1",
+      LIVE_STATUS_READINESS_PATH: liveStatusReadinessPath,
+      LIVE_STATUS_EVIDENCE_TARGET: pathToFileURL(resolve("artifacts/local/live-status-target-negative.json")).href,
+    },
+    encoding: "utf8",
+  });
+
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: live status local artifact target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("LIVE_STATUS_EVIDENCE_TARGET artifacts/local altında olmamalı.")) {
+    console.error("Production evidence template kontrolü başarısız: live status local artifact target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
   }
 }
 
@@ -4260,6 +5367,65 @@ function runGoLiveNegativeCheck({ label, path, expectedFailure, mutate }) {
   }
 }
 
+function runGoLiveSecretUrlTargetNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-go-live-evidence.mjs"], {
+    env: {
+      ...process.env,
+      GO_LIVE_ALLOW_EXAMPLE_EVIDENCE: "1",
+      GO_LIVE_EVIDENCE_TARGET: "https://ops:secret@evidence.uzmanhocam.com/go-live.json?token=secret#proof",
+    },
+    encoding: "utf8",
+  });
+
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: go-live secret URL target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("GO_LIVE_EVIDENCE_TARGET target URL userinfo, query veya fragment iceremez.")) {
+    console.error("Production evidence template kontrolü başarısız: go-live secret URL target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
+function runGoLiveLinkedLiveStatusLocalArtifactTargetNegativeCheck() {
+  const goLivePath = "docs/evidence-templates/go-live.linked-live-status-local-artifact-target.tmp.json";
+  const fixture = structuredClone(goLiveFixture);
+  fixture.liveStatusEvidence.evidenceTarget = pathToFileURL(resolve("artifacts/local/live-status-for-go-live.json")).href;
+  writeFileSync(goLivePath, `${JSON.stringify(fixture, null, 2)}\n`);
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-go-live-evidence.mjs"], {
+      env: {
+        ...process.env,
+        GO_LIVE_ALLOW_EXAMPLE_EVIDENCE: "1",
+        GO_LIVE_EVIDENCE_TARGET: pathToFileURL(goLivePath).href,
+      },
+      encoding: "utf8",
+    });
+
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.status === 0) {
+      console.error(
+        "Production evidence template kontrolü başarısız: go-live linked live-status local artifact target negative beklenen şekilde kırılmadı.",
+      );
+      process.exit(1);
+    }
+    if (!output.includes("liveStatusEvidence.evidenceTarget artifacts/local altinda olmamali.")) {
+      console.error("Production evidence template kontrolü başarısız: go-live linked live-status local artifact target negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    try {
+      unlinkSync(goLivePath);
+    } catch {
+      // Ignore cleanup errors; the negative-check failure above is the actionable signal.
+    }
+  }
+}
+
 function runGoLiveLinkedLiveStatusSymlinkParentTargetNegativeCheck() {
   const rootParent = resolve("artifacts/prod-evidence-template-check");
   mkdirSync(rootParent, { recursive: true });
@@ -4333,6 +5499,54 @@ function runStagingEvidenceEnvNegativeCheck() {
       process.exit(1);
     }
 
+    const missingAuditNullPath = "docs/evidence-templates/staging-evidence.missing-audit-null-tenant.tmp.env";
+    writeFileSync(
+      missingAuditNullPath,
+      readFileSync("docs/evidence-templates/staging-evidence.env.example", "utf8").replace(
+        /^AUDIT_NULL_TENANT_EVIDENCE_TARGET=.*\n?/m,
+        "",
+      ),
+    );
+    const missingAuditNullResult = spawnSync(
+      process.execPath,
+      ["scripts/check-staging-evidence-env.mjs", "--env-file", missingAuditNullPath],
+      { encoding: "utf8" },
+    );
+    const missingAuditNullOutput = `${missingAuditNullResult.stdout ?? ""}${missingAuditNullResult.stderr ?? ""}`;
+    if (missingAuditNullResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging env missing audit null tenant negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!missingAuditNullOutput.includes("eksik env anahtarı: AUDIT_NULL_TENANT_EVIDENCE_TARGET")) {
+      console.error("Production evidence template kontrolü başarısız: staging env missing audit null tenant negative beklenen hata yok.");
+      console.error(missingAuditNullOutput);
+      process.exit(1);
+    }
+
+    const missingUiWorkerResultPath = "docs/evidence-templates/staging-evidence.missing-ui-worker-result.tmp.env";
+    writeFileSync(
+      missingUiWorkerResultPath,
+      readFileSync("docs/evidence-templates/staging-evidence.env.example", "utf8").replace(
+        /^LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET=.*\n?/m,
+        "",
+      ),
+    );
+    const missingUiWorkerResult = spawnSync(
+      process.execPath,
+      ["scripts/check-staging-evidence-env.mjs", "--env-file", missingUiWorkerResultPath],
+      { encoding: "utf8" },
+    );
+    const missingUiWorkerResultOutput = `${missingUiWorkerResult.stdout ?? ""}${missingUiWorkerResult.stderr ?? ""}`;
+    if (missingUiWorkerResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging env missing UI-worker result negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!missingUiWorkerResultOutput.includes("eksik env anahtarı: LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET")) {
+      console.error("Production evidence template kontrolü başarısız: staging env missing UI-worker result negative beklenen hata yok.");
+      console.error(missingUiWorkerResultOutput);
+      process.exit(1);
+    }
+
     const defaultedSmokePath = "docs/evidence-templates/staging-evidence.defaulted-smoke.tmp.env";
     writeFileSync(
       defaultedSmokePath,
@@ -4387,7 +5601,13 @@ function runStagingEvidenceEnvNegativeCheck() {
       process.exit(1);
     }
   } finally {
-    for (const cleanupPath of [path, "docs/evidence-templates/staging-evidence.defaulted-smoke.tmp.env", workflowPath]) {
+    for (const cleanupPath of [
+      path,
+      "docs/evidence-templates/staging-evidence.missing-audit-null-tenant.tmp.env",
+      "docs/evidence-templates/staging-evidence.missing-ui-worker-result.tmp.env",
+      "docs/evidence-templates/staging-evidence.defaulted-smoke.tmp.env",
+      workflowPath,
+    ]) {
       try {
         unlinkSync(cleanupPath);
       } catch {
@@ -4410,6 +5630,86 @@ function runStagingFirstGatesFixtureCheck() {
     console.error(result.stderr);
     process.exit(result.status ?? 1);
   }
+}
+
+function runStagingFirstGatesTargetNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "staging-first-gates-target-negative-"));
+  const symlinkParentRoot = mkdtempSync(join(rootParent, "staging-first-gates-target-parent-symlink-"));
+  const symlinkParent = join(symlinkParentRoot, "link");
+  symlinkSync(resolve("docs/evidence-templates/staging-first-gates"), symlinkParent, "dir");
+
+  try {
+    const tempPath = "/tmp/staging-first-gates-manifest-target-negative.json";
+    writeFileSync(tempPath, readFileSync("docs/evidence-templates/staging-first-gates/first-gates-manifest.json", "utf8"));
+    const tempResult = runStagingFirstGatesTargetNegative(pathToFileURL(tempPath).href);
+    const tempOutput = `${tempResult.stdout ?? ""}${tempResult.stderr ?? ""}`;
+    if (tempResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates target temp path negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!tempOutput.includes("STAGING_FIRST_GATES_TARGET lokal temp path olmamalı.")) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates target temp path negative beklenen hata yok.");
+      console.error(tempOutput);
+      process.exit(1);
+    }
+    unlinkSync(tempPath);
+
+    const localTargetResult = runStagingFirstGatesTargetNegative(pathToFileURL(resolve("artifacts/local/first-gates/first-gates-manifest.json")).href);
+    const localTargetOutput = `${localTargetResult.stdout ?? ""}${localTargetResult.stderr ?? ""}`;
+    if (localTargetResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates target local artifact negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!localTargetOutput.includes("STAGING_FIRST_GATES_TARGET artifacts/local altında olmamalı.")) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates target local artifact negative beklenen hata yok.");
+      console.error(localTargetOutput);
+      process.exit(1);
+    }
+
+    const realManifest = join(root, "real-manifest.json");
+    const symlinkManifest = join(root, "manifest-link.json");
+    writeFileSync(realManifest, readFileSync("docs/evidence-templates/staging-first-gates/first-gates-manifest.json", "utf8"));
+    symlinkSync(realManifest, symlinkManifest);
+    const symlinkResult = runStagingFirstGatesTargetNegative(pathToFileURL(symlinkManifest).href);
+    const symlinkOutput = `${symlinkResult.stdout ?? ""}${symlinkResult.stderr ?? ""}`;
+    if (symlinkResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates target symlink negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!symlinkOutput.includes("STAGING_FIRST_GATES_TARGET symlink olmayan file artifact olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates target symlink negative beklenen hata yok.");
+      console.error(symlinkOutput);
+      process.exit(1);
+    }
+
+    const symlinkParentResult = runStagingFirstGatesTargetNegative(pathToFileURL(join(symlinkParent, "first-gates-manifest.json")).href);
+    const symlinkParentOutput = `${symlinkParentResult.stdout ?? ""}${symlinkParentResult.stderr ?? ""}`;
+    if (symlinkParentResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates target symlink parent negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!symlinkParentOutput.includes("STAGING_FIRST_GATES_TARGET parent dizini symlink olmayan dizin olmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates target symlink parent negative beklenen hata yok.");
+      console.error(symlinkParentOutput);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(symlinkParentRoot, { recursive: true, force: true });
+    rmSync("/tmp/staging-first-gates-manifest-target-negative.json", { force: true });
+  }
+}
+
+function runStagingFirstGatesTargetNegative(target) {
+  return spawnSync(process.execPath, ["scripts/check-staging-first-gates-evidence.mjs"], {
+    env: {
+      ...process.env,
+      STAGING_FIRST_GATES_TARGET: target,
+    },
+    encoding: "utf8",
+  });
 }
 
 function runStagingFirstGatesOutputDirNegativeCheck() {
@@ -4439,6 +5739,25 @@ function runStagingFirstGatesOutputDirNegativeCheck() {
     if (!tempOutput.includes("staging:first-gates:smoke output-dir lokal temp path olmamalı.")) {
       console.error("Production evidence template kontrolü başarısız: staging first-gates output-dir temp path negative beklenen hata yok.");
       console.error(tempOutput);
+      process.exit(1);
+    }
+
+    const localOutputResult = spawnSync(
+      process.execPath,
+      ["scripts/run-staging-first-gate-smokes.mjs", "--output-dir", "artifacts/local/first-gates-output-negative"],
+      {
+        env: process.env,
+        encoding: "utf8",
+      },
+    );
+    const localOutput = `${localOutputResult.stdout ?? ""}${localOutputResult.stderr ?? ""}`;
+    if (localOutputResult.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates output-dir local artifact negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!localOutput.includes("staging:first-gates:smoke output-dir artifacts/local altında olmamalı.")) {
+      console.error("Production evidence template kontrolü başarısız: staging first-gates output-dir local artifact negative beklenen hata yok.");
+      console.error(localOutput);
       process.exit(1);
     }
 
@@ -4667,6 +5986,19 @@ function runStagingReleaseArtifactsBundleCheck() {
       evidenceTime,
     );
     summary.generatedAt = summaryTime;
+    summary.webUrl = "https://staging.uzmanhocam.com";
+    summary.appUrl = "https://staging.uzmanhocam.com";
+    summary.apiUrl = "https://staging-api.uzmanhocam.com";
+    summary.smokeEvidence.traefikHttps.url = "https://staging.uzmanhocam.com/health";
+    summary.smokeEvidence.alertWebhook.webhookUrl = "https://alerts.uzmanhocam.com/hooks/staging";
+    summary.reports.liveExamCycle.appUrl = summary.appUrl;
+    summary.reports.liveExamCycle.apiUrl = summary.apiUrl;
+    for (const monitor of summary.reports.externalMonitoring.monitorsVerified) {
+      if (monitor.name === "API /health") monitor.url = `${summary.webUrl}/health`;
+      if (monitor.name === "API /health/ready") monitor.url = `${summary.webUrl}/health/ready`;
+      if (monitor.name === "Web login") monitor.url = `${summary.webUrl}/login`;
+      if (monitor.name === "Traefik TLS certificate") monitor.url = `${summary.webUrl}/`;
+    }
 
     const releaseSummaryPath = `${root}/release-summary-2026-06-15.1.json`;
     writeFileSync(releaseSummaryPath, `${JSON.stringify(summary, null, 2)}\n`);
@@ -4686,7 +6018,9 @@ function runStagingReleaseArtifactsBundleCheck() {
       securityAudit: "security-audit.example.json",
       liveExamCycle: "live-exam-cycle.example.json",
       isemOpticalPipeline: "isem-optical-pipeline.example.json",
+      liveUiWorkerResult: "live-ui-worker-result.example.json",
       inlineUploadMigration: "inline-upload-content-migration.example.json",
+      auditNullTenant: "audit-null-tenant.example.json",
       rateLimit: "rate-limit.example.json",
       rlsLive: "rls-live.example.json",
       uat: "uat.example.json",
@@ -4732,10 +6066,10 @@ function runStagingReleaseArtifactsBundleCheck() {
         check: "traefik_https_smoke",
         environment: summary.smokeEvidence.traefikHttps.environment,
         checkedAt: evidenceTime,
-        url: "https://staging.uzmanhocam.com/health",
-        expectedStatus: 200,
-        statusCode: 200,
-        strictTransportSecurity: "max-age=31536000; includeSubDomains",
+        url: summary.smokeEvidence.traefikHttps.url,
+        expectedStatus: summary.smokeEvidence.traefikHttps.expectedStatus,
+        statusCode: summary.smokeEvidence.traefikHttps.statusCode,
+        strictTransportSecurity: summary.smokeEvidence.traefikHttps.strictTransportSecurity,
         commandsPassed: ["pnpm traefik:https:smoke"],
         gaps: [],
       },
@@ -4745,9 +6079,9 @@ function runStagingReleaseArtifactsBundleCheck() {
         check: "alert_webhook_smoke",
         environment: summary.smokeEvidence.alertWebhook.environment,
         checkedAt: evidenceTime,
-        webhookUrl: "https://alerts.uzmanhocam.com/hooks/staging",
-        statusCode: 200,
-        authorizationScheme: "bearer",
+        webhookUrl: summary.smokeEvidence.alertWebhook.webhookUrl,
+        statusCode: summary.smokeEvidence.alertWebhook.statusCode,
+        authorizationScheme: summary.smokeEvidence.alertWebhook.authorizationScheme,
         commandsPassed: ["pnpm alert:webhook:smoke"],
         gaps: [],
       },
@@ -4797,6 +6131,282 @@ function runStagingReleaseArtifactsBundleCheck() {
       console.error(positive.stdout);
       console.error(positive.stderr);
       process.exit(positive.status ?? 1);
+    }
+
+    const gapReportPath = join(rootParent, "staging-release-gap-report-negative.json");
+      const rateLimitReportPath = `${reportsDir}/rate-limit.json`;
+      const unexpectedRootFilePath = `${root}/unexpected-diagnostic.log`;
+      const originalRateLimitReport = readFileSync(rateLimitReportPath, "utf8");
+      unlinkSync(rateLimitReportPath);
+      writeFileSync(unexpectedRootFilePath, "diagnostic logs do not belong in the release bundle\n");
+      try {
+      const gapReportNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
+        env: {
+          ...process.env,
+          STAGING_RELEASE_ARTIFACTS_TARGET: root,
+          STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1",
+          STAGING_RELEASE_GAP_REPORT_FILE: gapReportPath,
+        },
+        encoding: "utf8",
+      });
+      const gapReportOutput = `${gapReportNegative.stdout ?? ""}${gapReportNegative.stderr ?? ""}`;
+      if (gapReportNegative.status === 0) {
+        console.error("Production evidence template kontrolü başarısız: staging release gap report negative beklenen şekilde kırılmadı.");
+        process.exit(1);
+      }
+      const gapReport = JSON.parse(readFileSync(gapReportPath, "utf8"));
+      if (
+        gapReport.reportType !== "staging_release_artifacts_gap_report" ||
+        gapReport.result !== "NOT_RELEASE_EVIDENCE" ||
+        gapReport.overallStatus !== "BLOCKED" ||
+        gapReport.releaseEvidence !== false ||
+        gapReport.canPromote !== false
+      ) {
+        console.error("Production evidence template kontrolü başarısız: staging release gap report non-evidence shape bozuk.");
+        console.error(JSON.stringify(gapReport, null, 2));
+        process.exit(1);
+	      }
+	      if (
+	        !Array.isArray(gapReport.missingRequiredFiles) ||
+	        !gapReport.missingRequiredFiles.some(
+	          (item) =>
+	            item.path === "reports/rate-limit.json" &&
+	            item.remediation?.ownerAgent === "auth_session_engineer" &&
+	            item.remediation?.phase === "Faz 5 - Rate-limit Redis kanıtı" &&
+	            item.remediation?.evidenceGate === "rate-limit:check" &&
+	            item.remediation?.nextActionKind === "second_api_instance_or_lb_shard",
+	        ) ||
+	        gapReport.openClosureItemCount !== 1 ||
+	        !Array.isArray(gapReport.openClosureItems) ||
+	        !gapReport.openClosureItems.some((item) => item.path === "reports/rate-limit.json") ||
+	        !Array.isArray(gapReport.unexpectedFiles) ||
+	        !gapReport.unexpectedFiles.some((item) => item.path === "unexpected-diagnostic.log" && item.category === "unexpected_file") ||
+	        Object.hasOwn(gapReport, "reports") ||
+	        Object.hasOwn(gapReport, "smokeEvidence") ||
+	        Object.hasOwn(gapReport, "commandsPassed") ||
+	        Object.hasOwn(gapReport, "gaps")
+      ) {
+        console.error("Production evidence template kontrolü başarısız: staging release gap report yanlış release-evidence alanları taşıyor.");
+        console.error(JSON.stringify(gapReport, null, 2));
+        console.error(gapReportOutput);
+        process.exit(1);
+      }
+
+      const gapSummaryNegative = spawnSync(
+        process.execPath,
+        [
+          "scripts/print-staging-release-gap-summary.mjs",
+          "--artifacts-dir",
+          root,
+          "--gap-report-file",
+          gapReportPath,
+        ],
+        {
+          env: process.env,
+          encoding: "utf8",
+        },
+      );
+      const gapSummaryOutput = `${gapSummaryNegative.stdout ?? ""}${gapSummaryNegative.stderr ?? ""}`;
+      if (gapSummaryNegative.status === 0) {
+        console.error("Production evidence template kontrolü başarısız: staging release gap summary CLI beklenen şekilde kırılmadı.");
+        process.exit(1);
+	      }
+	      for (const expectedOutput of [
+	        "- missingRequiredFiles: 1",
+	        "- unexpectedFiles: 1",
+	        "- blockedChecks: 0",
+	        "- openClosureItems: 1",
+	        "Açık kapanış kalemleri",
+	        "Beklenmeyen bundle girdileri",
+	        "* unexpected-diagnostic.log",
+	      ]) {
+	        if (!gapSummaryOutput.includes(expectedOutput)) {
+	          console.error("Production evidence template kontrolü başarısız: staging release gap summary CLI eksik çıktı taşıyor.");
+	          console.error(`Beklenen çıktı: ${expectedOutput}`);
+	          console.error(gapSummaryOutput);
+	          process.exit(1);
+	        }
+	      }
+
+	      const firstGatesGapReportPath = join(rootParent, "staging-release-first-gates-gap-report-negative.json");
+	      const manifestPath = `${firstGatesDir}/first-gates-manifest.json`;
+	      const originalManifest = readFileSync(manifestPath, "utf8");
+	      unlinkSync(manifestPath);
+	      try {
+	        const firstGatesGapNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
+	          env: {
+	            ...process.env,
+	            STAGING_RELEASE_ARTIFACTS_TARGET: root,
+	            STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1",
+	            STAGING_RELEASE_GAP_REPORT_FILE: firstGatesGapReportPath,
+	          },
+	          encoding: "utf8",
+	        });
+	        if (firstGatesGapNegative.status === 0) {
+	          console.error("Production evidence template kontrolü başarısız: first-gates gap negative beklenen şekilde kırılmadı.");
+	          process.exit(1);
+	        }
+	        const firstGatesGapReport = JSON.parse(readFileSync(firstGatesGapReportPath, "utf8"));
+	        const firstGateClosurePaths = new Set((firstGatesGapReport.openClosureItems ?? []).map((item) => item.path));
+	        for (const expectedPath of [
+	          "first-gates/first-gates-manifest.json",
+	          "first-gates/traefik-https.json",
+	          "first-gates/alert-webhook.json",
+	        ]) {
+	          if (!firstGateClosurePaths.has(expectedPath)) {
+	            console.error("Production evidence template kontrolü başarısız: first-gates openClosureItems eksik.");
+	            console.error(`Beklenen path: ${expectedPath}`);
+	            console.error(JSON.stringify(firstGatesGapReport, null, 2));
+	            process.exit(1);
+	          }
+	        }
+	        if (firstGatesGapReport.openClosureItemCount !== 4) {
+	          console.error("Production evidence template kontrolü başarısız: first-gates openClosureItemCount yanlış.");
+	          console.error(JSON.stringify(firstGatesGapReport, null, 2));
+	          process.exit(1);
+	        }
+	      } finally {
+	        writeFileSync(manifestPath, originalManifest);
+	      }
+
+	      const archiveDir = join(rootParent, "staging-release-unexpected-archive");
+      const archiveDryRun = spawnSync(
+        process.execPath,
+        [
+          "scripts/archive-staging-release-unexpected-artifacts.mjs",
+          "--artifacts-dir",
+          root,
+          "--gap-report-file",
+          gapReportPath,
+          "--archive-dir",
+          archiveDir,
+        ],
+        { env: process.env, encoding: "utf8" },
+      );
+      const archiveDryRunOutput = `${archiveDryRun.stdout ?? ""}${archiveDryRun.stderr ?? ""}`;
+      if (archiveDryRun.status !== 0 || !archiveDryRunOutput.includes("--apply verilmedi; dosyalar taşınmadı.")) {
+        console.error("Production evidence template kontrolü başarısız: unexpected artifact archive dry-run çıktısı bozuk.");
+        console.error(archiveDryRunOutput);
+        process.exit(1);
+      }
+      if (!readFileSync(unexpectedRootFilePath, "utf8").includes("diagnostic logs")) {
+        console.error("Production evidence template kontrolü başarısız: archive dry-run unexpected artifact'i taşımamalı.");
+        process.exit(1);
+      }
+
+      const archiveApply = spawnSync(
+        process.execPath,
+        [
+          "scripts/archive-staging-release-unexpected-artifacts.mjs",
+          "--artifacts-dir",
+          root,
+          "--gap-report-file",
+          gapReportPath,
+          "--archive-dir",
+          archiveDir,
+          "--apply",
+        ],
+        { env: process.env, encoding: "utf8" },
+      );
+      const archiveApplyOutput = `${archiveApply.stdout ?? ""}${archiveApply.stderr ?? ""}`;
+      if (archiveApply.status !== 0) {
+        console.error("Production evidence template kontrolü başarısız: unexpected artifact archive apply kırıldı.");
+        console.error(archiveApplyOutput);
+        process.exit(1);
+      }
+      if (existsSync(unexpectedRootFilePath) || !existsSync(join(archiveDir, "unexpected-diagnostic.log"))) {
+        console.error("Production evidence template kontrolü başarısız: unexpected artifact archive apply taşıma yapmadı.");
+        console.error(archiveApplyOutput);
+        process.exit(1);
+      }
+      const archiveManifest = JSON.parse(readFileSync(join(archiveDir, "manifest.json"), "utf8"));
+      if (
+        archiveManifest.result !== "ARCHIVED_UNEXPECTED_STAGING_RELEASE_ARTIFACTS" ||
+        !archiveManifest.entries?.some((item) => item.path === "unexpected-diagnostic.log")
+      ) {
+        console.error("Production evidence template kontrolü başarısız: unexpected artifact archive manifest shape bozuk.");
+        console.error(JSON.stringify(archiveManifest, null, 2));
+        process.exit(1);
+      }
+    } finally {
+      writeFileSync(rateLimitReportPath, originalRateLimitReport);
+      rmSync(unexpectedRootFilePath, { force: true });
+      rmSync(gapReportPath, { force: true });
+      rmSync(join(rootParent, "staging-release-unexpected-archive"), { recursive: true, force: true });
+    }
+
+    const disallowExampleNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
+      env: {
+        ...process.env,
+        STAGING_RELEASE_ARTIFACTS_TARGET: root,
+      },
+      encoding: "utf8",
+    });
+    const disallowExampleOutput = `${disallowExampleNegative.stdout ?? ""}${disallowExampleNegative.stderr ?? ""}`;
+    if (disallowExampleNegative.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: staging release artifact example flag negative beklenen şekilde kırılmadı.");
+      process.exit(1);
+    }
+    if (!disallowExampleOutput.includes("örnek/placeholder/redacted")) {
+      console.error("Production evidence template kontrolü başarısız: staging release artifact example flag negative beklenen hata yok.");
+      console.error(disallowExampleOutput);
+      process.exit(1);
+    }
+
+    const forbiddenExampleFlagRoot = resolve("artifacts/staging-release-artifacts-example-flag-negative");
+    rmSync(forbiddenExampleFlagRoot, { recursive: true, force: true });
+    mkdirSync(forbiddenExampleFlagRoot, { recursive: true });
+    try {
+      const forbiddenExampleFlagNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
+        env: {
+          ...process.env,
+          STAGING_RELEASE_ARTIFACTS_TARGET: forbiddenExampleFlagRoot,
+          STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1",
+        },
+        encoding: "utf8",
+      });
+      const forbiddenExampleFlagOutput = `${forbiddenExampleFlagNegative.stdout ?? ""}${forbiddenExampleFlagNegative.stderr ?? ""}`;
+      if (forbiddenExampleFlagNegative.status === 0) {
+        console.error("Production evidence template kontrolü başarısız: staging release artifact forbidden example flag negative beklenen şekilde kırılmadı.");
+        process.exit(1);
+      }
+      if (
+        !forbiddenExampleFlagOutput.includes(
+          "STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE=1 yalnız prod evidence template fixture bundle'ında kullanılabilir.",
+        )
+      ) {
+        console.error("Production evidence template kontrolü başarısız: staging release artifact forbidden example flag negative beklenen hata yok.");
+        console.error(forbiddenExampleFlagOutput);
+        process.exit(1);
+      }
+    } finally {
+      rmSync(forbiddenExampleFlagRoot, { recursive: true, force: true });
+    }
+
+    const tempArtifactsRoot = "/tmp/staging-release-artifacts-temp-negative";
+    rmSync(tempArtifactsRoot, { recursive: true, force: true });
+    mkdirSync(tempArtifactsRoot, { recursive: true });
+    try {
+      const tempTargetNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
+        env: {
+          ...process.env,
+          STAGING_RELEASE_ARTIFACTS_TARGET: tempArtifactsRoot,
+          STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1",
+        },
+        encoding: "utf8",
+      });
+      const tempTargetOutput = `${tempTargetNegative.stdout ?? ""}${tempTargetNegative.stderr ?? ""}`;
+      if (tempTargetNegative.status === 0) {
+        console.error("Production evidence template kontrolü başarısız: staging release artifact temp path negative beklenen şekilde kırılmadı.");
+        process.exit(1);
+      }
+      if (!tempTargetOutput.includes("STAGING_RELEASE_ARTIFACTS_TARGET lokal temp path altında olmamalı.")) {
+        console.error("Production evidence template kontrolü başarısız: staging release artifact temp path negative beklenen hata yok.");
+        console.error(tempTargetOutput);
+        process.exit(1);
+      }
+    } finally {
+      rmSync(tempArtifactsRoot, { recursive: true, force: true });
     }
 
     const symlinkParentRoot = mkdtempSync(join(rootParent, "staging-release-artifacts-parent-symlink-"));
@@ -5020,6 +6630,31 @@ function runStagingReleaseArtifactsBundleCheck() {
     }
     writeFileSync(`${reportsDir}/deployment-region.json`, `${JSON.stringify(originalDeploymentRegion, null, 2)}\n`);
 
+    const firstGateTargetMismatch = JSON.parse(readFileSync(`${firstGatesDir}/traefik-https.json`, "utf8"));
+    firstGateTargetMismatch.url = "https://staging-different.uzmanhocam.com/health";
+    writeFileSync(`${firstGatesDir}/traefik-https.json`, `${JSON.stringify(firstGateTargetMismatch, null, 2)}\n`);
+    const firstGateTargetMismatchNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
+      env: {
+        ...process.env,
+        STAGING_RELEASE_ARTIFACTS_TARGET: root,
+        STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1",
+      },
+      encoding: "utf8",
+    });
+    const firstGateTargetMismatchOutput = `${firstGateTargetMismatchNegative.stdout ?? ""}${firstGateTargetMismatchNegative.stderr ?? ""}`;
+    if (firstGateTargetMismatchNegative.status === 0) {
+      console.error(
+        "Production evidence template kontrolü başarısız: staging release artifact first-gate target mismatch negative beklenen şekilde kırılmadı.",
+      );
+      process.exit(1);
+    }
+    if (!firstGateTargetMismatchOutput.includes("first-gates/traefik-https.json.url summary.smokeEvidence.traefikHttps.url ile eşleşmeli.")) {
+      console.error("Production evidence template kontrolü başarısız: staging release artifact first-gate target mismatch negative beklenen hata yok.");
+      console.error(firstGateTargetMismatchOutput);
+      process.exit(1);
+    }
+    writeFileSync(`${firstGatesDir}/traefik-https.json`, `${JSON.stringify(originalTraefikFirstGate, null, 2)}\n`);
+
     const staleTraefikFirstGate = JSON.parse(readFileSync(`${firstGatesDir}/traefik-https.json`, "utf8"));
     staleTraefikFirstGate.checkedAt = summaryTime;
     writeFileSync(`${firstGatesDir}/traefik-https.json`, `${JSON.stringify(staleTraefikFirstGate, null, 2)}\n`);
@@ -5142,6 +6777,48 @@ function runProdEnvHttpEvidenceTargetNegativeCheck() {
   }
 }
 
+function runProdEnvSecretEvidenceTargetNegativeCheck() {
+  const env = createValidProdEnvForNegativeCheck();
+  env.DEPLOYMENT_REGION_TARGET = "https://ops:secret@evidence.uzmanhocam.com/deployment-region.json?token=secret#proof";
+
+  const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
+    env,
+    encoding: "utf8",
+  });
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: prod env secret evidence target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+
+  if (!String(result.stderr).includes("DEPLOYMENT_REGION_TARGET production evidence target URL userinfo, query veya fragment içeremez.")) {
+    console.error("Production evidence template kontrolü başarısız: prod env secret evidence target negative beklenen hata yok.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
+function runProdEnvLocalEvidenceTargetNegativeCheck() {
+  const env = createValidProdEnvForNegativeCheck();
+  env.RLS_LIVE_EVIDENCE_TARGET = "file:///var/lib/uzman-hocam/artifacts/local/rls-live.json";
+
+  const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
+    env,
+    encoding: "utf8",
+  });
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: prod env local evidence target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+
+  if (!String(result.stderr).includes("RLS_LIVE_EVIDENCE_TARGET production için artifacts/local altında olmamalı.")) {
+    console.error("Production evidence template kontrolü başarısız: prod env local evidence target negative beklenen hata yok.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
 function runProdEvidenceSummaryOutputNegativeChecks() {
   const root = resolve("artifacts/prod-evidence-template-check/prod-evidence-summary-output-negative");
   const tempSummaryPath = "/tmp/prod-evidence-summary-output-negative.json";
@@ -5238,6 +6915,14 @@ function runProdEvidenceSmokeEvidenceFileNegativeChecks() {
       "TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE production için lokal temp path olmamalı.",
     );
 
+    const localArtifactEnv = createValidProdEnvForNegativeCheck();
+    localArtifactEnv.SMS_PROVIDER_SMOKE_EVIDENCE_FILE = "artifacts/local/sms-provider.json";
+    runProdEvidenceSmokeEvidenceFileNegative(
+      "prod evidence smoke file local artifact negative",
+      localArtifactEnv,
+      "SMS_PROVIDER_SMOKE_EVIDENCE_FILE production için artifacts/local altında olmamalı.",
+    );
+
     const realFile = join(root, "traefik-https.json");
     const symlinkFile = join(root, "traefik-https-link.json");
     writeFileSync(realFile, "{}\n");
@@ -5265,6 +6950,427 @@ function runProdEvidenceSmokeEvidenceFileNegativeChecks() {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+}
+
+function runFinalExternalEvidenceMissingTargetNegativeCheck() {
+  const env = { ...process.env };
+  delete env.PRODUCTION_EVIDENCE_SUMMARY_TARGET;
+  delete env.LIVE_STATUS_EVIDENCE_TARGET;
+  delete env.PILOT_EVIDENCE_TARGET;
+  delete env.GO_LIVE_EVIDENCE_TARGET;
+
+  const result = spawnSync(process.execPath, ["scripts/check-final-external-evidence.mjs"], {
+    env,
+    encoding: "utf8",
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: final external evidence missing target negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("PRODUCTION_EVIDENCE_SUMMARY_TARGET zorunlu.") || !output.includes("GO_LIVE_EVIDENCE_TARGET zorunlu.")) {
+    console.error("Production evidence template kontrolü başarısız: final external evidence missing target negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
+function runFinalExternalEvidenceExampleFlagNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-final-external-evidence.mjs"], {
+    env: {
+      ...process.env,
+      PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE: "1",
+      PRODUCTION_EVIDENCE_SUMMARY_TARGET: "file:///final-summary.json",
+      LIVE_STATUS_EVIDENCE_TARGET: "file:///final-live-status.json",
+      PILOT_EVIDENCE_TARGET: "file:///final-pilot.json",
+      GO_LIVE_EVIDENCE_TARGET: "file:///final-go-live.json",
+    },
+    encoding: "utf8",
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: final external evidence example flag negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE=1 final dış kanıt kapısında kullanılamaz.")) {
+    console.error("Production evidence template kontrolü başarısız: final external evidence example flag negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
+function runFinalExternalEvidenceReadinessOverrideNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/check-final-external-evidence.mjs"], {
+    env: {
+      ...process.env,
+      LIVE_STATUS_READINESS_PATH: "docs/evidence-templates/live-status-pass-readiness.example.md",
+      PRODUCTION_EVIDENCE_SUMMARY_TARGET: "file:///final-summary.json",
+      LIVE_STATUS_EVIDENCE_TARGET: "file:///final-live-status.json",
+      PILOT_EVIDENCE_TARGET: "file:///final-pilot.json",
+      GO_LIVE_EVIDENCE_TARGET: "file:///final-go-live.json",
+    },
+    encoding: "utf8",
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: final external evidence readiness override negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("LIVE_STATUS_READINESS_PATH final dış kanıt kapısında docs/phase-6-production-readiness.md olmalı.")) {
+    console.error("Production evidence template kontrolü başarısız: final external evidence readiness override negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
+function runProdEvidenceExampleFlagNegativeCheck() {
+  const env = createValidProdEnvForNegativeCheck();
+  env.RESTORE_DRILL_ALLOW_EXAMPLE_EVIDENCE = "1";
+
+  const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
+    env,
+    encoding: "utf8",
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: prod evidence example flag negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+  if (!output.includes("RESTORE_DRILL_ALLOW_EXAMPLE_EVIDENCE=1 prod:evidence:check kapısında kullanılamaz.")) {
+    console.error("Production evidence template kontrolü başarısız: prod evidence example flag negative beklenen hata yok.");
+    console.error(output);
+    process.exit(1);
+  }
+}
+
+function runFinalExternalEvidenceTargetHygieneNegativeChecks() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "final-external-target-hygiene-"));
+  const symlinkPath = join(root, "summary-link.json");
+  symlinkSync(resolve(productionSummaryFixturePath), symlinkPath);
+
+  try {
+    runFinalExternalEvidenceTargetHygieneNegative(
+      "final external evidence temp target negative",
+      {
+        PRODUCTION_EVIDENCE_SUMMARY_TARGET: "file:///tmp/final-production-summary.json",
+      },
+      "PRODUCTION_EVIDENCE_SUMMARY_TARGET final dış kanıt için lokal temp path olmamalı.",
+    );
+    runFinalExternalEvidenceTargetHygieneNegative(
+      "final external evidence private temp target negative",
+      {
+        PRODUCTION_EVIDENCE_SUMMARY_TARGET: "file:///private/tmp/final-production-summary.json",
+      },
+      "PRODUCTION_EVIDENCE_SUMMARY_TARGET final dış kanıt için lokal temp path olmamalı.",
+    );
+    runFinalExternalEvidenceTargetHygieneNegative(
+      "final external evidence local artifact target negative",
+      {
+        PRODUCTION_EVIDENCE_SUMMARY_TARGET: pathToFileURL(resolve("artifacts/local/final-production-summary.json")).href,
+      },
+      "PRODUCTION_EVIDENCE_SUMMARY_TARGET final dış kanıt için artifacts/local altında olmamalı.",
+    );
+    runFinalExternalEvidenceTargetHygieneNegative(
+      "final external evidence template fixture target negative",
+      {
+        PRODUCTION_EVIDENCE_SUMMARY_TARGET: pathToFileURL(resolve(productionSummaryFixturePath)).href,
+      },
+      "PRODUCTION_EVIDENCE_SUMMARY_TARGET final dış kanıt için docs/evidence-templates fixture hedefi olmamalı.",
+    );
+    runFinalExternalEvidenceTargetHygieneNegative(
+      "final external evidence placeholder target negative",
+      {
+        PRODUCTION_EVIDENCE_SUMMARY_TARGET: "https://example.com/final-production-summary.json",
+      },
+      "PRODUCTION_EVIDENCE_SUMMARY_TARGET final dış kanıt için gerçek https host olmalı.",
+    );
+    runFinalExternalEvidenceTargetHygieneNegative(
+      "final external evidence secret URL target negative",
+      {
+        PRODUCTION_EVIDENCE_SUMMARY_TARGET: "https://ops:secret@evidence.uzmanhocam.com/final-production-summary.json?token=secret#proof",
+      },
+      "PRODUCTION_EVIDENCE_SUMMARY_TARGET final dış kanıt target URL userinfo, query veya fragment içeremez.",
+    );
+    runFinalExternalEvidenceTargetHygieneNegative(
+      "final external evidence symlink target negative",
+      {
+        PRODUCTION_EVIDENCE_SUMMARY_TARGET: pathToFileURL(symlinkPath).href,
+      },
+      "PRODUCTION_EVIDENCE_SUMMARY_TARGET symlink olmayan file artifact olmalı.",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function runFinalExternalEvidenceTargetHygieneNegative(label, envOverrides, expectedFailure) {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "final-external-fixtures-"));
+  const env = { ...process.env };
+  delete env.PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE;
+  delete env.LIVE_STATUS_ALLOW_EXAMPLE_EVIDENCE;
+  delete env.PILOT_ALLOW_EXAMPLE_EVIDENCE;
+  delete env.GO_LIVE_ALLOW_EXAMPLE_EVIDENCE;
+  Object.assign(env, createFinalExternalFixtureTargets(root), envOverrides);
+
+  try {
+    const result = spawnSync(process.execPath, ["scripts/check-final-external-evidence.mjs"], {
+      env,
+      encoding: "utf8",
+    });
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+    if (result.status === 0) {
+      console.error(`Production evidence template kontrolü başarısız: ${label} beklenen şekilde kırılmadı.`);
+      process.exit(1);
+    }
+    if (!output.includes(expectedFailure)) {
+      console.error(`Production evidence template kontrolü başarısız: ${label} beklenen hata yok.`);
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function runFinalExternalEvidenceTargetMismatchNegativeCheck() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "final-external-target-mismatch-"));
+  const goLivePath = join(root, basename(goLiveFixturePath));
+  const fixture = structuredClone(goLiveFixture);
+  fixture.productionEvidenceSummary.summaryTarget = pathToFileURL(join(root, "other-production-summary.json")).href;
+
+  try {
+    const targets = createFinalExternalFixtureTargets(root);
+    writeFileSync(goLivePath, `${JSON.stringify(fixture, null, 2)}\n`);
+    const env = { ...process.env };
+    delete env.PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE;
+    delete env.LIVE_STATUS_ALLOW_EXAMPLE_EVIDENCE;
+    delete env.PILOT_ALLOW_EXAMPLE_EVIDENCE;
+    delete env.GO_LIVE_ALLOW_EXAMPLE_EVIDENCE;
+    Object.assign(env, targets, { GO_LIVE_EVIDENCE_TARGET: pathToFileURL(goLivePath).href });
+
+    const result = spawnSync(process.execPath, ["scripts/check-final-external-evidence.mjs"], {
+      env,
+      encoding: "utf8",
+    });
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+    if (result.status === 0) {
+      console.error(
+        "Production evidence template kontrolü başarısız: final external evidence target mismatch negative beklenen şekilde kırılmadı.",
+      );
+      process.exit(1);
+    }
+    if (!output.includes("goLive.productionEvidenceSummary.summaryTarget final target env ile aynı artifact hedefine bağlanmalı.")) {
+      console.error("Production evidence template kontrolü başarısız: final external evidence target mismatch negative beklenen hata yok.");
+      console.error(output);
+      process.exit(1);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function createFinalExternalFixtureTargets(root) {
+  const productionSummaryPath = join(root, basename(productionSummaryFixturePath));
+  const liveStatusPath = join(root, basename(liveStatusFixturePath));
+  const pilotPath = join(root, basename(pilotFixturePath));
+  const goLivePath = join(root, basename(goLiveFixturePath));
+  copyFileSync(productionSummaryFixturePath, productionSummaryPath);
+  copyFileSync(liveStatusFixturePath, liveStatusPath);
+  copyFileSync(pilotFixturePath, pilotPath);
+  copyFileSync(goLiveFixturePath, goLivePath);
+
+  return {
+    PRODUCTION_EVIDENCE_SUMMARY_TARGET: pathToFileURL(productionSummaryPath).href,
+    LIVE_STATUS_EVIDENCE_TARGET: pathToFileURL(liveStatusPath).href,
+    PILOT_EVIDENCE_TARGET: pathToFileURL(pilotPath).href,
+    GO_LIVE_EVIDENCE_TARGET: pathToFileURL(goLivePath).href,
+  };
+}
+
+function runRemoteFinalEvidenceReadinessBehaviorChecks() {
+  const rootParent = resolve("artifacts/prod-evidence-template-check");
+  mkdirSync(rootParent, { recursive: true });
+  const root = mkdtempSync(join(rootParent, "remote-final-readiness-"));
+  const binDir = join(root, "bin");
+  const fakeSshLog = join(root, "ssh.log");
+  const fakeSshPath = join(binDir, "ssh");
+  mkdirSync(binDir, { recursive: true });
+
+  const remoteTargets = {
+    REMOTE_PRODUCTION_EVIDENCE_SUMMARY_TARGET: "/root/uzman-hocam/artifacts/staging/release-summary.json",
+    REMOTE_LIVE_STATUS_EVIDENCE_TARGET: "/root/uzman-hocam/artifacts/staging/live-status.json",
+    REMOTE_PILOT_EVIDENCE_TARGET: "/root/uzman-hocam/artifacts/staging/pilot.json",
+    REMOTE_GO_LIVE_EVIDENCE_TARGET: "/root/uzman-hocam/artifacts/staging/go-live.json",
+  };
+
+  writeFileSync(
+    fakeSshPath,
+    `#!/usr/bin/env node
+import { appendFileSync } from "node:fs";
+
+const command = process.argv.at(-1) ?? "";
+appendFileSync(process.env.FAKE_SSH_LOG, command + "\\n");
+
+function ok(output = "") {
+  if (output) process.stdout.write(output);
+  process.exit(0);
+}
+
+function fail(message) {
+  process.stderr.write(message + "\\n");
+  process.exit(10);
+}
+
+const expectedEnv = [
+  "PRODUCTION_EVIDENCE_SUMMARY_TARGET='file:///root/uzman-hocam/artifacts/staging/release-summary.json'",
+  "LIVE_STATUS_EVIDENCE_TARGET='file:///root/uzman-hocam/artifacts/staging/live-status.json'",
+  "PILOT_EVIDENCE_TARGET='file:///root/uzman-hocam/artifacts/staging/pilot.json'",
+  "GO_LIVE_EVIDENCE_TARGET='file:///root/uzman-hocam/artifacts/staging/go-live.json'",
+];
+
+if (command === "printf remote-ok") ok("remote-ok");
+if (command.startsWith("test -d ")) ok();
+if (command.includes("test -f package.json")) ok();
+if (command.includes("curl -fsS") && command.includes("/health")) ok("{\\"status\\":\\"ok\\"}\\n");
+if (command.includes("curl -fsSI")) ok("HTTP/1.1 200 OK\\n");
+if (command.includes("test -f scripts/check-final-external-evidence.mjs")) ok();
+if (command.includes("prod:external-evidence:check")) {
+  ok("\\"prod:external-evidence:check\\": \\"node scripts/check-final-external-evidence.mjs\\"\\n");
+}
+
+if (command.includes("node scripts/check-live-status-evidence.mjs")) {
+  for (const token of expectedEnv) {
+    if (!command.includes(token)) fail("remote live status missing env " + token);
+  }
+  ok("Live status evidence kontrolü geçti: 18/18 dış kanıt PASS.\\n");
+}
+
+if (command.includes("node scripts/check-final-external-evidence.mjs")) {
+  for (const token of expectedEnv) {
+    if (!command.includes(token)) fail("remote final evidence missing env " + token);
+  }
+  ok("Final external evidence kontrolü geçti: production summary, 18/18 Canlı Durum, pilot ve go-live hedefleri doğrulandı.\\n");
+}
+
+fail("unexpected remote command: " + command);
+`,
+  );
+  chmodSync(fakeSshPath, 0o755);
+
+  try {
+    const positive = spawnSync(process.execPath, ["scripts/check-remote-final-evidence-readiness.mjs"], {
+      env: createRemoteFinalEvidenceReadinessEnv(binDir, fakeSshLog, remoteTargets),
+      encoding: "utf8",
+    });
+    const positiveOutput = `${positive.stdout ?? ""}${positive.stderr ?? ""}`;
+    if (positive.status !== 0) {
+      console.error("Production evidence template kontrolü başarısız: remote final readiness fake SSH positive kırıldı.");
+      console.error(positiveOutput);
+      process.exit(1);
+    }
+    if (!positiveOutput.includes("Remote final evidence readiness geçti: fake-remote:/root/uzman-hocam")) {
+      console.error("Production evidence template kontrolü başarısız: remote final readiness fake SSH positive beklenen çıktı yok.");
+      console.error(positiveOutput);
+      process.exit(1);
+    }
+
+    const sshLog = readFileSync(fakeSshLog, "utf8");
+    if (
+      !sshLog.includes("node scripts/check-live-status-evidence.mjs") ||
+      !sshLog.includes("LIVE_STATUS_EVIDENCE_TARGET='file:///root/uzman-hocam/artifacts/staging/live-status.json'") ||
+      !sshLog.includes("-u RESTORE_DRILL_ALLOW_EXAMPLE_EVIDENCE") ||
+      !sshLog.includes("node scripts/check-final-external-evidence.mjs") ||
+      !sshLog.includes("GO_LIVE_EVIDENCE_TARGET='file:///root/uzman-hocam/artifacts/staging/go-live.json'")
+    ) {
+      console.error("Production evidence template kontrolü başarısız: remote final readiness fake SSH env aktarımı logda yok.");
+      console.error(sshLog);
+      process.exit(1);
+    }
+
+    rmSync(fakeSshLog, { force: true });
+    const exampleFlagNegative = spawnSync(process.execPath, ["scripts/check-remote-final-evidence-readiness.mjs"], {
+      env: {
+        ...createRemoteFinalEvidenceReadinessEnv(binDir, fakeSshLog, remoteTargets),
+        RESTORE_DRILL_ALLOW_EXAMPLE_EVIDENCE: "1",
+      },
+      encoding: "utf8",
+    });
+    const exampleFlagOutput = `${exampleFlagNegative.stdout ?? ""}${exampleFlagNegative.stderr ?? ""}`;
+    if (exampleFlagNegative.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: remote final readiness example flag negative kırılmadı.");
+      process.exit(1);
+    }
+    if (!exampleFlagOutput.includes("RESTORE_DRILL_ALLOW_EXAMPLE_EVIDENCE=1 prod:remote-evidence:check kapısında kullanılamaz.")) {
+      console.error("Production evidence template kontrolü başarısız: remote final readiness example flag negative beklenen hata yok.");
+      console.error(exampleFlagOutput);
+      process.exit(1);
+    }
+    try {
+      const unexpectedSshLog = readFileSync(fakeSshLog, "utf8");
+      if (unexpectedSshLog.trim() !== "") {
+        console.error("Production evidence template kontrolü başarısız: remote final readiness example flag SSH'e çıkmamalı.");
+        console.error(unexpectedSshLog);
+        process.exit(1);
+      }
+    } catch {
+      // Missing log means the invalid example flag failed before SSH, as expected.
+    }
+
+    rmSync(fakeSshLog, { force: true });
+    const invalidTargets = {
+      ...remoteTargets,
+      REMOTE_LIVE_STATUS_EVIDENCE_TARGET: "file:///root/uzman-hocam/artifacts/local/live-status.json",
+    };
+    const negative = spawnSync(process.execPath, ["scripts/check-remote-final-evidence-readiness.mjs"], {
+      env: createRemoteFinalEvidenceReadinessEnv(binDir, fakeSshLog, invalidTargets),
+      encoding: "utf8",
+    });
+    const negativeOutput = `${negative.stdout ?? ""}${negative.stderr ?? ""}`;
+    if (negative.status === 0) {
+      console.error("Production evidence template kontrolü başarısız: remote final readiness local artifact target negative kırılmadı.");
+      process.exit(1);
+    }
+    if (!negativeOutput.includes("LIVE_STATUS_EVIDENCE_TARGET remote final kanıt için artifacts/local altında olmamalı.")) {
+      console.error("Production evidence template kontrolü başarısız: remote final readiness local artifact target negative beklenen hata yok.");
+      console.error(negativeOutput);
+      process.exit(1);
+    }
+    try {
+      const unexpectedSshLog = readFileSync(fakeSshLog, "utf8");
+      if (unexpectedSshLog.trim() !== "") {
+        console.error("Production evidence template kontrolü başarısız: remote final readiness invalid target SSH'e çıkmamalı.");
+        console.error(unexpectedSshLog);
+        process.exit(1);
+      }
+    } catch {
+      // Missing log means the invalid local target failed before SSH, as expected.
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function createRemoteFinalEvidenceReadinessEnv(binDir, fakeSshLog, targetEnv) {
+  return {
+    ...process.env,
+    ...targetEnv,
+    PATH: `${binDir}:${process.env.PATH ?? ""}`,
+    FAKE_SSH_LOG: fakeSshLog,
+    REMOTE_EVIDENCE_HOST: "fake-remote",
+    REMOTE_EVIDENCE_ROOT: "/root/uzman-hocam",
+  };
 }
 
 function runProdEvidenceSmokeEvidenceFileNegative(label, env, expectedFailure) {
@@ -5328,9 +7434,9 @@ function runProdEvidencePlaceholderEvidenceTargetNegativeCheck() {
   }
 }
 
-function runProdEvidenceTempFileEvidenceTargetNegativeCheck() {
+function runProdEvidenceSecretEvidenceTargetNegativeCheck() {
   const env = createValidProdEnvForNegativeCheck();
-  env.DEPLOYMENT_REGION_TARGET = "file:///tmp/deployment-region.json";
+  env.DEPLOYMENT_REGION_TARGET = "https://ops:secret@evidence.uzmanhocam.com/deployment-region.json?token=secret#proof";
 
   const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
     env,
@@ -5338,14 +7444,42 @@ function runProdEvidenceTempFileEvidenceTargetNegativeCheck() {
   });
 
   if (result.status === 0) {
-    console.error("Production evidence template kontrolü başarısız: prod evidence temp file evidence target negative beklenen şekilde kırılmadı.");
+    console.error("Production evidence template kontrolü başarısız: prod evidence secret evidence target negative beklenen şekilde kırılmadı.");
     process.exit(1);
   }
 
-  if (!String(result.stderr).includes("DEPLOYMENT_REGION_TARGET production için lokal temp path olmamalı.")) {
-    console.error("Production evidence template kontrolü başarısız: prod evidence temp file evidence target negative beklenen hata yok.");
+  if (!String(result.stderr).includes("DEPLOYMENT_REGION_TARGET production evidence target URL userinfo, query veya fragment içeremez.")) {
+    console.error("Production evidence template kontrolü başarısız: prod evidence secret evidence target negative beklenen hata yok.");
     console.error(result.stderr);
     process.exit(1);
+  }
+}
+
+function runProdEvidenceTempFileEvidenceTargetNegativeCheck() {
+  for (const tempRoot of ["/tmp", "/private/tmp"]) {
+    const label = `prod evidence temp file evidence target negative (${tempRoot})`;
+    const env = createValidProdEnvForNegativeCheck();
+    env.DEPLOYMENT_REGION_TARGET = `file://${tempRoot}/deployment-region.json`;
+
+    const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
+      env,
+      encoding: "utf8",
+    });
+
+    if (result.status === 0) {
+      console.error(
+        `Production evidence template kontrolü başarısız: ${label} beklenen şekilde kırılmadı.`,
+      );
+      process.exit(1);
+    }
+
+    if (!String(result.stderr).includes("DEPLOYMENT_REGION_TARGET production için lokal temp path olmamalı.")) {
+      console.error(
+        `Production evidence template kontrolü başarısız: ${label} beklenen hata yok.`,
+      );
+      console.error(result.stderr);
+      process.exit(1);
+    }
   }
 }
 
@@ -5523,6 +7657,48 @@ function runProdEnvPlaceholderNetgsmPasswordNegativeCheck() {
   }
 }
 
+function runProdEnvPlaceholderNotificationEmailNegativeCheck() {
+  const env = createValidProdEnvForNegativeCheck();
+  env.NOTIFICATION_SMOKE_EMAIL_TO = "ops@example.test";
+
+  const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
+    env,
+    encoding: "utf8",
+  });
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: prod env placeholder notification email negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+
+  if (!String(result.stderr).includes("NOTIFICATION_SMOKE_EMAIL_TO production için placeholder/test/example değer içermemeli.")) {
+    console.error("Production evidence template kontrolü başarısız: prod env placeholder notification email negative beklenen hata yok.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
+function runProdEnvPlaceholderNotificationPushNegativeCheck() {
+  const env = createValidProdEnvForNegativeCheck();
+  env.NOTIFICATION_SMOKE_PUSH_TO = "test-token-device";
+
+  const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
+    env,
+    encoding: "utf8",
+  });
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: prod env placeholder notification push negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+
+  if (!String(result.stderr).includes("NOTIFICATION_SMOKE_PUSH_TO production için placeholder/test/example değer içermemeli.")) {
+    console.error("Production evidence template kontrolü başarısız: prod env placeholder notification push negative beklenen hata yok.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
 function runProdEnvMissingS3SecretNegativeCheck() {
   const env = createValidProdEnvForNegativeCheck();
   delete env.S3_SECRET_ACCESS_KEY;
@@ -5562,6 +7738,86 @@ function runAlertWebhookMissingTokenNegativeCheck() {
   if (!String(result.stderr).includes("ALERT_WEBHOOK_TOKEN en az 32 karakterlik gerçek bearer secret olmalı.")) {
     console.error("Production evidence template kontrolü başarısız: alert webhook missing token negative beklenen hata yok.");
     console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
+function runAlertWebhookHttpUrlNegativeCheck() {
+  const result = runAlertWebhookUrlNegativeCheck("http://alerts.uzmanhocam.com/webhook");
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: alert webhook HTTP URL negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+
+  if (!String(result.stderr).includes("ALERT_WEBHOOK_URL https olmalı.")) {
+    console.error("Production evidence template kontrolü başarısız: alert webhook HTTP URL negative beklenen hata yok.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
+function runAlertWebhookSecretUrlNegativeCheck() {
+  const result = runAlertWebhookUrlNegativeCheck("https://user:secret@alerts.uzmanhocam.com/webhook?token=secret#fragment");
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: alert webhook secret URL negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+
+  if (!String(result.stderr).includes("ALERT_WEBHOOK_URL userinfo, query veya fragment içeremez.")) {
+    console.error("Production evidence template kontrolü başarısız: alert webhook secret URL negative beklenen hata yok.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
+function runAlertWebhookLocalHostNegativeCheck() {
+  const result = runAlertWebhookUrlNegativeCheck("https://localhost/webhook");
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: alert webhook local host negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+
+  if (!String(result.stderr).includes("ALERT_WEBHOOK_URL production için gerçek host olmalı.")) {
+    console.error("Production evidence template kontrolü başarısız: alert webhook local host negative beklenen hata yok.");
+    console.error(result.stderr);
+    process.exit(1);
+  }
+}
+
+function runAlertWebhookUrlNegativeCheck(url) {
+  return spawnSync(process.execPath, ["scripts/smoke-alert-webhook.mjs"], {
+    env: {
+      ...process.env,
+      ALERT_WEBHOOK_URL: url,
+      ALERT_WEBHOOK_TOKEN: "alert-webhook-token-123456789012345",
+    },
+    encoding: "utf8",
+  });
+}
+
+function runTraefikInsecureEvidenceFileNegativeCheck() {
+  const result = spawnSync(process.execPath, ["scripts/smoke-traefik-https.mjs"], {
+    env: {
+      ...process.env,
+      TRAEFIK_HTTPS_SMOKE_URL: "https://127.0.0.1/health",
+      TRAEFIK_HTTPS_SMOKE_ALLOW_INSECURE_TLS: "true",
+      TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE: "artifacts/staging/smoke/traefik-https.json",
+    },
+    encoding: "utf8",
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  if (result.status === 0) {
+    console.error("Production evidence template kontrolü başarısız: Traefik insecure evidence negative beklenen şekilde kırılmadı.");
+    process.exit(1);
+  }
+
+  if (!output.includes("yalnız teşhis") || !output.includes("PASS evidence artifact'i yazamaz")) {
+    console.error("Production evidence template kontrolü başarısız: Traefik insecure evidence negative beklenen hata yok.");
+    console.error(output);
     process.exit(1);
   }
 }
@@ -5672,7 +7928,9 @@ function createValidProdEnvForNegativeCheck() {
     "UAT_EVIDENCE_TARGET",
     "LIVE_EXAM_CYCLE_TARGET",
     "ISEM_OPTICAL_PIPELINE_TARGET",
+    "LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET",
     "INLINE_UPLOAD_CONTENT_MIGRATION_TARGET",
+    "AUDIT_NULL_TENANT_EVIDENCE_TARGET",
     "RATE_LIMIT_EVIDENCE_TARGET",
     "RLS_LIVE_EVIDENCE_TARGET",
     "PILOT_EVIDENCE_TARGET",

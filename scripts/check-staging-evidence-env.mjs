@@ -21,7 +21,12 @@ const summaryDefaultedSmokeKeys = new Map([
   ["WAL_ARCHIVE_SMOKE_EVIDENCE_FILE", "wal-archive.json"],
   ["REPORT_GENERATION_SMOKE_EVIDENCE_FILE", "report-generation.json"],
 ]);
-const workflowInjectedKeys = new Set(["ROLLBACK_IMAGE_TAG", "SENTRY_RELEASE", "GITHUB_CI_EVIDENCE_TARGET"]);
+const workflowInjectedKeys = new Set([
+  "ROLLBACK_IMAGE_TAG",
+  "SENTRY_RELEASE",
+  "GITHUB_CI_EVIDENCE_TARGET",
+  "PRODUCTION_EVIDENCE_SUMMARY_TARGET",
+]);
 const runtimeRequiredKeys = [
   "NETGSM_USERCODE",
   "NETGSM_PASSWORD",
@@ -150,6 +155,7 @@ function checkWorkflowContract(output) {
     "echo \"SENTRY_RELEASE=$IMAGE_TAG\"",
     "echo \"ROLLBACK_IMAGE_TAG=$ROLLBACK_IMAGE_TAG\"",
     "echo \"GITHUB_CI_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/github-ci.json\"",
+    "echo \"PRODUCTION_EVIDENCE_SUMMARY_TARGET=file://$PWD/artifacts/staging/release-summary-${IMAGE_TAG}.json\"",
     ".ghcr_read_token",
     "GHCR read token file is missing.",
     "pnpm prod:evidence:check --",
@@ -251,6 +257,7 @@ function checkResolvedProductionEnv(target) {
   }
   env.ROLLBACK_IMAGE_TAG = "staging-evidence-preflight";
   env.GITHUB_CI_EVIDENCE_TARGET = "file:///var/lib/uzman-hocam/staging-artifacts/github-ci.json";
+  env.PRODUCTION_EVIDENCE_SUMMARY_TARGET = "file:///var/lib/uzman-hocam/staging-artifacts/release-summary-preflight.json";
   for (const [key, fileName] of summaryDefaultedSmokeKeys.entries()) {
     env[key] = `artifacts/staging/smoke/${fileName}`;
   }

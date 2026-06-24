@@ -1,0 +1,24 @@
+services:
+  api-rate-limit-shard:
+    extends:
+      file: docker-compose.yml
+      service: api
+    image: ${API_IMAGE:-uzman-hocam-api}
+    ports: !reset []
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=uzman-hocam_frontend_net"
+      - "traefik.http.routers.api-rate-limit-shard-ip.rule=Host(`${SERVER_DOMAIN:-127.0.0.1}`) && PathPrefix(`/__rate-limit-shard`)"
+      - "traefik.http.routers.api-rate-limit-shard-ip.entrypoints=websecure"
+      - "traefik.http.routers.api-rate-limit-shard-ip.priority=120"
+      - "traefik.http.routers.api-rate-limit-shard-ip.service=api-rate-limit-shard-ip"
+      - "traefik.http.routers.api-rate-limit-shard-ip.tls=true"
+      - "traefik.http.routers.api-rate-limit-shard-ip.middlewares=api-rate-limit-shard-strip,api-rate-limit-shard-security-headers"
+      - "traefik.http.middlewares.api-rate-limit-shard-strip.stripprefix.prefixes=/__rate-limit-shard"
+      - "traefik.http.middlewares.api-rate-limit-shard-security-headers.headers.stsseconds=15552000"
+      - "traefik.http.middlewares.api-rate-limit-shard-security-headers.headers.stsincludesubdomains=false"
+      - "traefik.http.middlewares.api-rate-limit-shard-security-headers.headers.contenttypenosniff=true"
+      - "traefik.http.middlewares.api-rate-limit-shard-security-headers.headers.framedeny=true"
+      - "traefik.http.middlewares.api-rate-limit-shard-security-headers.headers.referrerpolicy=no-referrer"
+      - "traefik.http.middlewares.api-rate-limit-shard-security-headers.headers.permissionspolicy=camera=(), microphone=(), geolocation=()"
+      - "traefik.http.services.api-rate-limit-shard-ip.loadbalancer.server.port=3100"

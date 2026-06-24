@@ -23,6 +23,7 @@ const requiredStaticPassRows = new Map([
   ["Yerel geliştirme canlı smoke", "PASS"],
   ["Kurum canlı yayın kanıt ekranı", "PASS"],
 ]);
+const allowedExternalGateStatuses = ["NOT_RUN", "STAGING_PASS_WITH_FINAL_CHAIN_PENDING", "PASS"];
 
 const externalGates = [
   {
@@ -39,6 +40,94 @@ const externalGates = [
     source: "productionEvidenceSummary.reports.deploymentRegion",
     target: "summary",
     path: ["reports", "deploymentRegion"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Live exam cycle kanıtı",
+    command: "pnpm live:exam-cycle:check",
+    source: "productionEvidenceSummary.reports.liveExamCycle",
+    target: "summary",
+    path: ["reports", "liveExamCycle"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "iSEM optical pipeline kanıtı",
+    command: "pnpm isem-optical-pipeline:evidence-check",
+    source: "productionEvidenceSummary.reports.isemOpticalPipeline",
+    target: "summary",
+    path: ["reports", "isemOpticalPipeline"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Live UI-worker result kanıtı",
+    command: "pnpm live:ui-worker:result-check",
+    source: "productionEvidenceSummary.reports.liveUiWorkerResult",
+    target: "summary",
+    path: ["reports", "liveUiWorkerResult"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "KVKK inventory kanıtı",
+    command: "pnpm privacy:inventory:check",
+    source: "productionEvidenceSummary.reports.kvkkInventory",
+    target: "summary",
+    path: ["reports", "kvkkInventory"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "RLS live kanıtı",
+    command: "pnpm rls:live:check",
+    source: "productionEvidenceSummary.reports.rlsLive",
+    target: "summary",
+    path: ["reports", "rlsLive"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Inline upload migration kanıtı",
+    command: "pnpm inline-upload-content:check",
+    source: "productionEvidenceSummary.reports.inlineUploadMigration",
+    target: "summary",
+    path: ["reports", "inlineUploadMigration"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Audit null tenant kanıtı",
+    command: "pnpm audit-null-tenant:check",
+    source: "productionEvidenceSummary.reports.auditNullTenant",
+    target: "summary",
+    path: ["reports", "auditNullTenant"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Rate limit Redis kanıtı",
+    command: "pnpm rate-limit:check",
+    source: "productionEvidenceSummary.reports.rateLimit",
+    target: "summary",
+    path: ["reports", "rateLimit"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "SMS provider kanıtı",
+    command: "pnpm sms:smoke",
+    source: "productionEvidenceSummary.smokeEvidence.smsProvider",
+    target: "summary",
+    path: ["smokeEvidence", "smsProvider"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Notification provider kanıtı",
+    command: "pnpm notification:smoke",
+    source: "productionEvidenceSummary.smokeEvidence.notificationProvider",
+    target: "summary",
+    path: ["smokeEvidence", "notificationProvider"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Report generation perf kanıtı",
+    command: "pnpm report-generation:perf",
+    source: "productionEvidenceSummary.smokeEvidence.reportGeneration",
+    target: "summary",
+    path: ["smokeEvidence", "reportGeneration"],
     dateKey: "checkedAt",
   },
   {
@@ -99,8 +188,8 @@ for (const gate of externalGates) {
     failures.push(`${gate.label} canlı durum satırı eksik.`);
     continue;
   }
-  if (!["NOT_RUN", "PASS"].includes(status)) {
-    failures.push(`${gate.label} canlı durum değeri PASS veya NOT_RUN olmalı.`);
+  if (!allowedExternalGateStatuses.includes(status)) {
+    failures.push(`${gate.label} canlı durum değeri PASS, STAGING_PASS_WITH_FINAL_CHAIN_PENDING veya NOT_RUN olmalı.`);
   }
   if (status === "PASS" && !evidenceTarget) {
     failures.push(`${gate.label} PASS yapılamaz: LIVE_STATUS_EVIDENCE_TARGET zorunlu.`);
@@ -121,6 +210,9 @@ if (failures.length > 0) {
 
 const passCount = externalGates.filter((gate) => statuses.get(gate.label) === "PASS").length;
 console.log(`Live status evidence kontrolü geçti: ${passCount}/${externalGates.length} dış kanıt PASS.`);
+if (!evidenceTarget || passCount < externalGates.length) {
+  console.warn("Canlı Durum statik kontrolü geçti; target'sız veya 18/18 altı sonuç final dış kanıt değildir.");
+}
 
 function parseLiveStatus(source) {
   const section = source.split(/^## Canlı Durum\s*$/m)[1]?.split(/^## /m)[0];
@@ -237,6 +329,14 @@ async function readSourceJsonReference(value, baseUrl, output, label) {
     output.push(`${label} file:// veya https:// URL olmalı.`);
     return undefined;
   }
+  if (hasSecretBearingUrlParts(url)) {
+    output.push(`${label} target URL userinfo, query veya fragment içeremez.`);
+    return undefined;
+  }
+  if (url.protocol === "file:" && isLocalSmokeEvidenceTargetUrl(url)) {
+    output.push(`${label} artifacts/local altında olmamalı.`);
+    return undefined;
+  }
 
   try {
     let raw;
@@ -288,6 +388,7 @@ function validateGateSourceLinks(bundle, sources, output) {
       output.push(`gates.${gate.label}.source kaynak nesnesi eksik: ${gate.source}`);
       continue;
     }
+    requireSourceResultAndEnvironment(sourceScope, output, `gates.${gate.label}.source`);
 
     const sourceDate = sourceScope[gate.dateKey];
     if (typeof sourceDate === "string" && !Number.isNaN(Date.parse(sourceDate)) && item.checkedAt !== sourceDate) {
@@ -300,6 +401,15 @@ function validateGateSourceLinks(bundle, sources, output) {
     } else if (item.evidenceReference !== expectedReference) {
       output.push(`gates.${gate.label}.evidenceReference ${gate.source} kaynak referansı ile eslesmeli.`);
     }
+  }
+}
+
+function requireSourceResultAndEnvironment(sourceScope, output, label) {
+  if (Object.prototype.hasOwnProperty.call(sourceScope, "result") && sourceScope.result !== "PASS") {
+    output.push(`${label}.result PASS olmalı.`);
+  }
+  if (Object.prototype.hasOwnProperty.call(sourceScope, "environment") && sourceScope.environment !== "production") {
+    output.push(`${label}.environment production olmalı.`);
   }
 }
 
@@ -381,6 +491,12 @@ function toTargetUrl(value) {
     if (!isAllowedEvidenceTargetUrl(url)) {
       failNow(["LIVE_STATUS_EVIDENCE_TARGET file:// veya https:// URL olmalı."]);
     }
+    if (hasSecretBearingUrlParts(url)) {
+      failNow(["LIVE_STATUS_EVIDENCE_TARGET target URL userinfo, query veya fragment içeremez."]);
+    }
+    if (url.protocol === "file:" && isLocalSmokeEvidenceTargetUrl(url)) {
+      failNow(["LIVE_STATUS_EVIDENCE_TARGET artifacts/local altında olmamalı."]);
+    }
     return url;
   } catch {
     failNow(["LIVE_STATUS_EVIDENCE_TARGET file:// veya https:// URL olmalı."]);
@@ -454,6 +570,10 @@ function isAllowedEvidenceTargetUrl(url) {
   );
 }
 
+function hasSecretBearingUrlParts(url) {
+  return url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "";
+}
+
 function isPlaceholderEvidenceTargetHost(hostname) {
   const normalized = hostname.toLowerCase();
   return (
@@ -471,7 +591,19 @@ function isPlaceholderEvidenceTargetHost(hostname) {
 
 function isLocalTempEvidenceTargetUrl(url) {
   const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
-  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+  return (
+    path === "/tmp" ||
+    path.startsWith("/tmp/") ||
+    path === "/var/tmp" ||
+    path.startsWith("/var/tmp/") ||
+    path === "/private/tmp" ||
+    path.startsWith("/private/tmp/")
+  );
+}
+
+function isLocalSmokeEvidenceTargetUrl(url) {
+  const path = fileURLToPath(url).replaceAll("\\", "/").replace(/\/+$/g, "") || "/";
+  return path.endsWith("/artifacts/local") || path.includes("/artifacts/local/");
 }
 
 function parseJson(value) {

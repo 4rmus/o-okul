@@ -30,6 +30,94 @@ const gates = [
     dateKey: "checkedAt",
   },
   {
+    label: "Live exam cycle kanıtı",
+    command: "pnpm live:exam-cycle:check",
+    source: "productionEvidenceSummary.reports.liveExamCycle",
+    target: "summary",
+    path: ["reports", "liveExamCycle"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "iSEM optical pipeline kanıtı",
+    command: "pnpm isem-optical-pipeline:evidence-check",
+    source: "productionEvidenceSummary.reports.isemOpticalPipeline",
+    target: "summary",
+    path: ["reports", "isemOpticalPipeline"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Live UI-worker result kanıtı",
+    command: "pnpm live:ui-worker:result-check",
+    source: "productionEvidenceSummary.reports.liveUiWorkerResult",
+    target: "summary",
+    path: ["reports", "liveUiWorkerResult"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "KVKK inventory kanıtı",
+    command: "pnpm privacy:inventory:check",
+    source: "productionEvidenceSummary.reports.kvkkInventory",
+    target: "summary",
+    path: ["reports", "kvkkInventory"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "RLS live kanıtı",
+    command: "pnpm rls:live:check",
+    source: "productionEvidenceSummary.reports.rlsLive",
+    target: "summary",
+    path: ["reports", "rlsLive"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Inline upload migration kanıtı",
+    command: "pnpm inline-upload-content:check",
+    source: "productionEvidenceSummary.reports.inlineUploadMigration",
+    target: "summary",
+    path: ["reports", "inlineUploadMigration"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Audit null tenant kanıtı",
+    command: "pnpm audit-null-tenant:check",
+    source: "productionEvidenceSummary.reports.auditNullTenant",
+    target: "summary",
+    path: ["reports", "auditNullTenant"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Rate limit Redis kanıtı",
+    command: "pnpm rate-limit:check",
+    source: "productionEvidenceSummary.reports.rateLimit",
+    target: "summary",
+    path: ["reports", "rateLimit"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "SMS provider kanıtı",
+    command: "pnpm sms:smoke",
+    source: "productionEvidenceSummary.smokeEvidence.smsProvider",
+    target: "summary",
+    path: ["smokeEvidence", "smsProvider"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Notification provider kanıtı",
+    command: "pnpm notification:smoke",
+    source: "productionEvidenceSummary.smokeEvidence.notificationProvider",
+    target: "summary",
+    path: ["smokeEvidence", "notificationProvider"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Report generation perf kanıtı",
+    command: "pnpm report-generation:perf",
+    source: "productionEvidenceSummary.smokeEvidence.reportGeneration",
+    target: "summary",
+    path: ["smokeEvidence", "reportGeneration"],
+    dateKey: "checkedAt",
+  },
+  {
     label: "Staging/prod UAT",
     command: "pnpm uat:check",
     source: "productionEvidenceSummary.reports.uat",
@@ -183,6 +271,14 @@ function validateGoLiveLiveStatusTarget(goLiveReport, goLiveReportUrl, expectedO
     output.push("goLiveEvidence.liveStatusEvidence.evidenceTarget file:// veya https:// URL olmalı.");
     return;
   }
+  if (hasSecretBearingUrlParts(resolvedTarget)) {
+    output.push("goLiveEvidence.liveStatusEvidence.evidenceTarget target URL userinfo, query veya fragment içeremez.");
+    return;
+  }
+  if (resolvedTarget.protocol === "file:" && isLocalSmokeEvidenceTargetUrl(resolvedTarget)) {
+    output.push("goLiveEvidence.liveStatusEvidence.evidenceTarget artifacts/local altında olmamalı.");
+    return;
+  }
 
   if (resolvedTarget.href !== expectedOutputUrl.href) {
     output.push("goLiveEvidence.liveStatusEvidence.evidenceTarget --output ile aynı live-status artifact'ini göstermeli.");
@@ -301,6 +397,12 @@ function toEvidenceTargetUrl(value, label) {
     if (!isAllowedEvidenceTargetUrl(url)) {
       fail([`${label} file:// veya https:// URL olmalı.`]);
     }
+    if (hasSecretBearingUrlParts(url)) {
+      fail([`${label} target URL userinfo, query veya fragment içeremez.`]);
+    }
+    if (url.protocol === "file:" && isLocalSmokeEvidenceTargetUrl(url)) {
+      fail([`${label} artifacts/local altında olmamalı.`]);
+    }
     return url;
   } catch {
     fail([`${label} file:// veya https:// URL olmalı.`]);
@@ -368,6 +470,10 @@ function isAllowedEvidenceTargetUrl(url) {
   );
 }
 
+function hasSecretBearingUrlParts(url) {
+  return url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "";
+}
+
 function isPlaceholderEvidenceTargetHost(hostname) {
   const normalized = hostname.toLowerCase();
   return (
@@ -385,13 +491,28 @@ function isPlaceholderEvidenceTargetHost(hostname) {
 
 function isLocalTempEvidenceTargetUrl(url) {
   const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
-  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+  return (
+    path === "/tmp" ||
+    path.startsWith("/tmp/") ||
+    path === "/var/tmp" ||
+    path.startsWith("/var/tmp/") ||
+    path === "/private/tmp" ||
+    path.startsWith("/private/tmp/")
+  );
+}
+
+function isLocalSmokeEvidenceTargetUrl(url) {
+  const path = fileURLToPath(url).replaceAll("\\", "/").replace(/\/+$/g, "") || "/";
+  return path.endsWith("/artifacts/local") || path.includes("/artifacts/local/");
 }
 
 function validateOutputTarget(url) {
   const outputFile = fileURLToPath(url);
   if (isLocalTempPath(outputFile)) {
     fail(["LIVE_STATUS_EVIDENCE_OUTPUT lokal temp path olmamalı."]);
+  }
+  if (isLocalSmokeArtifactPath(outputFile)) {
+    fail(["LIVE_STATUS_EVIDENCE_OUTPUT artifacts/local altında olmamalı."]);
   }
 
   assertParentPathAllowed(dirname(outputFile), "LIVE_STATUS_EVIDENCE_OUTPUT");
@@ -406,7 +527,19 @@ function validateOutputTarget(url) {
 
 function isLocalTempPath(path) {
   const normalized = path.replace(/\/+$/g, "") || "/";
-  return normalized === "/tmp" || normalized.startsWith("/tmp/") || normalized === "/var/tmp" || normalized.startsWith("/var/tmp/");
+  return (
+    normalized === "/tmp" ||
+    normalized.startsWith("/tmp/") ||
+    normalized === "/var/tmp" ||
+    normalized.startsWith("/var/tmp/") ||
+    normalized === "/private/tmp" ||
+    normalized.startsWith("/private/tmp/")
+  );
+}
+
+function isLocalSmokeArtifactPath(path) {
+  const normalized = path.replaceAll("\\", "/").replace(/\/+$/g, "") || "/";
+  return normalized.endsWith("/artifacts/local") || normalized.includes("/artifacts/local/");
 }
 
 function parseJson(value, label) {

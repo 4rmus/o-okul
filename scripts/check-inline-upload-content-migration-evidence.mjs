@@ -9,6 +9,7 @@ const requiredSubjects = ["homework_material_files", "support_ticket_attachments
 const requiredCommands = [
   "pnpm inline-upload-content:audit",
   "INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true pnpm inline-upload-content:migrate",
+  "pnpm inline-upload-content:orphan-audit",
 ];
 const inlineUploadMigrationTopLevelKeys = [
   "result",
@@ -17,6 +18,7 @@ const inlineUploadMigrationTopLevelKeys = [
   "storageMode",
   "dryRun",
   "migration",
+  "orphanAudit",
   "commandsPassed",
   "evidenceReferences",
   "gaps",
@@ -41,6 +43,18 @@ const subjectSnapshotKeys = [
   "tableSizeBytes",
 ];
 const migratedItemKeys = ["subject", "migratedRows", "migratedBytes"];
+const orphanAuditKeys = ["result", "status", "environment", "checkedAt", "bucketVerified", "subjects", "commandsPassed", "gaps"];
+const orphanAuditSubjectKeys = [
+  "subject",
+  "prefix",
+  "listedObjects",
+  "dbReferencedObjects",
+  "referencedObjectsPresent",
+  "dbReferencedMissingObjects",
+  "orphanObjects",
+  "invalidKeyObjects",
+  "legacyDbStorageKeyRows",
+];
 
 if (!target) {
   fail(["INLINE_UPLOAD_CONTENT_MIGRATION_TARGET bos birakilamaz."]);
@@ -124,6 +138,10 @@ function requireAllowedEvidenceTargetUrl(url) {
     fail(["INLINE_UPLOAD_CONTENT_MIGRATION_TARGET file:// veya https:// URL olmali."]);
   }
 
+  if (url.username || url.password || url.search || url.hash) {
+    fail(["INLINE_UPLOAD_CONTENT_MIGRATION_TARGET userinfo, query veya fragment tasimamali."]);
+  }
+
   if (url.protocol === "https:" && isPlaceholderEvidenceTargetHost(url.hostname)) {
     fail(["INLINE_UPLOAD_CONTENT_MIGRATION_TARGET production kaniti icin gercek https host olmali."]);
   }
@@ -150,7 +168,14 @@ function isPlaceholderEvidenceTargetHost(hostname) {
 
 function isLocalTempEvidenceTargetUrl(url) {
   const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
-  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+  return (
+    path === "/tmp" ||
+    path.startsWith("/tmp/") ||
+    path === "/var/tmp" ||
+    path.startsWith("/var/tmp/") ||
+    path === "/private/tmp" ||
+    path.startsWith("/private/tmp/")
+  );
 }
 
 function parseJson(value) {
@@ -175,6 +200,7 @@ function validateReport(report) {
   requireStorageMode(report.storageMode, failures);
   requireDryRun(report.dryRun, report, failures);
   requireMigration(report.migration, report, failures);
+  requireOrphanAudit(report.orphanAudit, report, failures);
   requireCommands(report, failures);
   requireEvidenceReferences(report, failures);
   requireEmptyArray(report, failures, "gaps");
@@ -250,6 +276,64 @@ function requireMigration(migration, report, failures) {
   for (const subject of requiredSubjects) {
     if ((migratedRows.get(subject) ?? 0) < (dryRunPending.get(subject) ?? 0)) {
       failures.push(`migration.migrated ${subject} dry-run pendingRows degerinden az olamaz.`);
+    }
+  }
+}
+
+function requireOrphanAudit(orphanAudit, report, failures) {
+  if (!orphanAudit || typeof orphanAudit !== "object" || Array.isArray(orphanAudit)) {
+    failures.push("orphanAudit nesnesi zorunlu.");
+    return;
+  }
+
+  requireObjectKeySet(orphanAudit, orphanAuditKeys, failures, "orphanAudit");
+  requireObjectEqual(orphanAudit, failures, "orphanAudit.result", "result", "PASS");
+  requireObjectEqual(orphanAudit, failures, "orphanAudit.status", "status", "NO_ORPHANS");
+  requireObjectOneOf(orphanAudit, failures, "orphanAudit.environment", "environment", ["staging", "production"]);
+  requireObjectDate(orphanAudit, failures, "orphanAudit.checkedAt", "checkedAt");
+  requireDateNotAfter(orphanAudit, failures, "orphanAudit.checkedAt", "checkedAt", report, "checkedAt", "checkedAt");
+  requireObjectTrue(orphanAudit, failures, "orphanAudit.bucketVerified", "bucketVerified");
+  requireExactStringSet(
+    orphanAudit.commandsPassed,
+    failures,
+    "orphanAudit.commandsPassed",
+    ["pnpm inline-upload-content:orphan-audit"],
+    "komut",
+  );
+  requireEmptyArray(orphanAudit, failures, "gaps");
+  requireOrphanAuditSubjectList(orphanAudit.subjects, failures);
+}
+
+function requireOrphanAuditSubjectList(value, failures) {
+  if (!Array.isArray(value)) {
+    failures.push("orphanAudit.subjects listesi zorunlu.");
+    return;
+  }
+  if (value.length !== requiredSubjects.length) {
+    failures.push(`orphanAudit.subjects tam ${requiredSubjects.length} subject icermeli.`);
+    return;
+  }
+
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      failures.push("orphanAudit.subjects item nesnesi zorunlu.");
+      continue;
+    }
+    const subjectLabel = requiredSubjects.includes(item.subject) ? item.subject : "unknown";
+    requireObjectKeySet(item, orphanAuditSubjectKeys, failures, `orphanAudit.subjects.${subjectLabel}`);
+  }
+
+  for (const subject of requiredSubjects) {
+    const item = value.find((candidate) => candidate?.subject === subject);
+    if (!item) {
+      failures.push(`orphanAudit.subjects eksik: ${subject}`);
+      continue;
+    }
+    for (const key of ["listedObjects", "dbReferencedObjects", "referencedObjectsPresent"]) {
+      requireObjectIntegerAtLeast(item, failures, `orphanAudit.subjects.${subject}.${key}`, key, 0);
+    }
+    for (const key of ["dbReferencedMissingObjects", "orphanObjects", "invalidKeyObjects", "legacyDbStorageKeyRows"]) {
+      requireObjectEqual(item, failures, `orphanAudit.subjects.${subject}.${key}`, key, 0);
     }
   }
 }
@@ -334,19 +418,24 @@ function requireCommands(report, failures) {
 }
 
 function requireEvidenceReferences(report, failures) {
-  if (!Array.isArray(report.evidenceReferences) || report.evidenceReferences.length < 2) {
-    failures.push("evidenceReferences en az 2 kanit referansi icermeli.");
+  if (!Array.isArray(report.evidenceReferences) || report.evidenceReferences.length < 3) {
+    failures.push("evidenceReferences en az 3 kanit referansi icermeli.");
     return;
   }
 
-  if (allowExampleEvidence) return;
   for (const [index, value] of report.evidenceReferences.entries()) {
     if (typeof value !== "string" || value.trim() === "") {
       failures.push(`evidenceReferences.${index} bos olmayan metin olmali.`);
       continue;
     }
-    if (hasPlaceholderToken(value)) {
+    if (!allowExampleEvidence && hasPlaceholderToken(value)) {
       failures.push(`evidenceReferences.${index} production kaniti icin placeholder/redacted deger olmamali.`);
+    }
+    if (hasSecretBearingEvidenceReference(value)) {
+      failures.push(`evidenceReferences.${index} userinfo, query veya fragment tasimamali.`);
+    }
+    if (hasForbiddenEvidenceReferenceToken(value)) {
+      failures.push(`evidenceReferences.${index} ham upload icerigi, storage key veya signed URL tasimamali.`);
     }
   }
 }
@@ -388,6 +477,12 @@ function requireObjectEqual(scope, failures, label, key, expected) {
 function requireOneOf(report, failures, key, expectedValues) {
   if (!expectedValues.includes(report[key])) {
     failures.push(`${key} ${expectedValues.join(" veya ")} olmali.`);
+  }
+}
+
+function requireObjectOneOf(scope, failures, label, key, expectedValues) {
+  if (!expectedValues.includes(scope?.[key])) {
+    failures.push(`${label} ${expectedValues.join(" veya ")} olmali.`);
   }
 }
 
@@ -527,6 +622,43 @@ function hasPlaceholderToken(value) {
     ".invalid",
     "localhost",
     "127.0.0.1",
+  ].some((token) => normalized.includes(token));
+}
+
+function hasSecretBearingEvidenceReference(value) {
+  if (typeof value !== "string") return false;
+
+  const normalized = value.trim();
+  if (normalized.includes("?") || normalized.includes("#")) {
+    return true;
+  }
+
+  const urlCandidate = normalized.toLowerCase().startsWith("url:") ? normalized.slice(4) : normalized;
+  if (!/^(https|file|s3):\/\//i.test(urlCandidate)) {
+    return false;
+  }
+
+  try {
+    const url = new URL(urlCandidate);
+    return Boolean(url.username || url.password || url.search || url.hash);
+  } catch {
+    return false;
+  }
+}
+
+function hasForbiddenEvidenceReferenceToken(value) {
+  const normalized = value.toLowerCase();
+  return [
+    "contentbase64",
+    "filebase64",
+    "storagekey",
+    "objectkey",
+    "s3key",
+    "sourcefilepath",
+    "signedurl",
+    "x-amz-",
+    "support-ticket-attachments/",
+    "homework-material-files/",
   ].some((token) => normalized.includes(token));
 }
 

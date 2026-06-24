@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, readFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, parse, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
 
@@ -30,6 +30,7 @@ if (!manifestTarget) {
 }
 
 const manifestFile = resolveTargetPath(manifestTarget);
+validateManifestTargetPath(manifestFile);
 let manifest;
 try {
   manifest = parseJson(readFileSync(manifestFile, "utf8"), "first-gates-manifest");
@@ -160,6 +161,48 @@ function resolveTargetPath(target) {
     return fileURLToPath(new URL(target));
   }
   return resolve(target);
+}
+
+function validateManifestTargetPath(targetPath) {
+  const resolvedPath = resolve(targetPath);
+  if (isLocalTempPath(resolvedPath)) {
+    fail(["STAGING_FIRST_GATES_TARGET lokal temp path olmamalı."]);
+  }
+  if (isLocalSmokePath(resolvedPath)) {
+    fail(["STAGING_FIRST_GATES_TARGET artifacts/local altında olmamalı."]);
+  }
+  if (!existsSync(resolvedPath)) {
+    fail(["STAGING_FIRST_GATES_TARGET symlink olmayan file artifact olmalı."]);
+  }
+
+  const stat = lstatSync(resolvedPath);
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    fail(["STAGING_FIRST_GATES_TARGET symlink olmayan file artifact olmalı."]);
+  }
+  assertParentPathAllowed(dirname(resolvedPath));
+}
+
+function assertParentPathAllowed(parentPath) {
+  const root = parse(parentPath).root;
+  const segments = relative(root, parentPath).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+  for (const segment of segments) {
+    current = resolve(current, segment);
+    const stat = lstatSync(current);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      fail(["STAGING_FIRST_GATES_TARGET parent dizini symlink olmayan dizin olmalı."]);
+    }
+  }
+}
+
+function isLocalTempPath(value) {
+  const normalized = resolve(value);
+  return ["/tmp", "/var/tmp", "/private/tmp"].some((tempRoot) => normalized === tempRoot || normalized.startsWith(`${tempRoot}/`));
+}
+
+function isLocalSmokePath(value) {
+  const normalized = resolve(value).replaceAll("\\", "/").replace(/\/+$/g, "") || "/";
+  return normalized.endsWith("/artifacts/local") || normalized.includes("/artifacts/local/");
 }
 
 function resolveEvidencePath(value, manifestPath, label, failures) {

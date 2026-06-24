@@ -21,9 +21,12 @@ const evidenceTargetKeys = [
   "UAT_EVIDENCE_TARGET",
   "LIVE_EXAM_CYCLE_TARGET",
   "ISEM_OPTICAL_PIPELINE_TARGET",
+  "LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET",
   "INLINE_UPLOAD_CONTENT_MIGRATION_TARGET",
+  "AUDIT_NULL_TENANT_EVIDENCE_TARGET",
   "RATE_LIMIT_EVIDENCE_TARGET",
   "RLS_LIVE_EVIDENCE_TARGET",
+  "PRODUCTION_EVIDENCE_SUMMARY_TARGET",
   "PILOT_EVIDENCE_TARGET",
   "GO_LIVE_EVIDENCE_TARGET",
   "LIVE_STATUS_EVIDENCE_TARGET",
@@ -128,9 +131,12 @@ function checkContract(file) {
     "UAT_EVIDENCE_TARGET",
     "LIVE_EXAM_CYCLE_TARGET",
     "ISEM_OPTICAL_PIPELINE_TARGET",
+    "LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET",
     "INLINE_UPLOAD_CONTENT_MIGRATION_TARGET",
+    "AUDIT_NULL_TENANT_EVIDENCE_TARGET",
     "RATE_LIMIT_EVIDENCE_TARGET",
     "RLS_LIVE_EVIDENCE_TARGET",
+    "PRODUCTION_EVIDENCE_SUMMARY_TARGET",
     "PILOT_EVIDENCE_TARGET",
     "GO_LIVE_EVIDENCE_TARGET",
     "LIVE_STATUS_EVIDENCE_TARGET",
@@ -221,7 +227,9 @@ function checkProductionEnv(env) {
   requireHttpsUrl(env, failures, "NOTIFICATION_HTTP_ENDPOINT");
   requireSecret(env, failures, "NOTIFICATION_HTTP_BEARER_TOKEN");
   requireSet(env, failures, "NOTIFICATION_SMOKE_EMAIL_TO");
+  requireNoPlaceholderValue(env, failures, "NOTIFICATION_SMOKE_EMAIL_TO");
   requireSet(env, failures, "NOTIFICATION_SMOKE_PUSH_TO");
+  requireNoPlaceholderValue(env, failures, "NOTIFICATION_SMOKE_PUSH_TO");
   requireSet(env, failures, "NOTIFICATION_SMOKE_SUBJECT");
   requireNoPlaceholderValue(env, failures, "NOTIFICATION_SMOKE_SUBJECT");
   requireSet(env, failures, "NOTIFICATION_SMOKE_BODY");
@@ -408,6 +416,10 @@ function requireEvidenceTargetUrl(env, failures, key) {
     return;
   }
 
+  if (hasSecretBearingUrlParts(url)) {
+    failures.push(`${key} production evidence target URL userinfo, query veya fragment içeremez.`);
+  }
+
   if (hasPlaceholderToken(value)) {
     failures.push(`${key} production için placeholder/test/example değer içermemeli.`);
   }
@@ -418,8 +430,19 @@ function requireEvidenceTargetUrl(env, failures, key) {
 
   if (url.protocol === "file:") {
     const path = decodeURIComponent(url.pathname).replace(/\/+$/g, "") || "/";
-    if (path === "/" || path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/")) {
+    if (
+      path === "/" ||
+      path === "/tmp" ||
+      path.startsWith("/tmp/") ||
+      path === "/var/tmp" ||
+      path.startsWith("/var/tmp/") ||
+      path === "/private/tmp" ||
+      path.startsWith("/private/tmp/")
+    ) {
       failures.push(`${key} production için lokal temp path olmamalı.`);
+    }
+    if (path.includes("/artifacts/local/")) {
+      failures.push(`${key} production için artifacts/local altında olmamalı.`);
     }
   }
 }
@@ -452,7 +475,15 @@ function requireBackupTarget(env, failures, key) {
 
   if (url.protocol === "file:") {
     const path = decodeURIComponent(url.pathname).replace(/\/+$/g, "") || "/";
-    if (path === "/" || path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/")) {
+    if (
+      path === "/" ||
+      path === "/tmp" ||
+      path.startsWith("/tmp/") ||
+      path === "/var/tmp" ||
+      path.startsWith("/var/tmp/") ||
+      path === "/private/tmp" ||
+      path.startsWith("/private/tmp/")
+    ) {
       failures.push(`${key} production için lokal temp path olmamalı.`);
     }
   }
@@ -503,6 +534,10 @@ function isPlaceholderHost(hostname) {
   );
 }
 
+function hasSecretBearingUrlParts(url) {
+  return url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "";
+}
+
 function hasPlaceholderToken(value) {
   const normalized = value.toLowerCase();
   return [
@@ -516,6 +551,11 @@ function hasPlaceholderToken(value) {
     ".example",
     ".invalid",
     "example",
+    "test-token",
+    "test-message-id",
+    "dummy",
+    "fake",
+    "sms-provider-message",
   ].some((token) => normalized.includes(token));
 }
 

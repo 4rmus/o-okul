@@ -78,7 +78,14 @@ async function assertParentPathAllowed(parentPath, collectedFailures) {
 }
 
 function isLocalTempPath(filePath) {
-  return filePath === "/tmp" || filePath.startsWith("/tmp/") || filePath === "/var/tmp" || filePath.startsWith("/var/tmp/");
+  return (
+    filePath === "/tmp" ||
+    filePath.startsWith("/tmp/") ||
+    filePath === "/var/tmp" ||
+    filePath.startsWith("/var/tmp/") ||
+    filePath === "/private/tmp" ||
+    filePath.startsWith("/private/tmp/")
+  );
 }
 
 function parseJson(value, collectedFailures) {

@@ -2,9 +2,11 @@ import { readFileSync } from "node:fs";
 
 const compose = readFileSync("docker-compose.yml", "utf8");
 const releaseCompose = readFileSync("docker-compose.release.yml", "utf8");
+const rateLimitShardCompose = readFileSync("docker-compose.rate-limit-shard.yml", "utf8");
 const observability = readFileSync("docker-compose.observability.yml", "utf8");
 const externalMonitoring = readFileSync("docker-compose.external-monitoring.yml", "utf8");
 const traefik = readFileSync("docker-compose.traefik.yml", "utf8");
+const traefikIp = readFileSync("docker-compose.traefik-ip.yml", "utf8");
 const dockerfile = readFileSync("Dockerfile", "utf8");
 const alloy = readFileSync("docker/alloy/config.alloy", "utf8");
 const prometheus = readFileSync("docker/prometheus/prometheus.yml", "utf8");
@@ -81,6 +83,7 @@ const expectations = {
     "traefik.http.routers.web.rule=Host(`${DOMAIN}`)",
     "traefik.http.routers.web.entrypoints=websecure",
     "traefik.http.routers.web.priority=10",
+    "traefik.http.routers.web.service=web",
     "traefik.http.routers.web.tls.certresolver=letsencrypt",
     "traefik.http.routers.web.middlewares=web-security-headers",
     "traefik.http.middlewares.web-security-headers.headers.stsseconds=15552000",
@@ -90,12 +93,24 @@ const expectations = {
     "PathPrefix(`/health`)",
     "traefik.http.routers.api.entrypoints=websecure",
     "traefik.http.routers.api.priority=100",
+    "traefik.http.routers.api.service=api",
     "traefik.http.routers.api.tls.certresolver=letsencrypt",
     "traefik.http.routers.api.middlewares=api-security-headers",
     "traefik.http.middlewares.api-security-headers.headers.stsseconds=15552000",
     "traefik.http.middlewares.api-security-headers.headers.contenttypenosniff=true",
     "traefik.http.middlewares.api-security-headers.headers.framedeny=true",
     "traefik.http.services.api.loadbalancer.server.port=3100",
+  ],
+  "docker-compose.traefik-ip.yml": [
+    "traefik:v3.7.5",
+    "traefik.http.routers.web-ip.rule=Host(`${SERVER_DOMAIN:-127.0.0.1}`)",
+    "traefik.http.routers.web-ip.service=web-ip",
+    "traefik.http.routers.web-ip.tls=true",
+    "traefik.http.services.web-ip.loadbalancer.server.port=3001",
+    "traefik.http.routers.api-ip.rule=Host(`${SERVER_DOMAIN:-127.0.0.1}`) && (PathPrefix(`/api`) || PathPrefix(`/health`))",
+    "traefik.http.routers.api-ip.service=api-ip",
+    "traefik.http.routers.api-ip.tls=true",
+    "traefik.http.services.api-ip.loadbalancer.server.port=3100",
   ],
   "docker-compose.release.yml": [
     "web:",
@@ -107,6 +122,17 @@ const expectations = {
     "image: ${WORKER_IMAGE:?WORKER_IMAGE is required}",
     "image: ${QUEUE_BOARD_IMAGE:?QUEUE_BOARD_IMAGE is required}",
     "pull_policy: always",
+  ],
+  "docker-compose.rate-limit-shard.yml": [
+    "api-rate-limit-shard:",
+    "service: api",
+    "image: ${API_IMAGE:-uzman-hocam-api}",
+    "ports: !reset []",
+    "traefik.http.routers.api-rate-limit-shard-ip.rule=Host(`${SERVER_DOMAIN:-127.0.0.1}`) && PathPrefix(`/__rate-limit-shard`)",
+    "traefik.http.routers.api-rate-limit-shard-ip.service=api-rate-limit-shard-ip",
+    "traefik.http.routers.api-rate-limit-shard-ip.middlewares=api-rate-limit-shard-strip,api-rate-limit-shard-security-headers",
+    "traefik.http.middlewares.api-rate-limit-shard-strip.stripprefix.prefixes=/__rate-limit-shard",
+    "traefik.http.services.api-rate-limit-shard-ip.loadbalancer.server.port=3100",
   ],
   "docker-compose.observability.yml": [
     "prometheus:",
@@ -240,9 +266,11 @@ const expectations = {
 const files = {
   "docker-compose.yml": compose,
   "docker-compose.release.yml": releaseCompose,
+  "docker-compose.rate-limit-shard.yml": rateLimitShardCompose,
   "docker-compose.observability.yml": observability,
   "docker-compose.external-monitoring.yml": externalMonitoring,
   "docker-compose.traefik.yml": traefik,
+  "docker-compose.traefik-ip.yml": traefikIp,
   "docker/alloy/config.alloy": alloy,
   "docker/prometheus/prometheus.yml": prometheus,
   "docker/prometheus/rules/api-alerts.yml": prometheusAlerts,

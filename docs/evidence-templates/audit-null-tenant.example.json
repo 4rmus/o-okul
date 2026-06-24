@@ -1,0 +1,31 @@
+{
+  "result": "PASS",
+  "environment": "staging",
+  "checkedAt": "2026-05-31T10:00:00.000Z",
+  "auditNullTenant": {
+    "totalRows": 128,
+    "tenantRows": 120,
+    "nullTenantRows": 8,
+    "nullTenantBreakdown": {
+      "system": {
+        "count": 5,
+        "classificationRule": "tenantId IS NULL AND action LIKE 'system.%' OR action LIKE 'auth.system_%'"
+      },
+      "deletedTenant": {
+        "count": 3,
+        "classificationRule": "tenantId IS NULL AND diff.deletedTenantIdHash IS NOT NULL"
+      },
+      "unknown": {
+        "count": 0,
+        "classificationRule": "tenantId IS NULL AND no system/deletedTenant rule matched"
+      }
+    }
+  },
+  "commandsPassed": [
+    "pnpm audit-null-tenant:check"
+  ],
+  "evidenceReferences": [
+    "artifacts/example/audit-null-tenant/classification-query.json"
+  ],
+  "gaps": []
+}

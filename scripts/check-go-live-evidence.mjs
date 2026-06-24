@@ -5,6 +5,7 @@ import { getTenantScopedTables } from "../packages/db/scripts/tenant-models.mjs"
 
 const target = process.env.GO_LIVE_EVIDENCE_TARGET;
 const allowExampleEvidence = process.env.GO_LIVE_ALLOW_EXAMPLE_EVIDENCE === "1";
+const inlineUploadSubjects = ["homework_material_files", "support_ticket_attachments"];
 
 const requiredEvidenceCheckScripts = new Map([
   ["Production env", "scripts/check-prod-env.mjs"],
@@ -30,7 +31,9 @@ const requiredEvidenceCheckScripts = new Map([
   ["Security audit evidence", "scripts/check-security-audit-evidence.mjs"],
   ["Live exam cycle evidence", "scripts/check-live-exam-cycle-evidence.mjs"],
   ["iSEM optical pipeline evidence", "scripts/check-isem-optical-pipeline-evidence.mjs"],
+  ["Live UI-worker result evidence", "scripts/check-live-ui-worker-result-evidence.mjs"],
   ["Inline upload migration evidence", "scripts/check-inline-upload-content-migration-evidence.mjs"],
+  ["Audit null tenant evidence", "scripts/check-audit-null-tenant-evidence.mjs"],
   ["Rate limit Redis evidence", "scripts/check-rate-limit-evidence.mjs"],
   ["RLS live evidence", "scripts/check-rls-live-evidence.mjs"],
   ["UAT evidence", "scripts/check-uat-evidence.mjs"],
@@ -89,6 +92,7 @@ const goLiveLegalKeys = [
   "privacyInventoryPassed",
   "financialRetentionPassed",
   "inlineUploadMigrationPassed",
+  "auditNullTenantPassed",
 ];
 const goLiveOperationsKeys = [
   "incidentRunbookAcknowledged",
@@ -136,7 +140,9 @@ const summaryReportKeys = [
   "securityAudit",
   "liveExamCycle",
   "isemOpticalPipeline",
+  "liveUiWorkerResult",
   "inlineUploadMigration",
+  "auditNullTenant",
   "rateLimit",
   "rlsLive",
   "uat",
@@ -272,7 +278,34 @@ const summaryRequiredReportKeys = {
     "pipelineDurationMs",
     "commandsPassed",
   ],
-  inlineUploadMigration: ["environment", "checkedAt", "storageMode", "dryRun", "migration", "commandsPassed", "evidenceReferences"],
+  liveUiWorkerResult: [
+    "generatedAt",
+    "result",
+    "check",
+    "environment",
+    "checkedAt",
+    "examHash",
+    "firstStudentHash",
+    "reportStatus",
+    "downloadedArtifacts",
+    "karnePdfDownloaded",
+    "excelDownloaded",
+    "studentPortalViewed",
+    "guardianPortalViewed",
+    "commandsPassed",
+    "gaps",
+  ],
+  inlineUploadMigration: [
+    "environment",
+    "checkedAt",
+    "storageMode",
+    "dryRun",
+    "migration",
+    "orphanAudit",
+    "commandsPassed",
+    "evidenceReferences",
+  ],
+  auditNullTenant: ["environment", "checkedAt", "auditNullTenant", "commandsPassed", "evidenceReferences"],
   rateLimit: ["environment", "checkedAt", "config", "instances", "apiRateLimit", "loginAttemptLimiter", "commandsPassed", "evidenceReferences"],
   rlsLive: [
     "environment",
@@ -309,6 +342,11 @@ const requiredRlsWriteRejects = [
   "ParsedAnswer foreign tenant RawImport",
   "ParsedAnswer cross exam mismatch",
   "ParsedAnswer duplicate raw import participant parser",
+];
+const expectedRlsEvidenceReferenceFileNames = [
+  "db-rls-check.log",
+  "db-rls-check-live.log",
+  "rls-load-smoke.json",
 ];
 const expectedTenantCompositeRelations = [
   "AnnouncementReceipt.announcement",
@@ -352,6 +390,94 @@ const liveStatusGates = [
     source: "productionEvidenceSummary.reports.deploymentRegion",
     target: "summary",
     path: ["reports", "deploymentRegion"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Live exam cycle kanıtı",
+    command: "pnpm live:exam-cycle:check",
+    source: "productionEvidenceSummary.reports.liveExamCycle",
+    target: "summary",
+    path: ["reports", "liveExamCycle"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "iSEM optical pipeline kanıtı",
+    command: "pnpm isem-optical-pipeline:evidence-check",
+    source: "productionEvidenceSummary.reports.isemOpticalPipeline",
+    target: "summary",
+    path: ["reports", "isemOpticalPipeline"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Live UI-worker result kanıtı",
+    command: "pnpm live:ui-worker:result-check",
+    source: "productionEvidenceSummary.reports.liveUiWorkerResult",
+    target: "summary",
+    path: ["reports", "liveUiWorkerResult"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "KVKK inventory kanıtı",
+    command: "pnpm privacy:inventory:check",
+    source: "productionEvidenceSummary.reports.kvkkInventory",
+    target: "summary",
+    path: ["reports", "kvkkInventory"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "RLS live kanıtı",
+    command: "pnpm rls:live:check",
+    source: "productionEvidenceSummary.reports.rlsLive",
+    target: "summary",
+    path: ["reports", "rlsLive"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Inline upload migration kanıtı",
+    command: "pnpm inline-upload-content:check",
+    source: "productionEvidenceSummary.reports.inlineUploadMigration",
+    target: "summary",
+    path: ["reports", "inlineUploadMigration"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Audit null tenant kanıtı",
+    command: "pnpm audit-null-tenant:check",
+    source: "productionEvidenceSummary.reports.auditNullTenant",
+    target: "summary",
+    path: ["reports", "auditNullTenant"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Rate limit Redis kanıtı",
+    command: "pnpm rate-limit:check",
+    source: "productionEvidenceSummary.reports.rateLimit",
+    target: "summary",
+    path: ["reports", "rateLimit"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "SMS provider kanıtı",
+    command: "pnpm sms:smoke",
+    source: "productionEvidenceSummary.smokeEvidence.smsProvider",
+    target: "summary",
+    path: ["smokeEvidence", "smsProvider"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Notification provider kanıtı",
+    command: "pnpm notification:smoke",
+    source: "productionEvidenceSummary.smokeEvidence.notificationProvider",
+    target: "summary",
+    path: ["smokeEvidence", "notificationProvider"],
+    dateKey: "checkedAt",
+  },
+  {
+    label: "Report generation perf kanıtı",
+    command: "pnpm report-generation:perf",
+    source: "productionEvidenceSummary.smokeEvidence.reportGeneration",
+    target: "summary",
+    path: ["smokeEvidence", "reportGeneration"],
     dateKey: "checkedAt",
   },
   {
@@ -419,6 +545,12 @@ try {
 }
 if (!isAllowedEvidenceTargetUrl(targetUrl)) {
   fail(["GO_LIVE_EVIDENCE_TARGET file:// veya https:// URL olmali."]);
+}
+if (hasSecretBearingUrlParts(targetUrl)) {
+  fail(["GO_LIVE_EVIDENCE_TARGET target URL userinfo, query veya fragment iceremez."]);
+}
+if (targetUrl.protocol === "file:" && isLocalSmokeEvidenceTargetUrl(targetUrl)) {
+  fail(["GO_LIVE_EVIDENCE_TARGET artifacts/local altinda olmamali."]);
 }
 
 const report = await readJsonTarget(targetUrl, "Go-live raporu");
@@ -528,6 +660,9 @@ async function readLinkedProductionEvidenceSummary(report, baseUrl) {
   if (!isAllowedEvidenceTargetUrl(summaryUrl)) {
     fail(["productionEvidenceSummary.summaryTarget file:// veya https:// URL olmali."]);
   }
+  if (hasSecretBearingUrlParts(summaryUrl)) {
+    fail(["productionEvidenceSummary.summaryTarget target URL userinfo, query veya fragment iceremez."]);
+  }
 
   return readJsonTarget(summaryUrl, "Production evidence summary");
 }
@@ -547,6 +682,9 @@ async function readLinkedPilotEvidence(report, baseUrl) {
   if (!isAllowedEvidenceTargetUrl(pilotUrl)) {
     fail(["pilot.pilotEvidenceReference file:// veya https:// URL olmali."]);
   }
+  if (hasSecretBearingUrlParts(pilotUrl)) {
+    fail(["pilot.pilotEvidenceReference target URL userinfo, query veya fragment iceremez."]);
+  }
 
   return readJsonTarget(pilotUrl, "Pilot evidence");
 }
@@ -565,6 +703,12 @@ async function readLinkedLiveStatusEvidence(report, baseUrl) {
   }
   if (!isAllowedEvidenceTargetUrl(liveStatusUrl)) {
     fail(["liveStatusEvidence.evidenceTarget file:// veya https:// URL olmali."]);
+  }
+  if (hasSecretBearingUrlParts(liveStatusUrl)) {
+    fail(["liveStatusEvidence.evidenceTarget target URL userinfo, query veya fragment iceremez."]);
+  }
+  if (liveStatusUrl.protocol === "file:" && isLocalSmokeEvidenceTargetUrl(liveStatusUrl)) {
+    fail(["liveStatusEvidence.evidenceTarget artifacts/local altinda olmamali."]);
   }
 
   return {
@@ -797,6 +941,7 @@ function requireSummarySmokeEvidence(summary, failures, goLiveReport) {
     }
     requireObjectString(smsProvider, failures, "productionEvidenceSummary.summary.smokeEvidence.smsProvider.recipient", "recipient");
     requireNonPlaceholderString(smsProvider, failures, "productionEvidenceSummary.summary.smokeEvidence.smsProvider.recipient", "recipient");
+    requireMaskedRecipientString(smsProvider.recipient, failures, "productionEvidenceSummary.summary.smokeEvidence.smsProvider.recipient");
     requireObjectString(smsProvider, failures, "productionEvidenceSummary.summary.smokeEvidence.smsProvider.providerMessageId", "providerMessageId");
     requireNonPlaceholderString(smsProvider, failures, "productionEvidenceSummary.summary.smokeEvidence.smsProvider.providerMessageId", "providerMessageId");
   }
@@ -822,6 +967,15 @@ function requireSummarySmokeEvidence(summary, failures, goLiveReport) {
       1,
       true,
     );
+    if (Array.isArray(notificationProvider.recipients)) {
+      for (const [index, recipient] of notificationProvider.recipients.entries()) {
+        requireMaskedRecipientString(
+          recipient,
+          failures,
+          `productionEvidenceSummary.summary.smokeEvidence.notificationProvider.recipients.${index}`,
+        );
+      }
+    }
   }
 
   const sentryEvent = requireSmokeCheck(value, failures, "sentryEvent", "sentry_smoke", summary, goLiveReport);
@@ -854,8 +1008,8 @@ function requireSummarySmokeEvidence(summary, failures, goLiveReport) {
       "EXAM_RESULT_SUMMARY",
     );
     requireObjectEqual(reportGeneration, failures, "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.status", "status", "READY");
-    requireObjectIntegerAtLeast(reportGeneration, failures, "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.resultCount", "resultCount", 1);
-    requireObjectIntegerAtLeast(reportGeneration, failures, "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.studentCount", "studentCount", 1);
+    requireObjectIntegerAtLeast(reportGeneration, failures, "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.resultCount", "resultCount", 10_000);
+    requireObjectIntegerAtLeast(reportGeneration, failures, "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.studentCount", "studentCount", 10_000);
     requireObjectIntegerAtLeast(reportGeneration, failures, "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.classCount", "classCount", 1);
     requireObjectIntegerAtLeast(reportGeneration, failures, "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.branchCount", "branchCount", 1);
     requireObjectIntegerAtLeast(
@@ -916,6 +1070,13 @@ function requireSummarySmokeEvidence(summary, failures, goLiveReport) {
         "generationDurationMsMax",
         1,
       );
+      requireObjectEqual(
+        thresholds,
+        failures,
+        "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.thresholds.generationDurationMsMax",
+        "generationDurationMsMax",
+        60_000,
+      );
       requireObjectTrue(
         thresholds,
         failures,
@@ -941,10 +1102,9 @@ function requireSummarySmokeEvidence(summary, failures, goLiveReport) {
     );
     if (
       Array.isArray(reportGeneration.commandsPassed) &&
-      (reportGeneration.commandsPassed.length !== 1 ||
-        !["pnpm report-generation:smoke", "pnpm report-generation:perf"].includes(reportGeneration.commandsPassed[0]))
+      (reportGeneration.commandsPassed.length !== 1 || reportGeneration.commandsPassed[0] !== "pnpm report-generation:perf")
     ) {
-      failures.push("productionEvidenceSummary.summary.smokeEvidence.reportGeneration.commandsPassed tek report generation komutu icermeli.");
+      failures.push("productionEvidenceSummary.summary.smokeEvidence.reportGeneration.commandsPassed tek pnpm report-generation:perf komutu icermeli.");
     }
     requireEmptyArray(reportGeneration, failures, "gaps", "productionEvidenceSummary.summary.smokeEvidence.reportGeneration.gaps");
   }
@@ -1415,6 +1575,92 @@ function requireSummaryReports(summary, failures, goLiveReport) {
     }
   }
 
+  const liveUiWorkerResult = requireNestedObject(
+    reports,
+    failures,
+    "productionEvidenceSummary.summary.reports.liveUiWorkerResult",
+    "liveUiWorkerResult",
+  );
+  if (liveUiWorkerResult) {
+    requireObjectEqual(
+      liveUiWorkerResult,
+      failures,
+      "productionEvidenceSummary.summary.reports.liveUiWorkerResult.result",
+      "result",
+      "PASS",
+    );
+    requireObjectEqual(
+      liveUiWorkerResult,
+      failures,
+      "productionEvidenceSummary.summary.reports.liveUiWorkerResult.check",
+      "check",
+      "live_ui_worker_report_smoke",
+    );
+    requireObjectEqual(
+      liveUiWorkerResult,
+      failures,
+      "productionEvidenceSummary.summary.reports.liveUiWorkerResult.environment",
+      "environment",
+      "production",
+    );
+    requireSummaryReportDateNotAfter(
+      liveUiWorkerResult,
+      failures,
+      "productionEvidenceSummary.summary.reports.liveUiWorkerResult.generatedAt",
+      "generatedAt",
+      summary,
+      goLiveReport,
+    );
+    requireSummaryReportDateNotAfter(
+      liveUiWorkerResult,
+      failures,
+      "productionEvidenceSummary.summary.reports.liveUiWorkerResult.checkedAt",
+      "checkedAt",
+      summary,
+      goLiveReport,
+    );
+    requireObjectSha256(
+      liveUiWorkerResult,
+      failures,
+      "productionEvidenceSummary.summary.reports.liveUiWorkerResult.examHash",
+      "examHash",
+    );
+    requireObjectSha256(
+      liveUiWorkerResult,
+      failures,
+      "productionEvidenceSummary.summary.reports.liveUiWorkerResult.firstStudentHash",
+      "firstStudentHash",
+    );
+    requireObjectEqual(
+      liveUiWorkerResult,
+      failures,
+      "productionEvidenceSummary.summary.reports.liveUiWorkerResult.reportStatus",
+      "reportStatus",
+      "READY",
+    );
+    requireExactStringSet(
+      liveUiWorkerResult.downloadedArtifacts,
+      failures,
+      "productionEvidenceSummary.summary.reports.liveUiWorkerResult.downloadedArtifacts",
+      ["xlsx", "pdf"],
+    );
+    for (const key of ["karnePdfDownloaded", "excelDownloaded", "studentPortalViewed", "guardianPortalViewed"]) {
+      requireObjectTrue(liveUiWorkerResult, failures, `productionEvidenceSummary.summary.reports.liveUiWorkerResult.${key}`, key);
+    }
+    requireExactStringSet(
+      liveUiWorkerResult.commandsPassed,
+      failures,
+      "productionEvidenceSummary.summary.reports.liveUiWorkerResult.commandsPassed",
+      ["pnpm live:ui-worker:smoke"],
+    );
+    requireEmptyArray(
+      liveUiWorkerResult,
+      failures,
+      "gaps",
+      "productionEvidenceSummary.summary.reports.liveUiWorkerResult.gaps",
+    );
+  }
+
   const inlineUploadMigration = requireNestedObject(
     reports,
     failures,
@@ -1442,18 +1688,55 @@ function requireSummaryReports(summary, failures, goLiveReport) {
       failures,
       "productionEvidenceSummary.summary.reports.inlineUploadMigration.commandsPassed",
       "commandsPassed",
-      2,
+      3,
       false,
     );
     for (const command of [
       "pnpm inline-upload-content:audit",
       "INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true pnpm inline-upload-content:migrate",
+      "pnpm inline-upload-content:orphan-audit",
     ]) {
       if (!Array.isArray(inlineUploadMigration.commandsPassed) || !inlineUploadMigration.commandsPassed.includes(command)) {
         failures.push(`productionEvidenceSummary.summary.reports.inlineUploadMigration.commandsPassed eksik: ${command}`);
       }
     }
     requireSummaryInlineUploadMigration(inlineUploadMigration, failures);
+  }
+
+  const auditNullTenant = requireNestedObject(
+    reports,
+    failures,
+    "productionEvidenceSummary.summary.reports.auditNullTenant",
+    "auditNullTenant",
+  );
+  if (auditNullTenant) {
+    requireObjectEqual(
+      auditNullTenant,
+      failures,
+      "productionEvidenceSummary.summary.reports.auditNullTenant.environment",
+      "environment",
+      "production",
+    );
+    requireSummaryReportDateNotAfter(
+      auditNullTenant,
+      failures,
+      "productionEvidenceSummary.summary.reports.auditNullTenant.checkedAt",
+      "checkedAt",
+      summary,
+      goLiveReport,
+    );
+    requireObjectStringList(
+      auditNullTenant,
+      failures,
+      "productionEvidenceSummary.summary.reports.auditNullTenant.commandsPassed",
+      "commandsPassed",
+      1,
+      false,
+    );
+    if (!Array.isArray(auditNullTenant.commandsPassed) || !auditNullTenant.commandsPassed.includes("pnpm audit-null-tenant:check")) {
+      failures.push("productionEvidenceSummary.summary.reports.auditNullTenant.commandsPassed eksik: pnpm audit-null-tenant:check");
+    }
+    requireSummaryAuditNullTenant(auditNullTenant, failures);
   }
 
   const rateLimit = requireNestedObject(reports, failures, "productionEvidenceSummary.summary.reports.rateLimit", "rateLimit");
@@ -2593,12 +2876,75 @@ function requireSummaryInlineUploadMigration(report, failures) {
     requireSummaryInlineUploadMigrated(migration.migrated, failures);
   }
 
+  const orphanAudit = requireNestedObject(
+    report,
+    failures,
+    "productionEvidenceSummary.summary.reports.inlineUploadMigration.orphanAudit",
+    "orphanAudit",
+  );
+  if (orphanAudit) {
+    requireObjectEqual(
+      orphanAudit,
+      failures,
+      "productionEvidenceSummary.summary.reports.inlineUploadMigration.orphanAudit.result",
+      "result",
+      "PASS",
+    );
+    requireObjectEqual(
+      orphanAudit,
+      failures,
+      "productionEvidenceSummary.summary.reports.inlineUploadMigration.orphanAudit.status",
+      "status",
+      "NO_ORPHANS",
+    );
+    requireObjectTrue(
+      orphanAudit,
+      failures,
+      "productionEvidenceSummary.summary.reports.inlineUploadMigration.orphanAudit.bucketVerified",
+      "bucketVerified",
+    );
+    requireSummaryInlineUploadOrphanSubjects(orphanAudit.subjects, failures);
+  }
+
   requireObjectEvidenceReferences(
     report,
     failures,
     "productionEvidenceSummary.summary.reports.inlineUploadMigration.evidenceReferences",
     "evidenceReferences",
   );
+}
+
+function requireSummaryInlineUploadOrphanSubjects(subjects, failures) {
+  if (!Array.isArray(subjects)) {
+    failures.push("productionEvidenceSummary.summary.reports.inlineUploadMigration.orphanAudit.subjects listesi zorunlu.");
+    return;
+  }
+
+  for (const subject of inlineUploadSubjects) {
+    const item = subjects.find((candidate) => candidate?.subject === subject);
+    if (!item) {
+      failures.push(`productionEvidenceSummary.summary.reports.inlineUploadMigration.orphanAudit.subjects eksik: ${subject}`);
+      continue;
+    }
+    for (const key of ["listedObjects", "dbReferencedObjects", "referencedObjectsPresent"]) {
+      requireObjectIntegerAtLeast(
+        item,
+        failures,
+        `productionEvidenceSummary.summary.reports.inlineUploadMigration.orphanAudit.subjects.${subject}.${key}`,
+        key,
+        0,
+      );
+    }
+    for (const key of ["dbReferencedMissingObjects", "orphanObjects", "invalidKeyObjects", "legacyDbStorageKeyRows"]) {
+      requireObjectEqual(
+        item,
+        failures,
+        `productionEvidenceSummary.summary.reports.inlineUploadMigration.orphanAudit.subjects.${subject}.${key}`,
+        key,
+        0,
+      );
+    }
+  }
 }
 
 function requireSummaryInlineUploadSubjects(subjects, failures, scope, requirePendingZero) {
@@ -2862,6 +3208,114 @@ function requireSummaryRlsLive(report, failures) {
     "productionEvidenceSummary.summary.reports.rlsLive.evidenceReferences",
     "evidenceReferences",
   );
+  requireRlsEvidenceReferences(
+    report.evidenceReferences,
+    failures,
+    "productionEvidenceSummary.summary.reports.rlsLive.evidenceReferences",
+  );
+}
+
+function requireSummaryAuditNullTenant(report, failures) {
+  const classification = requireNestedObject(
+    report,
+    failures,
+    "productionEvidenceSummary.summary.reports.auditNullTenant.auditNullTenant",
+    "auditNullTenant",
+  );
+  if (!classification) return;
+
+  requireSummaryObjectKeySet(
+    classification,
+    ["totalRows", "tenantRows", "nullTenantRows", "nullTenantBreakdown"],
+    failures,
+    "productionEvidenceSummary.summary.reports.auditNullTenant.auditNullTenant",
+  );
+  requireObjectIntegerAtLeast(
+    classification,
+    failures,
+    "productionEvidenceSummary.summary.reports.auditNullTenant.auditNullTenant.totalRows",
+    "totalRows",
+    0,
+  );
+  requireObjectIntegerAtLeast(
+    classification,
+    failures,
+    "productionEvidenceSummary.summary.reports.auditNullTenant.auditNullTenant.tenantRows",
+    "tenantRows",
+    0,
+  );
+  requireObjectIntegerAtLeast(
+    classification,
+    failures,
+    "productionEvidenceSummary.summary.reports.auditNullTenant.auditNullTenant.nullTenantRows",
+    "nullTenantRows",
+    0,
+  );
+  if (
+    Number.isInteger(classification.totalRows) &&
+    Number.isInteger(classification.tenantRows) &&
+    Number.isInteger(classification.nullTenantRows) &&
+    classification.totalRows !== classification.tenantRows + classification.nullTenantRows
+  ) {
+    failures.push(
+      "productionEvidenceSummary.summary.reports.auditNullTenant.auditNullTenant.totalRows tenantRows + nullTenantRows toplamına esit olmali.",
+    );
+  }
+
+  const breakdown = requireNestedObject(
+    classification,
+    failures,
+    "productionEvidenceSummary.summary.reports.auditNullTenant.auditNullTenant.nullTenantBreakdown",
+    "nullTenantBreakdown",
+  );
+  if (!breakdown) return;
+
+  requireSummaryObjectKeySet(
+    breakdown,
+    ["system", "deletedTenant", "unknown"],
+    failures,
+    "productionEvidenceSummary.summary.reports.auditNullTenant.auditNullTenant.nullTenantBreakdown",
+  );
+
+  let breakdownCount = 0;
+  for (const key of ["system", "deletedTenant", "unknown"]) {
+    const item = requireNestedObject(
+      breakdown,
+      failures,
+      `productionEvidenceSummary.summary.reports.auditNullTenant.auditNullTenant.nullTenantBreakdown.${key}`,
+      key,
+    );
+    if (!item) continue;
+    requireSummaryObjectKeySet(
+      item,
+      ["count", "classificationRule"],
+      failures,
+      `productionEvidenceSummary.summary.reports.auditNullTenant.auditNullTenant.nullTenantBreakdown.${key}`,
+    );
+    requireObjectIntegerAtLeast(
+      item,
+      failures,
+      `productionEvidenceSummary.summary.reports.auditNullTenant.auditNullTenant.nullTenantBreakdown.${key}.count`,
+      "count",
+      0,
+    );
+    requireObjectString(
+      item,
+      failures,
+      `productionEvidenceSummary.summary.reports.auditNullTenant.auditNullTenant.nullTenantBreakdown.${key}.classificationRule`,
+      "classificationRule",
+    );
+    if (Number.isInteger(item.count)) breakdownCount += item.count;
+  }
+
+  if (breakdown.unknown?.count !== 0) {
+    failures.push("productionEvidenceSummary.summary.reports.auditNullTenant.auditNullTenant.nullTenantBreakdown.unknown.count 0 olmali.");
+  }
+  if (Number.isInteger(classification.nullTenantRows) && breakdownCount !== classification.nullTenantRows) {
+    failures.push(
+      "productionEvidenceSummary.summary.reports.auditNullTenant.auditNullTenant.nullTenantBreakdown count toplami nullTenantRows degerine esit olmali.",
+    );
+  }
 }
 
 function requireSummaryRateLimit(report, failures) {
@@ -3306,6 +3760,7 @@ function requireLiveStatusGateSourceDate(item, failures, gate, productionEvidenc
     failures.push(`liveStatusEvidence.gates.${gate.label}.source kaynak nesnesi okunamadi.`);
     return;
   }
+  requireLiveStatusGateSourceStatus(sourceScope, failures, gate);
 
   requireMatchingDate(
     item,
@@ -3316,6 +3771,15 @@ function requireLiveStatusGateSourceDate(item, failures, gate, productionEvidenc
     `${gate.source}.${gate.dateKey}`,
     gate.dateKey,
   );
+}
+
+function requireLiveStatusGateSourceStatus(sourceScope, failures, gate) {
+  if (Object.prototype.hasOwnProperty.call(sourceScope, "result") && sourceScope.result !== "PASS") {
+    failures.push(`liveStatusEvidence.gates.${gate.label}.source.result PASS olmali.`);
+  }
+  if (Object.prototype.hasOwnProperty.call(sourceScope, "environment") && sourceScope.environment !== "production") {
+    failures.push(`liveStatusEvidence.gates.${gate.label}.source.environment production olmali.`);
+  }
 }
 
 function requireLiveStatusGateEvidenceReference(
@@ -3525,6 +3989,7 @@ function requireLegal(report, failures) {
     "privacyInventoryPassed",
     "financialRetentionPassed",
     "inlineUploadMigrationPassed",
+    "auditNullTenantPassed",
   ]) {
     requireObjectTrue(value, failures, `legal.${key}`, key);
   }
@@ -3764,6 +4229,14 @@ function resolveTargetHref(value, baseUrl, failures, label) {
       failures.push(`${label} file:// veya https:// URL olmali.`);
       return undefined;
     }
+    if (hasSecretBearingUrlParts(url)) {
+      failures.push(`${label} target URL userinfo, query veya fragment iceremez.`);
+      return undefined;
+    }
+    if (url.protocol === "file:" && isLocalSmokeEvidenceTargetUrl(url)) {
+      failures.push(`${label} artifacts/local altinda olmamali.`);
+      return undefined;
+    }
     return url.href;
   } catch {
     failures.push(`${label} file:// veya https:// URL olmali.`);
@@ -3776,6 +4249,10 @@ function isAllowedEvidenceTargetUrl(url) {
     (url.protocol === "file:" && !isLocalTempEvidenceTargetUrl(url)) ||
     (url.protocol === "https:" && !isPlaceholderEvidenceTargetHost(url.hostname))
   );
+}
+
+function hasSecretBearingUrlParts(url) {
+  return url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "";
 }
 
 function isPlaceholderEvidenceTargetHost(hostname) {
@@ -3795,7 +4272,19 @@ function isPlaceholderEvidenceTargetHost(hostname) {
 
 function isLocalTempEvidenceTargetUrl(url) {
   const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
-  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+  return (
+    path === "/tmp" ||
+    path.startsWith("/tmp/") ||
+    path === "/var/tmp" ||
+    path.startsWith("/var/tmp/") ||
+    path === "/private/tmp" ||
+    path.startsWith("/private/tmp/")
+  );
+}
+
+function isLocalSmokeEvidenceTargetUrl(url) {
+  const path = fileURLToPath(url).replaceAll("\\", "/").replace(/\/+$/g, "") || "/";
+  return path.endsWith("/artifacts/local") || path.includes("/artifacts/local/");
 }
 
 function requireString(report, failures, key) {
@@ -4022,7 +4511,30 @@ function requireObjectStringList(report, failures, label, key, minLength, reject
       failures.push(`${label} production icin ornek/placeholder/redacted deger icermemeli.`);
       return;
     }
+    if (rejectPlaceholders && !allowExampleEvidence && hasRawRecipientToken(item)) {
+      failures.push(`${label} ham e-posta/telefon/push endpoint icermemeli.`);
+      return;
+    }
   }
+}
+
+function requireMaskedRecipientString(value, failures, label) {
+  if (typeof value !== "string" || value.trim() === "") return;
+  if (!value.includes("*")) {
+    failures.push(`${label} maskeli recipient olmali.`);
+  }
+  if (!allowExampleEvidence && hasRawRecipientToken(value)) {
+    failures.push(`${label} ham e-posta/telefon/push endpoint icermemeli.`);
+  }
+}
+
+function hasRawRecipientToken(value) {
+  return (
+    value.includes("@") ||
+    /[^\s@]+@[^\s@]+\.[^\s@]+/.test(value) ||
+    /(?:\+?90[\s-]?)?5\d{2}[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}/.test(value) ||
+    /https?:\/\//i.test(value)
+  );
 }
 
 function requireEmptyArray(report, failures, key, label = key) {
@@ -4086,9 +4598,67 @@ function hasPlaceholderToken(value) {
     "example",
     ".test",
     ".invalid",
+    "test-token",
+    "test-message-id",
+    "dummy",
+    "fake",
+    "sms-provider-message",
     "localhost",
     "127.0.0.1",
   ].some((token) => normalized.includes(token));
+}
+
+function requireRlsEvidenceReferences(references, failures, label) {
+  if (!Array.isArray(references) || references.length === 0) {
+    failures.push(`${label} bos olmayan liste olmali.`);
+    return;
+  }
+
+  for (const [index, reference] of references.entries()) {
+    if (typeof reference !== "string" || reference.trim() === "") {
+      failures.push(`${label}.${index} bos olmayan metin olmali.`);
+      continue;
+    }
+    if (!hasAllowedEvidenceReferencePrefix(reference)) {
+      failures.push(
+        `${label}.${index} artifact:, run:, log:, url:, https://, file://, s3:// veya artifacts/ ile baslayan kalici referans olmali.`,
+      );
+    }
+    if (isLocalSmokeEvidenceReference(reference)) {
+      failures.push(`${label}.${index} local smoke artifact referansi tasimamali.`);
+    }
+  }
+
+  for (const fileName of expectedRlsEvidenceReferenceFileNames) {
+    if (!references.some((reference) => hasEvidenceReferenceFileName(reference, fileName))) {
+      failures.push(`${label} ${fileName} kanıt artifact'ini içermeli.`);
+    }
+  }
+}
+
+function isLocalSmokeEvidenceReference(value) {
+  return typeof value === "string" && value.replaceAll("\\", "/").includes("artifacts/local/");
+}
+
+function hasAllowedEvidenceReferencePrefix(value) {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.startsWith("artifact:") ||
+    normalized.startsWith("run:") ||
+    normalized.startsWith("log:") ||
+    normalized.startsWith("url:") ||
+    normalized.startsWith("https://") ||
+    normalized.startsWith("file://") ||
+    normalized.startsWith("s3://") ||
+    normalized.startsWith("artifacts/")
+  );
+}
+
+function hasEvidenceReferenceFileName(value, fileName) {
+  if (typeof value !== "string") return false;
+  const normalized = value.split(/[?#]/)[0].replaceAll("\\", "/").replace(/\/+$/g, "");
+  return normalized.endsWith(`/${fileName}`) || normalized === fileName;
 }
 
 function fail(failures) {

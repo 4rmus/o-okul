@@ -1,4 +1,5 @@
 import { createHash, randomInt } from "node:crypto";
+import { connect as connectTcp } from "node:net";
 import { redactedUrl, validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
 const apiUrl = process.env.API_URL;
@@ -15,6 +16,10 @@ const otherLoginIp = process.env.RATE_LIMIT_LOGIN_SMOKE_OTHER_IP ?? `203.0.113.$
 const loginEmail = process.env.RATE_LIMIT_LOGIN_SMOKE_EMAIL ?? `rate-limit-smoke-${Date.now()}@example.invalid`;
 const loginUrl = readUrl("RATE_LIMIT_LOGIN_SMOKE_URL", defaultLoginUrl(apiUrl));
 const secondLoginUrl = readUrl("RATE_LIMIT_LOGIN_SMOKE_SECOND_INSTANCE_URL", defaultLoginUrl(secondUrl?.origin));
+const otherIpLoginUrl = readUrl("RATE_LIMIT_LOGIN_SMOKE_OTHER_IP_URL", loginUrl?.href);
+const resetApiLimitBeforeApi = process.env.RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_API === "true";
+const resetApiLimitBeforeLogin = process.env.RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_LOGIN === "true";
+const apiLimitResetIp = process.env.RATE_LIMIT_SMOKE_API_LIMIT_RESET_IP ?? clientIp;
 const expectedRateLimitCode = "RATE_LIMITED";
 const expectedLoginLockCode = "LOGIN_LOCKED";
 
@@ -26,11 +31,25 @@ if (!firstUrl) {
 if (!secondUrl) {
   fail("RATE_LIMIT_SMOKE_SECOND_INSTANCE_URL ikinci API instance veya LB shard URL'i olarak zorunludur.");
 }
-if (!loginUrl || !secondLoginUrl) {
-  fail("RATE_LIMIT_LOGIN_SMOKE_URL ve RATE_LIMIT_LOGIN_SMOKE_SECOND_INSTANCE_URL belirlenmeli.");
+if (!loginUrl || !secondLoginUrl || !otherIpLoginUrl) {
+  fail("RATE_LIMIT_LOGIN_SMOKE_URL, RATE_LIMIT_LOGIN_SMOKE_SECOND_INSTANCE_URL ve RATE_LIMIT_LOGIN_SMOKE_OTHER_IP_URL belirlenmeli.");
 }
+if (evidenceFile) {
+  requireEvidenceSmokeUrl("RATE_LIMIT_SMOKE_URL", firstUrl);
+  requireEvidenceSmokeUrl("RATE_LIMIT_SMOKE_SECOND_INSTANCE_URL", secondUrl);
+  requireEvidenceSmokeUrl("RATE_LIMIT_LOGIN_SMOKE_URL", loginUrl);
+  requireEvidenceSmokeUrl("RATE_LIMIT_LOGIN_SMOKE_SECOND_INSTANCE_URL", secondLoginUrl);
+}
+requireDifferentUrls("RATE_LIMIT_SMOKE_URL", firstUrl, "RATE_LIMIT_SMOKE_SECOND_INSTANCE_URL", secondUrl);
+requireDifferentUrls("RATE_LIMIT_LOGIN_SMOKE_URL", loginUrl, "RATE_LIMIT_LOGIN_SMOKE_SECOND_INSTANCE_URL", secondLoginUrl);
 
+if (resetApiLimitBeforeApi) {
+  await resetApiRateLimitKey(apiLimitResetIp);
+}
 const apiLimitResult = await verifyApiRateLimit();
+if (resetApiLimitBeforeLogin) {
+  await resetApiRateLimitKey(apiLimitResetIp);
+}
 const loginLimitResult = await verifyLoginAttemptLimiter();
 
 await writeSmokeEvidence(evidenceFile, {
@@ -58,6 +77,9 @@ await writeSmokeEvidence(evidenceFile, {
   evidenceReferences: [
     process.env.RATE_LIMIT_SMOKE_EVIDENCE_REFERENCE ?? "rate-limit-smoke-output",
     process.env.RATE_LIMIT_SMOKE_REDIS_REFERENCE ?? "redis-shared-window-observation",
+    ...(otherIpLoginUrl.href !== loginUrl.href ? ["login-other-ip-direct-negative"] : []),
+    ...(resetApiLimitBeforeApi ? [`redis-api-limit-pre-reset:${sha256(apiLimitResetIp)}`] : []),
+    ...(resetApiLimitBeforeLogin ? [`redis-api-limit-reset:${sha256(apiLimitResetIp)}`] : []),
   ],
   gaps: [],
 });
@@ -127,7 +149,7 @@ async function verifyLoginAttemptLimiter() {
     fail(`Login limiter hata kodu ${expectedLoginLockCode} olmali.`);
   }
 
-  const otherIpResponse = await postLogin(loginUrl, loginEmail, otherLoginIp);
+  const otherIpResponse = await postLogin(otherIpLoginUrl, loginEmail, otherLoginIp);
 
   return {
     clientIpHash: sha256(loginClientIp),
@@ -210,6 +232,21 @@ function defaultLoginUrl(baseUrl) {
   return url.href;
 }
 
+function requireEvidenceSmokeUrl(envKey, url) {
+  if (url.protocol !== "https:") {
+    fail(`${envKey} kalici kanit yazarken https:// olmali.`);
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    fail(`${envKey} kalici kanit yazarken userinfo, query veya fragment tasimamali.`);
+  }
+}
+
+function requireDifferentUrls(firstKey, first, secondKey, second) {
+  if (first.href === second.href) {
+    fail(`${secondKey} ${firstKey} ile ayni URL olamaz; iki gercek API instance veya LB shard URL'i gerekir.`);
+  }
+}
+
 function readPositiveInteger(value, fallback) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
@@ -217,6 +254,84 @@ function readPositiveInteger(value, fallback) {
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+async function resetApiRateLimitKey(ip) {
+  const redisUrl = readRedisUrl();
+  const key = `${process.env.API_RATE_LIMIT_KEY_PREFIX || process.env.QUEUE_PREFIX || "uzman_hocam"}:api-rate-limit:${sha256(ip)}`;
+  const response = await sendRedisCommand(redisUrl, ["DEL", key]);
+  if (typeof response !== "number") {
+    fail("RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_LOGIN Redis DEL yaniti sayisal olmali.");
+  }
+}
+
+function readRedisUrl() {
+  const value = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    fail("REDIS_URL gecerli redis:// URL olmali.");
+  }
+
+  if (url.protocol !== "redis:") {
+    fail("REDIS_URL redis:// URL olmali.");
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    fail("REDIS_URL rate-limit smoke icin userinfo, query veya fragment tasimamali.");
+  }
+  return url;
+}
+
+function sendRedisCommand(url, parts) {
+  return new Promise((resolveResponse, rejectResponse) => {
+    const socket = connectTcp({
+      host: url.hostname,
+      port: Number(url.port || 6379),
+      timeout: 2_000,
+    });
+    let buffer = "";
+
+    socket.on("connect", () => {
+      socket.write(encodeRedisCommand(parts));
+    });
+    socket.on("data", (chunk) => {
+      buffer += chunk.toString("utf8");
+      let parsed;
+      try {
+        parsed = parseRedisReply(buffer);
+      } catch (error) {
+        socket.destroy(error);
+        return;
+      }
+      if (parsed.done) {
+        socket.end();
+        resolveResponse(parsed.value);
+      }
+    });
+    socket.on("timeout", () => {
+      socket.destroy(new Error("Redis smoke reset timeout"));
+    });
+    socket.on("error", rejectResponse);
+  }).catch((error) => fail(`API rate limit smoke Redis reset basarisiz: ${error.message}`));
+}
+
+function encodeRedisCommand(parts) {
+  return `*${parts.length}\r\n${parts.map((part) => `$${Buffer.byteLength(part)}\r\n${part}\r\n`).join("")}`;
+}
+
+function parseRedisReply(value) {
+  if (value.startsWith(":")) {
+    const end = value.indexOf("\r\n");
+    if (end === -1) return { done: false };
+    return { done: true, value: Number(value.slice(1, end)) };
+  }
+  if (value.startsWith("-")) {
+    const end = value.indexOf("\r\n");
+    if (end === -1) return { done: false };
+    throw new Error(value.slice(1, end));
+  }
+  return { done: false };
 }
 
 function fail(message) {

@@ -115,12 +115,20 @@ function requireAllowedEvidenceTargetUrl(url) {
     fail(["DEPLOYMENT_ROLLBACK_TARGET file:// veya https:// URL olmali."]);
   }
 
+  if (url.username || url.password || url.search || url.hash) {
+    fail(["DEPLOYMENT_ROLLBACK_TARGET userinfo, query veya fragment tasimamali."]);
+  }
+
   if (url.protocol === "https:" && isPlaceholderEvidenceTargetHost(url.hostname)) {
     fail(["DEPLOYMENT_ROLLBACK_TARGET production kaniti icin gercek https host olmali."]);
   }
 
   if (url.protocol === "file:" && isLocalTempEvidenceTargetUrl(url)) {
     fail(["DEPLOYMENT_ROLLBACK_TARGET production kaniti icin lokal temp path olmamali."]);
+  }
+
+  if (url.protocol === "file:" && isLocalSmokeEvidenceTargetUrl(url)) {
+    fail(["DEPLOYMENT_ROLLBACK_TARGET production kaniti icin artifacts/local altinda olmamali."]);
   }
 }
 
@@ -141,7 +149,19 @@ function isPlaceholderEvidenceTargetHost(hostname) {
 
 function isLocalTempEvidenceTargetUrl(url) {
   const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
-  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+  return (
+    path === "/tmp" ||
+    path.startsWith("/tmp/") ||
+    path === "/var/tmp" ||
+    path.startsWith("/var/tmp/") ||
+    path === "/private/tmp" ||
+    path.startsWith("/private/tmp/")
+  );
+}
+
+function isLocalSmokeEvidenceTargetUrl(url) {
+  const path = fileURLToPath(url).replaceAll("\\", "/").replace(/\/+$/g, "") || "/";
+  return path.endsWith("/artifacts/local") || path.includes("/artifacts/local/");
 }
 
 function parseJson(value) {
@@ -346,8 +366,36 @@ function requireServices(report, failures) {
     requireObjectString(item, failures, `${service}.imageTag`, "imageTag");
     requireObjectString(item, failures, `${service}.evidenceReference`, "evidenceReference");
     requireObjectNonPlaceholderString(item, failures, `${service}.imageTag`, "imageTag");
+    requireServiceRollbackImageVersion(report, item, failures, service);
     requireObjectNonPlaceholderString(item, failures, `${service}.evidenceReference`, "evidenceReference");
+    requireObjectNoSecretBearingReference(item, failures, `${service}.evidenceReference`, "evidenceReference");
   }
+}
+
+function requireServiceRollbackImageVersion(report, item, failures, service) {
+  const expectedVersion = getImageVersion(report.rollbackImageTag);
+  const actualVersion = getImageVersion(item.imageTag);
+  if (!expectedVersion || !actualVersion) return;
+
+  if (actualVersion !== expectedVersion) {
+    failures.push(`${service}.imageTag rollbackImageTag versiyonuyla eşleşmeli.`);
+  }
+}
+
+function getImageVersion(value) {
+  if (typeof value !== "string" || value.trim() === "") return undefined;
+
+  const normalized = value.trim();
+  const digestIndex = normalized.indexOf("@sha256:");
+  if (digestIndex !== -1) {
+    return normalized.slice(digestIndex);
+  }
+
+  const lastSlash = normalized.lastIndexOf("/");
+  const lastColon = normalized.lastIndexOf(":");
+  if (lastColon <= lastSlash) return undefined;
+
+  return normalized.slice(lastColon + 1);
 }
 
 function requireEvidenceReferences(report, failures) {
@@ -364,6 +412,10 @@ function requireEvidenceReferences(report, failures) {
     }
     if (!allowExampleEvidence && hasPlaceholderToken(item)) {
       failures.push("evidenceReferences production kanıtı için örnek/placeholder değer içermemeli.");
+      return;
+    }
+    if (hasSecretBearingReference(item)) {
+      failures.push("evidenceReferences userinfo, query veya fragment tasimamali.");
       return;
     }
   }
@@ -408,6 +460,34 @@ function hasPlaceholderToken(value) {
     "localhost",
     "127.0.0.1",
   ].some((token) => normalized.includes(token));
+}
+
+function requireObjectNoSecretBearingReference(report, failures, label, key) {
+  const value = report[key];
+  if (typeof value !== "string" || value.trim() === "") return;
+
+  if (hasSecretBearingReference(value)) {
+    failures.push(`${label} userinfo, query veya fragment tasimamali.`);
+  }
+}
+
+function hasSecretBearingReference(value) {
+  const normalized = value.trim();
+  if (normalized.includes("?") || normalized.includes("#")) {
+    return true;
+  }
+
+  const urlCandidate = normalized.toLowerCase().startsWith("url:") ? normalized.slice(4) : normalized;
+  if (!/^(https|file|s3):\/\//i.test(urlCandidate)) {
+    return false;
+  }
+
+  try {
+    const url = new URL(urlCandidate);
+    return Boolean(url.username || url.password || url.search || url.hash);
+  } catch {
+    return false;
+  }
 }
 
 function fail(failures) {

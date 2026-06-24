@@ -257,7 +257,14 @@ function assertExistingFileArtifact(file) {
 
 function isLocalTempPath(path) {
   const normalized = path.replace(/\/+$/g, "") || "/";
-  return normalized === "/tmp" || normalized.startsWith("/tmp/") || normalized === "/var/tmp" || normalized.startsWith("/var/tmp/");
+  return (
+    normalized === "/tmp" ||
+    normalized.startsWith("/tmp/") ||
+    normalized === "/var/tmp" ||
+    normalized.startsWith("/var/tmp/") ||
+    normalized === "/private/tmp" ||
+    normalized.startsWith("/private/tmp/")
+  );
 }
 
 function fail(message) {

@@ -76,7 +76,14 @@ function assertParentPathAllowed(parentPath) {
 
 function isLocalTempPath(filePath) {
   const normalized = filePath.replace(/\/+$/g, "") || "/";
-  return normalized === "/tmp" || normalized.startsWith("/tmp/") || normalized === "/var/tmp" || normalized.startsWith("/var/tmp/");
+  return (
+    normalized === "/tmp" ||
+    normalized.startsWith("/tmp/") ||
+    normalized === "/var/tmp" ||
+    normalized.startsWith("/var/tmp/") ||
+    normalized === "/private/tmp" ||
+    normalized.startsWith("/private/tmp/")
+  );
 }
 
 async function findSuccessfulCiRun(repo, sha) {

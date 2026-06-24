@@ -1,0 +1,17 @@
+{
+  "result": "PASS",
+  "check": "live_ui_worker_report_smoke",
+  "generatedAt": "2026-06-15T09:45:00.000Z",
+  "environment": "production",
+  "checkedAt": "2026-06-15T09:45:00.000Z",
+  "examHash": "1111111111111111111111111111111111111111111111111111111111111111",
+  "firstStudentHash": "2222222222222222222222222222222222222222222222222222222222222222",
+  "reportStatus": "READY",
+  "downloadedArtifacts": ["xlsx", "pdf"],
+  "karnePdfDownloaded": true,
+  "excelDownloaded": true,
+  "studentPortalViewed": true,
+  "guardianPortalViewed": true,
+  "commandsPassed": ["pnpm live:ui-worker:smoke"],
+  "gaps": []
+}

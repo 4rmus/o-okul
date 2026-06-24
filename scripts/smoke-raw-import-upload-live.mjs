@@ -9,6 +9,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { NestFactory } from "@nestjs/core";
+import { hashPassword } from "../apps/api/dist/auth/auth-user-store.js";
 import { AppModule } from "../apps/api/dist/app.module.js";
 import { configureApiApp } from "../apps/api/dist/http/configure-api-app.js";
 import { rawImportQueueProducerToken } from "../apps/api/dist/exam/raw-import-queue.service.js";
@@ -26,7 +27,11 @@ const queuePrefix = process.env.QUEUE_PREFIX ?? `raw-import-smoke-${Date.now()}`
 const s3Credentials = resolveS3Credentials();
 const runId = randomUUID();
 const tenantId = "tenant-a";
+const userId = `user-raw-import-smoke-${runId}`;
+const membershipId = `membership-raw-import-smoke-${runId}`;
 const examId = `exam-smoke-${runId}`;
+const smokeEmail = `raw-import-smoke-${runId}@example.test`;
+const smokePassword = "password";
 
 process.env.DATABASE_URL = databaseUrl;
 process.env.REDIS_URL = redisUrl;
@@ -98,7 +103,7 @@ try {
     processedJob.name !== "excel-import" ||
     processedJob.payload.tenantId !== tenantId ||
     processedJob.payload.entityId !== rawImport.id ||
-    processedJob.payload.contentHash !== rawImport.sha256
+    !processedJob.payload.contentHash.startsWith(`${rawImport.sha256}-`)
   ) {
     throw new Error("RAW_IMPORT_SMOKE_QUEUE_PAYLOAD_MISMATCH");
   }
@@ -127,6 +132,16 @@ async function seedExam() {
        VALUES ($1, $2, $3, 'ACTIVE', now())
        ON CONFLICT ("id") DO UPDATE SET "updatedAt" = now()`,
       [tenantId, "Smoke Tenant A", "smoke-tenant-a"],
+    );
+    await client.query(
+      `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
+       VALUES ($1, $2, 'Raw Import Smoke Admin', $3, now())`,
+      [userId, smokeEmail, hashPassword(smokePassword)],
+    );
+    await client.query(
+      `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
+       VALUES ($1, $2, $3, 'TENANT_ADMIN', now())`,
+      [membershipId, tenantId, userId],
     );
     await client.query(
       `INSERT INTO "Exam" ("id", "tenantId", "title", "status", "updatedAt")
@@ -181,7 +196,7 @@ async function login(baseUrl) {
   const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email: "admin-a@example.test", password: "password" }),
+    body: JSON.stringify({ email: smokeEmail, password: smokePassword }),
   });
   if (!response.ok) {
     throw new Error(`RAW_IMPORT_SMOKE_LOGIN_FAILED: ${response.status}`);

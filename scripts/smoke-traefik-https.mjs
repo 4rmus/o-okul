@@ -9,6 +9,12 @@ const allowInsecureTls = process.env.TRAEFIK_HTTPS_SMOKE_ALLOW_INSECURE_TLS === 
 const evidenceFile = process.env.TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
 const checkedAt = new Date().toISOString();
 
+if (allowInsecureTls && evidenceFile) {
+  fail(
+    "TRAEFIK_HTTPS_SMOKE_ALLOW_INSECURE_TLS=true yalnız teşhis içindir; self-signed/IP smoke PASS evidence artifact'i yazamaz.",
+  );
+}
+
 await validateSmokeEvidenceOutputTarget(evidenceFile);
 
 if (!smokeUrl) {

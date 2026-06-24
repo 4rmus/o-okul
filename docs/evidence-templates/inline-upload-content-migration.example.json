@@ -74,13 +74,48 @@
       }
     ]
   },
+  "orphanAudit": {
+    "result": "PASS",
+    "status": "NO_ORPHANS",
+    "environment": "staging",
+    "checkedAt": "2026-05-31T09:45:00.000Z",
+    "bucketVerified": true,
+    "subjects": [
+      {
+        "subject": "homework_material_files",
+        "prefix": "homework-material-files/",
+        "listedObjects": 4,
+        "dbReferencedObjects": 4,
+        "referencedObjectsPresent": 4,
+        "dbReferencedMissingObjects": 0,
+        "orphanObjects": 0,
+        "invalidKeyObjects": 0,
+        "legacyDbStorageKeyRows": 0
+      },
+      {
+        "subject": "support_ticket_attachments",
+        "prefix": "support-ticket-attachments/",
+        "listedObjects": 2,
+        "dbReferencedObjects": 2,
+        "referencedObjectsPresent": 2,
+        "dbReferencedMissingObjects": 0,
+        "orphanObjects": 0,
+        "invalidKeyObjects": 0,
+        "legacyDbStorageKeyRows": 0
+      }
+    ],
+    "commandsPassed": ["pnpm inline-upload-content:orphan-audit"],
+    "gaps": []
+  },
   "commandsPassed": [
     "pnpm inline-upload-content:audit",
-    "INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true pnpm inline-upload-content:migrate"
+    "INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true pnpm inline-upload-content:migrate",
+    "pnpm inline-upload-content:orphan-audit"
   ],
   "evidenceReferences": [
     "artifacts/example/inline-upload-content/dry-run.json",
-    "artifacts/example/inline-upload-content/migrated.json"
+    "artifacts/example/inline-upload-content/migrated.json",
+    "artifacts/example/inline-upload-content/orphan-audit.json"
   ],
   "gaps": []
 }

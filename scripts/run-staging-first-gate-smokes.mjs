@@ -8,6 +8,9 @@ const outputDir = resolve(readArgValue("--output-dir") ?? "artifacts/staging/fir
 if (isLocalTempPath(outputDir)) {
   fail("staging:first-gates:smoke output-dir lokal temp path olmamalı.");
 }
+if (isLocalSmokePath(outputDir)) {
+  fail("staging:first-gates:smoke output-dir artifacts/local altında olmamalı.");
+}
 assertOutputPathAllowed(outputDir);
 const env = {
   ...process.env,
@@ -135,7 +138,19 @@ function assertOutputPathAllowed(directory) {
 
 function isLocalTempPath(path) {
   const normalized = path.replace(/\/+$/g, "") || "/";
-  return normalized === "/tmp" || normalized.startsWith("/tmp/") || normalized === "/var/tmp" || normalized.startsWith("/var/tmp/");
+  return (
+    normalized === "/tmp" ||
+    normalized.startsWith("/tmp/") ||
+    normalized === "/var/tmp" ||
+    normalized.startsWith("/var/tmp/") ||
+    normalized === "/private/tmp" ||
+    normalized.startsWith("/private/tmp/")
+  );
+}
+
+function isLocalSmokePath(path) {
+  const normalized = path.replaceAll("\\", "/").replace(/\/+$/g, "") || "/";
+  return normalized.endsWith("/artifacts/local") || normalized.includes("/artifacts/local/");
 }
 
 function validateEvidenceFile({ label, evidenceFile, expectedCheck }) {

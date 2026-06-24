@@ -2,6 +2,8 @@ import { lstat, readFile } from "node:fs/promises";
 import { dirname, parse, resolve } from "node:path";
 
 const enabled = process.env.NEXT_E2E_LIVE_UI_WORKER;
+const baseUrl = process.env.NEXT_E2E_BASE_URL;
+const skipWebServer = process.env.NEXT_E2E_SKIP_WEB_SERVER;
 const evidencePath = process.env.LIVE_UI_WORKER_EVIDENCE_PATH;
 const resultEvidencePath = process.env.LIVE_UI_WORKER_RESULT_EVIDENCE_FILE ?? process.env.LIVE_UI_WORKER_RESULT_EVIDENCE_PATH;
 const resultEvidenceEnvironment = process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV;
@@ -10,6 +12,12 @@ const failures = [];
 
 if (enabled !== "1") {
   failures.push("NEXT_E2E_LIVE_UI_WORKER=1 olmalı.");
+}
+
+validateBaseUrl(baseUrl, failures);
+
+if (skipWebServer !== "1") {
+  failures.push("NEXT_E2E_SKIP_WEB_SERVER=1 olmalı.");
 }
 
 if (!evidencePath) {
@@ -46,6 +54,10 @@ async function validateEvidencePath(filePath, collectedFailures) {
     collectedFailures.push("LIVE_UI_WORKER_EVIDENCE_PATH lokal temp path olmamalı.");
     return;
   }
+  if (!hasPrivatePathSegment(filePath)) {
+    collectedFailures.push("LIVE_UI_WORKER_EVIDENCE_PATH private runtime input dizini altında olmalı.");
+    return;
+  }
 
   await assertParentPathAllowed(dirname(filePath), collectedFailures, "LIVE_UI_WORKER_EVIDENCE_PATH");
   if (collectedFailures.length > 0) return;
@@ -60,6 +72,10 @@ async function validateEvidencePath(filePath, collectedFailures) {
 
   if (stat.isSymbolicLink() || !stat.isFile()) {
     collectedFailures.push("LIVE_UI_WORKER_EVIDENCE_PATH symlink olmayan file artifact olmalı.");
+    return;
+  }
+  if (!isOwnerReadWriteOnly(stat.mode)) {
+    collectedFailures.push("LIVE_UI_WORKER_EVIDENCE_PATH sadece owner read/write 0600 izniyle saklanmalı.");
   }
 }
 
@@ -125,7 +141,57 @@ function parentPathInvalidMessage(label) {
 }
 
 function isLocalTempPath(filePath) {
-  return filePath === "/tmp" || filePath.startsWith("/tmp/") || filePath === "/var/tmp" || filePath.startsWith("/var/tmp/");
+  return (
+    filePath === "/tmp" ||
+    filePath.startsWith("/tmp/") ||
+    filePath === "/var/tmp" ||
+    filePath.startsWith("/var/tmp/") ||
+    filePath === "/private/tmp" ||
+    filePath.startsWith("/private/tmp/")
+  );
+}
+
+function hasPrivatePathSegment(filePath) {
+  return filePath.split(/[\\/]+/).filter(Boolean).includes("private");
+}
+
+function validateBaseUrl(value, collectedFailures) {
+  if (!value) {
+    collectedFailures.push("NEXT_E2E_BASE_URL gerçek https staging/prod URL olmalı.");
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    collectedFailures.push("NEXT_E2E_BASE_URL gerçek https staging/prod URL olmalı.");
+    return;
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username ||
+    parsed.password ||
+    parsed.search ||
+    parsed.hash ||
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "0.0.0.0" ||
+    hostname === "::1" ||
+    hostname.endsWith(".test") ||
+    hostname.includes("example") ||
+    hostname.includes("redacted") ||
+    hostname.includes("placeholder") ||
+    hostname.includes("__set")
+  ) {
+    collectedFailures.push("NEXT_E2E_BASE_URL gerçek https staging/prod URL olmalı.");
+  }
+}
+
+function isOwnerReadWriteOnly(mode) {
+  return (mode & 0o777) === 0o600;
 }
 
 function parseJson(value, collectedFailures) {

@@ -23,6 +23,94 @@
       "evidenceReference": "provider-console-or-contract-reference"
     },
     {
+      "label": "Live exam cycle kanıtı",
+      "status": "PASS",
+      "command": "pnpm live:exam-cycle:check",
+      "source": "productionEvidenceSummary.reports.liveExamCycle",
+      "checkedAt": "2026-05-30",
+      "evidenceReference": "artifact:artifacts/example/live-exam-cycle/isem-optical-pipeline.log"
+    },
+    {
+      "label": "iSEM optical pipeline kanıtı",
+      "status": "PASS",
+      "command": "pnpm isem-optical-pipeline:evidence-check",
+      "source": "productionEvidenceSummary.reports.isemOpticalPipeline",
+      "checkedAt": "2026-06-15T09:40:00.000Z",
+      "evidenceReference": "production-evidence-summary.example.json#/reports/isemOpticalPipeline"
+    },
+    {
+      "label": "Live UI-worker result kanıtı",
+      "status": "PASS",
+      "command": "pnpm live:ui-worker:result-check",
+      "source": "productionEvidenceSummary.reports.liveUiWorkerResult",
+      "checkedAt": "2026-06-15T09:45:00.000Z",
+      "evidenceReference": "production-evidence-summary.example.json#/reports/liveUiWorkerResult"
+    },
+    {
+      "label": "KVKK inventory kanıtı",
+      "status": "PASS",
+      "command": "pnpm privacy:inventory:check",
+      "source": "productionEvidenceSummary.reports.kvkkInventory",
+      "checkedAt": "2026-05-30",
+      "evidenceReference": "production-evidence-summary.example.json#/reports/kvkkInventory"
+    },
+    {
+      "label": "RLS live kanıtı",
+      "status": "PASS",
+      "command": "pnpm rls:live:check",
+      "source": "productionEvidenceSummary.reports.rlsLive",
+      "checkedAt": "2026-05-31T11:30:00.000Z",
+      "evidenceReference": "artifacts/example/rls-live/db-rls-check.log"
+    },
+    {
+      "label": "Inline upload migration kanıtı",
+      "status": "PASS",
+      "command": "pnpm inline-upload-content:check",
+      "source": "productionEvidenceSummary.reports.inlineUploadMigration",
+      "checkedAt": "2026-05-31T10:00:00.000Z",
+      "evidenceReference": "artifacts/example/inline-upload-content/dry-run.json"
+    },
+    {
+      "label": "Audit null tenant kanıtı",
+      "status": "PASS",
+      "command": "pnpm audit-null-tenant:check",
+      "source": "productionEvidenceSummary.reports.auditNullTenant",
+      "checkedAt": "2026-05-31T10:30:00.000Z",
+      "evidenceReference": "artifacts/example/audit-null-tenant/classification-query.json"
+    },
+    {
+      "label": "Rate limit Redis kanıtı",
+      "status": "PASS",
+      "command": "pnpm rate-limit:check",
+      "source": "productionEvidenceSummary.reports.rateLimit",
+      "checkedAt": "2026-05-31T11:00:00.000Z",
+      "evidenceReference": "artifacts/example/rate-limit/rate-limit-smoke.json"
+    },
+    {
+      "label": "SMS provider kanıtı",
+      "status": "PASS",
+      "command": "pnpm sms:smoke",
+      "source": "productionEvidenceSummary.smokeEvidence.smsProvider",
+      "checkedAt": "2026-06-15T09:05:00.000Z",
+      "evidenceReference": "production-evidence-summary.example.json#/smokeEvidence/smsProvider"
+    },
+    {
+      "label": "Notification provider kanıtı",
+      "status": "PASS",
+      "command": "pnpm notification:smoke",
+      "source": "productionEvidenceSummary.smokeEvidence.notificationProvider",
+      "checkedAt": "2026-06-15T09:10:00.000Z",
+      "evidenceReference": "production-evidence-summary.example.json#/smokeEvidence/notificationProvider"
+    },
+    {
+      "label": "Report generation perf kanıtı",
+      "status": "PASS",
+      "command": "pnpm report-generation:perf",
+      "source": "productionEvidenceSummary.smokeEvidence.reportGeneration",
+      "checkedAt": "2026-06-15T09:35:00.000Z",
+      "evidenceReference": "production-evidence-summary.example.json#/smokeEvidence/reportGeneration"
+    },
+    {
       "label": "Staging/prod UAT",
       "status": "PASS",
       "command": "pnpm uat:check",

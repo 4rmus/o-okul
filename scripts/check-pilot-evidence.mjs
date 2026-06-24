@@ -89,6 +89,9 @@ try {
 }
 
 requireAllowedEvidenceTargetUrl(targetUrl);
+if (hasSecretBearingUrlParts(targetUrl)) {
+  fail(["PILOT_EVIDENCE_TARGET production evidence target URL userinfo, query veya fragment içeremez."]);
+}
 
 const report = await readJsonTarget(targetUrl);
 const failures = validateReport(report);
@@ -166,6 +169,10 @@ function requireAllowedEvidenceTargetUrl(url) {
   if (url.protocol === "file:" && isLocalTempEvidenceTargetUrl(url)) {
     fail(["PILOT_EVIDENCE_TARGET production kaniti icin lokal temp path olmamali."]);
   }
+
+  if (url.protocol === "file:" && isLocalSmokeEvidenceTargetUrl(url)) {
+    fail(["PILOT_EVIDENCE_TARGET production kaniti icin artifacts/local altinda olmamali."]);
+  }
 }
 
 function isPlaceholderEvidenceTargetHost(hostname) {
@@ -183,9 +190,25 @@ function isPlaceholderEvidenceTargetHost(hostname) {
   );
 }
 
+function hasSecretBearingUrlParts(url) {
+  return url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "";
+}
+
 function isLocalTempEvidenceTargetUrl(url) {
   const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
-  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+  return (
+    path === "/tmp" ||
+    path.startsWith("/tmp/") ||
+    path === "/var/tmp" ||
+    path.startsWith("/var/tmp/") ||
+    path === "/private/tmp" ||
+    path.startsWith("/private/tmp/")
+  );
+}
+
+function isLocalSmokeEvidenceTargetUrl(url) {
+  const path = fileURLToPath(url).replaceAll("\\", "/").replace(/\/+$/g, "") || "/";
+  return path.endsWith("/artifacts/local") || path.includes("/artifacts/local/");
 }
 
 function parseJson(value) {

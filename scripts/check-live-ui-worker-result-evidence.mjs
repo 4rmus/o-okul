@@ -100,6 +100,10 @@ function requireAllowedEvidenceTargetUrl(url) {
   if (url.protocol === "file:" && isLocalTempEvidenceTargetUrl(url)) {
     fail(["LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET production kanıtı için lokal temp path olmamalı."]);
   }
+
+  if (url.protocol === "file:" && isLocalSmokeEvidenceTargetUrl(url)) {
+    fail(["LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET production kanıtı için artifacts/local altında olmamalı."]);
+  }
 }
 
 function isPlaceholderEvidenceTargetHost(hostname) {
@@ -119,7 +123,19 @@ function isPlaceholderEvidenceTargetHost(hostname) {
 
 function isLocalTempEvidenceTargetUrl(url) {
   const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
-  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+  return (
+    path === "/tmp" ||
+    path.startsWith("/tmp/") ||
+    path === "/var/tmp" ||
+    path.startsWith("/var/tmp/") ||
+    path === "/private/tmp" ||
+    path.startsWith("/private/tmp/")
+  );
+}
+
+function isLocalSmokeEvidenceTargetUrl(url) {
+  const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
+  return path.includes("/artifacts/local/");
 }
 
 function parseJson(value) {
