@@ -113,12 +113,20 @@ function requireAllowedEvidenceTargetUrl(url) {
     fail(["OBSERVABILITY_UAT_TARGET file:// veya https:// URL olmali."]);
   }
 
+  if (url.username || url.password || url.search || url.hash) {
+    fail(["OBSERVABILITY_UAT_TARGET userinfo, query veya fragment tasimamali."]);
+  }
+
   if (url.protocol === "https:" && isPlaceholderEvidenceTargetHost(url.hostname)) {
     fail(["OBSERVABILITY_UAT_TARGET production kaniti icin gercek https host olmali."]);
   }
 
   if (url.protocol === "file:" && isLocalTempEvidenceTargetUrl(url)) {
     fail(["OBSERVABILITY_UAT_TARGET production kaniti icin lokal temp path olmamali."]);
+  }
+
+  if (url.protocol === "file:" && isLocalSmokeEvidenceTargetUrl(url)) {
+    fail(["OBSERVABILITY_UAT_TARGET production kaniti icin artifacts/local altinda olmamali."]);
   }
 }
 
@@ -139,7 +147,19 @@ function isPlaceholderEvidenceTargetHost(hostname) {
 
 function isLocalTempEvidenceTargetUrl(url) {
   const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
-  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+  return (
+    path === "/tmp" ||
+    path.startsWith("/tmp/") ||
+    path === "/var/tmp" ||
+    path.startsWith("/var/tmp/") ||
+    path === "/private/tmp" ||
+    path.startsWith("/private/tmp/")
+  );
+}
+
+function isLocalSmokeEvidenceTargetUrl(url) {
+  const path = fileURLToPath(url).replaceAll("\\", "/").replace(/\/+$/g, "") || "/";
+  return path.endsWith("/artifacts/local") || path.includes("/artifacts/local/");
 }
 
 function parseJson(value) {

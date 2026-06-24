@@ -50,7 +50,54 @@ const guardianStudentRecordRequired = [
 ];
 const guardianStudentDetailStudentRequired = ["id", "firstName", "lastName", "status", "hasPortalUser"];
 const paymentInstallmentStatuses = ["PENDING", "PAID", "OVERDUE", "CANCELED"];
+const paymentPlanWithInstallmentsRequired = ["id", "tenantId", "studentId", "title", "totalAmount", "currency", "createdAt", "installments"];
+const paymentPlanPortalForbiddenDeep = [
+  "birthDate",
+  "contentBase64",
+  "downloadUrl",
+  "email",
+  "fileBase64",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "objectKey",
+  "password",
+  "phone",
+  "photoKey",
+  "rawRow",
+  "refreshToken",
+  "s3Key",
+  "storageKey",
+  "token",
+  "tokenHash",
+  "userId",
+];
 const parserConfigSuggestionRequestAlternatives = [["sampleText"], ["fileBase64"], ["preset"]];
+const parserDelimiters = ["COMMA", "FIXED", "PIPE", "TAB"];
+const opticalFormTemplateRecordRequired = [
+  "id",
+  "tenantId",
+  "name",
+  "version",
+  "encoding",
+  "delimiter",
+  "skipHeaderLines",
+  "fieldMapping",
+  "status",
+  "createdAt",
+  "updatedAt",
+];
+const opticalFormTemplateForbiddenDeep = [
+  "contentBase64",
+  "fileBase64",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "rawRow",
+  "sampleText",
+  "token",
+  "tokenHash",
+];
 const rawImportEvaluationStatuses = ["COMPLETED", "RUNNING"];
 const rawImportQuarantineStatuses = ["OPEN", "RESOLVED"];
 const rawImportQuarantineRecordRequired = [
@@ -271,6 +318,82 @@ const examStatuses = ["DRAFT", "PUBLISHED"];
 const examParticipantStatuses = ["REGISTERED", "ATTENDED", "ABSENT"];
 const supportTicketPriorities = ["HIGH", "LOW", "NORMAL"];
 const supportTicketStatuses = ["CLOSED", "IN_PROGRESS", "OPEN", "RESOLVED"];
+const messageTemplateForbiddenDeep = [
+  "birthDate",
+  "contentBase64",
+  "deletedAt",
+  "downloadUrl",
+  "email",
+  "fileBase64",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "objectKey",
+  "phone",
+  "photoKey",
+  "rawRow",
+  "s3Key",
+  "storageKey",
+  "token",
+  "userId",
+];
+const messageTemplateRequired = ["id", "tenantId", "name", "channel", "body"];
+const messageTemplateChannels = ["SMS"];
+const identityInvitationSubjectTypes = ["GUARDIAN", "STUDENT", "TEACHER"];
+const identityInvitationStatuses = ["ACCEPTED", "PENDING"];
+const identityInvitationRecordRequired = [
+  "id",
+  "tenantId",
+  "subjectType",
+  "subjectId",
+  "email",
+  "name",
+  "role",
+  "status",
+  "expiresAt",
+  "createdAt",
+  "updatedAt",
+];
+const identityInvitationResponseForbiddenDeep = [
+  "acceptedUserId",
+  "activationToken",
+  "password",
+  "refreshToken",
+  "refreshTokenHash",
+  "token",
+  "tokenHash",
+];
+const portalSupportTicketForbiddenDeep = [
+  "attachment",
+  "attachments",
+  "birthDate",
+  "contentBase64",
+  "deletedAt",
+  "downloadUrl",
+  "email",
+  "fileBase64",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "nationalIdMasked",
+  "objectKey",
+  "phone",
+  "photoKey",
+  "rawRow",
+  "requesterId",
+  "s3Key",
+  "storageKey",
+  "token",
+  "userId",
+];
+const portalSupportTicketResponseRequired = ["id", "tenantId", "subject", "message", "priority", "status", "createdAt"];
+const portalSupportTicketStudentPaths = [
+  "/api/v1/me/student/support-tickets",
+  "/api/v1/me/guardian/students/{studentId}/support-tickets",
+];
+const portalSupportTicketTeacherPaths = [
+  "/api/v1/me/teacher/support-tickets",
+];
 const teacherRecordRequired = ["id", "tenantId", "firstName", "lastName"];
 const teacherResponseForbidden = [
   "downloadUrl",
@@ -287,17 +410,30 @@ const teacherResponseForbidden = [
 const teacherPortalReadForbiddenDeep = [
   "contentBase64",
   "downloadUrl",
+  "email",
   "fileBase64",
   "nationalId",
   "nationalIdEncrypted",
   "nationalIdHash",
   "objectKey",
+  "password",
   "phone",
   "photoKey",
+  "rawRow",
+  "refreshToken",
   "s3Key",
   "storageKey",
   "token",
+  "tokenHash",
   "userId",
+];
+const teacherPortalLookupsRequired = ["campuses", "classes", "courses", "gradeLevels", "terms"];
+const teacherPortalLookupsFieldChecks = [
+  { path: ["responseData", "campuses", "items", "id"], type: "string" },
+  { path: ["responseData", "classes", "items", "id"], type: "string" },
+  { path: ["responseData", "courses", "items", "id"], type: "string" },
+  { path: ["responseData", "gradeLevels", "items", "id"], type: "string" },
+  { path: ["responseData", "terms", "items", "id"], type: "string" },
 ];
 const studentAcademicTimelineForbiddenDeep = [
   "contentBase64",
@@ -336,6 +472,89 @@ const studentAcademicTimelineTeacherNotePaths = [
   "/api/v1/me/student/teacher-notes",
   "/api/v1/me/guardian/students/{studentId}/teacher-notes",
 ];
+const studentCoreForbiddenDeep = [
+  "birthDate",
+  "contentBase64",
+  "downloadUrl",
+  "email",
+  "fileBase64",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "objectKey",
+  "phone",
+  "photoKey",
+  "rawRow",
+  "s3Key",
+  "storageKey",
+  "token",
+  "userId",
+];
+const studentProfileForbiddenDeep = [
+  "contentBase64",
+  "downloadUrl",
+  "fileBase64",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "objectKey",
+  "rawRow",
+  "s3Key",
+  "storageKey",
+  "token",
+  "userId",
+];
+const studentCoreRequired = ["id", "tenantId", "firstName", "lastName", "status"];
+const studentCorePaths = [
+  "/api/v1/students",
+];
+const studentCoreItemPaths = [
+  "/api/v1/students/{id}",
+];
+const studentProfilePaths = [
+  "/api/v1/students/{id}/profile",
+];
+const studentImportRequestForbidden = [
+  "birthDate",
+  "classId",
+  "email",
+  "firstName",
+  "lastName",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "phone",
+  "photoKey",
+  "rawRow",
+  "studentId",
+  "studentIds",
+  "tenantId",
+  "token",
+  "userId",
+];
+const studentEnrollmentResponseRequired = ["id", "tenantId", "studentId", "status", "startsAt"];
+const studentEnrollmentForbiddenDeep = [
+  "birthDate",
+  "contentBase64",
+  "downloadUrl",
+  "email",
+  "fileBase64",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "objectKey",
+  "phone",
+  "photoKey",
+  "rawRow",
+  "s3Key",
+  "storageKey",
+  "token",
+  "userId",
+];
+const studentEnrollmentActionPaths = [
+  "/api/v1/students/{id}/enrollments/renew",
+  "/api/v1/students/{id}/enrollments/transfer",
+];
 const portalStudentRecordForbiddenDeep = [
   "birthDate",
   "contentBase64",
@@ -372,6 +591,348 @@ const portalStudentProfilePaths = [
   "/api/v1/me/student/profile",
   "/api/v1/me/guardian/students/{studentId}/profile",
 ];
+const kvkkInventoryKinds = ["guardian", "student", "teacher"];
+const kvkkInventoryRecordRequired = ["id", "kind", "displayRef", "piiCategories", "purgeAvailable"];
+const kvkkInventoryForbiddenDeep = [
+  "birthDate",
+  "contentBase64",
+  "downloadUrl",
+  "email",
+  "fileBase64",
+  "firstName",
+  "lastName",
+  "name",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "objectKey",
+  "password",
+  "phone",
+  "photoKey",
+  "rawRow",
+  "refreshToken",
+  "s3Key",
+  "storageKey",
+  "token",
+  "tokenHash",
+  "userId",
+];
+const selfPurgeResultRequired = ["userId", "purgedAt"];
+const selfPurgeForbiddenDeep = [
+  "accessToken",
+  "birthDate",
+  "contentBase64",
+  "downloadUrl",
+  "email",
+  "fileBase64",
+  "firstName",
+  "lastName",
+  "name",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "objectKey",
+  "password",
+  "passwordHash",
+  "phone",
+  "photoKey",
+  "rawRow",
+  "refreshToken",
+  "refreshTokenHash",
+  "s3Key",
+  "storageKey",
+  "token",
+  "tokenHash",
+];
+const meProfileForbiddenDeep = [
+  "birthDate",
+  "contentBase64",
+  "email",
+  "fileBase64",
+  "firstName",
+  "lastName",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "objectKey",
+  "password",
+  "phone",
+  "photoKey",
+  "rawRow",
+  "refreshToken",
+  "s3Key",
+  "storageKey",
+  "token",
+];
+const tenantRecordRequired = ["id", "name", "slug", "plan", "status"];
+const tenantRecordForbiddenDeep = [
+  "activationToken",
+  "firstAdmin",
+  "password",
+  "passwordHash",
+  "refreshToken",
+  "token",
+  "tokenHash",
+];
+const tenantAdminUpdateRequestProperties = [
+  "contactEmail",
+  "institutionType",
+  "licenseEndsAt",
+  "licenseStartsAt",
+  "logoUrl",
+  "name",
+  "plan",
+  "seatLimit",
+  "slug",
+  "status",
+];
+const tenantAdminUpdateRequestForbidden = [
+  "activeSeatCount",
+  "activationToken",
+  "firstAdmin",
+  "id",
+  "password",
+  "passwordHash",
+  "refreshToken",
+  "token",
+  "tokenHash",
+];
+const tenantCreateRequestProperties = [
+  "contactEmail",
+  "firstAdmin",
+  "id",
+  "institutionType",
+  "licenseEndsAt",
+  "licenseStartsAt",
+  "logoUrl",
+  "name",
+  "plan",
+  "seatLimit",
+  "slug",
+  "status",
+];
+const tenantCreateRequestForbidden = [
+  "activeSeatCount",
+  "activationToken",
+  "activationTokenExpiresAt",
+  "activationTokenIssued",
+  "admin",
+  "passwordHash",
+  "refreshToken",
+  "tenant",
+  "token",
+  "tokenHash",
+];
+const tenantCreateResponseForbiddenDeep = [
+  ...tenantRecordForbiddenDeep,
+  "activationToken",
+  "password",
+  "passwordHash",
+  "refreshToken",
+  "refreshTokenHash",
+  "token",
+  "tokenHash",
+];
+const tenantCreateFieldChecks = [
+  { path: ["requestBody", "contactEmail"], format: "email" },
+  { path: ["requestBody", "firstAdmin", "email"], format: "email" },
+  { path: ["requestBody", "firstAdmin", "mode"], enum: ["invitation", "password"] },
+  { path: ["requestBody", "firstAdmin", "name"], minLength: 1 },
+  { path: ["requestBody", "firstAdmin", "password"], minLength: 8 },
+  { path: ["requestBody", "licenseEndsAt"], format: "date-time" },
+  { path: ["requestBody", "licenseStartsAt"], format: "date-time" },
+  { path: ["requestBody", "name"], minLength: 1 },
+  { path: ["requestBody", "seatLimit"], minimum: 1 },
+  { path: ["requestBody", "slug"], minLength: 1 },
+];
+const tenantCurrentProfileRequestProperties = ["contactEmail", "institutionType", "logoUrl", "name"];
+const tenantCurrentProfileRequestForbidden = [
+  "activeSeatCount",
+  "firstAdmin",
+  "id",
+  "licenseEndsAt",
+  "licenseStartsAt",
+  "plan",
+  "seatLimit",
+  "slug",
+  "status",
+];
+const tenantAssignableRoles = ["ASSISTANT_ADMIN", "GUARDIAN", "STUDENT", "TEACHER", "TENANT_ADMIN"];
+const tenantUserRecordRequired = ["id", "email", "name", "tenantId", "roles", "createdAt", "updatedAt"];
+const tenantUserResponseForbiddenDeep = [
+  "activationToken",
+  "password",
+  "passwordHash",
+  "refreshToken",
+  "refreshTokenHash",
+  "token",
+  "tokenHash",
+];
+const tenantUserCreateRequestForbidden = [
+  "activationToken",
+  "id",
+  "passwordHash",
+  "refreshToken",
+  "refreshTokenHash",
+  "tenantId",
+  "token",
+  "tokenHash",
+];
+const tenantUserRoleUpdateRequestForbidden = [
+  "activationToken",
+  "email",
+  "id",
+  "name",
+  "password",
+  "passwordHash",
+  "refreshToken",
+  "refreshTokenHash",
+  "tenantId",
+  "token",
+  "tokenHash",
+];
+const tenantRecordFieldChecks = [
+  { path: ["responseData", "contactEmail"], format: "email" },
+  { path: ["responseData", "licenseEndsAt"], format: "date-time" },
+  { path: ["responseData", "licenseStartsAt"], format: "date-time" },
+  { path: ["responseData", "seatLimit"], minimum: 1 },
+  { path: ["responseData", "activeSeatCount"], minimum: 0 },
+];
+const tenantRecordListFieldChecks = [
+  { path: ["responseDataItem", "contactEmail"], format: "email" },
+  { path: ["responseDataItem", "licenseEndsAt"], format: "date-time" },
+  { path: ["responseDataItem", "licenseStartsAt"], format: "date-time" },
+  { path: ["responseDataItem", "seatLimit"], minimum: 1 },
+  { path: ["responseDataItem", "activeSeatCount"], minimum: 0 },
+];
+const tenantUserRecordFieldChecks = [
+  { path: ["responseData", "email"], format: "email" },
+  { path: ["responseData", "roles"], minItems: 1 },
+  { path: ["responseData", "roles", "items"], enum: tenantAssignableRoles },
+  { path: ["responseData", "createdAt"], format: "date-time" },
+  { path: ["responseData", "updatedAt"], format: "date-time" },
+];
+const tenantUserRecordListFieldChecks = [
+  { path: ["responseDataItem", "email"], format: "email" },
+  { path: ["responseDataItem", "roles"], minItems: 1 },
+  { path: ["responseDataItem", "roles", "items"], enum: tenantAssignableRoles },
+  { path: ["responseDataItem", "createdAt"], format: "date-time" },
+  { path: ["responseDataItem", "updatedAt"], format: "date-time" },
+];
+const portalSubjectRoles = ["GUARDIAN", "STUDENT", "TEACHER"];
+const rolePreviewSessionRequired = [
+  "id",
+  "tenantId",
+  "actorUserId",
+  "targetRole",
+  "targetSubjectType",
+  "targetSubjectId",
+  "mode",
+  "expiresAt",
+  "createdAt",
+  "previewToken",
+];
+const rolePreviewRequestForbidden = [
+  "accessToken",
+  "actorUserId",
+  "activationToken",
+  "createdAt",
+  "expiresAt",
+  "id",
+  "mode",
+  "password",
+  "passwordHash",
+  "previewToken",
+  "refreshToken",
+  "refreshTokenHash",
+  "tenantId",
+  "tokenHash",
+];
+const rolePreviewResponseForbiddenDeep = [
+  "accessToken",
+  "activationToken",
+  "password",
+  "passwordHash",
+  "refreshToken",
+  "refreshTokenHash",
+  "tokenHash",
+];
+const rolePreviewFieldChecks = [
+  { path: ["requestBody", "targetRole"], enum: portalSubjectRoles },
+  { path: ["requestBody", "targetSubjectId"], minLength: 1 },
+  { path: ["responseData", "targetRole"], enum: portalSubjectRoles },
+  { path: ["responseData", "targetSubjectType"], enum: portalSubjectRoles },
+  { path: ["responseData", "mode"], enum: ["READ_ONLY"] },
+  { path: ["responseData", "expiresAt"], format: "date-time" },
+  { path: ["responseData", "createdAt"], format: "date-time" },
+  { path: ["responseData", "previewToken"], minLength: 1 },
+];
+const portalHomeworkMaterialAssignmentRequired = ["id", "tenantId", "materialId", "studentId", "createdAt"];
+const portalHomeworkMaterialAssignmentForbiddenDeep = [
+  "birthDate",
+  "contentBase64",
+  "email",
+  "fileBase64",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "objectKey",
+  "password",
+  "phone",
+  "photoKey",
+  "rawRow",
+  "refreshToken",
+  "s3Key",
+  "storageKey",
+  "token",
+  "tokenHash",
+  "userId",
+];
+const portalHomeworkMaterialAssignmentFieldChecks = [
+  { path: ["responseDataItem", "dueAt"], format: "date-time" },
+  { path: ["responseDataItem", "createdAt"], format: "date-time" },
+];
+const guardianNotificationPreferenceRequestProperties = [
+  "canOpenSupportTickets",
+  "canReceiveAnnouncements",
+  "canReceiveSms",
+  "canViewFinance",
+  "isPrimary",
+  "relationshipType",
+];
+const guardianNotificationPreferenceRequestForbidden = [
+  "contentBase64",
+  "email",
+  "guardianId",
+  "id",
+  "nationalId",
+  "password",
+  "phone",
+  "studentId",
+  "tenantId",
+  "token",
+  "userId",
+];
+const guardianNotificationPreferenceForbiddenDeep = [
+  "birthDate",
+  "contentBase64",
+  "email",
+  "fileBase64",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "objectKey",
+  "password",
+  "phone",
+  "photoKey",
+  "rawRow",
+  "refreshToken",
+  "s3Key",
+  "storageKey",
+  "token",
+  "tokenHash",
+  "userId",
+];
 const notificationDeviceForbiddenDeep = [
   "contentBase64",
   "email",
@@ -392,6 +953,155 @@ const teacherAssignmentRecordRequired = ["id", "tenantId", "teacherId", "role"];
 const teacherAssignmentRoles = ["BRANCH_TEACHER", "CLASS_TEACHER", "GUIDANCE_COUNSELOR", "RESPONSIBLE_TEACHER"];
 const teacherNoteVisibilities = ["GUARDIAN_STUDENT", "INTERNAL"];
 const uploadContentTypes = ["application/pdf", "image/jpeg", "image/png", "text/plain"];
+const fileDownloadRequired = ["fileName", "contentType", "byteSize", "sha256", "downloadMode"];
+const fileDownloadForbiddenDeep = ["contentBase64", "objectKey", "rawRow", "s3Key", "storageKey", "token", "tokenHash"];
+const fileDownloadFieldChecks = [
+  { path: ["responseData", "contentType"], enum: uploadContentTypes },
+  { path: ["responseData", "byteSize"], minimum: 1 },
+  { path: ["responseData", "downloadMode"], enum: ["inline", "signed-url"] },
+  { path: ["responseData", "downloadUrlExpiresInSeconds"], minimum: 0 },
+  { path: ["responseData", "downloadUrlExpiresAt"], format: "date-time" },
+];
+const backupRestoreOperationTypes = ["BACKUP", "RESTORE_DRILL"];
+const backupRestoreStatuses = ["completed", "failed", "queued"];
+const backupRestoreJobRequired = [
+  "id",
+  "tenantId",
+  "requestedByUserId",
+  "operationType",
+  "targetReference",
+  "queueName",
+  "jobId",
+  "status",
+  "checkedTables",
+  "createdAt",
+  "updatedAt",
+];
+const backupRestoreForbiddenDeep = [
+  "accessToken",
+  "contentBase64",
+  "fileBase64",
+  "password",
+  "passwordHash",
+  "rawRow",
+  "refreshToken",
+  "s3Key",
+  "storageKey",
+  "token",
+  "tokenHash",
+];
+const backupRestoreJobFieldChecks = [
+  { path: ["requestBody", "confirmationText"], minLength: 1 },
+  { path: ["requestBody", "operationType"], enum: backupRestoreOperationTypes },
+  { path: ["requestBody", "targetReference"], minLength: 1 },
+  { path: ["responseData", "operationType"], enum: backupRestoreOperationTypes },
+  { path: ["responseData", "queueName"], enum: ["backup-restore"] },
+  { path: ["responseData", "status"], enum: backupRestoreStatuses },
+  { path: ["responseData", "createdAt"], format: "date-time" },
+  { path: ["responseData", "updatedAt"], format: "date-time" },
+];
+const backupRestoreJobListFieldChecks = [
+  { path: ["responseDataItem", "operationType"], enum: backupRestoreOperationTypes },
+  { path: ["responseDataItem", "queueName"], enum: ["backup-restore"] },
+  { path: ["responseDataItem", "status"], enum: backupRestoreStatuses },
+  { path: ["responseDataItem", "createdAt"], format: "date-time" },
+  { path: ["responseDataItem", "updatedAt"], format: "date-time" },
+];
+const tenantExportRequired = ["formatVersion", "tenantId", "generatedByUserId", "exportedAt", "scope", "rowLimitPerTable", "tables", "warnings"];
+const tenantExportForbiddenDeep = [
+  "contentBase64",
+  "fileBase64",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "objectKey",
+  "password",
+  "passwordHash",
+  "phone",
+  "rawRow",
+  "refreshToken",
+  "s3Key",
+  "storageKey",
+  "token",
+  "tokenHash",
+];
+const smsBatchQueueResultRequired = ["tenantId", "templateId", "recipientCount", "queueName", "jobId", "status"];
+const smsBatchDeliveryReportRequired = [
+  "id",
+  "tenantId",
+  "jobId",
+  "templateId",
+  "recipientCount",
+  "sentCount",
+  "failedCount",
+  "billableSegments",
+  "status",
+];
+const smsBatchForbiddenDeep = [
+  "accessToken",
+  "contentBase64",
+  "fileBase64",
+  "messageBody",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "objectKey",
+  "password",
+  "passwordHash",
+  "rawRow",
+  "recipients",
+  "refreshToken",
+  "s3Key",
+  "storageKey",
+  "token",
+  "tokenHash",
+];
+const smsBatchQueueFieldChecks = [
+  { path: ["requestBody", "recipients"], minItems: 1 },
+  { path: ["requestBody", "recipients", "items", "to"], minLength: 1 },
+  { path: ["requestBody", "templateId"], minLength: 1 },
+  { path: ["responseData", "recipientCount"], minimum: 0 },
+  { path: ["responseData", "queueName"], enum: ["sms-batch"] },
+  { path: ["responseData", "status"], enum: ["queued"] },
+];
+const smsBatchDeliveryReportFieldChecks = [
+  { path: ["responseData", "recipientCount"], minimum: 0 },
+  { path: ["responseData", "sentCount"], minimum: 0 },
+  { path: ["responseData", "failedCount"], minimum: 0 },
+  { path: ["responseData", "billableSegments"], minimum: 0 },
+  { path: ["responseData", "status"], enum: backupRestoreStatuses },
+  { path: ["responseData", "createdAt"], format: "date-time" },
+  { path: ["responseData", "updatedAt"], format: "date-time" },
+];
+const smsBatchRecipientPreviewRequired = ["recipients", "recipientCount"];
+const smsBatchRecipientPreviewForbiddenDeep = [
+  "accessToken",
+  "birthDate",
+  "contentBase64",
+  "email",
+  "fileBase64",
+  "messageBody",
+  "nationalId",
+  "nationalIdEncrypted",
+  "nationalIdHash",
+  "objectKey",
+  "password",
+  "passwordHash",
+  "rawRow",
+  "refreshToken",
+  "s3Key",
+  "storageKey",
+  "token",
+  "tokenHash",
+  "userId",
+];
+const smsBatchRecipientPreviewFieldChecks = [
+  { path: ["requestBody", "studentStatus"], enum: studentStatuses },
+  { path: ["responseData", "recipientCount"], minimum: 0 },
+  { path: ["responseData", "recipients", "items", "to"], minLength: 1 },
+  { path: ["responseData", "recipients", "items", "studentIds"], minItems: 1 },
+  { path: ["responseData", "recipients", "items", "studentNames"], minItems: 1 },
+];
 const schoolReferenceCrudContracts = [
   ...schoolCrudContracts({
     basePath: "/api/v1/academic-years",
@@ -429,6 +1139,96 @@ const schoolReferenceCrudContracts = [
 ];
 const requiredOperationContracts = [
   ...schoolReferenceCrudContracts,
+  {
+    method: "get",
+    path: "/health",
+    rawResponseContentType: "application/json",
+    rawResponseRequired: ["status"],
+    fieldChecks: [
+      { path: ["rawResponse", "status"], enum: ["ok"] },
+    ],
+  },
+  {
+    method: "get",
+    path: "/health/ready",
+    rawResponseContentType: "application/json",
+    rawResponseRequired: ["status", "dependencies"],
+    fieldChecks: [
+      { path: ["rawResponse", "status"], enum: ["ready"] },
+      { path: ["rawResponse", "dependencies", "postgres"], enum: ["ok"] },
+      { path: ["rawResponse", "dependencies", "redis"], enum: ["ok"] },
+    ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/metrics",
+    rawResponseContentType: "text/plain",
+    fieldChecks: [
+      { path: ["rawResponse"], type: "string" },
+    ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/backup-restore-jobs",
+    responseListEnvelope: true,
+    responseDataItemsRequired: backupRestoreJobRequired,
+    responseDataForbiddenDeep: backupRestoreForbiddenDeep,
+    fieldChecks: backupRestoreJobListFieldChecks,
+  },
+  {
+    method: "post",
+    path: "/api/v1/backup-restore-jobs",
+    requestBody: true,
+    responseEnvelope: true,
+    idempotencyHeader: true,
+    requestRequired: ["confirmationText", "operationType", "targetReference"],
+    responseDataRequired: backupRestoreJobRequired,
+    responseDataForbiddenDeep: backupRestoreForbiddenDeep,
+    fieldChecks: backupRestoreJobFieldChecks,
+  },
+  {
+    method: "get",
+    path: "/api/v1/backup-restore-jobs/tenant-export",
+    rawResponseContentType: "application/json",
+    rawResponseRequired: tenantExportRequired,
+    rawResponseForbiddenDeep: tenantExportForbiddenDeep,
+    fieldChecks: [
+      { path: ["rawResponse", "formatVersion"], enum: ["tenant-export-v1"] },
+      { path: ["rawResponse", "exportedAt"], format: "date-time" },
+      { path: ["rawResponse", "scope"], enum: ["tenant-user-entered-data"] },
+      { path: ["rawResponse", "rowLimitPerTable"], minimum: 1 },
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/sms-batches",
+    requestBody: true,
+    responseEnvelope: true,
+    idempotencyHeader: true,
+    requestRequired: ["recipients", "templateId"],
+    responseDataRequired: smsBatchQueueResultRequired,
+    responseDataForbiddenDeep: smsBatchForbiddenDeep,
+    fieldChecks: smsBatchQueueFieldChecks,
+  },
+  {
+    method: "get",
+    path: "/api/v1/sms-batches/{jobId}",
+    responseEnvelope: true,
+    responseDataRequired: smsBatchDeliveryReportRequired,
+    responseDataForbiddenDeep: smsBatchForbiddenDeep,
+    fieldChecks: smsBatchDeliveryReportFieldChecks,
+  },
+  {
+    method: "post",
+    path: "/api/v1/sms-batches/recipients/preview",
+    requestBody: true,
+    requestBodyRequired: false,
+    responseEnvelope: true,
+    requestProperties: ["announcementId", "campusId", "classId", "courseId", "gradeLevelId", "studentStatus", "termId"],
+    responseDataRequired: smsBatchRecipientPreviewRequired,
+    responseDataForbiddenDeep: smsBatchRecipientPreviewForbiddenDeep,
+    fieldChecks: smsBatchRecipientPreviewFieldChecks,
+  },
   {
     method: "get",
     path: "/api/v1/development/criteria",
@@ -503,6 +1303,24 @@ const requiredOperationContracts = [
     responseEnvelope: true,
     responseDataRequired: teacherRecordRequired,
     responseDataForbidden: teacherResponseForbidden,
+  },
+  {
+    method: "get",
+    path: "/api/v1/me/teacher/lookups",
+    responseEnvelope: true,
+    responseDataRequired: teacherPortalLookupsRequired,
+    responseDataForbiddenDeep: teacherPortalReadForbiddenDeep,
+    fieldChecks: teacherPortalLookupsFieldChecks,
+  },
+  {
+    method: "get",
+    path: "/api/v1/me/teacher/students",
+    responseListEnvelope: true,
+    responseDataItemsRequired: studentCoreRequired,
+    responseDataForbiddenDeep: teacherPortalReadForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseDataItem", "status"], enum: studentStatuses },
+    ],
   },
   {
     method: "get",
@@ -694,6 +1512,107 @@ const requiredOperationContracts = [
   },
   {
     method: "get",
+    path: "/api/v1/privacy/inventory",
+    responseListEnvelope: true,
+    responseDataItemsRequired: kvkkInventoryRecordRequired,
+    responseDataForbiddenDeep: kvkkInventoryForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseDataItem", "kind"], enum: kvkkInventoryKinds },
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/privacy/me/purge-pii",
+    responseEnvelope: true,
+    responseDataRequired: selfPurgeResultRequired,
+    responseDataForbiddenDeep: selfPurgeForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseData", "purgedAt"], format: "date-time" },
+    ],
+  },
+  ...portalSupportTicketStudentPaths.map((path) => ({
+    method: "get",
+    path,
+    responseListEnvelope: true,
+    responseDataItemsRequired: [...portalSupportTicketResponseRequired, "studentId"],
+    responseDataForbiddenDeep: portalSupportTicketForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseDataItem", "priority"], enum: supportTicketPriorities },
+      { path: ["responseDataItem", "status"], enum: supportTicketStatuses },
+      { path: ["responseDataItem", "createdAt"], format: "date-time" },
+    ],
+  })),
+  ...portalSupportTicketStudentPaths.map((path) => ({
+    method: "post",
+    path,
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["message", "subject"],
+    requestForbidden: [
+      "contentBase64",
+      "createdAt",
+      "fileBase64",
+      "id",
+      "requesterId",
+      "status",
+      "storageKey",
+      "studentId",
+      "tenantId",
+      "token",
+    ],
+    responseDataRequired: [...portalSupportTicketResponseRequired, "studentId"],
+    responseDataForbiddenDeep: portalSupportTicketForbiddenDeep,
+    fieldChecks: [
+      { path: ["requestBody", "message"], minLength: 1 },
+      { path: ["requestBody", "subject"], minLength: 1 },
+      { path: ["requestBody", "priority"], enum: supportTicketPriorities },
+      { path: ["responseData", "priority"], enum: supportTicketPriorities },
+      { path: ["responseData", "status"], enum: supportTicketStatuses },
+      { path: ["responseData", "createdAt"], format: "date-time" },
+    ],
+  })),
+  ...portalSupportTicketTeacherPaths.map((path) => ({
+    method: "get",
+    path,
+    responseListEnvelope: true,
+    responseDataItemsRequired: portalSupportTicketResponseRequired,
+    responseDataForbiddenDeep: portalSupportTicketForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseDataItem", "priority"], enum: supportTicketPriorities },
+      { path: ["responseDataItem", "status"], enum: supportTicketStatuses },
+      { path: ["responseDataItem", "createdAt"], format: "date-time" },
+    ],
+  })),
+  ...portalSupportTicketTeacherPaths.map((path) => ({
+    method: "post",
+    path,
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["message", "subject"],
+    requestForbidden: [
+      "contentBase64",
+      "createdAt",
+      "fileBase64",
+      "id",
+      "requesterId",
+      "status",
+      "storageKey",
+      "tenantId",
+      "token",
+    ],
+    responseDataRequired: portalSupportTicketResponseRequired,
+    responseDataForbiddenDeep: portalSupportTicketForbiddenDeep,
+    fieldChecks: [
+      { path: ["requestBody", "message"], minLength: 1 },
+      { path: ["requestBody", "subject"], minLength: 1 },
+      { path: ["requestBody", "priority"], enum: supportTicketPriorities },
+      { path: ["responseData", "priority"], enum: supportTicketPriorities },
+      { path: ["responseData", "status"], enum: supportTicketStatuses },
+      { path: ["responseData", "createdAt"], format: "date-time" },
+    ],
+  })),
+  {
+    method: "get",
     path: "/api/v1/audit-logs",
     responseListEnvelope: true,
     responseDataItemsRequired: ["id", "entityType", "action", "createdAt"],
@@ -882,6 +1801,203 @@ const requiredOperationContracts = [
   },
   {
     method: "get",
+    path: "/api/v1/tenants",
+    responseListEnvelope: true,
+    responseDataItemsRequired: tenantRecordRequired,
+    responseDataForbiddenDeep: tenantRecordForbiddenDeep,
+    fieldChecks: tenantRecordListFieldChecks,
+  },
+  {
+    method: "get",
+    path: "/api/v1/tenants/{id}",
+    responseEnvelope: true,
+    responseDataRequired: tenantRecordRequired,
+    responseDataForbiddenDeep: tenantRecordForbiddenDeep,
+    fieldChecks: tenantRecordFieldChecks,
+  },
+  {
+    method: "post",
+    path: "/api/v1/tenants",
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["name", "slug"],
+    requestProperties: tenantCreateRequestProperties,
+    requestForbidden: tenantCreateRequestForbidden,
+    responseDataOneOfRequired: [tenantRecordRequired, ["tenant", "admin"]],
+    responseDataForbiddenDeep: tenantCreateResponseForbiddenDeep,
+    fieldChecks: tenantCreateFieldChecks,
+  },
+  {
+    method: "patch",
+    path: "/api/v1/tenants/{id}",
+    requestBody: true,
+    responseEnvelope: true,
+    requestProperties: tenantAdminUpdateRequestProperties,
+    requestForbidden: tenantAdminUpdateRequestForbidden,
+    responseDataRequired: tenantRecordRequired,
+    responseDataForbiddenDeep: tenantRecordForbiddenDeep,
+    fieldChecks: [
+      { path: ["requestBody", "contactEmail"], format: "email" },
+      { path: ["requestBody", "licenseEndsAt"], format: "date-time" },
+      { path: ["requestBody", "licenseStartsAt"], format: "date-time" },
+      { path: ["requestBody", "seatLimit"], minimum: 1 },
+      ...tenantRecordFieldChecks,
+    ],
+  },
+  {
+    method: "delete",
+    path: "/api/v1/tenants/{id}",
+    responseEnvelope: true,
+    responseDataRequired: tenantRecordRequired,
+    responseDataForbiddenDeep: tenantRecordForbiddenDeep,
+    fieldChecks: tenantRecordFieldChecks,
+  },
+  {
+    method: "get",
+    path: "/api/v1/tenant-users",
+    responseListEnvelope: true,
+    responseDataItemsRequired: tenantUserRecordRequired,
+    responseDataForbiddenDeep: tenantUserResponseForbiddenDeep,
+    fieldChecks: tenantUserRecordListFieldChecks,
+  },
+  {
+    method: "post",
+    path: "/api/v1/tenant-users",
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["email", "name", "password", "roles"],
+    requestForbidden: tenantUserCreateRequestForbidden,
+    responseDataRequired: tenantUserRecordRequired,
+    responseDataForbiddenDeep: tenantUserResponseForbiddenDeep,
+    fieldChecks: [
+      { path: ["requestBody", "email"], format: "email" },
+      { path: ["requestBody", "name"], minLength: 1 },
+      { path: ["requestBody", "password"], minLength: 8 },
+      { path: ["requestBody", "roles"], minItems: 1 },
+      { path: ["requestBody", "roles", "items"], enum: tenantAssignableRoles },
+      ...tenantUserRecordFieldChecks,
+    ],
+  },
+  {
+    method: "patch",
+    path: "/api/v1/tenant-users/{userId}/roles",
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["roles"],
+    requestForbidden: tenantUserRoleUpdateRequestForbidden,
+    responseDataRequired: tenantUserRecordRequired,
+    responseDataForbiddenDeep: tenantUserResponseForbiddenDeep,
+    fieldChecks: [
+      { path: ["requestBody", "roles"], minItems: 1 },
+      { path: ["requestBody", "roles", "items"], enum: tenantAssignableRoles },
+      ...tenantUserRecordFieldChecks,
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/role-previews",
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["targetRole", "targetSubjectId"],
+    requestForbidden: rolePreviewRequestForbidden,
+    responseDataRequired: rolePreviewSessionRequired,
+    responseDataForbiddenDeep: rolePreviewResponseForbiddenDeep,
+    fieldChecks: rolePreviewFieldChecks,
+  },
+  {
+    method: "get",
+    path: "/api/v1/me/profile",
+    responseEnvelope: true,
+    responseDataRequired: ["userId", "tenantId", "roles"],
+    responseDataForbiddenDeep: meProfileForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseData", "roles"], minItems: 1 },
+      { path: ["responseData", "subjectType"], enum: ["GUARDIAN", "STUDENT", "TEACHER"] },
+    ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/me/tenant",
+    responseEnvelope: true,
+    responseDataRequired: tenantRecordRequired,
+    responseDataForbiddenDeep: tenantRecordForbiddenDeep,
+  },
+  {
+    method: "patch",
+    path: "/api/v1/me/tenant",
+    requestBody: true,
+    responseEnvelope: true,
+    requestProperties: tenantCurrentProfileRequestProperties,
+    requestForbidden: tenantCurrentProfileRequestForbidden,
+    responseDataRequired: tenantRecordRequired,
+    responseDataForbiddenDeep: tenantRecordForbiddenDeep,
+    fieldChecks: [
+      { path: ["requestBody", "contactEmail"], format: "email" },
+    ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/me/student/homework/material-assignments",
+    responseListEnvelope: true,
+    responseDataItemsRequired: portalHomeworkMaterialAssignmentRequired,
+    responseDataForbiddenDeep: portalHomeworkMaterialAssignmentForbiddenDeep,
+    fieldChecks: portalHomeworkMaterialAssignmentFieldChecks,
+  },
+  {
+    method: "get",
+    path: "/api/v1/me/guardian/homework/material-assignments",
+    responseListEnvelope: true,
+    responseDataItemsRequired: portalHomeworkMaterialAssignmentRequired,
+    responseDataForbiddenDeep: portalHomeworkMaterialAssignmentForbiddenDeep,
+    fieldChecks: portalHomeworkMaterialAssignmentFieldChecks,
+  },
+  {
+    method: "get",
+    path: "/api/v1/me/guardian/students/{studentId}/homework/material-assignments",
+    responseListEnvelope: true,
+    responseDataItemsRequired: portalHomeworkMaterialAssignmentRequired,
+    responseDataForbiddenDeep: portalHomeworkMaterialAssignmentForbiddenDeep,
+    fieldChecks: portalHomeworkMaterialAssignmentFieldChecks,
+  },
+  {
+    method: "get",
+    path: "/api/v1/me/guardian/students/{studentId}/notification-preferences",
+    responseEnvelope: true,
+    responseDataRequired: guardianStudentRecordRequired,
+    responseDataForbiddenDeep: guardianNotificationPreferenceForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseData", "relationshipType"], enum: guardianRelationshipTypes },
+    ],
+  },
+  {
+    method: "patch",
+    path: "/api/v1/me/guardian/students/{studentId}/notification-preferences",
+    requestBody: true,
+    responseEnvelope: true,
+    requestProperties: guardianNotificationPreferenceRequestProperties,
+    requestForbidden: guardianNotificationPreferenceRequestForbidden,
+    responseDataRequired: guardianStudentRecordRequired,
+    responseDataForbiddenDeep: guardianNotificationPreferenceForbiddenDeep,
+    fieldChecks: [
+      { path: ["requestBody", "relationshipType"], enum: guardianRelationshipTypes },
+      { path: ["responseData", "relationshipType"], enum: guardianRelationshipTypes },
+    ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/me/guardian/students/{studentId}/payment-plans",
+    responseListEnvelope: true,
+    responseDataItemsRequired: paymentPlanWithInstallmentsRequired,
+    responseDataForbiddenDeep: paymentPlanPortalForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseDataItem", "totalAmount"], minimum: 1 },
+      { path: ["responseDataItem", "installments", "items", "status"], enum: paymentInstallmentStatuses },
+      { path: ["responseDataItem", "installments", "items", "amount"], minimum: 1 },
+      { path: ["responseDataItem", "installments", "items", "dueDate"], format: "date" },
+    ],
+  },
+  {
+    method: "get",
     path: "/api/v1/exams",
     responseListEnvelope: true,
     responseDataItemsRequired: ["id", "tenantId", "title", "status", "createdAt", "updatedAt"],
@@ -967,7 +2083,7 @@ const requiredOperationContracts = [
       { path: ["requestBody", "sampleSize"], minimum: 1 },
       { path: ["responseData", "status"], enum: ["suggested"] },
       { path: ["responseData", "suggestion", "confidence"], enum: ["low", "medium", "high"] },
-      { path: ["responseData", "suggestion", "delimiter"], enum: ["COMMA", "FIXED", "PIPE", "TAB"] },
+      { path: ["responseData", "suggestion", "delimiter"], enum: parserDelimiters },
       { path: ["responseData", "suggestion", "skipHeaderLines"], minimum: 0 },
       { path: ["responseData", "suggestion", "version"], enum: [1] },
     ],
@@ -982,10 +2098,63 @@ const requiredOperationContracts = [
     responseDataRequired: ["tenantId", "examId", "version", "encoding", "delimiter", "skipHeaderLines", "fieldMapping", "status"],
     fieldChecks: [
       { path: ["requestBody", "suggestion", "confidence"], enum: ["low", "medium", "high"] },
-      { path: ["requestBody", "suggestion", "delimiter"], enum: ["COMMA", "FIXED", "PIPE", "TAB"] },
+      { path: ["requestBody", "suggestion", "delimiter"], enum: parserDelimiters },
       { path: ["requestBody", "suggestion", "skipHeaderLines"], minimum: 0 },
       { path: ["requestBody", "suggestion", "version"], enum: [1] },
-      { path: ["responseData", "delimiter"], enum: ["COMMA", "FIXED", "PIPE", "TAB"] },
+      { path: ["responseData", "delimiter"], enum: parserDelimiters },
+      { path: ["responseData", "skipHeaderLines"], minimum: 0 },
+      { path: ["responseData", "status"], enum: ["APPROVED"] },
+    ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/optical-form-templates",
+    responseListEnvelope: true,
+    responseDataItemsRequired: opticalFormTemplateRecordRequired,
+    responseDataForbiddenDeep: opticalFormTemplateForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseDataItem", "encoding"], enum: ["UTF-8"] },
+      { path: ["responseDataItem", "delimiter"], enum: parserDelimiters },
+      { path: ["responseDataItem", "skipHeaderLines"], minimum: 0 },
+      { path: ["responseDataItem", "status"], enum: ["APPROVED", "DRAFT"] },
+      { path: ["responseDataItem", "createdAt"], format: "date-time" },
+      { path: ["responseDataItem", "updatedAt"], format: "date-time" },
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/optical-form-templates",
+    requestBody: true,
+    responseEnvelope: true,
+    idempotencyHeader: true,
+    requestRequired: ["name", "suggestion", "version"],
+    responseDataRequired: opticalFormTemplateRecordRequired,
+    responseDataForbiddenDeep: opticalFormTemplateForbiddenDeep,
+    fieldChecks: [
+      { path: ["requestBody", "suggestion", "confidence"], enum: ["low", "medium", "high"] },
+      { path: ["requestBody", "suggestion", "delimiter"], enum: parserDelimiters },
+      { path: ["requestBody", "suggestion", "skipHeaderLines"], minimum: 0 },
+      { path: ["requestBody", "suggestion", "version"], enum: [1] },
+      { path: ["responseData", "encoding"], enum: ["UTF-8"] },
+      { path: ["responseData", "delimiter"], enum: parserDelimiters },
+      { path: ["responseData", "skipHeaderLines"], minimum: 0 },
+      { path: ["responseData", "status"], enum: ["APPROVED", "DRAFT"] },
+      { path: ["responseData", "createdAt"], format: "date-time" },
+      { path: ["responseData", "updatedAt"], format: "date-time" },
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/optical-form-templates/{templateId}/apply",
+    requestBody: true,
+    responseEnvelope: true,
+    idempotencyHeader: true,
+    requestRequired: ["examId", "version"],
+    responseDataRequired: ["tenantId", "examId", "version", "encoding", "delimiter", "skipHeaderLines", "fieldMapping", "status"],
+    responseDataForbiddenDeep: opticalFormTemplateForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseData", "encoding"], enum: ["CP1254", "ISO-8859-9", "UTF-8"] },
+      { path: ["responseData", "delimiter"], enum: parserDelimiters },
       { path: ["responseData", "skipHeaderLines"], minimum: 0 },
       { path: ["responseData", "status"], enum: ["APPROVED"] },
     ],
@@ -1184,13 +2353,241 @@ const requiredOperationContracts = [
     idempotencyHeader: true,
     requestRequired: ["firstName", "lastName"],
     responseDataRequired: ["id", "tenantId", "firstName", "lastName", "status"],
-    responseDataForbidden: ["email", "guardian", "invitationId", "nationalId", "nationalIdEncrypted", "nationalIdHash", "phone"],
+    responseDataForbiddenDeep: ["guardian", "invitationId", ...studentCoreForbiddenDeep],
     fieldChecks: [
       { path: ["requestBody", "status"], enum: studentStatuses },
       { path: ["requestBody", "guardian", "relationshipType"], enum: guardianRelationshipTypes },
       { path: ["responseData", "status"], enum: studentStatuses },
     ],
   },
+  ...studentCorePaths.map((path) => ({
+    method: "get",
+    path,
+    responseListEnvelope: true,
+    responseDataItemsRequired: studentCoreRequired,
+    responseDataForbiddenDeep: studentCoreForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseDataItem", "status"], enum: studentStatuses },
+    ],
+  })),
+  ...studentCoreItemPaths.map((path) => ({
+    method: "get",
+    path,
+    responseEnvelope: true,
+    responseDataRequired: studentCoreRequired,
+    responseDataForbiddenDeep: studentCoreForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseData", "status"], enum: studentStatuses },
+    ],
+  })),
+  ...studentCoreItemPaths.map((path) => ({
+    method: "patch",
+    path,
+    requestBody: true,
+    responseEnvelope: true,
+    requestProperties: ["classId", "firstName", "lastName", "responsibleTeacherId", "status"],
+    requestForbidden: ["birthDate", "email", "nationalId", "nationalIdEncrypted", "nationalIdHash", "phone", "photoKey", "tenantId", "userId"],
+    responseDataRequired: studentCoreRequired,
+    responseDataForbiddenDeep: studentCoreForbiddenDeep,
+    fieldChecks: [
+      { path: ["requestBody", "status"], enum: studentStatuses },
+      { path: ["responseData", "status"], enum: studentStatuses },
+    ],
+  })),
+  ...studentCoreItemPaths.map((path) => ({
+    method: "delete",
+    path,
+    responseStatus: "204",
+    noResponseBody: true,
+  })),
+  {
+    method: "get",
+    path: "/api/v1/students/{id}/class-history",
+    responseListEnvelope: true,
+    responseDataItemsRequired: ["id", "tenantId", "studentId", "startsAt"],
+    responseDataForbiddenDeep: studentEnrollmentForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseDataItem", "startsAt"], format: "date" },
+      { path: ["responseDataItem", "endsAt"], format: "date" },
+      { path: ["responseDataItem", "createdAt"], format: "date-time" },
+      { path: ["responseDataItem", "updatedAt"], format: "date-time" },
+    ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/students/{id}/enrollments",
+    responseListEnvelope: true,
+    responseDataItemsRequired: studentEnrollmentResponseRequired,
+    responseDataForbiddenDeep: studentEnrollmentForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseDataItem", "status"], enum: studentStatuses },
+      { path: ["responseDataItem", "startsAt"], format: "date" },
+      { path: ["responseDataItem", "endsAt"], format: "date" },
+      { path: ["responseDataItem", "createdAt"], format: "date-time" },
+      { path: ["responseDataItem", "updatedAt"], format: "date-time" },
+    ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/students/{id}/teacher-assignments",
+    responseListEnvelope: true,
+    responseDataItemsRequired: teacherAssignmentRecordRequired,
+    responseDataForbiddenDeep: ["birthDate", "email", "fileBase64", "nationalId", "nationalIdEncrypted", "nationalIdHash", "phone", "photoKey", "token", "userId"],
+    fieldChecks: [
+      { path: ["responseDataItem", "role"], enum: teacherAssignmentRoles },
+      { path: ["responseDataItem", "startsAt"], format: "date" },
+      { path: ["responseDataItem", "endsAt"], format: "date" },
+      { path: ["responseDataItem", "createdAt"], format: "date-time" },
+      { path: ["responseDataItem", "updatedAt"], format: "date-time" },
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/students/{id}/purge-pii",
+    requestBody: true,
+    requestBodyRequired: false,
+    responseEnvelope: true,
+    responseDataRequired: studentCoreRequired,
+    responseDataForbiddenDeep: studentCoreForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseData", "status"], enum: studentStatuses },
+    ],
+  },
+  {
+    method: "patch",
+    path: "/api/v1/students/{id}/tenant",
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["tenantId"],
+    requestForbidden: ["birthDate", "email", "firstName", "lastName", "nationalId", "nationalIdEncrypted", "nationalIdHash", "phone", "photoKey", "status", "userId"],
+    responseDataRequired: studentCoreRequired,
+    responseDataForbiddenDeep: studentCoreForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseData", "status"], enum: studentStatuses },
+    ],
+  },
+  ...studentProfilePaths.map((path) => ({
+    method: "get",
+    path,
+    responseEnvelope: true,
+    responseDataRequired: studentCoreRequired,
+    responseDataForbiddenDeep: studentProfileForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseData", "status"], enum: studentStatuses },
+      { path: ["responseData", "birthDate"], format: "date" },
+    ],
+  })),
+  ...studentProfilePaths.map((path) => ({
+    method: "patch",
+    path,
+    requestBody: true,
+    responseEnvelope: true,
+    requestProperties: ["birthDate", "email", "nationalId", "phone", "photoKey"],
+    requestForbidden: [
+      "classId",
+      "contentBase64",
+      "downloadUrl",
+      "fileBase64",
+      "firstName",
+      "lastName",
+      "nationalIdEncrypted",
+      "nationalIdHash",
+      "objectKey",
+      "responsibleTeacherId",
+      "s3Key",
+      "status",
+      "storageKey",
+      "tenantId",
+      "token",
+      "userId",
+    ],
+    responseDataRequired: studentCoreRequired,
+    responseDataForbiddenDeep: studentProfileForbiddenDeep,
+    fieldChecks: [
+      { path: ["requestBody", "birthDate"], format: "date" },
+      { path: ["responseData", "status"], enum: studentStatuses },
+      { path: ["responseData", "birthDate"], format: "date" },
+    ],
+  })),
+  {
+    method: "get",
+    path: "/api/v1/students/export",
+    responseEnvelope: true,
+    responseDataRequired: ["fileName", "contentType", "fileBase64", "rowCount"],
+    fieldChecks: [
+      { path: ["responseData", "contentType"], enum: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"] },
+      { path: ["responseData", "fileBase64"], format: "byte" },
+      { path: ["responseData", "rowCount"], minimum: 0 },
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/students/imports/dry-run",
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["fileBase64"],
+    requestForbidden: studentImportRequestForbidden,
+    responseDataRequired: ["dryRun", "totalRows", "validRows", "errors", "quota", "wouldImport"],
+    fieldChecks: [
+      { path: ["requestBody", "fileBase64"], minLength: 1 },
+      { path: ["responseData", "dryRun"], enum: [true] },
+      { path: ["responseData", "totalRows"], minimum: 0 },
+      { path: ["responseData", "validRows", "items", "row"], minimum: 1 },
+      { path: ["responseData", "quota", "limit"], minimum: 0 },
+      { path: ["responseData", "quota", "current"], minimum: 0 },
+      { path: ["responseData", "quota", "incoming"], minimum: 0 },
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/students/imports",
+    requestBody: true,
+    responseEnvelope: true,
+    idempotencyHeader: true,
+    requestRequired: ["fileBase64"],
+    requestForbidden: studentImportRequestForbidden,
+    responseDataRequired: ["importedRows", "students"],
+    responseDataForbiddenDeep: studentCoreForbiddenDeep,
+    fieldChecks: [
+      { path: ["requestBody", "fileBase64"], minLength: 1 },
+      { path: ["responseData", "importedRows"], minimum: 0 },
+      { path: ["responseData", "students", "items", "status"], enum: studentStatuses },
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/students/enrollments/bulk-renew",
+    requestBody: true,
+    responseEnvelope: true,
+    idempotencyHeader: true,
+    requestProperties: ["academicYearId", "classId", "classIdBySourceClassId", "startsAt", "studentIds", "termId", "useAutomaticClassMapping"],
+    requestForbidden: ["birthDate", "email", "fileBase64", "nationalId", "nationalIdEncrypted", "nationalIdHash", "phone", "photoKey", "status", "tenantId", "userId"],
+    responseDataRequired: ["updatedCount", "enrollments"],
+    responseDataForbiddenDeep: studentEnrollmentForbiddenDeep,
+    fieldChecks: [
+      { path: ["requestBody", "startsAt"], format: "date" },
+      { path: ["requestBody", "studentIds"], minItems: 1 },
+      { path: ["responseData", "updatedCount"], minimum: 0 },
+      { path: ["responseData", "enrollments", "items", "status"], enum: studentStatuses },
+      { path: ["responseData", "enrollments", "items", "startsAt"], format: "date" },
+    ],
+  },
+  ...studentEnrollmentActionPaths.map((path) => ({
+    method: "post",
+    path,
+    requestBody: true,
+    responseEnvelope: true,
+    idempotencyHeader: true,
+    requestProperties: ["academicYearId", "classId", "startsAt", "termId"],
+    requestForbidden: ["birthDate", "email", "fileBase64", "nationalId", "nationalIdEncrypted", "nationalIdHash", "phone", "photoKey", "studentIds", "tenantId", "userId"],
+    responseDataRequired: studentEnrollmentResponseRequired,
+    responseDataForbiddenDeep: studentEnrollmentForbiddenDeep,
+    fieldChecks: [
+      { path: ["requestBody", "startsAt"], format: "date" },
+      { path: ["responseData", "status"], enum: studentStatuses },
+      { path: ["responseData", "startsAt"], format: "date" },
+    ],
+  })),
   {
     method: "get",
     path: "/api/v1/guardians",
@@ -1559,6 +2956,12 @@ const requiredOperationContracts = [
     ],
   },
   {
+    method: "delete",
+    path: "/api/v1/teachers/{id}/assignments/{assignmentId}",
+    responseStatus: "204",
+    noResponseBody: true,
+  },
+  {
     method: "post",
     path: "/api/v1/teachers/imports/dry-run",
     requestBody: true,
@@ -1616,6 +3019,12 @@ const requiredOperationContracts = [
     responseDataRequired: ["id", "tenantId", "classId", "teacherId", "title", "startsAt", "endsAt"],
   },
   {
+    method: "delete",
+    path: "/api/v1/schedule-lessons/{id}",
+    responseStatus: "204",
+    noResponseBody: true,
+  },
+  {
     method: "post",
     path: "/api/v1/study-sessions",
     requestBody: true,
@@ -1661,6 +3070,12 @@ const requiredOperationContracts = [
     ],
   },
   {
+    method: "delete",
+    path: "/api/v1/study-sessions/{id}",
+    responseStatus: "204",
+    noResponseBody: true,
+  },
+  {
     method: "get",
     path: "/api/v1/teacher-notes",
     responseListEnvelope: true,
@@ -1693,6 +3108,12 @@ const requiredOperationContracts = [
       { path: ["requestBody", "visibility"], enum: teacherNoteVisibilities },
       { path: ["responseData", "visibility"], enum: teacherNoteVisibilities },
     ],
+  },
+  {
+    method: "delete",
+    path: "/api/v1/teacher-notes/{id}",
+    responseStatus: "204",
+    noResponseBody: true,
   },
   {
     method: "post",
@@ -1769,6 +3190,14 @@ const requiredOperationContracts = [
     ],
   },
   {
+    method: "get",
+    path: "/api/v1/support-tickets/{id}/attachments/{attachmentId}/download",
+    responseEnvelope: true,
+    responseDataRequired: fileDownloadRequired,
+    responseDataForbiddenDeep: fileDownloadForbiddenDeep,
+    fieldChecks: fileDownloadFieldChecks,
+  },
+  {
     method: "post",
     path: "/api/v1/support-tickets/{id}/comments",
     requestBody: true,
@@ -1813,6 +3242,12 @@ const requiredOperationContracts = [
     responseDataRequired: ["id", "tenantId", "title"],
   },
   {
+    method: "delete",
+    path: "/api/v1/homework/materials/{id}",
+    responseStatus: "204",
+    noResponseBody: true,
+  },
+  {
     method: "post",
     path: "/api/v1/homework/materials/{id}/files",
     requestBody: true,
@@ -1837,6 +3272,14 @@ const requiredOperationContracts = [
       { path: ["responseDataItem", "contentType"], enum: uploadContentTypes },
       { path: ["responseDataItem", "byteSize"], minimum: 1 },
     ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/homework/materials/{id}/files/{fileId}/download",
+    responseEnvelope: true,
+    responseDataRequired: fileDownloadRequired,
+    responseDataForbiddenDeep: fileDownloadForbiddenDeep,
+    fieldChecks: fileDownloadFieldChecks,
   },
   {
     method: "post",
@@ -1899,6 +3342,12 @@ const requiredOperationContracts = [
     responseDataRequired: ["id", "tenantId", "classId", "title"],
   },
   {
+    method: "delete",
+    path: "/api/v1/homework/{id}",
+    responseStatus: "204",
+    noResponseBody: true,
+  },
+  {
     method: "post",
     path: "/api/v1/payment-plans",
     requestBody: true,
@@ -1932,6 +3381,142 @@ const requiredOperationContracts = [
     fieldChecks: [
       { path: ["requestBody", "status"], enum: paymentInstallmentStatuses },
       { path: ["responseData", "installments", "items", "status"], enum: paymentInstallmentStatuses },
+    ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/message-templates",
+    responseListEnvelope: true,
+    responseDataItemsRequired: messageTemplateRequired,
+    responseDataForbiddenDeep: messageTemplateForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseDataItem", "channel"], enum: messageTemplateChannels },
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/message-templates",
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["name", "body"],
+    requestForbidden: ["deletedAt", "id", "userId", "token"],
+    responseDataRequired: messageTemplateRequired,
+    responseDataForbiddenDeep: messageTemplateForbiddenDeep,
+    fieldChecks: [
+      { path: ["requestBody", "name"], minLength: 1 },
+      { path: ["requestBody", "body"], minLength: 1 },
+      { path: ["requestBody", "channel"], enum: messageTemplateChannels },
+      { path: ["responseData", "channel"], enum: messageTemplateChannels },
+    ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/message-templates/{id}",
+    responseEnvelope: true,
+    responseDataRequired: messageTemplateRequired,
+    responseDataForbiddenDeep: messageTemplateForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseData", "channel"], enum: messageTemplateChannels },
+    ],
+  },
+  {
+    method: "patch",
+    path: "/api/v1/message-templates/{id}",
+    requestBody: true,
+    responseEnvelope: true,
+    requestProperties: ["name", "channel", "body"],
+    requestForbidden: ["deletedAt", "id", "tenantId", "userId", "token"],
+    responseDataRequired: messageTemplateRequired,
+    responseDataForbiddenDeep: messageTemplateForbiddenDeep,
+    fieldChecks: [
+      { path: ["requestBody", "name"], minLength: 1 },
+      { path: ["requestBody", "body"], minLength: 1 },
+      { path: ["requestBody", "channel"], enum: messageTemplateChannels },
+      { path: ["responseData", "channel"], enum: messageTemplateChannels },
+    ],
+  },
+  {
+    method: "delete",
+    path: "/api/v1/message-templates/{id}",
+    responseStatus: "204",
+    noResponseBody: true,
+  },
+  {
+    method: "get",
+    path: "/api/v1/identity-invitations",
+    responseListEnvelope: true,
+    responseDataItemsRequired: identityInvitationRecordRequired,
+    responseDataForbiddenDeep: identityInvitationResponseForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseDataItem", "subjectType"], enum: identityInvitationSubjectTypes },
+      { path: ["responseDataItem", "role"], enum: identityInvitationSubjectTypes },
+      { path: ["responseDataItem", "status"], enum: identityInvitationStatuses },
+      { path: ["responseDataItem", "expiresAt"], format: "date-time" },
+      { path: ["responseDataItem", "createdAt"], format: "date-time" },
+      { path: ["responseDataItem", "updatedAt"], format: "date-time" },
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/identity-invitations",
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["email", "subjectId", "subjectType"],
+    requestForbidden: ["acceptedUserId", "activationToken", "id", "role", "status", "tenantId", "tokenHash"],
+    responseDataRequired: identityInvitationRecordRequired,
+    responseDataForbiddenDeep: identityInvitationResponseForbiddenDeep,
+    fieldChecks: [
+      { path: ["requestBody", "email"], format: "email" },
+      { path: ["requestBody", "subjectId"], minLength: 1 },
+      { path: ["requestBody", "subjectType"], enum: identityInvitationSubjectTypes },
+      { path: ["responseData", "subjectType"], enum: identityInvitationSubjectTypes },
+      { path: ["responseData", "role"], enum: identityInvitationSubjectTypes },
+      { path: ["responseData", "status"], enum: identityInvitationStatuses },
+      { path: ["responseData", "expiresAt"], format: "date-time" },
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/identity-invitations/accept",
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["password", "token"],
+    requestForbidden: ["acceptedUserId", "email", "role", "status", "subjectId", "subjectType", "tenantId", "tokenHash"],
+    responseDataRequired: ["status"],
+    responseDataForbiddenDeep: [
+      "acceptedUserId",
+      "activationToken",
+      "createdAt",
+      "email",
+      "id",
+      "name",
+      "password",
+      "role",
+      "subjectId",
+      "subjectType",
+      "tenantId",
+      "token",
+      "tokenHash",
+      "updatedAt",
+    ],
+    fieldChecks: [
+      { path: ["requestBody", "password"], minLength: 8 },
+      { path: ["requestBody", "token"], minLength: 1 },
+      { path: ["responseData", "status"], enum: ["ACCEPTED"] },
+      { path: ["responseData", "acceptedAt"], format: "date-time" },
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/identity-invitations/{id}/resend",
+    responseEnvelope: true,
+    responseDataRequired: identityInvitationRecordRequired,
+    responseDataForbiddenDeep: identityInvitationResponseForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseData", "subjectType"], enum: identityInvitationSubjectTypes },
+      { path: ["responseData", "role"], enum: identityInvitationSubjectTypes },
+      { path: ["responseData", "status"], enum: identityInvitationStatuses },
+      { path: ["responseData", "expiresAt"], format: "date-time" },
     ],
   },
   {
@@ -2147,6 +3732,9 @@ function validateOpenApiDocument(document) {
     if (contract.requestProperties) {
       requireSchemaProperties(requestSchema, contract.requestProperties, failures, `${contract.method.toUpperCase()} ${contract.path} request body`);
     }
+    if (contract.requestForbidden) {
+      rejectSchemaProperties(requestSchema, contract.requestForbidden, failures, `${contract.method.toUpperCase()} ${contract.path} request body`);
+    }
     if (contract.requestMinProperties !== undefined && requestSchema?.minProperties !== contract.requestMinProperties) {
       failures.push(`OpenAPI minProperties beklenmiyor: ${contract.method.toUpperCase()} ${contract.path} request body=${requestSchema?.minProperties}`);
     }
@@ -2171,6 +3759,18 @@ function validateOpenApiDocument(document) {
 
     const successResponse = operation.responses?.[contract.responseStatus] ?? operation.responses?.["201"] ?? operation.responses?.["200"];
     const successSchema = successResponse?.content?.["application/json"]?.schema;
+    const rawResponseSchema = contract.rawResponseContentType
+      ? successResponse?.content?.[contract.rawResponseContentType]?.schema
+      : undefined;
+    if (contract.rawResponseContentType && !rawResponseSchema) {
+      failures.push(`OpenAPI raw response content eksik: ${contract.method.toUpperCase()} ${contract.path} ${contract.rawResponseContentType}`);
+    }
+    if (contract.rawResponseRequired) {
+      requireSchemaFields(rawResponseSchema, contract.rawResponseRequired, failures, `${contract.method.toUpperCase()} ${contract.path} raw response`);
+    }
+    if (contract.rawResponseForbiddenDeep) {
+      rejectSchemaPropertiesDeep(rawResponseSchema, contract.rawResponseForbiddenDeep, failures, `${contract.method.toUpperCase()} ${contract.path} raw response`);
+    }
     if (contract.responseEnvelope && !hasRequiredDataEnvelope(successSchema)) {
       failures.push(`OpenAPI response envelope schema eksik: ${contract.method.toUpperCase()} ${contract.path}`);
     }
@@ -2201,7 +3801,7 @@ function validateOpenApiDocument(document) {
     }
 
     for (const check of contract.fieldChecks ?? []) {
-      const schema = resolveContractSchema(check.path, requestSchema, successSchema?.properties?.data);
+      const schema = resolveContractSchema(check.path, requestSchema, successSchema?.properties?.data, rawResponseSchema);
       validateFieldCheck(schema, check, failures, `${contract.method.toUpperCase()} ${contract.path} ${check.path.join(".")}`);
     }
   }
@@ -2318,10 +3918,12 @@ function hasRequiredListEnvelope(schema) {
   );
 }
 
-function resolveContractSchema(path, requestSchema, responseDataSchema) {
+function resolveContractSchema(path, requestSchema, responseDataSchema, rawResponseSchema) {
   const [root, ...segments] = path;
   let current = root === "requestBody"
     ? requestSchema
+    : root === "rawResponse"
+      ? rawResponseSchema
     : root === "responseDataItem"
       ? responseDataSchema?.items
       : responseDataSchema;
@@ -2347,6 +3949,9 @@ function validateFieldCheck(schema, check, failures, label) {
   }
   if (check.format !== undefined && schema.format !== check.format) {
     failures.push(`OpenAPI format beklenmiyor: ${label}=${schema.format}`);
+  }
+  if (check.type !== undefined && schema.type !== check.type) {
+    failures.push(`OpenAPI type beklenmiyor: ${label}=${schema.type}`);
   }
   if (check.enum) {
     const actual = Array.isArray(schema.enum) ? [...schema.enum].sort() : [];
@@ -2404,7 +4009,14 @@ function assertExistingFileArtifact(file) {
 
 function isLocalTempPath(path) {
   const normalized = path.replace(/\/+$/g, "") || "/";
-  return normalized === "/tmp" || normalized.startsWith("/tmp/") || normalized === "/var/tmp" || normalized.startsWith("/var/tmp/");
+  return (
+    normalized === "/tmp" ||
+    normalized.startsWith("/tmp/") ||
+    normalized === "/var/tmp" ||
+    normalized.startsWith("/var/tmp/") ||
+    normalized === "/private/tmp" ||
+    normalized.startsWith("/private/tmp/")
+  );
 }
 
 function fail(message) {

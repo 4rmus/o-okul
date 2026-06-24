@@ -21,6 +21,8 @@ const expectedIsemFixture = {
   reportResultCount: 254,
 };
 const allowedEvidenceReferencePrefixes = ["artifact:", "run:", "log:", "url:", "https://", "file://", "s3://"];
+const isemOpticalPipelineEvidenceFileNames = new Set(["isem-optical-pipeline.json", "isem-optical-pipeline.log"]);
+const liveUiWorkerEvidenceFileNames = new Set(["live-ui-worker-result.json", "live-ui-worker-report.json"]);
 const forbiddenRawEvidenceKeyFragments = [
   "contentbase64",
   "filebase64",
@@ -189,7 +191,14 @@ function isPlaceholderEvidenceTargetHost(hostname) {
 
 function isLocalTempEvidenceTargetUrl(url) {
   const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
-  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+  return (
+    path === "/tmp" ||
+    path.startsWith("/tmp/") ||
+    path === "/var/tmp" ||
+    path.startsWith("/var/tmp/") ||
+    path === "/private/tmp" ||
+    path.startsWith("/private/tmp/")
+  );
 }
 
 function parseJson(value) {
@@ -492,6 +501,40 @@ function requireEvidenceReferences(report, failures, key) {
     if (!allowExampleEvidence && hasPlaceholderToken(reference)) {
       failures.push(`${key}[${index}] gercek kanit icin ornek/placeholder/redacted deger olmamali.`);
     }
+    if (reference.includes("artifacts/local/")) {
+      failures.push(`${key}[${index}] local smoke artifact referansi tasimamali.`);
+    }
+  }
+
+  if (!value.some((reference) => hasEvidenceReferenceFileName(reference, isemOpticalPipelineEvidenceFileNames))) {
+    failures.push(`${key} iSEM optical pipeline kaniti isem-optical-pipeline.json veya isem-optical-pipeline.log dosyasina baglanmali.`);
+  }
+  if (!value.some((reference) => hasEvidenceReferenceFileName(reference, liveUiWorkerEvidenceFileNames))) {
+    failures.push(`${key} live-ui-worker kaniti live-ui-worker-result.json veya live-ui-worker-report.json dosyasina baglanmali.`);
+  }
+}
+
+function hasEvidenceReferenceFileName(reference, expectedFileNames) {
+  if (typeof reference !== "string") return false;
+  const resource = extractEvidenceReferenceResource(reference);
+  const fileName = resource.split(/[\\/]/).filter(Boolean).pop() ?? "";
+  return expectedFileNames.has(fileName);
+}
+
+function extractEvidenceReferenceResource(reference) {
+  let value = reference.trim();
+  for (const prefix of ["artifact:", "run:", "log:", "url:"]) {
+    if (value.startsWith(prefix)) {
+      value = value.slice(prefix.length);
+      break;
+    }
+  }
+
+  try {
+    const url = new URL(value);
+    return url.pathname || value;
+  } catch {
+    return value.split(/[?#]/)[0];
   }
 }
 

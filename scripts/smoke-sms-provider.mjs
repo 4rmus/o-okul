@@ -27,6 +27,11 @@ if (!result || result.status !== "sent") {
   fail(`SMS provider smoke başarısız: ${result?.errorCode ?? "UNKNOWN"}`);
 }
 
+const providerMessageId = result.providerMessageId?.trim();
+if (!providerMessageId) {
+  fail("SMS provider smoke başarısız: providerMessageId boş.");
+}
+
 await writeSmokeEvidence(evidenceFile, {
   result: "PASS",
   check: "sms_provider_smoke",
@@ -35,7 +40,7 @@ await writeSmokeEvidence(evidenceFile, {
   provider,
   recipient: maskRecipient(to),
   segments: result.segmentEstimate?.segments ?? 0,
-  providerMessageId: result.providerMessageId ?? null,
+  providerMessageId,
   commandsPassed: ["pnpm sms:smoke"],
   gaps: [],
 });
@@ -46,7 +51,7 @@ console.log(
     `provider=${provider}`,
     `to=${maskRecipient(to)}`,
     `segments=${result.segmentEstimate?.segments ?? 0}`,
-    result.providerMessageId ? `providerMessageId=${result.providerMessageId}` : undefined,
+    `providerMessageId=${providerMessageId}`,
   ].filter(Boolean).join(" "),
 );
 

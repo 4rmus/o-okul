@@ -53,6 +53,7 @@ try {
     process.exit(0);
   }
 
+  await assertPendingContentHashesMatch();
   ({ client: s3Client, bucket: s3Bucket } = await createS3ClientFromEnv());
   const migrated = [];
   for (const subject of subjects) {
@@ -101,13 +102,84 @@ async function auditInlineUploadContent() {
              AND "contentBase64" IS NOT NULL
              AND "contentBase64" <> ''
          ), 0)::bigint AS "pendingBase64Characters",
-         pg_total_relation_size($1::regclass)::bigint AS "tableSizeBytes"
+         pg_total_relation_size(format('%I', $1::text)::regclass)::bigint AS "tableSizeBytes"
        FROM "${subject.table}"`,
       [subject.table],
     );
-    results.push({ subject: subject.label, ...(counts.rows[0] ?? {}) });
+    results.push(normalizeSubjectSnapshot(subject.label, counts.rows[0] ?? {}));
   }
   return results;
+}
+
+function normalizeSubjectSnapshot(subject, row) {
+  return {
+    subject,
+    totalRows: Number(row.totalRows ?? 0),
+    pendingRows: Number(row.pendingRows ?? 0),
+    pendingActiveRows: Number(row.pendingActiveRows ?? 0),
+    pendingDeletedRows: Number(row.pendingDeletedRows ?? 0),
+    pendingBase64Characters: Number(row.pendingBase64Characters ?? 0),
+    tableSizeBytes: Number(row.tableSizeBytes ?? 0),
+  };
+}
+
+async function assertPendingContentHashesMatch() {
+  const failures = [];
+
+  for (const subject of subjects) {
+    const summary = await countHashMismatches(subject);
+    if (summary.mismatchedRows > 0 || summary.invalidBase64Rows > 0) {
+      failures.push(summary);
+    }
+  }
+
+  if (failures.length === 0) return;
+
+  const details = failures
+    .map(
+      (item) =>
+        `${item.subject}: checked=${item.checkedRows}, sha256Mismatch=${item.mismatchedRows}, invalidBase64=${item.invalidBase64Rows}`,
+    )
+    .join("; ");
+  throw new Error(`Inline upload sha256 preflight failed; migration stopped before S3 write/DB update. ${details}`);
+}
+
+async function countHashMismatches(subject) {
+  let checkedRows = 0;
+  let mismatchedRows = 0;
+  let invalidBase64Rows = 0;
+  let cursorTenantId = "";
+  let cursorId = "";
+
+  while (true) {
+    const result = await client.query(
+      `SELECT "id", "tenantId", "sha256", "contentBase64"
+       FROM "${subject.table}"
+       WHERE "storageKey" IS NULL
+         AND "contentBase64" IS NOT NULL
+         AND "contentBase64" <> ''
+         AND ("tenantId", "id") > ($2, $3)
+       ORDER BY "tenantId", "id"
+       LIMIT $1`,
+      [batchSize, cursorTenantId, cursorId],
+    );
+
+    if (result.rows.length === 0) break;
+
+    for (const row of result.rows) {
+      checkedRows += 1;
+      try {
+        const body = decodeBase64(row.contentBase64, `${subject.label}:pending`);
+        if (sha256(body) !== row.sha256) mismatchedRows += 1;
+      } catch {
+        invalidBase64Rows += 1;
+      }
+      cursorTenantId = row.tenantId;
+      cursorId = row.id;
+    }
+  }
+
+  return { subject: subject.label, checkedRows, mismatchedRows, invalidBase64Rows };
 }
 
 async function migrateSubject(subject) {
@@ -116,7 +188,7 @@ async function migrateSubject(subject) {
 
   while (true) {
     const result = await client.query(
-      `SELECT "id", "tenantId", "${subject.parentColumn}" AS "parentId", "fileName", "contentType", "sha256", "contentBase64"
+      `SELECT "id", "tenantId", "contentType", "sha256", "contentBase64"
        FROM "${subject.table}"
        WHERE "storageKey" IS NULL
          AND "contentBase64" IS NOT NULL
@@ -131,10 +203,10 @@ async function migrateSubject(subject) {
     }
 
     for (const row of result.rows) {
-      const body = decodeBase64(row.contentBase64, `${subject.label}:${row.id}`);
+      const body = decodeBase64(row.contentBase64, `${subject.label}:pending-row`);
       const actualSha256 = sha256(body);
       if (actualSha256 !== row.sha256) {
-        throw new Error(`${subject.label}:${row.id} sha256 mismatch; migration stopped before DB update.`);
+        throw new Error(`${subject.label} sha256 mismatch; migration stopped before DB update.`);
       }
 
       const storageKey = createStorageKey(subject, row);
@@ -153,7 +225,10 @@ async function migrateSubject(subject) {
       );
 
       if (updated.rowCount !== 1) {
-        throw new Error(`${subject.label}:${row.id} DB update failed after S3 put; rerun is idempotent by storage key.`);
+        if (!(await hasDbStorageKeyReference(storageKey))) {
+          await deleteS3Object(storageKey);
+        }
+        throw new Error(`${subject.label} DB update failed after S3 put; S3 object cleanup was guarded by DB references.`);
       }
 
       migratedRows += 1;
@@ -198,14 +273,24 @@ async function putS3Object(key, body, contentType) {
   );
 }
 
+async function deleteS3Object(key) {
+  const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
+  await s3Client.send(new DeleteObjectCommand({ Bucket: s3Bucket, Key: key }));
+}
+
+async function hasDbStorageKeyReference(storageKey) {
+  const result = await client.query(
+    `SELECT (
+       EXISTS (SELECT 1 FROM "HomeworkMaterialFile" WHERE "storageKey" = $1)
+       OR EXISTS (SELECT 1 FROM "SupportTicketAttachment" WHERE "storageKey" = $1)
+     ) AS "referenced"`,
+    [storageKey],
+  );
+  return result.rows[0]?.referenced === true;
+}
+
 function createStorageKey(subject, row) {
-  return [
-    subject.prefix,
-    cleanKeySegment(row.tenantId),
-    cleanKeySegment(row.parentId),
-    row.sha256,
-    cleanKeySegment(row.fileName),
-  ].join("/");
+  return [subject.prefix, row.sha256].join("/");
 }
 
 function decodeBase64(value, label) {
@@ -214,10 +299,6 @@ function decodeBase64(value, label) {
     throw new Error(`${label} contentBase64 is not valid base64.`);
   }
   return Buffer.from(normalized, "base64");
-}
-
-function cleanKeySegment(value) {
-  return String(value).trim().replace(/[^A-Za-z0-9._-]/g, "_");
 }
 
 function sha256(value) {
@@ -280,7 +361,14 @@ async function assertExistingFileArtifact(path) {
 
 function isLocalTempPath(path) {
   const normalized = path.replace(/\/+$/g, "") || "/";
-  return normalized === "/tmp" || normalized.startsWith("/tmp/") || normalized === "/var/tmp" || normalized.startsWith("/var/tmp/");
+  return (
+    normalized === "/tmp" ||
+    normalized.startsWith("/tmp/") ||
+    normalized === "/var/tmp" ||
+    normalized.startsWith("/var/tmp/") ||
+    normalized === "/private/tmp" ||
+    normalized.startsWith("/private/tmp/")
+  );
 }
 
 async function assertPort(label, host, port, hint) {

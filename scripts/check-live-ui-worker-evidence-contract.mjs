@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const artifactRoot = "artifacts/live-ui-worker-evidence-contract";
-const validEvidencePath = join(artifactRoot, "valid-live-ui-worker.json");
+const validEvidencePath = join(artifactRoot, "private", "valid-live-ui-worker.json");
 const validResultEvidencePath = join(artifactRoot, "result", "live-ui-worker-result.json");
 const failures = [];
 
@@ -40,12 +40,64 @@ try {
   );
 
   runNegativeCheck(
+    "live UI-worker missing base URL negative",
+    {
+      NEXT_E2E_LIVE_UI_WORKER: "1",
+      NEXT_E2E_BASE_URL: "",
+      LIVE_UI_WORKER_EVIDENCE_PATH: validEvidencePath,
+    },
+    "NEXT_E2E_BASE_URL gerçek https staging/prod URL olmalı.",
+  );
+
+  runNegativeCheck(
+    "live UI-worker local base URL negative",
+    {
+      NEXT_E2E_LIVE_UI_WORKER: "1",
+      NEXT_E2E_BASE_URL: "http://localhost:3001",
+      LIVE_UI_WORKER_EVIDENCE_PATH: validEvidencePath,
+    },
+    "NEXT_E2E_BASE_URL gerçek https staging/prod URL olmalı.",
+  );
+
+  runNegativeCheck(
+    "live UI-worker missing skip web server negative",
+    {
+      NEXT_E2E_LIVE_UI_WORKER: "1",
+      NEXT_E2E_SKIP_WEB_SERVER: "",
+      LIVE_UI_WORKER_EVIDENCE_PATH: validEvidencePath,
+    },
+    "NEXT_E2E_SKIP_WEB_SERVER=1 olmalı.",
+  );
+
+  runNegativeCheck(
     "live UI-worker temp evidence path negative",
     {
       NEXT_E2E_LIVE_UI_WORKER: "1",
       LIVE_UI_WORKER_EVIDENCE_PATH: "/tmp/live-ui-worker-evidence-negative.json",
     },
     "LIVE_UI_WORKER_EVIDENCE_PATH lokal temp path olmamalı.",
+  );
+
+  const publicEvidencePath = join(artifactRoot, "public-live-ui-worker.json");
+  writeJson(publicEvidencePath, createValidEvidence());
+  runNegativeCheck(
+    "live UI-worker public credential input path negative",
+    {
+      NEXT_E2E_LIVE_UI_WORKER: "1",
+      LIVE_UI_WORKER_EVIDENCE_PATH: publicEvidencePath,
+    },
+    "LIVE_UI_WORKER_EVIDENCE_PATH private runtime input dizini altında olmalı.",
+  );
+
+  const permissiveEvidencePath = join(artifactRoot, "private", "permissive-live-ui-worker.json");
+  writeJson(permissiveEvidencePath, createValidEvidence(), 0o644);
+  runNegativeCheck(
+    "live UI-worker permissive credential input mode negative",
+    {
+      NEXT_E2E_LIVE_UI_WORKER: "1",
+      LIVE_UI_WORKER_EVIDENCE_PATH: permissiveEvidencePath,
+    },
+    "LIVE_UI_WORKER_EVIDENCE_PATH sadece owner read/write 0600 izniyle saklanmalı.",
   );
 
   runNegativeCheck(
@@ -69,8 +121,8 @@ try {
     "LIVE_UI_WORKER_RESULT_EVIDENCE_FILE için STAGING_ENVIRONMENT veya NODE_ENV staging/production olmalı.",
   );
 
-  const symlinkRealPath = join(artifactRoot, "symlink-real.json");
-  const symlinkPath = join(artifactRoot, "symlink-live-ui-worker.json");
+  const symlinkRealPath = join(artifactRoot, "private", "symlink-real.json");
+  const symlinkPath = join(artifactRoot, "private", "symlink-live-ui-worker.json");
   writeJson(symlinkRealPath, createValidEvidence());
   symlinkSync(symlinkRealPath, symlinkPath);
   runNegativeCheck(
@@ -101,7 +153,7 @@ try {
 
   const realDirectory = join(artifactRoot, "real-dir");
   const symlinkDirectory = join(artifactRoot, "symlink-dir");
-  const realNestedDirectory = join(realDirectory, "nested");
+  const realNestedDirectory = join(realDirectory, "private", "nested");
   mkdirSync(realNestedDirectory, { recursive: true });
   writeJson(join(realNestedDirectory, "live-ui-worker.json"), createValidEvidence());
   writeJson(join(realNestedDirectory, "live-ui-worker-result.json"), createValidResultEvidence());
@@ -110,7 +162,7 @@ try {
     "live UI-worker symlink parent negative",
     {
       NEXT_E2E_LIVE_UI_WORKER: "1",
-      LIVE_UI_WORKER_EVIDENCE_PATH: join(symlinkDirectory, "nested", "live-ui-worker.json"),
+      LIVE_UI_WORKER_EVIDENCE_PATH: join(symlinkDirectory, "private", "nested", "live-ui-worker.json"),
     },
     "LIVE_UI_WORKER_EVIDENCE_PATH parent dizini symlink olmayan dizin olmalı.",
   );
@@ -120,13 +172,13 @@ try {
     {
       NEXT_E2E_LIVE_UI_WORKER: "1",
       LIVE_UI_WORKER_EVIDENCE_PATH: validEvidencePath,
-      LIVE_UI_WORKER_RESULT_EVIDENCE_FILE: join(symlinkDirectory, "nested", "live-ui-worker-result.json"),
+      LIVE_UI_WORKER_RESULT_EVIDENCE_FILE: join(symlinkDirectory, "private", "nested", "live-ui-worker-result.json"),
       STAGING_ENVIRONMENT: "staging",
     },
     "LIVE_UI_WORKER_RESULT_EVIDENCE_FILE parent dizini symlink olmayan dizin olmalı.",
   );
 
-  const missingFieldPath = join(artifactRoot, "missing-field.json");
+  const missingFieldPath = join(artifactRoot, "private", "missing-field.json");
   const missingField = createValidEvidence();
   delete missingField.firstStudentId;
   writeJson(missingFieldPath, missingField);
@@ -139,7 +191,7 @@ try {
     "liveUiWorkerEvidence.firstStudentId alanı zorunlu.",
   );
 
-  const placeholderPath = join(artifactRoot, "placeholder.json");
+  const placeholderPath = join(artifactRoot, "private", "placeholder.json");
   const placeholder = createValidEvidence();
   placeholder.email = "report-admin@example.com";
   writeJson(placeholderPath, placeholder);
@@ -152,7 +204,7 @@ try {
     "email production kanıtı için örnek/placeholder/redacted değer olmamalı.",
   );
 
-  const extraFieldPath = join(artifactRoot, "extra-field.json");
+  const extraFieldPath = join(artifactRoot, "private", "extra-field.json");
   const extraField = createValidEvidence();
   extraField.studentPortal.unexpected = true;
   writeJson(extraFieldPath, extraField);
@@ -172,6 +224,12 @@ try {
   );
 
   runResultNegativeCheck(
+    "live UI-worker result local artifact target negative",
+    "artifacts/local/live-ui-worker-result-target-negative.json",
+    "LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET production kanıtı için artifacts/local altında olmamalı.",
+  );
+
+  runResultNegativeCheck(
     "live UI-worker result symlink target negative",
     symlinkResultPath,
     "LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET symlink olmayan file:// artifact olmalı.",
@@ -179,7 +237,7 @@ try {
 
   runResultNegativeCheck(
     "live UI-worker result symlink parent target negative",
-    join(symlinkDirectory, "nested", "live-ui-worker-result.json"),
+    join(symlinkDirectory, "private", "nested", "live-ui-worker-result.json"),
     "LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET parent dizini symlink olmayan dizin olmalı.",
   );
 
@@ -257,6 +315,8 @@ function runPreflight(env) {
       LIVE_UI_WORKER_EVIDENCE_PATH: "",
       LIVE_UI_WORKER_RESULT_EVIDENCE_FILE: "",
       LIVE_UI_WORKER_RESULT_EVIDENCE_PATH: "",
+      NEXT_E2E_BASE_URL: "https://staging.uzmanhocam.com",
+      NEXT_E2E_SKIP_WEB_SERVER: "1",
       STAGING_ENVIRONMENT: "",
       NODE_ENV: "",
       ...env,
@@ -298,9 +358,10 @@ function runResultNegativeCheck(label, target, expectedMessage) {
   }
 }
 
-function writeJson(path, value) {
+function writeJson(path, value, mode = path.includes(`${artifactRoot}/private/`) ? 0o600 : 0o644) {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode });
+  chmodSync(path, mode);
   if (!existsSync(path)) {
     failures.push(`${path} yazılamadı.`);
   } else {

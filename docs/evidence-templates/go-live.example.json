@@ -33,7 +33,9 @@
       "Security audit evidence",
       "Live exam cycle evidence",
       "iSEM optical pipeline evidence",
+      "Live UI-worker result evidence",
       "Inline upload migration evidence",
+      "Audit null tenant evidence",
       "Rate limit Redis evidence",
       "RLS live evidence",
       "UAT evidence"
@@ -46,6 +48,17 @@
     "gatesPassed": [
       "Traefik HTTPS smoke",
       "TR datacenter/provider kanıtı",
+      "Live exam cycle kanıtı",
+      "iSEM optical pipeline kanıtı",
+      "Live UI-worker result kanıtı",
+      "KVKK inventory kanıtı",
+      "RLS live kanıtı",
+      "Inline upload migration kanıtı",
+      "Audit null tenant kanıtı",
+      "Rate limit Redis kanıtı",
+      "SMS provider kanıtı",
+      "Notification provider kanıtı",
+      "Report generation perf kanıtı",
       "Staging/prod UAT",
       "Deployment rollback tatbikatı",
       "Pilot kapanış kanıtı",
@@ -90,7 +103,8 @@
     "kvkkNoticeApproved": true,
     "privacyInventoryPassed": true,
     "financialRetentionPassed": true,
-    "inlineUploadMigrationPassed": true
+    "inlineUploadMigrationPassed": true,
+    "auditNullTenantPassed": true
   },
   "operations": {
     "incidentRunbookAcknowledged": true,
@@ -154,6 +168,7 @@
     "artifacts/example/production/admin-mfa.json",
     "artifacts/example/production/ai-report-summary.json",
     "artifacts/example/production/live-exam-cycle.json",
+    "artifacts/example/production/live-ui-worker-result.json",
     "artifacts/example/production/inline-upload-content-migration.json",
     "artifacts/example/production/rate-limit.json",
     "artifacts/example/production/rls-live.json",

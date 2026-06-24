@@ -35,7 +35,9 @@ const requiredChecks = new Map([
   ["Security audit evidence", "scripts/check-security-audit-evidence.mjs"],
   ["Live exam cycle evidence", "scripts/check-live-exam-cycle-evidence.mjs"],
   ["iSEM optical pipeline evidence", "scripts/check-isem-optical-pipeline-evidence.mjs"],
+  ["Live UI-worker result evidence", "scripts/check-live-ui-worker-result-evidence.mjs"],
   ["Inline upload migration evidence", "scripts/check-inline-upload-content-migration-evidence.mjs"],
+  ["Audit null tenant evidence", "scripts/check-audit-null-tenant-evidence.mjs"],
   ["Rate limit Redis evidence", "scripts/check-rate-limit-evidence.mjs"],
   ["RLS live evidence", "scripts/check-rls-live-evidence.mjs"],
   ["UAT evidence", "scripts/check-uat-evidence.mjs"],
@@ -150,7 +152,34 @@ const requiredReports = {
     "pipelineDurationMs",
     "commandsPassed",
   ],
-  inlineUploadMigration: ["environment", "checkedAt", "storageMode", "dryRun", "migration", "commandsPassed", "evidenceReferences"],
+  liveUiWorkerResult: [
+    "generatedAt",
+    "result",
+    "check",
+    "environment",
+    "checkedAt",
+    "examHash",
+    "firstStudentHash",
+    "reportStatus",
+    "downloadedArtifacts",
+    "karnePdfDownloaded",
+    "excelDownloaded",
+    "studentPortalViewed",
+    "guardianPortalViewed",
+    "commandsPassed",
+    "gaps",
+  ],
+  inlineUploadMigration: [
+    "environment",
+    "checkedAt",
+    "storageMode",
+    "dryRun",
+    "migration",
+    "orphanAudit",
+    "commandsPassed",
+    "evidenceReferences",
+  ],
+  auditNullTenant: ["environment", "checkedAt", "auditNullTenant", "commandsPassed", "evidenceReferences"],
   rateLimit: ["environment", "checkedAt", "config", "instances", "apiRateLimit", "loginAttemptLimiter", "commandsPassed", "evidenceReferences"],
   rlsLive: [
     "environment",
@@ -281,6 +310,11 @@ const expectedRlsWriteRejects = [
   "ParsedAnswer cross exam mismatch",
   "ParsedAnswer duplicate raw import participant parser",
 ];
+const expectedRlsEvidenceReferenceFileNames = [
+  "db-rls-check.log",
+  "db-rls-check-live.log",
+  "rls-load-smoke.json",
+];
 const externalMonitoringPublicEdgeMonitors = ["API /health", "API /health/ready", "Web login", "Traefik TLS certificate"];
 
 if (!target) {
@@ -296,6 +330,9 @@ try {
 
 if (!isAllowedEvidenceTargetUrl(targetUrl)) {
   fail(["PRODUCTION_EVIDENCE_SUMMARY_TARGET file:// veya https:// URL olmalı."]);
+}
+if (hasSecretBearingUrlParts(targetUrl)) {
+  fail(["PRODUCTION_EVIDENCE_SUMMARY_TARGET production evidence target URL userinfo, query veya fragment içeremez."]);
 }
 
 const summary = await readJsonTarget(targetUrl);
@@ -374,6 +411,10 @@ function isAllowedEvidenceTargetUrl(url) {
   );
 }
 
+function hasSecretBearingUrlParts(url) {
+  return url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "";
+}
+
 function isPlaceholderEvidenceTargetHost(hostname) {
   const normalized = hostname.toLowerCase();
   return (
@@ -391,7 +432,14 @@ function isPlaceholderEvidenceTargetHost(hostname) {
 
 function isLocalTempEvidenceTargetUrl(url) {
   const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
-  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+  return (
+    path === "/tmp" ||
+    path.startsWith("/tmp/") ||
+    path === "/var/tmp" ||
+    path.startsWith("/var/tmp/") ||
+    path === "/private/tmp" ||
+    path.startsWith("/private/tmp/")
+  );
 }
 
 function parseJson(value) {
@@ -557,6 +605,8 @@ function requireReports(summary, failures) {
   requireObjectTrue(reports.securityAudit, failures, "reports.securityAudit.rlsLiveCheckOk", "rlsLiveCheckOk");
   requireObjectTrue(reports.securityAudit, failures, "reports.securityAudit.noCriticalFindings", "noCriticalFindings");
   requireRlsLiveReport(reports.rlsLive, failures);
+  requireAuditNullTenantReport(reports.auditNullTenant, failures);
+  requireLiveUiWorkerResultReport(reports.liveUiWorkerResult, failures);
   requireKvkkInventoryReport(reports.kvkkInventory, failures);
   requireUatJourneyScenarios(reports.uat, failures);
   requireObjectTrue(reports.uat, failures, "reports.uat.liveExamCyclePassed", "liveExamCyclePassed");
@@ -752,6 +802,86 @@ function requireRlsLiveReport(scope, failures) {
     "reports.rlsLive.commandsPassed",
     ["pnpm db:rls:check", "pnpm db:rls:check:live", "pnpm rls:load:smoke", "pnpm rls:live:check"],
   );
+  requireRlsEvidenceReferences(scope?.evidenceReferences, failures, "reports.rlsLive.evidenceReferences");
+}
+
+function requireAuditNullTenantReport(scope, failures) {
+  const classification = requireObject(scope, failures, "reports.auditNullTenant.auditNullTenant", "auditNullTenant");
+  if (classification) {
+    requireExpectedObjectKeys(
+      classification,
+      ["totalRows", "tenantRows", "nullTenantRows", "nullTenantBreakdown"],
+      failures,
+      "reports.auditNullTenant.auditNullTenant",
+    );
+    requireObjectNumberAtLeast(classification, failures, "reports.auditNullTenant.auditNullTenant.totalRows", "totalRows", 0);
+    requireObjectNumberAtLeast(classification, failures, "reports.auditNullTenant.auditNullTenant.tenantRows", "tenantRows", 0);
+    requireObjectNumberAtLeast(classification, failures, "reports.auditNullTenant.auditNullTenant.nullTenantRows", "nullTenantRows", 0);
+    if (
+      Number.isInteger(classification.totalRows) &&
+      Number.isInteger(classification.tenantRows) &&
+      Number.isInteger(classification.nullTenantRows) &&
+      classification.totalRows !== classification.tenantRows + classification.nullTenantRows
+    ) {
+      failures.push("reports.auditNullTenant.auditNullTenant.totalRows tenantRows + nullTenantRows toplamına eşit olmalı.");
+    }
+
+    const breakdown = requireObject(
+      classification,
+      failures,
+      "reports.auditNullTenant.auditNullTenant.nullTenantBreakdown",
+      "nullTenantBreakdown",
+    );
+    if (breakdown) {
+      requireExpectedObjectKeys(breakdown, ["system", "deletedTenant", "unknown"], failures, "reports.auditNullTenant.auditNullTenant.nullTenantBreakdown");
+      let breakdownCount = 0;
+      for (const key of ["system", "deletedTenant", "unknown"]) {
+        const item = requireObject(
+          breakdown,
+          failures,
+          `reports.auditNullTenant.auditNullTenant.nullTenantBreakdown.${key}`,
+          key,
+        );
+        if (!item) continue;
+        requireExpectedObjectKeys(
+          item,
+          ["count", "classificationRule"],
+          failures,
+          `reports.auditNullTenant.auditNullTenant.nullTenantBreakdown.${key}`,
+        );
+        requireObjectNumberAtLeast(
+          item,
+          failures,
+          `reports.auditNullTenant.auditNullTenant.nullTenantBreakdown.${key}.count`,
+          "count",
+          0,
+        );
+        if (Number.isInteger(item.count)) breakdownCount += item.count;
+        if (typeof item.classificationRule !== "string" || item.classificationRule.trim() === "") {
+          failures.push(`reports.auditNullTenant.auditNullTenant.nullTenantBreakdown.${key}.classificationRule boş olmayan metin olmalı.`);
+        }
+      }
+      requireObjectEqual(breakdown.unknown, failures, "reports.auditNullTenant.auditNullTenant.nullTenantBreakdown.unknown.count", "count", 0);
+      if (Number.isInteger(classification.nullTenantRows) && breakdownCount !== classification.nullTenantRows) {
+        failures.push("reports.auditNullTenant.auditNullTenant.nullTenantBreakdown count toplamı nullTenantRows değerine eşit olmalı.");
+      }
+    }
+  }
+
+  requireExactStringSet(scope?.commandsPassed, failures, "reports.auditNullTenant.commandsPassed", ["pnpm audit-null-tenant:check"]);
+}
+
+function requireLiveUiWorkerResultReport(scope, failures) {
+  failures.push(
+    ...validateSmokeEvidencePayload(scope, {
+      expectedCheck: "live_ui_worker_report_smoke",
+      allowedEnvironments: ["staging", "production"],
+      label: "reports.liveUiWorkerResult",
+      allowExampleEvidence,
+    }),
+  );
+  requireObjectEqual(scope, failures, "reports.liveUiWorkerResult.environment", "environment", "production");
+  requireExactStringSet(scope?.commandsPassed, failures, "reports.liveUiWorkerResult.commandsPassed", ["pnpm live:ui-worker:smoke"]);
 }
 
 function requireIsemLiveExamCycleConsistency(reports, failures) {
@@ -1155,13 +1285,76 @@ function hasPlaceholderToken(value) {
   const normalized = value.toLowerCase();
   return (
     normalized.includes("example") ||
+    normalized.includes("placeholder") ||
+    normalized.includes("change-me") ||
+    normalized.includes("replace-me") ||
     normalized.includes("redacted") ||
     normalized.includes("__set") ||
     normalized.includes("localhost") ||
     normalized.includes(".test") ||
+    normalized.includes(".example") ||
+    normalized.includes(".invalid") ||
+    normalized.includes("test-token") ||
+    normalized.includes("test-message-id") ||
+    normalized.includes("dummy") ||
+    normalized.includes("fake") ||
+    normalized.includes("sms-provider-message") ||
     normalized.includes("backup-bucket") ||
-    normalized.includes("provider-console-or-contract-reference")
+      normalized.includes("provider-console-or-contract-reference")
   );
+}
+
+function requireRlsEvidenceReferences(references, failures, label) {
+  if (!Array.isArray(references) || references.length === 0) {
+    failures.push(`${label} bos olmayan liste olmali.`);
+    return;
+  }
+
+  for (const [index, reference] of references.entries()) {
+    if (typeof reference !== "string" || reference.trim() === "") {
+      failures.push(`${label}.${index} bos olmayan metin olmali.`);
+      continue;
+    }
+    if (!hasAllowedEvidenceReferencePrefix(reference)) {
+      failures.push(
+        `${label}.${index} artifact:, run:, log:, url:, https://, file://, s3:// veya artifacts/ ile baslayan kalici referans olmali.`,
+      );
+    }
+    if (isLocalSmokeEvidenceReference(reference)) {
+      failures.push(`${label}.${index} local smoke artifact referansi tasimamali.`);
+    }
+  }
+
+  for (const fileName of expectedRlsEvidenceReferenceFileNames) {
+    if (!references.some((reference) => hasEvidenceReferenceFileName(reference, fileName))) {
+      failures.push(`${label} ${fileName} kanıt artifact'ini içermeli.`);
+    }
+  }
+}
+
+function isLocalSmokeEvidenceReference(value) {
+  return typeof value === "string" && value.replaceAll("\\", "/").includes("artifacts/local/");
+}
+
+function hasAllowedEvidenceReferencePrefix(value) {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.startsWith("artifact:") ||
+    normalized.startsWith("run:") ||
+    normalized.startsWith("log:") ||
+    normalized.startsWith("url:") ||
+    normalized.startsWith("https://") ||
+    normalized.startsWith("file://") ||
+    normalized.startsWith("s3://") ||
+    normalized.startsWith("artifacts/")
+  );
+}
+
+function hasEvidenceReferenceFileName(value, fileName) {
+  if (typeof value !== "string") return false;
+  const normalized = value.split(/[?#]/)[0].replaceAll("\\", "/").replace(/\/+$/g, "");
+  return normalized.endsWith(`/${fileName}`) || normalized === fileName;
 }
 
 function stableStringify(value) {

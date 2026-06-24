@@ -177,7 +177,15 @@ async function assertExistingDirectory(directory) {
 
 function isLocalTempOrRootPath(path) {
   const normalized = path.replace(/\/+$/g, "") || "/";
-  return normalized === "/" || normalized === "/tmp" || normalized.startsWith("/tmp/") || normalized === "/var/tmp" || normalized.startsWith("/var/tmp/");
+  return (
+    normalized === "/" ||
+    normalized === "/tmp" ||
+    normalized.startsWith("/tmp/") ||
+    normalized === "/var/tmp" ||
+    normalized.startsWith("/var/tmp/") ||
+    normalized === "/private/tmp" ||
+    normalized.startsWith("/private/tmp/")
+  );
 }
 
 function fail(message) {

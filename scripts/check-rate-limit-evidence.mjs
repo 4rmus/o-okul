@@ -137,12 +137,20 @@ function requireAllowedEvidenceTargetUrl(url) {
     fail(["RATE_LIMIT_EVIDENCE_TARGET file:// veya https:// URL olmali."]);
   }
 
+  if (url.username || url.password || url.search || url.hash) {
+    fail(["RATE_LIMIT_EVIDENCE_TARGET userinfo, query veya fragment tasimamali."]);
+  }
+
   if (url.protocol === "https:" && isPlaceholderEvidenceTargetHost(url.hostname)) {
     fail(["RATE_LIMIT_EVIDENCE_TARGET production kaniti icin gercek https host olmali."]);
   }
 
   if (url.protocol === "file:" && isLocalTempEvidenceTargetUrl(url)) {
     fail(["RATE_LIMIT_EVIDENCE_TARGET production kaniti icin lokal temp path olmamali."]);
+  }
+
+  if (url.protocol === "file:" && isLocalSmokeEvidenceTargetUrl(url)) {
+    fail(["RATE_LIMIT_EVIDENCE_TARGET production kaniti icin artifacts/local altinda olmamali."]);
   }
 }
 
@@ -163,7 +171,19 @@ function isPlaceholderEvidenceTargetHost(hostname) {
 
 function isLocalTempEvidenceTargetUrl(url) {
   const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
-  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+  return (
+    path === "/tmp" ||
+    path.startsWith("/tmp/") ||
+    path === "/var/tmp" ||
+    path.startsWith("/var/tmp/") ||
+    path === "/private/tmp" ||
+    path.startsWith("/private/tmp/")
+  );
+}
+
+function isLocalSmokeEvidenceTargetUrl(url) {
+  const path = fileURLToPath(url).replaceAll("\\", "/").replace(/\/+$/g, "") || "/";
+  return path.endsWith("/artifacts/local") || path.includes("/artifacts/local/");
 }
 
 function parseJson(value) {
@@ -224,6 +244,9 @@ function requireInstances(instances, failures) {
     failures.push("instances tam 2 API instance kaniti icermeli.");
   }
 
+  const labels = new Set();
+  const urls = new Set();
+
   for (const [index, instance] of instances.entries()) {
     if (!instance || typeof instance !== "object" || Array.isArray(instance)) {
       failures.push(`instances.${index} nesnesi zorunlu.`);
@@ -231,7 +254,21 @@ function requireInstances(instances, failures) {
     }
     requireObjectKeySet(instance, instanceKeys, failures, `instances.${index}`);
     requireObjectString(instance, failures, `instances.${index}.label`, "label");
-    requireObjectUrl(instance, failures, `instances.${index}.baseUrl`, "baseUrl");
+    const url = requireObjectUrl(instance, failures, `instances.${index}.baseUrl`, "baseUrl");
+
+    if (typeof instance.label === "string" && instance.label.trim() !== "") {
+      if (labels.has(instance.label)) {
+        failures.push("instances iki farkli API instance label'i icermeli.");
+      }
+      labels.add(instance.label);
+    }
+
+    if (url) {
+      if (urls.has(url.href)) {
+        failures.push("instances iki farkli API instance URL'i icermeli.");
+      }
+      urls.add(url.href);
+    }
   }
 }
 
@@ -310,11 +347,14 @@ function requireEmptyArray(report, failures, key) {
 
 function requireEvidenceReferences(references, failures) {
   requireStringList(references, failures, "evidenceReferences", 2);
-  if (!Array.isArray(references) || allowExampleEvidence) return;
+  if (!Array.isArray(references)) return;
 
   for (const [index, value] of references.entries()) {
-    if (hasPlaceholderToken(value)) {
+    if (!allowExampleEvidence && hasPlaceholderToken(value)) {
       failures.push(`evidenceReferences.${index} production kaniti icin placeholder/redacted deger olmamali.`);
+    }
+    if (hasSecretBearingEvidenceReference(value)) {
+      failures.push(`evidenceReferences.${index} userinfo, query veya fragment tasimamali.`);
     }
   }
 }
@@ -384,12 +424,19 @@ function requireObjectUrl(scope, failures, label, key) {
   const value = scope?.[key];
   if (typeof value !== "string" || value.trim() === "") {
     failures.push(`${label} bos olmayan URL olmali.`);
-    return;
+    return undefined;
   }
+  let url;
   try {
-    const url = new URL(value);
+    url = new URL(value);
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       failures.push(`${label} http:// veya https:// olmali.`);
+    }
+    if (!allowExampleEvidence && url.protocol !== "https:") {
+      failures.push(`${label} production kaniti icin https:// olmali.`);
+    }
+    if (url.username || url.password || url.search || url.hash) {
+      failures.push(`${label} userinfo, query veya fragment tasimamali.`);
     }
   } catch {
     failures.push(`${label} gecerli URL olmali.`);
@@ -397,6 +444,7 @@ function requireObjectUrl(scope, failures, label, key) {
   if (!allowExampleEvidence && hasPlaceholderToken(value)) {
     failures.push(`${label} production kaniti icin placeholder/redacted deger olmamali.`);
   }
+  return url;
 }
 
 function requireObjectIntegerAtLeast(scope, failures, label, key, min) {
@@ -484,6 +532,27 @@ function hasPlaceholderToken(value) {
     "localhost",
     "127.0.0.1",
   ].some((token) => normalized.includes(token));
+}
+
+function hasSecretBearingEvidenceReference(value) {
+  if (typeof value !== "string") return false;
+
+  const normalized = value.trim();
+  if (normalized.includes("?") || normalized.includes("#")) {
+    return true;
+  }
+
+  const urlCandidate = normalized.toLowerCase().startsWith("url:") ? normalized.slice(4) : normalized;
+  if (!/^(https|file|s3):\/\//i.test(urlCandidate)) {
+    return false;
+  }
+
+  try {
+    const url = new URL(urlCandidate);
+    return Boolean(url.username || url.password || url.search || url.hash);
+  } catch {
+    return false;
+  }
 }
 
 function fail(failures) {

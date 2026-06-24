@@ -3,6 +3,7 @@ import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const target = process.env.KVKK_INVENTORY_TARGET;
+const allowExampleEvidence = process.env.KVKK_INVENTORY_ALLOW_EXAMPLE_EVIDENCE === "1";
 const kvkkInventoryTopLevelKeys = [
   "result",
   "environment",
@@ -148,8 +149,16 @@ function requireAllowedEvidenceTargetUrl(url) {
     fail(["KVKK_INVENTORY_TARGET production kaniti icin gercek https host olmali."]);
   }
 
-  if (url.protocol === "file:" && isLocalTempEvidenceTargetUrl(url)) {
-    fail(["KVKK_INVENTORY_TARGET production kaniti icin lokal temp path olmamali."]);
+  if (url.protocol === "file:") {
+    if (isLocalTempEvidenceTargetUrl(url)) {
+      fail(["KVKK_INVENTORY_TARGET production kaniti icin lokal temp path olmamali."]);
+    }
+    if (isLocalSmokeArtifactTargetUrl(url)) {
+      fail(["KVKK_INVENTORY_TARGET production kaniti icin artifacts/local altinda olmamali."]);
+    }
+    if (!allowExampleEvidence && isExampleEvidenceTemplateTargetUrl(url)) {
+      fail(["KVKK_INVENTORY_TARGET production kaniti icin docs/evidence-templates fixture hedefi olmamali."]);
+    }
   }
 }
 
@@ -164,13 +173,30 @@ function isPlaceholderEvidenceTargetHost(hostname) {
     normalized.endsWith(".example.com") ||
     normalized.includes("example") ||
     normalized.includes("__set") ||
-    normalized.includes("placeholder")
+    normalized.includes("placeholder") ||
+    normalized.includes("redacted")
   );
 }
 
 function isLocalTempEvidenceTargetUrl(url) {
   const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
-  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+  return (
+    path === "/tmp" ||
+    path.startsWith("/tmp/") ||
+    path === "/var/tmp" ||
+    path.startsWith("/var/tmp/") ||
+    path === "/private/tmp" ||
+    path.startsWith("/private/tmp/")
+  );
+}
+
+function isLocalSmokeArtifactTargetUrl(url) {
+  const path = fileURLToPath(url).replaceAll("\\", "/").replace(/\/+$/g, "") || "/";
+  return path.endsWith("/artifacts/local") || path.includes("/artifacts/local/");
+}
+
+function isExampleEvidenceTemplateTargetUrl(url) {
+  return fileURLToPath(url).replaceAll("\\", "/").includes("/docs/evidence-templates/");
 }
 
 function parseJson(value) {

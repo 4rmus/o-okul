@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional, UnauthorizedException } from "@nestjs/common";
+import type { SelfPurgeResult } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdentityResolver } from "./identity-resolver.js";
@@ -29,11 +30,7 @@ import {
   verifyAdminMfaToken,
 } from "./totp-mfa.js";
 
-export interface SelfPurgeResult {
-  userId: string;
-  tenantId?: string;
-  purgedAt: string;
-}
+export type { SelfPurgeResult };
 
 export interface PasswordResetRequestResult {
   status: "ISSUED" | "IGNORED";

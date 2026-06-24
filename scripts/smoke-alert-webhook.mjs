@@ -22,6 +22,7 @@ try {
 } catch {
   fail("ALERT_WEBHOOK_URL geçerli URL olmalı.");
 }
+validateWebhookUrl(url);
 
 const body = {
   source: "uzman-hocam",
@@ -64,4 +65,35 @@ console.log(`Alert webhook smoke geçti: HTTP ${response.status}`);
 function fail(message) {
   console.error(message);
   process.exit(1);
+}
+
+function validateWebhookUrl(url) {
+  if (url.protocol !== "https:") {
+    fail("ALERT_WEBHOOK_URL https olmalı.");
+  }
+
+  if (url.username || url.password || url.search || url.hash) {
+    fail("ALERT_WEBHOOK_URL userinfo, query veya fragment içeremez.");
+  }
+
+  if (isPlaceholderOrLocalHost(url.hostname)) {
+    fail("ALERT_WEBHOOK_URL production için gerçek host olmalı.");
+  }
+}
+
+function isPlaceholderOrLocalHost(hostname) {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized.endsWith(".localhost") ||
+    normalized === "127.0.0.1" ||
+    normalized.startsWith("127.") ||
+    normalized === "::1" ||
+    normalized === "0.0.0.0" ||
+    normalized.endsWith(".test") ||
+    normalized.endsWith(".example") ||
+    normalized.endsWith(".invalid") ||
+    normalized.includes("example") ||
+    normalized.includes("__set")
+  );
 }

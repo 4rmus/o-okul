@@ -100,6 +100,10 @@ function requireAllowedEvidenceTargetUrl(url) {
     fail(["DEPLOYMENT_REGION_TARGET file:// veya https:// URL olmali."]);
   }
 
+  if (url.username || url.password || url.search || url.hash) {
+    fail(["DEPLOYMENT_REGION_TARGET userinfo, query veya fragment tasimamali."]);
+  }
+
   if (url.protocol === "https:" && isPlaceholderEvidenceTargetHost(url.hostname)) {
     fail(["DEPLOYMENT_REGION_TARGET production kaniti icin gercek https host olmali."]);
   }
@@ -126,7 +130,14 @@ function isPlaceholderEvidenceTargetHost(hostname) {
 
 function isLocalTempEvidenceTargetUrl(url) {
   const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
-  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+  return (
+    path === "/tmp" ||
+    path.startsWith("/tmp/") ||
+    path === "/var/tmp" ||
+    path.startsWith("/var/tmp/") ||
+    path === "/private/tmp" ||
+    path.startsWith("/private/tmp/")
+  );
 }
 
 function parseJson(value) {
@@ -155,6 +166,8 @@ function validateReport(report) {
   requireTrue(report, failures, "dataResidencyVerified");
   requireString(report, failures, "evidenceReference");
   requireNonPlaceholderString(report, failures, "evidenceReference");
+  requireNoSecretBearingReference(report, failures, "evidenceReference");
+  requireNoPublicIpLookupOnlyReference(report, failures, "evidenceReference");
   requireExactStringSet(report, failures, "servicesVerified", requiredServicesVerified);
   requireEmptyArray(report, failures, "gaps");
 
@@ -211,6 +224,67 @@ function requireNonPlaceholderString(report, failures, key) {
 
   if (hasPlaceholderToken(value)) {
     failures.push(`${key} production kanıtı için örnek/placeholder değer olmamalı.`);
+  }
+}
+
+function requireNoSecretBearingReference(report, failures, key) {
+  const value = report[key];
+  if (typeof value !== "string" || value.trim() === "") return;
+
+  if (hasSecretBearingReference(value)) {
+    failures.push(`${key} userinfo, query veya fragment tasimamali.`);
+  }
+}
+
+function requireNoPublicIpLookupOnlyReference(report, failures, key) {
+  const value = report[key];
+  if (typeof value !== "string" || value.trim() === "") return;
+
+  if (hasPublicIpLookupReference(value)) {
+    failures.push(`${key} provider console, sözleşme veya kalıcı first-party artifact olmalı; public IP lookup tek başına yeterli değil.`);
+  }
+}
+
+function hasPublicIpLookupReference(value) {
+  const normalized = value.trim();
+  const urlCandidate = normalized.toLowerCase().startsWith("url:") ? normalized.slice(4) : normalized;
+  if (!/^(https|file|s3):\/\//i.test(urlCandidate)) {
+    return false;
+  }
+
+  try {
+    const hostname = new URL(urlCandidate).hostname.toLowerCase();
+    return [
+      "api.ipify.org",
+      "ifconfig.me",
+      "icanhazip.com",
+      "ipinfo.io",
+      "ip-api.com",
+      "ipapi.co",
+      "iplocation.net",
+      "whatismyipaddress.com",
+    ].some((host) => hostname === host || hostname.endsWith(`.${host}`));
+  } catch {
+    return false;
+  }
+}
+
+function hasSecretBearingReference(value) {
+  const normalized = value.trim();
+  if (normalized.includes("?") || normalized.includes("#")) {
+    return true;
+  }
+
+  const urlCandidate = normalized.toLowerCase().startsWith("url:") ? normalized.slice(4) : normalized;
+  if (!/^(https|file|s3):\/\//i.test(urlCandidate)) {
+    return false;
+  }
+
+  try {
+    const url = new URL(urlCandidate);
+    return Boolean(url.username || url.password || url.search || url.hash);
+  } catch {
+    return false;
   }
 }
 

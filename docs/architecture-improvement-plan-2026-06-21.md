@@ -62,7 +62,7 @@ bolunmustur.
 | Urun/UAT | P1 | Optik, onboarding, UI-worker ve release evidence sozlesmeleri hazir ama gercek staging/prod kosusu bekliyor. | Lokal/static PASS, musteri oncesi production kaniti sayilamaz. | `docs/product-journeys-v1.md`, `docs/phase-6-production-readiness.md` | `pnpm live:onboarding:smoke`, `pnpm live:ui-worker:smoke`, `pnpm uat:check`, `pnpm go-live:check` |
 | Urun/UAT | P1 | `UAT-KURUM-07` odeme/taksit kabul satiri cok genis; baska idempotency akislari ayni PASS altinda. | Finans kabul kaniti netligini kaybeder, hatali release karari kolaylasir. | `docs/product-journeys-v1.md` | `node scripts/check-product-journeys.mjs`, `pnpm uat:check` |
 | UI/UX | P1 | A11y kapisi sadece `critical` axe ihlallerini fail ediyordu. | `serious` seviye erisilebilirlik sorunu CI'da yesil kalabilirdi. | `apps/web/e2e-next/a11y-next.spec.ts` | `pnpm web:a11y:check` |
-| Frontend | P1 | Rapor sayfasi acilista kampus, sinif, ders, sinav, seviye, ogrenci ve donem referanslarini birlikte yukluyor. | Buyuk tenant'ta yavas acilis ve PII minimizasyon riski. | `apps/web/app/(app)/kurum/raporlar/reports-page.tsx` | Buyuk fixture payload olcumu, `pnpm web:ux-contract:check`, `pnpm web:a11y:check` |
+| Frontend | P1 | Rapor sayfasi acilista artik ogrenci listesini yuklemiyor; ogrenci listesi rapor sorgusuna, karne/progress/hata kitapcigi detaylari kullanici secimine ertelendi. Sinif filtresi veya snapshot `classId` varsa ogrenci listesi `/students?classId=...` ile daralir; sinifsiz/sinav geneli raporda yalniz katilimci/snapshot ogrenci id'leri `/students/:id` ile yuklenir. | Ilk acilis PII ve payload yuzeyi daraldi; sinifli ve sinifsiz rapor sorgulari genel ogrenci listesine dusmeden calisir. Buyuk tenant'ta ileride tek batch endpoint performans iyilestirmesi olabilir. | `apps/web/app/(app)/kurum/raporlar/reports-page.tsx`, `apps/web/e2e-next/report-workspace-contract-next.spec.ts` | `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/report-workspace-contract-next.spec.ts`, `corepack pnpm web:ux-contract:check` |
 | Frontend | P1 | Optik calisma alani tek client component icinde cok fazla sorumluluk tasiyor. | Operator refresh/back sonrasi yarim isi kaybedebilir; queue/status ayrimi zor test edilir. | `apps/web/app/(app)/kurum/optik/parser-config-page.tsx` | `pnpm web:ux-contract:check`, hedefli optik e2e |
 | Frontend | P2 | Hata/basari/queue mesajlarinda live region tutarliligi eksik. | Ekran okuyucu kullanan operator islem sonucunu kacirabilir. | `apps/web/app/(app)/kurum/raporlar/reports-page.tsx`, `apps/web/app/(app)/kurum/optik/parser-config-page.tsx` | Submit hata/basari e2e, `pnpm web:a11y:check` |
 | Backend/API | P1 | OpenAPI artifact'i path sayisi yuksek olsa da request body ve response schema kapsami bos. | Frontend/dis entegrasyon dogru body/response sozlesmesini goremez. | `apps/api/src/openapi.ts`, `artifacts/openapi.json`, `scripts/generate-openapi.mjs` | `pnpm openapi:generate` ve schema coverage check |
@@ -71,8 +71,9 @@ bolunmustur.
 | DB/RLS | P1 | Tenant relation FK checker bu turdan sonra 0 legacy istisna ile geciyor. | Lokal schema artik izlenen tenant parent iliskilerinde cross-tenant parent referansini DB seviyesinde engeller; live/staging veri preflight kaniti ayrica uretilmeli. | `packages/db/scripts/check-tenant-relation-fks.mjs`, `packages/db/prisma/schema.prisma` | `pnpm db:rls:check`, `pnpm tenant-db:check`, orphan/cross-tenant insert negatifleri |
 | DB/RLS | P1 | `AnnouncementReceipt` parent/tenant FK boslugu lokal schema ve migration ile kapatildi; live/staging veri uzerinde orphan preflight henuz kosulmadi. | Canli tabloda orphan/cross-tenant satir varsa migration otomatik backfill yapmadan durmali. | `packages/db/prisma/schema.prisma`, `packages/db/prisma/migrations/20260621164000_announcement_receipt_composite_fk/migration.sql` | Orphan scan, composite FK migration, `pnpm db:rls:check` |
 | Privacy/Optik | P1 | `ImportQuarantine.rawRow` operator icin gerekli olabilir ama audit/log/Sentry/evidence disinda tutulmali. | Karantina response'u test loguna veya artifact'e yazilirsa ham satir ve cevap dizisi sizabilir. | `packages/db/prisma/schema.prisma`, `apps/api/src/exam/raw-import-quarantine-store.ts`, `apps/api/src/exam/raw-import.controller.e2e.test.ts` | `corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/raw-import.controller.e2e.test.ts src/exam/raw-import-quarantine-store.test.ts`, `corepack pnpm privacy:inventory:check` |
-| DB/Privacy | P2 | `contentBase64` inline dosya alani teknik olarak hala yazilabilir. | DB dump/backup/KVKK yuzeyi buyur. | `packages/db/prisma/schema.prisma`, `scripts/migrate-inline-upload-content-to-s3-live.mjs` | `pnpm inline-upload-content:check`, live dry-run pending satir sayisi |
-| DB/Audit | P2 | `AuditLog.tenantId` nullable ve tenant silmede `SET NULL`. | Tenant bazli audit/KVKK evidence eksik gorunebilir. | `packages/db/prisma/schema.prisma`, audit partition migration | Live audit null siniflandirma raporu |
+| DB/Privacy | P2 | `contentBase64` inline dosya alani staging verisinde hala var: live dry-run `HomeworkMaterialFile` ve `SupportTicketAttachment` icin 2+2 pending satir buldu; hash audit bu satirlarda `sha256` eksikligini PII basmadan sayiyor. | DB dump/backup/KVKK yuzeyi buyur; eksik hash onarimi ve tekrar hash audit gecmeden S3 migration kaniti uretmek veri butunlugu riski tasir. | `packages/db/prisma/schema.prisma`, `scripts/migrate-inline-upload-content-to-s3-live.mjs`, `scripts/audit-inline-upload-content-hashes-live.mjs`, `scripts/repair-inline-upload-content-sha-live.mjs` | `pnpm inline-upload-content:audit`, `pnpm inline-upload-content:hash-audit`, `pnpm inline-upload-content:repair-sha`, tekrar `pnpm inline-upload-content:hash-audit`, `INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true pnpm inline-upload-content:migrate`, `pnpm inline-upload-content:check` |
+| DB/Privacy | P1 | Inline upload, homework material ve support attachment S3 `storageKey` uretimi hash-only kaliba cekildi: key artik sadece sabit prefix ve `sha256` segmentinden olusur; parent id ve ham dosya adi key'e girmez. Orphan S3 object reconciliation icin PII-safe audit komutu eklendi. | Object listing, storage log veya monitoring yuzeyinde kurum/sinif/kisi bilgisinin key'den yeniden tanimlanma riski daraldi; yarim migration sonrasi DB referansi olmayan obje sayisi gorunur oldu. | `scripts/migrate-inline-upload-content-to-s3-live.mjs`, `scripts/audit-inline-upload-orphan-s3-live.mjs`, `apps/api/src/homework/homework-material-file-storage.ts`, `apps/api/src/support-ticket/support-ticket-attachment-storage.ts` | Hash-only object-key unit testleri, `pnpm prod:readiness:check`, `pnpm ops:check`, `pnpm inline-upload-content:hash-audit`, `pnpm inline-upload-content:orphan-audit` sonrasi onayli migration dry-run |
+| DB/Audit | P2 | `AuditLog.tenantId` nullable ve tenant silmede `SET NULL`; null tenant audit satirlari artik kanit sozlesmesiyle siniflandirilmali. | Tenant bazli audit/KVKK evidence eksik gorunebilir. | `packages/db/prisma/schema.prisma`, `scripts/check-audit-null-tenant-evidence.mjs`, audit partition migration | `AUDIT_NULL_TENANT_EVIDENCE_TARGET=... pnpm audit-null-tenant:check`, live audit null siniflandirma raporu |
 
 ## P0/P1/P2 Oncelik Tablosu
 
@@ -103,11 +104,128 @@ bolunmustur.
 | Faz | Durum | Bu tur kaniti | Kalan |
 | --- | --- | --- | --- |
 | Faz 1 - Gate ve Plan Netligi | `LOCAL_PASS` | `corepack pnpm --filter @uzman-hocam/web typecheck`, `corepack pnpm web:a11y:check`, `corepack pnpm web:ux-baseline:check`, `node scripts/check-product-journeys.mjs` gecti. | Broad CI ve staging kaniti Faz 5/Faz 10 kapsaminda. |
-| Faz 2 - OpenAPI ve Shared Contract Kalitesi | `PARTIAL_LOCAL_PASS` | Kritik auth/MFA/password-reset, exam create/read/update/delete/list/participant list-create, parser-config suggestion/approval, answer-key read/publish, raw-import upload/evaluation/quarantine/summary/status, report generation-job/snapshot list/student snapshot/export/progress/detail/error-booklet ve portal report snapshot list/detail/error-booklet/progress dar slice'i, portal development-assessments read, teacher portal read-only mirror, student/guardian academic timeline, portal student/profile public records, notification-device public response, student-create, payment-plan create/update/list, announcement create/delivery/read/portal, school reference CRUD/class read-delete/teacher CRUD-purge-assignment/guardian CRUD-link-read, development criteria/assessment, teacher import commit idempotency, attendance, audit-log read, program create/update/read, teacher-note create/update/list, support-ticket create/update/read, homework create/update/read ve UAT-KURUM-07 idempotency envanteri icin shared/API/OpenAPI dogrulamalari gecti. Idempotent UAT mutasyonlarinda `Idempotency-Key`, request body ve `{ data }` response envelope coverage'i fail-fast korunur. | Henuz slice'a alinmamis yonetim student ana kayitlari/profil mutasyonlari, support-ticket portal mutasyonlari, diger genis read/mutation yuzeyleri ve shared-types tek kaynak kullanimi tamamlanmali. |
-| Faz 3 - Tenant FK ve DB Butunlugu | `LOCAL_PASS_WITH_STAGING_PENDING` | Izlenen tenant parent iliskilerinde legacy FK allowlist sifirlandi; `Student.class`, `Student.responsibleTeacher`, `StudentClassHistory.class`, `StudentEnrollment.class`, `PaymentPlan.class`, `ReportSnapshot.class`, `Homework.sourceMaterial`, `SupportTicket.class` ve onceki slice'lar tenant composite FK'ye alindi; RLS live evidence artik 24 tenant composite relation icin `tenantFkPreflight` exact setini, 0 legacy allowlist, 0 orphan, 0 cross-tenant parent ve her relation icin cross-tenant insert negatifini ister. `corepack pnpm --filter @uzman-hocam/db test`, `corepack pnpm db:rls:check`, `corepack pnpm tenant-db:check`, `corepack pnpm --filter @uzman-hocam/api typecheck` ve hedefli API testleri gecti. | Kalan 0 legacy FK istisnasi; gercek live/staging DB artifact'i ve DB-level negatif insert kanitinin gercek ortamda uretilmesi tamamlanmali. |
-| Faz 4 - Rapor/Optik UX ve Privacy Minimizasyonu | `PARTIAL_LOCAL_PASS` | iSEM fixture testleri, raw import object key dosya adi negatifleri, live exam cycle PII/raw TXT evidence negatifleri, KVKK raw import/upload audit diff redaction kontrolleri, PII contact policy ve prod evidence template/smoke contract check'leri gecti; KVKK inventory checker repo fixture target ile gecti; optik/rapor URL state, alert/status live-region, report snapshot list summary, portal development trend, student/guardian academic timeline PII yasaklari, portal student/profile userId ve ham kimlik yasaklari, notification-device token/userId response yasaklari, teacher profile public redaction ve progress PII/soru detayi yasak alan guardrail dilimleri lokal kontratla gecti. | Genis rapor/optik UI data-loading refactor'u, real `KVKK_INVENTORY_TARGET` staging/prod kaniti ve karantina/evidence artifact PII negatifleri tamamlanmali. |
-| Faz 4A - iSEM Fixture Kapanisi | `LOCAL_PASS_WITH_STAGING_PILOT_PENDING` | `docs/DECISIONS.md` ve `docs/product-journeys-v1.md` iSEM fixture gercegine gore guncellendi; API/worker iSEM fixture testleri gecti. | `pnpm live:exam-cycle:check` staging artifact'i ve pilot UAT kaniti bekliyor. |
-| Faz 5 - Gercek Evidence ve Provider Kapanisi | `EXTERNAL_NOT_RUN` | `corepack pnpm prod:plan:check` gecti; live exam cycle, iSEM optical, KVKK ve RLS/tenant-FK evidence sozlesmeleri exact sayilar, PII-safe JSON, audit diff redaction, tenant FK preflight ve production/go-live summary cross-check ile lokal olarak sertlestirildi; gercek evidence target'lari kosulmadi. | iSEM smoke, live exam cycle, UI-worker, provider smoke, staging/prod evidence ve pilot/go-live kanitlari uretilmeli. |
+| Faz 2 - OpenAPI ve Shared Contract Kalitesi | `LOCAL_PASS` | Kritik auth/MFA/password-reset, exam create/read/update/delete/list/participant list-create, parser-config suggestion/approval, optical-form-template list/create/apply, answer-key read/publish, raw-import upload/evaluation/quarantine/summary/status, report generation-job/snapshot list/student snapshot/export/progress/detail/error-booklet ve portal report snapshot list/detail/error-booklet/progress dar slice'i, portal development-assessments read, teacher portal read-only mirror, student/guardian academic timeline, portal student/profile public records, yonetim student core/profile read-update-delete, student import-export/enrollment lifecycle, student class-history/enrollment/teacher-assignment read ve purge/tenant update residual, message-template CRUD, identity-invitation public response/token redaction, notification-device public response, support-ticket portal mutasyonlari, student-create, payment-plan create/update/list, announcement create/delivery/read/portal, school reference CRUD/class read-delete/teacher CRUD-purge-assignment/guardian CRUD-link-read, development criteria/assessment, teacher import commit idempotency, attendance, audit-log read, program create/update/read, teacher-note create/update/list, support-ticket create/update/read, homework create/update/read, health/ready raw response, metrics raw text, download/no-content delete, sms-batch create/report/preview, backup-restore list/create/tenant-export, me profile/tenant, portal homework/notification-preference read-update, tenant admin read-update-delete, tenant create/first-admin token redaction, tenant-user list-create-role-update, role-preview token-scope, kalan teacher/guardian portal read ve privacy inventory/self-purge dilimleri ve UAT-KURUM-07 idempotency envanteri icin shared/API/OpenAPI dogrulamalari gecti. Required-operation envanteri 277 toplam operation icinde 277 covered / 0 open; idempotent UAT mutasyonlarinda `Idempotency-Key`, request body ve `{ data }` response envelope coverage'i fail-fast korunur. | Lokal contract gate kapandi; staging/dis entegrasyon ve generated schema tek-kaynaklastirma sertlestirmesi Faz 5/sonraki hardening kapsaminda izlenmeli. |
+| Faz 3 - Tenant FK ve DB Butunlugu | `STAGING_RLS_PASS_WITH_PROD_CHAIN_PENDING` | Izlenen tenant parent iliskilerinde legacy FK allowlist sifirlandi; `Student.class`, `Student.responsibleTeacher`, `StudentClassHistory.class`, `StudentEnrollment.class`, `PaymentPlan.class`, `ReportSnapshot.class`, `Homework.sourceMaterial`, `SupportTicket.class` ve onceki slice'lar tenant composite FK'ye alindi; RLS live evidence artik 24 tenant composite relation icin `tenantFkPreflight` exact setini, 0 legacy allowlist, 0 orphan, 0 cross-tenant parent ve her relation icin cross-tenant insert negatifini ister. gercek live/staging DB artifact'i remote/staging `uzman-hocam-server` uzerinde `artifacts/staging/reports/rls-live.json` olarak uretildi; 54 tenant tablo, 24 relation, 0 orphan/cross-tenant parent, 600 tenant-scope sorgu ve 316.29 rps ile `RLS_LIVE_EVIDENCE_TARGET=file://... corepack pnpm rls:live:check` kapisindan gecti. | Kalan 0 legacy FK istisnasi; RLS staging artifact'inin production summary/live-status zincirine baglanmasi ve production/pilot asamasinda tekrar kosulmasi bekliyor. |
+| Faz 4 - Rapor/Optik UX ve Privacy Minimizasyonu | `PARTIAL_LOCAL_PASS` | iSEM fixture testleri, raw import object key dosya adi negatifleri, live exam cycle PII/raw TXT evidence negatifleri, iSEM optik smoke karantina/raw evidence PII negatifleri, KVKK raw import/upload audit diff redaction kontrolleri, PII contact policy ve prod evidence template/smoke contract check'leri gecti; KVKK inventory checker repo fixture target ile gecti; optik/rapor URL state, alert/status live-region, optik karantina `rawRow` UI PII negatifleri ve arama disi genis `/students` yuklememe kontrati, optik rapor context tekil/dedupe ogrenci yukleme ve memoized tablo/analiz turevleri, report workspace lazy ve class/participant-scoped ogrenci liste/detay yukleme, report analytics component/perf bolme, report snapshot list summary, API smoke log Authorization/raw request redaction guardrail'i, portal development trend, student/guardian academic timeline PII yasaklari, portal student/profile userId ve ham kimlik yasaklari, yonetim student core/profile userId/ham kimlik/storage yasaklari, student purge-pii profile PII temizligi, notification-device token/userId response yasaklari, support-ticket portal requesterId/file-storage-token yasaklari, teacher profile public redaction ve progress PII/soru detayi yasak alan guardrail dilimleri lokal kontratla gecti; iSEM 254 satir staging real-data smoke ve UI-worker portal sonucu Faz 4A/Faz 5 kanitina baglandi; remote/staging `artifacts/staging/reports/kvkk-inventory.json` 845 ogrenci, 16 ogretmen, 67 veli, 61 kullanici aggregate sayimi, 21 audit redaction negatif kontrolu ve bos `gaps` ile `KVKK_INVENTORY_TARGET=file://... corepack pnpm privacy:inventory:check` kapisindan gecti. | KVKK staging artifact'inin production summary/live-status zincirine baglanmasi ve production/pilot asamasinda tekrar kosulmasi bekliyor. |
+| Faz 4A - iSEM Fixture Kapanisi | `STAGING_ISEM_AND_LIVE_EXAM_PASS_WITH_PILOT_PENDING` | `docs/DECISIONS.md` ve `docs/product-journeys-v1.md` iSEM fixture gercegine gore guncellendi; API/worker iSEM fixture testleri gecti; local Postgres/Redis/MinIO uzerinde `corepack pnpm isem-optical-pipeline:smoke` 254 matched, 0 quarantine, 254 `ExamResult`, 254 report result ve PII-safe `artifacts/local/isem-optical-pipeline.json` ile gecti; remote/staging `uzman-hocam-server` uzerinde `artifacts/staging/isem-optical-pipeline.json` 254 matched, 0 quarantine, 254 `ExamResult`, 254 report result, bos `gaps` ve PII-safe grep ile `ISEM_OPTICAL_PIPELINE_TARGET=file://... corepack pnpm isem-optical-pipeline:evidence-check` kapisindan gecti; ayni release candidate icin `artifacts/staging/live-ui-worker-result.json` PDF/XLSX indirme, ogrenci/veli portal gorunumu, `reportStatus=READY`, bos `gaps` ve PII-safe grep ile `LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET=file://... corepack pnpm live:ui-worker:result-check` kapisindan gecti; `artifacts/staging/live-exam-cycle.json` 5 komutluk staging zinciri, 254/254 iSEM sayilari, PDF/Excel ve ogrenci/veli portal gorunumu ile `LIVE_EXAM_CYCLE_TARGET=file://... corepack pnpm live:exam-cycle:check` kapisindan gecti. | Pilot UAT kaniti ve bu staging artifact'lerinin production summary/live-status zincirine baglanmasi bekliyor. |
+| Faz 5 - Gercek Evidence ve Provider Kapanisi | `LOCAL_SMOKE_PASS_EXTERNAL_PENDING` | `corepack pnpm prod:plan:check` gecti; live exam cycle, iSEM optical, UI-worker result, KVKK, RLS/tenant-FK, restore drill, AI karne ozeti, inline upload migration, audit null tenant, rate-limit ve GitHub CI evidence sozlesmeleri exact sayilar, PII-safe JSON, audit diff redaction, tenant FK preflight, UI-worker PDF/Excel/portal sonucu, restore critical table sayimlari, AI disabled-mode stop-rule, inline upload write-disable/TTL/pending/migrated tutarliligi, null tenant breakdown/unknown=0, iki farkli rate-limit instance URL'i, secret URL/reference reddi, staging release bundle kalici path kontrolu, provider smoke masked-recipient/providerMessageId guardrail'i, production summary projection ve production/go-live summary cross-check ile lokal olarak sertlestirildi; remote/staging iSEM optical pipeline, live UI-worker result, live exam cycle, restore drill, AI karne ozeti disabled-mode, KVKK inventory, RLS live, audit null tenant, rate-limit Redis, inline upload migration ve GitHub CI artifact'leri kalici `artifacts/staging/**` yolunda uretildi ve checker'lardan gecti ama henuz production summary/live-status zincirine baglanmadi. Remote first-gates teshisi alert secret eksigi ve self-signed TLS nedeniyle PASS manifest uretmedi. | First-gates icin gercek alert webhook secret'lari ve public TLS/domain smoke'u, provider smoke, production summary/live-status ve pilot/go-live kanitlari uretilmeli. |
+| Faz 10 - Pilot ve Go-live Kapanisi | `EXTERNAL_NOT_RUN` | Pilot, go-live, production summary ve Canli Durum sozlesmeleri `pilot:check`, `go-live:check`, `live:status:check` ve `prod:evidence:templates:check` ile lokal fixture seviyesinde korunuyor; remote/staging `artifacts/staging/smoke/report-generation.json` perf artifact'i 10.000 sonuc/ogrenci, `generationDurationMs=9271`, `generationDurationMsMax=60000`, `commandsPassed=["pnpm report-generation:perf"]` ve bos `gaps` ile smoke evidence validator'dan gecti. | Gercek pilot kapanis raporu, 18/18 Canli Durum PASS bundle'i, go-live karar paketi, production summary, UAT, rollback ve alert artifact'leri staging/prod ortamda uretilmeli; report-generation perf artifact'i production summary/live-status zincirine baglanmali. |
+
+## Faz Kapanis Kanit Haritasi
+
+| Faz | Acik kanit | Zorunlu hedef/komut | Canli Durum baglantisi | Kapanis kosulu |
+| --- | --- | --- | --- | --- |
+| Faz 3 - Tenant FK ve DB Butunlugu | Gercek live/staging DB ve DB-level negatif insert kaniti. | `RLS_LIVE_EVIDENCE_TARGET=file:///... corepack pnpm rls:live:check`, `corepack pnpm db:rls:check`, `corepack pnpm db:rls:check:live`, `corepack pnpm rls:load:smoke`, `corepack pnpm tenant-db:check`. | `RLS live kanıtı`. | `reports.rlsLive.tenantFkPreflight` 24 relation, 0 legacy allowlist, 0 orphan, 0 cross-tenant parent, bos `gaps`. |
+| Faz 4 - Rapor/Optik UX ve Privacy Minimizasyonu | KVKK inventory ve iSEM staging real-data privacy/perf kaniti. | `KVKK_INVENTORY_TARGET=file:///... corepack pnpm privacy:inventory:check`, `ISEM_OPTICAL_PIPELINE_TARGET=file:///... corepack pnpm isem-optical-pipeline:evidence-check`. | `KVKK inventory kanıtı`, `iSEM optical pipeline kanıtı`. | Ham TXT/TCKN/ogrenci adi/object key PII yok; 254 matched sonuc ve staging/prod kalici artifact var. |
+| Faz 4A - iSEM Fixture Kapanisi | iSEM fixture'in staging tam sinav dongusune ve pilot UAT'a baglanmasi. | `ISEM_OPTICAL_PIPELINE_TARGET=file:///... corepack pnpm isem-optical-pipeline:evidence-check`, `LIVE_EXAM_CYCLE_TARGET=file:///... corepack pnpm live:exam-cycle:check`, `PILOT_EVIDENCE_TARGET=file:///... corepack pnpm pilot:check`. | `iSEM optical pipeline kanıtı`, `Live exam cycle kanıtı`, `Pilot kapanış kanıtı`. | 254 `ExamResult`, 254 report result, PDF/Excel, ogrenci/veli portal gorunumu ve pilot acceptance ayni release candidate uzerinde kanitlanir. |
+| Faz 5 - Gercek Evidence ve Provider Kapanisi | Staging/prod evidence bundle, UI-worker result, provider, migration, audit, GitHub CI, AI summary, kimlik göçü, finansal saklama ve rate-limit kanitlari. | `corepack pnpm prod:env:check`, `corepack pnpm prod:evidence:check --summary-file artifacts/staging/production-summary.json`, `corepack pnpm prod:evidence:summary:check`, `STAGING_RELEASE_ARTIFACTS_TARGET=/path/to/artifacts/staging corepack pnpm staging:release-artifacts:check`, `RESTORE_DRILL_TARGET=file:///... corepack pnpm restore:drill:check`, `AI_REPORT_SUMMARY_EVIDENCE_TARGET=file:///... corepack pnpm ai-report-summary:check`, `IDENTITY_MIGRATION_TARGET=file:///... corepack pnpm identity-migration:check`, `FINANCIAL_RETENTION_TARGET=file:///... corepack pnpm financial-retention:check`, `LIVE_EXAM_CYCLE_TARGET=file:///... corepack pnpm live:exam-cycle:check`, `ISEM_OPTICAL_PIPELINE_TARGET=file:///... corepack pnpm isem-optical-pipeline:evidence-check`, `LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET=file:///... corepack pnpm live:ui-worker:result-check`, `GITHUB_CI_EVIDENCE_TARGET=file:///... corepack pnpm github-ci:check`, `INLINE_UPLOAD_CONTENT_MIGRATION_TARGET=file:///... corepack pnpm inline-upload-content:check`, `AUDIT_NULL_TENANT_EVIDENCE_TARGET=file:///... corepack pnpm audit-null-tenant:check`, `RATE_LIMIT_EVIDENCE_TARGET=file:///... corepack pnpm rate-limit:check`, `RLS_LIVE_EVIDENCE_TARGET=file:///... corepack pnpm rls:live:check`, `SMS_PROVIDER_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/sms-provider.json corepack pnpm sms:smoke`, `NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/notification-provider.json corepack pnpm notification:smoke`, `UAT_EVIDENCE_TARGET=file:///... corepack pnpm uat:check`. | `Restore drill kanıtı`, `AI karne özeti kanıtı`, `Kimlik göçü kanıtı`, `Finansal saklama kanıtı`, `Live exam cycle kanıtı`, `iSEM optical pipeline kanıtı`, `Live UI-worker result kanıtı`, `GitHub CI kanıtı`, `Inline upload migration kanıtı`, `Audit null tenant kanıtı`, `Rate limit Redis kanıtı`, `RLS live kanıtı`, `SMS provider kanıtı`, `Notification provider kanıtı`, `Staging/prod UAT`. | Production summary tum required checks ve reports alanlarini kalici, PII-safe, symlink/temp olmayan target'lardan toplar. |
+| Faz 10 - Pilot ve Go-live Kapanisi | Pilot kapanisi, production summary, live-status bundle ve go-live karar paketi. | `PILOT_EVIDENCE_TARGET=file:///... corepack pnpm pilot:check`, `GO_LIVE_EVIDENCE_TARGET=file:///... corepack pnpm go-live:check`, `LIVE_STATUS_EVIDENCE_TARGET=file:///... corepack pnpm live:status:check`, `REPORT_GENERATION_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/report-generation.json corepack pnpm report-generation:perf`. | 18/18 Canli Durum PASS; ozellikle `Report generation perf kanıtı`, `Pilot kapanış kanıtı`, `Go-live karar paketi`. | `goLiveDecision=APPROVED`, 18/18 gate PASS, linked summary/pilot/live-status target/date/reference eslesmesi, `result=PASS`, `environment=production`, bos `gaps`. |
+
+## Canli Durum Gate Sahiplik Haritasi
+
+| Gate | Sahip faz | Komut | Source | PASS icin minimum |
+| --- | --- | --- | --- | --- |
+| Traefik HTTPS smoke | Faz 5 | `pnpm traefik:https:smoke` | `productionEvidenceSummary.smokeEvidence.traefikHttps` | HTTPS status/HSTS ve kalici release summary eslesir. |
+| TR datacenter/provider kanıtı | Faz 5 | `pnpm deployment:region:check` | `productionEvidenceSummary.reports.deploymentRegion` | `environment=production`, TR provider/region ve evidence reference kalici artifact'ten gelir. |
+| Restore drill kanıtı | Faz 5 | `pnpm restore:drill:check` | `productionEvidenceSummary.reports.restoreDrill` | Restore edilen DB'de Tenant, AuditLog, ReportSnapshot ve migration sayimlari en az 1, bos `errors` ve kalici artifact vardir. |
+| GitHub CI kanıtı | Faz 5 | `pnpm github-ci:check` | `productionEvidenceSummary.reports.githubCi` | Ayni release commit'i icin `.github/workflows/ci.yml` basarili run, `pnpm run ci` job adimi, run/job URL eslesmesi ve bos `gaps` kalici artifact'te vardir. |
+| AI karne özeti kanıtı | Faz 5 | `pnpm ai-report-summary:check` | `productionEvidenceSummary.reports.aiReportSummary` | `provider.mode=disabled`, `validation.externalProviderNotCalled=true`, `kvkk.piiSentToModel=false`, yorum üretimi kapalı, üç komutluk kanıt seti ve bos `gaps` vardir. |
+| Kimlik göçü kanıtı | Faz 5 | `pnpm identity-migration:check` | `productionEvidenceSummary.reports.identityMigration` | STUDENT/GUARDIAN/TEACHER source, linked user ve tenant membership sayıları eşit, invitation flow tutarlı, dört canonical doğrulama ve bos `gaps` vardir. |
+| Finansal saklama kanıtı | Faz 5 | `pnpm financial-retention:check` | `productionEvidenceSummary.reports.financialRetention` | Gercek karar sahibi/referansi, pozitif PaymentPlan/PaymentInstallment sayımı, purge exception ve iki canonical purge davranisi bos `gaps` ile kanitlanir. |
+| Live exam cycle kanıtı | Faz 5 | `pnpm live:exam-cycle:check` | `productionEvidenceSummary.reports.liveExamCycle` | iSEM dongusu, PDF/Excel ve portal gorunumleri ayni release candidate uzerinde kanitlanir. |
+| iSEM optical pipeline kanıtı | Faz 4A | `pnpm isem-optical-pipeline:evidence-check` | `productionEvidenceSummary.reports.isemOpticalPipeline` | 254 matched sonuc, 0 quarantine ve PII-safe staging/prod artifact vardir. |
+| Live UI-worker result kanıtı | Faz 5 | `pnpm live:ui-worker:result-check` | `productionEvidenceSummary.reports.liveUiWorkerResult` | READY result, PDF/XLSX indirme ve ogrenci/veli portal gorunumu kalici artifact'te vardir. |
+| KVKK inventory kanıtı | Faz 4 | `pnpm privacy:inventory:check` | `productionEvidenceSummary.reports.kvkkInventory` | Gercek veri sayimlari, audit diff redaction ve bos `gaps` korunur. |
+| RLS live kanıtı | Faz 3 | `pnpm rls:live:check` | `productionEvidenceSummary.reports.rlsLive` | `tenantFkPreflight`, load smoke, 0 orphan ve 0 cross-tenant parent kanitlanir. |
+| Inline upload migration kanıtı | Faz 5 | `pnpm inline-upload-content:check` | `productionEvidenceSummary.reports.inlineUploadMigration` | contentBase64 write-disable, TTL ve pending/migrated tutarliligi gecer. |
+| Audit null tenant kanıtı | Faz 5 | `pnpm audit-null-tenant:check` | `productionEvidenceSummary.reports.auditNullTenant` | null tenant breakdown toplamla eslesir, `unknown.count=0`, bos `gaps` vardir. |
+| Rate limit Redis kanıtı | Faz 5 | `pnpm rate-limit:check` | `productionEvidenceSummary.reports.rateLimit` | Redis store, iki farkli API instance URL'i, API/login/path smoke ve command seti kalici artifact'te vardir; target/reference URL'leri secret query/userinfo/fragment tasimaz. |
+| SMS provider kanıtı | Faz 5 | `pnpm sms:smoke` | `productionEvidenceSummary.smokeEvidence.smsProvider` | Gercek provider, masked recipient, providerMessageId ve bos `gaps` vardir. |
+| Notification provider kanıtı | Faz 5 | `pnpm notification:smoke` | `productionEvidenceSummary.smokeEvidence.notificationProvider` | E-posta/push smoke gercek alici maskesiyle ve bos `gaps` ile gecer. |
+| Report generation perf kanıtı | Faz 10 | `pnpm report-generation:perf` | `productionEvidenceSummary.smokeEvidence.reportGeneration` | 10k sonuc/ogrenci ve `generationDurationMsMax=60000` esigi gecer. |
+| Staging/prod UAT | Faz 10 | `pnpm uat:check` | `productionEvidenceSummary.reports.uat` | UAT release/rollback/restore referanslari go-live paketiyle eslesir. |
+| Deployment rollback tatbikatı | Faz 10 | `pnpm deployment:rollback:check` | `productionEvidenceSummary.reports.deploymentRollback` | Servis image tag, rollback komutlari ve kronoloji gecer. |
+| Pilot kapanış kanıtı | Faz 10 | `pnpm pilot:check` | `pilotEvidence` | 14+ gun pilot, AC-01..AC-10, gercek optik/karne/portal dongusu ve bos `gaps`. |
+| Go-live karar paketi | Faz 10 | `pnpm go-live:check` | `goLiveEvidence` | `goLiveDecision=APPROVED`, linked summary/pilot/live-status ve onaylar gecer. |
+| Alert bildirim kanalı | Faz 10 | `pnpm alert:webhook:smoke` | `productionEvidenceSummary.smokeEvidence.alertWebhook` | Bearer auth, 2xx webhook ve kalici summary eslesmesi vardir. |
+
+## Tamamlanma Denetimi
+
+| Denetim | Kabul edilen kanit | Yanlis pozitif olarak reddedilir |
+| --- | --- | --- |
+| Faz status guncellemesi | Faz 3/4/4A/5/10 satirlari yalniz ilgili kapanis haritasi ve Canli Durum gate sahiplik satirlari gercek kanitla kapandiginda daha ileri statuye tasinir. | Fixture/local smoke tek basina final kapanis kaniti degildir. |
+| Artifact hedef hijyeni | Kalici, symlink olmayan `file://` artifact veya gercek `https://` hedef; parent dizin de symlink degildir; URL userinfo, query veya fragment tasimaz. | `/tmp`, `/var/tmp`, `artifacts/local/**`, `docs/evidence-templates/**`, placeholder/test/example/redacted host, secret/env dosyasi, userinfo/query/fragment tasiyan URL veya `ALLOW_EXAMPLE_EVIDENCE` ile uretilmis kanit. |
+| Production summary zinciri | `corepack pnpm prod:env:check`, `corepack pnpm prod:evidence:check --summary-file artifacts/staging/production-summary.json` ve `corepack pnpm prod:evidence:summary:check` ayni release candidate artifact setini dogrular. | Elle yazilmis summary, eksik required check/report, first-gates target sapmasi veya source artifact ile eslesmeyen summary. |
+| Canli Durum transition | `LIVE_STATUS_EVIDENCE_TARGET=file:///... corepack pnpm live:status:check` 18/18 PASS verir; source date/reference/result/environment production summary, pilot ve go-live artifact'leriyle eslesir. | `0/18` veya kismi PASS, staging/FAIL source, source date/reference sapmasi veya farkli artifact setine baglanan live-status bundle. |
+| Pilot ve go-live paketi | `PILOT_EVIDENCE_TARGET` ve `GO_LIVE_EVIDENCE_TARGET` gercek JSON'lari `pilot:check` ve `go-live:check` ile gecer; `goLiveDecision=APPROVED`, bos `gaps`, imzali onaylar ve cutover kronolojisi vardir. | Pilot kabul imzasi, role approval, DPA/KVKK, rollback/restore veya linked pilot/live-status/summary hedeflerinden biri eksikse kapanis yoktur. |
+| Performans ve privacy | `REPORT_GENERATION_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/report-generation.json corepack pnpm report-generation:perf` 10k sonuc/ogrenci ve 60 sn esigini gecer; kanitlar ham TXT/TCKN/e-posta/telefon/ogrenci adi tasimaz. | `report-generation:smoke`, ham `ornek-veriler` path'i, ham object key, ham alici veya PII iceren release bundle. |
+| Son dogrulama | Target'li artifact komutlari, `LIVE_STATUS_EVIDENCE_TARGET=file:///... corepack pnpm live:status:check` 18/18 PASS, `PILOT_EVIDENCE_TARGET=file:///... corepack pnpm pilot:check`, `GO_LIVE_EVIDENCE_TARGET=file:///... corepack pnpm go-live:check`, `PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///... LIVE_STATUS_EVIDENCE_TARGET=file:///... PILOT_EVIDENCE_TARGET=file:///... GO_LIVE_EVIDENCE_TARGET=file:///... corepack pnpm prod:external-evidence:check`, `corepack pnpm prod:evidence:templates:check`, `corepack pnpm prod:readiness:check`, `corepack pnpm ops:check`, `corepack pnpm prod:plan:check` ve `git diff --check` gecer. | Target'siz `corepack pnpm live:status:check` ile gelen `0/18` PASS, sadece `prod:evidence:templates:check`, sadece bare `ops:check`, target'siz veya `ALLOW_EXAMPLE_EVIDENCE=1` ile calisan `prod:external-evidence:check`, dar unit test veya yalniz statik dokuman guncellemesi final kabul kaniti sayilmaz. |
+
+## Kapanis Calistirma Sirasi
+
+Bu sira, kalan Faz 3/4/4A/5/10 hedeflerini gercek artifact uretimine baglar. Bir satir
+`PASS` olmadan sonraki satirin release karari alinmaz; basarisiz satir Faz durumunu ileri
+tasimaz.
+
+| Sira | Kapsam | Komut paketi | Uretilen artifact | Gecis karari |
+| --- | --- | --- | --- | --- |
+| 1 | Preflight bundle hijyeni | `corepack pnpm prod:env:check`, `corepack pnpm staging:evidence-env:check`, `corepack pnpm staging:release-artifacts:check`, `corepack pnpm staging:release-gaps:summary -- --artifacts-dir artifacts/staging --gap-report-file artifacts/local/staging-release-gap-report.json`, `corepack pnpm staging:release-artifacts:archive-unexpected -- --apply`, `corepack pnpm prod:evidence:templates:check` | Kalici `artifacts/staging/**` veya gercek `https://` hedefleri; temp, symlink, placeholder ve secret/env dosyasi yok; `STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE=1` yalniz template fixture bundle'inda calisir, gercek release bundle kapisinda yasaktir; final disi diagnostik/log girdileri manifestli archive'a tasinir. Gap summary `missingRequiredFiles`, `unexpectedFiles`, `invalidFiles`, `mismatchFailures`, `blockedChecks` ve `openClosureItems` sayilarini handoff icin basar. | Artifact seti temiz degilse Faz 5/Faz 10 baslamaz. |
+| 2 | Infra ve provider ilk kapilar | `corepack pnpm staging:first-gates:check`, `corepack pnpm traefik:https:smoke`, `corepack pnpm deployment:region:check`, `corepack pnpm alert:webhook:smoke`, `SMS_PROVIDER_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/sms-provider.json corepack pnpm sms:smoke`, `NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/notification-provider.json corepack pnpm notification:smoke`, `corepack pnpm rate-limit:check` | Traefik, region, alert, SMS/notification ve Redis rate-limit kanitlari ayni release candidate referansina baglanir. | Canli Durum'da ilgili Faz 5 gate'leri yalniz source `PASS` ve `environment=production` ise PASS olur. |
+| 3 | Tenant, privacy ve veri kanitlari | `corepack pnpm db:rls:check:live`, `corepack pnpm rls:live:check`, `corepack pnpm privacy:inventory:check`, `corepack pnpm inline-upload-content:check`, `corepack pnpm audit-null-tenant:check` | RLS live, KVKK inventory, inline upload migration ve audit null tenant artifact'leri ham PII tasimadan uretilir. | Faz 3 ve Faz 4 status'u ancak 0 orphan, 0 cross-tenant parent, bos `gaps` ve PII negatifleriyle ilerler. |
+| 4 | Sinav, rapor ve UAT kanitlari | `corepack pnpm isem-optical-pipeline:evidence-check`, `corepack pnpm live:exam-cycle:check`, `corepack pnpm live:ui-worker:result-check`, `corepack pnpm report-generation:perf`, `corepack pnpm uat:check` | iSEM 254 sonuc, PDF/Excel, portal gorunumu, 10k perf ve UAT artifact'leri ayni release candidate icin uretilir. | Faz 4A/Faz 5 kapanisi ancak local smoke degil staging/prod artifact ile ilerler. |
+| 5 | Production summary ve Canli Durum terfisi | `corepack pnpm prod:evidence:check --summary-file artifacts/staging/production-summary.json`, `corepack pnpm prod:evidence:summary:check`, `LIVE_STATUS_EVIDENCE_TARGET=file:///... corepack pnpm live:status:check` | Production summary tum required check/report alanlarini toplar; Canli Durum bundle'i 18/18 dis gate PASS olur. | 18/18 altinda veya source date/reference sapmasinda Faz 5/Faz 10 ilerlemez. |
+| 6 | Pilot, rollback ve go-live karari | `PILOT_EVIDENCE_TARGET=file:///... corepack pnpm pilot:check`, `corepack pnpm deployment:rollback:check`, `GO_LIVE_EVIDENCE_TARGET=file:///... corepack pnpm go-live:check`, `corepack pnpm ops:check`, `corepack pnpm prod:plan:check` | Pilot kabul, rollback kronolojisi, onaylar, cutover ve go-live karar paketi ayni summary/live-status hedeflerine baglanir. | Faz 10 yalniz `goLiveDecision=APPROVED`, bos `gaps`, imzali onaylar ve rollback/restore referanslariyla kapanir. |
+| 7 | Faz status degisimi | `PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///... LIVE_STATUS_EVIDENCE_TARGET=file:///... PILOT_EVIDENCE_TARGET=file:///... GO_LIVE_EVIDENCE_TARGET=file:///... corepack pnpm prod:external-evidence:check`, `REMOTE_EVIDENCE_HOST=uzman-hocam-server REMOTE_EVIDENCE_ROOT=/root/uzman-hocam ... corepack pnpm prod:remote-evidence:check`, `git diff --check`, final hedefli testler ve yukaridaki artifact komutlari. | Dokuman, summary, live-status ve go-live JSON'lari birbirini isaret eder; `prod:external-evidence:check` local artifact setini, `prod:remote-evidence:check` remote/staging hostta aynı final checker ve 18/18 Canli Durum zincirini tekrarlar. | Faz 5 ancak `EXTERNAL_EVIDENCE_PASS`, Faz 10 ancak `GO_LIVE_APPROVED` statüsüne tasinir; bu statu degisikligi linked artifact'ler ve remote final readiness olmadan yapilmaz. |
+
+## Kalan 10 Artifact Kapanis Matrisi
+
+Remote `/root/uzman-hocam/artifacts/staging` gap raporu son kontrolde `missingCount=10`,
+`foundReleaseSummaryCount=0` ve `overallStatus=BLOCKED` verdi. Asagidaki tablo, her eksigin
+gercek kapanis komutunu ve neden henuz final PASS sayilamadigini sabitler; `ALLOW_EXAMPLE_EVIDENCE`
+veya fixture/local smoke bu satirlari kapatamaz.
+`scripts/check-staging-release-artifacts.mjs`, `STAGING_RELEASE_GAP_REPORT_FILE` verildiginde
+`missingRequiredFiles[].remediation` ve release summary `blockedChecks[].remediation` alanlarina
+bu komut/onkosul/blocker bilgisini, ayrica `phase`, `ownerAgent`, `evidenceGate` ve
+`nextActionKind` handoff metadata'sini de yazar; gap JSON'u bu yuzden ops handoff icin tek kaynak
+olarak kullanilabilir ama release evidence yerine gecmez.
+`openClosureItems[]` ise first-gates manifest'i eksikken manifest, Traefik HTTPS ve alert webhook
+alt kanitlarini ayri kapanis isi olarak gosterir; bu yuzden remote durumda `missingRequiredFiles=10`
+olsa bile release-summary ile birlikte 13 acik kapanis kalemi gorunur.
+`corepack pnpm staging:release-gaps:summary -- --artifacts-dir artifacts/staging --gap-report-file artifacts/local/staging-release-gap-report.json`
+ayni kontrolu kosar ve terminalde her eksik artifact icin `command`, `ownerAgent`, `phase`,
+`evidenceGate`, `nextActionKind`, `prerequisite` ve `blocker`
+ozetini basar; `release-summary-*.json` henuz yokken bile final bundle'a girmemesi gereken
+root/`reports`/`smoke`/`first-gates` dosyalari `unexpectedFiles[]` altinda gorunur. CLI artik
+`missingRequiredFiles`, `unexpectedFiles`, `invalidFiles`, `mismatchFailures`, `blockedChecks` ve `openClosureItems`
+sayilarini ayri basar; bu yuzden "eksik kanit" ile "temizlenmesi gereken paket girdisi" karismaz.
+CLI eski gap JSON'unu yeniden kullanmaz; checker yazim onayi ve komut baslangicindan eski olmayan
+`generatedAt` ister. Bundle blokluysa exit code yine basarisiz kalir.
+`reports/audit-null-tenant.json` release bundle icin beklenen zorunlu report setindedir; bu
+kanit artik `unexpectedFiles[]` temizligi degil, production summary `reports.auditNullTenant`
+zincirine baglanacak kalici Faz 5 kaniti olarak dogrulanir.
+Final bundle disi kalan diagnostik/log/calisma girdileri silinmeden
+`corepack pnpm staging:release-artifacts:archive-unexpected -- --artifacts-dir artifacts/staging --gap-report-file artifacts/local/staging-release-gap-report.json --archive-dir artifacts/local/staging-release-unexpected-<tag> --apply`
+ile `artifacts/local/**` altina tasinir; komut dry-run default'tur, taze gap raporundaki
+`unexpectedFiles[]` disinda dosya tasimaz ve `manifest.json` yazar.
+Remote `uzman-hocam-server` uzerinde bu akış `artifacts/local/staging-release-unexpected-2026-06-24-preflight`
+archive dizinine 9 final disi girdiyi manifestli tasidi; taze gap raporu artik
+`unexpectedFiles=0`, `missingRequiredFiles=10`, `blockedChecks=1` gosterir. Rate-limit raw smoke
+girdisi de `artifacts/local/staging-release-unexpected-rate-limit-smoke-2026-06-24` altina
+manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
+
+| Eksik artifact | Owner / faz | Gate | Next action | Guncel blocker |
+| --- | --- | --- | --- | --- |
+| `first-gates/first-gates-manifest.json` | `ops_release_engineer` / Faz 5 infra-provider | `staging:first-gates:check` | `external_tls_and_alert_secret` | Public TLS/HSTS domain ve gerçek alert webhook secret yok; self-signed/IP TLS release evidence değildir. |
+| `reports/deployment-region.json` | `ops_release_engineer` / Faz 5 deployment region | `deployment:region:check` | `provider_contract_evidence` | Provider console/sozlesme veya first-party TR datacenter reference saglanmadi; public IP lookup tek basina kabul edilmiyor. |
+| `reports/deployment-rollback.json` | `infra_dr_engineer` / Faz 10 rollback | `deployment:rollback:check` | `rollback_drill` | Gercek bozuk image deploy, healthcheck reject ve previous-pass rollback summary referanslari yok. |
+| `reports/identity-migration.json` | `auth_session_engineer` / Faz 5 identity | `identity-migration:check` | `approval_and_subject_data` | Remote sayim `Student=0`, `Guardian=0`, `Teacher=0`, `IdentityInvitation=0`; approval/reference ve subject verisi yok. |
+| `reports/financial-retention.json` | `privacy_governance_reviewer` / Faz 5 finans-KVKK | `financial-retention:check` | `policy_approval_and_finance_data` | Remote sayim `PaymentPlan=0`, `PaymentInstallment=0`; Finance/KVKK onayi ve pozitif canli finans kaydi yok. |
+| `reports/observability-uat.json` | `observability_sre_engineer` / Faz 5 observability | `observability:uat:check` | `monitoring_stack_and_alert_artifact` | Prometheus/Grafana/Loki HTTPS endpointleri, dashboard/alert referanslari ve alert delivery artifact'i saglanmadi. |
+| `reports/external-monitoring.json` | `observability_sre_engineer` / Faz 5 dis monitoring | `external-monitoring:check` | `external_monitoring_drill` | Uptime/monitoring node, public health/login/TLS monitorleri ve outage drill delivery kaniti yok. |
+| `reports/admin-mfa.json` | `auth_session_engineer` / Faz 5 Admin MFA | `admin-mfa:check` | `admin_enrollment_and_login_negatives` | Gercek admin enrollment, MFA secret key seti ve login/recovery/session evidence referanslari saglanmadi. |
+| `reports/security-audit.json` | `tenant_security_reviewer` / Faz 5 security audit | `security:audit:check` | `public_https_and_auth_data_controls` | Public HTTPS/header target'lari, auth control ve data control evidence referanslari yok. |
+| `reports/uat.json` | `qa_verification_engineer` / Faz 5 UAT | `uat:check` | `role_based_uat_artifacts` | 12 komut PASS evidence seti ve 21 persona senaryo artifact'i yok; first-gates/TLS de henuz PASS degil. |
+| `release-summary-*.json` | `ops_release_engineer` / Faz 5-10 summary | `prod:evidence:summary:check` | `generate_after_all_required_artifacts` | Yukaridaki 10 artifact ve first-gates PASS olmadan summary yazmak false evidence olur; su an 0 summary var. |
 
 ## Uygulama Fazlari
 
@@ -420,12 +538,41 @@ bolunmustur.
   - Gercek iSEM TXT fixture'i 254 satir, 128 A / 126 B kitapcik, 90 cevap ve ornek skor zincirini dogrular.
   - Karantina ve raw import evidence ham TCKN-benzeri alan, ham satir, `fileBase64` veya ogrenci adi tasimaz.
   - Rapor/karne karsilastirmalarinda `Basari %` ana metrik; `Net` ve `Soru` baglam olarak kalir.
+- Bu turda kapatilan dar slice:
+  - Rapor sayfasi ilk acilista `/students` listesini artik yuklemez; kampus, sinif, ders,
+    sinav, seviye ve donem referanslari ilk sorgu icin kalir.
+  - Ogrenci listesi yalniz kullanici `Raporu getir` aksiyonunu calistirinca ve snapshot varsa
+    yuklenir; sinif filtresi veya snapshot `classId` varsa `/students?classId=...` ile daralir.
+  - Sinifsiz/sinav geneli raporda genis `/students` listesine dusulmez; katilimci ve snapshot
+    ogrenci id'leri dedupe edilip mevcut `/students/:id` public kayitlariyla yuklenir.
+  - Karne, progress ve hata kitapcigi detaylari rapor sorgusunda otomatik yuklenmez; kullanici
+    ogrenci satirindan karneyi actiginda yuklenir.
+  - Playwright kontrati ilk acilista 0 ogrenci liste/detay istegini, sinifli sorguda
+    `/students?classId=...` istegini, sinifsiz sorguda 0 genis `/students` ve dedupe edilmis
+    `/students/:id` isteklerini, ogrenci seciminden sonra 3 detay istegini fail-fast dogrular.
+  - Optik karantina kontrati, API cevabindaki `rawRow` ham TCKN-benzeri alan, e-posta,
+    cevap dizisi ve ham satir tasisa bile UI tablo govdesinde yalniz satir, sebep, durum
+    ve islem alanlarinin gorundugunu; ham `rawRow` degerlerinin body metnine sizmadigini
+    fail-fast dogrular.
+  - Optik karantina satirlarini getirmek artik otomatik genis `/students` listesini yuklemez;
+    ogrenci secenekleri yalniz operatorun arama aksiyonuyla `/students?q=...&limit=10`
+    uzerinden gelir. Karantina select state'i rapor katilimci tablosu ogrenci context'inden
+    ayrildi.
+  - iSEM optik smoke evidence sozlesmesi artik `rawRow`, `rawLine`, `sourceFileName`,
+    TCKN-benzeri deger, ham telefon/e-posta, ham TXT path ve izinli string alanlara gomulmus
+    uzun optik satir/cevap dizisi gibi karantina/raw import sizintilarini ortak smoke validator
+    seviyesinde reddeder.
 - Test/dogrulama:
   - `corepack pnpm --filter @uzman-hocam/api exec vitest run src/exam/answer-key-excel-import.service.test.ts`
   - `corepack pnpm --filter @uzman-hocam/worker exec vitest run src/jobs/optik-7108-real-pipeline.test.ts src/jobs/optical-pilot-fixture.test.ts`
+  - `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/optik-workspace-contract-next.spec.ts`
+  - `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/report-workspace-contract-next.spec.ts`
   - `corepack pnpm --filter @uzman-hocam/web typecheck`
   - `corepack pnpm web:a11y:check`
   - `corepack pnpm web:ux-contract:check`
+  - `corepack pnpm karne:visual-contract:check`
+  - `corepack pnpm smoke:evidence:check`
+  - `corepack pnpm prod:evidence:templates:check`
   - `corepack pnpm privacy:inventory:check`
   - `corepack pnpm pii:contact-policy:check`
 - Risk ve rollback:
@@ -463,7 +610,8 @@ bolunmustur.
 - Sorumlu agent: `ops_release_engineer`, `privacy_governance_reviewer`, `messaging_integrations_engineer`,
   `qa_verification_engineer`.
 - Kabul kriterleri:
-  - Onboarding, live exam cycle, UI-worker report, UAT, pilot ve go-live evidence gercek staging/prod artifact'e bagli.
+  - Onboarding, live exam cycle, UI-worker report ve provider evidence gercek staging/prod artifact'e bagli;
+    UAT, pilot ve go-live bu artifact'leri Faz 10 girdisi olarak kullanir.
   - iSEM smoke zinciri staging servislerinde gecmeden tam sinav dongusu PASS sayilmaz:
     `isem-answer-key:smoke`, `isem-student-import:smoke`, `isem-optical-pipeline:smoke`.
   - iSEM pipeline 254 `ParsedAnswer MATCHED`, 0 quarantine fixture sonucu, 254 `ExamResult`,
@@ -473,7 +621,20 @@ bolunmustur.
   - `ISEM_OPTICAL_PIPELINE_TARGET` ve `LIVE_EXAM_CYCLE_TARGET` kalici `file://` artifact veya
     gercek `https://` host kullanir; `/tmp`, symlink, placeholder host, ham `ornek-veriler` path'i
     veya PII iceren object key kabul edilmez.
-  - SMS/e-posta/push provider smoke PII'siz delivery evidence uretir.
+  - `ISEM_OPTICAL_PIPELINE_TARGET`, `LIVE_EXAM_CYCLE_TARGET` referanslari ve
+    `LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET` local smoke ciktilarinin tutuldugu `artifacts/local/**`
+    yolunu staging/prod kaniti gibi kabul etmez; `LIVE_EXAM_CYCLE_TARGET` evidence reference'lari
+    `isem-optical-pipeline.json`/`.log` ve `live-ui-worker-result.json`/`live-ui-worker-report.json`
+    dosya adlariyla gercek iSEM optical pipeline ve UI-worker kanitini acikca baglar.
+  - `LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET`, `prod:evidence:check --summary-file` icinde
+    `reports.liveUiWorkerResult` olarak yazilir; production summary ve go-live linked summary
+    bu rapor olmadan PASS alamaz.
+  - Staging release artifact bundle hedefi kalici artifact path'i olmali; `STAGING_RELEASE_ARTIFACTS_TARGET`
+    `/tmp` veya `/var/tmp` altinda, symlink parent zincirinde veya secret/env dosyasi iceren bundle
+    uzerinden PASS alamaz.
+  - SMS/e-posta/push provider smoke PII'siz delivery evidence uretir; masked recipient disinda
+    ham telefon/e-posta/push endpoint'i, bos veya sahte `providerMessageId` ve placeholder/test
+    notification smoke alicilari PASS alamaz.
   - KVKK, retention, upload AV ve inline upload migration kanitlari placeholder degil.
 - Test/dogrulama:
   - `corepack pnpm isem-answer-key:smoke`
@@ -482,16 +643,61 @@ bolunmustur.
   - `ISEM_OPTICAL_PIPELINE_TARGET=file:///.../isem-optical-pipeline.json corepack pnpm isem-optical-pipeline:evidence-check`
   - `LIVE_EXAM_CYCLE_TARGET=file:///.../live-exam-cycle.json corepack pnpm live:exam-cycle:check`
   - `corepack pnpm live:ui-worker:smoke`
-  - `corepack pnpm live:ui-worker:result-check`
+  - `LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET=file:///.../live-ui-worker-result.json corepack pnpm live:ui-worker:result-check`
+  - `corepack pnpm prod:env:check`
+  - `corepack pnpm staging:evidence-env:check`
+  - `STAGING_RELEASE_ARTIFACTS_TARGET=/path/to/artifacts/staging corepack pnpm staging:release-artifacts:check`
+  - `corepack pnpm staging:first-gates:check`
+  - `corepack pnpm prod:evidence:check --summary-file artifacts/staging/production-summary.json`
+  - `corepack pnpm prod:evidence:summary:check`
   - `corepack pnpm prod:evidence:templates:check`
   - `corepack pnpm prod:plan:check`
-  - `corepack pnpm uat:check`
-  - `corepack pnpm sms:smoke`
-  - `corepack pnpm notification:smoke`
+  - `AI_REPORT_SUMMARY_EVIDENCE_TARGET=file:///.../ai-report-summary.json corepack pnpm ai-report-summary:check`
+  - `IDENTITY_MIGRATION_TARGET=file:///.../identity-migration.json corepack pnpm identity-migration:check`
+  - `FINANCIAL_RETENTION_TARGET=file:///.../financial-retention.json corepack pnpm financial-retention:check`
+  - `UAT_EVIDENCE_TARGET=file:///.../uat.json corepack pnpm uat:check`
+  - `RLS_LIVE_EVIDENCE_TARGET=file:///.../rls-live.json corepack pnpm rls:live:check`
+  - `RATE_LIMIT_EVIDENCE_TARGET=file:///.../rate-limit.json corepack pnpm rate-limit:check`
+  - `INLINE_UPLOAD_CONTENT_MIGRATION_TARGET=file:///.../inline-upload-content-migration.json corepack pnpm inline-upload-content:check`
+  - `AUDIT_NULL_TENANT_EVIDENCE_TARGET=file:///.../audit-null-tenant.json corepack pnpm audit-null-tenant:check`
+  - `SMS_PROVIDER_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/sms-provider.json corepack pnpm sms:smoke`
+  - `NOTIFICATION_PROVIDER_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/notification-provider.json corepack pnpm notification:smoke`
   - `corepack pnpm upload-av:check`
 - Risk ve rollback:
   - Yuksek risk; gercek secret/provider/staging bagimliligi var.
   - Rollback: evidence kosularini once staging-only ve read-only artifact modunda calistirmak.
+
+### Faz 10 - Pilot ve Go-live Kapanisi
+
+- Amac: Pilot kurum kabulunu, production summary zincirini ve go-live kararini tek kanit paketiyle kapatmak.
+- Degisecek dosya alanlari: `docs/evidence-templates/**`, `docs/phase-6-production-readiness.md`,
+  `docs/phase-6-ops-runbook.md`, `scripts/check-go-live-evidence.mjs`,
+  `scripts/check-live-status-evidence.mjs`, staging/prod artifact hedefleri.
+- Sorumlu agent: `ops_release_engineer`, `qa_verification_engineer`, `privacy_governance_reviewer`.
+- Kabul kriterleri:
+  - `PILOT_EVIDENCE_TARGET` gercek production pilot raporuna baglanir; 14+ gun pilot, AC-01..AC-10,
+    gercek import, optik dongu, rapor/karne, PDF/Excel, veli portali ve bos `gaps` zorunludur.
+  - `GO_LIVE_EVIDENCE_TARGET` ayni artifact setindeki production summary, pilot ve live-status bundle'ina
+    cozulur; placeholder/test/example/redacted hedefler normal kosuda reddedilir.
+  - Canli Durum 18/18 dis gate `PASS` olur; her gate source date/reference, source `result=PASS`
+    ve source `environment=production` sozlesmesini tasir.
+  - `report-generation:perf` 10k sonuc, 10k ogrenci ve `generationDurationMsMax=60000` esigiyle
+    go-live linked production summary icinde yer alir; `report-generation:smoke` Faz 10 kapanisi sayilmaz.
+- Test/dogrulama:
+  - `PILOT_EVIDENCE_TARGET=file:///.../pilot.json corepack pnpm pilot:check`
+  - `GO_LIVE_EVIDENCE_TARGET=file:///.../go-live.json corepack pnpm go-live:check`
+  - `LIVE_STATUS_EVIDENCE_TARGET=file:///.../live-status.json corepack pnpm live:status:check`
+  - `REPORT_GENERATION_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/report-generation.json corepack pnpm report-generation:perf`
+  - `PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///.../production-summary.json corepack pnpm prod:evidence:summary:check`
+  - `UAT_EVIDENCE_TARGET=file:///.../uat.json corepack pnpm uat:check`
+  - `DEPLOYMENT_ROLLBACK_TARGET=file:///.../deployment-rollback.json corepack pnpm deployment:rollback:check`
+  - `corepack pnpm prod:evidence:templates:check`
+  - `corepack pnpm ops:check` (statik/toparlayici gate; target'li 18/18 Canli Durum yerine gecmez)
+  - `corepack pnpm prod:plan:check`
+- Risk ve rollback:
+  - Yuksek risk; canli kurum, provider, production summary ve onay zinciri bagimliligi var.
+  - Rollback: go-live kararini `APPROVED` yerine `ON_HOLD` tutmak, release candidate'i staging'de
+    dondurmak ve sadece read-only artifact tekrar kosulari yapmak.
 
 ## Plan Kaydindaki Isler
 
@@ -775,6 +981,159 @@ bolunmustur.
   `corepack pnpm web:ux-contract:check`, `corepack pnpm web:a11y:check`
   ve `git diff --check` gecti. Bu Faz 4'u tamamen kapatmaz; genis UI data-loading
   refactor'u, real KVKK staging/prod target'i ve PII negatif artifact kanitlari acik kalir.
+- Faz 4 icin rapor workspace lazy ogrenci liste/detay yukleme dilimi lokal olarak
+  kapatildi: `apps/web/app/(app)/kurum/raporlar/reports-page.tsx` artik sayfa acilisinda
+  `/students` listesini yuklemez; liste yalniz `Raporu getir` sonrasi snapshot varsa yuklenir.
+  Karne, progress ve hata kitapcigi detaylari rapor sorgusunda otomatik gelmez, kullanici
+  ogrenci satirindan karneyi actiginda yuklenir. `apps/web/e2e-next/report-workspace-contract-next.spec.ts`
+  ilk acilista 0 ogrenci liste/detay istegini, sinifli sorgudan sonra 1 adet
+  `/students?classId=...` istegini, sinifsiz raporda 0 genis `/students` ve dedupe edilmis
+  `/students/:id` isteklerini, karne seciminden sonra 3 detay istegini dogrular.
+  `corepack pnpm --filter @uzman-hocam/web typecheck`,
+  `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/report-workspace-contract-next.spec.ts`
+  ve `corepack pnpm web:ux-contract:check` gecti. Kalan risk performans icin ileride tek
+  batch endpoint dusunulebilmesidir; privacy acisindan genis ogrenci listesi yukleme kapisi
+  lokal kontratta kapandi.
+- Faz 4 icin rapor analitik paneli component/perf dilimi lokal olarak kapatildi:
+  `apps/web/app/(app)/kurum/raporlar/reports-page.tsx` icindeki `activeTab === "analytics"`
+  blogu ayni dosyada `ReportAnalyticsPanel` component'ine tasindi. Branch radar, kazanım
+  satirlari, sinif barlari, sinav sonuc donut'u ve progress points gibi chart/table turevleri
+  artik ana rapor workspace render'inda degil, yalniz analitik sekmesi gorunurken uretilir.
+  Referans map'leri, ogrenci sonuc satirlari, snapshot context/input refs ve secili sinav etiketi
+  `useMemo` ile sabitlendi; mevcut lazy chart import'lari, `next-report-analytics-section`
+  class'i, `Rapor özeti`, `Kurum analitiği`, `Başarı %`, `Net` ve `Soru` gorunur kontratlari
+  degismedi. `scripts/check-web-ux-baseline.mjs` `function ReportAnalyticsPanel` ve memoized
+  derived-data guardrail'lerini izler. `corepack pnpm --filter @uzman-hocam/web typecheck`,
+  `corepack pnpm web:ux-baseline:check` ve
+  `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/report-workspace-contract-next.spec.ts`
+  gecti. Bu, optik workspace icin daha genis component/perf hardening'i ve real KVKK staging/prod
+  target'ini kapatmaz.
+- Faz 4 icin optik rapor context privacy/perf dilimi lokal olarak kapatildi:
+  `apps/web/app/(app)/kurum/optik/parser-config-page.tsx` artik rapor uretimi veya
+  `Raporları getir` yenilemesi sirasinda filtresiz `/students` listesini yuklemez.
+  Rapor context'i once READY/STALE snapshot ve participant kayitlarindan gereken ogrenci
+  id'lerini cikarir, id'leri dedupe eder ve yalniz `/students/:id` detaylarini ister.
+  Karantina ogrenci aramasi `q + limit` ile sinirli kalir; genis liste endpoint'i
+  arama disi akista kullanilmaz. Ayni dilimde `QuarantineResolutionPanel` ogrenci secenekleri
+  ve kolonlari, `OpticalReportPanel` snapshot kolonlari ve `studentRows`, `useMemo` ile
+  sabitlendi; `Optik katılımcı sonuçları` kolonlari `opticalStudentResultColumns` olarak
+  module-level tasindi. `apps/web/e2e-next/optik-workspace-contract-next.spec.ts` rapor
+  uretimi ve rapor yenileme sonrasi `optik rapor üretimi geniş /students listesi yüklememeli`
+  ve `optik rapor yenileme geniş /students listesi yüklememeli` negatiflerini, `Ada Kaya`
+  sonuc gorunumunu ve tekil `/students/student-a` detay yolunu dogrular. `scripts/check-web-ux-baseline.mjs`
+  bu tokenlari, `loadStudentsByIds`, `reportStudentIds`, `opticalStudentResultColumns` ve
+  `loadStudents(accessToken).catch(() => [])` no-token guardrail'ini izler.
+  `corepack pnpm --filter @uzman-hocam/web typecheck`,
+  `corepack pnpm web:ux-baseline:check` ve
+  `corepack pnpm --filter @uzman-hocam/web exec playwright test -c playwright.next.config.ts e2e-next/optik-workspace-contract-next.spec.ts`
+  gecti. Bu lokal kontrat, iSEM 254 satir/staging real-data performans kaniti veya real
+  KVKK staging/prod artifact'i yerine gecmez.
+- Faz 4 icin optik karantina `rawRow` UI PII negatif dilimi lokal olarak kapatildi:
+  `apps/web/e2e-next/optik-workspace-contract-next.spec.ts` artik karantina response'unda
+  ham TCKN-benzeri alan, e-posta, cevap dizisi ve ham satir bulunan bir kaydi fixture'a
+  ekler; UI sadece satir numarasi, sebep, durum ve islem alanlarini gosterir. Test,
+  `rawRow` icindeki hostile degerlerin sayfa body metnine sizmadigini dogrular. Ayni dilimde
+  `apps/web/app/(app)/kurum/optik/parser-config-page.tsx` karantina satiri yukleme sonrasi
+  otomatik/filtresiz `/students` cagrisini kaldirdi; ogrenci secenekleri ayri state'te ve
+  yalniz `q + limit=10` arama aksiyonuyla gelir. Bu dilim operator UI sizintisini ve
+  karantina DOM'unda genis ogrenci listesi riskini kapatir; kalici staging/prod evidence
+  artifact PII negatifleri Faz 5 dis kanit kapisinda kalir.
+- Faz 4/Faz 5 icin iSEM optik smoke evidence karantina/raw PII negatif dilimi lokal olarak
+  kapatildi: `scripts/smoke-evidence.mjs` iSEM optik smoke payload'ini artik ham karantina
+  alan adlari (`rawRow`, `rawLine`, `rawText`, `sourceFileName`, `nationalId`, TCKN vb.)
+  ve allowed alanlara gizlenmis TCKN-benzeri deger, ham e-posta veya ham TXT dosya yolu
+  ile ham telefon ve uzun optik satir/cevap dizisi icin recursive olarak tarar; hash/SHA alanlari
+  bu kontrolun disinda kalir.
+  `scripts/check-smoke-evidence-contract.mjs` rawRow, rawLine, TCKN-benzeri parser version,
+  ham `ornek-veriler/iSEM .txt` path, ham optik satir, ham telefon, ham e-posta,
+  `sourceFileName`, `objectKey` ve `s3Key` negatiflerini fail-fast fixture'a ekledi.
+  `corepack pnpm
+  smoke:evidence:check`, `corepack pnpm prod:evidence:templates:check` ve `corepack pnpm
+  --filter @uzman-hocam/web typecheck` gecti; ayrica
+  `ISEM_OPTICAL_PIPELINE_ALLOW_EXAMPLE_EVIDENCE=1 ISEM_OPTICAL_PIPELINE_TARGET=file://$PWD/docs/evidence-templates/isem-optical-pipeline.example.json node scripts/check-isem-optical-pipeline-evidence.mjs`
+  gecti. Bu lokal sozlesme gercek staging/prod evidence
+  artifact'inin yerini almaz; o artifact'lerin uretilmesi Faz 5 dis kosusunda kalir.
+- Faz 4/Faz 5 icin iSEM optik local live smoke ve log/privacy hardening dilimi
+  ilerletildi: local Colima/Docker uzerinde Postgres, Redis ve MinIO kaldirildi,
+  `corepack pnpm --filter @uzman-hocam/db exec prisma migrate status --config prisma.config.ts`
+  `Database schema is up to date!` dondurdu ve
+  `S3_ACCESS_KEY_ID=minioadmin S3_SECRET_ACCESS_KEY=minioadmin123 S3_BUCKET=uzman-hocam-local ISEM_OPTICAL_PIPELINE_SMOKE_EVIDENCE_FILE=artifacts/local/isem-optical-pipeline.json corepack pnpm isem-optical-pipeline:smoke`
+  gecti. Artifact `254 student/participant/matched`, `0 quarantine`, `254 ExamResult`,
+  `254 reportResult`, `reportReady=true`, `gaps=[]` ve 2 hashli ornek skor tasir;
+  direct payload validation `validateSmokeEvidencePayload(... expectedCheck: "isem_optical_pipeline_smoke")`
+  ile gecti. `package.json` iSEM smoke komutu artik POSIX shell env atamasina bagli olmadan
+  Node wrapper ile varsayilan `LOG_ENABLED=false` calisir; basari/hata loglari ham ogrenci
+  no/internal id tasimaz, ornek skor loglari sadece `sampleN` ve count/net degerlerini yazar.
+  `apps/api/src/observability/logging.ts` pino-http logunda ham request objesi ve
+  Authorization header'i basmayacak sekilde daraltildi; `apps/api/src/observability/logging.test.ts`
+  ham log satirinda e-posta, bearer token ve `authorization` metnini negatif dogrular.
+  `ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_FILE` yalniz `private` path segmenti altinda
+  0600 modunda yazilir; `LIVE_UI_WORKER_EVIDENCE_PATH` preflight'i public credential
+  input path'ini ve 0600 disi izinleri reddeder. `corepack pnpm live:ui-worker:evidence-contract`,
+  `corepack pnpm smoke:evidence:check`, hedefli API logging testi ve `corepack pnpm
+  isem-optical-pipeline:smoke` gecti. Bu local smoke, staging/prod veya pilot kaniti
+  yerine gecmez; Faz 5 dis kanit kapisi acik kalir.
+- Faz 5 staging release bundle kalicilik kapisi lokal olarak sertlestirildi:
+  `scripts/check-staging-release-artifacts.mjs` artik `STAGING_RELEASE_ARTIFACTS_TARGET`
+  hedefinin `/tmp` veya `/var/tmp` altinda kalmasini reddeder; `scripts/check-prod-evidence-templates.mjs`
+  temp path negatifini ve example evidence bayragi kapaliyken fixture bundle'in kirilmasini fail-fast
+  korur ve `scripts/check-prod-readiness.mjs` bu statik beklentiyi
+  izler. Bu, staging/prod kosusunun yerine gecmez; yalniz gercek kosudan indirilen bundle'in
+  gecici path'ten kalici release kaniti gibi sayilmasini engeller.
+- Faz 5 staging first-gates manifest target'i lokal olarak sertlestirildi:
+  `STAGING_FIRST_GATES_TARGET` artik lokal temp path, symlink manifest dosyasi veya symlink
+  parent directory uzerinden gelen manifest'i okumadan once reddeder; `prod:evidence:templates:check`
+  temp/symlink negatifleriyle bu guardrail'i korur. Bu, staging/prod first-gates kosusunu
+  uretmez; yalniz indirilen manifest target'inin kalici artifact oldugunu fail-fast kanitlar.
+- Faz 5 production evidence projection ve iSEM/live-exam baglantisi lokal olarak sertlestirildi:
+  `scripts/check-prod-evidence.mjs` summary uretirken KVKK `auditDiffRedactionVerified` ve RLS
+  `tenantFkPreflight` bloklarini artik production summary'ye tasir; boylece zorunlu redaction ve
+  tenant-FK preflight kanitlari summary projection'inda kaybolmaz. `scripts/check-isem-optical-pipeline-evidence.mjs`
+  `artifacts/local/**` altindaki local smoke artifact'ini staging/prod kaniti olarak reddeder.
+  `scripts/check-live-exam-cycle-evidence.mjs` tam sinav dongusu `evidenceReferences` listesinin
+  iSEM ve UI-worker kanitini yalniz beklenen artifact dosya adlariyla baglamasini ister; substring
+  marker dosyalari PASS sayilmaz. Yeni negatifler
+  `scripts/check-prod-evidence-templates.mjs` ve iSEM readiness beklentileri `scripts/check-prod-readiness.mjs`
+  icinde fail-fast korunur. Bu yine gercek staging/prod kosusu yerine gecmez; yalniz yanlis
+  veya eksik kanitin PASS sayilmasini engeller.
+- Faz 5 local smoke artifact ayrimi genisletildi: `scripts/check-live-exam-cycle-evidence.mjs`
+  artik `evidenceReferences` icinde `artifacts/local/**` referansini reddeder; `scripts/check-live-ui-worker-result-evidence.mjs`
+  `LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET` icin ayni local artifact reddini uygular.
+  `scripts/check-prod-evidence-templates.mjs`, `scripts/check-live-ui-worker-evidence-contract.mjs`
+  ve `scripts/check-prod-readiness.mjs` bu negatifleri lokal kapida korur. Bu degisiklik
+  staging/prod evidence uretmez; local smoke ciktilarinin dis kanit gibi kullanilmasini engeller.
+- Faz 5/Faz 10 local artifact hedef hijyeni provider ve Canli Durum zincirine genisletildi:
+  `scripts/check-prod-evidence.mjs` provider smoke evidence file hedeflerinde,
+  `scripts/check-live-status-evidence.mjs` `LIVE_STATUS_EVIDENCE_TARGET` icin,
+  `scripts/generate-live-status-evidence.mjs` `LIVE_STATUS_EVIDENCE_OUTPUT` ve bagli
+  go-live live-status hedefi icin, `scripts/check-go-live-evidence.mjs` ise
+  `GO_LIVE_EVIDENCE_TARGET` ve `liveStatusEvidence.evidenceTarget` icin `artifacts/local/**`
+  altini reddeder. `scripts/check-prod-evidence-templates.mjs` ve
+  `scripts/check-prod-plan-status.mjs` bu negatifleri lokal kapida korur. Bu degisiklik
+  staging/prod kanit uretmez; local smoke dosyalarinin final provider, Canli Durum veya
+  go-live artifact'i gibi sayilmasini engeller.
+- Faz 10 final external evidence kapisi eklendi: `scripts/check-final-external-evidence.mjs`
+  ve `corepack pnpm prod:external-evidence:check` artik `PRODUCTION_EVIDENCE_SUMMARY_TARGET`,
+  `LIVE_STATUS_EVIDENCE_TARGET`, `PILOT_EVIDENCE_TARGET` ve `GO_LIVE_EVIDENCE_TARGET`
+  olmadan calismaz; production summary, 18/18 Canli Durum, pilot ve go-live checker'larini
+  tek sirada kosar ve bu hedeflerin ayni artifact setine baglandigini dogrular.
+  Final hedefleri `https://` ise gercek host olmali; `file://` ise lokal temp, `artifacts/local/**`,
+  symlink dosya veya symlink parent dizin olamaz. `*_ALLOW_EXAMPLE_EVIDENCE=1` bayraklari
+  ve `LIVE_STATUS_READINESS_PATH` icin pass-readiness fixture override'i bu final kapida reddedilir;
+  final Canli Durum yalniz `docs/phase-6-production-readiness.md` ile dogrulanir.
+  Bu, `corepack pnpm ops:check` sonucunun veya fixture/template kosularinin final dis kanitla karistirilmasini engeller;
+  gercek staging/prod artifact'leri yine uretilmeden Faz 10 kapanmaz.
+- Faz 5 provider smoke evidence PII guardrail'i lokal olarak sertlestirildi:
+  `scripts/smoke-sms-provider.mjs` artik gercek SMS smoke icin bos `providerMessageId`
+  ile kanit yazmaz; `scripts/smoke-evidence.mjs` SMS ve notification recipient alanlarinda
+  maskeli degeri zorunlu tutar, ham telefon/e-posta/push endpoint'i ve sahte/test provider id'lerini
+  reddeder. `scripts/check-prod-env.mjs` production notification smoke alicilarinda
+  placeholder/test/example degerleri reddeder; `scripts/check-go-live-evidence.mjs` bagli
+  production summary icindeki provider recipient alanlarini ayrica maskeli ve PII'siz ister.
+  `scripts/check-smoke-evidence-contract.mjs`, `scripts/check-prod-evidence-templates.mjs`,
+  `scripts/check-prod-readiness.mjs` ve `scripts/check-ops-config.mjs` bu negatifleri lokal
+  kapida korur. Bu degisiklik provider/staging smoke kaniti uretmez; yalniz ham alici veya sahte
+  provider kanitinin release/go-live PASS sayilmasini engeller.
 - Faz 2 icin attendance ve teacher import OpenAPI/shared-contract dilimleri lokal olarak
   kapatildi: `AttendanceCreateRequest`, `AttendanceUpdateRequest` ve `TeacherImportRequest`
   shared-types'a eklendi; `apps/api/src/attendance/attendance-validation.ts` ve
@@ -845,8 +1204,8 @@ bolunmustur.
   `prod:evidence:templates:check` icinde fail-fast kirilir. `KVKK_INVENTORY_TARGET=...`
   ile KVKK template check, `PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE=1 ...`
   ile summary check ve `corepack pnpm prod:evidence:templates:check` gecti. Bu dilim KVKK
-  redaction kanit sozlesmesini guclendirir; real `KVKK_INVENTORY_TARGET` staging/prod kosusu
-  ve runtime retention/purge karari halen aciktir.
+  redaction kanit sozlesmesini guclendirir; runtime retention/purge karari ve production/pilot
+  tekrar kosusu ayri kanit olarak izlenir.
 - Faz 3/Faz 5 icin RLS live evidence tenant FK preflight sozlesmesi genisletildi:
   `RLS_LIVE_EVIDENCE_TARGET` payload'i artik `tenantFkPreflight` bloğu tasir. Bu blok
   `packages/db/scripts/check-tenant-relation-fks.mjs` tarafinda zorunlu tutulan 24 tenant
@@ -861,6 +1220,70 @@ bolunmustur.
   `GO_LIVE_ALLOW_EXAMPLE_EVIDENCE=1 ...` ile go-live check, `corepack pnpm prod:evidence:templates:check`
   ve `corepack pnpm tenant-db:check` gecti. Bu dilim kanit sozlesmesini guclendirir; gercek
   live/staging DB artifact'i halen uretilmelidir.
+- Faz 3/Faz 5 icin AuditLog null tenant siniflandirma kaniti lokal olarak eklendi:
+  `scripts/check-audit-null-tenant-evidence.mjs` ve
+  `docs/evidence-templates/audit-null-tenant.example.json`, `AuditLog.tenantId IS NULL`
+  satirlarini `system`, `deletedTenant` ve `unknown` breakdown'iyle zorunlu hale getirir;
+  `unknown.count=0`, `totalRows = tenantRows + nullTenantRows`, breakdown toplami
+  `nullTenantRows`, kalici/symlink olmayan target ve bos `gaps` guardrail'leri korunur.
+  `prod:evidence:check --summary-file` bu raporu `reports/audit-null-tenant.json` olarak
+  yazar; production summary ve go-live linked summary ayni `auditNullTenant` bloklarini
+  dogrular. Bu dilim kanit sozlesmesini guclendirir; gercek `AUDIT_NULL_TENANT_EVIDENCE_TARGET`
+  staging/prod artifact'i halen uretilmelidir.
+- Faz 5 icin inline upload migration evidence semantik negatifleri lokal olarak genisletildi:
+  `prod:evidence:templates:check`, `contentBase64WriteDisabled=false`,
+  `downloadUrlExpiresInSeconds=301`, migration sonrasi `pendingRows=1`,
+  `pendingBase64Characters=1` ve dry-run pending satirindan az `migratedRows` durumlarini
+  fail-fast reddeder. `SupportTicketAttachment` Postgres store testi de S3 `storageKey`
+  yaziminda insert parametresinin `contentBase64=null` kaldigini ve public record'da
+  `contentBase64/storageKey` donmedigini homework testiyle simetrik korur. Bu dilim
+  kanit sozlesmesini guclendirir; gercek dry-run + onayli migrate artifact'i ve
+  `INLINE_UPLOAD_CONTENT_MIGRATION_TARGET` staging/prod kosusu halen Faz 5 dis kanitidir.
+- Faz 5 icin staging evidence env sozlesmesi audit null tenant hedefiyle senkronize edildi:
+  `AUDIT_NULL_TENANT_EVIDENCE_TARGET` artik `prod:env:check` required evidence target setinde,
+  `docs/evidence-templates/staging-evidence.env.example` icinde ve ops/readiness statik
+  kapilarinda zorunlu gorunur. Bu dilim `prod:evidence:check` icinde kosulan audit null tenant
+  raporunun staging secret env'de eksik kalip evidence job sirasinda gec fail etmesini engeller;
+  gercek `AUDIT_NULL_TENANT_EVIDENCE_TARGET` staging/prod artifact'i yine uretilmelidir.
+- Faz 5 icin UI-worker result target'i staging/prod env sozlesmesine baglandi:
+  `LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET` artik `.env.example`, staging evidence secret ornegi,
+  `prod:env:check` required evidence target seti ve staging env negatifleri icinde zorunludur.
+  Ayrica `prod:evidence:check --summary-file` bu target'i okuyup `reports.liveUiWorkerResult`
+  olarak yazar; production summary ve go-live linked summary bu raporu, `pnpm live:ui-worker:smoke`
+  komutunu, PDF/Excel indirme ve ogrenci/veli portal gorunumunu zorunlu tutar. Bu, kalici result
+  artifact'inin secret/env hazirliginda veya release summary zincirinde eksik kalmasini engeller.
+  Bu turda remote/staging result artifact'i uretilmistir; production summary/live-status zincirine
+  baglanmadigi surece Faz 5 final kapanisi sayilmaz.
+- Faz durum tablosu artik `prod:plan:check` tarafindan korunur: Faz 3/4/4A/5/10 satirlari
+  staging/prod, pilot ve go-live kanitlari tamamlanmadan `LOCAL_PASS` ya da tamamlandi
+  anlamina gelen bir duruma cekilemez; `reports.liveUiWorkerResult` ve kalan dis kanit
+  token'lari eksilirse statik kapida fail-fast yakalanir.
+- Faz 10 go-live report-generation perf kaniti lokal olarak sertlestirildi:
+  go-live linked production summary artik `pnpm report-generation:smoke` ile kapanmaz;
+  `commandsPassed=["pnpm report-generation:perf"]`, `resultCount>=10000`,
+  `studentCount>=10000` ve `thresholds.generationDurationMsMax=60000` sartlarini arar.
+  `prod:evidence:templates:check` bu sozlesme icin smoke-command, 10k alti ve threshold
+  negatiflerini kosar. Bu guardrail gercek perf artifact'i yerine gecmez; Faz 10 icin
+  canli/staging `report-generation:perf` kaniti production summary/live-status zincirine hala baglanmalidir.
+- Faz 5/Faz 10 icin Canli Durum gate seti genisletildi:
+  live-status transition bundle'i artik yalniz 7 ust seviye kapidan olusmaz; live exam cycle,
+  iSEM optical pipeline, UI-worker result, KVKK inventory, RLS live, inline upload migration,
+  audit null tenant, rate limit, SMS/notification provider ve report-generation perf kanitlarini
+  da 18 gate'lik PASS/NOT_RUN sozlesmesine baglar. Production readiness belgesinde bu yeni
+  dis kanitlar `NOT_RUN` kalir; `prod:plan:check` bu satirlarin sessizce dusmesini engeller.
+  `pnpm live:status:generate` ornek bundle'i 18/18 PASS fixture olarak uretebilir ama gercek
+  staging/prod artifact'leri uretilmeden Faz 5/Faz 10 tamamlanmis sayilmaz.
+- Faz 5 staging first-gates promotion guardrail'i genisletildi:
+  staging release bundle artik first-gates Traefik URL/status/HSTS ve alert webhook URL/status/auth
+  scheme alanlarini final `summary.smokeEvidence` ile eslestirir. Boylece farkli host veya farkli
+  webhook ile alinmis erken gate kaniti ayni release summary'ye terfi edemez. `prod:evidence:templates:check`
+  first-gates target mismatch negatifini kosar; gercek Traefik/alert staging artifact'i yine dis
+  kanit olarak uretilmelidir.
+- Faz 5/Faz 10 Canli Durum source guardrail'i sertlestirildi:
+  live-status ve go-live linked live-status checker'lari artik source nesnesinde `result` varsa
+  `PASS`, `environment` varsa `production` arar; `prod:evidence:templates:check` `FAIL` ve
+  staging source negatiflerini kosar. Boylece PASS gate, staging veya fail olmus kaynak artifact'ten
+  turetilerek terfi edemez. Bu guardrail gercek staging/prod artifact'lerinin yerine gecmez.
 - Faz 2 icin school reference CRUD/class read-delete sozlesme dilimi lokal olarak kapatildi:
   `CampusCreateRequest`, `CampusUpdateRequest`, `CourseCreateRequest`, `CourseUpdateRequest`,
   `GradeLevelCreateRequest`, `GradeLevelUpdateRequest`, `LearningOutcomeCreateRequest`,
@@ -1116,3 +1539,856 @@ bolunmustur.
   ve artifact schema negatif kontrolu gecti. Operation-contract envanteri bu dilimden sonra
   277 toplam operation icinde 203 covered / 74 open; Faz 2 yine tam kapanmaz. Kalan portal
   borcu support-ticket portal mutasyonlari ve genis read/mutation yuzeyleridir.
+- Faz 2/Faz 4 icin support-ticket portal mutasyon dilimi lokal olarak kapatildi:
+  `GET/POST /api/v1/me/student/support-tickets`,
+  `GET/POST /api/v1/me/guardian/students/{studentId}/support-tickets` ve
+  `GET/POST /api/v1/me/teacher/support-tickets` OpenAPI overlay ve generator kapisina
+  alindi. `PortalSupportTicketCreateRequest`, `TeacherPortalSupportTicketCreateRequest` ve
+  `PublicPortalSupportTicketRecord` shared-types'a eklendi; student/guardian POST body artik
+  `studentId`/`tenantId`/`requesterId`/`status` override edemez, teacher POST body `tenantId`
+  override edemez. Portal response'lari runtime'da `requesterId` dondurmez; generator response
+  list/envelope, priority/status enum, `createdAt` format ve requesterId/userId/fileBase64/
+  contentBase64/storageKey/downloadUrl/token/nationalId* yasaklarini fail-fast korur. Tenant
+  security review OpenAPI tek basina yeterli olmadigini, runtime redaction gerektigini P1
+  olarak isaretledi ve bu runtime redaction eklendi. `node --check scripts/generate-openapi.mjs`,
+  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/support-ticket/support-ticket.e2e.test.ts
+  src/me/me-access-matrix.e2e.test.ts` (36 test), `corepack pnpm --filter @uzman-hocam/api build`,
+  `corepack pnpm openapi:generate` ve artifact schema negatif kontrolu gecti. Operation-contract
+  envanteri bu dilimden sonra 277 toplam operation icinde 209 covered / 68 open; Faz 2 yine
+  tam kapanmaz. Kalan lokal contract borcu yonetim student ana kayitlari/profil mutasyonlari,
+  diger genis read/mutation yuzeyleri ve shared-types tek kaynak gecisidir.
+- Faz 2/Faz 4 icin yonetim student core/profile read-update-delete dilimi lokal olarak
+  kapatildi: `GET /api/v1/students`, `GET/PATCH/DELETE /api/v1/students/{id}` ve
+  `GET/PATCH /api/v1/students/{id}/profile` OpenAPI overlay ve generator kapisina
+  alindi. `StudentUpdateRequest` ve `StudentProfileUpdateRequest` shared-types'a eklendi;
+  core student response'lari runtime'da public kayit beyaz listesine indirildi ve `userId`,
+  ham kimlik, iletisim/profil ve storage alanlarini dondurmez. Profile response'lari
+  `userId`, ham TC, encrypted/hash TC ve storage/token alanlarini yasaklar; profile request
+  ham `nationalId` girdisini yalnizca yazma girdisi olarak kabul eder ve `photoKey` de
+  `students/{studentId}/...` sinirina cekildi. Tenant security subagent'i `GET /students`
+  `userId` sizintisini P1 olarak isaretledi; bu runtime mapper beyaz listesiyle kapatildi.
+  `node --check scripts/generate-openapi.mjs`,
+  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/student/student-profile.e2e.test.ts
+  src/app.e2e.test.ts` (37 test), `corepack pnpm --filter @uzman-hocam/api build`,
+  `corepack pnpm openapi:generate`, student core/profile artifact negatif kontrolu,
+  `corepack pnpm prod:plan:check` ve scoped `git diff --check` gecti. Operation-contract
+  envanteri bu dilimden sonra 277 toplam operation icinde 215 covered / 62 open; Faz 2
+  yine tam kapanmaz. Kalan lokal contract borcu diger genis read/mutation yuzeyleri ve
+  shared-types tek kaynak gecisidir.
+- Faz 2 icin student import-export/enrollment lifecycle sozlesme dilimi lokal olarak
+  kapatildi: `GET /api/v1/students/export`, `POST /api/v1/students/imports/dry-run`,
+  `POST /api/v1/students/imports`, `POST /api/v1/students/enrollments/bulk-renew`,
+  `POST /api/v1/students/{id}/enrollments/renew` ve
+  `POST /api/v1/students/{id}/enrollments/transfer` OpenAPI overlay ve generator kapisina
+  alindi. `StudentImportRequest`, `StudentImportDryRunResult`, `StudentImportResult`,
+  `StudentExportResult`, `StudentEnrollmentActionRequest`, `StudentBulkEnrollmentRequest`
+  ve `StudentBulkEnrollmentResult` shared-types'a eklendi. Import commit response'u runtime'da
+  public student kaydina indirildi; `userId`, ham kimlik, iletisim/profil ve storage/token
+  alanlari donmez. `bulk-renew` mutasyonu tum ogrenci ve hedef class erisimlerini preflight
+  yapmadan kayit yazmaz; tenant disi ikinci ogrenci ilk ogrencide kismi enrollment olusturamaz.
+  Transfer endpoint'inin classId olmadan `data: null` donebilmesi OpenAPI'de nullable kayit
+  olarak temsil edilir. QA subagent'i dry-run bos schema, transfer nullable contract, bulk
+  `studentIds.minItems` ve kismi mutasyon risklerini isaretledi; bu kapilar eklendi.
+  `node --check scripts/generate-openapi.mjs`,
+  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/student/student-profile.e2e.test.ts
+  src/app.e2e.test.ts` (38 test), `corepack pnpm --filter @uzman-hocam/api build`,
+  `corepack pnpm openapi:generate` ve student import/enrollment artifact negatif kontrolu
+  gecti. Operation-contract envanteri bu dilimden sonra 277 toplam operation icinde
+  221 covered / 56 open; Faz 2 yine tam kapanmaz. Kalan lokal contract borcu diger genis
+  read/mutation yuzeyleri ve shared-types tek kaynak gecisidir.
+- Faz 2/Faz 4 icin kalan student lifecycle read/purge/tenant update dilimi lokal olarak
+  kapatildi: `GET /api/v1/students/{id}/class-history`,
+  `GET /api/v1/students/{id}/enrollments`,
+  `GET /api/v1/students/{id}/teacher-assignments`,
+  `POST /api/v1/students/{id}/purge-pii` ve `PATCH /api/v1/students/{id}/tenant`
+  OpenAPI overlay ve generator kapisina alindi. `StudentTenantUpdateRequest` shared-types'a
+  eklendi; purge ve tenant update response'lari runtime'da public student kaydina indirildi.
+  Student PII purge artik yalniz ad/soyad degil, `nationalIdEncrypted`, `nationalIdHash`,
+  `birthDate`, `phone`, `email` ve `photoKey` alanlarini da temizler. Generator class-history,
+  enrollment ve teacher-assignment liste envelope'larini, student status/teacher assignment role
+  enum'larini, tarih formatlarini ve userId/nationalId*/iletisim/storage/token yasaklarini
+  fail-fast korur. `node --check scripts/generate-openapi.mjs`,
+  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/student/student-store.test.ts
+  src/school/school.e2e.test.ts src/student/student-profile.e2e.test.ts` (46 test),
+  `corepack pnpm --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate` ve
+  student lifecycle residual artifact negatif kontrolu gecti. Operation-contract envanteri
+  bu dilimden sonra 277 toplam operation icinde 226 covered / 51 open; Faz 2 yine tam
+  kapanmaz. Kalan lokal contract borcu diger genis read/mutation yuzeyleri ve shared-types
+  tek kaynak gecisidir.
+- Faz 2 icin message-template CRUD sozlesme dilimi lokal olarak kapatildi:
+  `GET/POST /api/v1/message-templates`, `GET/PATCH/DELETE /api/v1/message-templates/{id}`
+  OpenAPI overlay ve generator kapisina alindi. `MessageTemplateCreateRequest` ve
+  `MessageTemplateUpdateRequest` shared-types'a eklendi; API Zod body semalari bu tiplere
+  baglandi. Generator list/tekil response envelope'larini, create `name`/`body` zorunlulugunu,
+  `SMS` channel enum'unu, `minLength: 1`, delete `204` no-body davranisini ve response'ta
+  `deletedAt`, userId, nationalId*, file/storage/token alan yasaklarini fail-fast korur.
+  `node --check scripts/generate-openapi.mjs`,
+  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api exec vitest run src/message-template/message-template.e2e.test.ts
+  src/message-template/message-template-store.test.ts` (9 test),
+  `corepack pnpm --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate` ve
+  message-template artifact negatif kontrolu gecti. Operation-contract envanteri bu dilimden
+  sonra 277 toplam operation icinde 231 covered / 46 open; Faz 2 yine tam kapanmaz.
+  Kalan lokal contract borcu diger genis read/mutation yuzeyleri ve shared-types tek kaynak
+  gecisidir.
+- Faz 2 icin identity-invitation public response ve token redaction sozlesme dilimi lokal
+  olarak kapatildi:
+  `GET/POST /api/v1/identity-invitations`, `POST /api/v1/identity-invitations/accept`
+  ve `POST /api/v1/identity-invitations/{id}/resend` shared request/response tiplerine,
+  OpenAPI overlay'e ve generator kapisina alindi. Controller create/resend response'lari
+  artik ham `activationToken` dondurmez; accept response'u yalnizca `status` ve `acceptedAt`
+  ile sinirlanir. Generator list/create/resend response'larinda `activationToken`, `token`,
+  `tokenHash`, `password`, `refreshToken` ve `acceptedUserId` yasaklarini, accept response'unda
+  tenant/subject/email/user/token alan yasaklarini fail-fast korur. `node --check
+  scripts/generate-openapi.mjs`, `corepack pnpm --filter @uzman-hocam/shared-types
+  typecheck`, `corepack pnpm --filter @uzman-hocam/api typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  src/identity-invitation/identity-invitation.e2e.test.ts` (5 test),
+  `corepack pnpm --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate` ve
+  identity-invitation artifact negatif kontrolu gecti. Operation-contract envanteri bu
+  dilimden sonra 277 toplam operation icinde 235 covered / 42 open; Faz 2 yine tam
+  kapanmaz. Kalan lokal contract borcu diger genis read/mutation yuzeyleri ve shared-types
+  tek kaynak gecisidir.
+- Faz 2/Faz 4A icin optical-form-template list/create/apply sozlesme dilimi lokal olarak
+  kapatildi:
+  `GET/POST /api/v1/optical-form-templates` ve
+  `POST /api/v1/optical-form-templates/{templateId}/apply` shared request tiplerine,
+  OpenAPI overlay'e ve generator kapisina alindi. Generator list/create response'larinda
+  `encoding`, `delimiter`, `skipHeaderLines`, `status`, `createdAt` ve `updatedAt` alanlarini;
+  create/apply request body'lerini; create/apply `Idempotency-Key` header'ini; optik template
+  ve applied parser-config response'larinda `fileBase64`, `sampleText`, `rawRow`, token/hash
+  alan yasaklarini fail-fast korur. `node --check scripts/generate-openapi.mjs`,
+  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  src/exam/optical-form-template.controller.e2e.test.ts
+  src/exam/optical-form-template.service.test.ts` (6 test), `corepack pnpm --filter
+  @uzman-hocam/api build`, `corepack pnpm openapi:generate` ve optical-form-template
+  artifact negatif kontrolu gecti. Operation-contract envanteri bu dilimden sonra 277
+  toplam operation icinde 238 covered / 39 open; Faz 2 yine tam kapanmaz. Kalan lokal
+  contract borcu diger genis read/mutation yuzeyleri ve shared-types tek kaynak gecisidir.
+- Faz 2 icin health/metrics raw response, download response ve no-content delete sozlesme
+  dilimi lokal olarak kapatildi:
+  `GET /health`, `GET /health/ready`, `GET /api/v1/metrics`,
+  `GET /api/v1/support-tickets/{id}/attachments/{attachmentId}/download`,
+  `GET /api/v1/homework/materials/{id}/files/{fileId}/download`,
+  `DELETE /api/v1/teachers/{id}/assignments/{assignmentId}`,
+  `DELETE /api/v1/homework/materials/{id}`, `DELETE /api/v1/homework/{id}`,
+  `DELETE /api/v1/schedule-lessons/{id}`, `DELETE /api/v1/study-sessions/{id}` ve
+  `DELETE /api/v1/teacher-notes/{id}` OpenAPI checker kapsamindadir. Metrics endpoint'i
+  global prefix/interceptor altinda raw `text/plain` kalir; health response'lari `{ data }`
+  zarfi tasimaz; delete endpoint'leri 204/no-content; download endpoint'leri file metadata
+  response'u verir ve `contentBase64`, storage/object key, token/hash alanlarini artifact
+  seviyesinde yasaklar. `node --check scripts/generate-openapi.mjs`,
+  `corepack pnpm --filter @uzman-hocam/api typecheck`, hedefli 9 API e2e dosyasi
+  (127 test), `corepack pnpm --filter @uzman-hocam/api build` ve
+  `corepack pnpm openapi:generate` gecti. Required-operation envanteri bu dilimden sonra
+  277 toplam operation icinde 249 covered / 28 open; Faz 2 yine tam kapanmaz.
+- Faz 2 icin SMS batch ve backup/tenant-export sozlesme dilimi lokal olarak kapatildi:
+  `POST /api/v1/sms-batches`, `GET /api/v1/sms-batches/{jobId}`,
+  `POST /api/v1/sms-batches/recipients/preview`, `GET /api/v1/backup-restore-jobs`,
+  `POST /api/v1/backup-restore-jobs` ve
+  `GET /api/v1/backup-restore-jobs/tenant-export` shared-types, OpenAPI overlay ve
+  generator kapisina alindi. Generator SMS response'larinda queue/report/preview required
+  alanlarini, recipient/template minLength/minItems kurallarini, `Idempotency-Key` header'ini
+  ve token/storage/raw-content yasaklarini; backup job'larda operation/status enum'larini,
+  target/confirmation minLength kurallarini, raw tenant-export required alanlarini ve
+  token/storage/ham kimlik yasaklarini fail-fast korur. `node --check
+  scripts/generate-openapi.mjs`, `corepack pnpm --filter @uzman-hocam/shared-types
+  typecheck`, `corepack pnpm --filter @uzman-hocam/api typecheck`, hedefli
+  `sms-batch`, `backup-restore` ve `api-response` e2e kosusu (19 test),
+  `corepack pnpm --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate`
+  ve SMS/backup/export artifact negatif kontrolu gecti. Required-operation envanteri bu
+  dilimden sonra 277 toplam operation icinde 255 covered / 22 open; Faz 2 yine tam kapanmaz.
+- Faz 2/Faz 4 icin `/me` profile/tenant ve portal homework/notification-preference sozlesme
+  dilimi lokal olarak kapatildi:
+  `GET /api/v1/me/profile`, `GET/PATCH /api/v1/me/tenant`,
+  `GET /api/v1/me/student/homework/material-assignments`,
+  `GET /api/v1/me/guardian/homework/material-assignments`,
+  `GET /api/v1/me/guardian/students/{studentId}/homework/material-assignments` ve
+  `GET/PATCH /api/v1/me/guardian/students/{studentId}/notification-preferences`
+  shared-types, OpenAPI overlay ve generator kapisina alindi. Generator session context
+  response'unu kaynak kayit/PII alanlarindan ayirir; tenant profile update request'inde
+  sadece `name`, `institutionType`, `contactEmail`, `logoUrl` alanlarini kabul eder;
+  portal homework/preference response'larinda token, storage key, raw content ve ham kimlik
+  alan yasaklarini fail-fast korur. `node --check scripts/generate-openapi.mjs`,
+  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api typecheck`, hedefli `me-access-matrix`,
+  `tenant`, `support-ticket` ve `app` e2e kosusu (74 test),
+  `corepack pnpm --filter @uzman-hocam/api build`, `corepack pnpm openapi:generate`
+  ve `/me` artifact negatif kontrolu gecti. Required-operation envanteri bu dilimden sonra
+  277 toplam operation icinde 263 covered / 14 open; Faz 2 yine tam kapanmaz.
+- Faz 2 icin tenant admin ve tenant-user sozlesme/P0 guvenlik dilimi lokal olarak kapatildi:
+  `GET /api/v1/tenants`, `GET/PATCH/DELETE /api/v1/tenants/{id}`,
+  `GET/POST /api/v1/tenant-users` ve
+  `PATCH /api/v1/tenant-users/{userId}/roles` shared-types, OpenAPI overlay ve
+  generator kapisina alindi. `PATCH /tenants/{id}` artik create'e ait `id` ve
+  `firstAdmin` alanlarini Zod seviyesinde reddeder. `POST /tenant-users` mevcut global
+  e-posta conflict'inde `User.passwordHash` satirini guncellemez; mevcut kullanici sadece
+  tenant membership'e baglanir, boylece baska tenant admin'inin bilinen e-posta uzerinden
+  parola ele gecirme riski kapatildi. Generator tenant-user role enum'unda `SYSTEM_ADMIN`
+  bulunmamasini, roles `minItems`, e-posta/tarih/koltuk limit formatlarini ve tenant/tenant-user
+  response'larinda activation token, parola, password hash, refresh token ve token/hash alan
+  yasaklarini fail-fast korur. `node --check scripts/generate-openapi.mjs`,
+  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  src/user-management/user-management-store.test.ts
+  src/user-management/user-management.e2e.test.ts
+  src/tenant/tenant.controller.e2e.test.ts` (16 test),
+  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate`
+  gecti. Required-operation envanteri bu dilimden sonra 277 toplam operation icinde
+  270 covered / 7 open; acik operation listesi:
+  `GET /api/v1/me/guardian/students/{studentId}/payment-plans`,
+  `GET /api/v1/me/teacher/lookups`, `GET /api/v1/me/teacher/students`,
+  `GET /api/v1/privacy/inventory`, `POST /api/v1/privacy/me/purge-pii`,
+  `POST /api/v1/role-previews` ve `POST /api/v1/tenants`. `POST /api/v1/tenants`
+  first-admin invitation response token'u ve first-admin audit raw e-posta borcu nedeniyle
+  bu turda bilincli olarak covered sayilmadi.
+- Faz 2 icin role-preview token-scope sozlesme dilimi lokal olarak kapatildi:
+  `POST /api/v1/role-previews` shared-types, OpenAPI overlay ve generator kapisina alindi.
+  Bu endpoint bilincli olarak `previewToken` dondurur; generator bu beklenen alanla birlikte
+  target role enum'unu sadece `TEACHER/STUDENT/GUARDIAN` ile sinirlar, `mode=READ_ONLY`,
+  `expiresAt/createdAt` date-time, `targetSubjectId.minLength` ve request body required
+  alanlarini fail-fast kontrol eder. Response'da access token, activation token, parola,
+  password hash, refresh token ve token hash alanlari yasak kalir. Runtime test success
+  response'unda `previewToken` disinda access/refresh token ve parola/hash alanlari olmadigini,
+  cross-tenant/missing subject durumunda token verilmedigini ve `SYSTEM_ADMIN` hedef rolunun
+  Zod ile reddedildigini korur. `node --check scripts/generate-openapi.mjs`,
+  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  src/role-preview/role-preview.controller.e2e.test.ts` (3 test),
+  `corepack pnpm --filter @uzman-hocam/api typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate`
+  gecti. Required-operation envanteri bu dilimden sonra 277 toplam operation icinde
+  271 covered / 6 open; acik operation listesi:
+  `GET /api/v1/me/guardian/students/{studentId}/payment-plans`,
+  `GET /api/v1/me/teacher/lookups`, `GET /api/v1/me/teacher/students`,
+  `GET /api/v1/privacy/inventory`, `POST /api/v1/privacy/me/purge-pii` ve
+  `POST /api/v1/tenants`.
+- Faz 2/Faz 4 icin kalan teacher/guardian portal read sozlesme ve privacy dilimi lokal
+  olarak kapatildi:
+  `GET /api/v1/me/teacher/lookups`, `GET /api/v1/me/teacher/students` ve
+  `GET /api/v1/me/guardian/students/{studentId}/payment-plans` OpenAPI overlay ve
+  generator kapisina alindi. `/me/teacher/students` runtime cevabi internal `StudentRecord`
+  yerine `PublicStudentRecord` kullanacak sekilde daraltildi; boylece `userId` ve portal
+  hesap baglantisi ogretmen listesine sizmaz. Generator teacher portal read response'larinda
+  e-posta, ham kimlik, telefon, photo/storage key, raw content, userId ve token/hash alanlarini;
+  guardian payment-plan response'unda ham kimlik/iletisim/storage/token alanlarini; payment
+  taksit status enum'u, tutar minimumlari ve tarih formatlarini fail-fast kontrol eder.
+  `node --check scripts/generate-openapi.mjs`,
+  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  src/me/me-access-matrix.e2e.test.ts src/payment/payment.e2e.test.ts` (30 test),
+  `corepack pnpm --filter @uzman-hocam/api typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate`
+  gecti. Required-operation envanteri bu dilimden sonra 277 toplam operation icinde
+  274 covered / 3 open; acik operation listesi:
+  `GET /api/v1/privacy/inventory`, `POST /api/v1/privacy/me/purge-pii` ve
+  `POST /api/v1/tenants`.
+- Faz 2/Faz 4 icin privacy inventory ve self-purge sozlesme dilimi lokal olarak kapatildi:
+  `GET /api/v1/privacy/inventory` ve `POST /api/v1/privacy/me/purge-pii` shared-types,
+  OpenAPI overlay ve generator kapisina alindi. `SelfPurgeResult` shared-types'a tasindi
+  ve AuthService ayni tipi yeniden export eder. KVKK inventory response'u sadece generic
+  `displayRef`, `kind`, `piiCategories` ve `purgeAvailable` alanlarini tasir; generator
+  ad/soyad/e-posta/telefon/ham kimlik/storage/raw content/userId/token alanlarini yasaklar.
+  Self-service purge response'u sadece `userId`, opsiyonel `tenantId` ve `purgedAt`
+  doner; e-posta, ad, parola/hash, refresh token ve token/hash alanlari fail-fast yasaktir.
+  `node --check scripts/generate-openapi.mjs`,
+  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  src/privacy/privacy.controller.e2e.test.ts
+  src/audit-log/audit-log.e2e.test.ts src/payment/payment.e2e.test.ts` (35 test),
+  `corepack pnpm --filter @uzman-hocam/api typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate`
+  gecti. Required-operation envanteri bu dilimden sonra 277 toplam operation icinde
+  276 covered / 1 open; kalan tek acik operation `POST /api/v1/tenants`.
+- Faz 2/Faz 4 icin tenant create ve first-admin token/audit PII dilimi lokal olarak kapatildi:
+  `POST /api/v1/tenants` shared-types, OpenAPI overlay ve generator kapisina alindi.
+  First-admin invitation akisi artik password reset token'unu store'a hash olarak yazar ama
+  response'a ham `activationToken` dondurmez; response yalniz `activationTokenIssued` ve
+  `activationTokenExpiresAt` gibi token tasimayan kanit alanlarini tasir. First-admin audit
+  diff'i raw admin e-postasi yerine `emailProvided: true` yazar. Generator tenant create
+  request'inde `name/slug` required, first-admin e-posta/mode/parola minimumlari, tarih ve
+  seat limit kurallarini; response oneOf branch'lerinde `TenantRecord` veya
+  `{ tenant, admin }` required alanlarini; activation token, parola/hash, refresh token ve
+  token/hash alan yasaklarini fail-fast kontrol eder. `node --check scripts/generate-openapi.mjs`,
+  `corepack pnpm --filter @uzman-hocam/shared-types typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api exec vitest run
+  src/tenant/tenant.service.test.ts src/tenant/tenant.controller.e2e.test.ts
+  src/user-management/user-management.e2e.test.ts` (22 test),
+  `corepack pnpm --filter @uzman-hocam/api typecheck`,
+  `corepack pnpm --filter @uzman-hocam/api build` ve `corepack pnpm openapi:generate`
+  gecti. Required-operation envanteri bu dilimden sonra 277 toplam operation icinde
+  277 covered / 0 open; Faz 2 lokal contract gate'i kapanmis sayilir.
+- Faz 5/Faz 10 icin final external evidence env/runbook baglantisi lokal olarak
+  sertlestirildi:
+  `PRODUCTION_EVIDENCE_SUMMARY_TARGET` artik `.env.example`, staging evidence env ornegi,
+  `prod:env:check` required evidence target seti ve staging evidence env sozlesmesi icinde
+  zorunludur. `docs/phase-6-ops-runbook.md` final dis kanit adimi artik production summary,
+  live-status, pilot ve go-live target'larini ayni komutta
+  `corepack pnpm prod:external-evidence:check` ile baglar; target'siz `ops:check`, `0/18`
+  Canli Durum, `*_ALLOW_EXAMPLE_EVIDENCE=1`, lokal temp path, `artifacts/local/**`,
+  symlink target, userinfo/query/fragment tasiyan URL veya placeholder/example/redacted HTTPS host
+  final kabul sayilmaz. Bu sozlesme
+  `scripts/check-ops-config.mjs` ve `scripts/check-prod-readiness.mjs` statik beklentilerine
+  baglandi. `node --check scripts/check-prod-env.mjs`,
+  `node --check scripts/check-ops-config.mjs`,
+  `node --check scripts/check-prod-readiness.mjs`,
+  `node scripts/check-prod-env.mjs --contract .env.example`,
+  `corepack pnpm staging:evidence-env:check`,
+  `corepack pnpm prod:evidence:templates:check`,
+  `corepack pnpm prod:readiness:check`, `corepack pnpm prod:plan:check` ve
+  `corepack pnpm ops:check` gecti. Bu guardrail gercek production summary, 18/18 Canli Durum,
+  pilot ve go-live artifact setini uretmez; Faz 5/Faz 10 kapanisi icin target'li
+  `prod:external-evidence:check` halen zorunludur.
+- Faz 5/Faz 10 icin evidence target URL secret hijyeni lokal olarak sertlestirildi:
+  `scripts/check-prod-env.mjs`, `scripts/check-prod-evidence.mjs` ve
+  `scripts/check-final-external-evidence.mjs` artik production/final evidence target URL'lerinde
+  userinfo, query veya fragment kabul etmez; boylece `https://user:pass@...`,
+  `?token=...` veya `#...` tasiyan kanit hedefleri release/final kapilarindan gecemez.
+  `scripts/check-prod-evidence-templates.mjs` prod env, prod evidence ve final external evidence
+  secret URL negatiflerini kosar; `scripts/check-ops-config.mjs`,
+  `scripts/check-prod-readiness.mjs` ve `scripts/check-prod-plan-status.mjs` bu kuralı
+  statik olarak izler. Bu guardrail gercek staging/prod artifact uretmez; final target'li
+  `prod:external-evidence:check` halen dis kanit gerektirir.
+- Faz 5/Faz 10 icin tekil evidence target URL secret hijyeni kapatildi:
+  read-only ops subagent `PILOT_EVIDENCE_TARGET`, `GO_LIVE_EVIDENCE_TARGET`,
+  `PRODUCTION_EVIDENCE_SUMMARY_TARGET` ve go-live linked summary/pilot/live-status target'larinda
+  userinfo/query/fragment reddi eksigini dogruladi. Bu turda
+  `scripts/check-production-evidence-summary.mjs`, `scripts/check-pilot-evidence.mjs` ve
+  `scripts/check-go-live-evidence.mjs` ayni target hijyeniyle sertlestirildi;
+  `scripts/check-prod-evidence-templates.mjs` production summary, pilot, go-live root ve
+  go-live linked target secret URL negatiflerini kosar. Bu da lokal guardrail'dir; gercek
+  production summary, 18/18 Canli Durum, pilot ve go-live artifact'leri uretilmeden Faz 5/Faz 10
+  tamamlanmis sayilmaz.
+- Faz 5/Faz 10 final dış kanıt fixture hedefi reddi eklendi: `scripts/check-final-external-evidence.mjs`
+  artık final target'larda `docs/evidence-templates/**` dosyalarını kabul etmez. Template kontrolleri
+  kendi `*_ALLOW_EXAMPLE_EVIDENCE=1` modunda kalır; final `prod:external-evidence:check` ise kalıcı
+  staging/prod artifact veya gerçek HTTPS hedef ister. `scripts/check-prod-evidence-templates.mjs`
+  bu negatif senaryoyu geçici artifact kopyalarıyla doğrular.
+- 2026-06-23 remote/staging salt-okunur kanıt audit'i: `uzman-hocam-server` erişimi çalışıyor,
+  `/root/uzman-hocam` altında Docker stack ayakta ve API `{"status":"ok"}`, web `127.0.0.1:3001`
+  HTTP 200 döndürüyor. Ancak `artifacts/` altında final zinciri için gereken
+  `production-summary`/`release-summary`, `live-status`, `pilot`, `go-live`, `uat`, `isem`,
+  `live-exam`, `live-ui`, `kvkk`, `audit-null` veya `inline-upload` artifact seti bulunmadı;
+  yalnız eski `single-node-2026-06-14/rls-load-smoke.json` ve eski smoke/UI artifact'leri görüldü.
+  Remote repo lokal final kapıya göre geride: `node scripts/check-live-status-evidence.mjs`
+  remote'da `0/7 dış kanıt PASS` veriyor ve `scripts/check-final-external-evidence.mjs` remote'da
+  bulunmuyor. Bu nedenle Faz 5/Faz 10 kapanışı için sıradaki gerçek adım, güncel guardrail'leri
+  remote/staging'e taşıyıp gerçek staging/prod artifact setini üretmek ve ardından target'li
+  `prod:external-evidence:check` koşmaktır.
+- Faz 5/Faz 10 için remote final readiness kapısı eklendi: `scripts/check-remote-final-evidence-readiness.mjs`
+  ve `corepack pnpm prod:remote-evidence:check`, `REMOTE_EVIDENCE_HOST`/`REMOTE_EVIDENCE_ROOT`
+  üzerinden remote repo final checker'ını, API/web health'i, 18/18 Canlı Durum sonucunu ve aynı
+  target setiyle remote `check-final-external-evidence.mjs` sonucunu salt-okunur doğrular. Bu
+  komut CI statik kapısına eklenmez; kapanış sırasının target'lı remote/staging doğrulama adımıdır.
+- Remote final readiness target hijyeni final kapıyla hizalandı: `prod:remote-evidence:check`
+  artık remote target URL'lerinde userinfo/query/fragment yanında placeholder HTTPS host,
+  remote `/tmp`/`/var/tmp`, `artifacts/local/**` ve `docs/evidence-templates/**` fixture
+  hedeflerini de reddeder. Bu, hatalı remote target'ların Faz 5/Faz 10 kapanışı gibi
+  sayılmasını engeller; gerçek artifact seti ve 18/18 Canlı Durum hâlâ zorunludur.
+- Remote final readiness davranışı fake-SSH testiyle sabitlendi: `REMOTE_*` target'ları hem
+  remote `live:status` hem remote `check-final-external-evidence.mjs` komutuna env prefix olarak
+  geçer; invalid `artifacts/local/**` target ise SSH'e çıkmadan kırılır. Kapı artık yerel
+  `*_ALLOW_EXAMPLE_EVIDENCE=1` bayraklarını SSH'e çıkmadan reddeder ve remote node komutlarını
+  aynı bayrakları `env -u` ile temizleyerek çalıştırır. Gerçek
+  `uzman-hocam-server` koşusunda target env'leri verildiğinde kapı artık env eksikliğinden değil,
+  remote repo final checker/package script geriliği ve eksik `live-status.json` artifact'i nedeniyle
+  kırılıyor. Bu nedenle kalan iş hâlâ güncel guardrail'leri remote/staging'e taşımak ve gerçek
+  production summary/live-status/pilot/go-live artifact setini üretmektir.
+- Remote/staging guardrail farkı dar kapsamlı kapatıldı: `scripts/check-final-external-evidence.mjs`,
+  `scripts/check-remote-final-evidence-readiness.mjs`, güncel production summary/live-status/pilot/
+  go-live checker'ları ve `docs/phase-6-production-readiness.md` remote `/root/uzman-hocam` altına
+  senkronlandı; remote `package.json` yalnız `prod:external-evidence:check` ve
+  `prod:remote-evidence:check` script anahtarlarıyla güncellendi. Öncesinde remote backup
+  `artifacts/guardrail-sync-2026-06-23/` altına alındı ve kalıcı target kökü
+  `/root/uzman-hocam/artifacts/staging` oluşturuldu. Target'lı
+  `prod:remote-evidence:check` artık checker/script geriliği nedeniyle değil,
+  `release-summary.json`, `live-status.json`, `pilot.json` ve `go-live.json` gerçek artifact
+  dosyaları henüz üretilmediği için kırılıyor.
+- Remote/staging iSEM optical pipeline kanıtı üretildi: `uzman-hocam-server` üzerinde
+  `STAGING_ENVIRONMENT=staging`, kurum kontrollü smoke e-posta domain'i ve kalıcı
+  `artifacts/staging/isem-optical-pipeline.json` hedefiyle `corepack pnpm isem-optical-pipeline:smoke`
+  geçti. Artifact `result=PASS`, `environment=staging`, 254 student/participant/matched/
+  `ExamResult`/report result, 0 quarantine, boş `gaps`, `pipelineDurationPassed=true` ve
+  `commandsPassed=["pnpm isem-optical-pipeline:smoke"]` içeriyor. `ISEM_OPTICAL_PIPELINE_TARGET=file://...`
+  ile `corepack pnpm isem-optical-pipeline:evidence-check` geçti; public artifact için ham TXT path,
+  e-posta, base64, raw row/line ve TCKN-benzeri 11 hane grep negatifleri temiz. Private
+  `artifacts/staging/private/live-ui-worker-input.json` 0600 izinle üretildi ve release paketine
+  konmamalı.
+- Live UI-worker result staging kanıtı üretildi: remote `apps/web/playwright.next.config.ts`
+  external `NEXT_E2E_BASE_URL`, webServer skip ve self-signed TLS toleransı alacak şekilde
+  senkronlandı; `live-ui-worker-report-next.spec.ts` login redirect, sekmeli rapor, PDF/Excel
+  indirme ve portal karne detayı gerçek UI akışına göre sertleştirildi. `uzman-hocam-server`
+  üzerinde `NEXT_E2E_BASE_URL=https://212.108.107.190`, `NEXT_E2E_SKIP_WEB_SERVER=1`,
+  `NEXT_E2E_IGNORE_HTTPS_ERRORS=1`, private 0600 input ve kalıcı
+  `artifacts/staging/live-ui-worker-result.json` hedefiyle `corepack pnpm live:ui-worker:smoke`
+  geçti. Result artifact `result=PASS`, `environment=staging`, `reportStatus=READY`,
+  `downloadedArtifacts=["xlsx","pdf"]`, `studentPortalViewed=true`, `guardianPortalViewed=true`,
+  boş `gaps` ve `commandsPassed=["pnpm live:ui-worker:smoke"]` içeriyor.
+  `LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET=file://... corepack pnpm live:ui-worker:result-check`
+  geçti; public artifact için e-posta/parola/token/base64/raw satır ve 11 hane grep negatifleri
+  temiz. Bu staging result, production summary/live-status zincirine henüz bağlanmadığı için
+  Faz 5 final kapanışı sayılmaz.
+- Live exam cycle staging kanıtı üretildi: remote `uzman-hocam-server` üzerinde `pnpm isem-answer-key:smoke`,
+  `pnpm raw-import:smoke` ve `pnpm report-generation:smoke` yeniden koşturuldu; report generation
+  kanıtı `artifacts/staging/smoke/report-generation.json` dosyasına yazıldı. Daha önce geçen iSEM optical pipeline ve
+  live UI-worker result artifact'leriyle aynı staging release candidate altında PII-safe
+  `artifacts/staging/live-exam-cycle.json` oluşturuldu. Bu artifact 90 soru, 1 booklet variant,
+  254 participant/matched/ExamResult/report result, 0 quarantine, 2 indirilen artifact, PDF/Excel,
+  ogrenci/veli portal gorunumu, 5 komutluk `commandsPassed` seti ve boş `gaps` taşır.
+  `LIVE_EXAM_CYCLE_TARGET=file://$PWD/artifacts/staging/live-exam-cycle.json corepack pnpm live:exam-cycle:check`
+  geçti; public artifact için e-posta/parola/token/base64/raw satır/object key ve 11 hane grep negatifleri
+  temiz. Bu Faz 4A live-exam halkasını kapatır; production summary/live-status ve pilot/go-live
+  zincirine bağlanmadığı sürece Faz 5/Faz 10 final kapanışı sayılmaz.
+- Audit null tenant staging kanıtı üretildi: remote `uzman-hocam-server` üzerinde `AuditLog`
+  tablosundan yalnız aggregate sayım ve sınıflandırma okuyan PII-safe sorgu ile
+  `artifacts/staging/reports/audit-null-tenant.json` oluşturuldu. Artifact `totalRows=0`,
+  `tenantRows=0`, `nullTenantRows=0`, `system=0`, `deletedTenant=0`, `unknown=0`, boş `gaps`
+  ve `commandsPassed=["pnpm audit-null-tenant:check"]` içerir. `AUDIT_NULL_TENANT_EVIDENCE_TARGET`
+  kalıcı staging artifact'ini gösterirken `corepack pnpm audit-null-tenant:check` geçti; public artifact ve aggregate query log'u için
+  e-posta/parola/token/base64/raw satır/object key ve 11 hane grep negatifleri temiz. Bu Faz 5
+  audit-null halkasını ilerletir; production summary/live-status zincirine bağlanmadığı sürece
+  Faz 5/Faz 10 final kapanışı sayılmaz.
+- KVKK inventory staging kanıtı üretildi: remote `uzman-hocam-server` üzerinde `Student`,
+  `Teacher`, `Guardian` ve `User` tablolarından yalnız aggregate `COUNT(*)` okuyan PII-safe
+  sorgu ile `artifacts/staging/reports/kvkk-inventory.json` oluşturuldu. Artifact 845 öğrenci,
+  16 öğretmen, 67 veli, 61 kullanıcı, dört canonical KVKK purge action'ı, `/audit-logs` için
+  21 audit diff redaction negatif kontrolü ve boş `gaps` taşır. Remote audit-log redaction
+  testleri `corepack pnpm --filter @uzman-hocam/api exec vitest run src/audit-log/audit-log.service.test.ts src/audit-log/audit-log.e2e.test.ts`
+  ile 19/19 geçti; `KVKK_INVENTORY_TARGET=file://$PWD/artifacts/staging/reports/kvkk-inventory.json corepack pnpm privacy:inventory:check`
+  geçti. Public artifact ve aggregate count log'u için e-posta/parola/token/base64/raw satır/object
+  key ve 11 hane grep negatifleri temiz. Bu Faz 4 KVKK halkasını staging düzeyinde ilerletir;
+  production summary/live-status ve pilot/go-live zincirine bağlanmadığı sürece Faz 5/Faz 10
+  final kapanışı sayılmaz.
+- Traefik self-signed/IP smoke kanıt ayrımı sertleştirildi: `scripts/smoke-traefik-https.mjs`
+  artık `TRAEFIK_HTTPS_SMOKE_ALLOW_INSECURE_TLS=true` ile birlikte
+  `TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE` verilirse fail-fast kırılır. Böylece IP/self-signed
+  teşhis koşusu, public TLS `PASS` smoke artifact'i gibi production summary veya go-live zincirine
+  taşınamaz. `docs/phase-6-production-readiness.md` ve `docs/phase-6-ops-runbook.md` aynı sınırı
+  açıklar; gerçek Faz 5 Traefik kapanışı için hâlâ domain/public TLS ve kalıcı
+  `traefik_https_smoke` artifact'i gerekir.
+- RLS live staging kanıtı üretildi: remote `uzman-hocam-server` üzerinde `.env.local` ile
+  `corepack pnpm db:rls:check`, `corepack pnpm db:rls:check:live`,
+  `STAGING_ENVIRONMENT=staging RLS_LOAD_SMOKE_EVIDENCE_FILE=artifacts/staging/rls-live/rls-load-smoke.json corepack pnpm rls:load:smoke`
+  ve `corepack pnpm tenant-db:check` kalıcı `artifacts/staging/rls-live/*.log|json`
+  hedeflerine yazılarak geçti. Public özet `artifacts/staging/reports/rls-live.json`
+  54 tenant tablo, 24 tenant composite relation, 0 legacy allowlist, 0 orphan, 0 cross-tenant
+  parent, 54 cross-tenant read check, 8 write/with-check negatif, 600 sorgu, 316.29 rps ve
+  boş `gaps` taşır; `RLS_LIVE_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/rls-live.json corepack pnpm rls:live:check`
+  geçti ve RLS artifact/log seti için PII/secret grep negatifleri temiz. `scripts/check-rls-live-evidence.mjs`
+  ayrıca `RLS_LIVE_EVIDENCE_TARGET` ve `evidenceReferences` içinde userinfo/query/fragment
+  reddiyle sertleştirildi; `prod:evidence:templates:check` bu negatifleri korur. Bu Faz 3
+  RLS halkasını staging düzeyinde ilerletir; production summary/live-status ve pilot/go-live
+  zincirine bağlanmadığı sürece Faz 5/Faz 10 final kapanışı sayılmaz.
+- Rate-limit Redis kanıtı false-positive guardrail'i sertleştirildi: `scripts/smoke-rate-limit-live.mjs`
+  kalıcı evidence yazarken smoke/login URL'lerinin `https://`, userinfo/query/fragment'siz ve
+  birbirinden farklı olmasını ister. `scripts/check-rate-limit-evidence.mjs` `RATE_LIMIT_EVIDENCE_TARGET`,
+  `instances[].baseUrl` ve `evidenceReferences[]` için secret URL/reference reddini, iki farklı
+  instance label/URL kontrolünü ve kalıcı evidence için `https://` instance URL şartını uygular.
+  `scripts/check-prod-evidence-templates.mjs`, `docs/phase-6-production-readiness.md` ve
+  `docs/phase-6-ops-runbook.md` bu 12 alanlı sözleşmeyi ve duplicate/secret/`artifacts/local/**`
+  negatiflerini korur.
+  Remote staging'de `docker-compose.rate-limit-shard.yml` ile ikinci API shard eklendi,
+  `API_RATE_LIMIT_ENABLED=true` kalıcı runtime env'e alındı ve `reports/rate-limit.json`
+  `RATE_LIMIT_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/rate-limit.json pnpm rate-limit:check`
+  ile PASS oldu. Bu Faz 5 rate-limit halkasını staging düzeyinde kapatır; production summary,
+  live-status ve go-live zincirine bağlanmadığı sürece final kapanış sayılmaz.
+- Inline upload migration evidence reference guardrail'i sertleştirildi:
+  `scripts/check-inline-upload-content-migration-evidence.mjs` artık
+  `INLINE_UPLOAD_CONTENT_MIGRATION_TARGET` ve `evidenceReferences[]` içinde userinfo/query/fragment,
+  signed URL, raw `storageKey`/`objectKey`/`s3Key`, `contentBase64`/`fileBase64` ve upload object
+  key pattern'lerini reddeder. Migration report output temp guardrail'i macOS `/private/tmp`
+  hedeflerini de kapsar. `scripts/check-prod-evidence-templates.mjs`,
+  `docs/phase-6-production-readiness.md` ve `docs/phase-6-ops-runbook.md` bu negatifleri korur.
+  Bu guardrail onaylı migration çalıştırmaz; `Inline upload migration kanıtı` gerçek migrate
+  ve checker PASS olmadan `NOT_RUN` kalır.
+- Inline upload live migration denemesi gerçek blocker yakaladı: `scripts/migrate-inline-upload-content-to-s3-live.mjs`
+  `pg_total_relation_size($1::regclass)` ifadesinde camelCase tablo adını `homeworkmaterialfile`
+  olarak çözdüğü için live dry-run önce kırılıyordu; script `format('%I', $1::text)::regclass`
+  ve numeric subject snapshot normalizasyonuyla düzeltildi. Remote/staging dry-run artık gerçek DB'den
+  `homework_material_files` ve `support_ticket_attachments` için 2+2 pending satır, toplam 16
+  base64 karakter ve 2+2 total row raporluyor. API container içindeki gerçek S3 env'iyle
+  `INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true` çalıştırıldığında ilk homework satırında
+  `sha256 mismatch` görüldü ve migration DB update öncesi durdu; sonraki dry-run pending satırların
+  değişmediğini doğruladı. Bunun üzerine script onaylı migrate öncesinde tüm pending satırları
+  PII taşımadan sha preflight'tan geçirir hale getirildi; yeni guardrail S3 write/DB update
+  başlamadan `homework_material_files: checked=2, sha256Mismatch=2` ve
+  `support_ticket_attachments: checked=2, sha256Mismatch=2` özetini vererek duruyor.
+  `pnpm inline-upload-content:hash-audit` bu durumu `contentBase64`, `tenantId`, `fileName`,
+  `storageKey`, object key veya signed URL yazmadan `pendingRows`, `checkedRows`,
+  `sha256MismatchRows`, `invalidBase64Rows`, `missingSha256Rows` ve `gaps` alanlarıyla kalıcı
+  diagnostik artifact'e döker. Remote staging'de `2026-06-24T07:00:30.777Z` koşusu
+  `homework_material_files` ve `support_ticket_attachments` için 2+2 pending satırda
+  `missingSha256Rows=2+2`, `sha256MismatchRows=0`, `invalidBase64Rows=0` ve
+  `gaps=["pending_inline_upload_missing_sha256_repair_required"]` üretti. Bu artifact
+  `reports/inline-upload-content-migration.json` yerine geçmez. Bu turda
+  `scripts/repair-inline-upload-content-sha-live.mjs` ve `pnpm inline-upload-content:repair-sha`
+  eklendi: varsayılan dry-run `INLINE_UPLOAD_CONTENT_SHA_REPAIR_APPROVED=true` olmadan DB'ye
+  yazmaz, onaylı modda yalnız `storageKey IS NULL`, dolu `contentBase64` ve eksik/invalid
+  `sha256` satırlarında hash'i mevcut içerikten hesaplar. Rapor sadece subject bazlı
+  `pendingRows`, `existingSha256Rows`, `repairableRows`, `invalidBase64Rows`, `repairedRows`,
+  `pendingBase64Characters`, `tableSizeBytes`, `commandsPassed` ve `gaps` alanlarını yazar;
+  ham `contentBase64`, `tenantId`, row id, `fileName`, `storageKey`, object key veya signed URL
+  yazmaz. Remote staging'de dry-run repair, onaylı repair, tekrar hash audit, onaylı S3
+  migration ve `INLINE_UPLOAD_CONTENT_MIGRATION_TARGET=file://... corepack pnpm inline-upload-content:check`
+  koşusu tamamlandı; final artifact checker PASS verdi ve inline upload bundle eksik listesinden çıktı.
+- Inline upload ve yeni upload storage key minimizasyonu kapatıldı: migration script'i artık pending
+  satırlardan `fileName`/parent id okumaz ve S3 key'i `subject.prefix/sha256` olarak üretir.
+  `apps/api/src/homework/homework-material-file-storage.ts` ve
+  `apps/api/src/support-ticket/support-ticket-attachment-storage.ts` yeni yazımlarda aynı hash-only
+  kalıbı kullanır; unit testler key içinde tenant id, material/ticket id veya dosya adı bulunmadığını
+  doğrular. Migration DB update'i S3 put sonrasında yarış nedeniyle satır güncelleyemezse önce
+  DB'de aynı `storageKey` referansı var mı bakar; referans yoksa objeyi `DeleteObjectCommand`
+  ile temizler, referans varsa aynı hash-only objeyi silmeden raw row id/key yazmadan fail-fast durur.
+  Process crash/kill durumunda cleanup callback'i çalışmayabileceği için kalan P2 takip işi orphan
+  S3 object reconciliation kanıtıdır. `pnpm inline-upload-content:orphan-audit` eklendi; S3
+  prefix'lerini ve DB `storageKey` referanslarını karşılaştırıp sadece subject/prefix bazlı
+  `listedObjects`, `dbReferencedObjects`, `orphanObjects`, `dbReferencedMissingObjects`,
+  `invalidKeyObjects`, `legacyDbStorageKeyRows`, `commandsPassed` ve `gaps` alanlarını yazar.
+  Ham object key, tenant id, parent id, dosya adı, signed URL veya içerik yazmaz; `orphan-audit.json`
+  final migration kanıtı değil, migration sonrası reconciliation kanıtıdır. Remote staging'de
+  `2026-06-24T07:15:08.322Z` koşusu `result=PASS`, `status=NO_ORPHANS`, iki subject için
+  `listedObjects=0`, `dbReferencedObjects=0`, `orphanObjects=0`, `invalidKeyObjects=0`,
+  `legacyDbStorageKeyRows=0` ve boş `gaps` üretti. Onaylı migration sonrası tekrar koşulan
+  orphan audit `listedObjects=2`, `dbReferencedObjects=2`, `referencedObjectsPresent=2`,
+  `orphanObjects=0`, `dbReferencedMissingObjects=0`, `invalidKeyObjects=0` ve
+  `legacyDbStorageKeyRows=0` ile final migration artifact'ine bağlandı.
+- Report generation perf staging kanıtı üretildi: remote `uzman-hocam-server` üzerinde `.env.local`
+  ile `STAGING_ENVIRONMENT=staging REPORT_GENERATION_SMOKE_EVIDENCE_FILE=artifacts/staging/smoke/report-generation.json corepack pnpm report-generation:perf`
+  çalıştırıldı. Artifact `result=PASS`, `environment=staging`, `status=READY`, 10.000 result,
+  10.000 student, 20 class, 2 branch, `generationDurationMs=9271`, `generationDurationMsMax=60000`,
+  `commandsPassed=["pnpm report-generation:perf"]` ve boş `gaps` taşır. Repo smoke evidence
+  validator'ı bu artifact'i geçti; artifact top-level ham e-posta/parola/tenantId/userId/examId/
+  snapshotId/firstStudentId/contentBase64/rawRow/rawLine taşımıyor. Bu Faz 10 perf halkasını
+  staging düzeyinde ilerletir; production summary/live-status ve pilot/go-live zincirine
+  bağlanmadığı sürece Faz 10 final kapanışı sayılmaz.
+- UAT, deployment region ve deployment rollback kanıt guardrail'leri sertleştirildi:
+  `UAT_EVIDENCE_TARGET`, `DEPLOYMENT_REGION_TARGET` ve `DEPLOYMENT_ROLLBACK_TARGET` userinfo/query/
+  fragment taşıyamaz; UAT restore/scenario evidence, deployment region `evidenceReference`,
+  rollback servis `evidenceReference` ve `evidenceReferences` alanları da secret-bearing URL veya
+  referansları reddeder. `prod:evidence:templates:check` bu negatifleri korur. Bu değişiklik
+  gerçek UAT/region/rollback koşularını çalıştırmaz; ilgili Faz 5/Faz 10 kanıtları hâlâ
+  staging/prod artifact zinciriyle üretilmelidir.
+- Final/prod/live/go-live evidence target temp-path guardrail'i macOS `/private/tmp` kapsamına
+  genişletildi: `scripts/check-final-external-evidence.mjs`, `scripts/check-prod-evidence.mjs`,
+  `scripts/check-live-status-evidence.mjs` ve `scripts/check-go-live-evidence.mjs` artık
+  `/tmp`, `/var/tmp` ve `/private/tmp` hedeflerini final/staging kanıt olarak reddeder;
+  `prod:evidence:templates:check` hem genel target seti hem de final/prod evidence için bu
+  negatifleri korur.
+- Remote final evidence kapanışı yeniden denetlendi: `uzman-hocam-server` altında mevcut kalıcı
+  staging artifact'leri `isem-optical-pipeline.json`, `live-exam-cycle.json`,
+  `live-ui-worker-result.json`, `reports/kvkk-inventory.json`, `reports/rls-live.json`,
+  `reports/audit-null-tenant.json` ve `smoke/report-generation.json` ile sınırlı. Final
+  kapının beklediği `artifacts/staging/release-summary.json`, `live-status.json`, `pilot.json`
+  ve `go-live.json` yok. Bu hedeflerle remote
+  `corepack pnpm prod:external-evidence:check` çalıştırıldığında dört hedef de
+  `okunabilir file artifact olmalı` hatasıyla kırıldı; aynı target setiyle
+  `corepack pnpm prod:remote-evidence:check` remote `live:status:check` ve remote final external
+  checker aşamalarında aynı eksikliği raporladı. Bu yüzden Faz 5/Faz 10 hâlâ final kapanış
+  değildir; sıradaki zorunlu iş gerçek production summary, 18/18 live-status, pilot ve go-live
+  artifact setini üretmektir.
+- TR datacenter/provider kanıtı için yanlış pozitif guardrail'i güçlendirildi: remote
+  `uzman-hocam-server` üzerinde `api`, `worker`, `postgres`, `redis`, `minio/object-storage`,
+  `web` ve `traefik` servisleri read-only olarak görüldü; public IP `212.108.107.190` için
+  IP lookup `TR/Istanbul` ve `AS212219 HOSTING DUNYAM` döndürüyor. Bu yalnız teşhis sinyalidir,
+  provider console/contract veya kalıcı first-party artifact yerine final kanıt sayılmaz.
+  `scripts/check-deployment-region-evidence.mjs` artık `evidenceReference` olarak `ipinfo.io`,
+  `ip-api.com`, `ipapi.co`, `api.ipify.org` gibi public IP lookup hedeflerini tek başına
+  reddeder; `prod:evidence:templates:check` bu negatif senaryoyu korur. Bu nedenle
+  `TR datacenter/provider kanıtı` hâlâ `NOT_RUN` kalır.
+- Deployment region artifact üretim yolu eklendi: `scripts/generate-deployment-region-evidence.mjs`
+  ve `pnpm deployment:region:generate`, gerçek `DEPLOYMENT_REGION_PROVIDER`,
+  `DEPLOYMENT_REGION_REGION`, `DEPLOYMENT_REGION_DATACENTER_COUNTRY_CODE=TR`,
+  `DEPLOYMENT_REGION_DATA_RESIDENCY_VERIFIED=true`, kalıcı
+  `DEPLOYMENT_REGION_EVIDENCE_REFERENCE` ve exact
+  `DEPLOYMENT_REGION_SERVICES_VERIFIED=api,worker,postgres,redis,object-storage` olmadan
+  `reports/deployment-region.json` yazmaz. Generator çıktıyı hemen
+  `DEPLOYMENT_REGION_TARGET=file://... pnpm deployment:region:check` ile doğrular ve public IP
+  lookup referansını final kanıt olarak kabul etmez. Remote/staging ortamda sağlayıcı
+  console/sözleşme veya first-party TR datacenter artifact referansı henüz sağlanmadığı için
+  `reports/deployment-region.json` bundle eksik listesinde kalır. Lokal ve remote
+  `node --check`, eksik env fail-fast ve public IP lookup fail-fast doğrulamaları dosya
+  yazmadan kırıldı; `prod:plan:check`, `prod:readiness:check`,
+  `prod:evidence:templates:check` ve `ops:check` iki ortamda da geçti. Bu ara turdaki remote gap raporu
+  `result=NOT_RELEASE_EVIDENCE`, `overallStatus=BLOCKED`, 12 eksik zorunlu artifact ve 0
+  `release-summary-*.json` gösteriyordu; güncel sayı yukarıdaki Kalan 10 Artifact Kapanis Matrisi'nde izlenir.
+- Staging release bundle canonical rapor konumu ilerletildi: daha önce checker'dan geçmiş
+  `artifacts/staging/live-exam-cycle.json`, `artifacts/staging/isem-optical-pipeline.json` ve
+  `artifacts/staging/live-ui-worker-result.json` remote üzerinde `artifacts/staging/reports/`
+  altına kopyalandı. Bu üç hedef yeni canonical konumlarından sırasıyla
+  `live:exam-cycle:check`, `isem-optical-pipeline:evidence-check` ve
+  `live:ui-worker:result-check` ile geçti. `scripts/check-staging-release-artifacts.mjs`
+  artık `reports/live-ui-worker-result.json` dosyasını da zorunlu rapor setine dahil eder;
+  `prod:evidence:templates:check` bu bundle fixture'ını korur. Restore-drill artifact'i sonraki
+  turda canonical `reports/restore-drill.json` konumunda üretildiği için bu eksik listeden düştü.
+  Bundle hâlâ final PASS değildir: `first-gates/first-gates-manifest.json`, deployment/
+  identity/financial/upload-av/observability/external-monitoring/admin-mfa/security/
+  inline-upload/rate-limit/UAT raporları ve `release-summary-*.json` eksik olduğu için
+  `STAGING_RELEASE_ARTIFACTS_TARGET=/root/uzman-hocam/artifacts/staging corepack pnpm staging:release-artifacts:check`
+  kırmızı kalır.
+- GitHub CI kanıtı gerçek GitHub Actions metadata'sından üretildi: `4rmus/uzman-hocam`
+  `89fa803bdb5ae775c64617a8fbc71f7ed58c887c` commit'i için `.github/workflows/ci.yml`
+  run `27993832864` success durumunda ve job adımları içinde `pnpm run ci` var. Lokal
+  `artifacts/staging/reports/github-ci.json` üretildi, remote canonical konuma kopyalandı ve
+  hem lokal hem remote `GITHUB_CI_EVIDENCE_TARGET=file://... corepack pnpm github-ci:check`
+  kapısından geçti. Bu yüzden `reports/github-ci.json` staging bundle eksik listesinden düştü;
+  bundle yine yukarıdaki kalan raporlar ve `release-summary-*.json` eksikliği nedeniyle
+  kırmızı kalır.
+- First-gates ve rate-limit staging teşhisi bu turda final PASS artifact üretmedi: remote
+  `.env.local` içinde `API_URL`, `NODE_ENV`, `API_RATE_LIMIT_ENABLED` ve
+  `LOGIN_ATTEMPT_LIMITER_STORE` set olsa da `TRAEFIK_HTTPS_SMOKE_URL`,
+  `ALERT_WEBHOOK_URL`, `ALERT_WEBHOOK_TOKEN` ve ikinci API instance/LB shard URL'leri yok.
+  Teşhis amaçlı first-gates koşusu Traefik HTTPS adımında `self-signed certificate` hatasıyla
+  durdu; `staging:first-gates:smoke` artık final dışı `artifacts/local/**` output-dir'ünü de
+  reddeder. Alert webhook secret'ı
+  olmadığı için `first-gates/first-gates-manifest.json` üretmek doğru olmaz. Rate-limit kanıtı
+  sonradan ikinci shard ve gerçek smoke ile PASS edildi; bu nedenle bu blokta kalan doğru sıradaki
+  iş gerçek alert secret ve public TLS/domain hedefi sağlandıktan sonra first-gates smoke + checker
+  zincirini yeniden koşmaktır.
+- Staging release bundle gap raporu eklendi: `scripts/check-staging-release-artifacts.mjs`
+  başarısız bundle koşusunda isteğe bağlı `STAGING_RELEASE_GAP_REPORT_FILE=...` hedefiyle
+  `reportType=staging_release_artifacts_gap_report`, `result=NOT_RELEASE_EVIDENCE`,
+  `overallStatus=BLOCKED`, `releaseEvidence=false` ve `canPromote=false` içeren makine-okunur
+  eksik/uyumsuzluk raporu yazabilir. Bu mod checker exit code'unu yeşile çevirmez, `PASS`,
+  `commandsPassed`, boş `gaps`, `reports` veya `smokeEvidence` gibi release-evidence alanları
+  taşımaz ve staging bundle dizininin içine yazılamaz. `prod:evidence:templates:check` eksik
+  `reports/rate-limit.json` negatifinde bu non-evidence shape'i korur.
+- Restore-drill gerçek artifact üretim yolu eklendi: `scripts/generate-restore-drill-evidence.mjs`
+  ve `pnpm restore:drill:generate`, Docker Compose postgres servisinden custom-format dump alıp
+  geçici restore DB'ye geri yükler, `Tenant`, `AuditLog`, `ReportSnapshot` ve `_prisma_migrations`
+  sayımlarını restore edilen DB'den okur, geçici DB/dump'ı temizler ve yalnız
+  `check-restore-drill-evidence.mjs` sözleşmesindeki 7 alanı `reports/restore-drill.json`
+  olarak yazar. `backup:restore:smoke` hâlâ pre-evidence'tır; final restore-drill yerine geçmez.
+  Remote/staging `uzman-hocam-server` üzerinde
+  `STAGING_ENVIRONMENT=staging RESTORE_DRILL_OUTPUT=artifacts/staging/reports/restore-drill.json corepack pnpm restore:drill:generate`
+  çalıştırıldı; artifact `Tenant=13`, `AuditLog=431`, `ReportSnapshot=11`,
+  `_prisma_migrations=60`, boş `errors`, gerçek `sourceBackup`/`targetDatabase` ve
+  `environment=staging` ile yazıldı. `RESTORE_DRILL_TARGET=file:///root/uzman-hocam/artifacts/staging/reports/restore-drill.json corepack pnpm restore:drill:check`
+  geçti; secret/PII anahtar grep'i temiz. Restore sonrası remote staging gap raporu artık
+  `reports/restore-drill.json` eksikliği göstermedi; o noktada 14 eksik artifact ve 0
+  `release-summary-*.json` nedeniyle bundle hâlâ `NOT_RELEASE_EVIDENCE/BLOCKED` kaldı.
+- AI karne özeti disabled-mode artifact üretim yolu eklendi:
+  `scripts/generate-ai-report-summary-evidence.mjs` ve `pnpm ai-report-summary:generate`,
+  `AI_REPORT_SUMMARY_PROVIDER=disabled` dışındaki runtime'ı reddeder, worker/API report testlerini
+  koşar ve `DEC-20260613-03` stop-rule referansıyla `provider.mode=disabled`,
+  `piiSentToModel=false`, `externalProviderNotCalled=true`, yorum üretimi kapalı ve boş `gaps`
+  taşıyan `reports/ai-report-summary.json` üretir. Bu kanıt AI/template yorumu açmaz; yalnız bu
+  release'te dış AI çağrısı yapılmadığını ve yorum taslağı üretilmediğini release bundle'a bağlar.
+  Remote/staging `uzman-hocam-server` üzerinde
+  `STAGING_ENVIRONMENT=staging AI_REPORT_SUMMARY_PROVIDER=disabled AI_REPORT_SUMMARY_OUTPUT=artifacts/staging/reports/ai-report-summary.json corepack pnpm ai-report-summary:generate`
+  çalıştırıldı; worker `report-generation-job.test.ts` 8 test, API
+  `report-generation.service.test.ts` 19 test geçti ve
+  `AI_REPORT_SUMMARY_EVIDENCE_TARGET=file:///root/uzman-hocam/artifacts/staging/reports/ai-report-summary.json corepack pnpm ai-report-summary:check`
+  PASS verdi. Artifact `result=PASS`, `environment=staging`, `provider.mode=disabled`,
+  `kvkk.piiSentToModel=false`, `validation.externalProviderNotCalled=true`, 3 komut ve boş
+  `gaps` taşıyor; dar secret/PII taraması temiz. Güncel gap raporu artık
+  `reports/ai-report-summary.json` eksikliği göstermiyor; kalan 11 artifact ve 0
+  `release-summary-*.json` nedeniyle bundle hâlâ `NOT_RELEASE_EVIDENCE/BLOCKED`.
+- Kimlik göçü artifact üretim yolu eklendi: `scripts/generate-identity-migration-evidence.mjs`
+  ve `pnpm identity-migration:generate`, gerçek `IDENTITY_MIGRATION_APPROVED_BY`,
+  `IDENTITY_MIGRATION_APPROVAL_REFERENCE` ve `IDENTITY_MIGRATION_ACTIVATION_MODE` olmadan
+  artifact yazmaz. Generator staging/prod DB'de `STUDENT`, `GUARDIAN` ve `TEACHER` kayıtları
+  için `sourceRecords == linkedUsers == tenantMembershipsCreated` eşitliğini ister; identity
+  invitation ve tenant user management e2e testleri geçmeden `reports/identity-migration.json`
+  yazmaz. Generator hedefli API e2e testlerini `DATABASE_URL`, `DIRECT_DATABASE_URL`, `NODE_ENV`
+  ve `ADMIN_MFA_MODE` env'lerinden izole eder; boylece canlı DB env'i test login akisini bozsa da
+  subject sayimi yine `DIRECT_DATABASE_URL` uzerinden staging/prod DB'den okunur. Son remote
+  read-only sayim `Student=0`, `Guardian=0`, `Teacher=0`, `IdentityInvitation=0` gosterdi; bu
+  yuzden kimlik göçü gerçek PASS için hazır değildir ve `reports/identity-migration.json` bundle
+  eksik listesinde kalır.
+- Finansal saklama artifact üretim yolu eklendi: `scripts/generate-financial-retention-evidence.mjs`
+  ve `pnpm financial-retention:generate`, gerçek `FINANCIAL_RETENTION_APPROVED_BY`,
+  `FINANCIAL_RETENTION_APPROVAL_REFERENCE`, `FINANCIAL_RETENTION_LEGAL_BASIS`,
+  `FINANCIAL_RETENTION_PERIOD_YEARS` ve `FINANCIAL_RETENTION_PURGE_EXCEPTION=true` değerleri
+  olmadan artifact yazmaz. Generator payment e2e içindeki KVKK purge ödeme planı koruma testini koşar, staging/prod
+  DB'den `PaymentPlan` ve `PaymentInstallment` sayar, pozitif kayıt yoksa veya onay alanı
+  placeholder/example/redacted/test içerirse durur. Generator hedefli payment e2e testini
+  `DATABASE_URL`, `DIRECT_DATABASE_URL`, `NODE_ENV`, `ADMIN_MFA_MODE`, `PERSISTENCE_DRIVER` ve `IDEMPOTENCY_STORE` env'lerinden izole eder;
+  boylece canlı DB env'i test login akisini bozsa da finans sayimi yine `DIRECT_DATABASE_URL`
+  uzerinden staging/prod DB'den okunur. Son remote read-only sayim `PaymentPlan=0` ve
+  `PaymentInstallment=0` gösterdi. Izolasyon sonrasi remote probe'da payment e2e 16/16 gecti,
+  ardindan `financialRecords.paymentPlans` sifirdan buyuk olmadigi icin artifact yazmadan durdu;
+  ayrica gerçek finansal saklama onay sahibi, onay referansı ve yasal dayanak env'i henüz sağlanmadığı için
+  `reports/financial-retention.json` üretilmedi ve bundle eksik listesinde kalır.
+- Read-only infra/observability ajan denetimi restore drill, deployment region, deployment rollback,
+  observability UAT, external monitoring, security audit ve admin MFA raporlarının bu turda gerçek
+  staging artifact olarak güvenle üretilemeyeceğini doğruladı. Restore için önce
+  `backup:restore:smoke` yalnız ön kanıt sayılıyordu; yukarıdaki generator eklenip gerçek
+  `restore-drill` raporu üretildikten sonra bu eksik kapandı. Region için public IP/ASN lookup,
+  provider console/sözleşme veya first-party TR datacenter artifact'i yerine geçmez; rollback için
+  gerçek başarısız image ve geri alma tatbikatı olmadan elle yazılmış JSON operasyonel kanıt
+  sayılmaz. Observability/security/admin MFA checker'ları da doğru şekilli JSON'u doğrular, fakat
+  linked log/screenshot/monitor kayıtlarının canlı sistemden geldiğini tek başına kanıtlamaz; bu
+  nedenle bu raporlar production summary, live-status, pilot ve go-live zincirine bağlanmadan
+  Faz 5/Faz 10 kapanışı olarak işaretlenmez.
+- Deployment rollback artifact üretim yolu eklendi: `scripts/generate-deployment-rollback-evidence.mjs`
+  ve `pnpm deployment:rollback:generate`, gerçek rollback drill onayı, bozuk image/release candidate,
+  farklı rollback image tag'i, `drillStartedAt <= drillCompletedAt <= checkedAt`, migration rollback
+  onayı, command log referansı, bozuk release summary, rollback summary ve `web/api/worker` servis
+  kanıtları olmadan `reports/deployment-rollback.json` yazmaz. Generator çıktıyı hemen
+  `DEPLOYMENT_ROLLBACK_TARGET=file://... pnpm deployment:rollback:check` ile doğrular ve
+  `artifacts/local`, temp path, symlink parent, placeholder/example/redacted/test veya secret-bearing
+  reference değerlerini reddeder. Alt ajan read-only denetimi de gerçek bozuk image tatbikatı
+  yapılmadan doğru kapanış artifact'i üretmenin güvenli olmadığını ve önce fail-fast generator
+  eklenmesi gerektiğini doğruladı. Remote/staging ortamda bozuk image enjekte etme + geri alma
+  tatbikatı, command log ve linked summary referansları henüz sağlanmadığı için
+  `reports/deployment-rollback.json` bundle eksik listesinde kalır. Lokal ve remote
+  `node --check`, eksik env fail-fast ve placeholder/secret reference fail-fast doğrulamaları
+  dosya yazmadan kırıldı; `prod:plan:check`, `prod:readiness:check`,
+  `prod:evidence:templates:check` ve `ops:check` iki ortamda da geçti. Bu ara turdaki remote gap raporu
+  `result=NOT_RELEASE_EVIDENCE`, `overallStatus=BLOCKED`, 12 eksik zorunlu artifact ve 0
+  `release-summary-*.json` gösteriyordu; güncel sayı yukarıdaki Kalan 10 Artifact Kapanis Matrisi'nde izlenir.
+- Upload AV artifact üretim yolu eklendi: `scripts/generate-upload-av-evidence.mjs` ve
+  `pnpm upload-av:generate`, `UPLOAD_AV_SCANNER=clamav`, gerçek scanner karar/onay alanları,
+  fail-closed onayları, `CLAMAV_HOST`/`CLAMAV_PORT` ve unreachable scanner test hedefi olmadan
+  artifact yazmaz. Generator ClamAV `VERSION` ve `INSTREAM` üzerinden temiz dosya ve EICAR test
+  vektörünü gerçek scanner'a gönderir, unreachable scanner hedefinin fail-closed kırılmasını bekler,
+  `upload-av-scanner`, homework ve support-ticket hedefli API testlerini koşar ve çıktıyı hemen
+  `UPLOAD_AV_TARGET=file://... pnpm upload-av:check` ile doğrular. Remote/staging'de
+  `docker compose --profile av up -d clamav` ile ClamAV başlatıldı; ilk freshclam güncellemesi CDN
+  403/cooldown verdi ama mevcut `ClamAV 1.5.2/28038` imza verisiyle TCP `VERSION`, clean scan,
+  EICAR malware scan ve unavailable scanner fail-closed testi geçti. Generator testleri `.env.local`
+  DB env'iyle çalışınca homework e2e login 401 verdiği için `scripts/generate-upload-av-evidence.mjs`
+  hedefli API testlerini `DATABASE_URL`, `DIRECT_DATABASE_URL`, `NODE_ENV`, `ADMIN_MFA_MODE`, `PERSISTENCE_DRIVER` ve `IDEMPOTENCY_STORE`
+  env'lerinden izole edecek şekilde sertleştirildi. Temiz env koşusunda 3 test dosyası/37 test geçti,
+  `reports/upload-av.json` yazıldı ve `UPLOAD_AV_TARGET=file://... pnpm upload-av:check` PASS verdi.
+  Güncel remote gap raporu `result=NOT_RELEASE_EVIDENCE`, `overallStatus=BLOCKED`, 11 eksik zorunlu
+  artifact ve 0 `release-summary-*.json` gösterir; upload AV artık eksik listesinde değildir.
+- Admin MFA artifact üretim yolu eklendi: `scripts/generate-admin-mfa-evidence.mjs` ve
+  `pnpm admin-mfa:generate`, gerçek `DIRECT_DATABASE_URL`, `ADMIN_MFA_MODE`, MFA secret'ları,
+  sekiz login/recovery/session doğrulama bayrağı ve sekiz gerçek evidence reference olmadan
+  artifact yazmaz. Generator aktif tenant DB'sinde SYSTEM_ADMIN/TENANT_ADMIN sayımlarını okur,
+  tüm zorunlu adminler TOTP enrollment'lı değilse, recovery code hash'i yoksa, auth MFA testleri
+  veya API typecheck geçmezse `reports/admin-mfa.json` üretmez; ürettiği çıktıyı hemen
+  `ADMIN_MFA_EVIDENCE_TARGET=file://... pnpm admin-mfa:check` ile doğrular. Alt ajan read-only
+  denetimi repo içinde daha önce yalnız checker/template/docs olduğunu, gerçek admin enrollment,
+  password-only block, TOTP/recovery reuse ve session revoke kanıtı olmadan Admin MFA kapanışının
+  doğru sayılamayacağını doğruladı. Lokal ve remote `node --check`, package script kontrolü, eksik
+  env fail-fast doğrulaması, `prod:plan:check`, `prod:readiness:check`, `prod:evidence:templates:check`
+  ve `ops:check` geçti. Bu ara turdaki remote gap raporu `result=NOT_RELEASE_EVIDENCE`,
+  `overallStatus=BLOCKED`, 12 eksik zorunlu artifact ve 0 `release-summary-*.json` gösteriyordu;
+  güncel sayı yukarıdaki Kalan 10 Artifact Kapanis Matrisi'nde izlenir;
+  eksikler içinde `reports/admin-mfa.json` da var.
+- Security audit artifact üretim yolu eklendi: `scripts/generate-security-audit-evidence.mjs` ve
+  `pnpm security:audit:generate`, gerçek `SECURITY_AUDIT_APP_URL`, `SECURITY_AUDIT_API_URL`,
+  `SECURITY_AUDIT_HEADERS_URL`, `RLS_LIVE_EVIDENCE_TARGET`, sekiz auth/data güvenlik doğrulama
+  bayrağı ve beş gerçek evidence reference olmadan artifact yazmaz. Generator `prod:env:check`,
+  `web:token-storage:check`, `rls:live:check`, `/health`, `/health/ready` ve altı security header
+  kontrolü geçmeden `reports/security-audit.json` üretmez; çıktıyı hemen
+  `SECURITY_AUDIT_TARGET=file://... pnpm security:audit:check` ile doğrular. Lokal `node --check`,
+  package script kontrolü ve eksik env fail-fast doğrulaması dosya yazmadan geçti. Remote gerçek
+  HTTPS endpoint/header, auth control ve RLS live referansları sağlanmadan `reports/security-audit.json`
+  bundle eksik listesinde kalır; bu local/static PASS değil, yalnızca doğru fail-fast üretim yoludur.
+- Observability UAT artifact üretim yolu eklendi: `scripts/generate-observability-uat-evidence.mjs`
+  ve `pnpm observability:uat:generate`, gerçek `OBSERVABILITY_UAT_PROMETHEUS_URL`,
+  `OBSERVABILITY_UAT_GRAFANA_URL`, `OBSERVABILITY_UAT_LOKI_URL`, alert webhook smoke artifact'i,
+  exact dashboard/alert listeleri ve dört gerçek evidence reference olmadan artifact yazmaz. Generator
+  Prometheus `/-/ready`, Grafana `/api/health`, Loki `/ready` ve alert webhook smoke JSON'unu doğrular;
+  çıktıyı hemen `OBSERVABILITY_UAT_TARGET=file://... pnpm observability:uat:check` ile geçirir.
+  `OBSERVABILITY_UAT_TARGET`, `OBSERVABILITY_UAT_OUTPUT` ve `OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET`
+  için secret URL ve `artifacts/local/**` negatifleri template check içinde korunur.
+  Lokal `node --check`, package script kontrolü ve eksik env fail-fast doğrulaması dosya yazmadan
+  geçti. Remote gerçek observability endpoint'leri ve alert delivery artifact'i sağlanmadan
+  `reports/observability-uat.json` bundle eksik listesinde kalır; bu da local/static PASS değil,
+  yalnızca doğru fail-fast üretim yoludur.
+- External monitoring artifact üretim yolu eklendi: `scripts/generate-external-monitoring-evidence.mjs`
+  ve `pnpm external-monitoring:generate`, gerçek Uptime Kuma node host/region/network bilgisi,
+  public HTTPS `API /health`, `API /health/ready`, web login ve TLS URL'leri, alert webhook 2xx
+  sonucu, outage drill timestamp'leri ve üç gerçek evidence reference olmadan artifact yazmaz.
+  Generator public endpoint'leri canlı fetch ile kontrol eder, TLS sertifika geçerlilik gününü
+  gerçek peer certificate üzerinden hesaplar, outage latency değerlerini timestamp farklarından
+  üretir ve çıktıyı hemen `EXTERNAL_MONITORING_TARGET=file://... pnpm external-monitoring:check`
+  ile doğrular. Lokal `node --check`, package script kontrolü ve eksik env fail-fast doğrulaması
+  dosya yazmadan geçti. Remote gerçek dış izleme node'u, outage drill ve TLS/monitor kanıtları
+  sağlanmadan `reports/external-monitoring.json` bundle eksik listesinde kalır; bu da final PASS
+  değil, doğru fail-fast üretim yoludur.
+- UAT artifact üretim yolu eklendi: `scripts/generate-uat-evidence.mjs` ve `pnpm uat:generate`,
+  gerçek `UAT_TESTER`, release candidate, rollback image, restore backup referansı, 12 zorunlu
+  komutun PASS/evidence listesini taşıyan `UAT_COMMAND_EVIDENCE_TARGET` ve 21 UAT senaryosunun
+  exact ID/persona/PASS/evidence setini taşıyan `UAT_SCENARIOS_TARGET` olmadan artifact yazmaz.
+  Generator template cümleleri, placeholder/redacted/example/test, temp path, `artifacts/local`,
+  userinfo/query/fragment taşıyan referansları reddeder; `UAT_OUTPUT`, `UAT_COMMAND_EVIDENCE_TARGET`
+  ve `UAT_SCENARIOS_TARGET` için `artifacts/local/**` negatifleri template check içinde korunur; çıktıyı hemen
+  `UAT_EVIDENCE_TARGET=file://... pnpm uat:check` ile doğrular. Lokal `node --check`, package
+  script kontrolü ve eksik env fail-fast doğrulaması dosya yazmadan geçti. Gerçek rol bazlı UAT
+  koşusu, komut kanıtları ve persona evidence artifact'leri sağlanmadan `reports/uat.json` bundle
+  eksik listesinde kalır; bu final PASS değil, doğru fail-fast üretim yoludur.
+- Inline upload migration final artifact üretim yolu eklendi: `scripts/generate-inline-upload-content-migration-evidence.mjs`
+  ve `pnpm inline-upload-content:generate`, gerçek dry-run artifact'i
+  `INLINE_UPLOAD_CONTENT_DRY_RUN_TARGET`, onaylı migrate artifact'i
+  `INLINE_UPLOAD_CONTENT_APPROVED_MIGRATION_TARGET`, orphan audit artifact'i
+  `INLINE_UPLOAD_CONTENT_ORPHAN_AUDIT_TARGET`, gerçek approval owner/reference, S3 storage
+  modu, signed-url indirme modu, `downloadUrlExpiresInSeconds<=300`, write-disable ve inline-read
+  uyumluluk onayları olmadan `reports/inline-upload-content-migration.json` yazmaz. Generator
+  dry-run `DRY_RUN`, migration `MIGRATED`, iki subject seti, migration sonrası pending satır/byte
+  sıfırı ve migrated row >= dry-run pending row koşullarını kontrol eder; çıktıyı hemen
+  `INLINE_UPLOAD_CONTENT_MIGRATION_TARGET=file://... pnpm inline-upload-content:check` ile
+  doğrular. Lokal `node --check`, package script kontrolü, eksik env fail-fast, örnek
+  dry-run/migrated parçalarıyla pozitif generator koşusu, `prod:plan:check`, `prod:readiness:check`,
+  `prod:evidence:templates:check` ve `ops:check` geçti; remote sync sonrası `node --check`,
+  `prod:readiness:check` ve `ops:check` geçti. Remote/staging'de
+  `pnpm inline-upload-content:repair-sha` dry-run 2+2 repairable satır, invalid base64 0 buldu;
+  onaylı repair 2+2 `sha256` değerini doldurdu; tekrar hash audit 4/4 match verdi. Ardından
+  dry-run migration 2+2 pending satırı kaydetti, `INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true`
+  migrate 2+2 satırı S3'e taşıyıp pending row/byte değerini sıfırladı, orphan audit
+  `NO_ORPHANS` ve final `reports/inline-upload-content-migration.json` checker PASS verdi.
+  Bu ara turdaki remote gap raporu `result=NOT_RELEASE_EVIDENCE`, `overallStatus=BLOCKED`, 12 eksik
+  zorunlu artifact ve 0 `release-summary-*.json` gösteriyordu; güncel sayı yukarıdaki Kalan 10 Artifact
+  Kapanis Matrisi'nde izlenir; inline upload migration artık eksik
+  listesinde değildir.
+- Rate-limit Redis final artifact üretim yolu eklendi: `scripts/generate-rate-limit-evidence.mjs`
+  ve `pnpm rate-limit:generate`, gerçek `pnpm rate-limit:smoke` çıktısını
+  `RATE_LIMIT_SMOKE_EVIDENCE_TARGET=file:///.../smoke/rate-limit.json` üzerinden okur,
+  önce input smoke artifact'ini `pnpm rate-limit:check` ile doğrular, sonra
+  `RATE_LIMIT_EVIDENCE_OUTPUT=artifacts/staging/reports/rate-limit.json` altına yazar ve
+  aynı final raporu tekrar checker'dan geçirir. Komut eksik input/output, lokal temp path,
+  `artifacts/local/**`, symlink parent/file ve userinfo/query/fragment taşıyan file URL durumlarında
+  dosya yazmadan kırılır.
+  `docker-compose.rate-limit-shard.yml` tek node staging için host port açmayan ikinci API shard'ı
+  sağlar; Traefik `/__rate-limit-shard` prefix'ini strip ederek bu container'a yönlendirir. Bu
+  rate-limit Redis paylaşım kanıtı yolunu açar ama public TLS/first-gates kanıtı yerine geçmez;
+  Traefik gerçek edge IP'siyle `X-Forwarded-For` değerini sabitlediğinde smoke script'i
+  `RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_API=true` ve
+  `RATE_LIMIT_SMOKE_RESET_API_LIMIT_BEFORE_LOGIN=true` ile yalnız API limiter smoke key'ini
+  temizleyip API/login limiter fazlarını ayrı doğrulayabilir; `differentIpNotLocked` negatifi
+  `RATE_LIMIT_LOGIN_SMOKE_OTHER_IP_URL` ile lokal API portundan ayrıştırılabilir. Final
+  Remote/staging'de `api-primary` ve `api-rate-limit-shard` URL'leriyle gerçek smoke PASS edildi,
+  final `reports/rate-limit.json` üretildi ve raw `smoke/rate-limit.json` final bundle dışı olduğu
+  için `artifacts/local/staging-release-unexpected-rate-limit-smoke-2026-06-24` altına arşivlendi.
+- First-gates alert webhook smoke fail-fast güvenliği sertleştirildi: `scripts/smoke-alert-webhook.mjs`
+  artık `ALERT_WEBHOOK_URL` için `https://` gerçek host, userinfo/query/fragment yokluğu ve
+  lokal/test host reddini network isteğinden önce uygular. Böylece yanlış webhook URL'sine bearer
+  secret gönderilmeden komut kırılır. Bu guardrail `prod:evidence:templates:check` içindeki HTTP URL,
+  secret URL ve local host negatifleriyle korunur; `check-ops-config` de aynı script beklentilerini
+  denetler. Bu değişiklik gerçek first-gates PASS artifact'i üretmez: remote/staging hâlâ public
+  TLS/HSTS domain ve gerçek alert webhook secret sağlanmadan `first-gates/first-gates-manifest.json`
+  eksik listesinde kalır.
+- Traefik IP edge ile ACME domain edge birlikte config edilirken router'lar artık service adını açıkça
+  taşır: `web -> web`, `api -> api`, `web-ip -> web-ip`, `api-ip -> api-ip`. Bu, domain geçiş
+  provasındaki ambiguous Traefik service hatasını tekrar ettirmemek için `docker:check`,
+  `prod:readiness:check` ve `ops:check` statik kapılarıyla korunur. Bu yalnızca geçiş guardrail'idir;
+  gerçek first-gates PASS için hâlâ public TLS/HSTS domain ve alert webhook kanıtı gerekir.
+- Deployment rollback kanıtı false-pass riski azaltıldı: `scripts/check-deployment-rollback-evidence.mjs`
+  artık üç servislik `servicesVerified` setinde her servis `imageTag` değerinin top-level
+  `rollbackImageTag` ile aynı image versiyonuna döndüğünü kontrol eder; generator da aynı
+  uyumsuzluğu artifact yazmadan reddeder. `prod:evidence:templates:check` içine servis image
+  versiyon uyumsuzluğu negatifi eklendi ve `prod:readiness:check`/`ops:check` bu guardrail'i
+  sentinel token'larla izler. Bu gerçek rollback drill artifact'i üretmez; `reports/deployment-rollback.json`
+  hâlâ bozuk image tatbikatı, rollback summary ve servis health kanıtları sağlanmadan eksik kalır.
+- Production evidence summary false-pass riski azaltıldı: `scripts/check-prod-evidence.mjs`
+  artık herhangi bir `*_ALLOW_EXAMPLE_EVIDENCE=1` bayrağı açıkken alt checker/smoke script
+  çalıştırmadan kırılır. Bu, template modundaki fixture gevşetmelerinin `prod:evidence:check
+  --summary-file` üzerinden gerçek production summary'ye taşınmasını engeller. Negatif test
+  `prod:evidence:templates:check` içinde korunur; `prod:readiness:check` ve `ops:check`
+  bu guardrail'i sentinel token'larla izler.

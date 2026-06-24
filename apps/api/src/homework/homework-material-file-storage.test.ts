@@ -55,8 +55,11 @@ describe("HomeworkMaterialFileStorage", () => {
     const signedDownload = await storage.createSignedDownloadUrl(stored.storageKey ?? "");
 
     expect(stored).toEqual({
-      storageKey: "homework-material-files/tenant-a/material-a/sha-a/kesirler_ek.txt",
+      storageKey: "homework-material-files/sha-a",
     });
+    expect(stored.storageKey?.split("/")).not.toContain("tenant-a");
+    expect(stored.storageKey?.split("/")).not.toContain("material-a");
+    expect(stored.storageKey).not.toContain("kesirler");
     expect(body.toString("utf8")).toBe("remote file");
     expect(signedDownload).toMatchObject({
       url: "https://storage.example.test/homework-material-file",

@@ -1,3 +1,4 @@
+import { existsSync, lstatSync } from "node:fs";
 import { lstat, readFile } from "node:fs/promises";
 import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -195,12 +196,20 @@ function requireAllowedEvidenceTargetUrl(url) {
     fail(["UAT_EVIDENCE_TARGET file:// veya https:// URL olmali."]);
   }
 
+  if (url.username || url.password || url.search || url.hash) {
+    fail(["UAT_EVIDENCE_TARGET userinfo, query veya fragment tasimamali."]);
+  }
+
   if (url.protocol === "https:" && isPlaceholderEvidenceTargetHost(url.hostname)) {
     fail(["UAT_EVIDENCE_TARGET production kaniti icin gercek https host olmali."]);
   }
 
   if (url.protocol === "file:" && isLocalTempEvidenceTargetUrl(url)) {
     fail(["UAT_EVIDENCE_TARGET production kaniti icin lokal temp path olmamali."]);
+  }
+
+  if (url.protocol === "file:" && isLocalSmokeEvidenceTargetUrl(url)) {
+    fail(["UAT_EVIDENCE_TARGET production kaniti icin artifacts/local altinda olmamali."]);
   }
 }
 
@@ -221,7 +230,19 @@ function isPlaceholderEvidenceTargetHost(hostname) {
 
 function isLocalTempEvidenceTargetUrl(url) {
   const path = fileURLToPath(url).replace(/\/+$/g, "") || "/";
-  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+  return (
+    path === "/tmp" ||
+    path.startsWith("/tmp/") ||
+    path === "/var/tmp" ||
+    path.startsWith("/var/tmp/") ||
+    path === "/private/tmp" ||
+    path.startsWith("/private/tmp/")
+  );
+}
+
+function isLocalSmokeEvidenceTargetUrl(url) {
+  const path = fileURLToPath(url).replaceAll("\\", "/").replace(/\/+$/g, "") || "/";
+  return path.endsWith("/artifacts/local") || path.includes("/artifacts/local/");
 }
 
 function parseJson(value) {
@@ -250,6 +271,7 @@ function validateReport(report) {
   requireNonPlaceholderString(report, failures, "rollbackImageTag");
   requireString(report, failures, "restoreBackupReference");
   requireNonPlaceholderString(report, failures, "restoreBackupReference");
+  requireNoSecretBearingReference(report, failures, "restoreBackupReference");
 
   requireExactStringSet(report, failures, "flowsVerified", expectedFlowsVerified, "akış");
   requireExactStringSet(report, failures, "commandsPassed", expectedCommandsPassed, "komut");
@@ -440,9 +462,16 @@ function requireEvidenceList(scenario, failures, label) {
       failures.push(`${label} production kanıtı için örnek/placeholder/redacted değer içermemeli.`);
       return;
     }
+    if (hasSecretBearingReference(item)) {
+      failures.push(`${label} userinfo, query veya fragment tasimamali.`);
+      return;
+    }
     if (!allowExampleEvidence && !hasEvidenceReference(item)) {
       failures.push(`${label} production kanıtı kalıcı artifact/run/log/url referansı içermeli.`);
       return;
+    }
+    if (!allowExampleEvidence) {
+      validateArtifactReference(item, label, failures);
     }
   }
 }
@@ -450,6 +479,102 @@ function requireEvidenceList(scenario, failures, label) {
 function hasEvidenceReference(value) {
   const normalized = value.trim().toLowerCase();
   return evidenceReferencePrefixes.some((prefix) => normalized.startsWith(prefix));
+}
+
+function validateArtifactReference(value, label, failures) {
+  if (typeof value !== "string" || !value.trim().toLowerCase().startsWith("artifact:")) return;
+
+  const artifactPath = value.trim().slice("artifact:".length);
+  const artifactSegments = artifactPath.split("/");
+  if (!artifactPath || artifactPath.startsWith("/") || artifactPath.includes("\\") || artifactSegments.includes("..")) {
+    failures.push(`${label} artifact referansı repo içi relative path olmalı.`);
+    return;
+  }
+
+  const resolvedPath = resolve(artifactPath);
+  if (isLocalTempEvidencePath(resolvedPath) || isLocalSmokeEvidencePath(resolvedPath)) {
+    failures.push(`${label} artifact referansı temp veya artifacts/local altında olmamalı.`);
+    return;
+  }
+
+  const parentFailures = validateArtifactParentPath(dirname(resolvedPath), label);
+  failures.push(...parentFailures);
+  if (parentFailures.length > 0) return;
+
+  if (!existsSync(resolvedPath)) {
+    failures.push(`${label} artifact referansı mevcut dosyaya bağlanmalı.`);
+    return;
+  }
+
+  const stat = lstatSync(resolvedPath);
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    failures.push(`${label} artifact referansı symlink olmayan dosya olmalı.`);
+  }
+}
+
+function validateArtifactParentPath(parentPath, label) {
+  const failures = [];
+  const root = parse(parentPath).root;
+  const segments = parentPath.slice(root.length).split(/[\\/]+/).filter(Boolean);
+  let current = root;
+
+  for (const segment of segments) {
+    current = resolve(current, segment);
+    if (!existsSync(current)) return failures;
+
+    const directoryStat = lstatSync(current);
+    if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) {
+      failures.push(`${label} artifact parent dizini symlink olmayan dizin olmalı.`);
+      return failures;
+    }
+  }
+
+  return failures;
+}
+
+function isLocalTempEvidencePath(filePath) {
+  const normalized = filePath.replace(/\/+$/g, "") || "/";
+  return (
+    normalized === "/tmp" ||
+    normalized.startsWith("/tmp/") ||
+    normalized === "/var/tmp" ||
+    normalized.startsWith("/var/tmp/") ||
+    normalized === "/private/tmp" ||
+    normalized.startsWith("/private/tmp/")
+  );
+}
+
+function isLocalSmokeEvidencePath(filePath) {
+  const normalized = filePath.replaceAll("\\", "/").replace(/\/+$/g, "") || "/";
+  return normalized.endsWith("/artifacts/local") || normalized.includes("/artifacts/local/");
+}
+
+function requireNoSecretBearingReference(report, failures, key) {
+  const value = report[key];
+  if (typeof value !== "string" || value.trim() === "") return;
+
+  if (hasSecretBearingReference(value)) {
+    failures.push(`${key} userinfo, query veya fragment tasimamali.`);
+  }
+}
+
+function hasSecretBearingReference(value) {
+  const normalized = value.trim();
+  if (normalized.includes("?") || normalized.includes("#")) {
+    return true;
+  }
+
+  const urlCandidate = normalized.toLowerCase().startsWith("url:") ? normalized.slice(4) : normalized;
+  if (!/^(https|file|s3):\/\//i.test(urlCandidate)) {
+    return false;
+  }
+
+  try {
+    const url = new URL(urlCandidate);
+    return Boolean(url.username || url.password || url.search || url.hash);
+  } catch {
+    return false;
+  }
 }
 
 function hasPlaceholderToken(value) {

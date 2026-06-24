@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -57,6 +57,7 @@ interface ReportData {
   snapshots: ReportSnapshotRecord[];
   studentReport: ReportStudentSnapshot | null;
   studentProgress: ReportStudentProgress | null;
+  students: StudentRecord[];
 }
 
 interface ReportReferences {
@@ -65,7 +66,6 @@ interface ReportReferences {
   courses: CourseRecord[];
   exams: ExamRecord[];
   gradeLevels: GradeLevelRecord[];
-  students: StudentRecord[];
   terms: AcademicTermRecord[];
 }
 
@@ -83,9 +83,10 @@ const emptyReferences: ReportReferences = {
   courses: [],
   exams: [],
   gradeLevels: [],
-  students: [],
   terms: [],
 };
+const emptyParticipants: ExamParticipantRecord[] = [];
+const emptyStudents: StudentRecord[] = [];
 
 type ReportWorkspaceTab = "query" | "analytics" | "students" | "karne" | "exports";
 
@@ -125,43 +126,45 @@ export function ReportsPage() {
   const courses = references.courses;
   const exams = references.exams;
   const terms = references.terms;
-  const students = references.students;
-  const classNameById = new Map(classes.map((klass) => [klass.id, klass.name]));
-  const campusNameById = new Map(campuses.map((campus) => [campus.id, campus.name]));
-  const gradeLevelNameById = new Map(gradeLevels.map((level) => [level.id, level.name]));
-  const courseNameById = new Map(courses.map((course) => [course.id, formatCourseName(course.name)]));
-  const termNameById = new Map(terms.map((term) => [term.id, term.name]));
+  const participants = reportData?.participants ?? emptyParticipants;
+  const students = reportData?.students ?? emptyStudents;
+  const classNameById = useMemo(() => new Map(classes.map((klass) => [klass.id, klass.name])), [classes]);
+  const campusNameById = useMemo(() => new Map(campuses.map((campus) => [campus.id, campus.name])), [campuses]);
+  const gradeLevelNameById = useMemo(() => new Map(gradeLevels.map((level) => [level.id, level.name])), [gradeLevels]);
+  const courseNameById = useMemo(() => new Map(courses.map((course) => [course.id, formatCourseName(course.name)])), [courses]);
+  const termNameById = useMemo(() => new Map(terms.map((term) => [term.id, term.name])), [terms]);
   const latestSnapshot = reportData?.snapshots[0] ?? null;
   const studentReport = reportData?.studentReport ?? null;
-  const studentRows = buildReportAnalysisRows({
-    classes,
-    participants: reportData?.participants ?? [],
-    snapshot: latestSnapshot,
-    students,
-  });
-  const branchRadar = toBranchRadar(latestSnapshot);
-  const outcomeRows = toOutcomeRows(latestSnapshot);
-  const classBars = toClassBars(latestSnapshot);
-  const examResult = toExamResult(latestSnapshot);
-  const progressPoints = toProgressPoints(reportData?.studentProgress ?? null);
-  const snapshotContext = latestSnapshot
-    ? formatReportContext(latestSnapshot, {
-        campusNameById,
-        classNameById,
-        courseNameById,
-        gradeLevelNameById,
-        termNameById,
-      })
-    : "-";
+  const studentRows = useMemo(
+    () => buildReportAnalysisRows({
+      classes,
+      participants,
+      snapshot: latestSnapshot,
+      students,
+    }),
+    [classes, latestSnapshot, participants, students],
+  );
+  const snapshotContext = useMemo(
+    () => latestSnapshot
+      ? formatReportContext(latestSnapshot, {
+          campusNameById,
+          classNameById,
+          courseNameById,
+          gradeLevelNameById,
+          termNameById,
+        })
+      : "-",
+    [campusNameById, classNameById, courseNameById, gradeLevelNameById, latestSnapshot, termNameById],
+  );
   const isSnapshotReady = latestSnapshot?.status === "READY";
   const snapshotGeneratedAt = formatSnapshotGeneratedAt(latestSnapshot);
-  const snapshotInputRefs = latestSnapshot ? formatSnapshotInputRefs(latestSnapshot.inputRefs) : "-";
+  const snapshotInputRefs = useMemo(() => latestSnapshot ? formatSnapshotInputRefs(latestSnapshot.inputRefs) : "-", [latestSnapshot]);
   const snapshotExportReadiness = latestSnapshot
     ? isSnapshotReady
       ? "Excel/PDF hazır"
       : "READY snapshot gerekli"
     : "Hazır rapor yok";
-  const selectedExamLabel = formatSelectedExamLabel(loadedExamId || examId, exams);
+  const selectedExamLabel = useMemo(() => formatSelectedExamLabel(loadedExamId || examId, exams), [examId, exams, loadedExamId]);
   const selectedExamExists = exams.some((exam) => exam.id === examId);
 
   useEffect(() => {
@@ -191,7 +194,7 @@ export function ReportsPage() {
       return;
     }
     try {
-      setReportData(await loadReportData(auth.accessToken, parsedForm.data.examId, filters, { classes, students }));
+      setReportData(await loadReportData(auth.accessToken, parsedForm.data.examId, filters));
       setLoadedExamId(parsedForm.data.examId);
       selectReportTab("analytics");
     } catch (loadError) {
@@ -402,78 +405,12 @@ export function ReportsPage() {
             />
           ) : null}
           {activeTab === "analytics" && latestSnapshot ? (
-            <section className="next-report-analytics-section" aria-label="Kurum analitiği">
-              <h2>Kurum analitiği</h2>
-              {!isSnapshotReady ? (
-                <Alert tone="warning" title="Snapshot çıktıya hazır değil">
-                  Bu snapshot {formatSnapshotStatus(latestSnapshot.status)} durumunda. Analiz görüntülenebilir, Excel/PDF çıktı hazır olduğunda açılır.
-                </Alert>
-              ) : null}
-              <MetricGrid aria-label="Rapor özeti" role="region">
-                <MetricCard
-                  description={isSnapshotReady ? "READY snapshot" : "Çıktı için READY snapshot gerekli"}
-                  label="Durum"
-                  tone={metricStatusTone(latestSnapshot.status)}
-                  value={formatSnapshotStatus(latestSnapshot.status)}
-                />
-                <MetricCard
-                  description="Öğrenci sonuç sayısı"
-                  label="Sonuç"
-                  value={latestSnapshot.snapshotData?.resultCount ?? "-"}
-                />
-                <MetricCard
-                  description="Sınav kapsamı"
-                  label="Soru"
-                  tone="info"
-                  value={formatNumber(reportQuestionCount(latestSnapshot.snapshotData?.averages))}
-                />
-                <MetricCard
-                  description="Ana karşılaştırma metriği"
-                  label="Başarı %"
-                  tone="success"
-                  value={formatPercentNumber(reportSuccessRate(latestSnapshot.snapshotData?.averages))}
-                />
-                <MetricCard
-                  description="Net, soru kapsamıyla okunur"
-                  label="Ortalama net"
-                  tone="info"
-                  value={formatNetNumber(latestSnapshot.snapshotData?.averages?.net)}
-                />
-                <MetricCard
-                  description="LGS bağlam metriği"
-                  label="LGS puanı"
-                  value={formatNumber(readLgsScore(latestSnapshot.snapshotData?.averages))}
-                />
-                <MetricCard
-                  description="Psikometrik bağlam"
-                  label="Standart puan"
-                  value={formatNumber(latestSnapshot.snapshotData?.averages?.standardScore)}
-                />
-                <MetricCard
-                  description="Filtre ve sınav bağlamı"
-                  label="Bağlam"
-                  span="wide"
-                  value={snapshotContext}
-                />
-              </MetricGrid>
-              <div className="next-report-visual-grid">
-                <ReportChartPanel description="Soru sayısına göre başarı ve doğruluk dağılımı" title="Sınav Sonuç Dağılımı">
-                  <ExamResultDonut result={examResult} />
-                </ReportChartPanel>
-                <ReportChartPanel description="Branş soru sayılarına göre başarı yüzdesi" title="Branş Başarıları">
-                  <TopicRadarChart branches={branchRadar} caption="Rapor branş başarıları" />
-                </ReportChartPanel>
-                <ReportChartPanel description="Kazanım bazlı başarı ve net karşılaştırması" title="Kazanım Başarıları">
-                  <OutcomeNetTable caption="Rapor kazanım başarıları" rows={outcomeRows} />
-                </ReportChartPanel>
-                <ReportChartPanel description="Sınıf ortalamalarının soru sayısına göre başarı yüzdesi" title="Sınıf Karşılaştırması">
-                  <ClassCompareBar caption="Sınıf ortalama başarıları" classes={classBars} />
-                </ReportChartPanel>
-                <ReportChartPanel description="Başarı yüzdesi, net ve standart puan gelişimi" title="Öğrenci Gelişim Eğrisi">
-                  <ProgressLineChart caption="Öğrenci başarı gelişimi" points={progressPoints} />
-                </ReportChartPanel>
-              </div>
-            </section>
+            <ReportAnalyticsPanel
+              isSnapshotReady={isSnapshotReady}
+              latestSnapshot={latestSnapshot}
+              snapshotContext={snapshotContext}
+              studentProgress={reportData?.studentProgress ?? null}
+            />
           ) : null}
           {activeTab === "students" && latestSnapshot ? (
             <StudentResultsTable
@@ -548,7 +485,6 @@ async function loadReportData(
   accessToken: string,
   examId: string,
   filters: typeof emptyFilters,
-  references: Pick<ReportReferences, "classes" | "students">,
 ): Promise<ReportData> {
   const snapshotsUrl = new URL(`${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots`);
   if (filters.campusId) snapshotsUrl.searchParams.set("campusId", filters.campusId);
@@ -564,19 +500,14 @@ async function loadReportData(
     loadExamParticipants(accessToken, examId).catch(() => []),
   ]);
   const latestSnapshot = snapshots[0];
-  const studentId = buildReportAnalysisRows({
-    classes: references.classes,
-    participants,
-    snapshot: latestSnapshot,
-    students: references.students,
-  }).find((row) => row.hasResult)?.studentId;
-
-  if (!latestSnapshot || !studentId) {
-    return { errorBooklet: null, participants, selectedStudentId: "", snapshots, studentReport: null, studentProgress: null };
-  }
-
-  const studentReportData = await loadStudentReportData(accessToken, examId, latestSnapshot.id, studentId);
-  return { snapshots, participants, selectedStudentId: studentId, ...studentReportData };
+  const students = latestSnapshot
+    ? await loadReportStudents(accessToken, {
+        classId: filters.classId || latestSnapshot.classId || "",
+        participants,
+        snapshot: latestSnapshot,
+      }).catch(() => [])
+    : [];
+  return { errorBooklet: null, participants, selectedStudentId: "", snapshots, studentReport: null, studentProgress: null, students };
 }
 
 async function loadStudentReportData(
@@ -604,13 +535,12 @@ async function loadStudentReportData(
 }
 
 async function loadReportReferences(accessToken: string): Promise<ReportReferences> {
-  const [campuses, classes, courses, exams, gradeLevels, students, terms] = await Promise.all([
+  const [campuses, classes, courses, exams, gradeLevels, terms] = await Promise.all([
     apiListRequest<CampusRecord>(accessToken, `${apiBaseUrl}/campuses`),
     apiListRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes`),
     apiListRequest<CourseRecord>(accessToken, `${apiBaseUrl}/courses`),
     apiListRequest<ExamRecord>(accessToken, `${apiBaseUrl}/exams`),
     apiListRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels`),
-    apiListRequest<StudentRecord>(accessToken, `${apiBaseUrl}/students`),
     apiListRequest<AcademicTermRecord>(accessToken, `${apiBaseUrl}/academic-terms`),
   ]);
   return {
@@ -619,9 +549,55 @@ async function loadReportReferences(accessToken: string): Promise<ReportReferenc
     courses: courses.data,
     exams: exams.data,
     gradeLevels: gradeLevels.data,
-    students: students.data,
     terms: terms.data,
   };
+}
+
+async function loadReportStudents(
+  accessToken: string,
+  input: Pick<typeof emptyFilters, "classId"> & {
+    participants: ExamParticipantRecord[];
+    snapshot: ReportSnapshotRecord;
+  },
+) {
+  if (!input.classId) {
+    return loadStudentsByIds(accessToken, reportStudentIds(input.participants, input.snapshot));
+  }
+
+  const studentsUrl = new URL(`${apiBaseUrl}/students`);
+  studentsUrl.searchParams.set("classId", input.classId);
+  const students = await apiListRequest<StudentRecord>(accessToken, studentsUrl.toString());
+  return students.data;
+}
+
+async function loadStudentsByIds(accessToken: string, studentIds: string[]) {
+  const students = await Promise.all(
+    studentIds.map((studentId) =>
+      apiRequest<StudentRecord>(
+        accessToken,
+        `${apiBaseUrl}/students/${encodeURIComponent(studentId)}`,
+      ).catch(() => null),
+    ),
+  );
+  return students.filter((student): student is StudentRecord => Boolean(student));
+}
+
+function reportStudentIds(participants: ExamParticipantRecord[], snapshot: ReportSnapshotRecord) {
+  return uniqueStrings([
+    ...participants.map((participant) => participant.studentId),
+    ...(snapshot.snapshotData?.students ?? []).map((student) => student.studentId),
+  ]);
+}
+
+function uniqueStrings(values: string[]) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    result.push(value);
+  }
+  return result;
 }
 
 async function loadExamParticipants(accessToken: string, examId: string) {
@@ -843,6 +819,99 @@ function toExamResult(snapshot: ReportSnapshotRecord | null) {
 
 function toProgressPoints(progress: ReportStudentProgress | null) {
   return progress?.points ?? [];
+}
+
+function ReportAnalyticsPanel({
+  isSnapshotReady,
+  latestSnapshot,
+  snapshotContext,
+  studentProgress,
+}: {
+  isSnapshotReady: boolean;
+  latestSnapshot: ReportSnapshotRecord;
+  snapshotContext: string;
+  studentProgress: ReportStudentProgress | null;
+}) {
+  const branchRadar = useMemo(() => toBranchRadar(latestSnapshot), [latestSnapshot]);
+  const outcomeRows = useMemo(() => toOutcomeRows(latestSnapshot), [latestSnapshot]);
+  const classBars = useMemo(() => toClassBars(latestSnapshot), [latestSnapshot]);
+  const examResult = useMemo(() => toExamResult(latestSnapshot), [latestSnapshot]);
+  const progressPoints = useMemo(() => toProgressPoints(studentProgress), [studentProgress]);
+
+  return (
+    <section className="next-report-analytics-section" aria-label="Kurum analitiği">
+      <h2>Kurum analitiği</h2>
+      {!isSnapshotReady ? (
+        <Alert tone="warning" title="Snapshot çıktıya hazır değil">
+          Bu snapshot {formatSnapshotStatus(latestSnapshot.status)} durumunda. Analiz görüntülenebilir, Excel/PDF çıktı hazır olduğunda açılır.
+        </Alert>
+      ) : null}
+      <MetricGrid aria-label="Rapor özeti" role="region">
+        <MetricCard
+          description={isSnapshotReady ? "READY snapshot" : "Çıktı için READY snapshot gerekli"}
+          label="Durum"
+          tone={metricStatusTone(latestSnapshot.status)}
+          value={formatSnapshotStatus(latestSnapshot.status)}
+        />
+        <MetricCard
+          description="Öğrenci sonuç sayısı"
+          label="Sonuç"
+          value={latestSnapshot.snapshotData?.resultCount ?? "-"}
+        />
+        <MetricCard
+          description="Sınav kapsamı"
+          label="Soru"
+          tone="info"
+          value={formatNumber(reportQuestionCount(latestSnapshot.snapshotData?.averages))}
+        />
+        <MetricCard
+          description="Ana karşılaştırma metriği"
+          label="Başarı %"
+          tone="success"
+          value={formatPercentNumber(reportSuccessRate(latestSnapshot.snapshotData?.averages))}
+        />
+        <MetricCard
+          description="Net, soru kapsamıyla okunur"
+          label="Ortalama net"
+          tone="info"
+          value={formatNetNumber(latestSnapshot.snapshotData?.averages?.net)}
+        />
+        <MetricCard
+          description="LGS bağlam metriği"
+          label="LGS puanı"
+          value={formatNumber(readLgsScore(latestSnapshot.snapshotData?.averages))}
+        />
+        <MetricCard
+          description="Psikometrik bağlam"
+          label="Standart puan"
+          value={formatNumber(latestSnapshot.snapshotData?.averages?.standardScore)}
+        />
+        <MetricCard
+          description="Filtre ve sınav bağlamı"
+          label="Bağlam"
+          span="wide"
+          value={snapshotContext}
+        />
+      </MetricGrid>
+      <div className="next-report-visual-grid">
+        <ReportChartPanel description="Soru sayısına göre başarı ve doğruluk dağılımı" title="Sınav Sonuç Dağılımı">
+          <ExamResultDonut result={examResult} />
+        </ReportChartPanel>
+        <ReportChartPanel description="Branş soru sayılarına göre başarı yüzdesi" title="Branş Başarıları">
+          <TopicRadarChart branches={branchRadar} caption="Rapor branş başarıları" />
+        </ReportChartPanel>
+        <ReportChartPanel description="Kazanım bazlı başarı ve net karşılaştırması" title="Kazanım Başarıları">
+          <OutcomeNetTable caption="Rapor kazanım başarıları" rows={outcomeRows} />
+        </ReportChartPanel>
+        <ReportChartPanel description="Sınıf ortalamalarının soru sayısına göre başarı yüzdesi" title="Sınıf Karşılaştırması">
+          <ClassCompareBar caption="Sınıf ortalama başarıları" classes={classBars} />
+        </ReportChartPanel>
+        <ReportChartPanel description="Başarı yüzdesi, net ve standart puan gelişimi" title="Öğrenci Gelişim Eğrisi">
+          <ProgressLineChart caption="Öğrenci başarı gelişimi" points={progressPoints} />
+        </ReportChartPanel>
+      </div>
+    </section>
+  );
 }
 
 function ErrorBookletTable({

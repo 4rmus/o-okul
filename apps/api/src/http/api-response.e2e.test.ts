@@ -89,4 +89,14 @@ describe("API success response envelope", () => {
 
     await request(server).get("/health").expect(200, { status: "ok" });
   });
+
+  it("metrics yanıtını üretim prefix'i altında raw text bırakır", async () => {
+    const response = await request(server)
+      .get(`/${apiPrefix}/metrics`)
+      .expect(200);
+
+    expect(response.headers["content-type"]).toContain("text/plain");
+    expect(response.text).toContain("# TYPE uzman_hocam_process_uptime_seconds gauge");
+    expect(response.text).not.toContain("\"data\"");
+  });
 });

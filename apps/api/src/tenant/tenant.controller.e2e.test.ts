@@ -105,6 +105,36 @@ describe("TenantController", () => {
       .expect(403);
   });
 
+  it("first-admin invitation tenant create response'unda ham aktivasyon tokenı dönmez", async () => {
+    await request(server)
+      .post("/tenants")
+      .set("Authorization", `Bearer ${systemToken}`)
+      .send({
+        id: "tenant-invitation-e2e",
+        name: "Tenant Invitation E2E",
+        slug: "tenant-invitation-e2e",
+        firstAdmin: {
+          name: "Invitation Admin",
+          email: "invitation-admin@example.test",
+          mode: "invitation",
+        },
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          tenant: expect.objectContaining({ id: "tenant-invitation-e2e" }),
+          admin: expect.objectContaining({
+            email: "invitation-admin@example.test",
+            tenantId: "tenant-invitation-e2e",
+            activationTokenIssued: true,
+            activationTokenExpiresAt: expect.any(String),
+          }),
+        });
+        expect(body.admin).not.toHaveProperty("activationToken");
+        expect(JSON.stringify(body)).not.toContain("tokenHash");
+      });
+  });
+
   it("tenant yönetim gövdelerini Zod ile doğrular", async () => {
     const invalidCreate = await request(server)
       .post("/tenants")
@@ -141,6 +171,12 @@ describe("TenantController", () => {
       .set("Authorization", `Bearer ${systemToken}`)
       .send({
         contactEmail: "gecersiz",
+        firstAdmin: {
+          email: "ignored-admin@example.test",
+          name: "Ignored Admin",
+          password: "password1",
+        },
+        id: "tenant-forbidden",
         licenseEndsAt: "2026-02-29T00:00:00.000Z",
         logoUrl: "ftp://cdn.example.test/logo.png",
         seatLimit: 0,
@@ -152,6 +188,7 @@ describe("TenantController", () => {
       details: {
         fields: expect.arrayContaining([
           expect.objectContaining({ path: "contactEmail" }),
+          expect.objectContaining({ path: "$" }),
           expect.objectContaining({ path: "licenseEndsAt" }),
           expect.objectContaining({ path: "logoUrl" }),
           expect.objectContaining({ path: "seatLimit" }),

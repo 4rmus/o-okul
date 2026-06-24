@@ -25,6 +25,54 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBeNull();
   });
 
+  test("öğrenci listesini yalnız rapor sorgusunda yükler", async ({ page }) => {
+    const studentRequests: string[] = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (request.method() === "GET" && url.pathname === "/api/v1/students") {
+        studentRequests.push(request.url());
+      }
+    });
+
+    await openWithReportMocks(page, "/kurum/raporlar", { height: 960, width: 1440 });
+
+    expect(studentRequests).toHaveLength(0);
+
+    await page.getByRole("button", { name: "Raporu getir" }).click();
+
+    await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
+    expect(studentRequests).toHaveLength(1);
+  });
+
+  test("sınıfsız raporda genel öğrenci listesi yerine katılımcı kayıtlarını yükler", async ({ page }) => {
+    const broadStudentRequests = trackApiRequests(page, (url, method) =>
+      method === "GET" && url.pathname === "/api/v1/students",
+    );
+    const scopedStudentRequests = trackApiRequests(page, (url, method) =>
+      method === "GET" && /^\/api\/v1\/students\/student-[ab]$/.test(url.pathname),
+    );
+    const studentDetailRequests = trackApiRequests(page, (url, method) =>
+      method === "GET" && /^\/api\/v1\/exams\/[^/]+\/reports\/(?:snapshots\/[^/]+\/students\/[^/]+(?:\/error-booklet)?|students\/[^/]+\/progress)$/.test(url.pathname),
+    );
+
+    await openWithReportMocks(page, "/kurum/raporlar", { height: 960, width: 1440 });
+
+    await page.getByRole("combobox", { name: "Sınav" }).selectOption("exam-report-general");
+    await page.getByRole("button", { name: "Raporu getir" }).click();
+
+    await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
+    expect(broadStudentRequests).toHaveLength(0);
+    await expect.poll(() => scopedStudentRequests.length).toBe(2);
+    expect(studentDetailRequests).toHaveLength(0);
+
+    await page.getByRole("tab", { name: "Öğrenci Sonuçları" }).click();
+    const studentResultsTable = page.getByRole("table", { name: "Öğrenci sıralamaları" });
+    await expect(studentResultsTable).toContainText("Ada Kaya");
+    await expect(studentResultsTable).toContainText("Bora Yılmaz");
+    expect(scopedStudentRequests.filter((requestUrl) => requestUrl.endsWith("/students/student-a"))).toHaveLength(1);
+    expect(scopedStudentRequests.filter((requestUrl) => requestUrl.endsWith("/students/student-b"))).toHaveLength(1);
+  });
+
   test("rapor sekmeleri klavyede roving focus ve panel odağını korur", async ({ page }) => {
     await openWithReportMocks(page, "/kurum/raporlar", { height: 960, width: 1440 });
 
@@ -65,10 +113,19 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
   });
 
   test("READY snapshot bağlam, girdi ve çıktı hazırlığını görünür tutar", async ({ page }) => {
+    const studentListRequests = trackApiRequests(page, (url, method) =>
+      method === "GET" && url.pathname === "/api/v1/students",
+    );
+    const studentDetailRequests = trackApiRequests(page, (url, method) =>
+      method === "GET" && /^\/api\/v1\/exams\/[^/]+\/reports\/(?:snapshots\/[^/]+\/students\/[^/]+(?:\/error-booklet)?|students\/[^/]+\/progress)$/.test(url.pathname),
+    );
+
     await openWithReportMocks(page, "/kurum/raporlar", { height: 960, width: 1440 });
 
     await expect(page.getByRole("heading", { level: 1, name: "Sınav Raporu" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Sorgu / Üretim" })).toHaveAttribute("aria-selected", "true");
+    expect(studentListRequests).toHaveLength(0);
+    expect(studentDetailRequests).toHaveLength(0);
 
     const reportFilters = page.getByLabel("Rapor filtreleri").locator("select");
     await reportFilters.nth(0).selectOption("campus-main");
@@ -91,6 +148,9 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     expect(snapshotsUrl.searchParams.get("termId")).toBe("term-2026");
 
     await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
+    expect(studentListRequests).toHaveLength(1);
+    expect(new URL(studentListRequests[0]!).searchParams.get("classId")).toBe("class-8a");
+    expect(studentDetailRequests).toHaveLength(0);
     const contextStrip = page.locator(".next-report-context-strip");
     await expect(contextStrip).toHaveClass(/uh-info-grid/);
     await expect(contextStrip.locator(".uh-info-item")).toHaveCount(6);
@@ -128,7 +188,9 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await expect(studentResultsTable.getByRole("row").nth(2)).toContainText("30");
     await expect(studentResultsTable.getByRole("row").nth(2)).toContainText("50");
 
-    await page.getByRole("tab", { name: "Karne Önizleme" }).click();
+    await studentResultsTable.getByRole("button", { name: "Ada Kaya karnesini aç" }).click();
+    await expect(page.getByRole("tab", { name: "Karne Önizleme" })).toHaveAttribute("aria-selected", "true");
+    await expect.poll(() => studentDetailRequests.length).toBe(3);
     const karnePanel = page.getByRole("tabpanel", { name: "Karne Önizleme" });
     const karneSheet = karnePanel.getByRole("region", { name: "Öğrenci karne özeti özet sayfası" });
     await expect(karneSheet).toHaveClass(/next-report-karne-sheet/);
@@ -214,7 +276,8 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
 
     await page.getByRole("button", { name: "Raporu getir" }).click();
     await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
-    await page.getByRole("tab", { name: "Karne Önizleme" }).click();
+    await page.getByRole("tab", { name: "Öğrenci Sonuçları" }).click();
+    await page.getByRole("table", { name: "Öğrenci sıralamaları" }).getByRole("button", { name: "Ada Kaya karnesini aç" }).click();
 
     const karnePanel = page.getByRole("tabpanel", { name: "Karne Önizleme" });
     const karneSheet = karnePanel.getByRole("region", { name: "Öğrenci karne özeti özet sayfası" });
@@ -279,19 +342,20 @@ function mockReportApiResponse(pathName: string, method: string): { data: unknow
   if (pathName === "/courses") return listResponse([{ id: "course-math", name: "Matematik", tenantId: "tenant-report" }]);
   if (pathName === "/grade-levels") return listResponse([{ id: "grade-8", name: "8. Sınıf", tenantId: "tenant-report" }]);
   if (pathName === "/academic-terms") return listResponse([{ id: "term-2026", name: "2026 Bahar", tenantId: "tenant-report" }]);
-  if (pathName === "/students") return listResponse([
-    { classId: "class-8a", firstName: "Ada", id: "student-a", lastName: "Kaya", studentNo: "1001", tenantId: "tenant-report" },
-    { classId: "class-8a", firstName: "Bora", id: "student-b", lastName: "Yılmaz", studentNo: "1002", tenantId: "tenant-report" },
-  ]);
+  if (pathName === "/students") return listResponse(createStudents());
+  if (pathName === "/students/student-a") return { data: createStudents()[0] };
+  if (pathName === "/students/student-b") return { data: createStudents()[1] };
   if (pathName === "/exams") {
     return listResponse([
       { courseId: "course-math", id: "exam-report-ready", status: "PUBLISHED", tenantId: "tenant-report", title: "LGS Rapor Denemesi" },
       { courseId: "course-math", id: "exam-report-stale", status: "DRAFT", tenantId: "tenant-report", title: "Eski Rapor Denemesi" },
+      { courseId: "course-math", id: "exam-report-general", status: "DRAFT", tenantId: "tenant-report", title: "Genel Rapor Denemesi" },
     ]);
   }
   if (pathName === "/exams/exam-report-ready/reports/snapshots") return { data: [createReportSnapshot("exam-report-ready", "READY")] };
   if (pathName === "/exams/exam-report-stale/reports/snapshots") return { data: [createReportSnapshot("exam-report-stale", "STALE")] };
-  if (pathName === "/exams/exam-report-ready/participants" || pathName === "/exams/exam-report-stale/participants") return { data: createParticipants() };
+  if (pathName === "/exams/exam-report-general/reports/snapshots") return { data: [createReportSnapshot("exam-report-general", "READY", { classId: null })] };
+  if (pathName === "/exams/exam-report-ready/participants" || pathName === "/exams/exam-report-stale/participants" || pathName === "/exams/exam-report-general/participants") return { data: createParticipants() };
   if (pathName === "/exams/exam-report-ready/reports/snapshots/snapshot-ready/students/student-a") return { data: createStudentReport() };
   if (pathName === "/exams/exam-report-ready/reports/snapshots/snapshot-ready/students/student-a/error-booklet") return { data: createErrorBooklet() };
   if (pathName === "/exams/exam-report-ready/reports/students/student-a/progress") return { data: createProgress() };
@@ -326,6 +390,13 @@ function createTenantResponse() {
   };
 }
 
+function createStudents() {
+  return [
+    { classId: "class-8a", firstName: "Ada", id: "student-a", lastName: "Kaya", studentNo: "1001", tenantId: "tenant-report" },
+    { classId: "class-8a", firstName: "Bora", id: "student-b", lastName: "Yılmaz", studentNo: "1002", tenantId: "tenant-report" },
+  ];
+}
+
 function createParticipants() {
   return [
     {
@@ -349,10 +420,11 @@ function createParticipants() {
   ];
 }
 
-function createReportSnapshot(examId: string, status: "READY" | "STALE") {
+function createReportSnapshot(examId: string, status: "READY" | "STALE", options: { classId?: string | null } = {}) {
+  const classId = options.classId === undefined ? "class-8a" : options.classId;
   return {
     campusId: "campus-main",
-    classId: "class-8a",
+    ...(classId ? { classId } : {}),
     courseId: "course-math",
     createdAt: "2026-06-17T12:00:00.000Z",
     examId,
@@ -542,6 +614,17 @@ function corsHeadersFor(route: Route) {
     ...corsHeaders,
     "access-control-allow-origin": route.request().headers().origin ?? corsHeaders["access-control-allow-origin"],
   };
+}
+
+function trackApiRequests(page: Page, predicate: (url: URL, method: string) => boolean): string[] {
+  const requests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (predicate(url, request.method())) {
+      requests.push(request.url());
+    }
+  });
+  return requests;
 }
 
 async function expectNoHorizontalOverflow(page: Page, label: string) {

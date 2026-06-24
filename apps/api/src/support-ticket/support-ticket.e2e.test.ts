@@ -162,7 +162,6 @@ describe("Support ticket API", () => {
 
     expect(created.body).toMatchObject({
       tenantId: "tenant-a",
-      requesterId: "teacher-tenant-a",
       subject: "Portal yoklama sorunu",
       studentId: "student-a",
       campusId: "campus-main",
@@ -172,14 +171,16 @@ describe("Support ticket API", () => {
       termId: "term-2026-spring",
       status: "OPEN",
     });
+    expectPortalSupportTicketResponseIsPublic(created.body);
 
     await request(server)
       .get("/me/teacher/support-tickets")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
-        expect(body).toEqual(expect.arrayContaining([expect.objectContaining({ id: created.body.id, requesterId: "teacher-tenant-a" })]));
+        expect(body).toEqual(expect.arrayContaining([expect.objectContaining({ id: created.body.id, studentId: "student-a" })]));
         expect(body).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: "support-ticket-a" })]));
+        expectPortalSupportTicketResponseIsPublic(body);
       });
   });
 
@@ -214,11 +215,11 @@ describe("Support ticket API", () => {
 
     expect(created.body).toMatchObject({
       tenantId: "tenant-a",
-      requesterId: "student-tenant-a",
       studentId: "student-a",
       subject: "Ödev dosyası açılmıyor",
       status: "OPEN",
     });
+    expectPortalSupportTicketResponseIsPublic(created.body);
 
     await request(server)
       .get("/me/student/support-tickets")
@@ -226,6 +227,7 @@ describe("Support ticket API", () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body).toEqual([expect.objectContaining({ id: created.body.id, studentId: "student-a" })]);
+        expectPortalSupportTicketResponseIsPublic(body);
       });
   });
 
@@ -242,18 +244,19 @@ describe("Support ticket API", () => {
 
     expect(created.body).toMatchObject({
       tenantId: "tenant-a",
-      requesterId: "guardian-tenant-a",
       studentId: "student-a",
       subject: "Rapor sorusu",
       priority: "HIGH",
     });
+    expectPortalSupportTicketResponseIsPublic(created.body);
 
     await request(server)
       .get("/me/guardian/students/student-a/support-tickets")
       .set("Authorization", `Bearer ${guardianAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
-        expect(body).toEqual([expect.objectContaining({ id: created.body.id, requesterId: "guardian-tenant-a" })]);
+        expect(body).toEqual([expect.objectContaining({ id: created.body.id, studentId: "student-a" })]);
+        expectPortalSupportTicketResponseIsPublic(body);
       });
 
     await request(server)
@@ -686,9 +689,47 @@ describe("Support ticket API", () => {
     expect(response.body.error).toMatchObject({
       code: "VALIDATION_FAILED",
       details: {
-        fields: [expect.objectContaining({ path: "subject" })],
-      },
-    });
+          fields: [expect.objectContaining({ path: "subject" })],
+        },
+      });
+
+    await request(server)
+      .post("/me/student/support-tickets")
+      .set("Authorization", `Bearer ${studentAAccessToken}`)
+      .send({
+        subject: "Kapsam dışı",
+        message: "Body öğrenci seçemez.",
+        requesterId: "student-tenant-a",
+        status: "CLOSED",
+        studentId: "student-b",
+        tenantId: "tenant-b",
+      })
+      .expect(422);
+
+    await request(server)
+      .post("/me/guardian/students/student-a/support-tickets")
+      .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .send({
+        subject: "Kapsam dışı",
+        message: "Body öğrenci seçemez.",
+        requesterId: "guardian-tenant-a",
+        status: "CLOSED",
+        studentId: "student-b",
+        tenantId: "tenant-b",
+      })
+      .expect(422);
+
+    await request(server)
+      .post("/me/teacher/support-tickets")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({
+        subject: "Kapsam dışı",
+        message: "Tenant body'den gelmemeli.",
+        requesterId: "teacher-tenant-a",
+        status: "CLOSED",
+        tenantId: "tenant-b",
+      })
+      .expect(422);
   });
 
   it("teacher destek durumunu güncelleyemez", async () => {
@@ -703,3 +744,21 @@ describe("Support ticket API", () => {
     await request(server).get("/support-tickets").expect(401);
   });
 });
+
+function expectPortalSupportTicketResponseIsPublic(body: unknown): void {
+  const serialized = JSON.stringify(body);
+  for (const forbidden of [
+    "requesterId",
+    "userId",
+    "student-tenant-a",
+    "guardian-tenant-a",
+    "teacher-tenant-a",
+    "token",
+    "storageKey",
+    "fileBase64",
+    "contentBase64",
+    "downloadUrl",
+  ]) {
+    expect(serialized).not.toContain(forbidden);
+  }
+}

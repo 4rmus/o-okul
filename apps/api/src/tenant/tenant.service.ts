@@ -1,4 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import type { TenantCreateResponse } from "@uzman-hocam/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import { createResetToken, hashResetToken } from "../auth/auth.service.js";
 import { type PasswordResetStore, passwordResetStoreToken } from "../auth/password-reset-store.js";
@@ -39,16 +40,7 @@ export interface TenantFirstAdminBody {
   password?: string;
 }
 
-export interface TenantFirstAdminProvisionResult extends TenantUserRecord {
-  activationToken?: string;
-}
-
-export type TenantCreateResponse =
-  | TenantRecord
-  | {
-      tenant: TenantRecord;
-      admin: TenantFirstAdminProvisionResult;
-    };
+export type { TenantCreateResponse };
 
 @Injectable()
 export class TenantService {
@@ -91,8 +83,14 @@ export class TenantService {
       const result = await createTenantOrThrow(() => this.tenants.createWithFirstAdmin!(tenantInput, firstAdmin));
       await this.recordTenantCreated(context, result.tenant);
       await this.recordFirstAdminCreated(context, result.tenant.id, result.admin);
-      const activationToken = await this.issueFirstAdminActivationToken(result.admin, firstAdmin.mode);
-      return { tenant: result.tenant, admin: { ...result.admin, ...(activationToken ? { activationToken } : {}) } };
+      const activation = await this.issueFirstAdminActivationToken(result.admin, firstAdmin.mode);
+      return {
+        tenant: result.tenant,
+        admin: {
+          ...result.admin,
+          ...(activation ? { activationTokenIssued: true, activationTokenExpiresAt: activation.expiresAt } : {}),
+        },
+      };
     }
     if (firstAdmin?.mode === "invitation") {
       throw new BadRequestException("TENANT_FIRST_ADMIN_INVITATION_REQUIRES_ATOMIC_STORE");
@@ -211,11 +209,14 @@ export class TenantService {
       entityType: "User",
       entityId: admin.id,
       action: "tenant.first_admin_created",
-      diff: { email: admin.email, roles: admin.roles },
+      diff: { emailProvided: true, roles: admin.roles },
     });
   }
 
-  private async issueFirstAdminActivationToken(admin: TenantUserRecord, mode: "password" | "invitation"): Promise<string | undefined> {
+  private async issueFirstAdminActivationToken(
+    admin: TenantUserRecord,
+    mode: "password" | "invitation",
+  ): Promise<{ expiresAt: string } | undefined> {
     if (mode !== "invitation") return undefined;
     if (!this.passwordResets) {
       throw new BadRequestException("TENANT_FIRST_ADMIN_INVITATION_TOKEN_STORE_REQUIRED");
@@ -223,12 +224,13 @@ export class TenantService {
 
     await this.passwordResets.revokePendingForUser(admin.id);
     const activationToken = createResetToken();
+    const expiresAt = nextActivationExpiry();
     await this.passwordResets.create({
       userId: admin.id,
       tokenHash: hashResetToken(activationToken),
-      expiresAt: nextActivationExpiry(),
+      expiresAt,
     });
-    return activationToken;
+    return { expiresAt };
   }
 }
 

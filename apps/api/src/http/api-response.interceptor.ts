@@ -9,7 +9,7 @@ export class ApiResponseInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest<Request>();
 
-    if (request.path === "/health" || request.path === "/health/ready") {
+    if (request.path === "/health" || request.path === "/health/ready" || request.path === "/api/v1/metrics") {
       return next.handle();
     }
 

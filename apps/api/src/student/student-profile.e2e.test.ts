@@ -65,7 +65,54 @@ describe("Student profile + TC API", () => {
           photoKey: "students/student-a/photo.jpg",
         });
         expect(JSON.stringify(body)).not.toContain("10000000146");
+        expectStudentProfileResponseIsPublic(body);
       });
+
+    await request(server)
+      .get("/students")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: "student-a", firstName: "Ada" })]);
+        expectStudentCoreResponseIsPublic(body);
+      });
+
+    await request(server)
+      .get("/students/student-a")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({ id: "student-a", firstName: "Ada" });
+        expectStudentCoreResponseIsPublic(body);
+      });
+
+    await request(server)
+      .patch("/students/student-a")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Ada" })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({ id: "student-a", firstName: "Ada" });
+        expectStudentCoreResponseIsPublic(body);
+      });
+
+    await request(server)
+      .patch("/students/student-a")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Ada", nationalId: "10000000146", phone: "5551234567" })
+      .expect(422);
+
+    await request(server)
+      .patch("/students/student-a/profile")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ nationalIdHash: "hash", nationalIdEncrypted: "encrypted", userId: "student-tenant-a" })
+      .expect(422);
+
+    await request(server)
+      .patch("/students/student-a/profile")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ photoKey: "students/student-b/photo.jpg" })
+      .expect(400);
 
     await request(server)
       .patch("/students/student-a/profile")
@@ -168,6 +215,28 @@ describe("Student profile + TC API", () => {
       });
   });
 
+  it("bulk enrollment tenant dışı öğrenciyle kısmi yenileme yapmaz", async () => {
+    const before = await request(server)
+      .get("/students/student-a/enrollments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200);
+
+    await request(server)
+      .post("/students/enrollments/bulk-renew")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ studentIds: ["student-a", "student-b"], classId: "class-a", startsAt: "2026-09-01" })
+      .expect(403);
+
+    await request(server)
+      .get("/students/student-a/enrollments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toHaveLength(before.body.length);
+        expect(JSON.stringify(body)).not.toContain("2026-09-01");
+      });
+  });
+
   it("öğrenci, veli ve kapsamlı öğretmen profili maskeli görür", async () => {
     await request(server)
       .get("/me/student/profile")
@@ -262,6 +331,7 @@ describe("Student profile + TC API", () => {
         expect(body.section).toBe("A");
         expect(body.responsibleTeacherName).toBe("Ayse Ogretmen");
         expect(JSON.stringify(body)).not.toContain("10000000146");
+        expectStudentProfileResponseIsPublic(body);
       });
   });
 
@@ -284,3 +354,43 @@ describe("Student profile + TC API", () => {
       });
   });
 });
+
+function expectStudentCoreResponseIsPublic(body: unknown): void {
+  const serialized = JSON.stringify(body);
+  for (const forbidden of [
+    "student-tenant-a",
+    "userId",
+    "10000000146",
+    "*******0146",
+    "ada@example.test",
+    "5551234567",
+    "students/student-a/photo.jpg",
+    "birthDate",
+    "nationalId",
+    "nationalIdEncrypted",
+    "nationalIdHash",
+    "phone",
+    "photoKey",
+  ]) {
+    expect(serialized).not.toContain(forbidden);
+  }
+}
+
+function expectStudentProfileResponseIsPublic(body: unknown): void {
+  const serialized = JSON.stringify(body);
+  for (const forbidden of [
+    "student-tenant-a",
+    "userId",
+    "10000000146",
+    "nationalIdEncrypted",
+    "nationalIdHash",
+    "token",
+    "fileBase64",
+    "contentBase64",
+    "storageKey",
+    "objectKey",
+    "s3Key",
+  ]) {
+    expect(serialized).not.toContain(forbidden);
+  }
+}

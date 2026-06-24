@@ -25,7 +25,9 @@ const evidenceTargetKeys = [
   "UAT_EVIDENCE_TARGET",
   "LIVE_EXAM_CYCLE_TARGET",
   "ISEM_OPTICAL_PIPELINE_TARGET",
+  "LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET",
   "INLINE_UPLOAD_CONTENT_MIGRATION_TARGET",
+  "AUDIT_NULL_TENANT_EVIDENCE_TARGET",
   "RATE_LIMIT_EVIDENCE_TARGET",
   "RLS_LIVE_EVIDENCE_TARGET",
   "PILOT_EVIDENCE_TARGET",
@@ -70,7 +72,9 @@ const checks = [
   ["Security audit evidence", "scripts/check-security-audit-evidence.mjs"],
   ["Live exam cycle evidence", "scripts/check-live-exam-cycle-evidence.mjs"],
   ["iSEM optical pipeline evidence", "scripts/check-isem-optical-pipeline-evidence.mjs"],
+  ["Live UI-worker result evidence", "scripts/check-live-ui-worker-result-evidence.mjs"],
   ["Inline upload migration evidence", "scripts/check-inline-upload-content-migration-evidence.mjs"],
+  ["Audit null tenant evidence", "scripts/check-audit-null-tenant-evidence.mjs"],
   ["Rate limit Redis evidence", "scripts/check-rate-limit-evidence.mjs"],
   ["RLS live evidence", "scripts/check-rls-live-evidence.mjs"],
   ["UAT evidence", "scripts/check-uat-evidence.mjs"],
@@ -91,13 +95,16 @@ const reportArtifacts = {
   securityAudit: "security-audit.json",
   liveExamCycle: "live-exam-cycle.json",
   isemOpticalPipeline: "isem-optical-pipeline.json",
+  liveUiWorkerResult: "live-ui-worker-result.json",
   inlineUploadMigration: "inline-upload-content-migration.json",
+  auditNullTenant: "audit-null-tenant.json",
   rateLimit: "rate-limit.json",
   rlsLive: "rls-live.json",
   uat: "uat.json",
 };
 
 requireSmokeEvidenceFileTargets();
+requireNoExampleEvidenceFlags();
 requireEvidenceTargetUrls();
 
 for (const [label, script] of checks) {
@@ -163,11 +170,17 @@ function requireEvidenceTargetUrls() {
       failures.push(`${key} file:// veya https:// URL olmalı.`);
       continue;
     }
+    if (hasSecretBearingUrlParts(url)) {
+      failures.push(`${key} production evidence target URL userinfo, query veya fragment içeremez.`);
+    }
     if (url.protocol === "https:" && isPlaceholderHost(url.hostname)) {
       failures.push(`${key} production için gerçek https host olmalı.`);
     }
     if (url.protocol === "file:" && isLocalTempFileUrl(url)) {
       failures.push(`${key} production için lokal temp path olmamalı.`);
+    }
+    if (url.protocol === "file:" && isLocalSmokeEvidenceFileUrl(url)) {
+      failures.push(`${key} production için artifacts/local altında olmamalı.`);
     }
     if (url.protocol === "file:" && !isFileUrlParentPathAllowed(url)) {
       failures.push(`${key} production için parent dizini symlink olmayan dizin olmalı.`);
@@ -180,6 +193,17 @@ function requireEvidenceTargetUrls() {
   if (failures.length > 0) {
     fail(failures);
   }
+}
+
+function requireNoExampleEvidenceFlags() {
+  const enabledFlags = Object.entries(env)
+    .filter(([key, value]) => key.endsWith("_ALLOW_EXAMPLE_EVIDENCE") && value === "1")
+    .map(([key]) => key)
+    .sort();
+
+  if (enabledFlags.length === 0) return;
+
+  fail(enabledFlags.map((key) => `${key}=1 prod:evidence:check kapısında kullanılamaz.`));
 }
 
 function writeSummary(file) {
@@ -209,7 +233,9 @@ function writeSummary(file) {
     securityAudit: readJsonTarget(env.SECURITY_AUDIT_TARGET),
     liveExamCycle: readJsonTarget(env.LIVE_EXAM_CYCLE_TARGET),
     isemOpticalPipeline: readJsonTarget(env.ISEM_OPTICAL_PIPELINE_TARGET),
+    liveUiWorkerResult: readJsonTarget(env.LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET),
     inlineUploadMigration: readJsonTarget(env.INLINE_UPLOAD_CONTENT_MIGRATION_TARGET),
+    auditNullTenant: readJsonTarget(env.AUDIT_NULL_TENANT_EVIDENCE_TARGET),
     rateLimit: readJsonTarget(env.RATE_LIMIT_EVIDENCE_TARGET),
     rlsLive: readJsonTarget(env.RLS_LIVE_EVIDENCE_TARGET),
     uat: readJsonTarget(env.UAT_EVIDENCE_TARGET),
@@ -273,6 +299,7 @@ function writeSummary(file) {
         dataSubjectCounts: reports.kvkkInventory.dataSubjectCounts,
         purgeCoverage: reports.kvkkInventory.purgeCoverage,
         auditActionsVerified: reports.kvkkInventory.auditActionsVerified,
+        auditDiffRedactionVerified: reports.kvkkInventory.auditDiffRedactionVerified,
       },
       identityMigration: {
         environment: reports.identityMigration.environment,
@@ -371,14 +398,39 @@ function writeSummary(file) {
         pipelineDurationMs: reports.isemOpticalPipeline.pipelineDurationMs,
         commandsPassed: reports.isemOpticalPipeline.commandsPassed,
       },
+      liveUiWorkerResult: {
+        generatedAt: reports.liveUiWorkerResult.generatedAt,
+        result: reports.liveUiWorkerResult.result,
+        check: reports.liveUiWorkerResult.check,
+        environment: reports.liveUiWorkerResult.environment,
+        checkedAt: reports.liveUiWorkerResult.checkedAt,
+        examHash: reports.liveUiWorkerResult.examHash,
+        firstStudentHash: reports.liveUiWorkerResult.firstStudentHash,
+        reportStatus: reports.liveUiWorkerResult.reportStatus,
+        downloadedArtifacts: reports.liveUiWorkerResult.downloadedArtifacts,
+        karnePdfDownloaded: reports.liveUiWorkerResult.karnePdfDownloaded,
+        excelDownloaded: reports.liveUiWorkerResult.excelDownloaded,
+        studentPortalViewed: reports.liveUiWorkerResult.studentPortalViewed,
+        guardianPortalViewed: reports.liveUiWorkerResult.guardianPortalViewed,
+        commandsPassed: reports.liveUiWorkerResult.commandsPassed,
+        gaps: reports.liveUiWorkerResult.gaps,
+      },
       inlineUploadMigration: {
         environment: reports.inlineUploadMigration.environment,
         checkedAt: reports.inlineUploadMigration.checkedAt,
         storageMode: reports.inlineUploadMigration.storageMode,
         dryRun: reports.inlineUploadMigration.dryRun,
         migration: reports.inlineUploadMigration.migration,
+        orphanAudit: reports.inlineUploadMigration.orphanAudit,
         commandsPassed: reports.inlineUploadMigration.commandsPassed,
         evidenceReferences: reports.inlineUploadMigration.evidenceReferences,
+      },
+      auditNullTenant: {
+        environment: reports.auditNullTenant.environment,
+        checkedAt: reports.auditNullTenant.checkedAt,
+        auditNullTenant: reports.auditNullTenant.auditNullTenant,
+        commandsPassed: reports.auditNullTenant.commandsPassed,
+        evidenceReferences: reports.auditNullTenant.evidenceReferences,
       },
       rateLimit: {
         environment: reports.rateLimit.environment,
@@ -395,6 +447,7 @@ function writeSummary(file) {
         checkedAt: reports.rlsLive.checkedAt,
         schema: reports.rlsLive.schema,
         isolation: reports.rlsLive.isolation,
+        tenantFkPreflight: reports.rlsLive.tenantFkPreflight,
         loadSmoke: reports.rlsLive.loadSmoke,
         commandsPassed: reports.rlsLive.commandsPassed,
         evidenceReferences: reports.rlsLive.evidenceReferences,
@@ -532,6 +585,9 @@ function validateSmokeEvidenceFileTarget(key, file, { requireExisting = false } 
   if (isLocalTempPath(resolvedFile)) {
     fail([`${key} production için lokal temp path olmamalı.`]);
   }
+  if (isLocalSmokeArtifactPath(resolvedFile)) {
+    fail([`${key} production için artifacts/local altında olmamalı.`]);
+  }
 
   assertParentPathAllowed(
     dirname(resolvedFile),
@@ -620,6 +676,9 @@ function toEvidenceTargetUrl(value, label) {
   if (!isAllowedEvidenceTargetUrl(url)) {
     throw new Error(`${label} file:// veya https:// URL olmalı.`);
   }
+  if (url.protocol === "file:" && isLocalSmokeEvidenceFileUrl(url)) {
+    throw new Error(`${label} production için artifacts/local altında olmamalı.`);
+  }
 
   return url;
 }
@@ -638,12 +697,36 @@ function isAllowedEvidenceTargetUrl(url) {
 
 function isLocalTempFileUrl(url) {
   const path = decodeURIComponent(url.pathname).replace(/\/+$/g, "") || "/";
-  return path === "/tmp" || path.startsWith("/tmp/") || path === "/var/tmp" || path.startsWith("/var/tmp/");
+  return (
+    path === "/tmp" ||
+    path.startsWith("/tmp/") ||
+    path === "/var/tmp" ||
+    path.startsWith("/var/tmp/") ||
+    path === "/private/tmp" ||
+    path.startsWith("/private/tmp/")
+  );
+}
+
+function isLocalSmokeEvidenceFileUrl(url) {
+  const path = decodeURIComponent(url.pathname).replace(/\/+$/g, "") || "/";
+  return path.includes("/artifacts/local/");
 }
 
 function isLocalTempPath(path) {
   const normalized = path.replace(/\/+$/g, "") || "/";
-  return normalized === "/tmp" || normalized.startsWith("/tmp/") || normalized === "/var/tmp" || normalized.startsWith("/var/tmp/");
+  return (
+    normalized === "/tmp" ||
+    normalized.startsWith("/tmp/") ||
+    normalized === "/var/tmp" ||
+    normalized.startsWith("/var/tmp/") ||
+    normalized === "/private/tmp" ||
+    normalized.startsWith("/private/tmp/")
+  );
+}
+
+function isLocalSmokeArtifactPath(path) {
+  const normalized = path.replaceAll("\\", "/").replace(/\/+$/g, "") || "/";
+  return normalized.endsWith("/artifacts/local") || normalized.includes("/artifacts/local/");
 }
 
 function isRegularNonSymlinkFileUrl(url) {
@@ -669,6 +752,10 @@ function isPlaceholderHost(hostname) {
     normalized.includes("example") ||
     normalized.includes("__set")
   );
+}
+
+function hasSecretBearingUrlParts(url) {
+  return url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "";
 }
 
 function fetchSync(url) {

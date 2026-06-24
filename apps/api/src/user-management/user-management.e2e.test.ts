@@ -86,6 +86,9 @@ describe("Tenant user management", () => {
       tenantId: "tenant-a",
       roles: ["TEACHER"],
     });
+    expect(created.body).not.toHaveProperty("password");
+    expect(created.body).not.toHaveProperty("passwordHash");
+    expect(JSON.stringify(created.body)).not.toContain("password1");
 
     const userId = (created.body as { id: string }).id;
     await request(server)

@@ -149,6 +149,57 @@ const negativeCases = [
     "sms_provider_smoke",
   ],
   [
+    "SMS ham recipient reddedilir",
+    {
+      ...summary.smokeEvidence?.smsProvider,
+      recipient: "+905551112233",
+    },
+    "sms_provider_smoke",
+  ],
+  [
+    "SMS maskesiz recipient reddedilir",
+    {
+      ...summary.smokeEvidence?.smsProvider,
+      recipient: "sms-recipient-1234",
+    },
+    "sms_provider_smoke",
+  ],
+  [
+    "SMS providerMessageId boş reddedilir",
+    {
+      ...summary.smokeEvidence?.smsProvider,
+      providerMessageId: null,
+    },
+    "sms_provider_smoke",
+  ],
+  [
+    "SMS placeholder providerMessageId reddedilir",
+    {
+      ...summary.smokeEvidence?.smsProvider,
+      providerMessageId: "placeholder-provider-message-id",
+    },
+    "sms_provider_smoke",
+    false,
+  ],
+  [
+    "SMS test providerMessageId reddedilir",
+    {
+      ...summary.smokeEvidence?.smsProvider,
+      providerMessageId: "test-message-id",
+    },
+    "sms_provider_smoke",
+    false,
+  ],
+  [
+    "SMS generic providerMessageId reddedilir",
+    {
+      ...summary.smokeEvidence?.smsProvider,
+      providerMessageId: "sms-provider-message-001",
+    },
+    "sms_provider_smoke",
+    false,
+  ],
+  [
     "SMS beklenmeyen alan reddedilir",
     {
       ...summary.smokeEvidence?.smsProvider,
@@ -161,6 +212,38 @@ const negativeCases = [
     {
       ...summary.smokeEvidence?.notificationProvider,
       gaps: ["provider teslimatı manuel doğrulanmadı"],
+    },
+    "notification_provider_smoke",
+  ],
+  [
+    "Notification ham e-posta recipient reddedilir",
+    {
+      ...summary.smokeEvidence?.notificationProvider,
+      recipients: ["guardian@school.com"],
+    },
+    "notification_provider_smoke",
+  ],
+  [
+    "Notification ham telefon recipient reddedilir",
+    {
+      ...summary.smokeEvidence?.notificationProvider,
+      recipients: ["+905551112233"],
+    },
+    "notification_provider_smoke",
+  ],
+  [
+    "Notification maskesiz recipient reddedilir",
+    {
+      ...summary.smokeEvidence?.notificationProvider,
+      recipients: ["notification-recipient"],
+    },
+    "notification_provider_smoke",
+  ],
+  [
+    "Notification ham push endpoint reddedilir",
+    {
+      ...summary.smokeEvidence?.notificationProvider,
+      recipients: ["https://push.example.com/subscription/abc"],
     },
     "notification_provider_smoke",
   ],
@@ -273,6 +356,86 @@ const negativeCases = [
         ...isemOpticalPipeline.counts,
         quarantineCount: 1,
       },
+    },
+    "isem_optical_pipeline_smoke",
+  ],
+  [
+    "iSEM optik rawRow evidence alani reddedilir",
+    {
+      ...isemOpticalPipeline,
+      rawRow: "0000000000012345678901AABCDE",
+    },
+    "isem_optical_pipeline_smoke",
+  ],
+  [
+    "iSEM optik TCKN benzeri parser version reddedilir",
+    {
+      ...isemOpticalPipeline,
+      parserConfigVersion: "optik-7108-12345678901",
+    },
+    "isem_optical_pipeline_smoke",
+  ],
+  [
+    "iSEM optik ham TXT path reddedilir",
+    {
+      ...isemOpticalPipeline,
+      answerKeyVersion: "ornek-veriler/iSEM .txt",
+    },
+    "isem_optical_pipeline_smoke",
+  ],
+  [
+    "iSEM optik ham satir string alanda reddedilir",
+    {
+      ...isemOpticalPipeline,
+      parserConfigVersion: "0000000000012345678901AABCDE",
+    },
+    "isem_optical_pipeline_smoke",
+  ],
+  [
+    "iSEM optik ham telefon string alanda reddedilir",
+    {
+      ...isemOpticalPipeline,
+      answerKeyVersion: "+90 555 111 22 33",
+    },
+    "isem_optical_pipeline_smoke",
+  ],
+  [
+    "iSEM optik ham e-posta string alanda reddedilir",
+    {
+      ...isemOpticalPipeline,
+      answerKeyVersion: "operator@kurum.example",
+    },
+    "isem_optical_pipeline_smoke",
+  ],
+  [
+    "iSEM optik rawLine evidence alani reddedilir",
+    {
+      ...isemOpticalPipeline,
+      rawLine: "0000000000012345678901AABCDE",
+    },
+    "isem_optical_pipeline_smoke",
+  ],
+  [
+    "iSEM optik sourceFileName evidence alani reddedilir",
+    {
+      ...isemOpticalPipeline,
+      sourceFileName: "iSEM .txt",
+    },
+    "isem_optical_pipeline_smoke",
+  ],
+  [
+    "iSEM optik objectKey evidence alani reddedilir",
+    {
+      ...isemOpticalPipeline,
+      objectKey: "raw-imports/iSEM .txt",
+    },
+    "isem_optical_pipeline_smoke",
+  ],
+  [
+    "iSEM optik s3Key evidence alani reddedilir",
+    {
+      ...isemOpticalPipeline,
+      s3Key: "tenant/raw/iSEM .txt",
     },
     "isem_optical_pipeline_smoke",
   ],
@@ -453,12 +616,12 @@ failures.push(
   }),
 );
 
-for (const [label, payload, expectedCheck] of negativeCases) {
+for (const [label, payload, expectedCheck, allowExampleEvidence = true] of negativeCases) {
   const caseFailures = validateSmokeEvidencePayload(payload, {
     expectedCheck,
     allowedEnvironments: ["staging", "production"],
     label,
-    allowExampleEvidence: true,
+    allowExampleEvidence,
   });
   if (caseFailures.length === 0) {
     failures.push(`${label}: negatif senaryo hata üretmedi.`);

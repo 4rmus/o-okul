@@ -114,7 +114,14 @@ async function assertExistingFileArtifact(filePath) {
 }
 
 function isLocalTempPath(filePath) {
-  return filePath === "/tmp" || filePath.startsWith("/tmp/") || filePath === "/var/tmp" || filePath.startsWith("/var/tmp/");
+  return (
+    filePath === "/tmp" ||
+    filePath.startsWith("/tmp/") ||
+    filePath === "/var/tmp" ||
+    filePath.startsWith("/var/tmp/") ||
+    filePath === "/private/tmp" ||
+    filePath.startsWith("/private/tmp/")
+  );
 }
 
 function requireDateNotInFuture(scope, failures, label, key, allowExampleEvidence = false) {
@@ -182,8 +189,7 @@ function validateCheckSpecificPayload(payload, failures, label, allowExampleEvid
       ]);
       requireSmokeRunMetadata(payload, failures, label, "pnpm sms:smoke", allowExampleEvidence);
       requireProvider(payload, failures, `${label}.provider`, "provider", allowExampleEvidence);
-      requireString(payload, failures, `${label}.recipient`, "recipient");
-      requireNonPlaceholderString(payload, failures, `${label}.recipient`, "recipient", allowExampleEvidence);
+      requireMaskedRecipient(payload, failures, `${label}.recipient`, "recipient", allowExampleEvidence);
       requireIntegerAtLeast(payload, failures, `${label}.segments`, "segments", 0);
       requireString(payload, failures, `${label}.providerMessageId`, "providerMessageId");
       requireNonPlaceholderString(payload, failures, `${label}.providerMessageId`, "providerMessageId", allowExampleEvidence);
@@ -205,11 +211,9 @@ function validateCheckSpecificPayload(payload, failures, label, allowExampleEvid
       requireProvider(payload, failures, `${label}.provider`, "provider", allowExampleEvidence);
       requireStringArray(payload, failures, `${label}.channels`, "channels");
       requireStringArray(payload, failures, `${label}.recipients`, "recipients");
-      if (Array.isArray(payload.recipients) && !allowExampleEvidence) {
+      if (Array.isArray(payload.recipients)) {
         for (const [index, recipient] of payload.recipients.entries()) {
-          if (hasPlaceholderToken(recipient)) {
-            failures.push(`${label}.recipients.${index} production için ornek/placeholder/redacted deger olmamalı.`);
-          }
+          requireMaskedRecipientValue(recipient, failures, `${label}.recipients.${index}`, allowExampleEvidence);
         }
       }
       break;
@@ -752,6 +756,24 @@ function requireIsemOpticalPipelineSmoke(payload, failures, label, allowExampleE
   requireExactStringList(payload.commandsPassed, failures, `${label}.commandsPassed`, ["pnpm isem-optical-pipeline:smoke"]);
   requireEmptyArray(payload, failures, `${label}.gaps`, "gaps");
   requireNoForbiddenKeys(payload, failures, label, ["email", "password", "tenantId", "userId", "examId", "rawImportId", "answerKeyId", "snapshotId", "studentId", "guardianId"]);
+  requireNoRawEvidenceValues(payload, failures, label, [
+    "contentbase64",
+    "filebase64",
+    "filename",
+    "identitynumber",
+    "nationalid",
+    "objectkey",
+    "rawanswer",
+    "rawline",
+    "rawrow",
+    "rawtext",
+    "s3key",
+    "sourcefilename",
+    "sourcefilepath",
+    "studentname",
+    "tckn",
+    "tcno",
+  ]);
 }
 
 function requireIsemSampleScores(value, failures, label) {
@@ -866,6 +888,30 @@ function requireStringArray(scope, failures, label, key) {
   const value = scope[key];
   if (!Array.isArray(value) || value.length === 0 || value.some((item) => typeof item !== "string" || item.trim() === "")) {
     failures.push(`${label} boş olmayan metin listesi olmalı.`);
+  }
+}
+
+function requireMaskedRecipient(scope, failures, label, key, allowExampleEvidence) {
+  requireString(scope, failures, label, key);
+  requireMaskedRecipientValue(scope[key], failures, label, allowExampleEvidence);
+}
+
+function requireMaskedRecipientValue(value, failures, label, allowExampleEvidence) {
+  if (typeof value !== "string" || value.trim() === "") return;
+  if (!value.includes("*")) {
+    failures.push(`${label} maskeli recipient olmalı.`);
+  }
+  if (!allowExampleEvidence && hasPlaceholderToken(value)) {
+    failures.push(`${label} production için ornek/placeholder/redacted deger olmamalı.`);
+  }
+  if (value.includes("@") || /[^\s@]+@[^\s@]+\.[^\s@]+/.test(value)) {
+    failures.push(`${label} ham e-posta taşımamalı.`);
+  }
+  if (/(?:\+?90[\s-]?)?5\d{2}[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}/.test(value)) {
+    failures.push(`${label} ham telefon taşımamalı.`);
+  }
+  if (/https?:\/\//i.test(value)) {
+    failures.push(`${label} ham push endpoint taşımamalı.`);
   }
 }
 
@@ -1069,6 +1115,54 @@ function requireNoForbiddenKeys(value, failures, label, forbiddenKeys, path = ""
   }
 }
 
+function requireNoRawEvidenceValues(value, failures, label, forbiddenKeyFragments, path = "") {
+  if (Array.isArray(value)) {
+    for (const [index, item] of value.entries()) {
+      requireNoRawEvidenceValues(item, failures, label, forbiddenKeyFragments, path ? `${path}.${index}` : `${index}`);
+    }
+    return;
+  }
+
+  if (value && typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) {
+      const childPath = path ? `${path}.${key}` : key;
+      const normalizedKey = key.toLowerCase();
+      if (forbiddenKeyFragments.some((fragment) => normalizedKey.includes(fragment))) {
+        failures.push(`${label}.${childPath} ham PII/TXT evidence alanı taşımamalı.`);
+      }
+      requireNoRawEvidenceValues(child, failures, label, forbiddenKeyFragments, childPath);
+    }
+    return;
+  }
+
+  if (typeof value !== "string") return;
+
+  const normalized = value.toLowerCase();
+  if (normalized.includes("ornek-veriler") || /\bisem\s*\.txt\b/.test(normalized) || /\.txt(\b|$)/.test(normalized)) {
+    failures.push(`${label}.${path} ham TXT dosya adı veya yolu taşımamalı.`);
+  }
+
+  if (isHashPath(path)) return;
+
+  if (/\b\d{11}\b/.test(value)) {
+    failures.push(`${label}.${path} TCKN benzeri 11 haneli değer taşımamalı.`);
+  }
+  if (/[^\s@]+@[^\s@]+\.[^\s@]+/.test(value)) {
+    failures.push(`${label}.${path} ham e-posta taşımamalı.`);
+  }
+  if (/(?:\+?90[\s-]?)?5\d{2}[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}/.test(value)) {
+    failures.push(`${label}.${path} ham telefon taşımamalı.`);
+  }
+  if (/\d{12,}/.test(value) && /[ABCDE]{5,}/i.test(value)) {
+    failures.push(`${label}.${path} ham optik satır veya cevap dizisi taşımamalı.`);
+  }
+}
+
+function isHashPath(path) {
+  const normalized = path.toLowerCase();
+  return normalized.includes("hash") || normalized.includes("sha256");
+}
+
 function isPlaceholderHost(hostname) {
   const normalized = hostname.toLowerCase();
   return (
@@ -1087,10 +1181,20 @@ function hasPlaceholderToken(value) {
   const normalized = value.toLowerCase();
   return (
     normalized.includes("example") ||
+    normalized.includes("placeholder") ||
+    normalized.includes("change-me") ||
+    normalized.includes("replace-me") ||
     normalized.includes("redacted") ||
     normalized.includes("__set") ||
     normalized.includes("localhost") ||
     normalized.includes(".test") ||
+    normalized.includes(".example") ||
+    normalized.includes(".invalid") ||
+    normalized.includes("test-token") ||
+    normalized.includes("test-message-id") ||
+    normalized.includes("dummy") ||
+    normalized.includes("fake") ||
+    normalized.includes("sms-provider-message") ||
     normalized.includes("backup-bucket") ||
     normalized.includes("provider-console-or-contract-reference")
   );

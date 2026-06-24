@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { dirname, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -134,12 +134,16 @@ try {
     summary.totalRows !== 254 ||
     summary.quarantineReasons.length !== 0
   ) {
-    throw new Error(`ISEM_OPTICAL_PARSE_SUMMARY_MISMATCH: ${JSON.stringify(summary)}`);
+    throw new Error(
+      `ISEM_OPTICAL_PARSE_SUMMARY_MISMATCH: totalRows ${summary.totalRows}, matched ${summary.matchedCount}, quarantined ${summary.quarantinedCount}`,
+    );
   }
 
   const evaluation = await enqueueEvaluation(baseUrl, token, rawImport.id, answerKey.id);
   if (evaluation.queuedCount !== 254 || evaluation.matchedCount !== 254 || evaluation.jobs.length !== 254) {
-    throw new Error(`ISEM_OPTICAL_EVALUATION_QUEUE_MISMATCH: ${JSON.stringify(evaluation)}`);
+    throw new Error(
+      `ISEM_OPTICAL_EVALUATION_QUEUE_MISMATCH: queued ${evaluation.queuedCount}, matched ${evaluation.matchedCount}, jobs ${evaluation.jobs.length}`,
+    );
   }
   await waitForExamResultCount(254, 30_000);
 
@@ -228,7 +232,7 @@ try {
   });
 
   console.log(
-    `iSEM optical pipeline live smoke passed: tenant ${tenantId}, exam ${examId}, rawImport ${rawImport.id}, parseJob ${parseJob.jobId}, evaluation jobs ${evaluation.queuedCount}, reportJob ${reportJob.jobId}, snapshot ${snapshot.id}, results ${evidence.examResultCount}, sampleScores ${formatSampleScores(evidence.sampleScores)}`,
+    `iSEM optical pipeline live smoke passed: tenantHash ${sha256(tenantId)}, examHash ${sha256(examId)}, rawImportHash ${sha256(rawImport.id)}, parseJobHash ${sha256(parseJob.jobId)}, evaluation jobs ${evaluation.queuedCount}, reportJobHash ${sha256(reportJob.jobId)}, snapshotHash ${sha256(snapshot.id)}, results ${evidence.examResultCount}, sampleScores ${formatSampleScores(evidence.sampleScores)}`,
   );
 } finally {
   await closeProducer(reportGenerationProducer);
@@ -597,7 +601,9 @@ function assertPipelineEvidence(evidence) {
     evidence.guardianUserLinkCount !== 2 ||
     evidence.guardianLinkCount !== 2
   ) {
-    throw new Error(`ISEM_OPTICAL_EVIDENCE_MISMATCH: ${JSON.stringify(evidence)}`);
+    throw new Error(
+      `ISEM_OPTICAL_EVIDENCE_MISMATCH: students ${evidence.studentCount}, participants ${evidence.participantCount}, matched ${evidence.matchedCount}, quarantine ${evidence.quarantineCount}, examResults ${evidence.examResultCount}, reportResults ${evidence.snapshotResultCount}, studentLinks ${evidence.studentUserLinkCount}, guardianLinks ${evidence.guardianUserLinkCount}/${evidence.guardianLinkCount}`,
+    );
   }
   for (const sample of evidence.sampleScores) {
     const expected = expectedScores.get(sample.studentNo);
@@ -608,7 +614,9 @@ function assertPipelineEvidence(evidence) {
       sample.blank !== expected.blank ||
       Math.abs(sample.net - expected.net) > 0.0001
     ) {
-      throw new Error(`ISEM_OPTICAL_SAMPLE_SCORE_MISMATCH: ${JSON.stringify(sample)}`);
+      throw new Error(
+        `ISEM_OPTICAL_SAMPLE_SCORE_MISMATCH: studentNoHash ${sha256(sample.studentNo)}, correct ${sample.correct}, wrong ${sample.wrong}, blank ${sample.blank}, net ${sample.net}`,
+      );
     }
   }
 }
@@ -725,9 +733,18 @@ function sampleGuardianEmail(studentNo) {
 async function writeUiWorkerEvidence(filePath, payload) {
   if (!filePath) return;
   const resolvedPath = resolve(filePath);
+  assertPrivateRuntimeInputPath(resolvedPath);
   await mkdir(dirname(resolvedPath), { recursive: true });
-  await writeFile(resolvedPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  await writeFile(resolvedPath, `${JSON.stringify(payload, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  await chmod(resolvedPath, 0o600);
   await validateSmokeEvidenceOutputTarget(resolvedPath);
+}
+
+function assertPrivateRuntimeInputPath(filePath) {
+  const segments = filePath.split(/[\\/]+/).filter(Boolean);
+  if (!segments.includes("private")) {
+    throw new Error("ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_FILE private runtime input dizini altında olmalı.");
+  }
 }
 
 function sha256(value) {
@@ -736,7 +753,7 @@ function sha256(value) {
 
 function formatSampleScores(samples) {
   return samples
-    .map((sample) => `${sample.studentNo}:${sample.correct}/${sample.wrong}/${sample.blank}/${sample.net.toFixed(4)}`)
+    .map((sample, index) => `sample${index + 1}:${sample.correct}/${sample.wrong}/${sample.blank}/${sample.net.toFixed(4)}`)
     .join(",");
 }
 

@@ -168,11 +168,17 @@ export class InMemoryStudentStore implements StudentStore {
   }
 
   async purgePii(id: string): Promise<StudentRecord | undefined> {
-    const student = await this.findById(id);
+    const student = await this.findProfileById(id);
     if (!student) return undefined;
 
     student.firstName = "Anonim";
     student.lastName = "Ogrenci";
+    delete student.nationalIdEncrypted;
+    delete student.nationalIdHash;
+    delete student.birthDate;
+    delete student.phone;
+    delete student.email;
+    delete student.photoKey;
     return student;
   }
 
@@ -400,6 +406,12 @@ export class PostgresStudentStore implements StudentStore {
         `UPDATE "Student"
          SET "firstName" = 'Anonim',
              "lastName" = 'Ogrenci',
+             "nationalIdEncrypted" = NULL,
+             "nationalIdHash" = NULL,
+             "birthDate" = NULL,
+             "phone" = NULL,
+             "email" = NULL,
+             "photoKey" = NULL,
              "updatedAt" = now()
          WHERE "id" = $1
          RETURNING *`,

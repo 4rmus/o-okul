@@ -55,8 +55,11 @@ describe("SupportTicketAttachmentStorage", () => {
     const signedDownload = await storage.createSignedDownloadUrl(stored.storageKey ?? "");
 
     expect(stored).toEqual({
-      storageKey: "support-ticket-attachments/tenant-a/support-ticket-a/sha-a/hata_ekrani.txt",
+      storageKey: "support-ticket-attachments/sha-a",
     });
+    expect(stored.storageKey?.split("/")).not.toContain("tenant-a");
+    expect(stored.storageKey?.split("/")).not.toContain("support-ticket-a");
+    expect(stored.storageKey).not.toContain("hata");
     expect(body.toString("utf8")).toBe("remote file");
     expect(signedDownload).toMatchObject({
       url: "https://storage.example.test/support-ticket-attachment",

@@ -10,6 +10,7 @@ import type {
   ReportStudentProgress,
   ReportStudentSnapshot,
   ReportSnapshotRecord,
+  PublicStudentRecord,
   ScheduleLessonRecord,
   StudentRecord,
   StudentClassHistoryRecord,
@@ -26,6 +27,7 @@ import type {
   GuardianStudentRecord,
   NotificationDeviceTokenRecord,
   PublicNotificationDeviceTokenRecord,
+  PublicPortalSupportTicketRecord,
 } from "@uzman-hocam/shared-types";
 import { AnnouncementService } from "../announcement/announcement.service.js";
 import { AttendanceService } from "../attendance/attendance.service.js";
@@ -52,8 +54,10 @@ import {
 import { StudentService } from "../student/student.service.js";
 import { SupportTicketService } from "../support-ticket/support-ticket.service.js";
 import {
-  type SupportTicketCreateBody,
-  supportTicketCreateBodySchema,
+  type PortalSupportTicketCreateBody,
+  type TeacherPortalSupportTicketCreateBody,
+  portalSupportTicketCreateBodySchema,
+  teacherPortalSupportTicketCreateBodySchema,
 } from "../support-ticket/support-ticket-validation.js";
 import { TeacherNoteService } from "../teacher-note/teacher-note.service.js";
 import { TenantService } from "../tenant/tenant.service.js";
@@ -211,16 +215,16 @@ export class MeController {
 
   @Get("student/support-tickets")
   @Roles("STUDENT")
-  studentSupportTickets(): Promise<SupportTicketRecord[]> {
-    return this.supportTickets.listCurrentStudent(getRequestContext());
+  async studentSupportTickets(): Promise<PublicPortalSupportTicketRecord[]> {
+    return (await this.supportTickets.listCurrentStudent(getRequestContext())).map(toPublicPortalSupportTicketResponse);
   }
 
   @Post("student/support-tickets")
   @Roles("STUDENT")
-  createStudentSupportTicket(
-    @Body(zodBody(supportTicketCreateBodySchema)) body: SupportTicketCreateBody,
-  ): Promise<SupportTicketRecord> {
-    return this.supportTickets.createCurrentStudent(getRequestContext(), body);
+  async createStudentSupportTicket(
+    @Body(zodBody(portalSupportTicketCreateBodySchema)) body: PortalSupportTicketCreateBody,
+  ): Promise<PublicPortalSupportTicketRecord> {
+    return toPublicPortalSupportTicketResponse(await this.supportTickets.createCurrentStudent(getRequestContext(), body));
   }
 
   @Get("student/reports/:examId/snapshots/:snapshotId")
@@ -377,39 +381,39 @@ export class MeController {
 
   @Get("guardian/students/:studentId/support-tickets")
   @Roles("GUARDIAN")
-  guardianStudentSupportTickets(@Param("studentId") studentId: string): Promise<SupportTicketRecord[]> {
-    return this.supportTickets.listCurrentGuardianStudent(getRequestContext(), studentId);
+  async guardianStudentSupportTickets(@Param("studentId") studentId: string): Promise<PublicPortalSupportTicketRecord[]> {
+    return (await this.supportTickets.listCurrentGuardianStudent(getRequestContext(), studentId)).map(toPublicPortalSupportTicketResponse);
   }
 
   @Post("guardian/students/:studentId/support-tickets")
   @Roles("GUARDIAN")
-  createGuardianStudentSupportTicket(
+  async createGuardianStudentSupportTicket(
     @Param("studentId") studentId: string,
-    @Body(zodBody(supportTicketCreateBodySchema)) body: SupportTicketCreateBody,
-  ): Promise<SupportTicketRecord> {
-    return this.supportTickets.createCurrentGuardianStudent(getRequestContext(), studentId, body);
+    @Body(zodBody(portalSupportTicketCreateBodySchema)) body: PortalSupportTicketCreateBody,
+  ): Promise<PublicPortalSupportTicketRecord> {
+    return toPublicPortalSupportTicketResponse(await this.supportTickets.createCurrentGuardianStudent(getRequestContext(), studentId, body));
   }
 
   @Get("teacher/support-tickets")
   @Roles("TEACHER")
-  teacherSupportTickets(): Promise<SupportTicketRecord[]> {
-    return this.supportTickets.listCurrentTeacher(getRequestContext());
+  async teacherSupportTickets(): Promise<PublicPortalSupportTicketRecord[]> {
+    return (await this.supportTickets.listCurrentTeacher(getRequestContext())).map(toPublicPortalSupportTicketResponse);
   }
 
   @Post("teacher/support-tickets")
   @Roles("TEACHER")
-  createTeacherSupportTicket(
-    @Body(zodBody(supportTicketCreateBodySchema)) body: SupportTicketCreateBody,
-  ): Promise<SupportTicketRecord> {
-    return this.supportTickets.createCurrentTeacher(getRequestContext(), body);
+  async createTeacherSupportTicket(
+    @Body(zodBody(teacherPortalSupportTicketCreateBodySchema)) body: TeacherPortalSupportTicketCreateBody,
+  ): Promise<PublicPortalSupportTicketRecord> {
+    return toPublicPortalSupportTicketResponse(await this.supportTickets.createCurrentTeacher(getRequestContext(), body));
   }
 
   @Get("teacher/students")
   @Roles("TEACHER")
-  teacherStudents(): Promise<StudentRecord[]> {
+  teacherStudents(): Promise<PublicStudentRecord[]> {
     const context = getRequestContext();
     assertTeacherContext(context);
-    return this.students.list(context);
+    return this.students.listForViewer(context);
   }
 
   @Get("teacher/attendance")
@@ -673,6 +677,11 @@ function toPublicTeacherResponse(record: TeacherRecord): TeacherRecord {
 
 function toPublicNotificationDeviceResponse(record: NotificationDeviceTokenRecord): PublicNotificationDeviceTokenRecord {
   const { token: _token, userId: _userId, ...response } = record;
+  return response;
+}
+
+function toPublicPortalSupportTicketResponse(record: SupportTicketRecord): PublicPortalSupportTicketRecord {
+  const { requesterId: _requesterId, ...response } = record;
   return response;
 }
 

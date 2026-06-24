@@ -34,8 +34,18 @@
       "status": "PASS"
     },
     {
+      "label": "Live UI-worker result evidence",
+      "script": "scripts/check-live-ui-worker-result-evidence.mjs",
+      "status": "PASS"
+    },
+    {
       "label": "Inline upload migration evidence",
       "script": "scripts/check-inline-upload-content-migration-evidence.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "Audit null tenant evidence",
+      "script": "scripts/check-audit-null-tenant-evidence.mjs",
       "status": "PASS"
     },
     { "label": "Rate limit Redis evidence", "script": "scripts/check-rate-limit-evidence.mjs", "status": "PASS" },
@@ -699,6 +709,23 @@
       "pipelineDurationMs": 12000,
       "commandsPassed": ["pnpm isem-optical-pipeline:smoke"]
     },
+    "liveUiWorkerResult": {
+      "generatedAt": "2026-06-15T09:45:00.000Z",
+      "result": "PASS",
+      "check": "live_ui_worker_report_smoke",
+      "environment": "production",
+      "checkedAt": "2026-06-15T09:45:00.000Z",
+      "examHash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "firstStudentHash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "reportStatus": "READY",
+      "downloadedArtifacts": ["xlsx", "pdf"],
+      "karnePdfDownloaded": true,
+      "excelDownloaded": true,
+      "studentPortalViewed": true,
+      "guardianPortalViewed": true,
+      "commandsPassed": ["pnpm live:ui-worker:smoke"],
+      "gaps": []
+    },
     "inlineUploadMigration": {
       "environment": "production",
       "checkedAt": "2026-05-31T10:00:00.000Z",
@@ -735,7 +762,7 @@
           }
         ]
       },
-      "migration": {
+	      "migration": {
         "status": "MIGRATED",
         "generatedAt": "2026-05-31T09:30:00.000Z",
         "approvedBy": "ops-owner-redacted",
@@ -772,16 +799,76 @@
             "migratedRows": 2,
             "migratedBytes": 3072
           }
-        ]
+	        ]
+	      },
+	      "orphanAudit": {
+	        "result": "PASS",
+	        "status": "NO_ORPHANS",
+	        "environment": "production",
+	        "checkedAt": "2026-05-31T09:45:00.000Z",
+	        "bucketVerified": true,
+	        "subjects": [
+	          {
+	            "subject": "homework_material_files",
+	            "prefix": "homework-material-files/",
+	            "listedObjects": 4,
+	            "dbReferencedObjects": 4,
+	            "referencedObjectsPresent": 4,
+	            "dbReferencedMissingObjects": 0,
+	            "orphanObjects": 0,
+	            "invalidKeyObjects": 0,
+	            "legacyDbStorageKeyRows": 0
+	          },
+	          {
+	            "subject": "support_ticket_attachments",
+	            "prefix": "support-ticket-attachments/",
+	            "listedObjects": 2,
+	            "dbReferencedObjects": 2,
+	            "referencedObjectsPresent": 2,
+	            "dbReferencedMissingObjects": 0,
+	            "orphanObjects": 0,
+	            "invalidKeyObjects": 0,
+	            "legacyDbStorageKeyRows": 0
+	          }
+	        ],
+	        "commandsPassed": ["pnpm inline-upload-content:orphan-audit"],
+	        "gaps": []
+	      },
+	      "commandsPassed": [
+	        "pnpm inline-upload-content:audit",
+	        "INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true pnpm inline-upload-content:migrate",
+	        "pnpm inline-upload-content:orphan-audit"
+	      ],
+	      "evidenceReferences": [
+	        "artifacts/example/inline-upload-content/dry-run.json",
+	        "artifacts/example/inline-upload-content/migrated.json",
+	        "artifacts/example/inline-upload-content/orphan-audit.json"
+	      ]
+    },
+    "auditNullTenant": {
+      "environment": "production",
+      "checkedAt": "2026-05-31T10:30:00.000Z",
+      "auditNullTenant": {
+        "totalRows": 128,
+        "tenantRows": 120,
+        "nullTenantRows": 8,
+        "nullTenantBreakdown": {
+          "system": {
+            "count": 5,
+            "classificationRule": "tenantId IS NULL AND action LIKE 'system.%' OR action LIKE 'auth.system_%'"
+          },
+          "deletedTenant": {
+            "count": 3,
+            "classificationRule": "tenantId IS NULL AND diff.deletedTenantIdHash IS NOT NULL"
+          },
+          "unknown": {
+            "count": 0,
+            "classificationRule": "tenantId IS NULL AND no system/deletedTenant rule matched"
+          }
+        }
       },
-      "commandsPassed": [
-        "pnpm inline-upload-content:audit",
-        "INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true pnpm inline-upload-content:migrate"
-      ],
-      "evidenceReferences": [
-        "artifacts/example/inline-upload-content/dry-run.json",
-        "artifacts/example/inline-upload-content/migrated.json"
-      ]
+      "commandsPassed": ["pnpm audit-null-tenant:check"],
+      "evidenceReferences": ["artifacts/example/audit-null-tenant/classification-query.json"]
     },
     "rateLimit": {
       "environment": "production",

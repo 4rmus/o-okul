@@ -4,6 +4,7 @@ import type {
   ParserDelimiter,
   ParserEncoding,
 } from "./format-analyzer.js";
+import type { PortalSubjectRoleName, TenantAssignableRoleName } from "./role-capabilities.js";
 
 export interface Session {
   id: string;
@@ -104,6 +105,114 @@ export interface MeProfileResponse {
   subjectId?: string;
 }
 
+export interface TenantRecord {
+  id: string;
+  name: string;
+  slug: string;
+  plan: string;
+  licenseStartsAt?: string;
+  licenseEndsAt?: string;
+  institutionType?: string;
+  contactEmail?: string;
+  logoUrl?: string;
+  seatLimit?: number;
+  activeSeatCount?: number;
+  status: string;
+}
+
+export interface TenantCurrentProfileUpdateRequest {
+  contactEmail?: string;
+  institutionType?: string;
+  logoUrl?: string;
+  name?: string;
+}
+
+export interface TenantFirstAdminCreateRequest {
+  email: string;
+  mode?: "invitation" | "password";
+  name: string;
+  password?: string;
+}
+
+export interface TenantCreateRequest {
+  contactEmail?: string;
+  firstAdmin?: TenantFirstAdminCreateRequest;
+  id?: string;
+  institutionType?: string;
+  licenseEndsAt?: string;
+  licenseStartsAt?: string;
+  logoUrl?: string;
+  name: string;
+  plan?: string;
+  seatLimit?: number;
+  slug: string;
+  status?: string;
+}
+
+export interface TenantAdminUpdateRequest {
+  contactEmail?: string;
+  institutionType?: string;
+  licenseEndsAt?: string;
+  licenseStartsAt?: string;
+  logoUrl?: string;
+  name?: string;
+  plan?: string;
+  seatLimit?: number;
+  slug?: string;
+  status?: string;
+}
+
+export interface TenantUserRecord {
+  id: string;
+  email: string;
+  name: string;
+  tenantId: string;
+  roles: TenantAssignableRoleName[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TenantUserCreateRequest {
+  email: string;
+  name: string;
+  password: string;
+  roles: TenantAssignableRoleName[];
+}
+
+export interface TenantUserRoleUpdateRequest {
+  roles: TenantAssignableRoleName[];
+}
+
+export interface TenantFirstAdminProvisionResult extends TenantUserRecord {
+  activationTokenIssued?: boolean;
+  activationTokenExpiresAt?: string;
+}
+
+export type TenantCreateResponse =
+  | TenantRecord
+  | {
+      tenant: TenantRecord;
+      admin: TenantFirstAdminProvisionResult;
+    };
+
+export interface RolePreviewStartRequest {
+  targetRole: PortalSubjectRoleName;
+  targetSubjectId: string;
+}
+
+export interface RolePreviewSession {
+  id: string;
+  tenantId: string;
+  actorUserId: string;
+  targetRole: PortalSubjectRoleName;
+  targetSubjectType: PortalSubjectRoleName;
+  targetSubjectId: string;
+  mode: "READ_ONLY";
+  expiresAt: string;
+  createdAt: string;
+  previewToken: string;
+}
+
 export interface TeacherPortalLookupsResponse {
   campuses: CampusRecord[];
   classes: ClassRecord[];
@@ -120,6 +229,12 @@ export interface KvkkInventoryRecord {
   displayRef: string;
   piiCategories: string[];
   purgeAvailable: boolean;
+}
+
+export interface SelfPurgeResult {
+  userId: string;
+  tenantId?: string;
+  purgedAt: string;
 }
 
 export interface NotificationDeviceTokenRecord {
@@ -483,6 +598,91 @@ export interface StudentCreateRequest {
   guardian?: StudentGuardianProvisionRequest;
 }
 
+export interface StudentUpdateRequest {
+  firstName?: string;
+  lastName?: string;
+  classId?: string;
+  responsibleTeacherId?: string;
+  status?: StudentStatus;
+}
+
+export interface StudentTenantUpdateRequest {
+  tenantId: string;
+}
+
+export interface StudentProfileUpdateRequest {
+  nationalId?: string;
+  birthDate?: string;
+  phone?: string;
+  email?: string;
+  photoKey?: string;
+}
+
+export interface StudentEnrollmentActionRequest {
+  academicYearId?: string;
+  termId?: string;
+  classId?: string;
+  startsAt?: string;
+}
+
+export interface StudentBulkEnrollmentRequest extends StudentEnrollmentActionRequest {
+  studentIds?: string[];
+  classIdBySourceClassId?: Record<string, string>;
+  useAutomaticClassMapping?: boolean;
+}
+
+export interface StudentBulkEnrollmentResult {
+  updatedCount: number;
+  enrollments: StudentEnrollmentRecord[];
+}
+
+export interface StudentImportRequest {
+  fileBase64: string;
+}
+
+export interface StudentImportError {
+  row: number;
+  field: "className" | "firstName" | "lastName" | "quota" | "studentNo";
+  code: "CLASS_NOT_FOUND" | "REQUIRED" | "STUDENT_NO_DUPLICATE" | "STUDENT_QUOTA_EXCEEDED";
+  value?: string;
+}
+
+export interface StudentImportPreviewRow {
+  row: number;
+  classId?: string;
+  className?: string;
+  firstName: string;
+  guardian?: StudentGuardianProvisionRequest;
+  lastName: string;
+  studentNo?: string;
+}
+
+export interface StudentImportDryRunResult {
+  dryRun: true;
+  totalRows: number;
+  validRows: StudentImportPreviewRow[];
+  errors: StudentImportError[];
+  quota: {
+    limit: number;
+    current: number;
+    incoming: number;
+    wouldExceed: boolean;
+  };
+  wouldImport: boolean;
+}
+
+export interface StudentImportResult {
+  importedRows: number;
+  students: PublicStudentRecord[];
+}
+
+export interface StudentExportResult {
+  fileName: string;
+  contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  fileBase64: string;
+  rowCount: number;
+}
+
 export interface GuardianStudentDetailStudentRecord {
   id: string;
   studentNo?: string;
@@ -842,6 +1042,45 @@ export interface ApiListResponse<TItem> {
   meta: ApiListMeta;
 }
 
+export type IdentityInvitationSubjectType = "TEACHER" | "STUDENT" | "GUARDIAN";
+export type IdentityInvitationStatus = "PENDING" | "ACCEPTED";
+
+export interface IdentityInvitationRecord {
+  id: string;
+  tenantId: string;
+  subjectType: IdentityInvitationSubjectType;
+  subjectId: string;
+  email: string;
+  name: string;
+  role: IdentityInvitationSubjectType;
+  status: IdentityInvitationStatus;
+  expiresAt: string;
+  acceptedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IdentityInvitationCreateRequest {
+  email: string;
+  name?: string;
+  subjectId: string;
+  subjectType: IdentityInvitationSubjectType;
+}
+
+export interface IdentityInvitationAcceptRequest {
+  name?: string;
+  password: string;
+  token: string;
+}
+
+export type IdentityInvitationCreateResponse = IdentityInvitationRecord;
+export type IdentityInvitationResendResponse = IdentityInvitationRecord;
+
+export interface IdentityInvitationAcceptResponse {
+  status: "ACCEPTED";
+  acceptedAt?: string;
+}
+
 export interface MessageTemplateRecord {
   id: string;
   tenantId: string;
@@ -849,6 +1088,113 @@ export interface MessageTemplateRecord {
   channel: "SMS";
   body: string;
   deletedAt?: string;
+}
+
+export interface MessageTemplateCreateRequest {
+  tenantId?: string;
+  name: string;
+  channel?: "SMS";
+  body: string;
+}
+
+export interface MessageTemplateUpdateRequest {
+  name?: string;
+  channel?: "SMS";
+  body?: string;
+}
+
+export type BackupRestoreOperationType = "BACKUP" | "RESTORE_DRILL";
+export type BackupRestoreJobStatus = "queued" | "completed" | "failed";
+
+export interface BackupRestoreJobCreateRequest {
+  confirmationText: string;
+  operationType: BackupRestoreOperationType;
+  reason?: string;
+  targetReference: string;
+}
+
+export interface BackupRestoreJobRecord {
+  id: string;
+  tenantId: string;
+  requestedByUserId: string;
+  operationType: BackupRestoreOperationType;
+  targetReference: string;
+  reason?: string;
+  queueName: "backup-restore";
+  jobId: string;
+  status: BackupRestoreJobStatus;
+  result?: "PASS";
+  checkedTables: string[];
+  errorCode?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TenantDataExportPayload {
+  formatVersion: "tenant-export-v1";
+  tenantId: string;
+  generatedByUserId: string;
+  exportedAt: string;
+  scope: "tenant-user-entered-data";
+  rowLimitPerTable: number;
+  tables: Record<string, unknown[]>;
+  warnings: string[];
+}
+
+export interface SmsBatchRecipientInput {
+  to: string;
+}
+
+export interface SmsBatchCreateRequest {
+  templateId: string;
+  recipients: SmsBatchRecipientInput[];
+}
+
+export interface SmsBatchQueueResult {
+  tenantId: string;
+  templateId: string;
+  recipientCount: number;
+  queueName: "sms-batch";
+  jobId: string;
+  status: "queued";
+}
+
+export interface SmsBatchRecipientPreviewRequest {
+  announcementId?: string;
+  campusId?: string;
+  classId?: string;
+  courseId?: string;
+  gradeLevelId?: string;
+  studentStatus?: StudentStatus;
+  termId?: string;
+}
+
+export interface SmsBatchRecipientPreviewRecord {
+  to: string;
+  guardianId: string;
+  guardianName: string;
+  studentIds: string[];
+  studentNames: string[];
+}
+
+export interface SmsBatchRecipientPreviewResult {
+  recipients: SmsBatchRecipientPreviewRecord[];
+  recipientCount: number;
+}
+
+export interface SmsBatchDeliveryReportRecord {
+  id: string;
+  tenantId: string;
+  jobId: string;
+  templateId: string;
+  recipientCount: number;
+  sentCount: number;
+  failedCount: number;
+  billableSegments: number;
+  status: "queued" | "completed" | "failed";
+  providerErrorCode?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
@@ -1041,6 +1387,10 @@ export interface SupportTicketCreateRequest {
   priority?: SupportTicketPriority;
 }
 
+export type PortalSupportTicketCreateRequest = Omit<SupportTicketCreateRequest, "studentId" | "tenantId">;
+
+export type TeacherPortalSupportTicketCreateRequest = Omit<SupportTicketCreateRequest, "tenantId">;
+
 export interface SupportTicketUpdateRequest {
   priority?: SupportTicketPriority;
   status?: SupportTicketStatus;
@@ -1062,6 +1412,8 @@ export interface SupportTicketRecord {
   status: SupportTicketStatus;
   createdAt: string;
 }
+
+export type PublicPortalSupportTicketRecord = Omit<SupportTicketRecord, "requesterId">;
 
 export interface SupportTicketAttachmentCreateRequest {
   fileName: string;
@@ -1617,6 +1969,17 @@ export interface OpticalFormTemplateRecord {
   status: "APPROVED" | "DRAFT";
   createdAt: string;
   updatedAt: string;
+}
+
+export interface OpticalFormTemplateCreateRequest {
+  name: string;
+  suggestion: ParserConfigSuggestion;
+  version: string;
+}
+
+export interface OpticalFormTemplateApplyRequest {
+  examId: string;
+  version: string;
 }
 
 export type AnswerChoice = "A" | "B" | "C" | "D" | "E";

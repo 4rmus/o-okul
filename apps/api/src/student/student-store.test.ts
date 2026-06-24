@@ -75,6 +75,8 @@ describe("PostgresStudentStore", () => {
     expect(insertQueries[2]?.values).toEqual([expect.any(String), "tenant-a", "103", "Mert", "Import", null, "ACTIVE"]);
     expect(businessQueries.find((query) => query.values?.[1] === "Ada Guncel")?.values).toEqual(["student-a", "Ada Guncel", null, false, null, false, null, null]);
     expect(businessQueries.some((query) => query.sql.includes('"firstName" = \'Anonim\''))).toBe(true);
+    expect(businessQueries.some((query) => query.sql.includes('"nationalIdEncrypted" = NULL'))).toBe(true);
+    expect(businessQueries.some((query) => query.sql.includes('"photoKey" = NULL'))).toBe(true);
     expect(businessQueries.find((query) => query.values?.[1] === "tenant-a" && query.sql.includes('SET "tenantId"'))?.values).toEqual(["student-a", "tenant-a"]);
     expect(businessQueries.find((query) => query.values?.[1] === "2026-06-01T12:00:00.000Z")?.values).toEqual(["student-a", "2026-06-01T12:00:00.000Z"]);
   });

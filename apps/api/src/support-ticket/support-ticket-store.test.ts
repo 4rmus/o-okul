@@ -167,4 +167,71 @@ describe("PostgresSupportTicketStore", () => {
       "2026-06-08T10:10:00.000Z",
     ]);
   });
+
+  it("SupportTicketAttachment storageKey değerini Postgres'e yazar ama public record'dan saklar", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const pool = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        return {
+          rows: [
+            {
+              id: "support-attachment-s3",
+              tenantId: "tenant-a",
+              ticketId: "support-ticket-a",
+              uploadedById: "user-tenant-a",
+              fileName: "ekran.txt",
+              contentType: "text/plain",
+              byteSize: 11,
+              sha256: "sha-a",
+              contentBase64: null,
+              storageKey: "support-ticket-attachments/tenant-a/support-ticket-a/sha-a/ekran.txt",
+              createdAt: new Date("2026-06-08T09:10:00.000Z"),
+              deletedAt: null,
+            },
+          ] as T[],
+        };
+      },
+    };
+    const store = new PostgresSupportTicketStore(pool);
+
+    const created = await runWithRequestContext(
+      { userId: "user-tenant-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      () =>
+        store.createAttachment({
+          tenantId: "tenant-a",
+          ticketId: "support-ticket-a",
+          uploadedById: "user-tenant-a",
+          fileName: "ekran.txt",
+          contentType: "text/plain",
+          byteSize: 11,
+          sha256: "sha-a",
+          storageKey: "support-ticket-attachments/tenant-a/support-ticket-a/sha-a/ekran.txt",
+          createdAt: "2026-06-08T10:00:00.000Z",
+        }),
+    );
+
+    const insert = queries.find((query) => query.sql.includes('INSERT INTO "SupportTicketAttachment"'));
+    expect(insert?.sql).toContain('"storageKey"');
+    expect(insert?.values).toEqual([
+      expect.any(String),
+      "tenant-a",
+      "support-ticket-a",
+      "user-tenant-a",
+      "ekran.txt",
+      "text/plain",
+      11,
+      "sha-a",
+      null,
+      "support-ticket-attachments/tenant-a/support-ticket-a/sha-a/ekran.txt",
+      "2026-06-08T10:00:00.000Z",
+    ]);
+    expect(created).toMatchObject({
+      id: "support-attachment-s3",
+      fileName: "ekran.txt",
+      sha256: "sha-a",
+    });
+    expect((created as { contentBase64?: string }).contentBase64).toBeUndefined();
+    expect((created as { storageKey?: string }).storageKey).toBeUndefined();
+  });
 });

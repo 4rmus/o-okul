@@ -51,6 +51,10 @@ describe("RolePreview API", () => {
         });
         expect(body.previewToken).toEqual(expect.any(String));
         expect(body.expiresAt).toEqual(expect.any(String));
+        expect(body).not.toHaveProperty("accessToken");
+        expect(body).not.toHaveProperty("password");
+        expect(body).not.toHaveProperty("passwordHash");
+        expect(body).not.toHaveProperty("refreshToken");
       });
   });
 
