@@ -99,7 +99,8 @@ export class OpticalAnswerParser {
     const unmatched: UnmatchedParsedAnswer[] = [];
 
     for (const [index, line] of dataLines.entries()) {
-      const row = parseLine(line, input.parserConfig, index + input.parserConfig.skipHeaderLines + 1);
+      const normalizedLine = normalizeFixedWidthLine(line, input.parserConfig.delimiter);
+      const row = parseLine(normalizedLine, input.parserConfig, index + input.parserConfig.skipHeaderLines + 1);
       const reason = getQuarantineReason(row, input.parserConfig.fieldMapping.absentMarker);
       if (reason) {
         unmatched.push(toUnmatched(input, row, reason));
@@ -135,7 +136,7 @@ export class OpticalAnswerParser {
   parseResolvedQuarantine(input: ResolvedQuarantineParseInput): MatchedParsedAnswer {
     validateResolvedInput(input);
 
-    const row = parseLine(input.line, input.parserConfig, input.rowNumber);
+    const row = parseLine(normalizeFixedWidthLine(input.line, input.parserConfig.delimiter), input.parserConfig, input.rowNumber);
     const reason = getQuarantineReason(row, input.parserConfig.fieldMapping.absentMarker);
     if (reason) {
       throw new Error(`OPTICAL_RESOLVED_QUARANTINE_${reason}`);
@@ -230,6 +231,27 @@ function normalizeLines(content: string | Buffer): string[] {
     .replace(/\r/g, "\n")
     .split("\n")
     .filter((line) => line.trim().length > 0);
+}
+
+function normalizeFixedWidthLine(line: string, delimiter: ParserDelimiter): string {
+  if (delimiter !== "FIXED" || !line.includes("\t")) {
+    return line;
+  }
+
+  let normalized = "";
+  let column = 0;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]!;
+    if (char === "\t") {
+      const spaceCount = 8 - (column % 8);
+      normalized += " ".repeat(spaceCount);
+      column += spaceCount;
+      continue;
+    }
+    normalized += char;
+    column += 1;
+  }
+  return normalized;
 }
 
 function extractField(line: string, delimiter: ParserDelimiter, spec: FieldSpec): string {

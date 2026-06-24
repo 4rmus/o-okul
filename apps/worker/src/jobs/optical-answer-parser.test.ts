@@ -160,6 +160,29 @@ describe("OpticalAnswerParser", () => {
     expect(result.matched[0]?.answers[54]).toEqual({ questionNo: 55, answer: "" });
   });
 
+  it("OPTİK-7108 tablı gerçek satırı fixed kolonlara göre hizalar", () => {
+    const parser = new OpticalAnswerParser();
+    const firstLine = readFirstIsemRow();
+    const preset = getParserConfigPresetSuggestion("OPTIK_7108_LGS");
+
+    const result = parser.parse({
+      ...createBaseInput(),
+      content: firstLine,
+      parserConfig: preset,
+      participants: [{ participantId: "participant-tabbed", participantNo: "100", bookletType: "A" }],
+    });
+
+    expect(firstLine).toContain("\t");
+    expect(result.unmatched).toEqual([]);
+    expect(result.matched[0]).toMatchObject({
+      participantId: "participant-tabbed",
+      bookletType: "A",
+      status: "MATCHED",
+    });
+    expect(result.matched[0]?.answers).toHaveLength(90);
+    expect(result.matched[0]?.answers.slice(0, 20).map((item) => item.answer).join("")).toBe("CBCADDBABDBACAABDACA");
+  });
+
   it("öğrenci bulunamazsa ImportQuarantine adayı döndürür", () => {
     const parser = new OpticalAnswerParser();
 
@@ -458,6 +481,15 @@ function readFirstValidIsemARow(): string {
     .split("\n")
     .find((line) => line.length >= 171 && line.slice(50, 51).trim() === "A");
   if (!row) throw new Error("ISEM_VALID_A_ROW_MISSING");
+  return row;
+}
+
+function readFirstIsemRow(): string {
+  const row = readFileSync("../../ornek-veriler/iSEM .txt", "utf8")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .find((line) => line.trim());
+  if (!row) throw new Error("ISEM_FIRST_ROW_MISSING");
   return row;
 }
 

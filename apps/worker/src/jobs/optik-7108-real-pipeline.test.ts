@@ -49,7 +49,7 @@ const fixtures: RealExamFixture[] = [
     id: "isem-lgs-1",
     txtPath: "../../ornek-veriler/iSEM .txt",
     answerKeyPath: "../../ornek-veriler/iSEM - LGS - 1 Detaylı Cevap Anahtarı.xlsx",
-    expectedRows: { total: 21, valid: 20, A: 11, B: 9 },
+    expectedRows: { total: 21, valid: 21, A: 12, B: 9 },
     expectedStudents: { A: "102", B: "101" },
     expectedBPermutationHead: [
       20, 19, 18, 17, 16, 15, 14, 13, 12, 11,
@@ -72,7 +72,7 @@ const fixtures: RealExamFixture[] = [
     id: "3d-prova-lgs-2",
     txtPath: "../../ornek-veriler/3D.txt",
     answerKeyPath: "../../ornek-veriler/3D - PROVA LGS - 2 Detaylı Cevap Anahtarı.xlsx",
-    expectedRows: { total: 21, valid: 20, A: 9, B: 11 },
+    expectedRows: { total: 21, valid: 21, A: 9, B: 12 },
     expectedStudents: { A: "102", B: "101" },
     expectedBPermutationHead: [
       3, 4, 1, 2, 6, 7, 13, 8, 10, 11,
@@ -95,7 +95,7 @@ const fixtures: RealExamFixture[] = [
     id: "muba-lgs-3",
     txtPath: "../../ornek-veriler/MUBA.txt",
     answerKeyPath: "../../ornek-veriler/MUBA - LGS - 3 Detaylı Cevap Anahtarı.xlsx",
-    expectedRows: { total: 21, valid: 20, A: 11, B: 9 },
+    expectedRows: { total: 21, valid: 21, A: 11, B: 10 },
     expectedStudents: { A: "102", B: "101" },
     expectedBPermutationHead: [
       2, 1, 4, 5, 3, 7, 8, 6, 10, 11,
@@ -123,8 +123,8 @@ describe("OPTİK-7108 gerçek veri pipeline fixture", () => {
       const answerKey = await readAnswerKey(fixture.answerKeyPath);
       const rows = readOptikRows(fixture.txtPath);
       const validRows = rows.filter((row) => isValidOptik7108Line(row.line));
-      const aRow = validRows.find((row) => row.bookletType === "A");
-      const bRow = validRows.find((row) => row.bookletType === "B");
+      const aRow = validRows.find((row) => row.studentNo === fixture.expectedStudents.A && row.bookletType === "A");
+      const bRow = validRows.find((row) => row.studentNo === fixture.expectedStudents.B && row.bookletType === "B");
       if (!aRow || !bRow) throw new Error("OPTIK_7108_FIXTURE_ROW_MISSING");
 
       expect(rows).toHaveLength(fixture.expectedRows.total);
@@ -133,6 +133,24 @@ describe("OPTİK-7108 gerçek veri pipeline fixture", () => {
       expect(validRows.filter((row) => row.bookletType === "B")).toHaveLength(fixture.expectedRows.B);
       expect(aRow.studentNo).toBe(fixture.expectedStudents.A);
       expect(bRow.studentNo).toBe(fixture.expectedStudents.B);
+
+      const parsedRows = new OpticalAnswerParser().parse({
+        tenantId: "tenant-a",
+        examId: fixture.id,
+        rawImportId: `${fixture.id}-raw-import`,
+        parserConfigVersion: "optik-7108-lgs-v1",
+        content: validRows.map((row) => row.line).join("\n"),
+        parserConfig: getParserConfigPresetSuggestion("OPTIK_7108_LGS"),
+        participants: validRows.map((row) => ({
+          participantId: `participant-${row.studentNo}`,
+          participantNo: row.studentNo,
+          bookletType: row.bookletType,
+        })),
+      });
+
+      expect(parsedRows.unmatched).toEqual([]);
+      expect(parsedRows.matched).toHaveLength(fixture.expectedRows.valid);
+      expect(parsedRows.matched.every((row) => row.answers.length === 90)).toBe(true);
 
       const parsed = new OpticalAnswerParser().parse({
         tenantId: "tenant-a",
@@ -263,6 +281,7 @@ function readOptikRows(path: string): Array<{ line: string; studentNo: string; b
     .replace(/\r\n/g, "\n")
     .split("\n")
     .filter((line) => line.trim())
+    .map(normalizeFixedWidthLine)
     .map((line) => ({
       line,
       studentNo: line.slice(11, 15).trim(),
@@ -272,6 +291,27 @@ function readOptikRows(path: string): Array<{ line: string; studentNo: string; b
 
 function isValidOptik7108Line(line: string): boolean {
   return line.length >= 171;
+}
+
+function normalizeFixedWidthLine(line: string): string {
+  if (!line.includes("\t")) {
+    return line;
+  }
+
+  let normalized = "";
+  let column = 0;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]!;
+    if (char === "\t") {
+      const spaceCount = 8 - (column % 8);
+      normalized += " ".repeat(spaceCount);
+      column += spaceCount;
+      continue;
+    }
+    normalized += char;
+    column += 1;
+  }
+  return normalized;
 }
 
 function cellText(value: ExcelJS.CellValue): string {

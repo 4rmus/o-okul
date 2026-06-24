@@ -46,10 +46,10 @@ const answerKeyVersion = "isem-lgs-1-v1";
 const txtPath = "ornek-veriler/iSEM .txt";
 const answerKeyPath = "ornek-veriler/iSEM - LGS - 1 Detaylı Cevap Anahtarı.xlsx";
 const expectedRawRowCount = 21;
-const expectedMatchedCount = 20;
-const expectedQuarantineCount = 1;
+const expectedMatchedCount = 21;
+const expectedQuarantineCount = 0;
 const expectedParticipantCount = 21;
-const expectedValidBookletCounts = { A: 11, B: 9 };
+const expectedValidBookletCounts = { A: 12, B: 9 };
 const sampleStudentNos = ["102", "101"];
 const smokeEmailDomain = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL_DOMAIN ?? "example.test";
 const smokeEmail = process.env.ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL ?? `isem-optical-smoke-${runId}@${smokeEmailDomain}`;
@@ -138,9 +138,7 @@ try {
     summary.matchedCount !== expectedMatchedCount ||
     summary.quarantinedCount !== expectedQuarantineCount ||
     summary.totalRows !== expectedRawRowCount ||
-    summary.quarantineReasons.length !== 1 ||
-    summary.quarantineReasons[0]?.reason !== "ANSWER_PARSE_INVALID" ||
-    summary.quarantineReasons[0]?.count !== expectedQuarantineCount
+    summary.quarantineReasons.length !== 0
   ) {
     throw new Error(
       `ISEM_OPTICAL_PARSE_SUMMARY_MISMATCH: totalRows ${summary.totalRows}, matched ${summary.matchedCount}, quarantined ${summary.quarantinedCount}`,
@@ -740,6 +738,7 @@ function readOpticalRows(content) {
     .replace(/\r\n/g, "\n")
     .split("\n")
     .filter((line) => line.trim())
+    .map(normalizeFixedWidthLine)
     .map((line, index) => ({
       rowNumber: index + 1,
       line,
@@ -775,6 +774,27 @@ function assertOpticalRows(rows) {
       throw new Error(`ISEM_OPTICAL_SAMPLE_STUDENT_MISSING: ${studentNo}`);
     }
   }
+}
+
+function normalizeFixedWidthLine(line) {
+  if (!line.includes("\t")) {
+    return line;
+  }
+
+  let normalized = "";
+  let column = 0;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === "\t") {
+      const spaceCount = 8 - (column % 8);
+      normalized += " ".repeat(spaceCount);
+      column += spaceCount;
+      continue;
+    }
+    normalized += char;
+    column += 1;
+  }
+  return normalized;
 }
 
 async function insertRows(client, sqlPrefix, columns, rows, rowSuffix = ", now()") {
