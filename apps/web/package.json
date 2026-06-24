@@ -8,14 +8,14 @@
     "a11y": "playwright test -c playwright.next.config.ts e2e-next/a11y-next.spec.ts",
     "backup-restore-panel": "playwright test -c playwright.next.config.ts e2e-next/backup-restore-next.spec.ts",
     "dev": "next dev --hostname 0.0.0.0 --port 3001",
-    "lint": "tsc -p tsconfig.json --noEmit",
+    "lint": "rm -rf .next && tsc -p tsconfig.json --noEmit",
     "next:build": "next build",
     "next:dev": "next dev --hostname 0.0.0.0 --port ${NEXT_E2E_PORT:-3001}",
     "next:e2e": "playwright test -c playwright.next.config.ts",
-    "next:typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsc -p tsconfig.json --noEmit",
+    "next:typecheck": "rm -rf .next && tsc -p tsconfig.json --noEmit",
+    "test": "rm -rf .next && tsc -p tsconfig.json --noEmit",
     "test:e2e": "playwright test -c playwright.next.config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "rm -rf .next && tsc -p tsconfig.json --noEmit",
     "ux-contract": "playwright test -c playwright.next.config.ts --workers=1 e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts"
   },
   "devDependencies": {
