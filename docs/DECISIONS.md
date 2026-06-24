@@ -264,5 +264,5 @@ Son kontrol: 2026-06-23
 
 | ID | Faz | Bloklar mı? | Soru | Beklenen kanıt |
 |---|---|---|---|---|
-| OPEN-20260529-03 | Faz 4 / Faz 10 | Hayır | iSEM fixture geldi; staging/pilot sınav döngüsü kanıtı üretildi mi? | Gerçek iSEM fixture testleri + `pnpm live:exam-cycle:check` staging artifact'i + pilot UAT kanıtı |
+| OPEN-20260529-03 | Faz 4 / Faz 10 | Hayır | iSEM fixture geldi; pilot sınav döngüsü kabulü üretildi mi? | Gerçek iSEM fixture testleri + staging `pnpm live:exam-cycle:check` artifact'i tamam; kalan pilot UAT kanıtı |
 | OPEN-20260529-04 | Faz 5 | Hayır | Netgsm test credential/canlı hesap doğrulaması nasıl yapılacak? | Test hesabı secretları + `pnpm sms:smoke` canlı/staging sonucu |
