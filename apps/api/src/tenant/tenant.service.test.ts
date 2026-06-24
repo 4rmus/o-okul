@@ -213,6 +213,28 @@ describe("TenantService", () => {
     })).rejects.toThrow("TENANT_SLUG_ALREADY_EXISTS");
   });
 
+  it("ilk admin e-postası çakışmasını anlaşılır tenant hatasına çevirir", async () => {
+    const store = {
+      createWithFirstAdmin: async () => {
+        throw Object.assign(new Error("TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS"), {
+          code: "TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS",
+        });
+      },
+    };
+    const service = new TenantService(store as never);
+
+    await expect(service.create(systemContext, {
+      name: "Çakışan Admin Kurumu",
+      slug: "cakisan-admin-kurumu",
+      firstAdmin: {
+        name: "Demo Admin",
+        email: "demo-admin@example.test",
+        mode: "password",
+        password: "password1",
+      },
+    })).rejects.toThrow("TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS");
+  });
+
   it("tenant admin kurum yönetimi yapamaz", async () => {
     const service = new TenantService(new InMemoryTenantStore());
 

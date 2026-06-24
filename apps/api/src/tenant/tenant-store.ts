@@ -237,6 +237,15 @@ export class PostgresTenantStore implements TenantStore {
 
   async createWithFirstAdmin(input: CreateTenantInput, firstAdmin: CreateTenantFirstAdminInput): Promise<TenantCreateWithAdminResult> {
     return withBypassRlsQuery(this.pool, async (client) => {
+      const normalizedEmail = firstAdmin.email.toLowerCase();
+      const existingUser = await client.query<{ id: string }>(
+        `SELECT "id" FROM "User" WHERE lower("email") = lower($1) LIMIT 1`,
+        [normalizedEmail],
+      );
+      if (existingUser.rows[0]) {
+        throw tenantFirstAdminEmailAlreadyExists();
+      }
+
       const tenantResult = await client.query<TenantRow>(
         `INSERT INTO "Tenant" ("id", "name", "slug", "plan", "licenseStartsAt", "licenseEndsAt", "institutionType", "contactEmail", "logoUrl", "seatLimit", "status", "updatedAt")
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
@@ -256,28 +265,17 @@ export class PostgresTenantStore implements TenantStore {
         ],
       );
       const tenant = mapTenantRow(tenantResult.rows[0]!);
-      const normalizedEmail = firstAdmin.email.toLowerCase();
       const passwordHash = firstAdmin.mode === "invitation" ? "" : hashPassword(firstAdmin.password ?? "", randomUUID());
-      const shouldUpdatePassword = firstAdmin.mode === "password";
       const createdUser = await client.query<{ id: string }>(
         `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
          VALUES ($1, $2, $3, $4, now())
-         ON CONFLICT ("email") DO UPDATE
-         SET "name" = EXCLUDED."name",
-             "passwordHash" = CASE WHEN $5::boolean THEN EXCLUDED."passwordHash" ELSE "User"."passwordHash" END,
-             "updatedAt" = now()
+         ON CONFLICT ("email") DO NOTHING
          RETURNING "id"`,
-        [randomUUID(), normalizedEmail, firstAdmin.name, passwordHash, shouldUpdatePassword],
+        [randomUUID(), normalizedEmail, firstAdmin.name, passwordHash],
       );
-      const userId =
-        createdUser.rows[0]?.id ??
-        (
-          await client.query<{ id: string }>(`SELECT "id" FROM "User" WHERE lower("email") = lower($1) LIMIT 1`, [
-            normalizedEmail,
-          ])
-        ).rows[0]?.id;
+      const userId = createdUser.rows[0]?.id;
       if (!userId) {
-        throw new Error("USER_CREATE_FAILED");
+        throw tenantFirstAdminEmailAlreadyExists();
       }
 
       await client.query(`DELETE FROM "TenantMembership" WHERE "tenantId" = $1 AND "userId" = $2`, [tenant.id, userId]);
@@ -373,6 +371,12 @@ export class PostgresTenantStore implements TenantStore {
   async delete(id: string): Promise<TenantRecord | undefined> {
     return this.update(id, { status: "DELETED" });
   }
+}
+
+function tenantFirstAdminEmailAlreadyExists(): Error & { code: string } {
+  return Object.assign(new Error("TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS"), {
+    code: "TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS",
+  });
 }
 
 interface TenantRow {
