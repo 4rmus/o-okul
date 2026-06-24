@@ -75,13 +75,11 @@ describe("OpticalAnswerParser", () => {
 
   it("OPTİK-7108 gerçek satırındaki sol boşluk dolgusunu fixed kolonlarda korur", () => {
     const parser = new OpticalAnswerParser();
-    const [firstLine] = readFileSync("../../ornek-veriler/iSEM .txt", "utf8")
-      .replace(/\r\n/g, "\n")
-      .split("\n");
+    const firstLine = readFirstValidIsemARow();
 
     const result = parser.parse({
       ...createBaseInput(),
-      content: firstLine ?? "",
+      content: firstLine,
       parserConfig: {
         delimiter: "FIXED",
         skipHeaderLines: 0,
@@ -91,7 +89,7 @@ describe("OpticalAnswerParser", () => {
           answers: { kind: "fixed", start: 51, length: 20, estimatedQuestionCount: 20 },
         },
       },
-      participants: [{ participantId: "participant-real", participantNo: "331", bookletType: "A" }],
+      participants: [{ participantId: "participant-real", participantNo: "102", bookletType: "A" }],
     });
 
     expect(result.unmatched).toEqual([]);
@@ -100,18 +98,16 @@ describe("OpticalAnswerParser", () => {
       rowNumber: 1,
       status: "MATCHED",
     });
-    expect(result.matched[0]?.answers.map((item) => item.answer).join("")).toBe("CBCADDBABDBACAABDACA");
+    expect(result.matched[0]?.answers.map((item) => item.answer).join("")).toBe("CBCCDCBABDBCBDABCAAA");
   });
 
   it("OPTİK-7108 gerçek satırındaki bitişik olmayan ders bloklarını 90 soruya birleştirir", () => {
     const parser = new OpticalAnswerParser();
-    const [firstLine] = readFileSync("../../ornek-veriler/iSEM .txt", "utf8")
-      .replace(/\r\n/g, "\n")
-      .split("\n");
+    const firstLine = readFirstValidIsemARow();
 
     const result = parser.parse({
       ...createBaseInput(),
-      content: firstLine ?? "",
+      content: firstLine,
       parserConfig: {
         delimiter: "FIXED",
         skipHeaderLines: 0,
@@ -132,7 +128,7 @@ describe("OpticalAnswerParser", () => {
           },
         },
       },
-      participants: [{ participantId: "participant-real", participantNo: "331", bookletType: "A" }],
+      participants: [{ participantId: "participant-real", participantNo: "102", bookletType: "A" }],
     });
 
     const answers = result.matched[0]?.answers ?? [];
@@ -141,24 +137,22 @@ describe("OpticalAnswerParser", () => {
     expect(answers[0]).toEqual({ questionNo: 1, answer: "C" });
     expect(answers[19]).toEqual({ questionNo: 20, answer: "A" });
     expect(answers[20]).toEqual({ questionNo: 21, answer: "B" });
-    expect(answers[49]).toEqual({ questionNo: 50, answer: "D" });
+    expect(answers[49]).toEqual({ questionNo: 50, answer: "C" });
     expect(answers[54]).toEqual({ questionNo: 55, answer: "" });
-    expect(answers[57]).toEqual({ questionNo: 58, answer: "" });
+    expect(answers[57]).toEqual({ questionNo: 58, answer: "C" });
     expect(answers[89]).toEqual({ questionNo: 90, answer: "A" });
   });
 
   it("OPTİK-7108 LGS preset'i gerçek satırı 90 soruya parse eder", () => {
     const parser = new OpticalAnswerParser();
-    const [firstLine] = readFileSync("../../ornek-veriler/iSEM .txt", "utf8")
-      .replace(/\r\n/g, "\n")
-      .split("\n");
+    const firstLine = readFirstValidIsemARow();
     const preset = getParserConfigPresetSuggestion("OPTIK_7108_LGS");
 
     const result = parser.parse({
       ...createBaseInput(),
-      content: firstLine ?? "",
+      content: firstLine,
       parserConfig: preset,
-      participants: [{ participantId: "participant-real", participantNo: "331", bookletType: "A" }],
+      participants: [{ participantId: "participant-real", participantNo: "102", bookletType: "A" }],
     });
 
     expect(result.unmatched).toEqual([]);
@@ -456,6 +450,15 @@ function createDelimitedConfig(): Pick<ParserConfigSuggestion, "delimiter" | "sk
       answers: { kind: "delimited", column: 2, estimatedQuestionCount: 5 },
     },
   };
+}
+
+function readFirstValidIsemARow(): string {
+  const row = readFileSync("../../ornek-veriler/iSEM .txt", "utf8")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .find((line) => line.length >= 171 && line.slice(50, 51).trim() === "A");
+  if (!row) throw new Error("ISEM_VALID_A_ROW_MISSING");
+  return row;
 }
 
 function hashNationalId(value: string): string {
