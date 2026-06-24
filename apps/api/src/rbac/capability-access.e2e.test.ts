@@ -2,10 +2,16 @@ import "reflect-metadata";
 import { randomUUID } from "node:crypto";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import type { ExamParticipantRecord, ExamRecord } from "@o-okul/shared-types";
+import type { AnswerKeyRecord, ExamParticipantRecord, ExamRecord } from "@o-okul/shared-types";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
+import { AnswerKeyExcelImportService } from "../exam/answer-key-excel-import.service.js";
+import {
+  answerKeyRepositoryToken,
+  type AnswerKeyRepository,
+  type SaveAnswerKeyInput,
+} from "../exam/answer-key.service.js";
 import {
   type CreateExamParticipantRepositoryInput,
   type CreateExamRepositoryInput,
@@ -15,6 +21,7 @@ import {
   examRepositoryToken,
   type UpdateExamRepositoryInput,
 } from "../exam/exam.service.js";
+import { InMemorySupportTicketStore, supportTicketStoreToken } from "../support-ticket/support-ticket-store.js";
 
 describe("Capability access matrix", () => {
   let app: INestApplication;
@@ -22,8 +29,10 @@ describe("Capability access matrix", () => {
   let tenantAdminToken: string;
   let assistantToken: string;
   let teacherToken: string;
+  let answerKeys: FakeAnswerKeyRepository;
 
   beforeAll(async () => {
+    answerKeys = new FakeAnswerKeyRepository();
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -31,6 +40,25 @@ describe("Capability access matrix", () => {
       .useValue(new FakeExamRepository())
       .overrideProvider(examParticipantRepositoryToken)
       .useValue(new FakeExamParticipantRepository())
+      .overrideProvider(supportTicketStoreToken)
+      .useValue(new InMemorySupportTicketStore())
+      .overrideProvider(answerKeyRepositoryToken)
+      .useValue(answerKeys)
+      .overrideProvider(AnswerKeyExcelImportService)
+      .useValue({
+        import(context: { tenantId?: string }, input: { examId?: string; version?: string }) {
+          const answerKey = answerKeys.add({
+            tenantId: context.tenantId ?? "tenant-a",
+            examId: input.examId ?? "exam-a",
+            version: input.version ?? "answer-key-v1",
+          });
+          return Promise.resolve({
+            imported: true,
+            answerKey,
+            bookletVariants: [],
+          });
+        },
+      })
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -161,16 +189,66 @@ describe("Capability access matrix", () => {
     await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${assistantToken}`)
-      .send({ title: "Md.Yrd Yetki Denemesi" })
+      .send(examCreateBody("Md.Yrd Yetki Denemesi"))
       .expect(201);
 
     await request(server)
       .post("/exams")
       .set("Authorization", `Bearer ${teacherToken}`)
-      .send({ title: "Öğretmen Yetki Denemesi" })
+      .send(examCreateBody("Öğretmen Yetki Denemesi"))
       .expect(403);
   });
+
+  function examCreateBody(title: string) {
+    return {
+      title,
+      answerKey: {
+        version: "rbac-answer-key-v1",
+        fileBase64: Buffer.from("fake-xlsx").toString("base64"),
+      },
+    };
+  }
 });
+
+class FakeAnswerKeyRepository implements AnswerKeyRepository {
+  private readonly records = new Map<string, AnswerKeyRecord>();
+
+  add(input: Pick<SaveAnswerKeyInput, "tenantId" | "examId" | "version">): AnswerKeyRecord {
+    const now = "2026-03-01T00:00:00.000Z";
+    const record: AnswerKeyRecord = {
+      id: randomUUID(),
+      tenantId: input.tenantId,
+      examId: input.examId,
+      version: input.version,
+      questionCount: 1,
+      branches: [{ branch: "Matematik", questionCount: 1 }],
+      scoringConfig: { wrongPenalty: 0.25 },
+      status: "DRAFT",
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.records.set(`${record.tenantId}:${record.examId}:${record.version}`, record);
+    return record;
+  }
+
+  async create(input: SaveAnswerKeyInput): Promise<AnswerKeyRecord> {
+    return this.add(input);
+  }
+
+  async list(tenantId: string, examId: string): Promise<AnswerKeyRecord[]> {
+    return [...this.records.values()].filter((record) => record.tenantId === tenantId && record.examId === examId);
+  }
+
+  async publish(tenantId: string, examId: string, version: string): Promise<AnswerKeyRecord | undefined> {
+    const record = this.records.get(`${tenantId}:${examId}:${version}`);
+    if (!record) {
+      return undefined;
+    }
+    const updated: AnswerKeyRecord = { ...record, status: "PUBLISHED", publishedAt: "2026-03-01T00:00:00.000Z" };
+    this.records.set(`${tenantId}:${examId}:${version}`, updated);
+    return updated;
+  }
+}
 
 class FakeExamRepository implements ExamRepository {
   private readonly exams = new Map<string, ExamRecord>();

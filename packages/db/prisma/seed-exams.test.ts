@@ -6,6 +6,14 @@ describe("seed-exams gerçek pipeline", () => {
   it("demo kişi fixture'larını Excel ve TXT kaynaklarından üretir", async () => {
     const fixtures = await loadDemoFixtures();
 
+    expect(fixtures.courses.map((course) => course.name)).toEqual([
+      "Türkçe",
+      "Matematik",
+      "Fen Bilimleri",
+      "T.C. İnkılap Tarihi ve Atatürkçülük",
+      "Din Kültürü ve Ahlak Bilgisi",
+      "İngilizce",
+    ]);
     expect(fixtures.classes.map((demoClass) => demoClass.name)).toEqual(["8 LGS A", "8 LGS B", "8 LGS C", "8 LGS D"]);
     expect(fixtures.teachers).toHaveLength(12);
     expect(fixtures.students).toHaveLength(21);
@@ -47,18 +55,20 @@ describe("seed-exams gerçek pipeline", () => {
       bPermutationHead: exam.bookletVariants[0]?.permutation.slice(0, 5),
       matchedDemoStudents: exam.matchedEntries.length,
       unmatchedRows: exam.unmatchedCount,
-      hasInvalidRow100Result: exam.matchedEntries.some((entry) => entry.studentNo === "100"),
+      hasRow100Result: exam.matchedEntries.some((entry) => entry.studentNo === "100"),
       hasTxtOnlyStudents: ["119", "120"].every((studentNo) => exam.matchedEntries.some((entry) => entry.studentNo === studentNo)),
+      branches: [...new Set(exam.questions.map((question) => question.branch))],
       accountStudentScore: exam.matchedEntries.find((entry) => entry.studentNo === "101")?.score.total,
     }))).toEqual([
       {
         id: "exam-demo-isem-lgs-1",
         questionCount: 90,
         bPermutationHead: [20, 19, 18, 17, 16],
-        matchedDemoStudents: 20,
-        unmatchedRows: 1,
-        hasInvalidRow100Result: false,
+        matchedDemoStudents: 21,
+        unmatchedRows: 0,
+        hasRow100Result: true,
         hasTxtOnlyStudents: true,
+        branches: ["Türkçe", "T.C. İnkılap Tarihi ve Atatürkçülük", "Din Kültürü ve Ahlak Bilgisi", "İngilizce", "Matematik", "Fen Bilimleri"],
         accountStudentScore: {
           correct: 44,
           wrong: 31,
@@ -73,10 +83,11 @@ describe("seed-exams gerçek pipeline", () => {
         id: "exam-demo-muba-lgs-3",
         questionCount: 90,
         bPermutationHead: [2, 1, 4, 5, 3],
-        matchedDemoStudents: 20,
-        unmatchedRows: 1,
-        hasInvalidRow100Result: false,
+        matchedDemoStudents: 21,
+        unmatchedRows: 0,
+        hasRow100Result: true,
         hasTxtOnlyStudents: true,
+        branches: ["Türkçe", "T.C. İnkılap Tarihi ve Atatürkçülük", "Din Kültürü ve Ahlak Bilgisi", "İngilizce", "Matematik", "Fen Bilimleri"],
         accountStudentScore: {
           correct: 43,
           wrong: 43,
@@ -91,10 +102,11 @@ describe("seed-exams gerçek pipeline", () => {
         id: "exam-demo-3d-lgs-2",
         questionCount: 90,
         bPermutationHead: [3, 4, 1, 2, 6],
-        matchedDemoStudents: 20,
-        unmatchedRows: 1,
-        hasInvalidRow100Result: false,
+        matchedDemoStudents: 21,
+        unmatchedRows: 0,
+        hasRow100Result: true,
         hasTxtOnlyStudents: true,
+        branches: ["Türkçe", "T.C. İnkılap Tarihi ve Atatürkçülük", "Din Kültürü ve Ahlak Bilgisi", "İngilizce", "Matematik", "Fen Bilimleri"],
         accountStudentScore: {
           correct: 24,
           wrong: 48,

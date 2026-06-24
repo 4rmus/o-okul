@@ -79,6 +79,9 @@ describe("PostgresTenantStore", () => {
         return {
           async query<T>(sql: string, values?: unknown[]) {
             queries.push({ sql, values });
+            if (sql.includes('SELECT "id" FROM "User" WHERE lower("email")')) {
+              return { rows: [] as T[] };
+            }
             if (sql.includes('INSERT INTO "Tenant"')) {
               return {
                 rows: [
@@ -138,10 +141,39 @@ describe("PostgresTenantStore", () => {
     expect(queries.some((query) => query.sql.includes("set_config('app.bypass_rls'") && query.values?.[0] === "true")).toBe(true);
     expect(queries.some((query) => query.sql.includes('INSERT INTO "Tenant"'))).toBe(true);
     const insertUser = queries.find((query) => query.sql.includes('INSERT INTO "User"'));
-    expect(insertUser?.sql).toContain('ON CONFLICT ("email") DO UPDATE');
-    expect(insertUser?.sql).toContain('CASE WHEN $5::boolean');
-    expect(insertUser?.values?.[4]).toBe(true);
+    expect(insertUser?.sql).toContain('ON CONFLICT ("email") DO NOTHING');
+    expect(insertUser?.values).toHaveLength(4);
     expect(queries.some((query) => query.sql.includes('INSERT INTO "TenantMembership"'))).toBe(true);
     expect(queries.at(-1)?.sql).toBe("COMMIT");
+  });
+
+  it("ilk admin e-postası başka kullanıcıda varsa tenant oluşturmadan reddeder", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const pool = {
+      async query<T>() {
+        return { rows: [] as T[] };
+      },
+      async connect() {
+        return {
+          async query<T>(sql: string, values?: unknown[]) {
+            queries.push({ sql, values });
+            if (sql.includes('SELECT "id" FROM "User" WHERE lower("email")')) {
+              return { rows: [{ id: "user-existing" }] as T[] };
+            }
+            return { rows: [] as T[] };
+          },
+          release() {},
+        };
+      },
+    };
+    const store = new PostgresTenantStore(pool);
+
+    await expect(store.createWithFirstAdmin(
+      { id: "tenant-duplicate-admin", name: "Duplicate Admin Tenant", slug: "duplicate-admin-tenant" },
+      { name: "Existing Admin", email: "existing.admin@example.test", mode: "password", password: "password1" },
+    )).rejects.toThrow("TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS");
+
+    expect(queries.some((query) => query.sql.includes('INSERT INTO "Tenant"'))).toBe(false);
+    expect(queries.at(-1)?.sql).toBe("ROLLBACK");
   });
 });
