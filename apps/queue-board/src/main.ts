@@ -114,7 +114,7 @@ function requireBasicAuth(config: QueueBoardConfig) {
       return;
     }
 
-    response.setHeader("WWW-Authenticate", 'Basic realm="Uzman Hocam Queue Board"');
+    response.setHeader("WWW-Authenticate", 'Basic realm="o-okul Queue Board"');
     response.status(401).send("Unauthorized");
   };
 }

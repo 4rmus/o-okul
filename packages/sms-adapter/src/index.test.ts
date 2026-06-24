@@ -111,7 +111,7 @@ describe("NetgsmSmsAdapter", () => {
           },
         };
       },
-      msgHeader: "UZMANHOCAM",
+      msgHeader: "OOKUL",
       password: "secret",
       usercode: "8500000000",
     });
@@ -130,7 +130,7 @@ describe("NetgsmSmsAdapter", () => {
       "content-type": "application/json",
     });
     expect(JSON.parse(calls[0]?.init.body ?? "{}")).toEqual({
-      msgheader: "UZMANHOCAM",
+      msgheader: "OOKUL",
       messages: [{ msg: "Deneme mesajı", no: "905000000001" }],
       encoding: "TR",
       iysfilter: "0",
@@ -146,7 +146,7 @@ describe("NetgsmSmsAdapter", () => {
           return JSON.stringify({ code: "30", description: "Geçersiz kullanıcı" });
         },
       }),
-      msgHeader: "UZMANHOCAM",
+      msgHeader: "OOKUL",
       password: "secret",
       usercode: "8500000000",
     });
@@ -167,7 +167,7 @@ describe("NetgsmSmsAdapter", () => {
           return JSON.stringify({ code: "70", description: "Parametre hatalı" });
         },
       }),
-      msgHeader: "UZMANHOCAM",
+      msgHeader: "OOKUL",
       password: "secret",
       usercode: "8500000000",
     });
@@ -184,7 +184,7 @@ describe("NetgsmSmsAdapter", () => {
       SMS_PROVIDER: "netgsm",
       NETGSM_USERCODE: "8500000000",
       NETGSM_PASSWORD: "secret",
-      NETGSM_MSG_HEADER: "UZMANHOCAM",
+      NETGSM_MSG_HEADER: "OOKUL",
     })).toBeInstanceOf(NetgsmSmsAdapter);
 
     expect(() => createSmsAdapterFromEnv({ SMS_PROVIDER: "netgsm" }))

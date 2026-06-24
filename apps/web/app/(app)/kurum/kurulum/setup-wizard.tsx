@@ -607,7 +607,7 @@ function GeneralStep({
           invalid={Boolean(errors.institutionName ?? errors["general.institutionName"])}
           value={draft.general.institutionName}
           onChange={(event) => updateDraft("general", { institutionName: event.target.value })}
-          placeholder="Uzman Hocam Eğitim Kurumu"
+          placeholder="o-okul Eğitim Kurumu"
         />
       </Field>
       <Field label="Kurum türü">

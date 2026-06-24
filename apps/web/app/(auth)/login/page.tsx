@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { AuthResponse, MfaChallengeResponse } from "@uzman-hocam/shared-types";
 import { Button, Checkbox, Field, Input, SegmentedControl } from "@uzman-hocam/ui";
 import { useAuth } from "../../providers.js";
+import { appBrand } from "../../../src/brand.js";
 import { MfaRequiredError } from "../../../src/api-client.js";
 
 const demoAccounts = [
@@ -94,8 +95,8 @@ export default function LoginPage() {
   return (
     <section className="next-auth-panel" aria-labelledby="login-title">
       <div className="next-brand">
-        <span className="next-brand-mark">UH</span>
-        <span>Uzman Hocam</span>
+        <span className="next-brand-mark">{appBrand.mark}</span>
+        <span>{appBrand.name}</span>
       </div>
       <form className="next-form" aria-label="Giriş formu" onSubmit={(event) => void handleSubmit(event)}>
         <h1 id="login-title">Giriş</h1>

@@ -13,11 +13,11 @@ describe("getAllowedCorsOrigins", () => {
   it("allows additional exact origins from CORS_ORIGINS", () => {
     expect(getAllowedCorsOrigins({
       WEB_URL: "https://212.108.107.190",
-      CORS_ORIGINS: "http://212.108.107.190:3001, https://pilot.uzmanhocam.com ",
+      CORS_ORIGINS: "http://212.108.107.190:3001, https://pilot.o-okul.com ",
     })).toEqual([
       "https://212.108.107.190",
       "http://212.108.107.190:3001",
-      "https://pilot.uzmanhocam.com",
+      "https://pilot.o-okul.com",
     ]);
   });
 

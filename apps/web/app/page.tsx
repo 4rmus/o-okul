@@ -19,9 +19,7 @@ import {
   UserRoundCog,
   Users,
 } from "lucide-react";
-
-const demoHref =
-  "mailto:demo@uzmanhocam.local?subject=Demo%20iste%20-%20Uzman%20Hocam&body=Merhaba,%20Uzman%20Hocam%20i%C3%A7in%20demo%20talep%20ediyoruz.";
+import { appBrand, appBrandHomeAriaLabel, demoRequestHref } from "../src/brand.js";
 
 const heroMetrics = [
   { value: "4 rol", label: "Öğrenci, veli, öğretmen ve kurum görünümü" },
@@ -150,7 +148,7 @@ const reportHighlights = [
 
 const faqs = [
   {
-    question: "Uzman Hocam hangi kurumlar için uygundur?",
+    question: "o-okul hangi kurumlar için uygundur?",
     answer:
       "Dershaneler, özel okullar, kurs merkezleri ve çok şubeli eğitim kurumları için tasarlanmıştır. Kurum, öğretmen, öğrenci ve veli akışlarını birlikte yönetir.",
   },
@@ -196,9 +194,9 @@ export default function HomePage() {
         </picture>
         <div className="next-marketing-hero__overlay" aria-hidden="true" />
         <nav className="next-marketing-nav" aria-label="Landing navigasyonu">
-          <Link className="next-brand" href="/" aria-label="Uzman Hocam ana sayfa">
-            <span className="next-brand-mark">UH</span>
-            <span>Uzman Hocam</span>
+          <Link className="next-brand" href="/" aria-label={appBrandHomeAriaLabel}>
+            <span className="next-brand-mark">{appBrand.mark}</span>
+            <span>{appBrand.name}</span>
           </Link>
           <div className="next-marketing-nav__links">
             <a href="#faydalar">Faydalar</a>
@@ -212,7 +210,7 @@ export default function HomePage() {
 
         <div className="next-marketing-hero__content">
           <p className="next-marketing-kicker">Dershane, özel okul ve kurs merkezleri için</p>
-          <h1 id="home-title">Uzman Hocam</h1>
+          <h1 id="home-title">{appBrand.name}</h1>
           <p className="next-marketing-hero__headline">
             Eğitim kurumları için öğrenci takip ve kurum yönetimini tek platformda birleştirir.
           </p>
@@ -221,7 +219,7 @@ export default function HomePage() {
             aynı güvenilir veri akışında yönetin.
           </p>
           <div className="next-marketing-actions">
-            <a className="uh-button uh-button--primary uh-button--lg" href={demoHref} title="Demo iste">
+            <a className="uh-button uh-button--primary uh-button--lg" href={demoRequestHref} title="Demo iste">
               <span>Demo Talep Et</span>
               <ArrowRight size={18} aria-hidden="true" />
             </a>
@@ -254,7 +252,7 @@ export default function HomePage() {
           <span>Kurumlar için problem ve çözüm</span>
           <h2 id="problem-title">Dağınık eğitim operasyonunu ölçülebilir ve takip edilebilir hale getirin.</h2>
           <p>
-            Uzman Hocam, kurum yöneticilerinin günlük operasyonu görmesini, ekiplerin aynı veriden çalışmasını
+            {appBrand.name}, kurum yöneticilerinin günlük operasyonu görmesini, ekiplerin aynı veriden çalışmasını
             ve velilerin zamanında bilgilendirilmesini sağlar.
           </p>
         </div>
@@ -267,7 +265,7 @@ export default function HomePage() {
               </div>
               <ArrowRight size={20} aria-hidden="true" />
               <div>
-                <span>Uzman Hocam ile</span>
+                <span>{appBrand.name} ile</span>
                 <p>{item.solution}</p>
               </div>
             </article>
@@ -413,7 +411,7 @@ export default function HomePage() {
           <span>Demo çağrısı</span>
           <h2 id="contact-title">Kurumunuzun takip, iletişim ve raporlama sürecini birlikte değerlendirelim.</h2>
           <p>
-            Demo görüşmesinde mevcut işleyişinizi dinleyip Uzman Hocam'ın öğrenci, veli, öğretmen ve kurum
+            Demo görüşmesinde mevcut işleyişinizi dinleyip {appBrand.name} öğrenci, veli, öğretmen ve kurum
             yönetimi akışlarını kurum senaryonuz üzerinden gösteririz.
           </p>
           <p className="next-marketing-contact-note">
@@ -421,7 +419,7 @@ export default function HomePage() {
           </p>
         </div>
         <div className="next-marketing-contact-actions">
-          <a className="uh-button uh-button--primary uh-button--lg" href={demoHref} title="Demo iste">
+          <a className="uh-button uh-button--primary uh-button--lg" href={demoRequestHref} title="Demo iste">
             <span>Demo Talep Et</span>
             <ArrowRight size={18} aria-hidden="true" />
           </a>
@@ -451,9 +449,9 @@ export default function HomePage() {
 
       <footer className="next-marketing-footer">
         <div>
-          <Link className="next-brand" href="/" aria-label="Uzman Hocam ana sayfa">
-            <span className="next-brand-mark">UH</span>
-            <span>Uzman Hocam</span>
+          <Link className="next-brand" href="/" aria-label={appBrandHomeAriaLabel}>
+            <span className="next-brand-mark">{appBrand.mark}</span>
+            <span>{appBrand.name}</span>
           </Link>
           <p>Dershaneler, özel okullar ve kurs merkezleri için eğitim kurumu yönetim platformu.</p>
         </div>

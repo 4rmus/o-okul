@@ -51,7 +51,7 @@ const expectations = {
     "ADMIN_MFA_SECRET_ENCRYPTION_KEY: ${ADMIN_MFA_SECRET_ENCRYPTION_KEY:-}",
     "ADMIN_MFA_RECOVERY_HASH_KEY: ${ADMIN_MFA_RECOVERY_HASH_KEY:-}",
     "ADMIN_MFA_CHALLENGE_SECRET: ${ADMIN_MFA_CHALLENGE_SECRET:-}",
-    "ADMIN_MFA_ISSUER: ${ADMIN_MFA_ISSUER:-Uzman Hocam}",
+    "ADMIN_MFA_ISSUER: ${ADMIN_MFA_ISSUER:-o-okul}",
     "AI_REPORT_SUMMARY_PROVIDER: ${AI_REPORT_SUMMARY_PROVIDER:-disabled}",
     "SUPPORT_ATTACHMENT_STORAGE: ${SUPPORT_ATTACHMENT_STORAGE:-s3}",
     "HOMEWORK_MATERIAL_FILE_STORAGE: ${HOMEWORK_MATERIAL_FILE_STORAGE:-s3}",
@@ -184,7 +184,7 @@ const expectations = {
   ],
   "docker/grafana/provisioning/dashboards/dashboards.yml": ["path: /var/lib/grafana/dashboards"],
   "docker/grafana/dashboards/api-overview.json": [
-    "Uzman Hocam API Overview",
+    "o-okul API Overview",
     "up{job=\\\"uzman-hocam-api\\\"}",
     "uzman_hocam_http_requests_total",
     "uzman_hocam_http_request_duration_seconds_sum",

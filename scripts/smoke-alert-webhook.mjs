@@ -29,7 +29,7 @@ const body = {
   event: "observability.alert_webhook_smoke",
   severity: "info",
   environment,
-  message: "Uzman Hocam alert webhook smoke",
+  message: "o-okul alert webhook smoke",
   sentAt: checkedAt,
 };
 

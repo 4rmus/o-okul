@@ -315,7 +315,7 @@ function runPreflight(env) {
       LIVE_UI_WORKER_EVIDENCE_PATH: "",
       LIVE_UI_WORKER_RESULT_EVIDENCE_FILE: "",
       LIVE_UI_WORKER_RESULT_EVIDENCE_PATH: "",
-      NEXT_E2E_BASE_URL: "https://staging.uzmanhocam.com",
+      NEXT_E2E_BASE_URL: "https://staging.o-okul.com",
       NEXT_E2E_SKIP_WEB_SERVER: "1",
       STAGING_ENVIRONMENT: "",
       NODE_ENV: "",
@@ -371,16 +371,16 @@ function writeJson(path, value, mode = path.includes(`${artifactRoot}/private/`)
 
 function createValidEvidence() {
   return {
-    email: "report.admin@staging.uzmanhocam.com",
+    email: "report.admin@staging.o-okul.com",
     examId: "exam-report-smoke-20260614",
     firstStudentId: "student-report-smoke-20260614-00001",
     guardianPortal: {
-      email: "guardian.portal@staging.uzmanhocam.com",
+      email: "guardian.portal@staging.o-okul.com",
       password: "Str0ngGuardian!2026",
     },
     password: "Str0ngReport!2026",
     studentPortal: {
-      email: "student.portal@staging.uzmanhocam.com",
+      email: "student.portal@staging.o-okul.com",
       password: "Str0ngStudent!2026",
     },
   };

@@ -83,7 +83,7 @@ export function createTotpEnrollmentDraft(email: string, userId: string, now = D
     secret,
     secretEncrypted: encryptAdminMfaSecret(secret),
     keyUri: withAuthenticatorOptions({ step: tokenStepSeconds, window: tokenWindow }, () =>
-      authenticator.keyuri(email, process.env.ADMIN_MFA_ISSUER ?? "Uzman Hocam", secret),
+      authenticator.keyuri(email, process.env.ADMIN_MFA_ISSUER ?? "o-okul", secret),
     ),
     recoveryCodes,
     recoveryCodeHashes,

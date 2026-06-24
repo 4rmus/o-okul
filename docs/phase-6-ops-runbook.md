@@ -1013,7 +1013,7 @@ Live UI-worker/report smoke preflight:
 
 ```sh
 STAGING_ENVIRONMENT=staging \
-ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL_DOMAIN=staging.uzmanhocam.com \
+ISEM_OPTICAL_PIPELINE_SMOKE_EMAIL_DOMAIN=staging.o-okul.com \
 ISEM_OPTICAL_PIPELINE_SMOKE_EVIDENCE_FILE=artifacts/staging/isem-optical-pipeline.json \
 ISEM_OPTICAL_PIPELINE_UI_WORKER_EVIDENCE_FILE=artifacts/staging/private/live-ui-worker-input.json \
 pnpm isem-optical-pipeline:smoke

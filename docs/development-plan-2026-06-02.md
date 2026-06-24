@@ -1,4 +1,4 @@
-# Uzman Hocam — Gerçek Veri & Ürün Tamamlama Planı
+# o-okul — Gerçek Veri & Ürün Tamamlama Planı
 
 > **Tarih:** 2026-06-03 · **Durum:** UYGULAMA SÜRÜYOR — Faz 3/4 karne-portal kapanış turu için ölçüm-hamle planı aktif
 > **Kaynak:** 4-ajan orkestrasyonu (`system-architect ∥ backend-architect ∥ frontend-architect` + iş paneli `Christensen/Drucker/Porter/Godin/Meadows/Taleb`) + kullanıcının sağladığı **gerçek örnek veri** (`ornek-veriler/`) üzerinden sentez.

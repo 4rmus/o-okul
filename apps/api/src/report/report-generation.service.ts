@@ -790,7 +790,7 @@ function createSnapshotStudentListSummary(student: Record<string, unknown>): Rec
 
 async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<ReportSnapshotExportResult> {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "Uzman Hocam";
+  workbook.creator = "o-okul";
   workbook.created = new Date();
 
   const summary = workbook.addWorksheet("Summary");
@@ -1024,7 +1024,7 @@ function createSnapshotPdfLines(
   const snapshotData = snapshot.snapshotData ?? {};
   const averages = readRecord(snapshotData.averages);
   return [
-    `${institution.institutionName ?? "Uzman Hocam"} - Sinav Raporu`,
+    `${institution.institutionName ?? "o-okul"} - Sinav Raporu`,
     `Sinav: ${snapshot.examId}`,
     `Snapshot: ${snapshot.id}`,
     `Durum: ${snapshot.status}`,

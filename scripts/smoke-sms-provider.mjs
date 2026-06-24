@@ -6,7 +6,7 @@ const { createSmsAdapterFromEnv } = require("../packages/sms-adapter/dist/index.
 
 const provider = process.env.SMS_PROVIDER ?? "noop";
 const to = process.env.SMS_SMOKE_TO;
-const body = process.env.SMS_SMOKE_BODY ?? "Uzman Hocam SMS smoke";
+const body = process.env.SMS_SMOKE_BODY ?? "o-okul SMS smoke";
 const evidenceFile = process.env.SMS_PROVIDER_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
 const checkedAt = new Date().toISOString();
 

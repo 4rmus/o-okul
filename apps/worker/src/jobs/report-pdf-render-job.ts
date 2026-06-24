@@ -104,7 +104,7 @@ function createSnapshotPdfLines(snapshot: ReportPdfSnapshotRecord, institution: 
   const snapshotData = snapshot.snapshotData ?? {};
   const averages = readRecord(snapshotData.averages);
   return [
-    `${institution.institutionName ?? "Uzman Hocam"} - Sinav Raporu`,
+    `${institution.institutionName ?? "o-okul"} - Sinav Raporu`,
     `Sinav: ${snapshot.examId}`,
     `Snapshot: ${snapshot.id}`,
     `Durum: ${snapshot.status}`,
@@ -151,7 +151,7 @@ function createSnapshotPdfHtml(snapshot: ReportPdfSnapshotRecord, institution: R
   const branches = readRecords(snapshotData.branches).slice(0, 8);
   const classes = readRecords(snapshotData.classes).slice(0, 8);
   const students = readRecords(snapshotData.students).slice(0, 14);
-  const institutionName = institution.institutionName ?? "Uzman Hocam";
+  const institutionName = institution.institutionName ?? "o-okul";
 
   return `<!doctype html>
 <html lang="tr">
@@ -370,7 +370,7 @@ function renderPdfStudentKarne(
 }
 
 function renderPdfInstitutionBrand(institution: ReportPdfInstitution): string {
-  const name = institution.institutionName ?? "Uzman Hocam";
+  const name = institution.institutionName ?? "o-okul";
   if (institution.institutionLogoUrl) {
     return `<img src="${escapeHtml(institution.institutionLogoUrl)}" alt="${escapeHtml(name)} logosu" />`;
   }

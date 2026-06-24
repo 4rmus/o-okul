@@ -1879,7 +1879,7 @@ const expectations = {
     "live UI-worker result extra field negative",
     "LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET",
     "live_ui_worker_report_smoke",
-    "report.admin@staging.uzmanhocam.com",
+    "report.admin@staging.o-okul.com",
     "Live UI-worker evidence contract kontrolü geçti.",
   ],
   "scripts/check-live-ui-worker-result-evidence.mjs": [
@@ -3119,7 +3119,7 @@ const expectations = {
     "placeholder host target negative",
     "temp file target negative",
     "symlink file target negative",
-    "http://evidence.uzmanhocam.com",
+    "http://evidence.o-okul.com",
     "https://localhost",
     "file:///tmp",
     "gercek https host",

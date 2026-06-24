@@ -1,6 +1,6 @@
 self.addEventListener("push", (event) => {
   const data = event.data ? event.data.json() : {};
-  const title = data.title || "Uzman Hocam";
+  const title = data.title || "o-okul";
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || "",

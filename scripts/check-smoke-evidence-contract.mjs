@@ -267,7 +267,7 @@ const negativeCases = [
     "Sentry beklenmeyen alan reddedilir",
     {
       ...summary.smokeEvidence?.sentryEvent,
-      message: "Uzman Hocam Sentry smoke",
+      message: "o-okul Sentry smoke",
     },
     "sentry_smoke",
   ],

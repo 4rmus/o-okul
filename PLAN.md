@@ -1,4 +1,4 @@
-# Uzman Hocam Panel, UI/UX ve DB Modernizasyon Planı
+# o-okul Panel, UI/UX ve DB Modernizasyon Planı
 
 ## Özet
 - Dört ajanla salt-okunur paralel analiz yapıldı: `product_scope_planner`, `frontend_ux_engineer`, `data_platform_engineer`, `tenant_security_reviewer`.
