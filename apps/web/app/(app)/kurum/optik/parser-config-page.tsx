@@ -307,6 +307,34 @@ export function ParserConfigPage() {
   const selectedPresetForm = opticalFormPresets.find((form) => form.preset === selectedPreset) ?? opticalFormPresets[0]!;
   const selectedPresetVersion = createPresetParserVersion(selectedPresetForm);
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
+  const hasReadyReportSnapshot = reportSnapshots.some((snapshot) => snapshot.status === "READY");
+  const latestReportSnapshot = reportSnapshots[0] ?? null;
+  const formatStatusLabel = savedConfig ? "Format hazır" : suggestion ? "Öneri hazır" : "Format bekliyor";
+  const formatStatusTone = savedConfig ? "success" : suggestion ? "info" : "neutral";
+  const uploadStatusLabel = rawImportSummary
+    ? "Kontrol tamamlandı"
+    : rawImport
+      ? "Kontrol bekliyor"
+      : rawImportFileName
+        ? "Dosya seçildi"
+        : "Dosya bekliyor";
+  const uploadStatusTone = rawImportSummary ? "success" : rawImport || rawImportFileName ? "warning" : "neutral";
+  const analysisStatusLabel = evaluationStatus?.status === "COMPLETED"
+    ? "Tamamlandı"
+    : evaluationJobs
+      ? "Kuyrukta"
+      : rawImportSummary
+        ? "Analiz bekliyor"
+        : "Yükleme bekliyor";
+  const analysisStatusTone = evaluationStatus?.status === "COMPLETED" ? "success" : evaluationJobs || rawImportSummary ? "warning" : "neutral";
+  const outputStatusLabel = hasReadyReportSnapshot
+    ? "Excel/PDF hazır"
+    : reportJob
+      ? "Rapor kuyruğa alındı"
+      : latestReportSnapshot
+        ? "READY bekleniyor"
+        : "Hazır rapor yok";
+  const outputStatusTone = hasReadyReportSnapshot ? "success" : reportJob || latestReportSnapshot ? "warning" : "neutral";
 
   useEffect(() => {
     if (!auth) return;
@@ -770,6 +798,28 @@ export function ParserConfigPage() {
         description="Cevap anahtarı sınav oluşturulurken hazırlanır; bu ekran yalnız format, optik yükleme, eşleşmeyen satır çözümü ve rapor üretimini yürütür."
         title="Optik Operasyon Akışı"
       >
+        <InfoGrid aria-label="Optik iş akışı" className="next-optical-workflow-strip" role="region">
+          <InfoItem
+            description="Form şablonu ve parser sürümü"
+            label="Format"
+            value={<StatusBadge tone={formatStatusTone}>{formatStatusLabel}</StatusBadge>}
+          />
+          <InfoItem
+            description="TXT/DAT kontrol sonucu"
+            label="Yükleme"
+            value={<StatusBadge tone={uploadStatusTone}>{uploadStatusLabel}</StatusBadge>}
+          />
+          <InfoItem
+            description="Queue ile tamamlanma ayrımı"
+            label="Analiz"
+            value={<StatusBadge tone={analysisStatusTone}>{analysisStatusLabel}</StatusBadge>}
+          />
+          <InfoItem
+            description="READY snapshot çıktısı"
+            label="Çıktı"
+            value={<StatusBadge tone={outputStatusTone}>{outputStatusLabel}</StatusBadge>}
+          />
+        </InfoGrid>
         <Tabs label="Optik sekmeleri" className="next-optical-tabs">
           {tabs.map((tab) => (
             <TabButton

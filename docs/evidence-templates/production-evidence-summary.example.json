@@ -39,6 +39,11 @@
       "status": "PASS"
     },
     {
+      "label": "UI/UX redesign evidence",
+      "script": "scripts/check-ui-ux-redesign-evidence.mjs",
+      "status": "PASS"
+    },
+    {
       "label": "Inline upload migration evidence",
       "script": "scripts/check-inline-upload-content-migration-evidence.mjs",
       "status": "PASS"
@@ -725,6 +730,144 @@
       "guardianPortalViewed": true,
       "commandsPassed": ["pnpm live:ui-worker:smoke"],
       "gaps": []
+    },
+    "uiUxRedesign": {
+      "result": "PASS",
+      "environment": "production",
+      "checkedAt": "2026-06-15T09:50:00.000Z",
+      "releaseCandidate": "ghcr.io/example/o-okul/api:2026-06-15.1",
+      "redesignPlanPath": "docs/ui-ux-redesign-plan.md",
+      "localStaticEvidence": {
+        "result": "PASS",
+        "releaseBlocking": false,
+        "commandsPassed": [
+          "pnpm --filter @o-okul/web typecheck",
+          "pnpm web:a11y:check",
+          "pnpm web:ux-baseline:check",
+          "pnpm web:ux-contract:check",
+          "pnpm karne:visual-contract:check"
+        ],
+        "note": "Local/static PASS staging veya production kabul kanıtı değildir."
+      },
+      "stagingProductionEvidence": {
+        "result": "PASS",
+        "requiredForRelease": true,
+        "commandsPassed": [
+          "pnpm prod:evidence:templates:check",
+          "pnpm prod:plan:check",
+          "pnpm live:onboarding:smoke",
+          "pnpm live:ui-worker:smoke",
+          "pnpm uat:check"
+        ],
+        "evidenceReferences": [
+          "artifact:artifacts/ui-ux-redesign/phase-0/a11y-production-summary.json",
+          "artifact:artifacts/ui-ux-redesign/phase-2/data-table-375.png",
+          "artifact:artifacts/ui-ux-redesign/phase-3/report-workspace-1024.png",
+          "artifact:artifacts/ui-ux-redesign/phase-4/guardian-portal-1440.png",
+          "run:https://github.com/example/o-okul/actions/runs/1234567890"
+        ]
+      },
+      "phaseEvidence": [
+        {
+          "phase": "Faz 0",
+          "status": "PASS",
+          "scope": "staging-production",
+          "commandsPassed": ["pnpm --filter @o-okul/web typecheck", "pnpm web:a11y:check"],
+          "evidenceReferences": ["artifact:artifacts/ui-ux-redesign/phase-0/a11y-production-summary.json"]
+        },
+        {
+          "phase": "Faz 1",
+          "status": "PASS",
+          "scope": "staging-production",
+          "commandsPassed": ["pnpm web:ux-contract:check"],
+          "evidenceReferences": ["artifact:artifacts/ui-ux-redesign/phase-1/portal-context-768.png"]
+        },
+        {
+          "phase": "Faz 2",
+          "status": "PASS",
+          "scope": "staging-production",
+          "commandsPassed": ["pnpm --filter @o-okul/ui build", "pnpm web:ux-contract:check"],
+          "evidenceReferences": ["artifact:artifacts/ui-ux-redesign/phase-2/data-table-375.png"]
+        },
+        {
+          "phase": "Faz 3",
+          "status": "PASS",
+          "scope": "staging-production",
+          "commandsPassed": ["pnpm karne:visual-contract:check", "pnpm live:ui-worker:smoke"],
+          "evidenceReferences": ["artifact:artifacts/ui-ux-redesign/phase-3/report-workspace-1024.png"]
+        },
+        {
+          "phase": "Faz 4",
+          "status": "PASS",
+          "scope": "staging-production",
+          "commandsPassed": ["pnpm web:ux-contract:check"],
+          "evidenceReferences": ["artifact:artifacts/ui-ux-redesign/phase-4/guardian-portal-1440.png"]
+        },
+        {
+          "phase": "Faz 5",
+          "status": "PASS",
+          "scope": "staging-production",
+          "commandsPassed": ["pnpm prod:evidence:templates:check", "pnpm uat:check"],
+          "evidenceReferences": ["run:https://github.com/example/o-okul/actions/runs/1234567890"]
+        }
+      ],
+      "viewportCoverage": [
+        {
+          "surface": "kurum dashboard",
+          "widths": [375, 768, 1024, 1440],
+          "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-375.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-768.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-1024.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-1440.png"
+          ]
+        },
+        {
+          "surface": "optik workspace",
+          "widths": [375, 768, 1024, 1440],
+          "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-3/optik-375.png",
+            "artifact:artifacts/ui-ux-redesign/phase-3/optik-768.png",
+            "artifact:artifacts/ui-ux-redesign/phase-3/optik-1024.png",
+            "artifact:artifacts/ui-ux-redesign/phase-3/optik-1440.png"
+          ]
+        },
+        {
+          "surface": "rapor workspace",
+          "widths": [375, 768, 1024, 1440],
+          "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-3/rapor-375.png",
+            "artifact:artifacts/ui-ux-redesign/phase-3/rapor-768.png",
+            "artifact:artifacts/ui-ux-redesign/phase-3/rapor-1024.png",
+            "artifact:artifacts/ui-ux-redesign/phase-3/rapor-1440.png"
+          ]
+        },
+        {
+          "surface": "portal shell",
+          "widths": [375, 768, 1024, 1440],
+          "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-4/portal-375.png",
+            "artifact:artifacts/ui-ux-redesign/phase-4/portal-768.png",
+            "artifact:artifacts/ui-ux-redesign/phase-4/portal-1024.png",
+            "artifact:artifacts/ui-ux-redesign/phase-4/portal-1440.png"
+          ]
+        }
+      ],
+      "privacy": {
+        "piiReview": "PASS",
+        "rawPiiInArtifacts": false,
+        "smsRecipientPreviewExported": false,
+        "guardianFinanceLeakageChecked": true,
+        "forbiddenRawFields": ["email", "phone", "nationalId", "rawAnswer", "rawLine", "rawRow"]
+      },
+      "approvals": [
+        {
+          "role": "release-owner",
+          "decision": "PASS",
+          "approvedAt": "2026-06-15T09:55:00.000Z"
+        }
+      ],
+      "openRisks": []
     },
     "inlineUploadMigration": {
       "environment": "production",

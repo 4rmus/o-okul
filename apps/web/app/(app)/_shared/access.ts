@@ -12,16 +12,6 @@ type SessionLike = {
   subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER";
 };
 
-const hiddenInstitutionPathCapabilities: Record<string, string> = {
-  "/kurum/canli-yayin": "system:operations",
-  "/kurum/denetim": "audit:read",
-  "/kurum/gozlemlenebilirlik": "system:operations",
-  "/kurum/guvenlik-denetimi": "system:operations",
-  "/kurum/kvkk": "privacy:manage",
-  "/kurum/sistem-sagligi": "system:operations",
-  "/kurum/uat-rollback": "system:operations",
-};
-
 export function hasInstitutionAccess(roles: readonly string[]) {
   return roles.includes("TENANT_ADMIN") || roles.includes("ASSISTANT_ADMIN");
 }
@@ -45,9 +35,6 @@ export function getInstitutionNavGroups(roles: readonly string[]) {
 
 export function canAccessInstitutionPath(roles: readonly string[], pathname: string) {
   const normalizedPathname = normalizeInstitutionPath(pathname);
-  const hiddenCapability = findHiddenInstitutionPathCapability(normalizedPathname);
-  if (hiddenCapability) return hasCapabilityForRoles(roles, hiddenCapability);
-
   const item = findInstitutionNavigationItem(normalizedPathname);
   if (!item) return false;
   if (item.href === "/kurum" && normalizedPathname !== "/kurum") return false;
@@ -56,9 +43,6 @@ export function canAccessInstitutionPath(roles: readonly string[], pathname: str
 
 export function canAccessHref(roles: readonly string[], href: string) {
   const normalizedHref = normalizeInstitutionPath(href);
-  const hiddenCapability = findHiddenInstitutionPathCapability(normalizedHref);
-  if (hiddenCapability) return hasCapabilityForRoles(roles, hiddenCapability);
-
   const item = findInstitutionNavigationItem(normalizedHref);
   if (!item) return false;
   if (item.href === "/kurum" && normalizedHref !== "/kurum") return false;
@@ -78,12 +62,6 @@ function findInstitutionNavigationItem(pathname: string) {
   return items
     .filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
     .sort((left, right) => right.href.length - left.href.length)[0];
-}
-
-function findHiddenInstitutionPathCapability(pathname: string) {
-  return Object.entries(hiddenInstitutionPathCapabilities)
-    .filter(([href]) => pathname === href || pathname.startsWith(`${href}/`))
-    .sort(([left], [right]) => right.length - left.length)[0]?.[1];
 }
 
 function normalizeInstitutionPath(pathname: string) {

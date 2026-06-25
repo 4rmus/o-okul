@@ -123,11 +123,18 @@ export const institutionNavGroups: readonly InstitutionNavGroup[] = [
     ],
   },
   {
-    label: "Yönetim",
+    label: "Yönetim ve Kanıt",
     items: [
       { href: "/kurum/kullanicilar", icon: Users, label: "Kullanıcılar", requiredCapability: "user:manage" },
       { href: "/kurum/rol-onizleme", icon: ShieldCheck, label: "Rol Önizleme", requiredCapability: "role-preview:manage" },
       { href: "/kurum/yedek-restore", icon: Activity, label: "Yedekleme", requiredCapability: "operation:manage" },
+      { href: "/kurum/kvkk", icon: ShieldCheck, label: "KVKK", requiredCapability: "privacy:manage" },
+      { href: "/kurum/denetim", icon: ClipboardList, label: "Denetim", requiredCapability: "audit:read" },
+      { href: "/kurum/sistem-sagligi", icon: Activity, label: "Sistem Sağlığı", requiredCapability: "system:operations" },
+      { href: "/kurum/gozlemlenebilirlik", icon: BarChart3, label: "Gözlemlenebilirlik", requiredCapability: "system:operations" },
+      { href: "/kurum/uat-rollback", icon: ClipboardCheck, label: "UAT / Rollback", requiredCapability: "system:operations" },
+      { href: "/kurum/guvenlik-denetimi", icon: ShieldCheck, label: "Güvenlik Denetimi", requiredCapability: "system:operations" },
+      { href: "/kurum/canli-yayin", icon: Activity, label: "Canlı Yayın", requiredCapability: "system:operations" },
     ],
   },
 ];

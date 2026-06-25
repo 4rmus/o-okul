@@ -136,6 +136,13 @@ const templateChecks = [
     { LIVE_UI_WORKER_RESULT_ALLOW_EXAMPLE_EVIDENCE: "1" },
   ],
   [
+    "UI/UX redesign template",
+    "UI_UX_REDESIGN_EVIDENCE_TARGET",
+    "docs/evidence-templates/ui-ux-redesign.example.json",
+    "scripts/check-ui-ux-redesign-evidence.mjs",
+    { UI_UX_REDESIGN_ALLOW_EXAMPLE_EVIDENCE: "1" },
+  ],
+  [
     "Inline upload content migration template",
     "INLINE_UPLOAD_CONTENT_MIGRATION_TARGET",
     "docs/evidence-templates/inline-upload-content-migration.example.json",
@@ -1949,7 +1956,7 @@ runProductionSummarySymlinkParentTargetNegativeCheck();
 runProductionSummaryNegativeCheck({
   label: "Production summary extra check negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-check.tmp.json",
-  expectedFailure: "checks tam 29 madde içermeli.",
+  expectedFailure: "checks tam 30 madde içermeli.",
   mutate: (fixture) => {
     fixture.checks.push({
       label: "Beklenmeyen production check",
@@ -2067,7 +2074,7 @@ runProductionSummaryNegativeCheck({
 runProductionSummaryNegativeCheck({
   label: "Production summary extra report negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-report.tmp.json",
-  expectedFailure: "reports tam 21 alan içermeli.",
+  expectedFailure: "reports tam 22 alan içermeli.",
   mutate: (fixture) => {
     fixture.reports.unexpectedReport = { ...fixture.reports.securityAudit };
   },
@@ -2472,7 +2479,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra checksPassed negative",
   path: "docs/evidence-templates/go-live.extra-checks-passed.tmp.json",
-  expectedFailure: "productionEvidenceSummary.checksPassed tam 29 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.checksPassed tam 30 madde icermeli.",
   mutate: (fixture) => {
     fixture.productionEvidenceSummary.checksPassed.push("Beklenmeyen production check");
   },
@@ -2538,7 +2545,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked duplicate summary check negative",
   path: "docs/evidence-templates/go-live.linked-duplicate-summary-check.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.checks tam 29 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.checks tam 30 madde icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.duplicate-check-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -2726,7 +2733,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked extra summary report negative",
   path: "docs/evidence-templates/go-live.linked-extra-summary-report.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.reports tam 21 alan icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.reports tam 22 alan icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.extra-report-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -6019,6 +6026,7 @@ function runStagingReleaseArtifactsBundleCheck() {
       liveExamCycle: "live-exam-cycle.example.json",
       isemOpticalPipeline: "isem-optical-pipeline.example.json",
       liveUiWorkerResult: "live-ui-worker-result.example.json",
+      uiUxRedesign: "ui-ux-redesign.example.json",
       inlineUploadMigration: "inline-upload-content-migration.example.json",
       auditNullTenant: "audit-null-tenant.example.json",
       rateLimit: "rate-limit.example.json",
@@ -7209,10 +7217,10 @@ function runRemoteFinalEvidenceReadinessBehaviorChecks() {
   mkdirSync(binDir, { recursive: true });
 
   const remoteTargets = {
-    REMOTE_PRODUCTION_EVIDENCE_SUMMARY_TARGET: "/root/o-okul/artifacts/staging/release-summary.json",
-    REMOTE_LIVE_STATUS_EVIDENCE_TARGET: "/root/o-okul/artifacts/staging/live-status.json",
-    REMOTE_PILOT_EVIDENCE_TARGET: "/root/o-okul/artifacts/staging/pilot.json",
-    REMOTE_GO_LIVE_EVIDENCE_TARGET: "/root/o-okul/artifacts/staging/go-live.json",
+    REMOTE_PRODUCTION_EVIDENCE_SUMMARY_TARGET: "/root/uzman-hocam/artifacts/staging/release-summary.json",
+    REMOTE_LIVE_STATUS_EVIDENCE_TARGET: "/root/uzman-hocam/artifacts/staging/live-status.json",
+    REMOTE_PILOT_EVIDENCE_TARGET: "/root/uzman-hocam/artifacts/staging/pilot.json",
+    REMOTE_GO_LIVE_EVIDENCE_TARGET: "/root/uzman-hocam/artifacts/staging/go-live.json",
   };
 
   writeFileSync(
@@ -7234,14 +7242,15 @@ function fail(message) {
 }
 
 const expectedEnv = [
-  "PRODUCTION_EVIDENCE_SUMMARY_TARGET='file:///root/o-okul/artifacts/staging/release-summary.json'",
-  "LIVE_STATUS_EVIDENCE_TARGET='file:///root/o-okul/artifacts/staging/live-status.json'",
-  "PILOT_EVIDENCE_TARGET='file:///root/o-okul/artifacts/staging/pilot.json'",
-  "GO_LIVE_EVIDENCE_TARGET='file:///root/o-okul/artifacts/staging/go-live.json'",
+  "PRODUCTION_EVIDENCE_SUMMARY_TARGET='file:///root/uzman-hocam/artifacts/staging/release-summary.json'",
+  "LIVE_STATUS_EVIDENCE_TARGET='file:///root/uzman-hocam/artifacts/staging/live-status.json'",
+  "PILOT_EVIDENCE_TARGET='file:///root/uzman-hocam/artifacts/staging/pilot.json'",
+  "GO_LIVE_EVIDENCE_TARGET='file:///root/uzman-hocam/artifacts/staging/go-live.json'",
 ];
 
 if (command === "printf remote-ok") ok("remote-ok");
 if (command.startsWith("test -d ")) ok();
+if (command.startsWith("test -f ") && command.includes("/root/uzman-hocam/artifacts/staging/")) ok();
 if (command.includes("test -f package.json")) ok();
 if (command.includes("curl -fsS") && command.includes("/health")) ok("{\\"status\\":\\"ok\\"}\\n");
 if (command.includes("curl -fsSI")) ok("HTTP/1.1 200 OK\\n");
@@ -7280,7 +7289,7 @@ fail("unexpected remote command: " + command);
       console.error(positiveOutput);
       process.exit(1);
     }
-    if (!positiveOutput.includes("Remote final evidence readiness geçti: fake-remote:/root/o-okul")) {
+    if (!positiveOutput.includes("Remote final evidence readiness geçti: fake-remote:/root/uzman-hocam")) {
       console.error("Production evidence template kontrolü başarısız: remote final readiness fake SSH positive beklenen çıktı yok.");
       console.error(positiveOutput);
       process.exit(1);
@@ -7289,10 +7298,11 @@ fail("unexpected remote command: " + command);
     const sshLog = readFileSync(fakeSshLog, "utf8");
     if (
       !sshLog.includes("node scripts/check-live-status-evidence.mjs") ||
-      !sshLog.includes("LIVE_STATUS_EVIDENCE_TARGET='file:///root/o-okul/artifacts/staging/live-status.json'") ||
+      !sshLog.includes("test -f '/root/uzman-hocam/artifacts/staging/release-summary.json'") ||
+      !sshLog.includes("LIVE_STATUS_EVIDENCE_TARGET='file:///root/uzman-hocam/artifacts/staging/live-status.json'") ||
       !sshLog.includes("-u RESTORE_DRILL_ALLOW_EXAMPLE_EVIDENCE") ||
       !sshLog.includes("node scripts/check-final-external-evidence.mjs") ||
-      !sshLog.includes("GO_LIVE_EVIDENCE_TARGET='file:///root/o-okul/artifacts/staging/go-live.json'")
+      !sshLog.includes("GO_LIVE_EVIDENCE_TARGET='file:///root/uzman-hocam/artifacts/staging/go-live.json'")
     ) {
       console.error("Production evidence template kontrolü başarısız: remote final readiness fake SSH env aktarımı logda yok.");
       console.error(sshLog);
@@ -7331,7 +7341,7 @@ fail("unexpected remote command: " + command);
     rmSync(fakeSshLog, { force: true });
     const invalidTargets = {
       ...remoteTargets,
-      REMOTE_LIVE_STATUS_EVIDENCE_TARGET: "file:///root/o-okul/artifacts/local/live-status.json",
+      REMOTE_LIVE_STATUS_EVIDENCE_TARGET: "file:///root/uzman-hocam/artifacts/local/live-status.json",
     };
     const negative = spawnSync(process.execPath, ["scripts/check-remote-final-evidence-readiness.mjs"], {
       env: createRemoteFinalEvidenceReadinessEnv(binDir, fakeSshLog, invalidTargets),
@@ -7369,7 +7379,7 @@ function createRemoteFinalEvidenceReadinessEnv(binDir, fakeSshLog, targetEnv) {
     PATH: `${binDir}:${process.env.PATH ?? ""}`,
     FAKE_SSH_LOG: fakeSshLog,
     REMOTE_EVIDENCE_HOST: "fake-remote",
-    REMOTE_EVIDENCE_ROOT: "/root/o-okul",
+    REMOTE_EVIDENCE_ROOT: "/root/uzman-hocam",
   };
 }
 
@@ -7896,7 +7906,7 @@ function createValidProdEnvForNegativeCheck() {
     WAL_ARCHIVE_TARGET: "s3://prod-wal-archive/o-okul/wal",
     ALERT_WEBHOOK_URL: "https://alerts.o-okul.com/webhook",
     ALERT_WEBHOOK_TOKEN: "alert-webhook-token-123456789012345",
-    ROLLBACK_IMAGE_TAG: "ghcr.io/o-okul/o-okul/api:2026-06-14.1",
+    ROLLBACK_IMAGE_TAG: "ghcr.io/4rmus/uzman-hocam/api:2026-06-14.1",
   };
 
   for (const key of [
@@ -7929,6 +7939,7 @@ function createValidProdEnvForNegativeCheck() {
     "LIVE_EXAM_CYCLE_TARGET",
     "ISEM_OPTICAL_PIPELINE_TARGET",
     "LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET",
+    "UI_UX_REDESIGN_EVIDENCE_TARGET",
     "INLINE_UPLOAD_CONTENT_MIGRATION_TARGET",
     "AUDIT_NULL_TENANT_EVIDENCE_TARGET",
     "RATE_LIMIT_EVIDENCE_TARGET",

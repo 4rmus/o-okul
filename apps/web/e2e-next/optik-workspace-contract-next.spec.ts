@@ -73,6 +73,17 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await openWithOptikMocks(page, "/kurum/optik");
 
     await expect(page.getByRole("heading", { level: 1, name: "Optik İşlemleri" })).toBeVisible();
+    const workflowStrip = page.getByRole("region", { name: "Optik iş akışı" });
+    await expect(workflowStrip).toHaveClass(/uh-info-grid/);
+    await expect(workflowStrip.locator(".uh-info-item")).toHaveCount(4);
+    await expect(workflowStrip).toContainText("Format");
+    await expect(workflowStrip).toContainText("Format bekliyor");
+    await expect(workflowStrip).toContainText("Yükleme");
+    await expect(workflowStrip).toContainText("Dosya bekliyor");
+    await expect(workflowStrip).toContainText("Analiz");
+    await expect(workflowStrip).toContainText("Yükleme bekliyor");
+    await expect(workflowStrip).toContainText("Çıktı");
+    await expect(workflowStrip).toContainText("Hazır rapor yok");
     await expect(page.getByRole("tab", { name: "1. Format" })).toHaveAttribute("aria-selected", "true");
     const selectedFormSummary = page.getByLabel("Seçili form özeti");
     await expect(selectedFormSummary).toHaveClass(/uh-info-grid/);
@@ -90,6 +101,7 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await expect(page.getByRole("tab", { name: /Cevap anahtarı/ })).toHaveCount(0);
     await page.getByRole("button", { name: "Seç ve ilerle" }).click();
     await expect(page.getByRole("tab", { name: "2. Optik yükleme" })).toHaveAttribute("aria-selected", "true");
+    await expect(workflowStrip).toContainText("Format hazır");
     const uploadPanel = page.getByRole("tabpanel", { name: "2. Optik yükleme" });
     await uploadPanel.getByLabel("Optik cevap dosyası").setInputFiles({
       buffer: Buffer.from("optik cevap satiri"),
@@ -97,9 +109,11 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
       name: rawImportFileName,
     });
     await expect(uploadPanel).toContainText("TXT dosyası seçildi");
+    await expect(workflowStrip).toContainText("Dosya seçildi");
     await uploadPanel.getByRole("button", { name: "Yükle ve kontrol et" }).click();
     const uploadResult = page.getByLabel("Optik yükleme sonucu");
     await expect(uploadResult).toContainText("Kontrol tamamlandı");
+    await expect(workflowStrip).toContainText("Kontrol tamamlandı");
     const uploadSummary = uploadResult.locator(".next-parser-summary");
     await expect(uploadSummary).toHaveClass(/uh-info-grid/);
     await expect(uploadSummary.locator(".uh-info-item")).toHaveCount(4);
@@ -118,6 +132,7 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await page.getByRole("tab", { name: "2. Optik yükleme" }).click();
     await expect(uploadResult.getByRole("status").filter({ hasText: "1/1 analiz işi kuyruğa alındı." })).toBeVisible();
     await expect(uploadResult.getByRole("status").filter({ hasText: "1/1 analiz sonucu tamamlandı." })).toBeVisible();
+    await expect(workflowStrip).toContainText("Tamamlandı");
 
     await page.getByRole("tab", { name: "3. Eşleşmeyen satırlar ve rapor" }).click();
     const optikReportPanel = page.getByRole("tabpanel", { name: "3. Eşleşmeyen satırlar ve rapor" });
@@ -167,6 +182,10 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await expect(readyReportsTable.getByRole("button", { name: "Hazır optik raporu PDF indir" })).toBeEnabled();
     await expect(readyReportsTable.getByRole("button", { name: "Eski optik raporu Excel indir" })).toBeDisabled();
     await expect(readyReportsTable.getByRole("button", { name: "Eski optik raporu PDF indir" })).toBeDisabled();
+    await expect(workflowStrip).toContainText("Excel/PDF hazır");
+    for (const value of hostileOptikReferences) {
+      await expect(workflowStrip).not.toContainText(value);
+    }
 
     const studentResultsTable = page.getByRole("table", { name: "Optik katılımcı sonuçları" });
     await expect(studentResultsTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();

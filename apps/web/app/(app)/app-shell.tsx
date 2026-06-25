@@ -76,7 +76,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     () => auth?.session ? rolePortalNavGroups.filter((group) => hasSubjectPortalAccess(auth.session, group.role, group.subjectType)) : [],
     [auth],
   );
-  const visibleInstitutionNavGroups = useMemo(() => auth?.session ? getInstitutionNavGroups(auth.session.roles) : [], [auth]);
+  const visibleInstitutionNavGroups = useMemo(
+    () => auth?.session && hasInstitutionAccess(auth.session.roles) ? getInstitutionNavGroups(auth.session.roles) : [],
+    [auth],
+  );
   const visibleSystemNavGroups = useMemo(
     () => auth?.session && hasSystemAccess(auth.session.roles) ? systemNavGroups : [],
     [auth],
@@ -245,7 +248,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <main className="next-app-shell">
+    <div className="next-app-shell">
+      <a className="next-skip-link" href="#next-content">
+        İçeriğe geç
+      </a>
       <header className="next-mobile-topbar">
         <button
           aria-controls="next-sidebar"
@@ -339,10 +345,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         tabIndex={isMobileNavOpen ? 0 : -1}
         type="button"
       />
-      <section className="next-workspace" aria-hidden={isMobileNavOpen ? "true" : undefined}>
+      <main
+        className="next-workspace"
+        id="next-content"
+        tabIndex={-1}
+        aria-hidden={isMobileNavOpen ? "true" : undefined}
+      >
         <RouteBreadcrumb pathname={pathname} />
         {children}
-      </section>
+      </main>
       <CommandPalette
         accessToken={auth.accessToken}
         enableEntitySearch={canUseEntitySearch(auth.session.roles)}
@@ -354,7 +365,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         query={commandQuery}
         setQuery={setCommandQuery}
       />
-    </main>
+    </div>
   );
 }
 
@@ -704,7 +715,7 @@ function canAccessPath(session: AppSession, pathname: string, searchParams?: Pic
     return hasSubjectPortalAccess(session, "GUARDIAN", "GUARDIAN");
   }
 
-  return true;
+  return false;
 }
 
 function hasRolePreviewAccess(searchParams?: Pick<URLSearchParams, "get">) {

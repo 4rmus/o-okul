@@ -166,6 +166,14 @@ export function ReportsPage() {
     : "Hazır rapor yok";
   const selectedExamLabel = useMemo(() => formatSelectedExamLabel(loadedExamId || examId, exams), [examId, exams, loadedExamId]);
   const selectedExamExists = exams.some((exam) => exam.id === examId);
+  const hasSelectedExam = Boolean(examId.trim());
+  const queryStatusLabel = loadedExamId ? "Sorgulandı" : hasSelectedExam ? "Sınav seçili" : "Sınav bekliyor";
+  const queryStatusTone = loadedExamId ? "success" : hasSelectedExam ? "info" : "neutral";
+  const productionStatusLabel = queueMessage ? "Kuyruğa alındı" : latestSnapshot ? formatSnapshotStatus(latestSnapshot.status) : "Snapshot yok";
+  const productionStatusTone = queueMessage ? "warning" : snapshotStatusTone(latestSnapshot?.status);
+  const outputStatusTone = isSnapshotReady ? "success" : latestSnapshot ? "warning" : "neutral";
+  const karneStatusLabel = studentReport ? "Karne açık" : latestSnapshot ? "Öğrenci seç" : "Rapor bekliyor";
+  const karneStatusTone = studentReport ? "success" : latestSnapshot ? "info" : "neutral";
 
   useEffect(() => {
     if (!examId && exams.length > 0) {
@@ -269,6 +277,28 @@ export function ReportsPage() {
       subtitle="Raporu sorgula, üret ve Excel/PDF olarak dışa aktar."
     >
       <section className="next-report-workspace" aria-label="Rapor çalışma alanı">
+        <InfoGrid aria-label="Rapor iş akışı" className="next-report-workflow-strip" role="region">
+          <InfoItem
+            description="Sınav ve filtre sorgusu"
+            label="Sorgu"
+            value={<StatusBadge tone={queryStatusTone}>{queryStatusLabel}</StatusBadge>}
+          />
+          <InfoItem
+            description="Snapshot üretim durumu"
+            label="Üretim"
+            value={<StatusBadge tone={productionStatusTone}>{productionStatusLabel}</StatusBadge>}
+          />
+          <InfoItem
+            description="Excel/PDF erişimi"
+            label="Çıktı"
+            value={<StatusBadge tone={outputStatusTone}>{snapshotExportReadiness}</StatusBadge>}
+          />
+          <InfoItem
+            description="Öğrenci karne önizleme"
+            label="Karne"
+            value={<StatusBadge tone={karneStatusTone}>{karneStatusLabel}</StatusBadge>}
+          />
+        </InfoGrid>
         <InfoGrid aria-label="Rapor bağlam özeti" className="next-report-context-strip" role="region">
           <InfoItem label="Seçili sınav" value={selectedExamLabel} />
           <InfoItem

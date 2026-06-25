@@ -14,7 +14,7 @@ import type {
   PaymentPlanWithInstallmentsRecord,
   StudentRecord,
 } from "@o-okul/shared-types";
-import { CrudPage, EmptyState, Field, FormModal, Input, Select, StatusBadge, type DataTableColumn } from "@o-okul/ui";
+import { CrudPage, EmptyState, Field, FilterBar, FormModal, Input, Select, StatusBadge, type DataTableColumn } from "@o-okul/ui";
 import { CheckCircle2, Pencil, RotateCcw, TriangleAlert } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, type ListMeta } from "../../../../src/api-client.js";
@@ -325,7 +325,7 @@ function FinanceFiltersPanel({
   references: FinanceReferences;
 }) {
   return (
-    <div className="next-list-controls" aria-label="Finans filtreleri">
+    <FilterBar className="next-list-controls" role="group" aria-label="Finans filtreleri">
       <Field label="Öğrenci">
         <Select aria-label="Öğrenci" value={filters.studentId} onChange={(event) => onChange({ ...filters, studentId: event.target.value })}>
           <option value="">Tümü</option>
@@ -386,7 +386,7 @@ function FinanceFiltersPanel({
           ))}
         </Select>
       </Field>
-    </div>
+    </FilterBar>
   );
 }
 

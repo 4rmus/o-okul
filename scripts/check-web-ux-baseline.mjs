@@ -125,6 +125,19 @@ requireNoTokensInFiles("apps/web/app/(app)", appSourcePaths, [
 
 requireScript("web:ux-baseline:check", "node scripts/check-web-ux-baseline.mjs");
 requireScript("web:ux-contract:check", "pnpm --filter @o-okul/web ux-contract");
+requireScript(
+  "ui-ux-redesign:visual-qa",
+  "UI_VISUAL_ARTIFACT_DIR=artifacts/ui-ux-redesign/local pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts --workers=1 e2e-next/ui-visual-qa-next.spec.ts",
+);
+requireScript(
+  "ui-ux-redesign:fixture-regression",
+  "pnpm --filter @o-okul/api exec vitest run src/exam/answer-key-excel-import.service.test.ts && pnpm --filter @o-okul/worker exec vitest run src/jobs/optik-7108-real-pipeline.test.ts",
+);
+requireScript(
+  "ui-ux-redesign:local-gates",
+  "pnpm --filter @o-okul/shared-types build && pnpm --filter @o-okul/ui build && pnpm --filter @o-okul/web typecheck && pnpm web:a11y:check && pnpm web:ux-baseline:check && pnpm web:ux-contract:check && pnpm karne:visual-contract:check && pnpm ui-ux-redesign:example-fixtures && pnpm ui-ux-redesign:fixture-regression && pnpm ui-ux-redesign:evidence-generate:contract && pnpm ui-ux-redesign:visual-qa",
+);
+requireScript("ui-ux-redesign:evidence-generate", "node scripts/generate-ui-ux-redesign-evidence.mjs");
 
 if (uiPackageJson.scripts?.test !== "tsc -p tsconfig.contract.json --noEmit") {
   failures.push("packages/ui/package.json test script must run the primitive contract tsconfig.");
@@ -219,7 +232,10 @@ requireNoTokens("apps/web/app/(auth)/login/page.tsx", [
 ]);
 
 requireTokens("apps/web/src/list-controls.tsx", [
-  'import { Button, Field, Input, Select } from "@o-okul/ui";',
+  'import { Button, Field, FilterBar, Input, Select } from "@o-okul/ui";',
+  "type ReactNode",
+  "children?: ReactNode;",
+  '<FilterBar className="next-list-controls" role="group" aria-label="Liste kontrolleri">',
   '<Field className="next-list-search" label="Ara">',
   '<Input',
   'aria-label="Ara"',
@@ -228,6 +244,7 @@ requireTokens("apps/web/src/list-controls.tsx", [
   '<Field label="Göster">',
   "value={state.limit}",
   "onChange={(event) => onChange({ ...state, page: 1, limit: Number(event.target.value) })}",
+  "{children}",
 ]);
 
 requireNoTokens("apps/web/src/list-controls.tsx", [
@@ -1382,7 +1399,7 @@ requireTokens("apps/web/e2e-next/report-workspace-contract-next.spec.ts", [
   "READY snapshot",
   'not.toContainText("snapshot-ready")',
   "report-workspace-ready-karne-mobile",
-  "{ height: 780, width: 360 }",
+  "{ height: 812, width: 375 }",
   'getByRole("table", { name: "Öğrenci branş karne tablosu" })',
   "expectNoClippedVisibleText",
   "mobileBranchTable",
@@ -1499,16 +1516,12 @@ requireNoTokens("apps/web/app/(app)/kurum/_shared/operation-summary.tsx", [
   "next-operation-summary__action-copy",
 ]);
 
-requireTokens("apps/web/app/(app)/_shared/access.ts", [
-  '"/kurum/denetim": "audit:read"',
-  '"/kurum/kvkk": "privacy:manage"',
-  '"/kurum/guvenlik-denetimi": "system:operations"',
-  "findHiddenInstitutionPathCapability",
-  "hasCapabilityForRoles(roles, hiddenCapability)",
-]);
-
 requireTokens("apps/web/app/(app)/_shared/navigation.ts", [
   '{ href: "/kurum/kurulum", icon: Settings, label: "Kurulum", requiredCapability: "operation:manage" }',
+  'label: "Yönetim ve Kanıt"',
+  '{ href: "/kurum/denetim", icon: ClipboardList, label: "Denetim", requiredCapability: "audit:read" }',
+  '{ href: "/kurum/kvkk", icon: ShieldCheck, label: "KVKK", requiredCapability: "privacy:manage" }',
+  '{ href: "/kurum/guvenlik-denetimi", icon: ShieldCheck, label: "Güvenlik Denetimi", requiredCapability: "system:operations" }',
 ]);
 
 requireTokens("apps/web/app/(app)/app-shell.tsx", [
@@ -1518,6 +1531,7 @@ requireTokens("apps/web/app/(app)/app-shell.tsx", [
   'actions={<StatusBadge tone={statusTone}>{statusLabel}</StatusBadge>}',
   'description={`${activeDevices.length} aktif cihaz`}',
   "getPushStatusTone",
+  "return false;\n}\n\nfunction hasRolePreviewAccess",
 ]);
 
 requireNoTokens("apps/web/app/(app)/app-shell.tsx", [
@@ -1528,6 +1542,8 @@ requireNoTokens("apps/web/app/(app)/app-shell.tsx", [
 requireNoTokens("apps/web/app/(app)/_shared/access.ts", [
   '"/kurum/denetim": "system:operations"',
   '"/kurum/kvkk": "system:operations"',
+  "findHiddenInstitutionPathCapability",
+  "hasCapabilityForRoles(roles, hiddenCapability)",
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx", [
@@ -2330,7 +2346,9 @@ requireTokens("apps/web/app/(app)/kurum/finans/finance-page.tsx", [
   "financeSummaryActions",
   "Kurum finans görünümü",
   "Field,",
+  "FilterBar,",
   "Select,",
+  '<FilterBar className="next-list-controls" role="group" aria-label="Finans filtreleri">',
   "Öğrenci kapsamı doğrulanmadı",
   "Bağlam doğrulanmadı",
   'tableCaption="Ödeme taksitleri"',
@@ -2406,8 +2424,10 @@ requireTokens("apps/web/app/(app)/kurum/destek/support-tickets-page.tsx", [
   "InfoItem,",
   "Panel,",
   "Field,",
+  "FilterBar,",
   "Select,",
   "Textarea,",
+  '<FilterBar className="next-list-controls" role="group" aria-label="Destek filtreleri">',
   'className="next-support-detail-grid"',
   'aria-label="Destek seçili bildirim detayı"',
   'className="next-support-selected-panel"',
@@ -4607,14 +4627,17 @@ requireNoTokens("apps/web/app/globals.css", [
 
 requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   "type Locator",
+  "UI_VISUAL_ARTIFACT_DIR",
+  "artifacts/ui-ux-redesign/local",
   "RolePortalActionStripCase",
+  "const redesignViewports",
   "expectPortalDailyBrief",
   'getByRole("region", { name: "Günlük durum" })',
   'getByRole("region", { name: "Günlük ders akışı" })',
   'brief.getByRole("group", { name: /metrikleri/ })',
   'metrics).toHaveClass(/uh-metric-grid/)',
   'metrics.locator(".next-portal-brief__item.uh-metric-card")).toHaveCount(expectedCount)',
-  "kurum dashboard 360/768/1024/1440 görünümde özet, karar ve rapor sözleşmesini korur",
+  "kurum dashboard 375/768/1024/1440 görünümde özet, karar ve rapor sözleşmesini korur",
   'getByRole("region", { exact: true, name: "Kurum özeti" })',
   "overviewRegion).toHaveClass(/uh-metric-grid/)",
   'overviewRegion.locator(".uh-metric-card")).toHaveCount(4)',
@@ -4657,8 +4680,14 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   "Başarı %",
   "READY rapor",
   "Tenant scope doğrulandı",
-  "rol portal aksiyon şeritleri 360/768/1024/1440 görünümde taşmadan kalır",
-  "rapor çalışma alanı 360/768/1024/1440 görünümde bağlam ve karne taşmadan kalır",
+  "öğrenci listesi 375/768/1024/1440 görünümde URL state ile taşmadan kalır",
+  "faz9-students-list-${viewport.width}",
+  "`faz9-students-list-${viewport.width}.png`",
+  "rol portal aksiyon şeritleri 375/768/1024/1440 görünümde taşmadan kalır",
+  "rapor çalışma alanı 375/768/1024/1440 görünümde bağlam ve karne taşmadan kalır",
+  "optik workflow 375/768/1024/1440 görünümde tab semantiği ve yoğun form düzenini korur",
+  "faz9-optik-workflow-${viewport.width}",
+  "`faz9-optik-workflow-${viewport.width}.png`",
   "öğretmen detay desktop ve mobil görev ilişkilerini güvenli gösterir",
   "sınıf detay desktop ve mobil rapor bağlamını güvenli gösterir",
   "expectStudentDetailNoRawIds",
@@ -4689,7 +4718,7 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   'pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots"',
   'pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-a/students/student-a"',
   "test.setTimeout(90_000)",
-  "{ height: 780, width: 360 }",
+  "{ height: 812, width: 375 }",
   "{ height: 1024, width: 768 }",
   "{ height: 900, width: 1024 }",
   "{ height: 960, width: 1440 }",
@@ -4735,7 +4764,6 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   'getByRole("region", { name: "Öğretmen operasyon bağlam metrikleri" })',
   'teacherFocusMetrics).toHaveClass(/uh-info-grid/)',
   'teacherFocusMetrics.locator(".uh-info-item")).toHaveCount(8)',
-  "viewport.width === 360 || viewport.width === 1440",
   "`faz9-${portalCase.key}-action-strip-${viewport.width}.png`",
   "`faz9-report-workspace-${viewport.width}.png`",
   "faz9-student-portal-karne-mobile-expanded.png",

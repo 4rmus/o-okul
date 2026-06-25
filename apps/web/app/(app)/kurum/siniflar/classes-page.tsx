@@ -260,18 +260,17 @@ export function ClassesPage() {
     <>
       <CrudPage
         actions={
-          <>
-            <ListControls
-              meta={classesQuery.data?.meta}
-              onChange={setListQuery}
-              sortOptions={classSortOptions}
-              state={listQuery}
-            />
+          <ListControls
+            meta={classesQuery.data?.meta}
+            onChange={setListQuery}
+            sortOptions={classSortOptions}
+            state={listQuery}
+          >
             <Button onClick={openCreateForm}>
               <Plus size={17} aria-hidden="true" />
               Sınıf ekle
             </Button>
-          </>
+          </ListControls>
         }
         aria-label="Sınıf yönetimi"
         columns={columns}

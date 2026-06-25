@@ -36,6 +36,7 @@ const requiredChecks = new Map([
   ["Live exam cycle evidence", "scripts/check-live-exam-cycle-evidence.mjs"],
   ["iSEM optical pipeline evidence", "scripts/check-isem-optical-pipeline-evidence.mjs"],
   ["Live UI-worker result evidence", "scripts/check-live-ui-worker-result-evidence.mjs"],
+  ["UI/UX redesign evidence", "scripts/check-ui-ux-redesign-evidence.mjs"],
   ["Inline upload migration evidence", "scripts/check-inline-upload-content-migration-evidence.mjs"],
   ["Audit null tenant evidence", "scripts/check-audit-null-tenant-evidence.mjs"],
   ["Rate limit Redis evidence", "scripts/check-rate-limit-evidence.mjs"],
@@ -168,6 +169,20 @@ const requiredReports = {
     "guardianPortalViewed",
     "commandsPassed",
     "gaps",
+  ],
+  uiUxRedesign: [
+    "result",
+    "environment",
+    "checkedAt",
+    "releaseCandidate",
+    "redesignPlanPath",
+    "localStaticEvidence",
+    "stagingProductionEvidence",
+    "phaseEvidence",
+    "viewportCoverage",
+    "privacy",
+    "approvals",
+    "openRisks",
   ],
   inlineUploadMigration: [
     "environment",
@@ -607,6 +622,7 @@ function requireReports(summary, failures) {
   requireRlsLiveReport(reports.rlsLive, failures);
   requireAuditNullTenantReport(reports.auditNullTenant, failures);
   requireLiveUiWorkerResultReport(reports.liveUiWorkerResult, failures);
+  requireUiUxRedesignReport(reports.uiUxRedesign, reports.deploymentRollback, failures);
   requireKvkkInventoryReport(reports.kvkkInventory, failures);
   requireUatJourneyScenarios(reports.uat, failures);
   requireObjectTrue(reports.uat, failures, "reports.uat.liveExamCyclePassed", "liveExamCyclePassed");
@@ -882,6 +898,54 @@ function requireLiveUiWorkerResultReport(scope, failures) {
   );
   requireObjectEqual(scope, failures, "reports.liveUiWorkerResult.environment", "environment", "production");
   requireExactStringSet(scope?.commandsPassed, failures, "reports.liveUiWorkerResult.commandsPassed", ["pnpm live:ui-worker:smoke"]);
+}
+
+function requireUiUxRedesignReport(scope, deploymentRollback, failures) {
+  requireObjectEqual(scope, failures, "reports.uiUxRedesign.result", "result", "PASS");
+  requireObjectEqual(scope, failures, "reports.uiUxRedesign.redesignPlanPath", "redesignPlanPath", "docs/ui-ux-redesign-plan.md");
+  requireMatchingString(
+    scope,
+    failures,
+    "reports.uiUxRedesign.releaseCandidate",
+    "releaseCandidate",
+    deploymentRollback,
+    "reports.deploymentRollback.releaseCandidate",
+    "releaseCandidate",
+  );
+
+  const localStaticEvidence = requireObject(scope, failures, "reports.uiUxRedesign.localStaticEvidence", "localStaticEvidence");
+  if (localStaticEvidence) {
+    requireObjectEqual(localStaticEvidence, failures, "reports.uiUxRedesign.localStaticEvidence.result", "result", "PASS");
+    requireObjectEqual(localStaticEvidence, failures, "reports.uiUxRedesign.localStaticEvidence.releaseBlocking", "releaseBlocking", false);
+  }
+
+  const stagingProductionEvidence = requireObject(
+    scope,
+    failures,
+    "reports.uiUxRedesign.stagingProductionEvidence",
+    "stagingProductionEvidence",
+  );
+  if (stagingProductionEvidence) {
+    requireObjectEqual(stagingProductionEvidence, failures, "reports.uiUxRedesign.stagingProductionEvidence.result", "result", "PASS");
+    requireObjectTrue(
+      stagingProductionEvidence,
+      failures,
+      "reports.uiUxRedesign.stagingProductionEvidence.requiredForRelease",
+      "requiredForRelease",
+    );
+  }
+
+  const privacy = requireObject(scope, failures, "reports.uiUxRedesign.privacy", "privacy");
+  if (privacy) {
+    requireObjectEqual(privacy, failures, "reports.uiUxRedesign.privacy.piiReview", "piiReview", "PASS");
+    requireObjectEqual(privacy, failures, "reports.uiUxRedesign.privacy.rawPiiInArtifacts", "rawPiiInArtifacts", false);
+    requireObjectEqual(privacy, failures, "reports.uiUxRedesign.privacy.smsRecipientPreviewExported", "smsRecipientPreviewExported", false);
+    requireObjectTrue(privacy, failures, "reports.uiUxRedesign.privacy.guardianFinanceLeakageChecked", "guardianFinanceLeakageChecked");
+  }
+
+  if (!Array.isArray(scope?.openRisks) || scope.openRisks.length !== 0) {
+    failures.push("reports.uiUxRedesign.openRisks boş liste olmalı.");
+  }
 }
 
 function requireIsemLiveExamCycleConsistency(reports, failures) {

@@ -36,6 +36,12 @@ test.describe("Next erişilebilirlik smoke", () => {
 
   test("kurum dashboard shell'inde yüksek etkili axe ihlali yok", async ({ page }) => {
     await openInstitutionDashboard(page);
+    await expectFirstFocusableElement(page, "İçeriğe geç");
+    const skipLink = page.getByRole("link", { name: "İçeriğe geç" });
+    await skipLink.focus();
+    await expect(skipLink).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#next-content")).toBeFocused();
     await expectNoHighImpactA11yViolations(page, "kurum-dashboard");
   });
 
@@ -119,6 +125,20 @@ async function expectNoHorizontalOverflow(page: Page, label: string) {
   });
 
   expect(overflow, `${label}: yatay taşma ${overflow}px`).toBeLessThanOrEqual(1);
+}
+
+async function expectFirstFocusableElement(page: Page, expectedText: string) {
+  const firstFocusableText = await page.evaluate(() => {
+    const focusableElements = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((element) => element.getClientRects().length > 0 && window.getComputedStyle(element).visibility !== "hidden");
+
+    return focusableElements[0]?.textContent?.trim() ?? "";
+  });
+
+  expect(firstFocusableText).toBe(expectedText);
 }
 
 async function openInstitutionDashboard(page: Page, options: { expectNavigationVisible?: boolean } = {}) {

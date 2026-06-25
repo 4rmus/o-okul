@@ -151,6 +151,19 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     expect(studentListRequests).toHaveLength(1);
     expect(new URL(studentListRequests[0]!).searchParams.get("classId")).toBe("class-8a");
     expect(studentDetailRequests).toHaveLength(0);
+    const workflowStrip = page.getByRole("region", { name: "Rapor iş akışı" });
+    await expect(workflowStrip).toHaveClass(/uh-info-grid/);
+    await expect(workflowStrip.locator(".uh-info-item")).toHaveCount(4);
+    await expect(workflowStrip).toContainText("Sorgu");
+    await expect(workflowStrip).toContainText("Sorgulandı");
+    await expect(workflowStrip).toContainText("Üretim");
+    await expect(workflowStrip).toContainText("Hazır");
+    await expect(workflowStrip).toContainText("Çıktı");
+    await expect(workflowStrip).toContainText("Excel/PDF hazır");
+    await expect(workflowStrip).toContainText("Karne");
+    await expect(workflowStrip).toContainText("Öğrenci seç");
+    await expect(workflowStrip).not.toContainText("exam-report-ready");
+    await expect(workflowStrip).not.toContainText("snapshot-ready");
     const contextStrip = page.locator(".next-report-context-strip");
     await expect(contextStrip).toHaveClass(/uh-info-grid/);
     await expect(contextStrip.locator(".uh-info-item")).toHaveCount(6);
@@ -191,6 +204,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await studentResultsTable.getByRole("button", { name: "Ada Kaya karnesini aç" }).click();
     await expect(page.getByRole("tab", { name: "Karne Önizleme" })).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => studentDetailRequests.length).toBe(3);
+    await expect(workflowStrip).toContainText("Karne açık");
     const karnePanel = page.getByRole("tabpanel", { name: "Karne Önizleme" });
     const karneSheet = karnePanel.getByRole("region", { name: "Öğrenci karne özeti özet sayfası" });
     await expect(karneSheet).toHaveClass(/next-report-karne-sheet/);
@@ -246,6 +260,15 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await page.getByRole("button", { name: "Raporu getir" }).click();
 
     await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
+    const workflowStrip = page.getByRole("region", { name: "Rapor iş akışı" });
+    await expect(workflowStrip).toHaveClass(/uh-info-grid/);
+    await expect(workflowStrip.locator(".uh-info-item")).toHaveCount(4);
+    await expect(workflowStrip).toContainText("Sorgulandı");
+    await expect(workflowStrip).toContainText("Eski");
+    await expect(workflowStrip).toContainText("READY snapshot gerekli");
+    await expect(workflowStrip).toContainText("Öğrenci seç");
+    await expect(workflowStrip).not.toContainText("exam-report-stale");
+    await expect(workflowStrip).not.toContainText("snapshot-stale");
     const contextStrip = page.locator(".next-report-context-strip");
     await expect(contextStrip).toHaveClass(/uh-info-grid/);
     await expect(contextStrip.locator(".uh-info-item")).toHaveCount(6);
@@ -272,7 +295,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
   });
 
   test("READY snapshot mobil karne önizleme başarı net ve soru bağlamını taşmadan korur", async ({ page }) => {
-    await openWithReportMocks(page, "/kurum/raporlar", { height: 780, width: 360 });
+    await openWithReportMocks(page, "/kurum/raporlar", { height: 812, width: 375 });
 
     await page.getByRole("button", { name: "Raporu getir" }).click();
     await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
@@ -689,6 +712,7 @@ async function expectNoClippedVisibleText(page: Page, label: string) {
         "button",
         ".uh-status-badge",
         ".next-report-context-strip > .uh-info-item",
+        ".next-report-workflow-strip > .uh-info-item",
         ".next-report-export-grid > div",
         ".next-karne-context-strip .uh-info-item",
         ".next-karne-summary-strip .uh-metric-card",

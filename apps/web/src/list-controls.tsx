@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Button, Field, Input, Select } from "@o-okul/ui";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Button, Field, FilterBar, Input, Select } from "@o-okul/ui";
 import type { ListMeta } from "./api-client.js";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
@@ -73,12 +73,14 @@ export function useUrlListState(
 }
 
 export function ListControls({
+  children,
   meta,
   onChange,
   searchPlaceholder = "Ara",
   sortOptions,
   state,
 }: {
+  children?: ReactNode;
   meta?: ListMeta;
   onChange(state: ListQueryState): void;
   searchPlaceholder?: string;
@@ -92,7 +94,7 @@ export function ListControls({
   const canGoForward = totalPages > 0 && page < totalPages;
 
   return (
-    <div className="next-list-controls">
+    <FilterBar className="next-list-controls" role="group" aria-label="Liste kontrolleri">
       <Field className="next-list-search" label="Ara">
         <Search size={17} aria-hidden="true" />
         <Input
@@ -142,7 +144,8 @@ export function ListControls({
       >
         <ChevronRight size={17} aria-hidden="true" />
       </Button>
-    </div>
+      {children}
+    </FilterBar>
   );
 }
 

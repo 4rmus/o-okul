@@ -30,12 +30,12 @@ describe("AnswerKeyExcelImportService", () => {
       wouldImport: true,
     });
     expect(result.branches).toEqual([
-      { branch: "LGS DİN KÜLTÜRÜ VE AHLAK BİLGİSİ", questionCount: 10 },
-      { branch: "LGS FEN BİLİMLERİ", questionCount: 20 },
-      { branch: "LGS İNGİLİZCE", questionCount: 10 },
-      { branch: "LGS MATEMATİK", questionCount: 20 },
-      { branch: "LGS T.C. İNKILAP TARİHİ VE ATATÜRKÇÜLÜK", questionCount: 10 },
-      { branch: "LGS TÜRKÇE", questionCount: 20 },
+      { branch: "Din Kültürü", questionCount: 10 },
+      { branch: "Fen Bilimleri", questionCount: 20 },
+      { branch: "İngilizce", questionCount: 10 },
+      { branch: "Matematik", questionCount: 20 },
+      { branch: "Sosyal Bilgiler", questionCount: 10 },
+      { branch: "Türkçe", questionCount: 20 },
     ]);
   });
 
@@ -55,7 +55,7 @@ describe("AnswerKeyExcelImportService", () => {
     expect(repository.records[0]?.questions[0]).toEqual({
       questionNo: 1,
       correctAnswer: "D",
-      branch: "LGS TÜRKÇE",
+      branch: "Türkçe",
       outcomeCode: "SÖZCÜKTE ANLAM",
       topic: "SÖZCÜKTE ANLAM",
     });

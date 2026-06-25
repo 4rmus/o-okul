@@ -133,8 +133,16 @@ pnpm backup:restore:smoke
   staging VPS'te `docker-compose.release.yml` override'ı ile imajları çeker, migration çalıştırır,
   Traefik'li stack'i ayağa kaldırır ve `prod:evidence:check --summary-file` çıktısını artifact olarak saklar.
 - GitHub `staging` environment hazır olmadan deploy tetiklenmez; `pnpm staging:github-env:check`
-  environment varlığını, `STAGING_DEPLOY_DIR=/root/o-okul`, `STAGING_NEXT_PUBLIC_API_URL`, opsiyonel
+  environment varlığını, `STAGING_DEPLOY_DIR=/root/uzman-hocam`, `STAGING_NEXT_PUBLIC_API_URL`, opsiyonel
   `STAGING_EDGE_MODE` değerlerini ve required secret isimlerini secret değerlerini yazdırmadan doğrular.
+  Eksik secret/var handoff'u için `pnpm staging:github-env:gaps:summary -- --repo 4rmus/uzman-hocam
+  --environment staging --gap-report-file artifacts/local/staging-github-env-gap-report.json` yalnız
+  isimleri ve önerilen düzeltme komutlarını `artifacts/local/**` altında raporlar; bu çıktı PASS kanıtı değildir.
+- UI/UX redesign deploy öncesinde `pnpm ui-ux-redesign:release-preflight -- --repo 4rmus/uzman-hocam
+  --environment staging --summary-file artifacts/local/ui-ux-redesign-release-readiness-summary.json
+  --github-gap-report-file artifacts/local/staging-github-env-gap-report.json --remote-snapshot-dir
+  artifacts/local/remote-staging-snapshot --remote-gap-report-file artifacts/local/remote-staging-gap-report.json
+  --max-age-minutes 30` çalıştırılır; komut taze summary üretmeden `--require-ready` kabul etmez.
 - Staging production evidence secret sözleşmesi `docs/evidence-templates/staging-evidence.env.example`
   ve `pnpm staging:evidence-env:check` ile deploy başlamadan önce decode edilip doğrulanır; zorunlu
   env anahtarları eksik veya boş değerli olamaz ve decode edilen `.staging-evidence.env` dosyası
@@ -145,8 +153,13 @@ pnpm backup:restore:smoke
   altındaki `smoke/` klasöründe toplar. Secret env dosyası `TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE`
   benzeri raw smoke path'lerini ve `REPORT_GENERATION_SMOKE_EVIDENCE_FILE` değerini içeremez;
   bunlar summary hedefinden türeyen `artifacts/staging/smoke/*.json` dosyalarıdır.
+  UI/UX redesign release candidate ve GitHub run referansları staging workflow'un `GITHUB_REPOSITORY`
+  slug'ıyla aynı olmalıdır; bu hatta gerçek repo slug `4rmus/uzman-hocam` olduğu için image prefix
+  `ghcr.io/4rmus/uzman-hocam` olmalıdır.
   `pnpm staging:evidence-env:secret:set` aynı doğrulamayı çalıştırır, repo/temp/symlink dosyalarını
   reddeder ve `STAGING_EVIDENCE_ENV_B64` değerini GitHub environment secret'a stdin üzerinden yazar.
+  `pnpm staging:ghcr-read-token:secret:set` GHCR read token dosyasını aynı şekilde repo/temp/symlink
+  dışı ve `chmod 600` zorunlu tutarak `GHCR_READ_TOKEN` secret'ına stdin üzerinden yazar.
 - Production kanıt şablonları `pnpm prod:evidence:templates:check` ile repo içinde doğrulanır.
 - KVKK, kimlik göçü, finansal saklama, upload AV, deployment region, observability UAT ve security
   audit gerçek kanıtlarında `checkedAt` gelecekte olamaz.
@@ -798,6 +811,18 @@ pnpm backup:restore:smoke
   geç tarihli olamaz. First-gates Traefik URL/status/HSTS ve alert webhook URL/status/auth scheme
   değerleri final `summary.smokeEvidence` değerleriyle eşleşmelidir; farklı host/webhook ile alınmış
   erken gate kanıtı aynı release summary'ye terfi edemez.
+- UI/UX redesign release kanıtı staging bundle'a
+  `UI_UX_REDESIGN_EVIDENCE_OUTPUT=artifacts/staging/reports/ui-ux-redesign.json pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env`
+  ile üretilir; env dosyasındaki faz, viewport, PII review, UAT, live onboarding ve live UI-worker
+  referansları gerçek staging/prod artifact'lerine bağlanmalı, local/mock screenshot paketi tek başına
+  release kanıtı sayılmaz. Workflow bu çıktıdan sonra `UI_UX_REDESIGN_EVIDENCE_TARGET=file://.../reports/ui-ux-redesign.json`
+  değerini `.staging-evidence.env` dosyasına ekler ve production evidence zinciri aynı bundle artifact'ini okur.
+  Lokal kabul kapısı `pnpm ui-ux-redesign:local-gates`, shared-types/UI build, web typecheck, a11y,
+  UX contract, karne görsel kontratı, örnek fixture regresyonu, evidence generator kontratı ve görsel QA
+  screenshot zincirini tek komutta koşturur; bu gate staging/prod artifact'in yerini almaz.
+  Local örnek içerik guardrail'i `pnpm ui-ux-redesign:example-fixtures`, `ornek-veriler/` altındaki
+  iSEM/3D/MUBA TXT + cevap anahtarı ve aktarım şablonlarının mevcut biçimini doğrular; raw dosya
+  içeriğini log'a veya release artifact'e taşımaz ve staging/prod evidence yerine geçmez.
 - Bundle eksik veya blokluysa aynı kontrol isteğe bağlı
   `STAGING_RELEASE_GAP_REPORT_FILE=artifacts/local/staging-release-gap-report.json` ile
   makine-okunur gap raporu yazabilir. Bu rapor `result=NOT_RELEASE_EVIDENCE`,
@@ -819,6 +844,22 @@ pnpm backup:restore:smoke
   ayrıca listeler ve bloklu bundle için yine non-zero exit code döndürür. Summary CLI eski
   gap JSON'unu yeniden kullanmaz; alttaki checker'dan yazım onayı almalı ve rapor
   `generatedAt` zamanı komut başlangıcından eski olmamalıdır.
+  Remote staging hosttaki bundle gap'i aynı sözleşmeyle görmek için
+  `corepack pnpm staging:remote-release-gaps:summary -- --host uzman-hocam-server --snapshot-dir artifacts/local/remote-staging-snapshot --gap-report-file artifacts/local/remote-staging-gap-report.json`
+  kullanılır. Bu komut remote `artifacts/staging` snapshot'ını yalnız `artifacts/local/**`
+  altına alır, secret/env dosyası okumaz ve eksik kanıt varsa non-zero dönmeye devam eder.
+  UI/UX redesign kapanışı için `corepack pnpm ui-ux-redesign:release-readiness:summary -- --repo
+  4rmus/uzman-hocam --environment staging --summary-file artifacts/local/ui-ux-redesign-release-readiness-summary.json
+  --github-gap-report-file artifacts/local/staging-github-env-gap-report.json --remote-snapshot-dir
+  artifacts/local/remote-staging-snapshot --remote-gap-report-file artifacts/local/remote-staging-gap-report.json`
+  GitHub env gap'i ve remote bundle gap'ini tek `releaseEvidence=false` handoff dosyasında birleştirir;
+  PASS veya production evidence summary yerine geçmez. Remote package `ui-ux-redesign:evidence-generate`
+  script'ini içermiyorsa `remote_code_deploy` aksiyonu, `reports/ui-ux-redesign.json` üretiminden önce
+  görünür. `corepack pnpm ui-ux-redesign:release-readiness:check -- --target
+  artifacts/local/ui-ux-redesign-release-readiness-summary.json --max-age-minutes 30 --require-ready`
+  summary içindeki GitHub env gap ve remote bundle gap raporlarıyla tarih/sonuç tutarlılığını kontrol eder.
+  Gerçek deploy/release öncesinde secret, dirty workspace, stale summary, remote script ve artifact
+  blokajlarının kapandığını doğrulamalıdır.
   Beklenmeyen girdiler teşhis/log/çalışma diziniyse silinmeden bundle dışına alınır:
   `corepack pnpm staging:release-artifacts:archive-unexpected -- --artifacts-dir artifacts/staging --gap-report-file artifacts/local/staging-release-gap-report.json --archive-dir artifacts/local/staging-release-unexpected-<tag> --apply`.
   Komut önce gap raporunu taze üretir, yalnız `unexpectedFiles[]` girdilerini arşivler,

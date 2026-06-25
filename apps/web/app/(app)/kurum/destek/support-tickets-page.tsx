@@ -8,6 +8,7 @@ import {
   CrudPage,
   EmptyState,
   Field,
+  FilterBar,
   FormModal,
   InfoGrid,
   InfoItem,
@@ -483,7 +484,7 @@ export function SupportTicketsPage() {
               sortOptions={supportTicketSortOptions}
               state={listQuery}
             />
-            <div className="next-list-controls" aria-label="Destek filtreleri">
+            <FilterBar className="next-list-controls" role="group" aria-label="Destek filtreleri">
               <Field label="Kampüs">
                 <Select
                   aria-label="Kampüs"
@@ -554,7 +555,7 @@ export function SupportTicketsPage() {
                   ))}
                 </Select>
               </Field>
-            </div>
+            </FilterBar>
             <Button onClick={openCreateForm}>
               <Plus size={17} aria-hidden="true" />
               Destek bildirimi aç

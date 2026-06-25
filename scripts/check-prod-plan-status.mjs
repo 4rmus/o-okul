@@ -13,6 +13,7 @@ const goLiveEvidenceCheckerPath = "scripts/check-go-live-evidence.mjs";
 const finalExternalEvidenceCheckerPath = "scripts/check-final-external-evidence.mjs";
 const remoteFinalEvidenceCheckerPath = "scripts/check-remote-final-evidence-readiness.mjs";
 const stagingReleaseGapSummaryPath = "scripts/print-staging-release-gap-summary.mjs";
+const remoteStagingReleaseGapSummaryPath = "scripts/print-remote-staging-release-gap-summary.mjs";
 const packagePath = "package.json";
 
 const plan = readFileSync(planPath, "utf8");
@@ -28,6 +29,7 @@ const goLiveEvidenceChecker = readFileSync(goLiveEvidenceCheckerPath, "utf8");
 const finalExternalEvidenceChecker = readFileSync(finalExternalEvidenceCheckerPath, "utf8");
 const remoteFinalEvidenceChecker = readFileSync(remoteFinalEvidenceCheckerPath, "utf8");
 const stagingReleaseGapSummary = readFileSync(stagingReleaseGapSummaryPath, "utf8");
+const remoteStagingReleaseGapSummary = readFileSync(remoteStagingReleaseGapSummaryPath, "utf8");
 const packageJson = JSON.parse(readFileSync(packagePath, "utf8"));
 
 const failures = [];
@@ -424,7 +426,7 @@ const requiredArchitecturePendingTokens = [
   "Broad CI ve staging kaniti Faz 5/Faz 10 kapsaminda.",
   "gercek live/staging DB artifact'i",
   "KVKK staging artifact'inin production summary/live-status zincirine baglanmasi",
-  "remote/staging `o-okul-server` uzerinde `artifacts/staging/isem-optical-pipeline.json`",
+  "remote/staging `uzman-hocam-server` uzerinde `artifacts/staging/isem-optical-pipeline.json`",
   "`artifacts/staging/live-ui-worker-result.json` PDF/XLSX indirme",
   "UI-worker result",
   "pilot/go-live kanitlari uretilmeli",
@@ -585,6 +587,7 @@ const requiredEvidenceScriptTokens = new Map([
   ["staging:evidence-env:check", ["scripts/check-staging-evidence-env.mjs"]],
   ["staging:release-artifacts:check", ["scripts/check-staging-release-artifacts.mjs"]],
   ["staging:release-gaps:summary", ["scripts/print-staging-release-gap-summary.mjs"]],
+  ["staging:remote-release-gaps:summary", ["scripts/print-remote-staging-release-gap-summary.mjs"]],
   ["staging:first-gates:check", ["scripts/check-staging-first-gates-evidence.mjs"]],
   ["traefik:https:smoke", ["scripts/smoke-traefik-https.mjs"]],
   ["deployment:region:check", ["scripts/check-deployment-region-evidence.mjs"]],
@@ -715,6 +718,8 @@ requireTokens(
     "${remoteEvidenceEnvPrefix} node scripts/check-live-status-evidence.mjs",
     "Live status evidence kontrolü geçti: 18/18 dış kanıt PASS.",
     "Remote live:status:check 18/18 dış kanıt PASS üretmeli",
+    "requireRemoteFinalFileTargets",
+    "remote final artifact bulunamadı",
     "remote final kanıt kapısı için zorunlu.",
     "remote final kanıt target URL userinfo, query veya fragment içeremez.",
     "remote final kanıt için gerçek https host olmalı.",
@@ -748,6 +753,27 @@ requireTokens(
     "evidenceGate",
     "nextActionKind",
     "release-summary-*.json",
+  ],
+  failures,
+);
+
+requireTokens(
+  remoteStagingReleaseGapSummaryPath,
+  remoteStagingReleaseGapSummary,
+  [
+    "REMOTE_STAGING_RELEASE_HOST",
+    "REMOTE_STAGING_RELEASE_ROOT",
+    "REMOTE_STAGING_RELEASE_ARTIFACTS_DIR",
+    "REMOTE_STAGING_RELEASE_SNAPSHOT_DIR",
+    "REMOTE_STAGING_RELEASE_GAP_REPORT_FILE",
+    "scripts/print-staging-release-gap-summary.mjs",
+    "artifacts/local",
+    "BatchMode=yes",
+    "tar -cf -",
+    "Remote staging artifact snapshot yazıldı",
+    "Remote staging gap raporu hedefi",
+    "symlink olmayan hedef olmalı",
+    "parent dizini symlink olmayan dizin olmalı",
   ],
   failures,
 );

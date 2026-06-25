@@ -229,18 +229,17 @@ export function ScheduleLessonsPage() {
     <>
       <CrudPage
         actions={
-          <>
-            <ListControls
-              meta={lessonsQuery.data?.meta}
-              onChange={setListQuery}
-              sortOptions={scheduleSortOptions}
-              state={listQuery}
-            />
+          <ListControls
+            meta={lessonsQuery.data?.meta}
+            onChange={setListQuery}
+            sortOptions={scheduleSortOptions}
+            state={listQuery}
+          >
             <Button onClick={openCreateForm}>
               <Plus size={17} aria-hidden="true" />
               Ders ekle
             </Button>
-          </>
+          </ListControls>
         }
         aria-label="Ders programı yönetimi"
         columns={columns}

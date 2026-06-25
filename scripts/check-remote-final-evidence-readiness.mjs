@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 
-const host = process.env.REMOTE_EVIDENCE_HOST ?? "o-okul-server";
-const root = process.env.REMOTE_EVIDENCE_ROOT ?? "/root/o-okul";
+const host = process.env.REMOTE_EVIDENCE_HOST ?? "uzman-hocam-server";
+const root = process.env.REMOTE_EVIDENCE_ROOT ?? "/root/uzman-hocam";
 const apiHealthUrl = process.env.REMOTE_EVIDENCE_API_HEALTH_URL ?? "http://127.0.0.1:3100/health";
 const webHealthUrl = process.env.REMOTE_EVIDENCE_WEB_HEALTH_URL ?? "http://127.0.0.1:3001";
 const connectTimeout = process.env.REMOTE_EVIDENCE_CONNECT_TIMEOUT_SECONDS ?? "10";
@@ -65,6 +65,11 @@ requireRemotePass(
   `${rootCommand} && grep -F '"prod:external-evidence:check": "node scripts/check-final-external-evidence.mjs"' package.json`,
   "Remote package.json prod:external-evidence:check script'ini final checker'a bağlamalı.",
 );
+requireRemoteFinalFileTargets(targetEnv);
+
+if (failures.length > 0) {
+  fail(failures);
+}
 
 const remoteEvidenceEnvPrefix = toEnvPrefix(targetEnv);
 const liveStatus = runRemote("Remote live status", `${rootCommand} && ${remoteEvidenceEnvPrefix} node scripts/check-live-status-evidence.mjs`);
@@ -205,6 +210,19 @@ function requireRemotePass(label, command, failureMessage) {
   const result = runRemote(label, command);
   if (result.status !== 0) {
     failures.push(failureMessage ?? formatRemoteFailure(`${label} kontrolü başarısız`, result));
+  }
+}
+
+function requireRemoteFinalFileTargets(values) {
+  for (const [key, value] of Object.entries(values)) {
+    const url = new URL(value);
+    if (url.protocol !== "file:") continue;
+
+    const pathname = decodeURIComponent(url.pathname);
+    const result = runRemote(`Remote final artifact ${key}`, `test -f ${shellQuote(pathname)}`);
+    if (result.status !== 0) {
+      failures.push(`${key} remote final artifact bulunamadı: ${pathname}`);
+    }
   }
 }
 

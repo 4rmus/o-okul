@@ -36,6 +36,7 @@ type RealExamFixture = {
       net: number;
       first20: string;
       firstQuestion: {
+        branch: string;
         answer: Choice;
         correctAnswer: Exclude<Choice, "">;
         status: "CORRECT" | "WRONG" | "BLANK";
@@ -64,7 +65,7 @@ const fixtures: RealExamFixture[] = [
         blank: 15,
         net: 33.6667,
         first20: "BBC_BDBACDADDDABBACD",
-        firstQuestion: { answer: "B", correctAnswer: "D", status: "WRONG" },
+        firstQuestion: { branch: "Türkçe", answer: "B", correctAnswer: "D", status: "WRONG" },
       },
     },
   },
@@ -87,7 +88,7 @@ const fixtures: RealExamFixture[] = [
         blank: 18,
         net: 8,
         first20: "DDCB_ACCDDAA_BA_CBDB",
-        firstQuestion: { answer: "D", correctAnswer: "C", status: "WRONG" },
+        firstQuestion: { branch: "LGS TÜRKÇE", answer: "D", correctAnswer: "C", status: "WRONG" },
       },
     },
   },
@@ -110,7 +111,7 @@ const fixtures: RealExamFixture[] = [
         blank: 4,
         net: 28.6667,
         first20: "BBABBDACBDCCCCDBCDCA",
-        firstQuestion: { answer: "B", correctAnswer: "D", status: "WRONG" },
+        firstQuestion: { branch: "LGS TÜRKÇE", answer: "B", correctAnswer: "D", status: "WRONG" },
       },
     },
   },
@@ -199,7 +200,7 @@ describe("OPTİK-7108 gerçek veri pipeline fixture", () => {
       expect(bScore.total.net).toBeCloseTo(fixture.expectedScores.B.net, 4);
       expect(bScore.questions[0]).toEqual({
         questionNo: 1,
-        branch: "LGS TÜRKÇE",
+        branch: fixture.expectedScores.B.firstQuestion.branch,
         outcomeCode: "SÖZCÜKTE ANLAM",
         topic: "SÖZCÜKTE ANLAM",
         answer: fixture.expectedScores.B.firstQuestion.answer,

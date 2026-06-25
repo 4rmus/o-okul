@@ -175,6 +175,15 @@ const reportArtifacts = new Map([
     },
   ],
   [
+    "uiUxRedesign",
+    {
+      file: "ui-ux-redesign.json",
+      script: "scripts/check-ui-ux-redesign-evidence.mjs",
+      targetEnv: "UI_UX_REDESIGN_EVIDENCE_TARGET",
+      allowEnv: "UI_UX_REDESIGN_ALLOW_EXAMPLE_EVIDENCE",
+    },
+  ],
+  [
     "inlineUploadMigration",
     {
       file: "inline-upload-content-migration.json",
@@ -383,6 +392,15 @@ const missingArtifactRemediation = new Map([
     },
   ],
   [
+    "reports/ui-ux-redesign.json",
+    {
+      command:
+        "UI_UX_REDESIGN_EVIDENCE_OUTPUT=artifacts/staging/reports/ui-ux-redesign.json corepack pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env",
+      prerequisite: "Staging/prod UI/UX redesign viewport coverage, PII review, UAT, live onboarding, and live UI-worker references.",
+      blocker: "Generator input references must point to real staging/prod artifacts; local/mock screenshots alone are not release evidence.",
+    },
+  ],
+  [
     "reports/inline-upload-content-migration.json",
     {
       command:
@@ -586,6 +604,15 @@ const missingArtifactHandoff = new Map([
       ownerAgent: "exam_reporting_engineer",
       evidenceGate: "live:ui-worker:result-check",
       nextActionKind: "worker_result_artifact",
+    },
+  ],
+  [
+    "reports/ui-ux-redesign.json",
+    {
+      phase: "Faz 5 - UI/UX redesign release kanıtı",
+      ownerAgent: "qa_verification_engineer",
+      evidenceGate: "ui-ux-redesign:evidence-check",
+      nextActionKind: "staging_ui_ux_artifact",
     },
   ],
   [

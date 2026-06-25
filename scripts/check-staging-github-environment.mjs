@@ -5,7 +5,7 @@ const args = process.argv.slice(2);
 const environmentName = readArgValue("--environment") ?? process.env.STAGING_GITHUB_ENVIRONMENT ?? "staging";
 const ghBin = readArgValue("--gh-bin") ?? process.env.GH_BIN ?? defaultGhBin();
 const repo = readArgValue("--repo") ?? process.env.GITHUB_REPOSITORY ?? inferRepoFromRemote();
-const expectedDeployDir = "/root/o-okul";
+const expectedDeployDir = "/root/uzman-hocam";
 const requiredSecrets = [
   "STAGING_SSH_HOST",
   "STAGING_SSH_USER",
@@ -86,7 +86,7 @@ function validateDeployDir(value, output) {
     output.push("STAGING_DEPLOY_DIR / olamaz.");
   }
   if (value !== expectedDeployDir) {
-    output.push("STAGING_DEPLOY_DIR /root/o-okul olmalı.");
+    output.push("STAGING_DEPLOY_DIR /root/uzman-hocam olmalı.");
   }
   if (value.includes("'") || value.includes("\n") || value.includes("\r")) {
     output.push("STAGING_DEPLOY_DIR shell için güvenli path olmalı.");

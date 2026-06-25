@@ -226,13 +226,12 @@ export function AttendancePage() {
     <>
       <CrudPage
         actions={
-          <>
-            <ListControls
-              meta={attendanceQuery.data?.meta}
-              onChange={setListQuery}
-              sortOptions={attendanceSortOptions}
-              state={listQuery}
-            />
+          <ListControls
+            meta={attendanceQuery.data?.meta}
+            onChange={setListQuery}
+            sortOptions={attendanceSortOptions}
+            state={listQuery}
+          >
             <Field className="next-filter-field" label="Sınıf">
               <Select
                 value={classId}
@@ -252,7 +251,7 @@ export function AttendancePage() {
               <Plus size={17} aria-hidden="true" />
               Devamsızlık ekle
             </Button>
-          </>
+          </ListControls>
         }
         aria-label="Devamsızlık yönetimi"
         columns={columns}

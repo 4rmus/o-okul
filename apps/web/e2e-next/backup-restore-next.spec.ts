@@ -169,7 +169,7 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
   });
 
   await loginAsTenantAdmin(page);
-  await expandSidebarGroup(page, "Yönetim");
+  await expandSidebarGroup(page, "Yönetim ve Kanıt");
   const backupLink = page.getByRole("link", { name: "Yedekleme" });
   await expect(backupLink).toHaveAttribute("href", "/kurum/yedek-restore");
   await backupLink.focus();

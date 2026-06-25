@@ -511,14 +511,24 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
   const showOverview = view === "overview";
   const showStudentWorkspace = view === "overview" || view === "student" || view === "homework" || view === "reports" || view === "support";
   const showStudentTracking = view === "overview" || view === "student";
+  const portalSubtitle = teacherPortalSubtitle(view, data?.teacher ? `${data.teacher.firstName} ${data.teacher.lastName}` : "Ders programı");
 
   return (
-    <PortalFrame title="Öğretmen Portalı" subtitle={teacherPortalSubtitle(view, data?.teacher ? `${data.teacher.firstName} ${data.teacher.lastName}` : "Ders programı")}>
+    <PortalFrame
+      title="Öğretmen Portalı"
+      subtitle={portalSubtitle}
+      context={teacherPortalContext(view, portalSubtitle, selectedStudentLabel, isRolePreview)}
+    >
       {showOverview ? (
         <>
           <PortalDailyBrief
             title="Günlük ders akışı"
             summary="Ders akışı, seçili öğrenci ve sınıf içi takip işleri aynı yüzeyde kalır; öğretmen portali günün operasyonlarını öne alır."
+            scope={{
+              detail: selectedCourseName && selectedTermName ? `${selectedCourseName} / ${selectedTermName}` : "Ders bağlamı bekliyor",
+              label: "Seçili öğrenci",
+              value: selectedStudentLabel,
+            }}
             items={[
               {
                 label: "Sıradaki ders",
@@ -1239,6 +1249,24 @@ function teacherPortalSubtitle(view: TeacherPortalView, fallback: string) {
   };
 
   return subtitleByView[view];
+}
+
+function teacherPortalContext(view: TeacherPortalView, label: string, selectedStudentLabel: string, isRolePreview: boolean) {
+  const detailByView: Record<TeacherPortalView, string> = {
+    announcements: "Öğretmen duyuruları ve okuma durumu",
+    homework: "Ödev kontrolü ve materyal atamaları",
+    overview: "Ders, öğrenci, ödev, rapor ve destek özeti",
+    reports: `${selectedStudentLabel} için başarı %, net ve soru bağlamı`,
+    schedule: "Bugünkü ders akışı ve program listesi",
+    student: `${selectedStudentLabel} için yoklama, not ve materyal işlemleri`,
+    support: "Destek talepleri ve yanıt akışı",
+  };
+
+  return {
+    detail: detailByView[view],
+    label,
+    meta: isRolePreview ? "Salt-okuma" : "Canlı öğretmen hesabı",
+  };
 }
 
 function todayInputValue() {

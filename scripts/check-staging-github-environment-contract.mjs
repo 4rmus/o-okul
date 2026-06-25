@@ -22,7 +22,7 @@ if (path === "repos/owner/repo/environments/staging") {
 
 if (path === "repos/owner/repo/environments/staging/variables?per_page=100") {
   const values = {
-    STAGING_DEPLOY_DIR: "/root/o-okul",
+    STAGING_DEPLOY_DIR: "/root/uzman-hocam",
     STAGING_NEXT_PUBLIC_API_URL: "https://212.108.107.190",
     STAGING_EDGE_MODE: "ip",
   };
@@ -64,7 +64,7 @@ try {
   expectNoOutput("missing-secrets", "super-secret-value-that-must-not-leak");
   expectFailure("bad-edge", ["STAGING_EDGE_MODE ip staging host için ip olmalı."]);
   expectFailure("bad-deploy-dir", ["STAGING_DEPLOY_DIR absolute path olmalı."]);
-  expectFailure("wrong-deploy-dir", ["STAGING_DEPLOY_DIR /root/o-okul olmalı."]);
+  expectFailure("wrong-deploy-dir", ["STAGING_DEPLOY_DIR /root/uzman-hocam olmalı."]);
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

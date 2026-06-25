@@ -5,7 +5,7 @@ import { expect, test, type Locator, type Page, type Route } from "@playwright/t
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const artifactDir = path.join(repoRoot, "artifacts/ui-smoke");
+const artifactDir = path.resolve(repoRoot, process.env.UI_VISUAL_ARTIFACT_DIR ?? "artifacts/ui-ux-redesign/local");
 
 const corsHeaders = {
   "access-control-allow-credentials": "true",
@@ -30,17 +30,19 @@ interface RolePortalActionStripCase {
   regionName: string;
 }
 
+const redesignViewports = [
+  { height: 812, width: 375 },
+  { height: 1024, width: 768 },
+  { height: 900, width: 1024 },
+  { height: 960, width: 1440 },
+];
+
 test.describe("Faz 9 UI görsel smoke", () => {
-  test("kurum dashboard 360/768/1024/1440 görünümde özet, karar ve rapor sözleşmesini korur", async ({ page }) => {
+  test("kurum dashboard 375/768/1024/1440 görünümde özet, karar ve rapor sözleşmesini korur", async ({ page }) => {
     test.setTimeout(90_000);
     const consoleErrors = collectConsoleErrors(page);
 
-    for (const viewport of [
-      { height: 780, width: 360 },
-      { height: 1024, width: 768 },
-      { height: 900, width: 1024 },
-      { height: 960, width: 1440 },
-    ]) {
+    for (const viewport of redesignViewports) {
       await openWithUiMocks(page, "/kurum", viewport);
 
       await expect(page.getByRole("heading", { level: 1, name: "Faz 9 Akademi" })).toBeVisible();
@@ -85,10 +87,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
       await expect(page.locator("body")).not.toContainText("tenant-faz9");
       await expect(page.locator("body")).not.toContainText("user-faz9-admin");
       await expectUiStable(page, `faz9-dashboard-${viewport.width}`, consoleErrors);
-
-      if (viewport.width === 360 || viewport.width === 1440) {
-        await saveScreenshot(page, `faz9-dashboard-${viewport.width}.png`);
-      }
+      await saveScreenshot(page, `faz9-dashboard-${viewport.width}.png`);
     }
   });
 
@@ -210,21 +209,24 @@ test.describe("Faz 9 UI görsel smoke", () => {
     expect(studentPortalRequestCount).toBe(0);
   });
 
-  test("öğrenci listesi mobilde URL state ile taşmadan kalır", async ({ page }) => {
+  test("öğrenci listesi 375/768/1024/1440 görünümde URL state ile taşmadan kalır", async ({ page }) => {
+    test.setTimeout(90_000);
     const consoleErrors = collectConsoleErrors(page);
-    await openWithUiMocks(
-      page,
-      "/kurum/ogrenciler?page=1&limit=10&q=ada&sort=lastName&classId=class-8a&density=compact&columns=name,class,status,actions",
-      { height: 844, width: 390 },
-    );
 
-    const studentsRegion = page.getByLabel("Öğrenci yönetimi");
-    await expect(studentsRegion.getByRole("heading", { name: "Öğrenciler" })).toBeVisible();
-    await expect(studentsRegion.getByLabel("Ara")).toHaveValue("ada");
-    await expect(studentsRegion).toHaveClass(/next-students-page--compact/);
-    await expectUiStable(page, "faz9-students-mobile", consoleErrors);
+    for (const viewport of redesignViewports) {
+      await openWithUiMocks(
+        page,
+        "/kurum/ogrenciler?page=1&limit=10&q=ada&sort=lastName&classId=class-8a&density=compact&columns=name,class,status,actions",
+        viewport,
+      );
 
-    await saveScreenshot(page, "faz9-students-mobile.png");
+      const studentsRegion = page.getByLabel("Öğrenci yönetimi");
+      await expect(studentsRegion.getByRole("heading", { name: "Öğrenciler" })).toBeVisible();
+      await expect(studentsRegion.getByLabel("Ara")).toHaveValue("ada");
+      await expect(studentsRegion).toHaveClass(/next-students-page--compact/);
+      await expectUiStable(page, `faz9-students-list-${viewport.width}`, consoleErrors);
+      await saveScreenshot(page, `faz9-students-list-${viewport.width}.png`);
+    }
   });
 
   test("veli listesi iletişim PII'sini maskeli gösterir", async ({ page }) => {
@@ -611,7 +613,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await saveScreenshot(page, "faz9-teacher-portal-desktop.png");
   });
 
-  test("rol portal aksiyon şeritleri 360/768/1024/1440 görünümde taşmadan kalır", async ({ page }) => {
+  test("rol portal aksiyon şeritleri 375/768/1024/1440 görünümde taşmadan kalır", async ({ page }) => {
     test.setTimeout(90_000);
     const consoleErrors = collectConsoleErrors(page);
     const cases: RolePortalActionStripCase[] = [
@@ -650,21 +652,14 @@ test.describe("Faz 9 UI görsel smoke", () => {
       },
     ];
 
-    for (const viewport of [
-      { height: 780, width: 360 },
-      { height: 1024, width: 768 },
-      { height: 900, width: 1024 },
-      { height: 960, width: 1440 },
-    ]) {
+    for (const viewport of redesignViewports) {
       for (const portalCase of cases) {
         await openWithUiMocks(page, portalCase.path, viewport, { authProfile: portalCase.authProfile });
         const actionStrip = page.getByRole("region", { name: portalCase.regionName });
         await expectRolePortalActionStrip(actionStrip, portalCase.count, portalCase.hrefs);
         await expect(actionStrip.getByRole("heading", { name: "Öncelikli aksiyonlar" })).toBeVisible();
         await expectUiStable(page, `faz9-${portalCase.key}-action-strip-${viewport.width}`, consoleErrors);
-        if (viewport.width === 360 || viewport.width === 1440) {
-          await saveScreenshot(page, `faz9-${portalCase.key}-action-strip-${viewport.width}.png`);
-        }
+        await saveScreenshot(page, `faz9-${portalCase.key}-action-strip-${viewport.width}.png`);
       }
     }
   });
@@ -689,12 +684,11 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(studentResultsTable.getByRole("columnheader", { name: "Soru" })).toBeVisible();
     await expect(studentResultsTable).toContainText("Ada Kaya");
     await expect(studentResultsTable).toContainText("%81,7");
-    await expect(studentResultsTable.getByRole("button", { name: "Ada Kaya karnesini aç" })).toBeEnabled();
-    await page.getByRole("tab", { name: "Karne Önizleme" }).click();
+    await studentResultsTable.getByRole("button", { name: "Ada Kaya karnesini aç" }).click();
+    await expect(page.getByRole("tab", { name: "Karne Önizleme" })).toHaveAttribute("aria-selected", "true");
     const reportErrorBooklet = page.getByRole("region", { name: "Hata kitapçığı" });
-    await expect(reportErrorBooklet).toContainText("Yanıt");
-    await expect(reportErrorBooklet).toContainText("Doğru");
-    await expect(reportErrorBooklet).toContainText("Boş");
+    await expect(reportErrorBooklet).toHaveClass(/next-report-output-panel/);
+    await expect(reportErrorBooklet.getByRole("table", { name: "Seçili öğrenci hata kitapçığı" })).toBeVisible();
     await page.getByRole("tab", { name: "Çıktılar" }).click();
     const exportsRegion = page.getByRole("region", { name: "Rapor çıktıları" });
     await expect(exportsRegion.getByRole("button", { name: "Excel indir" })).toBeEnabled();
@@ -704,16 +698,11 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await saveScreenshot(page, "faz9-reports-desktop.png");
   });
 
-  test("rapor çalışma alanı 360/768/1024/1440 görünümde bağlam ve karne taşmadan kalır", async ({ page }) => {
+  test("rapor çalışma alanı 375/768/1024/1440 görünümde bağlam ve karne taşmadan kalır", async ({ page }) => {
     test.setTimeout(90_000);
     const consoleErrors = collectConsoleErrors(page);
 
-    for (const viewport of [
-      { height: 780, width: 360 },
-      { height: 1024, width: 768 },
-      { height: 900, width: 1024 },
-      { height: 960, width: 1440 },
-    ]) {
+    for (const viewport of redesignViewports) {
       await openWithUiMocks(page, "/kurum/raporlar", viewport);
       await page.getByRole("button", { name: "Raporu getir" }).click();
       await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
@@ -730,11 +719,13 @@ test.describe("Faz 9 UI görsel smoke", () => {
       await expect(studentResultsTable.getByRole("columnheader", { name: "Soru" })).toBeVisible();
       await expect(studentResultsTable).toContainText("%81,7");
 
-      await page.getByRole("tab", { name: "Karne Önizleme" }).click();
+      await studentResultsTable.getByRole("button", { name: "Ada Kaya karnesini aç" }).click();
+      await expect(page.getByRole("tab", { name: "Karne Önizleme" })).toHaveAttribute("aria-selected", "true");
       const karnePanel = page.getByRole("tabpanel", { name: "Karne Önizleme" });
-      const karneContext = karnePanel.getByRole("region", { exact: true, name: "Karne rapor bağlamı" }).first();
+      const karneSheet = karnePanel.getByRole("region", { name: "Öğrenci karne özeti özet sayfası" });
+      const karneContext = karneSheet.getByRole("region", { exact: true, name: "Karne rapor bağlamı" });
       await expect(karneContext.getByRole("group", { name: "Karne rapor bağlam metrikleri" })).toHaveClass(/uh-info-grid/);
-      await expect(karneContext).toContainText("READY snapshot");
+      await expect(karneContext).toContainText("Rapor kaydı hazır");
       await expect(karneContext).toContainText("Soru");
       const karneBranchTable = karnePanel.getByRole("table", { name: "Öğrenci branş karne tablosu" });
       await expect(karneBranchTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
@@ -748,36 +739,37 @@ test.describe("Faz 9 UI görsel smoke", () => {
       await expect(exportsRegion.getByRole("button", { name: "PDF indir" })).toBeEnabled();
 
       await expectUiStable(page, `faz9-report-workspace-${viewport.width}`, consoleErrors);
-      if (viewport.width === 360 || viewport.width === 1440) {
-        await saveScreenshot(page, `faz9-report-workspace-${viewport.width}.png`);
-      }
+      await saveScreenshot(page, `faz9-report-workspace-${viewport.width}.png`);
     }
   });
 
-  test("optik workflow desktop kanıtı tab semantiği ve yoğun form düzenini korur", async ({ page }) => {
+  test("optik workflow 375/768/1024/1440 görünümde tab semantiği ve yoğun form düzenini korur", async ({ page }) => {
+    test.setTimeout(90_000);
     const consoleErrors = collectConsoleErrors(page);
-    await openWithUiMocks(page, "/kurum/optik", { height: 960, width: 1440 });
 
-    await expect(page.getByRole("heading", { level: 1, name: "Optik İşlemleri" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "1. Format" })).toHaveAttribute("aria-selected", "true");
-    const selectedFormSummary = page.getByLabel("Seçili form özeti");
-    await expect(selectedFormSummary).toHaveClass(/uh-info-grid/);
-    await expect(selectedFormSummary.locator(".uh-info-item")).toHaveCount(4);
-    await expect(selectedFormSummary).toContainText("90 soru");
-    await page.getByRole("tab", { name: "4. Eşleşmeyen satırlar" }).click();
-    await expect(page.getByRole("tabpanel", { name: "4. Eşleşmeyen satırlar" })).toContainText("Rapor üretimi");
-    await expect(page.getByRole("tabpanel", { name: "4. Eşleşmeyen satırlar" })).toContainText("Hazır rapor yok");
-    await page.getByRole("button", { name: "Raporları getir" }).click();
-    const readyReportsTable = page.getByRole("table", { name: "Hazır optik raporlar" });
-    await expect(readyReportsTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
-    await expect(readyReportsTable.getByRole("columnheader", { name: "Net" })).toBeVisible();
-    await expect(readyReportsTable.getByRole("columnheader", { name: "Soru" })).toBeVisible();
-    await expect(readyReportsTable).toContainText("%76,7");
-    await expect(readyReportsTable).toContainText("23");
-    await expect(readyReportsTable).toContainText("30");
-    await expectUiStable(page, "faz9-optik-desktop", consoleErrors);
+    for (const viewport of redesignViewports) {
+      await openWithUiMocks(page, "/kurum/optik", viewport);
 
-    await saveScreenshot(page, "faz9-optik-desktop.png");
+      await expect(page.getByRole("heading", { level: 1, name: "Optik İşlemleri" })).toBeVisible();
+      await expect(page.getByRole("tab", { name: "1. Format" })).toHaveAttribute("aria-selected", "true");
+      const selectedFormSummary = page.getByLabel("Seçili form özeti");
+      await expect(selectedFormSummary).toHaveClass(/uh-info-grid/);
+      await expect(selectedFormSummary.locator(".uh-info-item")).toHaveCount(4);
+      await expect(selectedFormSummary).toContainText("90 soru");
+      await page.getByRole("tab", { name: "3. Eşleşmeyen satırlar ve rapor" }).click();
+      await expect(page.getByRole("tabpanel", { name: "3. Eşleşmeyen satırlar ve rapor" })).toContainText("Rapor üretimi");
+      await expect(page.getByRole("tabpanel", { name: "3. Eşleşmeyen satırlar ve rapor" })).toContainText("Hazır rapor yok");
+      await page.getByRole("button", { name: "Raporları getir" }).click();
+      const readyReportsTable = page.getByRole("table", { name: "Hazır optik raporlar" });
+      await expect(readyReportsTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
+      await expect(readyReportsTable.getByRole("columnheader", { name: "Net" })).toBeVisible();
+      await expect(readyReportsTable.getByRole("columnheader", { name: "Soru" })).toBeVisible();
+      await expect(readyReportsTable).toContainText("%76,7");
+      await expect(readyReportsTable).toContainText("23");
+      await expect(readyReportsTable).toContainText("30");
+      await expectUiStable(page, `faz9-optik-workflow-${viewport.width}`, consoleErrors);
+      await saveScreenshot(page, `faz9-optik-workflow-${viewport.width}.png`);
+    }
   });
 });
 

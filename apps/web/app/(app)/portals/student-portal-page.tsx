@@ -102,6 +102,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
   const attendanceStatus = `${data?.attendanceSummary.total ?? 0} kayıt`;
   const supportStatus = openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok";
   const profileSubtitle = data?.profile ? `${data.profile.firstName} ${data.profile.lastName}` : "Öğrenci özeti";
+  const portalSubtitle = studentPortalSubtitle(view, profileSubtitle);
   const studentActionItems: PortalActionItem[] = [
     {
       actionLabel: unreadAnnouncements > 0 ? "Oku" : "Hazır",
@@ -171,11 +172,20 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
     },
   ];
   return (
-    <PortalFrame title="Öğrenci Portalı" subtitle={studentPortalSubtitle(view, profileSubtitle)}>
+    <PortalFrame
+      title="Öğrenci Portalı"
+      subtitle={portalSubtitle}
+      context={studentPortalContext(view, portalSubtitle, isRolePreview)}
+    >
       {view === "overview" ? (
         <>
           <PortalDailyBrief
             summary="Devamsızlık, ödev, duyuru ve son sınav durumu tek bakışta; öğrencinin bugün öncelik vermesi gereken işler burada toplanır."
+            scope={{
+              detail: isRolePreview ? "Salt-okuma önizleme" : "Canlı öğrenci hesabı",
+              label: "Öğrenci",
+              value: profileSubtitle,
+            }}
             items={[
               {
                 label: "Duyuru",
@@ -421,4 +431,22 @@ function studentPortalSubtitle(view: StudentPortalView, fallback: string) {
   };
 
   return subtitleByView[view];
+}
+
+function studentPortalContext(view: StudentPortalView, label: string, isRolePreview: boolean) {
+  const detailByView: Record<StudentPortalView, string> = {
+    announcements: "Okunmamış duyurular ve okul bilgilendirmeleri",
+    attendance: "Devamsızlık kayıtları ve geç kalma özeti",
+    homework: "Ödev ve materyal atamaları",
+    overview: "Günlük durum, ödev, devamsızlık, duyuru ve son sınav",
+    profile: "Profil, veli ilişkileri ve kayıt geçmişi",
+    reports: "Son sınavda başarı %, net ve soru bağlamı",
+    support: "Destek talepleri ve yanıt durumu",
+  };
+
+  return {
+    detail: detailByView[view],
+    label,
+    meta: isRolePreview ? "Salt-okuma" : "Canlı öğrenci hesabı",
+  };
 }

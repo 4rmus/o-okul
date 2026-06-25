@@ -34,6 +34,7 @@
       "Live exam cycle evidence",
       "iSEM optical pipeline evidence",
       "Live UI-worker result evidence",
+      "UI/UX redesign evidence",
       "Inline upload migration evidence",
       "Audit null tenant evidence",
       "Rate limit Redis evidence",

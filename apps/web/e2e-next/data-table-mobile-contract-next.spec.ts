@@ -41,6 +41,9 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(enrollmentTable).toContainText("9-B");
     await expect(enrollmentTable).toContainText("Sınıf eşleşmedi");
     await expect(enrollmentTable).toContainText("Dönem eşleşmedi");
+    await expectMobileDetailCells(enrollmentTable, [
+      { label: "Bağlam", text: "Akademik yıl eşleşmedi / Dönem eşleşmedi" },
+    ]);
 
     await expectNoVisibleTextValues(page, "student-360-mobile", [
       "student-a",
@@ -208,6 +211,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
     const financeFilters = financeRegion.getByLabel("Finans filtreleri");
     await expect(listControls.locator(".uh-field")).toHaveCount(3);
     await expect(financeFilters).toBeVisible();
+    await expect(financeFilters).toHaveClass(/uh-filter-bar/);
     await expect(financeFilters.locator(".uh-field")).toHaveCount(6);
     const installmentsTable = financeRegion.getByRole("table", { name: "Ödeme taksitleri" });
     await expect(installmentsTable.getByRole("columnheader", { name: "Öğrenci" })).toBeVisible();
@@ -248,6 +252,8 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(attendanceRegion.getByLabel("Sırala")).toHaveValue("-date");
     await expect(attendanceRegion.getByLabel("Göster")).toHaveValue("20");
     await expect(attendanceRegion.getByLabel("Sınıf")).toHaveValue("class-8a");
+    const attendanceControls = attendanceRegion.getByRole("group", { name: "Liste kontrolleri" });
+    await expect(attendanceControls.getByRole("button", { name: "Devamsızlık ekle" })).toBeVisible();
 
     const attendanceTable = attendanceRegion.getByRole("table", { name: "Devamsızlık operasyon listesi" });
     await expect(attendanceTable.getByRole("columnheader", { name: "Öğrenci" })).toBeVisible();
@@ -314,6 +320,8 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(programSummary).toContainText("Program toplamı");
     await expect(programSummary).toContainText("Saat planı");
     await expect(programSummary.getByLabel("Ders programı operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    const programControls = programRegion.getByRole("group", { name: "Liste kontrolleri" });
+    await expect(programControls.getByRole("button", { name: "Ders ekle" })).toBeVisible();
     const programTable = programRegion.getByRole("table", { name: "Ders programı operasyon listesi" });
     await expect(programTable.getByRole("columnheader", { name: "Ders" })).toBeVisible();
     await expect(programTable.getByRole("columnheader", { name: "Dönem" })).toHaveCount(0);
@@ -650,7 +658,11 @@ test.describe("DataTable mobil sözleşmesi", () => {
       { key: "status", label: "Durum", text: "Açık" },
     ]);
     await expect(supportTable.getByText("Optik dosya okunmuyor")).toBeVisible();
-    await expect(supportTable.getByText("Bağlı öğrenci")).toHaveCount(2);
+    await expect(supportTable.getByText("Bağlı öğrenci")).toHaveCount(4);
+    await expectMobileDetailCells(supportTable, [
+      { label: "Öğrenci", text: "Bağlı öğrenci" },
+      { label: "Bağlam", text: "Ana Kampüs / 8. Sınıf / 8-A / Matematik / 2026 Bahar" },
+    ]);
     await expect(supportTable.getByRole("button", { name: "Optik dosya okunmuyor işleme al" })).toBeVisible();
     await expect(supportTable.getByRole("row", { name: /Optik dosya okunmuyor/ })).toHaveClass(/next-support-row--selected/);
     const selectedDetail = page.getByRole("region", { name: "Destek seçili bildirim detayı" });
@@ -1653,6 +1665,17 @@ async function expectMobileDataCells(table: Locator, cells: Array<{ key: string;
     const locator = firstRow.locator(`td[data-column-key="${cell.key}"]`);
     await expect(locator).toHaveAttribute("data-label", cell.label);
     await expect(locator).toContainText(cell.text);
+  }
+}
+
+async function expectMobileDetailCells(table: Locator, cells: Array<{ label: string; text: string }>) {
+  const detailRows = table.locator('tbody tr[data-mobile-detail="true"]');
+  await expect(detailRows.first()).toBeVisible();
+
+  for (const cell of cells) {
+    const detailItem = detailRows.locator(".uh-data-table__mobile-detail-item").filter({ hasText: cell.text }).first();
+    await expect(detailItem.locator("dt")).toHaveText(cell.label);
+    await expect(detailItem.locator("dd")).toContainText(cell.text);
   }
 }
 

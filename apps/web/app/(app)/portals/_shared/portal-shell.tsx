@@ -10,12 +10,19 @@ interface PortalFrameProps {
   subtitle: string;
   actions?: ReactNode;
   children: ReactNode;
+  context?: PortalFrameContext;
 }
 
 interface PortalWorkspaceProps {
   ariaLabel: string;
   main: ReactNode;
   side: ReactNode;
+}
+
+interface PortalFrameContext {
+  detail: string;
+  label: string;
+  meta?: string;
 }
 
 interface PortalMetricItem {
@@ -27,11 +34,25 @@ interface PortalMetricItem {
 
 const demoLoginEnabled = process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN === "true" || process.env.NODE_ENV !== "production";
 
-export function PortalFrame({ actions, children, subtitle, title }: PortalFrameProps) {
+export function PortalFrame({ actions, children, context, subtitle, title }: PortalFrameProps) {
   return (
     <PageFrame title={title} subtitle={subtitle} actions={actions}>
+      {context ? <PortalContextStrip context={context} /> : null}
       <div className="next-portal-stack">{children}</div>
     </PageFrame>
+  );
+}
+
+function PortalContextStrip({ context }: { context: PortalFrameContext }) {
+  return (
+    <section className="next-portal-context-strip" aria-label="Portal görev bağlamı">
+      <p className="next-section-eyebrow">Aktif görünüm</p>
+      <div>
+        <strong>{context.label}</strong>
+        <span>{context.detail}</span>
+      </div>
+      {context.meta ? <small>{context.meta}</small> : null}
+    </section>
   );
 }
 
@@ -153,6 +174,12 @@ export interface PortalDailyBriefItem {
   tone?: "critical" | "info" | "neutral" | "success" | "warning";
 }
 
+export interface PortalDailyBriefScope {
+  detail?: string;
+  label: string;
+  value: string;
+}
+
 export interface PortalActionItem {
   actionLabel: string;
   contextLabel?: string;
@@ -167,10 +194,12 @@ export interface PortalActionItem {
 
 export function PortalDailyBrief({
   items,
+  scope,
   summary,
   title = "Günlük durum",
 }: {
   items: PortalDailyBriefItem[];
+  scope?: PortalDailyBriefScope;
   summary: string;
   title?: string;
 }) {
@@ -182,6 +211,13 @@ export function PortalDailyBrief({
       description={<span className="next-section-eyebrow">Bugünün odağı</span>}
       title={title}
     >
+      {scope ? (
+        <div className="next-portal-brief__scope" aria-label={`${title} görev kapsamı`}>
+          <span>{scope.label}</span>
+          <strong>{scope.value}</strong>
+          {scope.detail ? <small>{scope.detail}</small> : null}
+        </div>
+      ) : null}
       <UiMetricGrid aria-label={`${title} metrikleri`} className="next-portal-brief__grid" role="group">
         {items.map((item) => (
           <MetricCard

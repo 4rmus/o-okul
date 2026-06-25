@@ -101,8 +101,8 @@ jobs:
             echo "STAGING_DEPLOY_DIR must not be /." >&2
             exit 1
           fi
-          if [ "$STAGING_DEPLOY_DIR" != "/root/o-okul" ]; then
-            echo "STAGING_DEPLOY_DIR must be /root/o-okul." >&2
+          if [ "$STAGING_DEPLOY_DIR" != "/root/uzman-hocam" ]; then
+            echo "STAGING_DEPLOY_DIR must be /root/uzman-hocam." >&2
             exit 1
           fi
           if [[ "$STAGING_DEPLOY_DIR" == *"'"* || "$STAGING_DEPLOY_DIR" == *$'\n'* || "$STAGING_DEPLOY_DIR" == *$'\r'* ]]; then
@@ -493,6 +493,12 @@ jobs:
         run: |
           GITHUB_CI_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/github-ci.json" pnpm github-ci:check
 
+      - name: Generate UI/UX redesign evidence
+        shell: bash
+        run: |
+          UI_UX_REDESIGN_EVIDENCE_OUTPUT="artifacts/staging/reports/ui-ux-redesign.json" \
+            pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env
+
       - name: Append release evidence metadata
         shell: bash
         env:
@@ -503,6 +509,7 @@ jobs:
             echo "SENTRY_RELEASE=$IMAGE_TAG"
             echo "ROLLBACK_IMAGE_TAG=$ROLLBACK_IMAGE_TAG"
             echo "GITHUB_CI_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/github-ci.json"
+            echo "UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json"
             echo "PRODUCTION_EVIDENCE_SUMMARY_TARGET=file://$PWD/artifacts/staging/release-summary-${IMAGE_TAG}.json"
           } >> .staging-evidence.env
 

@@ -251,6 +251,7 @@ test.describe("Liste URL state", () => {
     await expect(financeSummary).toContainText("6 filtre aktif");
     await expect(financeSummary.getByLabel("Finans operasyon özeti aksiyon kuyruğu")).toBeVisible();
     await expect(financeListControls.locator(".uh-field")).toHaveCount(3);
+    await expect(filters).toHaveClass(/uh-filter-bar/);
     await expect(financeRegion.getByLabel("Ara")).toHaveValue("haziran");
     await expect(financeRegion.getByLabel("Sırala")).toHaveValue("-dueDate");
     await expect(financeRegion.getByLabel("Göster")).toHaveValue("20");
@@ -294,6 +295,7 @@ test.describe("Liste URL state", () => {
     await expect(supportSummary).toContainText("Triage kuyruğu");
     await expect(supportSummary).toContainText("5 aktif filtre");
     await expect(supportSummary.getByLabel("Destek operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(filters).toHaveClass(/uh-filter-bar/);
     await expect(supportRegion.getByLabel("Ara")).toHaveValue("optik");
     await expect(supportRegion.getByLabel("Sırala")).toHaveValue("-createdAt");
     await expect(supportRegion.getByLabel("Göster")).toHaveValue("20");
@@ -678,9 +680,11 @@ test.describe("Liste URL state", () => {
         for (const actionText of screen.actionTexts) {
           await expect(summary).toContainText(actionText);
         }
-        await expect(region.getByLabel("Ara")).toHaveValue(screen.searchValue);
-        await expect(region.getByLabel("Sırala")).toHaveValue(screen.sortValue);
-        await expect(region.getByLabel("Göster")).toHaveValue("20");
+        const listControls = region.getByRole("group", { name: "Liste kontrolleri" });
+        await expect(listControls).toBeVisible();
+        await expect(listControls.getByLabel("Ara")).toHaveValue(screen.searchValue);
+        await expect(listControls.getByLabel("Sırala")).toHaveValue(screen.sortValue);
+        await expect(listControls.getByLabel("Göster")).toHaveValue("20");
 
         const table = region.getByRole("table", { name: screen.tableName });
         await expect(table).toBeVisible();

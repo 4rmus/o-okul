@@ -25,8 +25,29 @@ const workflowInjectedKeys = new Set([
   "ROLLBACK_IMAGE_TAG",
   "SENTRY_RELEASE",
   "GITHUB_CI_EVIDENCE_TARGET",
+  "UI_UX_REDESIGN_EVIDENCE_TARGET",
   "PRODUCTION_EVIDENCE_SUMMARY_TARGET",
 ]);
+const uiUxRedesignGeneratorKeys = [
+  "UI_UX_REDESIGN_RELEASE_CANDIDATE",
+  "UI_UX_REDESIGN_STAGING_EVIDENCE_REFERENCES",
+  "UI_UX_REDESIGN_PHASE_0_REFERENCES",
+  "UI_UX_REDESIGN_PHASE_1_REFERENCES",
+  "UI_UX_REDESIGN_PHASE_2_REFERENCES",
+  "UI_UX_REDESIGN_PHASE_3_REFERENCES",
+  "UI_UX_REDESIGN_PHASE_4_REFERENCES",
+  "UI_UX_REDESIGN_PHASE_5_REFERENCES",
+  "UI_UX_REDESIGN_KURUM_DASHBOARD_REFERENCES",
+  "UI_UX_REDESIGN_OPTIK_WORKSPACE_REFERENCES",
+  "UI_UX_REDESIGN_RAPOR_WORKSPACE_REFERENCES",
+  "UI_UX_REDESIGN_PORTAL_SHELL_REFERENCES",
+  "UI_UX_REDESIGN_PII_REVIEW",
+  "UI_UX_REDESIGN_RAW_PII_IN_ARTIFACTS",
+  "UI_UX_REDESIGN_SMS_RECIPIENT_PREVIEW_EXPORTED",
+  "UI_UX_REDESIGN_GUARDIAN_FINANCE_LEAKAGE_CHECKED",
+  "UI_UX_REDESIGN_APPROVAL_ROLE",
+  "UI_UX_REDESIGN_APPROVED_AT",
+];
 const runtimeRequiredKeys = [
   "NETGSM_USERCODE",
   "NETGSM_PASSWORD",
@@ -34,7 +55,7 @@ const runtimeRequiredKeys = [
   "S3_ACCESS_KEY_ID",
   "S3_SECRET_ACCESS_KEY",
 ];
-const requiredKeys = unique([...extractProdEnvContractKeys(), ...runtimeRequiredKeys]);
+const requiredKeys = unique([...extractProdEnvContractKeys(), ...runtimeRequiredKeys, ...uiUxRedesignGeneratorKeys]);
 const keysRequiredInSecret = requiredKeys.filter(
   (key) => !summaryDefaultedSmokeKeys.has(key) && !workflowInjectedKeys.has(key),
 );
@@ -62,6 +83,7 @@ for (const key of target.duplicateKeys) {
 
 checkWorkflowContract(failures);
 checkProdEvidenceDefaults(failures);
+checkTemplateRepositorySlugContract(failures);
 
 if (envFile) {
   checkNoPlaceholders(target, failures);
@@ -131,7 +153,7 @@ function checkWorkflowContract(output) {
   const requiredTokens = [
     "Validate staging dispatch inputs and environment",
     "STAGING_NEXT_PUBLIC_API_URL must be an https:// URL.",
-    "STAGING_DEPLOY_DIR must be /root/o-okul.",
+    "STAGING_DEPLOY_DIR must be /root/uzman-hocam.",
     "validate_tag \"rollback_image_tag\"",
     "github-ci-evidence:",
     "needs: preflight",
@@ -152,6 +174,10 @@ function checkWorkflowContract(output) {
     "path: artifacts/staging/reports",
     "path: artifacts/staging/reports/github-ci.json",
     "Check pre-deploy GitHub CI evidence",
+    "Generate UI/UX redesign evidence",
+    "UI_UX_REDESIGN_EVIDENCE_OUTPUT=\"artifacts/staging/reports/ui-ux-redesign.json\"",
+    "pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env",
+    "echo \"UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json\"",
     "echo \"SENTRY_RELEASE=$IMAGE_TAG\"",
     "echo \"ROLLBACK_IMAGE_TAG=$ROLLBACK_IMAGE_TAG\"",
     "echo \"GITHUB_CI_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/github-ci.json\"",
@@ -200,7 +226,11 @@ function checkWorkflowContract(output) {
     "Check staging evidence env",
     "pnpm staging:evidence-env:check -- --env-file .staging-evidence.env",
     "Check pre-deploy GitHub CI evidence",
+    "Generate UI/UX redesign evidence",
+    "UI_UX_REDESIGN_EVIDENCE_OUTPUT=\"artifacts/staging/reports/ui-ux-redesign.json\"",
+    "pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env",
     "Append release evidence metadata",
+    "echo \"UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json\"",
     "Run first staging evidence gates",
     "Run production evidence chain",
     "Check staging release artifact bundle",
@@ -226,6 +256,20 @@ function checkProdEvidenceDefaults(output) {
     if (!source.includes(fileName)) {
       output.push(`${prodEvidenceScriptPath} eksik smoke evidence default dosyası: ${fileName}`);
     }
+  }
+}
+
+function checkTemplateRepositorySlugContract(output) {
+  if (targetPath !== templatePath) return;
+
+  const releaseCandidate = target.values.get("UI_UX_REDESIGN_RELEASE_CANDIDATE");
+  const evidenceReferences = target.values.get("UI_UX_REDESIGN_STAGING_EVIDENCE_REFERENCES");
+
+  if (!String(releaseCandidate).startsWith("ghcr.io/__SET_GITHUB_REPOSITORY__/")) {
+    output.push(`${templatePath} UI_UX_REDESIGN_RELEASE_CANDIDATE GITHUB_REPOSITORY slug'ını kullanmalı.`);
+  }
+  if (!String(evidenceReferences).includes("run:https://github.com/__SET_GITHUB_REPOSITORY__/actions/runs/")) {
+    output.push(`${templatePath} UI_UX_REDESIGN_STAGING_EVIDENCE_REFERENCES GITHUB_REPOSITORY run URL'si kullanmalı.`);
   }
 }
 
@@ -257,6 +301,7 @@ function checkResolvedProductionEnv(target) {
   }
   env.ROLLBACK_IMAGE_TAG = "staging-evidence-preflight";
   env.GITHUB_CI_EVIDENCE_TARGET = "file:///var/lib/o-okul/staging-artifacts/github-ci.json";
+  env.UI_UX_REDESIGN_EVIDENCE_TARGET = "file:///var/lib/o-okul/staging-artifacts/ui-ux-redesign.json";
   env.PRODUCTION_EVIDENCE_SUMMARY_TARGET = "file:///var/lib/o-okul/staging-artifacts/release-summary-preflight.json";
   for (const [key, fileName] of summaryDefaultedSmokeKeys.entries()) {
     env[key] = `artifacts/staging/smoke/${fileName}`;

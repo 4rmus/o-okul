@@ -165,6 +165,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
   const supportReadOnly = isRolePreview || !canOpenSupportTickets;
   const selectedStudentLabel = selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "Seçilmedi";
   const selectedStudentDetail = data?.profile?.className ?? "Bağlı öğrenci";
+  const portalSubtitle = guardianPortalSubtitle(view, selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "Bağlı öğrenci özeti");
   const guardianActionItems: PortalActionItem[] = [
     {
       actionLabel: "İzle",
@@ -245,7 +246,11 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
     },
   ];
   return (
-    <PortalFrame title="Veli Portalı" subtitle={guardianPortalSubtitle(view, selectedStudent ? `${selectedStudent.firstName} ${selectedStudent.lastName}` : "Bağlı öğrenci özeti")}>
+    <PortalFrame
+      title="Veli Portalı"
+      subtitle={portalSubtitle}
+      context={guardianPortalContext(view, portalSubtitle, selectedStudentLabel, canViewFinance, isRolePreview)}
+    >
       <SegmentedControl className="next-segmented" id="portal-student-picker" label="Öğrenci seçimi">
         {students.map((student) => (
           <button
@@ -262,6 +267,11 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
         <>
           <PortalDailyBrief
             summary="Veli için bugün izlenecek başlıklar seçili öğrenciye göre daraltılır; finans ve destek alanları yalnız izin verilen kapsamda görünür."
+            scope={{
+              detail: canViewFinance ? "Finans görünürlüğü açık" : "Finans görünürlüğü kapalı",
+              label: "Bağlı öğrenci",
+              value: selectedStudentLabel,
+            }}
             items={[
               {
                 label: "Öğrenci",
@@ -647,4 +657,29 @@ function guardianPortalSubtitle(view: GuardianPortalView, fallback: string) {
   };
 
   return subtitleByView[view];
+}
+
+function guardianPortalContext(
+  view: GuardianPortalView,
+  label: string,
+  selectedStudentLabel: string,
+  canViewFinance: boolean,
+  isRolePreview: boolean,
+) {
+  const detailByView: Record<GuardianPortalView, string> = {
+    announcements: "Veli duyuruları ve okuma durumu",
+    homework: `${selectedStudentLabel} için ödev ve materyal takibi`,
+    notifications: "Bildirim, finans ve destek izinleri",
+    overview: `${selectedStudentLabel} için günlük veli özeti`,
+    payments: canViewFinance ? "İzinli taksit ve alacak takibi" : "Finans görünürlüğü kapalı",
+    reports: `${selectedStudentLabel} için başarı %, net ve soru bağlamı`,
+    student: `${selectedStudentLabel} için öğrenci profili ve kayıt geçmişi`,
+    support: "Veli destek talepleri ve yanıt durumu",
+  };
+
+  return {
+    detail: detailByView[view],
+    label,
+    meta: isRolePreview ? "Salt-okuma" : "Canlı veli hesabı",
+  };
 }

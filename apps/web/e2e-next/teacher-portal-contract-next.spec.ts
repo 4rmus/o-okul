@@ -105,6 +105,15 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       await expectTeacherDisplayPanels(page);
       await expectTeacherActivityPanels(page);
 
+      const dailyBrief = page.getByRole("region", { exact: true, name: "Günlük ders akışı" });
+      const dailyScope = dailyBrief.getByLabel("Günlük ders akışı görev kapsamı");
+      await expect(dailyScope).toContainText("Seçili öğrenci");
+      await expect(dailyScope).toContainText("Ada Kaya / 8-A");
+      await expect(dailyScope).toContainText("Matematik / 2026 Bahar");
+      for (const value of rawInternalValues) {
+        await expect(dailyScope).not.toContainText(value);
+      }
+
       const actionStrip = page.getByRole("region", { name: "Öğretmen günlük aksiyonları" });
       await expect(actionStrip).toBeVisible();
       await expect(actionStrip).toContainText("Günlük iş kuyruğu");
@@ -174,6 +183,7 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       await expect(focus).toContainText("Bora Yilmaz");
       await expect(focus).toContainText("%63,3");
       await expect(page.getByRole("region", { name: "Öğretmen günlük aksiyonları" })).toContainText("Bora Yilmaz / 8-A");
+      await expect(dailyScope).toContainText("Bora Yilmaz / 8-A");
 
       await expectNoHorizontalOverflow(page, `teacher-portal-${viewport.width}`);
       await expectNoUnlabeledControls(page, `teacher-portal-${viewport.width}`);
@@ -224,18 +234,19 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     await openTeacherPortal(page, { height: 900, width: 1024 });
 
     const routeCases = [
-      { label: "Ders Akışı", path: "/ogretmen/ders-akisi", panel: () => page.getByRole("region", { exact: true, name: "Bugünkü dersler" }) },
-      { label: "Öğrenci Takibi", path: "/ogretmen/ogrenci-takibi", panel: () => page.getByRole("region", { name: "Öğrenci çalışma alanı" }) },
-      { label: "Ödev Kontrolü", path: "/ogretmen/odevler", panel: () => page.getByRole("region", { exact: true, name: "Öğretmen ödev kontrolü" }) },
-      { label: "Sınav Raporu", path: "/ogretmen/raporlar", panel: () => page.getByRole("region", { name: "Portal rapor özeti" }) },
-      { label: "Duyurular", path: "/ogretmen/duyurular", panel: () => page.getByRole("region", { exact: true, name: "Duyurular" }) },
-      { label: "Destek", path: "/ogretmen/destek", panel: () => page.getByRole("region", { name: "Destek talepleri" }) },
+      { context: "Ders akışı", label: "Ders Akışı", path: "/ogretmen/ders-akisi", panel: () => page.getByRole("region", { exact: true, name: "Bugünkü dersler" }) },
+      { context: "Öğrenci takibi", label: "Öğrenci Takibi", path: "/ogretmen/ogrenci-takibi", panel: () => page.getByRole("region", { name: "Öğrenci çalışma alanı" }) },
+      { context: "Ödev kontrolü", label: "Ödev Kontrolü", path: "/ogretmen/odevler", panel: () => page.getByRole("region", { exact: true, name: "Öğretmen ödev kontrolü" }) },
+      { context: "Sınav raporu", label: "Sınav Raporu", path: "/ogretmen/raporlar", panel: () => page.getByRole("region", { name: "Portal rapor özeti" }) },
+      { context: "Duyurular", label: "Duyurular", path: "/ogretmen/duyurular", panel: () => page.getByRole("region", { exact: true, name: "Duyurular" }) },
+      { context: "Destek talepleri", label: "Destek", path: "/ogretmen/destek", panel: () => page.getByRole("region", { name: "Destek talepleri" }) },
     ];
 
     for (const routeCase of routeCases) {
       await clickSidebarRoute(page, "Öğretmen Paneli", routeCase.label);
       await expect(page).toHaveURL(new RegExp(`${routeCase.path}$`));
       await expect(page.getByRole("heading", { level: 1, name: "Öğretmen Portalı" })).toBeVisible();
+      await expect(page.getByRole("region", { exact: true, name: "Portal görev bağlamı" })).toContainText(routeCase.context);
       await expect(routeCase.panel()).toBeVisible();
       await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { exact: true, name: "Özet" })).not.toHaveAttribute("aria-current", "page");
     }

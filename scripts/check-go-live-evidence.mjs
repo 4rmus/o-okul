@@ -32,6 +32,7 @@ const requiredEvidenceCheckScripts = new Map([
   ["Live exam cycle evidence", "scripts/check-live-exam-cycle-evidence.mjs"],
   ["iSEM optical pipeline evidence", "scripts/check-isem-optical-pipeline-evidence.mjs"],
   ["Live UI-worker result evidence", "scripts/check-live-ui-worker-result-evidence.mjs"],
+  ["UI/UX redesign evidence", "scripts/check-ui-ux-redesign-evidence.mjs"],
   ["Inline upload migration evidence", "scripts/check-inline-upload-content-migration-evidence.mjs"],
   ["Audit null tenant evidence", "scripts/check-audit-null-tenant-evidence.mjs"],
   ["Rate limit Redis evidence", "scripts/check-rate-limit-evidence.mjs"],
@@ -141,6 +142,7 @@ const summaryReportKeys = [
   "liveExamCycle",
   "isemOpticalPipeline",
   "liveUiWorkerResult",
+  "uiUxRedesign",
   "inlineUploadMigration",
   "auditNullTenant",
   "rateLimit",
@@ -294,6 +296,20 @@ const summaryRequiredReportKeys = {
     "guardianPortalViewed",
     "commandsPassed",
     "gaps",
+  ],
+  uiUxRedesign: [
+    "result",
+    "environment",
+    "checkedAt",
+    "releaseCandidate",
+    "redesignPlanPath",
+    "localStaticEvidence",
+    "stagingProductionEvidence",
+    "phaseEvidence",
+    "viewportCoverage",
+    "privacy",
+    "approvals",
+    "openRisks",
   ],
   inlineUploadMigration: [
     "environment",
@@ -1658,6 +1674,135 @@ function requireSummaryReports(summary, failures, goLiveReport) {
       failures,
       "gaps",
       "productionEvidenceSummary.summary.reports.liveUiWorkerResult.gaps",
+    );
+  }
+
+  const uiUxRedesign = requireNestedObject(
+    reports,
+    failures,
+    "productionEvidenceSummary.summary.reports.uiUxRedesign",
+    "uiUxRedesign",
+  );
+  if (uiUxRedesign) {
+    requireObjectEqual(uiUxRedesign, failures, "productionEvidenceSummary.summary.reports.uiUxRedesign.result", "result", "PASS");
+    requireObjectEqual(
+      uiUxRedesign,
+      failures,
+      "productionEvidenceSummary.summary.reports.uiUxRedesign.environment",
+      "environment",
+      "production",
+    );
+    requireSummaryReportDateNotAfter(
+      uiUxRedesign,
+      failures,
+      "productionEvidenceSummary.summary.reports.uiUxRedesign.checkedAt",
+      "checkedAt",
+      summary,
+      goLiveReport,
+    );
+    requireObjectEqual(
+      uiUxRedesign,
+      failures,
+      "productionEvidenceSummary.summary.reports.uiUxRedesign.redesignPlanPath",
+      "redesignPlanPath",
+      "docs/ui-ux-redesign-plan.md",
+    );
+    requireMatchingString(
+      uiUxRedesign,
+      failures,
+      "productionEvidenceSummary.summary.reports.uiUxRedesign.releaseCandidate",
+      "releaseCandidate",
+      goLiveReport,
+      "releaseCandidate",
+      "releaseCandidate",
+    );
+
+    const localStaticEvidence = requireNestedObject(
+      uiUxRedesign,
+      failures,
+      "productionEvidenceSummary.summary.reports.uiUxRedesign.localStaticEvidence",
+      "localStaticEvidence",
+    );
+    if (localStaticEvidence) {
+      requireObjectEqual(
+        localStaticEvidence,
+        failures,
+        "productionEvidenceSummary.summary.reports.uiUxRedesign.localStaticEvidence.result",
+        "result",
+        "PASS",
+      );
+      requireObjectEqual(
+        localStaticEvidence,
+        failures,
+        "productionEvidenceSummary.summary.reports.uiUxRedesign.localStaticEvidence.releaseBlocking",
+        "releaseBlocking",
+        false,
+      );
+    }
+
+    const stagingProductionEvidence = requireNestedObject(
+      uiUxRedesign,
+      failures,
+      "productionEvidenceSummary.summary.reports.uiUxRedesign.stagingProductionEvidence",
+      "stagingProductionEvidence",
+    );
+    if (stagingProductionEvidence) {
+      requireObjectEqual(
+        stagingProductionEvidence,
+        failures,
+        "productionEvidenceSummary.summary.reports.uiUxRedesign.stagingProductionEvidence.result",
+        "result",
+        "PASS",
+      );
+      requireObjectTrue(
+        stagingProductionEvidence,
+        failures,
+        "productionEvidenceSummary.summary.reports.uiUxRedesign.stagingProductionEvidence.requiredForRelease",
+        "requiredForRelease",
+      );
+    }
+
+    const privacy = requireNestedObject(
+      uiUxRedesign,
+      failures,
+      "productionEvidenceSummary.summary.reports.uiUxRedesign.privacy",
+      "privacy",
+    );
+    if (privacy) {
+      requireObjectEqual(
+        privacy,
+        failures,
+        "productionEvidenceSummary.summary.reports.uiUxRedesign.privacy.piiReview",
+        "piiReview",
+        "PASS",
+      );
+      requireObjectEqual(
+        privacy,
+        failures,
+        "productionEvidenceSummary.summary.reports.uiUxRedesign.privacy.rawPiiInArtifacts",
+        "rawPiiInArtifacts",
+        false,
+      );
+      requireObjectEqual(
+        privacy,
+        failures,
+        "productionEvidenceSummary.summary.reports.uiUxRedesign.privacy.smsRecipientPreviewExported",
+        "smsRecipientPreviewExported",
+        false,
+      );
+      requireObjectTrue(
+        privacy,
+        failures,
+        "productionEvidenceSummary.summary.reports.uiUxRedesign.privacy.guardianFinanceLeakageChecked",
+        "guardianFinanceLeakageChecked",
+      );
+    }
+
+    requireEmptyArray(
+      uiUxRedesign,
+      failures,
+      "openRisks",
+      "productionEvidenceSummary.summary.reports.uiUxRedesign.openRisks",
     );
   }
 

@@ -250,7 +250,13 @@ test.describe("Governance evidence sözleşmesi", () => {
     await openWithGovernanceMocks(page, "/kurum/denetim", { height: 844, width: 390 }, { roles: ["TENANT_ADMIN"] });
     await expect(page).toHaveURL(/\/kurum\/denetim$/);
     await expect(page.getByRole("region", { exact: true, name: "Denetim operasyon özeti" })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Denetim", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Komut paleti" }).click();
+    const auditCommandDialog = page.getByRole("dialog", { name: "Komut paleti" });
+    await auditCommandDialog.getByLabel("Komut ara").fill("denetim");
+    await expect(auditCommandDialog.getByRole("link", { name: /Denetim/ })).toBeVisible();
+    await auditCommandDialog.getByRole("button", { name: "Kapat" }).click();
+    await page.getByRole("button", { name: "Ana menüyü aç" }).click();
+    await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Denetim", exact: true })).toBeVisible();
 
     const assistantAuditLogRequests: string[] = [];
     page.on("request", (request) => {
@@ -287,6 +293,13 @@ test.describe("Governance evidence sözleşmesi", () => {
     await openWithGovernanceMocks(page, "/kurum/kvkk", { height: 844, width: 390 }, { roles: ["TENANT_ADMIN"] });
     await expect(page).toHaveURL(/\/kurum\/kvkk$/);
     await expect(page.getByRole("region", { exact: true, name: "KVKK operasyon özeti" })).toBeVisible();
+    await page.getByRole("button", { name: "Komut paleti" }).click();
+    const kvkkCommandDialog = page.getByRole("dialog", { name: "Komut paleti" });
+    await kvkkCommandDialog.getByLabel("Komut ara").fill("kvkk");
+    await expect(kvkkCommandDialog.getByRole("link", { name: /KVKK/ })).toBeVisible();
+    await kvkkCommandDialog.getByRole("button", { name: "Kapat" }).click();
+    await page.getByRole("button", { name: "Ana menüyü aç" }).click();
+    await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "KVKK" })).toBeVisible();
 
     await openWithGovernanceMocks(page, "/kurum/kvkk", { height: 844, width: 390 }, { roles: ["ASSISTANT_ADMIN"] });
     await expect(page).toHaveURL(/\/kurum$/);
