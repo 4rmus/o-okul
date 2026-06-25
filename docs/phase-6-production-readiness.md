@@ -133,12 +133,12 @@ pnpm backup:restore:smoke
   staging VPS'te `docker-compose.release.yml` override'ı ile imajları çeker, migration çalıştırır,
   Traefik'li stack'i ayağa kaldırır ve `prod:evidence:check --summary-file` çıktısını artifact olarak saklar.
 - GitHub `staging` environment hazır olmadan deploy tetiklenmez; `pnpm staging:github-env:check`
-  environment varlığını, `STAGING_DEPLOY_DIR=/root/uzman-hocam`, `STAGING_NEXT_PUBLIC_API_URL`, opsiyonel
+  environment varlığını, `STAGING_DEPLOY_DIR=/root/o-okul`, `STAGING_NEXT_PUBLIC_API_URL`, opsiyonel
   `STAGING_EDGE_MODE` değerlerini ve required secret isimlerini secret değerlerini yazdırmadan doğrular.
-  Eksik secret/var handoff'u için `pnpm staging:github-env:gaps:summary -- --repo 4rmus/uzman-hocam
+  Eksik secret/var handoff'u için `pnpm staging:github-env:gaps:summary -- --repo 4rmus/o-okul
   --environment staging --gap-report-file artifacts/local/staging-github-env-gap-report.json` yalnız
   isimleri ve önerilen düzeltme komutlarını `artifacts/local/**` altında raporlar; bu çıktı PASS kanıtı değildir.
-- UI/UX redesign deploy öncesinde `pnpm ui-ux-redesign:release-preflight -- --repo 4rmus/uzman-hocam
+- UI/UX redesign deploy öncesinde `pnpm ui-ux-redesign:release-preflight -- --repo 4rmus/o-okul
   --environment staging --summary-file artifacts/local/ui-ux-redesign-release-readiness-summary.json
   --github-gap-report-file artifacts/local/staging-github-env-gap-report.json --remote-snapshot-dir
   artifacts/local/remote-staging-snapshot --remote-gap-report-file artifacts/local/remote-staging-gap-report.json
@@ -154,8 +154,8 @@ pnpm backup:restore:smoke
   benzeri raw smoke path'lerini ve `REPORT_GENERATION_SMOKE_EVIDENCE_FILE` değerini içeremez;
   bunlar summary hedefinden türeyen `artifacts/staging/smoke/*.json` dosyalarıdır.
   UI/UX redesign release candidate ve GitHub run referansları staging workflow'un `GITHUB_REPOSITORY`
-  slug'ıyla aynı olmalıdır; bu hatta gerçek repo slug `4rmus/uzman-hocam` olduğu için image prefix
-  `ghcr.io/4rmus/uzman-hocam` olmalıdır.
+  slug'ıyla aynı olmalıdır; bu hatta gerçek repo slug `4rmus/o-okul` olduğu için image prefix
+  `ghcr.io/4rmus/o-okul` olmalıdır.
   `pnpm staging:evidence-env:secret:set` aynı doğrulamayı çalıştırır, repo/temp/symlink dosyalarını
   reddeder ve `STAGING_EVIDENCE_ENV_B64` değerini GitHub environment secret'a stdin üzerinden yazar.
   `pnpm staging:ghcr-read-token:secret:set` GHCR read token dosyasını aynı şekilde repo/temp/symlink
@@ -849,7 +849,7 @@ pnpm backup:restore:smoke
   kullanılır. Bu komut remote `artifacts/staging` snapshot'ını yalnız `artifacts/local/**`
   altına alır, secret/env dosyası okumaz ve eksik kanıt varsa non-zero dönmeye devam eder.
   UI/UX redesign kapanışı için `corepack pnpm ui-ux-redesign:release-readiness:summary -- --repo
-  4rmus/uzman-hocam --environment staging --summary-file artifacts/local/ui-ux-redesign-release-readiness-summary.json
+  4rmus/o-okul --environment staging --summary-file artifacts/local/ui-ux-redesign-release-readiness-summary.json
   --github-gap-report-file artifacts/local/staging-github-env-gap-report.json --remote-snapshot-dir
   artifacts/local/remote-staging-snapshot --remote-gap-report-file artifacts/local/remote-staging-gap-report.json`
   GitHub env gap'i ve remote bundle gap'ini tek `releaseEvidence=false` handoff dosyasında birleştirir;

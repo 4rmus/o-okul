@@ -101,14 +101,14 @@ function buildRemediation(messages) {
     remediation.push({
       name: "GHCR_READ_TOKEN",
       command:
-        "pnpm staging:ghcr-read-token:secret:set -- --repo 4rmus/uzman-hocam --environment staging --token-file /secure/path/ghcr-read-token",
+        "pnpm staging:ghcr-read-token:secret:set -- --repo 4rmus/o-okul --environment staging --token-file /secure/path/ghcr-read-token",
     });
   }
   if (missingSecrets.has("STAGING_EVIDENCE_ENV_B64")) {
     remediation.push({
       name: "STAGING_EVIDENCE_ENV_B64",
       command:
-        "pnpm staging:evidence-env:secret:set -- --repo 4rmus/uzman-hocam --environment staging --env-file /secure/path/staging-evidence.env",
+        "pnpm staging:evidence-env:secret:set -- --repo 4rmus/o-okul --environment staging --env-file /secure/path/staging-evidence.env",
     });
   }
   return remediation;

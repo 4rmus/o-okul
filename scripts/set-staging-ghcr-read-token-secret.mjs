@@ -183,7 +183,7 @@ function hasFlag(name) {
 
 function printUsage() {
   console.log(`Usage:
-  pnpm staging:ghcr-read-token:secret:set -- --repo 4rmus/uzman-hocam --environment staging --token-file /secure/path/ghcr-read-token
+  pnpm staging:ghcr-read-token:secret:set -- --repo 4rmus/o-okul --environment staging --token-file /secure/path/ghcr-read-token
 
 Options:
   --token-file    Gerçek GHCR read token dosyası. Repo ve temp dizinleri reddedilir.

@@ -709,7 +709,7 @@ const expectations = {
   ],
   "docs/evidence-templates/ui-ux-redesign.example.json": [
     "docs/ui-ux-redesign-plan.md",
-    "run:https://github.com/4rmus/uzman-hocam/actions/runs/123456789",
+    "run:https://github.com/4rmus/o-okul/actions/runs/123456789",
     "artifact:artifacts/ui-ux-redesign/phase-3/report-workspace-1024.png",
     "privacy",
     "guardianFinanceLeakageChecked",
@@ -1025,7 +1025,7 @@ const expectations = {
   ".github/workflows/staging-deploy.yml": [
     "Validate staging dispatch inputs and environment",
     "STAGING_NEXT_PUBLIC_API_URL must be an https:// URL.",
-    "STAGING_DEPLOY_DIR must be /root/uzman-hocam.",
+    "STAGING_DEPLOY_DIR must be /root/o-okul.",
     "validate_tag \"rollback_image_tag\"",
     "github-ci-evidence:",
     "needs: preflight",
@@ -3509,7 +3509,7 @@ const expectations = {
     "GitHub staging secret eksik",
     "GitHub staging variable eksik",
     "STAGING_NEXT_PUBLIC_API_URL https:// URL olmalı.",
-    "STAGING_DEPLOY_DIR /root/uzman-hocam olmalı.",
+    "STAGING_DEPLOY_DIR /root/o-okul olmalı.",
     "STAGING_EDGE_MODE ip staging host için ip olmalı.",
     "GitHub staging environment kontrolü geçti",
   ],
@@ -4570,7 +4570,7 @@ const expectations = {
   "scripts/check-remote-staging-release-gap-summary-contract.mjs": [
     "scripts/print-remote-staging-release-gap-summary.mjs",
     "fake-remote",
-    "Remote staging source: fake-remote:/root/uzman-hocam/artifacts/staging",
+    "Remote staging source: fake-remote:/root/o-okul/artifacts/staging",
     "Remote commit: contract123",
     "Remote ui-ux evidence script: present",
     "NOT_RELEASE_EVIDENCE",

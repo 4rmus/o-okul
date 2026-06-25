@@ -31,7 +31,7 @@
       "artifact:artifacts/ui-ux-redesign/phase-2/data-table-375.png",
       "artifact:artifacts/ui-ux-redesign/phase-3/report-workspace-1024.png",
       "artifact:artifacts/ui-ux-redesign/phase-4/guardian-portal-390.png",
-      "run:https://github.com/4rmus/uzman-hocam/actions/runs/123456789"
+      "run:https://github.com/4rmus/o-okul/actions/runs/123456789"
     ]
   },
   "phaseEvidence": [
@@ -75,7 +75,7 @@
       "status": "PASS",
       "scope": "staging-production",
       "commandsPassed": ["pnpm prod:evidence:templates:check", "pnpm uat:check"],
-      "evidenceReferences": ["run:https://github.com/4rmus/uzman-hocam/actions/runs/123456789"]
+      "evidenceReferences": ["run:https://github.com/4rmus/o-okul/actions/runs/123456789"]
     }
   ],
   "viewportCoverage": [

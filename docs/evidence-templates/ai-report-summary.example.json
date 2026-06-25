@@ -54,7 +54,7 @@
   "commandsPassed": [
     "pnpm --filter @o-okul/worker exec vitest run src/jobs/report-generation-job.test.ts",
     "pnpm --filter @o-okul/api exec vitest run src/report/report-generation.service.test.ts",
-    "AI_REPORT_SUMMARY_ALLOW_EXAMPLE_EVIDENCE=1 AI_REPORT_SUMMARY_EVIDENCE_TARGET=file:///root/uzman-hocam/docs/evidence-templates/ai-report-summary.example.json pnpm ai-report-summary:check"
+    "AI_REPORT_SUMMARY_ALLOW_EXAMPLE_EVIDENCE=1 AI_REPORT_SUMMARY_EVIDENCE_TARGET=file:///root/o-okul/docs/evidence-templates/ai-report-summary.example.json pnpm ai-report-summary:check"
   ],
   "evidenceReferences": [
     "artifacts/example/ai-report-summary/disabled-provider-check.log",

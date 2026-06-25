@@ -103,8 +103,8 @@ function buildValidEnvFile() {
   const lines = [
     "STAGING_ENVIRONMENT=staging",
     "UI_UX_REDESIGN_CHECKED_AT=2026-06-25T12:00:00.000Z",
-    "UI_UX_REDESIGN_RELEASE_CANDIDATE=ghcr.io/4rmus/uzman-hocam/api:ui-ux-contract-20260625",
-    "UI_UX_REDESIGN_STAGING_EVIDENCE_REFERENCES=url:https://staging.o-okul.com/evidence/ui-ux-redesign/summary.json,run:https://github.com/4rmus/uzman-hocam/actions/runs/987654321,url:https://staging.o-okul.com/evidence/ui-ux-redesign/uat.json",
+    "UI_UX_REDESIGN_RELEASE_CANDIDATE=ghcr.io/4rmus/o-okul/api:ui-ux-contract-20260625",
+    "UI_UX_REDESIGN_STAGING_EVIDENCE_REFERENCES=url:https://staging.o-okul.com/evidence/ui-ux-redesign/summary.json,run:https://github.com/4rmus/o-okul/actions/runs/987654321,url:https://staging.o-okul.com/evidence/ui-ux-redesign/uat.json",
     "UI_UX_REDESIGN_PHASE_0_REFERENCES=url:https://staging.o-okul.com/evidence/ui-ux-redesign/phase-0-a11y.json",
     "UI_UX_REDESIGN_PHASE_1_REFERENCES=url:https://staging.o-okul.com/evidence/ui-ux-redesign/phase-1-shell.json",
     "UI_UX_REDESIGN_PHASE_2_REFERENCES=url:https://staging.o-okul.com/evidence/ui-ux-redesign/phase-2-lists.json",
@@ -142,7 +142,7 @@ function replaceLine(key, value) {
 function secretBearingReferenceEnv() {
   const value = [
     `url:https://staging.o-okul.com/evidence/ui-ux-redesign/summary.json?token=${secretLeakMarker}`,
-    "run:https://github.com/4rmus/uzman-hocam/actions/runs/987654321",
+    "run:https://github.com/4rmus/o-okul/actions/runs/987654321",
     "url:https://staging.o-okul.com/evidence/ui-ux-redesign/uat.json",
   ].join(",");
   return replaceLine("UI_UX_REDESIGN_STAGING_EVIDENCE_REFERENCES", value);

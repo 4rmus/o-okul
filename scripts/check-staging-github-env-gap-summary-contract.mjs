@@ -110,7 +110,7 @@ if (path === "repos/owner/repo/environments/staging") writeJson({ name: "staging
 if (path === "repos/owner/repo/environments/staging/variables?per_page=100") {
   writeJson({
     variables: [
-      { name: "STAGING_DEPLOY_DIR", value: "/root/uzman-hocam" },
+      { name: "STAGING_DEPLOY_DIR", value: "/root/o-okul" },
       { name: "STAGING_NEXT_PUBLIC_API_URL", value: "https://212.108.107.190" },
       { name: "STAGING_EDGE_MODE", value: "ip" },
     ],

@@ -593,7 +593,7 @@ workflow artifact'i olarak toplamak.
 Tetikleme:
 
 ```sh
-pnpm ui-ux-redesign:release-preflight -- --repo 4rmus/uzman-hocam --environment staging --summary-file artifacts/local/ui-ux-redesign-release-readiness-summary.json --github-gap-report-file artifacts/local/staging-github-env-gap-report.json --remote-snapshot-dir artifacts/local/remote-staging-snapshot --remote-gap-report-file artifacts/local/remote-staging-gap-report.json --max-age-minutes 30
+pnpm ui-ux-redesign:release-preflight -- --repo 4rmus/o-okul --environment staging --summary-file artifacts/local/ui-ux-redesign-release-readiness-summary.json --github-gap-report-file artifacts/local/staging-github-env-gap-report.json --remote-snapshot-dir artifacts/local/remote-staging-snapshot --remote-gap-report-file artifacts/local/remote-staging-gap-report.json --max-age-minutes 30
 gh workflow run staging-deploy.yml -f rollback_image_tag=<last-known-good-tag>
 ```
 
@@ -605,7 +605,7 @@ Gerekli GitHub `staging` environment secret/var değerleri:
 
 - Secrets: `STAGING_SSH_HOST`, `STAGING_SSH_USER`, `STAGING_SSH_PRIVATE_KEY`, `GHCR_READ_TOKEN`,
   `STAGING_EVIDENCE_ENV_B64`.
-- Vars: `STAGING_DEPLOY_DIR=/root/uzman-hocam`, `STAGING_NEXT_PUBLIC_API_URL`, opsiyonel `STAGING_EDGE_MODE`.
+- Vars: `STAGING_DEPLOY_DIR=/root/o-okul`, `STAGING_NEXT_PUBLIC_API_URL`, opsiyonel `STAGING_EDGE_MODE`.
   `STAGING_EDGE_MODE=domain` varsayılandır ve `docker-compose.traefik.yml` ile ACME kullanır.
   `STAGING_EDGE_MODE=ip` bu cihazdaki geçici IP/self-signed edge için `docker-compose.traefik-ip.yml`
   dosyasını seçer.
@@ -621,8 +621,8 @@ sözleşmesinden üretilir. Gerçek değerlerle doldurulan özel env dosyası Gi
 şu komutla doğrulanır:
 
 UI/UX redesign için `UI_UX_REDESIGN_RELEASE_CANDIDATE` ve GitHub run referansları staging workflow'un
-ürettiği `GITHUB_REPOSITORY` slug'ıyla aynı olmalıdır; bu deploy hattında repo slug `4rmus/uzman-hocam`
-olduğunda image prefix `ghcr.io/4rmus/uzman-hocam` olur.
+ürettiği `GITHUB_REPOSITORY` slug'ıyla aynı olmalıdır; bu deploy hattında repo slug `4rmus/o-okul`
+olduğunda image prefix `ghcr.io/4rmus/o-okul` olur.
 
 ```sh
 node scripts/check-staging-evidence-env.mjs --env-file /path/to/staging-evidence.env
@@ -632,7 +632,7 @@ Doğrulanmış dosyayı secret değerini terminal argümanına yazmadan GitHub `
 
 ```sh
 chmod 600 /secure/path/staging-evidence.env
-pnpm staging:evidence-env:secret:set -- --repo 4rmus/uzman-hocam --environment staging --env-file /secure/path/staging-evidence.env
+pnpm staging:evidence-env:secret:set -- --repo 4rmus/o-okul --environment staging --env-file /secure/path/staging-evidence.env
 ```
 
 Bu yardımcı repo/temp dizinindeki veya symlink üzerinden gelen dosyaları reddeder, aynı
@@ -644,7 +644,7 @@ kullanılabilir.
 
 ```sh
 chmod 600 /secure/path/ghcr-read-token
-pnpm staging:ghcr-read-token:secret:set -- --repo 4rmus/uzman-hocam --environment staging --token-file /secure/path/ghcr-read-token
+pnpm staging:ghcr-read-token:secret:set -- --repo 4rmus/o-okul --environment staging --token-file /secure/path/ghcr-read-token
 ```
 
 Bu yardımcı token dosyasının repo/temp/symlink altında olmadığını ve sadece sahibi tarafından
@@ -655,13 +655,13 @@ GitHub `staging` environment oluşturulduktan sonra secret değerleri yazdırıl
 sözleşmesi şu komutla doğrulanır:
 
 ```sh
-pnpm staging:github-env:check -- --repo 4rmus/uzman-hocam --environment staging
+pnpm staging:github-env:check -- --repo 4rmus/o-okul --environment staging
 ```
 
 Eksikler güvenli handoff için makine-okunur rapora da alınabilir:
 
 ```sh
-pnpm staging:github-env:gaps:summary -- --repo 4rmus/uzman-hocam --environment staging --gap-report-file artifacts/local/staging-github-env-gap-report.json
+pnpm staging:github-env:gaps:summary -- --repo 4rmus/o-okul --environment staging --gap-report-file artifacts/local/staging-github-env-gap-report.json
 ```
 
 Bu rapor yalnız secret/var isimlerini ve tamamlanması gereken komutları içerir; secret değerlerini
@@ -670,7 +670,7 @@ yazdırmaz ve release PASS kanıtı sayılmaz.
 GitHub env gap'i ve remote release artifact gap'i tek UI/UX handoff raporunda toplamak için:
 
 ```sh
-pnpm ui-ux-redesign:release-readiness:summary -- --repo 4rmus/uzman-hocam --environment staging --summary-file artifacts/local/ui-ux-redesign-release-readiness-summary.json --github-gap-report-file artifacts/local/staging-github-env-gap-report.json --remote-snapshot-dir artifacts/local/remote-staging-snapshot --remote-gap-report-file artifacts/local/remote-staging-gap-report.json
+pnpm ui-ux-redesign:release-readiness:summary -- --repo 4rmus/o-okul --environment staging --summary-file artifacts/local/ui-ux-redesign-release-readiness-summary.json --github-gap-report-file artifacts/local/staging-github-env-gap-report.json --remote-snapshot-dir artifacts/local/remote-staging-snapshot --remote-gap-report-file artifacts/local/remote-staging-gap-report.json
 ```
 
 Bu çıktı `releaseEvidence=false` taşır; sadece kapanış sıralaması ve sahiplik handoff'u içindir.
@@ -686,7 +686,7 @@ Kontrol ayrıca summary içindeki GitHub env gap ve remote bundle gap raporu yol
 altında var olduğunu, sonuçlarının summary ile eşleştiğini ve tarih olarak summary penceresiyle tutarlı
 olduğunu doğrular. Gerçek deploy/release öncesinde aynı kontrol `--require-ready` ile çalıştırılır; eksik secret,
 dirty local workspace, remote script eksikliği, stale summary veya açık artifact kalemi varsa kırmızı dönmelidir.
-Bu iki adımı tek komutla yürütmek için `pnpm ui-ux-redesign:release-preflight -- --repo 4rmus/uzman-hocam
+Bu iki adımı tek komutla yürütmek için `pnpm ui-ux-redesign:release-preflight -- --repo 4rmus/o-okul
 --environment staging --summary-file artifacts/local/ui-ux-redesign-release-readiness-summary.json
 --github-gap-report-file artifacts/local/staging-github-env-gap-report.json --remote-snapshot-dir
 artifacts/local/remote-staging-snapshot --remote-gap-report-file artifacts/local/remote-staging-gap-report.json
@@ -829,7 +829,7 @@ Beklenen akış:
   alır ve aynı gap özetini çalıştırır. Bu komutun non-zero dönmesi eksik kanıt varken beklenen
   davranıştır; `NOT_RELEASE_EVIDENCE` çıktısı release PASS değildir.
   UI/UX redesign özelinde GitHub env ve remote bundle gap'ini tek dosyada toplamak için
-  `corepack pnpm ui-ux-redesign:release-readiness:summary -- --repo 4rmus/uzman-hocam --environment staging --summary-file artifacts/local/ui-ux-redesign-release-readiness-summary.json --github-gap-report-file artifacts/local/staging-github-env-gap-report.json --remote-snapshot-dir artifacts/local/remote-staging-snapshot --remote-gap-report-file artifacts/local/remote-staging-gap-report.json`
+  `corepack pnpm ui-ux-redesign:release-readiness:summary -- --repo 4rmus/o-okul --environment staging --summary-file artifacts/local/ui-ux-redesign-release-readiness-summary.json --github-gap-report-file artifacts/local/staging-github-env-gap-report.json --remote-snapshot-dir artifacts/local/remote-staging-snapshot --remote-gap-report-file artifacts/local/remote-staging-gap-report.json`
   kullanılır; bu dosya `releaseEvidence=false` kalır ve final summary yerine geçmez. Remote package
   UI/UX evidence script'ini içermiyorsa `remote_code_deploy` aksiyonu, artifact üretiminden önce
   kapanması gereken önkoşul olarak görünür.
@@ -876,7 +876,7 @@ Beklenen akış:
   `docs/evidence-templates/**` fixture hedefi, symlink target ve userinfo/query/fragment taşıyan
   URL veya placeholder/example/redacted HTTPS host kullanımı final kapıda reddedilir.
 - Remote/staging final readiness kapısı aynı target setini remote hostta salt-okunur doğrular:
-  `REMOTE_EVIDENCE_HOST=uzman-hocam-server REMOTE_EVIDENCE_ROOT=/root/uzman-hocam PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///root/uzman-hocam/artifacts/staging/release-summary.json LIVE_STATUS_EVIDENCE_TARGET=file:///root/uzman-hocam/artifacts/staging/live-status.json PILOT_EVIDENCE_TARGET=file:///root/uzman-hocam/artifacts/staging/pilot.json GO_LIVE_EVIDENCE_TARGET=file:///root/uzman-hocam/artifacts/staging/go-live.json pnpm prod:remote-evidence:check`.
+  `REMOTE_EVIDENCE_HOST=uzman-hocam-server REMOTE_EVIDENCE_ROOT=/root/o-okul PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///root/o-okul/artifacts/staging/release-summary.json LIVE_STATUS_EVIDENCE_TARGET=file:///root/o-okul/artifacts/staging/live-status.json PILOT_EVIDENCE_TARGET=file:///root/o-okul/artifacts/staging/pilot.json GO_LIVE_EVIDENCE_TARGET=file:///root/o-okul/artifacts/staging/go-live.json pnpm prod:remote-evidence:check`.
   Bu komut deploy yapmaz; remote repo final checker'ı, 18/18 Canlı Durum ve target'lı
   `prod:external-evidence:check` sonucunu kanıtlar. Remote target'lar da placeholder HTTPS host,
   remote temp path, `artifacts/local/**`, `docs/evidence-templates/**` ve userinfo/query/fragment

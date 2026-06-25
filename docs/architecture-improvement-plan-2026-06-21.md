@@ -175,11 +175,11 @@ tasimaz.
 | 4 | Sinav, rapor ve UAT kanitlari | `corepack pnpm isem-optical-pipeline:evidence-check`, `corepack pnpm live:exam-cycle:check`, `corepack pnpm live:ui-worker:result-check`, `corepack pnpm report-generation:perf`, `corepack pnpm uat:check` | iSEM 254 sonuc, PDF/Excel, portal gorunumu, 10k perf ve UAT artifact'leri ayni release candidate icin uretilir. | Faz 4A/Faz 5 kapanisi ancak local smoke degil staging/prod artifact ile ilerler. |
 | 5 | Production summary ve Canli Durum terfisi | `corepack pnpm prod:evidence:check --summary-file artifacts/staging/production-summary.json`, `corepack pnpm prod:evidence:summary:check`, `LIVE_STATUS_EVIDENCE_TARGET=file:///... corepack pnpm live:status:check` | Production summary tum required check/report alanlarini toplar; Canli Durum bundle'i 18/18 dis gate PASS olur. | 18/18 altinda veya source date/reference sapmasinda Faz 5/Faz 10 ilerlemez. |
 | 6 | Pilot, rollback ve go-live karari | `PILOT_EVIDENCE_TARGET=file:///... corepack pnpm pilot:check`, `corepack pnpm deployment:rollback:check`, `GO_LIVE_EVIDENCE_TARGET=file:///... corepack pnpm go-live:check`, `corepack pnpm ops:check`, `corepack pnpm prod:plan:check` | Pilot kabul, rollback kronolojisi, onaylar, cutover ve go-live karar paketi ayni summary/live-status hedeflerine baglanir. | Faz 10 yalniz `goLiveDecision=APPROVED`, bos `gaps`, imzali onaylar ve rollback/restore referanslariyla kapanir. |
-| 7 | Faz status degisimi | `PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///... LIVE_STATUS_EVIDENCE_TARGET=file:///... PILOT_EVIDENCE_TARGET=file:///... GO_LIVE_EVIDENCE_TARGET=file:///... corepack pnpm prod:external-evidence:check`, `REMOTE_EVIDENCE_HOST=uzman-hocam-server REMOTE_EVIDENCE_ROOT=/root/uzman-hocam ... corepack pnpm prod:remote-evidence:check`, `git diff --check`, final hedefli testler ve yukaridaki artifact komutlari. | Dokuman, summary, live-status ve go-live JSON'lari birbirini isaret eder; `prod:external-evidence:check` local artifact setini, `prod:remote-evidence:check` remote/staging hostta aynı final checker ve 18/18 Canli Durum zincirini tekrarlar. | Faz 5 ancak `EXTERNAL_EVIDENCE_PASS`, Faz 10 ancak `GO_LIVE_APPROVED` statüsüne tasinir; bu statu degisikligi linked artifact'ler ve remote final readiness olmadan yapilmaz. |
+| 7 | Faz status degisimi | `PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///... LIVE_STATUS_EVIDENCE_TARGET=file:///... PILOT_EVIDENCE_TARGET=file:///... GO_LIVE_EVIDENCE_TARGET=file:///... corepack pnpm prod:external-evidence:check`, `REMOTE_EVIDENCE_HOST=uzman-hocam-server REMOTE_EVIDENCE_ROOT=/root/o-okul ... corepack pnpm prod:remote-evidence:check`, `git diff --check`, final hedefli testler ve yukaridaki artifact komutlari. | Dokuman, summary, live-status ve go-live JSON'lari birbirini isaret eder; `prod:external-evidence:check` local artifact setini, `prod:remote-evidence:check` remote/staging hostta aynı final checker ve 18/18 Canli Durum zincirini tekrarlar. | Faz 5 ancak `EXTERNAL_EVIDENCE_PASS`, Faz 10 ancak `GO_LIVE_APPROVED` statüsüne tasinir; bu statu degisikligi linked artifact'ler ve remote final readiness olmadan yapilmaz. |
 
 ## Kalan 10 Artifact Kapanis Matrisi
 
-Remote `/root/uzman-hocam/artifacts/staging` gap raporu son kontrolde `missingCount=10`,
+Remote `/root/o-okul/artifacts/staging` gap raporu son kontrolde `missingCount=10`,
 `foundReleaseSummaryCount=0` ve `overallStatus=BLOCKED` verdi. Asagidaki tablo, her eksigin
 gercek kapanis komutunu ve neden henuz final PASS sayilamadigini sabitler; `ALLOW_EXAMPLE_EVIDENCE`
 veya fixture/local smoke bu satirlari kapatamaz.
@@ -1877,7 +1877,7 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   staging/prod artifact veya gerçek HTTPS hedef ister. `scripts/check-prod-evidence-templates.mjs`
   bu negatif senaryoyu geçici artifact kopyalarıyla doğrular.
 - 2026-06-23 remote/staging salt-okunur kanıt audit'i: `uzman-hocam-server` erişimi çalışıyor,
-  `/root/uzman-hocam` altında Docker stack ayakta ve API `{"status":"ok"}`, web `127.0.0.1:3001`
+  `/root/o-okul` altında Docker stack ayakta ve API `{"status":"ok"}`, web `127.0.0.1:3001`
   HTTP 200 döndürüyor. Ancak `artifacts/` altında final zinciri için gereken
   `production-summary`/`release-summary`, `live-status`, `pilot`, `go-live`, `uat`, `isem`,
   `live-exam`, `live-ui`, `kvkk`, `audit-null` veya `inline-upload` artifact seti bulunmadı;
@@ -1908,11 +1908,11 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   production summary/live-status/pilot/go-live artifact setini üretmektir.
 - Remote/staging guardrail farkı dar kapsamlı kapatıldı: `scripts/check-final-external-evidence.mjs`,
   `scripts/check-remote-final-evidence-readiness.mjs`, güncel production summary/live-status/pilot/
-  go-live checker'ları ve `docs/phase-6-production-readiness.md` remote `/root/uzman-hocam` altına
+  go-live checker'ları ve `docs/phase-6-production-readiness.md` remote `/root/o-okul` altına
   senkronlandı; remote `package.json` yalnız `prod:external-evidence:check` ve
   `prod:remote-evidence:check` script anahtarlarıyla güncellendi. Öncesinde remote backup
   `artifacts/guardrail-sync-2026-06-23/` altına alındı ve kalıcı target kökü
-  `/root/uzman-hocam/artifacts/staging` oluşturuldu. Target'lı
+  `/root/o-okul/artifacts/staging` oluşturuldu. Target'lı
   `prod:remote-evidence:check` artık checker/script geriliği nedeniyle değil,
   `release-summary.json`, `live-status.json`, `pilot.json` ve `go-live.json` gerçek artifact
   dosyaları henüz üretilmediği için kırılıyor.
@@ -2135,9 +2135,9 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   Bundle hâlâ final PASS değildir: `first-gates/first-gates-manifest.json`, deployment/
   identity/financial/upload-av/observability/external-monitoring/admin-mfa/security/
   inline-upload/rate-limit/UAT raporları ve `release-summary-*.json` eksik olduğu için
-  `STAGING_RELEASE_ARTIFACTS_TARGET=/root/uzman-hocam/artifacts/staging corepack pnpm staging:release-artifacts:check`
+  `STAGING_RELEASE_ARTIFACTS_TARGET=/root/o-okul/artifacts/staging corepack pnpm staging:release-artifacts:check`
   kırmızı kalır.
-- GitHub CI kanıtı gerçek GitHub Actions metadata'sından üretildi: `4rmus/uzman-hocam`
+- GitHub CI kanıtı gerçek GitHub Actions metadata'sından üretildi: `4rmus/o-okul`
   `89fa803bdb5ae775c64617a8fbc71f7ed58c887c` commit'i için `.github/workflows/ci.yml`
   run `27993832864` success durumunda ve job adımları içinde `pnpm run ci` var. Lokal
   `artifacts/staging/reports/github-ci.json` üretildi, remote canonical konuma kopyalandı ve
@@ -2174,7 +2174,7 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `STAGING_ENVIRONMENT=staging RESTORE_DRILL_OUTPUT=artifacts/staging/reports/restore-drill.json corepack pnpm restore:drill:generate`
   çalıştırıldı; artifact `Tenant=13`, `AuditLog=431`, `ReportSnapshot=11`,
   `_prisma_migrations=60`, boş `errors`, gerçek `sourceBackup`/`targetDatabase` ve
-  `environment=staging` ile yazıldı. `RESTORE_DRILL_TARGET=file:///root/uzman-hocam/artifacts/staging/reports/restore-drill.json corepack pnpm restore:drill:check`
+  `environment=staging` ile yazıldı. `RESTORE_DRILL_TARGET=file:///root/o-okul/artifacts/staging/reports/restore-drill.json corepack pnpm restore:drill:check`
   geçti; secret/PII anahtar grep'i temiz. Restore sonrası remote staging gap raporu artık
   `reports/restore-drill.json` eksikliği göstermedi; o noktada 14 eksik artifact ve 0
   `release-summary-*.json` nedeniyle bundle hâlâ `NOT_RELEASE_EVIDENCE/BLOCKED` kaldı.
@@ -2189,7 +2189,7 @@ manifestli arsivlenmistir; final `reports/rate-limit.json` bundle'da kalir.
   `STAGING_ENVIRONMENT=staging AI_REPORT_SUMMARY_PROVIDER=disabled AI_REPORT_SUMMARY_OUTPUT=artifacts/staging/reports/ai-report-summary.json corepack pnpm ai-report-summary:generate`
   çalıştırıldı; worker `report-generation-job.test.ts` 8 test, API
   `report-generation.service.test.ts` 19 test geçti ve
-  `AI_REPORT_SUMMARY_EVIDENCE_TARGET=file:///root/uzman-hocam/artifacts/staging/reports/ai-report-summary.json corepack pnpm ai-report-summary:check`
+  `AI_REPORT_SUMMARY_EVIDENCE_TARGET=file:///root/o-okul/artifacts/staging/reports/ai-report-summary.json corepack pnpm ai-report-summary:check`
   PASS verdi. Artifact `result=PASS`, `environment=staging`, `provider.mode=disabled`,
   `kvkk.piiSentToModel=false`, `validation.externalProviderNotCalled=true`, 3 komut ve boş
   `gaps` taşıyor; dar secret/PII taraması temiz. Güncel gap raporu artık

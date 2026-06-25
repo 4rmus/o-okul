@@ -179,7 +179,7 @@ function hasFlag(name) {
 
 function printUsage() {
   console.log(`Usage:
-  pnpm staging:evidence-env:secret:set -- --repo 4rmus/uzman-hocam --environment staging --env-file /secure/path/staging-evidence.env
+  pnpm staging:evidence-env:secret:set -- --repo 4rmus/o-okul --environment staging --env-file /secure/path/staging-evidence.env
 
 Options:
   --env-file      Gerçek staging evidence env dosyası. Repo ve temp dizinleri reddedilir.

@@ -22,7 +22,7 @@ try {
   expectFailure("gap report outside artifacts/local", ["--gap-report-file", "../remote-staging-gap-report.json"], [
     "REMOTE_STAGING_RELEASE_GAP_REPORT_FILE artifacts/local altında olmalı.",
   ]);
-  expectFailure("absolute remote artifacts dir", ["--remote-artifacts-dir", "/root/uzman-hocam/artifacts/staging"], [
+  expectFailure("absolute remote artifacts dir", ["--remote-artifacts-dir", "/root/o-okul/artifacts/staging"], [
     "REMOTE_STAGING_RELEASE_ARTIFACTS_DIR remote root altında relative path olmalı.",
   ]);
 } finally {
@@ -36,7 +36,7 @@ function expectGapSummaryPassesContract() {
     "--host",
     "fake-remote",
     "--remote-root",
-    "/root/uzman-hocam",
+    "/root/o-okul",
     "--snapshot-dir",
     snapshotDir,
     "--gap-report-file",
@@ -48,7 +48,7 @@ function expectGapSummaryPassesContract() {
 
   const output = combinedOutput(result);
   for (const token of [
-    "Remote staging source: fake-remote:/root/uzman-hocam/artifacts/staging",
+    "Remote staging source: fake-remote:/root/o-okul/artifacts/staging",
     "Remote commit: contract123",
     "Remote ui-ux evidence script: present",
     "Remote staging artifact snapshot yazıldı:",
@@ -75,7 +75,7 @@ function expectFailure(label, extraArgs, expectedMessages) {
     "--host",
     "fake-remote",
     "--remote-root",
-    "/root/uzman-hocam",
+    "/root/o-okul",
     ...extraArgs,
   ]);
   if (result.status === 0) failContract(`${label} senaryosu kırılmalı.`, result);
@@ -110,7 +110,7 @@ if (command === "printf remote-ok") {
   process.exit(0);
 }
 if (command.includes("git rev-parse --short HEAD")) {
-  process.stdout.write("Remote staging source: fake-remote:/root/uzman-hocam/artifacts/staging\\n");
+  process.stdout.write("Remote staging source: fake-remote:/root/o-okul/artifacts/staging\\n");
   process.stdout.write("Remote commit: contract123\\n");
   process.stdout.write("Remote ui-ux evidence script: present\\n");
   process.exit(0);

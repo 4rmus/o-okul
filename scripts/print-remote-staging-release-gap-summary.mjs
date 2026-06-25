@@ -6,7 +6,7 @@ const args = process.argv.slice(2);
 const host =
   readOption("--host") ?? process.env.REMOTE_STAGING_RELEASE_HOST ?? process.env.REMOTE_EVIDENCE_HOST ?? "uzman-hocam-server";
 const remoteRoot =
-  readOption("--remote-root") ?? process.env.REMOTE_STAGING_RELEASE_ROOT ?? process.env.REMOTE_EVIDENCE_ROOT ?? "/root/uzman-hocam";
+  readOption("--remote-root") ?? process.env.REMOTE_STAGING_RELEASE_ROOT ?? process.env.REMOTE_EVIDENCE_ROOT ?? "/root/o-okul";
 const remoteArtifactsDir =
   readOption("--remote-artifacts-dir") ?? process.env.REMOTE_STAGING_RELEASE_ARTIFACTS_DIR ?? "artifacts/staging";
 const snapshotDir = allowedLocalPath(

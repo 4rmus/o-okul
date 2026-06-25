@@ -101,8 +101,8 @@ jobs:
             echo "STAGING_DEPLOY_DIR must not be /." >&2
             exit 1
           fi
-          if [ "$STAGING_DEPLOY_DIR" != "/root/uzman-hocam" ]; then
-            echo "STAGING_DEPLOY_DIR must be /root/uzman-hocam." >&2
+          if [ "$STAGING_DEPLOY_DIR" != "/root/o-okul" ]; then
+            echo "STAGING_DEPLOY_DIR must be /root/o-okul." >&2
             exit 1
           fi
           if [[ "$STAGING_DEPLOY_DIR" == *"'"* || "$STAGING_DEPLOY_DIR" == *$'\n'* || "$STAGING_DEPLOY_DIR" == *$'\r'* ]]; then

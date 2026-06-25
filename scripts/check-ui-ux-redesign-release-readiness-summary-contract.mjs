@@ -99,7 +99,7 @@ function runSummary(extraArgs) {
       "--host",
       "fake-remote",
       "--remote-root",
-      "/root/uzman-hocam",
+      "/root/o-okul",
       "--github-gap-report-file",
       githubGapReportFile,
       "--remote-snapshot-dir",
@@ -137,7 +137,7 @@ if (path === "repos/owner/repo/environments/staging") writeJson({ name: "staging
 if (path === "repos/owner/repo/environments/staging/variables?per_page=100") {
   writeJson({
     variables: [
-      { name: "STAGING_DEPLOY_DIR", value: "/root/uzman-hocam" },
+      { name: "STAGING_DEPLOY_DIR", value: "/root/o-okul" },
       { name: "STAGING_NEXT_PUBLIC_API_URL", value: "https://212.108.107.190" },
       { name: "STAGING_EDGE_MODE", value: "ip" },
     ],
@@ -177,7 +177,7 @@ if (command === "printf remote-ok") {
   process.exit(0);
 }
 if (command.includes("git rev-parse --short HEAD")) {
-  process.stdout.write("Remote staging source: fake-remote:/root/uzman-hocam/artifacts/staging\\n");
+  process.stdout.write("Remote staging source: fake-remote:/root/o-okul/artifacts/staging\\n");
   process.stdout.write("Remote commit: contract123\\n");
   process.stdout.write("Remote ui-ux evidence script: missing\\n");
   process.exit(0);

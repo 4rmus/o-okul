@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 
 const host = process.env.REMOTE_EVIDENCE_HOST ?? "uzman-hocam-server";
-const root = process.env.REMOTE_EVIDENCE_ROOT ?? "/root/uzman-hocam";
+const root = process.env.REMOTE_EVIDENCE_ROOT ?? "/root/o-okul";
 const apiHealthUrl = process.env.REMOTE_EVIDENCE_API_HEALTH_URL ?? "http://127.0.0.1:3100/health";
 const webHealthUrl = process.env.REMOTE_EVIDENCE_WEB_HEALTH_URL ?? "http://127.0.0.1:3001";
 const connectTimeout = process.env.REMOTE_EVIDENCE_CONNECT_TIMEOUT_SECONDS ?? "10";
