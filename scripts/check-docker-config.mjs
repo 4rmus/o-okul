@@ -89,6 +89,7 @@ const expectations = {
     "traefik.http.middlewares.web-security-headers.headers.stsseconds=15552000",
     "traefik.http.middlewares.web-security-headers.headers.contenttypenosniff=true",
     "traefik.http.middlewares.web-security-headers.headers.framedeny=true",
+    "traefik.http.middlewares.web-security-headers.headers.contentsecuritypolicy=",
     "traefik.http.services.web.loadbalancer.server.port=3001",
     "PathPrefix(`/health`)",
     "traefik.http.routers.api.entrypoints=websecure",
@@ -99,6 +100,7 @@ const expectations = {
     "traefik.http.middlewares.api-security-headers.headers.stsseconds=15552000",
     "traefik.http.middlewares.api-security-headers.headers.contenttypenosniff=true",
     "traefik.http.middlewares.api-security-headers.headers.framedeny=true",
+    "traefik.http.middlewares.api-security-headers.headers.contentsecuritypolicy=",
     "traefik.http.services.api.loadbalancer.server.port=3100",
   ],
   "docker-compose.traefik-ip.yml": [

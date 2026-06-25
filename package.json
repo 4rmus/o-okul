@@ -132,6 +132,7 @@
     "ui-ux-redesign:evidence-generate:contract": "node scripts/check-ui-ux-redesign-generator-contract.mjs",
     "ui-ux-redesign:example-fixtures": "node scripts/check-ui-ux-example-fixtures.mjs",
     "ui-ux-redesign:fixture-regression": "pnpm --filter @o-okul/api exec vitest run src/exam/answer-key-excel-import.service.test.ts && pnpm --filter @o-okul/worker exec vitest run src/jobs/optik-7108-real-pipeline.test.ts",
+    "ui-ux-redesign:live-surface:check": "node scripts/check-ui-ux-redesign-live-surface.mjs",
     "ui-ux-redesign:local-gates": "pnpm --filter @o-okul/shared-types build && pnpm --filter @o-okul/ui build && pnpm --filter @o-okul/web typecheck && pnpm web:a11y:check && pnpm web:ux-baseline:check && pnpm web:ux-contract:check && pnpm karne:visual-contract:check && pnpm ui-ux-redesign:example-fixtures && pnpm ui-ux-redesign:fixture-regression && pnpm ui-ux-redesign:evidence-generate:contract && pnpm ui-ux-redesign:visual-qa",
     "ui-ux-redesign:release-readiness:check": "node scripts/check-ui-ux-redesign-release-readiness-summary.mjs",
     "ui-ux-redesign:release-readiness:check:contract": "node scripts/check-ui-ux-redesign-release-readiness-check-contract.mjs",

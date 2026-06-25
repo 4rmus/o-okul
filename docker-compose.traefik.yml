@@ -43,6 +43,7 @@ services:
       - "traefik.http.middlewares.web-security-headers.headers.framedeny=true"
       - "traefik.http.middlewares.web-security-headers.headers.referrerpolicy=no-referrer"
       - "traefik.http.middlewares.web-security-headers.headers.permissionspolicy=camera=(), microphone=(), geolocation=()"
+      - "traefik.http.middlewares.web-security-headers.headers.contentsecuritypolicy=default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss:; worker-src 'self' blob:; manifest-src 'self'; media-src 'self' blob:"
       - "traefik.http.services.web.loadbalancer.server.port=3001"
 
   api:
@@ -61,6 +62,7 @@ services:
       - "traefik.http.middlewares.api-security-headers.headers.framedeny=true"
       - "traefik.http.middlewares.api-security-headers.headers.referrerpolicy=no-referrer"
       - "traefik.http.middlewares.api-security-headers.headers.permissionspolicy=camera=(), microphone=(), geolocation=()"
+      - "traefik.http.middlewares.api-security-headers.headers.contentsecuritypolicy=default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
       - "traefik.http.services.api.loadbalancer.server.port=3100"
 
 volumes:
