@@ -65,18 +65,18 @@ async function runLiveChecks(url) {
   ]);
   requireHeaderValue("web_login", login.headers, "x-content-type-options", "nosniff");
   requireHeaderValue("web_login", login.headers, "x-frame-options", "DENY");
-  if (login.headers["x-powered-by"]) {
-    failures.push("web_login X-Powered-By header'ı kapalı olmalı.");
-  }
+  requireNoPoweredBy("web_login", login.headers);
 
   const healthUrl = new URL("/health", url);
   const health = await fetchText(healthUrl, "api_health");
   requireStatus("api_health", health, 200, 200);
   requireJsonField("api_health", health.body, "status", "ok");
+  requireNoPoweredBy("api_health", health.headers);
 
   const readinessUrl = new URL("/health/ready", url);
   const readiness = await fetchText(readinessUrl, "api_readiness");
   requireStatus("api_readiness", readiness, 200, 200);
+  requireNoPoweredBy("api_readiness", readiness.headers);
 }
 
 async function fetchText(url, label) {
@@ -138,6 +138,12 @@ function requireHeaderValue(label, headers, header, expected) {
   const actual = headers[header];
   if (actual && actual.toLowerCase() !== expected.toLowerCase()) {
     failures.push(`${label} ${header}=${expected} olmalı; gelen ${actual}.`);
+  }
+}
+
+function requireNoPoweredBy(label, headers) {
+  if (headers["x-powered-by"]) {
+    failures.push(`${label} X-Powered-By header'ı kapalı olmalı.`);
   }
 }
 

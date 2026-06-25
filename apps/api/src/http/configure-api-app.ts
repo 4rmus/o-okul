@@ -5,6 +5,9 @@ import { createApiRateLimitMiddleware } from "./rate-limit.js";
 
 export const apiPrefix = "api/v1";
 const defaultWebUrl = "http://localhost:3000";
+type ExpressLikeInstance = {
+  disable?: (setting: string) => void;
+};
 
 export function getAllowedCorsOrigins(env: NodeJS.ProcessEnv = process.env): string | string[] {
   const origins = [
@@ -21,6 +24,8 @@ export function getAllowedCorsOrigins(env: NodeJS.ProcessEnv = process.env): str
 }
 
 export function configureApiApp(app: INestApplication): void {
+  const express = app.getHttpAdapter().getInstance() as ExpressLikeInstance;
+  express.disable?.("x-powered-by");
   app.use(createApiHttpLoggerMiddleware());
   app.use(createApiRateLimitMiddleware());
   app.setGlobalPrefix(apiPrefix, {
