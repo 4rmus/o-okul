@@ -813,6 +813,22 @@ describe("School management API", () => {
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .expect(403);
     await request(server)
+      .get(`/guardians/${guardianId}/students`)
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ guardianId, studentId: "student-a" })]);
+        expect(JSON.stringify(body)).not.toContain("student-b");
+      });
+    await request(server)
+      .get("/guardians")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.arrayContaining([expect.objectContaining({ id: guardianId })]));
+        expect(body).toEqual(expect.not.arrayContaining([expect.objectContaining({ id: "guardian-b" })]));
+      });
+    await request(server)
       .get("/students/student-a/guardian-links")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(200)

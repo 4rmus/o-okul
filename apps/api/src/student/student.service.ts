@@ -40,7 +40,7 @@ import {
   type TeacherAssignmentStore,
   teacherAssignmentStoreToken,
 } from "../school/teacher-assignment-store.js";
-import { type StudentStore, studentStoreToken } from "./student-store.js";
+import { type StudentProfileUpdate, type StudentStore, studentStoreToken } from "./student-store.js";
 import {
   type StudentClassHistoryStore,
   studentClassHistoryStoreToken,
@@ -79,6 +79,11 @@ export type StudentBulkEnrollmentInput = StudentBulkEnrollmentRequest;
 export type StudentBulkEnrollmentResult = SharedStudentBulkEnrollmentResult;
 export type StudentGuardianProvisionInput = StudentGuardianProvisionRequest;
 export type StudentCreateInput = StudentCreateRequest;
+export type StudentBulkCreateInput = Pick<StudentRecord, "firstName" | "lastName"> &
+  Partial<Pick<StudentRecord, "classId" | "studentNo">> &
+  StudentProfileInput & {
+    guardian?: StudentGuardianProvisionInput;
+  };
 
 @Injectable()
 export class StudentService {
@@ -263,6 +268,9 @@ export class StudentService {
     if (input.guardian) {
       parseGuardianProvisionInput(input.guardian, { lastName: input.lastName });
     }
+    if (input.studentNo && (await this.list(context)).some((student) => student.tenantId === tenantId && student.studentNo === input.studentNo?.trim())) {
+      throw new ConflictException("STUDENT_NO_CONFLICT");
+    }
     if ((await this.list(context)).filter((student) => student.tenantId === tenantId).length >= this.maxStudentsPerTenant) {
       throw new ConflictException("STUDENT_QUOTA_EXCEEDED");
     }
@@ -273,6 +281,7 @@ export class StudentService {
 
     const student = await this.store.create({
       tenantId,
+      studentNo: input.studentNo,
       firstName: input.firstName ?? "",
       lastName: input.lastName ?? "",
       classId: input.classId,
@@ -315,12 +324,7 @@ export class StudentService {
 
   async createMany(
     context: RequestContext,
-    inputs: Array<
-      Pick<StudentRecord, "firstName" | "lastName"> &
-        Partial<Pick<StudentRecord, "classId" | "studentNo">> & {
-          guardian?: StudentGuardianProvisionInput;
-        }
-    >,
+    inputs: StudentBulkCreateInput[],
   ): Promise<StudentRecord[]> {
     const tenantId = context.tenantId;
     if (!tenantId) {
@@ -345,6 +349,12 @@ export class StudentService {
         throw new NotFoundException("CLASS_NOT_FOUND");
       }
       this.assertAccess(context, schoolClass);
+    }
+
+    const nationalIdHashes = new Set<string>();
+    const profileUpdates: Array<StudentProfileUpdate | undefined> = [];
+    for (const input of inputs) {
+      profileUpdates.push(await this.resolveProfileUpdateForCreate(tenantId, input, nationalIdHashes));
     }
 
     const students = await this.store.createMany(inputs.map((input) => ({
@@ -377,6 +387,11 @@ export class StudentService {
       });
     }
     for (const [index, student] of students.entries()) {
+      const profileUpdate = profileUpdates[index];
+      if (!profileUpdate) continue;
+      await this.store.updateProfile(student.id, profileUpdate);
+    }
+    for (const [index, student] of students.entries()) {
       const guardian = inputs[index]?.guardian;
       if (!guardian) continue;
       await this.autoProvisionGuardian(context, student, guardian);
@@ -392,6 +407,17 @@ export class StudentService {
       incoming,
       wouldExceed: current + incoming > this.maxStudentsPerTenant,
     };
+  }
+
+  async hasNationalId(context: RequestContext, nationalId: string): Promise<boolean> {
+    const tenantId = context.tenantId;
+    if (!tenantId) {
+      throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+    }
+
+    this.assertAccess(context, { tenantId });
+    const normalized = normalizeTcIdentity(nationalId);
+    return Boolean(await this.store.findByNationalIdHash(tenantId, hashTcIdentity(normalized)));
   }
 
   async update(context: RequestContext, id: string, input: StudentUpdateRequest): Promise<PublicStudentRecord> {
@@ -805,6 +831,55 @@ export class StudentService {
     return (await this.guardianStore.list()).find(
       (guardian) => guardian.tenantId === tenantId && guardian.phone === phone && !guardian.deletedAt,
     );
+  }
+
+  private async resolveProfileUpdateForCreate(
+    tenantId: string,
+    input: StudentBulkCreateInput,
+    seenNationalIdHashes: Set<string>,
+  ): Promise<StudentProfileUpdate | undefined> {
+    const profileUpdate: StudentProfileUpdate = {};
+    let hasUpdate = false;
+
+    if (input.birthDate !== undefined) {
+      const birthDate = optionalDate(input.birthDate);
+      if (birthDate !== undefined) {
+        profileUpdate.birthDate = birthDate;
+        hasUpdate = true;
+      }
+    }
+    if (input.phone !== undefined) {
+      const phone = optionalText(input.phone);
+      if (phone !== undefined) {
+        profileUpdate.phone = phone;
+        hasUpdate = true;
+      }
+    }
+    if (input.email !== undefined) {
+      const email = optionalEmail(input.email);
+      if (email !== undefined) {
+        profileUpdate.email = email;
+        hasUpdate = true;
+      }
+    }
+    const nationalIdInput = optionalText(input.nationalId);
+    if (nationalIdInput !== undefined) {
+      const nationalId = normalizeTcIdentity(nationalIdInput);
+      const nationalIdHash = hashTcIdentity(nationalId);
+      if (seenNationalIdHashes.has(nationalIdHash)) {
+        throw new ConflictException("STUDENT_NATIONAL_ID_CONFLICT");
+      }
+      const duplicate = await this.store.findByNationalIdHash(tenantId, nationalIdHash);
+      if (duplicate) {
+        throw new ConflictException("STUDENT_NATIONAL_ID_CONFLICT");
+      }
+      seenNationalIdHashes.add(nationalIdHash);
+      profileUpdate.nationalIdEncrypted = encryptTcIdentity(nationalId);
+      profileUpdate.nationalIdHash = nationalIdHash;
+      hasUpdate = true;
+    }
+
+    return hasUpdate ? profileUpdate : undefined;
   }
 
   private assertSubjectAccess(context: RequestContext, resource: { tenantId: string; studentId?: string; guardianIds?: string[]; id?: string }): void {

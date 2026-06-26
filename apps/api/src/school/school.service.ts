@@ -19,7 +19,7 @@ import type {
 } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
-import { assertTeacherScopedStudentAccess, assertTenantResourceAccess, filterTenantResources } from "../tenant/tenant-access.js";
+import { assertTeacherScopedStudentAccess, assertTenantResourceAccess, filterTenantResources, isTeacherSubjectContext } from "../tenant/tenant-access.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "./academic-calendar-store.js";
 import { type CampusStore, campusStoreToken } from "./campus-store.js";
 import { type ClassStore, classStoreToken } from "./class-store.js";
@@ -829,11 +829,19 @@ export class SchoolService {
   }
 
   async listGuardians(context: RequestContext): Promise<GuardianRecord[]> {
-    return this.list(context, await this.guardianStore.list());
+    const guardians = this.list(context, await this.guardianStore.list());
+    if (!this.shouldLimitToTeacherScope(context)) {
+      return guardians;
+    }
+
+    const guardianIds = await this.listTeacherScopedGuardianIds(context);
+    return guardians.filter((guardian) => guardianIds.has(guardian.id));
   }
 
   async findGuardian(context: RequestContext, id: string): Promise<GuardianRecord> {
-    return this.findRecord(context, await this.guardianStore.findById(id), "GUARDIAN_NOT_FOUND");
+    const guardian = this.findRecord(context, await this.guardianStore.findById(id), "GUARDIAN_NOT_FOUND");
+    await this.assertGuardianTeacherScope(context, guardian.id);
+    return guardian;
   }
 
   async createGuardian(context: RequestContext, input: Partial<GuardianRecord>): Promise<GuardianRecord> {
@@ -919,15 +927,20 @@ export class SchoolService {
 
   async listGuardianStudents(context: RequestContext, guardianId: string): Promise<GuardianStudentRecord[]> {
     const guardian = await this.findGuardian(context, guardianId);
-    return filterTenantResources(context, await this.guardianStudentStore.listByGuardian(guardian.id));
+    return this.filterGuardianStudentLinksByTeacherScope(
+      context,
+      filterTenantResources(context, await this.guardianStudentStore.listByGuardian(guardian.id)),
+    );
   }
 
   async listGuardianStudentDetails(context: RequestContext, guardianId: string): Promise<GuardianStudentDetailsResponse> {
     const guardian = await this.findGuardian(context, guardianId);
-    const links = filterTenantResources(context, await this.guardianStudentStore.listByGuardian(guardian.id));
+    const links = await this.filterGuardianStudentLinksByTeacherScope(
+      context,
+      filterTenantResources(context, await this.guardianStudentStore.listByGuardian(guardian.id)),
+    );
     const linkedStudentIds = new Set(links.map((link) => link.studentId));
-    const students = filterTenantResources(context, await this.studentStore.list());
-    await Promise.all(students.map((student) => this.assertTeacherScope(context, student)));
+    const students = await this.listTeacherScopedStudents(context);
 
     const classNameById = new Map(
       filterTenantResources(context, await this.classStore.list())
@@ -1204,6 +1217,66 @@ export class SchoolService {
     );
   }
 
+  private shouldLimitToTeacherScope(
+    context: RequestContext,
+  ): context is RequestContext & { subjectType: "TEACHER"; subjectId: string } {
+    return isTeacherSubjectContext(context) &&
+      !context.roles.includes("TENANT_ADMIN") &&
+      !context.roles.includes("ASSISTANT_ADMIN");
+  }
+
+  private async listTeacherScopedStudents(context: RequestContext): Promise<SharedStudentRecord[]> {
+    const students = filterTenantResources(context, await this.studentStore.list());
+    if (!this.shouldLimitToTeacherScope(context)) {
+      return students;
+    }
+
+    const assignments = filterTenantResources(context, await this.teacherAssignmentStore.listByTeacher(context.subjectId));
+    return students.filter((student) =>
+      student.responsibleTeacherId === context.subjectId ||
+      assignments.some((assignment) =>
+        isAssignmentActive(assignment) &&
+        (assignment.studentId === student.id || Boolean(student.classId && assignment.classId === student.classId)),
+      ),
+    );
+  }
+
+  private async listTeacherScopedGuardianIds(context: RequestContext): Promise<Set<string>> {
+    const students = await this.listTeacherScopedStudents(context);
+    const links = await Promise.all(
+      students.map((student) => this.guardianStudentStore.listByStudent(student.id)),
+    );
+    return new Set(
+      links
+        .flat()
+        .filter((link) => link.tenantId === context.tenantId)
+        .map((link) => link.guardianId),
+    );
+  }
+
+  private async assertGuardianTeacherScope(context: RequestContext, guardianId: string): Promise<void> {
+    if (!this.shouldLimitToTeacherScope(context)) {
+      return;
+    }
+
+    const guardianIds = await this.listTeacherScopedGuardianIds(context);
+    if (!guardianIds.has(guardianId)) {
+      throw new ForbiddenException("FORBIDDEN_SUBJECT");
+    }
+  }
+
+  private async filterGuardianStudentLinksByTeacherScope(
+    context: RequestContext,
+    links: GuardianStudentRecord[],
+  ): Promise<GuardianStudentRecord[]> {
+    if (!this.shouldLimitToTeacherScope(context)) {
+      return links;
+    }
+
+    const studentIds = new Set((await this.listTeacherScopedStudents(context)).map((student) => student.id));
+    return links.filter((link) => studentIds.has(link.studentId));
+  }
+
   private resolveTeacherAssignmentInput(
     teacher: TeacherRecord,
     input: TeacherAssignmentRelationInput,
@@ -1275,16 +1348,16 @@ function resolveGuardianStudentRelation(
     relation.isPrimary = resolveBoolean(input.isPrimary, false);
   }
   if (applyDefaults || input.canViewFinance !== undefined) {
-    relation.canViewFinance = resolveBoolean(input.canViewFinance, true);
+    relation.canViewFinance = resolveBoolean(input.canViewFinance, false);
   }
   if (applyDefaults || input.canReceiveSms !== undefined) {
-    relation.canReceiveSms = resolveBoolean(input.canReceiveSms, true);
+    relation.canReceiveSms = resolveBoolean(input.canReceiveSms, false);
   }
   if (applyDefaults || input.canReceiveAnnouncements !== undefined) {
-    relation.canReceiveAnnouncements = resolveBoolean(input.canReceiveAnnouncements, true);
+    relation.canReceiveAnnouncements = resolveBoolean(input.canReceiveAnnouncements, false);
   }
   if (applyDefaults || input.canOpenSupportTickets !== undefined) {
-    relation.canOpenSupportTickets = resolveBoolean(input.canOpenSupportTickets, true);
+    relation.canOpenSupportTickets = resolveBoolean(input.canOpenSupportTickets, false);
   }
   return relation;
 }

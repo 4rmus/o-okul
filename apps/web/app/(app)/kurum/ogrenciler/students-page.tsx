@@ -18,12 +18,14 @@ import type {
   ReportStudentSnapshot,
   StudentClassHistoryRecord,
   StudentEnrollmentRecord,
+  StudentImportDryRunResult,
+  StudentImportResult,
   StudentProfileRecord,
   StudentRecord,
   TeacherNoteRecord,
   TeacherRecord,
 } from "@o-okul/shared-types";
-import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import {
@@ -96,6 +98,8 @@ interface QueryParamReader {
 const requiredStudentColumnKeys = new Set<StudentColumnKey>(["name", "actions"]);
 const defaultVisibleStudentColumnKeys = [...studentColumnKeys];
 const studentPageLimits = [5, 10, 20];
+const studentImportMaxBytes = 5 * 1024 * 1024;
+const studentImportAllowedExtensions = new Set(["CSV", "XLSX"]);
 
 const studentColumnOptions: Array<{ key: StudentColumnKey; label: string }> = [
   { key: "studentNo", label: "Okul No" },
@@ -107,6 +111,7 @@ const studentColumnOptions: Array<{ key: StudentColumnKey; label: string }> = [
 ];
 
 const emptyForm: StudentFormState = {
+  studentNo: "",
   firstName: "",
   lastName: "",
   classId: "",
@@ -119,6 +124,13 @@ const emptyForm: StudentFormState = {
   guardianFirstName: "",
   guardianLastName: "",
   guardianPhone: "",
+  guardianEmail: "",
+  guardianRelationshipType: "GUARDIAN",
+  guardianIsPrimary: true,
+  guardianCanViewFinance: false,
+  guardianCanReceiveSms: false,
+  guardianCanReceiveAnnouncements: false,
+  guardianCanOpenSupportTickets: false,
 };
 
 const emptyFilters: StudentListFilters = {
@@ -167,6 +179,13 @@ export function StudentsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isEnrollmentSaving, setIsEnrollmentSaving] = useState(false);
   const [isBulkEnrollmentSaving, setIsBulkEnrollmentSaving] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isImportChecking, setIsImportChecking] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importFileBase64, setImportFileBase64] = useState("");
+  const [importFileLabel, setImportFileLabel] = useState("");
+  const [importDryRun, setImportDryRun] = useState<StudentImportDryRunResult | null>(null);
+  const [importError, setImportError] = useState("");
   const [enrollmentAction, setEnrollmentAction] = useState<EnrollmentActionState>(emptyEnrollmentAction);
   const [bulkEnrollmentAction, setBulkEnrollmentAction] = useState<BulkEnrollmentActionState>({
     ...emptyBulkEnrollmentAction,
@@ -377,6 +396,22 @@ export function StudentsPage() {
     setError("");
   }
 
+  function openImportModal() {
+    setImportFileBase64("");
+    setImportFileLabel("");
+    setImportDryRun(null);
+    setImportError("");
+    setIsImportOpen(true);
+  }
+
+  function closeImportModal() {
+    setIsImportOpen(false);
+    setImportFileBase64("");
+    setImportFileLabel("");
+    setImportDryRun(null);
+    setImportError("");
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!auth || isSaving) return;
@@ -392,6 +427,7 @@ export function StudentsPage() {
     setIsSaving(true);
     try {
       const studentForm = parsedForm.data;
+      const guardianPayload = buildGuardianPayload(studentForm);
       const savedStudent = wasEditing
         ? await updateStudent(auth.accessToken, wasEditing.id, {
             firstName: studentForm.firstName,
@@ -401,11 +437,13 @@ export function StudentsPage() {
             status: studentForm.status,
           })
         : await createStudent(auth.accessToken, {
+            studentNo: studentForm.studentNo || undefined,
             firstName: studentForm.firstName,
             lastName: studentForm.lastName,
             classId: studentForm.classId || undefined,
             responsibleTeacherId: studentForm.responsibleTeacherId || undefined,
             status: studentForm.status,
+            guardian: guardianPayload ?? undefined,
           });
 
       if (!wasEditing) {
@@ -418,13 +456,7 @@ export function StudentsPage() {
         await updateStudentProfile(auth.accessToken, savedStudent.id, profilePayload);
       }
 
-      if (studentForm.guardianFirstName) {
-        const guardian = await createGuardian(auth.accessToken, {
-          firstName: studentForm.guardianFirstName,
-          lastName: studentForm.guardianLastName,
-          phone: studentForm.guardianPhone || undefined,
-        });
-        await linkGuardian(auth.accessToken, guardian.id, savedStudent.id);
+      if (!wasEditing && guardianPayload) {
         void queryClient.invalidateQueries({ queryKey: ["next-guardians"] });
       }
 
@@ -534,6 +566,67 @@ export function StudentsPage() {
       setError("Toplu dönem geçişi yapılamadı.");
     } finally {
       setIsBulkEnrollmentSaving(false);
+    }
+  }
+
+  async function handleStudentImportFile(file: File | undefined) {
+    setImportFileBase64("");
+    setImportFileLabel("");
+    setImportDryRun(null);
+    setImportError("");
+    if (!auth || !file) return;
+
+    const extension = inferStudentImportExtension(file);
+    if (!extension || !studentImportAllowedExtensions.has(extension)) {
+      setImportError("CSV veya XLSX dosyası seçin.");
+      return;
+    }
+    if (file.size <= 0) {
+      setImportError("Dosya boş görünüyor.");
+      return;
+    }
+    if (file.size > studentImportMaxBytes) {
+      setImportError(`Dosya en fazla ${formatByteSize(studentImportMaxBytes)} olabilir.`);
+      return;
+    }
+
+    setIsImportChecking(true);
+    try {
+      const fileBase64 = await readFileAsBase64(file);
+      const dryRun = await dryRunStudentImport(auth.accessToken, fileBase64);
+      setImportFileBase64(fileBase64);
+      setImportFileLabel(`${extension} • ${formatByteSize(file.size)}`);
+      setImportDryRun(dryRun);
+    } catch {
+      setImportError("Dosya kontrol edilemedi. Sınıf adlarını, zorunlu alanları ve dosya biçimini kontrol edin.");
+    } finally {
+      setIsImportChecking(false);
+    }
+  }
+
+  async function handleCommitStudentImport(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!auth || isImporting) return;
+    if (!importFileBase64 || !importDryRun) {
+      setImportError("Önce aktarım dosyası seçin.");
+      return;
+    }
+    if (!importDryRun.wouldImport) {
+      setImportError("Hatalar giderilmeden aktarım başlatılamaz.");
+      return;
+    }
+
+    setImportError("");
+    setIsImporting(true);
+    try {
+      await commitStudentImport(auth.accessToken, importFileBase64);
+      void queryClient.invalidateQueries({ queryKey: listQueryKey });
+      void queryClient.invalidateQueries({ queryKey: ["next-student-detail"] });
+      closeImportModal();
+    } catch {
+      setImportError("Aktarım tamamlanamadı. Aynı okul no, kota veya profil doğrulamalarını kontrol edin.");
+    } finally {
+      setIsImporting(false);
     }
   }
 
@@ -689,6 +782,10 @@ export function StudentsPage() {
                 Listelenenleri geçir
               </Button>
             </div>
+            <Button type="button" variant="secondary" onClick={openImportModal}>
+              <Upload size={17} aria-hidden="true" />
+              Toplu aktar
+            </Button>
             <Button onClick={openCreateForm}>
               <Plus size={17} aria-hidden="true" />
               Öğrenci ekle
@@ -726,6 +823,49 @@ export function StudentsPage() {
         title="Öğrenciler"
       />
       <FormModal
+        description="CSV veya XLSX dosyası seçildiğinde önce dry-run yapılır; hata yoksa aktarım tamamlanır."
+        onCancel={closeImportModal}
+        onSubmit={(event) => void handleCommitStudentImport(event)}
+        open={isImportOpen}
+        submitLabel={isImporting ? "Aktarılıyor…" : "Aktar"}
+        title="Toplu öğrenci aktar"
+      >
+        <Field
+          label="Aktarım dosyası"
+          description={importFileLabel || `CSV/XLSX • en fazla ${formatByteSize(studentImportMaxBytes)}`}
+        >
+          <Input
+            type="file"
+            accept=".csv,.xlsx"
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              void handleStudentImportFile(file);
+              event.currentTarget.value = "";
+            }}
+          />
+        </Field>
+        {isImportChecking ? <span className="next-field-hint">Kontrol ediliyor…</span> : null}
+        {importDryRun ? (
+          <InfoGrid>
+            <InfoItem label="Satır" value={formatCount(importDryRun.totalRows)} />
+            <InfoItem label="Geçerli" value={formatCount(importDryRun.validRows.length)} />
+            <InfoItem label="Hata" value={formatCount(importDryRun.errors.length)} />
+            <InfoItem label="Kota" value={`${importDryRun.quota.current}+${importDryRun.quota.incoming}/${importDryRun.quota.limit}`} />
+          </InfoGrid>
+        ) : null}
+        {importDryRun && importDryRun.errors.length > 0 ? (
+          <div className="next-form-guardians">
+            <span className="next-field-hint">İlk hatalar</span>
+            <ul>
+              {importDryRun.errors.slice(0, 5).map((item, index) => (
+                <li key={`${item.row}-${item.field}-${item.code}-${index}`}>{formatStudentImportError(item)}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {importError ? <p className="uh-crud-page__error">{importError}</p> : null}
+      </FormModal>
+      <FormModal
         description="Ad ve soyad zorunludur. Diğer alanlar opsiyoneldir."
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
@@ -747,6 +887,14 @@ export function StudentsPage() {
             onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))}
           />
         </Field>
+        {!editingStudent ? (
+          <Field label="Okul No" description="Boş bırakılırsa sistem sıradaki numarayı verir.">
+            <Input
+              value={form.studentNo}
+              onChange={(event) => setForm((current) => ({ ...current, studentNo: event.target.value }))}
+            />
+          </Field>
+        ) : null}
         <Field label="Sınıf" description="Sınıf bağlantısı rapor, devamsızlık, ödeme ve portal bağlamını besler.">
           <Select
             value={form.classId}
@@ -863,6 +1011,53 @@ export function StudentsPage() {
               onChange={(event) => setForm((current) => ({ ...current, guardianPhone: event.target.value }))}
             />
           </Field>
+          <Field label="Veli e-postası" description="Portal daveti gerekiyorsa bu adres kullanılır.">
+            <Input
+              type="email"
+              value={form.guardianEmail}
+              onChange={(event) => setForm((current) => ({ ...current, guardianEmail: event.target.value }))}
+            />
+          </Field>
+          <Field label="Yakınlık">
+            <Select
+              value={form.guardianRelationshipType}
+              onChange={(event) => setForm((current) => ({ ...current, guardianRelationshipType: event.target.value as StudentFormState["guardianRelationshipType"] }))}
+            >
+              <option value="GUARDIAN">Vasi</option>
+              <option value="MOTHER">Anne</option>
+              <option value="FATHER">Baba</option>
+              <option value="EMERGENCY_CONTACT">Acil kişi</option>
+              <option value="OTHER">Diğer</option>
+            </Select>
+          </Field>
+          <Checkbox
+            checked={form.guardianIsPrimary}
+            label="Birincil veli"
+            onChange={(event) => setForm((current) => ({ ...current, guardianIsPrimary: event.target.checked }))}
+          />
+          <fieldset className="next-permission-fieldset">
+            <legend>Veli izinleri</legend>
+            <Checkbox
+              checked={form.guardianCanViewFinance}
+              label="Finans görünürlüğü"
+              onChange={(event) => setForm((current) => ({ ...current, guardianCanViewFinance: event.target.checked }))}
+            />
+            <Checkbox
+              checked={form.guardianCanReceiveSms}
+              label="SMS alabilir"
+              onChange={(event) => setForm((current) => ({ ...current, guardianCanReceiveSms: event.target.checked }))}
+            />
+            <Checkbox
+              checked={form.guardianCanReceiveAnnouncements}
+              label="Duyuru alabilir"
+              onChange={(event) => setForm((current) => ({ ...current, guardianCanReceiveAnnouncements: event.target.checked }))}
+            />
+            <Checkbox
+              checked={form.guardianCanOpenSupportTickets}
+              label="Destek talebi açabilir"
+              onChange={(event) => setForm((current) => ({ ...current, guardianCanOpenSupportTickets: event.target.checked }))}
+            />
+          </fieldset>
         </div>
         {editingStudent ? (
           <section className="next-form-section" aria-label="Kayıt işlemleri">
@@ -1040,6 +1235,25 @@ function buildProfilePayload(form: StudentFormPayload): StudentProfilePayload | 
   if (form.email.trim()) payload.email = form.email.trim();
   if (form.birthDate.trim()) payload.birthDate = form.birthDate.trim();
   return Object.keys(payload).length > 0 ? payload : null;
+}
+
+function buildGuardianPayload(form: StudentFormPayload) {
+  if (!form.guardianFirstName.trim() && !form.guardianLastName.trim() && !form.guardianPhone.trim() && !form.guardianEmail.trim()) {
+    return null;
+  }
+
+  return {
+    firstName: form.guardianFirstName.trim(),
+    lastName: form.guardianLastName.trim(),
+    phone: form.guardianPhone.trim() || undefined,
+    email: form.guardianEmail.trim() || undefined,
+    relationshipType: form.guardianRelationshipType,
+    isPrimary: form.guardianIsPrimary,
+    canViewFinance: form.guardianCanViewFinance,
+    canReceiveSms: form.guardianCanReceiveSms,
+    canReceiveAnnouncements: form.guardianCanReceiveAnnouncements,
+    canOpenSupportTickets: form.guardianCanOpenSupportTickets,
+  };
 }
 
 const studentSortOptions = [
@@ -1267,7 +1481,15 @@ async function apiRequestOrNull<T>(accessToken: string, input: RequestInfo | URL
 
 async function createStudent(
   accessToken: string,
-  input: { firstName: string; lastName: string; classId?: string; responsibleTeacherId?: string; status: StudentRecord["status"] },
+  input: {
+    studentNo?: string;
+    firstName: string;
+    lastName: string;
+    classId?: string;
+    responsibleTeacherId?: string;
+    status: StudentRecord["status"];
+    guardian?: NonNullable<ReturnType<typeof buildGuardianPayload>>;
+  },
 ) {
   return apiRequest<StudentRecord>(accessToken, `${apiBaseUrl}/students`, {
     body: JSON.stringify(input),
@@ -1320,20 +1542,17 @@ async function bulkRenewStudentEnrollments(accessToken: string, input: BulkEnrol
   });
 }
 
-async function createGuardian(
-  accessToken: string,
-  input: { firstName: string; lastName: string; phone?: string },
-) {
-  return apiRequest<GuardianRecord>(accessToken, `${apiBaseUrl}/guardians`, {
-    body: JSON.stringify(input),
+async function dryRunStudentImport(accessToken: string, fileBase64: string) {
+  return apiRequest<StudentImportDryRunResult>(accessToken, `${apiBaseUrl}/students/imports/dry-run`, {
+    body: JSON.stringify({ fileBase64 }),
     headers: { "content-type": "application/json" },
     method: "POST",
   });
 }
 
-async function linkGuardian(accessToken: string, guardianId: string, studentId: string) {
-  await apiRequest<unknown>(accessToken, `${apiBaseUrl}/guardians/${encodeURIComponent(guardianId)}/students`, {
-    body: JSON.stringify({ studentId }),
+async function commitStudentImport(accessToken: string, fileBase64: string) {
+  return apiRequest<StudentImportResult>(accessToken, `${apiBaseUrl}/students/imports`, {
+    body: JSON.stringify({ fileBase64 }),
     headers: { "content-type": "application/json" },
     method: "POST",
   });
@@ -1379,6 +1598,61 @@ function formatDelta(value: number | undefined) {
 
 function formatCount(value: number) {
   return value.toLocaleString("tr-TR");
+}
+
+function formatByteSize(byteSize: number) {
+  if (byteSize >= 1024 * 1024) {
+    return `${(byteSize / (1024 * 1024)).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} MB`;
+  }
+  return `${Math.max(1, Math.round(byteSize / 1024)).toLocaleString("tr-TR")} KB`;
+}
+
+function inferStudentImportExtension(file: File): "CSV" | "XLSX" | undefined {
+  const extension = file.name.split(".").pop()?.replace(/[^a-z0-9]/gi, "").toLocaleUpperCase("tr-TR");
+  if (extension === "CSV" || extension === "XLSX") return extension;
+  if (file.type === "text/csv" || file.type === "text/plain") return "CSV";
+  if (file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") return "XLSX";
+  return undefined;
+}
+
+function formatStudentImportError(error: StudentImportDryRunResult["errors"][number]) {
+  const row = error.row > 0 ? `${error.row}. satır` : "Kota";
+  if (error.code === "CLASS_NOT_FOUND") return `${row}: sınıf bulunamadı (${error.value ?? "-"})`;
+  if (error.code === "REQUIRED") return `${row}: ${studentImportFieldLabel(error.field)} zorunlu`;
+  if (error.code === "STUDENT_NO_DUPLICATE") return `${row}: okul no tekrar ediyor`;
+  if (error.code === "STUDENT_NATIONAL_ID_DUPLICATE") return `${row}: TC kimlik no tekrar ediyor`;
+  if (error.code === "INVALID_EMAIL") return `${row}: e-posta geçersiz`;
+  if (error.code === "INVALID_DATE") return `${row}: tarih YYYY-AA-GG olmalı`;
+  if (error.code === "INVALID_NATIONAL_ID") return `${row}: TC kimlik no geçersiz`;
+  if (error.code === "STUDENT_QUOTA_EXCEEDED") return "Öğrenci kotası aşılır";
+  return `${row}: dosya satırı kontrol edilmeli`;
+}
+
+function studentImportFieldLabel(field: StudentImportDryRunResult["errors"][number]["field"]) {
+  const labels: Record<StudentImportDryRunResult["errors"][number]["field"], string> = {
+    birthDate: "doğum tarihi",
+    className: "sınıf",
+    email: "e-posta",
+    firstName: "ad",
+    guardianEmail: "veli e-postası",
+    lastName: "soyad",
+    nationalId: "TC kimlik no",
+    quota: "kota",
+    studentNo: "okul no",
+  };
+  return labels[field];
+}
+
+async function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("FILE_READ_FAILED"));
+    reader.onload = () => {
+      const result = String(reader.result ?? "");
+      resolve(result.includes(",") ? result.split(",")[1] ?? "" : result);
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function formatGuardianLinkedFilter(value: StudentListFilters["guardianLinked"]) {

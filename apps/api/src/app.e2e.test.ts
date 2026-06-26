@@ -897,8 +897,46 @@ describe("API auth + tenant isolation", () => {
         .set("Authorization", `Bearer ${issued.accessToken}`)
         .send({
           fileBase64: await createStudentWorkbookBase64(
-            [["321", "Ece", "Velili", "8-A", "Fatma", "Velili", "5553210000"]],
-            ["okul_no", "ad", "soyad", "sinif", "veli_ad", "veli_soyad", "veli_telefon"],
+            [[
+              "321",
+              "Ece",
+              "Velili",
+              "ece.velili@example.test",
+              "5553219999",
+              "2012-09-01",
+              "10000000146",
+              "8-A",
+              "Fatma",
+              "Velili",
+              "5553210000",
+              "fatma.velili@example.test",
+              "anne",
+              "evet",
+              "hayir",
+              "evet",
+              "evet",
+              "hayir",
+            ]],
+            [
+              "okul_no",
+              "ad",
+              "soyad",
+              "email",
+              "telefon",
+              "dogum_tarihi",
+              "tc_kimlik_no",
+              "sinif",
+              "veli_ad",
+              "veli_soyad",
+              "veli_telefon",
+              "veli_email",
+              "veli_iliski",
+              "veli_birincil",
+              "veli_finans",
+              "veli_sms",
+              "veli_duyuru",
+              "veli_destek",
+            ],
           ),
         })
         .expect(201);
@@ -924,13 +962,28 @@ describe("API auth + tenant isolation", () => {
         .expect(({ body }) => {
           expect(body).toEqual([
             expect.objectContaining({
-              relationshipType: "GUARDIAN",
+              relationshipType: "MOTHER",
               isPrimary: true,
+              canViewFinance: false,
               canReceiveSms: true,
               canReceiveAnnouncements: true,
-              canOpenSupportTickets: true,
+              canOpenSupportTickets: false,
             }),
           ]);
+        });
+
+      await request(server)
+        .get(`/students/${encodeURIComponent(studentId)}/profile`)
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .expect(200)
+        .expect(({ body }) => {
+          expect(body).toMatchObject({
+            birthDate: "2012-09-01",
+            email: "ece.velili@example.test",
+            nationalIdMasked: "*******0146",
+            phone: "5553219999",
+          });
+          expect(JSON.stringify(body)).not.toContain("10000000146");
         });
     } finally {
       if (studentId) {
@@ -1046,7 +1099,10 @@ describe("API auth + tenant isolation", () => {
     expect(response.body).toMatchObject({
       dryRun: true,
       totalRows: 2,
-      validRows: [],
+      validRows: [
+        { row: 2, firstName: "Ece", lastName: "Import" },
+        { row: 3, firstName: "Deniz", lastName: "Import" },
+      ],
       errors: [{ row: 0, field: "quota", code: "STUDENT_QUOTA_EXCEEDED" }],
       quota: { limit: 2, current: 1, incoming: 2, wouldExceed: true },
       wouldImport: false,

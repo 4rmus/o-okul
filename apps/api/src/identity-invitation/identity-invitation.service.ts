@@ -82,7 +82,7 @@ export class IdentityInvitationService {
       entityType: "IdentityInvitation",
       entityId: invitation.id,
       action: "identity_invitation.created",
-      diff: { subjectType, subjectId, email, role: invitation.role },
+      diff: { subjectType, subjectId, emailProvided: true, role: invitation.role },
     });
     return { invitation, activationToken: token };
   }

@@ -64,7 +64,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     });
     const studentUploadStatus = page.getByLabel("Öğrenci aktarım güven durumu");
     await expect(studentUploadStatus).toContainText("Dosya kabul edilmedi");
-    await expect(studentUploadStatus).toContainText("CSV, XLS veya XLSX dosyası seçin.");
+    await expect(studentUploadStatus).toContainText("CSV veya XLSX dosyası seçin.");
     await expect(setupForm).not.toContainText("PDF dosyası seçildi");
     await expectNoVisibleTextValues(page, "setup-upload-invalid", hostileUploadValues);
     await expectDraftStorageDoesNotContain(page, "setup-upload-invalid-storage", hostileUploadValues);

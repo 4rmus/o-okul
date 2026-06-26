@@ -6,7 +6,7 @@ import { InMemoryStudentStore } from "../student/student-store.js";
 import { InMemoryTenantStore } from "../tenant/tenant-store.js";
 import { InMemoryUserManagementStore } from "../user-management/user-management-store.js";
 import { IdentityInvitationService, hashActivationToken } from "./identity-invitation.service.js";
-import type { IdentityInvitationStore } from "./identity-invitation-store.js";
+import { InMemoryIdentityInvitationStore, type IdentityInvitationStore } from "./identity-invitation-store.js";
 
 describe("IdentityInvitationService", () => {
   it("süresi dolan daveti kabul etmez", async () => {
@@ -45,5 +45,34 @@ describe("IdentityInvitationService", () => {
     await expect(service.accept({ token: "expired-token", password: "password1" })).rejects.toThrow(
       "IDENTITY_INVITATION_EXPIRED",
     );
+  });
+
+  it("davet audit kaydında ham e-posta tutmaz", async () => {
+    const students = new InMemoryStudentStore();
+    const student = await students.create({
+      tenantId: "tenant-a",
+      firstName: "Davet",
+      lastName: "Ogrenci",
+    });
+    const auditLogs = { record: vi.fn() };
+    const service = new IdentityInvitationService(
+      new InMemoryIdentityInvitationStore(),
+      new InMemoryUserManagementStore(),
+      students,
+      new InMemoryGuardianStore(),
+      new InMemoryTeacherStore(),
+      new InMemoryTenantStore(),
+      auditLogs as never,
+    );
+
+    await service.create(
+      { tenantId: "tenant-a", userId: "admin-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      { subjectType: "STUDENT", subjectId: student.id, email: "Student.Invite@example.test" },
+    );
+
+    const diff = auditLogs.record.mock.calls[0]?.[0]?.diff;
+    expect(diff).toEqual(expect.objectContaining({ emailProvided: true, role: "STUDENT" }));
+    expect(diff).not.toHaveProperty("email");
+    expect(JSON.stringify(diff)).not.toContain("student.invite@example.test");
   });
 });

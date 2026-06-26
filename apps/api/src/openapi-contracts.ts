@@ -1964,18 +1964,34 @@ const studentImportRequestSchema = objectSchema({
 
 const studentImportErrorSchema = objectSchema({
   row: integerSchema({ minimum: 0 }),
-  field: { type: "string", enum: ["className", "firstName", "lastName", "quota", "studentNo"] },
-  code: { type: "string", enum: ["CLASS_NOT_FOUND", "REQUIRED", "STUDENT_NO_DUPLICATE", "STUDENT_QUOTA_EXCEEDED"] },
+  field: { type: "string", enum: ["birthDate", "className", "email", "firstName", "guardianEmail", "lastName", "nationalId", "quota", "studentNo"] },
+  code: {
+    type: "string",
+    enum: [
+      "CLASS_NOT_FOUND",
+      "INVALID_DATE",
+      "INVALID_EMAIL",
+      "INVALID_NATIONAL_ID",
+      "REQUIRED",
+      "STUDENT_NATIONAL_ID_DUPLICATE",
+      "STUDENT_NO_DUPLICATE",
+      "STUDENT_QUOTA_EXCEEDED",
+    ],
+  },
   value: stringSchema(),
 }, ["row", "field", "code"]);
 
 const studentImportPreviewRowSchema = objectSchema({
   row: integerSchema({ minimum: 1 }),
+  birthDate: stringSchema({ format: "date" }),
   classId: stringSchema(),
   className: stringSchema(),
+  email: stringSchema({ format: "email" }),
   firstName: stringSchema(),
   guardian: studentGuardianProvisionRequestSchema,
   lastName: stringSchema(),
+  nationalId: stringSchema(),
+  phone: stringSchema(),
   studentNo: stringSchema(),
 }, ["row", "firstName", "lastName"]);
 
@@ -2585,6 +2601,7 @@ const operationContracts: Record<string, OperationContract> = {
       lastName: stringSchema(),
       responsibleTeacherId: stringSchema(),
       status: studentStatusSchema,
+      studentNo: stringSchema(),
       tenantId: stringSchema(),
     }, ["firstName", "lastName"]),
     responseBody: publicStudentRecordSchema,

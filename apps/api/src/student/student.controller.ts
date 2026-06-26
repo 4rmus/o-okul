@@ -73,6 +73,7 @@ const studentCreateBodySchema = z.object({
   lastName: requiredTrimmedString,
   responsibleTeacherId: optionalTrimmedString,
   status: studentStatusSchema.optional(),
+  studentNo: optionalTrimmedString,
   tenantId: optionalTrimmedString,
 }).strict();
 const studentUpdateBodySchema = z.object({

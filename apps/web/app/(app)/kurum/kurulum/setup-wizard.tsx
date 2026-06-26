@@ -8,6 +8,8 @@ import type {
   AcademicYearRecord,
   ClassRecord,
   CourseRecord,
+  StudentImportDryRunResult,
+  StudentImportResult,
   TeacherImportDryRunResult,
   TeacherImportResult,
 } from "@o-okul/shared-types";
@@ -18,7 +20,7 @@ import { PageFrame } from "../_shared/page-frame.js";
 
 type StepId = "general" | "term" | "courses" | "classes" | "people";
 type StageId = "7" | "8-LGS" | "10" | "11" | "12" | "TYT/AYT";
-type SetupImportFileExtension = "CSV" | "XLS" | "XLSX";
+type SetupImportFileExtension = "CSV" | "XLSX";
 type SetupUploadStatusState = "idle" | "ready" | "error";
 
 interface SetupUploadStatus {
@@ -63,28 +65,6 @@ interface OnboardingDraft {
 }
 
 type StepErrors = Record<string, string>;
-
-interface StudentImportDryRunResult {
-  dryRun: true;
-  errors: Array<{
-    code: "CLASS_NOT_FOUND" | "REQUIRED" | "STUDENT_NO_DUPLICATE" | "STUDENT_QUOTA_EXCEEDED";
-    field: "className" | "firstName" | "lastName" | "quota" | "studentNo";
-    row: number;
-    value?: string;
-  }>;
-  quota?: {
-    current: number;
-    incoming: number;
-    limit: number;
-    wouldExceed: boolean;
-  };
-  totalRows: number;
-  wouldImport: boolean;
-}
-
-interface StudentImportResult {
-  importedRows: number;
-}
 
 interface TenantProfileRecord {
   contactEmail?: string;
@@ -240,7 +220,7 @@ const courseGroups: Array<{ title: string; source: string; courses: Array<{ id: 
 
 const allCourseOptions = courseGroups.flatMap((group) => group.courses);
 const setupImportMaxBytes = 5 * 1024 * 1024;
-const setupImportAllowedExtensions = new Set<SetupImportFileExtension>(["CSV", "XLS", "XLSX"]);
+const setupImportAllowedExtensions = new Set<SetupImportFileExtension>(["CSV", "XLSX"]);
 
 export function SetupWizard() {
   const { auth } = useAuth();
@@ -834,8 +814,8 @@ function PeopleStep({
 }) {
   function downloadTeacherTemplate() {
     const sampleClassName = sampleClassNameFromDraft(draft);
-    downloadExcelLikeFile(
-      "ogretmen-aktarim-sablonu.xls",
+    downloadCsvFile(
+      "ogretmen-aktarim-sablonu.csv",
       [
         ["ad", "soyad", "brans", "atanacak_sinif", "ders"],
         ["Ayse", "Yilmaz", "Matematik", sampleClassName, "Matematik"],
@@ -845,20 +825,58 @@ function PeopleStep({
 
   function downloadStudentTemplate() {
     const sampleClassName = sampleClassNameFromDraft(draft);
-    downloadExcelLikeFile(
-      "ogrenci-aktarim-sablonu.xls",
+    downloadCsvFile(
+      "ogrenci-aktarim-sablonu.csv",
       [
-        ["okul_no", "ad", "soyad", "email", "telefon", "sinif", "veli_ad", "veli_soyad", "veli_telefon"],
-        ["100", "Ogrenci", "Deneme", "", "", sampleClassName, "Veli", "Deneme", ""],
+        [
+          "okul_no",
+          "ad",
+          "soyad",
+          "email",
+          "telefon",
+          "dogum_tarihi",
+          "tc_kimlik_no",
+          "sinif",
+          "veli_ad",
+          "veli_soyad",
+          "veli_telefon",
+          "veli_email",
+          "veli_iliski",
+          "veli_birincil",
+          "veli_finans",
+          "veli_sms",
+          "veli_duyuru",
+          "veli_destek",
+        ],
+        [
+          "100",
+          "Ogrenci",
+          "Deneme",
+          "ogrenci@example.com",
+          "5550000000",
+          "2012-09-01",
+          "",
+          sampleClassName,
+          "Veli",
+          "Deneme",
+          "5550000001",
+          "veli@example.com",
+          "anne",
+          "evet",
+          "hayir",
+          "evet",
+          "evet",
+          "hayir",
+        ],
       ],
     );
   }
 
-  function downloadExcelLikeFile(fileName: string, rows: string[][]) {
+  function downloadCsvFile(fileName: string, rows: string[][]) {
     const content = rows
-      .map((row) => row.join(";"))
+      .map((row) => row.map(escapeCsvCell).join(";"))
       .join("\n");
-    const blob = new Blob([`\uFEFF${content}`], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const blob = new Blob([`\uFEFF${content}`], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -893,15 +911,15 @@ function PeopleStep({
       </section>
       <section className="next-onboarding-template-panel">
         <div>
-          <h3>Excel şablonları</h3>
+          <h3>Aktarım şablonları</h3>
           <p>Öğretmen ve öğrenci aktarımı için ayrı, sade ve uygulama alanlarına uyumlu dosyalar.</p>
         </div>
         <div className="next-onboarding-template-actions">
           <Button variant="secondary" type="button" onClick={downloadTeacherTemplate}>
-            Öğretmen şablonu
+            Öğretmen CSV şablonu
           </Button>
           <Button variant="secondary" type="button" onClick={downloadStudentTemplate}>
-            Öğrenci şablonu
+            Öğrenci CSV şablonu
           </Button>
         </div>
       </section>
@@ -909,13 +927,13 @@ function PeopleStep({
         label="Öğretmen aktarım dosyası"
         description={describeSelectedUploadFileNotice(
           draft.people.teacherImportFileName,
-          "Öğretmen Excel veya CSV dosyası seçilebilir.",
+          "Öğretmen XLSX veya CSV dosyası seçilebilir.",
         )}
         error={errors.teacherImportFileName ?? errors["people.teacherImportFileName"]}
       >
         <Input
           type="file"
-          accept=".xls,.xlsx,.csv"
+          accept=".xlsx,.csv"
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];
             onTeacherImportFileChange(file);
@@ -928,13 +946,13 @@ function PeopleStep({
         label="Öğrenci aktarım dosyası"
         description={describeSelectedUploadFileNotice(
           draft.people.studentImportFileName,
-          "Öğrenci Excel veya CSV dosyası seçilebilir.",
+          "Öğrenci XLSX veya CSV dosyası seçilebilir.",
         )}
         error={errors.studentImportFileName ?? errors["people.studentImportFileName"]}
       >
         <Input
           type="file"
-          accept=".xls,.xlsx,.csv"
+          accept=".xlsx,.csv"
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];
             onStudentImportFileChange(file);
@@ -1085,7 +1103,7 @@ function validateSetupImportFile(
     return {
       accepted: false,
       notice: "",
-      status: createErrorUploadStatus(file, "CSV, XLS veya XLSX dosyası seçin."),
+      status: createErrorUploadStatus(file, "CSV veya XLSX dosyası seçin."),
     };
   }
   if (file.size <= 0) {
@@ -1119,9 +1137,8 @@ function validateSetupImportFile(
 
 function inferSetupImportExtension(file: File): SetupImportFileExtension | undefined {
   const extension = file.name.split(".").pop()?.replace(/[^a-z0-9]/gi, "").toLocaleUpperCase("tr-TR");
-  if (extension === "CSV" || extension === "XLS" || extension === "XLSX") return extension;
+  if (extension === "CSV" || extension === "XLSX") return extension;
   if (file.type === "text/csv" || file.type === "text/plain") return "CSV";
-  if (file.type === "application/vnd.ms-excel") return "XLS";
   if (file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") return "XLSX";
   return undefined;
 }
@@ -1130,7 +1147,7 @@ function createIdleUploadStatus(): SetupUploadStatus {
   return {
     badge: "Bekliyor",
     detail: "Dosya adı saklanmaz; yalnız tür, boyut ve yerel kontrol sonucu gösterilir.",
-    meta: `CSV/XLS/XLSX • en fazla ${formatUploadByteSize(setupImportMaxBytes)}`,
+    meta: `CSV/XLSX • en fazla ${formatUploadByteSize(setupImportMaxBytes)}`,
     state: "idle",
     title: "Dosya bekleniyor",
     tone: "info",
@@ -1370,7 +1387,32 @@ function studentImportErrorMessage(dryRun: StudentImportDryRunResult) {
     return `Öğrenci dosyasında tekrar eden veya sistemde zaten kayıtlı okul no var. Satır: ${duplicateStudentNo.row}.`;
   }
 
+  const duplicateNationalId = dryRun.errors.find((error) => error.code === "STUDENT_NATIONAL_ID_DUPLICATE");
+  if (duplicateNationalId) {
+    return `Öğrenci dosyasında tekrar eden veya sistemde zaten kayıtlı TC kimlik no var. Satır: ${duplicateNationalId.row}.`;
+  }
+
+  const invalidEmail = dryRun.errors.find((error) => error.code === "INVALID_EMAIL");
+  if (invalidEmail) {
+    return `Öğrenci dosyasında geçersiz e-posta var. Satır: ${invalidEmail.row}.`;
+  }
+
+  const invalidDate = dryRun.errors.find((error) => error.code === "INVALID_DATE");
+  if (invalidDate) {
+    return `Öğrenci dosyasında tarih YYYY-AA-GG formatında olmalı. Satır: ${invalidDate.row}.`;
+  }
+
+  const invalidNationalId = dryRun.errors.find((error) => error.code === "INVALID_NATIONAL_ID");
+  if (invalidNationalId) {
+    return `Öğrenci dosyasında geçersiz TC kimlik no var. Satır: ${invalidNationalId.row}.`;
+  }
+
   return "Öğrenci aktarım dosyası içe aktarılamadı. Dosyayı kontrol edip tekrar deneyin.";
+}
+
+function escapeCsvCell(value: string): string {
+  if (!/[;"\n\r]/.test(value)) return value;
+  return `"${value.replace(/"/g, "\"\"")}"`;
 }
 
 function normalizeValue(value: string) {

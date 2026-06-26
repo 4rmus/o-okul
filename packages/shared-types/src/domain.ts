@@ -590,6 +590,7 @@ export interface StudentGuardianProvisionRequest {
 
 export interface StudentCreateRequest {
   tenantId?: string;
+  studentNo?: string;
   firstName: string;
   lastName: string;
   classId?: string;
@@ -642,18 +643,30 @@ export interface StudentImportRequest {
 
 export interface StudentImportError {
   row: number;
-  field: "className" | "firstName" | "lastName" | "quota" | "studentNo";
-  code: "CLASS_NOT_FOUND" | "REQUIRED" | "STUDENT_NO_DUPLICATE" | "STUDENT_QUOTA_EXCEEDED";
+  field: "birthDate" | "className" | "email" | "firstName" | "guardianEmail" | "lastName" | "nationalId" | "quota" | "studentNo";
+  code:
+    | "CLASS_NOT_FOUND"
+    | "INVALID_DATE"
+    | "INVALID_EMAIL"
+    | "INVALID_NATIONAL_ID"
+    | "REQUIRED"
+    | "STUDENT_NATIONAL_ID_DUPLICATE"
+    | "STUDENT_NO_DUPLICATE"
+    | "STUDENT_QUOTA_EXCEEDED";
   value?: string;
 }
 
 export interface StudentImportPreviewRow {
   row: number;
+  birthDate?: string;
   classId?: string;
   className?: string;
+  email?: string;
   firstName: string;
   guardian?: StudentGuardianProvisionRequest;
   lastName: string;
+  nationalId?: string;
+  phone?: string;
   studentNo?: string;
 }
 
