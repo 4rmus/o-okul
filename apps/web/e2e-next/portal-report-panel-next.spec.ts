@@ -184,7 +184,6 @@ function createTenantResponse() {
 
 function createStudentProfile() {
   return {
-    birthDate: "2012-05-12",
     classId: "class-8a",
     firstName: "Ada",
     id: "student-a",

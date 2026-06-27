@@ -23,6 +23,7 @@ export interface TenantRecord {
 export interface TenantStore {
   list(): Promise<TenantRecord[]>;
   findById(id: string): Promise<TenantRecord | undefined>;
+  findBySlug(slug: string): Promise<TenantRecord | undefined>;
   findForAdmin(id: string): Promise<TenantRecord | undefined>;
   create(input: CreateTenantInput): Promise<TenantRecord>;
   createWithFirstAdmin?(input: CreateTenantInput, firstAdmin: CreateTenantFirstAdminInput): Promise<TenantCreateWithAdminResult>;
@@ -56,6 +57,12 @@ export class InMemoryTenantStore implements TenantStore {
 
   async findById(id: string): Promise<TenantRecord | undefined> {
     const tenant = this.tenants.find((record) => record.id === id && isUsableTenant(record));
+    return tenant ? { ...tenant } : undefined;
+  }
+
+  async findBySlug(slug: string): Promise<TenantRecord | undefined> {
+    const normalizedSlug = slug.trim().toLowerCase();
+    const tenant = this.tenants.find((record) => record.slug.toLowerCase() === normalizedSlug && isUsableTenant(record));
     return tenant ? { ...tenant } : undefined;
   }
 
@@ -183,6 +190,35 @@ export class PostgresTenantStore implements TenantStore {
     });
   }
 
+  async findBySlug(slug: string): Promise<TenantRecord | undefined> {
+    return withBypassRlsQuery(this.pool, async (client) => {
+      const result = await client.query<TenantRow>(
+        `SELECT
+           t."id",
+           t."name",
+           t."slug",
+           t."plan",
+           t."licenseStartsAt",
+           t."licenseEndsAt",
+           t."institutionType",
+           t."contactEmail",
+           t."logoUrl",
+           t."seatLimit",
+           COUNT(DISTINCT m."userId")::int AS "activeSeatCount",
+           t."status"
+         FROM "Tenant" t
+         LEFT JOIN "TenantMembership" m ON m."tenantId" = t."id"
+         WHERE lower(t."slug") = lower($1) AND t."status" = 'ACTIVE'
+           AND (t."licenseEndsAt" IS NULL OR t."licenseEndsAt" >= now())
+         GROUP BY t."id", t."name", t."slug", t."plan", t."licenseStartsAt", t."licenseEndsAt", t."institutionType", t."contactEmail", t."logoUrl", t."seatLimit", t."status"
+         LIMIT 1`,
+        [slug],
+      );
+      const row = result.rows[0];
+      return row ? mapTenantRow(row) : undefined;
+    });
+  }
+
   async findForAdmin(id: string): Promise<TenantRecord | undefined> {
     return withBypassRlsQuery(this.pool, async (client) => {
       const result = await client.query<TenantRow>(
@@ -267,11 +303,11 @@ export class PostgresTenantStore implements TenantStore {
       const tenant = mapTenantRow(tenantResult.rows[0]!);
       const passwordHash = firstAdmin.mode === "invitation" ? "" : hashPassword(firstAdmin.password ?? "", randomUUID());
       const createdUser = await client.query<{ id: string }>(
-        `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
-         VALUES ($1, $2, $3, $4, now())
+        `INSERT INTO "User" ("id", "tenantId", "email", "name", "passwordHash", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, now())
          ON CONFLICT ("email") DO NOTHING
          RETURNING "id"`,
-        [randomUUID(), normalizedEmail, firstAdmin.name, passwordHash],
+        [randomUUID(), tenant.id, normalizedEmail, firstAdmin.name, passwordHash],
       );
       const userId = createdUser.rows[0]?.id;
       if (!userId) {

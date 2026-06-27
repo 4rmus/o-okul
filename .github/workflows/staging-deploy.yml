@@ -312,6 +312,7 @@ jobs:
             docker-compose.release.yml \
             docker-compose.traefik.yml \
             docker-compose.traefik-ip.yml \
+            docker/evidence \
             docker/postgres/init
 
           ssh -i ~/.ssh/staging_deploy_key \

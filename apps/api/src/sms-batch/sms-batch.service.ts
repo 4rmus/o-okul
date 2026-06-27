@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundEx
 import { createHash } from "node:crypto";
 import { announcementStoreToken, type AnnouncementStore } from "../announcement/announcement-store.js";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
+import { isSmsEnabled } from "../config/env.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { MessageTemplateService } from "../message-template/message-template.service.js";
@@ -93,6 +94,7 @@ export class SmsBatchService {
     context: RequestContext,
     input: SmsBatchRecipientPreviewInput,
   ): Promise<SmsBatchRecipientPreviewResult> {
+    assertSmsEnabled();
     if (!context.tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }
@@ -209,6 +211,7 @@ export class SmsBatchService {
     input: CreateSmsBatchInput,
     idempotencyKey?: string,
   ): Promise<SmsBatchQueueResult> {
+    assertSmsEnabled();
     if (idempotencyKey && this.idempotency) {
       return this.idempotency.run(
         context,
@@ -267,6 +270,12 @@ export class SmsBatchService {
       jobId: job.options.jobId,
       status: "queued",
     };
+  }
+}
+
+function assertSmsEnabled(): void {
+  if (!isSmsEnabled()) {
+    throw new BadRequestException("SMS_DISABLED");
   }
 }
 

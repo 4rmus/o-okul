@@ -90,6 +90,13 @@ describe("createSmsAdapterFromEnv", () => {
       .toThrow("SMS_PROVIDER_REQUIRED");
   });
 
+  it("SMS kapalı prod ortamında no-op adapter ile başlayabilir", async () => {
+    const adapter = createSmsAdapterFromEnv({ NODE_ENV: "production", SMS_ENABLED: "false", SMS_PROVIDER: "noop" });
+
+    await expect(adapter.sendBatch([{ to: "5000000001", body: "test" }]))
+      .resolves.toEqual([expect.objectContaining({ providerMessageId: "noop-1" })]);
+  });
+
   it("Netgsm seçildiğinde credential ister", () => {
     expect(() => createSmsAdapterFromEnv({ NODE_ENV: "development", SMS_PROVIDER: "netgsm" }))
       .toThrow("NETGSM_USERCODE_MISSING");

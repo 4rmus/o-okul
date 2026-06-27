@@ -58,6 +58,7 @@ describe("PostgresUserManagementStore", () => {
     expect(insertUser?.sql).not.toContain('"passwordHash" = EXCLUDED."passwordHash"');
     expect(insertUser?.values).toEqual([
       expect.any(String),
+      "tenant-a",
       "created@example.test",
       "Created User",
       expect.stringMatching(/^scrypt:/),

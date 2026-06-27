@@ -285,10 +285,10 @@ async function seedPipelineInput(rows) {
       [membershipId, tenantId, userId],
     );
     await client.query(
-      `INSERT INTO "Class" ("id", "tenantId", "name", "level", "updatedAt")
+      `INSERT INTO "Class" ("id", "tenantId", "name", "updatedAt")
        VALUES
-         ($1, $2, '8 LGS A', '8', now()),
-         ($3, $2, '8 LGS B', '8', now())`,
+         ($1, $2, '8 LGS A', now()),
+         ($3, $2, '8 LGS B', now())`,
       [classAId, tenantId, classBId],
     );
     await seedSampleUsers(client);
@@ -413,15 +413,13 @@ async function seedSampleGuardians(client) {
   );
   await insertRows(
     client,
-    `INSERT INTO "GuardianStudent" ("id", "tenantId", "guardianId", "studentId", "relationshipType", "isPrimary", "updatedAt") VALUES `,
-    ["id", "tenantId", "guardianId", "studentId", "relationshipType", "isPrimary"],
+    `INSERT INTO "GuardianStudent" ("id", "tenantId", "guardianId", "studentId", "updatedAt") VALUES `,
+    ["id", "tenantId", "guardianId", "studentId"],
     sampleStudentNos.map((studentNo) => [
       `guardian-link-isem-${runId}-${studentNo}`,
       tenantId,
       guardianId(studentNo),
       studentId(studentNo),
-      "GUARDIAN",
-      true,
     ]),
   );
 }

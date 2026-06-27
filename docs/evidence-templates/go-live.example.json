@@ -12,7 +12,7 @@
     "checksPassed": [
       "Production env",
       "Traefik HTTPS",
-      "SMS provider",
+      "SMS disabled path",
       "Notification provider",
       "Sentry test event",
       "Alert webhook",
@@ -57,7 +57,7 @@
       "Inline upload migration kanıtı",
       "Audit null tenant kanıtı",
       "Rate limit Redis kanıtı",
-      "SMS provider kanıtı",
+      "SMS disabled path kanıtı",
       "Notification provider kanıtı",
       "Report generation perf kanıtı",
       "Staging/prod UAT",

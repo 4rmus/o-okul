@@ -1,0 +1,100 @@
+"use client";
+
+import { type FormEvent, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button, Field, Input } from "@o-okul/ui";
+import type { AuthResponse } from "@o-okul/shared-types";
+import { appBrand } from "../../../src/brand.js";
+import { useAuth } from "../../providers.js";
+
+export default function ChangePasswordPage() {
+  const router = useRouter();
+  const { auth, changePassword, isBootstrapping, logout } = useAuth();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newPasswordAgain, setNewPasswordAgain] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isBootstrapping) return;
+    if (!auth) {
+      router.replace("/login");
+      return;
+    }
+    if (!auth.session.mustChangePassword) {
+      router.replace(getAuthHomePath(auth));
+    }
+  }, [auth, isBootstrapping, router]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    if (newPassword !== newPasswordAgain) {
+      setError("Yeni şifreler aynı olmalı.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await changePassword({ currentPassword, newPassword });
+      router.replace(auth ? getAuthHomePath(auth) : "/login");
+    } catch {
+      setError("Şifre değiştirilemedi.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="next-auth-panel" aria-labelledby="change-password-title">
+      <div className="next-brand">
+        <span className="next-brand-mark">{appBrand.mark}</span>
+        <span>{appBrand.name}</span>
+      </div>
+      <form className="next-form" aria-label="Şifre değiştirme formu" onSubmit={(event) => void handleSubmit(event)}>
+        <h1 id="change-password-title">Şifre değiştir</h1>
+        <Field label="Mevcut şifre">
+          <Input
+            type="password"
+            value={currentPassword}
+            onChange={(event) => setCurrentPassword(event.target.value)}
+            autoComplete="current-password"
+          />
+        </Field>
+        <Field label="Yeni şifre">
+          <Input
+            type="password"
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+            autoComplete="new-password"
+          />
+        </Field>
+        <Field label="Yeni şifre tekrar">
+          <Input
+            type="password"
+            value={newPasswordAgain}
+            onChange={(event) => setNewPasswordAgain(event.target.value)}
+            autoComplete="new-password"
+          />
+        </Field>
+        {error ? <p className="next-form-error">{error}</p> : null}
+        <Button type="submit" disabled={isSubmitting || isBootstrapping}>
+          {isSubmitting ? "Kaydediliyor" : "Kaydet"}
+        </Button>
+        <Button type="button" variant="secondary" onClick={() => void logout()} disabled={isSubmitting}>
+          Çıkış yap
+        </Button>
+      </form>
+    </section>
+  );
+}
+
+function getAuthHomePath(auth: AuthResponse) {
+  const { roles, subjectType } = auth.session;
+  if (roles.includes("SYSTEM_ADMIN")) return "/sistem";
+  if (roles.includes("TENANT_ADMIN") || roles.includes("ASSISTANT_ADMIN")) return "/kurum";
+  if (roles.includes("TEACHER") && subjectType === "TEACHER") return "/ogretmen";
+  if (roles.includes("STUDENT") && subjectType === "STUDENT") return "/ogrenci";
+  if (roles.includes("GUARDIAN") && subjectType === "GUARDIAN") return "/veli";
+  return "/login";
+}

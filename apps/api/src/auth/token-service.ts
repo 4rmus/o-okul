@@ -7,6 +7,7 @@ export interface AccessTokenPayload {
   roles: string[];
   sessionId: string;
   membershipVersion: number;
+  mustChangePassword?: boolean;
   subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER";
   subjectId?: string;
 }
@@ -15,6 +16,7 @@ export interface TokenPair {
   accessToken: string;
   refreshToken: string;
   session: SessionRecord;
+  mustChangePassword?: boolean;
 }
 
 export class TokenService {

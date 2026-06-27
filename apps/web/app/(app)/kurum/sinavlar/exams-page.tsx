@@ -2,7 +2,7 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ClassRecord, ExamParticipantRecord, ExamRecord, StudentRecord } from "@o-okul/shared-types";
+import type { AlanRecord, ClassRecord, ExamParticipantRecord, ExamRecord, GradeLevelRecord, StudentRecord } from "@o-okul/shared-types";
 import {
   Button,
   Checkbox,
@@ -14,6 +14,7 @@ import {
   InfoItem,
   Input,
   Panel,
+  Select,
   StatusBadge,
   type DataTableColumn,
   type StatusBadgeProps,
@@ -34,11 +35,16 @@ import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem
 const emptyForm: ExamWithClassFormState = {
   title: "",
   startsAt: "",
+  gradeLevelId: "",
+  alanId: "",
+  examType: "",
   classIds: [],
 };
 
 interface ExamPageReferences {
+  alanlar: AlanRecord[];
   classes: ClassRecord[];
+  gradeLevels: GradeLevelRecord[];
   students: StudentRecord[];
 }
 
@@ -89,6 +95,11 @@ export function ExamsPage() {
   const studentById = new Map(students.map((student) => [student.id, student]));
   const classes = referencesQuery.data?.classes ?? [];
   const classById = new Map(classes.map((klass) => [klass.id, klass]));
+  const gradeLevels = referencesQuery.data?.gradeLevels ?? [];
+  const gradeLevelNameById = new Map(gradeLevels.map((gradeLevel) => [gradeLevel.id, gradeLevel.name]));
+  const alanlar = referencesQuery.data?.alanlar ?? [];
+  const alanNameById = new Map(alanlar.map((alan) => [alan.id, alan.name]));
+  const selectableAlanlar = alanlar.filter((alan) => !alan.gradeLevelId || alan.gradeLevelId === form.gradeLevelId);
   const publishedExamCount = rows.filter((exam) => exam.status === "PUBLISHED").length;
   const draftExamCount = rows.filter((exam) => exam.status === "DRAFT").length;
   const answerKeyReadyCount = rows.filter((exam) => exam.answerKeySummary?.status && exam.answerKeySummary.status !== "MISSING").length;
@@ -182,6 +193,12 @@ export function ExamsPage() {
       key: "startsAt",
       priority: "secondary",
       render: (exam) => formatDateTime(exam.startsAt),
+    },
+    {
+      header: "Kapsam",
+      key: "academicContext",
+      priority: "optional",
+      render: (exam) => formatExamAcademicContext(exam, gradeLevelNameById, alanNameById),
     },
     {
       header: "Cevap anahtarı",
@@ -307,6 +324,9 @@ export function ExamsPage() {
     setForm({
       title: exam.title,
       startsAt: toDateTimeLocal(exam.startsAt),
+      gradeLevelId: exam.gradeLevelId ?? "",
+      alanId: exam.alanId ?? "",
+      examType: toExamTypeFormValue(exam.examType),
       classIds: classIdsFromParticipants(examParticipants, studentById),
     });
     setClassSearch("");
@@ -519,6 +539,45 @@ export function ExamsPage() {
             onChange={(event) => setForm((current) => ({ ...current, startsAt: event.target.value }))}
           />
         </Field>
+        <Field label="Sınav türü">
+          <Select value={form.examType ?? ""} onChange={(event) => setForm((current) => ({ ...current, examType: event.target.value as ExamWithClassFormState["examType"] }))}>
+            <option value="">Seçiniz</option>
+            <option value="SCHOOL">Okul sınavı</option>
+            <option value="LGS">LGS</option>
+            <option value="TYT">TYT</option>
+            <option value="AYT">AYT</option>
+            <option value="KPSS">KPSS</option>
+          </Select>
+        </Field>
+        <Field label="Seviye">
+          <Select
+            value={form.gradeLevelId ?? ""}
+            onChange={(event) => {
+              setForm((current) => ({
+                ...current,
+                alanId: alanlar.some((alan) => alan.id === current.alanId && (!alan.gradeLevelId || alan.gradeLevelId === event.target.value)) ? current.alanId : "",
+                gradeLevelId: event.target.value,
+              }));
+            }}
+          >
+            <option value="">Seçiniz</option>
+            {gradeLevels.map((gradeLevel) => (
+              <option key={gradeLevel.id} value={gradeLevel.id}>
+                {gradeLevel.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Alan">
+          <Select value={form.alanId ?? ""} onChange={(event) => setForm((current) => ({ ...current, alanId: event.target.value }))}>
+            <option value="">Seçiniz</option>
+            {selectableAlanlar.map((alan) => (
+              <option key={alan.id} value={alan.id}>
+                {alan.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
         {!editingExam ? (
           <Field label="Cevap anahtarı dosyası" description="Excel dosyası; soru cevapları, branş, kazanım ve B kitapçık karşılığı içermelidir.">
             <Input
@@ -637,11 +696,13 @@ async function deleteExam(accessToken: string, id: string) {
 }
 
 async function loadExamReferences(accessToken: string): Promise<ExamPageReferences> {
-  const [classes, students] = await Promise.all([
+  const [alanlar, classes, gradeLevels, students] = await Promise.all([
+    apiRequest<AlanRecord[]>(accessToken, `${apiBaseUrl}/alanlar`),
     apiRequest<ClassRecord[]>(accessToken, `${apiBaseUrl}/classes`),
+    apiRequest<GradeLevelRecord[]>(accessToken, `${apiBaseUrl}/grade-levels`),
     apiRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/students`),
   ]);
-  return { classes, students };
+  return { alanlar, classes, gradeLevels, students };
 }
 
 async function loadParticipants(accessToken: string, examId: string) {
@@ -669,6 +730,26 @@ function answerKeySummaryLabel(summary: ExamRecord["answerKeySummary"] | undefin
   const questionCount = summary.questionCount ? `${formatCount(summary.questionCount)} soru` : "Hazır";
   if (summary.status === "PUBLISHED") return `Yayında / ${questionCount}`;
   return `Hazır / ${questionCount}`;
+}
+
+function formatExamAcademicContext(
+  exam: ExamRecord,
+  gradeLevelNameById: ReadonlyMap<string, string>,
+  alanNameById: ReadonlyMap<string, string>,
+) {
+  const examType = exam.examType ? examTypeLabel(exam.examType) : "";
+  const gradeLevel = exam.gradeLevelId ? gradeLevelNameById.get(exam.gradeLevelId) ?? exam.gradeLevelId : "";
+  const alan = exam.alanId ? alanNameById.get(exam.alanId) ?? exam.alanId : "";
+  return [examType, gradeLevel, alan].filter(Boolean).join(" / ") || "-";
+}
+
+function examTypeLabel(value: string) {
+  if (value === "SCHOOL") return "Okul";
+  return value;
+}
+
+function toExamTypeFormValue(value: string | undefined): ExamWithClassFormState["examType"] {
+  return value === "SCHOOL" || value === "LGS" || value === "TYT" || value === "AYT" || value === "KPSS" ? value : "";
 }
 
 function formatDateTime(value: string | undefined) {
@@ -699,11 +780,11 @@ function participantStatusTone(status: string): StatusBadgeProps["tone"] {
 }
 
 function classSearchText(record: ClassRecord) {
-  return [record.name, record.level, record.section].filter(Boolean).join(" ");
+  return [record.name, record.section].filter(Boolean).join(" ");
 }
 
 function classMeta(record: ClassRecord) {
-  return [record.level, record.section].filter(Boolean).join(" / ");
+  return record.section ?? "";
 }
 
 function classIdsFromParticipants(participants: ExamParticipantRecord[], studentById: Map<string, StudentRecord>) {

@@ -159,7 +159,7 @@ describe("Audit log API", () => {
     const created = await request(server)
       .post("/classes")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ name: "Audit 6-A", level: "6" })
+      .send({ name: "Audit 6-A" })
       .expect(201);
     const classId = (created.body as { id: string }).id;
 
@@ -192,7 +192,7 @@ describe("Audit log API", () => {
         entityType: "Class",
         entityId: classId,
         action: "class.created",
-        diff: { name: "[REDACTED]", level: "6" },
+        diff: { name: "[REDACTED]" },
       }),
       expect.objectContaining({
         tenantId: "tenant-a",
@@ -201,8 +201,8 @@ describe("Audit log API", () => {
         entityId: classId,
         action: "class.updated",
         diff: {
-          before: { name: "[REDACTED]", level: "6" },
-          after: { name: "[REDACTED]", level: "6" },
+          before: { name: "[REDACTED]" },
+          after: { name: "[REDACTED]" },
         },
       }),
       expect.objectContaining({
@@ -343,7 +343,7 @@ describe("Audit log API", () => {
     expect(JSON.stringify(response.body)).not.toContain("5000000089");
   });
 
-  it("veli-öğrenci ilişki tipi ve izin değişikliklerini PII saklamadan audit'e yazar", async () => {
+  it("veli-öğrenci izin değişikliklerini PII saklamadan audit'e yazar", async () => {
     const guardian = await request(server)
       .post("/guardians")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
@@ -354,13 +354,13 @@ describe("Audit log API", () => {
     const linked = await request(server)
       .post(`/guardians/${guardianId}/students`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ studentId: "student-a", relationshipType: "FATHER", isPrimary: true, canViewFinance: false })
+      .send({ studentId: "student-a", canViewFinance: false })
       .expect(201);
 
     await request(server)
       .patch(`/guardians/${guardianId}/students/student-a`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ relationshipType: "GUARDIAN", canReceiveSms: false })
+      .send({ canReceiveSms: false })
       .expect(200);
 
     const response = await request(server)
@@ -373,21 +373,21 @@ describe("Audit log API", () => {
         entityType: "GuardianStudent",
         entityId: linked.body.id,
         action: "guardian_student.linked",
-        diff: expect.objectContaining({
-          guardianId,
-          studentId: "student-a",
-          fieldsSet: expect.arrayContaining(["relationshipType", "isPrimary", "canViewFinance"]),
-        }),
+          diff: expect.objectContaining({
+            guardianId,
+            studentId: "student-a",
+            fieldsSet: expect.arrayContaining(["canViewFinance"]),
+          }),
       }),
       expect.objectContaining({
         entityType: "GuardianStudent",
         entityId: linked.body.id,
         action: "guardian_student.updated",
-        diff: expect.objectContaining({
-          guardianId,
-          studentId: "student-a",
-          fieldsChanged: ["relationshipType", "canReceiveSms"],
-        }),
+          diff: expect.objectContaining({
+            guardianId,
+            studentId: "student-a",
+            fieldsChanged: ["canReceiveSms"],
+          }),
       }),
     ]));
     expect(JSON.stringify(response.body)).not.toContain("DenetimGizli");
@@ -405,7 +405,7 @@ describe("Audit log API", () => {
     const linked = await request(server)
       .post(`/guardians/${guardianId}/students`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ studentId: "student-a", relationshipType: "MOTHER", isPrimary: true, canViewFinance: true })
+      .send({ studentId: "student-a", canViewFinance: true })
       .expect(201);
 
     await request(server)

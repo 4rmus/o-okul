@@ -32,6 +32,7 @@ import { ArrowLeft, BarChart3, ChevronRight, LayoutDashboard } from "lucide-reac
 import { ActionCard, DataTable, Field, InfoGrid, InfoItem, Panel, Select, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
+import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { formatCourseName, formatOutcomeCode, shortCourseName } from "../../_shared/academic-labels.js";
@@ -313,16 +314,16 @@ function StudentDashboard({
   termNameById: ReadonlyMap<string, string>;
 }) {
   const currentClass = formatCurrentClass(detail.profile.classId, classNameById);
-  const primaryGuardian = detail.guardianLinks.find((link) => link.isPrimary) ?? detail.guardianLinks[0];
-  const primaryGuardianName = primaryGuardian ? guardianNameById.get(primaryGuardian.guardianId) ?? "Veli kaydı" : "Veli bağı yok";
+  const guardianLink = detail.guardianLinks[0];
+  const guardianLinkName = guardianLink ? guardianNameById.get(guardianLink.guardianId) ?? "Veli kaydı" : "Veli bağı yok";
   const activeEnrollment = resolveActiveEnrollment(detail.enrollments);
   const studentDashboardSummaryItems = buildStudentDashboardSummaryItems(detail, report, progress, currentClass);
-  const studentDashboardSummaryBadges = buildStudentDashboardSummaryBadges(detail, report, primaryGuardian);
+  const studentDashboardSummaryBadges = buildStudentDashboardSummaryBadges(detail, report, guardianLink);
   const studentDashboardSummaryActions = buildStudentDashboardSummaryActions({
     detail,
     errorBooklet,
     canViewFinance,
-    primaryGuardianName,
+    primaryGuardianName: guardianLinkName,
     progress,
     report,
     selectedSnapshot,
@@ -363,7 +364,7 @@ function StudentDashboard({
             value={<StatusBadge tone={studentStatusTone(detail.profile.status)}>{formatStudentStatus(detail.profile.status)}</StatusBadge>}
           />
           <InfoItem label="Kurum sınıfı" value={currentClass} />
-          <InfoItem label="Birincil veli" value={primaryGuardianName} />
+          <InfoItem label="Veli bağlantısı" value={guardianLinkName} />
           <InfoItem label="Öğrenci no" value={detail.profile.studentNo ?? "Öğrenci no yok"} />
         </InfoGrid>
       </Panel>
@@ -415,10 +416,10 @@ function StudentDashboard({
           />
           <ActionCard
             className="next-student-decision-card"
-            detail={primaryGuardian ? "İzinler ilişki geçmişinde kontrollü gösterilir" : "Veli izinleri tanımlı değil"}
+            detail={guardianLink ? "İzinler veli bağlantısında kontrollü gösterilir" : "Veli izinleri tanımlı değil"}
             label="Veli erişimi"
-            tone={primaryGuardian ? "success" : "warning"}
-            value={primaryGuardianName}
+            tone={guardianLink ? "success" : "warning"}
+            value={guardianLinkName}
           />
           <ActionCard
             className="next-student-decision-card"
@@ -623,8 +624,8 @@ function buildGuardianRelationshipRows(
     id: link.id,
     meta: link.createdAt ? `${formatDateTime(link.createdAt)} tarihinde bağlandı` : "Tarih yok",
     primary: guardianNameById.get(link.guardianId) ?? "Veli kaydı",
-    status: formatGuardianRelationshipSummary(link) || "İlişki",
-    tone: link.isPrimary ? "success" : "info",
+    status: "Veli bağlantısı",
+    tone: "info",
   }));
 }
 
@@ -875,8 +876,8 @@ function buildStudentRelationshipData({
       id: link.id,
       label: guardianNameById.get(link.guardianId) ?? "Veli kaydı",
       detail: [
-        formatGuardianRelationshipSummary(link),
-        "İzinler ilişki geçmişinde",
+        "Veli bağlantısı",
+        "İzinler bağlantı kapsamında",
       ].filter(Boolean).join(" · "),
     })),
     teachers: detail.teacherAssignments.map((assignment) => ({
@@ -1360,17 +1361,6 @@ function formatDelta(value: number | undefined) {
   return value > 0 ? `+${formatNetNumber(value)}` : formatNetNumber(value);
 }
 
-function formatRelationshipType(value: GuardianStudentRecord["relationshipType"]) {
-  const labels: Record<GuardianStudentRecord["relationshipType"], string> = {
-    EMERGENCY_CONTACT: "Acil kişi",
-    FATHER: "Baba",
-    GUARDIAN: "Vasi",
-    MOTHER: "Anne",
-    OTHER: "Diğer",
-  };
-  return labels[value] ?? value;
-}
-
 function formatTeacherNoteSummary(notes: TeacherNoteRecord[]) {
   if (notes.length === 0) return "Öğretmen notu yok";
   return `${notes.length} not · son kayıt ${formatDate(notes[0]?.createdAt ?? "")}`;
@@ -1471,14 +1461,10 @@ function formatEnrollmentReason(reason: string | undefined) {
   return reason ? labels[reason] ?? reason : "Kayıt";
 }
 
-function formatGuardianRelationshipSummary(link: GuardianStudentRecord) {
-  return [formatRelationshipType(link.relationshipType), link.isPrimary ? "Birincil" : ""].filter(Boolean).join(" · ");
-}
-
 function formatGuardianPermissionLabels(link: GuardianStudentRecord, includeFinance = true) {
   const permissions = [
     includeFinance ? `Finans görünürlüğü: ${link.canViewFinance ? "açık" : "kapalı"}` : undefined,
-    `SMS: ${link.canReceiveSms ? "açık" : "kapalı"}`,
+    isSmsEnabled ? `SMS: ${link.canReceiveSms ? "açık" : "kapalı"}` : undefined,
     `Duyuru: ${link.canReceiveAnnouncements ? "açık" : "kapalı"}`,
     `Destek: ${link.canOpenSupportTickets ? "açık" : "kapalı"}`,
   ].filter(Boolean);

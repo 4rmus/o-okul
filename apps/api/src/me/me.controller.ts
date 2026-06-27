@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, ForbiddenException, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { z } from "zod";
 import type {
   DevelopmentTrendItem,
   HomeworkMaterialAssignmentRecord,
@@ -6,6 +7,8 @@ import type {
   HomeworkRecord,
   GuardianRecord,
   MeProfileResponse,
+  MePasswordChangeRequest,
+  MePasswordChangeResponse,
   ReportErrorBooklet,
   ReportStudentProgress,
   ReportStudentSnapshot,
@@ -31,6 +34,7 @@ import type {
 } from "@o-okul/shared-types";
 import { AnnouncementService } from "../announcement/announcement.service.js";
 import { AttendanceService } from "../attendance/attendance.service.js";
+import { AuthService } from "../auth/auth.service.js";
 import { getRequestContext, type RequestContext } from "../context/request-context.js";
 import { DevelopmentService } from "../development/development.service.js";
 import { HomeworkService } from "../homework/homework.service.js";
@@ -64,12 +68,18 @@ import { TenantService } from "../tenant/tenant.service.js";
 import type { TenantRecord } from "../tenant/tenant-store.js";
 import { tenantCurrentProfileBodySchema, type TenantCurrentProfileBody } from "../tenant/tenant-validation.js";
 
+const mePasswordChangeBodySchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8),
+}).strict() satisfies z.ZodType<MePasswordChangeRequest>;
+
 @Controller("me")
 @UseGuards(RolesGuard)
 export class MeController {
   constructor(
     private readonly announcements: AnnouncementService,
     private readonly attendance: AttendanceService,
+    private readonly auth: AuthService,
     private readonly development: DevelopmentService,
     private readonly homework: HomeworkService,
     private readonly notificationDevices: NotificationDeviceService,
@@ -91,9 +101,17 @@ export class MeController {
       userId: context.userId,
       tenantId: context.tenantId,
       roles: context.roles,
+      mustChangePassword: context.mustChangePassword,
       subjectType: context.subjectType,
       subjectId: context.subjectId,
     };
+  }
+
+  @Post("password")
+  @HttpCode(200)
+  @Roles("TENANT_ADMIN", "ASSISTANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN")
+  changePassword(@Body(zodBody(mePasswordChangeBodySchema)) body: MePasswordChangeRequest): Promise<MePasswordChangeResponse> {
+    return this.auth.changeCurrentPassword(getRequestContext(), body.currentPassword, body.newPassword);
   }
 
   @Get("tenant")

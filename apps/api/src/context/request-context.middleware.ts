@@ -1,4 +1,4 @@
-import { ForbiddenException, Inject, Injectable, NestMiddleware } from "@nestjs/common";
+import { ForbiddenException, HttpException, Inject, Injectable, NestMiddleware } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
 import { AuthService } from "../auth/auth.service.js";
 import { setApiLogContext } from "../observability/log-context.js";
@@ -24,6 +24,9 @@ export class RequestContextMiddleware implements NestMiddleware {
     }
 
     const payload = await this.auth.verifyActiveAccessToken(authHeader.slice("Bearer ".length));
+    if (payload.mustChangePassword && !isPasswordChangeAllowed(request)) {
+      throw new HttpException("PASSWORD_CHANGE_REQUIRED", 423);
+    }
     const tenantId = payload.tenantId === "system" ? null : payload.tenantId;
     const tenantAccessMode = tenantId ? await this.resolveTenantAccessMode(tenantId, request.method) : "active";
 
@@ -41,11 +44,13 @@ export class RequestContextMiddleware implements NestMiddleware {
       runWithRequestContext(
         {
           userId: payload.sub,
+          sessionId: payload.sessionId,
           tenantId,
           tenantAccessMode,
           roles: [preview.targetRole],
           capabilities: capabilitiesForRoles([preview.targetRole]),
           bypassRls: false,
+          mustChangePassword: payload.mustChangePassword,
           subjectType: preview.targetSubjectType,
           subjectId: preview.targetSubjectId,
           rolePreview: {
@@ -64,11 +69,13 @@ export class RequestContextMiddleware implements NestMiddleware {
     runWithRequestContext(
       {
         userId: payload.sub,
+        sessionId: payload.sessionId,
         tenantId,
         tenantAccessMode,
         roles: payload.roles,
         capabilities: capabilitiesForRoles(payload.roles),
         bypassRls: false,
+        mustChangePassword: payload.mustChangePassword,
         subjectType: payload.subjectType,
         subjectId: payload.subjectId,
       },
@@ -92,6 +99,14 @@ export class RequestContextMiddleware implements NestMiddleware {
 
     return "read_only";
   }
+}
+
+function isPasswordChangeAllowed(request: Request): boolean {
+  const method = request.method.toUpperCase();
+  const paths = [request.originalUrl, `${request.baseUrl ?? ""}${request.path ?? ""}`, request.path].filter(Boolean);
+  if (method === "POST" && paths.some((path) => path.split("?")[0]?.endsWith("/me/password"))) return true;
+  if (method === "POST" && paths.some((path) => path.split("?")[0]?.endsWith("/auth/logout"))) return true;
+  return false;
 }
 
 function isReadOnlyMethod(method: string): boolean {

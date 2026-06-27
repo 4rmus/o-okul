@@ -259,6 +259,10 @@ Varsayılan plan UI-only ilerler:
 - Mevcut `@o-okul/ui` komponent public prop'ları kırılmaz.
 - `packages/shared-types` değiştirilmez.
 
+`docs/production-v1-modernization-plan-2026-06-27.md` bu UI-only planın parçası değil, ayrı
+modernizasyon dalıdır. O dalda DB/API/shared-types değişikliği yalnız `DEC-20260627-01` ve ilgili
+gate'lerle birlikte yapılır.
+
 Ayrı karar gerektiren olası işler:
 
 - `report:read`, `report:export`, `report:question-detail` capability ayrımı.

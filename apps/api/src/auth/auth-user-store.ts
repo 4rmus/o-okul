@@ -1,16 +1,20 @@
-import { scryptSync, timingSafeEqual } from "node:crypto";
+import { randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withBypassRlsQuery } from "../db/tenant-query.js";
 
 export interface AuthUser {
   id: string;
-  email: string;
+  tenantId: string;
+  email?: string;
+  nationalIdEncrypted?: string;
+  nationalIdHash?: string;
   name: string;
   passwordHash: string;
-  tenantId: string;
   roles: string[];
   membershipVersion: number;
+  mustChangePassword?: boolean;
+  passwordChangedAt?: string;
   purgedAt?: string;
   totpSecretEncrypted?: string;
   totpEnabledAt?: string;
@@ -20,8 +24,10 @@ export interface AuthUser {
 
 export interface AuthUserStore {
   findByEmail(email: string): Promise<AuthUser | undefined>;
+  findByTenantAndNationalIdHash(tenantId: string, nationalIdHash: string): Promise<AuthUser | undefined>;
   findById(id: string): Promise<AuthUser | undefined>;
-  updatePassword(id: string, passwordHash: string): Promise<AuthUser | undefined>;
+  createOrAttachTenantIdentity(input: CreateTenantIdentityUserInput): Promise<AuthUser>;
+  updatePassword(id: string, passwordHash: string, input?: PasswordStateUpdate): Promise<AuthUser | undefined>;
   enableTotp(input: {
     userId: string;
     secretEncrypted: string;
@@ -33,6 +39,22 @@ export interface AuthUserStore {
   markTotpCounterUsed(userId: string, counter: string): Promise<boolean>;
   consumeTotpRecoveryCode(userId: string, codeHash: string): Promise<boolean>;
   purgePii(id: string, input: { email: string; name: string; purgedAt: string }): Promise<AuthUser | undefined>;
+}
+
+export interface CreateTenantIdentityUserInput {
+  tenantId: string;
+  email?: string;
+  nationalIdEncrypted: string;
+  nationalIdHash: string;
+  name: string;
+  passwordHash: string;
+  roles: string[];
+  mustChangePassword: boolean;
+}
+
+export interface PasswordStateUpdate {
+  mustChangePassword?: boolean;
+  passwordChangedAt?: string;
 }
 
 export const authUserStoreToken = Symbol("AuthUserStore");
@@ -144,24 +166,36 @@ const inMemoryUsers = demoUsers.map((user) => ({ ...user, roles: [...user.roles]
 
 export function upsertInMemoryAuthUser(input: {
   id: string;
-  email: string;
+  email?: string;
+  nationalIdEncrypted?: string;
+  nationalIdHash?: string;
   name: string;
   password?: string;
   passwordHash?: string;
   tenantId: string;
   roles: string[];
+  mustChangePassword?: boolean;
+  passwordChangedAt?: string;
   totpSecretEncrypted?: string;
   totpEnabledAt?: string;
   totpRecoveryCodeHashes?: string[];
   totpLastUsedCounter?: string;
 }): AuthUser {
-  const email = input.email.toLowerCase();
-  const existing = inMemoryUsers.find((candidate) => candidate.email.toLowerCase() === email);
+  const email = input.email?.toLowerCase();
+  const existing = inMemoryUsers.find((candidate) => (
+    (email && candidate.email?.toLowerCase() === email) ||
+    (input.nationalIdHash && candidate.tenantId === input.tenantId && candidate.nationalIdHash === input.nationalIdHash)
+  ));
   if (existing) {
+    existing.email = email ?? existing.email;
+    existing.nationalIdEncrypted = input.nationalIdEncrypted ?? existing.nationalIdEncrypted;
+    existing.nationalIdHash = input.nationalIdHash ?? existing.nationalIdHash;
     existing.name = input.name;
     existing.tenantId = input.tenantId;
     existing.roles = [...input.roles];
     existing.membershipVersion += 1;
+    existing.mustChangePassword = input.mustChangePassword ?? existing.mustChangePassword;
+    existing.passwordChangedAt = input.passwordChangedAt ?? existing.passwordChangedAt;
     existing.totpSecretEncrypted = input.totpSecretEncrypted;
     existing.totpEnabledAt = input.totpEnabledAt;
     existing.totpRecoveryCodeHashes = [...(input.totpRecoveryCodeHashes ?? existing.totpRecoveryCodeHashes ?? [])];
@@ -175,11 +209,15 @@ export function upsertInMemoryAuthUser(input: {
   const user: AuthUser = {
     id: input.id,
     email,
+    nationalIdEncrypted: input.nationalIdEncrypted,
+    nationalIdHash: input.nationalIdHash,
     name: input.name,
     passwordHash: input.passwordHash ?? (input.password === undefined ? "" : hashPassword(input.password)),
     tenantId: input.tenantId,
     roles: [...input.roles],
     membershipVersion: 1,
+    mustChangePassword: input.mustChangePassword,
+    passwordChangedAt: input.passwordChangedAt,
     totpSecretEncrypted: input.totpSecretEncrypted,
     totpEnabledAt: input.totpEnabledAt,
     totpRecoveryCodeHashes: [...(input.totpRecoveryCodeHashes ?? [])],
@@ -194,18 +232,38 @@ export class InMemoryAuthUserStore implements AuthUserStore {
 
   async findByEmail(email: string): Promise<AuthUser | undefined> {
     const normalizedEmail = email.toLowerCase();
-    return cloneUser(this.users.find((candidate) => candidate.email.toLowerCase() === normalizedEmail));
+    return cloneUser(this.users.find((candidate) => candidate.email?.toLowerCase() === normalizedEmail));
+  }
+
+  async findByTenantAndNationalIdHash(tenantId: string, nationalIdHash: string): Promise<AuthUser | undefined> {
+    return cloneUser(this.users.find((candidate) => candidate.tenantId === tenantId && candidate.nationalIdHash === nationalIdHash));
   }
 
   async findById(id: string): Promise<AuthUser | undefined> {
     return cloneUser(this.users.find((candidate) => candidate.id === id));
   }
 
-  async updatePassword(id: string, passwordHash: string): Promise<AuthUser | undefined> {
+  async createOrAttachTenantIdentity(input: CreateTenantIdentityUserInput): Promise<AuthUser> {
+    return upsertInMemoryAuthUser({
+      id: `user-${this.users.length + 1}`,
+      tenantId: input.tenantId,
+      email: input.email,
+      nationalIdEncrypted: input.nationalIdEncrypted,
+      nationalIdHash: input.nationalIdHash,
+      name: input.name,
+      passwordHash: input.passwordHash,
+      roles: input.roles,
+      mustChangePassword: input.mustChangePassword,
+    });
+  }
+
+  async updatePassword(id: string, passwordHash: string, input: PasswordStateUpdate = {}): Promise<AuthUser | undefined> {
     const user = this.users.find((candidate) => candidate.id === id);
     if (!user) return undefined;
 
     user.passwordHash = passwordHash;
+    user.mustChangePassword = input.mustChangePassword ?? user.mustChangePassword;
+    user.passwordChangedAt = input.passwordChangedAt ?? user.passwordChangedAt;
     user.membershipVersion += 1;
     return cloneUser(user);
   }
@@ -280,7 +338,8 @@ export class PostgresAuthUserStore implements AuthUserStore {
     const result = await this.queryAuthUsers(
       `WHERE lower(u."email") = lower($1)
          AND t."status" = 'ACTIVE'
-       GROUP BY u."id", u."email", u."name", u."passwordHash", u."totpSecretEncrypted",
+       GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
+                u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
                 u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
        ORDER BY min(m."createdAt") ASC
        LIMIT 1`,
@@ -289,11 +348,27 @@ export class PostgresAuthUserStore implements AuthUserStore {
     return result[0];
   }
 
+  async findByTenantAndNationalIdHash(tenantId: string, nationalIdHash: string): Promise<AuthUser | undefined> {
+    const result = await this.queryAuthUsers(
+      `WHERE u."tenantId" = $1
+         AND u."nationalIdHash" = $2
+         AND m."tenantId" = $1
+         AND t."status" = 'ACTIVE'
+       GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
+                u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
+                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
+       LIMIT 1`,
+      [tenantId, nationalIdHash],
+    );
+    return result[0];
+  }
+
   async findById(id: string): Promise<AuthUser | undefined> {
     const result = await this.queryAuthUsers(
       `WHERE u."id" = $1
          AND t."status" = 'ACTIVE'
-       GROUP BY u."id", u."email", u."name", u."passwordHash", u."totpSecretEncrypted",
+       GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
+                u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
                 u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
        ORDER BY min(m."createdAt") ASC
        LIMIT 1`,
@@ -309,6 +384,9 @@ export class PostgresAuthUserStore implements AuthUserStore {
          SET "email" = $2,
              "name" = $3,
              "passwordHash" = '',
+             "nationalIdEncrypted" = NULL,
+             "nationalIdHash" = NULL,
+             "mustChangePassword" = false,
              "totpSecretEncrypted" = NULL,
              "totpEnabledAt" = NULL,
              "totpRecoveryCodeHashes" = ARRAY[]::TEXT[],
@@ -321,6 +399,48 @@ export class PostgresAuthUserStore implements AuthUserStore {
       return Boolean(update.rows[0]);
     });
     return updated ? this.findById(id) : undefined;
+  }
+
+  async createOrAttachTenantIdentity(input: CreateTenantIdentityUserInput): Promise<AuthUser> {
+    const userId = await withBypassRlsQuery(this.pool, async (client) => {
+      const created = await client.query<{ id: string }>(
+        `INSERT INTO "User" (
+           "id", "tenantId", "email", "nationalIdEncrypted", "nationalIdHash", "name",
+           "passwordHash", "mustChangePassword", "updatedAt"
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+         ON CONFLICT ("tenantId", "nationalIdHash") DO UPDATE
+         SET "name" = EXCLUDED."name",
+             "email" = COALESCE("User"."email", EXCLUDED."email"),
+             "updatedAt" = now()
+         RETURNING "id"`,
+        [
+          randomUUID(),
+          input.tenantId,
+          input.email?.toLowerCase() ?? null,
+          input.nationalIdEncrypted,
+          input.nationalIdHash,
+          input.name,
+          input.passwordHash,
+          input.mustChangePassword,
+        ],
+      );
+      const id = created.rows[0]?.id;
+      if (!id) throw new Error("USER_CREATE_FAILED");
+
+      for (const role of input.roles) {
+        await client.query(
+          `INSERT INTO "TenantMembership" ("id", "tenantId", "userId", "role", "updatedAt")
+           VALUES ($1, $2, $3, $4, now())
+           ON CONFLICT ("tenantId", "userId", "role") DO NOTHING`,
+          [randomUUID(), input.tenantId, id, role],
+        );
+      }
+      return id;
+    });
+    const user = await this.findById(userId);
+    if (!user) throw new Error("USER_CREATE_FAILED");
+    return user;
   }
 
   async enableTotp(input: {
@@ -395,15 +515,17 @@ export class PostgresAuthUserStore implements AuthUserStore {
     });
   }
 
-  async updatePassword(id: string, passwordHash: string): Promise<AuthUser | undefined> {
+  async updatePassword(id: string, passwordHash: string, input: PasswordStateUpdate = {}): Promise<AuthUser | undefined> {
     const updated = await withBypassRlsQuery(this.pool, async (client) => {
       const update = await client.query(
         `UPDATE "User"
          SET "passwordHash" = $2,
+             "mustChangePassword" = COALESCE($3, "mustChangePassword"),
+             "passwordChangedAt" = COALESCE($4::timestamptz, "passwordChangedAt"),
              "updatedAt" = now()
          WHERE "id" = $1
          RETURNING "id"`,
-        [id, passwordHash],
+        [id, passwordHash, input.mustChangePassword ?? null, input.passwordChangedAt ?? null],
       );
       return Boolean(update.rows[0]);
     });
@@ -415,9 +537,14 @@ export class PostgresAuthUserStore implements AuthUserStore {
       const result = await client.query<AuthUserRow>(
         `SELECT
            u."id",
+           u."tenantId",
            u."email",
+           u."nationalIdEncrypted",
+           u."nationalIdHash",
            u."name",
            u."passwordHash",
+           u."mustChangePassword",
+           u."passwordChangedAt",
            u."totpSecretEncrypted",
            u."totpEnabledAt",
            u."totpRecoveryCodeHashes",
@@ -456,26 +583,34 @@ export function verifyPassword(password: string, passwordHash: string): boolean 
 
 interface AuthUserRow {
   id: string;
-  email: string;
+  tenantId: string | null;
+  email: string | null;
+  nationalIdEncrypted: string | null;
+  nationalIdHash: string | null;
   name: string;
   passwordHash: string;
+  mustChangePassword: boolean;
+  passwordChangedAt: Date | string | null;
   totpSecretEncrypted: string | null;
   totpEnabledAt: Date | string | null;
   totpRecoveryCodeHashes: string[] | null;
   totpLastUsedCounter: string | null;
-  tenantId: string;
   roles: string[];
 }
 
 function toAuthUser(row: AuthUserRow): AuthUser {
   return {
     id: row.id,
-    email: row.email,
+    email: row.email ?? undefined,
+    nationalIdEncrypted: row.nationalIdEncrypted ?? undefined,
+    nationalIdHash: row.nationalIdHash ?? undefined,
     name: row.name,
     passwordHash: row.passwordHash,
-    tenantId: row.tenantId,
+    tenantId: row.tenantId ?? "system",
     roles: row.roles,
     membershipVersion: 1,
+    mustChangePassword: row.mustChangePassword,
+    passwordChangedAt: row.passwordChangedAt ? new Date(row.passwordChangedAt).toISOString() : undefined,
     totpSecretEncrypted: row.totpSecretEncrypted ?? undefined,
     totpEnabledAt: row.totpEnabledAt ? new Date(row.totpEnabledAt).toISOString() : undefined,
     totpRecoveryCodeHashes: [...(row.totpRecoveryCodeHashes ?? [])],

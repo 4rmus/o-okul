@@ -49,6 +49,11 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expect(classCounts.locator(".uh-field")).toHaveCount(6);
     await expect(classCounts.locator(".uh-input")).toHaveCount(6);
     await expect(classCounts.getByLabel("8. sınıf / LGS")).toHaveValue("2");
+    await classCounts.getByLabel("8. sınıf / LGS").fill("0");
+    await classCounts.getByLabel("10. sınıf").fill("1");
+    await stepNavigation.getByRole("tab", { name: /Derslerin Oluşturulması/ }).click();
+    await expect(setupForm.getByRole("button", { name: /10-MAT/ })).toHaveAttribute("aria-pressed", "true");
+    await expect(setupForm.getByRole("button", { name: /LGS-MAT/ })).toHaveAttribute("aria-pressed", "false");
 
     await stepNavigation.getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
     await expect(setupForm.getByRole("group", { name: "Öğretmen veri girişi" })).toHaveClass(/uh-segmented-control/);
@@ -220,10 +225,64 @@ function mockSetupApiResponse(
   if (pathName === "/auth/refresh") return createAuthResponse(options.roles ?? ["TENANT_ADMIN"]);
   if (pathName === "/me/tenant") return createTenantResponse();
   if (pathName === "/me/notification-devices") return [];
+  if (method === "GET" && pathName === "/grade-levels") {
+    return [
+      { code: "8-LGS", id: "grade-setup-lgs", name: "8. sınıf / LGS", tenantId: "tenant-setup" },
+      { code: "10", id: "grade-setup-10", name: "10. sınıf", tenantId: "tenant-setup" },
+    ];
+  }
+  if (method === "GET" && pathName === "/grade-levels/grade-setup-lgs/courses") {
+    return [
+      {
+        courseCode: "LGS-TUR",
+        courseId: "course-setup-turkce",
+        courseName: "Türkçe",
+        gradeLevelId: "grade-setup-lgs",
+        id: "template-lgs-turkce",
+        isDefault: true,
+        sortOrder: 10,
+        tenantId: "tenant-setup",
+      },
+      {
+        courseCode: "LGS-MAT",
+        courseId: "course-setup-matematik",
+        courseName: "Matematik",
+        gradeLevelId: "grade-setup-lgs",
+        id: "template-lgs-matematik",
+        isDefault: true,
+        sortOrder: 20,
+        tenantId: "tenant-setup",
+      },
+      {
+        courseCode: "LGS-FEN",
+        courseId: "course-setup-fen",
+        courseName: "Fen Bilgisi",
+        gradeLevelId: "grade-setup-lgs",
+        id: "template-lgs-fen",
+        isDefault: true,
+        sortOrder: 30,
+        tenantId: "tenant-setup",
+      },
+    ];
+  }
+  if (method === "GET" && pathName === "/grade-levels/grade-setup-10/courses") {
+    return [
+      {
+        courseCode: "10-MAT",
+        courseId: "course-setup-10-matematik",
+        courseName: "Matematik",
+        gradeLevelId: "grade-setup-10",
+        id: "template-10-matematik",
+        isDefault: true,
+        sortOrder: 10,
+        tenantId: "tenant-setup",
+      },
+    ];
+  }
   if (method === "POST" && pathName === "/academic-years") return { id: "academic-year-setup", name: "2026-2027" };
   if (method === "POST" && pathName === "/academic-terms") return { id: "academic-term-setup", name: "1. Dönem" };
   if (method === "POST" && pathName === "/courses") return { id: "course-setup", code: "LGS-TUR", name: "Türkçe" };
-  if (method === "POST" && pathName === "/classes") return { id: "class-setup", level: "8-LGS", name: "8-A", section: "A" };
+  if (method === "POST" && pathName === "/classes") return { id: "class-setup", name: "8-A", section: "A" };
   if (method === "POST" && pathName === "/teachers/imports/dry-run") {
     return {
       dryRun: true,

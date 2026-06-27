@@ -35,6 +35,7 @@ import type {
 import { Plus, Send } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
 import {
   announcementFormSchema,
@@ -277,7 +278,6 @@ export function AnnouncementsPage() {
           <EmptyState
             title="Duyuru yok"
             description="Kurum, sınıf veya öğretmen hedefli ilk duyuruyu yayınlayarak başla."
-            hint="SMS gönderimi için duyuru ve mesaj şablonu birlikte kullanılır."
             primaryAction={{ label: "Duyuru ekle", onClick: openCreateForm }}
           />
         }
@@ -320,7 +320,7 @@ export function AnnouncementsPage() {
           ) : reportDataQuery.data?.recipientReport ? (
             <AnnouncementRecipientReportPanel report={reportDataQuery.data.recipientReport} />
           ) : null}
-          {selectedAnnouncement && selectedAnnouncement.audience !== "TEACHERS" ? (
+          {isSmsEnabled && selectedAnnouncement && selectedAnnouncement.audience !== "TEACHERS" ? (
             <Panel
               aria-label="Duyuru SMS gönderimi"
               title="SMS gönderimi"
@@ -527,7 +527,9 @@ async function loadSmsBatchDeliveryReport(accessToken: string, jobId: string) {
 async function loadAnnouncementPageData(accessToken: string): Promise<AnnouncementPageData> {
   const [references, messageTemplates] = await Promise.all([
     loadReferences(accessToken),
-    apiListRequest<MessageTemplateRecord>(accessToken, buildListUrl(`${apiBaseUrl}/message-templates`, initialListQuery)),
+    isSmsEnabled
+      ? apiListRequest<MessageTemplateRecord>(accessToken, buildListUrl(`${apiBaseUrl}/message-templates`, initialListQuery))
+      : Promise.resolve({ data: [] }),
   ]);
   return { references, messageTemplates: messageTemplates.data };
 }
@@ -583,13 +585,17 @@ function buildAnnouncementSummaryItems({
   const guardianCount = rows.filter((announcement) => announcement.audience === "GUARDIANS").length;
   const readProgress = recipientReport ? `${formatCount(recipientReport.read)}/${formatCount(recipientReport.total)}` : "Seçim bekliyor";
 
-  return [
+  const items: OperationSummaryItem[] = [
     {
       description: "URL state ile sayfalanan kayıt",
       key: "total",
       label: "Duyuru toplamı",
       value: formatCount(listTotal),
     },
+  ];
+
+  if (isSmsEnabled) {
+    items.push(
     {
       description: `${formatCount(guardianCount)} veli hedefli`,
       key: "sms-eligible",
@@ -597,6 +603,10 @@ function buildAnnouncementSummaryItems({
       tone: smsEligibleCount > 0 ? "info" : "default",
       value: formatCount(smsEligibleCount),
     },
+    );
+  }
+
+  items.push(
     {
       description: "Kampüs, sınıf, ders veya dönem hedefli",
       key: "scoped",
@@ -611,7 +621,9 @@ function buildAnnouncementSummaryItems({
       tone: recipientReport && recipientReport.unread > 0 ? "warning" : recipientReport ? "success" : "default",
       value: readProgress,
     },
-  ];
+  );
+
+  return items;
 }
 
 function buildAnnouncementSummaryBadges({
@@ -623,7 +635,7 @@ function buildAnnouncementSummaryBadges({
   listQuery: ListQueryState;
   messageTemplates: MessageTemplateRecord[];
 }): OperationSummaryBadge[] {
-  return [
+  const badges: OperationSummaryBadge[] = [
     {
       key: "sort",
       label: formatAnnouncementSortLabel(listQuery.sort),
@@ -634,12 +646,19 @@ function buildAnnouncementSummaryBadges({
       label: isReferenceLoading ? "Referanslar yükleniyor" : "Bağlam referansları hazır",
       tone: isReferenceLoading ? "warning" : "success",
     },
+  ];
+
+  if (isSmsEnabled) {
+    badges.push(
     {
       key: "templates",
       label: messageTemplates.length > 0 ? "SMS şablonu hazır" : "SMS şablonu bekliyor",
       tone: messageTemplates.length > 0 ? "success" : "warning",
     },
-  ];
+    );
+  }
+
+  return badges;
 }
 
 function buildAnnouncementSummaryActions({
@@ -657,7 +676,7 @@ function buildAnnouncementSummaryActions({
 }): OperationSummaryAction[] {
   const smsUnavailable = selectedAnnouncement?.audience === "TEACHERS";
 
-  return [
+  const actions: OperationSummaryAction[] = [
     {
       detail: selectedAnnouncement ? "Seçili duyurunun alıcı kapsamı" : "Satırdaki Alıcılar aksiyonuyla açılır",
       key: "recipient-report",
@@ -666,6 +685,10 @@ function buildAnnouncementSummaryActions({
       tone: selectedAnnouncement ? "info" : "neutral",
       value: recipientReport ? `${formatCount(recipientReport.total)} alıcı` : "Bekliyor",
     },
+  ];
+
+  if (isSmsEnabled) {
+    actions.push(
     {
       detail: smsUnavailable ? "Öğretmen hedefinde SMS kapalı" : selectedSmsTemplate ? selectedSmsTemplate.name : "Önce SMS şablonu oluşturulmalı",
       key: "sms-queue",
@@ -674,6 +697,10 @@ function buildAnnouncementSummaryActions({
       tone: smsDeliveryReportJobId ? "warning" : selectedSmsTemplate && !smsUnavailable ? "success" : "neutral",
       value: smsStatus || (smsUnavailable ? "Uygun değil" : selectedSmsTemplate ? "Gönderilebilir" : "Şablon yok"),
     },
+    );
+  }
+
+  actions.push(
     {
       detail: recipientReport ? "Okunmayan alıcılar raporda görünür" : "Rapor seçimi bekleniyor",
       key: "read-tracking",
@@ -682,7 +709,9 @@ function buildAnnouncementSummaryActions({
       tone: recipientReport && recipientReport.unread > 0 ? "warning" : recipientReport ? "success" : "neutral",
       value: recipientReport ? `${formatCount(recipientReport.unread)} bekliyor` : "Rapor yok",
     },
-  ];
+  );
+
+  return actions;
 }
 
 function scopeLabel(

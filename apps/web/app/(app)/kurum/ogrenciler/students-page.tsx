@@ -9,6 +9,7 @@ import type {
   AttendanceSummaryRecord,
   ClassRecord,
   GuardianRecord,
+  GradeLevelRecord,
   HomeworkMaterialAssignmentRecord,
   HomeworkMaterialRecord,
   PaymentPlanWithInstallmentsRecord,
@@ -25,9 +26,10 @@ import type {
   TeacherNoteRecord,
   TeacherRecord,
 } from "@o-okul/shared-types";
-import { Eye, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { Download, Eye, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import {
   firstFormError,
   studentFormSchema,
@@ -45,7 +47,6 @@ interface StudentProfilePayload {
   nationalId?: string;
   phone?: string;
   email?: string;
-  birthDate?: string;
 }
 
 interface StudentDetail {
@@ -72,6 +73,7 @@ interface StudentListFilters {
 
 interface StudentReferences {
   classes: ClassRecord[];
+  gradeLevels: GradeLevelRecord[];
   teachers: TeacherRecord[];
 }
 
@@ -120,17 +122,14 @@ const emptyForm: StudentFormState = {
   nationalId: "",
   phone: "",
   email: "",
-  birthDate: "",
   guardianFirstName: "",
   guardianLastName: "",
   guardianPhone: "",
   guardianEmail: "",
-  guardianRelationshipType: "GUARDIAN",
-  guardianIsPrimary: true,
-  guardianCanViewFinance: false,
+  guardianCanViewFinance: true,
   guardianCanReceiveSms: false,
-  guardianCanReceiveAnnouncements: false,
-  guardianCanOpenSupportTickets: false,
+  guardianCanReceiveAnnouncements: true,
+  guardianCanOpenSupportTickets: true,
 };
 
 const emptyFilters: StudentListFilters = {
@@ -211,7 +210,9 @@ export function StudentsPage() {
   });
   const classes = referencesQuery.data?.classes ?? [];
   const classNameById = new Map(classes.map((klass) => [klass.id, klass.name]));
-  const levels = [...new Set(classes.map((klass) => klass.level).filter((level): level is string => Boolean(level)))].sort();
+  const gradeLevels = referencesQuery.data?.gradeLevels ?? [];
+  const classGradeLevelIds = new Set(classes.map((klass) => klass.gradeLevelId).filter((value): value is string => Boolean(value)));
+  const levelOptions = gradeLevels.filter((gradeLevel) => classGradeLevelIds.has(gradeLevel.id));
 
   const teachers = referencesQuery.data?.teachers ?? [];
   const teacherNameById = new Map(teachers.map((teacher) => [teacher.id, `${teacher.firstName} ${teacher.lastName}`]));
@@ -296,7 +297,7 @@ export function StudentsPage() {
       value: `${activeRowCount}/${rows.length}`,
     },
     {
-      description: filters.level ? `${filters.level}. seviye filtresi` : "Geçerli sayfa kapsamı",
+      description: filters.level ? `${levelLabel(filters.level, gradeLevels)} filtresi` : "Geçerli sayfa kapsamı",
       key: "classes",
       label: "Sınıf kapsamı",
       value: classCoverageCount > 0 ? `${classCoverageCount} sınıf` : "Sınıfsız",
@@ -328,7 +329,7 @@ export function StudentsPage() {
   ];
   const studentSummaryActions: OperationSummaryAction[] = [
     {
-      detail: filters.level ? `${filters.level}. seviye görünümü` : "Bu sayfadaki sınıf dağılımı",
+      detail: filters.level ? `${levelLabel(filters.level, gradeLevels)} görünümü` : "Bu sayfadaki sınıf dağılımı",
       key: "class-mapping",
       label: "Sınıf eşleştirme",
       status: classCoverageCount > 0 ? "İzleniyor" : "Kontrol",
@@ -662,9 +663,9 @@ export function StudentsPage() {
                   onChange={(event) => updateFilters({ ...filters, level: event.target.value })}
                 >
                   <option value="">Tümü</option>
-                  {levels.map((level) => (
-                    <option key={level} value={level}>
-                      {level}
+                  {levelOptions.map((level) => (
+                    <option key={level.id} value={level.id}>
+                      {level.name}
                     </option>
                   ))}
                 </Select>
@@ -849,9 +850,18 @@ export function StudentsPage() {
           <InfoGrid>
             <InfoItem label="Satır" value={formatCount(importDryRun.totalRows)} />
             <InfoItem label="Geçerli" value={formatCount(importDryRun.validRows.length)} />
+            <InfoItem label="Hesap" value={formatCount(importDryRun.validRows.filter((row) => row.accountPreview).length)} />
             <InfoItem label="Hata" value={formatCount(importDryRun.errors.length)} />
             <InfoItem label="Kota" value={`${importDryRun.quota.current}+${importDryRun.quota.incoming}/${importDryRun.quota.limit}`} />
           </InfoGrid>
+        ) : null}
+        {importDryRun && studentImportAccountPreviewCount(importDryRun) > 0 ? (
+          <div className="next-form-actions">
+            <Button type="button" variant="secondary" onClick={() => downloadStudentImportAccountPreview(importDryRun)}>
+              <Download size={16} aria-hidden="true" />
+              Hesap CSV indir
+            </Button>
+          </div>
         ) : null}
         {importDryRun && importDryRun.errors.length > 0 ? (
           <div className="next-form-guardians">
@@ -963,16 +973,6 @@ export function StudentsPage() {
             onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
           />
         </Field>
-        <Field label="Doğum tarihi">
-          <Input
-            type="date"
-            value={form.birthDate}
-            onChange={(event) => setForm((current) => ({ ...current, birthDate: event.target.value }))}
-          />
-          {detail?.profile.birthDate ? (
-            <span className="next-field-hint">Kayıtlı: {detail.profile.birthDate}</span>
-          ) : null}
-        </Field>
         <div className="next-form-section">
           <p className="next-form-section-title">Veli</p>
           {editingStudent ? (
@@ -1018,23 +1018,6 @@ export function StudentsPage() {
               onChange={(event) => setForm((current) => ({ ...current, guardianEmail: event.target.value }))}
             />
           </Field>
-          <Field label="Yakınlık">
-            <Select
-              value={form.guardianRelationshipType}
-              onChange={(event) => setForm((current) => ({ ...current, guardianRelationshipType: event.target.value as StudentFormState["guardianRelationshipType"] }))}
-            >
-              <option value="GUARDIAN">Vasi</option>
-              <option value="MOTHER">Anne</option>
-              <option value="FATHER">Baba</option>
-              <option value="EMERGENCY_CONTACT">Acil kişi</option>
-              <option value="OTHER">Diğer</option>
-            </Select>
-          </Field>
-          <Checkbox
-            checked={form.guardianIsPrimary}
-            label="Birincil veli"
-            onChange={(event) => setForm((current) => ({ ...current, guardianIsPrimary: event.target.checked }))}
-          />
           <fieldset className="next-permission-fieldset">
             <legend>Veli izinleri</legend>
             <Checkbox
@@ -1042,11 +1025,13 @@ export function StudentsPage() {
               label="Finans görünürlüğü"
               onChange={(event) => setForm((current) => ({ ...current, guardianCanViewFinance: event.target.checked }))}
             />
-            <Checkbox
-              checked={form.guardianCanReceiveSms}
-              label="SMS alabilir"
-              onChange={(event) => setForm((current) => ({ ...current, guardianCanReceiveSms: event.target.checked }))}
-            />
+            {isSmsEnabled ? (
+              <Checkbox
+                checked={form.guardianCanReceiveSms}
+                label="SMS alabilir"
+                onChange={(event) => setForm((current) => ({ ...current, guardianCanReceiveSms: event.target.checked }))}
+              />
+            ) : null}
             <Checkbox
               checked={form.guardianCanReceiveAnnouncements}
               label="Duyuru alabilir"
@@ -1233,7 +1218,6 @@ function buildProfilePayload(form: StudentFormPayload): StudentProfilePayload | 
   if (form.nationalId.trim()) payload.nationalId = form.nationalId.trim();
   if (form.phone.trim()) payload.phone = form.phone.trim();
   if (form.email.trim()) payload.email = form.email.trim();
-  if (form.birthDate.trim()) payload.birthDate = form.birthDate.trim();
   return Object.keys(payload).length > 0 ? payload : null;
 }
 
@@ -1247,8 +1231,6 @@ function buildGuardianPayload(form: StudentFormPayload) {
     lastName: form.guardianLastName.trim(),
     phone: form.guardianPhone.trim() || undefined,
     email: form.guardianEmail.trim() || undefined,
-    relationshipType: form.guardianRelationshipType,
-    isPrimary: form.guardianIsPrimary,
     canViewFinance: form.guardianCanViewFinance,
     canReceiveSms: form.guardianCanReceiveSms,
     canReceiveAnnouncements: form.guardianCanReceiveAnnouncements,
@@ -1385,11 +1367,16 @@ function buildStudentListUrl(baseUrl: string, state: ListQueryState, filters: St
 }
 
 async function loadStudentReferences(accessToken: string): Promise<StudentReferences> {
-  const [classes, teachers] = await Promise.all([
+  const [classes, gradeLevels, teachers] = await Promise.all([
     apiRequest<ClassRecord[]>(accessToken, `${apiBaseUrl}/classes`),
+    apiRequest<GradeLevelRecord[]>(accessToken, `${apiBaseUrl}/grade-levels`),
     apiRequest<TeacherRecord[]>(accessToken, `${apiBaseUrl}/teachers`),
   ]);
-  return { classes, teachers };
+  return { classes, gradeLevels, teachers };
+}
+
+function levelLabel(levelId: string, gradeLevels: GradeLevelRecord[]) {
+  return gradeLevels.find((gradeLevel) => gradeLevel.id === levelId)?.name ?? levelId;
 }
 
 async function loadStudentDetail(accessToken: string, id: string, reportExamId: string): Promise<StudentDetail> {
@@ -1615,6 +1602,45 @@ function inferStudentImportExtension(file: File): "CSV" | "XLSX" | undefined {
   return undefined;
 }
 
+function studentImportAccountPreviewCount(dryRun: StudentImportDryRunResult) {
+  return dryRun.validRows.filter((row) => row.accountPreview).length;
+}
+
+function downloadStudentImportAccountPreview(dryRun: StudentImportDryRunResult) {
+  const rows = dryRun.validRows
+    .filter((row) => row.accountPreview)
+    .map((row) => [
+      String(row.row),
+      row.firstName,
+      row.lastName,
+      row.accountPreview?.usernameMasked ?? "",
+      row.accountPreview ? "telefon numarasıyla ilk giriş" : "",
+      row.accountPreview?.willCreate ? "evet" : "hayir",
+    ]);
+  if (rows.length === 0) return;
+
+  downloadCsvFile(`ogrenci-hesap-onizleme-${new Date().toISOString().slice(0, 10)}.csv`, [
+    ["satir", "ad", "soyad", "kullanici_adi", "ilk_sifre_notu", "hesap_olusturulacak"],
+    ...rows,
+  ]);
+}
+
+function downloadCsvFile(fileName: string, rows: string[][]) {
+  const content = rows.map((row) => row.map(escapeCsvCell).join(";")).join("\n");
+  const blob = new Blob([`\uFEFF${content}`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function escapeCsvCell(value: string): string {
+  if (!/[;"\n\r]/.test(value)) return value;
+  return `"${value.replace(/"/g, "\"\"")}"`;
+}
+
 function formatStudentImportError(error: StudentImportDryRunResult["errors"][number]) {
   const row = error.row > 0 ? `${error.row}. satır` : "Kota";
   if (error.code === "CLASS_NOT_FOUND") return `${row}: sınıf bulunamadı (${error.value ?? "-"})`;
@@ -1624,19 +1650,22 @@ function formatStudentImportError(error: StudentImportDryRunResult["errors"][num
   if (error.code === "INVALID_EMAIL") return `${row}: e-posta geçersiz`;
   if (error.code === "INVALID_DATE") return `${row}: tarih YYYY-AA-GG olmalı`;
   if (error.code === "INVALID_NATIONAL_ID") return `${row}: TC kimlik no geçersiz`;
+  if (error.code === "INVALID_PHONE") return `${row}: telefon geçersiz`;
   if (error.code === "STUDENT_QUOTA_EXCEEDED") return "Öğrenci kotası aşılır";
   return `${row}: dosya satırı kontrol edilmeli`;
 }
 
 function studentImportFieldLabel(field: StudentImportDryRunResult["errors"][number]["field"]) {
   const labels: Record<StudentImportDryRunResult["errors"][number]["field"], string> = {
-    birthDate: "doğum tarihi",
     className: "sınıf",
     email: "e-posta",
     firstName: "ad",
     guardianEmail: "veli e-postası",
+    guardianNationalId: "veli TC kimlik no",
+    guardianPhone: "veli telefonu",
     lastName: "soyad",
     nationalId: "TC kimlik no",
+    phone: "telefon",
     quota: "kota",
     studentNo: "okul no",
   };

@@ -41,7 +41,7 @@ const releaseGates = [
 const productionEvidenceSteps = [
   "Production env",
   "Traefik HTTPS",
-  "SMS provider",
+  "SMS disabled path",
   "Notification provider",
   "Sentry test event",
   "Alert webhook",
@@ -88,7 +88,7 @@ const finalDecisionFields = [
 const openExternalEvidence = [
   "Staging/prod domain",
   "TR datacenter/provider kanıtı",
-  "SMS provider credential",
+  "SMS disabled path credential",
   "Notification provider credential",
   "Sentry DSN ve alert webhook",
   "Off-host backup ve WAL hedefi",

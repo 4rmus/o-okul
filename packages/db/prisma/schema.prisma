@@ -29,12 +29,15 @@ model Tenant {
   status      String             @default("ACTIVE")
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
+  users       User[]
   memberships TenantMembership[]
   authSessions AuthSession[]
   idempotencyKeys IdempotencyKey[]
   identityInvitations IdentityInvitation[]
   campuses    Campus[]
   gradeLevels GradeLevel[]
+  alanlar     Alan[]
+  gradeLevelCourses GradeLevelCourse[]
   classes     Class[]
   courses     Course[]
   academicYears AcademicYear[]
@@ -143,15 +146,21 @@ model DevelopmentScore {
 
 model User {
   id          String             @id @default(uuid())
-  email       String             @unique
+  tenantId    String?
+  email       String?            @unique
+  nationalIdEncrypted String?
+  nationalIdHash String?
   name        String
   passwordHash String
+  mustChangePassword Boolean     @default(false)
+  passwordChangedAt DateTime?    @db.Timestamptz(6)
   totpSecretEncrypted String?
   totpEnabledAt DateTime? @db.Timestamptz(6)
   totpRecoveryCodeHashes String[] @default([])
   totpLastUsedCounter String?
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
+  tenant      Tenant?            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   memberships TenantMembership[]
   authSessions AuthSession[]
   passwordResetTokens PasswordResetToken[]
@@ -162,6 +171,10 @@ model User {
   createdStudents Student[]      @relation("StudentCreatedBy")
   updatedStudents Student[]      @relation("StudentUpdatedBy")
   checkedHomework Homework[]      @relation("HomeworkCheckedBy")
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, nationalIdHash])
+  @@index([tenantId])
 }
 
 model NotificationDeviceToken {
@@ -178,7 +191,7 @@ model NotificationDeviceToken {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
 
   @@unique([tenantId, userId, token])
   @@index([tenantId, userId, disabledAt])
@@ -193,7 +206,7 @@ model TenantMembership {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
 
   @@unique([tenantId, userId, role])
   @@index([tenantId, role])
@@ -213,7 +226,7 @@ model AuthSession {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User     @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
 
   @@index([tenantId, userId, status])
   @@index([tokenFamilyId])
@@ -286,8 +299,8 @@ model Class {
   tenantId  String
   campusId  String?
   gradeLevelId String?
+  alanId    String?
   name      String
-  level     String?
   section   String?
   deletedAt DateTime?
   createdAt DateTime  @default(now())
@@ -295,6 +308,7 @@ model Class {
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   campus    Campus?   @relation(fields: [tenantId, campusId], references: [tenantId, id], onDelete: Restrict)
   gradeLevel GradeLevel? @relation(fields: [tenantId, gradeLevelId], references: [tenantId, id], onDelete: Restrict)
+  alan      Alan?     @relation(fields: [tenantId, alanId], references: [tenantId, id], onDelete: Restrict)
   students  Student[]
   studentClassHistory StudentClassHistory[]
   studentEnrollments StudentEnrollment[]
@@ -309,6 +323,7 @@ model Class {
   @@unique([tenantId, id])
   @@index([tenantId, campusId])
   @@index([tenantId, gradeLevelId])
+  @@index([tenantId, alanId])
   @@index([tenantId, deletedAt])
 }
 
@@ -321,13 +336,37 @@ model GradeLevel {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  alanlar   Alan[]
+  gradeLevelCourses GradeLevelCourse[]
   classes   Class[]
+  exams     Exam[]
   supportTickets SupportTicket[]
   reportSnapshots ReportSnapshot[]
   paymentPlans PaymentPlan[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
+  @@index([tenantId, deletedAt])
+}
+
+model Alan {
+  id        String    @id @default(uuid())
+  tenantId  String
+  gradeLevelId String?
+  name      String
+  code      String?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  gradeLevel GradeLevel? @relation(fields: [tenantId, gradeLevelId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  classes   Class[]
+  exams     Exam[]
+  gradeLevelCourses GradeLevelCourse[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, gradeLevelId])
   @@index([tenantId, deletedAt])
 }
 
@@ -359,6 +398,7 @@ model Course {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  gradeLevelCourses GradeLevelCourse[]
   teacherAssignments TeacherAssignment[]
   scheduleLessons ScheduleLesson[]
   studySessions StudySession[]
@@ -372,6 +412,27 @@ model Course {
   @@unique([tenantId, id])
   @@unique([tenantId, code])
   @@index([tenantId, deletedAt])
+}
+
+model GradeLevelCourse {
+  id           String   @id @default(uuid())
+  tenantId     String
+  gradeLevelId String
+  courseId     String
+  alanId       String?
+  isDefault    Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  gradeLevel   GradeLevel @relation(fields: [tenantId, gradeLevelId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
+  course       Course   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
+  alan         Alan?    @relation(fields: [tenantId, alanId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, gradeLevelId])
+  @@index([tenantId, courseId])
+  @@index([tenantId, alanId])
 }
 
 model AcademicYear {
@@ -436,7 +497,6 @@ model Student {
   studentNo   String
   nationalIdEncrypted String?
   nationalIdHash String?
-  birthDate   DateTime? @db.Date
   phone       String?
   email       String?
   photoKey    String?
@@ -449,9 +509,9 @@ model Student {
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   class       Class?    @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   responsibleTeacher Teacher? @relation("StudentResponsibleTeacher", fields: [tenantId, responsibleTeacherId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
-  accountUser User?     @relation("StudentAccountUser", fields: [userId], references: [id], onDelete: SetNull)
-  createdBy   User?     @relation("StudentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy   User?     @relation("StudentUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  accountUser User?     @relation("StudentAccountUser", fields: [tenantId, userId], references: [tenantId, id], onDelete: NoAction)
+  createdBy   User?     @relation("StudentCreatedBy", fields: [tenantId, createdById], references: [tenantId, id], onDelete: NoAction)
+  updatedBy   User?     @relation("StudentUpdatedBy", fields: [tenantId, updatedById], references: [tenantId, id], onDelete: NoAction)
   guardians   GuardianStudent[]
   studySessions StudySessionStudent[]
   examParticipants ExamParticipant[]
@@ -471,6 +531,7 @@ model Student {
   @@index([tenantId, responsibleTeacherId])
   @@index([tenantId, studentNo])
   @@unique([tenantId, nationalIdHash])
+  @@unique([tenantId, userId])
   @@unique([tenantId, id])
 }
 
@@ -531,12 +592,15 @@ model Teacher {
   firstName String
   lastName  String
   branch    String?
+  nationalIdEncrypted String?
+  nationalIdHash String?
+  phone     String?
   userId    String?   @unique
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  accountUser User?   @relation("TeacherAccountUser", fields: [userId], references: [id], onDelete: SetNull)
+  accountUser User?   @relation("TeacherAccountUser", fields: [tenantId, userId], references: [tenantId, id], onDelete: NoAction)
   scheduleLessons ScheduleLesson[]
   studySessions StudySession[]
   teacherNotes TeacherNote[]
@@ -545,6 +609,8 @@ model Teacher {
   teacherAssignments TeacherAssignment[]
 
   @@unique([tenantId, id])
+  @@unique([tenantId, userId])
+  @@unique([tenantId, nationalIdHash])
   @@index([tenantId, deletedAt])
 }
 
@@ -582,15 +648,19 @@ model Guardian {
   firstName String
   lastName  String
   phone     String?
+  nationalIdEncrypted String?
+  nationalIdHash String?
   userId    String?   @unique
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  accountUser User?   @relation("GuardianAccountUser", fields: [userId], references: [id], onDelete: SetNull)
+  accountUser User?   @relation("GuardianAccountUser", fields: [tenantId, userId], references: [tenantId, id], onDelete: NoAction)
   students  GuardianStudent[]
 
   @@unique([tenantId, id])
+  @@unique([tenantId, userId])
+  @@unique([tenantId, nationalIdHash])
   @@index([tenantId, deletedAt])
 }
 
@@ -599,10 +669,8 @@ model GuardianStudent {
   tenantId                String
   guardianId              String
   studentId               String
-  relationshipType        String   @default("GUARDIAN")
-  isPrimary               Boolean  @default(false)
   canViewFinance          Boolean  @default(true)
-  canReceiveSms           Boolean  @default(true)
+  canReceiveSms           Boolean  @default(false)
   canReceiveAnnouncements Boolean  @default(true)
   canOpenSupportTickets   Boolean  @default(true)
   createdAt               DateTime @default(now())
@@ -865,7 +933,7 @@ model Homework {
   tenant              Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   class               Class     @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Cascade)
   sourceMaterial      HomeworkMaterial? @relation(fields: [tenantId, sourceMaterialId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
-  checkedBy           User?     @relation("HomeworkCheckedBy", fields: [checkedById], references: [id], onDelete: SetNull)
+  checkedBy           User?     @relation("HomeworkCheckedBy", fields: [tenantId, checkedById], references: [tenantId, id], onDelete: NoAction)
 
   @@index([tenantId, deletedAt])
   @@index([tenantId, classId, dueAt, deletedAt])
@@ -876,6 +944,9 @@ model Homework {
 model Exam {
   id        String    @id @default(uuid())
   tenantId  String
+  gradeLevelId String?
+  alanId    String?
+  examType  String?
   title     String
   status    String    @default("DRAFT")
   startsAt  DateTime?
@@ -883,6 +954,8 @@ model Exam {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  gradeLevel GradeLevel? @relation(fields: [tenantId, gradeLevelId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  alan      Alan?     @relation(fields: [tenantId, alanId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   parserConfigs ParserConfig[]
   participants ExamParticipant[]
   rawImports RawImport[]
@@ -894,6 +967,9 @@ model Exam {
   reportSnapshots ReportSnapshot[]
 
   @@unique([tenantId, id])
+  @@index([tenantId, gradeLevelId])
+  @@index([tenantId, alanId])
+  @@index([tenantId, examType])
   @@index([tenantId, deletedAt])
   @@index([tenantId, status, deletedAt])
 }

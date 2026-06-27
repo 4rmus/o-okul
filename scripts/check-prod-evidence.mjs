@@ -52,7 +52,7 @@ if (summaryOutputFile) {
 const checks = [
   ["Production env", "scripts/check-prod-env.mjs"],
   ["Traefik HTTPS", "scripts/smoke-traefik-https.mjs"],
-  ["SMS provider", "scripts/smoke-sms-provider.mjs"],
+  ["SMS disabled path", "scripts/smoke-sms-provider.mjs"],
   ["Notification provider", "scripts/smoke-notification-provider.mjs"],
   ["Sentry test event", "scripts/smoke-sentry-event.mjs"],
   ["Alert webhook", "scripts/smoke-alert-webhook.mjs"],

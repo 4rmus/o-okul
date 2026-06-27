@@ -6,16 +6,19 @@ import { type TenantQueryable, withExplicitTenantQuery, withTenantQuery } from "
 
 export interface TeacherRecord extends SharedTeacherRecord {
   deletedAt?: string;
+  nationalIdEncrypted?: string;
+  nationalIdHash?: string;
 }
 
 export interface TeacherStore {
   list(): Promise<TeacherRecord[]>;
   findById(id: string): Promise<TeacherRecord | undefined>;
+  findByNationalIdHash(tenantId: string, nationalIdHash: string): Promise<TeacherRecord | undefined>;
   findByUserId(tenantId: string, userId: string): Promise<TeacherRecord | undefined>;
   create(input: Omit<TeacherRecord, "id">): Promise<TeacherRecord>;
   update(
     id: string,
-    input: Partial<Pick<TeacherRecord, "firstName" | "lastName" | "branch">>,
+    input: Partial<Pick<TeacherRecord, "firstName" | "lastName" | "branch" | "nationalIdEncrypted" | "nationalIdHash" | "phone">>,
   ): Promise<TeacherRecord | undefined>;
   bindUser(tenantId: string, id: string, userId: string): Promise<TeacherRecord | undefined>;
   softDelete(id: string, deletedAt: string): Promise<TeacherRecord | undefined>;
@@ -47,6 +50,10 @@ export class InMemoryTeacherStore implements TeacherStore {
     return this.teachers.find((candidate) => candidate.id === id && !candidate.deletedAt);
   }
 
+  async findByNationalIdHash(tenantId: string, nationalIdHash: string): Promise<TeacherRecord | undefined> {
+    return this.teachers.find((candidate) => candidate.tenantId === tenantId && candidate.nationalIdHash === nationalIdHash && !candidate.deletedAt);
+  }
+
   async findByUserId(tenantId: string, userId: string): Promise<TeacherRecord | undefined> {
     return this.teachers.find((candidate) => candidate.tenantId === tenantId && candidate.userId === userId && !candidate.deletedAt);
   }
@@ -62,7 +69,7 @@ export class InMemoryTeacherStore implements TeacherStore {
 
   async update(
     id: string,
-    input: Partial<Pick<TeacherRecord, "firstName" | "lastName" | "branch">>,
+    input: Partial<Pick<TeacherRecord, "firstName" | "lastName" | "branch" | "nationalIdEncrypted" | "nationalIdHash" | "phone">>,
   ): Promise<TeacherRecord | undefined> {
     const record = await this.findById(id);
     if (!record) return undefined;
@@ -70,6 +77,9 @@ export class InMemoryTeacherStore implements TeacherStore {
     if (input.firstName !== undefined) record.firstName = input.firstName;
     if (input.lastName !== undefined) record.lastName = input.lastName;
     if (input.branch !== undefined) record.branch = input.branch;
+    if (input.nationalIdEncrypted !== undefined) record.nationalIdEncrypted = input.nationalIdEncrypted;
+    if (input.nationalIdHash !== undefined) record.nationalIdHash = input.nationalIdHash;
+    if (input.phone !== undefined) record.phone = input.phone;
     return record;
   }
 
@@ -95,6 +105,9 @@ export class InMemoryTeacherStore implements TeacherStore {
 
     record.firstName = "Anonim";
     record.lastName = "Ogretmen";
+    record.nationalIdEncrypted = undefined;
+    record.nationalIdHash = undefined;
+    record.phone = undefined;
     return record;
   }
 }
@@ -119,6 +132,20 @@ export class PostgresTeacherStore implements TeacherStore {
     });
   }
 
+  async findByNationalIdHash(tenantId: string, nationalIdHash: string): Promise<TeacherRecord | undefined> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const result = await client.query<TeacherRow>(
+        `SELECT * FROM "Teacher"
+         WHERE "tenantId" = $1
+           AND "nationalIdHash" = $2
+           AND "deletedAt" IS NULL
+         LIMIT 1`,
+        [tenantId, nationalIdHash],
+      );
+      return result.rows[0] ? toTeacherRecord(result.rows[0]) : undefined;
+    });
+  }
+
   async findByUserId(tenantId: string, userId: string): Promise<TeacherRecord | undefined> {
     return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
       const result = await client.query<TeacherRow>(
@@ -132,10 +159,19 @@ export class PostgresTeacherStore implements TeacherStore {
   async create(input: Omit<TeacherRecord, "id">): Promise<TeacherRecord> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<TeacherRow>(
-        `INSERT INTO "Teacher" ("id", "tenantId", "firstName", "lastName", "branch", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, now())
+        `INSERT INTO "Teacher" ("id", "tenantId", "firstName", "lastName", "branch", "nationalIdEncrypted", "nationalIdHash", "phone", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
          RETURNING *`,
-        [randomUUID(), input.tenantId, input.firstName, input.lastName, input.branch ?? null],
+        [
+          randomUUID(),
+          input.tenantId,
+          input.firstName,
+          input.lastName,
+          input.branch ?? null,
+          input.nationalIdEncrypted ?? null,
+          input.nationalIdHash ?? null,
+          input.phone ?? null,
+        ],
       );
       const record = result.rows[0];
       if (!record) {
@@ -147,7 +183,7 @@ export class PostgresTeacherStore implements TeacherStore {
 
   async update(
     id: string,
-    input: Partial<Pick<TeacherRecord, "firstName" | "lastName" | "branch">>,
+    input: Partial<Pick<TeacherRecord, "firstName" | "lastName" | "branch" | "nationalIdEncrypted" | "nationalIdHash" | "phone">>,
   ): Promise<TeacherRecord | undefined> {
     const existing = await this.findById(id);
     if (!existing) return undefined;
@@ -158,11 +194,24 @@ export class PostgresTeacherStore implements TeacherStore {
          SET "firstName" = COALESCE($2, "firstName"),
              "lastName" = COALESCE($3, "lastName"),
              "branch" = CASE WHEN $4 THEN $5 ELSE "branch" END,
+             "nationalIdEncrypted" = COALESCE($6, "nationalIdEncrypted"),
+             "nationalIdHash" = COALESCE($7, "nationalIdHash"),
+             "phone" = CASE WHEN $8 THEN $9 ELSE "phone" END,
              "updatedAt" = now()
          WHERE "id" = $1
            AND "deletedAt" IS NULL
          RETURNING *`,
-        [id, input.firstName ?? null, input.lastName ?? null, input.branch !== undefined, input.branch ?? null],
+        [
+          id,
+          input.firstName ?? null,
+          input.lastName ?? null,
+          input.branch !== undefined,
+          input.branch ?? null,
+          input.nationalIdEncrypted ?? null,
+          input.nationalIdHash ?? null,
+          input.phone !== undefined,
+          input.phone ?? null,
+        ],
       );
       return result.rows[0] ? toTeacherRecord(result.rows[0]) : undefined;
     });
@@ -210,6 +259,9 @@ export class PostgresTeacherStore implements TeacherStore {
         `UPDATE "Teacher"
          SET "firstName" = 'Anonim',
              "lastName" = 'Ogretmen',
+             "nationalIdEncrypted" = NULL,
+             "nationalIdHash" = NULL,
+             "phone" = NULL,
              "updatedAt" = now()
          WHERE "id" = $1
          RETURNING *`,
@@ -230,6 +282,9 @@ interface TeacherRow {
   firstName: string;
   lastName: string;
   branch: string | null;
+  nationalIdEncrypted: string | null;
+  nationalIdHash: string | null;
+  phone: string | null;
   userId: string | null;
   deletedAt: Date | null;
 }
@@ -241,6 +296,9 @@ function toTeacherRecord(row: TeacherRow): TeacherRecord {
     firstName: row.firstName,
     lastName: row.lastName,
     branch: row.branch ?? undefined,
+    nationalIdEncrypted: row.nationalIdEncrypted ?? undefined,
+    nationalIdHash: row.nationalIdHash ?? undefined,
+    phone: row.phone ?? undefined,
     userId: row.userId ?? undefined,
     deletedAt: row.deletedAt?.toISOString(),
   };

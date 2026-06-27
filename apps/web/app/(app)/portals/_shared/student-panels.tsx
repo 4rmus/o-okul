@@ -8,6 +8,7 @@ import type {
   StudentEnrollmentRecord,
   StudentProfileRecord,
 } from "@o-okul/shared-types";
+import { isSmsEnabled } from "../../../../src/sms-feature.js";
 
 export function StudentFocusPanel({
   announcementStatus,
@@ -105,18 +106,6 @@ export function GuardianRelationsPanel({ guardians, links }: { guardians: Guardi
         return guardian ? `${guardian.firstName} ${guardian.lastName}` : "Bilinmeyen veli";
       },
       sticky: "left",
-    },
-    {
-      header: "İlişki",
-      key: "relationship",
-      priority: "primary",
-      render: (link) => guardianRelationshipLabel(link.relationshipType),
-    },
-    {
-      header: "Birincil",
-      key: "primary",
-      priority: "secondary",
-      render: (link) => (link.isPrimary ? "Evet" : "Hayır"),
     },
     {
       header: "İzinler",
@@ -246,21 +235,10 @@ function studentFocusModeLabel(mode: "guardian" | "read-only" | "student") {
   return "Canlı öğrenci";
 }
 
-function guardianRelationshipLabel(value: GuardianStudentRecord["relationshipType"]) {
-  const labels: Record<GuardianStudentRecord["relationshipType"], string> = {
-    EMERGENCY_CONTACT: "Acil kişi",
-    FATHER: "Baba",
-    GUARDIAN: "Vasi",
-    MOTHER: "Anne",
-    OTHER: "Diğer",
-  };
-  return labels[value];
-}
-
 function formatGuardianPermissions(link: GuardianStudentRecord) {
   const permissions = [
     link.canViewFinance ? "Finans" : undefined,
-    link.canReceiveSms ? "SMS" : undefined,
+    isSmsEnabled && link.canReceiveSms ? "SMS" : undefined,
     link.canReceiveAnnouncements ? "Duyuru" : undefined,
     link.canOpenSupportTickets ? "Destek" : undefined,
   ].filter((permission): permission is string => Boolean(permission));

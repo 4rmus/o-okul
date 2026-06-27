@@ -28,9 +28,14 @@ import type { LoginMfaChallenge } from "./totp-mfa.js";
 import type { TokenPair } from "./token-service.js";
 
 const loginBodySchema = z.object({
-  email: z.string().trim().email(),
+  email: z.string().trim().email().optional(),
+  tenantSlug: optionalTrimmedString,
+  nationalId: optionalTrimmedString,
   password: requiredTrimmedString,
-}).strict() satisfies z.ZodType<LoginRequest>;
+}).strict().refine((value) => Boolean(value.email || (value.tenantSlug && value.nationalId)), {
+  message: "E-posta veya kurum kodu + TC zorunlu.",
+  path: ["email"],
+}) satisfies z.ZodType<LoginRequest>;
 const refreshBodySchema = z.preprocess((value) => value ?? {}, z.object({
   refreshToken: optionalTrimmedString,
 }).strict()) satisfies z.ZodType<AuthRefreshRequest>;
@@ -88,7 +93,7 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<LoginResponse> {
-    const tokenPair = await this.auth.login(body.email, body.password, resolveClientIp(request));
+    const tokenPair = await this.auth.login(body, resolveClientIp(request));
     if (isLoginMfaChallenge(tokenPair)) {
       return tokenPair;
     }
@@ -219,11 +224,11 @@ function createCsrfToken(): string {
 function toAuthResponse(tokenPair: TokenPair): AuthResponse {
   return {
     accessToken: tokenPair.accessToken,
-    session: toPublicSession(tokenPair.session),
+    session: toPublicSession(tokenPair.session, tokenPair.mustChangePassword),
   };
 }
 
-function toPublicSession(session: TokenPair["session"]): Session {
+function toPublicSession(session: TokenPair["session"], mustChangePassword = false): Session {
   return {
     id: session.id,
     userId: session.userId,
@@ -231,6 +236,7 @@ function toPublicSession(session: TokenPair["session"]): Session {
     roles: [...session.roles],
     membershipVersion: session.membershipVersion,
     status: session.status,
+    ...(mustChangePassword ? { mustChangePassword: true } : {}),
     ...(session.subjectType ? { subjectType: session.subjectType } : {}),
     ...(session.subjectId ? { subjectId: session.subjectId } : {}),
   };

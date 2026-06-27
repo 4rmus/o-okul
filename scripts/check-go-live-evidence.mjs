@@ -10,7 +10,7 @@ const inlineUploadSubjects = ["homework_material_files", "support_ticket_attachm
 const requiredEvidenceCheckScripts = new Map([
   ["Production env", "scripts/check-prod-env.mjs"],
   ["Traefik HTTPS", "scripts/smoke-traefik-https.mjs"],
-  ["SMS provider", "scripts/smoke-sms-provider.mjs"],
+  ["SMS disabled path", "scripts/smoke-sms-provider.mjs"],
   ["Notification provider", "scripts/smoke-notification-provider.mjs"],
   ["Sentry test event", "scripts/smoke-sentry-event.mjs"],
   ["Alert webhook", "scripts/smoke-alert-webhook.mjs"],
@@ -473,7 +473,7 @@ const liveStatusGates = [
     dateKey: "checkedAt",
   },
   {
-    label: "SMS provider kanıtı",
+    label: "SMS disabled path kanıtı",
     command: "pnpm sms:smoke",
     source: "productionEvidenceSummary.smokeEvidence.smsProvider",
     target: "summary",

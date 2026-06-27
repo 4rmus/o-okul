@@ -73,7 +73,6 @@ describe("School management API", () => {
         id: "class-a",
         tenantId: "tenant-a",
         name: "8-A",
-        level: "8",
         campusId: "campus-main",
         gradeLevelId: "grade-8",
         section: "A",
@@ -97,6 +96,41 @@ describe("School management API", () => {
       .expect(200);
 
     expect(response.body).toEqual([{ id: "grade-8", tenantId: "tenant-a", name: "8. Sınıf", code: "8" }]);
+  });
+
+  it("tenant A sadece kendi alan kayıtlarını listeler", async () => {
+    const response = await request(server)
+      .get("/alanlar")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual([{ id: "alan-11-sayisal", tenantId: "tenant-a", gradeLevelId: "grade-11", name: "Sayısal", code: "11-SAY" }]);
+  });
+
+  it("seviye ders şablonlarını tenant içinde listeler", async () => {
+    await request(server)
+      .get("/grade-levels/grade-8/courses")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([
+          expect.objectContaining({
+            id: "grade-course-8-math",
+            tenantId: "tenant-a",
+            gradeLevelId: "grade-8",
+            courseId: "course-math",
+            courseName: "Matematik",
+            courseCode: "MAT",
+            isDefault: true,
+            sortOrder: 10,
+          }),
+        ]);
+      });
+
+    await request(server)
+      .get("/grade-levels/grade-7/courses")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(403);
   });
 
   it("tenant A sadece kendi ders kayıtlarını listeler", async () => {
@@ -288,9 +322,9 @@ describe("School management API", () => {
       await request(server)
         .post("/guardians/guardian-a/students")
         .set("Authorization", `Bearer ${tenantAAccessToken}`)
-        .send({ relationshipType: "OWNER", canReceiveSms: "yes" })
+        .send({ canReceiveSms: "yes" })
         .expect(422),
-      ["canReceiveSms", "relationshipType", "studentId"],
+      ["canReceiveSms", "studentId"],
     );
   });
 
@@ -298,7 +332,7 @@ describe("School management API", () => {
     const classCreated = await request(server)
       .post("/classes")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ name: "7-C", level: "7" })
+      .send({ name: "7-C" })
       .expect(201);
     const teacherCreated = await request(server)
       .post("/teachers")
@@ -376,12 +410,26 @@ describe("School management API", () => {
   });
 
   it("class CRUD akışını tenant içinde tamamlar", async () => {
+    const alan = await request(server)
+      .post("/alanlar")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "8. Sınıf Alanı", gradeLevelId: "grade-8", code: "8-ALAN" })
+      .expect(201);
+    const alanId = (alan.body as { id: string }).id;
+    const otherGradeLevel = await request(server)
+      .post("/grade-levels")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "9. Sınıf", code: "9-TEST" })
+      .expect(201);
+    const otherGradeLevelId = (otherGradeLevel.body as { id: string }).id;
+
     const created = await request(server)
       .post("/classes")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ name: "9-A", level: "8", campusId: "campus-main", gradeLevelId: "grade-8", section: "A" })
+      .send({ name: "9-A", alanId, campusId: "campus-main", gradeLevelId: "grade-8", section: "A" })
       .expect(201)
       .expect(({ body }) => {
+        expect(body.alanId).toBe(alanId);
         expect(body.campusId).toBe("campus-main");
         expect(body.gradeLevelId).toBe("grade-8");
         expect(body.section).toBe("A");
@@ -396,8 +444,18 @@ describe("School management API", () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body.name).toBe("9 Fen");
+        expect(body.alanId).toBe(alanId);
         expect(body.campusId).toBe("campus-main");
         expect(body.gradeLevelId).toBe("grade-8");
+      });
+
+    await request(server)
+      .patch(`/classes/${classId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ gradeLevelId: otherGradeLevelId })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.error).toMatchObject({ code: "ALAN_GRADE_LEVEL_MISMATCH" });
       });
 
     await request(server)
@@ -421,6 +479,8 @@ describe("School management API", () => {
 
     await request(server).delete(`/classes/${classId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
     await request(server).get(`/classes/${classId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(404);
+    await request(server).delete(`/alanlar/${alanId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+    await request(server).delete(`/grade-levels/${otherGradeLevelId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
   });
 
   it("kampüs CRUD akışını tenant içinde tamamlar", async () => {
@@ -635,10 +695,19 @@ describe("School management API", () => {
     const created = await request(server)
       .post("/teachers")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ firstName: "Gizli", lastName: "Ogretmen", branch: "Matematik" })
+      .send({ firstName: "Gizli", lastName: "Ogretmen", branch: "Matematik", nationalId: "10000000146", phone: "0 555 000 00 10" })
       .expect(201);
     const teacherId = (created.body as { id: string }).id;
     expect(created.body).not.toHaveProperty("userId");
+    expect(created.body).not.toHaveProperty("nationalIdEncrypted");
+    expect(created.body).not.toHaveProperty("nationalIdHash");
+    expect(created.body.phone).toBe("5550000010");
+
+    await request(server)
+      .post("/teachers")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Ayni", lastName: "Tc", nationalId: "10000000146", phone: "5550000011" })
+      .expect(409);
 
     await request(server)
       .post(`/teachers/${teacherId}/purge-pii`)
@@ -648,6 +717,9 @@ describe("School management API", () => {
         expect(body.firstName).toBe("Anonim");
         expect(body.lastName).toBe("Ogretmen");
         expect(body.branch).toBe("Matematik");
+        expect(body.phone).toBeUndefined();
+        expect(body).not.toHaveProperty("nationalIdEncrypted");
+        expect(body).not.toHaveProperty("nationalIdHash");
         expect(body).not.toHaveProperty("userId");
       });
 
@@ -658,6 +730,9 @@ describe("School management API", () => {
       .expect(({ body }) => {
         expect(body.firstName).toBe("Anonim");
         expect(body.lastName).toBe("Ogretmen");
+        expect(body.phone).toBeUndefined();
+        expect(body).not.toHaveProperty("nationalIdEncrypted");
+        expect(body).not.toHaveProperty("nationalIdHash");
         expect(body).not.toHaveProperty("userId");
       });
 
@@ -675,18 +750,29 @@ describe("School management API", () => {
     const created = await request(server)
       .post("/guardians")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ firstName: "Can", lastName: "Veli", phone: "5000000010" })
+      .send({ firstName: "Can", lastName: "Veli", nationalId: "10000000146", phone: "+90 500 000 00 10" })
       .expect(201);
+    expect(created.body.phone).toBe("5000000010");
+    expect(created.body).not.toHaveProperty("nationalIdEncrypted");
+    expect(created.body).not.toHaveProperty("nationalIdHash");
 
     const guardianId = (created.body as { id: string }).id;
 
     await request(server)
+      .post("/guardians")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Ayni", lastName: "Veli", nationalId: "10000000146", phone: "5000000012" })
+      .expect(409);
+
+    await request(server)
       .patch(`/guardians/${guardianId}`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ phone: "5000000011" })
+      .send({ phone: "0 500 000 00 11" })
       .expect(200)
       .expect(({ body }) => {
         expect(body.phone).toBe("5000000011");
+        expect(body).not.toHaveProperty("nationalIdEncrypted");
+        expect(body).not.toHaveProperty("nationalIdHash");
       });
 
     await request(server)
@@ -697,6 +783,8 @@ describe("School management API", () => {
         expect(body.firstName).toBe("Anonim");
         expect(body.lastName).toBe("Veli");
         expect(body.phone).toBeUndefined();
+        expect(body).not.toHaveProperty("nationalIdEncrypted");
+        expect(body).not.toHaveProperty("nationalIdHash");
       });
 
     await request(server)
@@ -707,6 +795,8 @@ describe("School management API", () => {
         expect(body.firstName).toBe("Anonim");
         expect(body.lastName).toBe("Veli");
         expect(body.phone).toBeUndefined();
+        expect(body).not.toHaveProperty("nationalIdEncrypted");
+        expect(body).not.toHaveProperty("nationalIdHash");
       });
 
     await request(server)
@@ -740,11 +830,6 @@ describe("School management API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
         studentId: "student-a",
-        relationshipType: "MOTHER",
-        isPrimary: true,
-        canViewFinance: true,
-        canReceiveSms: true,
-        canReceiveAnnouncements: true,
         canOpenSupportTickets: false,
       })
       .expect(201);
@@ -753,20 +838,20 @@ describe("School management API", () => {
       tenantId: "tenant-a",
       guardianId,
       studentId: "student-a",
-      relationshipType: "MOTHER",
-      isPrimary: true,
+      canViewFinance: true,
+      canReceiveSms: false,
+      canReceiveAnnouncements: true,
       canOpenSupportTickets: false,
     }));
 
     const updated = await request(server)
       .patch(`/guardians/${guardianId}/students/student-a`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ relationshipType: "GUARDIAN", canViewFinance: false, canReceiveSms: false })
+      .send({ canViewFinance: false, canReceiveSms: false })
       .expect(200);
     expect(updated.body).toEqual(expect.objectContaining({
       guardianId,
       studentId: "student-a",
-      relationshipType: "GUARDIAN",
       canViewFinance: false,
       canReceiveSms: false,
     }));
@@ -890,6 +975,22 @@ describe("School management API", () => {
       .send({ classId: "class-a", courseId: "course-turkish", role: "BRANCH_TEACHER" })
       .expect(403);
 
+    const extraCourse = await request(server)
+      .post("/courses")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ name: "Sablon Disi", code: "DIS" })
+      .expect(201);
+    const extraCourseId = (extraCourse.body as { id: string }).id;
+
+    await request(server)
+      .post("/teachers/teacher-a/assignments")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ classId: "class-a", courseId: extraCourseId, role: "BRANCH_TEACHER" })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.error).toMatchObject({ code: "TEACHER_ASSIGNMENT_COURSE_GRADE_LEVEL_MISMATCH" });
+      });
+
     await request(server)
       .patch(`/teachers/teacher-a/assignments/${assignmentId}`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
@@ -947,6 +1048,10 @@ describe("School management API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(204);
     await request(server)
+      .delete(`/courses/${extraCourseId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(204);
+    await request(server)
       .delete(`/students/${studentId}`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(204);
@@ -957,7 +1062,7 @@ describe("School management API", () => {
       .post("/teachers/imports/dry-run")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
-        fileBase64: createCsvBase64("ad;soyad;brans;atanacak_sinif;ders\nMerve;Import;Matematik;8-A;Matematik\n"),
+        fileBase64: createCsvBase64("ad;soyad;brans;tc;telefon;atanacak_sinif;ders\nMerve;Import;Matematik;10000000214;0555 000 0012;8-A;Matematik\n"),
       })
       .expect(201)
       .expect(({ body }) => {
@@ -974,11 +1079,16 @@ describe("School management API", () => {
               courseName: "Matematik",
               firstName: "Merve",
               lastName: "Import",
+              accountPreview: {
+                usernameMasked: "*******0214",
+                willCreate: true,
+              },
               row: 2,
             }),
           ],
           wouldImport: true,
         });
+        expect(JSON.stringify(body)).not.toContain("5550000012");
       });
   });
 
@@ -1107,9 +1217,9 @@ describe("School management API", () => {
 
   it("öğretmen import commit tek öğretmen ve sınıf/ders atamaları oluşturur", async () => {
     const fileBase64 = createCsvBase64([
-      "ad;soyad;brans;atanacak_sinif;ders",
-      "Nehir;Import;Matematik;8-A;Matematik",
-      "Nehir;Import;Matematik;8-A;",
+      "ad;soyad;brans;tc;telefon;atanacak_sinif;ders",
+      "Nehir;Import;Matematik;10000000382;5550000013;8-A;Matematik",
+      "Nehir;Import;Matematik;10000000382;5550000013;8-A;",
     ].join("\n"));
 
     const imported = await request(server)
@@ -1128,6 +1238,18 @@ describe("School management API", () => {
             expect.objectContaining({ classId: "class-a", role: "CLASS_TEACHER" }),
           ]),
         );
+        expect(JSON.stringify(body)).not.toContain("10000000382");
+        expect(JSON.stringify(body)).not.toContain("nationalIdHash");
+        expect(JSON.stringify(body)).not.toContain("nationalIdEncrypted");
+        expect(JSON.stringify(body)).not.toContain("userId");
+      });
+
+    await request(server)
+      .post("/auth/login")
+      .send({ tenantSlug: "dna-egitim", nationalId: "10000000382", password: "5550000013" })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.session).toMatchObject({ mustChangePassword: true });
       });
 
     await request(server)
@@ -1241,7 +1363,7 @@ describe("School management API", () => {
     const nextClass = await request(server)
       .post("/classes")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ name: "8-C", level: "8", campusId: "campus-main", gradeLevelId: "grade-8", section: "C" })
+      .send({ name: "8-C", campusId: "campus-main", gradeLevelId: "grade-8", section: "C" })
       .expect(201);
     const nextClassId = (nextClass.body as { id: string }).id;
     const nextGradeLevel = await request(server)
@@ -1253,7 +1375,7 @@ describe("School management API", () => {
     const promotedClass = await request(server)
       .post("/classes")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ name: "9-C", level: "9", campusId: "campus-main", gradeLevelId: nextGradeLevelId, section: "C" })
+      .send({ name: "9-C", campusId: "campus-main", gradeLevelId: nextGradeLevelId, section: "C" })
       .expect(201);
     const promotedClassId = (promotedClass.body as { id: string }).id;
 
@@ -1310,7 +1432,7 @@ describe("School management API", () => {
 
     await request(server)
       .get("/students")
-      .query({ classId: nextClassId, level: "8", status: "PASSIVE" })
+      .query({ classId: nextClassId, level: "grade-8", status: "PASSIVE" })
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
@@ -1650,7 +1772,6 @@ describe("School management API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
         nationalId: "10000000146",
-        birthDate: "2012-05-10",
         phone: "5551234567",
         email: "ada-purge@example.test",
         photoKey: "students/student-a/purge-photo.jpg",
@@ -1684,7 +1805,6 @@ describe("School management API", () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body.nationalIdMasked).toBeUndefined();
-        expect(body.birthDate).toBeUndefined();
         expect(body.phone).toBeUndefined();
         expect(body.email).toBeUndefined();
         expect(body.photoKey).toBeUndefined();

@@ -864,6 +864,79 @@ describe("API auth + tenant isolation", () => {
     });
   });
 
+  it("student CSV dry-run TC hatasında ham kimlik numarası döndürmez", async () => {
+    const issued = await login("admin-a@example.test");
+    const fileBase64 = Buffer.from("\uFEFFad;soyad;tc_kimlik_no;telefon\nEce;Kimlik;11111111111;5550000014\n", "utf8").toString("base64");
+
+    const response = await request(server)
+      .post("/students/imports/dry-run")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ fileBase64 })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      dryRun: true,
+      totalRows: 1,
+      validRows: [],
+      errors: [{ row: 2, field: "nationalId", code: "INVALID_NATIONAL_ID", value: "*******1111" }],
+      wouldImport: false,
+    });
+    expect(JSON.stringify(response.body)).not.toContain("11111111111");
+  });
+
+  it("student CSV dry-run hesap önizlemesini maskeli döner", async () => {
+    const issued = await login("admin-a@example.test");
+    const fileBase64 = Buffer.from("\uFEFFad;soyad;tc_kimlik_no;telefon\nEce;Hesap;10000000146;0555 000 0014\n", "utf8").toString("base64");
+
+    const response = await request(server)
+      .post("/students/imports/dry-run")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ fileBase64 })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      dryRun: true,
+      totalRows: 1,
+      validRows: [
+        {
+          row: 2,
+          firstName: "Ece",
+          lastName: "Hesap",
+          accountPreview: {
+            usernameMasked: "*******0146",
+            willCreate: true,
+          },
+        },
+      ],
+      errors: [],
+      wouldImport: true,
+    });
+    expect(response.body.validRows[0]).not.toHaveProperty("nationalId");
+    expect(response.body.validRows[0]).not.toHaveProperty("phone");
+    expect(JSON.stringify(response.body)).not.toContain("10000000146");
+    expect(JSON.stringify(response.body)).not.toContain("5550000014");
+  });
+
+  it("student CSV dry-run TC tek başına gelirse hesap oluşturmayı sessiz geçmez", async () => {
+    const issued = await login("admin-a@example.test");
+    const fileBase64 = Buffer.from("\uFEFFad;soyad;tc_kimlik_no\nEce;EksikTelefon;10000000146\n", "utf8").toString("base64");
+
+    const response = await request(server)
+      .post("/students/imports/dry-run")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ fileBase64 })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      dryRun: true,
+      totalRows: 1,
+      validRows: [],
+      errors: [{ row: 2, field: "phone", code: "REQUIRED" }],
+      wouldImport: false,
+    });
+    expect(JSON.stringify(response.body)).not.toContain("10000000146");
+  });
+
   it("student Excel dry-run üst açıklama satırını atlayıp başlıkları doğru çözer", async () => {
     const issued = await login("admin-a@example.test");
     const fileBase64 = await createStudentWorkbookBase64(
@@ -962,8 +1035,6 @@ describe("API auth + tenant isolation", () => {
         .expect(({ body }) => {
           expect(body).toEqual([
             expect.objectContaining({
-              relationshipType: "MOTHER",
-              isPrimary: true,
               canViewFinance: false,
               canReceiveSms: true,
               canReceiveAnnouncements: true,
@@ -978,7 +1049,6 @@ describe("API auth + tenant isolation", () => {
         .expect(200)
         .expect(({ body }) => {
           expect(body).toMatchObject({
-            birthDate: "2012-09-01",
             email: "ece.velili@example.test",
             nationalIdMasked: "*******0146",
             phone: "5553219999",

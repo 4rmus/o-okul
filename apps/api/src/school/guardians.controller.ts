@@ -26,13 +26,13 @@ export class GuardiansController {
   @Get()
   @Roles("TEACHER")
   async list(@Query() query: ListQuery): Promise<GuardianRecord[]> {
-    return applyListQuery(await this.school.listGuardians(getRequestContext()), query, guardianListFields);
+    return applyListQuery(await this.school.listGuardians(getRequestContext()), query, guardianListFields).map(toGuardianResponse);
   }
 
   @Get(":id")
   @Roles("TEACHER")
-  findOne(@Param("id") id: string): Promise<GuardianRecord> {
-    return this.school.findGuardian(getRequestContext(), id);
+  async findOne(@Param("id") id: string): Promise<GuardianRecord> {
+    return toGuardianResponse(await this.school.findGuardian(getRequestContext(), id));
   }
 
   @Get(":id/students")
@@ -49,20 +49,20 @@ export class GuardiansController {
 
   @Post()
   @RequireCapability("student:manage")
-  create(@Body(zodBody(guardianCreateBodySchema)) body: GuardianCreateBody): Promise<GuardianRecord> {
-    return this.school.createGuardian(getRequestContext(), body);
+  async create(@Body(zodBody(guardianCreateBodySchema)) body: GuardianCreateBody): Promise<GuardianRecord> {
+    return toGuardianResponse(await this.school.createGuardian(getRequestContext(), body));
   }
 
   @Patch(":id")
   @RequireCapability("student:manage")
-  update(@Param("id") id: string, @Body(zodBody(guardianUpdateBodySchema)) body: GuardianUpdateBody): Promise<GuardianRecord> {
-    return this.school.updateGuardian(getRequestContext(), id, body);
+  async update(@Param("id") id: string, @Body(zodBody(guardianUpdateBodySchema)) body: GuardianUpdateBody): Promise<GuardianRecord> {
+    return toGuardianResponse(await this.school.updateGuardian(getRequestContext(), id, body));
   }
 
   @Post(":id/purge-pii")
   @RequireCapability("privacy:manage")
-  purgePii(@Param("id") id: string): Promise<GuardianRecord> {
-    return this.school.purgeGuardianPii(getRequestContext(), id);
+  async purgePii(@Param("id") id: string): Promise<GuardianRecord> {
+    return toGuardianResponse(await this.school.purgeGuardianPii(getRequestContext(), id));
   }
 
   @Post(":id/students")
@@ -104,3 +104,10 @@ const guardianListFields = [
   { name: "lastName", read: (record: GuardianRecord) => record.lastName },
   { name: "phone", read: (record: GuardianRecord) => record.phone },
 ];
+
+function toGuardianResponse(record: GuardianRecord): GuardianRecord {
+  const response = { ...record } as GuardianRecord & { nationalIdEncrypted?: string; nationalIdHash?: string };
+  delete response.nationalIdEncrypted;
+  delete response.nationalIdHash;
+  return response;
+}

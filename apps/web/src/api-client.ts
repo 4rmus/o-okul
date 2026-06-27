@@ -1,5 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
-import type { AuthResponse, LoginResponse, MfaChallengeResponse } from "@o-okul/shared-types";
+import type { AuthResponse, LoginRequest, LoginResponse, MePasswordChangeRequest, MePasswordChangeResponse, MfaChallengeResponse } from "@o-okul/shared-types";
 
 declare const process: { env: Record<string, string | undefined> };
 
@@ -50,9 +50,14 @@ export const queryClient = new QueryClient({
   },
 });
 
-export async function login(email: string, password: string): Promise<AuthResponse> {
+export async function login(email: string, password: string): Promise<AuthResponse>;
+export async function login(credentials: LoginRequest): Promise<AuthResponse>;
+export async function login(credentialsOrEmail: LoginRequest | string, password?: string): Promise<AuthResponse> {
+  const body = typeof credentialsOrEmail === "string"
+    ? { email: credentialsOrEmail, password: password ?? "" }
+    : credentialsOrEmail;
   const response = await fetch(`${apiBaseUrl}/auth/login`, {
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(body),
     credentials: "include",
     headers: { "content-type": "application/json" },
     method: "POST",
@@ -68,6 +73,14 @@ export async function login(email: string, password: string): Promise<AuthRespon
   }
 
   return rememberAuth(result);
+}
+
+export async function changePassword(accessToken: string, input: MePasswordChangeRequest): Promise<MePasswordChangeResponse> {
+  return apiRequest<MePasswordChangeResponse>(accessToken, `${apiBaseUrl}/me/password`, {
+    body: JSON.stringify(input),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
 }
 
 export async function verifyMfa(challengeToken: string, input: { totpCode?: string; recoveryCode?: string }): Promise<AuthResponse> {

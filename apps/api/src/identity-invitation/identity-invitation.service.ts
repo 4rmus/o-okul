@@ -122,7 +122,7 @@ export class IdentityInvitationService {
     if (Date.parse(invitation.expiresAt) <= Date.now()) throw new BadRequestException("IDENTITY_INVITATION_EXPIRED");
 
     const existingUsers = await this.users.listTenantUsers(invitation.tenantId);
-    if (!existingUsers.some((user) => user.email.toLowerCase() === invitation.email)) {
+    if (!existingUsers.some((user) => user.email?.toLowerCase() === invitation.email)) {
       await this.assertTenantSeatAvailable(invitation.tenantId);
     }
 

@@ -35,6 +35,7 @@ import type {
 import { Pencil, Plus, Search, Send, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
 import {
   firstFormError,
@@ -80,7 +81,7 @@ export function MessageTemplatesPage() {
   const referencesQuery = useQuery({
     queryKey: ["next-sms-recipient-refs", auth?.session.tenantId ?? "anonymous"],
     queryFn: () => loadSmsRecipientReferences(auth?.accessToken ?? ""),
-    enabled: Boolean(auth),
+    enabled: Boolean(auth && isSmsEnabled),
     refetchOnWindowFocus: false,
   });
   const [editingTemplate, setEditingTemplate] = useState<MessageTemplateRecord | null>(null);
@@ -349,7 +350,6 @@ export function MessageTemplatesPage() {
           <EmptyState
             title="Şablon yok"
             description="SMS gönderimlerinde kullanmak için ilk mesaj şablonunu oluştur."
-            hint="Şablonlar duyuru SMS akışında tekrar kullanılabilir."
             primaryAction={{ label: "Şablon ekle", onClick: openCreateForm }}
           />
         }
@@ -371,7 +371,8 @@ export function MessageTemplatesPage() {
         tableDescription="SMS mesaj şablonları ve yeniden kullanılabilir gönderim metinleri."
         title="Şablonlar"
       />
-      <Panel
+      {isSmsEnabled ? (
+        <Panel
         aria-label="SMS gönderim"
         title="SMS gönderim"
         description="Şablon seç, kapsamı filtrele, alıcı listesini kontrol et ve teslim raporunu izle."
@@ -570,6 +571,7 @@ export function MessageTemplatesPage() {
           />
         ) : null}
       </Panel>
+      ) : null}
       <FormModal
         description="Şablon adı ve metni zorunludur."
         onCancel={closeForm}
@@ -639,13 +641,19 @@ function buildTemplateSummaryItems({
   recipientPreview: SmsBatchRecipientPreviewResult | null;
   rows: MessageTemplateRecord[];
 }): OperationSummaryItem[] {
-  return [
+  const items: OperationSummaryItem[] = [
     {
       description: "URL state ile sayfalanan şablon",
       key: "total",
       label: "Şablon toplamı",
       value: formatCount(listTotal),
     },
+  ];
+
+  if (!isSmsEnabled) return items;
+
+  return [
+    ...items,
     {
       description: "SMS kanalında kullanılabilir",
       key: "sms-ready",
@@ -681,12 +689,18 @@ function buildTemplateSummaryBadges({
   parsedRecipientCount: number;
   previewRecipientCount: number;
 }): OperationSummaryBadge[] {
-  return [
+  const badges: OperationSummaryBadge[] = [
     {
       key: "sort",
       label: formatTemplateSortLabel(listQuery.sort),
       tone: listQuery.sort ? "info" : "neutral",
     },
+  ];
+
+  if (!isSmsEnabled) return badges;
+
+  return [
+    ...badges,
     {
       key: "references",
       label: isReferenceLoading ? "SMS referansları yükleniyor" : "SMS referansları hazır",
@@ -715,6 +729,8 @@ function buildTemplateSummaryActions({
   selectedSmsTemplate?: MessageTemplateRecord;
   sendStatus: string;
 }): OperationSummaryAction[] {
+  if (!isSmsEnabled) return [];
+
   return [
     {
       detail: selectedSmsTemplate ? "Gönderimde kullanılacak metin hazır" : "Önce SMS şablonu oluşturulmalı",

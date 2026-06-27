@@ -7,12 +7,14 @@ import {
   NotFoundException,
   Optional,
 } from "@nestjs/common";
-import type { AnswerKeyRecord, ExamParticipantRecord, ExamRecord } from "@o-okul/shared-types";
+import type { AnswerKeyRecord, ExamParticipantRecord, ExamRecord, ExamType } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { type AlanStore, alanStoreToken } from "../school/alan-store.js";
 import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
+import { type GradeLevelStore, gradeLevelStoreToken } from "../school/grade-level-store.js";
 import {
   type TeacherAssignmentStore,
   teacherAssignmentStoreToken,
@@ -23,15 +25,22 @@ import { answerKeyRepositoryToken, type AnswerKeyRepository } from "./answer-key
 
 export const examRepositoryToken = Symbol("ExamRepository");
 export const examParticipantRepositoryToken = Symbol("ExamParticipantRepository");
+const examTypes: ExamType[] = ["SCHOOL", "LGS", "TYT", "AYT", "KPSS"];
 
 export interface CreateExamRepositoryInput {
   tenantId: string;
+  gradeLevelId?: string;
+  alanId?: string;
+  examType?: ExamType;
   title: string;
   startsAt?: string;
 }
 
 export interface UpdateExamRepositoryInput {
   title: string;
+  gradeLevelId?: string;
+  alanId?: string;
+  examType?: ExamType;
   startsAt?: string;
 }
 
@@ -65,6 +74,9 @@ interface CreateExamAnswerKeyInput {
 
 export interface CreateExamInput {
   title?: string;
+  gradeLevelId?: string;
+  alanId?: string;
+  examType?: ExamType | string;
   startsAt?: string;
   classId?: string;
   classIds?: string[];
@@ -73,6 +85,9 @@ export interface CreateExamInput {
 
 export interface UpdateExamInput {
   title?: string;
+  gradeLevelId?: string;
+  alanId?: string;
+  examType?: ExamType | string;
   startsAt?: string;
   classId?: string;
   classIds?: string[];
@@ -95,6 +110,10 @@ export class ExamService {
     private readonly students: StudentStore,
     @Inject(classStoreToken)
     private readonly classes: ClassStore,
+    @Inject(gradeLevelStoreToken)
+    private readonly gradeLevels: GradeLevelStore,
+    @Inject(alanStoreToken)
+    private readonly alanlar: AlanStore,
     @Inject(teacherAssignmentStoreToken)
     private readonly teacherAssignments: TeacherAssignmentStore,
     @Inject(answerKeyRepositoryToken)
@@ -123,6 +142,7 @@ export class ExamService {
   private async createOnce(context: RequestContext, input: CreateExamInput): Promise<ExamRecord> {
     const tenantId = requireTenant(context);
     const title = requiredString(input.title, "EXAM_TITLE_REQUIRED");
+    const academicContext = await this.resolveAcademicContext(tenantId, input);
     const startsAt = optionalIso(input.startsAt, "EXAM_STARTS_AT_INVALID");
     const classIds = normalizeClassIds(input);
     const answerKey = requireCreateAnswerKey(input.answerKey);
@@ -131,14 +151,14 @@ export class ExamService {
       await this.requireClass(tenantId, classId);
     }
 
-    const exam = await this.repository.create({ tenantId, title, ...(startsAt ? { startsAt } : {}) });
+    const exam = await this.repository.create({ tenantId, title, ...academicContext, ...(startsAt ? { startsAt } : {}) });
     await this.auditLogs?.record({
       tenantId,
       actorUserId: context.userId,
       entityType: "Exam",
       entityId: exam.id,
       action: "exam.created",
-      diff: { title: exam.title, status: exam.status },
+      diff: { title: exam.title, status: exam.status, gradeLevelId: exam.gradeLevelId, alanId: exam.alanId, examType: exam.examType },
     });
     for (const classId of classIds) {
       await this.addClassParticipants(context, tenantId, exam.id, classId);
@@ -173,6 +193,8 @@ export class ExamService {
     const tenantId = requireTenant(context);
     const id = requiredString(examId, "EXAM_ID_REQUIRED");
     const title = requiredString(input.title, "EXAM_TITLE_REQUIRED");
+    await this.requireExam(tenantId, id);
+    const academicContext = await this.resolveAcademicContext(tenantId, input);
     const startsAt = optionalIso(input.startsAt, "EXAM_STARTS_AT_INVALID");
     const classIds = normalizeClassIds(input);
 
@@ -180,7 +202,7 @@ export class ExamService {
       await this.requireClass(tenantId, classId);
     }
 
-    const exam = await this.repository.update(tenantId, id, { title, ...(startsAt ? { startsAt } : {}) });
+    const exam = await this.repository.update(tenantId, id, { title, ...academicContext, ...(startsAt ? { startsAt } : {}) });
     if (!exam) {
       throw new NotFoundException("EXAM_NOT_FOUND");
     }
@@ -190,7 +212,7 @@ export class ExamService {
       entityType: "Exam",
       entityId: exam.id,
       action: "exam.updated",
-      diff: { title: exam.title, startsAt: exam.startsAt },
+      diff: { title: exam.title, startsAt: exam.startsAt, gradeLevelId: exam.gradeLevelId, alanId: exam.alanId, examType: exam.examType },
     });
     for (const classId of classIds) {
       await this.addClassParticipants(context, tenantId, exam.id, classId);
@@ -239,6 +261,37 @@ export class ExamService {
     if (answerKeys.length === 0) {
       throw new BadRequestException("EXAM_ANSWER_KEY_REQUIRED");
     }
+  }
+
+  private async resolveAcademicContext(
+    tenantId: string,
+    input: Pick<CreateExamInput, "gradeLevelId" | "alanId" | "examType">,
+  ): Promise<Pick<CreateExamRepositoryInput, "gradeLevelId" | "alanId" | "examType">> {
+    const gradeLevelId = optionalString(input.gradeLevelId);
+    const alanId = optionalString(input.alanId);
+    const examType = resolveExamType(input.examType);
+
+    if (gradeLevelId) {
+      const gradeLevel = await this.gradeLevels.findById(gradeLevelId);
+      if (!gradeLevel || gradeLevel.deletedAt || gradeLevel.tenantId !== tenantId) {
+        throw new ForbiddenException("FORBIDDEN_TENANT");
+      }
+    }
+    if (alanId) {
+      const alan = await this.alanlar.findById(alanId);
+      if (!alan || alan.deletedAt || alan.tenantId !== tenantId) {
+        throw new ForbiddenException("FORBIDDEN_TENANT");
+      }
+      if (alan.gradeLevelId && alan.gradeLevelId !== gradeLevelId) {
+        throw new BadRequestException("ALAN_GRADE_LEVEL_MISMATCH");
+      }
+    }
+
+    return {
+      ...(gradeLevelId ? { gradeLevelId } : {}),
+      ...(alanId ? { alanId } : {}),
+      ...(examType ? { examType } : {}),
+    };
   }
 
   private async withAnswerKeySummary(tenantId: string, exam: ExamRecord): Promise<ExamRecord> {
@@ -426,6 +479,15 @@ function isCalendarDateString(value: string): boolean {
 function optionalString(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
+}
+
+function resolveExamType(value: string | undefined): ExamType | undefined {
+  const trimmed = optionalString(value)?.toUpperCase();
+  if (!trimmed) return undefined;
+  if (!examTypes.includes(trimmed as ExamType)) {
+    throw new BadRequestException("EXAM_TYPE_INVALID");
+  }
+  return trimmed as ExamType;
 }
 
 function normalizeClassIds(input: Pick<CreateExamInput, "classId" | "classIds">): string[] {

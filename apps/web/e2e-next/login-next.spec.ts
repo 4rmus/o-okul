@@ -7,6 +7,7 @@ const corsHeaders = {
   "access-control-allow-methods": "DELETE,GET,PATCH,POST,OPTIONS",
   "access-control-allow-origin": `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`,
 };
+const smsEnabled = process.env.NEXT_PUBLIC_SMS_ENABLED === "true";
 
 function heading(page: Page, options: Parameters<Page["getByRole"]>[1]) {
   return page.getByRole("heading", options).first();
@@ -281,12 +282,12 @@ function automaticTargetClassId(
   if (!sourceClass) return undefined;
 
   const gradeLevelById = new Map(gradeLevels.map((gradeLevel) => [gradeLevel.id, gradeLevel]));
-  const sourceCode = sourceClass.gradeLevelId ? gradeLevelById.get(sourceClass.gradeLevelId)?.code : sourceClass.level;
+  const sourceCode = sourceClass.gradeLevelId ? gradeLevelById.get(sourceClass.gradeLevelId)?.code : undefined;
   if (!sourceCode || !/^\d+$/.test(sourceCode)) return undefined;
   const targetCode = String(Number.parseInt(sourceCode, 10) + 1);
   return classes.find((klass) =>
     klass.id !== sourceClass.id &&
-    (klass.gradeLevelId ? gradeLevelById.get(klass.gradeLevelId)?.code : klass.level) === targetCode &&
+    (klass.gradeLevelId ? gradeLevelById.get(klass.gradeLevelId)?.code : undefined) === targetCode &&
     (!sourceClass.campusId || klass.campusId === sourceClass.campusId) &&
     (!sourceClass.section || klass.section === sourceClass.section),
   )?.id;
@@ -368,8 +369,6 @@ type GuardianStudentFixture = {
   tenantId: string;
   guardianId: string;
   studentId: string;
-  relationshipType: "MOTHER" | "FATHER" | "GUARDIAN" | "EMERGENCY_CONTACT" | "OTHER";
-  isPrimary: boolean;
   canViewFinance: boolean;
   canReceiveSms: boolean;
   canReceiveAnnouncements: boolean;
@@ -550,8 +549,8 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     },
   ];
   let classes: ClassFixture[] = [
-    { id: "class-a", tenantId: "tenant-a", name: "8-A", level: "8", campusId: "campus-main", gradeLevelId: "grade-8", section: "A" },
-    { id: "class-b", tenantId: "tenant-a", name: "8-B", level: "8", campusId: "campus-main", gradeLevelId: "grade-8", section: "B" },
+    { id: "class-a", tenantId: "tenant-a", name: "8-A", campusId: "campus-main", gradeLevelId: "grade-8", section: "A" },
+    { id: "class-b", tenantId: "tenant-a", name: "8-B", campusId: "campus-main", gradeLevelId: "grade-8", section: "B" },
   ];
   let campuses: CampusFixture[] = [
     { id: "campus-main", tenantId: "tenant-a", name: "Merkez Kampüs", code: "MRK" },
@@ -751,8 +750,6 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       tenantId: "tenant-a",
       guardianId: "guardian-a",
       studentId: "student-a",
-      relationshipType: "MOTHER",
-      isPrimary: true,
       canViewFinance: true,
       canReceiveSms: true,
       canReceiveAnnouncements: true,
@@ -2282,8 +2279,6 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
         tenantId: "tenant-a",
         guardianId,
         studentId: body.studentId ?? "student-a",
-        relationshipType: body.relationshipType ?? "GUARDIAN",
-        isPrimary: body.isPrimary ?? false,
         canViewFinance: body.canViewFinance ?? false,
         canReceiveSms: body.canReceiveSms ?? false,
         canReceiveAnnouncements: body.canReceiveAnnouncements ?? false,
@@ -3528,7 +3523,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       const responsibleTeacherId = url.searchParams.get("responsibleTeacherId");
       const status = url.searchParams.get("status");
       const guardianLinked = url.searchParams.get("guardianLinked");
-      const classIdsByLevel = new Set(classes.filter((klass) => !level || klass.level === level).map((klass) => klass.id));
+      const classIdsByLevel = new Set(classes.filter((klass) => !level || klass.gradeLevelId === level).map((klass) => klass.id));
       const filteredStudents = students.filter((student) =>
         (!classId || student.classId === classId) &&
         (!level || Boolean(student.classId && classIdsByLevel.has(student.classId))) &&
@@ -4363,7 +4358,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByText("Selin Anne")).toHaveCount(0);
 
   gradeLevels = [...gradeLevels, { id: "grade-9", tenantId: "tenant-a", name: "9. Sınıf", code: "9" }];
-  classes = [...classes, { id: "class-c", tenantId: "tenant-a", name: "9-A", level: "9", campusId: "campus-main", gradeLevelId: "grade-9", section: "A" }];
+  classes = [...classes, { id: "class-c", tenantId: "tenant-a", name: "9-A", campusId: "campus-main", gradeLevelId: "grade-9", section: "A" }];
 
   await expandSidebarGroup(page, "Kişiler");
   await clickSidebarLink(page, "Öğrenciler", /\/kurum\/ogrenciler$/);
@@ -4438,7 +4433,11 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByLabel("İlişki geçmişi").getByText("Zeynep Veli")).toBeVisible();
   await expect(page.getByLabel("İlişki geçmişi").getByText("Anne · Birincil")).toBeVisible();
   await expect(page.getByLabel("İlişki geçmişi").getByText("Finans görünürlüğü: açık")).toBeVisible();
-  await expect(page.getByLabel("İlişki geçmişi").getByText("SMS: açık")).toBeVisible();
+  if (smsEnabled) {
+    await expect(page.getByLabel("İlişki geçmişi").getByText("SMS: açık")).toBeVisible();
+  } else {
+    await expect(page.getByLabel("İlişki geçmişi")).not.toContainText("SMS");
+  }
   await expect(page.getByLabel("İlişki geçmişi").getByText("Destek: kapalı")).toBeVisible();
   await expect(page.getByLabel("İlişki geçmişi")).not.toContainText("Ödeme görür");
   await expect(page.getByLabel("Öğretmen ilişkileri").getByText("Ayse Ogretmen")).toBeVisible();
@@ -4528,11 +4527,15 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByRole("cell", { name: "Veliler", exact: true })).toBeVisible();
   await expect(page.getByRole("row", { name: /Sınav hazırlığı/ }).getByText("Merkez Kampüs / 8. Sınıf / 8-A / Matematik / 2. Donem")).toBeVisible();
   await page.getByRole("row", { name: /Sınav hazırlığı/ }).getByRole("button", { name: "Alıcılar" }).click();
-  await expect(page.getByLabel("Duyuru SMS gönderimi").getByText("SMS gönderimi")).toBeVisible();
-  await page.getByLabel("Duyuru SMS gönderimi").getByRole("combobox", { name: "SMS şablonu" }).selectOption("message-template-a");
-  await page.getByLabel("Duyuru SMS gönderimi").getByRole("button", { name: "SMS gönder" }).click();
-  await expect(page.getByLabel("Duyuru SMS gönderimi").getByText("1 alıcı kuyruğa alındı.")).toBeVisible();
-  await expect(page.getByLabel("Duyuru SMS gönderimi").getByLabel("SMS teslim raporu").getByText("completed")).toBeVisible();
+  if (smsEnabled) {
+    await expect(page.getByLabel("Duyuru SMS gönderimi").getByText("SMS gönderimi")).toBeVisible();
+    await page.getByLabel("Duyuru SMS gönderimi").getByRole("combobox", { name: "SMS şablonu" }).selectOption("message-template-a");
+    await page.getByLabel("Duyuru SMS gönderimi").getByRole("button", { name: "SMS gönder" }).click();
+    await expect(page.getByLabel("Duyuru SMS gönderimi").getByText("1 alıcı kuyruğa alındı.")).toBeVisible();
+    await expect(page.getByLabel("Duyuru SMS gönderimi").getByLabel("SMS teslim raporu").getByText("completed")).toBeVisible();
+  } else {
+    await expect(page.getByLabel("Duyuru SMS gönderimi")).toHaveCount(0);
+  }
   await page.getByRole("button", { name: "Kapat" }).click();
   await page.getByLabel("Ara").fill("Sınav");
   await expect(page.getByText("Sınav hazırlığı")).toBeVisible();
@@ -4775,47 +4778,53 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(firstPaymentRow.getByText("Ödendi")).toBeVisible();
   await expect(page.getByLabel("Finans özeti").getByText("₺0,00")).toBeVisible();
 
-  await expandSidebarGroup(page, "İçerik");
-  await clickSidebarLink(page, "Mesaj Şablonları", /\/kurum\/sablonlar$/);
-  await expect(heading(page, { name: "Şablonlar" })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "Sınav hatırlatma", exact: true })).toBeVisible();
-  await expect(page.getByLabel("SMS önizleme").getByText("Yarın deneme sınavı yapılacaktır.")).toBeVisible();
-  await page.getByRole("combobox", { name: "Duyuru hedefi" }).selectOption("announcement-a");
-  await expect(page.getByRole("combobox", { name: "Sınıf" })).toHaveValue("class-a");
-  await expect(page.getByRole("combobox", { name: "Ders" })).toHaveValue("course-math");
-  await expect(page.getByRole("combobox", { name: "Dönem" })).toHaveValue("term-2026-spring");
-  await page.getByRole("button", { name: "Alıcıları getir" }).click();
-  await expect(page.getByLabel("SMS alıcı önizleme").getByText("1 izinli veli")).toBeVisible();
-  await expect(page.getByLabel("SMS alıcı önizleme").getByText("Ali Veli - Ada A")).toBeVisible();
-  await expect(page.getByLabel("SMS alıcıları")).toHaveValue("905000000001");
-  await expect(page.getByLabel("SMS önizleme").getByText("1 alıcı")).toBeVisible();
-  await page.getByRole("button", { name: "SMS gönder" }).click();
-  await expect(page.getByText("1 alıcı kuyruğa alındı.")).toBeVisible();
-  await expect(page.getByLabel("SMS teslim raporu").getByText("completed")).toBeVisible();
-  await expect(page.getByLabel("SMS teslim raporu").getByText("1", { exact: true }).first()).toBeVisible();
+  if (smsEnabled) {
+    await expandSidebarGroup(page, "İçerik");
+    await clickSidebarLink(page, "Mesaj Şablonları", /\/kurum\/sablonlar$/);
+    await expect(heading(page, { name: "Şablonlar" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "Sınav hatırlatma", exact: true })).toBeVisible();
+    await expect(page.getByLabel("SMS önizleme").getByText("Yarın deneme sınavı yapılacaktır.")).toBeVisible();
+    await page.getByRole("combobox", { name: "Duyuru hedefi" }).selectOption("announcement-a");
+    await expect(page.getByRole("combobox", { name: "Sınıf" })).toHaveValue("class-a");
+    await expect(page.getByRole("combobox", { name: "Ders" })).toHaveValue("course-math");
+    await expect(page.getByRole("combobox", { name: "Dönem" })).toHaveValue("term-2026-spring");
+    await page.getByRole("button", { name: "Alıcıları getir" }).click();
+    await expect(page.getByLabel("SMS alıcı önizleme").getByText("1 izinli veli")).toBeVisible();
+    await expect(page.getByLabel("SMS alıcı önizleme").getByText("Ali Veli - Ada A")).toBeVisible();
+    await expect(page.getByLabel("SMS alıcıları")).toHaveValue("905000000001");
+    await expect(page.getByLabel("SMS önizleme").getByText("1 alıcı")).toBeVisible();
+    await page.getByRole("button", { name: "SMS gönder" }).click();
+    await expect(page.getByText("1 alıcı kuyruğa alındı.")).toBeVisible();
+    await expect(page.getByLabel("SMS teslim raporu").getByText("completed")).toBeVisible();
+    await expect(page.getByLabel("SMS teslim raporu").getByText("1", { exact: true }).first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Şablon ekle" }).click();
-  await page.getByLabel("Şablon adı", { exact: true }).fill("   ");
-  await page.getByLabel("Mesaj metni", { exact: true }).fill("Geçici metin");
-  await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await expect(page.getByLabel("Şablon yönetimi").getByText("Şablon adı zorunludur.")).toBeVisible();
-  await page.getByLabel("Şablon adı", { exact: true }).fill(" Devamsızlık ");
-  await page.getByLabel("Mesaj metni", { exact: true }).fill(" Bugün öğrenciniz devamsız görünmektedir. ");
-  await page.getByRole("button", { name: "Ekle", exact: true }).click();
-  await expect(page.getByRole("cell", { name: "Devamsızlık", exact: true })).toBeVisible();
-  await page.getByLabel("Ara").fill("Devamsızlık");
-  await expect(page.getByRole("cell", { name: "Devamsızlık", exact: true })).toBeVisible();
-  await expect(page.getByText("Sınav hatırlatma")).toBeHidden();
-  await page.getByLabel("Ara").fill("");
+    await page.getByRole("button", { name: "Şablon ekle" }).click();
+    await page.getByLabel("Şablon adı", { exact: true }).fill("   ");
+    await page.getByLabel("Mesaj metni", { exact: true }).fill("Geçici metin");
+    await page.getByRole("button", { name: "Ekle", exact: true }).click();
 
-  await page.getByRole("button", { name: "Devamsızlık düzenle" }).click();
-  await page.getByLabel("Mesaj metni", { exact: true }).fill("Bugün öğrenciniz derse katılmadı.");
-  await page.getByRole("button", { name: "Kaydet", exact: true }).click();
-  await expect(page.getByText("Bugün öğrenciniz derse katılmadı.")).toBeVisible();
+    await expect(page.getByLabel("Şablon yönetimi").getByText("Şablon adı zorunludur.")).toBeVisible();
+    await page.getByLabel("Şablon adı", { exact: true }).fill(" Devamsızlık ");
+    await page.getByLabel("Mesaj metni", { exact: true }).fill(" Bugün öğrenciniz devamsız görünmektedir. ");
+    await page.getByRole("button", { name: "Ekle", exact: true }).click();
+    await expect(page.getByRole("cell", { name: "Devamsızlık", exact: true })).toBeVisible();
+    await page.getByLabel("Ara").fill("Devamsızlık");
+    await expect(page.getByRole("cell", { name: "Devamsızlık", exact: true })).toBeVisible();
+    await expect(page.getByText("Sınav hatırlatma")).toBeHidden();
+    await page.getByLabel("Ara").fill("");
 
-  await page.getByRole("button", { name: "Devamsızlık sil" }).click();
-  await confirmDeleteDialog(page, "Şablonu sil", "Devamsızlık şablonu silinsin mi?");
-  await expect(page.getByRole("cell", { name: "Devamsızlık", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Devamsızlık düzenle" }).click();
+    await page.getByLabel("Mesaj metni", { exact: true }).fill("Bugün öğrenciniz derse katılmadı.");
+    await page.getByRole("button", { name: "Kaydet", exact: true }).click();
+    await expect(page.getByText("Bugün öğrenciniz derse katılmadı.")).toBeVisible();
+
+    await page.getByRole("button", { name: "Devamsızlık sil" }).click();
+    await confirmDeleteDialog(page, "Şablonu sil", "Devamsızlık şablonu silinsin mi?");
+    await expect(page.getByRole("cell", { name: "Devamsızlık", exact: true })).toHaveCount(0);
+  } else {
+    await expandSidebarGroup(page, "İçerik");
+    await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Mesaj Şablonları", exact: true })).toHaveCount(0);
+  }
 
   await expandSidebarGroup(page, "Finans ve Destek");
   await clickSidebarLink(page, "Destek", /\/kurum\/destek$/);
@@ -5024,6 +5033,115 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   }), ["local" + "Storage", "session" + "Storage"]);
   expect(storageKeys.first.filter((key) => key !== "des.sidebar.expandedGroups.v2")).toEqual([]);
   expect(storageKeys.second).toEqual([]);
+});
+
+test("ilk girişte zorunlu şifre değişimi ekranına yönlendirir", async ({ page }) => {
+  let auth = createAuthResponse("student-a@example.test");
+  auth = {
+    ...auth,
+    session: {
+      ...auth.session,
+      mustChangePassword: true,
+    },
+    mustChangePassword: true,
+  };
+  let passwordChanged = false;
+
+  await page.route("**/*", async (route) => {
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({ headers: corsHeaders, status: 204 });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.route("**/api/v1/auth/refresh", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      headers: corsHeaders,
+      status: 200,
+      body: JSON.stringify(envelope(auth)),
+    });
+  });
+
+  await page.route("**/api/v1/auth/login", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      headers: corsHeaders,
+      status: 200,
+      body: JSON.stringify(envelope(auth)),
+    });
+  });
+
+  await page.route("**/api/v1/me/password", async (route) => {
+    const body = route.request().postDataJSON() as { currentPassword?: string; newPassword?: string };
+    expect(body).toMatchObject({ currentPassword: "5551234567", newPassword: "YeniSifre123" });
+    passwordChanged = true;
+    auth = {
+      ...auth,
+      session: {
+        ...auth.session,
+        mustChangePassword: false,
+      },
+      mustChangePassword: false,
+    };
+    await route.fulfill({
+      contentType: "application/json",
+      headers: corsHeaders,
+      status: 200,
+      body: JSON.stringify(envelope({ changedAt: "2026-06-27T12:00:00.000Z" })),
+    });
+  });
+
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname.replace("/api/v1", "");
+    if (path.startsWith("/auth/") || path === "/me/password") {
+      await route.fallback();
+      return;
+    }
+    if (path === "/me/tenant") {
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope({ id: "tenant-a", name: "DNA Eğitim", slug: "dna-egitim", plan: "TRIAL", status: "ACTIVE" })),
+      });
+      return;
+    }
+    if (path === "/me/notification-devices") {
+      await route.fulfill({
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+        body: JSON.stringify(envelope([])),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      headers: corsHeaders,
+      status: 200,
+      body: JSON.stringify(envelope([])),
+    });
+  });
+
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Kurum + TC" }).click();
+  await page.getByLabel("Kurum kodu").fill("dna-egitim");
+  await page.getByLabel("TC kimlik no").fill("10000000146");
+  await page.getByLabel("Şifre").fill("5551234567");
+  await page.getByRole("button", { name: "Giriş yap" }).click();
+
+  await expect(page).toHaveURL(/\/sifre-degistir$/, { timeout: 15_000 });
+  await expect(heading(page, { level: 1, name: "Şifre değiştir" })).toBeVisible();
+  await page.getByLabel("Mevcut şifre").fill("5551234567");
+  await page.getByLabel("Yeni şifre", { exact: true }).fill("YeniSifre123");
+  await page.getByLabel("Yeni şifre tekrar").fill("YeniSifre123");
+  await page.getByRole("button", { name: "Kaydet" }).click();
+
+  await expect(page).toHaveURL(/\/ogrenci$/, { timeout: 15_000 });
+  expect(passwordChanged).toBe(true);
 });
 
 test("Next sıfır-veri kurulum adımlarını ve yeni kayıt derin linkini gösterir", async ({ page }) => {
@@ -5629,8 +5747,6 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
     tenantId: "tenant-a",
     guardianId: "guardian-a",
     studentId: "student-a",
-    relationshipType: "MOTHER",
-    isPrimary: true,
     canViewFinance: true,
     canReceiveSms: true,
     canReceiveAnnouncements: true,
@@ -6089,7 +6205,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page.getByLabel("Profil").getByText("Ayse Ogretmen")).toBeVisible();
   await expect(page.getByLabel("Veli ilişkileri").getByText("Zeynep Veli")).toBeVisible();
   await expect(page.getByLabel("Veli ilişkileri").getByText("Anne")).toBeVisible();
-  await expect(page.getByLabel("Veli ilişkileri").getByText("Finans, SMS, Duyuru, Destek")).toBeVisible();
+  await expect(page.getByLabel("Veli ilişkileri").getByText(smsEnabled ? "Finans, SMS, Duyuru, Destek" : "Finans, Duyuru, Destek")).toBeVisible();
   await expect(page.getByLabel("Sınıf ve kayıt geçmişi").getByText("8-A").first()).toBeVisible();
   await expect(page.getByLabel("Sınıf ve kayıt geçmişi").getByText("Merkez Kampüs / 8. Sınıf / A şube").first()).toBeVisible();
   await expect(page.getByLabel("Sınıf ve kayıt geçmişi").getByText("İlk kayıt").first()).toBeVisible();
@@ -6239,9 +6355,13 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page.getByLabel("Duyurular").getByRole("cell", { name: "Veli duyurusu", exact: true })).toBeVisible();
   await page.getByLabel("Duyurular").getByRole("button", { name: "Okundu işaretle" }).click();
   await expect(page.getByLabel("Duyurular").getByText("Okundu")).toBeVisible();
-  await expect(page.getByLabel("Bildirim tercihleri").getByLabel("SMS al")).toBeChecked();
-  await page.getByLabel("Bildirim tercihleri").getByLabel("SMS al").click();
-  await expect(page.getByLabel("Bildirim tercihleri").getByLabel("SMS al")).not.toBeChecked();
+  if (smsEnabled) {
+    await expect(page.getByLabel("Bildirim tercihleri").getByLabel("SMS al")).toBeChecked();
+    await page.getByLabel("Bildirim tercihleri").getByLabel("SMS al").click();
+    await expect(page.getByLabel("Bildirim tercihleri").getByLabel("SMS al")).not.toBeChecked();
+  } else {
+    await expect(page.getByLabel("Bildirim tercihleri").getByLabel("SMS al")).toHaveCount(0);
+  }
   await expect(page.getByLabel("Ödevler").getByText("Bireysel tekrar")).toBeVisible();
   await expect(page.getByLabel("Ödevler").getByText("Kesirler Çalışma Kağıdı")).toBeVisible();
   await expect(page.getByLabel("Ödevler").getByText("Matematik / 2. Donem")).toBeVisible();
@@ -6273,8 +6393,10 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page.getByLabel("Ödeme planları").getByText("1. taksit / 500,00 TRY")).toBeVisible();
   await expect(page.getByLabel("Ödeme planları").getByRole("row", { name: /1\. taksit .* Bekliyor/ })).toBeVisible();
   portalGuardianPreferences = { ...portalGuardianPreferences, canViewFinance: false };
-  await page.getByLabel("Bildirim tercihleri").getByLabel("SMS al").click();
-  await expect(page.getByLabel("Bildirim tercihleri").getByLabel("SMS al")).toBeChecked();
+  if (smsEnabled) {
+    await page.getByLabel("Bildirim tercihleri").getByLabel("SMS al").click();
+    await expect(page.getByLabel("Bildirim tercihleri").getByLabel("SMS al")).toBeChecked();
+  }
   expect(portalGuardianClosedFinancePaymentPlanRequests).toBe(0);
   await expect(page.getByLabel("Portal özeti").getByText("Kapalı").first()).toBeVisible();
   await expect(page.getByLabel("Ödeme planları").getByText("Ödeme görünümü kapalı.")).toBeVisible();
@@ -6291,7 +6413,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page.getByLabel("Sınıf ve kayıt geçmişi").getByRole("cell", { name: "Aktif", exact: true })).toBeVisible();
   await expect(page.getByLabel("Veli ilişki özeti").getByText("Anne")).toBeVisible();
   await expect(page.getByLabel("Veli ilişki özeti").getByText("Kapalı")).toBeVisible();
-  await expect(page.getByLabel("Veli ilişki özeti").getByText("SMS, Duyuru, Destek")).toBeVisible();
+  await expect(page.getByLabel("Veli ilişki özeti").getByText(smsEnabled ? "SMS, Duyuru, Destek" : "Duyuru, Destek")).toBeVisible();
 });
 
 async function loginAs(page: Page, email: string) {
@@ -6307,7 +6429,25 @@ async function loginAs(page: Page, email: string) {
   await expect(page).toHaveURL(homeUrlByEmail[email] ?? /\/kurum$/, { timeout: 15_000 });
 }
 
-function createAuthResponse(email = "admin-a@example.test") {
+type TestAuthSession = {
+  id: string;
+  userId: string;
+  tenantId: string;
+  roles: string[];
+  membershipVersion: number;
+  status: string;
+  mustChangePassword?: boolean;
+  subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER";
+  subjectId?: string;
+};
+
+type TestAuthResponse = {
+  accessToken: string;
+  session: TestAuthSession;
+  mustChangePassword?: boolean;
+};
+
+function createAuthResponse(email = "admin-a@example.test"): TestAuthResponse {
   const profileByEmail: Record<
     string,
     { userId: string; roles: string[]; tenantId?: string; subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER"; subjectId?: string }
@@ -6369,7 +6509,7 @@ function readPortalFixture(path: string): unknown {
   if (path === "/me/teacher/students/student-a/class-history") return readPortalFixture("/me/student/class-history");
   if (path === "/me/teacher/students/student-a/enrollments") return readPortalFixture("/me/student/enrollments");
   if (path === "/campuses") return [{ id: "campus-main", tenantId: "tenant-a", name: "Merkez Kampüs", code: "MRK" }];
-  if (path === "/classes") return [{ id: "class-a", tenantId: "tenant-a", name: "8-A", level: "8", campusId: "campus-main", gradeLevelId: "grade-8", section: "A" }];
+  if (path === "/classes") return [{ id: "class-a", tenantId: "tenant-a", name: "8-A", campusId: "campus-main", gradeLevelId: "grade-8", section: "A" }];
   if (path === "/teachers") return [];
   if (path === "/grade-levels") return [{ id: "grade-8", tenantId: "tenant-a", name: "8. Sınıf", code: "8" }];
   if (path === "/courses") {
@@ -6419,8 +6559,6 @@ function readPortalFixture(path: string): unknown {
       tenantId: "tenant-a",
       guardianId: "guardian-a",
       studentId: "student-a",
-      relationshipType: "MOTHER",
-      isPrimary: true,
       canViewFinance: true,
       canReceiveSms: true,
       canReceiveAnnouncements: true,
@@ -7712,8 +7850,6 @@ function readFixture(path: string) {
       tenantId: "tenant-a",
       guardianId: "guardian-a",
       studentId: "student-a",
-      relationshipType: "MOTHER",
-      isPrimary: true,
       canViewFinance: true,
       canReceiveSms: true,
       canReceiveAnnouncements: true,

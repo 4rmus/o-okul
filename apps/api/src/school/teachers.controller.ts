@@ -66,11 +66,15 @@ export class TeachersController {
 
   @Post("imports")
   @RequireCapability("staff:manage")
-  import(
+  async import(
     @Body(zodBody(teacherImportBodySchema)) body: TeacherImportBody,
     @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<TeacherImportResult> {
-    return this.imports.import(getRequestContext(), body, idempotencyKey);
+    const result = await this.imports.import(getRequestContext(), body, idempotencyKey);
+    return {
+      ...result,
+      teachers: result.teachers.map(toTeacherResponse),
+    };
   }
 
   @Post(":id/assignments")
@@ -126,7 +130,9 @@ const teacherListFields = [
 ];
 
 function toTeacherResponse(record: TeacherRecord): TeacherRecord {
-  const response = { ...record };
+  const response = { ...record } as TeacherRecord & { nationalIdEncrypted?: string; nationalIdHash?: string };
+  delete response.nationalIdEncrypted;
+  delete response.nationalIdHash;
   delete response.userId;
   return response;
 }

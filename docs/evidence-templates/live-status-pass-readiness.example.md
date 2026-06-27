@@ -18,7 +18,7 @@ template dogrulamasina pass-readiness fixture'i saglar. Gercek readiness belgesi
 - Inline upload migration kanıtı: `PASS`
 - Audit null tenant kanıtı: `PASS`
 - Rate limit Redis kanıtı: `PASS`
-- SMS provider kanıtı: `PASS`
+- SMS disabled path kanıtı: `PASS`
 - Notification provider kanıtı: `PASS`
 - Report generation perf kanıtı: `PASS`
 - Staging/prod UAT: `PASS`

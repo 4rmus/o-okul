@@ -260,6 +260,27 @@ Açık soru: Gerçek staging/prod KVKK inventory ve pilot veli/öğrenci aydınl
 kapısında ayrıca üretilmelidir; bu karar local/static evidence yerine geçmez.
 Son kontrol: 2026-06-23
 
+### DEC-20260627-01 — Production v1 modernizasyon kapsam kilidi
+
+Durum: Onaylı
+Karar: `docs/production-v1-modernization-plan-2026-06-27.md` v1 modernizasyon dalının kaynak
+planıdır. Faz 0 karar/sözleşme hizalamasıdır; per-tenant `User`, TC/telefon ile giriş, zorunlu
+şifre değişimi, akademik taksonomi (`Alan`, `GradeLevelCourse`, `Class.alanId`) ve PII kolon
+düşürmeleri ayrı migration dalgaları olarak uygulanır. Bu dilimde veli finans/duyuru/destek
+varsayılanları açık, SMS varsayılanı kapalıdır; SMS kodu ve Netgsm adapter kalır ama
+`SMS_ENABLED=false` v1 varsayılanıdır ve SMS sağlayıcı kanıtı v1 go-live blocker'ı değildir.
+Kaynak: `docs/production-v1-modernization-plan-2026-06-27.md`.
+Kanıt: `apps/api/src/school/guardian-student-store.ts`, `apps/api/src/school/school.service.ts`,
+`apps/api/src/sms-batch/sms-batch.service.ts`, `apps/api/src/search/search.service.ts`, `.env.example`,
+`packages/db/prisma/migrations/20260627123000_guardian_student_sms_default_off/migration.sql`,
+`packages/db/prisma/migrations/20260627143000_drop_student_birthdate_guardian_relation_fields/migration.sql`,
+`packages/db/prisma/migrations/20260627152000_add_global_search_trigram_indexes/migration.sql`,
+`packages/db/prisma/migrations/20260627154000_add_alan_grade_level_courses/migration.sql`.
+Etkilenen ADR: Yok
+Açık soru: Per-tenant giriş yolu (`/k/{slug}/giris` veya kurum kodu alanı) ve akademik taksonomi
+ortak ders kapsamı sonraki migration dalında netleştirilecek.
+Son kontrol: 2026-06-27
+
 ## Faz Öncesi Onay Gerektirenler
 
 | ID | Faz | Bloklar mı? | Soru | Beklenen kanıt |

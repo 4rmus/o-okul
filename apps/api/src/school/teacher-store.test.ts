@@ -30,8 +30,8 @@ describe("PostgresTeacherStore", () => {
       async () => {
         await store.list();
         await store.findById("teacher-a");
-        await store.create({ tenantId: "tenant-a", firstName: "Ece", lastName: "Ogretmen", branch: "Fen" });
-        await store.update("teacher-a", { firstName: "Ayse Guncel" });
+        await store.create({ tenantId: "tenant-a", firstName: "Ece", lastName: "Ogretmen", branch: "Fen", phone: "5550000010" });
+        await store.update("teacher-a", { firstName: "Ayse Guncel", phone: "5550000011" });
         await store.purgePii("teacher-a");
         await store.softDelete("teacher-a", "2026-06-01T12:00:00.000Z");
       },
@@ -42,9 +42,9 @@ describe("PostgresTeacherStore", () => {
     expect(businessQueries[0]?.sql).toContain('SELECT * FROM "Teacher"');
     expect(businessQueries[1]?.values).toEqual(["teacher-a"]);
     expect(businessQueries[2]?.sql).toContain('INSERT INTO "Teacher"');
-    expect(businessQueries[2]?.values).toEqual([expect.any(String), "tenant-a", "Ece", "Ogretmen", "Fen"]);
+    expect(businessQueries[2]?.values).toEqual([expect.any(String), "tenant-a", "Ece", "Ogretmen", "Fen", null, null, "5550000010"]);
     expect(businessQueries[4]?.sql).toContain('UPDATE "Teacher"');
-    expect(businessQueries[4]?.values).toEqual(["teacher-a", "Ayse Guncel", null, false, null]);
+    expect(businessQueries[4]?.values).toEqual(["teacher-a", "Ayse Guncel", null, false, null, null, null, true, "5550000011"]);
     expect(businessQueries[6]?.sql).toContain('"firstName" = \'Anonim\'');
     expect(businessQueries[8]?.values).toEqual(["teacher-a", "2026-06-01T12:00:00.000Z"]);
   });

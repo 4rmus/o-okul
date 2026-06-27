@@ -65,5 +65,24 @@ services:
       - "traefik.http.middlewares.api-security-headers.headers.contentsecuritypolicy=default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
       - "traefik.http.services.api.loadbalancer.server.port=3100"
 
+  evidence:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${DOCKER_FRONTEND_NETWORK:-o-okul_frontend_net}"
+      - "traefik.http.routers.evidence.rule=Host(`${DOMAIN}`) && PathPrefix(`/evidence`)"
+      - "traefik.http.routers.evidence.entrypoints=websecure"
+      - "traefik.http.routers.evidence.priority=110"
+      - "traefik.http.routers.evidence.service=evidence"
+      - "traefik.http.routers.evidence.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.evidence.middlewares=evidence-strip,evidence-security-headers"
+      - "traefik.http.middlewares.evidence-strip.stripprefix.prefixes=/evidence"
+      - "traefik.http.middlewares.evidence-security-headers.headers.stsseconds=15552000"
+      - "traefik.http.middlewares.evidence-security-headers.headers.stsincludesubdomains=true"
+      - "traefik.http.middlewares.evidence-security-headers.headers.contenttypenosniff=true"
+      - "traefik.http.middlewares.evidence-security-headers.headers.framedeny=true"
+      - "traefik.http.middlewares.evidence-security-headers.headers.referrerpolicy=no-referrer"
+      - "traefik.http.middlewares.evidence-security-headers.headers.contentsecuritypolicy=default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+      - "traefik.http.services.evidence.loadbalancer.server.port=8080"
+
 volumes:
   traefik_letsencrypt:

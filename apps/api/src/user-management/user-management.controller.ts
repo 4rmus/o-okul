@@ -1,10 +1,10 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
-import { UserManagementService } from "./user-management.service.js";
+import { type TenantUserPasswordResetResult, UserManagementService } from "./user-management.service.js";
 import type { TenantUserRecord } from "./user-management-store.js";
 import {
   type TenantUserCreateBody,
@@ -38,11 +38,18 @@ export class UserManagementController {
   ): Promise<TenantUserRecord> {
     return this.users.setRoles(getRequestContext(), userId, body);
   }
+
+  @Post(":userId/reset-password")
+  @HttpCode(200)
+  @RequireCapability("user:manage")
+  resetPassword(@Param("userId") userId: string): Promise<TenantUserPasswordResetResult> {
+    return this.users.resetPassword(getRequestContext(), userId);
+  }
 }
 
 const tenantUserListFields = [
   { name: "name", read: (record: TenantUserRecord) => record.name },
-  { name: "email", read: (record: TenantUserRecord) => record.email },
+  { name: "email", read: (record: TenantUserRecord) => record.email ?? "" },
   { name: "roles", read: (record: TenantUserRecord) => record.roles.join(",") },
   { name: "createdAt", read: (record: TenantUserRecord) => record.createdAt },
   { name: "updatedAt", read: (record: TenantUserRecord) => record.updatedAt },

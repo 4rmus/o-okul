@@ -9,8 +9,11 @@ import { RolesGuard } from "../rbac/roles.guard.js";
 import { ExamService, type CreateExamParticipantInput } from "./exam.service.js";
 
 const examBaseBodySchema = z.object({
+  alanId: optionalTrimmedString,
   classId: optionalTrimmedString,
   classIds: z.array(requiredTrimmedString).optional(),
+  examType: optionalTrimmedString,
+  gradeLevelId: optionalTrimmedString,
   startsAt: optionalIsoDateTime("EXAM_STARTS_AT_INVALID"),
   title: requiredTrimmedString,
 }).strict();
@@ -44,6 +47,9 @@ export class ExamController {
   ): Promise<ExamRecord> {
     return this.exams.create(getRequestContext(), {
       title: body.title,
+      gradeLevelId: body.gradeLevelId,
+      alanId: body.alanId,
+      examType: body.examType,
       startsAt: body.startsAt,
       classId: body.classId,
       classIds: body.classIds,
@@ -71,6 +77,9 @@ export class ExamController {
   ): Promise<ExamRecord> {
     return this.exams.update(getRequestContext(), examId, {
       title: body.title,
+      gradeLevelId: body.gradeLevelId,
+      alanId: body.alanId,
+      examType: body.examType,
       startsAt: body.startsAt,
       classId: body.classId,
       classIds: body.classIds,

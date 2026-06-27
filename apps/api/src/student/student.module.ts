@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { AuditLogModule } from "../audit-log/audit-log.module.js";
 import { IdentityInvitationModule } from "../identity-invitation/identity-invitation.module.js";
+import { IdentityProvisioningModule } from "../identity-provisioning/identity-provisioning.module.js";
 import { SchoolModule } from "../school/school.module.js";
 import { createStudentClassHistoryStore, studentClassHistoryStoreToken } from "./student-class-history-store.js";
 import { StudentController } from "./student.controller.js";
@@ -9,7 +10,7 @@ import { StudentImportService } from "./student-import.service.js";
 import { StudentService } from "./student.service.js";
 
 @Module({
-  imports: [AuditLogModule, IdentityInvitationModule, SchoolModule],
+  imports: [AuditLogModule, IdentityInvitationModule, IdentityProvisioningModule, SchoolModule],
   controllers: [StudentController],
   providers: [
     StudentImportService,

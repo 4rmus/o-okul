@@ -1648,7 +1648,7 @@ runRlsLiveNegativeCheck({
 runRlsLiveNegativeCheck({
   label: "RLS live extra table negative",
   path: "docs/evidence-templates/rls-live.extra-table.tmp.json",
-  expectedFailure: "schema.tablesVerified tam 54 tablo icermeli.",
+  expectedFailure: "schema.tablesVerified tam 57 tablo icermeli.",
   mutate: (fixture) => {
     fixture.schema.tablesVerified.push("UnexpectedTenantTable");
   },
@@ -5485,8 +5485,8 @@ function runStagingEvidenceEnvNegativeCheck() {
   const path = "docs/evidence-templates/staging-evidence.empty-required.tmp.env";
   const workflowPath = "docs/evidence-templates/staging-deploy.bad-order.tmp.yml";
   const contents = readFileSync("docs/evidence-templates/staging-evidence.env.example", "utf8").replace(
-    /^NETGSM_USERCODE=.*$/m,
-    "NETGSM_USERCODE=",
+    /^S3_ACCESS_KEY_ID=.*$/m,
+    "S3_ACCESS_KEY_ID=",
   );
   writeFileSync(path, contents);
 
@@ -5500,7 +5500,7 @@ function runStagingEvidenceEnvNegativeCheck() {
       console.error("Production evidence template kontrolü başarısız: staging env empty required negative beklenen şekilde kırılmadı.");
       process.exit(1);
     }
-    if (!output.includes("boş env değeri içeriyor: NETGSM_USERCODE")) {
+    if (!output.includes("boş env değeri içeriyor: S3_ACCESS_KEY_ID")) {
       console.error("Production evidence template kontrolü başarısız: staging env empty required negative beklenen hata yok.");
       console.error(output);
       process.exit(1);
@@ -7867,6 +7867,8 @@ function createValidProdEnvForNegativeCheck() {
     QUEUE_METRICS_ENABLED: "true",
     QUEUE_BOARD_BASIC_AUTH_USER: "ops-admin",
     QUEUE_BOARD_BASIC_AUTH_PASSWORD: "queue-board-password-1234567890123",
+    SMS_ENABLED: "true",
+    NEXT_PUBLIC_SMS_ENABLED: "true",
     SMS_PROVIDER: "netgsm",
     SMS_ALLOW_NOOP_IN_PRODUCTION: "false",
     SMS_SMOKE_TO: "+905551112233",

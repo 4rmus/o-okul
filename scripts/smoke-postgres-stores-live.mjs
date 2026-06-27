@@ -122,16 +122,16 @@ try {
     email: `managed-${runId}@example.test`,
     name: "Managed Store User",
     password: "password1",
-    roles: ["TEACHER"],
+    roles: ["ASSISTANT_ADMIN"],
   });
   userIds.push(managedUser.id);
-  assertArrayEqual(managedUser.roles, ["TEACHER"], "USER_MANAGEMENT_CREATE_ROLES_MISMATCH");
-  const updatedManagedUser = await userManagementStore.setTenantRoles(tenantA, managedUser.id, ["STUDENT"]);
-  assertArrayEqual(updatedManagedUser?.roles ?? [], ["STUDENT"], "USER_MANAGEMENT_UPDATE_ROLES_MISMATCH");
+  assertArrayEqual(managedUser.roles, ["ASSISTANT_ADMIN"], "USER_MANAGEMENT_CREATE_ROLES_MISMATCH");
+  const updatedManagedUser = await userManagementStore.setTenantRoles(tenantA, managedUser.id, ["TENANT_ADMIN"]);
+  assertArrayEqual(updatedManagedUser?.roles ?? [], ["TENANT_ADMIN"], "USER_MANAGEMENT_UPDATE_ROLES_MISMATCH");
   await assertEmptyFromTenant(tenantB, () => userManagementStore.listTenantUsers(tenantB), "USER_MANAGEMENT_RLS_LEAK");
 
   const classRecord = await withTenant(tenantA, () =>
-    classStore.create({ tenantId: tenantA, name: "Store Smoke 8-A", level: "8" }),
+    classStore.create({ tenantId: tenantA, name: "Store Smoke 8-A" }),
   );
   assertEqual(classRecord.tenantId, tenantA, "CLASS_TENANT_MISMATCH");
   assertEqual(classRecord.name, "Store Smoke 8-A", "CLASS_CREATE_MISMATCH");

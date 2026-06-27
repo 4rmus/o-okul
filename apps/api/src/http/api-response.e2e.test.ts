@@ -45,7 +45,6 @@ describe("API success response envelope", () => {
         campusId: "campus-main",
         gradeLevelId: "grade-8",
         name: "8-A",
-        level: "8",
         section: "A",
       },
     });
@@ -64,7 +63,6 @@ describe("API success response envelope", () => {
         campusId: "campus-main",
         gradeLevelId: "grade-8",
         name: "8-A",
-        level: "8",
         section: "A",
       }],
       meta: { total: 1, page: 1, limit: 1, totalPages: 1 },
@@ -75,7 +73,7 @@ describe("API success response envelope", () => {
     const created = await request(server)
       .post(`/${apiPrefix}/classes`)
       .set("Authorization", `Bearer ${accessToken}`)
-      .send({ name: "10-A", level: "10" })
+      .send({ name: "10-A" })
       .expect(201);
     const classId = (created.body as { data: { id: string } }).data.id;
 

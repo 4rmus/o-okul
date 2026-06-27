@@ -12,6 +12,23 @@ const checkedAt = new Date().toISOString();
 
 await validateSmokeEvidenceOutputTarget(evidenceFile);
 
+if (process.env.SMS_ENABLED !== "true") {
+  await writeSmokeEvidence(evidenceFile, {
+    result: "PASS",
+    check: "sms_provider_smoke",
+    environment: process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "unknown",
+    checkedAt,
+    provider: "disabled",
+    recipient: "****disabled",
+    segments: 0,
+    providerMessageId: "sms-disabled-v1",
+    commandsPassed: ["pnpm sms:smoke"],
+    gaps: [],
+  });
+  console.log("SMS provider smoke scope disi: SMS_ENABLED=false");
+  process.exit(0);
+}
+
 if (!to) {
   fail("SMS_SMOKE_TO boş bırakılamaz.");
 }

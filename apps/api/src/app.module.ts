@@ -24,6 +24,7 @@ import { ReportModule } from "./report/report.module.js";
 import { RolePreviewModule } from "./role-preview/role-preview.module.js";
 import { SchoolModule } from "./school/school.module.js";
 import { SecurityHeadersMiddleware } from "./security/security-headers.middleware.js";
+import { SearchModule } from "./search/search.module.js";
 import { SmsBatchModule } from "./sms-batch/sms-batch.module.js";
 import { StudentModule } from "./student/student.module.js";
 import { SupportTicketModule } from "./support-ticket/support-ticket.module.js";
@@ -57,6 +58,7 @@ import { UserManagementModule } from "./user-management/user-management.module.j
     RolePreviewModule,
     ScheduleModule,
     SchoolModule,
+    SearchModule,
     SmsBatchModule,
     StudentModule,
     StudySessionModule,

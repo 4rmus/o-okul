@@ -128,6 +128,7 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
   const queryClient = useQueryClient();
   const rolePreviewToken = readRolePreviewToken(searchParams);
   const reportExamId = readReportExamId(searchParams);
+  const requestedStudentId = readRequestedStudentId(searchParams);
   const isRolePreview = Boolean(rolePreviewToken);
   const canReadPortal = Boolean(auth && (auth.session.subjectType === "TEACHER" || isRolePreview));
   const queryKey = ["next-teacher-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", reportExamId];
@@ -175,24 +176,24 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
     const visibleTermIds = new Set(query.data.schedule.map((lesson) => lesson.termId).filter((termId): termId is string => Boolean(termId)));
     setAttendanceForm((current) => ({
       ...current,
-      studentId: current.studentId && visibleStudentIds.has(current.studentId) ? current.studentId : firstStudentId,
+      studentId: resolveRequestedStudentId(requestedStudentId, current.studentId, firstStudentId, visibleStudentIds),
       courseId: current.courseId && visibleCourseIds.has(current.courseId) ? current.courseId : firstCourseId,
       termId: current.termId && visibleTermIds.has(current.termId) ? current.termId : firstTermId,
     }));
     setNoteForm((current) => ({
       ...current,
-      studentId: current.studentId && visibleStudentIds.has(current.studentId) ? current.studentId : firstStudentId,
+      studentId: resolveRequestedStudentId(requestedStudentId, current.studentId, firstStudentId, visibleStudentIds),
       courseId: current.courseId && visibleCourseIds.has(current.courseId) ? current.courseId : firstCourseId,
       termId: current.termId && visibleTermIds.has(current.termId) ? current.termId : firstTermId,
     }));
     setMaterialForm((current) => ({
       ...current,
       materialId: current.materialId || firstMaterialId,
-      studentId: current.studentId && visibleStudentIds.has(current.studentId) ? current.studentId : firstStudentId,
+      studentId: resolveRequestedStudentId(requestedStudentId, current.studentId, firstStudentId, visibleStudentIds),
       courseId: current.courseId && visibleCourseIds.has(current.courseId) ? current.courseId : firstCourseId,
       termId: current.termId && visibleTermIds.has(current.termId) ? current.termId : firstTermId,
     }));
-  }, [query.data, query.isSuccess]);
+  }, [query.data, query.isSuccess, requestedStudentId]);
 
   const data = query.data;
   const students = data?.students ?? [];
@@ -1267,6 +1268,21 @@ function teacherPortalContext(view: TeacherPortalView, label: string, selectedSt
     label,
     meta: isRolePreview ? "Salt-okuma" : "Canlı öğretmen hesabı",
   };
+}
+
+function readRequestedStudentId(searchParams: Pick<URLSearchParams, "get">): string {
+  return searchParams.get("studentId")?.trim() ?? "";
+}
+
+function resolveRequestedStudentId(
+  requestedStudentId: string,
+  currentStudentId: string,
+  firstStudentId: string,
+  visibleStudentIds: ReadonlySet<string>,
+): string {
+  if (requestedStudentId && visibleStudentIds.has(requestedStudentId)) return requestedStudentId;
+  if (currentStudentId && visibleStudentIds.has(currentStudentId)) return currentStudentId;
+  return firstStudentId;
 }
 
 function todayInputValue() {

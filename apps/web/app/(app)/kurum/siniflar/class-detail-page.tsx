@@ -367,7 +367,7 @@ function buildClassSummaryItems(detail: ClassDetailData, classReport: ReturnType
       description: campusLabel(detail),
       key: "grade",
       label: "Seviye / şube",
-      tone: detail.gradeLevelName || detail.record.level ? "info" : "warning",
+      tone: detail.gradeLevelName ? "info" : "warning",
       value: `${gradeLevelLabel(detail)} / ${detail.record.section ?? "Şube yok"}`,
     },
     {
@@ -400,7 +400,7 @@ function buildClassSummaryBadges(detail: ClassDetailData, reportState: ClassRepo
     },
     {
       key: "grade",
-      label: detail.gradeLevelName ? "Seviye eşleşti" : detail.record.gradeLevelId ? "Seviye eşleşmedi" : "Legacy seviye",
+      label: detail.gradeLevelName ? "Seviye eşleşti" : detail.record.gradeLevelId ? "Seviye eşleşmedi" : "Seviye atanmadı",
       tone: detail.gradeLevelName ? "success" : detail.record.gradeLevelId ? "warning" : "neutral",
     },
   ];
@@ -570,7 +570,7 @@ function countStudentsByStatus(students: StudentRecord[], status: StudentRecord[
 }
 
 function gradeLevelLabel(detail: ClassDetailData) {
-  return detail.gradeLevelName ?? detail.record.level ?? "Seviye eşleşmedi";
+  return detail.gradeLevelName ?? "Seviye eşleşmedi";
 }
 
 function campusLabel(detail: ClassDetailData) {

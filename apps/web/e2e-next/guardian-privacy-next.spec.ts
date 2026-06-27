@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
+const smsEnabled = process.env.NEXT_PUBLIC_SMS_ENABLED === "true";
 
 const corsHeaders = {
   "access-control-allow-credentials": "true",
@@ -16,8 +17,6 @@ interface GuardianLinkBody {
   canReceiveAnnouncements?: boolean;
   canReceiveSms?: boolean;
   canViewFinance?: boolean;
-  isPrimary?: boolean;
-  relationshipType?: string;
   studentId?: string;
 }
 
@@ -42,18 +41,21 @@ test.describe("Veli gizlilik ve izin UX'i", () => {
     const relationshipRegion = page.getByRole("table", { name: "Veli öğrenci bağlantıları" });
     await expect(relationshipRegion).toContainText("ham iletişim bilgisi");
     await expect(relationshipRegion).toContainText("Finans kapalı");
-    await expect(relationshipRegion).toContainText("SMS kapalı");
+    if (smsEnabled) {
+      await expect(relationshipRegion).toContainText("SMS kapalı");
+    } else {
+      await expect(relationshipRegion).not.toContainText("SMS");
+    }
     await expect(relationshipRegion).toContainText("Duyuru kapalı");
     await expect(relationshipRegion).toContainText("Destek kapalı");
 
     const linkRegion = page.getByLabel("Veli öğrenci bağı ekle");
     await expect(linkRegion.getByRole("checkbox", { name: /Finans görünürlüğü/ })).not.toBeChecked();
-    await expect(linkRegion.getByRole("checkbox", { name: /SMS alabilir/ })).not.toBeChecked();
+    await expect(linkRegion.getByRole("checkbox", { name: /SMS alabilir/ })).toHaveCount(smsEnabled ? 1 : 0);
     await expect(linkRegion.getByRole("checkbox", { name: /Duyuru görebilir/ })).not.toBeChecked();
     await expect(linkRegion.getByRole("checkbox", { name: /Destek talebi açabilir/ })).not.toBeChecked();
 
     await linkRegion.getByLabel("Öğrenci", { exact: true }).selectOption("student-b");
-    await linkRegion.getByLabel("İlişki", { exact: true }).selectOption("FATHER");
     await linkRegion.getByRole("button", { name: "Bağla" }).click();
 
     await expect.poll(() => capturedLinks.at(-1)).toMatchObject({
@@ -61,8 +63,6 @@ test.describe("Veli gizlilik ve izin UX'i", () => {
       canReceiveAnnouncements: false,
       canReceiveSms: false,
       canViewFinance: false,
-      isPrimary: true,
-      relationshipType: "FATHER",
       studentId: "student-b",
     });
     await expect.poll(() => forbiddenBulkCalls).toEqual([]);
@@ -116,7 +116,7 @@ async function openGuardianPortal(page: Page, visibility: "false" | "omitted") {
 }
 
 async function installGuardianPrivacyMocks(page: Page, role: TenantRole, capturedLinks: GuardianLinkBody[]) {
-  const links = [createGuardianLink("guardian-link-a", "student-a", true)];
+  const links = [createGuardianLink("guardian-link-a", "student-a")];
   const forbiddenBulkCalls: string[] = [];
 
   await page.route("**/api/v1/**", async (route) => {
@@ -144,7 +144,7 @@ async function installGuardianPrivacyMocks(page: Page, role: TenantRole, capture
     if (path === "/guardians/guardian-a/students" && route.request().method() === "POST") {
       const body = route.request().postDataJSON() as GuardianLinkBody;
       capturedLinks.push(body);
-      links.push(createGuardianLink("guardian-link-created", body.studentId ?? "student-b", Boolean(body.isPrimary), body));
+      links.push(createGuardianLink("guardian-link-created", body.studentId ?? "student-b", body));
       return fulfillData(route, links.at(-1));
     }
 
@@ -252,7 +252,6 @@ function createClass() {
     campusId: "campus-main",
     gradeLevelId: "grade-8",
     id: "class-8a",
-    level: "8",
     name: "8-A",
     section: "A",
     tenantId: "tenant-guardian-privacy",
@@ -298,7 +297,7 @@ function createGuardianPortalProfile() {
 }
 
 function createGuardianPortalPreferences(visibility: "false" | "omitted") {
-  const preferences = createGuardianLink("guardian-link-a", "student-a", true, {
+  const preferences = createGuardianLink("guardian-link-a", "student-a", {
     canOpenSupportTickets: true,
     canReceiveAnnouncements: true,
     canReceiveSms: true,
@@ -310,8 +309,6 @@ function createGuardianPortalPreferences(visibility: "false" | "omitted") {
     canReceiveSms: preferences.canReceiveSms,
     guardianId: preferences.guardianId,
     id: preferences.id,
-    isPrimary: preferences.isPrimary,
-    relationshipType: preferences.relationshipType,
     studentId: preferences.studentId,
     tenantId: preferences.tenantId,
   };
@@ -331,7 +328,7 @@ function createPortalPaymentPlans() {
   ];
 }
 
-function createGuardianLink(id: string, studentId: string, isPrimary: boolean, overrides: GuardianLinkBody = {}) {
+function createGuardianLink(id: string, studentId: string, overrides: GuardianLinkBody = {}) {
   return {
     canOpenSupportTickets: overrides.canOpenSupportTickets ?? false,
     canReceiveAnnouncements: overrides.canReceiveAnnouncements ?? false,
@@ -339,8 +336,6 @@ function createGuardianLink(id: string, studentId: string, isPrimary: boolean, o
     canViewFinance: overrides.canViewFinance ?? false,
     guardianId: "guardian-a",
     id,
-    isPrimary,
-    relationshipType: overrides.relationshipType ?? "MOTHER",
     studentId,
     tenantId: "tenant-guardian-privacy",
   };

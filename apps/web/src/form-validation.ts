@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { portalSubjectRoles, tenantAssignableRoles } from "@o-okul/shared-types";
+import { portalSubjectRoles } from "@o-okul/shared-types";
 
 const requiredText = (fieldName: string) => z.string().trim().min(1, `${fieldName} zorunludur.`);
 const optionalText = () => z.string().trim();
@@ -27,7 +27,7 @@ const requiredDateTime = (fieldName: string) => requiredText(fieldName).refine(i
 
 export const classFormSchema = z.object({
   name: requiredText("Sınıf adı"),
-  level: optionalText(),
+  alanId: optionalText(),
   campusId: optionalText(),
   gradeLevelId: optionalText(),
   section: optionalText(),
@@ -92,7 +92,10 @@ export const examFormSchema = z.object({
 });
 
 export const examWithClassFormSchema = examFormSchema.extend({
+  alanId: optionalText(),
   classIds: z.array(z.string()).min(1, "En az bir sınıf seçilmelidir."),
+  examType: z.enum(["", "SCHOOL", "LGS", "TYT", "AYT", "KPSS"]),
+  gradeLevelId: optionalText(),
 });
 
 export const examParticipantFormSchema = z.object({
@@ -237,13 +240,10 @@ export const studentFormSchema = z.object({
   nationalId: optionalNationalId,
   phone: optionalText(),
   email: optionalEmail,
-  birthDate: optionalDate,
   guardianFirstName: optionalText(),
   guardianLastName: optionalText(),
   guardianPhone: optionalText(),
   guardianEmail: optionalEmail,
-  guardianRelationshipType: z.enum(["MOTHER", "FATHER", "GUARDIAN", "EMERGENCY_CONTACT", "OTHER"]),
-  guardianIsPrimary: z.boolean(),
   guardianCanViewFinance: z.boolean(),
   guardianCanReceiveSms: z.boolean(),
   guardianCanReceiveAnnouncements: z.boolean(),
@@ -322,7 +322,7 @@ export const homeworkMaterialFormSchema = z.object({
   description: optionalText(),
 });
 
-export const userRolesSchema = z.array(z.enum(tenantAssignableRoles)).min(1, "En az bir rol seçilmelidir.");
+export const userRolesSchema = z.array(z.enum(["TENANT_ADMIN", "ASSISTANT_ADMIN"])).min(1, "En az bir rol seçilmelidir.");
 
 export const tenantUserFormSchema = z.object({
   email: requiredText("E-posta").email("E-posta geçerli olmalıdır."),

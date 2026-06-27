@@ -9,8 +9,10 @@ import type {
   TeacherRecord,
 } from "@o-okul/shared-types";
 import ExcelJS from "exceljs";
+import { normalizeTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { maskTcIdentity, normalizeTcIdentity } from "../student/tc-identity.js";
 import { type ClassStore, classStoreToken } from "./class-store.js";
 import { type CourseStore, courseStoreToken } from "./course-store.js";
 import { SchoolService } from "./school.service.js";
@@ -24,7 +26,11 @@ interface TeacherImportInput {
   fileBase64?: string;
 }
 
-type ParsedTeacherImportRow = TeacherImportPreviewRow & { hasCourseColumn: boolean };
+type ParsedTeacherImportRow = TeacherImportPreviewRow & {
+  hasCourseColumn: boolean;
+  nationalId?: string;
+  phone?: string;
+};
 
 const maxTeacherImportBytes = 5 * 1024 * 1024;
 
@@ -44,8 +50,7 @@ export class TeacherImportService {
       throw new BadRequestException("IMPORT_FILE_REQUIRED");
     }
 
-    const rows = await this.readRows(input.fileBase64);
-    const errors = await this.validateRows(context, rows);
+    const { rows, errors } = await this.readAndValidateRows(context, input.fileBase64);
     return {
       dryRun: true,
       totalRows: rows.length,
@@ -71,13 +76,16 @@ export class TeacherImportService {
   }
 
   private async importOnce(context: RequestContext, input: TeacherImportInput): Promise<TeacherImportResult> {
-    const dryRun = await this.dryRun(context, input);
-    if (dryRun.errors.length > 0) {
+    if (!input.fileBase64) {
+      throw new BadRequestException("IMPORT_FILE_REQUIRED");
+    }
+    const { rows, errors } = await this.readAndValidateRows(context, input.fileBase64);
+    if (errors.length > 0) {
       throw new BadRequestException({
         error: {
           code: "TEACHER_IMPORT_INVALID",
           message: "Öğretmen aktarım dosyası geçersiz.",
-          details: dryRun.errors,
+          details: errors,
         },
       });
     }
@@ -95,7 +103,7 @@ export class TeacherImportService {
     const createdAssignments: TeacherAssignmentRecord[] = [];
     let createdTeachers = 0;
 
-    for (const row of dryRun.validRows) {
+    for (const row of rows) {
       const key = teacherKey(row);
       let teacher = teacherByKey.get(key);
       if (!teacher) {
@@ -103,9 +111,17 @@ export class TeacherImportService {
           branch: row.branch,
           firstName: row.firstName,
           lastName: row.lastName,
+          nationalId: row.nationalId,
+          phone: row.phone,
         });
         teacherByKey.set(key, teacher);
         createdTeachers += 1;
+      } else if (row.nationalId && row.phone && !teacher.userId) {
+        teacher = await this.school.updateTeacher(context, teacher.id, {
+          nationalId: row.nationalId,
+          phone: row.phone,
+        });
+        teacherByKey.set(key, teacher);
       }
       importedTeachers.set(teacher.id, teacher);
 
@@ -130,12 +146,23 @@ export class TeacherImportService {
     }
 
     return {
-      importedRows: dryRun.validRows.length,
+      importedRows: rows.length,
       createdTeachers,
       createdAssignments: createdAssignments.length,
       teachers: [...importedTeachers.values()],
       assignments: createdAssignments,
     };
+  }
+
+  private async readAndValidateRows(
+    context: RequestContext,
+    fileBase64: string | undefined,
+  ): Promise<{ rows: ParsedTeacherImportRow[]; errors: TeacherImportError[] }> {
+    if (!fileBase64) {
+      throw new BadRequestException("IMPORT_FILE_REQUIRED");
+    }
+    const rows = await this.readRows(fileBase64);
+    return { rows, errors: await this.validateRows(context, rows) };
   }
 
   private async readRows(fileBase64: string): Promise<ParsedTeacherImportRow[]> {
@@ -194,6 +221,35 @@ export class TeacherImportService {
       if (!row.lastName) {
         errors.push({ row: row.row, field: "lastName", code: "REQUIRED" });
       }
+      if (row.nationalId && !row.phone) {
+        errors.push({ row: row.row, field: "phone", code: "REQUIRED" });
+      }
+      if (row.phone && !row.nationalId) {
+        errors.push({ row: row.row, field: "nationalId", code: "REQUIRED" });
+      }
+      let identityValid = true;
+      if (row.nationalId) {
+        try {
+          row.nationalId = normalizeTcIdentity(row.nationalId, "TEACHER_NATIONAL_ID_INVALID");
+        } catch {
+          identityValid = false;
+          errors.push({ row: row.row, field: "nationalId", code: "INVALID", value: row.nationalId });
+        }
+      }
+      if (row.phone) {
+        try {
+          row.phone = normalizeTurkishMobilePhone(row.phone, "TEACHER_PHONE_INVALID");
+        } catch {
+          identityValid = false;
+          errors.push({ row: row.row, field: "phone", code: "INVALID", value: row.phone });
+        }
+      }
+      if (identityValid && row.nationalId && row.phone) {
+        row.accountPreview = {
+          usernameMasked: maskTcIdentity(row.nationalId),
+          willCreate: true,
+        };
+      }
       if (row.courseName && !row.className) {
         errors.push({ row: row.row, field: "className", code: "REQUIRED" });
       }
@@ -227,7 +283,7 @@ function createSha256(bytes: Buffer): string {
 }
 
 function toPreviewRow(row: ParsedTeacherImportRow): TeacherImportPreviewRow {
-  const { hasCourseColumn: _hasCourseColumn, ...previewRow } = row;
+  const { hasCourseColumn: _hasCourseColumn, nationalId: _nationalId, phone: _phone, ...previewRow } = row;
   return previewRow;
 }
 
@@ -238,6 +294,8 @@ function readMatrixRows(matrix: Array<{ rowNumber: number; cells: string[] }>): 
   const firstNameIndex = findHeaderIndex(header, ["firstName", "ad", "adi", "adı", "isim"]) ?? 0;
   const lastNameIndex = findHeaderIndex(header, ["lastName", "soyad", "soyadi", "soyadı"]) ?? 1;
   const branchIndex = findHeaderIndex(header, ["branch", "brans", "branş", "dersBransi", "dersBranşı"]);
+  const nationalIdIndex = findHeaderIndex(header, ["nationalId", "tc", "tckn", "tcKimlik", "tcKimlikNo", "kimlikNo"]);
+  const phoneIndex = findHeaderIndex(header, ["phone", "telefon", "cepTelefonu", "cep", "gsm", "ogretmenTelefon", "öğretmenTelefon"]);
   const classIndex = findHeaderIndex(header, ["class", "className", "atanacakSinif", "atanacakSınıf", "sinif", "sınıf"]);
   const courseIndex = findHeaderIndex(header, ["course", "courseName", "ders", "dersAdi", "dersAdı"]);
 
@@ -245,9 +303,11 @@ function readMatrixRows(matrix: Array<{ rowNumber: number; cells: string[] }>): 
     const firstName = row.cells[firstNameIndex]?.trim() ?? "";
     const lastName = row.cells[lastNameIndex]?.trim() ?? "";
     const branch = branchIndex === undefined ? "" : row.cells[branchIndex]?.trim() ?? "";
+    const nationalId = nationalIdIndex === undefined ? "" : row.cells[nationalIdIndex]?.trim() ?? "";
+    const phone = phoneIndex === undefined ? "" : row.cells[phoneIndex]?.trim() ?? "";
     const className = classIndex === undefined ? "" : row.cells[classIndex]?.trim() ?? "";
     const courseName = courseIndex === undefined ? "" : row.cells[courseIndex]?.trim() ?? "";
-    if (!firstName && !lastName && !branch && !className && !courseName) continue;
+    if (!firstName && !lastName && !branch && !nationalId && !phone && !className && !courseName) continue;
 
     rows.push({
       row: row.rowNumber,
@@ -255,6 +315,8 @@ function readMatrixRows(matrix: Array<{ rowNumber: number; cells: string[] }>): 
       lastName,
       hasCourseColumn: courseIndex !== undefined,
       ...(branch ? { branch } : {}),
+      ...(nationalId ? { nationalId } : {}),
+      ...(phone ? { phone } : {}),
       ...(className ? { className } : {}),
       ...(courseName ? { courseName } : {}),
     });

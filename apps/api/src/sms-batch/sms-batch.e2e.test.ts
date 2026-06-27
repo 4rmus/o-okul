@@ -13,8 +13,10 @@ describe("SmsBatch API", () => {
   let producer: FakeProducer;
   let tenantAAccessToken: string;
   let teacherAAccessToken: string;
+  const originalSmsEnabled = process.env.SMS_ENABLED;
 
   beforeAll(async () => {
+    process.env.SMS_ENABLED = "true";
     producer = new FakeProducer();
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
@@ -41,11 +43,17 @@ describe("SmsBatch API", () => {
   });
 
   beforeEach(() => {
+    process.env.SMS_ENABLED = "true";
     producer.inputs = [];
   });
 
   afterAll(async () => {
     await app.close();
+    if (originalSmsEnabled === undefined) {
+      delete process.env.SMS_ENABLED;
+      return;
+    }
+    process.env.SMS_ENABLED = originalSmsEnabled;
   });
 
   it("TENANT_ADMIN SMS batch isteğini sms-batch queue'ya bağlar", async () => {
@@ -158,6 +166,33 @@ describe("SmsBatch API", () => {
         fields: [expect.objectContaining({ path: "recipients.0.to" })],
       },
     });
+
+    expect(producer.inputs).toHaveLength(0);
+  });
+
+  it("SMS_ENABLED açık değilse batch ve önizleme SMS_DISABLED döner", async () => {
+    process.env.SMS_ENABLED = "false";
+
+    await request(server)
+      .post("/sms-batches")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        templateId: "message-template-a",
+        recipients: [{ to: "5000000001" }],
+      })
+      .expect(400)
+      .expect((response) => {
+        expect(response.body.error.code).toBe("SMS_DISABLED");
+      });
+
+    await request(server)
+      .post("/sms-batches/recipients/preview")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ announcementId: "announcement-a", studentStatus: "ACTIVE" })
+      .expect(400)
+      .expect((response) => {
+        expect(response.body.error.code).toBe("SMS_DISABLED");
+      });
 
     expect(producer.inputs).toHaveLength(0);
   });

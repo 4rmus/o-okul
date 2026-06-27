@@ -142,7 +142,7 @@ describe("PostgresTenantStore", () => {
     expect(queries.some((query) => query.sql.includes('INSERT INTO "Tenant"'))).toBe(true);
     const insertUser = queries.find((query) => query.sql.includes('INSERT INTO "User"'));
     expect(insertUser?.sql).toContain('ON CONFLICT ("email") DO NOTHING');
-    expect(insertUser?.values).toHaveLength(4);
+    expect(insertUser?.values).toHaveLength(5);
     expect(queries.some((query) => query.sql.includes('INSERT INTO "TenantMembership"'))).toBe(true);
     expect(queries.at(-1)?.sql).toBe("COMMIT");
   });

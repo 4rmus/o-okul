@@ -8,6 +8,8 @@ import type {
   AcademicYearRecord,
   ClassRecord,
   CourseRecord,
+  GradeLevelCourseRecord,
+  GradeLevelRecord,
   StudentImportDryRunResult,
   StudentImportResult,
   TeacherImportDryRunResult,
@@ -22,6 +24,8 @@ type StepId = "general" | "term" | "courses" | "classes" | "people";
 type StageId = "7" | "8-LGS" | "10" | "11" | "12" | "TYT/AYT";
 type SetupImportFileExtension = "CSV" | "XLSX";
 type SetupUploadStatusState = "idle" | "ready" | "error";
+type SetupCourseOption = { id: string; name: string; code: string; isDefault?: boolean; stageId?: StageId };
+type SetupCourseGroup = { title: string; source: string; courses: SetupCourseOption[]; stageId?: StageId };
 
 interface SetupUploadStatus {
   badge: string;
@@ -155,10 +159,11 @@ const stageOptions: Array<{ id: StageId; label: string }> = [
   { id: "TYT/AYT", label: "TYT/AYT" },
 ];
 
-const courseGroups: Array<{ title: string; source: string; courses: Array<{ id: string; name: string; code: string }> }> = [
+const fallbackCourseGroups: SetupCourseGroup[] = [
   {
     title: "7. sınıflar",
     source: "Ortaokul temel dersleri",
+    stageId: "7",
     courses: [
       { id: "7-turkce", name: "Türkçe", code: "7-TUR" },
       { id: "7-matematik", name: "Matematik", code: "7-MAT" },
@@ -171,6 +176,7 @@ const courseGroups: Array<{ title: string; source: string; courses: Array<{ id: 
   {
     title: "8. sınıflar / LGS",
     source: "LGS sınavı hazırlık dersleri",
+    stageId: "8-LGS",
     courses: [
       { id: "8-lgs-turkce", name: "Türkçe", code: "LGS-TUR" },
       { id: "8-lgs-matematik", name: "Matematik", code: "LGS-MAT" },
@@ -183,6 +189,7 @@ const courseGroups: Array<{ title: string; source: string; courses: Array<{ id: 
   {
     title: "10. sınıflar",
     source: "Lise ortak dersleri",
+    stageId: "10",
     courses: [
       { id: "10-edebiyat", name: "Türk Dili ve Edebiyatı", code: "10-EDE" },
       { id: "10-matematik", name: "Matematik", code: "10-MAT" },
@@ -199,6 +206,7 @@ const courseGroups: Array<{ title: string; source: string; courses: Array<{ id: 
   {
     title: "11, 12 ve TYT/AYT",
     source: "Alan gruplarına göre sınav hazırlık dersleri",
+    stageId: "TYT/AYT",
     courses: [
       { id: "ayt-temel-matematik", name: "Temel Matematik", code: "AYT-TMAT" },
       { id: "ayt-geometri", name: "Geometri", code: "AYT-GEO" },
@@ -218,7 +226,7 @@ const courseGroups: Array<{ title: string; source: string; courses: Array<{ id: 
   },
 ];
 
-const allCourseOptions = courseGroups.flatMap((group) => group.courses);
+const fallbackCourseOptions = fallbackCourseGroups.flatMap((group) => group.courses);
 const setupImportMaxBytes = 5 * 1024 * 1024;
 const setupImportAllowedExtensions = new Set<SetupImportFileExtension>(["CSV", "XLSX"]);
 
@@ -248,15 +256,31 @@ export function SetupWizard() {
     queryFn: () => loadCurrentTenant(auth?.accessToken ?? ""),
     enabled: Boolean(auth?.accessToken),
   });
+  const courseTemplatesQuery = useQuery({
+    queryKey: ["next-setup-course-templates", tenantId],
+    queryFn: () => loadCourseTemplateGroups(auth?.accessToken ?? ""),
+    enabled: Boolean(auth?.accessToken),
+  });
+  const courseGroups =
+    courseTemplatesQuery.data && courseTemplatesQuery.data.length > 0 ? courseTemplatesQuery.data : fallbackCourseGroups;
+  const allCourseOptions = useMemo(
+    () => courseGroups.flatMap((group) => group.courses.map((course) => ({ ...course, stageId: course.stageId ?? group.stageId }))),
+    [courseGroups],
+  );
+  const courseTemplateError = courseTemplatesQuery.isError
+    ? "Ders şablonları alınamadı."
+    : courseTemplatesQuery.isSuccess && (!courseTemplatesQuery.data || courseTemplatesQuery.data.length === 0)
+      ? "Ders şablonu bulunamadı."
+      : "";
   const activeStepIndex = Math.max(0, steps.findIndex((step) => step.id === activeStepId));
   const activeStep = steps[activeStepIndex]!;
   const stepValidation = useMemo(
-    () => new Map(steps.map((step) => [step.id, validateStep(step.id, draft)])),
-    [draft],
+    () => new Map(steps.map((step) => [step.id, validateStep(step.id, draft, allCourseOptions)])),
+    [allCourseOptions, draft],
   );
   const completedStepCount = steps.filter((step) => Object.keys(stepValidation.get(step.id) ?? {}).length === 0).length;
   const progressPercent = Math.round((completedStepCount / steps.length) * 100);
-  const selectedCourses = selectedCourseOptions(draft.courses.selectedCourseIds);
+  const selectedCourses = selectedCourseOptions(draft.courses.selectedCourseIds, allCourseOptions);
   const generatedClasses = generateClasses(draft.classes.classCounts);
   const courseCount = selectedCourses.length;
   const classCount = generatedClasses.length;
@@ -283,6 +307,22 @@ export function SetupWizard() {
     setDraft((current) => mergeTenantProfileDraft(current, tenantProfileQuery.data!));
   }, [draftStorageKey, loadedDraftKey, tenantProfileQuery.data]);
 
+  useEffect(() => {
+    const activeStageIds = activeStageIdsFromClassCounts(draft.classes.classCounts);
+    if (activeStageIds.length === 0) return;
+    setDraft((current) => {
+      const defaultCourseIds = defaultCourseIdsForStages(activeStageIdsFromClassCounts(current.classes.classCounts), allCourseOptions);
+      if (defaultCourseIds.length === 0 || sameStringList(current.courses.selectedCourseIds, defaultCourseIds)) return current;
+      return {
+        ...current,
+        courses: {
+          ...current.courses,
+          selectedCourseIds: defaultCourseIds,
+        },
+      };
+    });
+  }, [allCourseOptions, draft.classes.classCounts]);
+
   function updateDraft(section: keyof OnboardingDraft, nextValue: Partial<OnboardingDraft[typeof section]>) {
     setDraft((current) => ({
       ...current,
@@ -299,7 +339,7 @@ export function SetupWizard() {
   }
 
   function goNext() {
-    const nextErrors = validateStep(activeStep.id, draft);
+    const nextErrors = validateStep(activeStep.id, draft, allCourseOptions);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
     const nextStep = steps[activeStepIndex + 1];
@@ -376,13 +416,28 @@ export function SetupWizard() {
   async function finishSetup() {
     const allErrors = Object.fromEntries(
       steps.flatMap((step) =>
-        Object.entries(validateStep(step.id, draft)).map(([field, message]) => [`${step.id}.${field}`, message]),
+        Object.entries(validateStep(step.id, draft, allCourseOptions)).map(([field, message]) => [
+          `${step.id}.${field}`,
+          message,
+        ]),
       ),
     );
     if (Object.keys(allErrors).length > 0) {
-      const firstInvalidStep = steps.find((step) => Object.keys(validateStep(step.id, draft)).length > 0);
+      const firstInvalidStep = steps.find(
+        (step) => Object.keys(validateStep(step.id, draft, allCourseOptions)).length > 0,
+      );
       if (firstInvalidStep) setActiveStepId(firstInvalidStep.id);
       setErrors(allErrors);
+      return;
+    }
+    if (courseTemplatesQuery.isLoading) {
+      setActiveStepId("courses");
+      setSaveError("Ders şablonları yükleniyor. Lütfen birkaç saniye sonra tekrar deneyin.");
+      return;
+    }
+    if (courseTemplateError) {
+      setActiveStepId("courses");
+      setSaveError(courseTemplateError);
       return;
     }
     if (studentImportUploadStatus.state === "error") {
@@ -413,7 +468,13 @@ export function SetupWizard() {
     setSaveError("");
     setSavedSummary("");
     try {
-      const result = await saveSetup(auth.accessToken, draft, teacherImportFileBase64, studentImportFileBase64);
+      const result = await saveSetup(
+        auth.accessToken,
+        draft,
+        teacherImportFileBase64,
+        studentImportFileBase64,
+        allCourseOptions,
+      );
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["next-academic-years", tenantId] }),
         queryClient.invalidateQueries({ queryKey: ["next-academic-terms", tenantId] }),
@@ -500,7 +561,15 @@ export function SetupWizard() {
             <ClassesStep draft={draft} errors={errors} updateDraft={updateDraft} />
           ) : null}
           {activeStep.id === "courses" ? (
-            <CoursesStep draft={draft} errors={errors} updateDraft={updateDraft} />
+            <CoursesStep
+              allCourseOptions={allCourseOptions}
+              courseGroups={courseGroups}
+              draft={draft}
+              errorMessage={courseTemplateError}
+              errors={errors}
+              isLoading={courseTemplatesQuery.isLoading}
+              updateDraft={updateDraft}
+            />
           ) : null}
           {activeStep.id === "people" ? (
             <PeopleStep
@@ -684,15 +753,25 @@ function TermStep({
 }
 
 function CoursesStep({
+  allCourseOptions,
+  courseGroups,
   draft,
+  errorMessage,
   errors,
+  isLoading,
   updateDraft,
 }: {
+  allCourseOptions: SetupCourseOption[];
+  courseGroups: SetupCourseGroup[];
   draft: OnboardingDraft;
+  errorMessage: string;
   errors: StepErrors;
+  isLoading: boolean;
   updateDraft: (section: "courses", nextValue: Partial<OnboardingDraft["courses"]>) => void;
 }) {
-  const allCoursesSelected = draft.courses.selectedCourseIds.length === allCourseOptions.length;
+  const selectedCourseIds = new Set(draft.courses.selectedCourseIds);
+  const selectedVisibleCourseCount = allCourseOptions.filter((course) => selectedCourseIds.has(course.id)).length;
+  const allCoursesSelected = allCourseOptions.length > 0 && selectedVisibleCourseCount === allCourseOptions.length;
 
   function selectAllCourses() {
     updateDraft("courses", { selectedCourseIds: allCourseOptions.map((course) => course.id) });
@@ -711,10 +790,21 @@ function CoursesStep({
   return (
     <div className="next-onboarding-fields">
       <div className="next-onboarding-course-actions">
-        <Button variant="secondary" type="button" onClick={selectAllCourses} disabled={allCoursesSelected}>
+        <Button
+          variant="secondary"
+          type="button"
+          onClick={selectAllCourses}
+          disabled={allCoursesSelected || allCourseOptions.length === 0}
+        >
           Hepsini Seç
         </Button>
       </div>
+      {isLoading ? (
+        <p className="next-onboarding-success" role="status">
+          Ders şablonları yükleniyor.
+        </p>
+      ) : null}
+      {errorMessage ? <p className="next-form-error">{errorMessage}</p> : null}
       {courseGroups.map((group) => (
         <section className="next-onboarding-course-group" key={group.title}>
           <header>
@@ -783,7 +873,7 @@ function ClassesStep({
         <h3>Otomatik atanacak şubeler</h3>
         <div>
           {generatedClasses.map((classRecord) => (
-            <span key={`${classRecord.level}-${classRecord.section}`}>{classRecord.name}</span>
+            <span key={`${classRecord.stageId}-${classRecord.section}`}>{classRecord.name}</span>
           ))}
         </div>
       </section>
@@ -1007,10 +1097,10 @@ function FieldError({ message }: { message: string | undefined }) {
   return message ? <span className="next-form-error">{message}</span> : null;
 }
 
-function validateStep(stepId: StepId, draft: OnboardingDraft): StepErrors {
+function validateStep(stepId: StepId, draft: OnboardingDraft, courseOptions: SetupCourseOption[]): StepErrors {
   if (stepId === "general") return validateGeneral(draft.general);
   if (stepId === "term") return validateTerm(draft.term);
-  if (stepId === "courses") return validateCourses(draft.courses);
+  if (stepId === "courses") return validateCourses(draft.courses, courseOptions);
   if (stepId === "classes") return validateClasses(draft.classes);
   return validatePeople(draft.people);
 }
@@ -1038,8 +1128,10 @@ function validateTerm(term: OnboardingDraft["term"]): StepErrors {
   return errors;
 }
 
-function validateCourses(courses: OnboardingDraft["courses"]): StepErrors {
-  return selectedCourseOptions(courses.selectedCourseIds).length > 0 ? {} : { selectedCourseIds: "En az bir ders seçilmelidir." };
+function validateCourses(courses: OnboardingDraft["courses"], courseOptions: SetupCourseOption[]): StepErrors {
+  return selectedCourseOptions(courses.selectedCourseIds, courseOptions).length > 0
+    ? {}
+    : { selectedCourseIds: "En az bir ders seçilmelidir." };
 }
 
 function validateClasses(classes: OnboardingDraft["classes"]): StepErrors {
@@ -1177,15 +1269,41 @@ function describeSelectedUploadFileNotice(value: string, fallback: string) {
   return fallback;
 }
 
-function selectedCourseOptions(selectedCourseIds: string[]) {
+function selectedCourseOptions(selectedCourseIds: string[], courseOptions: SetupCourseOption[]) {
   const selected = new Set(selectedCourseIds);
-  const uniqueByName = new Map<string, { id: string; name: string; code: string }>();
-  for (const course of allCourseOptions) {
+  const uniqueByName = new Map<string, SetupCourseOption>();
+  for (const course of courseOptions) {
     if (selected.has(course.id) && !uniqueByName.has(course.name)) {
       uniqueByName.set(course.name, course);
     }
   }
   return [...uniqueByName.values()];
+}
+
+function activeStageIdsFromClassCounts(classCounts: Record<StageId, string>): StageId[] {
+  return stageOptions
+    .filter((stage) => {
+      const count = Number(classCounts[stage.id]);
+      return Number.isInteger(count) && count > 0;
+    })
+    .map((stage) => stage.id);
+}
+
+function defaultCourseIdsForStages(stageIds: StageId[], courseOptions: SetupCourseOption[]) {
+  const activeStages = new Set(stageIds);
+  const matchingCourses = courseOptions.filter((course) => courseMatchesActiveStages(course, activeStages));
+  const defaultCourses = matchingCourses.filter((course) => course.isDefault !== false);
+  return (defaultCourses.length > 0 ? defaultCourses : matchingCourses).map((course) => course.id);
+}
+
+function courseMatchesActiveStages(course: SetupCourseOption, activeStages: ReadonlySet<StageId>) {
+  if (!course.stageId) return true;
+  if (activeStages.has(course.stageId)) return true;
+  return course.stageId === "TYT/AYT" && (activeStages.has("11") || activeStages.has("12"));
+}
+
+function sameStringList(left: string[], right: string[]) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function generateClasses(classCounts: Record<StageId, string>) {
@@ -1195,9 +1313,9 @@ function generateClasses(classCounts: Record<StageId, string>) {
     return Array.from({ length: Math.min(classCount, 26) }, (_item, index) => {
       const section = String.fromCharCode(65 + index);
       return {
-        level: stage.id,
         name: `${stageClassPrefix(stage.id)} ${section}`,
         section,
+        stageId: stage.id,
       };
     });
   });
@@ -1217,6 +1335,7 @@ async function saveSetup(
   draft: OnboardingDraft,
   teacherImportFileBase64: string,
   studentImportFileBase64: string,
+  courseOptions: SetupCourseOption[],
 ) {
   await apiRequest<TenantProfileRecord>(accessToken, `${apiBaseUrl}/me/tenant`, {
     body: JSON.stringify({
@@ -1229,14 +1348,20 @@ async function saveSetup(
     method: "PATCH",
   });
 
-  const [existingCourses, existingClasses, existingYears, existingTerms] = await Promise.all([
+  const [existingCourses, existingClasses, existingYears, existingTerms, gradeLevels] = await Promise.all([
     apiListRequest<CourseRecord>(accessToken, `${apiBaseUrl}/courses?limit=200`),
     apiListRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes?limit=200`),
     apiListRequest<AcademicYearRecord>(accessToken, `${apiBaseUrl}/academic-years?limit=200`),
     apiListRequest<AcademicTermRecord>(accessToken, `${apiBaseUrl}/academic-terms?limit=200`),
+    apiListRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels?limit=200`),
   ]);
   const existingCourseNames = new Set(existingCourses.data.map((course) => normalizeValue(course.name)));
   const existingClassNames = new Set(existingClasses.data.map((classRecord) => normalizeValue(classRecord.name)));
+  const gradeLevelIdByStageId = new Map(
+    gradeLevels.data
+      .map((gradeLevel) => [stageIdFromGradeLevel(gradeLevel), gradeLevel.id] as const)
+      .filter((entry): entry is [StageId, string] => Boolean(entry[0])),
+  );
   const existingYear = existingYears.data.find((year) => normalizeValue(year.name) === normalizeValue(draft.term.academicYearName));
   let createdCourses = 0;
   let createdClasses = 0;
@@ -1276,7 +1401,7 @@ async function saveSetup(
     createdAcademicTerms += 1;
   }
 
-  for (const course of selectedCourseOptions(draft.courses.selectedCourseIds)) {
+  for (const course of selectedCourseOptions(draft.courses.selectedCourseIds, courseOptions)) {
     if (existingCourseNames.has(normalizeValue(course.name))) continue;
     await apiRequest<CourseRecord>(accessToken, `${apiBaseUrl}/courses`, {
       body: JSON.stringify({ code: course.code, name: course.name }),
@@ -1289,7 +1414,11 @@ async function saveSetup(
   for (const classRecord of generateClasses(draft.classes.classCounts)) {
     if (existingClassNames.has(normalizeValue(classRecord.name))) continue;
     await apiRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes`, {
-      body: JSON.stringify(classRecord),
+      body: JSON.stringify({
+        name: classRecord.name,
+        section: classRecord.section,
+        ...(gradeLevelIdByStageId.get(classRecord.stageId) ? { gradeLevelId: gradeLevelIdByStageId.get(classRecord.stageId) } : {}),
+      }),
       headers: { "content-type": "application/json" },
       method: "POST",
     });
@@ -1358,11 +1487,26 @@ function teacherImportErrorMessage(dryRun: TeacherImportDryRunResult) {
     if (requiredError.field === "className") {
       return `Öğretmen dosyasında ders ataması için sınıf alanı eksik. Satır: ${requiredError.row}.`;
     }
-    const fieldName = requiredError.field === "firstName" ? "ad" : "soyad";
+    const fieldName = teacherImportFieldLabel(requiredError.field);
     return `Öğretmen dosyasında zorunlu ${fieldName} alanı eksik. Satır: ${requiredError.row}.`;
   }
 
+  const invalidError = dryRun.errors.find((error) => error.code === "INVALID");
+  if (invalidError) {
+    return `Öğretmen dosyasında geçersiz ${teacherImportFieldLabel(invalidError.field)} var. Satır: ${invalidError.row}.`;
+  }
+
   return "Öğretmen aktarım dosyası içe aktarılamadı. Dosyayı kontrol edip tekrar deneyin.";
+}
+
+function teacherImportFieldLabel(field: string) {
+  if (field === "firstName") return "ad";
+  if (field === "lastName") return "soyad";
+  if (field === "nationalId") return "TC kimlik";
+  if (field === "phone") return "telefon";
+  if (field === "className") return "sınıf";
+  if (field === "courseName") return "ders";
+  return field;
 }
 
 function studentImportErrorMessage(dryRun: StudentImportDryRunResult) {
@@ -1378,7 +1522,7 @@ function studentImportErrorMessage(dryRun: StudentImportDryRunResult) {
 
   const requiredError = dryRun.errors.find((error) => error.code === "REQUIRED");
   if (requiredError) {
-    const fieldName = requiredError.field === "firstName" ? "ad" : "soyad";
+    const fieldName = studentImportFieldLabel(requiredError.field);
     return `Öğrenci dosyasında zorunlu ${fieldName} alanı eksik. Satır: ${requiredError.row}.`;
   }
 
@@ -1407,7 +1551,26 @@ function studentImportErrorMessage(dryRun: StudentImportDryRunResult) {
     return `Öğrenci dosyasında geçersiz TC kimlik no var. Satır: ${invalidNationalId.row}.`;
   }
 
+  const invalidPhone = dryRun.errors.find((error) => error.code === "INVALID_PHONE");
+  if (invalidPhone) {
+    return `Öğrenci dosyasında geçersiz telefon var. Satır: ${invalidPhone.row}.`;
+  }
+
   return "Öğrenci aktarım dosyası içe aktarılamadı. Dosyayı kontrol edip tekrar deneyin.";
+}
+
+function studentImportFieldLabel(field: string) {
+  if (field === "firstName") return "ad";
+  if (field === "lastName") return "soyad";
+  if (field === "nationalId") return "TC kimlik";
+  if (field === "phone") return "telefon";
+  if (field === "className") return "sınıf";
+  if (field === "email") return "e-posta";
+  if (field === "guardianEmail") return "veli e-postası";
+  if (field === "guardianNationalId") return "veli TC kimlik";
+  if (field === "guardianPhone") return "veli telefonu";
+  if (field === "studentNo") return "okul no";
+  return field;
 }
 
 function escapeCsvCell(value: string): string {
@@ -1421,6 +1584,47 @@ function normalizeValue(value: string) {
 
 function loadCurrentTenant(accessToken: string) {
   return apiRequest<TenantProfileRecord>(accessToken, `${apiBaseUrl}/me/tenant`);
+}
+
+async function loadCourseTemplateGroups(accessToken: string): Promise<SetupCourseGroup[]> {
+  const gradeLevels = await apiListRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels?limit=200`);
+  const groups = await Promise.all(
+    gradeLevels.data.map(async (gradeLevel) => {
+      const templates = await apiListRequest<GradeLevelCourseRecord>(
+        accessToken,
+        `${apiBaseUrl}/grade-levels/${encodeURIComponent(gradeLevel.id)}/courses?limit=200`,
+      );
+      const stageId = stageIdFromGradeLevel(gradeLevel);
+      return {
+        title: gradeLevel.name,
+        source: gradeLevel.code ? `${gradeLevel.code} ders şablonu` : "Ders şablonu",
+        courses: templates.data.map((template) => ({
+          code: template.courseCode ?? template.courseId,
+          id: template.id,
+          isDefault: template.isDefault,
+          name: template.courseName,
+          stageId,
+        })),
+        stageId,
+      };
+    }),
+  );
+  return groups.filter((group) => group.courses.length > 0);
+}
+
+function stageIdFromGradeLevel(gradeLevel: GradeLevelRecord): StageId | undefined {
+  const value = `${gradeLevel.code ?? ""} ${gradeLevel.name} ${gradeLevel.id}`.toLocaleLowerCase("tr-TR");
+  if (value.includes("tyt") || value.includes("ayt")) return "TYT/AYT";
+  if (value.includes("lgs") || containsStandaloneNumber(value, "8")) return "8-LGS";
+  if (containsStandaloneNumber(value, "7")) return "7";
+  if (containsStandaloneNumber(value, "10")) return "10";
+  if (containsStandaloneNumber(value, "11")) return "11";
+  if (containsStandaloneNumber(value, "12")) return "12";
+  return undefined;
+}
+
+function containsStandaloneNumber(value: string, numberText: string) {
+  return new RegExp(`(^|\\D)${numberText}(\\D|$)`).test(value);
 }
 
 function mergeTenantProfileDraft(draft: OnboardingDraft, tenant: TenantProfileRecord): OnboardingDraft {
@@ -1554,11 +1758,11 @@ function normalizeCourseIds(values: unknown[]) {
     "lgs-din": "8-lgs-din",
     "lgs-ingilizce": "8-lgs-ingilizce",
   };
-  const validIds = new Set(allCourseOptions.map((course) => course.id));
+  const validIds = new Set(fallbackCourseOptions.map((course) => course.id));
   const normalized = values
     .filter((id): id is string => typeof id === "string")
     .map((id) => legacyCourseIdById[id] ?? id)
-    .filter((id) => validIds.has(id));
+    .filter((id) => validIds.has(id) || /^[a-z0-9][a-z0-9._:-]{0,159}$/i.test(id));
   return normalized.length > 0 ? normalized : initialDraft.courses.selectedCourseIds;
 }
 

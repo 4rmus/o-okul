@@ -33,6 +33,7 @@ export interface SmsAdapterEnvironment {
   NETGSM_USERCODE?: string;
   NODE_ENV?: string;
   SMS_ALLOW_NOOP_IN_PRODUCTION?: string;
+  SMS_ENABLED?: string;
   SMS_PROVIDER?: string;
 }
 
@@ -44,7 +45,7 @@ export function createSmsAdapterFromEnv(env: SmsAdapterEnvironment): SmsAdapter 
   if (provider !== "noop") {
     throw new Error("SMS_PROVIDER_UNSUPPORTED");
   }
-  if (env.NODE_ENV === "production" && env.SMS_ALLOW_NOOP_IN_PRODUCTION !== "true") {
+  if (env.NODE_ENV === "production" && env.SMS_ENABLED !== "false" && env.SMS_ALLOW_NOOP_IN_PRODUCTION !== "true") {
     throw new Error("SMS_PROVIDER_REQUIRED");
   }
   return createNoopSmsAdapter();

@@ -15,8 +15,6 @@ describe("PostgresGuardianStudentStore", () => {
               tenantId: "tenant-a",
               guardianId: "guardian-a",
               studentId: "student-a",
-              relationshipType: "MOTHER",
-              isPrimary: true,
               canViewFinance: true,
               canReceiveSms: true,
               canReceiveAnnouncements: true,
@@ -38,8 +36,6 @@ describe("PostgresGuardianStudentStore", () => {
           tenantId: "tenant-a",
           guardianId: "guardian-a",
           studentId: "student-a",
-          relationshipType: "MOTHER",
-          isPrimary: true,
           canViewFinance: true,
           canReceiveSms: true,
           canReceiveAnnouncements: true,
@@ -62,15 +58,13 @@ describe("PostgresGuardianStudentStore", () => {
       "tenant-a",
       "guardian-a",
       "student-a",
-      "MOTHER",
-      true,
       true,
       true,
       true,
       false,
     ]);
     expect(businessQueries[3]?.sql).toContain('UPDATE "GuardianStudent"');
-    expect(businessQueries[3]?.values).toEqual(["guardian-a", "student-a", undefined, undefined, false, false, undefined, undefined]);
+    expect(businessQueries[3]?.values).toEqual(["guardian-a", "student-a", false, false, undefined, undefined]);
     expect(businessQueries[4]?.sql).toContain('DELETE FROM "GuardianStudent"');
     expect(businessQueries[4]?.values).toEqual(["guardian-a", "student-a"]);
   });
@@ -90,12 +84,6 @@ describe("PostgresGuardianStudentStore", () => {
                   tenantId: "tenant-a",
                   guardianId: "guardian-a",
                   studentId: "student-a",
-                  relationshipType: "MOTHER",
-                  isPrimary: true,
-                  canViewFinance: true,
-                  canReceiveSms: true,
-                  canReceiveAnnouncements: true,
-                  canOpenSupportTickets: true,
                 },
               ] as T[],
         };
@@ -110,6 +98,22 @@ describe("PostgresGuardianStudentStore", () => {
     );
 
     expect(record.id).toBe("guardian-student-a");
+    expect(record).toEqual(expect.objectContaining({
+      canViewFinance: true,
+      canReceiveSms: false,
+      canReceiveAnnouncements: true,
+      canOpenSupportTickets: true,
+    }));
+    expect(queries.find((query) => query.sql.includes('INSERT INTO "GuardianStudent"'))?.values).toEqual([
+      expect.any(String),
+      "tenant-a",
+      "guardian-a",
+      "student-a",
+      true,
+      false,
+      true,
+      true,
+    ]);
     expect(queries.some((query) => query.sql.includes("ON CONFLICT"))).toBe(true);
     expect(queries.some((query) => query.sql.includes("LIMIT 1"))).toBe(true);
   });

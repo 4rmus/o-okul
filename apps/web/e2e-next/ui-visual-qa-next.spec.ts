@@ -979,8 +979,8 @@ function createSystemTenants() {
 
 function createClasses() {
   return [
-    { campusId: "campus-main", gradeLevelId: "grade-8", id: "class-8a", level: "8", name: "8-A", section: "A", tenantId: "tenant-faz9" },
-    { campusId: "campus-main", gradeLevelId: "grade-8", id: "class-8b", level: "8", name: "8-B", section: "B", tenantId: "tenant-faz9" },
+    { campusId: "campus-main", gradeLevelId: "grade-8", id: "class-8a", name: "8-A", section: "A", tenantId: "tenant-faz9" },
+    { campusId: "campus-main", gradeLevelId: "grade-8", id: "class-8b", name: "8-B", section: "B", tenantId: "tenant-faz9" },
   ];
 }
 
@@ -1030,7 +1030,6 @@ function createStudents() {
 
 function createStudentProfile() {
   return {
-    birthDate: "2012-05-12",
     classId: "class-8a",
     email: "ada@example.test",
     firstName: "Ada",
@@ -1059,8 +1058,6 @@ function createGuardianLinks() {
       canViewFinance: true,
       guardianId: "guardian-mother",
       id: "guardian-link-mother",
-      isPrimary: true,
-      relationshipType: "MOTHER",
       studentId: "student-a",
       tenantId: "tenant-faz9",
     },
@@ -1071,8 +1068,6 @@ function createGuardianLinks() {
       canViewFinance: false,
       guardianId: "guardian-father",
       id: "guardian-link-father",
-      isPrimary: false,
-      relationshipType: "FATHER",
       studentId: "student-a",
       tenantId: "tenant-faz9",
     },
@@ -1172,7 +1167,7 @@ function createCourses() {
 }
 
 function createGradeLevels() {
-  return [{ id: "grade-8", level: "8", name: "8. Sinif", tenantId: "tenant-faz9" }];
+  return [{ code: "8", id: "grade-8", name: "8. Sinif", tenantId: "tenant-faz9" }];
 }
 
 function createAcademicTerms() {

@@ -24,6 +24,10 @@ export function parsePostgresUrl(
   };
 }
 
+export function isSmsEnabled(env = process.env): boolean {
+  return env.SMS_ENABLED === "true";
+}
+
 function parseRedisDb(pathname: string): number | undefined {
   if (!pathname || pathname === "/") {
     return undefined;

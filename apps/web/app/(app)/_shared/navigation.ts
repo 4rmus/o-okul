@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import { isSmsEnabled } from "../../../src/sms-feature.js";
 import {
   Activity,
   BarChart3,
@@ -112,7 +113,7 @@ export const institutionNavGroups: readonly InstitutionNavGroup[] = [
       { href: "/kurum/materyaller", icon: Library, label: "Materyaller", requiredCapability: "academic:manage" },
       { href: "/kurum/notlar", icon: NotebookTabs, label: "Notlar", requiredCapability: "note:manage" },
       { href: "/kurum/duyurular", icon: Megaphone, label: "Duyurular", requiredCapability: "announcement:manage" },
-      { href: "/kurum/sablonlar", icon: MessageSquareText, label: "Mesaj Şablonları", requiredCapability: "announcement:manage" },
+      ...(isSmsEnabled ? [{ href: "/kurum/sablonlar", icon: MessageSquareText, label: "Mesaj Şablonları", requiredCapability: "announcement:manage" }] : []),
     ],
   },
   {

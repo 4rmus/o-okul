@@ -31,8 +31,12 @@ const ids = {
   campusB: "00000000-0000-4000-8000-000000000013b1",
   gradeLevelA: "00000000-0000-4000-8000-000000000014a1",
   gradeLevelB: "00000000-0000-4000-8000-000000000014b1",
+  alanA: "00000000-0000-4000-8000-00000000002ca1",
+  alanB: "00000000-0000-4000-8000-00000000002cb1",
   courseA: "00000000-0000-4000-8000-000000000015a1",
   courseB: "00000000-0000-4000-8000-000000000015b1",
+  gradeLevelCourseA: "00000000-0000-4000-8000-00000000002da1",
+  gradeLevelCourseB: "00000000-0000-4000-8000-00000000002db1",
   academicYearA: "00000000-0000-4000-8000-000000000016a1",
   academicYearB: "00000000-0000-4000-8000-000000000016b1",
   academicTermA: "00000000-0000-4000-8000-000000000017a1",
@@ -166,12 +170,14 @@ async function seedFixtures() {
     );
 
     await adminClient.query(
-      `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
+      `INSERT INTO "User" ("id", "tenantId", "email", "name", "passwordHash", "updatedAt")
        VALUES
-         ($1, 'rls-a@example.test', 'RLS User A', 'hash-a', now()),
-         ($2, 'rls-b@example.test', 'RLS User B', 'hash-b', now())
-       ON CONFLICT ("email") DO NOTHING`,
-      [ids.userA, ids.userB],
+         ($1, $2, 'rls-a@example.test', 'RLS User A', 'hash-a', now()),
+         ($3, $4, 'rls-b@example.test', 'RLS User B', 'hash-b', now())
+       ON CONFLICT ("email") DO UPDATE
+       SET "tenantId" = EXCLUDED."tenantId",
+           "updatedAt" = now()`,
+      [ids.userA, ids.tenantA, ids.userB, ids.tenantB],
     );
 
     await adminClient.query(
@@ -252,6 +258,35 @@ async function seedFixtures() {
          ($3, $4, 'RLS Ders B', 'RLS-COURSE-B', now())
        ON CONFLICT ("tenantId", "code") DO NOTHING`,
       [ids.courseA, ids.tenantA, ids.courseB, ids.tenantB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "Alan" ("id", "tenantId", "gradeLevelId", "name", "code", "updatedAt")
+       VALUES
+         ($1, $2, $3, 'RLS Alan A', 'RLS-ALAN-A', now()),
+         ($4, $5, $6, 'RLS Alan B', 'RLS-ALAN-B', now())
+       ON CONFLICT ("tenantId", "code") DO NOTHING`,
+      [ids.alanA, ids.tenantA, ids.gradeLevelA, ids.alanB, ids.tenantB, ids.gradeLevelB],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "GradeLevelCourse" ("id", "tenantId", "gradeLevelId", "courseId", "alanId", "isDefault", "sortOrder", "updatedAt")
+       VALUES
+         ($1, $2, $3, $4, $5, true, 1, now()),
+         ($6, $7, $8, $9, $10, true, 1, now())
+       ON CONFLICT ("id") DO NOTHING`,
+      [
+        ids.gradeLevelCourseA,
+        ids.tenantA,
+        ids.gradeLevelA,
+        ids.courseA,
+        ids.alanA,
+        ids.gradeLevelCourseB,
+        ids.tenantB,
+        ids.gradeLevelB,
+        ids.courseB,
+        ids.alanB,
+      ],
     );
 
     await adminClient.query(
@@ -392,10 +427,10 @@ async function seedFixtures() {
     );
 
     await adminClient.query(
-      `INSERT INTO "GuardianStudent" ("id", "tenantId", "guardianId", "studentId", "relationshipType", "isPrimary", "updatedAt")
+      `INSERT INTO "GuardianStudent" ("id", "tenantId", "guardianId", "studentId", "updatedAt")
        VALUES
-         ($1, $2, $3, $4, 'MOTHER', true, now()),
-         ($5, $6, $7, $8, 'MOTHER', true, now())
+         ($1, $2, $3, $4, now()),
+         ($5, $6, $7, $8, now())
        ON CONFLICT ("tenantId", "guardianId", "studentId") DO NOTHING`,
       [ids.guardianStudentA, ids.tenantA, ids.guardianA, ids.studentA, ids.guardianStudentB, ids.tenantB, ids.guardianB, ids.studentB],
     );
