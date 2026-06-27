@@ -39,6 +39,7 @@ export interface SessionStore {
   revoke(sessionId: string): Promise<void>;
   revokeByMembership(userId: string, tenantId: string, membershipVersion: number): Promise<void>;
   revokeByUser(userId: string): Promise<void>;
+  revokeByUserExcept(userId: string, activeSessionId: string): Promise<void>;
 }
 
 export const authSessionStoreToken = Symbol("AuthSessionStore");
@@ -126,6 +127,14 @@ export class InMemorySessionStore implements SessionStore {
   async revokeByUser(userId: string): Promise<void> {
     for (const [id, session] of this.sessions) {
       if (session.userId === userId) {
+        this.sessions.set(id, { ...session, status: "REVOKED", updatedAt: new Date() });
+      }
+    }
+  }
+
+  async revokeByUserExcept(userId: string, activeSessionId: string): Promise<void> {
+    for (const [id, session] of this.sessions) {
+      if (session.userId === userId && id !== activeSessionId) {
         this.sessions.set(id, { ...session, status: "REVOKED", updatedAt: new Date() });
       }
     }
@@ -286,6 +295,19 @@ export class PostgresSessionStore implements SessionStore {
              "updatedAt" = now()
          WHERE "userId" = $1`,
         [userId],
+      );
+    });
+  }
+
+  async revokeByUserExcept(userId: string, activeSessionId: string): Promise<void> {
+    await this.withClient(async (client) => {
+      await client.query(
+        `UPDATE "AuthSession"
+         SET "status" = 'REVOKED',
+             "updatedAt" = now()
+         WHERE "userId" = $1
+           AND "id" <> $2`,
+        [userId, activeSessionId],
       );
     });
   }

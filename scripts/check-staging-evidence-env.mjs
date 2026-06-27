@@ -48,14 +48,17 @@ const uiUxRedesignGeneratorKeys = [
   "UI_UX_REDESIGN_APPROVAL_ROLE",
   "UI_UX_REDESIGN_APPROVED_AT",
 ];
-const runtimeRequiredKeys = [
-  "NETGSM_USERCODE",
-  "NETGSM_PASSWORD",
-  "NETGSM_MSG_HEADER",
-  "S3_ACCESS_KEY_ID",
-  "S3_SECRET_ACCESS_KEY",
-];
-const requiredKeys = unique([...extractProdEnvContractKeys(), ...runtimeRequiredKeys, ...uiUxRedesignGeneratorKeys]);
+const smsProviderRuntimeKeys = ["NETGSM_USERCODE", "NETGSM_PASSWORD", "NETGSM_MSG_HEADER"];
+const smsSmokeKeys = ["SMS_SMOKE_TO", "SMS_SMOKE_BODY", "SMS_SMOKE_CONFIRM"];
+const runtimeRequiredKeys = ["S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"];
+const smsEnabled = target.values.get("SMS_ENABLED") === "true";
+const prodEnvContractKeys = extractProdEnvContractKeys().filter((key) => smsEnabled || !smsSmokeKeys.includes(key));
+const requiredKeys = unique([
+  ...prodEnvContractKeys,
+  ...runtimeRequiredKeys,
+  ...(smsEnabled ? smsProviderRuntimeKeys : []),
+  ...uiUxRedesignGeneratorKeys,
+]);
 const keysRequiredInSecret = requiredKeys.filter(
   (key) => !summaryDefaultedSmokeKeys.has(key) && !workflowInjectedKeys.has(key),
 );

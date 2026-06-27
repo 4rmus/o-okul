@@ -21,7 +21,10 @@ const demoLoginEnabled = process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN === "true" ||
 export default function LoginPage() {
   const router = useRouter();
   const { auth, isBootstrapping, login, verifyMfa } = useAuth();
+  const [loginMode, setLoginMode] = useState<"email" | "nationalId">("email");
   const [email, setEmail] = useState(demoLoginEnabled ? "admin@demo.local" : "");
+  const [tenantSlug, setTenantSlug] = useState("");
+  const [nationalId, setNationalId] = useState("");
   const [password, setPassword] = useState(demoLoginEnabled ? "password" : "");
   const [rememberMe, setRememberMe] = useState(false);
   const [pendingMfa, setPendingMfa] = useState<MfaChallengeResponse | null>(null);
@@ -49,15 +52,21 @@ export default function LoginPage() {
     setIsSubmitting(true);
     const formData = new FormData(event.currentTarget);
     const formEmail = String(formData.get("email") ?? "").trim();
+    const formTenantSlug = String(formData.get("tenantSlug") ?? "").trim();
+    const formNationalId = String(formData.get("nationalId") ?? "").trim();
     const formPassword = String(formData.get("password") ?? "");
 
     try {
       if (pendingMfa) {
         await verifyMfa(pendingMfa.challengeToken, mfaMethod === "totp" ? { totpCode: mfaCode } : { recoveryCode: mfaCode });
-      } else {
+      } else if (loginMode === "email") {
         await login(formEmail, formPassword);
+      } else {
+        await login({ tenantSlug: formTenantSlug, nationalId: formNationalId, password: formPassword });
       }
-      saveRememberedEmail(formEmail, rememberMe);
+      if (loginMode === "email") {
+        saveRememberedEmail(formEmail, rememberMe);
+      }
     } catch (caught) {
       if (caught instanceof MfaRequiredError) {
         setPendingMfa(caught.challenge);
@@ -65,7 +74,7 @@ export default function LoginPage() {
         setError("");
         return;
       }
-      setError(pendingMfa ? "Doğrulama kodu geçersiz." : "E-posta veya şifre hatalı.");
+      setError(pendingMfa ? "Doğrulama kodu geçersiz." : "Giriş bilgileri hatalı.");
     } finally {
       setIsSubmitting(false);
     }
@@ -100,15 +109,59 @@ export default function LoginPage() {
       </div>
       <form className="next-form" aria-label="Giriş formu" onSubmit={(event) => void handleSubmit(event)}>
         <h1 id="login-title">Giriş</h1>
-        <Field label="E-posta" description="Kurum hesabınız veya portal e-postanız.">
-          <Input
-            name="email"
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            autoComplete="username"
-          />
-        </Field>
+        <SegmentedControl className="next-segmented" label="Giriş yöntemi">
+          <button
+            type="button"
+            aria-pressed={loginMode === "email"}
+            onClick={() => setLoginMode("email")}
+            disabled={Boolean(pendingMfa)}
+          >
+            E-posta
+          </button>
+          <button
+            type="button"
+            aria-pressed={loginMode === "nationalId"}
+            onClick={() => setLoginMode("nationalId")}
+            disabled={Boolean(pendingMfa)}
+          >
+            Kurum + TC
+          </button>
+        </SegmentedControl>
+        {loginMode === "email" ? (
+          <Field label="E-posta" description="Kurum hesabınız veya portal e-postanız.">
+            <Input
+              name="email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              autoComplete="username"
+            />
+          </Field>
+        ) : (
+          <div className="next-form-section">
+            <Field label="Kurum kodu">
+              <Input
+                name="tenantSlug"
+                type="text"
+                value={tenantSlug}
+                onChange={(event) => setTenantSlug(event.target.value)}
+                autoComplete="organization"
+                disabled={Boolean(pendingMfa)}
+              />
+            </Field>
+            <Field label="TC kimlik no">
+              <Input
+                name="nationalId"
+                type="text"
+                value={nationalId}
+                onChange={(event) => setNationalId(event.target.value)}
+                autoComplete="username"
+                inputMode="numeric"
+                disabled={Boolean(pendingMfa)}
+              />
+            </Field>
+          </div>
+        )}
         <Field label="Şifre">
           <Input
             name="password"
@@ -149,13 +202,15 @@ export default function LoginPage() {
             </Field>
           </div>
         ) : null}
-        <Checkbox
-          checked={rememberMe}
-          description="Bu tarayıcıda yalnız e-posta adresi saklanır."
-          label="Beni hatırla"
-          name="rememberMe"
-          onChange={(event) => setRememberMe(event.target.checked)}
-        />
+        {loginMode === "email" ? (
+          <Checkbox
+            checked={rememberMe}
+            description="Bu tarayıcıda yalnız e-posta adresi saklanır."
+            label="Beni hatırla"
+            name="rememberMe"
+            onChange={(event) => setRememberMe(event.target.checked)}
+          />
+        ) : null}
         {error ? <p className="next-form-error">{error}</p> : null}
         <Button type="submit" disabled={isSubmitting || isBootstrapping}>
           {isSubmitting ? "Giriş yapılıyor" : pendingMfa ? "Doğrula" : "Giriş yap"}
@@ -184,6 +239,7 @@ export default function LoginPage() {
 }
 
 function getAuthHomePath(auth: AuthResponse) {
+  if (auth.session.mustChangePassword) return "/sifre-degistir";
   const { roles, subjectType } = auth.session;
   if (roles.includes("SYSTEM_ADMIN")) return "/sistem";
   if (roles.includes("TENANT_ADMIN") || roles.includes("ASSISTANT_ADMIN")) return "/kurum";

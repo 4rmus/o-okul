@@ -49,6 +49,7 @@ const sessionSchema = objectSchema({
   roles: arraySchema(stringSchema(), { minItems: 1 }),
   membershipVersion: integerSchema({ minimum: 0 }),
   status: stringSchema(),
+  mustChangePassword: { type: "boolean" },
   subjectType: { type: "string", enum: ["STUDENT", "GUARDIAN", "TEACHER"] },
   subjectId: stringSchema(),
 }, ["id", "userId", "tenantId", "roles", "membershipVersion", "status"]);
@@ -57,6 +58,7 @@ const meProfileResponseSchema = objectSchema({
   userId: stringSchema(),
   tenantId: { type: "string", nullable: true },
   roles: arraySchema(stringSchema(), { minItems: 1 }),
+  mustChangePassword: { type: "boolean" },
   subjectType: { type: "string", enum: ["STUDENT", "GUARDIAN", "TEACHER"] },
   subjectId: stringSchema(),
 }, ["userId", "tenantId", "roles"]);
@@ -123,6 +125,11 @@ const tenantAssignableRoleSchema = {
   enum: ["TENANT_ADMIN", "ASSISTANT_ADMIN", "TEACHER", "STUDENT", "GUARDIAN"],
 };
 
+const tenantUserManagementRoleSchema = {
+  type: "string",
+  enum: ["TENANT_ADMIN", "ASSISTANT_ADMIN"],
+};
+
 const tenantUserRecordSchema = objectSchema({
   id: stringSchema(),
   email: stringSchema({ format: "email" }),
@@ -131,7 +138,7 @@ const tenantUserRecordSchema = objectSchema({
   roles: arraySchema(tenantAssignableRoleSchema, { minItems: 1 }),
   createdAt: stringSchema({ format: "date-time" }),
   updatedAt: stringSchema({ format: "date-time" }),
-}, ["id", "email", "name", "tenantId", "roles", "createdAt", "updatedAt"]);
+}, ["id", "name", "tenantId", "roles", "createdAt", "updatedAt"]);
 
 const tenantFirstAdminProvisionResultSchema = objectSchema({
   ...(tenantUserRecordSchema.properties as Record<string, JsonSchema>),
@@ -148,12 +155,18 @@ const tenantUserCreateRequestSchema = objectSchema({
   email: stringSchema({ format: "email" }),
   name: stringSchema({ minLength: 1 }),
   password: stringSchema({ minLength: 8 }),
-  roles: arraySchema(tenantAssignableRoleSchema, { minItems: 1 }),
+  roles: arraySchema(tenantUserManagementRoleSchema, { minItems: 1 }),
 }, ["email", "name", "password", "roles"]);
 
 const tenantUserRoleUpdateRequestSchema = objectSchema({
-  roles: arraySchema(tenantAssignableRoleSchema, { minItems: 1 }),
+  roles: arraySchema(tenantUserManagementRoleSchema, { minItems: 1 }),
 }, ["roles"]);
+
+const tenantUserPasswordResetResponseSchema = objectSchema({
+  userId: stringSchema(),
+  resetAt: stringSchema({ format: "date-time" }),
+  mustChangePassword: { type: "boolean", enum: [true] },
+}, ["userId", "resetAt", "mustChangePassword"]);
 
 const portalSubjectRoleSchema = {
   type: "string",
@@ -201,6 +214,15 @@ const passwordResetAcceptedResponseSchema = objectSchema({
 const passwordResetConfirmResponseSchema = objectSchema({
   resetAt: stringSchema({ format: "date-time" }),
 }, ["resetAt"]);
+
+const mePasswordChangeRequestSchema = objectSchema({
+  currentPassword: stringSchema({ minLength: 1 }),
+  newPassword: stringSchema({ minLength: 8 }),
+}, ["currentPassword", "newPassword"]);
+
+const mePasswordChangeResponseSchema = objectSchema({
+  changedAt: stringSchema({ format: "date-time" }),
+}, ["changedAt"]);
 
 const totpVerificationRequestSchema = objectSchema({
   challengeToken: stringSchema(),
@@ -492,7 +514,7 @@ const developmentCriterionRecordSchema = objectSchema({
   name: stringSchema(),
   scaleMin: integerSchema(),
   scaleMax: integerSchema(),
-  sortOrder: integerSchema(),
+  sortOrder: integerSchema({ minimum: 0 }),
 }, ["id", "tenantId", "name", "scaleMin", "scaleMax", "sortOrder"]);
 
 const developmentCriterionCreateRequestSchema = objectSchema({
@@ -573,6 +595,40 @@ const namedSchoolReferenceUpdateRequestSchema = objectSchema({
   name: stringSchema(),
 });
 
+const alanRecordSchema = objectSchema({
+  id: stringSchema(),
+  tenantId: stringSchema(),
+  gradeLevelId: stringSchema(),
+  name: stringSchema(),
+  code: stringSchema(),
+}, ["id", "tenantId", "name"]);
+
+const alanCreateRequestSchema = objectSchema({
+  code: stringSchema(),
+  gradeLevelId: stringSchema(),
+  name: stringSchema(),
+  tenantId: stringSchema(),
+}, ["name"]);
+
+const alanUpdateRequestSchema = objectSchema({
+  code: stringSchema(),
+  gradeLevelId: stringSchema(),
+  name: stringSchema(),
+});
+
+const gradeLevelCourseRecordSchema = objectSchema({
+  id: stringSchema(),
+  tenantId: stringSchema(),
+  gradeLevelId: stringSchema(),
+  courseId: stringSchema(),
+  alanId: stringSchema(),
+  isDefault: { type: "boolean" },
+  sortOrder: integerSchema(),
+  courseName: stringSchema(),
+  courseCode: stringSchema(),
+  alanName: stringSchema(),
+}, ["id", "tenantId", "gradeLevelId", "courseId", "isDefault", "sortOrder", "courseName"]);
+
 const learningOutcomeRecordSchema = objectSchema({
   id: stringSchema(),
   tenantId: stringSchema(),
@@ -652,7 +708,7 @@ const classRecordSchema = objectSchema({
   id: stringSchema(),
   tenantId: stringSchema(),
   name: stringSchema(),
-  level: stringSchema(),
+  alanId: stringSchema(),
   campusId: stringSchema(),
   gradeLevelId: stringSchema(),
   section: stringSchema(),
@@ -667,18 +723,18 @@ const teacherPortalLookupsResponseSchema = objectSchema({
 }, ["campuses", "classes", "courses", "gradeLevels", "terms"]);
 
 const classCreateRequestSchema = objectSchema({
+  alanId: stringSchema(),
   campusId: stringSchema(),
   gradeLevelId: stringSchema(),
-  level: stringSchema(),
   name: stringSchema(),
   section: stringSchema(),
   tenantId: stringSchema(),
 }, ["name"]);
 
 const classUpdateRequestSchema = objectSchema({
+  alanId: stringSchema(),
   campusId: stringSchema(),
   gradeLevelId: stringSchema(),
-  level: stringSchema(),
   name: stringSchema(),
   section: stringSchema(),
 }, [], { minProperties: 1 });
@@ -729,12 +785,15 @@ const teacherRecordSchema = objectSchema({
   firstName: stringSchema(),
   lastName: stringSchema(),
   branch: stringSchema(),
+  phone: stringSchema(),
 }, ["id", "tenantId", "firstName", "lastName"]);
 
 const teacherCreateRequestSchema = objectSchema({
   branch: stringSchema(),
   firstName: stringSchema(),
   lastName: stringSchema(),
+  nationalId: stringSchema(),
+  phone: stringSchema(),
   tenantId: stringSchema(),
 }, ["firstName", "lastName"]);
 
@@ -742,6 +801,8 @@ const teacherUpdateRequestSchema = objectSchema({
   branch: stringSchema(),
   firstName: stringSchema(),
   lastName: stringSchema(),
+  nationalId: stringSchema(),
+  phone: stringSchema(),
 });
 
 const teacherImportRequestSchema = objectSchema({
@@ -750,12 +811,16 @@ const teacherImportRequestSchema = objectSchema({
 
 const teacherImportErrorSchema = objectSchema({
   row: integerSchema({ minimum: 1 }),
-  field: { type: "string", enum: ["className", "courseName", "firstName", "lastName"] },
-  code: { type: "string", enum: ["CLASS_NOT_FOUND", "COURSE_NOT_FOUND", "REQUIRED"] },
+  field: { type: "string", enum: ["className", "courseName", "firstName", "lastName", "nationalId", "phone"] },
+  code: { type: "string", enum: ["CLASS_NOT_FOUND", "COURSE_NOT_FOUND", "INVALID", "REQUIRED"] },
   value: stringSchema(),
 }, ["row", "field", "code"]);
 
 const teacherImportPreviewRowSchema = objectSchema({
+  accountPreview: objectSchema({
+    usernameMasked: stringSchema(),
+    willCreate: { type: "boolean" },
+  }, ["usernameMasked", "willCreate"]),
   row: integerSchema({ minimum: 1 }),
   classId: stringSchema(),
   className: stringSchema(),
@@ -1227,11 +1292,6 @@ const studentStatusSchema = {
   enum: ["ACTIVE", "PASSIVE", "GRADUATED", "TRANSFERRED"],
 };
 
-const guardianRelationshipTypeSchema = {
-  type: "string",
-  enum: ["MOTHER", "FATHER", "GUARDIAN", "EMERGENCY_CONTACT", "OTHER"],
-};
-
 const studentGuardianProvisionRequestSchema = objectSchema({
   canOpenSupportTickets: { type: "boolean" },
   canReceiveAnnouncements: { type: "boolean" },
@@ -1239,10 +1299,8 @@ const studentGuardianProvisionRequestSchema = objectSchema({
   canViewFinance: { type: "boolean" },
   email: stringSchema(),
   firstName: stringSchema(),
-  isPrimary: { type: "boolean" },
   lastName: stringSchema(),
   phone: stringSchema(),
-  relationshipType: guardianRelationshipTypeSchema,
 });
 
 const guardianRecordSchema = objectSchema({
@@ -1265,6 +1323,7 @@ const guardianPiiPurgedRecordSchema = objectSchema({
 const guardianCreateRequestSchema = objectSchema({
   firstName: stringSchema(),
   lastName: stringSchema(),
+  nationalId: stringSchema(),
   phone: stringSchema(),
   tenantId: stringSchema(),
 }, ["firstName", "lastName"]);
@@ -1272,6 +1331,7 @@ const guardianCreateRequestSchema = objectSchema({
 const guardianUpdateRequestSchema = objectSchema({
   firstName: stringSchema(),
   lastName: stringSchema(),
+  nationalId: stringSchema(),
   phone: stringSchema(),
 });
 
@@ -1280,8 +1340,6 @@ const guardianStudentRelationRequestProperties: Record<string, JsonSchema> = {
   canReceiveAnnouncements: { type: "boolean" },
   canReceiveSms: { type: "boolean" },
   canViewFinance: { type: "boolean" },
-  isPrimary: { type: "boolean" },
-  relationshipType: guardianRelationshipTypeSchema,
 };
 
 const guardianStudentRelationRequestSchema = objectSchema(guardianStudentRelationRequestProperties);
@@ -1296,8 +1354,6 @@ const guardianStudentRecordSchema = objectSchema({
   tenantId: stringSchema(),
   guardianId: stringSchema(),
   studentId: stringSchema(),
-  relationshipType: guardianRelationshipTypeSchema,
-  isPrimary: { type: "boolean" },
   canViewFinance: { type: "boolean" },
   canReceiveSms: { type: "boolean" },
   canReceiveAnnouncements: { type: "boolean" },
@@ -1309,8 +1365,6 @@ const guardianStudentRecordSchema = objectSchema({
   "tenantId",
   "guardianId",
   "studentId",
-  "relationshipType",
-  "isPrimary",
   "canViewFinance",
   "canReceiveSms",
   "canReceiveAnnouncements",
@@ -1352,6 +1406,14 @@ const publicStudentRecordSchema = objectSchema({
   status: studentStatusSchema,
 }, ["id", "tenantId", "firstName", "lastName", "status"]);
 
+const globalSearchResultRecordSchema = objectSchema({
+  href: stringSchema(),
+  id: stringSchema(),
+  subtitle: stringSchema(),
+  title: stringSchema(),
+  type: { type: "string", enum: ["students", "teachers", "guardians", "classes"] },
+}, ["href", "id", "title", "type"]);
+
 const publicStudentProfileRecordSchema = objectSchema({
   id: stringSchema(),
   tenantId: stringSchema(),
@@ -1367,14 +1429,12 @@ const publicStudentProfileRecordSchema = objectSchema({
   section: stringSchema(),
   responsibleTeacherName: stringSchema(),
   nationalIdMasked: stringSchema(),
-  birthDate: stringSchema({ format: "date" }),
   phone: stringSchema(),
   email: stringSchema({ format: "email" }),
   photoKey: stringSchema(),
 }, ["id", "tenantId", "firstName", "lastName", "status"]);
 
 const studentProfileUpdateRequestSchema = objectSchema({
-  birthDate: stringSchema({ format: "date" }),
   email: stringSchema({ format: "email" }),
   nationalId: stringSchema(),
   phone: stringSchema(),
@@ -1401,6 +1461,9 @@ const guardianStudentDetailsResponseSchema = objectSchema({
 const examRecordSchema = objectSchema({
   id: stringSchema(),
   tenantId: stringSchema(),
+  gradeLevelId: stringSchema(),
+  alanId: stringSchema(),
+  examType: { type: "string", enum: ["SCHOOL", "LGS", "TYT", "AYT", "KPSS"] },
   title: stringSchema(),
   status: { type: "string", enum: ["DRAFT", "PUBLISHED"] },
   answerKeySummary: objectSchema({
@@ -1421,8 +1484,11 @@ const examCreateRequestSchema = objectSchema({
     scoringConfig: looseObjectSchema(),
     version: stringSchema(),
   }, ["fileBase64", "version"]),
+  alanId: stringSchema(),
   classId: stringSchema(),
   classIds: arraySchema(stringSchema()),
+  examType: { type: "string", enum: ["SCHOOL", "LGS", "TYT", "AYT", "KPSS"] },
+  gradeLevelId: stringSchema(),
   startsAt: stringSchema({ format: "date-time" }),
   title: stringSchema(),
 }, ["title", "answerKey"]);
@@ -1964,7 +2030,7 @@ const studentImportRequestSchema = objectSchema({
 
 const studentImportErrorSchema = objectSchema({
   row: integerSchema({ minimum: 0 }),
-  field: { type: "string", enum: ["birthDate", "className", "email", "firstName", "guardianEmail", "lastName", "nationalId", "quota", "studentNo"] },
+  field: { type: "string", enum: ["className", "email", "firstName", "guardianEmail", "lastName", "nationalId", "phone", "quota", "studentNo"] },
   code: {
     type: "string",
     enum: [
@@ -1972,6 +2038,7 @@ const studentImportErrorSchema = objectSchema({
       "INVALID_DATE",
       "INVALID_EMAIL",
       "INVALID_NATIONAL_ID",
+      "INVALID_PHONE",
       "REQUIRED",
       "STUDENT_NATIONAL_ID_DUPLICATE",
       "STUDENT_NO_DUPLICATE",
@@ -1982,16 +2049,17 @@ const studentImportErrorSchema = objectSchema({
 }, ["row", "field", "code"]);
 
 const studentImportPreviewRowSchema = objectSchema({
+  accountPreview: objectSchema({
+    usernameMasked: stringSchema(),
+    willCreate: { type: "boolean" },
+  }, ["usernameMasked", "willCreate"]),
   row: integerSchema({ minimum: 1 }),
-  birthDate: stringSchema({ format: "date" }),
   classId: stringSchema(),
   className: stringSchema(),
   email: stringSchema({ format: "email" }),
   firstName: stringSchema(),
   guardian: studentGuardianProvisionRequestSchema,
   lastName: stringSchema(),
-  nationalId: stringSchema(),
-  phone: stringSchema(),
   studentNo: stringSchema(),
 }, ["row", "firstName", "lastName"]);
 
@@ -2183,11 +2251,22 @@ const operationContracts: Record<string, OperationContract> = {
     rawResponseBody: stringSchema(),
     rawResponseContentType: "text/plain",
   },
+  "get /api/v1/search": {
+    responseBody: arraySchema(globalSearchResultRecordSchema),
+    listResponse: true,
+  },
   "post /api/v1/auth/login": {
     requestBody: objectSchema({
       email: stringSchema({ format: "email" }),
+      tenantSlug: stringSchema(),
+      nationalId: stringSchema(),
       password: stringSchema(),
-    }, ["email", "password"]),
+    }, ["password"], {
+      anyOf: [
+        { required: ["email"] },
+        { required: ["tenantSlug", "nationalId"] },
+      ],
+    }),
     responseBody: {
       oneOf: [
         authResponseSchema,
@@ -2273,12 +2352,19 @@ const operationContracts: Record<string, OperationContract> = {
     requestBody: tenantUserRoleUpdateRequestSchema,
     responseBody: tenantUserRecordSchema,
   },
+  "post /api/v1/tenant-users/{userId}/reset-password": {
+    responseBody: tenantUserPasswordResetResponseSchema,
+  },
   "post /api/v1/role-previews": {
     requestBody: rolePreviewStartRequestSchema,
     responseBody: rolePreviewSessionSchema,
   },
   "get /api/v1/me/profile": {
     responseBody: meProfileResponseSchema,
+  },
+  "post /api/v1/me/password": {
+    requestBody: mePasswordChangeRequestSchema,
+    responseBody: mePasswordChangeResponseSchema,
   },
   "get /api/v1/me/tenant": {
     responseBody: tenantRecordSchema,
@@ -2599,6 +2685,9 @@ const operationContracts: Record<string, OperationContract> = {
       firstName: stringSchema(),
       guardian: studentGuardianProvisionRequestSchema,
       lastName: stringSchema(),
+      nationalId: stringSchema(),
+      phone: stringSchema(),
+      email: stringSchema({ format: "email" }),
       responsibleTeacherId: stringSchema(),
       status: studentStatusSchema,
       studentNo: stringSchema(),
@@ -2831,6 +2920,24 @@ const operationContracts: Record<string, OperationContract> = {
   "delete /api/v1/campuses/{id}": {
     noContent: true,
   },
+  "get /api/v1/alanlar": {
+    responseBody: arraySchema(alanRecordSchema),
+    listResponse: true,
+  },
+  "post /api/v1/alanlar": {
+    requestBody: alanCreateRequestSchema,
+    responseBody: alanRecordSchema,
+  },
+  "get /api/v1/alanlar/{id}": {
+    responseBody: alanRecordSchema,
+  },
+  "patch /api/v1/alanlar/{id}": {
+    requestBody: alanUpdateRequestSchema,
+    responseBody: alanRecordSchema,
+  },
+  "delete /api/v1/alanlar/{id}": {
+    noContent: true,
+  },
   "post /api/v1/classes": {
     requestBody: classCreateRequestSchema,
     responseBody: classRecordSchema,
@@ -2877,6 +2984,10 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/grade-levels/{id}": {
     responseBody: namedSchoolReferenceRecordSchema,
+  },
+  "get /api/v1/grade-levels/{id}/courses": {
+    responseBody: arraySchema(gradeLevelCourseRecordSchema),
+    listResponse: true,
   },
   "patch /api/v1/grade-levels/{id}": {
     requestBody: namedSchoolReferenceUpdateRequestSchema,

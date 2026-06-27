@@ -53,7 +53,7 @@ export class ClassesController {
 
 const classListFields = [
   { name: "name", read: (record: ClassRecord) => record.name },
-  { name: "level", read: (record: ClassRecord) => record.level },
+  { name: "alanId", read: (record: ClassRecord) => record.alanId },
   { name: "campusId", read: (record: ClassRecord) => record.campusId },
   { name: "gradeLevelId", read: (record: ClassRecord) => record.gradeLevelId },
   { name: "section", read: (record: ClassRecord) => record.section },

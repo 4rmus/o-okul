@@ -45,7 +45,6 @@ describe("API version prefix", () => {
             campusId: "campus-main",
             gradeLevelId: "grade-8",
             name: "8-A",
-            level: "8",
             section: "A",
           }],
           meta: { total: 1, page: 1, limit: 1, totalPages: 1 },
@@ -55,7 +54,7 @@ describe("API version prefix", () => {
     const createdClass = await request(server)
       .post(`/${apiPrefix}/classes`)
       .set("Authorization", `Bearer ${accessToken}`)
-      .send({ name: "7-C", level: "7" })
+      .send({ name: "7-C" })
       .expect(201);
 
     await request(server)

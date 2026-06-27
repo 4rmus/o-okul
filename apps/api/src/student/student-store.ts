@@ -10,7 +10,6 @@ const studentNoStart = 100;
 export interface StudentProfileStorageRecord extends StudentRecord {
   nationalIdEncrypted?: string;
   nationalIdHash?: string;
-  birthDate?: string;
   phone?: string;
   email?: string;
   photoKey?: string;
@@ -19,7 +18,6 @@ export interface StudentProfileStorageRecord extends StudentRecord {
 export type StudentProfileUpdate = {
   nationalIdEncrypted?: string;
   nationalIdHash?: string;
-  birthDate?: string;
   phone?: string;
   email?: string;
   photoKey?: string;
@@ -144,7 +142,6 @@ export class InMemoryStudentStore implements StudentStore {
 
     if (input.nationalIdEncrypted !== undefined) student.nationalIdEncrypted = input.nationalIdEncrypted;
     if (input.nationalIdHash !== undefined) student.nationalIdHash = input.nationalIdHash;
-    if (input.birthDate !== undefined) student.birthDate = input.birthDate;
     if (input.phone !== undefined) student.phone = input.phone;
     if (input.email !== undefined) student.email = input.email;
     if (input.photoKey !== undefined) student.photoKey = input.photoKey;
@@ -175,7 +172,6 @@ export class InMemoryStudentStore implements StudentStore {
     student.lastName = "Ogrenci";
     delete student.nationalIdEncrypted;
     delete student.nationalIdHash;
-    delete student.birthDate;
     delete student.phone;
     delete student.email;
     delete student.photoKey;
@@ -338,10 +334,9 @@ export class PostgresStudentStore implements StudentStore {
         `UPDATE "Student"
          SET "nationalIdEncrypted" = COALESCE($2, "nationalIdEncrypted"),
              "nationalIdHash" = COALESCE($3, "nationalIdHash"),
-             "birthDate" = CASE WHEN $4 THEN $5::date ELSE "birthDate" END,
-             "phone" = CASE WHEN $6 THEN $7 ELSE "phone" END,
-             "email" = CASE WHEN $8 THEN $9 ELSE "email" END,
-             "photoKey" = CASE WHEN $10 THEN $11 ELSE "photoKey" END,
+             "phone" = CASE WHEN $4 THEN $5 ELSE "phone" END,
+             "email" = CASE WHEN $6 THEN $7 ELSE "email" END,
+             "photoKey" = CASE WHEN $8 THEN $9 ELSE "photoKey" END,
              "updatedAt" = now()
          WHERE "id" = $1
            AND "deletedAt" IS NULL
@@ -350,8 +345,6 @@ export class PostgresStudentStore implements StudentStore {
           id,
           input.nationalIdEncrypted ?? null,
           input.nationalIdHash ?? null,
-          input.birthDate !== undefined,
-          input.birthDate ?? null,
           input.phone !== undefined,
           input.phone ?? null,
           input.email !== undefined,
@@ -408,7 +401,6 @@ export class PostgresStudentStore implements StudentStore {
              "lastName" = 'Ogrenci',
              "nationalIdEncrypted" = NULL,
              "nationalIdHash" = NULL,
-             "birthDate" = NULL,
              "phone" = NULL,
              "email" = NULL,
              "photoKey" = NULL,
@@ -505,7 +497,6 @@ interface StudentRow {
   status: StudentRecord["status"];
   nationalIdEncrypted: string | null;
   nationalIdHash: string | null;
-  birthDate: Date | null;
   phone: string | null;
   email: string | null;
   photoKey: string | null;
@@ -533,7 +524,6 @@ function toStudentProfileStorageRecord(row: StudentRow): StudentProfileStorageRe
     ...toStudentRecord(row),
     nationalIdEncrypted: row.nationalIdEncrypted ?? undefined,
     nationalIdHash: row.nationalIdHash ?? undefined,
-    birthDate: row.birthDate?.toISOString().slice(0, 10),
     phone: row.phone ?? undefined,
     email: row.email ?? undefined,
     photoKey: row.photoKey ?? undefined,

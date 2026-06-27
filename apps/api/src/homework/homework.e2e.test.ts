@@ -511,7 +511,7 @@ describe("Homework API", () => {
     const classC = await request(server)
       .post("/classes")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ name: "9-C", level: "9" })
+      .send({ name: "9-C" })
       .expect(201);
     const unscopedStudent = await request(server)
       .post("/students")
@@ -943,7 +943,7 @@ describe("Homework API", () => {
     const classC = await request(server)
       .post("/classes")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ name: "9-C", level: "9" })
+      .send({ name: "9-C" })
       .expect(201);
     const unscoped = await request(server)
       .post("/homework")

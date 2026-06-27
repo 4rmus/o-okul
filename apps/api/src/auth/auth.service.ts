@@ -3,6 +3,8 @@ import { BadRequestException, Inject, Injectable, NotFoundException, Optional, U
 import type { SelfPurgeResult } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { tenantStoreToken, type TenantStore } from "../tenant/tenant-store.js";
+import { hashTcIdentity, normalizeTcIdentity } from "../student/tc-identity.js";
 import { IdentityResolver } from "./identity-resolver.js";
 import {
   createLoginAttemptLimiter,
@@ -71,6 +73,13 @@ export interface TotpVerificationInput {
   recoveryCode?: string;
 }
 
+export interface LoginCredentials {
+  email?: string;
+  tenantSlug?: string;
+  nationalId?: string;
+  password: string;
+}
+
 @Injectable()
 export class AuthService {
   private readonly tokens: TokenService;
@@ -83,17 +92,25 @@ export class AuthService {
     private readonly identities: IdentityResolver,
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() @Inject(loginAttemptLimiterToken) loginAttempts?: LoginAttemptLimiterStore,
+    @Optional() @Inject(tenantStoreToken) private readonly tenants?: TenantStore,
   ) {
     this.tokens = new TokenService(this.sessions, process.env.JWT_ACCESS_SECRET ?? "test-access-secret");
     this.loginAttempts = loginAttempts ?? createLoginAttemptLimiter();
   }
 
-  async login(email: string, password: string, clientIp = "unknown"): Promise<TokenPair | LoginMfaChallenge> {
-    const attemptKey = loginAttemptKey(email, clientIp);
+  async login(email: string, password: string, clientIp?: string): Promise<TokenPair | LoginMfaChallenge>;
+  async login(credentials: LoginCredentials, clientIp?: string): Promise<TokenPair | LoginMfaChallenge>;
+  async login(credentialsOrEmail: LoginCredentials | string, passwordOrClientIp = "unknown", maybeClientIp = "unknown"): Promise<TokenPair | LoginMfaChallenge> {
+    const credentials = typeof credentialsOrEmail === "string"
+      ? { email: credentialsOrEmail, password: passwordOrClientIp }
+      : credentialsOrEmail;
+    const clientIp = typeof credentialsOrEmail === "string" ? maybeClientIp : passwordOrClientIp;
+    const resolved = await this.resolveLoginUser(credentials, clientIp);
+    const attemptKey = resolved.attemptKey;
     await this.loginAttempts.assertAllowed(attemptKey);
 
-    const user = await this.users.findByEmail(email);
-    if (!user || !verifyPassword(password, user.passwordHash)) {
+    const user = resolved.user;
+    if (!user || !verifyPassword(credentials.password, user.passwordHash)) {
       await this.loginAttempts.recordFailure(attemptKey);
       throw new UnauthorizedException("LOGIN_FAILED");
     }
@@ -111,7 +128,7 @@ export class AuthService {
       return createLoginMfaChallenge(user.id);
     }
 
-    return this.issueTokenPairForUser(user, "auth.login", { roles: user.roles });
+    return this.issueTokenPairForUser(user, "auth.login", { roles: user.roles, mustChangePassword: Boolean(user.mustChangePassword) });
   }
 
   async verifyTotpChallenge(challengeToken: string, input: TotpVerificationInput): Promise<TokenPair> {
@@ -131,6 +148,7 @@ export class AuthService {
     return this.issueTokenPairForUser(user, "auth.login_mfa_verified", {
       roles: user.roles,
       method,
+      mustChangePassword: Boolean(user.mustChangePassword),
     });
   }
 
@@ -152,7 +170,7 @@ export class AuthService {
       throw new BadRequestException("MFA_ALREADY_ENABLED");
     }
 
-    const draft = createTotpEnrollmentDraft(user.email, user.id);
+    const draft = createTotpEnrollmentDraft(user.email ?? user.id, user.id);
     await this.auditLogs?.record({
       tenantId: user.tenantId === "system" ? undefined : user.tenantId,
       actorUserId: user.id,
@@ -235,6 +253,7 @@ export class AuthService {
     tenantId: string;
     roles: string[];
     membershipVersion: number;
+    mustChangePassword?: boolean;
   }, auditAction: string, auditDiff: Record<string, unknown>): Promise<TokenPair> {
     const subject = await this.identities.resolve({
       userId: user.id,
@@ -246,6 +265,7 @@ export class AuthService {
       tenantId: user.tenantId,
       roles: user.roles,
       membershipVersion: user.membershipVersion,
+      mustChangePassword: Boolean(user.mustChangePassword),
       subjectType: subject?.subjectType,
       subjectId: subject?.subjectId,
     });
@@ -257,12 +277,14 @@ export class AuthService {
       action: auditAction,
       diff: auditDiff,
     });
-    return tokenPair;
+    return { ...tokenPair, mustChangePassword: Boolean(user.mustChangePassword) };
   }
 
   async refresh(refreshToken: string): Promise<TokenPair> {
     try {
-      return await this.tokens.rotate(refreshToken);
+      const tokenPair = await this.tokens.rotate(refreshToken);
+      const user = await this.users.findById(tokenPair.session.userId);
+      return { ...tokenPair, mustChangePassword: Boolean(user?.mustChangePassword) };
     } catch (error) {
       throw new UnauthorizedException(error instanceof Error ? error.message : "REFRESH_FAILED");
     }
@@ -283,6 +305,9 @@ export class AuthService {
 
     const user = await this.users.findByEmail(normalizedEmail);
     if (!user) {
+      return { status: "IGNORED" };
+    }
+    if (user.tenantId !== "system") {
       return { status: "IGNORED" };
     }
 
@@ -315,7 +340,17 @@ export class AuthService {
     if (reset.status !== "PENDING") throw new BadRequestException("PASSWORD_RESET_NOT_PENDING");
     if (Date.parse(reset.expiresAt) <= Date.now()) throw new BadRequestException("PASSWORD_RESET_EXPIRED");
 
-    const user = await this.users.updatePassword(reset.userId, hashPassword(password, `reset-${reset.id}`));
+    const existingUser = await this.users.findById(reset.userId);
+    if (!existingUser) throw new NotFoundException("USER_NOT_FOUND");
+    if (existingUser.tenantId !== "system") {
+      await this.passwordResets.markUsed(reset.id, new Date().toISOString());
+      throw new BadRequestException("TENANT_PASSWORD_RESET_FORBIDDEN");
+    }
+
+    const user = await this.users.updatePassword(reset.userId, hashPassword(password, `reset-${reset.id}`), {
+      mustChangePassword: false,
+      passwordChangedAt: new Date().toISOString(),
+    });
     if (!user) throw new NotFoundException("USER_NOT_FOUND");
 
     const resetAt = new Date().toISOString();
@@ -338,7 +373,7 @@ export class AuthService {
       throw new NotFoundException("USER_NOT_FOUND");
     }
 
-    const hadEmail = user.email.length > 0;
+    const hadEmail = (user.email ?? "").length > 0;
     const hadName = user.name.length > 0;
     const purgedAt = new Date().toISOString();
     const purged = await this.users.purgePii(user.id, {
@@ -392,6 +427,10 @@ export class AuthService {
     ) {
       throw new UnauthorizedException("ACCESS_SESSION_MISMATCH");
     }
+    const user = await this.users.findById(payload.sub);
+    if (!user) {
+      throw new UnauthorizedException("ACCESS_USER_NOT_FOUND");
+    }
 
     return {
       ...payload,
@@ -399,6 +438,67 @@ export class AuthService {
       subjectType: session.subjectType,
       subjectId: session.subjectId,
       membershipVersion: session.membershipVersion,
+      mustChangePassword: Boolean(user.mustChangePassword),
+    };
+  }
+
+  async changeCurrentPassword(context: RequestContext, currentPassword: string, newPassword: string): Promise<{ changedAt: string }> {
+    if (!newPassword || newPassword.length < 8) {
+      throw new BadRequestException("PASSWORD_MIN_8_REQUIRED");
+    }
+    const user = await this.requireCurrentUser(context);
+    if (!verifyPassword(currentPassword, user.passwordHash)) {
+      throw new UnauthorizedException("CURRENT_PASSWORD_INVALID");
+    }
+
+    const changedAt = new Date().toISOString();
+    const updated = await this.users.updatePassword(user.id, hashPassword(newPassword, `change-${user.id}-${Date.now()}`), {
+      mustChangePassword: false,
+      passwordChangedAt: changedAt,
+    });
+    if (!updated) throw new NotFoundException("USER_NOT_FOUND");
+    if (context.sessionId) {
+      await this.sessions.revokeByUserExcept(user.id, context.sessionId);
+    } else {
+      await this.sessions.revokeByUser(user.id);
+    }
+    await this.auditLogs?.record({
+      tenantId: user.tenantId === "system" ? undefined : user.tenantId,
+      actorUserId: user.id,
+      entityType: "Auth",
+      entityId: user.id,
+      action: "auth.password_changed",
+      diff: { mustChangePassword: false },
+    });
+    return { changedAt };
+  }
+
+  private async resolveLoginUser(credentials: LoginCredentials, clientIp: string): Promise<{ user?: Awaited<ReturnType<AuthUserStore["findByEmail"]>>; attemptKey: string }> {
+    if (credentials.email?.trim()) {
+      const email = credentials.email.trim().toLowerCase();
+      const user = await this.users.findByEmail(email);
+      return {
+        user: user && isProvisionedSubjectEmailLoginAllowed(user) ? user : undefined,
+        attemptKey: loginAttemptKey(email, clientIp),
+      };
+    }
+
+    if (!this.tenants) {
+      throw new BadRequestException("TENANT_STORE_REQUIRED");
+    }
+    const tenantSlug = credentials.tenantSlug?.trim().toLowerCase();
+    const nationalIdInput = credentials.nationalId?.trim();
+    if (!tenantSlug || !nationalIdInput) {
+      throw new BadRequestException("LOGIN_IDENTIFIER_REQUIRED");
+    }
+    const tenant = await this.tenants.findBySlug(tenantSlug);
+    if (!tenant) {
+      return { user: undefined, attemptKey: loginAttemptKey(`${tenantSlug}:missing`, clientIp) };
+    }
+    const nationalIdHash = hashTcIdentity(normalizeTcIdentity(nationalIdInput, "LOGIN_NATIONAL_ID_INVALID"));
+    return {
+      user: await this.users.findByTenantAndNationalIdHash(tenant.id, nationalIdHash),
+      attemptKey: loginAttemptKey(`${tenant.id}:${nationalIdHash}`, clientIp),
     };
   }
 
@@ -452,6 +552,11 @@ export class AuthService {
 
     throw new UnauthorizedException("MFA_CODE_REQUIRED");
   }
+}
+
+function isProvisionedSubjectEmailLoginAllowed(user: { tenantId: string; nationalIdHash?: string; roles: string[] }): boolean {
+  if (user.tenantId === "system" || !user.nationalIdHash) return true;
+  return user.roles.some((role) => role === "TENANT_ADMIN" || role === "ASSISTANT_ADMIN" || role === "SYSTEM_ADMIN");
 }
 
 export function createResetToken(): string {

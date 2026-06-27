@@ -11,9 +11,35 @@ describe("createSmsBatchProcessor", () => {
     expect(() => createSmsBatchProcessor({
       env: {
         NODE_ENV: "production",
+        SMS_ENABLED: "true",
         SMS_PROVIDER: "noop",
       },
     })).toThrow("SMS_PROVIDER_REQUIRED");
+  });
+
+  it("SMS kapalı prod ortamında no-op adapter ile başlayabilir", async () => {
+    const processor = createSmsBatchProcessor({
+      deliveryReporter: new FakeDeliveryReporter(),
+      env: {
+        NODE_ENV: "production",
+        SMS_ENABLED: "false",
+        SMS_PROVIDER: "noop",
+      },
+    });
+
+    await expect(processor({
+      id: "message-template-a_sms-hash-a",
+      name: "sms-batch",
+      payload: {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        entityId: "message-template-a",
+        contentHash: "sms-hash-a",
+        templateId: "message-template-a",
+        messageBody: "Test",
+        recipients: [{ to: "5000000001" }],
+      },
+    })).resolves.toEqual(expect.objectContaining({ status: "completed" }));
   });
 
   it("lokalde açıkça no-op adapter ile çalışabilir", async () => {

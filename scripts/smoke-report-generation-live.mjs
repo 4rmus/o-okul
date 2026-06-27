@@ -176,13 +176,12 @@ async function seedReportInput() {
 
     await insertRows(
       client,
-      `INSERT INTO "Class" ("id", "tenantId", "name", "level", "updatedAt") VALUES `,
-      ["id", "tenantId", "name", "level"],
+      `INSERT INTO "Class" ("id", "tenantId", "name", "updatedAt") VALUES `,
+      ["id", "tenantId", "name"],
       Array.from({ length: expectedClassCount }, (_value, index) => [
         classIdAt(index),
         tenantId,
         classNameAt(index),
-        "8",
       ]),
     );
 

@@ -10,12 +10,18 @@ export type TenantUserRole = TenantAssignableRoleName;
 
 export interface TenantUserRecord {
   id: string;
-  email: string;
+  email?: string;
   name: string;
   tenantId: string;
   roles: TenantUserRole[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TenantUserPasswordResetTarget {
+  userId: string;
+  phone?: string;
+  subjectType?: "STUDENT" | "TEACHER" | "GUARDIAN";
 }
 
 export interface CreateTenantUserInput {
@@ -29,6 +35,7 @@ export interface CreateTenantUserInput {
 export interface UserManagementStore {
   listTenantUsers(tenantId: string): Promise<TenantUserRecord[]>;
   findTenantUser(tenantId: string, userId: string): Promise<TenantUserRecord | undefined>;
+  findTenantUserPasswordResetTarget(tenantId: string, userId: string): Promise<TenantUserPasswordResetTarget | undefined>;
   createOrAttachTenantUser(input: CreateTenantUserInput): Promise<TenantUserRecord>;
   setTenantRoles(tenantId: string, userId: string, roles: TenantUserRole[]): Promise<TenantUserRecord | undefined>;
 }
@@ -83,6 +90,12 @@ const demoUsers: TenantUserRecord[] = [
   },
 ];
 
+const demoPasswordResetTargets: Record<string, TenantUserPasswordResetTarget> = {
+  "teacher-tenant-a": { userId: "teacher-tenant-a", phone: "5550000010", subjectType: "TEACHER" },
+  "student-tenant-a": { userId: "student-tenant-a", phone: "5550000001", subjectType: "STUDENT" },
+  "guardian-tenant-a": { userId: "guardian-tenant-a", phone: "5000000001", subjectType: "GUARDIAN" },
+};
+
 export class InMemoryUserManagementStore implements UserManagementStore {
   private readonly users = demoUsers.map((user) => ({ ...user, roles: [...user.roles] }));
 
@@ -92,6 +105,13 @@ export class InMemoryUserManagementStore implements UserManagementStore {
 
   async findTenantUser(tenantId: string, userId: string): Promise<TenantUserRecord | undefined> {
     return cloneTenantUser(this.users.find((user) => user.tenantId === tenantId && user.id === userId));
+  }
+
+  async findTenantUserPasswordResetTarget(tenantId: string, userId: string): Promise<TenantUserPasswordResetTarget | undefined> {
+    const user = this.users.find((candidate) => candidate.tenantId === tenantId && candidate.id === userId);
+    if (!user) return undefined;
+    const target = demoPasswordResetTargets[userId];
+    return target ? { ...target } : { userId };
   }
 
   async createOrAttachTenantUser(input: CreateTenantUserInput): Promise<TenantUserRecord> {
@@ -145,7 +165,7 @@ export class PostgresUserManagementStore implements UserManagementStore {
          JOIN "User" u ON u."id" = m."userId"
          WHERE m."tenantId" = $1
          GROUP BY u."id", u."email", u."name", m."tenantId"
-         ORDER BY lower(u."email") ASC`,
+         ORDER BY lower(coalesce(u."email", u."name")) ASC`,
         [tenantId],
       );
       return result.rows.map(toTenantUserRecord);
@@ -174,15 +194,40 @@ export class PostgresUserManagementStore implements UserManagementStore {
     });
   }
 
+  async findTenantUserPasswordResetTarget(tenantId: string, userId: string): Promise<TenantUserPasswordResetTarget | undefined> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const result = await client.query<TenantUserPasswordResetTargetRow>(
+        `SELECT
+           u."id" AS "userId",
+           COALESCE(s."phone", t."phone", g."phone") AS "phone",
+           CASE
+             WHEN s."id" IS NOT NULL THEN 'STUDENT'
+             WHEN t."id" IS NOT NULL THEN 'TEACHER'
+             WHEN g."id" IS NOT NULL THEN 'GUARDIAN'
+             ELSE NULL
+           END AS "subjectType"
+         FROM "TenantMembership" m
+         JOIN "User" u ON u."id" = m."userId"
+         LEFT JOIN "Student" s ON s."tenantId" = m."tenantId" AND s."userId" = u."id" AND s."deletedAt" IS NULL
+         LEFT JOIN "Teacher" t ON t."tenantId" = m."tenantId" AND t."userId" = u."id" AND t."deletedAt" IS NULL
+         LEFT JOIN "Guardian" g ON g."tenantId" = m."tenantId" AND g."userId" = u."id" AND g."deletedAt" IS NULL
+         WHERE m."tenantId" = $1 AND u."id" = $2
+         LIMIT 1`,
+        [tenantId, userId],
+      );
+      return result.rows[0] ? toTenantUserPasswordResetTarget(result.rows[0]) : undefined;
+    });
+  }
+
   async createOrAttachTenantUser(input: CreateTenantUserInput): Promise<TenantUserRecord> {
     return withExplicitTenantQuery(this.pool, input.tenantId, async (client) => {
       const normalizedEmail = input.email.toLowerCase();
       const created = await client.query<{ id: string }>(
-        `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt")
-         VALUES ($1, $2, $3, $4, now())
+        `INSERT INTO "User" ("id", "tenantId", "email", "name", "passwordHash", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, now())
          ON CONFLICT ("email") DO NOTHING
          RETURNING "id"`,
-        [randomUUID(), normalizedEmail, input.name, hashPassword(input.password, randomUUID())],
+        [randomUUID(), input.tenantId, normalizedEmail, input.name, hashPassword(input.password, randomUUID())],
       );
       const userId =
         created.rows[0]?.id ??
@@ -287,7 +332,7 @@ export function createUserManagementStore(): UserManagementStore {
 
 interface TenantUserRow {
   id: string;
-  email: string;
+  email: string | null;
   name: string;
   tenantId: string;
   roles: TenantUserRole[];
@@ -295,15 +340,29 @@ interface TenantUserRow {
   updatedAt: Date;
 }
 
+interface TenantUserPasswordResetTargetRow {
+  userId: string;
+  phone: string | null;
+  subjectType: "STUDENT" | "TEACHER" | "GUARDIAN" | null;
+}
+
 function toTenantUserRecord(row: TenantUserRow): TenantUserRecord {
   return {
     id: row.id,
-    email: row.email,
+    email: row.email ?? undefined,
     name: row.name,
     tenantId: row.tenantId,
     roles: row.roles,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function toTenantUserPasswordResetTarget(row: TenantUserPasswordResetTargetRow): TenantUserPasswordResetTarget {
+  return {
+    userId: row.userId,
+    phone: row.phone ?? undefined,
+    subjectType: row.subjectType ?? undefined,
   };
 }
 

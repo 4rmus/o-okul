@@ -13,6 +13,7 @@ export interface Session {
   roles: string[];
   membershipVersion: number;
   status: string;
+  mustChangePassword?: boolean;
   subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER";
   subjectId?: string;
 }
@@ -23,7 +24,9 @@ export interface AuthResponse {
 }
 
 export interface LoginRequest {
-  email: string;
+  email?: string;
+  tenantSlug?: string;
+  nationalId?: string;
   password: string;
 }
 
@@ -55,6 +58,15 @@ export interface PasswordResetConfirmRequest {
 
 export interface PasswordResetConfirmResponse {
   resetAt: string;
+}
+
+export interface MePasswordChangeRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface MePasswordChangeResponse {
+  changedAt: string;
 }
 
 export interface TotpChallengeVerifyRequest {
@@ -101,6 +113,7 @@ export interface MeProfileResponse {
   userId: string;
   tenantId: string | null;
   roles: string[];
+  mustChangePassword?: boolean;
   subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER";
   subjectId?: string;
 }
@@ -164,7 +177,7 @@ export interface TenantAdminUpdateRequest {
 
 export interface TenantUserRecord {
   id: string;
-  email: string;
+  email?: string;
   name: string;
   tenantId: string;
   roles: TenantAssignableRoleName[];
@@ -181,6 +194,12 @@ export interface TenantUserCreateRequest {
 
 export interface TenantUserRoleUpdateRequest {
   roles: TenantAssignableRoleName[];
+}
+
+export interface TenantUserPasswordResetResponse {
+  userId: string;
+  resetAt: string;
+  mustChangePassword: true;
 }
 
 export interface TenantFirstAdminProvisionResult extends TenantUserRecord {
@@ -258,7 +277,7 @@ export interface ClassRecord {
   id: string;
   tenantId: string;
   name: string;
-  level?: string;
+  alanId?: string;
   campusId?: string;
   gradeLevelId?: string;
   section?: string;
@@ -267,7 +286,7 @@ export interface ClassRecord {
 export interface ClassCreateRequest {
   tenantId?: string;
   name: string;
-  level?: string;
+  alanId?: string;
   campusId?: string;
   gradeLevelId?: string;
   section?: string;
@@ -275,7 +294,7 @@ export interface ClassCreateRequest {
 
 export interface ClassUpdateRequest {
   name?: string;
-  level?: string;
+  alanId?: string;
   campusId?: string;
   gradeLevelId?: string;
   section?: string;
@@ -317,11 +336,45 @@ export interface GradeLevelUpdateRequest {
   code?: string;
 }
 
+export interface AlanRecord {
+  id: string;
+  tenantId: string;
+  gradeLevelId?: string;
+  name: string;
+  code?: string;
+}
+
+export interface AlanCreateRequest {
+  tenantId?: string;
+  gradeLevelId?: string;
+  name: string;
+  code?: string;
+}
+
+export interface AlanUpdateRequest {
+  gradeLevelId?: string;
+  name?: string;
+  code?: string;
+}
+
 export interface CourseRecord {
   id: string;
   tenantId: string;
   name: string;
   code?: string;
+}
+
+export interface GradeLevelCourseRecord {
+  id: string;
+  tenantId: string;
+  gradeLevelId: string;
+  courseId: string;
+  alanId?: string;
+  isDefault: boolean;
+  sortOrder: number;
+  courseName: string;
+  courseCode?: string;
+  alanName?: string;
 }
 
 export interface CourseCreateRequest {
@@ -416,6 +469,7 @@ export interface TeacherRecord {
   firstName: string;
   lastName: string;
   branch?: string;
+  phone?: string;
   userId?: string;
 }
 
@@ -424,12 +478,16 @@ export interface TeacherCreateRequest {
   firstName: string;
   lastName: string;
   branch?: string;
+  nationalId?: string;
+  phone?: string;
 }
 
 export interface TeacherUpdateRequest {
   firstName?: string;
   lastName?: string;
   branch?: string;
+  nationalId?: string;
+  phone?: string;
 }
 
 export type TeacherAssignmentRole = "CLASS_TEACHER" | "BRANCH_TEACHER" | "GUIDANCE_COUNSELOR" | "RESPONSIBLE_TEACHER";
@@ -475,13 +533,17 @@ export interface TeacherImportRequest {
 
 export interface TeacherImportError {
   row: number;
-  field: "className" | "courseName" | "firstName" | "lastName";
-  code: "CLASS_NOT_FOUND" | "COURSE_NOT_FOUND" | "REQUIRED";
+  field: "className" | "courseName" | "firstName" | "lastName" | "nationalId" | "phone";
+  code: "CLASS_NOT_FOUND" | "COURSE_NOT_FOUND" | "INVALID" | "REQUIRED";
   value?: string;
 }
 
 export interface TeacherImportPreviewRow {
   row: number;
+  accountPreview?: {
+    usernameMasked: string;
+    willCreate: boolean;
+  };
   classId?: string;
   className?: string;
   courseId?: string;
@@ -523,17 +585,17 @@ export interface GuardianCreateRequest {
   firstName: string;
   lastName: string;
   phone?: string;
+  nationalId?: string;
 }
 
 export interface GuardianUpdateRequest {
   firstName?: string;
   lastName?: string;
   phone?: string;
+  nationalId?: string;
 }
 
 export interface GuardianStudentRelationRequest {
-  relationshipType?: GuardianRelationshipType;
-  isPrimary?: boolean;
   canViewFinance?: boolean;
   canReceiveSms?: boolean;
   canReceiveAnnouncements?: boolean;
@@ -549,8 +611,6 @@ export interface GuardianStudentRecord {
   tenantId: string;
   guardianId: string;
   studentId: string;
-  relationshipType: GuardianRelationshipType;
-  isPrimary: boolean;
   canViewFinance: boolean;
   canReceiveSms: boolean;
   canReceiveAnnouncements: boolean;
@@ -578,10 +638,9 @@ export type StudentStatus = "ACTIVE" | "PASSIVE" | "GRADUATED" | "TRANSFERRED";
 export interface StudentGuardianProvisionRequest {
   firstName?: string;
   lastName?: string;
+  nationalId?: string;
   phone?: string;
   email?: string;
-  relationshipType?: GuardianRelationshipType;
-  isPrimary?: boolean;
   canViewFinance?: boolean;
   canReceiveSms?: boolean;
   canReceiveAnnouncements?: boolean;
@@ -596,6 +655,9 @@ export interface StudentCreateRequest {
   classId?: string;
   responsibleTeacherId?: string;
   status?: StudentStatus;
+  nationalId?: string;
+  phone?: string;
+  email?: string;
   guardian?: StudentGuardianProvisionRequest;
 }
 
@@ -613,7 +675,6 @@ export interface StudentTenantUpdateRequest {
 
 export interface StudentProfileUpdateRequest {
   nationalId?: string;
-  birthDate?: string;
   phone?: string;
   email?: string;
   photoKey?: string;
@@ -643,12 +704,13 @@ export interface StudentImportRequest {
 
 export interface StudentImportError {
   row: number;
-  field: "birthDate" | "className" | "email" | "firstName" | "guardianEmail" | "lastName" | "nationalId" | "quota" | "studentNo";
+  field: "className" | "email" | "firstName" | "guardianEmail" | "guardianNationalId" | "guardianPhone" | "lastName" | "nationalId" | "phone" | "quota" | "studentNo";
   code:
     | "CLASS_NOT_FOUND"
     | "INVALID_DATE"
     | "INVALID_EMAIL"
     | "INVALID_NATIONAL_ID"
+    | "INVALID_PHONE"
     | "REQUIRED"
     | "STUDENT_NATIONAL_ID_DUPLICATE"
     | "STUDENT_NO_DUPLICATE"
@@ -658,15 +720,16 @@ export interface StudentImportError {
 
 export interface StudentImportPreviewRow {
   row: number;
-  birthDate?: string;
+  accountPreview?: {
+    usernameMasked: string;
+    willCreate: boolean;
+  };
   classId?: string;
   className?: string;
   email?: string;
   firstName: string;
   guardian?: StudentGuardianProvisionRequest;
   lastName: string;
-  nationalId?: string;
-  phone?: string;
   studentNo?: string;
 }
 
@@ -713,6 +776,16 @@ export interface GuardianStudentDetailsResponse {
   availableStudents: GuardianStudentDetailStudentRecord[];
 }
 
+export type GlobalSearchType = "students" | "teachers" | "guardians" | "classes";
+
+export interface GlobalSearchResultRecord {
+  id: string;
+  type: GlobalSearchType;
+  title: string;
+  subtitle?: string;
+  href: string;
+}
+
 export interface StudentClassHistoryRecord {
   id: string;
   tenantId: string;
@@ -757,7 +830,6 @@ export interface StudentProfileRecord extends StudentRecord {
   section?: string;
   responsibleTeacherName?: string;
   nationalIdMasked?: string;
-  birthDate?: string;
   phone?: string;
   email?: string;
   photoKey?: string;
@@ -1945,6 +2017,7 @@ export interface ParserConfigRecord {
 }
 
 export type ExamStatus = "DRAFT" | "PUBLISHED";
+export type ExamType = "SCHOOL" | "LGS" | "TYT" | "AYT" | "KPSS";
 
 export interface ExamAnswerKeySummary {
   status: "MISSING" | "DRAFT" | "PUBLISHED";
@@ -1957,6 +2030,9 @@ export interface ExamAnswerKeySummary {
 export interface ExamRecord {
   id: string;
   tenantId: string;
+  gradeLevelId?: string;
+  alanId?: string;
+  examType?: ExamType | string;
   title: string;
   status: string;
   answerKeySummary?: ExamAnswerKeySummary;

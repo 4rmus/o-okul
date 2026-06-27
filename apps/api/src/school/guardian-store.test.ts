@@ -42,9 +42,9 @@ describe("PostgresGuardianStore", () => {
     expect(businessQueries[0]?.sql).toContain('SELECT * FROM "Guardian"');
     expect(businessQueries[1]?.values).toEqual(["guardian-a"]);
     expect(businessQueries[2]?.sql).toContain('INSERT INTO "Guardian"');
-    expect(businessQueries[2]?.values).toEqual([expect.any(String), "tenant-a", "Can", "Veli", "5000000010"]);
+    expect(businessQueries[2]?.values).toEqual([expect.any(String), "tenant-a", "Can", "Veli", "5000000010", null, null]);
     expect(businessQueries[4]?.sql).toContain('UPDATE "Guardian"');
-    expect(businessQueries[4]?.values).toEqual(["guardian-a", null, null, true, "5000000011"]);
+    expect(businessQueries[4]?.values).toEqual(["guardian-a", null, null, true, "5000000011", null, null]);
     expect(businessQueries[6]?.sql).toContain('"phone" = NULL');
     expect(businessQueries[8]?.values).toEqual(["guardian-a", "2026-06-01T12:00:00.000Z"]);
   });

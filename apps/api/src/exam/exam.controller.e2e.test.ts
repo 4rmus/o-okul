@@ -116,6 +116,67 @@ describe("ExamController", () => {
     expect(answerKeys.records.size).toBe(1);
   });
 
+  it("TENANT_ADMIN sınav akademik bağlamını oluşturur ve günceller", async () => {
+    const issued = await login("admin-a@example.test");
+    let alanId = "";
+    let otherGradeLevelId = "";
+    try {
+      const alan = await request(server)
+        .post("/alanlar")
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .send({ name: "LGS Alanı", gradeLevelId: "grade-8", code: "LGS-TEST" })
+        .expect(201);
+      alanId = (alan.body as { id: string }).id;
+      const otherGradeLevel = await request(server)
+        .post("/grade-levels")
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .send({ name: "9. Sınıf", code: "9-EXAM-TEST" })
+        .expect(201);
+      otherGradeLevelId = (otherGradeLevel.body as { id: string }).id;
+
+      const created = await request(server)
+        .post("/exams")
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .send(examCreateBody("LGS Bağlamlı Deneme", { gradeLevelId: "grade-8", alanId, examType: "LGS" }))
+        .expect(201);
+
+      expect(created.body).toMatchObject({
+        gradeLevelId: "grade-8",
+        alanId,
+        examType: "LGS",
+      });
+
+      await request(server)
+        .patch(`/exams/${created.body.id}`)
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .send({ title: "Uyumsuz Bağlam", gradeLevelId: otherGradeLevelId, alanId, examType: "SCHOOL" })
+        .expect(400)
+        .expect(({ body }) => {
+          expect(body.error).toMatchObject({ code: "ALAN_GRADE_LEVEL_MISMATCH" });
+        });
+
+      const updated = await request(server)
+        .patch(`/exams/${created.body.id}`)
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .send({ title: "Okul Bağlamlı Deneme", gradeLevelId: "grade-8", alanId, examType: "SCHOOL" })
+        .expect(200);
+
+      expect(updated.body).toMatchObject({
+        title: "Okul Bağlamlı Deneme",
+        gradeLevelId: "grade-8",
+        alanId,
+        examType: "SCHOOL",
+      });
+    } finally {
+      if (alanId) {
+        await request(server).delete(`/alanlar/${alanId}`).set("Authorization", `Bearer ${issued.accessToken}`);
+      }
+      if (otherGradeLevelId) {
+        await request(server).delete(`/grade-levels/${otherGradeLevelId}`).set("Authorization", `Bearer ${issued.accessToken}`);
+      }
+    }
+  });
+
   it("TENANT_ADMIN sınav oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
     const issued = await login("admin-a@example.test");
     const key = "exam-create-idempotency-a";
@@ -151,7 +212,7 @@ describe("ExamController", () => {
     const extraClass = await request(server)
       .post("/classes")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ name: "8-B", level: "8" })
+      .send({ name: "8-B" })
       .expect(201);
     const extraStudent = await request(server)
       .post("/students")
@@ -537,6 +598,9 @@ class FakeExamRepository implements ExamRepository {
     const exam: ExamRecord = {
       id: randomUUID(),
       tenantId: input.tenantId,
+      ...(input.gradeLevelId ? { gradeLevelId: input.gradeLevelId } : {}),
+      ...(input.alanId ? { alanId: input.alanId } : {}),
+      ...(input.examType ? { examType: input.examType } : {}),
       title: input.title,
       status: "DRAFT",
       ...(input.startsAt ? { startsAt: input.startsAt } : {}),
@@ -574,6 +638,9 @@ class FakeExamRepository implements ExamRepository {
     const updated: ExamRecord = {
       ...exam,
       title: input.title,
+      ...(input.gradeLevelId ? { gradeLevelId: input.gradeLevelId } : { gradeLevelId: undefined }),
+      ...(input.alanId ? { alanId: input.alanId } : { alanId: undefined }),
+      ...(input.examType ? { examType: input.examType } : { examType: undefined }),
       ...(input.startsAt ? { startsAt: input.startsAt } : {}),
       updatedAt: "2026-03-01T00:00:00.000Z",
     };

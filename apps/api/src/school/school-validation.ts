@@ -4,6 +4,8 @@ import type {
   AcademicTermUpdateRequest,
   AcademicYearCreateRequest,
   AcademicYearUpdateRequest,
+  AlanCreateRequest,
+  AlanUpdateRequest,
   CampusCreateRequest,
   CampusUpdateRequest,
   ClassCreateRequest,
@@ -34,7 +36,6 @@ import {
 const optionalNonEmptyString = requiredTrimmedString.optional();
 const dateString = requiredDateString("DATE_INVALID");
 const optionalDateString = optionalCalendarDateString("DATE_INVALID");
-const guardianRelationshipTypeSchema = z.enum(["MOTHER", "FATHER", "GUARDIAN", "EMERGENCY_CONTACT", "OTHER"]);
 const teacherAssignmentRoleSchema = z.enum(["CLASS_TEACHER", "BRANCH_TEACHER", "GUIDANCE_COUNSELOR", "RESPONSIBLE_TEACHER"]);
 
 export const campusCreateBodySchema = z.object({
@@ -59,19 +60,34 @@ export const gradeLevelUpdateBodySchema = z.object({
   name: optionalNonEmptyString,
 }).strict() satisfies z.ZodType<GradeLevelUpdateRequest>;
 
+export const alanCreateBodySchema = z.object({
+  code: optionalTrimmedString,
+  gradeLevelId: optionalNonEmptyString,
+  name: requiredTrimmedString,
+  tenantId: optionalNonEmptyString,
+}).strict() satisfies z.ZodType<AlanCreateRequest>;
+
+export const alanUpdateBodySchema = z.object({
+  code: optionalTrimmedString,
+  gradeLevelId: optionalNonEmptyString,
+  name: optionalNonEmptyString,
+}).strict().refine(hasAtLeastOneField, {
+  message: "UPDATE_BODY_EMPTY",
+}) satisfies z.ZodType<AlanUpdateRequest>;
+
 export const classCreateBodySchema = z.object({
+  alanId: optionalNonEmptyString,
   campusId: optionalNonEmptyString,
   gradeLevelId: optionalNonEmptyString,
-  level: optionalTrimmedString,
   name: requiredTrimmedString,
   section: optionalTrimmedString,
   tenantId: optionalNonEmptyString,
 }).strict() satisfies z.ZodType<ClassCreateRequest>;
 
 export const classUpdateBodySchema = z.object({
+  alanId: optionalNonEmptyString,
   campusId: optionalNonEmptyString,
   gradeLevelId: optionalNonEmptyString,
-  level: optionalTrimmedString,
   name: optionalNonEmptyString,
   section: optionalTrimmedString,
 }).strict().refine(hasAtLeastOneField, {
@@ -140,6 +156,8 @@ export const teacherCreateBodySchema = z.object({
   branch: optionalTrimmedString,
   firstName: requiredTrimmedString,
   lastName: requiredTrimmedString,
+  nationalId: optionalTrimmedString,
+  phone: optionalTrimmedString,
   tenantId: optionalNonEmptyString,
 }).strict() satisfies z.ZodType<TeacherCreateRequest>;
 
@@ -147,6 +165,8 @@ export const teacherUpdateBodySchema = z.object({
   branch: optionalTrimmedString,
   firstName: optionalNonEmptyString,
   lastName: optionalNonEmptyString,
+  nationalId: optionalTrimmedString,
+  phone: optionalTrimmedString,
 }).strict() satisfies z.ZodType<TeacherUpdateRequest>;
 
 const teacherAssignmentBodyFields = {
@@ -175,6 +195,7 @@ export const teacherImportBodySchema = z.object({
 export const guardianCreateBodySchema = z.object({
   firstName: requiredTrimmedString,
   lastName: requiredTrimmedString,
+  nationalId: optionalTrimmedString,
   phone: optionalTrimmedString,
   tenantId: optionalNonEmptyString,
 }).strict() satisfies z.ZodType<GuardianCreateRequest>;
@@ -182,6 +203,7 @@ export const guardianCreateBodySchema = z.object({
 export const guardianUpdateBodySchema = z.object({
   firstName: optionalNonEmptyString,
   lastName: optionalNonEmptyString,
+  nationalId: optionalTrimmedString,
   phone: optionalTrimmedString,
 }).strict() satisfies z.ZodType<GuardianUpdateRequest>;
 
@@ -190,8 +212,6 @@ const guardianStudentRelationFields = {
   canReceiveAnnouncements: z.boolean().optional(),
   canReceiveSms: z.boolean().optional(),
   canViewFinance: z.boolean().optional(),
-  isPrimary: z.boolean().optional(),
-  relationshipType: guardianRelationshipTypeSchema.optional(),
 };
 
 export const guardianStudentLinkBodySchema = z.object({
@@ -209,6 +229,8 @@ export const guardianNotificationPreferenceBodySchema = z.object({
 
 export type CampusCreateBody = CampusCreateRequest;
 export type CampusUpdateBody = CampusUpdateRequest;
+export type AlanCreateBody = AlanCreateRequest;
+export type AlanUpdateBody = AlanUpdateRequest;
 export type GradeLevelCreateBody = GradeLevelCreateRequest;
 export type GradeLevelUpdateBody = GradeLevelUpdateRequest;
 export type ClassCreateBody = ClassCreateRequest;

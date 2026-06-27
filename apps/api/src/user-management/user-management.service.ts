@@ -1,6 +1,8 @@
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { authUserStoreToken, hashPassword, type AuthUserStore } from "../auth/auth-user-store.js";
+import { optionalTurkishMobilePhone } from "../auth/phone-normalize.js";
 import { authSessionStoreToken, type SessionStore } from "../auth/session-store.js";
 import { isTenantAssignableRoleName, type TenantAssignableRoleName } from "@o-okul/shared-types";
 import {
@@ -27,10 +29,17 @@ export interface SetTenantUserRolesBody {
   roles?: string[];
 }
 
+export interface TenantUserPasswordResetResult {
+  userId: string;
+  resetAt: string;
+  mustChangePassword: true;
+}
+
 @Injectable()
 export class UserManagementService {
   constructor(
     @Inject(userManagementStoreToken) private readonly store: UserManagementStore,
+    @Inject(authUserStoreToken) private readonly users: AuthUserStore,
     @Inject(authSessionStoreToken) private readonly sessions: SessionStore,
     @Inject(tenantStoreToken) private readonly tenants: TenantStore,
     @Optional() private readonly auditLogs?: AuditLogService,
@@ -45,7 +54,7 @@ export class UserManagementService {
     const tenantId = this.requireTenantId(context);
     const input = this.parseCreateInput(tenantId, body);
     const existingUsers = await this.store.listTenantUsers(tenantId);
-    if (!existingUsers.some((user) => user.email.toLowerCase() === input.email)) {
+    if (!existingUsers.some((user) => user.email?.toLowerCase() === input.email)) {
       await this.assertTenantSeatAvailable(tenantId);
     }
 
@@ -65,6 +74,38 @@ export class UserManagementService {
       diff: { emailProvided: true, roles: record.roles },
     });
     return record;
+  }
+
+  async resetPassword(context: RequestContext, userId: string): Promise<TenantUserPasswordResetResult> {
+    const tenantId = this.requireTenantId(context);
+    const target = await this.store.findTenantUserPasswordResetTarget(tenantId, userId);
+    if (!target) {
+      throw new NotFoundException("USER_MEMBERSHIP_NOT_FOUND");
+    }
+
+    const phone = optionalTurkishMobilePhone(target.phone, "USER_RESET_PHONE_INVALID");
+    if (!phone) {
+      throw new BadRequestException("USER_RESET_PHONE_REQUIRED");
+    }
+
+    const resetAt = new Date().toISOString();
+    const updated = await this.users.updatePassword(userId, hashPassword(phone, `reset-${userId}-${Date.now()}`), {
+      mustChangePassword: true,
+    });
+    if (!updated) {
+      throw new NotFoundException("USER_NOT_FOUND");
+    }
+
+    await this.sessions.revokeByUser(userId);
+    await this.auditLogs?.record({
+      tenantId,
+      actorUserId: context.userId,
+      entityType: "User",
+      entityId: userId,
+      action: "user.password_reset_to_phone",
+      diff: { passwordSource: "phone", subjectType: target.subjectType ?? null },
+    });
+    return { userId, resetAt, mustChangePassword: true };
   }
 
   async setRoles(context: RequestContext, userId: string, body: SetTenantUserRolesBody): Promise<TenantUserRecord> {
@@ -151,6 +192,9 @@ function parseTenantRoles(input: string[] | undefined): TenantAssignableRoleName
     }
     if (!isTenantAssignableRoleName(role)) {
       throw new BadRequestException("ROLE_INVALID");
+    }
+    if (role === "TEACHER" || role === "STUDENT" || role === "GUARDIAN") {
+      throw new BadRequestException("TENANT_USER_SUBJECT_ROLE_FORBIDDEN");
     }
     parsedRoles.push(role);
   }

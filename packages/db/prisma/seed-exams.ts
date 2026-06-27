@@ -409,11 +409,11 @@ async function seedClasses(client: pg.PoolClient, fixtures: DemoFixtures): Promi
   for (const demoClass of fixtures.classes) {
     await client.query(
       `
-        INSERT INTO "Class" ("id", "tenantId", "name", "level", "updatedAt")
+        INSERT INTO "Class" ("id", "tenantId", "name", "gradeLevelId", "updatedAt")
         VALUES ($1, $2, $3, $4, now())
-        ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "level" = EXCLUDED."level", "deletedAt" = NULL, "updatedAt" = now()
+        ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "gradeLevelId" = EXCLUDED."gradeLevelId", "deletedAt" = NULL, "updatedAt" = now()
       `,
-      [demoClass.id, TENANT_ID, demoClass.name, demoClass.level],
+      [demoClass.id, TENANT_ID, demoClass.name, demoClass.gradeLevelId ?? null],
     );
   }
 }

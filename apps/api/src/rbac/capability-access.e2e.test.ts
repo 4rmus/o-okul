@@ -258,6 +258,9 @@ class FakeExamRepository implements ExamRepository {
     const exam: ExamRecord = {
       id: randomUUID(),
       tenantId: input.tenantId,
+      ...(input.gradeLevelId ? { gradeLevelId: input.gradeLevelId } : {}),
+      ...(input.alanId ? { alanId: input.alanId } : {}),
+      ...(input.examType ? { examType: input.examType } : {}),
       title: input.title,
       status: "DRAFT",
       ...(input.startsAt ? { startsAt: input.startsAt } : {}),
@@ -295,6 +298,9 @@ class FakeExamRepository implements ExamRepository {
     const updated: ExamRecord = {
       ...exam,
       title: input.title,
+      ...(input.gradeLevelId ? { gradeLevelId: input.gradeLevelId } : { gradeLevelId: undefined }),
+      ...(input.alanId ? { alanId: input.alanId } : { alanId: undefined }),
+      ...(input.examType ? { examType: input.examType } : { examType: undefined }),
       ...(input.startsAt ? { startsAt: input.startsAt } : {}),
       updatedAt: "2026-03-01T00:00:00.000Z",
     };

@@ -10,10 +10,18 @@ export class PostgresExamRepository implements ExamRepository {
   async create(input: CreateExamRepositoryInput): Promise<ExamRecord> {
     return withTenantQuery(this.pool, async (client) => {
       const inserted = await client.query<ExamRow>(
-        `INSERT INTO "Exam" ("id", "tenantId", "title", "status", "startsAt", "updatedAt")
-         VALUES ($1, $2, $3, 'DRAFT', $4, now())
+        `INSERT INTO "Exam" ("id", "tenantId", "gradeLevelId", "alanId", "examType", "title", "status", "startsAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, 'DRAFT', $7, now())
          RETURNING *`,
-        [randomUUID(), input.tenantId, input.title, input.startsAt ?? null],
+        [
+          randomUUID(),
+          input.tenantId,
+          input.gradeLevelId ?? null,
+          input.alanId ?? null,
+          input.examType ?? null,
+          input.title,
+          input.startsAt ?? null,
+        ],
       );
       return toExamRecord(inserted.rows[0]!);
     });
@@ -48,10 +56,15 @@ export class PostgresExamRepository implements ExamRepository {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<ExamRow>(
         `UPDATE "Exam"
-         SET "title" = $3, "startsAt" = $4, "updatedAt" = now()
+         SET "title" = $3,
+             "gradeLevelId" = $4,
+             "alanId" = $5,
+             "examType" = $6,
+             "startsAt" = $7,
+             "updatedAt" = now()
          WHERE "tenantId" = $1 AND "id" = $2 AND "deletedAt" IS NULL
          RETURNING *`,
-        [tenantId, examId, input.title, input.startsAt ?? null],
+        [tenantId, examId, input.title, input.gradeLevelId ?? null, input.alanId ?? null, input.examType ?? null, input.startsAt ?? null],
       );
       const row = result.rows[0];
       return row ? toExamRecord(row) : undefined;
@@ -104,6 +117,9 @@ export class PostgresExamRepository implements ExamRepository {
 interface ExamRow {
   id: string;
   tenantId: string;
+  gradeLevelId: string | null;
+  alanId: string | null;
+  examType: string | null;
   title: string;
   status: string;
   startsAt: Date | string | null;
@@ -115,6 +131,9 @@ function toExamRecord(row: ExamRow): ExamRecord {
   return {
     id: row.id,
     tenantId: row.tenantId,
+    ...(row.gradeLevelId ? { gradeLevelId: row.gradeLevelId } : {}),
+    ...(row.alanId ? { alanId: row.alanId } : {}),
+    ...(row.examType ? { examType: row.examType } : {}),
     title: row.title,
     status: row.status,
     ...(row.startsAt ? { startsAt: toIso(row.startsAt) } : {}),

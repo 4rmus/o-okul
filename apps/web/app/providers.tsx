@@ -8,8 +8,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { AuthResponse } from "@o-okul/shared-types";
+import type { AuthResponse, LoginRequest, MePasswordChangeRequest } from "@o-okul/shared-types";
 import {
+  changePassword as requestChangePassword,
   login as requestLogin,
   logout as requestLogout,
   queryClient,
@@ -21,7 +22,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 interface AuthStore {
   auth: AuthResponse | null;
   isBootstrapping: boolean;
-  login(email: string, password: string): Promise<void>;
+  login(credentialsOrEmail: LoginRequest | string, password?: string): Promise<void>;
+  changePassword(input: MePasswordChangeRequest): Promise<void>;
   verifyMfa(challengeToken: string, input: { totpCode?: string; recoveryCode?: string }): Promise<void>;
   logout(): Promise<void>;
 }
@@ -49,11 +51,18 @@ export function Providers({ children }: { children: ReactNode }) {
     () => ({
       auth,
       isBootstrapping,
-      async login(email, password) {
-        setAuth(await requestLogin(email, password));
+      async login(credentialsOrEmail: LoginRequest | string, password?: string) {
+        setAuth(typeof credentialsOrEmail === "string"
+          ? await requestLogin(credentialsOrEmail, password ?? "")
+          : await requestLogin(credentialsOrEmail));
       },
       async verifyMfa(challengeToken, input) {
         setAuth(await requestVerifyMfa(challengeToken, input));
+      },
+      async changePassword(input) {
+        if (!auth) throw new Error("AUTH_REQUIRED");
+        await requestChangePassword(auth.accessToken, input);
+        setAuth(await refreshSession());
       },
       async logout() {
         await requestLogout().catch(() => undefined);

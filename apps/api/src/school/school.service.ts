@@ -1,13 +1,14 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type {
   AcademicTermRecord as SharedAcademicTermRecord,
   AcademicYearRecord as SharedAcademicYearRecord,
+  AlanRecord as SharedAlanRecord,
   CampusRecord as SharedCampusRecord,
   ClassRecord as SharedClassRecord,
   CourseRecord as SharedCourseRecord,
+  GradeLevelCourseRecord,
   GradeLevelRecord as SharedGradeLevelRecord,
   GuardianRecord as SharedGuardianRecord,
-  GuardianRelationshipType,
   GuardianStudentDetailStudentRecord,
   GuardianStudentDetailsResponse,
   GuardianStudentRecord,
@@ -18,12 +19,16 @@ import type {
   TeacherRecord as SharedTeacherRecord,
 } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
+import { optionalTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
+import { IdentityProvisioningService } from "../identity-provisioning/identity-provisioning.service.js";
 import { assertTeacherScopedStudentAccess, assertTenantResourceAccess, filterTenantResources, isTeacherSubjectContext } from "../tenant/tenant-access.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "./academic-calendar-store.js";
+import { type AlanStore, alanStoreToken } from "./alan-store.js";
 import { type CampusStore, campusStoreToken } from "./campus-store.js";
 import { type ClassStore, classStoreToken } from "./class-store.js";
 import { type CourseStore, courseStoreToken } from "./course-store.js";
+import { type GradeLevelCourseStore, gradeLevelCourseStoreToken } from "./grade-level-course-store.js";
 import { type GradeLevelStore, gradeLevelStoreToken } from "./grade-level-store.js";
 import { type GuardianStudentStore, guardianStudentStoreToken } from "./guardian-student-store.js";
 import { type GuardianStore, guardianStoreToken } from "./guardian-store.js";
@@ -35,12 +40,17 @@ import {
   teacherAssignmentStoreToken,
 } from "./teacher-assignment-store.js";
 import { type TeacherStore, teacherStoreToken } from "./teacher-store.js";
+import { encryptTcIdentity, hashTcIdentity, normalizeTcIdentity } from "../student/tc-identity.js";
 
 export interface ClassRecord extends SharedClassRecord {
   deletedAt?: string;
 }
 
 export interface CampusRecord extends SharedCampusRecord {
+  deletedAt?: string;
+}
+
+export interface AlanRecord extends SharedAlanRecord {
   deletedAt?: string;
 }
 
@@ -66,15 +76,23 @@ export interface LearningOutcomeRecord extends SharedLearningOutcomeRecord {
 
 export interface TeacherRecord extends SharedTeacherRecord {
   deletedAt?: string;
+  nationalIdEncrypted?: string;
+  nationalIdHash?: string;
 }
 
 export interface GuardianRecord extends SharedGuardianRecord {
   deletedAt?: string;
+  nationalIdEncrypted?: string;
+  nationalIdHash?: string;
 }
+
+type TeacherWriteInput = Partial<TeacherRecord> & { nationalId?: string };
+type GuardianWriteInput = Partial<GuardianRecord> & { nationalId?: string };
 
 type SchoolRecord =
   | AcademicYearRecord
   | AcademicTermRecord
+  | AlanRecord
   | CampusRecord
   | ClassRecord
   | CourseRecord
@@ -85,7 +103,7 @@ type SchoolRecord =
 
 export type GuardianStudentRelationInput = Partial<Pick<
   GuardianStudentRecord,
-  "relationshipType" | "isPrimary" | "canViewFinance" | "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets"
+  "canViewFinance" | "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets"
 >>;
 
 export type GuardianNotificationPreferenceInput = Partial<Pick<
@@ -98,7 +116,6 @@ export type TeacherAssignmentRelationInput = Partial<Pick<
   "classId" | "studentId" | "courseId" | "termId" | "role" | "startsAt" | "endsAt"
 >>;
 
-const guardianRelationshipTypes: GuardianRelationshipType[] = ["MOTHER", "FATHER", "GUARDIAN", "EMERGENCY_CONTACT", "OTHER"];
 const teacherAssignmentRoles: TeacherAssignmentRole[] = ["CLASS_TEACHER", "BRANCH_TEACHER", "GUIDANCE_COUNSELOR", "RESPONSIBLE_TEACHER"];
 
 function toGuardianStudentDetailStudent(
@@ -122,9 +139,11 @@ function toGuardianStudentDetailStudent(
 export class SchoolService {
   constructor(
     @Inject(academicCalendarStoreToken) private readonly academicCalendarStore: AcademicCalendarStore,
+    @Inject(alanStoreToken) private readonly alanStore: AlanStore,
     @Inject(campusStoreToken) private readonly campusStore: CampusStore,
     @Inject(classStoreToken) private readonly classStore: ClassStore,
     @Inject(courseStoreToken) private readonly courseStore: CourseStore,
+    @Inject(gradeLevelCourseStoreToken) private readonly gradeLevelCourseStore: GradeLevelCourseStore,
     @Inject(gradeLevelStoreToken) private readonly gradeLevelStore: GradeLevelStore,
     @Inject(learningOutcomeStoreToken) private readonly learningOutcomeStore: LearningOutcomeStore,
     @Inject(teacherStoreToken) private readonly teacherStore: TeacherStore,
@@ -133,6 +152,7 @@ export class SchoolService {
     @Inject(studentStoreToken) private readonly studentStore: StudentStore,
     @Inject(teacherAssignmentStoreToken) private readonly teacherAssignmentStore: TeacherAssignmentStore,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly identityProvisioning?: IdentityProvisioningService,
   ) {}
 
   async listClasses(context: RequestContext): Promise<ClassRecord[]> {
@@ -208,6 +228,87 @@ export class SchoolService {
 
   async findGradeLevel(context: RequestContext, id: string): Promise<GradeLevelRecord> {
     return this.findRecord(context, await this.gradeLevelStore.findById(id), "GRADE_LEVEL_NOT_FOUND");
+  }
+
+  async listAlanlar(context: RequestContext): Promise<AlanRecord[]> {
+    return this.list(context, await this.alanStore.list());
+  }
+
+  async findAlan(context: RequestContext, id: string): Promise<AlanRecord> {
+    return this.findRecord(context, await this.alanStore.findById(id), "ALAN_NOT_FOUND");
+  }
+
+  async createAlan(context: RequestContext, input: Partial<AlanRecord>): Promise<AlanRecord> {
+    const tenantId = this.resolveTenantId(context, input.tenantId);
+    const gradeLevelId = optionalText(input.gradeLevelId);
+    if (gradeLevelId) {
+      const gradeLevel = await this.findGradeLevel(context, gradeLevelId);
+      if (gradeLevel.tenantId !== tenantId) {
+        throw new ForbiddenException("FORBIDDEN_TENANT");
+      }
+    }
+    const record = await this.alanStore.create({
+      tenantId,
+      gradeLevelId,
+      name: input.name ?? "",
+      code: optionalText(input.code),
+    });
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "Alan",
+      entityId: record.id,
+      action: "alan.created",
+      diff: { fieldsSet: presentFields(record, ["name", "code", "gradeLevelId"]) },
+    });
+    return record;
+  }
+
+  async updateAlan(context: RequestContext, id: string, input: Partial<AlanRecord>): Promise<AlanRecord> {
+    await this.findAlan(context, id);
+    const gradeLevelId = input.gradeLevelId !== undefined ? optionalText(input.gradeLevelId) : undefined;
+    if (gradeLevelId) {
+      await this.findGradeLevel(context, gradeLevelId);
+    }
+    const changedFields = changedInputFields(input, ["name", "code", "gradeLevelId"]);
+    const record = await this.alanStore.update(id, {
+      name: input.name,
+      code: input.code !== undefined ? optionalText(input.code) : undefined,
+      gradeLevelId,
+    });
+    if (!record) {
+      throw new NotFoundException("ALAN_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "Alan",
+      entityId: record.id,
+      action: "alan.updated",
+      diff: { fieldsChanged: changedFields },
+    });
+    return record;
+  }
+
+  async deleteAlan(context: RequestContext, id: string): Promise<void> {
+    const existing = await this.findAlan(context, id);
+    const record = await this.alanStore.softDelete(id, new Date().toISOString());
+    if (!record) {
+      throw new NotFoundException("ALAN_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "Alan",
+      entityId: record.id,
+      action: "alan.deleted",
+      diff: { name: existing.name, deletedAt: record.deletedAt },
+    });
+  }
+
+  async listGradeLevelCourses(context: RequestContext, gradeLevelId: string, alanId?: string): Promise<GradeLevelCourseRecord[]> {
+    await this.findGradeLevel(context, gradeLevelId);
+    return filterTenantResources(context, await this.gradeLevelCourseStore.listByGradeLevel(gradeLevelId, optionalText(alanId)));
   }
 
   async createGradeLevel(context: RequestContext, input: Partial<GradeLevelRecord>): Promise<GradeLevelRecord> {
@@ -415,6 +516,7 @@ export class SchoolService {
 
   async createClass(context: RequestContext, input: Partial<ClassRecord>): Promise<ClassRecord> {
     const tenantId = this.resolveTenantId(context, input.tenantId);
+    const alanId = optionalText(input.alanId);
     const campusId = optionalText(input.campusId);
     const gradeLevelId = optionalText(input.gradeLevelId);
     if (campusId) {
@@ -429,12 +531,15 @@ export class SchoolService {
         throw new ForbiddenException("FORBIDDEN_TENANT");
       }
     }
+    if (alanId) {
+      await this.assertAlanFitsClass(context, alanId, tenantId, gradeLevelId);
+    }
     const record = await this.classStore.create({
       tenantId,
+      alanId,
       campusId,
       gradeLevelId,
       name: input.name ?? "",
-      level: input.level,
       section: optionalText(input.section),
     });
     await this.auditLogs?.record({
@@ -443,14 +548,15 @@ export class SchoolService {
       entityType: "Class",
       entityId: record.id,
       action: "class.created",
-      diff: { name: record.name, level: record.level, campusId: record.campusId, gradeLevelId: record.gradeLevelId, section: record.section },
+      diff: { name: record.name, alanId: record.alanId, campusId: record.campusId, gradeLevelId: record.gradeLevelId, section: record.section },
     });
     return record;
   }
 
   async updateClass(context: RequestContext, id: string, input: Partial<ClassRecord>): Promise<ClassRecord> {
     const existing = await this.findClass(context, id);
-    const previousState = { name: existing.name, level: existing.level, campusId: existing.campusId, gradeLevelId: existing.gradeLevelId, section: existing.section };
+    const previousState = { name: existing.name, alanId: existing.alanId, campusId: existing.campusId, gradeLevelId: existing.gradeLevelId, section: existing.section };
+    const alanId = input.alanId !== undefined ? optionalText(input.alanId) : undefined;
     const campusId = input.campusId !== undefined ? optionalText(input.campusId) : undefined;
     const gradeLevelId = input.gradeLevelId !== undefined ? optionalText(input.gradeLevelId) : undefined;
     if (campusId) {
@@ -459,9 +565,13 @@ export class SchoolService {
     if (gradeLevelId) {
       await this.findGradeLevel(context, gradeLevelId);
     }
+    const effectiveAlanId = input.alanId !== undefined ? alanId : existing.alanId;
+    if (effectiveAlanId) {
+      await this.assertAlanFitsClass(context, effectiveAlanId, existing.tenantId, gradeLevelId ?? existing.gradeLevelId);
+    }
     const record = await this.classStore.update(id, {
       name: input.name,
-      level: input.level,
+      alanId,
       campusId,
       gradeLevelId,
       section: input.section !== undefined ? optionalText(input.section) : undefined,
@@ -477,7 +587,7 @@ export class SchoolService {
       action: "class.updated",
       diff: {
         before: previousState,
-        after: { name: record.name, level: record.level, campusId: record.campusId, gradeLevelId: record.gradeLevelId, section: record.section },
+        after: { name: record.name, alanId: record.alanId, campusId: record.campusId, gradeLevelId: record.gradeLevelId, section: record.section },
       },
     });
     return record;
@@ -649,13 +759,16 @@ export class SchoolService {
     return this.findTeacher(context, context.subjectId);
   }
 
-  async createTeacher(context: RequestContext, input: Partial<TeacherRecord>): Promise<TeacherRecord> {
+  async createTeacher(context: RequestContext, input: TeacherWriteInput): Promise<TeacherRecord> {
     const tenantId = this.resolveTenantId(context, input.tenantId);
+    const identity = await this.resolveTeacherIdentityInput(context, tenantId, input.nationalId);
     const record = await this.teacherStore.create({
       tenantId,
       firstName: input.firstName ?? "",
       lastName: input.lastName ?? "",
       branch: input.branch,
+      ...identity,
+      phone: optionalTurkishMobilePhone(input.phone, "TEACHER_PHONE_INVALID"),
     });
     await this.auditLogs?.record({
       tenantId: record.tenantId,
@@ -663,18 +776,21 @@ export class SchoolService {
       entityType: "Teacher",
       entityId: record.id,
       action: "teacher.created",
-      diff: { fieldsSet: presentFields(record, ["firstName", "lastName", "branch"]) },
+      diff: { fieldsSet: presentFields(record, ["firstName", "lastName", "branch", "nationalIdHash", "phone"]) },
     });
-    return record;
+    return this.autoProvisionTeacherAccount(context, record, input);
   }
 
-  async updateTeacher(context: RequestContext, id: string, input: Partial<TeacherRecord>): Promise<TeacherRecord> {
-    await this.findTeacher(context, id);
-    const changedFields = changedInputFields(input, ["firstName", "lastName", "branch"]);
+  async updateTeacher(context: RequestContext, id: string, input: TeacherWriteInput): Promise<TeacherRecord> {
+    const existing = await this.findTeacher(context, id);
+    const identity = await this.resolveTeacherIdentityInput(context, existing.tenantId, input.nationalId, existing.id);
+    const changedFields = changedInputFields(input, ["firstName", "lastName", "branch", "nationalId", "phone"]);
     const record = await this.teacherStore.update(id, {
       firstName: input.firstName,
       lastName: input.lastName,
       branch: input.branch,
+      ...identity,
+      phone: input.phone !== undefined ? optionalTurkishMobilePhone(input.phone, "TEACHER_PHONE_INVALID") : undefined,
     });
     if (!record) {
       throw new NotFoundException("TEACHER_NOT_FOUND");
@@ -688,7 +804,7 @@ export class SchoolService {
       diff: { fieldsChanged: changedFields },
     });
     this.assertAccess(context, record);
-    return record;
+    return this.autoProvisionTeacherAccount(context, record, input);
   }
 
   async deleteTeacher(context: RequestContext, id: string): Promise<void> {
@@ -759,6 +875,7 @@ export class SchoolService {
       await this.findAcademicTerm(context, input.termId);
     }
     const assignmentInput = this.resolveTeacherAssignmentInput(teacher, input) as TeacherAssignmentInput;
+    await this.assertTeacherAssignmentCourseFitsClass(context, assignmentInput);
     const record = await this.teacherAssignmentStore.create(assignmentInput);
     await this.auditLogs?.record({
       tenantId: record.tenantId,
@@ -791,6 +908,10 @@ export class SchoolService {
     }
 
     const assignmentInput = this.resolveTeacherAssignmentInput(teacher, input, false);
+    await this.assertTeacherAssignmentCourseFitsClass(context, {
+      ...existing,
+      ...assignmentInput,
+    });
     const record = await this.teacherAssignmentStore.update(assignmentId, assignmentInput);
     if (!record) {
       throw new NotFoundException("TEACHER_ASSIGNMENT_NOT_FOUND");
@@ -844,13 +965,15 @@ export class SchoolService {
     return guardian;
   }
 
-  async createGuardian(context: RequestContext, input: Partial<GuardianRecord>): Promise<GuardianRecord> {
+  async createGuardian(context: RequestContext, input: GuardianWriteInput): Promise<GuardianRecord> {
     const tenantId = this.resolveTenantId(context, input.tenantId);
+    const identity = await this.resolveGuardianIdentityInput(context, tenantId, input.nationalId);
     const record = await this.guardianStore.create({
       tenantId,
       firstName: input.firstName ?? "",
       lastName: input.lastName ?? "",
-      phone: input.phone,
+      ...identity,
+      phone: optionalTurkishMobilePhone(input.phone, "GUARDIAN_PHONE_INVALID"),
     });
     await this.auditLogs?.record({
       tenantId: record.tenantId,
@@ -858,18 +981,20 @@ export class SchoolService {
       entityType: "Guardian",
       entityId: record.id,
       action: "guardian.created",
-      diff: { fieldsSet: presentFields(record, ["firstName", "lastName", "phone"]) },
+      diff: { fieldsSet: presentFields(record, ["firstName", "lastName", "phone", "nationalIdHash"]) },
     });
-    return record;
+    return this.autoProvisionGuardianAccount(context, record, input);
   }
 
-  async updateGuardian(context: RequestContext, id: string, input: Partial<GuardianRecord>): Promise<GuardianRecord> {
-    await this.findGuardian(context, id);
-    const changedFields = changedInputFields(input, ["firstName", "lastName", "phone"]);
+  async updateGuardian(context: RequestContext, id: string, input: GuardianWriteInput): Promise<GuardianRecord> {
+    const existing = await this.findGuardian(context, id);
+    const identity = await this.resolveGuardianIdentityInput(context, existing.tenantId, input.nationalId, existing.id);
+    const changedFields = changedInputFields(input, ["firstName", "lastName", "phone", "nationalId"]);
     const record = await this.guardianStore.update(id, {
       firstName: input.firstName,
       lastName: input.lastName,
-      phone: input.phone,
+      ...identity,
+      phone: input.phone !== undefined ? optionalTurkishMobilePhone(input.phone, "GUARDIAN_PHONE_INVALID") : undefined,
     });
     if (!record) {
       throw new NotFoundException("GUARDIAN_NOT_FOUND");
@@ -1181,6 +1306,161 @@ export class SchoolService {
     return resolvedTenantId;
   }
 
+  private async assertAlanFitsClass(context: RequestContext, alanId: string, tenantId: string, gradeLevelId: string | undefined): Promise<void> {
+    const alan = await this.findAlan(context, alanId);
+    if (alan.tenantId !== tenantId) {
+      throw new ForbiddenException("FORBIDDEN_TENANT");
+    }
+    if (alan.gradeLevelId && alan.gradeLevelId !== gradeLevelId) {
+      throw new BadRequestException("ALAN_GRADE_LEVEL_MISMATCH");
+    }
+  }
+
+  private async assertTeacherAssignmentCourseFitsClass(
+    context: RequestContext,
+    assignment: Pick<TeacherAssignmentInput, "tenantId"> &
+      Partial<Pick<TeacherAssignmentInput, "classId" | "studentId" | "courseId">>,
+  ): Promise<void> {
+    const courseId = optionalText(assignment.courseId);
+    if (!courseId) return;
+
+    const course = await this.findCourse(context, courseId);
+    if (course.tenantId !== assignment.tenantId) {
+      throw new ForbiddenException("FORBIDDEN_TENANT");
+    }
+
+    let targetClass: ClassRecord | undefined;
+    const classId = optionalText(assignment.classId);
+    if (classId) {
+      targetClass = await this.findClass(context, classId);
+    }
+
+    const studentId = optionalText(assignment.studentId);
+    if (studentId) {
+      const student = await this.studentStore.findById(studentId);
+      if (!student) {
+        throw new NotFoundException("STUDENT_NOT_FOUND");
+      }
+      this.assertAccess(context, student);
+      if (!targetClass && student.classId) {
+        targetClass = await this.findClass(context, student.classId);
+      }
+    }
+
+    if (!targetClass?.gradeLevelId) return;
+
+    const gradeLevelCourses = filterTenantResources(
+      context,
+      await this.gradeLevelCourseStore.listByGradeLevel(targetClass.gradeLevelId, targetClass.alanId),
+    );
+    const courseFitsClass = gradeLevelCourses.some((template) => template.courseId === course.id);
+    if (!courseFitsClass) {
+      throw new BadRequestException("TEACHER_ASSIGNMENT_COURSE_GRADE_LEVEL_MISMATCH");
+    }
+  }
+
+  private async resolveTeacherIdentityInput(
+    context: RequestContext,
+    tenantId: string,
+    nationalIdInput: string | undefined,
+    currentTeacherId?: string,
+  ): Promise<Pick<TeacherRecord, "nationalIdEncrypted" | "nationalIdHash">> {
+    const nationalIdText = optionalText(nationalIdInput);
+    if (!nationalIdText) return {};
+
+    const nationalId = normalizeTcIdentity(nationalIdText, "TEACHER_NATIONAL_ID_INVALID");
+    const nationalIdHash = hashTcIdentity(nationalId);
+    const duplicate = await this.teacherStore.findByNationalIdHash(tenantId, nationalIdHash);
+    if (duplicate && duplicate.id !== currentTeacherId) {
+      throw new ConflictException("TEACHER_NATIONAL_ID_CONFLICT");
+    }
+    this.assertAccess(context, { tenantId });
+    return {
+      nationalIdEncrypted: encryptTcIdentity(nationalId),
+      nationalIdHash,
+    };
+  }
+
+  private async autoProvisionTeacherAccount(
+    context: RequestContext,
+    teacher: TeacherRecord,
+    input: TeacherWriteInput,
+  ): Promise<TeacherRecord> {
+    if (!this.identityProvisioning || teacher.userId || !input.nationalId || !teacher.phone) return teacher;
+
+    const provisioned = await this.identityProvisioning.provisionTenantSubject({
+      tenantId: teacher.tenantId,
+      subjectType: "TEACHER",
+      subjectId: teacher.id,
+      displayName: `${teacher.firstName} ${teacher.lastName}`.trim(),
+      nationalId: input.nationalId,
+      phone: teacher.phone,
+    });
+    if (!provisioned) return teacher;
+
+    const bound = await this.teacherStore.bindUser(teacher.tenantId, teacher.id, provisioned.userId);
+    await this.auditLogs?.record({
+      tenantId: teacher.tenantId,
+      actorUserId: context.userId,
+      entityType: "Teacher",
+      entityId: teacher.id,
+      action: "teacher.account_auto_provisioned",
+      diff: { userId: provisioned.userId, mustChangePassword: true },
+    });
+    return bound ?? teacher;
+  }
+
+  private async resolveGuardianIdentityInput(
+    context: RequestContext,
+    tenantId: string,
+    nationalIdInput: string | undefined,
+    currentGuardianId?: string,
+  ): Promise<Pick<GuardianRecord, "nationalIdEncrypted" | "nationalIdHash">> {
+    const nationalIdText = optionalText(nationalIdInput);
+    if (!nationalIdText) return {};
+
+    const nationalId = normalizeTcIdentity(nationalIdText, "GUARDIAN_NATIONAL_ID_INVALID");
+    const nationalIdHash = hashTcIdentity(nationalId);
+    const duplicate = await this.guardianStore.findByNationalIdHash(tenantId, nationalIdHash);
+    if (duplicate && duplicate.id !== currentGuardianId) {
+      throw new ConflictException("GUARDIAN_NATIONAL_ID_CONFLICT");
+    }
+    this.assertAccess(context, { tenantId });
+    return {
+      nationalIdEncrypted: encryptTcIdentity(nationalId),
+      nationalIdHash,
+    };
+  }
+
+  private async autoProvisionGuardianAccount(
+    context: RequestContext,
+    guardian: GuardianRecord,
+    input: GuardianWriteInput,
+  ): Promise<GuardianRecord> {
+    if (!this.identityProvisioning || guardian.userId || !input.nationalId || !guardian.phone) return guardian;
+
+    const provisioned = await this.identityProvisioning.provisionTenantSubject({
+      tenantId: guardian.tenantId,
+      subjectType: "GUARDIAN",
+      subjectId: guardian.id,
+      displayName: `${guardian.firstName} ${guardian.lastName}`.trim(),
+      nationalId: input.nationalId,
+      phone: guardian.phone,
+    });
+    if (!provisioned) return guardian;
+
+    const bound = await this.guardianStore.bindUser(guardian.tenantId, guardian.id, provisioned.userId);
+    await this.auditLogs?.record({
+      tenantId: guardian.tenantId,
+      actorUserId: context.userId,
+      entityType: "Guardian",
+      entityId: guardian.id,
+      action: "guardian.account_auto_provisioned",
+      diff: { userId: provisioned.userId, mustChangePassword: true },
+    });
+    return bound ?? guardian;
+  }
+
   private assertAccess(context: RequestContext, resource: { tenantId: string }): void {
     try {
       assertTenantResourceAccess(context, resource);
@@ -1312,8 +1592,6 @@ function changedInputFields<TRecord>(
 }
 
 const guardianStudentRelationFields: Array<keyof GuardianStudentRelationInput> = [
-  "relationshipType",
-  "isPrimary",
   "canViewFinance",
   "canReceiveSms",
   "canReceiveAnnouncements",
@@ -1341,23 +1619,17 @@ function resolveGuardianStudentRelation(
   applyDefaults = true,
 ): GuardianStudentRelationInput {
   const relation: GuardianStudentRelationInput = {};
-  if (applyDefaults || input.relationshipType !== undefined) {
-    relation.relationshipType = resolveRelationshipType(input.relationshipType);
-  }
-  if (applyDefaults || input.isPrimary !== undefined) {
-    relation.isPrimary = resolveBoolean(input.isPrimary, false);
-  }
   if (applyDefaults || input.canViewFinance !== undefined) {
-    relation.canViewFinance = resolveBoolean(input.canViewFinance, false);
+    relation.canViewFinance = resolveBoolean(input.canViewFinance, true);
   }
   if (applyDefaults || input.canReceiveSms !== undefined) {
     relation.canReceiveSms = resolveBoolean(input.canReceiveSms, false);
   }
   if (applyDefaults || input.canReceiveAnnouncements !== undefined) {
-    relation.canReceiveAnnouncements = resolveBoolean(input.canReceiveAnnouncements, false);
+    relation.canReceiveAnnouncements = resolveBoolean(input.canReceiveAnnouncements, true);
   }
   if (applyDefaults || input.canOpenSupportTickets !== undefined) {
-    relation.canOpenSupportTickets = resolveBoolean(input.canOpenSupportTickets, false);
+    relation.canOpenSupportTickets = resolveBoolean(input.canOpenSupportTickets, true);
   }
   return relation;
 }
@@ -1374,14 +1646,6 @@ function resolveGuardianNotificationPreference(input: GuardianNotificationPrefer
     relation.canOpenSupportTickets = resolveBoolean(input.canOpenSupportTickets, true);
   }
   return relation;
-}
-
-function resolveRelationshipType(value: GuardianRelationshipType | undefined): GuardianRelationshipType {
-  const resolved = value ?? "GUARDIAN";
-  if (!guardianRelationshipTypes.includes(resolved)) {
-    throw new BadRequestException("GUARDIAN_RELATIONSHIP_TYPE_INVALID");
-  }
-  return resolved;
 }
 
 function resolveBoolean(value: boolean | undefined, fallback: boolean): boolean {

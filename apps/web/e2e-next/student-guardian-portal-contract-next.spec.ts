@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
+const smsEnabled = process.env.NEXT_PUBLIC_SMS_ENABLED === "true";
 const rawPiiValues = ["12345678901", "+905551234567", "ada.kaya@example.test", "bora.yilmaz@example.test"];
 const rawInternalValues = ["student-a", "student-b", "teacher-math", "course-math", "term-2026"];
 
@@ -170,7 +171,6 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       const focus = page.getByRole("region", { exact: true, name: "Öğrenci operasyon bağlamı" });
       await expect(focus).toContainText("Öğrenci Odağı");
       await expect(focus).toContainText("Veli kapsamı");
-      await expect(focus).toContainText("Anne");
       await expectStudentFocusMetrics(focus, 9);
       await expect(focus).toContainText("Finans");
       await expect(focus).toContainText("Kapalı");
@@ -249,10 +249,11 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
     await expect(guardianPreviewActions.getByRole("link", { name: /Önizleme durumu: Salt-okuma/ })).toHaveAttribute("href", "/veli?rolePreview=1");
     await expect(guardianPreviewActions.getByRole("link", { name: /Destek talebini takip et: .*Salt-okuma.*Destek talebi açma kapalı/ })).toHaveAttribute("href", "/veli/destek?rolePreview=1");
     const preferenceCheckboxes = page.getByLabel("Bildirim tercihleri").locator('input[type="checkbox"]');
-    await expect(preferenceCheckboxes).toHaveCount(3);
-    await expect(preferenceCheckboxes.nth(0)).toBeDisabled();
-    await expect(preferenceCheckboxes.nth(1)).toBeDisabled();
-    await expect(preferenceCheckboxes.nth(2)).toBeDisabled();
+    const preferenceCheckboxCount = smsEnabled ? 3 : 2;
+    await expect(preferenceCheckboxes).toHaveCount(preferenceCheckboxCount);
+    for (let index = 0; index < preferenceCheckboxCount; index += 1) {
+      await expect(preferenceCheckboxes.nth(index)).toBeDisabled();
+    }
     await expectStudentProfileAndHistoryPanels(page);
     await expectGuardianRelationshipSummary(page);
     await expectPortalActivityPanels(page);
@@ -324,7 +325,7 @@ async function expectGuardianRelationsPanel(page: Page) {
   await expect(relations.getByRole("heading", { name: "Veliler" })).toBeVisible();
   const table = relations.getByRole("table", { name: "Veli ilişkileri" });
   await expect(table).toBeVisible();
-  await expect(table.locator("thead th")).toHaveText(["Veli", "İlişki", "Birincil", "İzinler"]);
+  await expect(table.locator("thead th")).toHaveText(["Veli", "İzinler"]);
   await expect(relations).toContainText("Ayşe Kaya");
   await expect(relations).toContainText("Bilinmeyen veli");
   await expect(relations).not.toContainText("guardian-a");
@@ -335,7 +336,7 @@ async function expectGuardianRelationshipSummary(page: Page) {
   const relationship = page.getByRole("region", { exact: true, name: "Veli ilişki özeti" });
   const relationshipInfo = relationship.getByRole("region", { name: "Veli ilişki metrikleri" });
   await expect(relationshipInfo).toHaveClass(/uh-info-grid/);
-  await expect(relationshipInfo.locator(".uh-info-item")).toHaveCount(4);
+  await expect(relationshipInfo.locator(".uh-info-item")).toHaveCount(3);
 }
 
 async function expectHomeworkAssignmentsPanel(page: Page) {
@@ -640,8 +641,6 @@ function createStudentGuardianLinks() {
       canViewFinance: false,
       guardianId: "guardian-a",
       id: "guardian-link-a",
-      isPrimary: true,
-      relationshipType: "MOTHER",
       studentId: "student-a",
       tenantId: "tenant-portal-contract",
     },
@@ -652,8 +651,6 @@ function createStudentGuardianLinks() {
       canViewFinance: false,
       guardianId: "guardian-missing",
       id: "guardian-link-missing",
-      isPrimary: false,
-      relationshipType: "OTHER",
       studentId: "student-a",
       tenantId: "tenant-portal-contract",
     },
@@ -668,8 +665,6 @@ function createGuardianPreferences(studentId: "student-a" | "student-b", canView
     canViewFinance,
     guardianId: "guardian-a",
     id: `guardian-link-${studentId}`,
-    isPrimary: studentId === "student-a",
-    relationshipType: "MOTHER",
     studentId,
     tenantId: "tenant-portal-contract",
   };

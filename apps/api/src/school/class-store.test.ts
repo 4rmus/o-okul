@@ -14,7 +14,6 @@ describe("PostgresClassStore", () => {
               id: "class-a",
               tenantId: "tenant-a",
               name: "8-A",
-              level: "8",
               deletedAt: null,
             },
           ] as T[],
@@ -29,7 +28,7 @@ describe("PostgresClassStore", () => {
       async () => {
         await store.list();
         await store.findById("class-a");
-        await store.create({ tenantId: "tenant-a", name: "9-A", level: "9" });
+        await store.create({ tenantId: "tenant-a", name: "9-A" });
         await store.update("class-a", { name: "9 Fen" });
         await store.softDelete("class-a", "2026-05-29T20:00:00.000Z");
       },
@@ -40,7 +39,7 @@ describe("PostgresClassStore", () => {
     expect(businessQueries[0]?.sql).toContain('SELECT * FROM "Class"');
     expect(businessQueries[1]?.values).toEqual(["class-a"]);
     expect(businessQueries[2]?.sql).toContain('INSERT INTO "Class"');
-    expect(businessQueries[2]?.values).toEqual([expect.any(String), "tenant-a", null, null, "9-A", "9", null]);
+    expect(businessQueries[2]?.values).toEqual([expect.any(String), "tenant-a", null, null, null, "9-A", null]);
     expect(businessQueries[4]?.sql).toContain('UPDATE "Class"');
     expect(businessQueries[4]?.values).toEqual(["class-a", "9 Fen", false, null, false, null, false, null, false, null]);
     expect(businessQueries[6]?.values).toEqual(["class-a", "2026-05-29T20:00:00.000Z"]);

@@ -1,6 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type {
-  GuardianRelationshipType,
   StudentClassHistoryRecord,
   StudentBulkEnrollmentRequest,
   StudentBulkEnrollmentResult as SharedStudentBulkEnrollmentResult,
@@ -30,6 +29,7 @@ import {
 } from "../school/guardian-student-store.js";
 import { type GuardianRecord, type GuardianStore, guardianStoreToken } from "../school/guardian-store.js";
 import { IdentityInvitationService } from "../identity-invitation/identity-invitation.service.js";
+import { IdentityProvisioningService } from "../identity-provisioning/identity-provisioning.service.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
 import { type CampusStore, campusStoreToken } from "../school/campus-store.js";
@@ -49,7 +49,7 @@ import {
   type StudentEnrollmentStore,
   studentEnrollmentStoreToken,
 } from "./student-enrollment-store.js";
-import { decryptTcIdentity, encryptTcIdentity, hashTcIdentity, maskTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
+import { decryptTcIdentity, encryptTcIdentity, hashTcIdentity, isValidTcIdentity, maskTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
 
 export interface StudentRecord extends SharedStudentRecord {
   deletedAt?: string;
@@ -68,7 +68,6 @@ export interface StudentQuotaPreview {
 
 export interface StudentProfileInput {
   nationalId?: string;
-  birthDate?: string;
   phone?: string;
   email?: string;
   photoKey?: string;
@@ -104,6 +103,7 @@ export class StudentService {
     private readonly identityInvitations: IdentityInvitationService,
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly idempotency?: IdempotencyService,
+    @Optional() private readonly identityProvisioning?: IdentityProvisioningService,
   ) {}
 
   async list(context: RequestContext): Promise<StudentRecord[]> {
@@ -118,6 +118,17 @@ export class StudentService {
 
   async listForViewer(context: RequestContext): Promise<PublicStudentRecord[]> {
     return (await this.list(context)).map(toPublicStudentRecord);
+  }
+
+  async findByNationalIdForViewer(context: RequestContext, nationalId: string): Promise<PublicStudentRecord | undefined> {
+    const normalized = nationalId.replace(/\D/g, "");
+    if (!isValidTcIdentity(normalized)) return undefined;
+    if (!context.tenantId) {
+      throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+    }
+
+    const student = await this.store.findByNationalIdHash(context.tenantId, hashTcIdentity(normalized));
+    return student ? this.findOneForViewer(context, student.id) : undefined;
   }
 
   async findOne(context: RequestContext, id: string): Promise<StudentRecord> {
@@ -193,7 +204,6 @@ export class StudentService {
   async updateProfile(context: RequestContext, id: string, input: StudentProfileInput): Promise<PublicStudentProfileRecord> {
     const student = await this.findOne(context, id);
     const profileUpdate = {
-      birthDate: input.birthDate !== undefined ? optionalDate(input.birthDate) : undefined,
       phone: input.phone !== undefined ? optionalText(input.phone) : undefined,
       email: input.email !== undefined ? optionalEmail(input.email) : undefined,
       photoKey: input.photoKey !== undefined ? optionalStudentPhotoKey(student.id, input.photoKey) : undefined,
@@ -225,7 +235,7 @@ export class StudentService {
       entityId: updated.id,
       action: "student.profile_updated",
       diff: {
-        fieldsChanged: changedInputFields(input, ["nationalId", "birthDate", "phone", "email", "photoKey"]),
+        fieldsChanged: changedInputFields(input, ["nationalId", "phone", "email", "photoKey"]),
       },
     });
     return this.toStudentProfile(updated);
@@ -278,6 +288,7 @@ export class StudentService {
       classId: input.classId,
       responsibleTeacherId: input.responsibleTeacherId,
     });
+    const profileUpdate = await this.resolveProfileUpdateForCreate(tenantId, input, new Set());
 
     const student = await this.store.create({
       tenantId,
@@ -308,6 +319,10 @@ export class StudentService {
         reason: "CREATED",
       });
     }
+    if (profileUpdate) {
+      await this.store.updateProfile(student.id, profileUpdate);
+    }
+    await this.autoProvisionStudentAccount(context, student, input);
     await this.auditLogs?.record({
       tenantId: student.tenantId,
       actorUserId: context.userId,
@@ -390,6 +405,11 @@ export class StudentService {
       const profileUpdate = profileUpdates[index];
       if (!profileUpdate) continue;
       await this.store.updateProfile(student.id, profileUpdate);
+    }
+    for (const [index, student] of students.entries()) {
+      const input = inputs[index];
+      if (!input) continue;
+      await this.autoProvisionStudentAccount(context, student, input);
     }
     for (const [index, student] of students.entries()) {
       const guardian = inputs[index]?.guardian;
@@ -780,29 +800,32 @@ export class StudentService {
     input: StudentGuardianProvisionInput,
   ): Promise<void> {
     const guardianInput = parseGuardianProvisionInput(input, student);
-    const guardian =
-      await this.findGuardianByPhone(student.tenantId, guardianInput.phone)
-      ?? await this.guardianStore.create({
+    const existingGuardian = await this.findGuardianByPhone(student.tenantId, guardianInput.phone);
+    const identity = await this.resolveGuardianIdentityInput(context, student.tenantId, guardianInput.nationalId, existingGuardian?.id);
+    let guardian = existingGuardian ? await this.updateGuardianIdentity(existingGuardian, identity) : undefined;
+    if (!guardian) {
+      guardian = await this.guardianStore.create({
         tenantId: student.tenantId,
         firstName: guardianInput.firstName,
         lastName: guardianInput.lastName,
         phone: guardianInput.phone,
+        ...identity,
       });
+    }
 
     const link = await this.guardianStudentStore.create({
       tenantId: student.tenantId,
       guardianId: guardian.id,
       studentId: student.id,
-      relationshipType: guardianInput.relationshipType,
-      isPrimary: guardianInput.isPrimary,
       canViewFinance: guardianInput.canViewFinance,
       canReceiveSms: guardianInput.canReceiveSms,
       canReceiveAnnouncements: guardianInput.canReceiveAnnouncements,
       canOpenSupportTickets: guardianInput.canOpenSupportTickets,
     });
 
+    const provisionedUserId = await this.autoProvisionGuardianAccount(context, guardian, guardianInput);
     let invitationId: string | undefined;
-    if (guardianInput.email && !guardian.userId) {
+    if (guardianInput.email && !guardian.userId && !provisionedUserId) {
       const invitation = await this.identityInvitations.create(context, {
         subjectType: "GUARDIAN",
         subjectId: guardian.id,
@@ -822,8 +845,69 @@ export class StudentService {
         guardianId: guardian.id,
         studentId: student.id,
         invitationId,
+        provisionedUserId,
       },
     });
+  }
+
+  private async resolveGuardianIdentityInput(
+    context: RequestContext,
+    tenantId: string,
+    nationalIdInput: string | undefined,
+    currentGuardianId?: string,
+  ): Promise<Pick<GuardianRecord, "nationalIdEncrypted" | "nationalIdHash">> {
+    const nationalIdText = optionalText(nationalIdInput);
+    if (!nationalIdText) return {};
+
+    const nationalId = normalizeTcIdentity(nationalIdText, "GUARDIAN_NATIONAL_ID_INVALID");
+    const nationalIdHash = hashTcIdentity(nationalId);
+    const duplicate = await this.guardianStore.findByNationalIdHash(tenantId, nationalIdHash);
+    if (duplicate && duplicate.id !== currentGuardianId) {
+      throw new ConflictException("GUARDIAN_NATIONAL_ID_CONFLICT");
+    }
+    this.assertAccess(context, { tenantId });
+    return {
+      nationalIdEncrypted: encryptTcIdentity(nationalId),
+      nationalIdHash,
+    };
+  }
+
+  private async updateGuardianIdentity(
+    guardian: GuardianRecord,
+    identity: Pick<GuardianRecord, "nationalIdEncrypted" | "nationalIdHash">,
+  ): Promise<GuardianRecord | undefined> {
+    if (!identity.nationalIdEncrypted && !identity.nationalIdHash) return guardian;
+    return await this.guardianStore.update(guardian.id, identity) ?? guardian;
+  }
+
+  private async autoProvisionGuardianAccount(
+    context: RequestContext,
+    guardian: GuardianRecord,
+    input: ReturnType<typeof parseGuardianProvisionInput>,
+  ): Promise<string | undefined> {
+    if (!this.identityProvisioning || guardian.userId || !input.nationalId || !guardian.phone) return undefined;
+
+    const provisioned = await this.identityProvisioning.provisionTenantSubject({
+      tenantId: guardian.tenantId,
+      subjectType: "GUARDIAN",
+      subjectId: guardian.id,
+      displayName: `${guardian.firstName} ${guardian.lastName}`.trim(),
+      nationalId: input.nationalId,
+      phone: guardian.phone,
+      email: input.email,
+    });
+    if (!provisioned) return undefined;
+
+    await this.guardianStore.bindUser(guardian.tenantId, guardian.id, provisioned.userId);
+    await this.auditLogs?.record({
+      tenantId: guardian.tenantId,
+      actorUserId: context.userId,
+      entityType: "Guardian",
+      entityId: guardian.id,
+      action: "guardian.account_auto_provisioned",
+      diff: { userId: provisioned.userId, mustChangePassword: true },
+    });
+    return provisioned.userId;
   }
 
   private async findGuardianByPhone(tenantId: string, phone: string | undefined): Promise<GuardianRecord | undefined> {
@@ -841,13 +925,6 @@ export class StudentService {
     const profileUpdate: StudentProfileUpdate = {};
     let hasUpdate = false;
 
-    if (input.birthDate !== undefined) {
-      const birthDate = optionalDate(input.birthDate);
-      if (birthDate !== undefined) {
-        profileUpdate.birthDate = birthDate;
-        hasUpdate = true;
-      }
-    }
     if (input.phone !== undefined) {
       const phone = optionalText(input.phone);
       if (phone !== undefined) {
@@ -880,6 +957,35 @@ export class StudentService {
     }
 
     return hasUpdate ? profileUpdate : undefined;
+  }
+
+  private async autoProvisionStudentAccount(
+    context: RequestContext,
+    student: StudentRecord,
+    input: StudentProfileInput & Pick<StudentRecord, "firstName" | "lastName">,
+  ): Promise<void> {
+    if (!this.identityProvisioning || student.userId || !input.nationalId || !input.phone) return;
+
+    const provisioned = await this.identityProvisioning.provisionTenantSubject({
+      tenantId: student.tenantId,
+      subjectType: "STUDENT",
+      subjectId: student.id,
+      displayName: `${input.firstName} ${input.lastName}`.trim(),
+      nationalId: input.nationalId,
+      phone: input.phone,
+      email: input.email,
+    });
+    if (!provisioned) return;
+
+    await this.store.bindUser(student.tenantId, student.id, provisioned.userId);
+    await this.auditLogs?.record({
+      tenantId: student.tenantId,
+      actorUserId: context.userId,
+      entityType: "Student",
+      entityId: student.id,
+      action: "student.account_auto_provisioned",
+      diff: { userId: provisioned.userId, mustChangePassword: true },
+    });
   }
 
   private assertSubjectAccess(context: RequestContext, resource: { tenantId: string; studentId?: string; guardianIds?: string[]; id?: string }): void {
@@ -1034,7 +1140,6 @@ export class StudentService {
     status: StudentStatus;
     userId?: string;
     nationalIdEncrypted?: string;
-    birthDate?: string;
     phone?: string;
     email?: string;
     photoKey?: string;
@@ -1115,7 +1220,7 @@ function resolveClassGradeCode(record: ClassRecord, gradeLevelById: Map<string, 
     const gradeLevelCode = gradeLevelById.get(record.gradeLevelId)?.code?.trim();
     if (gradeLevelCode) return gradeLevelCode;
   }
-  return record.level?.trim() || undefined;
+  return undefined;
 }
 
 function nextGradeCode(code: string | undefined): string | undefined {
@@ -1145,7 +1250,6 @@ function toStudentProfile(student: {
   responsibleTeacherId?: string;
   status: StudentStatus;
   nationalIdEncrypted?: string;
-  birthDate?: string;
   phone?: string;
   email?: string;
   photoKey?: string;
@@ -1164,7 +1268,6 @@ function toStudentProfile(student: {
     ...(labels.section ? { section: labels.section } : {}),
     ...(labels.responsibleTeacherName ? { responsibleTeacherName: labels.responsibleTeacherName } : {}),
     nationalIdMasked: student.nationalIdEncrypted ? maskTcIdentity(decryptTcIdentity(student.nationalIdEncrypted)) : undefined,
-    birthDate: student.birthDate,
     phone: student.phone,
     email: student.email,
     photoKey: student.photoKey,
@@ -1174,15 +1277,6 @@ function toStudentProfile(student: {
 function optionalText(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
-}
-
-function optionalDate(value: string | undefined): string | undefined {
-  const trimmed = optionalText(value);
-  if (trimmed === undefined) return undefined;
-  if (!isCalendarDateString(trimmed)) {
-    throw new BadRequestException("STUDENT_BIRTH_DATE_INVALID");
-  }
-  return trimmed;
 }
 
 function enrollmentDate(value: string): string {
@@ -1250,10 +1344,9 @@ function parseGuardianProvisionInput(input: StudentGuardianProvisionInput, stude
   return {
     firstName: optionalGuardianText(input.firstName) ?? "Veli",
     lastName: optionalGuardianText(input.lastName) ?? optionalGuardianText(student.lastName) ?? "Veli",
+    nationalId: optionalGuardianText(input.nationalId),
     phone,
     email,
-    relationshipType: resolveGuardianRelationshipType(input.relationshipType),
-    isPrimary: input.isPrimary,
     canViewFinance: input.canViewFinance,
     canReceiveSms: input.canReceiveSms,
     canReceiveAnnouncements: input.canReceiveAnnouncements,
@@ -1273,12 +1366,4 @@ function optionalGuardianEmail(value: string | undefined): string | undefined {
     throw new BadRequestException("GUARDIAN_EMAIL_INVALID");
   }
   return email;
-}
-
-function resolveGuardianRelationshipType(value: GuardianRelationshipType | undefined): GuardianRelationshipType | undefined {
-  if (value === undefined) return undefined;
-  if (["MOTHER", "FATHER", "GUARDIAN", "EMERGENCY_CONTACT", "OTHER"].includes(value)) {
-    return value;
-  }
-  throw new BadRequestException("GUARDIAN_RELATIONSHIP_TYPE_INVALID");
 }

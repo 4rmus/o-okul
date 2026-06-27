@@ -4,10 +4,10 @@ import { UnprocessableEntityException } from "@nestjs/common";
 const defaultTestEncryptionKey = "11111111111111111111111111111111";
 const defaultTestHashKey = "22222222222222222222222222222222";
 
-export function normalizeTcIdentity(value: string): string {
+export function normalizeTcIdentity(value: string, errorCode = "STUDENT_NATIONAL_ID_INVALID"): string {
   const normalized = value.replace(/\D/g, "");
   if (!isValidTcIdentity(normalized)) {
-    throw new UnprocessableEntityException("STUDENT_NATIONAL_ID_INVALID");
+    throw new UnprocessableEntityException(errorCode);
   }
   return normalized;
 }

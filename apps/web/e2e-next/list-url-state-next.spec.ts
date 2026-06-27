@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
+const smsEnabled = process.env.NEXT_PUBLIC_SMS_ENABLED === "true";
 
 const corsHeaders = {
   "access-control-allow-credentials": "true",
@@ -97,7 +98,7 @@ test.describe("Liste URL state", () => {
     await expect(summary).toContainText("Kullanıcı toplamı");
     await expect(summary).toContainText("Davet bekliyor");
     await expect(summary).toContainText("Rol taslağı");
-    await expect(adminRoles.locator(".next-role-grid--compact .uh-checkbox")).toHaveCount(5);
+    await expect(adminRoles.locator(".next-role-grid--compact .uh-checkbox")).toHaveCount(2);
     await expect(adminRoles).toContainText("Tüm kurum operasyonları");
     await expect(saveButton).toBeDisabled();
 
@@ -112,7 +113,7 @@ test.describe("Liste URL state", () => {
     await expect.poll(() => captured.roleUpdates).toHaveLength(1);
     expect(captured.roleUpdates[0]).toMatchObject({
       authorization: "Bearer list-url-access-token",
-      body: { roles: ["TEACHER", "TENANT_ADMIN"] },
+      body: { roles: ["TENANT_ADMIN"] },
       userId: "tenant-user-a",
     });
     await expect(saveButton).toBeDisabled();
@@ -120,9 +121,9 @@ test.describe("Liste URL state", () => {
 
     await usersRegion.getByRole("button", { name: "Kullanıcı ekle" }).click();
     const userDialog = page.getByRole("dialog", { name: "Kullanıcı ekle" });
-    await expect(userDialog.locator(".next-role-fieldset .uh-checkbox")).toHaveCount(5);
-    await expect(userDialog).toContainText("Kullanıcının kurum paneli veya portal kapsamını seç.");
-    await expect(userDialog.getByRole("checkbox", { name: /Öğretmen/ })).toBeChecked();
+    await expect(userDialog.locator(".next-role-fieldset .uh-checkbox")).toHaveCount(2);
+    await expect(userDialog).toContainText("Kullanıcının kurum yönetim kapsamını seç.");
+    await expect(userDialog.getByRole("checkbox", { name: /Yardımcı yönetici/ })).toBeChecked();
     await userDialog.getByRole("button", { name: "Vazgeç" }).click();
 
     for (const value of ["12345678901", "+905551234567", "guardian-private@example.test"]) {
@@ -192,7 +193,7 @@ test.describe("Liste URL state", () => {
     await openWithListMocks(
       page,
       captured,
-      "/kurum/ogrenciler?page=2&limit=20&q=ada&sort=-lastName&classId=class-11a&level=11&responsibleTeacherId=teacher-a&status=ACTIVE&guardianLinked=true&density=compact&columns=name,class,status,actions",
+      "/kurum/ogrenciler?page=2&limit=20&q=ada&sort=-lastName&classId=class-11a&level=grade-11&responsibleTeacherId=teacher-a&status=ACTIVE&guardianLinked=true&density=compact&columns=name,class,status,actions",
     );
 
     const studentsRegion = page.getByLabel("Öğrenci yönetimi");
@@ -210,8 +211,8 @@ test.describe("Liste URL state", () => {
     await expect(studentsRegion.getByLabel("Göster")).toHaveValue("20");
     await expect(filters.locator(".uh-field")).toHaveCount(5);
     await expect(filters.locator(".uh-select")).toHaveCount(5);
-    await expect(filters.getByLabel("Sınıf")).toHaveValue("class-11a");
-    await expect(filters.getByLabel("Seviye")).toHaveValue("11");
+    await expect(filters.getByRole("combobox").nth(0)).toHaveValue("class-11a");
+    await expect(filters.getByRole("combobox").nth(1)).toHaveValue("grade-11");
     await expect(filters.getByLabel("Sorumlu")).toHaveValue("teacher-a");
     await expect(filters.getByLabel("Durum")).toHaveValue("ACTIVE");
     await expect(filters.getByLabel("Veli")).toHaveValue("true");
@@ -329,7 +330,11 @@ test.describe("Liste URL state", () => {
     const announcementSummary = announcementsRegion.getByRole("region", { exact: true, name: "Duyuru operasyon özeti" });
 
     await expect(announcementSummary).toContainText("Duyuru toplamı");
-    await expect(announcementSummary).toContainText("SMS uygun");
+    if (smsEnabled) {
+      await expect(announcementSummary).toContainText("SMS uygun");
+    } else {
+      await expect(announcementSummary).not.toContainText("SMS");
+    }
     await expect(announcementSummary.getByLabel("Duyuru operasyon özeti aksiyon kuyruğu")).toBeVisible();
     await expect(announcementSummary).toContainText("Alıcı raporu");
     await expect(announcementsRegion.getByLabel("Ara")).toHaveValue("sınav");
@@ -355,6 +360,10 @@ test.describe("Liste URL state", () => {
   test("şablon listesi URL state ve SMS operasyon özetini korur", async ({ page }) => {
     const captured = createCapturedRequests();
     await openWithListMocks(page, captured, "/kurum/sablonlar?page=2&limit=20&q=hafta&sort=-name");
+    if (!smsEnabled) {
+      await expect(page.getByLabel("Şablon yönetimi")).toHaveCount(0);
+      return;
+    }
 
     const templatesRegion = page.getByLabel("Şablon yönetimi");
     const templateSummary = templatesRegion.getByRole("region", { exact: true, name: "Şablon operasyon özeti" });
@@ -429,7 +438,7 @@ test.describe("Liste URL state", () => {
     await openWithListMocks(
       page,
       captured,
-      "/kurum/ogrenciler?page=2&limit=20&q=ada&sort=-lastName&classId=class-11a&level=11&responsibleTeacherId=teacher-a&status=ACTIVE&guardianLinked=true&density=compact&columns=name,class,status,actions",
+      "/kurum/ogrenciler?page=2&limit=20&q=ada&sort=-lastName&classId=class-11a&level=grade-11&responsibleTeacherId=teacher-a&status=ACTIVE&guardianLinked=true&density=compact&columns=name,class,status,actions",
     );
 
     const studentsRegion = page.getByLabel("Öğrenci yönetimi");
@@ -445,8 +454,8 @@ test.describe("Liste URL state", () => {
     await expect(studentSummary).toContainText("Toplu dönem geçişi");
     await expect(filters.locator(".uh-field")).toHaveCount(5);
     await expect(filters.locator(".uh-select")).toHaveCount(5);
-    await expect(filters.getByLabel("Sınıf")).toHaveValue("class-11a");
-    await expect(filters.getByLabel("Seviye")).toHaveValue("11");
+    await expect(filters.getByRole("combobox").nth(0)).toHaveValue("class-11a");
+    await expect(filters.getByRole("combobox").nth(1)).toHaveValue("grade-11");
     await expect(tableView.locator(".uh-checkbox")).toHaveCount(6);
     await expect(tableView.getByLabel("Görünüm")).toHaveValue("compact");
     await expect(bulkTransition.locator(".uh-field")).toHaveCount(3);
@@ -1170,7 +1179,6 @@ function createClass() {
     campusId: "campus-a",
     gradeLevelId: "grade-11",
     id: "class-11a",
-    level: "11",
     name: "11-A",
     section: "A",
     tenantId: "tenant-list-url",
@@ -1243,7 +1251,6 @@ function createStudent() {
 function createStudentProfile() {
   return {
     ...createStudent(),
-    birthDate: "2010-01-01",
     email: "ada.kaya@example.test",
     nationalIdMasked: "*********01",
     phone: "+905551234567",

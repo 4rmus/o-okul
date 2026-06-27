@@ -188,7 +188,7 @@ describe("Support ticket API", () => {
     const createdClass = await request(server)
       .post("/classes")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ name: "Destek Dışı", level: "8" })
+      .send({ name: "Destek Dışı" })
       .expect(201);
 
     await request(server)

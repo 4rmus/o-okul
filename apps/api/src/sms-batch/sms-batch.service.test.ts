@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AuditLogService, CreateAuditLogInput } from "../audit-log/audit-log.service.js";
 import type { AnnouncementStore } from "../announcement/announcement-store.js";
 import type { MessageTemplateRecord, MessageTemplateService } from "../message-template/message-template.service.js";
@@ -17,6 +17,20 @@ import type {
 import { SmsBatchService, type SmsBatchQueueProducer } from "./sms-batch.service.js";
 
 describe("SmsBatchService", () => {
+  const originalSmsEnabled = process.env.SMS_ENABLED;
+
+  beforeEach(() => {
+    process.env.SMS_ENABLED = "true";
+  });
+
+  afterEach(() => {
+    if (originalSmsEnabled === undefined) {
+      delete process.env.SMS_ENABLED;
+      return;
+    }
+    process.env.SMS_ENABLED = originalSmsEnabled;
+  });
+
   it("SMS batch isteğini sms-batch queue job'una çevirir", async () => {
     const templates = new FakeMessageTemplateService();
     const deliveryReports = new FakeSmsBatchDeliveryReportStore();
@@ -118,6 +132,36 @@ describe("SmsBatchService", () => {
     expect(producer.inputs).toHaveLength(0);
   });
 
+  it("SMS_ENABLED açık değilse queue'ya iş göndermez", async () => {
+    delete process.env.SMS_ENABLED;
+    const producer = new FakeProducer();
+    const service = new SmsBatchService(
+      new FakeMessageTemplateService() as unknown as MessageTemplateService,
+      new FakeAnnouncementStore() as unknown as AnnouncementStore,
+      new FakeClassStore() as unknown as ClassStore,
+      new FakeSmsBatchDeliveryReportStore(),
+      new FakeGuardianStore() as unknown as GuardianStore,
+      new FakeGuardianStudentStore() as unknown as GuardianStudentStore,
+      producer,
+      new FakeScheduleStore() as unknown as ScheduleStore,
+      new FakeStudentStore() as unknown as StudentStore,
+    );
+
+    await expect(service.enqueue(
+      {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        roles: ["TENANT_ADMIN"],
+        bypassRls: false,
+      },
+      {
+        templateId: "message-template-a",
+        recipients: [{ to: "5000000001" }],
+      },
+    )).rejects.toThrow("SMS_DISABLED");
+    expect(producer.inputs).toHaveLength(0);
+  });
+
   it("alıcı yoksa queue'ya iş göndermez", async () => {
     const producer = new FakeProducer();
     const service = new SmsBatchService(
@@ -178,6 +222,31 @@ describe("SmsBatchService", () => {
         studentNames: ["Ada A"],
       }],
     });
+  });
+
+  it("SMS_ENABLED açık değilse önizleme üretmez", async () => {
+    process.env.SMS_ENABLED = "false";
+    const service = new SmsBatchService(
+      new FakeMessageTemplateService() as unknown as MessageTemplateService,
+      new FakeAnnouncementStore() as unknown as AnnouncementStore,
+      new FakeClassStore() as unknown as ClassStore,
+      new FakeSmsBatchDeliveryReportStore(),
+      new FakeGuardianStore() as unknown as GuardianStore,
+      new FakeGuardianStudentStore() as unknown as GuardianStudentStore,
+      new FakeProducer(),
+      new FakeScheduleStore() as unknown as ScheduleStore,
+      new FakeStudentStore() as unknown as StudentStore,
+    );
+
+    await expect(service.previewRecipients(
+      {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        roles: ["TENANT_ADMIN"],
+        bypassRls: false,
+      },
+      { announcementId: "announcement-a", studentStatus: "ACTIVE" },
+    )).rejects.toThrow("SMS_DISABLED");
   });
 });
 
@@ -259,8 +328,8 @@ class FakeSmsBatchDeliveryReportStore implements SmsBatchDeliveryReportStore {
 class FakeClassStore {
   async list() {
     return [
-      { id: "class-a", tenantId: "tenant-a", name: "8-A", level: "8", campusId: "campus-main", gradeLevelId: "grade-8" },
-      { id: "class-b", tenantId: "tenant-a", name: "7-B", level: "7", campusId: "campus-main", gradeLevelId: "grade-7" },
+      { id: "class-a", tenantId: "tenant-a", name: "8-A", campusId: "campus-main", gradeLevelId: "grade-8" },
+      { id: "class-b", tenantId: "tenant-a", name: "7-B", campusId: "campus-main", gradeLevelId: "grade-7" },
     ];
   }
 }
@@ -324,8 +393,6 @@ class FakeGuardianStudentStore {
         tenantId: "tenant-a",
         guardianId: "guardian-a",
         studentId: "student-a",
-        relationshipType: "MOTHER",
-        isPrimary: true,
         canViewFinance: true,
         canReceiveSms: true,
         canReceiveAnnouncements: true,
@@ -336,8 +403,6 @@ class FakeGuardianStudentStore {
         tenantId: "tenant-a",
         guardianId: "guardian-no-phone",
         studentId: "student-a",
-        relationshipType: "FATHER",
-        isPrimary: false,
         canViewFinance: true,
         canReceiveSms: true,
         canReceiveAnnouncements: true,
@@ -348,8 +413,6 @@ class FakeGuardianStudentStore {
         tenantId: "tenant-a",
         guardianId: "guardian-b",
         studentId: "student-b",
-        relationshipType: "GUARDIAN",
-        isPrimary: true,
         canViewFinance: true,
         canReceiveSms: false,
         canReceiveAnnouncements: true,

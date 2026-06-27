@@ -121,7 +121,7 @@ function createAuthResponse(accessToken: string) {
 
 function readFixture(path: string) {
   if (path === "/classes") {
-    return [{ id: "class-a", tenantId: "tenant-a", name: "8-A", level: "8" }];
+    return [{ id: "class-a", tenantId: "tenant-a", name: "8-A" }];
   }
 
   if (path === "/teachers") {

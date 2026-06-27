@@ -963,6 +963,15 @@ a {
   font-size: 14px;
 }
 
+.next-brand-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+  object-fit: contain;
+  border: 1px solid var(--color-border-faint);
+  background: var(--color-surface);
+}
+
 .next-form {
   display: grid;
   gap: 14px;
@@ -1383,6 +1392,100 @@ a {
 
 .next-workspace:focus {
   outline: none;
+}
+
+.next-desktop-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--color-border-faint);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.94);
+  padding: 10px 12px;
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(14px);
+}
+
+.next-desktop-topbar__search {
+  min-width: 0;
+}
+
+.next-desktop-topbar__brand,
+.next-desktop-topbar__context,
+.next-desktop-topbar__account {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.next-desktop-topbar__brand {
+  color: var(--color-text);
+}
+
+.next-desktop-topbar__context,
+.next-desktop-topbar__account {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.next-desktop-topbar__context span,
+.next-desktop-topbar__account span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.next-desktop-topbar__context {
+  max-width: 220px;
+}
+
+.next-desktop-topbar__account {
+  justify-content: flex-end;
+}
+
+.next-desktop-topbar__account .uh-button {
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.next-shell-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: min(520px, 100%);
+  min-width: 0;
+}
+
+.next-shell-search svg {
+  position: absolute;
+  left: 12px;
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.next-shell-search input {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  border: 1px solid var(--color-border-input);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  padding: 0 12px 0 38px;
+}
+
+.next-shell-search input:focus-visible {
+  border-color: var(--color-primary);
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
 }
 
 .next-command-palette {
@@ -6920,6 +7023,10 @@ a {
 @media (max-width: 760px) {
   .next-app-shell {
     grid-template-columns: 1fr;
+  }
+
+  .next-desktop-topbar {
+    display: none;
   }
 
   .next-mobile-topbar {

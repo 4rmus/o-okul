@@ -224,7 +224,7 @@ pnpm backup:restore:smoke
   beklenmeyen criterion ve invalid/non-empty gaps negatifleriyle korunur.
 - Canlı RLS kanıtı `RLS_LIVE_EVIDENCE_TARGET` ve `pnpm rls:live:check` ile doğrulanır; bu
   rapor `pnpm db:rls:check`, `pnpm db:rls:check:live` ve `pnpm rls:load:smoke` çıktılarını
-  tek JSON'da toplar. `schema.tablesVerified` schema'dan türeyen 54 tenant tablosunu,
+  tek JSON'da toplar. `schema.tablesVerified` schema'dan türeyen 57 tenant tablosunu,
   `isolation.crossTenantReadRows=0` çapraz-tenant okuma sonucunu, `withCheckRejects` yanlış
   tenant yazım/referans negatiflerini ve `loadSmoke.actualRps >= targetRps >= 200` sonucunu
   kanıtlamalıdır. `tenantFkPreflight` bloğu 24 zorunlu tenant composite relation'ı exact listeler,
@@ -238,7 +238,7 @@ pnpm backup:restore:smoke
   `evidenceReferences` userinfo, query veya fragment taşıyamaz. Gerçek kanıtta tenant hash ve artifact referansları `redacted`, `example`,
   `.test`, `localhost`, `__SET` veya placeholder değer içeremez; bu gevşetme yalnız template
   kontrolünde `RLS_LIVE_ALLOW_EXAMPLE_EVIDENCE=1` ile açılır. RLS live raporu top-level 10 alanı,
-  `schema`/`isolation`/`tenantFkPreflight`/`loadSmoke` blok shape'leri, 54 tabloluk
+  `schema`/`isolation`/`tenantFkPreflight`/`loadSmoke` blok shape'leri, 57 tabloluk
   `tablesVerified` exact seti, 24 relation'lık tenant FK exact seti, `withCheckRejects`
   negatif seti, tam `commandsPassed` seti ve boş `gaps` listesi
   `prod:evidence:templates:check` içindeki fazla alan/tablo/komut ve invalid/non-empty gaps negatifleriyle korunur.
@@ -334,16 +334,15 @@ pnpm backup:restore:smoke
   `STAGING_ENVIRONMENT=staging DEPLOYMENT_REGION_OUTPUT=artifacts/staging/reports/deployment-region.json DEPLOYMENT_REGION_PROVIDER=... DEPLOYMENT_REGION_REGION=... DEPLOYMENT_REGION_DATACENTER_COUNTRY_CODE=TR DEPLOYMENT_REGION_DATA_RESIDENCY_VERIFIED=true DEPLOYMENT_REGION_EVIDENCE_REFERENCE=... DEPLOYMENT_REGION_SERVICES_VERIFIED=api,worker,postgres,redis,object-storage pnpm deployment:region:generate`
   kullanılır. Generator gerçek provider/region/evidence referansı ve exact servis onayı olmadan
   artifact yazmaz; public IP lookup referansını da final kanıt saymaz.
-- Netgsm secret'ları repoya yazılmaz.
-- `SMS_PROVIDER=netgsm` ise `SMS_ALLOW_NOOP_IN_PRODUCTION=false` kalır.
-- Gerçek staging/prod release env içinde `NETGSM_USERCODE`, `NETGSM_PASSWORD` ve
-  `NETGSM_MSG_HEADER` boş veya placeholder/example/test değer olamaz; `pnpm prod:env:check`
-  bu credential alanlarını release öncesi reddeder.
-- Netgsm test/canlı credential doğrulaması `SMS_SMOKE_TO`, `SMS_SMOKE_BODY` ve
-  `SMS_SMOKE_CONFIRM=send` içeren gerçek release env ile `pnpm sms:smoke` ve production kanıt
-  zincirindeki SMS provider adımıyla yapılır.
-- SMS provider smoke kanıtı `SMS_PROVIDER_SMOKE_EVIDENCE_FILE` ile masked recipient, provider,
-  `segments` ve boş olmayan gerçek `providerMessageId` sonucu olarak yazılır; artifact exact top-level
+- SMS v1 kapsamı kapalıdır: staging/prod release env içinde `SMS_ENABLED=false`,
+  `NEXT_PUBLIC_SMS_ENABLED=false`, `SMS_PROVIDER=noop` ve `SMS_ALLOW_NOOP_IN_PRODUCTION=false`
+  kalır; `pnpm sms:smoke` bu kapsam dışı yolu `provider=disabled`, `segments=0` ve
+  `providerMessageId=sms-disabled-v1` ile kanıtlar.
+- SMS yeniden release kapsamına alınırsa Netgsm secret'ları repoya yazılmaz; `SMS_PROVIDER=netgsm`,
+  `SMS_SMOKE_CONFIRM=send` ve gerçek Netgsm credential'ları `pnpm prod:env:check` tarafından
+  placeholder/test değerlerden ayrıştırılır.
+- SMS disabled path kanıtı `SMS_PROVIDER_SMOKE_EVIDENCE_FILE` ile masked recipient, provider,
+  `segments` ve boş olmayan `providerMessageId` sonucu olarak yazılır; artifact exact top-level
   alan seti, `checkedAt`, tek `commandsPassed=["pnpm sms:smoke"]` ve boş `gaps` listesi taşır.
   Ham telefon, maskesiz recipient veya `placeholder`/`test-message-id`/`sms-provider-message-*`
   gibi sahte provider id'leri production evidence ve go-live summary içinde kabul edilmez.
@@ -1017,7 +1016,7 @@ summary/pilot/go-live kaynak ve go-live linked pilot gaps negatif fixture'ların
 - Inline upload migration kanıtı: `STAGING_PASS_WITH_FINAL_CHAIN_PENDING`
 - Audit null tenant kanıtı: `STAGING_PASS_WITH_FINAL_CHAIN_PENDING`
 - Rate limit Redis kanıtı: `STAGING_PASS_WITH_FINAL_CHAIN_PENDING`
-- SMS provider kanıtı: `NOT_RUN`
+- SMS disabled path kanıtı: `NOT_RUN`
 - Notification provider kanıtı: `NOT_RUN`
 - Report generation perf kanıtı: `STAGING_PASS_WITH_FINAL_CHAIN_PENDING`
 - Staging/prod UAT: `NOT_RUN`

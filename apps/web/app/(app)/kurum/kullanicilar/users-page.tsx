@@ -20,15 +20,15 @@ import {
 import {
   isPortalSubjectRoleName,
   portalSubjectRoles,
-  tenantAssignableRoles,
   tenantRoleLabel,
   type GuardianRecord,
   type PortalSubjectRoleName,
   type StudentRecord,
   type TeacherRecord,
   type TenantAssignableRoleName,
+  type TenantUserPasswordResetResponse,
 } from "@o-okul/shared-types";
-import { Plus, RotateCcw, Save, Send } from "lucide-react";
+import { KeyRound, Plus, RotateCcw, Save, Send } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import {
@@ -45,13 +45,14 @@ import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 type Role = TenantAssignableRoleName;
+type ManagementRole = Extract<Role, "TENANT_ADMIN" | "ASSISTANT_ADMIN">;
 type InvitationSubjectType = PortalSubjectRoleName;
 type InvitationStatus = "PENDING" | "ACCEPTED";
 
 interface TenantUserRecord {
   id: string;
   tenantId: string;
-  email: string;
+  email?: string;
   name: string;
   roles: Role[];
   createdAt: string;
@@ -85,7 +86,8 @@ interface UserSubjectReferences {
   teachers: TeacherRecord[];
 }
 
-const roleOptions = tenantAssignableRoles.map((role) => ({ value: role, label: tenantRoleLabel(role) }));
+const managementRoleOptions = ["TENANT_ADMIN", "ASSISTANT_ADMIN"] as const satisfies readonly ManagementRole[];
+const roleOptions = managementRoleOptions.map((role) => ({ value: role, label: tenantRoleLabel(role) }));
 
 const roleDescriptions: Record<Role, string> = {
   TENANT_ADMIN: "Tüm kurum operasyonları",
@@ -108,7 +110,7 @@ const emptyUserForm: TenantUserFormState = {
   email: "",
   name: "",
   password: "",
-  roles: ["TEACHER"],
+  roles: ["ASSISTANT_ADMIN"],
 };
 
 const emptyInvitationForm: IdentityInvitationFormState = {
@@ -153,13 +155,14 @@ export function UsersPage() {
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
-  const [roleDrafts, setRoleDrafts] = useState<Record<string, Role[]>>({});
+  const [roleDrafts, setRoleDrafts] = useState<Record<string, ManagementRole[]>>({});
   const [isUserFormOpen, setIsUserFormOpen] = useState(false);
   const [userForm, setUserForm] = useState<TenantUserFormState>(emptyUserForm);
   const [isInvitationFormOpen, setIsInvitationFormOpen] = useState(false);
   const [invitationForm, setInvitationForm] = useState<IdentityInvitationFormState>(emptyInvitationForm);
   const [issuedToken, setIssuedToken] = useState<{ email: string; token: string } | null>(null);
   const [isIssuedTokenRevealed, setIsIssuedTokenRevealed] = useState(false);
+  const [resettingUserId, setResettingUserId] = useState("");
   const [error, setError] = useState("");
 
   const users = usersQuery.data?.data ?? [];
@@ -202,7 +205,7 @@ export function UsersPage() {
       header: "E-posta",
       mobilePriority: "secondary",
       priority: "secondary",
-      render: (user) => user.email,
+      render: (user) => user.email ?? "-",
     },
     {
       key: "roles",
@@ -247,6 +250,15 @@ export function UsersPage() {
             aria-label={`${user.name} rollerini kaydet`}
           >
             <Save size={17} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            disabled={resettingUserId === user.id}
+            onClick={() => void resetUserPassword(user)}
+            aria-label={`${user.name} şifresini telefona sıfırla`}
+            title="Şifreyi telefona sıfırla"
+          >
+            <KeyRound size={17} aria-hidden="true" />
           </button>
         </span>
       ),
@@ -324,17 +336,17 @@ export function UsersPage() {
   ];
 
   function getDraftRoles(user: TenantUserRecord) {
-    return roleDrafts[user.id] ?? user.roles;
+    return roleDrafts[user.id] ?? managementRoles(user.roles);
   }
 
   function hasRoleDraftChanges(user: TenantUserRecord) {
-    return normalizeRoles(getDraftRoles(user)).join("|") !== normalizeRoles(user.roles).join("|");
+    return normalizeRoles(getDraftRoles(user)).join("|") !== normalizeRoles(managementRoles(user.roles)).join("|");
   }
 
-  function toggleRole(userId: string, role: Role) {
+  function toggleRole(userId: string, role: ManagementRole) {
     setRoleDrafts((current) => {
       const user = users.find((candidate) => candidate.id === userId);
-      const roles = current[userId] ?? user?.roles ?? [];
+      const roles = current[userId] ?? managementRoles(user?.roles ?? []);
       const nextRoles = roles.includes(role) ? roles.filter((candidate) => candidate !== role) : [...roles, role];
       return { ...current, [userId]: nextRoles };
     });
@@ -382,6 +394,23 @@ export function UsersPage() {
       });
     } catch (rolesError) {
       setError(apiErrorMessage(rolesError, "Roller kaydedilemedi."));
+    }
+  }
+
+  async function resetUserPassword(user: TenantUserRecord) {
+    if (!auth) return;
+    const confirmed = window.confirm(`${user.name} için şifre telefon numarasına sıfırlanacak ve aktif oturumları kapatılacak. Devam edilsin mi?`);
+    if (!confirmed) return;
+
+    setError("");
+    setResettingUserId(user.id);
+    try {
+      await resetTenantUserPassword(auth.accessToken, user.id);
+      void queryClient.invalidateQueries({ queryKey: usersListQueryKey });
+    } catch (resetError) {
+      setError(apiErrorMessage(resetError, "Şifre sıfırlanamadı."));
+    } finally {
+      setResettingUserId("");
     }
   }
 
@@ -643,7 +672,7 @@ export function UsersPage() {
         </Field>
         <fieldset className="next-role-fieldset">
           <legend>Roller</legend>
-          <p className="next-role-fieldset__hint">Kullanıcının kurum paneli veya portal kapsamını seç.</p>
+          <p className="next-role-fieldset__hint">Kullanıcının kurum yönetim kapsamını seç.</p>
           <RoleCheckboxGrid
             selectedRoles={userForm.roles}
             onToggle={(role) =>
@@ -736,8 +765,8 @@ function RoleCheckboxGrid({
   onToggle,
 }: {
   density?: "compact" | "regular";
-  selectedRoles: Role[];
-  onToggle: (role: Role) => void;
+  selectedRoles: ManagementRole[];
+  onToggle: (role: ManagementRole) => void;
 }) {
   return (
     <div className={density === "compact" ? "next-role-grid next-role-grid--compact" : "next-role-grid"}>
@@ -799,7 +828,11 @@ function normalizeRoles(roles: Role[]) {
   return [...roles].sort();
 }
 
-function toggleRoleSelection(roles: Role[], role: Role) {
+function managementRoles(roles: Role[]) {
+  return roles.filter((role): role is ManagementRole => role === "TENANT_ADMIN" || role === "ASSISTANT_ADMIN");
+}
+
+function toggleRoleSelection(roles: ManagementRole[], role: ManagementRole) {
   return roles.includes(role) ? roles.filter((candidate) => candidate !== role) : [...roles, role];
 }
 
@@ -846,6 +879,14 @@ async function setTenantUserRoles(accessToken: string, userId: string, roles: Ro
     headers: { "content-type": "application/json" },
     method: "PATCH",
   });
+}
+
+async function resetTenantUserPassword(accessToken: string, userId: string) {
+  return apiRequest<TenantUserPasswordResetResponse>(
+    accessToken,
+    `${apiBaseUrl}/tenant-users/${encodeURIComponent(userId)}/reset-password`,
+    { method: "POST" },
+  );
 }
 
 async function loadInvitations(accessToken: string, listQuery: ListQueryState) {

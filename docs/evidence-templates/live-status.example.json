@@ -87,7 +87,7 @@
       "evidenceReference": "artifacts/example/rate-limit/rate-limit-smoke.json"
     },
     {
-      "label": "SMS provider kanıtı",
+      "label": "SMS disabled path kanıtı",
       "status": "PASS",
       "command": "pnpm sms:smoke",
       "source": "productionEvidenceSummary.smokeEvidence.smsProvider",

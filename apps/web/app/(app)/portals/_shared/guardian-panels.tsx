@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Checkbox, DataTable, InfoGrid, InfoItem, Panel, type DataTableColumn } from "@o-okul/ui";
 import type { GuardianStudentRecord, PaymentPlanWithInstallmentsRecord } from "@o-okul/shared-types";
+import { isSmsEnabled } from "../../../../src/sms-feature.js";
 
 export function NotificationPreferencesPanel({
   preferences,
@@ -29,12 +30,14 @@ export function NotificationPreferencesPanel({
   return (
     <Panel aria-label="Bildirim tercihleri" title="Bildirim Tercihleri">
       {readOnly ? <p>Salt-okuma önizlemede bildirim tercihleri değiştirilemez.</p> : null}
-      <Checkbox
-        checked={preferences?.canReceiveSms ?? false}
-        disabled={readOnly || !preferences || !onUpdate}
-        label="SMS al"
-        onChange={(event) => void update({ canReceiveSms: event.target.checked })}
-      />
+      {isSmsEnabled ? (
+        <Checkbox
+          checked={preferences?.canReceiveSms ?? false}
+          disabled={readOnly || !preferences || !onUpdate}
+          label="SMS al"
+          onChange={(event) => void update({ canReceiveSms: event.target.checked })}
+        />
+      ) : null}
       <Checkbox
         checked={preferences?.canReceiveAnnouncements ?? false}
         disabled={readOnly || !preferences || !onUpdate}
@@ -56,8 +59,7 @@ export function GuardianRelationshipSummaryPanel({ relationship }: { relationshi
   return (
     <Panel aria-label="Veli ilişki özeti" title="Veli İlişki Özeti">
       <InfoGrid className="next-guardian-relationship-info" aria-label="Veli ilişki metrikleri" role="region">
-        <InfoItem label="İlişki" value={relationship ? guardianRelationshipLabel(relationship.relationshipType) : "-"} />
-        <InfoItem label="Birincil kişi" value={relationship?.isPrimary ? "Evet" : "Hayır"} />
+        <InfoItem label="Bağlantı" value={relationship ? "Aktif" : "-"} />
         <InfoItem label="Ödeme görünümü" value={relationship?.canViewFinance ? "Açık" : "Kapalı"} />
         <InfoItem label="İzinler" value={relationship ? formatGuardianPermissions(relationship) : "-"} />
       </InfoGrid>
@@ -131,21 +133,10 @@ export function PaymentPlansPanel({
   );
 }
 
-function guardianRelationshipLabel(value: GuardianStudentRecord["relationshipType"]) {
-  const labels: Record<GuardianStudentRecord["relationshipType"], string> = {
-    EMERGENCY_CONTACT: "Acil kişi",
-    FATHER: "Baba",
-    GUARDIAN: "Vasi",
-    MOTHER: "Anne",
-    OTHER: "Diğer",
-  };
-  return labels[value];
-}
-
 function formatGuardianPermissions(link: GuardianStudentRecord) {
   const permissions = [
     link.canViewFinance ? "Finans" : undefined,
-    link.canReceiveSms ? "SMS" : undefined,
+    isSmsEnabled && link.canReceiveSms ? "SMS" : undefined,
     link.canReceiveAnnouncements ? "Duyuru" : undefined,
     link.canOpenSupportTickets ? "Destek" : undefined,
   ].filter((permission): permission is string => Boolean(permission));

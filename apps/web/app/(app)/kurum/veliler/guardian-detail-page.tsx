@@ -25,6 +25,7 @@ import type {
 import { ArrowLeft, Link2, Send } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
+import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
@@ -38,12 +39,10 @@ interface GuardianDetailData {
 }
 
 const emptyLinkForm = {
-  canOpenSupportTickets: false,
-  canReceiveAnnouncements: false,
+  canOpenSupportTickets: true,
+  canReceiveAnnouncements: true,
   canReceiveSms: false,
-  canViewFinance: false,
-  isPrimary: true,
-  relationshipType: "GUARDIAN" as GuardianStudentRecord["relationshipType"],
+  canViewFinance: true,
   studentId: "",
 };
 
@@ -116,7 +115,7 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
                 <InfoItem label="Portal" value={detail.guardian.userId ? "Bağlı" : "Yok"} />
                 <InfoItem label="Öğrenci bağlantısı" value={`${formatCount(detail.links.length)} bağlantı`} />
                 <InfoItem label="Finans görünürlüğü" value={formatPermissionCount(detail.links, "canViewFinance")} />
-                <InfoItem label="SMS izni" value={formatPermissionCount(detail.links, "canReceiveSms")} />
+                {isSmsEnabled ? <InfoItem label="SMS izni" value={formatPermissionCount(detail.links, "canReceiveSms")} /> : null}
                 <InfoItem label="Destek izni" value={formatPermissionCount(detail.links, "canOpenSupportTickets")} />
               </InfoGrid>
             </Panel>
@@ -157,32 +156,7 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
                       ))}
                     </Select>
                   </Field>
-                  <Field label="İlişki">
-                    <Select
-                      aria-label="İlişki"
-                      value={linkForm.relationshipType}
-                      onChange={(event) =>
-                        setLinkForm((current) => ({
-                          ...current,
-                          relationshipType: event.target.value as GuardianStudentRecord["relationshipType"],
-                        }))
-                      }
-                    >
-                      <option value="GUARDIAN">Vasi</option>
-                      <option value="MOTHER">Anne</option>
-                      <option value="FATHER">Baba</option>
-                      <option value="EMERGENCY_CONTACT">Acil kişi</option>
-                      <option value="OTHER">Diğer</option>
-                    </Select>
-                  </Field>
                 </div>
-                <Checkbox
-                  checked={linkForm.isPrimary}
-                  className="next-permission-toggle"
-                  description="Öğrencinin ana iletişim kişisi olarak işaretle."
-                  label="Birincil veli"
-                  onChange={(event) => setLinkForm((current) => ({ ...current, isPrimary: event.target.checked }))}
-                />
                 <fieldset className="next-permission-fieldset">
                   <legend>Erişim izinleri</legend>
                   <span className="next-field-hint">Hassas izinler varsayılan kapalıdır; yalnız açıkça seçilen yetkiler gönderilir.</span>
@@ -256,8 +230,6 @@ async function linkGuardianStudent(
       canReceiveAnnouncements: input.canReceiveAnnouncements,
       canReceiveSms: input.canReceiveSms,
       canViewFinance: input.canViewFinance,
-      isPrimary: input.isPrimary,
-      relationshipType: input.relationshipType,
       studentId: input.studentId,
     }),
     headers: { "content-type": "application/json" },
@@ -322,18 +294,17 @@ function buildGuardianSummaryBadges(detail: GuardianDetailData): OperationSummar
 function buildGuardianSummaryActions(detail: GuardianDetailData): OperationSummaryAction[] {
   const enabledPermissionCount = guardianEnabledPermissionCount(detail.links);
   const totalPermissionCount = detail.links.length * guardianPermissionOptions.length;
-  const primaryCount = detail.links.filter((link) => link.isPrimary).length;
   return [
     {
-      detail: "Birincil ve ek veli ilişkileri",
+      detail: "Veli öğrenci bağlantıları",
       key: "relationship-control",
-      label: "İlişki kontrolü",
-      status: primaryCount > 0 ? "Birincil var" : "Birincil yok",
-      tone: primaryCount > 0 ? "success" : "warning",
+      label: "Bağlantı kontrolü",
+      status: detail.links.length > 0 ? "Bağlı" : "Bağ yok",
+      tone: detail.links.length > 0 ? "success" : "warning",
       value: `${formatCount(detail.links.length)} bağ`,
     },
     {
-      detail: "Finans, SMS, duyuru ve destek izinleri",
+      detail: isSmsEnabled ? "Finans, SMS, duyuru ve destek izinleri" : "Finans, duyuru ve destek izinleri",
       key: "permission-scope",
       label: "İzin kapsamı",
       status: enabledPermissionCount > 0 ? "Kontrollü" : "Kapalı",
@@ -368,18 +339,6 @@ function buildGuardianStudentColumns(detail: GuardianDetailData): Array<DataTabl
         );
       },
       sticky: "left",
-    },
-    {
-      key: "relationship",
-      header: "İlişki",
-      mobilePriority: "secondary",
-      priority: "primary",
-      render: (link) => (
-        <span className="next-permission-row">
-          <StatusBadge tone="info">{formatRelationship(link.relationshipType)}</StatusBadge>
-          <StatusBadge tone={link.isPrimary ? "success" : "neutral"}>{link.isPrimary ? "Birincil" : "Ek bağlantı"}</StatusBadge>
-        </span>
-      ),
     },
     {
       key: "class",
@@ -424,14 +383,6 @@ function buildGuardianStudentColumns(detail: GuardianDetailData): Array<DataTabl
       ),
     },
   ];
-}
-
-function formatRelationship(value: GuardianStudentRecord["relationshipType"]) {
-  if (value === "MOTHER") return "Anne";
-  if (value === "FATHER") return "Baba";
-  if (value === "GUARDIAN") return "Vasi";
-  if (value === "EMERGENCY_CONTACT") return "Acil kişi";
-  return "Diğer";
 }
 
 function formatStudentStatus(status: GuardianStudentDetailStudentRecord["status"]) {
@@ -488,13 +439,14 @@ function formatCount(value: number) {
   return new Intl.NumberFormat("tr-TR").format(value);
 }
 
-function permissionBadges(link: GuardianStudentRecord) {
-  return [
+function permissionBadges(link: GuardianStudentRecord): Array<{ enabled: boolean; label: string }> {
+  const badges: Array<{ enabled: boolean; label: string }> = [
     { enabled: link.canViewFinance, label: `Finans ${link.canViewFinance ? "açık" : "kapalı"}` },
-    { enabled: link.canReceiveSms, label: `SMS ${link.canReceiveSms ? "açık" : "kapalı"}` },
     { enabled: link.canReceiveAnnouncements, label: `Duyuru ${link.canReceiveAnnouncements ? "açık" : "kapalı"}` },
     { enabled: link.canOpenSupportTickets, label: `Destek ${link.canOpenSupportTickets ? "açık" : "kapalı"}` },
   ];
+  if (isSmsEnabled) badges.splice(1, 0, { enabled: link.canReceiveSms, label: `SMS ${link.canReceiveSms ? "açık" : "kapalı"}` });
+  return badges;
 }
 
 const guardianPermissionOptions: Array<{
@@ -507,11 +459,11 @@ const guardianPermissionOptions: Array<{
     key: "canViewFinance",
     label: "Finans görünürlüğü",
   },
-  {
+  ...(isSmsEnabled ? [{
     description: "Duyuru ve bilgilendirme SMS alıcısı olarak kullanılır.",
-    key: "canReceiveSms",
+    key: "canReceiveSms" as const,
     label: "SMS alabilir",
-  },
+  }] : []),
   {
     description: "Kurum duyurularını veli portalında gösterir.",
     key: "canReceiveAnnouncements",

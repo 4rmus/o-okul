@@ -511,7 +511,7 @@ Minimum kanıt içeriği:
 
 - `commandsPassed` içinde `pnpm db:rls:check`, `pnpm db:rls:check:live`,
   `pnpm rls:load:smoke` ve `pnpm rls:live:check` bulunur.
-- `schema.tablesVerified` schema'dan türeyen 54 tenant tablosunu kapsar; `AnnouncementReceipt`,
+- `schema.tablesVerified` schema'dan türeyen 57 tenant tablosunu kapsar; `AnnouncementReceipt`,
   `BackupRestoreJob`, `HomeworkMaterialFile`, `SupportTicketAttachment` ve `AuditLog` bu listenin
   içinde görünmelidir.
 - `isolation.crossTenantReadRows=0`, `withCheckRejects` yanlış tenant yazım/referans negatiflerini
@@ -522,7 +522,7 @@ Minimum kanıt içeriği:
   referansını zorunlu tutar. Artifact `checkedAt`, hash'li tenant referansları,
   `commandsPassed=["pnpm rls:load:smoke"]` ve boş `gaps` listesi taşır; ham tenant/student id
   alanları ortak smoke evidence sözleşmesinde reddedilir.
-- Rapor top-level 10 alanı, `schema`/`isolation`/`tenantFkPreflight`/`loadSmoke` blok shape'leri, 54 tabloluk
+- Rapor top-level 10 alanı, `schema`/`isolation`/`tenantFkPreflight`/`loadSmoke` blok shape'leri, 57 tabloluk
   `tablesVerified` exact seti, `withCheckRejects` negatif seti, tam `commandsPassed` seti ve
   boş `gaps` listesini taşır; `prod:evidence:templates:check` RLS live fazla alan/tablo/komut
   ve invalid/non-empty gaps negatiflerini kırmızıya düşürür.
@@ -1257,7 +1257,7 @@ Minimum kanıt içeriği:
   `Live exam cycle kanıtı`, `iSEM optical pipeline kanıtı`,
   `Live UI-worker result kanıtı`, `KVKK inventory kanıtı`, `RLS live kanıtı`,
   `Inline upload migration kanıtı`, `Audit null tenant kanıtı`, `Rate limit Redis kanıtı`,
-  `SMS provider kanıtı`, `Notification provider kanıtı`, `Report generation perf kanıtı`,
+  `SMS disabled path kanıtı`, `Notification provider kanıtı`, `Report generation perf kanıtı`,
   `Staging/prod UAT`, `Deployment rollback tatbikatı`, `Pilot kapanış kanıtı`,
   `Go-live karar paketi` ve `Alert bildirim kanalı` satırlarını
   readiness dokümanındaki durumla birebir eşleştirir. Liste tam 18 satırdan oluşmalı, beklenmeyen

@@ -2,13 +2,13 @@ import { createHash } from "node:crypto";
 import { BadRequestException, ConflictException, Inject, Injectable, Optional, PayloadTooLargeException } from "@nestjs/common";
 import ExcelJS from "exceljs";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
+import { normalizeTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import { StudentService, type StudentGuardianProvisionInput, type StudentRecord } from "./student.service.js";
-import { isValidTcIdentity } from "./tc-identity.js";
+import { maskTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
 import type {
-  GuardianRelationshipType,
   PublicStudentRecord,
   StudentExportResult,
   StudentImportDryRunResult,
@@ -19,6 +19,10 @@ import type {
 } from "@o-okul/shared-types";
 
 type StudentImportDryRunInput = Partial<StudentImportRequest>;
+type ParsedStudentImportRow = StudentImportPreviewRow & {
+  nationalId?: string;
+  phone?: string;
+};
 const maxStudentImportBytes = 5 * 1024 * 1024;
 
 @Injectable()
@@ -35,18 +39,12 @@ export class StudentImportService {
       throw new BadRequestException("IMPORT_FILE_REQUIRED");
     }
 
-    const rows = await this.readRows(input.fileBase64);
-    const errors = await this.validateRows(context, rows);
-    const quota = await this.students.previewQuota(context, rows.length);
-
-    if (quota.wouldExceed) {
-      errors.push({ row: 0, field: "quota", code: "STUDENT_QUOTA_EXCEEDED" });
-    }
+    const { rows, errors, quota } = await this.readAndValidateRows(context, input.fileBase64);
 
     return {
       dryRun: true,
       totalRows: rows.length,
-      validRows: filterValidRows(rows, errors),
+      validRows: filterValidRows(rows, errors).map(toPreviewRow),
       errors,
       quota,
       wouldImport: errors.length === 0,
@@ -73,8 +71,8 @@ export class StudentImportService {
   }
 
   private async importOnce(context: RequestContext, input: StudentImportDryRunInput): Promise<StudentImportResult> {
-    const dryRun = await this.dryRun(context, input);
-    const rowErrors = dryRun.errors.filter((error) => error.code !== "STUDENT_QUOTA_EXCEEDED");
+    const { rows, errors, quota } = await this.readAndValidateRows(context, input.fileBase64);
+    const rowErrors = errors.filter((error) => error.code !== "STUDENT_QUOTA_EXCEEDED");
 
     if (rowErrors.length > 0) {
       throw new BadRequestException({
@@ -82,27 +80,45 @@ export class StudentImportService {
         errors: rowErrors,
       });
     }
-    if (dryRun.quota.wouldExceed) {
+    if (quota.wouldExceed) {
       throw new ConflictException("STUDENT_QUOTA_EXCEEDED");
     }
 
-    const students = await this.students.createMany(context, dryRun.validRows);
+    const students = await this.students.createMany(context, filterValidRows(rows, errors));
     await this.auditLogs?.record({
       tenantId: context.tenantId ?? undefined,
       actorUserId: context.userId,
       entityType: "StudentImport",
       action: "student_import.completed",
       diff: {
-        totalRows: dryRun.totalRows,
+        totalRows: rows.length,
         importedRows: students.length,
-        errorCount: dryRun.errors.length,
-        quota: dryRun.quota,
+        errorCount: errors.length,
+        quota,
       },
     });
     return {
       importedRows: students.length,
       students: students.map(toPublicImportedStudent),
     };
+  }
+
+  private async readAndValidateRows(
+    context: RequestContext,
+    fileBase64: string | undefined,
+  ): Promise<{ rows: ParsedStudentImportRow[]; errors: StudentImportError[]; quota: StudentImportDryRunResult["quota"] }> {
+    if (!fileBase64) {
+      throw new BadRequestException("IMPORT_FILE_REQUIRED");
+    }
+    const rows = await this.readRows(fileBase64);
+    const errors = await this.validateRows(context, rows);
+    const quota = await this.students.previewQuota(context, rows.length);
+
+    if (quota.wouldExceed) {
+      errors.push({ row: 0, field: "quota", code: "STUDENT_QUOTA_EXCEEDED" });
+    }
+
+    return { rows, errors, quota };
   }
 
   async export(context: RequestContext): Promise<StudentExportResult> {
@@ -126,7 +142,7 @@ export class StudentImportService {
     };
   }
 
-  private async readRows(fileBase64: string): Promise<StudentImportPreviewRow[]> {
+  private async readRows(fileBase64: string): Promise<ParsedStudentImportRow[]> {
     const bytes = Buffer.from(fileBase64, "base64");
     if (bytes.byteLength > maxStudentImportBytes) {
       throw new PayloadTooLargeException("IMPORT_FILE_TOO_LARGE");
@@ -159,7 +175,7 @@ export class StudentImportService {
     return worksheet;
   }
 
-  private readWorksheetRows(worksheet: ExcelJS.Worksheet): StudentImportPreviewRow[] {
+  private readWorksheetRows(worksheet: ExcelJS.Worksheet): ParsedStudentImportRow[] {
     const matrix: Array<{ rowNumber: number; cells: string[] }> = [];
 
     worksheet.eachRow((row, rowNumber) => {
@@ -173,7 +189,7 @@ export class StudentImportService {
     return this.readMatrixRows(matrix);
   }
 
-  private readDelimitedRows(content: string): StudentImportPreviewRow[] {
+  private readDelimitedRows(content: string): ParsedStudentImportRow[] {
     const lines = content.replace(/^\uFEFF/, "").split(/\r?\n/);
     const delimiter = detectDelimiter(lines.find((line) => line.trim()) ?? "");
     const matrix = lines
@@ -183,8 +199,8 @@ export class StudentImportService {
     return this.readMatrixRows(matrix);
   }
 
-  private readMatrixRows(matrix: Array<{ rowNumber: number; cells: string[] }>): StudentImportPreviewRow[] {
-    const rows: StudentImportPreviewRow[] = [];
+  private readMatrixRows(matrix: Array<{ rowNumber: number; cells: string[] }>): ParsedStudentImportRow[] {
+    const rows: ParsedStudentImportRow[] = [];
     const headerRowIndex = findHeaderRowIndex(matrix);
     const header = matrix[headerRowIndex]?.cells ?? [];
     const studentNoIndex = findHeaderIndex(header, ["studentNo", "schoolNo", "okulNo", "okulNumarasi", "okulNumarası", "ogrenciNo", "öğrenciNo"]);
@@ -193,15 +209,13 @@ export class StudentImportService {
     const classIndex = findHeaderIndex(header, ["class", "className", "sinif", "sınıf", "sube", "şube", "sinifAdi", "sınıfAdı"]);
     const emailIndex = findHeaderIndex(header, ["email", "ePosta", "eposta", "studentEmail", "ogrenciEmail", "öğrenciEmail"]);
     const phoneIndex = findHeaderIndex(header, ["phone", "telefon", "cepTelefonu", "studentPhone", "ogrenciTelefon", "öğrenciTelefon"]);
-    const birthDateIndex = findHeaderIndex(header, ["birthDate", "dogumTarihi", "doğumTarihi", "dogumGunu", "doğumGünü"]);
     const nationalIdIndex = findHeaderIndex(header, ["nationalId", "tc", "tckn", "tcKimlikNo", "kimlikNo", "ogrenciTc", "öğrenciTc"]);
     const guardianIndexes: GuardianColumnIndexes = {
       firstName: findHeaderIndex(header, ["guardianFirstName", "veliAd", "veliAdi", "veliAdı"]),
       lastName: findHeaderIndex(header, ["guardianLastName", "veliSoyad", "veliSoyadi", "veliSoyadı"]),
       phone: findHeaderIndex(header, ["guardianPhone", "veliTelefon", "veliTel", "veliCep"]),
       email: findHeaderIndex(header, ["guardianEmail", "veliEmail", "veliEposta", "veliEPosta"]),
-      relationshipType: findHeaderIndex(header, ["guardianRelationshipType", "veliIliski", "veliİlişki", "veliiliski", "veliYakinlik", "veliYakınlık", "veliyakinlik"]),
-      isPrimary: findHeaderIndex(header, ["guardianIsPrimary", "veliBirincil", "birincilVeli"]),
+      nationalId: findHeaderIndex(header, ["guardianNationalId", "guardianTc", "veliTc", "veliTckn", "veliKimlikNo"]),
       canViewFinance: findHeaderIndex(header, ["guardianCanViewFinance", "veliFinans", "veliFinansGoruntuleme", "veliFinansGörme"]),
       canReceiveSms: findHeaderIndex(header, ["guardianCanReceiveSms", "veliSms", "veliSmsIzni", "veliSmsİzni"]),
       canReceiveAnnouncements: findHeaderIndex(header, ["guardianCanReceiveAnnouncements", "veliDuyuru", "veliDuyuruIzni", "veliDuyuruİzni"]),
@@ -215,7 +229,6 @@ export class StudentImportService {
       const className = classIndex === undefined ? "" : row.cells[classIndex]?.trim() ?? "";
       const email = readOptionalCell(row.cells, emailIndex);
       const phone = readOptionalCell(row.cells, phoneIndex);
-      const birthDate = readOptionalCell(row.cells, birthDateIndex);
       const nationalId = readOptionalCell(row.cells, nationalIdIndex);
       const guardian = readGuardian(row.cells, guardianIndexes);
       if (!studentNo && !firstName && !lastName) continue;
@@ -228,7 +241,6 @@ export class StudentImportService {
         ...(className ? { className } : {}),
         ...(email ? { email } : {}),
         ...(phone ? { phone } : {}),
-        ...(birthDate ? { birthDate } : {}),
         ...(nationalId ? { nationalId } : {}),
         ...(guardian ? { guardian } : {}),
       });
@@ -237,7 +249,7 @@ export class StudentImportService {
     return rows;
   }
 
-  private async validateRows(context: RequestContext, rows: StudentImportPreviewRow[]): Promise<StudentImportError[]> {
+  private async validateRows(context: RequestContext, rows: ParsedStudentImportRow[]): Promise<StudentImportError[]> {
     const errors: StudentImportError[] = [];
     const classes = (await this.classes.list()).filter((record) => record.tenantId === context.tenantId && !record.deletedAt);
     const classByName = new Map(classes.map((record) => [this.normalizeValue(record.name), record]));
@@ -273,22 +285,77 @@ export class StudentImportService {
         }
       }
       if (row.email && !isEmailLike(row.email)) {
-        errors.push({ row: row.row, field: "email", code: "INVALID_EMAIL", value: row.email });
+        errors.push({ row: row.row, field: "email", code: "INVALID_EMAIL" });
       }
-      if (row.birthDate && !isCalendarDateString(row.birthDate)) {
-        errors.push({ row: row.row, field: "birthDate", code: "INVALID_DATE", value: row.birthDate });
+      if (row.nationalId && !row.phone) {
+        errors.push({ row: row.row, field: "phone", code: "REQUIRED" });
       }
+      if (row.phone && !row.nationalId) {
+        errors.push({ row: row.row, field: "nationalId", code: "REQUIRED" });
+      }
+      let identityValid = true;
       if (row.nationalId) {
-        const normalizedNationalId = row.nationalId.replace(/\D/g, "");
-        if (!isValidTcIdentity(normalizedNationalId)) {
-          errors.push({ row: row.row, field: "nationalId", code: "INVALID_NATIONAL_ID", value: row.nationalId });
-        } else if (seenNationalIds.has(normalizedNationalId) || await this.students.hasNationalId(context, normalizedNationalId)) {
-          errors.push({ row: row.row, field: "nationalId", code: "STUDENT_NATIONAL_ID_DUPLICATE", value: row.nationalId });
+        try {
+          row.nationalId = normalizeTcIdentity(row.nationalId);
+        } catch {
+          identityValid = false;
+          errors.push({
+            row: row.row,
+            field: "nationalId",
+            code: "INVALID_NATIONAL_ID",
+            ...maskedNationalIdValue(row.nationalId),
+          });
         }
-        seenNationalIds.add(normalizedNationalId);
+      }
+      if (row.phone) {
+        try {
+          row.phone = normalizeTurkishMobilePhone(row.phone, "STUDENT_PHONE_INVALID");
+        } catch {
+          identityValid = false;
+          errors.push({ row: row.row, field: "phone", code: "INVALID_PHONE" });
+        }
+      }
+      if (row.nationalId && identityValid) {
+        if (seenNationalIds.has(row.nationalId) || await this.students.hasNationalId(context, row.nationalId)) {
+          errors.push({
+            row: row.row,
+            field: "nationalId",
+            code: "STUDENT_NATIONAL_ID_DUPLICATE",
+            ...maskedNationalIdValue(row.nationalId),
+          });
+        }
+        seenNationalIds.add(row.nationalId);
+      }
+      if (row.nationalId && row.phone && identityValid) {
+        row.accountPreview = {
+          usernameMasked: maskTcIdentity(row.nationalId),
+          willCreate: true,
+        };
       }
       if (row.guardian?.email && !isEmailLike(row.guardian.email)) {
-        errors.push({ row: row.row, field: "guardianEmail", code: "INVALID_EMAIL", value: row.guardian.email });
+        errors.push({ row: row.row, field: "guardianEmail", code: "INVALID_EMAIL" });
+      }
+      if (row.guardian?.nationalId) {
+        try {
+          row.guardian.nationalId = normalizeTcIdentity(row.guardian.nationalId);
+        } catch {
+          errors.push({
+            row: row.row,
+            field: "guardianNationalId",
+            code: "INVALID_NATIONAL_ID",
+            ...maskedNationalIdValue(row.guardian.nationalId),
+          });
+        }
+        if (!row.guardian.phone) {
+          errors.push({ row: row.row, field: "guardianPhone", code: "REQUIRED" });
+        }
+      }
+      if (row.guardian?.nationalId && row.guardian.phone) {
+        try {
+          row.guardian.phone = normalizeTurkishMobilePhone(row.guardian.phone, "GUARDIAN_PHONE_INVALID");
+        } catch {
+          errors.push({ row: row.row, field: "guardianPhone", code: "INVALID_PHONE" });
+        }
       }
     }
 
@@ -400,17 +467,32 @@ interface GuardianColumnIndexes {
   lastName?: number;
   phone?: number;
   email?: number;
-  relationshipType?: number;
-  isPrimary?: number;
+  nationalId?: number;
   canViewFinance?: number;
   canReceiveSms?: number;
   canReceiveAnnouncements?: number;
   canOpenSupportTickets?: number;
 }
 
-function filterValidRows(rows: StudentImportPreviewRow[], errors: StudentImportError[]): StudentImportPreviewRow[] {
+function filterValidRows<T extends { row: number }>(rows: T[], errors: StudentImportError[]): T[] {
   const invalidRows = new Set(errors.filter((error) => error.row > 0).map((error) => error.row));
   return rows.filter((row) => !invalidRows.has(row.row));
+}
+
+function toPreviewRow(row: ParsedStudentImportRow): StudentImportPreviewRow {
+  const { nationalId: _nationalId, phone: _phone, ...previewRow } = row;
+  if (previewRow.guardian?.nationalId) {
+    previewRow.guardian = {
+      ...previewRow.guardian,
+      nationalId: maskTcIdentity(previewRow.guardian.nationalId),
+    };
+  }
+  return previewRow;
+}
+
+function maskedNationalIdValue(value: string): { value?: string } {
+  const digits = value.replace(/\D/g, "");
+  return digits.length >= 4 ? { value: `*******${digits.slice(-4)}` } : {};
 }
 
 function readGuardian(cells: string[], indexes: GuardianColumnIndexes): StudentGuardianProvisionInput | undefined {
@@ -418,19 +500,19 @@ function readGuardian(cells: string[], indexes: GuardianColumnIndexes): StudentG
   const lastName = readOptionalCell(cells, indexes.lastName);
   const phone = readOptionalCell(cells, indexes.phone);
   const email = readOptionalCell(cells, indexes.email);
-  if (!firstName && !lastName && !phone && !email) return undefined;
+  const nationalId = readOptionalCell(cells, indexes.nationalId);
+  if (!firstName && !lastName && !phone && !email && !nationalId) return undefined;
 
   return {
     firstName: firstName || undefined,
     lastName: lastName || undefined,
+    nationalId: nationalId || undefined,
     phone: phone || undefined,
     email: email || undefined,
-    relationshipType: readRelationshipType(readOptionalCell(cells, indexes.relationshipType)) ?? "GUARDIAN",
-    isPrimary: readBooleanCell(cells, indexes.isPrimary) ?? true,
-    canViewFinance: readBooleanCell(cells, indexes.canViewFinance) ?? false,
+    canViewFinance: readBooleanCell(cells, indexes.canViewFinance) ?? true,
     canReceiveSms: readBooleanCell(cells, indexes.canReceiveSms) ?? false,
-    canReceiveAnnouncements: readBooleanCell(cells, indexes.canReceiveAnnouncements) ?? false,
-    canOpenSupportTickets: readBooleanCell(cells, indexes.canOpenSupportTickets) ?? false,
+    canReceiveAnnouncements: readBooleanCell(cells, indexes.canReceiveAnnouncements) ?? true,
+    canOpenSupportTickets: readBooleanCell(cells, indexes.canOpenSupportTickets) ?? true,
   };
 }
 
@@ -446,37 +528,8 @@ function readBooleanCell(cells: string[], index: number | undefined): boolean | 
   return undefined;
 }
 
-function readRelationshipType(value: string): GuardianRelationshipType | undefined {
-  const normalized = normalizeHeader(value);
-  const aliases: Record<string, GuardianRelationshipType> = {
-    anne: "MOTHER",
-    baba: "FATHER",
-    mother: "MOTHER",
-    father: "FATHER",
-    guardian: "GUARDIAN",
-    vasi: "GUARDIAN",
-    veli: "GUARDIAN",
-    acilkisi: "EMERGENCY_CONTACT",
-    acilkontak: "EMERGENCY_CONTACT",
-    emergencycontact: "EMERGENCY_CONTACT",
-    diger: "OTHER",
-    diğer: "OTHER",
-    other: "OTHER",
-  };
-  if (["MOTHER", "FATHER", "GUARDIAN", "EMERGENCY_CONTACT", "OTHER"].includes(value)) {
-    return value as GuardianRelationshipType;
-  }
-  return aliases[normalized];
-}
-
 function isEmailLike(value: string): boolean {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
-}
-
-function isCalendarDateString(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 function normalizeHeader(value: string): string {

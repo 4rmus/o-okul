@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
+const smsEnabled = process.env.NEXT_PUBLIC_SMS_ENABLED === "true";
 
 const corsHeaders = {
   "access-control-allow-credentials": "true",
@@ -64,12 +65,16 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expectNoClippedVisibleText(page, "student-360-mobile");
   });
 
-  test("duyuru alıcı ve SMS teslim panelleri mobilde taşmadan kalır", async ({ page }) => {
+  test("duyuru alıcı paneli mobilde taşmadan kalır", async ({ page }) => {
     await openWithDataTableMocks(page, "/kurum/duyurular");
 
     const announcementSummary = page.getByRole("region", { exact: true, name: "Duyuru operasyon özeti" });
     await expect(announcementSummary).toContainText("Duyuru toplamı");
-    await expect(announcementSummary).toContainText("SMS uygun");
+    if (smsEnabled) {
+      await expect(announcementSummary).toContainText("SMS uygun");
+    } else {
+      await expect(announcementSummary).not.toContainText("SMS");
+    }
     await expect(announcementSummary.getByLabel("Duyuru operasyon özeti aksiyon kuyruğu")).toBeVisible();
     const announcementTable = page.getByRole("table", { name: "Duyuru yönetimi" });
     await expect(announcementTable.getByRole("columnheader", { name: "Başlık" })).toBeVisible();
@@ -98,15 +103,19 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(recipientsTable.getByText("Bekliyor")).toBeVisible();
 
     const smsRegion = page.getByLabel("Duyuru SMS gönderimi");
-    await expect(smsRegion.getByLabel("SMS şablonu")).toBeVisible();
-    await smsRegion.getByRole("button", { name: "SMS gönder" }).click();
-    await expect(smsRegion.getByRole("status").filter({ hasText: "SMS kuyruğa alındı" })).toContainText("1 alıcı");
-    const announcementDeliveryReport = smsRegion.getByLabel("SMS teslim raporu");
-    const announcementDeliveryMetrics = announcementDeliveryReport.getByRole("region", { name: "SMS teslim metrikleri" });
-    await expect(announcementDeliveryMetrics.locator(".uh-metric-card")).toHaveCount(5);
-    await expect(announcementDeliveryReport.locator(".next-sms-delivery-metrics")).toHaveCount(0);
-    await expect(announcementDeliveryReport).toContainText("Kuyrukta");
-    await expect(announcementDeliveryReport).toContainText("Provider kabulü");
+    if (smsEnabled) {
+      await expect(smsRegion.getByLabel("SMS şablonu")).toBeVisible();
+      await smsRegion.getByRole("button", { name: "SMS gönder" }).click();
+      await expect(smsRegion.getByRole("status").filter({ hasText: "SMS kuyruğa alındı" })).toContainText("1 alıcı");
+      const announcementDeliveryReport = smsRegion.getByLabel("SMS teslim raporu");
+      const announcementDeliveryMetrics = announcementDeliveryReport.getByRole("region", { name: "SMS teslim metrikleri" });
+      await expect(announcementDeliveryMetrics.locator(".uh-metric-card")).toHaveCount(5);
+      await expect(announcementDeliveryReport.locator(".next-sms-delivery-metrics")).toHaveCount(0);
+      await expect(announcementDeliveryReport).toContainText("Kuyrukta");
+      await expect(announcementDeliveryReport).toContainText("Provider kabulü");
+    } else {
+      await expect(smsRegion).toHaveCount(0);
+    }
 
     await expectNoVisibleTextValues(page, "duyuru-mobile", [
       "announcement-a",
@@ -121,8 +130,13 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expectNoClippedVisibleText(page, "duyuru-mobile");
   });
 
-  test("şablon SMS çalışma alanı mobilde taşmadan kalır", async ({ page }) => {
+  test("şablon SMS çalışma alanı env kapısına uyar", async ({ page }) => {
     await openWithDataTableMocks(page, "/kurum/sablonlar");
+    if (!smsEnabled) {
+      await expect(page.getByLabel("Şablon yönetimi")).toHaveCount(0);
+      await expect(page.getByRole("region", { name: "SMS gönderim" })).toHaveCount(0);
+      return;
+    }
 
     const templateRegion = page.getByLabel("Şablon yönetimi");
     const templateSummary = templateRegion.getByRole("region", { exact: true, name: "Şablon operasyon özeti" });
@@ -616,7 +630,10 @@ test.describe("DataTable mobil sözleşmesi", () => {
 
     await page.getByRole("button", { name: "Sınav ekle" }).click();
     const examDialog = page.getByRole("dialog", { name: "Sınav ekle" });
-    await expect(examDialog.locator(".uh-field")).toHaveCount(3);
+    await expect(examDialog.locator(".uh-field")).toHaveCount(6);
+    await expect(examDialog.getByLabel("Sınav türü")).toBeVisible();
+    await expect(examDialog.getByLabel("Seviye")).toBeVisible();
+    await expect(examDialog.getByLabel("Alan")).toBeVisible();
     await expect(examDialog.getByLabel("Cevap anahtarı dosyası")).toBeVisible();
     await expect(examDialog.getByLabel("Sınıf ara")).toBeVisible();
     await expect(examDialog.locator(".next-checkbox-list .uh-checkbox")).toHaveCount(2);
@@ -1060,7 +1077,6 @@ function createStudents() {
 
 function createStudentProfile() {
   return {
-    birthDate: "2012-05-10",
     classId: "class-8a",
     email: "ada.kaya@example.test",
     firstName: "Ada",

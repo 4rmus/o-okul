@@ -1,8 +1,11 @@
 import { Module } from "@nestjs/common";
 import { AuditLogModule } from "../audit-log/audit-log.module.js";
+import { IdentityProvisioningModule } from "../identity-provisioning/identity-provisioning.module.js";
 import { StudentPersistenceModule } from "../student/student-persistence.module.js";
 import { AcademicCalendarController } from "./academic-calendar.controller.js";
 import { academicCalendarStoreToken, createAcademicCalendarStore } from "./academic-calendar-store.js";
+import { alanStoreToken, createAlanStore } from "./alan-store.js";
+import { AlanlarController } from "./alanlar.controller.js";
 import { campusStoreToken, createCampusStore } from "./campus-store.js";
 import { CampusesController } from "./campuses.controller.js";
 import { classStoreToken, createClassStore } from "./class-store.js";
@@ -12,6 +15,7 @@ import { CoursesController } from "./courses.controller.js";
 import { createGuardianStudentStore, guardianStudentStoreToken } from "./guardian-student-store.js";
 import { createGuardianStore, guardianStoreToken } from "./guardian-store.js";
 import { GuardiansController } from "./guardians.controller.js";
+import { createGradeLevelCourseStore, gradeLevelCourseStoreToken } from "./grade-level-course-store.js";
 import { createGradeLevelStore, gradeLevelStoreToken } from "./grade-level-store.js";
 import { GradeLevelsController } from "./grade-levels.controller.js";
 import { createLearningOutcomeStore, learningOutcomeStoreToken } from "./learning-outcome-store.js";
@@ -26,6 +30,10 @@ const schoolStoreProviders = [
   {
     provide: academicCalendarStoreToken,
     useFactory: createAcademicCalendarStore,
+  },
+  {
+    provide: alanStoreToken,
+    useFactory: createAlanStore,
   },
   {
     provide: campusStoreToken,
@@ -52,6 +60,10 @@ const schoolStoreProviders = [
     useFactory: createGradeLevelStore,
   },
   {
+    provide: gradeLevelCourseStoreToken,
+    useFactory: createGradeLevelCourseStore,
+  },
+  {
     provide: learningOutcomeStoreToken,
     useFactory: createLearningOutcomeStore,
   },
@@ -66,9 +78,10 @@ const schoolStoreProviders = [
 ] as const;
 
 @Module({
-  imports: [AuditLogModule, StudentPersistenceModule],
+  imports: [AuditLogModule, IdentityProvisioningModule, StudentPersistenceModule],
   controllers: [
     AcademicCalendarController,
+    AlanlarController,
     CampusesController,
     ClassesController,
     CoursesController,
@@ -81,11 +94,13 @@ const schoolStoreProviders = [
   exports: [
     StudentPersistenceModule,
     academicCalendarStoreToken,
+    alanStoreToken,
     campusStoreToken,
     classStoreToken,
     courseStoreToken,
     guardianStoreToken,
     guardianStudentStoreToken,
+    gradeLevelCourseStoreToken,
     gradeLevelStoreToken,
     learningOutcomeStoreToken,
     teacherStoreToken,

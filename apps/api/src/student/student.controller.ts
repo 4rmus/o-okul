@@ -39,7 +39,6 @@ import type {
 const studentStatusSchema = z.enum(["ACTIVE", "PASSIVE", "GRADUATED", "TRANSFERRED"]);
 const optionalStudentStatusQuerySchema = z.preprocess((value) => value === "" ? undefined : value, studentStatusSchema.optional());
 const optionalGuardianLinkedQuerySchema = z.preprocess((value) => value === "" ? undefined : value, z.enum(["true", "false"]).optional());
-const optionalStudentBirthDateSchema = z.preprocess((value) => value === "" ? undefined : value, optionalDateString("STUDENT_BIRTH_DATE_INVALID"));
 const optionalStudentEnrollmentStartsAtSchema = z.preprocess((value) => value === "" ? undefined : value, optionalDateString("STUDENT_ENROLLMENT_STARTS_AT_INVALID"));
 const studentListQuerySchema = z.object({
   classId: optionalTrimmedString,
@@ -53,7 +52,6 @@ const studentListQuerySchema = z.object({
   status: optionalStudentStatusQuerySchema,
 });
 type StudentListQuery = z.infer<typeof studentListQuerySchema>;
-const guardianRelationshipTypeSchema = z.enum(["MOTHER", "FATHER", "GUARDIAN", "EMERGENCY_CONTACT", "OTHER"]);
 const studentGuardianProvisionBodySchema = z.object({
   canOpenSupportTickets: z.boolean().optional(),
   canReceiveAnnouncements: z.boolean().optional(),
@@ -61,16 +59,18 @@ const studentGuardianProvisionBodySchema = z.object({
   canViewFinance: z.boolean().optional(),
   email: optionalTrimmedString,
   firstName: optionalTrimmedString,
-  isPrimary: z.boolean().optional(),
   lastName: optionalTrimmedString,
+  nationalId: optionalTrimmedString,
   phone: optionalTrimmedString,
-  relationshipType: guardianRelationshipTypeSchema.optional(),
 }).strict();
 const studentCreateBodySchema = z.object({
   classId: optionalTrimmedString,
   firstName: requiredTrimmedString,
   guardian: studentGuardianProvisionBodySchema.optional(),
   lastName: requiredTrimmedString,
+  nationalId: optionalTrimmedString,
+  phone: optionalTrimmedString,
+  email: optionalTrimmedString,
   responsibleTeacherId: optionalTrimmedString,
   status: studentStatusSchema.optional(),
   studentNo: optionalTrimmedString,
@@ -84,7 +84,6 @@ const studentUpdateBodySchema = z.object({
   status: studentStatusSchema.optional(),
 }).strict() satisfies z.ZodType<StudentUpdateRequest>;
 const studentProfileBodySchema = z.object({
-  birthDate: optionalStudentBirthDateSchema,
   email: optionalTrimmedString,
   nationalId: optionalTrimmedString,
   phone: optionalTrimmedString,
@@ -270,7 +269,7 @@ export class StudentController {
     if (query.level) {
       const classIds = new Set(
         (await this.school.listClasses(getRequestContext()))
-          .filter((klass) => klass.level === query.level)
+          .filter((klass) => klass.gradeLevelId === query.level)
           .map((klass) => klass.id),
       );
       filtered = filtered.filter((student) => Boolean(student.classId && classIds.has(student.classId)));

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { GuardianRelationshipType, GuardianStudentRecord } from "@o-okul/shared-types";
+import type { GuardianStudentRecord } from "@o-okul/shared-types";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
@@ -7,7 +7,7 @@ import { type Queryable, type TenantQueryable, withTenantQuery } from "../db/ten
 export type GuardianStudentInput = Pick<GuardianStudentRecord, "tenantId" | "guardianId" | "studentId"> &
   Partial<Pick<
     GuardianStudentRecord,
-    "relationshipType" | "isPrimary" | "canViewFinance" | "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets"
+    "canViewFinance" | "canReceiveSms" | "canReceiveAnnouncements" | "canOpenSupportTickets"
   >>;
 
 export interface GuardianStudentStore {
@@ -26,8 +26,6 @@ const demoLinks: GuardianStudentRecord[] = [
     tenantId: "tenant-a",
     guardianId: "guardian-a",
     studentId: "student-a",
-    relationshipType: "MOTHER",
-    isPrimary: true,
     canViewFinance: true,
     canReceiveSms: true,
     canReceiveAnnouncements: true,
@@ -38,8 +36,6 @@ const demoLinks: GuardianStudentRecord[] = [
     tenantId: "tenant-b",
     guardianId: "guardian-b",
     studentId: "student-b",
-    relationshipType: "GUARDIAN",
-    isPrimary: true,
     canViewFinance: true,
     canReceiveSms: true,
     canReceiveAnnouncements: true,
@@ -141,15 +137,13 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
            "tenantId",
            "guardianId",
            "studentId",
-           "relationshipType",
-           "isPrimary",
            "canViewFinance",
            "canReceiveSms",
            "canReceiveAnnouncements",
            "canOpenSupportTickets",
            "updatedAt"
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
          ON CONFLICT ("tenantId", "guardianId", "studentId") DO NOTHING
          RETURNING *`,
         [
@@ -157,8 +151,6 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
           recordInput.tenantId,
           recordInput.guardianId,
           recordInput.studentId,
-          recordInput.relationshipType,
-          recordInput.isPrimary,
           recordInput.canViewFinance,
           recordInput.canReceiveSms,
           recordInput.canReceiveAnnouncements,
@@ -177,12 +169,10 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<GuardianStudentRow>(
         `UPDATE "GuardianStudent"
-         SET "relationshipType" = COALESCE($3, "relationshipType"),
-             "isPrimary" = COALESCE($4, "isPrimary"),
-             "canViewFinance" = COALESCE($5, "canViewFinance"),
-             "canReceiveSms" = COALESCE($6, "canReceiveSms"),
-             "canReceiveAnnouncements" = COALESCE($7, "canReceiveAnnouncements"),
-             "canOpenSupportTickets" = COALESCE($8, "canOpenSupportTickets"),
+         SET "canViewFinance" = COALESCE($3, "canViewFinance"),
+             "canReceiveSms" = COALESCE($4, "canReceiveSms"),
+             "canReceiveAnnouncements" = COALESCE($5, "canReceiveAnnouncements"),
+             "canOpenSupportTickets" = COALESCE($6, "canOpenSupportTickets"),
              "updatedAt" = now()
          WHERE "guardianId" = $1
            AND "studentId" = $2
@@ -190,8 +180,6 @@ export class PostgresGuardianStudentStore implements GuardianStudentStore {
         [
           guardianId,
           studentId,
-          input.relationshipType,
-          input.isPrimary,
           input.canViewFinance,
           input.canReceiveSms,
           input.canReceiveAnnouncements,
@@ -227,8 +215,6 @@ interface GuardianStudentRow {
   tenantId: string;
   guardianId: string;
   studentId: string;
-  relationshipType?: GuardianRelationshipType;
-  isPrimary?: boolean;
   canViewFinance?: boolean;
   canReceiveSms?: boolean;
   canReceiveAnnouncements?: boolean;
@@ -259,12 +245,10 @@ function toGuardianStudentRecord(row: GuardianStudentRow): GuardianStudentRecord
     tenantId: row.tenantId,
     guardianId: row.guardianId,
     studentId: row.studentId,
-    relationshipType: row.relationshipType ?? "GUARDIAN",
-    isPrimary: row.isPrimary ?? false,
-    canViewFinance: row.canViewFinance ?? false,
+    canViewFinance: row.canViewFinance ?? true,
     canReceiveSms: row.canReceiveSms ?? false,
-    canReceiveAnnouncements: row.canReceiveAnnouncements ?? false,
-    canOpenSupportTickets: row.canOpenSupportTickets ?? false,
+    canReceiveAnnouncements: row.canReceiveAnnouncements ?? true,
+    canOpenSupportTickets: row.canOpenSupportTickets ?? true,
     createdAt: row.createdAt ? toIsoString(row.createdAt) : undefined,
     updatedAt: row.updatedAt ? toIsoString(row.updatedAt) : undefined,
   };
@@ -275,12 +259,10 @@ function withGuardianStudentDefaults(input: GuardianStudentInput): Omit<Guardian
     tenantId: input.tenantId,
     guardianId: input.guardianId,
     studentId: input.studentId,
-    relationshipType: input.relationshipType ?? "GUARDIAN",
-    isPrimary: input.isPrimary ?? false,
-    canViewFinance: input.canViewFinance ?? false,
+    canViewFinance: input.canViewFinance ?? true,
     canReceiveSms: input.canReceiveSms ?? false,
-    canReceiveAnnouncements: input.canReceiveAnnouncements ?? false,
-    canOpenSupportTickets: input.canOpenSupportTickets ?? false,
+    canReceiveAnnouncements: input.canReceiveAnnouncements ?? true,
+    canOpenSupportTickets: input.canOpenSupportTickets ?? true,
   };
 }
 

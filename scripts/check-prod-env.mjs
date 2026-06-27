@@ -79,6 +79,8 @@ function checkContract(file) {
     "QUEUE_METRICS_ENABLED",
     "QUEUE_BOARD_BASIC_AUTH_USER",
     "QUEUE_BOARD_BASIC_AUTH_PASSWORD",
+    "SMS_ENABLED",
+    "NEXT_PUBLIC_SMS_ENABLED",
     "SMS_PROVIDER",
     "SMS_ALLOW_NOOP_IN_PRODUCTION",
     "SMS_SMOKE_TO",
@@ -213,15 +215,22 @@ function checkProductionEnv(env) {
   requireNoPlaceholderValue(env, failures, "QUEUE_BOARD_BASIC_AUTH_USER");
   requireSecret(env, failures, "QUEUE_BOARD_BASIC_AUTH_PASSWORD");
 
-  requireEqual(env, failures, "SMS_PROVIDER", "netgsm");
-  requireEqual(env, failures, "SMS_ALLOW_NOOP_IN_PRODUCTION", "false");
-  requireSet(env, failures, "SMS_SMOKE_TO");
-  requireNoPlaceholderValue(env, failures, "SMS_SMOKE_TO");
-  requireSet(env, failures, "SMS_SMOKE_BODY");
-  requireNoPlaceholderValue(env, failures, "SMS_SMOKE_BODY");
-  requireEqual(env, failures, "SMS_SMOKE_CONFIRM", "send");
-  for (const key of ["NETGSM_USERCODE", "NETGSM_PASSWORD", "NETGSM_MSG_HEADER"]) {
-    requireProviderCredential(env, failures, key);
+  requireOneOf(env, failures, "SMS_ENABLED", ["true", "false"]);
+  requireEqual(env, failures, "NEXT_PUBLIC_SMS_ENABLED", env.SMS_ENABLED);
+  if (env.SMS_ENABLED === "true") {
+    requireEqual(env, failures, "SMS_PROVIDER", "netgsm");
+    requireEqual(env, failures, "SMS_ALLOW_NOOP_IN_PRODUCTION", "false");
+    requireSet(env, failures, "SMS_SMOKE_TO");
+    requireNoPlaceholderValue(env, failures, "SMS_SMOKE_TO");
+    requireSet(env, failures, "SMS_SMOKE_BODY");
+    requireNoPlaceholderValue(env, failures, "SMS_SMOKE_BODY");
+    requireEqual(env, failures, "SMS_SMOKE_CONFIRM", "send");
+    for (const key of ["NETGSM_USERCODE", "NETGSM_PASSWORD", "NETGSM_MSG_HEADER"]) {
+      requireProviderCredential(env, failures, key);
+    }
+  } else {
+    requireEqual(env, failures, "SMS_PROVIDER", "noop");
+    requireEqual(env, failures, "SMS_ALLOW_NOOP_IN_PRODUCTION", "false");
   }
 
   requireEqual(env, failures, "NOTIFICATION_PROVIDER", "http");

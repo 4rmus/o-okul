@@ -76,7 +76,7 @@ describe("Tenant user management", () => {
         email: "created-user-a@example.test",
         name: "Created User A",
         password: "password1",
-        roles: ["TEACHER"],
+        roles: ["ASSISTANT_ADMIN"],
       })
       .expect(201);
 
@@ -84,7 +84,7 @@ describe("Tenant user management", () => {
       email: "created-user-a@example.test",
       name: "Created User A",
       tenantId: "tenant-a",
-      roles: ["TEACHER"],
+      roles: ["ASSISTANT_ADMIN"],
     });
     expect(created.body).not.toHaveProperty("password");
     expect(created.body).not.toHaveProperty("passwordHash");
@@ -94,13 +94,13 @@ describe("Tenant user management", () => {
     await request(server)
       .patch(`/tenant-users/${userId}/roles`)
       .set("Authorization", `Bearer ${tenantA}`)
-      .send({ roles: ["STUDENT", "GUARDIAN"] })
+      .send({ roles: ["TENANT_ADMIN"] })
       .expect(200)
       .expect(({ body }) => {
         expect(body).toMatchObject({
           id: userId,
           tenantId: "tenant-a",
-          roles: ["STUDENT", "GUARDIAN"],
+          roles: ["TENANT_ADMIN"],
         });
       });
 
@@ -158,7 +158,7 @@ describe("Tenant user management", () => {
     await request(server)
       .patch(`/tenant-users/${userId}/roles`)
       .set("Authorization", `Bearer ${tenantA}`)
-      .send({ roles: ["TEACHER"] })
+      .send({ roles: ["ASSISTANT_ADMIN"] })
       .expect(200);
 
     await request(server).get("/tenant-users").set("Authorization", `Bearer ${elevatedToken}`).expect(401);
@@ -191,7 +191,7 @@ describe("Tenant user management", () => {
         email: "seat-users-new@example.test",
         name: "Seat Users New",
         password: "password1",
-        roles: ["TEACHER"],
+        roles: ["ASSISTANT_ADMIN"],
       })
       .expect(400)
       .expect(({ body }) => {
@@ -238,7 +238,7 @@ describe("Tenant user management", () => {
     });
   });
 
-  it("tenant admin SYSTEM_ADMIN veremez ve kendi admin rolünü düşüremez", async () => {
+  it("tenant admin SYSTEM_ADMIN veya kişi rolü veremez ve kendi admin rolünü düşüremez", async () => {
     const tenantA = await login("admin-a@example.test");
 
     await request(server)
@@ -253,9 +253,62 @@ describe("Tenant user management", () => {
       .expect(422);
 
     await request(server)
+      .post("/tenant-users")
+      .set("Authorization", `Bearer ${tenantA}`)
+      .send({
+        email: "subject-role-a@example.test",
+        name: "Subject Role",
+        password: "password1",
+        roles: ["TEACHER"],
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(JSON.stringify(body)).toContain("TENANT_USER_SUBJECT_ROLE_FORBIDDEN");
+      });
+
+    await request(server)
       .patch("/tenant-users/user-tenant-a/roles")
       .set("Authorization", `Bearer ${tenantA}`)
       .send({ roles: ["TEACHER"] })
-      .expect(400);
+      .expect(400)
+      .expect(({ body }) => {
+        expect(JSON.stringify(body)).toContain("TENANT_USER_SUBJECT_ROLE_FORBIDDEN");
+      });
+  });
+
+  it("admin kullanıcı şifresini kişinin telefonuna sıfırlar ve eski oturumları iptal eder", async () => {
+    const tenantA = await login("admin-a@example.test");
+    const teacherToken = await login("teacher-a@example.test");
+
+    await request(server).get("/me/profile").set("Authorization", `Bearer ${teacherToken}`).expect(200);
+
+    await request(server)
+      .post("/tenant-users/teacher-tenant-a/reset-password")
+      .set("Authorization", `Bearer ${tenantA}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          userId: "teacher-tenant-a",
+          mustChangePassword: true,
+        });
+        expect(body.resetAt).toEqual(expect.any(String));
+        expect(JSON.stringify(body)).not.toContain("5550000010");
+      });
+
+    await request(server).get("/me/profile").set("Authorization", `Bearer ${teacherToken}`).expect(401);
+
+    const resetLogin = await request(server)
+      .post("/auth/login")
+      .send({ email: "teacher-a@example.test", password: "5550000010" })
+      .expect(200);
+    const resetToken = (resetLogin.body as { accessToken: string }).accessToken;
+    expect(resetLogin.body.session).toMatchObject({ mustChangePassword: true });
+
+    await request(server).get("/me/profile").set("Authorization", `Bearer ${resetToken}`).expect(423);
+    await request(server)
+      .post("/me/password")
+      .set("Authorization", `Bearer ${resetToken}`)
+      .send({ currentPassword: "5550000010", newPassword: "password" })
+      .expect(200);
   });
 });

@@ -34,15 +34,12 @@ const answerKeyRecordRequired = [
   "updatedAt",
 ];
 const answerKeyResponseForbidden = ["correctAnswer", "fileBase64", "keyData", "participantNo", "questions", "studentId"];
-const guardianRelationshipTypes = ["EMERGENCY_CONTACT", "FATHER", "GUARDIAN", "MOTHER", "OTHER"];
 const guardianRecordRequired = ["id", "tenantId", "firstName", "lastName"];
 const guardianStudentRecordRequired = [
   "id",
   "tenantId",
   "guardianId",
   "studentId",
-  "relationshipType",
-  "isPrimary",
   "canViewFinance",
   "canReceiveSms",
   "canReceiveAnnouncements",
@@ -402,7 +399,6 @@ const teacherResponseForbidden = [
   "nationalIdEncrypted",
   "nationalIdHash",
   "objectKey",
-  "phone",
   "photoKey",
   "token",
   "userId",
@@ -758,7 +754,9 @@ const tenantCurrentProfileRequestForbidden = [
   "status",
 ];
 const tenantAssignableRoles = ["ASSISTANT_ADMIN", "GUARDIAN", "STUDENT", "TEACHER", "TENANT_ADMIN"];
-const tenantUserRecordRequired = ["id", "email", "name", "tenantId", "roles", "createdAt", "updatedAt"];
+const tenantUserManagementRoles = ["ASSISTANT_ADMIN", "TENANT_ADMIN"];
+const tenantUserRecordRequired = ["id", "name", "tenantId", "roles", "createdAt", "updatedAt"];
+const tenantUserPasswordResetRequired = ["userId", "resetAt", "mustChangePassword"];
 const tenantUserResponseForbiddenDeep = [
   "activationToken",
   "password",
@@ -897,8 +895,6 @@ const guardianNotificationPreferenceRequestProperties = [
   "canReceiveAnnouncements",
   "canReceiveSms",
   "canViewFinance",
-  "isPrimary",
-  "relationshipType",
 ];
 const guardianNotificationPreferenceRequestForbidden = [
   "contentBase64",
@@ -1120,6 +1116,11 @@ const schoolReferenceCrudContracts = [
     createRequired: ["name"],
     responseRequired: ["id", "tenantId", "name"],
   }),
+  ...schoolCrudContracts({
+    basePath: "/api/v1/alanlar",
+    createRequired: ["name"],
+    responseRequired: ["id", "tenantId", "name"],
+  }),
   ...schoolReadDeleteContracts("/api/v1/classes", ["id", "tenantId", "name"]),
   ...schoolCrudContracts({
     basePath: "/api/v1/courses",
@@ -1131,6 +1132,12 @@ const schoolReferenceCrudContracts = [
     createRequired: ["name"],
     responseRequired: ["id", "tenantId", "name"],
   }),
+  {
+    method: "get",
+    path: "/api/v1/grade-levels/{id}/courses",
+    responseListEnvelope: true,
+    responseDataItemsRequired: ["id", "tenantId", "gradeLevelId", "courseId", "isDefault", "sortOrder", "courseName"],
+  },
   ...schoolCrudContracts({
     basePath: "/api/v1/learning-outcomes",
     createRequired: ["branch", "code", "title"],
@@ -1469,7 +1476,6 @@ const requiredOperationContracts = [
     responseDataForbiddenDeep: portalStudentProfileForbiddenDeep,
     fieldChecks: [
       { path: ["responseData", "status"], enum: studentStatuses },
-      { path: ["responseData", "birthDate"], format: "date" },
     ],
   })),
   {
@@ -1695,7 +1701,8 @@ const requiredOperationContracts = [
     path: "/api/v1/auth/login",
     requestBody: true,
     responseEnvelope: true,
-    requestRequired: ["email", "password"],
+    requestRequired: ["password"],
+    requestAnyOfRequired: [["email"], ["tenantSlug", "nationalId"]],
     responseDataOneOfRequired: [
       ["accessToken", "session"],
       ["challengeToken", "expiresAt", "methods", "status"],
@@ -1874,7 +1881,7 @@ const requiredOperationContracts = [
       { path: ["requestBody", "name"], minLength: 1 },
       { path: ["requestBody", "password"], minLength: 8 },
       { path: ["requestBody", "roles"], minItems: 1 },
-      { path: ["requestBody", "roles", "items"], enum: tenantAssignableRoles },
+      { path: ["requestBody", "roles", "items"], enum: tenantUserManagementRoles },
       ...tenantUserRecordFieldChecks,
     ],
   },
@@ -1889,8 +1896,19 @@ const requiredOperationContracts = [
     responseDataForbiddenDeep: tenantUserResponseForbiddenDeep,
     fieldChecks: [
       { path: ["requestBody", "roles"], minItems: 1 },
-      { path: ["requestBody", "roles", "items"], enum: tenantAssignableRoles },
+      { path: ["requestBody", "roles", "items"], enum: tenantUserManagementRoles },
       ...tenantUserRecordFieldChecks,
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/tenant-users/{userId}/reset-password",
+    responseEnvelope: true,
+    responseDataRequired: tenantUserPasswordResetRequired,
+    responseDataForbiddenDeep: tenantUserResponseForbiddenDeep,
+    fieldChecks: [
+      { path: ["responseData", "resetAt"], format: "date-time" },
+      { path: ["responseData", "mustChangePassword"], enum: [true] },
     ],
   },
   {
@@ -1965,9 +1983,6 @@ const requiredOperationContracts = [
     responseEnvelope: true,
     responseDataRequired: guardianStudentRecordRequired,
     responseDataForbiddenDeep: guardianNotificationPreferenceForbiddenDeep,
-    fieldChecks: [
-      { path: ["responseData", "relationshipType"], enum: guardianRelationshipTypes },
-    ],
   },
   {
     method: "patch",
@@ -1978,10 +1993,6 @@ const requiredOperationContracts = [
     requestForbidden: guardianNotificationPreferenceRequestForbidden,
     responseDataRequired: guardianStudentRecordRequired,
     responseDataForbiddenDeep: guardianNotificationPreferenceForbiddenDeep,
-    fieldChecks: [
-      { path: ["requestBody", "relationshipType"], enum: guardianRelationshipTypes },
-      { path: ["responseData", "relationshipType"], enum: guardianRelationshipTypes },
-    ],
   },
   {
     method: "get",
@@ -2003,6 +2014,7 @@ const requiredOperationContracts = [
     responseDataItemsRequired: ["id", "tenantId", "title", "status", "createdAt", "updatedAt"],
     fieldChecks: [
       { path: ["responseDataItem", "status"], enum: examStatuses },
+      { path: ["responseDataItem", "examType"], enum: ["SCHOOL", "LGS", "TYT", "AYT", "KPSS"] },
     ],
   },
   {
@@ -2012,9 +2024,12 @@ const requiredOperationContracts = [
     responseEnvelope: true,
     idempotencyHeader: true,
     requestRequired: ["title"],
+    requestProperties: ["alanId", "classId", "classIds", "examType", "gradeLevelId", "startsAt", "title"],
     responseDataRequired: ["id", "tenantId", "title", "status", "createdAt", "updatedAt"],
     fieldChecks: [
       { path: ["responseData", "status"], enum: examStatuses },
+      { path: ["requestBody", "examType"], enum: ["SCHOOL", "LGS", "TYT", "AYT", "KPSS"] },
+      { path: ["responseData", "examType"], enum: ["SCHOOL", "LGS", "TYT", "AYT", "KPSS"] },
     ],
   },
   {
@@ -2024,6 +2039,7 @@ const requiredOperationContracts = [
     responseDataRequired: ["id", "tenantId", "title", "status", "createdAt", "updatedAt"],
     fieldChecks: [
       { path: ["responseData", "status"], enum: examStatuses },
+      { path: ["responseData", "examType"], enum: ["SCHOOL", "LGS", "TYT", "AYT", "KPSS"] },
     ],
   },
   {
@@ -2032,9 +2048,12 @@ const requiredOperationContracts = [
     requestBody: true,
     responseEnvelope: true,
     requestRequired: ["title"],
+    requestProperties: ["alanId", "classId", "classIds", "examType", "gradeLevelId", "startsAt", "title"],
     responseDataRequired: ["id", "tenantId", "title", "status", "createdAt", "updatedAt"],
     fieldChecks: [
       { path: ["responseData", "status"], enum: examStatuses },
+      { path: ["requestBody", "examType"], enum: ["SCHOOL", "LGS", "TYT", "AYT", "KPSS"] },
+      { path: ["responseData", "examType"], enum: ["SCHOOL", "LGS", "TYT", "AYT", "KPSS"] },
     ],
   },
   {
@@ -2356,7 +2375,6 @@ const requiredOperationContracts = [
     responseDataForbiddenDeep: ["guardian", "invitationId", ...studentCoreForbiddenDeep],
     fieldChecks: [
       { path: ["requestBody", "status"], enum: studentStatuses },
-      { path: ["requestBody", "guardian", "relationshipType"], enum: guardianRelationshipTypes },
       { path: ["responseData", "status"], enum: studentStatuses },
     ],
   },
@@ -2474,7 +2492,6 @@ const requiredOperationContracts = [
     responseDataForbiddenDeep: studentProfileForbiddenDeep,
     fieldChecks: [
       { path: ["responseData", "status"], enum: studentStatuses },
-      { path: ["responseData", "birthDate"], format: "date" },
     ],
   })),
   ...studentProfilePaths.map((path) => ({
@@ -2482,7 +2499,7 @@ const requiredOperationContracts = [
     path,
     requestBody: true,
     responseEnvelope: true,
-    requestProperties: ["birthDate", "email", "nationalId", "phone", "photoKey"],
+    requestProperties: ["email", "nationalId", "phone", "photoKey"],
     requestForbidden: [
       "classId",
       "contentBase64",
@@ -2504,9 +2521,7 @@ const requiredOperationContracts = [
     responseDataRequired: studentCoreRequired,
     responseDataForbiddenDeep: studentProfileForbiddenDeep,
     fieldChecks: [
-      { path: ["requestBody", "birthDate"], format: "date" },
       { path: ["responseData", "status"], enum: studentStatuses },
-      { path: ["responseData", "birthDate"], format: "date" },
     ],
   })),
   {
@@ -2631,9 +2646,6 @@ const requiredOperationContracts = [
     path: "/api/v1/guardians/{id}/students",
     responseListEnvelope: true,
     responseDataItemsRequired: guardianStudentRecordRequired,
-    fieldChecks: [
-      { path: ["responseDataItem", "relationshipType"], enum: guardianRelationshipTypes },
-    ],
   },
   {
     method: "post",
@@ -2642,10 +2654,6 @@ const requiredOperationContracts = [
     responseEnvelope: true,
     requestRequired: ["studentId"],
     responseDataRequired: guardianStudentRecordRequired,
-    fieldChecks: [
-      { path: ["requestBody", "relationshipType"], enum: guardianRelationshipTypes },
-      { path: ["responseData", "relationshipType"], enum: guardianRelationshipTypes },
-    ],
   },
   {
     method: "patch",
@@ -2657,14 +2665,8 @@ const requiredOperationContracts = [
       "canReceiveAnnouncements",
       "canReceiveSms",
       "canViewFinance",
-      "isPrimary",
-      "relationshipType",
     ],
     responseDataRequired: guardianStudentRecordRequired,
-    fieldChecks: [
-      { path: ["requestBody", "relationshipType"], enum: guardianRelationshipTypes },
-      { path: ["responseData", "relationshipType"], enum: guardianRelationshipTypes },
-    ],
   },
   { method: "delete", path: "/api/v1/guardians/{id}/students/{studentId}", responseStatus: "204", noResponseBody: true },
   {
@@ -2679,7 +2681,6 @@ const requiredOperationContracts = [
         { path: ["responseData", "linkedStudents", "items", field] },
         { path: ["responseData", "availableStudents", "items", field] },
       ]),
-      { path: ["responseData", "links", "items", "relationshipType"], enum: guardianRelationshipTypes },
       { path: ["responseData", "linkedStudents", "items", "status"], enum: studentStatuses },
       { path: ["responseData", "availableStudents", "items", "status"], enum: studentStatuses },
     ],
@@ -2695,9 +2696,6 @@ const requiredOperationContracts = [
     path: "/api/v1/students/{id}/guardian-links",
     responseListEnvelope: true,
     responseDataItemsRequired: guardianStudentRecordRequired,
-    fieldChecks: [
-      { path: ["responseDataItem", "relationshipType"], enum: guardianRelationshipTypes },
-    ],
   },
   {
     method: "get",
@@ -2710,9 +2708,6 @@ const requiredOperationContracts = [
     path: "/api/v1/me/student/guardian-links",
     responseListEnvelope: true,
     responseDataItemsRequired: guardianStudentRecordRequired,
-    fieldChecks: [
-      { path: ["responseDataItem", "relationshipType"], enum: guardianRelationshipTypes },
-    ],
   },
   {
     method: "post",
@@ -2870,7 +2865,7 @@ const requiredOperationContracts = [
     path: "/api/v1/classes/{id}",
     requestBody: true,
     responseEnvelope: true,
-    requestProperties: ["campusId", "gradeLevelId", "level", "name", "section"],
+    requestProperties: ["alanId", "campusId", "gradeLevelId", "name", "section"],
     requestMinProperties: 1,
     responseDataRequired: ["id", "tenantId", "name"],
   },

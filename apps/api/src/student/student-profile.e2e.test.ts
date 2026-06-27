@@ -43,7 +43,6 @@ describe("Student profile + TC API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
         nationalId: "10000000146",
-        birthDate: "2012-05-10",
         phone: "5551234567",
         email: "ada@example.test",
         photoKey: "students/student-a/photo.jpg",
@@ -59,7 +58,6 @@ describe("Student profile + TC API", () => {
           section: "A",
           responsibleTeacherName: "Ayse Ogretmen",
           nationalIdMasked: "*******0146",
-          birthDate: "2012-05-10",
           phone: "5551234567",
           email: "ada@example.test",
           photoKey: "students/student-a/photo.jpg",
@@ -120,24 +118,6 @@ describe("Student profile + TC API", () => {
       .send({ nationalId: "10000000145" })
       .expect(422);
 
-    await request(server)
-      .patch("/students/student-a/profile")
-      .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ birthDate: "2011-02-29" })
-      .expect(422)
-      .expect(({ body }) => {
-        expect(body.error).toMatchObject({
-          code: "VALIDATION_FAILED",
-          details: {
-            fields: [
-              expect.objectContaining({
-                message: "STUDENT_BIRTH_DATE_INVALID",
-                path: "birthDate",
-              }),
-            ],
-          },
-        });
-      });
   });
 
   it("tenant içinde nationalIdHash benzersizliğini korur", async () => {
@@ -365,7 +345,6 @@ function expectStudentCoreResponseIsPublic(body: unknown): void {
     "ada@example.test",
     "5551234567",
     "students/student-a/photo.jpg",
-    "birthDate",
     "nationalId",
     "nationalIdEncrypted",
     "nationalIdHash",

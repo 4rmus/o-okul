@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, CrudPage, EmptyState, Field, FormModal, Input, Select, type DataTableColumn, useConfirmDialog } from "@o-okul/ui";
-import type { CampusRecord, ClassRecord, GradeLevelRecord } from "@o-okul/shared-types";
+import type { AlanRecord, CampusRecord, ClassRecord, GradeLevelRecord } from "@o-okul/shared-types";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
@@ -19,7 +19,7 @@ import { OperationSummary, type OperationSummaryAction, type OperationSummaryBad
 
 const emptyForm: ClassFormState = {
   name: "",
-  level: "",
+  alanId: "",
   campusId: "",
   gradeLevelId: "",
   section: "",
@@ -51,6 +51,12 @@ export function ClassesPage() {
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
+  const alanlarQuery = useQuery({
+    queryKey: ["next-class-alanlar", auth?.session.tenantId ?? "anonymous"],
+    queryFn: () => loadAlanlar(auth?.accessToken ?? ""),
+    enabled: Boolean(auth),
+    refetchOnWindowFocus: false,
+  });
   const [editingClass, setEditingClass] = useState<ClassRecord | null>(null);
   const [form, setForm] = useState<ClassFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -58,10 +64,14 @@ export function ClassesPage() {
   const rows = classesQuery.data?.data ?? [];
   const campuses = campusesQuery.data?.data ?? [];
   const gradeLevels = gradeLevelsQuery.data?.data ?? [];
+  const alanlar = alanlarQuery.data?.data ?? [];
   const campusNames = new Map(campuses.map((record) => [record.id, record.name]));
   const gradeLevelNames = new Map(gradeLevels.map((record) => [record.id, record.name]));
+  const alanNames = new Map(alanlar.map((record) => [record.id, record.name]));
+  const selectableAlanlar = alanlar.filter((record) => !record.gradeLevelId || record.gradeLevelId === form.gradeLevelId);
   const campusCoverageCount = new Set(rows.map((record) => record.campusId).filter(Boolean)).size;
-  const gradeLevelCoverageCount = new Set(rows.map((record) => record.gradeLevelId || record.level).filter(Boolean)).size;
+  const gradeLevelCoverageCount = new Set(rows.map((record) => record.gradeLevelId).filter(Boolean)).size;
+  const alanCoverageCount = rows.filter((record) => Boolean(record.alanId)).length;
   const sectionCoverageCount = rows.filter((record) => Boolean(record.section)).length;
   const classSummaryItems: OperationSummaryItem[] = [
     {
@@ -78,7 +88,7 @@ export function ClassesPage() {
       value: campusCoverageCount > 0 ? `${campusCoverageCount} kampüs` : "Bağsız",
     },
     {
-      description: "Seviye veya legacy level",
+      description: "Seviye referansı",
       key: "grade",
       label: "Seviye kapsamı",
       tone: gradeLevelCoverageCount > 0 ? "success" : "warning",
@@ -115,7 +125,7 @@ export function ClassesPage() {
       label: "Referans eşleşmesi",
       status: campuses.length > 0 && gradeLevels.length > 0 ? "Hazır" : "Kontrol",
       tone: campuses.length > 0 && gradeLevels.length > 0 ? "success" : "warning",
-      value: `Kampüs ${campuses.length} / Seviye ${gradeLevels.length}`,
+      value: `Kampüs ${campuses.length} / Seviye ${gradeLevels.length} / Alan ${alanlar.length}`,
     },
     {
       detail: "Bu sayfadaki sınıf dağılımı",
@@ -128,10 +138,10 @@ export function ClassesPage() {
     {
       detail: "Şube alanı sınıf adını destekler",
       key: "section-coverage",
-      label: "Şube düzeni",
-      status: sectionCoverageCount > 0 ? "İzleniyor" : "Opsiyonel",
-      tone: sectionCoverageCount > 0 ? "neutral" : "warning",
-      value: `${sectionCoverageCount}/${rows.length}`,
+      label: "Alan / şube",
+      status: alanCoverageCount > 0 || sectionCoverageCount > 0 ? "İzleniyor" : "Opsiyonel",
+      tone: alanCoverageCount > 0 || sectionCoverageCount > 0 ? "neutral" : "warning",
+      value: `Alan ${alanCoverageCount} / Şube ${sectionCoverageCount}`,
     },
   ];
 
@@ -157,10 +167,10 @@ export function ClassesPage() {
     },
     {
       key: "section",
-      header: "Şube",
+      header: "Alan / Şube",
       mobilePriority: "hidden",
       priority: "optional",
-      render: (record) => record.section ?? "-",
+      render: (record) => [alanLabel(record.alanId, alanNames), record.section].filter((value) => value && value !== "-").join(" / ") || "-",
     },
     {
       key: "campusId",
@@ -200,7 +210,7 @@ export function ClassesPage() {
     setEditingClass(record);
     setForm({
       name: record.name,
-      level: record.level ?? "",
+      alanId: record.alanId ?? "",
       campusId: record.campusId ?? "",
       gradeLevelId: record.gradeLevelId ?? "",
       section: record.section ?? "",
@@ -289,9 +299,10 @@ export function ClassesPage() {
         error={
           error ||
           (classesQuery.isError ? "Sınıflar alınamadı." : campusesQuery.isError ? "Kampüsler alınamadı." : gradeLevelsQuery.isError ? "Seviyeler alınamadı." : undefined)
+          || (alanlarQuery.isError ? "Alanlar alınamadı." : undefined)
         }
         getRowKey={(record) => record.id}
-        loading={classesQuery.isPending || campusesQuery.isPending || gradeLevelsQuery.isPending}
+        loading={classesQuery.isPending || campusesQuery.isPending || gradeLevelsQuery.isPending || alanlarQuery.isPending}
         rows={rows}
         summary={
           <OperationSummary
@@ -324,12 +335,28 @@ export function ClassesPage() {
           <Select
             value={form.gradeLevelId ?? ""}
             onChange={(event) => {
-              const gradeLevel = gradeLevels.find((record) => record.id === event.target.value);
-              setForm((current) => ({ ...current, gradeLevelId: event.target.value, level: gradeLevel?.code ?? "" }));
+              setForm((current) => ({
+                ...current,
+                alanId: alanlar.some((alan) => alan.id === current.alanId && (!alan.gradeLevelId || alan.gradeLevelId === event.target.value)) ? current.alanId : "",
+                gradeLevelId: event.target.value,
+              }));
             }}
           >
             <option value="">Seçiniz</option>
             {gradeLevels.map((record) => (
+              <option key={record.id} value={record.id}>
+                {record.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Alan" description="Alan, seçilen seviyeye uygun ders şablonlarını ve sınıf bağlamını belirler.">
+          <Select
+            value={form.alanId ?? ""}
+            onChange={(event) => setForm((current) => ({ ...current, alanId: event.target.value }))}
+          >
+            <option value="">Seçiniz</option>
+            {selectableAlanlar.map((record) => (
               <option key={record.id} value={record.id}>
                 {record.name}
               </option>
@@ -361,8 +388,8 @@ export function ClassesPage() {
 const classSortOptions = [
   { label: "Sınıf A-Z", value: "name" },
   { label: "Sınıf Z-A", value: "-name" },
-  { label: "Seviye A-Z", value: "level" },
-  { label: "Seviye Z-A", value: "-level" },
+  { label: "Seviye A-Z", value: "gradeLevelId" },
+  { label: "Seviye Z-A", value: "-gradeLevelId" },
   { label: "Şube A-Z", value: "section" },
   { label: "Şube Z-A", value: "-section" },
 ];
@@ -377,6 +404,10 @@ async function loadCampuses(accessToken: string) {
 
 async function loadGradeLevels(accessToken: string) {
   return apiListRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels`);
+}
+
+async function loadAlanlar(accessToken: string) {
+  return apiListRequest<AlanRecord>(accessToken, `${apiBaseUrl}/alanlar`);
 }
 
 async function createClass(accessToken: string, input: ClassFormPayload) {
@@ -397,9 +428,9 @@ async function updateClass(accessToken: string, id: string, input: ClassFormPayl
 
 function toClassRequestPayload(input: ClassFormPayload) {
   return {
-    level: input.level,
     name: input.name,
     section: input.section,
+    ...(input.alanId ? { alanId: input.alanId } : {}),
     ...(input.campusId ? { campusId: input.campusId } : {}),
     ...(input.gradeLevelId ? { gradeLevelId: input.gradeLevelId } : {}),
   };
@@ -422,7 +453,12 @@ function campusLabel(campusId: string | undefined, campusNames: Map<string, stri
 
 function gradeLevelLabel(record: ClassRecord, gradeLevelNames: Map<string, string>) {
   if (record.gradeLevelId) return gradeLevelNames.get(record.gradeLevelId) ?? record.gradeLevelId;
-  return record.level ?? "-";
+  return "-";
+}
+
+function alanLabel(alanId: string | undefined, alanNames: Map<string, string>) {
+  if (!alanId) return "-";
+  return alanNames.get(alanId) ?? alanId;
 }
 
 function formatCount(value: number) {

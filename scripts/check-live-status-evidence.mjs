@@ -107,7 +107,7 @@ const externalGates = [
     dateKey: "checkedAt",
   },
   {
-    label: "SMS provider kanıtı",
+    label: "SMS disabled path kanıtı",
     command: "pnpm sms:smoke",
     source: "productionEvidenceSummary.smokeEvidence.smsProvider",
     target: "summary",

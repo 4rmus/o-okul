@@ -341,7 +341,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
           net={formatNetNumber(reportTotal?.net)}
           profile={data?.profile}
           questionCount={formatNetNumber(reportQuestionCount(reportTotal))}
-          scopeLabel={data?.notificationPreferences ? guardianRelationshipLabel(data.notificationPreferences.relationshipType) : "Veli kapsamı"}
+          scopeLabel="Veli kapsamı"
           successRate={formatPercentNumber(reportSuccess)}
           supportStatus={supportStatus}
         />
@@ -604,17 +604,6 @@ function toHeaderRecord(headers: HeadersInit | undefined): Record<string, string
   if (headers instanceof Headers) return Object.fromEntries(headers.entries());
   if (Array.isArray(headers)) return Object.fromEntries(headers);
   return headers;
-}
-
-function guardianRelationshipLabel(value: GuardianStudentRecord["relationshipType"]) {
-  const labels: Record<GuardianStudentRecord["relationshipType"], string> = {
-    EMERGENCY_CONTACT: "Acil kişi",
-    FATHER: "Baba",
-    GUARDIAN: "Vasi",
-    MOTHER: "Anne",
-    OTHER: "Diğer",
-  };
-  return labels[value];
 }
 
 function formatMoney(amount: number, currency: string) {

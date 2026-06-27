@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, Menu, Search, X, type LucideIcon } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Building2, ChevronDown, LogOut, Menu, Search, UserRound, X, type LucideIcon } from "lucide-react";
 import { Button, Dialog, Field, Input, Panel, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";
-import type { ClassRecord, GuardianRecord, NotificationDeviceTokenRecord, StudentRecord, TeacherRecord } from "@o-okul/shared-types";
+import { isTenantRoleName, tenantRoleLabel, type GlobalSearchResultRecord, type NotificationDeviceTokenRecord, type Session, type TenantRecord } from "@o-okul/shared-types";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../src/api-client.js";
 import { appBrand } from "../../src/brand.js";
 import { useAuth } from "../providers.js";
@@ -49,7 +50,7 @@ type SidebarItem = {
   label: string;
 };
 
-const entitySearchLimit = 3;
+const entitySearchLimit = 12;
 const sidebarGroupStorageKey = "des.sidebar.expandedGroups.v2";
 
 interface EntitySearchResult {
@@ -57,6 +58,12 @@ interface EntitySearchResult {
   href: string;
   id: string;
   label: string;
+  subtitle?: string;
+}
+
+interface ShellTenantBrand {
+  logoUrl?: string;
+  name: string;
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -89,12 +96,25 @@ export function AppShell({ children }: { children: ReactNode }) {
     [auth?.session.roles, visibleInstitutionNavGroups, visiblePortalNavGroups, visibleSystemNavGroups],
   );
   const canUsePushDevices = auth?.session ? hasInstitutionAccess(auth.session.roles) || visiblePortalNavGroups.length > 0 : false;
+  const canUseShellSearch = auth?.session ? hasShellSearchAccess(auth.session) : false;
   const isRolePreviewRoute = hasRolePreviewAccess(searchParams);
+  const tenantBrandQuery = useQuery({
+    queryKey: ["next-shell-tenant-brand", auth?.session.tenantId ?? "anonymous"],
+    queryFn: () => loadShellTenant(auth?.accessToken ?? ""),
+    enabled: Boolean(auth && hasInstitutionAccess(auth.session.roles) && !isRolePreviewRoute),
+    refetchOnWindowFocus: false,
+  });
+  const tenantBrand = safeTenantBrand(tenantBrandQuery.data);
   const isAuthorizedPath = auth ? canAccessPath(auth.session, pathname, searchParams) : false;
 
   useEffect(() => {
     if (!isBootstrapping && !auth) {
       router.replace("/login");
+      return;
+    }
+
+    if (!isBootstrapping && auth?.session.mustChangePassword) {
+      router.replace("/sifre-degistir");
       return;
     }
 
@@ -222,6 +242,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     router.push(href);
   }
 
+  function openCommandSearch(value: string) {
+    setCommandQuery(value);
+    setIsCommandOpen(true);
+  }
+
   function openMobileNav() {
     setIsMobileNavOpen(true);
   }
@@ -264,10 +289,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <Menu size={18} aria-hidden="true" />
         </button>
-        <div className="next-brand">
-          <span className="next-brand-mark">{appBrand.mark}</span>
-          <span>{appBrand.name}</span>
-        </div>
+        <ShellBrand tenantBrand={tenantBrand} />
         <button className="next-command-open" type="button" onClick={(event) => openCommandPalette(event.currentTarget)} aria-label="Komut paleti" title="Komut paleti">
           <Search size={16} aria-hidden="true" />
         </button>
@@ -280,10 +302,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         ref={sidebarRef}
       >
         <header className="next-sidebar-header">
-          <div className="next-brand">
-            <span className="next-brand-mark">{appBrand.mark}</span>
-            <span>{appBrand.name}</span>
-          </div>
+          <ShellBrand tenantBrand={tenantBrand} />
           <button className="next-command-open" type="button" onClick={(event) => openCommandPalette(event.currentTarget)} aria-label="Komut paleti" title="Komut paleti">
             <Search size={16} aria-hidden="true" />
           </button>
@@ -351,13 +370,19 @@ export function AppShell({ children }: { children: ReactNode }) {
         tabIndex={-1}
         aria-hidden={isMobileNavOpen ? "true" : undefined}
       >
+        <DesktopTopBar
+          canUseShellSearch={canUseShellSearch}
+          onLogout={() => void handleLogout()}
+          onSearch={openCommandSearch}
+          session={auth.session}
+          tenantBrand={tenantBrand}
+        />
         <RouteBreadcrumb pathname={pathname} />
         {children}
       </main>
       <CommandPalette
         accessToken={auth.accessToken}
         enableEntitySearch={canUseEntitySearch(auth.session.roles)}
-        entitySearchRoles={auth.session.roles}
         items={commandItems}
         onClose={closeCommandPalette}
         onNavigate={navigateFromCommandPalette}
@@ -367,6 +392,86 @@ export function AppShell({ children }: { children: ReactNode }) {
       />
     </div>
   );
+}
+
+function DesktopTopBar({
+  canUseShellSearch,
+  onLogout,
+  onSearch,
+  session,
+  tenantBrand,
+}: {
+  canUseShellSearch: boolean;
+  onLogout(): void;
+  onSearch(value: string): void;
+  session: Session;
+  tenantBrand?: ShellTenantBrand;
+}) {
+  const primaryRole = session.roles.find(isTenantRoleName);
+  const roleLabel = primaryRole ? tenantRoleLabel(primaryRole) : (session.roles[0] ?? "Hesap");
+  const contextLabel = tenantBrand?.name ?? sessionContextLabel(session);
+
+  return (
+    <header className="next-desktop-topbar" aria-label="Üst gezinme">
+      <div className="next-desktop-topbar__search">
+        {canUseShellSearch ? <ShellSearchBar onSearch={onSearch} /> : <span className="next-desktop-topbar__brand">{appBrand.name}</span>}
+      </div>
+      <div className="next-desktop-topbar__context" aria-label="Çalışma bağlamı">
+        <Building2 size={16} aria-hidden="true" />
+        <span>{contextLabel}</span>
+      </div>
+      <div className="next-desktop-topbar__account">
+        <UserRound size={16} aria-hidden="true" />
+        <span>{roleLabel}</span>
+        <Button type="button" variant="secondary" onClick={onLogout}>
+          <LogOut size={16} aria-hidden="true" />
+          Çıkış
+        </Button>
+      </div>
+    </header>
+  );
+}
+
+function ShellBrand({ tenantBrand }: { tenantBrand?: ShellTenantBrand }) {
+  const brandName = tenantBrand?.name ?? appBrand.name;
+
+  return (
+    <div className="next-brand">
+      {tenantBrand?.logoUrl ? (
+        <img className="next-brand-logo" src={tenantBrand.logoUrl} alt={`${brandName} logosu`} />
+      ) : (
+        <span className="next-brand-mark">{appBrand.mark}</span>
+      )}
+      <span>{brandName}</span>
+    </div>
+  );
+}
+
+function sessionContextLabel(session: Session) {
+  if (session.subjectType === "STUDENT") return "Öğrenci portalı";
+  if (session.subjectType === "GUARDIAN") return "Veli portalı";
+  if (session.subjectType === "TEACHER") return "Öğretmen portalı";
+  if (hasSystemAccess(session.roles) && !hasInstitutionAccess(session.roles)) return "Sistem";
+  return "Kurum";
+}
+
+function safeTenantBrand(tenant: TenantRecord | undefined): ShellTenantBrand | undefined {
+  const name = safeTenantName(tenant?.name);
+  if (!name) return undefined;
+  const logoUrl = safeLogoUrl(tenant?.logoUrl);
+  return logoUrl ? { logoUrl, name } : { name };
+}
+
+function safeTenantName(value: string | undefined) {
+  const name = value?.trim();
+  if (!name || /^tenant[-_][a-z0-9-]+$/i.test(name)) return undefined;
+  return name;
+}
+
+function safeLogoUrl(value: string | undefined) {
+  const url = value?.trim();
+  if (!url) return undefined;
+  return /^https?:\/\//i.test(url) ? url : undefined;
 }
 
 function focusCommandOpener(preferredOpener: HTMLButtonElement | null) {
@@ -462,10 +567,32 @@ function SidebarLink({ current, item }: { current?: "page"; item: SidebarItem })
   );
 }
 
+function ShellSearchBar({ onSearch }: { onSearch(value: string): void }) {
+  const [value, setValue] = useState("");
+
+  function handleSearch(value: string) {
+    setValue(value);
+    onSearch(value);
+  }
+
+  return (
+    <label className="next-shell-search">
+      <Search size={16} aria-hidden="true" />
+      <input
+        aria-label="Genel arama"
+        onChange={(event) => handleSearch(event.target.value)}
+        onFocus={() => onSearch(value)}
+        placeholder="Ara"
+        type="search"
+        value={value}
+      />
+    </label>
+  );
+}
+
 function CommandPalette({
   accessToken,
   enableEntitySearch,
-  entitySearchRoles,
   items,
   onClose,
   onNavigate,
@@ -475,7 +602,6 @@ function CommandPalette({
 }: {
   accessToken: string;
   enableEntitySearch: boolean;
-  entitySearchRoles: readonly string[];
   items: CommandPaletteItem[];
   onClose(): void;
   onNavigate(href: string): void;
@@ -508,7 +634,7 @@ function CommandPalette({
     let isStale = false;
     setIsEntitySearchLoading(true);
     const timeoutId = window.setTimeout(() => {
-      void searchEntities(accessToken, query, entitySearchRoles)
+      void searchEntities(accessToken, query)
         .then((results) => {
           if (!isStale) setEntityResults(results);
         })
@@ -524,7 +650,7 @@ function CommandPalette({
       isStale = true;
       window.clearTimeout(timeoutId);
     };
-  }, [accessToken, enableEntitySearch, entitySearchRoles, query]);
+  }, [accessToken, enableEntitySearch, query]);
 
   return (
     <Dialog
@@ -559,7 +685,7 @@ function CommandPalette({
             {entityResults.map((item) => (
               <Link key={item.id} href={item.href} onClick={(event) => handleCommandItemClick(event, item.href)}>
                 <span>{item.label}</span>
-                <small>{item.group}</small>
+                <small>{item.subtitle ? `${item.group} · ${item.subtitle}` : item.group}</small>
               </Link>
             ))}
           </div>
@@ -782,6 +908,10 @@ function getHomePath(session: AppSession) {
   return "/login";
 }
 
+function hasShellSearchAccess(session: AppSession) {
+  return hasInstitutionAccess(session.roles) || hasSubjectPortalAccess(session, "TEACHER", "TEACHER");
+}
+
 function buildCommandItems(
   institutionGroups: readonly NavigationGroup[],
   systemGroups: readonly NavigationGroup[],
@@ -811,7 +941,7 @@ function buildCommandItems(
 }
 
 function canUseEntitySearch(roles: readonly string[]) {
-  return ["student:manage", "staff:manage", "class:manage"].some((capability) => hasCapabilityForRoles(roles, capability));
+  return hasCapabilityForRoles(roles, "search:read");
 }
 
 function commandItem(href: string, label: string, group: string): CommandPaletteItem {
@@ -835,51 +965,37 @@ function filterCommandItems(items: CommandPaletteItem[], query: string) {
   );
 }
 
-async function searchEntities(accessToken: string, query: string, roles: readonly string[]): Promise<EntitySearchResult[]> {
-  const [students, teachers, guardians, classes] = await Promise.all([
-    hasCapabilityForRoles(roles, "student:manage") ? safeEntityList<StudentRecord>(accessToken, "students", query) : Promise.resolve([]),
-    hasCapabilityForRoles(roles, "staff:manage") ? safeEntityList<TeacherRecord>(accessToken, "teachers", query) : Promise.resolve([]),
-    hasCapabilityForRoles(roles, "student:manage") ? safeEntityList<GuardianRecord>(accessToken, "guardians", query) : Promise.resolve([]),
-    hasCapabilityForRoles(roles, "class:manage") ? safeEntityList<ClassRecord>(accessToken, "classes", query) : Promise.resolve([]),
-  ]);
-
-  return [
-    ...students.map((student) => ({
-      group: "Öğrenci",
-      href: `/kurum/ogrenciler/${encodeURIComponent(student.id)}`,
-      id: `student:${student.id}`,
-      label: `${student.firstName} ${student.lastName}`,
-    })),
-    ...teachers.map((teacher) => ({
-      group: "Öğretmen",
-      href: `/kurum/ogretmenler/${encodeURIComponent(teacher.id)}`,
-      id: `teacher:${teacher.id}`,
-      label: `${teacher.firstName} ${teacher.lastName}`,
-    })),
-    ...guardians.map((guardian) => ({
-      group: "Veli",
-      href: `/kurum/veliler/${encodeURIComponent(guardian.id)}`,
-      id: `guardian:${guardian.id}`,
-      label: `${guardian.firstName} ${guardian.lastName}`,
-    })),
-    ...classes.map((record) => ({
-      group: "Sınıf",
-      href: `/kurum/siniflar/${encodeURIComponent(record.id)}`,
-      id: `class:${record.id}`,
-      label: record.name,
-    })),
-  ].slice(0, 12);
-}
-
-async function safeEntityList<TRecord>(accessToken: string, endpoint: string, query: string): Promise<TRecord[]> {
+async function searchEntities(accessToken: string, query: string): Promise<EntitySearchResult[]> {
   try {
-    const url = new URL(`${apiBaseUrl}/${endpoint}`);
+    const url = new URL(`${apiBaseUrl}/search`);
     url.searchParams.set("q", query);
     url.searchParams.set("limit", String(entitySearchLimit));
-    return (await apiListRequest<TRecord>(accessToken, url.toString())).data;
+    const results = (await apiListRequest<GlobalSearchResultRecord>(accessToken, url.toString())).data;
+    return results.map((result) => ({
+      group: searchResultGroupLabel(result.type),
+      href: result.href,
+      id: `${result.type}:${result.id}`,
+      label: result.title,
+      subtitle: result.subtitle,
+    }));
   } catch {
     return [];
   }
+}
+
+async function loadShellTenant(accessToken: string): Promise<TenantRecord | undefined> {
+  try {
+    return await apiRequest<TenantRecord>(accessToken, `${apiBaseUrl}/me/tenant`);
+  } catch {
+    return undefined;
+  }
+}
+
+function searchResultGroupLabel(type: GlobalSearchResultRecord["type"]): string {
+  if (type === "students") return "Öğrenci";
+  if (type === "teachers") return "Öğretmen";
+  if (type === "guardians") return "Veli";
+  return "Sınıf";
 }
 
 function normalizeCommandText(value: string) {
