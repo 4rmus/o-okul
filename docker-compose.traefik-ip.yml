@@ -61,3 +61,22 @@ services:
       - "traefik.http.middlewares.api-ip-security-headers.headers.permissionspolicy=camera=(), microphone=(), geolocation=()"
       - "traefik.http.middlewares.api-ip-security-headers.headers.contentsecuritypolicy=default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
       - "traefik.http.services.api-ip.loadbalancer.server.port=3100"
+
+  evidence:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${DOCKER_FRONTEND_NETWORK:-o-okul_frontend_net}"
+      - "traefik.http.routers.evidence-ip.rule=Host(`${SERVER_DOMAIN:-127.0.0.1}`) && PathPrefix(`/evidence`)"
+      - "traefik.http.routers.evidence-ip.entrypoints=websecure"
+      - "traefik.http.routers.evidence-ip.priority=110"
+      - "traefik.http.routers.evidence-ip.service=evidence-ip"
+      - "traefik.http.routers.evidence-ip.tls=true"
+      - "traefik.http.routers.evidence-ip.middlewares=evidence-ip-strip,evidence-ip-security-headers"
+      - "traefik.http.middlewares.evidence-ip-strip.stripprefix.prefixes=/evidence"
+      - "traefik.http.middlewares.evidence-ip-security-headers.headers.stsseconds=15552000"
+      - "traefik.http.middlewares.evidence-ip-security-headers.headers.stsincludesubdomains=false"
+      - "traefik.http.middlewares.evidence-ip-security-headers.headers.contenttypenosniff=true"
+      - "traefik.http.middlewares.evidence-ip-security-headers.headers.framedeny=true"
+      - "traefik.http.middlewares.evidence-ip-security-headers.headers.referrerpolicy=no-referrer"
+      - "traefik.http.middlewares.evidence-ip-security-headers.headers.contentsecuritypolicy=default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+      - "traefik.http.services.evidence-ip.loadbalancer.server.port=8080"

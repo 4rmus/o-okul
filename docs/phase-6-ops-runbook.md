@@ -720,7 +720,7 @@ Beklenen akış:
 - `web`, `api`, `worker` ve `queue-board` image'ları GHCR'a commit SHA tag'i ve `staging-latest`
   tag'i ile push edilir.
 - GitHub runner `docker-compose.yml`, `docker-compose.release.yml`, `docker-compose.traefik.yml`,
-  `docker-compose.traefik-ip.yml` ve
+  `docker-compose.traefik-ip.yml`, `docker/evidence` ve
   `docker/postgres/init` içeriğini SSH üzerinden staging deploy dizinine kopyalar; staging host'un
   repo clone yetkisine ihtiyacı yoktur.
 - `.env.release` dosyası `WEB_IMAGE`, `API_IMAGE`, `WORKER_IMAGE`, `QUEUE_BOARD_IMAGE`, `SENTRY_RELEASE` ve
@@ -731,6 +731,8 @@ Beklenen akış:
   -f docker-compose.release.yml -f docker-compose.traefik.yml pull web api worker queue-board` ile imajlar çekilir.
 - `docker compose ... run --rm api pnpm --filter @o-okul/db db:migrate` migration deploy'u çalıştırır.
 - `docker compose ... up -d --remove-orphans` Traefik'li staging stack'ini ayağa kaldırır.
+  `evidence` servisi `artifacts/staging/reports` altındaki doğrulanmış JSON kanıtlarını
+  `/evidence/*.json` olarak salt-okunur sunar; eksik kanıt dosyası bilinçli olarak 404 döner.
 - GitHub runner, `STAGING_EVIDENCE_ENV_B64` içeriğini evidence job'da yeniden decode edip
   `pnpm staging:evidence-env:check` ile tekrar doğrular.
 - GitHub runner, deploy öncesi üretilmiş `staging-github-ci-evidence-<sha>` artifact'ini

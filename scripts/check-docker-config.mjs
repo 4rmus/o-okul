@@ -15,6 +15,7 @@ const grafanaDatasources = readFileSync("docker/grafana/provisioning/datasources
 const grafanaDashboards = readFileSync("docker/grafana/provisioning/dashboards/dashboards.yml", "utf8");
 const grafanaApiOverview = readFileSync("docker/grafana/dashboards/api-overview.json", "utf8");
 const loki = readFileSync("docker/loki/local-config.yaml", "utf8");
+const evidenceNginx = readFileSync("docker/evidence/nginx.conf", "utf8");
 const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
 const stagingDeployWorkflow = readFileSync(".github/workflows/staging-deploy.yml", "utf8");
 
@@ -29,6 +30,12 @@ const expectations = {
     "clamav_data:",
     "minio:",
     "api:",
+    "evidence:",
+    "nginx:1.27-alpine",
+    "EVIDENCE_HOST_PORT:-3300",
+    "./artifacts/staging/reports:/usr/share/nginx/html:ro",
+    "./docker/evidence/nginx.conf:/etc/nginx/conf.d/default.conf:ro",
+    "http://127.0.0.1:8080/healthz",
     "worker:",
     "queue-board:",
     "target: queue-board",
@@ -102,6 +109,11 @@ const expectations = {
     "traefik.http.middlewares.api-security-headers.headers.framedeny=true",
     "traefik.http.middlewares.api-security-headers.headers.contentsecuritypolicy=",
     "traefik.http.services.api.loadbalancer.server.port=3100",
+    "traefik.http.routers.evidence.rule=Host(`${DOMAIN}`) && PathPrefix(`/evidence`)",
+    "traefik.http.routers.evidence.priority=110",
+    "traefik.http.routers.evidence.middlewares=evidence-strip,evidence-security-headers",
+    "traefik.http.middlewares.evidence-strip.stripprefix.prefixes=/evidence",
+    "traefik.http.services.evidence.loadbalancer.server.port=8080",
   ],
   "docker-compose.traefik-ip.yml": [
     "traefik:v3.7.5",
@@ -113,6 +125,11 @@ const expectations = {
     "traefik.http.routers.api-ip.service=api-ip",
     "traefik.http.routers.api-ip.tls=true",
     "traefik.http.services.api-ip.loadbalancer.server.port=3100",
+    "traefik.http.routers.evidence-ip.rule=Host(`${SERVER_DOMAIN:-127.0.0.1}`) && PathPrefix(`/evidence`)",
+    "traefik.http.routers.evidence-ip.priority=110",
+    "traefik.http.routers.evidence-ip.middlewares=evidence-ip-strip,evidence-ip-security-headers",
+    "traefik.http.middlewares.evidence-ip-strip.stripprefix.prefixes=/evidence",
+    "traefik.http.services.evidence-ip.loadbalancer.server.port=8080",
   ],
   "docker-compose.release.yml": [
     "web:",
@@ -195,6 +212,15 @@ const expectations = {
     "{stack=\\\"o-okul\\\"}",
   ],
   "docker/loki/local-config.yaml": ["auth_enabled: false", "retention_period: 168h"],
+  "docker/evidence/nginx.conf": [
+    "listen 8080",
+    "server_tokens off",
+    "X-Content-Type-Options nosniff",
+    "Cache-Control \"no-store\"",
+    "location = /healthz",
+    "application/json json",
+    "try_files $uri =404",
+  ],
   ".github/workflows/ci.yml": [
     "pnpm install",
     "pnpm --filter @o-okul/web exec playwright install --with-deps chromium",
@@ -224,6 +250,7 @@ const expectations = {
     "STAGING_SSH_PRIVATE_KEY",
     "STAGING_DEPLOY_DIR",
     "Upload compose bundle",
+    "docker/evidence",
     "docker/postgres/init",
     "scp -i ~/.ssh/staging_deploy_key",
     "GHCR_READ_TOKEN",
@@ -280,6 +307,7 @@ const files = {
   "docker/grafana/provisioning/dashboards/dashboards.yml": grafanaDashboards,
   "docker/grafana/dashboards/api-overview.json": grafanaApiOverview,
   "docker/loki/local-config.yaml": loki,
+  "docker/evidence/nginx.conf": evidenceNginx,
   Dockerfile: dockerfile,
   ".github/workflows/ci.yml": workflow,
   ".github/workflows/staging-deploy.yml": stagingDeployWorkflow,

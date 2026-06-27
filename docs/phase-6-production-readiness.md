@@ -119,6 +119,10 @@ pnpm backup:restore:smoke
   WAL archive ve report generation smoke kanıtları summary dosyasının yanındaki `smoke/`
   klasörüne secret içermeyen JSON artifact'leri olarak otomatik yazılır. Override edilen raw smoke
   dosya path'leri de kalıcı, symlink olmayan artifact dosyası olmalıdır.
+- Staging hostta `docker-compose.yml` içindeki `evidence` nginx servisi
+  `./artifacts/staging/reports` klasörünü salt-okunur mount eder; Traefik
+  `/evidence/<dosya>.json` isteklerini prefix strip ederek bu servise yollar.
+  Mevcut kanıt dosyaları `no-store` ve `nosniff` header'larıyla sunulur, eksik dosyalar 404 kalır.
 - Summary yazımı smoke kanıtlarında `result=PASS`, beklenen `check` adı, `environment=production`,
   gelecekte olmayan `generatedAt` ve her smoke tipine özgü alanları doğrular: Traefik smoke URL origin'i
   summary `webUrl` origin'iyle eşleşmeli; external monitoring monitor URL origin'leri de summary
