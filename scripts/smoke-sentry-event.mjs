@@ -6,6 +6,9 @@ const environment = process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? "u
 const message = process.env.SENTRY_SMOKE_MESSAGE ?? "o-okul Sentry smoke";
 const evidenceFile = process.env.SENTRY_SMOKE_EVIDENCE_FILE ?? process.env.SMOKE_EVIDENCE_FILE;
 const checkedAt = new Date().toISOString();
+const emailPattern = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const turkishPhonePattern = /\b(?:\+?90[\s.-]?)?0?5\d{2}[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}\b/g;
+const turkishNationalIdPattern = /\b[1-9]\d{10}\b/g;
 
 await validateSmokeEvidenceOutputTarget(evidenceFile);
 
@@ -83,7 +86,3 @@ function fail(message) {
   console.error(message);
   process.exit(1);
 }
-
-const emailPattern = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-const turkishPhonePattern = /\b(?:\+?90[\s.-]?)?0?5\d{2}[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}\b/g;
-const turkishNationalIdPattern = /\b[1-9]\d{10}\b/g;
