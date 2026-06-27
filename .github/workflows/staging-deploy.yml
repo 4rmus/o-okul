@@ -426,7 +426,7 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.release.yml \
             -f "$EDGE_COMPOSE_FILE" \
-            run --rm api pnpm --filter @o-okul/db db:migrate
+            run --rm -T api pnpm --filter @o-okul/db db:migrate < /dev/null
 
           docker compose \
             --env-file .env \

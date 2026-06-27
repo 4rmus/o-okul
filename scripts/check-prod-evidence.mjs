@@ -528,6 +528,8 @@ function validateSummaryFile(file) {
 function applySmokeEvidenceDefaults(file) {
   const directory = join(dirname(file), "smoke");
   validateManagedSiblingDirectory(file, "smoke");
+  mkdirSync(directory, { recursive: true });
+  validateManagedSiblingDirectory(file, "smoke");
 
   for (const [key, fileName] of Object.entries(smokeEvidenceFileDefaults)) {
     env[key] ||= join(directory, fileName);
