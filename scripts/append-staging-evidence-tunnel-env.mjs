@@ -16,6 +16,8 @@ appendFileSync(
   [
     "",
     "# GitHub Actions SSH tunnel overrides.",
+    "STAGING_EVIDENCE_DB_TUNNEL=1",
+    `STAGING_EVIDENCE_POSTGRES_TUNNEL_PORT=${postgresPort}`,
     `DATABASE_URL=${rewriteUrl(databaseUrl, postgresPort)}`,
     `DIRECT_DATABASE_URL=${rewriteUrl(directDatabaseUrl, postgresPort)}`,
     `REDIS_URL=${rewriteUrl(redisUrl, redisPort)}`,

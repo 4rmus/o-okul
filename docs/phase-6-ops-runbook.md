@@ -801,7 +801,11 @@ Beklenen akış:
   olarak doğrular. Evidence job, staging host'a SSH tunnel açar ve `DATABASE_URL`,
   `DIRECT_DATABASE_URL` değerlerini runner içindeki `127.0.0.1:15432` tunnel portuna çevirir.
   `REDIS_URL` private env'de varsa `127.0.0.1:16379` portuna çevrilir; yoksa evidence smoke'ları
-  için aynı tunnel portuna bakan default Redis URL'i eklenir. `/tmp`/`/var/tmp`, symlink dosya ve symlink parent directory üzerinden gelen raw
+  için aynı tunnel portuna bakan default Redis URL'i eklenir. Helper ayrıca
+  `STAGING_EVIDENCE_DB_TUNNEL=1` ve `STAGING_EVIDENCE_POSTGRES_TUNNEL_PORT`
+  ekler; `prod:evidence:check` yalnız bu açık staging tunnel işaretinde
+  `DATABASE_URL`/`DIRECT_DATABASE_URL` için runner `127.0.0.1` Postgres tunnel
+  hostunu kabul eder, normal production env'de lokal DB URL'leri kırmızı kalır. `/tmp`/`/var/tmp`, symlink dosya ve symlink parent directory üzerinden gelen raw
   smoke path'i kabul edilmez. Evidence job, artifact upload öncesinde `if: always()` cleanup
   adımıyla `.staging-evidence.env` secret dosyasını workspace'ten siler.
 - Full evidence zinciri PASS olduktan sonra workflow aynı job içinde

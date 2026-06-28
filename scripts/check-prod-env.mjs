@@ -160,6 +160,7 @@ function checkContract(file) {
 
 function checkProductionEnv(env) {
   const failures = [];
+  const dbTunnelPort = readStagingEvidenceDbTunnelPort(env, failures);
 
   requireNoExampleEvidenceBypass(env, failures);
   requireEqual(env, failures, "NODE_ENV", "production");
@@ -168,8 +169,8 @@ function checkProductionEnv(env) {
   requireHttpsUrl(env, failures, "WEB_URL");
   requireSet(env, failures, "DATABASE_URL");
   requireSet(env, failures, "DIRECT_DATABASE_URL");
-  requireNotContains(env, failures, "DATABASE_URL", ["localhost", "127.0.0.1", "app:app"]);
-  requireNotContains(env, failures, "DIRECT_DATABASE_URL", ["localhost", "127.0.0.1", "migration:migration"]);
+  requireDatabaseUrlSafe(env, failures, "DATABASE_URL", ["app:app"], dbTunnelPort);
+  requireDatabaseUrlSafe(env, failures, "DIRECT_DATABASE_URL", ["migration:migration"], dbTunnelPort);
   requireSecret(env, failures, "JWT_ACCESS_SECRET");
   requireSecret(env, failures, "JWT_REFRESH_SECRET");
   requireSecret(env, failures, "STUDENT_PII_ENCRYPTION_KEY");
@@ -335,6 +336,42 @@ function requireNotContains(env, failures, key, forbiddenValues) {
       failures.push(`${key} production için güvenli görünmüyor.`);
       return;
     }
+  }
+}
+
+function readStagingEvidenceDbTunnelPort(env, failures) {
+  if (!env.STAGING_EVIDENCE_DB_TUNNEL) {
+    return undefined;
+  }
+  if (env.STAGING_EVIDENCE_DB_TUNNEL !== "1") {
+    failures.push("STAGING_EVIDENCE_DB_TUNNEL 1 olmalı veya hiç set edilmemeli.");
+    return undefined;
+  }
+
+  const port = Number(env.STAGING_EVIDENCE_POSTGRES_TUNNEL_PORT);
+  if (!Number.isInteger(port) || port <= 0) {
+    failures.push("STAGING_EVIDENCE_POSTGRES_TUNNEL_PORT pozitif tam sayı olmalı.");
+    return undefined;
+  }
+  return String(port);
+}
+
+function requireDatabaseUrlSafe(env, failures, key, forbiddenCredentials, allowedTunnelPort) {
+  const value = env[key] ?? "";
+  if (allowedTunnelPort && isAllowedStagingEvidenceTunnelDatabaseUrl(value, allowedTunnelPort)) {
+    requireNotContains(env, failures, key, forbiddenCredentials);
+    return;
+  }
+
+  requireNotContains(env, failures, key, ["localhost", "127.0.0.1", ...forbiddenCredentials]);
+}
+
+function isAllowedStagingEvidenceTunnelDatabaseUrl(value, port) {
+  try {
+    const url = new URL(value);
+    return ["postgres:", "postgresql:"].includes(url.protocol) && url.hostname === "127.0.0.1" && url.port === port;
+  } catch {
+    return false;
   }
 }
 
