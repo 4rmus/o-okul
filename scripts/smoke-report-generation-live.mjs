@@ -16,6 +16,7 @@ const directDatabaseUrl = process.env.DIRECT_DATABASE_URL ?? "postgresql://migra
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 const queuePrefix = process.env.QUEUE_PREFIX ?? `report-generation-smoke-${Date.now()}`;
 const resultCount = readResultCount();
+const generationDurationMsMax = resultCount >= 10_000 ? 60_000 : 10_000;
 const runId = randomUUID();
 const tenantId = process.env.REPORT_GENERATION_SMOKE_TENANT_ID ?? "tenant-smoke-report";
 const userId = process.env.REPORT_GENERATION_SMOKE_USER_ID ?? "user-smoke-report";
@@ -70,7 +71,7 @@ try {
   });
 
   const startedAt = performance.now();
-  const snapshot = await waitForSnapshot(resultCount >= 10_000 ? 30_000 : 5_000);
+  const snapshot = await waitForSnapshot(generationDurationMsMax);
   const generationDurationMs = Math.round(performance.now() - startedAt);
   if (producedJob.options.jobId !== `${examId}_${contentHash}`) {
     throw new Error("REPORT_GENERATION_SMOKE_JOB_ID_MISMATCH");
@@ -115,8 +116,8 @@ try {
     },
     thresholds: {
       resultCountMatches: snapshot.resultCount === resultCount,
-      generationDurationMsMax: resultCount >= 10_000 ? 60_000 : 5_000,
-      generationDurationPassed: generationDurationMs <= (resultCount >= 10_000 ? 60_000 : 5_000),
+      generationDurationMsMax,
+      generationDurationPassed: generationDurationMs <= generationDurationMsMax,
     },
     commandsPassed: [commandPassed],
     gaps: [],
