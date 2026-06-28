@@ -731,6 +731,8 @@ Beklenen akış:
   alınır. `up -d` başarılı olunca `.env.release.next`, `.env.release` olarak taşınır.
 - `GHCR_READ_TOKEN` uzak shell komut satırına gömülmez; SSH stdin ile `0600` benzeri izinli
   `.ghcr_read_token` dosyasına aktarılır, `docker login --password-stdin` sonrası trap ile silinir.
+- Pull öncesinde workflow, aktif release ve rollback tag'i dışındaki eski `ghcr.io/4rmus/o-okul/*`
+  imajlarını temizler, en az 2048MB boş disk alanı ister ve image pull adımını 20 dakika ile sınırlar.
 - `docker compose --env-file .env --env-file .env.release.next -f docker-compose.yml
   -f docker-compose.release.yml -f docker-compose.traefik.yml pull web api worker queue-board` ile imajlar çekilir.
 - `docker compose ... run --rm api sh -lc 'cd packages/db && ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts'`
@@ -740,6 +742,11 @@ Beklenen akış:
   `/evidence/*.json` olarak salt-okunur sunar; eksik kanıt dosyası bilinçli olarak 404 döner.
 - GitHub runner, `STAGING_EVIDENCE_ENV_B64` içeriğini evidence job'da yeniden decode edip
   `pnpm staging:evidence-env:check` ile tekrar doğrular.
+- Evidence job, `DEPLOYMENT_REGION_PROVIDER`, `DEPLOYMENT_REGION_REGION`,
+  `DEPLOYMENT_REGION_DATACENTER_COUNTRY_CODE`, `DEPLOYMENT_REGION_DATA_RESIDENCY_VERIFIED`,
+  `DEPLOYMENT_REGION_EVIDENCE_REFERENCE` ve `DEPLOYMENT_REGION_SERVICES_VERIFIED` değerlerinden
+  `artifacts/staging/reports/deployment-region.json` üretir ve `DEPLOYMENT_REGION_TARGET` değerini
+  bu dosya artifact'ine çevirir.
 - GitHub runner, deploy öncesi üretilmiş `staging-github-ci-evidence-<sha>` artifact'ini
   `actions/download-artifact@v4` ile `artifacts/staging/reports/github-ci.json` yoluna indirir ve
   `pnpm github-ci:check` ile tekrar doğrular.
@@ -925,6 +932,9 @@ STAGING_ENVIRONMENT=staging \
   DEPLOYMENT_REGION_SERVICES_VERIFIED=api,worker,postgres,redis,object-storage \
   pnpm deployment:region:generate
 ```
+
+Staging deploy workflow'u bu artifact'i otomatik üretir; yukarıdaki alanlar
+`STAGING_EVIDENCE_ENV_B64` içindeki gerçek değerlerden gelmelidir.
 
 Minimum kanıt içeriği:
 

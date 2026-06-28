@@ -447,7 +447,35 @@ jobs:
 
           docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin < .ghcr_read_token
 
-          docker compose \
+          current_release="$(sed -n 's/^SENTRY_RELEASE=//p' .env.release 2>/dev/null | head -n 1 || true)"
+
+          prune_old_release_images() {
+            docker image ls --format '{{.Repository}}:{{.Tag}}' | while read -r image; do
+              case "$image" in
+                "${IMAGE_PREFIX}/web:${IMAGE_TAG}"|"${IMAGE_PREFIX}/api:${IMAGE_TAG}"|"${IMAGE_PREFIX}/worker:${IMAGE_TAG}"|"${IMAGE_PREFIX}/queue-board:${IMAGE_TAG}") ;;
+                "${IMAGE_PREFIX}/web:${current_release}"|"${IMAGE_PREFIX}/api:${current_release}"|"${IMAGE_PREFIX}/worker:${current_release}"|"${IMAGE_PREFIX}/queue-board:${current_release}") ;;
+                "${IMAGE_PREFIX}/web:"*|"${IMAGE_PREFIX}/api:"*|"${IMAGE_PREFIX}/worker:"*|"${IMAGE_PREFIX}/queue-board:"*) docker image rm "$image" >/dev/null 2>&1 || true ;;
+              esac
+            done
+            docker image prune -f >/dev/null
+          }
+
+          require_disk_space_mb() {
+            local minimum_mb="$1"
+            local available_kb
+            available_kb="$(df -Pk . | awk 'NR == 2 { print $4 }')"
+            if [ "$available_kb" -lt $((minimum_mb * 1024)) ]; then
+              echo "At least ${minimum_mb}MB free disk is required before pulling release images." >&2
+              df -h . >&2
+              docker system df >&2
+              exit 1
+            fi
+          }
+
+          prune_old_release_images
+          require_disk_space_mb 2048
+
+          timeout 20m docker compose \
             --env-file .env \
             --env-file "$release_env_file" \
             -f docker-compose.yml \
@@ -569,6 +597,13 @@ jobs:
           UI_UX_REDESIGN_EVIDENCE_OUTPUT="artifacts/staging/reports/ui-ux-redesign.json" \
             pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env
 
+      - name: Generate deployment region evidence
+        shell: bash
+        run: |
+          pnpm deployment:region:generate -- \
+            --env-file .staging-evidence.env \
+            --output artifacts/staging/reports/deployment-region.json
+
       - name: Append release evidence metadata
         shell: bash
         env:
@@ -580,6 +615,7 @@ jobs:
             echo "ROLLBACK_IMAGE_TAG=$ROLLBACK_IMAGE_TAG"
             echo "GITHUB_CI_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/github-ci.json"
             echo "UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json"
+            echo "DEPLOYMENT_REGION_TARGET=file://$PWD/artifacts/staging/reports/deployment-region.json"
             echo "PRODUCTION_EVIDENCE_SUMMARY_TARGET=file://$PWD/artifacts/staging/release-summary-${IMAGE_TAG}.json"
           } >> .staging-evidence.env
 

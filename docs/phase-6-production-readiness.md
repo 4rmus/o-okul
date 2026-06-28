@@ -337,7 +337,9 @@ pnpm backup:restore:smoke
   Staging artifact'i üretmek için
   `STAGING_ENVIRONMENT=staging DEPLOYMENT_REGION_OUTPUT=artifacts/staging/reports/deployment-region.json DEPLOYMENT_REGION_PROVIDER=... DEPLOYMENT_REGION_REGION=... DEPLOYMENT_REGION_DATACENTER_COUNTRY_CODE=TR DEPLOYMENT_REGION_DATA_RESIDENCY_VERIFIED=true DEPLOYMENT_REGION_EVIDENCE_REFERENCE=... DEPLOYMENT_REGION_SERVICES_VERIFIED=api,worker,postgres,redis,object-storage pnpm deployment:region:generate`
   kullanılır. Generator gerçek provider/region/evidence referansı ve exact servis onayı olmadan
-  artifact yazmaz; public IP lookup referansını da final kanıt saymaz.
+  artifact yazmaz; public IP lookup referansını da final kanıt saymaz. Staging deploy workflow'u
+  bu artifact'i evidence job içinde üretir ve `DEPLOYMENT_REGION_TARGET` değerini file artifact'e
+  çevirir.
 - SMS v1 kapsamı kapalıdır: staging/prod release env içinde `SMS_ENABLED=false`,
   `NEXT_PUBLIC_SMS_ENABLED=false`, `SMS_PROVIDER=noop` ve `SMS_ALLOW_NOOP_IN_PRODUCTION=false`
   kalır; `pnpm sms:smoke` bu kapsam dışı yolu `provider=disabled`, `segments=0` ve

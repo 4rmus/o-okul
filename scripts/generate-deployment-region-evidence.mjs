@@ -1,19 +1,20 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, parse, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const requiredServicesVerified = ["api", "worker", "postgres", "redis", "object-storage"];
 
-const outputPath = readOption("--output") ?? process.env.DEPLOYMENT_REGION_OUTPUT;
-const environment = readOption("--environment") ?? process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "staging";
+const env = { ...process.env, ...readEnvFileOption() };
+const outputPath = readOption("--output") ?? env.DEPLOYMENT_REGION_OUTPUT;
+const environment = readOption("--environment") ?? env.STAGING_ENVIRONMENT ?? env.NODE_ENV ?? "staging";
 
-const provider = process.env.DEPLOYMENT_REGION_PROVIDER?.trim();
-const region = process.env.DEPLOYMENT_REGION_REGION?.trim();
-const datacenterCountryCode = process.env.DEPLOYMENT_REGION_DATACENTER_COUNTRY_CODE?.trim();
-const dataResidencyVerified = process.env.DEPLOYMENT_REGION_DATA_RESIDENCY_VERIFIED;
-const evidenceReference = process.env.DEPLOYMENT_REGION_EVIDENCE_REFERENCE?.trim();
-const servicesVerified = parseServices(process.env.DEPLOYMENT_REGION_SERVICES_VERIFIED);
+const provider = env.DEPLOYMENT_REGION_PROVIDER?.trim();
+const region = env.DEPLOYMENT_REGION_REGION?.trim();
+const datacenterCountryCode = env.DEPLOYMENT_REGION_DATACENTER_COUNTRY_CODE?.trim();
+const dataResidencyVerified = env.DEPLOYMENT_REGION_DATA_RESIDENCY_VERIFIED;
+const evidenceReference = env.DEPLOYMENT_REGION_EVIDENCE_REFERENCE?.trim();
+const servicesVerified = parseServices(env.DEPLOYMENT_REGION_SERVICES_VERIFIED);
 
 const failures = [];
 requireValue(outputPath, "DEPLOYMENT_REGION_OUTPUT veya --output", failures);
@@ -74,6 +75,23 @@ function readOption(name) {
     fail([`${name} için değer gerekli.`]);
   }
   return value;
+}
+
+function readEnvFileOption() {
+  const file = readOption("--env-file");
+  if (!file) return {};
+
+  const values = {};
+  for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const separator = trimmed.indexOf("=");
+    if (separator === -1) continue;
+    const key = trimmed.slice(0, separator);
+    const value = trimmed.slice(separator + 1).replace(/^["']|["']$/g, "");
+    values[key] = value;
+  }
+  return values;
 }
 
 function parseServices(rawValue) {
