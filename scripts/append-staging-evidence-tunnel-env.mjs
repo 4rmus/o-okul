@@ -7,10 +7,9 @@ const env = readEnvFile(envFile);
 
 const databaseUrl = env.DATABASE_URL;
 const directDatabaseUrl = env.DIRECT_DATABASE_URL || databaseUrl;
-const redisUrl = env.REDIS_URL;
+const redisUrl = env.REDIS_URL || "redis://127.0.0.1:6379";
 
 if (!databaseUrl) fail("DATABASE_URL is required.");
-if (!redisUrl) fail("REDIS_URL is required.");
 
 appendFileSync(
   envFile,
