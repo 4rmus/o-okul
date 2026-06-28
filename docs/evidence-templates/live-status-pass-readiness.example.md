@@ -9,7 +9,6 @@ template dogrulamasina pass-readiness fixture'i saglar. Gercek readiness belgesi
 - Yerel geliştirme canlı smoke: `PASS`
 - Kurum canlı yayın kanıt ekranı: `PASS`
 - Traefik HTTPS smoke: `PASS`
-- TR datacenter/provider kanıtı: `PASS`
 - Live exam cycle kanıtı: `PASS`
 - iSEM optical pipeline kanıtı: `PASS`
 - Live UI-worker result kanıtı: `PASS`

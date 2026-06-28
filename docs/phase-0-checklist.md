@@ -71,7 +71,6 @@ isimlerini ekler.
 | S3/MinIO | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE` | upload smoke testi |
 | Sentry | `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_SEND_DEFAULT_PII=false` | test hata kaydı |
 | Traefik/TLS | `DOMAIN`, `ACME_EMAIL`, `TRAEFIK_HTTPS_SMOKE_URL` | `pnpm traefik:https:smoke` staging TLS kontrolü |
-| TR Datacenter | `DEPLOYMENT_REGION_TARGET` | `pnpm deployment:region:check` |
 | Backup/Ops | `BACKUP_BUCKET` veya `BACKUP_PATH`, `BACKUP_RETENTION_DAYS` | `pg_dump` + restore denemesi |
 | CI/Deploy | `CI_DATABASE_URL`, `CI_REDIS_URL`, gerekirse `SENTRY_AUTH_TOKEN`, `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY` | CI secret listesi |
 

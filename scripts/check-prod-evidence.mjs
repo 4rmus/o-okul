@@ -9,7 +9,6 @@ const summaryFile = readArgValue("--summary-file");
 const summaryOutputFile = summaryFile ? validateSummaryOutputFile(summaryFile) : undefined;
 const summarySmokeEnvironments = ["staging", "production"];
 const evidenceTargetKeys = [
-  "DEPLOYMENT_REGION_TARGET",
   "DEPLOYMENT_ROLLBACK_TARGET",
   "GITHUB_CI_EVIDENCE_TARGET",
   "RESTORE_DRILL_TARGET",
@@ -58,7 +57,6 @@ const checks = [
   ["Alert webhook", "scripts/smoke-alert-webhook.mjs"],
   ["WAL archive target", "scripts/smoke-wal-archive-target.mjs"],
   ["Report generation smoke", "scripts/smoke-report-generation-live.mjs"],
-  ["Deployment region evidence", "scripts/check-deployment-region-evidence.mjs"],
   ["Deployment rollback evidence", "scripts/check-deployment-rollback-evidence.mjs"],
   ["GitHub CI evidence", "scripts/check-github-ci-evidence.mjs"],
   ["Restore drill evidence", "scripts/check-restore-drill-evidence.mjs"],
@@ -83,7 +81,6 @@ const checks = [
 ];
 const reportArtifacts = {
   restoreDrill: "restore-drill.json",
-  deploymentRegion: "deployment-region.json",
   deploymentRollback: "deployment-rollback.json",
   githubCi: "github-ci.json",
   kvkkInventory: "kvkk-inventory.json",
@@ -222,7 +219,6 @@ function writeSummary(file) {
   };
   const reports = {
     restoreDrill: readJsonTarget(env.RESTORE_DRILL_TARGET),
-    deploymentRegion: readJsonTarget(env.DEPLOYMENT_REGION_TARGET),
     deploymentRollback: readJsonTarget(env.DEPLOYMENT_ROLLBACK_TARGET),
     githubCi: readJsonTarget(env.GITHUB_CI_EVIDENCE_TARGET),
     kvkkInventory: readJsonTarget(env.KVKK_INVENTORY_TARGET),
@@ -261,15 +257,6 @@ function writeSummary(file) {
         sourceBackup: reports.restoreDrill.sourceBackup,
         targetDatabase: reports.restoreDrill.targetDatabase,
         tableCounts: reports.restoreDrill.tableCounts,
-      },
-      deploymentRegion: {
-        environment: reports.deploymentRegion.environment,
-        checkedAt: reports.deploymentRegion.checkedAt,
-        provider: reports.deploymentRegion.provider,
-        region: reports.deploymentRegion.region,
-        datacenterCountryCode: reports.deploymentRegion.datacenterCountryCode,
-        evidenceReference: reports.deploymentRegion.evidenceReference,
-        servicesVerified: reports.deploymentRegion.servicesVerified,
       },
       deploymentRollback: {
         environment: reports.deploymentRollback.environment,

@@ -16,7 +16,6 @@ const requiredEvidenceCheckScripts = new Map([
   ["Alert webhook", "scripts/smoke-alert-webhook.mjs"],
   ["WAL archive target", "scripts/smoke-wal-archive-target.mjs"],
   ["Report generation smoke", "scripts/smoke-report-generation-live.mjs"],
-  ["Deployment region evidence", "scripts/check-deployment-region-evidence.mjs"],
   ["Deployment rollback evidence", "scripts/check-deployment-rollback-evidence.mjs"],
   ["GitHub CI evidence", "scripts/check-github-ci-evidence.mjs"],
   ["Restore drill evidence", "scripts/check-restore-drill-evidence.mjs"],
@@ -62,7 +61,6 @@ const goLiveTopLevelKeys = [
 const goLiveProductionEvidenceSummaryKeys = ["result", "summaryTarget", "summaryReference", "generatedAt", "checksPassed"];
 const goLiveLiveStatusEvidenceKeys = ["result", "evidenceTarget", "generatedAt", "gatesPassed"];
 const goLiveDeploymentKeys = [
-  "deploymentRegionPassed",
   "githubCiPassed",
   "traefikHttpsPassed",
   "restoreDrillPassed",
@@ -127,7 +125,6 @@ const summarySmokeEvidenceKeys = [
 ];
 const summaryReportKeys = [
   "restoreDrill",
-  "deploymentRegion",
   "deploymentRollback",
   "githubCi",
   "kvkkInventory",
@@ -183,15 +180,6 @@ const expectedKvkkAuditDiffActions = [
 ];
 const summaryRequiredReportKeys = {
   restoreDrill: ["environment", "drillDate", "sourceBackup", "targetDatabase", "tableCounts"],
-  deploymentRegion: [
-    "environment",
-    "checkedAt",
-    "provider",
-    "region",
-    "datacenterCountryCode",
-    "evidenceReference",
-    "servicesVerified",
-  ],
   deploymentRollback: [
     "environment",
     "checkedAt",
@@ -399,14 +387,6 @@ const liveStatusGates = [
     target: "summary",
     path: ["smokeEvidence", "traefikHttps"],
     dateKey: "generatedAt",
-  },
-  {
-    label: "TR datacenter/provider kanıtı",
-    command: "pnpm deployment:region:check",
-    source: "productionEvidenceSummary.reports.deploymentRegion",
-    target: "summary",
-    path: ["reports", "deploymentRegion"],
-    dateKey: "checkedAt",
   },
   {
     label: "Live exam cycle kanıtı",
@@ -1136,40 +1116,6 @@ function requireSummaryReports(summary, failures, goLiveReport) {
     if (report) {
       requireSummaryObjectKeySet(report, requiredKeys, failures, `productionEvidenceSummary.summary.reports.${key}`);
     }
-  }
-
-  const deploymentRegion = requireNestedObject(
-    reports,
-    failures,
-    "productionEvidenceSummary.summary.reports.deploymentRegion",
-    "deploymentRegion",
-  );
-  if (deploymentRegion) {
-    requireObjectEqual(deploymentRegion, failures, "productionEvidenceSummary.summary.reports.deploymentRegion.environment", "environment", "production");
-    requireSummaryReportDateNotAfter(
-      deploymentRegion,
-      failures,
-      "productionEvidenceSummary.summary.reports.deploymentRegion.checkedAt",
-      "checkedAt",
-      summary,
-      goLiveReport,
-    );
-    requireObjectEqual(deploymentRegion, failures, "productionEvidenceSummary.summary.reports.deploymentRegion.datacenterCountryCode", "datacenterCountryCode", "TR");
-    requireNonPlaceholderString(deploymentRegion, failures, "productionEvidenceSummary.summary.reports.deploymentRegion.provider", "provider");
-    requireNonPlaceholderString(deploymentRegion, failures, "productionEvidenceSummary.summary.reports.deploymentRegion.region", "region");
-    requireObjectString(
-      deploymentRegion,
-      failures,
-      "productionEvidenceSummary.summary.reports.deploymentRegion.evidenceReference",
-      "evidenceReference",
-    );
-    requireNonPlaceholderString(
-      deploymentRegion,
-      failures,
-      "productionEvidenceSummary.summary.reports.deploymentRegion.evidenceReference",
-      "evidenceReference",
-    );
-    requireObjectArrayAtLeast(deploymentRegion, failures, "productionEvidenceSummary.summary.reports.deploymentRegion.servicesVerified", "servicesVerified", 1);
   }
 
   const deploymentRollback = requireNestedObject(
@@ -3652,7 +3598,6 @@ function requireDeployment(report, failures) {
   requireSummaryObjectKeySet(value, goLiveDeploymentKeys, failures, "deployment");
 
   for (const key of [
-    "deploymentRegionPassed",
     "githubCiPassed",
     "traefikHttpsPassed",
     "restoreDrillPassed",

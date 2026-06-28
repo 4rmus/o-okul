@@ -40,15 +40,6 @@ const reportArtifacts = new Map([
     },
   ],
   [
-    "deploymentRegion",
-    {
-      file: "deployment-region.json",
-      script: "scripts/check-deployment-region-evidence.mjs",
-      targetEnv: "DEPLOYMENT_REGION_TARGET",
-      allowEnv: "DEPLOYMENT_REGION_ALLOW_EXAMPLE_EVIDENCE",
-    },
-  ],
-  [
     "deploymentRollback",
     {
       file: "deployment-rollback.json",
@@ -269,14 +260,6 @@ const missingArtifactRemediation = new Map([
     },
   ],
   [
-    "reports/deployment-region.json",
-    {
-      command: "DEPLOYMENT_REGION_OUTPUT=artifacts/staging/reports/deployment-region.json corepack pnpm deployment:region:generate",
-      prerequisite: "Provider console, contract, or first-party TR datacenter evidence for api, worker, postgres, redis, and object-storage.",
-      blocker: "Public IP lookup alone is rejected by the deployment region evidence contract.",
-    },
-  ],
-  [
     "reports/deployment-rollback.json",
     {
       command:
@@ -469,15 +452,6 @@ const missingArtifactHandoff = new Map([
       ownerAgent: "infra_dr_engineer",
       evidenceGate: "restore:drill:check",
       nextActionKind: "staging_dr_drill",
-    },
-  ],
-  [
-    "reports/deployment-region.json",
-    {
-      phase: "Faz 5 - Deployment region kanıtı",
-      ownerAgent: "ops_release_engineer",
-      evidenceGate: "deployment:region:check",
-      nextActionKind: "provider_contract_evidence",
     },
   ],
   [

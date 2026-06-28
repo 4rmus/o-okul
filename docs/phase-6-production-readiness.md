@@ -165,7 +165,7 @@ pnpm backup:restore:smoke
   `pnpm staging:ghcr-read-token:secret:set` GHCR read token dosyasını aynı şekilde repo/temp/symlink
   dışı ve `chmod 600` zorunlu tutarak `GHCR_READ_TOKEN` secret'ına stdin üzerinden yazar.
 - Production kanıt şablonları `pnpm prod:evidence:templates:check` ile repo içinde doğrulanır.
-- KVKK, kimlik göçü, finansal saklama, upload AV, deployment region, observability UAT ve security
+- KVKK, kimlik göçü, finansal saklama, upload AV, observability UAT ve security
   audit gerçek kanıtlarında `checkedAt` gelecekte olamaz.
 - Admin MFA raporu `ADMIN_MFA_EVIDENCE_TARGET` ile doğrulanır; SYSTEM_ADMIN/TENANT_ADMIN
   hesaplarında password-only login auth session üretmez, TOTP ve recovery code reuse reddedilir.
@@ -184,7 +184,7 @@ pnpm backup:restore:smoke
   `prod:evidence:templates:check` içindeki fazla alan/komut ve invalid/non-empty gaps negatifleriyle korunur.
 - Bozuk imajdan geri dönüş tatbikatı `DEPLOYMENT_ROLLBACK_TARGET` ve
   `pnpm deployment:rollback:check` ile ayrı kanıt raporu olarak doğrulanır; UAT içindeki
-  `rollbackImageTag` yalnız release adayı referansıdır. Gerçek deployment region/rollback
+  `rollbackImageTag` yalnız release adayı referansıdır. Gerçek deployment rollback
   kanıtlarında `example`, `.test`, `localhost`, `__SET` veya placeholder provider/image/artifact
   referansı kabul edilmez; target URL ve kanıt referansları userinfo, query token veya fragment
   taşıyamaz; rollback raporunda `checkedAt`, `drillStartedAt` ve `drillCompletedAt`
@@ -271,7 +271,7 @@ pnpm backup:restore:smoke
   ve her gömülü report blok anahtar seti de tam ve beklenmeyen alansız olmalıdır.
   Final kapanışta `PRODUCTION_EVIDENCE_SUMMARY_TARGET`, `LIVE_STATUS_EVIDENCE_TARGET`,
   `PILOT_EVIDENCE_TARGET` ve `GO_LIVE_EVIDENCE_TARGET` birlikte verilerek
-  `pnpm prod:external-evidence:check` çalıştırılır; target'sız `ops:check` veya `0/18`
+  `pnpm prod:external-evidence:check` çalıştırılır; target'sız `ops:check` veya kısmi
   Canlı Durum sonucu final dış kanıt sayılmaz. `*_ALLOW_EXAMPLE_EVIDENCE=1` bayrakları
   bu final kapıda kabul edilmez; örnek fixture gevşetmeleri yalnız template kontrolleri içindir.
   Bu final target'lar lokal temp path, `artifacts/local/**`, `docs/evidence-templates/**`
@@ -285,7 +285,7 @@ pnpm backup:restore:smoke
   başlamaz; remote node komutları da bu bayrakları `env -u` ile temizleyerek çalışır.
   `release-summary.json`, `live-status.json`, `pilot.json` veya
   `go-live.json` eksikse remote readiness kırmızı kalır; bu eksiklik target'sız `ops:check`
-  veya `0/18` Canlı Durum sonucu ile kapatılamaz.
+  veya kısmi Canlı Durum sonucu ile kapatılamaz.
   `productionEvidenceSummary.generatedAt` değerinin bağlı summary `generatedAt` değeriyle eşleştiğini,
   bağlı summary içindeki smoke evidence ve report alanlarının `environment=production` olduğunu, smoke evidence `generatedAt` tarihlerinin summary
   `generatedAt` veya go-live kararından sonra olmadığını, production summary içindeki UAT
@@ -298,8 +298,8 @@ pnpm backup:restore:smoke
   `checkedAt`/`drillDate` tarihlerinin summary `generatedAt` veya go-live kararından sonra olmadığını doğrular. Normal
   `go-live:check` çalışması `.test`/`example`/`redacted`/
   placeholder host, image, provider, recipient, Sentry event, backup/WAL target, approver, owner, summary
-  veya artifact referanslarını kabul etmez; linked summary deployment region `evidenceReference`,
-  deployment rollback `commandsPassed`, servis image/evidence referansları ve `evidenceReferences`
+  veya artifact referanslarını kabul etmez; linked summary deployment rollback `commandsPassed`,
+  servis image/evidence referansları ve `evidenceReferences`
   alanlarını, GitHub CI `runUrl`, `commitSha`, `workflowUsesSingleCiCommand` ve `githubCiPassed`
   değerlerini, RLS live `schema.tablesVerified`, `crossTenantReadRows`, `withCheckRejects`,
   `loadSmoke.actualRps` ve `rlsLivePassed` değerlerini, audit null tenant `unknown.count=0`
@@ -329,13 +329,8 @@ pnpm backup:restore:smoke
   deploy zincirine dahil değildir; Faz 10 kapanışında çalıştırılır.
 - Kurum `/kurum/canli-yayin` ekranı production kanıt zincirini, release özet alanlarını ve dış ortam
   kanıt gereksinimlerini ops görünümünde listeler.
-- TR datacenter/provider kanıtı varsa `pnpm deployment:region:check` ile doğrulanır.
-  Rapor top-level alan kümesi ve `api`, `worker`, `postgres`, `redis`, `object-storage` tam servis
-  seti ile boş `gaps` listesi `prod:evidence:templates:check` içindeki fazla alan/servis ve
-  invalid/non-empty gaps negatifleriyle korunur. Public IP geolocation/ASN lookup tek başına
-  provider console, sözleşme veya kalıcı first-party artifact yerine geçemez.
-  Staging deploy workflow'u bu artifact'i üretmez; `DEPLOYMENT_REGION_TARGET` secret içindeki
-  mevcut kalıcı kanıt URL'sini kullanır.
+- TR datacenter/provider kanıtı v1 go-live zincirinde zorunlu değildir; sunucu lokasyonu operasyon
+  envanterinde tutulur ve `DEPLOYMENT_REGION_TARGET` staging/prod release secret'ı değildir.
 - SMS v1 kapsamı kapalıdır: staging/prod release env içinde `SMS_ENABLED=false`,
   `NEXT_PUBLIC_SMS_ENABLED=false`, `SMS_PROVIDER=noop` ve `SMS_ALLOW_NOOP_IN_PRODUCTION=false`
   kalır; `pnpm sms:smoke` bu kapsam dışı yolu `provider=disabled`, `segments=0` ve
@@ -966,7 +961,7 @@ Normal production çalışmasında üretici `--output` hedefinin go-live raporun
 Bundle sözleşmesi `docs/evidence-templates/live-status.example.json` ve
 `docs/evidence-templates/live-status-pass-readiness.example.md` fixture'ı ile
 `pnpm prod:evidence:templates:check` zincirinde korunur; bundle top-level alanları ve her gate
-item alan seti tam ve beklenmeyen alansız olmalı, 18 gate satırı tam ve tekrarsız taşınmalı,
+item alan seti tam ve beklenmeyen alansız olmalı, 17 gate satırı tam ve tekrarsız taşınmalı,
 her gate `command` ve `source` değeri kanonik listeyle eşleşmeli, `checkedAt` geçerli tarih olmalı,
 `evidenceReference` ilgili source artifact referansından türemeli, `checkedAt` ilgili
 smoke/report/pilot/go-live kaynak tarihinden türemeli ve bundle `generatedAt` sonrasına düşmemelidir.
@@ -997,8 +992,8 @@ kvkk-inventory top-level/count/coverage/action/gaps shape fazlası,
 restore-drill top-level/tableCounts shape fazlası,
 rate-limit top-level/config/instance/API/login/path/command/gaps shape fazlası,
 RLS live top-level/schema/isolation/loadSmoke/table/command/gaps shape fazlası,
-pilot top-level/nested/assessment/gaps shape fazlası, deployment region top-level/servis/gaps
-shape fazlası, deployment rollback top-level/servis/komut/gaps shape, kronoloji fazlası ve release=rollback sapması, external monitoring outage chronology/latency, production summary smoke environment, Traefik URL origin, external monitoring URL origin, live exam cycle release/app/API ve UAT release/rollback/restore eşleşme sapmaları, go-live `gatesPassed` fazlası
+pilot top-level/nested/assessment/gaps shape fazlası, deployment rollback top-level/servis/komut/gaps
+shape, kronoloji fazlası ve release=rollback sapması, external monitoring outage chronology/latency, production summary smoke environment, Traefik URL origin, external monitoring URL origin, live exam cycle release/app/API ve UAT release/rollback/restore eşleşme sapmaları, go-live `gatesPassed` fazlası
 ve live-status source-date/evidenceReference sapmaları, bağlı live-status duplicate gate/top-level/gate item shape fazlası, target, source-date ve evidenceReference sapmaları, production summary
 top-level/check-list/check-field/smoke/report/report-field fazlası, check status/script/duplicate sapmaları ve smoke/report tarih negatifleri, go-live top-level/production-summary/
 deployment/approval shape fazlası, go-live `checksPassed` fazlası, bağlı summary duplicate check,
@@ -1009,7 +1004,6 @@ summary/pilot/go-live kaynak ve go-live linked pilot gaps negatif fixture'ların
 - Yerel geliştirme canlı smoke: `PASS` (2026-05-31; `pnpm live:smoke`)
 - Kurum canlı yayın kanıt ekranı: `PASS` (2026-06-02; web typecheck ve hedefli Playwright kurum smoke)
 - Traefik HTTPS smoke: `NOT_RUN`
-- TR datacenter/provider kanıtı: `NOT_RUN`
 - Live exam cycle kanıtı: `STAGING_PASS_WITH_FINAL_CHAIN_PENDING`
 - iSEM optical pipeline kanıtı: `STAGING_PASS_WITH_FINAL_CHAIN_PENDING`
 - Live UI-worker result kanıtı: `STAGING_PASS_WITH_FINAL_CHAIN_PENDING`

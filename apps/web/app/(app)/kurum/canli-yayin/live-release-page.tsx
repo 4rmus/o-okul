@@ -47,7 +47,6 @@ const productionEvidenceSteps = [
   "Alert webhook",
   "Off-host backup target",
   "WAL archive target",
-  "Deployment region evidence",
   "Deployment rollback evidence",
   "Restore drill evidence",
   "KVKK inventory evidence",
@@ -68,7 +67,6 @@ const summaryFields = [
   "reports.uat.rollbackImageTag",
   "reports.uat.journeyScenariosVerified",
   "reports.restoreDrill.sourceBackup",
-  "reports.deploymentRegion.datacenterCountryCode",
   "reports.deploymentRollback.rollbackImageTag",
 ] as const;
 
@@ -87,7 +85,6 @@ const finalDecisionFields = [
 
 const openExternalEvidence = [
   "Staging/prod domain",
-  "TR datacenter/provider kanıtı",
   "SMS disabled path credential",
   "Notification provider credential",
   "Sentry DSN ve alert webhook",

@@ -75,8 +75,8 @@ const remoteEvidenceEnvPrefix = toEnvPrefix(targetEnv);
 const liveStatus = runRemote("Remote live status", `${rootCommand} && ${remoteEvidenceEnvPrefix} node scripts/check-live-status-evidence.mjs`);
 if (liveStatus.status !== 0) {
   failures.push(formatRemoteFailure("Remote live:status:check başarısız", liveStatus));
-} else if (!liveStatus.stdout.includes("Live status evidence kontrolü geçti: 18/18 dış kanıt PASS.")) {
-  failures.push("Remote live:status:check 18/18 dış kanıt PASS üretmeli; target'sız veya eski gate seti final kanıt değildir.");
+} else if (!hasFullPassLiveStatus(liveStatus.stdout)) {
+  failures.push("Remote live:status:check tam dış kanıt PASS üretmeli; target'sız veya eski gate seti final kanıt değildir.");
 }
 
 const remoteFinal = runRemote(
@@ -92,6 +92,11 @@ if (failures.length > 0) {
 }
 
 console.log(`Remote final evidence readiness geçti: ${host}:${root}`);
+
+function hasFullPassLiveStatus(output) {
+  const match = output.match(/Live status evidence kontrolü geçti: (\d+)\/(\d+) dış kanıt PASS\./);
+  return Boolean(match && match[1] === match[2]);
+}
 
 function collectTargetEnv() {
   const output = {};

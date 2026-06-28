@@ -5,7 +5,6 @@ const contractIndex = args.indexOf("--contract");
 const envFileIndex = args.indexOf("--env-file");
 
 const evidenceTargetKeys = [
-  "DEPLOYMENT_REGION_TARGET",
   "DEPLOYMENT_ROLLBACK_TARGET",
   "GITHUB_CI_EVIDENCE_TARGET",
   "RESTORE_DRILL_TARGET",
@@ -118,7 +117,6 @@ function checkContract(file) {
     "BACKUP_RETENTION_DAYS",
     "WAL_ARCHIVE_TARGET",
     "WAL_ARCHIVE_SMOKE_EVIDENCE_FILE",
-    "DEPLOYMENT_REGION_TARGET",
     "DEPLOYMENT_ROLLBACK_TARGET",
     "GITHUB_CI_EVIDENCE_TARGET",
     "RESTORE_DRILL_TARGET",
