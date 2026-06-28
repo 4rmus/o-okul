@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
+import { registerTestLoginIdentity, testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 
@@ -10,7 +11,6 @@ describe("TenantController", () => {
   let server: Parameters<typeof request>[0];
   let systemToken: string;
   let adminToken: string;
-  let expiredTenantToken: string;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -23,15 +23,14 @@ describe("TenantController", () => {
 
     systemToken = await login("system@example.test");
     adminToken = await login("admin-a@example.test");
-    expiredTenantToken = await login("expired-tenant@example.test");
   });
 
   afterAll(async () => {
     await app.close();
   });
 
-  async function login(email: string): Promise<string> {
-    const response = await request(server).post("/auth/login").send({ email, password: "password" }).expect(200);
+  async function login(email: string, password?: string): Promise<string> {
+    const response = await request(server).post("/auth/login").send(testLoginBody(email, password)).expect(200);
     return (response.body as { accessToken: string }).accessToken;
   }
 
@@ -233,12 +232,42 @@ describe("TenantController", () => {
 
   it("expired tenant bearer token ile okuma yapar ama yazma isteği başlatamaz", async () => {
     await request(server)
+      .post("/tenants")
+      .set("Authorization", `Bearer ${systemToken}`)
+      .send({
+        id: "tenant-readonly-expired-e2e",
+        name: "Tenant Readonly Expired E2E",
+        slug: "tenant-readonly-expired-e2e",
+        licenseEndsAt: "2030-01-01T00:00:00.000Z",
+        firstAdmin: {
+          name: "Readonly Expired Admin",
+          email: "readonly-expired-admin@example.test",
+          nationalId: "10000002126",
+          phone: "5550000021",
+        },
+      })
+      .expect(201);
+
+    registerTestLoginIdentity("readonly-expired-admin@example.test", {
+      nationalId: "10000002126",
+      password: "5550000021",
+      tenantSlug: "tenant-readonly-expired-e2e",
+    });
+    const expiredTenantToken = await login("readonly-expired-admin@example.test", "5550000021");
+
+    await request(server)
+      .patch("/tenants/tenant-readonly-expired-e2e")
+      .set("Authorization", `Bearer ${systemToken}`)
+      .send({ licenseEndsAt: "2020-01-01T00:00:00.000Z" })
+      .expect(200);
+
+    await request(server)
       .get("/me/profile")
       .set("Authorization", `Bearer ${expiredTenantToken}`)
       .expect(200)
       .expect(({ body }) => {
         expect(body).toMatchObject({
-          tenantId: "tenant-expired",
+          tenantId: "tenant-readonly-expired-e2e",
           roles: ["TENANT_ADMIN"],
         });
       });

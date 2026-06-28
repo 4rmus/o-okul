@@ -47,7 +47,7 @@ test.describe("Liste URL state", () => {
     await expect(teacherSummary).toContainText("Portal hazır");
     await expect(teacherSummary.getByLabel("Öğretmen operasyon özeti aksiyon kuyruğu")).toBeVisible();
     await expect(teacherSummary).toContainText("Branş temizliği");
-    await expect(teacherSummary).toContainText("Portal daveti");
+    await expect(teacherSummary).toContainText("Portal hesabı");
     await expect(teachersRegion.getByLabel("Ara")).toHaveValue("mat");
     await expect(teachersRegion.getByLabel("Sırala")).toHaveValue("-firstName");
     await expect(teachersRegion.getByLabel("Göster")).toHaveValue("20");
@@ -62,29 +62,23 @@ test.describe("Liste URL state", () => {
     await expect.poll(() => new URL(page.url()).searchParams.get("sort")).toBe("lastName");
   });
 
-  test("iki listeli kullanıcı ekranında URL state namespace ile ayrılır", async ({ page }) => {
+  test("kullanıcı ekranında URL state namespace ile ayrılır", async ({ page }) => {
     const captured = createCapturedRequests();
     await openWithListMocks(
       page,
       captured,
-      "/kurum/kullanicilar?usersPage=2&usersLimit=20&usersQ=admin&usersSort=email&invitationsPage=2&invitationsLimit=5&invitationsQ=veli&invitationsSort=-expiresAt",
+      "/kurum/kullanicilar?usersPage=2&usersLimit=20&usersQ=admin&usersSort=email",
     );
 
     const usersRegion = page.getByLabel("Kullanıcı ve rol yönetimi");
-    const invitationsRegion = page.getByLabel("Kimlik davetleri");
     await expect(usersRegion.getByLabel("Ara")).toHaveValue("admin");
     await expect(usersRegion.getByLabel("Sırala")).toHaveValue("email");
     await expect(usersRegion.getByLabel("Göster")).toHaveValue("20");
-    await expect(invitationsRegion.getByLabel("Ara")).toHaveValue("veli");
-    await expect(invitationsRegion.getByLabel("Sırala")).toHaveValue("-expiresAt");
-    await expect(invitationsRegion.getByLabel("Göster")).toHaveValue("5");
     await expect.poll(() => captured.users.at(-1)?.get("q")).toBe("admin");
-    await expect.poll(() => captured.invitations.at(-1)?.get("q")).toBe("veli");
 
-    await invitationsRegion.getByLabel("Ara").fill("sms");
-    await expect.poll(() => new URL(page.url()).searchParams.get("usersQ")).toBe("admin");
-    await expect.poll(() => new URL(page.url()).searchParams.get("invitationsQ")).toBe("sms");
-    await expect.poll(() => new URL(page.url()).searchParams.get("invitationsPage")).toBe("1");
+    await usersRegion.getByLabel("Ara").fill("yardımcı");
+    await expect.poll(() => new URL(page.url()).searchParams.get("usersQ")).toBe("yardımcı");
+    await expect.poll(() => new URL(page.url()).searchParams.get("usersPage")).toBe("1");
   });
 
   test("kullanıcı rol taslağını kaydetmeden mutasyona göndermez ve kayıttan sonra temizler", async ({ page }) => {
@@ -92,11 +86,11 @@ test.describe("Liste URL state", () => {
     await openWithListMocks(page, captured, "/kurum/kullanicilar");
 
     const usersRegion = page.getByLabel("Kullanıcı ve rol yönetimi");
-    const summary = usersRegion.getByRole("region", { exact: true, name: "Kullanıcı ve davet operasyon özeti" });
+    const summary = usersRegion.getByRole("region", { exact: true, name: "Kullanıcı operasyon özeti" });
     const saveButton = page.getByRole("button", { name: "Admin Kullanıcı rollerini kaydet" });
     const adminRoles = usersRegion.getByLabel("Admin Kullanıcı rolleri", { exact: true });
     await expect(summary).toContainText("Kullanıcı toplamı");
-    await expect(summary).toContainText("Davet bekliyor");
+    await expect(summary).toContainText("TC + telefon girişi");
     await expect(summary).toContainText("Rol taslağı");
     await expect(adminRoles.locator(".next-role-grid--compact .uh-checkbox")).toHaveCount(2);
     await expect(adminRoles).toContainText("Tüm kurum operasyonları");
@@ -131,59 +125,16 @@ test.describe("Liste URL state", () => {
     }
   });
 
-  test("davet oluşturma ve yenileme aktivasyon tokenını reveal dışında saklı tutar", async ({ page }) => {
+  test("kullanıcı ekranı davet tokenı göstermeden PII maskesini korur", async ({ page }) => {
     const captured = createCapturedRequests();
     await openWithListMocks(page, captured, "/kurum/kullanicilar");
 
-    await page.getByRole("button", { name: "Davet oluştur" }).click();
-    const dialog = page.getByRole("dialog", { name: "Davet oluştur" });
-    await dialog.getByLabel("Kişi türü").selectOption("STUDENT");
-    await dialog.getByRole("combobox", { name: "Kişi", exact: true }).selectOption("student-a");
-    const invitationContext = dialog.getByLabel("Davet bağlamı");
-    await expect(invitationContext).toHaveClass(/uh-info-grid/);
-    await expect(invitationContext.locator(".uh-info-item")).toHaveCount(1);
-    await expect(invitationContext).toContainText("Ada Kaya");
-    await dialog.getByLabel("E-posta").fill("ada.portal@example.test");
-    await dialog.getByLabel("Ad Soyad").fill("Ada Portal");
-    await page.getByRole("button", { name: "Oluştur", exact: true }).click();
-
-    await expect.poll(() => captured.invitationCreates).toHaveLength(1);
-    expect(captured.invitationCreates[0]).toMatchObject({
-      authorization: "Bearer list-url-access-token",
-      body: {
-        email: "ada.portal@example.test",
-        name: "Ada Portal",
-        subjectId: "student-a",
-        subjectType: "STUDENT",
-      },
-    });
-
-    const tokenPanel = page.getByLabel("Son aktivasyon tokenı");
-    await expect(tokenPanel).toContainText("ada.portal@example.test");
-    await expect(tokenPanel).toContainText("Token maskeli");
-    await expect(page.locator("body")).not.toContainText("activation-token-created-secret");
-    await tokenPanel.getByRole("button", { name: "Tokenı göster" }).click();
-    await expect(tokenPanel).toContainText("Token açık");
-    await expect(tokenPanel).toContainText("activation-token-created-secret");
-    await tokenPanel.getByRole("button", { name: "Tokenı gizle" }).click();
-    await expect(page.locator("body")).not.toContainText("activation-token-created-secret");
-    await tokenPanel.getByRole("button", { name: "Tokenı kapat" }).click();
+    await expect(page.getByRole("button", { name: "Davet oluştur" })).toHaveCount(0);
     await expect(page.getByLabel("Son aktivasyon tokenı")).toHaveCount(0);
-    await expect(page.locator("body")).not.toContainText("activation-token-created-secret");
+    expect(captured.invitationCreates).toEqual([]);
+    expect(captured.invitationResends).toEqual([]);
 
-    await page.getByRole("button", { name: "Veli Daveti davetini yenile" }).click();
-    await expect.poll(() => captured.invitationResends).toEqual([
-      { authorization: "Bearer list-url-access-token", id: "invitation-a" },
-    ]);
-    const resentTokenPanel = page.getByLabel("Son aktivasyon tokenı");
-    await expect(resentTokenPanel).toContainText("veli@liste-akademi.example");
-    await expect(page.locator("body")).not.toContainText("activation-token-resent-secret");
-    await resentTokenPanel.getByRole("button", { name: "Tokenı göster" }).click();
-    await expect(resentTokenPanel).toContainText("activation-token-resent-secret");
-    await resentTokenPanel.getByRole("button", { name: "Tokenı kapat" }).click();
-    await expect(page.locator("body")).not.toContainText("activation-token-resent-secret");
-
-    for (const value of ["12345678901", "+905551234567", "guardian-private@example.test"]) {
+    for (const value of ["12345678901", "+905551234567", "guardian-private@example.test", "activation-token-created-secret", "activation-token-resent-secret"]) {
       await expect(page.locator("body")).not.toContainText(value);
     }
   });
@@ -521,16 +472,13 @@ test.describe("Liste URL state", () => {
       await expect(teacherSummary).toContainText("Branş kapsamı");
       await expect(teacherSummary).toContainText("Portal hazır");
       await expect(teacherSummary).toContainText("Atama bağlamı");
-      await expect(teacherSummary).toContainText("Davet aksiyonu açık");
+      await expect(teacherSummary).toContainText("Portal hesabı");
       await expect(teacherSummary).toContainText("Branş temizliği");
       await expect(teacherSummary).toContainText("Atama referansı");
-      await expect(teachersRegion.getByRole("table", { name: "Öğretmen operasyon listesi" })).toBeVisible();
-      await expect(teachersRegion.getByText("Davet bekliyor")).toBeVisible();
+      const teachersTable = teachersRegion.getByRole("table", { name: "Öğretmen operasyon listesi" });
+      await expect(teachersTable).toBeVisible();
+      await expect(teachersTable.getByText("TC + telefon bekliyor")).toBeVisible();
       await expect(teachersRegion.getByRole("link", { name: "Zeynep detay" })).toBeVisible();
-      await expect(teachersRegion.getByRole("link", { name: "Zeynep portal daveti gönder" })).toHaveAttribute(
-        "href",
-        /invite=teacher&subjectId=teacher-a/,
-      );
 
       for (const value of ["12345678901", "+905551234567", "ada.kaya@example.test", "5554443322"]) {
         await expect(page.locator("body")).not.toContainText(value);

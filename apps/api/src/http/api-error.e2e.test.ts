@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { INestApplication, ServiceUnavailableException } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
+import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 import { HealthService } from "../health/health.service.js";
@@ -39,7 +40,7 @@ describe("API error envelope", () => {
 
     const login = await request(server)
       .post("/auth/login")
-      .send({ email: "admin-a@example.test", password: "password" })
+      .send(testLoginBody("admin-a@example.test"))
       .expect(200);
     tenantAAccessToken = (login.body as { accessToken: string }).accessToken;
   });
@@ -91,7 +92,7 @@ describe("API error envelope", () => {
   it("auth login gövde validasyon hatalarını 422 alan listesiyle döner", async () => {
     const response = await request(server)
       .post("/auth/login")
-      .send({ email: "gecersiz", password: 123 })
+      .send({ tenantSlug: " ", nationalId: " ", password: 123 })
       .expect(422);
 
     expect(response.body).toMatchObject({
@@ -100,7 +101,8 @@ describe("API error envelope", () => {
         message: "İstek gövdesi geçersiz.",
         details: {
           fields: expect.arrayContaining([
-            expect.objectContaining({ path: "email" }),
+            expect.objectContaining({ path: "tenantSlug" }),
+            expect.objectContaining({ path: "nationalId" }),
             expect.objectContaining({ path: "password" }),
           ]),
         },

@@ -28,7 +28,7 @@ test.describe("Next erişilebilirlik smoke", () => {
     const loginForm = page.getByRole("form", { name: "Giriş formu" });
     await expect(loginForm.getByLabel("Kurum kodu")).toBeVisible();
     await expect(loginForm.getByLabel("TC kimlik no")).toBeVisible();
-    await expect(loginForm.getByLabel("Şifre", { exact: true })).toBeVisible();
+    await expect(loginForm.getByLabel("Telefon", { exact: true })).toBeVisible();
     await expect(loginForm.getByRole("textbox", { name: /E-posta/ })).toHaveCount(0);
     await expect(loginForm.getByRole("button", { name: "Giriş yap" })).toBeVisible();
     await expectNoHighImpactA11yViolations(page, "login");

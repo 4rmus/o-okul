@@ -3,6 +3,7 @@ import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import ExcelJS from "exceljs";
 import request from "supertest";
+import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 
@@ -24,19 +25,19 @@ describe("Audit log API", () => {
 
     const login = await request(server)
       .post("/auth/login")
-      .send({ email: "admin-a@example.test", password: "password" })
+      .send(testLoginBody("admin-a@example.test"))
       .expect(200);
     tenantAAccessToken = (login.body as { accessToken: string }).accessToken;
 
     const teacherLogin = await request(server)
       .post("/auth/login")
-      .send({ email: "teacher-a@example.test", password: "password" })
+      .send(testLoginBody("teacher-a@example.test"))
       .expect(200);
     teacherAAccessToken = (teacherLogin.body as { accessToken: string }).accessToken;
 
     const systemLogin = await request(server)
       .post("/auth/login")
-      .send({ email: "system@example.test", password: "password" })
+      .send(testLoginBody("system@example.test"))
       .expect(200);
     systemAccessToken = (systemLogin.body as { accessToken: string }).accessToken;
   });
@@ -961,7 +962,7 @@ describe("Audit log API", () => {
   it("kullanıcı kendi hesap PII temizleme işlemini self-service yapar ve ham email/ad audit'e yazılmaz", async () => {
     const login = await request(server)
       .post("/auth/login")
-      .send({ email: "privacy@example.test", password: "password" })
+      .send(testLoginBody("privacy@example.test"))
       .expect(200);
     const accessToken = (login.body as { accessToken: string }).accessToken;
 
@@ -978,7 +979,7 @@ describe("Audit log API", () => {
 
     await request(server)
       .post("/auth/login")
-      .send({ email: "privacy@example.test", password: "password" })
+      .send(testLoginBody("privacy@example.test"))
       .expect(401);
 
     const response = await request(server)

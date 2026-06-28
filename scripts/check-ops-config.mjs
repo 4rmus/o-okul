@@ -1044,6 +1044,8 @@ const expectations = {
     "uptime_kuma_data:/app/data",
   ],
   ".github/workflows/staging-deploy.yml": [
+    "workflow_run:",
+    "github.event.workflow_run.conclusion == 'success'",
     "Validate staging dispatch inputs and environment",
     "STAGING_NEXT_PUBLIC_API_URL must be an https:// URL.",
     "STAGING_DEPLOY_DIR must be /root/o-okul.",
@@ -1074,7 +1076,8 @@ const expectations = {
     "if-no-files-found: ignore",
     "if: always()",
     "actions/download-artifact@v4",
-    "staging-github-ci-evidence-${{ github.sha }}",
+    "staging-github-ci-evidence-${{ needs.build-images.outputs.deploy-sha }}",
+    "pnpm --filter @o-okul/db exec prisma migrate deploy --config prisma.config.ts",
     "Check pre-deploy GitHub CI evidence",
     "GITHUB_CI_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/github-ci.json",
     "PRODUCTION_EVIDENCE_SUMMARY_TARGET=file://$PWD/artifacts/staging/release-summary-${IMAGE_TAG}.json",

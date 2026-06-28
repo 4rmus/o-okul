@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
+import { registerTestLoginIdentity, testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../app.module.js";
 import { IdentityInvitationService } from "./identity-invitation.service.js";
@@ -27,7 +28,7 @@ describe("Identity invitations", () => {
   });
 
   async function login(email: string, password = "password"): Promise<string> {
-    const response = await request(server).post("/auth/login").send({ email, password }).expect(200);
+    const response = await request(server).post("/auth/login").send(testLoginBody(email, password)).expect(200);
     return (response.body as { accessToken: string }).accessToken;
   }
 
@@ -76,7 +77,7 @@ describe("Identity invitations", () => {
     const student = await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${admin}`)
-      .send({ firstName: "Davet", lastName: "Ogrenci" })
+      .send({ firstName: "Davet", lastName: "Ogrenci", nationalId: "10000001754" })
       .expect(201);
     const studentId = (student.body as { id: string }).id;
 
@@ -157,7 +158,7 @@ describe("Identity invitations", () => {
     const teacher = await request(server)
       .post("/teachers")
       .set("Authorization", `Bearer ${admin}`)
-      .send({ firstName: "Davet", lastName: "Ogretmen", branch: "Fen" })
+      .send({ firstName: "Davet", lastName: "Ogretmen", branch: "Fen", nationalId: "10000001822" })
       .expect(201);
     const teacherId = (teacher.body as { id: string }).id;
     const { response: invite, activationToken: oldToken } = await captureCreateActivationToken(() =>
@@ -206,17 +207,22 @@ describe("Identity invitations", () => {
         firstAdmin: {
           name: "Seat Invitations Admin",
           email: "seat-invitations-admin@example.test",
-          mode: "password",
-          password: "password1",
+          nationalId: "10000000450",
+          phone: "5551234567",
         },
       })
       .expect(201);
 
-    const admin = await login("seat-invitations-admin@example.test", "password1");
+    registerTestLoginIdentity("seat-invitations-admin@example.test", {
+      nationalId: "10000000450",
+      password: "5551234567",
+      tenantSlug: "seat-invitations-tenant",
+    });
+    const admin = await login("seat-invitations-admin@example.test", "5551234567");
     const teacher = await request(server)
       .post("/teachers")
       .set("Authorization", `Bearer ${admin}`)
-      .send({ firstName: "Seat", lastName: "Teacher", branch: "Math" })
+      .send({ firstName: "Seat", lastName: "Teacher", branch: "Math", nationalId: "10000001990" })
       .expect(201);
     const teacherId = (teacher.body as { id: string }).id;
 

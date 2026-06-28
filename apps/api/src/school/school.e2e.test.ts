@@ -3,6 +3,7 @@ import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import ExcelJS from "exceljs";
 import request from "supertest";
+import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 import { TeacherImportService } from "./teacher-import.service.js";
@@ -30,25 +31,25 @@ describe("School management API", () => {
 
     const login = await request(server)
       .post("/auth/login")
-      .send({ email: "admin-a@example.test", password: "password" })
+      .send(testLoginBody("admin-a@example.test"))
       .expect(200);
     tenantAAccessToken = (login.body as { accessToken: string }).accessToken;
 
     const teacherLogin = await request(server)
       .post("/auth/login")
-      .send({ email: "teacher-a@example.test", password: "password" })
+      .send(testLoginBody("teacher-a@example.test"))
       .expect(200);
     teacherAAccessToken = (teacherLogin.body as { accessToken: string }).accessToken;
 
     const studentLogin = await request(server)
       .post("/auth/login")
-      .send({ email: "student-a@example.test", password: "password" })
+      .send(testLoginBody("student-a@example.test"))
       .expect(200);
     studentAAccessToken = (studentLogin.body as { accessToken: string }).accessToken;
 
     const guardianLogin = await request(server)
       .post("/auth/login")
-      .send({ email: "guardian-a@example.test", password: "password" })
+      .send(testLoginBody("guardian-a@example.test"))
       .expect(200);
     guardianAAccessToken = (guardianLogin.body as { accessToken: string }).accessToken;
   });
@@ -695,7 +696,7 @@ describe("School management API", () => {
     const created = await request(server)
       .post("/teachers")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ firstName: "Gizli", lastName: "Ogretmen", branch: "Matematik", nationalId: "10000000146", phone: "0 555 000 00 10" })
+      .send({ firstName: "Gizli", lastName: "Ogretmen", branch: "Matematik", nationalId: "10000001204", phone: "0 555 000 00 10" })
       .expect(201);
     const teacherId = (created.body as { id: string }).id;
     expect(created.body).not.toHaveProperty("userId");
@@ -706,7 +707,7 @@ describe("School management API", () => {
     await request(server)
       .post("/teachers")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ firstName: "Ayni", lastName: "Tc", nationalId: "10000000146", phone: "5550000011" })
+      .send({ firstName: "Ayni", lastName: "Tc", nationalId: "10000001204", phone: "5550000011" })
       .expect(409);
 
     await request(server)
@@ -750,7 +751,7 @@ describe("School management API", () => {
     const created = await request(server)
       .post("/guardians")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ firstName: "Can", lastName: "Veli", nationalId: "10000000146", phone: "+90 500 000 00 10" })
+      .send({ firstName: "Can", lastName: "Veli", nationalId: "10000001372", phone: "+90 500 000 00 10" })
       .expect(201);
     expect(created.body.phone).toBe("5000000010");
     expect(created.body).not.toHaveProperty("nationalIdEncrypted");
@@ -761,7 +762,7 @@ describe("School management API", () => {
     await request(server)
       .post("/guardians")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ firstName: "Ayni", lastName: "Veli", nationalId: "10000000146", phone: "5000000012" })
+      .send({ firstName: "Ayni", lastName: "Veli", nationalId: "10000001372", phone: "5000000012" })
       .expect(409);
 
     await request(server)
@@ -1062,7 +1063,7 @@ describe("School management API", () => {
       .post("/teachers/imports/dry-run")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
-        fileBase64: createCsvBase64("ad;soyad;brans;tc;telefon;atanacak_sinif;ders\nMerve;Import;Matematik;10000000214;0555 000 0012;8-A;Matematik\n"),
+        fileBase64: createCsvBase64("ad;soyad;brans;tc;telefon;atanacak_sinif;ders\nMerve;Import;Matematik;10000001440;0555 000 0012;8-A;Matematik\n"),
       })
       .expect(201)
       .expect(({ body }) => {
@@ -1080,7 +1081,7 @@ describe("School management API", () => {
               firstName: "Merve",
               lastName: "Import",
               accountPreview: {
-                usernameMasked: "*******0214",
+                usernameMasked: "*******1440",
                 willCreate: true,
               },
               row: 2,
@@ -1218,8 +1219,8 @@ describe("School management API", () => {
   it("öğretmen import commit tek öğretmen ve sınıf/ders atamaları oluşturur", async () => {
     const fileBase64 = createCsvBase64([
       "ad;soyad;brans;tc;telefon;atanacak_sinif;ders",
-      "Nehir;Import;Matematik;10000000382;5550000013;8-A;Matematik",
-      "Nehir;Import;Matematik;10000000382;5550000013;8-A;",
+      "Nehir;Import;Matematik;10000001518;5550000013;8-A;Matematik",
+      "Nehir;Import;Matematik;10000001518;5550000013;8-A;",
     ].join("\n"));
 
     const imported = await request(server)
@@ -1238,7 +1239,7 @@ describe("School management API", () => {
             expect.objectContaining({ classId: "class-a", role: "CLASS_TEACHER" }),
           ]),
         );
-        expect(JSON.stringify(body)).not.toContain("10000000382");
+        expect(JSON.stringify(body)).not.toContain("10000001518");
         expect(JSON.stringify(body)).not.toContain("nationalIdHash");
         expect(JSON.stringify(body)).not.toContain("nationalIdEncrypted");
         expect(JSON.stringify(body)).not.toContain("userId");
@@ -1246,7 +1247,7 @@ describe("School management API", () => {
 
     await request(server)
       .post("/auth/login")
-      .send({ tenantSlug: "dna-egitim", nationalId: "10000000382", password: "5550000013" })
+      .send({ tenantSlug: "dna-egitim", nationalId: "10000001518", password: "5550000013" })
       .expect(200)
       .expect(({ body }) => {
         expect(body.session).toMatchObject({ mustChangePassword: true });
@@ -1771,7 +1772,7 @@ describe("School management API", () => {
       .patch("/students/student-a/profile")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
-        nationalId: "10000000146",
+        nationalId: "10000001686",
         phone: "5551234567",
         email: "ada-purge@example.test",
         photoKey: "students/student-a/purge-photo.jpg",
@@ -1786,7 +1787,7 @@ describe("School management API", () => {
         expect(body.firstName).toBe("Anonim");
         expect(body.lastName).toBe("Ogrenci");
         expect(JSON.stringify(body)).not.toContain("student-tenant-a");
-        expect(JSON.stringify(body)).not.toContain("10000000146");
+        expect(JSON.stringify(body)).not.toContain("10000001686");
         expect(JSON.stringify(body)).not.toContain("ada-purge@example.test");
       });
 
@@ -1808,7 +1809,7 @@ describe("School management API", () => {
         expect(body.phone).toBeUndefined();
         expect(body.email).toBeUndefined();
         expect(body.photoKey).toBeUndefined();
-        expect(JSON.stringify(body)).not.toContain("10000000146");
+        expect(JSON.stringify(body)).not.toContain("10000001686");
         expect(JSON.stringify(body)).not.toContain("ada-purge@example.test");
       });
   });

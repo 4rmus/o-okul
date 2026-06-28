@@ -173,7 +173,8 @@ function checkWorkflowContract(output) {
     "GITHUB_CI_EVIDENCE_OUTPUT=\"artifacts/staging/reports/github-ci.json\" pnpm github-ci:generate",
     "GITHUB_CI_EVIDENCE_TARGET=\"file://$PWD/artifacts/staging/reports/github-ci.json\" pnpm github-ci:check",
     "actions/download-artifact@v4",
-    "staging-github-ci-evidence-${{ github.sha }}",
+    "staging-github-ci-evidence-${{ github.event.workflow_run.head_sha || github.sha }}",
+    "staging-github-ci-evidence-${{ needs.build-images.outputs.deploy-sha }}",
     "path: artifacts/staging/reports",
     "path: artifacts/staging/reports/github-ci.json",
     "Check pre-deploy GitHub CI evidence",
@@ -218,7 +219,7 @@ function checkWorkflowContract(output) {
     "GITHUB_CI_EVIDENCE_OUTPUT=\"artifacts/staging/reports/github-ci.json\" pnpm github-ci:generate",
     "GITHUB_CI_EVIDENCE_TARGET=\"file://$PWD/artifacts/staging/reports/github-ci.json\" pnpm github-ci:check",
     "actions/upload-artifact@v4",
-    "staging-github-ci-evidence-${{ github.sha }}",
+    "staging-github-ci-evidence-${{ github.event.workflow_run.head_sha || github.sha }}",
     "path: artifacts/staging/reports/github-ci.json",
   ]);
   requireWorkflowOrder(output, workflow, "staging evidence bundle order", [

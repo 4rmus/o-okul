@@ -704,6 +704,8 @@ base64 -w0 /path/to/staging-evidence.env
 
 Beklenen akış:
 
+- Workflow elle `workflow_dispatch` ile çalıştırılabilir; ayrıca `main` üstündeki `CI` workflow'u başarılı
+  bittiğinde otomatik çalışır.
 - Workflow önce dispatch input'larını, Docker tag biçimini, `STAGING_NEXT_PUBLIC_API_URL=https://...`
   değerini, `STAGING_EDGE_MODE=domain|ip` değerini ve gerekli staging secret/var varlığını doğrular.
 - Workflow `STAGING_EVIDENCE_ENV_B64` içeriğini decode eder, boş dosyayı reddeder ve
@@ -714,7 +716,7 @@ Beklenen akış:
   `prod:evidence:check --summary-file` bunları `artifacts/staging/smoke/*.json` altında üretir.
 - Workflow aynı commit'in başarılı `.github/workflows/ci.yml` run'ını GitHub API'dan okuyup
   `artifacts/staging/reports/github-ci.json` üretir, `pnpm github-ci:check` ile doğrular ve
-  `staging-github-ci-evidence-<sha>` artifact'i olarak saklar. Bu job geçmeden image build veya deploy başlamaz.
+  deploy SHA'sına bağlı `staging-github-ci-evidence-<sha>` artifact'i olarak saklar. Bu job geçmeden image build veya deploy başlamaz.
 - Workflow sonra `pnpm run ci` çalıştırmadan önce web Playwright Chromium bağımlılıklarını
   `pnpm --filter @o-okul/web exec playwright install --with-deps chromium` ile kurar.
 - `web`, `api`, `worker` ve `queue-board` image'ları GHCR'a commit SHA tag'i ve `staging-latest`
@@ -724,12 +726,14 @@ Beklenen akış:
   `docker/postgres/init` içeriğini SSH üzerinden staging deploy dizinine kopyalar; staging host'un
   repo clone yetkisine ihtiyacı yoktur.
 - `.env.release` dosyası `WEB_IMAGE`, `API_IMAGE`, `WORKER_IMAGE`, `QUEUE_BOARD_IMAGE`, `SENTRY_RELEASE` ve
-  `ROLLBACK_IMAGE_TAG` alanlarıyla yazılır.
+  `ROLLBACK_IMAGE_TAG` alanlarıyla yazılır; otomatik deploy'da rollback tag'i sunucudaki önceki
+  `.env.release` içindeki `SENTRY_RELEASE` değerinden alınır.
 - `GHCR_READ_TOKEN` uzak shell komut satırına gömülmez; SSH stdin ile `0600` benzeri izinli
   `.ghcr_read_token` dosyasına aktarılır, `docker login --password-stdin` sonrası trap ile silinir.
 - `docker compose --env-file .env --env-file .env.release -f docker-compose.yml
   -f docker-compose.release.yml -f docker-compose.traefik.yml pull web api worker queue-board` ile imajlar çekilir.
-- `docker compose ... run --rm api pnpm --filter @o-okul/db db:migrate` migration deploy'u çalıştırır.
+- `docker compose ... run --rm api pnpm --filter @o-okul/db exec prisma migrate deploy --config prisma.config.ts`
+  interaktif olmayan migration deploy'u çalıştırır.
 - `docker compose ... up -d --remove-orphans` Traefik'li staging stack'ini ayağa kaldırır.
   `evidence` servisi `artifacts/staging/reports` altındaki doğrulanmış JSON kanıtlarını
   `/evidence/*.json` olarak salt-okunur sunar; eksik kanıt dosyası bilinçli olarak 404 döner.

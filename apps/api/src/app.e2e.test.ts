@@ -3,6 +3,7 @@ import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import ExcelJS from "exceljs";
 import request from "supertest";
+import { testLoginBody } from "./test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "./app.module.js";
 
@@ -32,7 +33,7 @@ describe("API auth + tenant isolation", () => {
   });
 
   async function login(email: string) {
-    const response = await request(server).post("/auth/login").send({ email, password: "password" }).expect(200);
+    const response = await request(server).post("/auth/login").send(testLoginBody(email)).expect(200);
     const refreshCookie = getRefreshCookie(response.headers["set-cookie"]);
     const csrfCookie = getCookie(response.headers["set-cookie"], "csrfToken");
 
@@ -886,7 +887,7 @@ describe("API auth + tenant isolation", () => {
 
   it("student CSV dry-run hesap önizlemesini maskeli döner", async () => {
     const issued = await login("admin-a@example.test");
-    const fileBase64 = Buffer.from("\uFEFFad;soyad;tc_kimlik_no;telefon\nEce;Hesap;10000000146;0555 000 0014\n", "utf8").toString("base64");
+    const fileBase64 = Buffer.from("\uFEFFad;soyad;tc_kimlik_no;telefon\nEce;Hesap;10000001204;0555 000 0014\n", "utf8").toString("base64");
 
     const response = await request(server)
       .post("/students/imports/dry-run")
@@ -903,7 +904,7 @@ describe("API auth + tenant isolation", () => {
           firstName: "Ece",
           lastName: "Hesap",
           accountPreview: {
-            usernameMasked: "*******0146",
+            usernameMasked: "*******1204",
             willCreate: true,
           },
         },
@@ -913,13 +914,13 @@ describe("API auth + tenant isolation", () => {
     });
     expect(response.body.validRows[0]).not.toHaveProperty("nationalId");
     expect(response.body.validRows[0]).not.toHaveProperty("phone");
-    expect(JSON.stringify(response.body)).not.toContain("10000000146");
+    expect(JSON.stringify(response.body)).not.toContain("10000001204");
     expect(JSON.stringify(response.body)).not.toContain("5550000014");
   });
 
   it("student CSV dry-run TC tek başına gelirse hesap oluşturmayı sessiz geçmez", async () => {
     const issued = await login("admin-a@example.test");
-    const fileBase64 = Buffer.from("\uFEFFad;soyad;tc_kimlik_no\nEce;EksikTelefon;10000000146\n", "utf8").toString("base64");
+    const fileBase64 = Buffer.from("\uFEFFad;soyad;tc_kimlik_no\nEce;EksikTelefon;10000001372\n", "utf8").toString("base64");
 
     const response = await request(server)
       .post("/students/imports/dry-run")
@@ -934,7 +935,7 @@ describe("API auth + tenant isolation", () => {
       errors: [{ row: 2, field: "phone", code: "REQUIRED" }],
       wouldImport: false,
     });
-    expect(JSON.stringify(response.body)).not.toContain("10000000146");
+    expect(JSON.stringify(response.body)).not.toContain("10000001372");
   });
 
   it("student Excel dry-run üst açıklama satırını atlayıp başlıkları doğru çözer", async () => {
@@ -977,7 +978,7 @@ describe("API auth + tenant isolation", () => {
               "ece.velili@example.test",
               "5553219999",
               "2012-09-01",
-              "10000000146",
+              "10000001440",
               "8-A",
               "Fatma",
               "Velili",
@@ -1050,10 +1051,10 @@ describe("API auth + tenant isolation", () => {
         .expect(({ body }) => {
           expect(body).toMatchObject({
             email: "ece.velili@example.test",
-            nationalIdMasked: "*******0146",
+            nationalIdMasked: "*******1440",
             phone: "5553219999",
           });
-          expect(JSON.stringify(body)).not.toContain("10000000146");
+          expect(JSON.stringify(body)).not.toContain("10000001440");
         });
     } finally {
       if (studentId) {
@@ -1329,13 +1330,13 @@ describe("API auth + tenant isolation", () => {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       await request(server)
         .post("/auth/login")
-        .send({ email: "admin-b@example.test", password: "yanlis" })
+        .send(testLoginBody("admin-b@example.test", "yanlis"))
         .expect(401);
     }
 
     await request(server)
       .post("/auth/login")
-      .send({ email: "admin-b@example.test", password: "password" })
+      .send(testLoginBody("admin-b@example.test"))
       .expect(429);
   });
 });

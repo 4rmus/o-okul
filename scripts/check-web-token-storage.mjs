@@ -6,9 +6,6 @@ const storageReference = /\b(?:window\.)?(localStorage|sessionStorage)\b/g;
 const allowedLocalStorageCall =
   /\b(?:window\.)?localStorage\s*\.\s*(getItem|setItem|removeItem)\s*\(\s*([^,\n)]+)/g;
 const allowedLocalStorageKeys = {
-  "apps/web/app/(auth)/login/page.tsx": {
-    rememberedEmailStorageKey: "des.rememberedLoginEmail",
-  },
   "apps/web/app/(app)/app-shell.tsx": {
     sidebarGroupStorageKey: "des.sidebar.expandedGroups.v2",
   },

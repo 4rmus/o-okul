@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
+import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 import type { ProducedJob } from "../queue/job-producer.js";
@@ -31,13 +32,13 @@ describe("SmsBatch API", () => {
 
     const login = await request(server)
       .post("/auth/login")
-      .send({ email: "admin-a@example.test", password: "password" })
+      .send(testLoginBody("admin-a@example.test"))
       .expect(200);
     tenantAAccessToken = (login.body as { accessToken: string }).accessToken;
 
     const teacherLogin = await request(server)
       .post("/auth/login")
-      .send({ email: "teacher-a@example.test", password: "password" })
+      .send(testLoginBody("teacher-a@example.test"))
       .expect(200);
     teacherAAccessToken = (teacherLogin.body as { accessToken: string }).accessToken;
   });

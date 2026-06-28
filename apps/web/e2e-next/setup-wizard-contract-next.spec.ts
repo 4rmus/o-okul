@@ -58,10 +58,6 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await stepNavigation.getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
     await expect(setupForm.getByRole("group", { name: "Öğretmen veri girişi" })).toHaveClass(/uh-segmented-control/);
     await expect(setupForm.getByRole("group", { name: "Öğrenci veri girişi" })).toHaveClass(/uh-segmented-control/);
-    await expect(setupForm.locator(".next-onboarding-check.uh-checkbox")).toHaveCount(2);
-    await expect(setupForm.locator(".next-onboarding-check .uh-checkbox__input")).toHaveCount(2);
-    await expect(setupForm.getByLabel("Öğretmen portal davetleri hazırlansın")).toBeChecked();
-    await expect(setupForm.getByLabel("Veli portal davetleri öğrenci kayıtlarından sonra hazırlansın")).toBeChecked();
     await setupForm.getByLabel("Öğrenci aktarım dosyası").setInputFiles({
       buffer: Buffer.from("%PDF-1.7"),
       mimeType: "application/pdf",

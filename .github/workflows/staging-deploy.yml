@@ -11,6 +11,13 @@ on:
         description: "Last known-good image tag for rollback evidence."
         required: true
         type: string
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -23,6 +30,11 @@ concurrency:
 
 jobs:
   preflight:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 10
@@ -44,7 +56,6 @@ jobs:
           set -euo pipefail
 
           for key in \
-            ROLLBACK_IMAGE_TAG \
             STAGING_NEXT_PUBLIC_API_URL \
             STAGING_DEPLOY_DIR \
             STAGING_SSH_HOST \
@@ -59,6 +70,11 @@ jobs:
             fi
           done
 
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -z "${ROLLBACK_IMAGE_TAG:-}" ]; then
+            echo "ROLLBACK_IMAGE_TAG is required for manual staging deploy." >&2
+            exit 1
+          fi
+
           validate_tag() {
             local label="$1"
             local value="$2"
@@ -71,7 +87,9 @@ jobs:
           if [ -n "${REQUESTED_IMAGE_TAG:-}" ]; then
             validate_tag "image_tag" "$REQUESTED_IMAGE_TAG"
           fi
-          validate_tag "rollback_image_tag" "$ROLLBACK_IMAGE_TAG"
+          if [ -n "${ROLLBACK_IMAGE_TAG:-}" ]; then
+            validate_tag "rollback_image_tag" "$ROLLBACK_IMAGE_TAG"
+          fi
 
           case "$STAGING_NEXT_PUBLIC_API_URL" in
             https://*) ;;
@@ -111,6 +129,8 @@ jobs:
           fi
 
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -143,6 +163,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -161,6 +183,7 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           mkdir -p artifacts/staging/reports
           GITHUB_CI_EVIDENCE_OUTPUT="artifacts/staging/reports/github-ci.json" pnpm github-ci:generate
@@ -168,7 +191,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: staging-github-ci-evidence-${{ github.sha }}
+          name: staging-github-ci-evidence-${{ github.event.workflow_run.head_sha || github.sha }}
           path: artifacts/staging/reports/github-ci.json
 
   build-images:
@@ -179,8 +202,11 @@ jobs:
     outputs:
       image-prefix: ${{ steps.meta.outputs.image-prefix }}
       image-tag: ${{ steps.meta.outputs.image-tag }}
+      deploy-sha: ${{ steps.meta.outputs.deploy-sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -201,14 +227,21 @@ jobs:
 
       - id: meta
         shell: bash
+        env:
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          REQUESTED_IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
-          tag="${{ inputs.image_tag }}"
+          tag="$REQUESTED_IMAGE_TAG"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+            tag="$DEPLOY_SHA"
+          fi
           if [ -z "$tag" ]; then
-            tag="${GITHUB_SHA}"
+            tag="$DEPLOY_SHA"
           fi
           repository="$(echo "ghcr.io/${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
           echo "image-tag=$tag" >> "$GITHUB_OUTPUT"
           echo "image-prefix=$repository" >> "$GITHUB_OUTPUT"
+          echo "deploy-sha=$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Login to GHCR
         shell: bash
@@ -287,8 +320,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 25
+    outputs:
+      rollback-image-tag: ${{ steps.deploy-stack.outputs.rollback-image-tag }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build-images.outputs.deploy-sha }}
 
       - name: Configure SSH
         shell: bash
@@ -331,6 +368,7 @@ jobs:
             "tar -xzf '$STAGING_DEPLOY_DIR/compose.tgz' -C '$STAGING_DEPLOY_DIR' && rm -f '$STAGING_DEPLOY_DIR/compose.tgz'"
 
       - name: Deploy compose stack
+        id: deploy-stack
         shell: bash
         env:
           STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
@@ -350,14 +388,25 @@ jobs:
             STAGING_DEPLOY_DIR \
             GHCR_READ_TOKEN \
             IMAGE_PREFIX \
-            IMAGE_TAG \
-            ROLLBACK_IMAGE_TAG
+            IMAGE_TAG
           do
             if [ -z "${!key:-}" ]; then
               echo "$key is required for staging deploy." >&2
               exit 1
             fi
           done
+
+          if [ -z "${ROLLBACK_IMAGE_TAG:-}" ]; then
+            ROLLBACK_IMAGE_TAG="$(ssh -i ~/.ssh/staging_deploy_key \
+              -o StrictHostKeyChecking=accept-new \
+              "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+              "cd '$STAGING_DEPLOY_DIR' && sed -n 's/^SENTRY_RELEASE=//p' .env.release 2>/dev/null | head -n 1")"
+          fi
+          if ! [[ "$ROLLBACK_IMAGE_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "ROLLBACK_IMAGE_TAG must come from dispatch input or remote .env.release SENTRY_RELEASE." >&2
+            exit 1
+          fi
+          echo "rollback-image-tag=$ROLLBACK_IMAGE_TAG" >> "$GITHUB_OUTPUT"
 
           printf '%s' "$GHCR_READ_TOKEN" | ssh -i ~/.ssh/staging_deploy_key \
             -o StrictHostKeyChecking=accept-new \
@@ -426,7 +475,7 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.release.yml \
             -f "$EDGE_COMPOSE_FILE" \
-            run --rm -T api pnpm --filter @o-okul/db db:migrate < /dev/null
+            run --rm -T api pnpm --filter @o-okul/db exec prisma migrate deploy --config prisma.config.ts < /dev/null
 
           docker compose \
             --env-file .env \
@@ -455,6 +504,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build-images.outputs.deploy-sha }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -471,7 +522,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: staging-github-ci-evidence-${{ github.sha }}
+          name: staging-github-ci-evidence-${{ needs.build-images.outputs.deploy-sha }}
           path: artifacts/staging/reports
 
       - name: Decode staging evidence env
@@ -504,7 +555,7 @@ jobs:
         shell: bash
         env:
           IMAGE_TAG: ${{ needs.build-images.outputs.image-tag }}
-          ROLLBACK_IMAGE_TAG: ${{ inputs.rollback_image_tag }}
+          ROLLBACK_IMAGE_TAG: ${{ needs.deploy.outputs.rollback-image-tag }}
         run: |
           {
             echo "SENTRY_RELEASE=$IMAGE_TAG"

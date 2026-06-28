@@ -3,6 +3,7 @@ import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { NotificationAdapter, NotificationMessage, NotificationSendResult } from "@o-okul/notification-adapter";
 import request from "supertest";
+import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 import type { ProducedJob, TenantQueueJobInput } from "../queue/job-producer.js";
@@ -40,25 +41,25 @@ describe("Announcement API", () => {
 
     const login = await request(server)
       .post("/auth/login")
-      .send({ email: "admin-a@example.test", password: "password" })
+      .send(testLoginBody("admin-a@example.test"))
       .expect(200);
     tenantAAccessToken = (login.body as { accessToken: string }).accessToken;
 
     const teacherLogin = await request(server)
       .post("/auth/login")
-      .send({ email: "teacher-a@example.test", password: "password" })
+      .send(testLoginBody("teacher-a@example.test"))
       .expect(200);
     teacherAAccessToken = (teacherLogin.body as { accessToken: string }).accessToken;
 
     const studentLogin = await request(server)
       .post("/auth/login")
-      .send({ email: "student-a@example.test", password: "password" })
+      .send(testLoginBody("student-a@example.test"))
       .expect(200);
     studentAAccessToken = (studentLogin.body as { accessToken: string }).accessToken;
 
     const guardianLogin = await request(server)
       .post("/auth/login")
-      .send({ email: "guardian-a@example.test", password: "password" })
+      .send(testLoginBody("guardian-a@example.test"))
       .expect(200);
     guardianAAccessToken = (guardianLogin.body as { accessToken: string }).accessToken;
   });

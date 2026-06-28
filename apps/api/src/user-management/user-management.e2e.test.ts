@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
+import { registerTestLoginIdentity, testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 import { upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
@@ -25,7 +26,7 @@ describe("Tenant user management", () => {
   });
 
   async function login(email: string, password = "password"): Promise<string> {
-    const response = await request(server).post("/auth/login").send({ email, password }).expect(200);
+    const response = await request(server).post("/auth/login").send(testLoginBody(email, password)).expect(200);
     return (response.body as { accessToken: string }).accessToken;
   }
 
@@ -75,7 +76,7 @@ describe("Tenant user management", () => {
       .send({
         email: "created-user-a@example.test",
         name: "Created User A",
-        nationalId: "10000000450",
+        nationalId: "10000002294",
         phone: "5551234567",
         roles: ["ASSISTANT_ADMIN"],
       })
@@ -124,13 +125,18 @@ describe("Tenant user management", () => {
       .send({
         email,
         name: "Revoked Admin A",
-        nationalId: "10000000450",
+        nationalId: "10000002058",
         phone: "5551234567",
         roles: ["TENANT_ADMIN"],
       })
       .expect(201);
 
     const userId = (created.body as { id: string }).id;
+    registerTestLoginIdentity(email, {
+      nationalId: "10000002058",
+      password: "5551234567",
+      tenantSlug: "dna-egitim",
+    });
     upsertInMemoryAuthUser({
       id: userId,
       email,
@@ -185,6 +191,11 @@ describe("Tenant user management", () => {
       })
       .expect(201);
 
+    registerTestLoginIdentity("seat-users-admin@example.test", {
+      nationalId: "10000000450",
+      password: "5551234567",
+      tenantSlug: "seat-users-tenant",
+    });
     const admin = await login("seat-users-admin@example.test", "5551234567");
     await request(server)
       .post("/tenant-users")
@@ -305,7 +316,7 @@ describe("Tenant user management", () => {
 
     const resetLogin = await request(server)
       .post("/auth/login")
-      .send({ email: "teacher-a@example.test", password: "5550000010" })
+      .send(testLoginBody("teacher-a@example.test", "5550000010"))
       .expect(200);
     const resetToken = (resetLogin.body as { accessToken: string }).accessToken;
     expect(resetLogin.body.session).toMatchObject({ mustChangePassword: true });

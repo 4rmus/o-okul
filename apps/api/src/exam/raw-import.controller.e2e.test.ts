@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
+import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 import {
@@ -533,7 +534,7 @@ describe("RawImportController", () => {
   });
 
   async function login(email: string) {
-    const response = await request(server).post("/auth/login").send({ email, password: "password" }).expect(200);
+    const response = await request(server).post("/auth/login").send(testLoginBody(email)).expect(200);
     return response.body as { accessToken: string };
   }
 });

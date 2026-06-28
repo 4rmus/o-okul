@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
+import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 
@@ -33,7 +34,7 @@ describe("Student profile + TC API", () => {
   });
 
   async function login(email: string): Promise<string> {
-    const response = await request(server).post("/auth/login").send({ email, password: "password" }).expect(200);
+    const response = await request(server).post("/auth/login").send(testLoginBody(email)).expect(200);
     return (response.body as { accessToken: string }).accessToken;
   }
 
@@ -42,7 +43,7 @@ describe("Student profile + TC API", () => {
       .patch("/students/student-a/profile")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
-        nationalId: "10000000146",
+        nationalId: "10000002362",
         phone: "5551234567",
         email: "ada@example.test",
         photoKey: "students/student-a/photo.jpg",
@@ -57,12 +58,12 @@ describe("Student profile + TC API", () => {
           gradeLevelName: "8. Sınıf",
           section: "A",
           responsibleTeacherName: "Ayse Ogretmen",
-          nationalIdMasked: "*******0146",
+          nationalIdMasked: "*******2362",
           phone: "5551234567",
           email: "ada@example.test",
           photoKey: "students/student-a/photo.jpg",
         });
-        expect(JSON.stringify(body)).not.toContain("10000000146");
+        expect(JSON.stringify(body)).not.toContain("10000002362");
         expectStudentProfileResponseIsPublic(body);
       });
 
@@ -97,7 +98,7 @@ describe("Student profile + TC API", () => {
     await request(server)
       .patch("/students/student-a")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ firstName: "Ada", nationalId: "10000000146", phone: "5551234567" })
+      .send({ firstName: "Ada", nationalId: "10000002362", phone: "5551234567" })
       .expect(422);
 
     await request(server)
@@ -130,7 +131,7 @@ describe("Student profile + TC API", () => {
     await request(server)
       .patch(`/students/${created.body.id}/profile`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ nationalId: "10000000146" })
+      .send({ nationalId: "10000002362" })
       .expect(409);
   });
 
@@ -223,13 +224,13 @@ describe("Student profile + TC API", () => {
       .set("Authorization", `Bearer ${studentAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
-        expect(body.nationalIdMasked).toBe("*******0146");
+        expect(body.nationalIdMasked).toBe("*******2362");
         expect(body.className).toBe("8-A");
         expect(body.campusName).toBe("Merkez Kampus");
         expect(body.gradeLevelName).toBe("8. Sınıf");
         expect(body.section).toBe("A");
         expect(body.responsibleTeacherName).toBe("Ayse Ogretmen");
-        expect(JSON.stringify(body)).not.toContain("10000000146");
+        expect(JSON.stringify(body)).not.toContain("10000002362");
         expect(JSON.stringify(body)).not.toContain("userId");
       });
     await request(server)
@@ -262,7 +263,7 @@ describe("Student profile + TC API", () => {
       .set("Authorization", `Bearer ${guardianAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
-        expect(body.nationalIdMasked).toBe("*******0146");
+        expect(body.nationalIdMasked).toBe("*******2362");
         expect(body.className).toBe("8-A");
         expect(body.campusName).toBe("Merkez Kampus");
         expect(body.gradeLevelName).toBe("8. Sınıf");
@@ -304,13 +305,13 @@ describe("Student profile + TC API", () => {
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
-        expect(body.nationalIdMasked).toBe("*******0146");
+        expect(body.nationalIdMasked).toBe("*******2362");
         expect(body.className).toBe("8-A");
         expect(body.campusName).toBe("Merkez Kampus");
         expect(body.gradeLevelName).toBe("8. Sınıf");
         expect(body.section).toBe("A");
         expect(body.responsibleTeacherName).toBe("Ayse Ogretmen");
-        expect(JSON.stringify(body)).not.toContain("10000000146");
+        expect(JSON.stringify(body)).not.toContain("10000002362");
         expectStudentProfileResponseIsPublic(body);
       });
   });
@@ -330,7 +331,7 @@ describe("Student profile + TC API", () => {
           entityId: "student-a",
           action: "student.profile_viewed",
         });
-        expect(JSON.stringify(profileView)).not.toContain("10000000146");
+        expect(JSON.stringify(profileView)).not.toContain("10000002362");
       });
   });
 });
@@ -340,8 +341,8 @@ function expectStudentCoreResponseIsPublic(body: unknown): void {
   for (const forbidden of [
     "student-tenant-a",
     "userId",
-    "10000000146",
-    "*******0146",
+    "10000002362",
+    "*******2362",
     "ada@example.test",
     "5551234567",
     "students/student-a/photo.jpg",
@@ -360,7 +361,7 @@ function expectStudentProfileResponseIsPublic(body: unknown): void {
   for (const forbidden of [
     "student-tenant-a",
     "userId",
-    "10000000146",
+    "10000002362",
     "nationalIdEncrypted",
     "nationalIdHash",
     "token",

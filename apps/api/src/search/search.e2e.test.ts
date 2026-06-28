@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
+import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 
@@ -32,7 +33,7 @@ describe("Global search API", () => {
     await request(server)
       .patch("/students/student-a/profile")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ nationalId: "10000000146", phone: "5551234567", email: "ada@example.test" })
+      .send({ nationalId: "10000002430", phone: "5551234567", email: "ada@example.test" })
       .expect(200);
   });
 
@@ -41,7 +42,7 @@ describe("Global search API", () => {
   });
 
   async function login(email: string): Promise<string> {
-    const response = await request(server).post("/auth/login").send({ email, password: "password" }).expect(200);
+    const response = await request(server).post("/auth/login").send(testLoginBody(email)).expect(200);
     return (response.body as { accessToken: string }).accessToken;
   }
 
@@ -64,7 +65,7 @@ describe("Global search API", () => {
         expect(JSON.stringify(body)).not.toContain("student-tenant-a");
         expect(JSON.stringify(body)).not.toContain("5551234567");
         expect(JSON.stringify(body)).not.toContain("ada@example.test");
-        expect(JSON.stringify(body)).not.toContain("10000000146");
+        expect(JSON.stringify(body)).not.toContain("10000002430");
       });
 
     await request(server)
@@ -158,17 +159,17 @@ describe("Global search API", () => {
   it("PII pattern aramasını öğretmene açmaz ve response içinde PII döndürmez", async () => {
     await request(server)
       .get("/search")
-      .query({ q: "10000000146", types: "students" })
+      .query({ q: "10000002430", types: "students" })
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
         expect(body).toEqual([expect.objectContaining({ id: "student-a", title: "Ada A", type: "students" })]);
-        expect(JSON.stringify(body)).not.toContain("10000000146");
+        expect(JSON.stringify(body)).not.toContain("10000002430");
       });
 
     await request(server)
       .get("/search")
-      .query({ q: "10000000146", types: "students" })
+      .query({ q: "10000002430", types: "students" })
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .expect(200, []);
 

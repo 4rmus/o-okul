@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
+import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 import { apiPrefix, configureApiApp } from "./configure-api-app.js";
@@ -23,7 +24,7 @@ describe("API version prefix", () => {
 
     const login = await request(server)
       .post(`/${apiPrefix}/auth/login`)
-      .send({ email: "admin-a@example.test", password: "password" })
+      .send(testLoginBody("admin-a@example.test"))
       .expect(200);
     accessToken = (login.body as { data: { accessToken: string } }).data.accessToken;
   });

@@ -429,7 +429,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
     const teacherProfileInfo = teacherProfile.getByRole("region", { name: "Öğretmen profil özeti" });
     await expect(teacherProfileInfo).toHaveClass(/uh-info-grid/);
     await expect(teacherProfileInfo.locator(".uh-info-item")).toHaveCount(3);
-    await expect(page.getByRole("link", { name: "Portal daveti gönder" })).toHaveAttribute("href", /invite=teacher&subjectId=teacher-a/);
+    await expect(teacherProfileInfo).toContainText("Portal");
 
     const assignmentsTable = page.getByRole("table", { name: "Öğretmen atama ilişkileri" });
     await expect(assignmentsTable.getByRole("columnheader", { name: "Rol" })).toBeVisible();
