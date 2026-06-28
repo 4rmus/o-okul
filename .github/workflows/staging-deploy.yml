@@ -11,6 +11,11 @@ on:
         description: "Last known-good image tag for rollback evidence."
         required: true
         type: string
+      full_evidence:
+        description: "Run the full production evidence chain after first staging gates."
+        required: false
+        default: false
+        type: boolean
   workflow_run:
     workflows:
       - CI
@@ -240,6 +245,7 @@ jobs:
           IMAGE_PREFIX: ${{ steps.meta.outputs.image-prefix }}
           IMAGE_TAG: ${{ steps.meta.outputs.image-tag }}
           NEXT_PUBLIC_API_URL: ${{ vars.STAGING_NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_SMS_ENABLED: "false"
         run: |
           docker buildx build \
             --push \
@@ -247,6 +253,7 @@ jobs:
             --cache-to type=gha,mode=max,scope=web \
             --target web \
             --build-arg NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL" \
+            --build-arg NEXT_PUBLIC_SMS_ENABLED="$NEXT_PUBLIC_SMS_ENABLED" \
             --tag "$IMAGE_PREFIX/web:$IMAGE_TAG" \
             --tag "$IMAGE_PREFIX/web:staging-latest" \
             .
@@ -334,6 +341,7 @@ jobs:
             docker-compose.release.yml \
             docker-compose.traefik.yml \
             docker-compose.traefik-ip.yml \
+            docker-compose.observability.yml \
             docker/evidence \
             docker/postgres/init
 
@@ -508,6 +516,50 @@ jobs:
             -f docker-compose.release.yml \
             -f "$EDGE_COMPOSE_FILE" \
             ps
+
+          require_running_image() {
+            local service="$1"
+            local expected_image="$2"
+            local container_id
+            local actual_image
+            local state
+            local health
+            local deadline=$((SECONDS + 180))
+
+            while true; do
+              container_id="$(docker compose \
+                --env-file .env \
+                --env-file .env.release \
+                -f docker-compose.yml \
+                -f docker-compose.release.yml \
+                -f "$EDGE_COMPOSE_FILE" \
+                ps -q "$service")"
+              if [ -n "$container_id" ]; then
+                actual_image="$(docker inspect -f '{{.Config.Image}}' "$container_id")"
+                if [ "$actual_image" != "$expected_image" ]; then
+                  echo "$service image drift: expected $expected_image, got $actual_image." >&2
+                  exit 1
+                fi
+
+                state="$(docker inspect -f '{{.State.Status}}' "$container_id")"
+                health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container_id")"
+                if [ "$state" = "running" ] && { [ -z "$health" ] || [ "$health" = "healthy" ]; }; then
+                  return 0
+                fi
+              fi
+
+              if [ "$SECONDS" -ge "$deadline" ]; then
+                echo "$service did not become running/healthy after deploy. state=${state:-missing} health=${health:-none}" >&2
+                exit 1
+              fi
+              sleep 5
+            done
+          }
+
+          require_running_image web "${IMAGE_PREFIX}/web:${IMAGE_TAG}"
+          require_running_image api "${IMAGE_PREFIX}/api:${IMAGE_TAG}"
+          require_running_image worker "${IMAGE_PREFIX}/worker:${IMAGE_TAG}"
+          require_running_image queue-board "${IMAGE_PREFIX}/queue-board:${IMAGE_TAG}"
           REMOTE
 
   evidence:
@@ -621,6 +673,7 @@ jobs:
             pnpm staging:first-gates:check
 
       - name: Run production evidence chain
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}
         shell: bash
         env:
           IMAGE_TAG: ${{ needs.build-images.outputs.image-tag }}
@@ -631,6 +684,7 @@ jobs:
             --summary-file "artifacts/staging/release-summary-${IMAGE_TAG}.json"
 
       - name: Check staging release artifact bundle
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}
         shell: bash
         run: |
           STAGING_RELEASE_ARTIFACTS_TARGET="$PWD/artifacts/staging" \

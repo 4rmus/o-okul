@@ -154,9 +154,11 @@ function extractProdEnvContractKeys() {
 function checkWorkflowContract(output) {
   const workflow = readFileSync(workflowPath, "utf8");
   const requiredTokens = [
+    "full_evidence:",
     "Validate staging dispatch inputs and environment",
     "STAGING_NEXT_PUBLIC_API_URL must be an https:// URL.",
     "STAGING_DEPLOY_DIR must be /root/o-okul.",
+    "docker-compose.observability.yml",
     "validate_tag \"rollback_image_tag\"",
     "github-ci-evidence:",
     "needs: preflight",
@@ -183,6 +185,10 @@ function checkWorkflowContract(output) {
     "prune_old_release_images",
     "require_disk_space_mb 2048",
     "timeout 20m docker compose",
+    "require_running_image web \"${IMAGE_PREFIX}/web:${IMAGE_TAG}\"",
+    "require_running_image api \"${IMAGE_PREFIX}/api:${IMAGE_TAG}\"",
+    "require_running_image worker \"${IMAGE_PREFIX}/worker:${IMAGE_TAG}\"",
+    "require_running_image queue-board \"${IMAGE_PREFIX}/queue-board:${IMAGE_TAG}\"",
     "echo \"UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json\"",
     "echo \"SENTRY_RELEASE=$IMAGE_TAG\"",
     "echo \"ROLLBACK_IMAGE_TAG=$ROLLBACK_IMAGE_TAG\"",
@@ -190,6 +196,7 @@ function checkWorkflowContract(output) {
     "echo \"PRODUCTION_EVIDENCE_SUMMARY_TARGET=file://$PWD/artifacts/staging/release-summary-${IMAGE_TAG}.json\"",
     ".ghcr_read_token",
     "GHCR read token file is missing.",
+    "if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}",
     "pnpm prod:evidence:check --",
     "--env-file .staging-evidence.env",
     "--summary-file",

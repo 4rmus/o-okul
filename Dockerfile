@@ -10,7 +10,9 @@ RUN pnpm install --frozen-lockfile
 
 FROM deps AS build-web
 ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_SMS_ENABLED=false
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_SMS_ENABLED=${NEXT_PUBLIC_SMS_ENABLED}
 RUN pnpm turbo run build --filter=@o-okul/web...
 
 FROM deps AS build-api

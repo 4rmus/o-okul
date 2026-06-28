@@ -130,12 +130,17 @@ pnpm backup:restore:smoke
   SMS/notification gerçek provider, WAL `target` ve sha256 marker.
   Bu payload sözleşmesi `pnpm smoke:evidence:check` ve `pnpm prod:evidence:templates:check`
   zincirinde örnek summary üstünden korunur.
-- Staging deploy GitHub Actions'ta yalnız elle tetiklenen `.github/workflows/staging-deploy.yml`
-  workflow'u ile yapılır; workflow önce dispatch input'larını, staging secret/var varlığını ve Docker tag
-  biçimini doğrular, aynı commit'in başarılı `.github/workflows/ci.yml` run'ından GitHub CI evidence artifact'ini
-  deploy öncesi üretip doğrular, ardından `pnpm run ci` sonrası web/api/worker imajlarını GHCR'a push eder,
-  staging VPS'te `docker-compose.release.yml` override'ı ile imajları çeker, migration çalıştırır,
-  Traefik'li stack'i ayağa kaldırır ve `prod:evidence:check --summary-file` çıktısını artifact olarak saklar.
+- Staging deploy GitHub Actions'ta elle tetiklenen `.github/workflows/staging-deploy.yml`
+  workflow'u veya `main` üzerindeki başarılı `CI` workflow'u sonrasında çalışır; workflow önce dispatch
+  input'larını, staging secret/var varlığını ve Docker tag biçimini doğrular, aynı commit'in başarılı
+  `.github/workflows/ci.yml` run'ından GitHub CI evidence artifact'ini deploy öncesi üretip doğrular,
+  ardından web/api/worker/queue-board imajlarını GHCR'a push eder. Staging VPS'te
+  `docker-compose.release.yml` override'ı ile imajları çeker, migration çalıştırır, Traefik'li stack'i
+  ayağa kaldırır ve `web`, `api`, `worker`, `queue-board` servislerinin çalışan image tag'ini deploy
+  `IMAGE_TAG` değeriyle birebir karşılaştırır. Otomatik deploy yalnız image activation, migration,
+  health ve first-gates sonucuyla yeşil/kırmızı olur; `prod:evidence:check --summary-file` ve
+  `staging:release-artifacts:check` yalnız manuel `workflow_dispatch` çalışmasında `full_evidence=true`
+  verildiğinde promotion/full evidence kapısı olarak koşar.
 - GitHub `staging` environment hazır olmadan deploy tetiklenmez; `pnpm staging:github-env:check`
   environment varlığını, `STAGING_DEPLOY_DIR=/root/o-okul`, `STAGING_NEXT_PUBLIC_API_URL`, opsiyonel
   `STAGING_EDGE_MODE` değerlerini ve required secret isimlerini secret değerlerini yazdırmadan doğrular.
@@ -620,6 +625,8 @@ pnpm backup:restore:smoke
 - BullMQ operasyon paneli `queue-board` servisi olarak yalnız `backend_net` içinde çalışır; host portu
   `127.0.0.1:${QUEUE_BOARD_HOST_PORT:-3200}` ile loopback'e bağlıdır, Traefik router'ı yoktur ve
   erişim `QUEUE_BOARD_BASIC_AUTH_USER`/`QUEUE_BOARD_BASIC_AUTH_PASSWORD` ile korunur.
+- Prometheus, Grafana, Loki ve Alloy host portları `docker-compose.observability.yml` içinde loopback'e
+  bağlıdır; public bind kullanılmaz. UAT erişimi SSH tunnel veya auth'lu reverse proxy arkasından yapılır.
 - `LOG_LEVEL=info`, `LOG_ENABLED=true`, `QUEUE_METRICS_ENABLED=true`,
   `API_RATE_LIMIT_ENABLED=true`, `API_RATE_LIMIT_STORE=redis`, `IDEMPOTENCY_STORE=postgres`,
   `REPORT_PDF_RENDERER=worker` ve `SENTRY_SEND_DEFAULT_PII=false` production env içinde sabittir.

@@ -722,7 +722,7 @@ Beklenen akış:
 - `web`, `api`, `worker` ve `queue-board` image'ları GHCR'a commit SHA tag'i ve `staging-latest`
   tag'i ile push edilir.
 - GitHub runner `docker-compose.yml`, `docker-compose.release.yml`, `docker-compose.traefik.yml`,
-  `docker-compose.traefik-ip.yml`, `docker/evidence` ve
+  `docker-compose.traefik-ip.yml`, `docker-compose.observability.yml`, `docker/evidence` ve
   `docker/postgres/init` içeriğini SSH üzerinden staging deploy dizinine kopyalar; staging host'un
   repo clone yetkisine ihtiyacı yoktur.
 - Yeni release bilgisi önce `.env.release.next` dosyasına `WEB_IMAGE`, `API_IMAGE`, `WORKER_IMAGE`,
@@ -738,7 +738,9 @@ Beklenen akış:
 - `docker compose ... run --rm api sh -lc 'cd packages/db && ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts'`
   interaktif olmayan migration deploy'u çalıştırır.
 - `docker compose ... up -d --remove-orphans` Traefik'li staging stack'ini ayağa kaldırır.
-  `evidence` servisi `artifacts/staging/reports` altındaki doğrulanmış JSON kanıtlarını
+  Ardından `web`, `api`, `worker` ve `queue-board` container'larının çalışan image adı deploy
+  `IMAGE_TAG` değeriyle birebir karşılaştırılır; container eksikse, running değilse veya healthcheck
+  `healthy` değilse deploy kırmızıya düşer. `evidence` servisi `artifacts/staging/reports` altındaki doğrulanmış JSON kanıtlarını
   `/evidence/*.json` olarak salt-okunur sunar; eksik kanıt dosyası bilinçli olarak 404 döner.
 - GitHub runner, `STAGING_EVIDENCE_ENV_B64` içeriğini evidence job'da yeniden decode edip
   `pnpm staging:evidence-env:check` ile tekrar doğrular.
@@ -794,7 +796,8 @@ Beklenen akış:
   komutuyla manifest'i, iki artifact'i, artifact ortamlarının manifest ortamıyla eşleştiğini ve manifest
   zamanının artifact `generatedAt`/`checkedAt` zamanlarından önce olmadığını tekrar doğrular; manifest target lokal temp path, `artifacts/local/**`, symlink dosya veya symlink parent directory olamaz. Artifact upload adımı `if: always()` ile çalışır ve
   full production evidence zinciri sonradan düşse bile üretilen first-gates artifact'lerini saklar.
-- GitHub runner, doğrulanmış production evidence env sözleşmesiyle
+- Manuel `workflow_dispatch` çalışmasında `full_evidence=true` verilirse GitHub runner doğrulanmış
+  production evidence env sözleşmesiyle
   `pnpm prod:evidence:check -- --summary-file artifacts/staging/release-summary-<tag>.json`
   komutunu çalıştırır. Bu komut release summary dosyasını yazdıktan sonra aynı summary'yi
   `scripts/check-production-evidence-summary.mjs` ile doğrular ve `artifacts/staging`
@@ -811,7 +814,9 @@ Beklenen akış:
   `DATABASE_URL`/`DIRECT_DATABASE_URL` için runner `127.0.0.1` Postgres tunnel
   hostunu kabul eder, normal production env'de lokal DB URL'leri kırmızı kalır. `/tmp`/`/var/tmp`, symlink dosya ve symlink parent directory üzerinden gelen raw
   smoke path'i kabul edilmez. Evidence job, artifact upload öncesinde `if: always()` cleanup
-  adımıyla `.staging-evidence.env` secret dosyasını workspace'ten siler.
+  adımıyla `.staging-evidence.env` secret dosyasını workspace'ten siler. Otomatik staging deploy
+  bu full evidence adımını koşmaz; eksik go-live artifact'leri otomatik deploy sonucunu hatalı
+  biçimde failed yapmaz.
 - Full evidence zinciri PASS olduktan sonra workflow aynı job içinde
   `STAGING_RELEASE_ARTIFACTS_TARGET=$PWD/artifacts/staging pnpm staging:release-artifacts:check`
   komutunu çalıştırır. Bu kontrol indirilecek `staging-production-evidence-<tag>` artifact setinde
