@@ -443,9 +443,10 @@ jobs:
 
           trap 'rm -f "$STAGING_DEPLOY_DIR/.ghcr_read_token"' EXIT
           cd "$STAGING_DEPLOY_DIR"
-          trap 'rm -f .ghcr_read_token' EXIT
+          trap 'rm -f .ghcr_read_token .env.release.next' EXIT
 
-          cat > .env.release <<EOF
+          release_env_file=".env.release.next"
+          cat > "$release_env_file" <<EOF
           WEB_IMAGE=${IMAGE_PREFIX}/web:${IMAGE_TAG}
           API_IMAGE=${IMAGE_PREFIX}/api:${IMAGE_TAG}
           WORKER_IMAGE=${IMAGE_PREFIX}/worker:${IMAGE_TAG}
@@ -463,7 +464,7 @@ jobs:
 
           docker compose \
             --env-file .env \
-            --env-file .env.release \
+            --env-file "$release_env_file" \
             -f docker-compose.yml \
             -f docker-compose.release.yml \
             -f "$EDGE_COMPOSE_FILE" \
@@ -471,19 +472,21 @@ jobs:
 
           docker compose \
             --env-file .env \
-            --env-file .env.release \
+            --env-file "$release_env_file" \
             -f docker-compose.yml \
             -f docker-compose.release.yml \
             -f "$EDGE_COMPOSE_FILE" \
-            run --rm -T api pnpm --filter @o-okul/db exec prisma migrate deploy --config prisma.config.ts < /dev/null
+            run --rm -T api sh -lc 'cd packages/db && ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts' < /dev/null
 
           docker compose \
             --env-file .env \
-            --env-file .env.release \
+            --env-file "$release_env_file" \
             -f docker-compose.yml \
             -f docker-compose.release.yml \
             -f "$EDGE_COMPOSE_FILE" \
             up -d --remove-orphans
+
+          mv "$release_env_file" .env.release
 
           docker compose \
             --env-file .env \

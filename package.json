@@ -72,7 +72,7 @@
     "privacy:inventory:check": "node scripts/check-kvkk-inventory-evidence.mjs",
     "pii:contact-policy:check": "node scripts/check-pii-contact-policy.mjs",
     "prod:env:check": "node scripts/check-prod-env.mjs",
-    "prod:evidence:check": "pnpm --filter @o-okul/sms-adapter build && pnpm --filter @o-okul/notification-adapter build && node scripts/check-prod-evidence.mjs",
+    "prod:evidence:check": "pnpm --filter @o-okul/api build && pnpm --filter @o-okul/worker build && pnpm --filter @o-okul/sms-adapter build && pnpm --filter @o-okul/notification-adapter build && node scripts/check-prod-evidence.mjs",
     "prod:external-evidence:check": "node scripts/check-final-external-evidence.mjs",
     "prod:remote-evidence:check": "node scripts/check-remote-final-evidence-readiness.mjs",
     "prod:evidence:summary:check": "node scripts/check-production-evidence-summary.mjs",

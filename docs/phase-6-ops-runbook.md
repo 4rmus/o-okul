@@ -725,14 +725,15 @@ Beklenen akış:
   `docker-compose.traefik-ip.yml`, `docker/evidence` ve
   `docker/postgres/init` içeriğini SSH üzerinden staging deploy dizinine kopyalar; staging host'un
   repo clone yetkisine ihtiyacı yoktur.
-- `.env.release` dosyası `WEB_IMAGE`, `API_IMAGE`, `WORKER_IMAGE`, `QUEUE_BOARD_IMAGE`, `SENTRY_RELEASE` ve
-  `ROLLBACK_IMAGE_TAG` alanlarıyla yazılır; otomatik deploy'da rollback tag'i sunucudaki önceki
-  `.env.release` içindeki `SENTRY_RELEASE` değerinden alınır.
+- Yeni release bilgisi önce `.env.release.next` dosyasına `WEB_IMAGE`, `API_IMAGE`, `WORKER_IMAGE`,
+  `QUEUE_BOARD_IMAGE`, `SENTRY_RELEASE` ve `ROLLBACK_IMAGE_TAG` alanlarıyla yazılır. Otomatik
+  deploy'da rollback tag'i sunucudaki mevcut `.env.release` içindeki `SENTRY_RELEASE` değerinden
+  alınır. `up -d` başarılı olunca `.env.release.next`, `.env.release` olarak taşınır.
 - `GHCR_READ_TOKEN` uzak shell komut satırına gömülmez; SSH stdin ile `0600` benzeri izinli
   `.ghcr_read_token` dosyasına aktarılır, `docker login --password-stdin` sonrası trap ile silinir.
-- `docker compose --env-file .env --env-file .env.release -f docker-compose.yml
+- `docker compose --env-file .env --env-file .env.release.next -f docker-compose.yml
   -f docker-compose.release.yml -f docker-compose.traefik.yml pull web api worker queue-board` ile imajlar çekilir.
-- `docker compose ... run --rm api pnpm --filter @o-okul/db exec prisma migrate deploy --config prisma.config.ts`
+- `docker compose ... run --rm api sh -lc 'cd packages/db && ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts'`
   interaktif olmayan migration deploy'u çalıştırır.
 - `docker compose ... up -d --remove-orphans` Traefik'li staging stack'ini ayağa kaldırır.
   `evidence` servisi `artifacts/staging/reports` altındaki doğrulanmış JSON kanıtlarını
