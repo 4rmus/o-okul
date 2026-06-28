@@ -35,14 +35,6 @@ const externalGates = [
     dateKey: "generatedAt",
   },
   {
-    label: "TR datacenter/provider kanıtı",
-    command: "pnpm deployment:region:check",
-    source: "productionEvidenceSummary.reports.deploymentRegion",
-    target: "summary",
-    path: ["reports", "deploymentRegion"],
-    dateKey: "checkedAt",
-  },
-  {
     label: "Live exam cycle kanıtı",
     command: "pnpm live:exam-cycle:check",
     source: "productionEvidenceSummary.reports.liveExamCycle",
@@ -211,7 +203,7 @@ if (failures.length > 0) {
 const passCount = externalGates.filter((gate) => statuses.get(gate.label) === "PASS").length;
 console.log(`Live status evidence kontrolü geçti: ${passCount}/${externalGates.length} dış kanıt PASS.`);
 if (!evidenceTarget || passCount < externalGates.length) {
-  console.warn("Canlı Durum statik kontrolü geçti; target'sız veya 18/18 altı sonuç final dış kanıt değildir.");
+  console.warn("Canlı Durum statik kontrolü geçti; target'sız veya tam PASS olmayan sonuç final dış kanıt değildir.");
 }
 
 function parseLiveStatus(source) {

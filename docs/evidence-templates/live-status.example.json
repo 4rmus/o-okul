@@ -15,14 +15,6 @@
       "evidenceReference": "production-evidence-summary.example.json#/smokeEvidence/traefikHttps"
     },
     {
-      "label": "TR datacenter/provider kanıtı",
-      "status": "PASS",
-      "command": "pnpm deployment:region:check",
-      "source": "productionEvidenceSummary.reports.deploymentRegion",
-      "checkedAt": "2026-05-30",
-      "evidenceReference": "provider-console-or-contract-reference"
-    },
-    {
       "label": "Live exam cycle kanıtı",
       "status": "PASS",
       "command": "pnpm live:exam-cycle:check",

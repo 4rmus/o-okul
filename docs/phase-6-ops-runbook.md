@@ -742,9 +742,8 @@ Beklenen akış:
   `/evidence/*.json` olarak salt-okunur sunar; eksik kanıt dosyası bilinçli olarak 404 döner.
 - GitHub runner, `STAGING_EVIDENCE_ENV_B64` içeriğini evidence job'da yeniden decode edip
   `pnpm staging:evidence-env:check` ile tekrar doğrular.
-- Evidence job, deployment-region artifact üretmez; `DEPLOYMENT_REGION_TARGET` mevcut staging
-  evidence secret içindeki kalıcı kanıt URL'sinden okunur. Provider/region detay env anahtarları
-  uygulama runtime'ı için zorunlu değildir.
+- Evidence job, deployment-region artifact üretmez; v1 go-live zinciri region evidence target'ı
+  beklemez.
 - GitHub runner, deploy öncesi üretilmiş `staging-github-ci-evidence-<sha>` artifact'ini
   `actions/download-artifact@v4` ile `artifacts/staging/reports/github-ci.json` yoluna indirir ve
   `pnpm github-ci:check` ile tekrar doğrular.
@@ -889,14 +888,14 @@ Beklenen akış:
 - Final dış kanıt kapısı tekil summary/pilot/go-live/live-status kontrollerinden sonra aynı artifact
   setini tekrar bağlar:
   `PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///path/to/release-summary.json LIVE_STATUS_EVIDENCE_TARGET=file:///path/to/live-status.json PILOT_EVIDENCE_TARGET=file:///path/to/pilot.json GO_LIVE_EVIDENCE_TARGET=file:///path/to/go-live.json pnpm prod:external-evidence:check`.
-  Bu komut target'sız `ops:check` çıktısını veya `0/18` Canlı Durum sonucunu final kabul saymaz;
+  Bu komut target'sız `ops:check` çıktısını veya kısmi Canlı Durum sonucunu final kabul saymaz;
   `*_ALLOW_EXAMPLE_EVIDENCE=1`, lokal temp path (`/tmp`, `/var/tmp`, macOS `/private/tmp`),
   `artifacts/local/**`,
   `docs/evidence-templates/**` fixture hedefi, symlink target ve userinfo/query/fragment taşıyan
   URL veya placeholder/example/redacted HTTPS host kullanımı final kapıda reddedilir.
 - Remote/staging final readiness kapısı aynı target setini remote hostta salt-okunur doğrular:
   `REMOTE_EVIDENCE_HOST=uzman-hocam-server REMOTE_EVIDENCE_ROOT=/root/o-okul PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///root/o-okul/artifacts/staging/release-summary.json LIVE_STATUS_EVIDENCE_TARGET=file:///root/o-okul/artifacts/staging/live-status.json PILOT_EVIDENCE_TARGET=file:///root/o-okul/artifacts/staging/pilot.json GO_LIVE_EVIDENCE_TARGET=file:///root/o-okul/artifacts/staging/go-live.json pnpm prod:remote-evidence:check`.
-  Bu komut deploy yapmaz; remote repo final checker'ı, 18/18 Canlı Durum ve target'lı
+  Bu komut deploy yapmaz; remote repo final checker'ı, tam Canlı Durum ve target'lı
   `prod:external-evidence:check` sonucunu kanıtlar. Remote target'lar da placeholder HTTPS host,
   remote temp path, `artifacts/local/**`, `docs/evidence-templates/**` ve userinfo/query/fragment
   taşıyan URL ile verilemez. Bu dört final artifact henüz üretilmemişse komutun kırmızıya
@@ -905,50 +904,6 @@ Beklenen akış:
 
 Bu workflow prod deploy değildir; staging environment üzerinde gerçek HTTPS, provider, backup,
 observability ve UAT kanıtlarını üretmek için kapıdır.
-
-## Deployment Region Evidence
-
-Amaç: staging/prod servislerinin TR datacenter/provider altında çalıştığını ve veri ikametgahı
-kararının gerçek sağlayıcı kanıtıyla kapandığını doğrulamak.
-
-Komut:
-
-```sh
-DEPLOYMENT_REGION_TARGET=file:///path/to/deployment-region.json pnpm deployment:region:check
-```
-
-Artifact üretim komutu:
-
-```sh
-STAGING_ENVIRONMENT=staging \
-  DEPLOYMENT_REGION_OUTPUT=artifacts/staging/reports/deployment-region.json \
-  DEPLOYMENT_REGION_PROVIDER=... \
-  DEPLOYMENT_REGION_REGION=... \
-  DEPLOYMENT_REGION_DATACENTER_COUNTRY_CODE=TR \
-  DEPLOYMENT_REGION_DATA_RESIDENCY_VERIFIED=true \
-  DEPLOYMENT_REGION_EVIDENCE_REFERENCE=... \
-  DEPLOYMENT_REGION_SERVICES_VERIFIED=api,worker,postgres,redis,object-storage \
-  pnpm deployment:region:generate
-```
-
-Staging deploy workflow'u bu artifact'i otomatik üretir; yukarıdaki alanlar
-`STAGING_EVIDENCE_ENV_B64` içindeki gerçek değerlerden gelmelidir.
-
-Minimum kanıt içeriği:
-
-- `datacenterCountryCode=TR` ve `dataResidencyVerified=true`.
-- Gerçek kanıtta `checkedAt` gelecekte olamaz.
-- Provider, region ve evidence reference gerçek sözleşme/console/provider kanıtını göstermeli.
-- Generator bu gerçek alanlar ve exact servis onayı olmadan artifact yazmaz.
-- `DEPLOYMENT_REGION_TARGET` ve `evidenceReference` userinfo, query token veya fragment taşıyamaz.
-- Public IP geolocation/ASN lookup tek başına `dataResidencyVerified=true` için yeterli değildir;
-  provider console, sözleşme ya da kalıcı first-party artifact referansı gerekir.
-- `tr-provider-example`, `example`, `.test`, `localhost`, `__SET` veya placeholder değerler yalnız
-  template kontrolünde `DEPLOYMENT_REGION_ALLOW_EXAMPLE_EVIDENCE=1` ile geçebilir.
-- `servicesVerified` içinde `api`, `worker`, `postgres`, `redis` ve `object-storage` yer alır.
-- `gaps` boş liste olmalıdır.
-- Rapor top-level alan kümesi, tam servis seti ve boş `gaps` listesi
-  `prod:evidence:templates:check` içindeki fazla alan/servis ve invalid/non-empty gaps negatifleriyle korunur.
 
 ## Deployment Rollback Drill
 
@@ -1270,22 +1225,21 @@ Minimum kanıt içeriği:
   tam ve beklenmeyen alansız olmalıdır; approval rolleri product/technical/operations/dataProtection
   olarak tam ve tekrarsız taşınır.
 - Go-live raporundaki `liveStatusEvidence.evidenceTarget`, aynı artifact setindeki Canlı Durum
-  transition bundle'ını göstermelidir; `pnpm go-live:check` bu bundle'ı okur, 18 dış kapının
+  transition bundle'ını göstermelidir; `pnpm go-live:check` bu bundle'ı okur, 17 dış kapının
   `PASS` olduğunu ve summary/pilot/go-live hedeflerinin aynı dosyalara bağlandığını doğrular.
   Bundle içindeki `productionEvidenceSummaryTarget`, `goLiveEvidenceTarget` ve
   `pilotEvidenceTarget` alanları go-live paketindeki aynı summary/go-live/pilot artifact hedeflerine
   çözülmelidir.
-- Canlı Durum transition bundle'ı `Traefik HTTPS smoke`, `TR datacenter/provider kanıtı`,
-  `Live exam cycle kanıtı`, `iSEM optical pipeline kanıtı`,
+- Canlı Durum transition bundle'ı `Traefik HTTPS smoke`, `Live exam cycle kanıtı`, `iSEM optical pipeline kanıtı`,
   `Live UI-worker result kanıtı`, `KVKK inventory kanıtı`, `RLS live kanıtı`,
   `Inline upload migration kanıtı`, `Audit null tenant kanıtı`, `Rate limit Redis kanıtı`,
   `SMS disabled path kanıtı`, `Notification provider kanıtı`, `Report generation perf kanıtı`,
   `Staging/prod UAT`, `Deployment rollback tatbikatı`, `Pilot kapanış kanıtı`,
   `Go-live karar paketi` ve `Alert bildirim kanalı` satırlarını
-  readiness dokümanındaki durumla birebir eşleştirir. Liste tam 18 satırdan oluşmalı, beklenmeyen
+  readiness dokümanındaki durumla birebir eşleştirir. Liste tam 17 satırdan oluşmalı, beklenmeyen
   veya tekrarlı gate içermemelidir. Readiness içindeki `STAGING_PASS_WITH_FINAL_CHAIN_PENDING`,
   staging artifact'inin checker'dan geçtiğini ama production summary/live-status/pilot/go-live
-  zincirine bağlanmadığını gösterir; go-live bundle'ında 18 gate yine `PASS` olmalıdır. Bundle
+  zincirine bağlanmadığını gösterir; go-live bundle'ında 17 gate yine `PASS` olmalıdır. Bundle
   top-level alanları ve her gate item alan seti tam ve
   beklenmeyen alansız olmalıdır. Her gate `command` ve `source` değeri kanonik listeyle
   eşleşmelidir; `checkedAt` geçerli tarih, `evidenceReference` source artifact referansıyla eşleşen
@@ -1315,8 +1269,8 @@ Minimum kanıt içeriği:
   restore-drill top-level/tableCounts shape fazlası,
   rate-limit top-level/config/instance/API/login/path/command/gaps shape fazlası,
   RLS live top-level/schema/isolation/loadSmoke/table/command/gaps shape fazlası,
-  pilot top-level/nested/assessment/gaps shape fazlası, deployment region top-level/servis/gaps shape fazlası,
-  deployment rollback top-level/servis/komut/gaps shape, kronoloji fazlası ve release=rollback sapması, external monitoring outage chronology/latency, production summary smoke environment, Traefik URL origin, external monitoring URL origin ve live exam cycle release/app/API sapması, go-live `gatesPassed` fazlası, live-status
+  pilot top-level/nested/assessment/gaps shape fazlası, deployment rollback top-level/servis/komut/gaps shape,
+  kronoloji fazlası ve release=rollback sapması, external monitoring outage chronology/latency, production summary smoke environment, Traefik URL origin, external monitoring URL origin ve live exam cycle release/app/API sapması, go-live `gatesPassed` fazlası, live-status
   top-level/gate item shape fazlası, bağlı live-status duplicate
   gate/top-level/gate item shape fazlası, live-status source-date/evidenceReference ve `FAIL`/staging source sapmaları, bağlı live-status target, source-date ve evidenceReference sapmaları ile kırık summary/pilot/go-live kaynak ve go-live linked pilot gaps negatiflerinin yanında production summary
   top-level/check-list/check-field/smoke/report/report-field fazlası, check status/script/duplicate sapmaları ve smoke/report tarih negatifleri, go-live top-level/production-summary/
@@ -1339,8 +1293,8 @@ Minimum kanıt içeriği:
   değeriyle eşleşmelidir; linked deployment rollback `releaseCandidate` ve `rollbackImageTag` değerleri go-live
   raporundaki top-level değerlerle eşleşmeli, report `checkedAt`/`drillDate` tarihleri summary
   `generatedAt` veya go-live `checkedAt` karar zamanından sonra olamaz. Normal `go-live:check` çalışması `.test`, `example` veya placeholder host/image/provider
-  değerlerini reddeder; linked summary deployment region `evidenceReference`, deployment rollback
-  `commandsPassed`, servis image/evidence referansları ve `evidenceReferences` alanlarını, GitHub CI
+  değerlerini reddeder; linked summary deployment rollback `commandsPassed`, servis image/evidence
+  referansları ve `evidenceReferences` alanlarını, GitHub CI
   `runUrl`, `commitSha`, `workflowUsesSingleCiCommand` ve `githubCiPassed` değerlerini, RLS live
   `schema.tablesVerified`, `crossTenantReadRows`, `withCheckRejects`, `loadSmoke.actualRps` ve
   `rlsLivePassed` değerlerini, audit null tenant `unknown.count=0` ve toplam tutarlılığını,

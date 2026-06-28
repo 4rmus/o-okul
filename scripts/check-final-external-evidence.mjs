@@ -22,12 +22,11 @@ const finalChecks = [
     script: "scripts/check-production-evidence-summary.mjs",
   },
   {
-    label: "Live status 18/18",
+    label: "Live status full PASS",
     script: "scripts/check-live-status-evidence.mjs",
-    assertOutput: (output) =>
-      output.includes("Live status evidence kontrolü geçti: 18/18 dış kanıt PASS."),
+    assertOutput: hasFullPassLiveStatus,
     outputFailure:
-      "LIVE_STATUS_EVIDENCE_TARGET 18/18 dış kanıt PASS üretmeli; target'sız veya kısmi Canlı Durum final kanıt sayılmaz.",
+      "LIVE_STATUS_EVIDENCE_TARGET tam dış kanıt PASS üretmeli; target'sız veya kısmi Canlı Durum final kanıt sayılmaz.",
   },
   {
     label: "Pilot evidence",
@@ -74,7 +73,12 @@ for (const check of finalChecks) {
   }
 }
 
-console.log("Final external evidence kontrolü geçti: production summary, 18/18 Canlı Durum, pilot ve go-live hedefleri doğrulandı.");
+console.log("Final external evidence kontrolü geçti: production summary, tam Canlı Durum, pilot ve go-live hedefleri doğrulandı.");
+
+function hasFullPassLiveStatus(output) {
+  const match = output.match(/Live status evidence kontrolü geçti: (\d+)\/(\d+) dış kanıt PASS\./);
+  return Boolean(match && match[1] === match[2]);
+}
 
 function validateTargetUrls() {
   const failures = [];

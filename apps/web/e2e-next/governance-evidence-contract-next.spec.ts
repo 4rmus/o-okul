@@ -357,7 +357,6 @@ test.describe("Governance evidence sözleşmesi", () => {
     const releaseSummaryTable = page.getByRole("table", { name: "Release özeti alanları" });
     await expect(releaseSummaryTable).toContainText("result = PASS");
     await expect(releaseSummaryTable).toContainText("reports.uat.rollbackImageTag");
-    await expect(releaseSummaryTable).toContainText("reports.deploymentRegion.datacenterCountryCode");
     await expect(releaseSummaryTable).toContainText("reports.deploymentRollback.rollbackImageTag");
     const goLiveDecisionTable = page.getByRole("table", { name: "Go-live karar alanları" });
     await expect(goLiveDecisionTable).toContainText("productionEvidenceSummary.summaryTarget");
@@ -371,7 +370,6 @@ test.describe("Governance evidence sözleşmesi", () => {
     await expect(externalEvidenceTable).toContainText("Sentry DSN ve alert webhook");
     await expect(externalEvidenceTable).toContainText("Off-host backup ve WAL hedefi");
     await expect(externalEvidenceTable).toContainText("Pilot kapanış kanıtı");
-    await expect(externalEvidenceTable).toContainText("TR datacenter/provider kanıtı");
     await expect(externalEvidenceTable).toContainText("Go-live karar paketi");
     await expectNoHorizontalOverflow(page, "live-release-governance-mobile");
     await expectNoUnlabeledControls(page, "live-release-governance-mobile");

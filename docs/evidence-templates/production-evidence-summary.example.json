@@ -14,7 +14,6 @@
     { "label": "Alert webhook", "script": "scripts/smoke-alert-webhook.mjs", "status": "PASS" },
     { "label": "WAL archive target", "script": "scripts/smoke-wal-archive-target.mjs", "status": "PASS" },
     { "label": "Report generation smoke", "script": "scripts/smoke-report-generation-live.mjs", "status": "PASS" },
-    { "label": "Deployment region evidence", "script": "scripts/check-deployment-region-evidence.mjs", "status": "PASS" },
     { "label": "Deployment rollback evidence", "script": "scripts/check-deployment-rollback-evidence.mjs", "status": "PASS" },
     { "label": "GitHub CI evidence", "script": "scripts/check-github-ci-evidence.mjs", "status": "PASS" },
     { "label": "Restore drill evidence", "script": "scripts/check-restore-drill-evidence.mjs", "status": "PASS" },
@@ -180,15 +179,6 @@
         "ReportSnapshot": 1,
         "_prisma_migrations": 56
       }
-    },
-    "deploymentRegion": {
-      "environment": "production",
-      "checkedAt": "2026-05-30",
-      "provider": "tr-provider-example",
-      "region": "tr-istanbul-1",
-      "datacenterCountryCode": "TR",
-      "evidenceReference": "provider-console-or-contract-reference",
-      "servicesVerified": ["api", "worker", "postgres", "redis", "object-storage"]
     },
     "deploymentRollback": {
       "environment": "production",

@@ -257,7 +257,7 @@ const expectedArchitectureClosureRows = new Map([
       "LIVE_STATUS_EVIDENCE_TARGET",
       "REPORT_GENERATION_SMOKE_EVIDENCE_FILE",
       "corepack pnpm go-live:check",
-      "18/18 Canli Durum PASS",
+      "17/17 Canli Durum PASS",
       "goLiveDecision=APPROVED",
     ],
   ],
@@ -272,7 +272,6 @@ for (const [phase, tokens] of expectedArchitectureClosureRows) {
 
 const expectedLiveStatusGateOwnershipRows = [
   ["Traefik HTTPS smoke", "Faz 5", "pnpm traefik:https:smoke", "productionEvidenceSummary.smokeEvidence.traefikHttps"],
-  ["TR datacenter/provider kanıtı", "Faz 5", "pnpm deployment:region:check", "productionEvidenceSummary.reports.deploymentRegion"],
   ["Live exam cycle kanıtı", "Faz 5", "pnpm live:exam-cycle:check", "productionEvidenceSummary.reports.liveExamCycle"],
   ["iSEM optical pipeline kanıtı", "Faz 4A", "pnpm isem-optical-pipeline:evidence-check", "productionEvidenceSummary.reports.isemOpticalPipeline"],
   ["Live UI-worker result kanıtı", "Faz 5", "pnpm live:ui-worker:result-check", "productionEvidenceSummary.reports.liveUiWorkerResult"],
@@ -307,16 +306,6 @@ const expectedRemainingReleaseArtifactRows = [
       "staging:first-gates:check",
       "external_tls_and_alert_secret",
       "Public TLS/HSTS domain",
-    ],
-  ],
-  [
-    "reports/deployment-region.json",
-    [
-      "ops_release_engineer",
-      "Faz 5 deployment region",
-      "deployment:region:check",
-      "provider_contract_evidence",
-      "public IP lookup tek basina kabul edilmiyor",
     ],
   ],
   [
@@ -435,7 +424,7 @@ const requiredArchitecturePendingTokens = [
   "henuz production summary/live-status zincirine baglanmadi",
   "Faz 10 - Pilot ve Go-live Kapanisi",
   "Gercek pilot kapanis raporu",
-  "18/18 Canli Durum PASS bundle'i",
+  "17/17 Canli Durum PASS bundle'i",
   "report-generation perf artifact'i production summary/live-status zincirine baglanmali",
   "`PILOT_EVIDENCE_TARGET` gercek production pilot raporuna baglanir",
   "`GO_LIVE_EVIDENCE_TARGET` ayni artifact setindeki production summary",
@@ -469,8 +458,8 @@ const requiredArchitecturePendingTokens = [
   "corepack pnpm prod:remote-evidence:check",
   "target'siz veya `ALLOW_EXAMPLE_EVIDENCE=1` ile calisan `prod:external-evidence:check`",
   "`ALLOW_EXAMPLE_EVIDENCE=1` ile calisan `prod:external-evidence:check`",
-  "`corepack pnpm ops:check` (statik/toparlayici gate; target'li 18/18 Canli Durum yerine gecmez)",
-  "Target'siz `corepack pnpm live:status:check` ile gelen `0/18` PASS",
+  "`corepack pnpm ops:check` (statik/toparlayici gate; target'li tam Canli Durum yerine gecmez)",
+  "Target'siz `corepack pnpm live:status:check` ile gelen kismi PASS",
   "Faz 5 ancak `EXTERNAL_EVIDENCE_PASS`, Faz 10 ancak `GO_LIVE_APPROVED`",
   "10k sonuc/ogrenci",
   "Bearer auth, 2xx webhook",
@@ -493,7 +482,6 @@ requireTokens(architecturePlanPath, architecturePlan, requiredArchitecturePendin
 
 const requiredNotRunLines = [
   "Traefik HTTPS smoke: `NOT_RUN`",
-  "TR datacenter/provider kan\u0131t\u0131: `NOT_RUN`",
   "Live exam cycle kan\u0131t\u0131: `STAGING_PASS_WITH_FINAL_CHAIN_PENDING`",
   "iSEM optical pipeline kan\u0131t\u0131: `STAGING_PASS_WITH_FINAL_CHAIN_PENDING`",
   "Live UI-worker result kan\u0131t\u0131: `STAGING_PASS_WITH_FINAL_CHAIN_PENDING`",
@@ -691,7 +679,7 @@ requireTokens(
     "LIVE_STATUS_EVIDENCE_TARGET",
     "PILOT_EVIDENCE_TARGET",
     "GO_LIVE_EVIDENCE_TARGET",
-    "Live status evidence kontrolü geçti: 18/18 dış kanıt PASS.",
+    "tam dış kanıt PASS",
     "target'sız veya kısmi Canlı Durum final kanıt sayılmaz.",
     "final target env ile aynı artifact hedefine bağlanmalı.",
     "final dış kanıt kapısında kullanılamaz.",
@@ -716,8 +704,8 @@ requireTokens(
     "prod:external-evidence:check",
     "remoteEvidenceEnvPrefix",
     "${remoteEvidenceEnvPrefix} node scripts/check-live-status-evidence.mjs",
-    "Live status evidence kontrolü geçti: 18/18 dış kanıt PASS.",
-    "Remote live:status:check 18/18 dış kanıt PASS üretmeli",
+    "tam dış kanıt PASS",
+    "Remote live:status:check tam dış kanıt PASS üretmeli",
     "requireRemoteFinalFileTargets",
     "remote final artifact bulunamadı",
     "remote final kanıt kapısı için zorunlu.",
@@ -855,13 +843,13 @@ function findArchitectureRemainingArtifactRow(markdown, artifactPath, requiredTo
 function checkNoStaleLiveStatusGateCount(path, source, output) {
   const stalePatterns = [
     [/yedi\s+dış\s+Canlı\s+Durum\s+satır/iu, "yedi dış Canlı Durum satırı"],
-    [/7\s+(dış\s+)?(Canlı\s+Durum\s+)?(gate|kapı)/iu, "7 gate/kapı"],
-    [/tam\s+7\s+gate/iu, "tam 7 gate"],
+    [/\b7\s+(dış\s+)?(Canlı\s+Durum\s+)?(gate|kapı)/iu, "7 gate/kapı"],
+    [/\btam\s+7\s+gate/iu, "tam 7 gate"],
   ];
 
   for (const [pattern, label] of stalePatterns) {
     if (pattern.test(source)) {
-      output.push(`${path} stale live-status gate count token found: ${label}; use 18 gate.`);
+      output.push(`${path} stale live-status gate count token found: ${label}; use current live-status gate set.`);
     }
   }
 }

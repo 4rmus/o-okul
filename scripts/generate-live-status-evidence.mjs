@@ -22,14 +22,6 @@ const gates = [
     dateKey: "generatedAt",
   },
   {
-    label: "TR datacenter/provider kanıtı",
-    command: "pnpm deployment:region:check",
-    source: "productionEvidenceSummary.reports.deploymentRegion",
-    target: "summary",
-    path: ["reports", "deploymentRegion"],
-    dateKey: "checkedAt",
-  },
-  {
     label: "Live exam cycle kanıtı",
     command: "pnpm live:exam-cycle:check",
     source: "productionEvidenceSummary.reports.liveExamCycle",

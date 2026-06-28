@@ -20,7 +20,6 @@ const requiredChecks = new Map([
   ["Alert webhook", "scripts/smoke-alert-webhook.mjs"],
   ["WAL archive target", "scripts/smoke-wal-archive-target.mjs"],
   ["Report generation smoke", "scripts/smoke-report-generation-live.mjs"],
-  ["Deployment region evidence", "scripts/check-deployment-region-evidence.mjs"],
   ["Deployment rollback evidence", "scripts/check-deployment-rollback-evidence.mjs"],
   ["GitHub CI evidence", "scripts/check-github-ci-evidence.mjs"],
   ["Restore drill evidence", "scripts/check-restore-drill-evidence.mjs"],
@@ -56,15 +55,6 @@ const requiredSmokeEvidence = new Map([
 
 const requiredReports = {
   restoreDrill: ["environment", "drillDate", "sourceBackup", "targetDatabase", "tableCounts"],
-  deploymentRegion: [
-    "environment",
-    "checkedAt",
-    "provider",
-    "region",
-    "datacenterCountryCode",
-    "evidenceReference",
-    "servicesVerified",
-  ],
   deploymentRollback: [
     "environment",
     "checkedAt",
@@ -611,7 +601,6 @@ function requireReports(summary, failures) {
     }
   }
 
-  requireObjectEqual(reports.deploymentRegion, failures, "reports.deploymentRegion.datacenterCountryCode", "datacenterCountryCode", "TR");
   requireObjectEqual(reports.externalMonitoring, failures, "reports.externalMonitoring.provider", "provider", "self-hosted-uptime-kuma");
   requireExternalMonitoringPublicEdge(reports.externalMonitoring, summary, failures);
   requireExternalMonitoringOutageDrill(reports.externalMonitoring, failures);

@@ -1956,7 +1956,7 @@ runProductionSummarySymlinkParentTargetNegativeCheck();
 runProductionSummaryNegativeCheck({
   label: "Production summary extra check negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-check.tmp.json",
-  expectedFailure: "checks tam 30 madde içermeli.",
+  expectedFailure: "checks tam 29 madde içermeli.",
   mutate: (fixture) => {
     fixture.checks.push({
       label: "Beklenmeyen production check",
@@ -2074,7 +2074,7 @@ runProductionSummaryNegativeCheck({
 runProductionSummaryNegativeCheck({
   label: "Production summary extra report negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-report.tmp.json",
-  expectedFailure: "reports tam 22 alan içermeli.",
+  expectedFailure: "reports tam 21 alan içermeli.",
   mutate: (fixture) => {
     fixture.reports.unexpectedReport = { ...fixture.reports.securityAudit };
   },
@@ -2098,9 +2098,9 @@ runProductionSummaryNegativeCheck({
 runProductionSummaryNegativeCheck({
   label: "Production summary report after summary negative",
   path: "docs/evidence-templates/production-evidence-summary.report-after-summary.tmp.json",
-  expectedFailure: "reports.deploymentRegion.checkedAt generatedAt tarihinden sonra olamaz.",
+  expectedFailure: "reports.deploymentRollback.checkedAt generatedAt tarihinden sonra olamaz.",
   mutate: (fixture) => {
-    fixture.reports.deploymentRegion.checkedAt = "2026-06-15T10:30:00.000Z";
+    fixture.reports.deploymentRollback.checkedAt = "2026-06-15T10:30:00.000Z";
   },
 });
 runProductionSummaryNegativeCheck({
@@ -2426,7 +2426,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra gatesPassed negative",
   path: "docs/evidence-templates/go-live.extra-gates-passed.tmp.json",
-  expectedFailure: "liveStatusEvidence.gatesPassed tam 18 gate içermeli.",
+  expectedFailure: "liveStatusEvidence.gatesPassed tam 17 gate içermeli.",
   mutate: (fixture) => {
     fixture.liveStatusEvidence.gatesPassed.push("Beklenmeyen gate");
   },
@@ -2450,7 +2450,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra deployment field negative",
   path: "docs/evidence-templates/go-live.extra-deployment-field.tmp.json",
-  expectedFailure: "deployment tam 14 alan icermeli.",
+  expectedFailure: "deployment tam 13 alan icermeli.",
   mutate: (fixture) => {
     fixture.deployment.unexpectedField = true;
   },
@@ -2479,7 +2479,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra checksPassed negative",
   path: "docs/evidence-templates/go-live.extra-checks-passed.tmp.json",
-  expectedFailure: "productionEvidenceSummary.checksPassed tam 30 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.checksPassed tam 29 madde icermeli.",
   mutate: (fixture) => {
     fixture.productionEvidenceSummary.checksPassed.push("Beklenmeyen production check");
   },
@@ -2545,7 +2545,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked duplicate summary check negative",
   path: "docs/evidence-templates/go-live.linked-duplicate-summary-check.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.checks tam 30 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.checks tam 29 madde icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.duplicate-check-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -2733,7 +2733,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked extra summary report negative",
   path: "docs/evidence-templates/go-live.linked-extra-summary-report.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.reports tam 22 alan icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.reports tam 21 alan icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.extra-report-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -2860,7 +2860,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked duplicate gate negative",
   path: "docs/evidence-templates/go-live.linked-duplicate-gate.tmp.json",
-  expectedFailure: "liveStatusEvidence.gates tam 18 gate içermeli.",
+  expectedFailure: "liveStatusEvidence.gates tam 17 gate içermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/live-status.duplicate-gate-for-go-live.tmp.json";
     const linkedLiveStatus = structuredClone(liveStatusFixture);
@@ -2960,7 +2960,7 @@ runGoLiveNegativeCheck({
   label: "Go-live linked live-status report date mismatch negative",
   path: "docs/evidence-templates/go-live.linked-live-status-report-date-mismatch.tmp.json",
   expectedFailure:
-    "liveStatusEvidence.gates.TR datacenter/provider kanıtı.checkedAt productionEvidenceSummary.reports.deploymentRegion.checkedAt ile eslesmeli.",
+    "liveStatusEvidence.gates.Live exam cycle kanıtı.checkedAt productionEvidenceSummary.reports.liveExamCycle.checkedAt ile eslesmeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/live-status.report-date-mismatch-for-go-live.tmp.json";
     const linkedLiveStatus = structuredClone(liveStatusFixture);
@@ -2979,7 +2979,7 @@ runGoLiveNegativeCheck({
     const linkedPath = "docs/evidence-templates/live-status.pilot-date-mismatch-for-go-live.tmp.json";
     const linkedLiveStatus = structuredClone(liveStatusFixture);
     linkedLiveStatus.goLiveEvidenceTarget = "go-live.linked-live-status-pilot-date-mismatch.tmp.json";
-    linkedLiveStatus.gates[15].checkedAt = "2026-06-14";
+    linkedLiveStatus.gates[14].checkedAt = "2026-06-14";
     fixture.liveStatusEvidence.evidenceTarget = "live-status.pilot-date-mismatch-for-go-live.tmp.json";
     writeFileSync(linkedPath, `${JSON.stringify(linkedLiveStatus, null, 2)}\n`);
     cleanupPaths.push(linkedPath);
@@ -2993,7 +2993,7 @@ runGoLiveNegativeCheck({
     const linkedPath = "docs/evidence-templates/live-status.go-live-date-mismatch-for-go-live.tmp.json";
     const linkedLiveStatus = structuredClone(liveStatusFixture);
     linkedLiveStatus.goLiveEvidenceTarget = "go-live.linked-live-status-go-live-date-mismatch.tmp.json";
-    linkedLiveStatus.gates[16].checkedAt = "2026-06-15T13:00:00.000Z";
+    linkedLiveStatus.gates[15].checkedAt = "2026-06-15T13:00:00.000Z";
     fixture.liveStatusEvidence.evidenceTarget = "live-status.go-live-date-mismatch-for-go-live.tmp.json";
     writeFileSync(linkedPath, `${JSON.stringify(linkedLiveStatus, null, 2)}\n`);
     cleanupPaths.push(linkedPath);
@@ -3018,12 +3018,12 @@ runGoLiveNegativeCheck({
   label: "Go-live linked live-status report evidence reference mismatch negative",
   path: "docs/evidence-templates/go-live.linked-live-status-report-reference-mismatch.tmp.json",
   expectedFailure:
-    "liveStatusEvidence.gates.TR datacenter/provider kanıtı.evidenceReference productionEvidenceSummary.reports.deploymentRegion kaynak referansı ile eslesmeli.",
+    "liveStatusEvidence.gates.Live exam cycle kanıtı.evidenceReference productionEvidenceSummary.reports.liveExamCycle kaynak referansı ile eslesmeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/live-status.report-reference-mismatch-for-go-live.tmp.json";
     const linkedLiveStatus = structuredClone(liveStatusFixture);
     linkedLiveStatus.goLiveEvidenceTarget = "go-live.linked-live-status-report-reference-mismatch.tmp.json";
-    linkedLiveStatus.gates[1].evidenceReference = "artifacts/example/production/wrong-region-reference.json";
+    linkedLiveStatus.gates[1].evidenceReference = "artifacts/example/production/wrong-live-exam-cycle-reference.json";
     fixture.liveStatusEvidence.evidenceTarget = "live-status.report-reference-mismatch-for-go-live.tmp.json";
     writeFileSync(linkedPath, `${JSON.stringify(linkedLiveStatus, null, 2)}\n`);
     cleanupPaths.push(linkedPath);
@@ -3037,7 +3037,7 @@ runGoLiveNegativeCheck({
     const linkedPath = "docs/evidence-templates/live-status.pilot-reference-mismatch-for-go-live.tmp.json";
     const linkedLiveStatus = structuredClone(liveStatusFixture);
     linkedLiveStatus.goLiveEvidenceTarget = "go-live.linked-live-status-pilot-reference-mismatch.tmp.json";
-    linkedLiveStatus.gates[15].evidenceReference = "artifacts/example/pilot/wrong-pilot-reference.json";
+    linkedLiveStatus.gates[14].evidenceReference = "artifacts/example/pilot/wrong-pilot-reference.json";
     fixture.liveStatusEvidence.evidenceTarget = "live-status.pilot-reference-mismatch-for-go-live.tmp.json";
     writeFileSync(linkedPath, `${JSON.stringify(linkedLiveStatus, null, 2)}\n`);
     cleanupPaths.push(linkedPath);
@@ -3051,7 +3051,7 @@ runGoLiveNegativeCheck({
     const linkedPath = "docs/evidence-templates/live-status.go-live-reference-mismatch-for-go-live.tmp.json";
     const linkedLiveStatus = structuredClone(liveStatusFixture);
     linkedLiveStatus.goLiveEvidenceTarget = "go-live.linked-live-status-go-live-reference-mismatch.tmp.json";
-    linkedLiveStatus.gates[16].evidenceReference = "artifacts/example/production/wrong-go-live-reference.json";
+    linkedLiveStatus.gates[15].evidenceReference = "artifacts/example/production/wrong-go-live-reference.json";
     fixture.liveStatusEvidence.evidenceTarget = "live-status.go-live-reference-mismatch-for-go-live.tmp.json";
     writeFileSync(linkedPath, `${JSON.stringify(linkedLiveStatus, null, 2)}\n`);
     cleanupPaths.push(linkedPath);
@@ -6011,7 +6011,6 @@ function runStagingReleaseArtifactsBundleCheck() {
     writeFileSync(releaseSummaryPath, `${JSON.stringify(summary, null, 2)}\n`);
     for (const [key, file] of Object.entries({
       restoreDrill: "restore-drill.example.json",
-      deploymentRegion: "deployment-region.example.json",
       deploymentRollback: "deployment-rollback.example.json",
       githubCi: "github-ci.example.json",
       kvkkInventory: "kvkk-inventory.example.json",
@@ -6615,9 +6614,9 @@ function runStagingReleaseArtifactsBundleCheck() {
     unlinkSync(firstGateTraefikPath);
     writeFileSync(firstGateTraefikPath, `${JSON.stringify(originalTraefikFirstGate, null, 2)}\n`);
 
-    const originalDeploymentRegion = JSON.parse(readFileSync(`${reportsDir}/deployment-region.json`, "utf8"));
-    const badDeploymentRegion = { ...originalDeploymentRegion, region: "tr-ankara-2" };
-    writeFileSync(`${reportsDir}/deployment-region.json`, `${JSON.stringify(badDeploymentRegion, null, 2)}\n`);
+    const originalDeploymentRollback = JSON.parse(readFileSync(`${reportsDir}/deployment-rollback.json`, "utf8"));
+    const badDeploymentRollback = { ...originalDeploymentRollback, failureMode: "different rollback drill failure mode" };
+    writeFileSync(`${reportsDir}/deployment-rollback.json`, `${JSON.stringify(badDeploymentRollback, null, 2)}\n`);
     const reportNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
       env: {
         ...process.env,
@@ -6631,12 +6630,12 @@ function runStagingReleaseArtifactsBundleCheck() {
       console.error("Production evidence template kontrolü başarısız: staging release artifact bundle raw report negative beklenen şekilde kırılmadı.");
       process.exit(1);
     }
-    if (!reportNegativeOutput.includes("summary.reports.deploymentRegion.region reports/deployment-region.json ile eşleşmeli")) {
+    if (!reportNegativeOutput.includes("summary.reports.deploymentRollback.failureMode reports/deployment-rollback.json ile eşleşmeli")) {
       console.error("Production evidence template kontrolü başarısız: staging release artifact bundle raw report negative beklenen hata yok.");
       console.error(reportNegativeOutput);
       process.exit(1);
     }
-    writeFileSync(`${reportsDir}/deployment-region.json`, `${JSON.stringify(originalDeploymentRegion, null, 2)}\n`);
+    writeFileSync(`${reportsDir}/deployment-rollback.json`, `${JSON.stringify(originalDeploymentRollback, null, 2)}\n`);
 
     const firstGateTargetMismatch = JSON.parse(readFileSync(`${firstGatesDir}/traefik-https.json`, "utf8"));
     firstGateTargetMismatch.url = "https://staging-different.o-okul.com/health";
@@ -6766,7 +6765,7 @@ function normalizeOutageDrillRecord(value, replacement) {
 
 function runProdEnvHttpEvidenceTargetNegativeCheck() {
   const env = createValidProdEnvForNegativeCheck();
-  env.DEPLOYMENT_REGION_TARGET = "http://evidence.o-okul.com/deployment-region.json";
+  env.DEPLOYMENT_ROLLBACK_TARGET = "http://evidence.o-okul.com/deployment-rollback.json";
 
   const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
     env,
@@ -6778,7 +6777,7 @@ function runProdEnvHttpEvidenceTargetNegativeCheck() {
     process.exit(1);
   }
 
-  if (!String(result.stderr).includes("DEPLOYMENT_REGION_TARGET file:// veya https:// URL olmalı.")) {
+  if (!String(result.stderr).includes("DEPLOYMENT_ROLLBACK_TARGET file:// veya https:// URL olmalı.")) {
     console.error("Production evidence template kontrolü başarısız: prod env http evidence target negative beklenen hata yok.");
     console.error(result.stderr);
     process.exit(1);
@@ -6787,7 +6786,7 @@ function runProdEnvHttpEvidenceTargetNegativeCheck() {
 
 function runProdEnvSecretEvidenceTargetNegativeCheck() {
   const env = createValidProdEnvForNegativeCheck();
-  env.DEPLOYMENT_REGION_TARGET = "https://ops:secret@evidence.o-okul.com/deployment-region.json?token=secret#proof";
+  env.DEPLOYMENT_ROLLBACK_TARGET = "https://ops:secret@evidence.o-okul.com/deployment-rollback.json?token=secret#proof";
 
   const result = spawnSync(process.execPath, ["scripts/check-prod-env.mjs"], {
     env,
@@ -6799,7 +6798,7 @@ function runProdEnvSecretEvidenceTargetNegativeCheck() {
     process.exit(1);
   }
 
-  if (!String(result.stderr).includes("DEPLOYMENT_REGION_TARGET production evidence target URL userinfo, query veya fragment içeremez.")) {
+  if (!String(result.stderr).includes("DEPLOYMENT_ROLLBACK_TARGET production evidence target URL userinfo, query veya fragment içeremez.")) {
     console.error("Production evidence template kontrolü başarısız: prod env secret evidence target negative beklenen hata yok.");
     console.error(result.stderr);
     process.exit(1);
@@ -7263,14 +7262,14 @@ if (command.includes("node scripts/check-live-status-evidence.mjs")) {
   for (const token of expectedEnv) {
     if (!command.includes(token)) fail("remote live status missing env " + token);
   }
-  ok("Live status evidence kontrolü geçti: 18/18 dış kanıt PASS.\\n");
+  ok("Live status evidence kontrolü geçti: 17/17 dış kanıt PASS.\\n");
 }
 
 if (command.includes("node scripts/check-final-external-evidence.mjs")) {
   for (const token of expectedEnv) {
     if (!command.includes(token)) fail("remote final evidence missing env " + token);
   }
-  ok("Final external evidence kontrolü geçti: production summary, 18/18 Canlı Durum, pilot ve go-live hedefleri doğrulandı.\\n");
+  ok("Final external evidence kontrolü geçti: production summary, tam Canlı Durum, pilot ve go-live hedefleri doğrulandı.\\n");
 }
 
 fail("unexpected remote command: " + command);
@@ -7404,7 +7403,7 @@ function runProdEvidenceSmokeEvidenceFileNegative(label, env, expectedFailure) {
 
 function runProdEvidenceHttpEvidenceTargetNegativeCheck() {
   const env = createValidProdEnvForNegativeCheck();
-  env.DEPLOYMENT_REGION_TARGET = "http://evidence.o-okul.com/deployment-region.json";
+  env.DEPLOYMENT_ROLLBACK_TARGET = "http://evidence.o-okul.com/deployment-rollback.json";
 
   const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
     env,
@@ -7416,7 +7415,7 @@ function runProdEvidenceHttpEvidenceTargetNegativeCheck() {
     process.exit(1);
   }
 
-  if (!String(result.stderr).includes("DEPLOYMENT_REGION_TARGET file:// veya https:// URL olmalı.")) {
+  if (!String(result.stderr).includes("DEPLOYMENT_ROLLBACK_TARGET file:// veya https:// URL olmalı.")) {
     console.error("Production evidence template kontrolü başarısız: prod evidence http evidence target negative beklenen hata yok.");
     console.error(result.stderr);
     process.exit(1);
@@ -7425,7 +7424,7 @@ function runProdEvidenceHttpEvidenceTargetNegativeCheck() {
 
 function runProdEvidencePlaceholderEvidenceTargetNegativeCheck() {
   const env = createValidProdEnvForNegativeCheck();
-  env.DEPLOYMENT_REGION_TARGET = "https://example.test/deployment-region.json";
+  env.DEPLOYMENT_ROLLBACK_TARGET = "https://example.test/deployment-rollback.json";
 
   const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
     env,
@@ -7437,7 +7436,7 @@ function runProdEvidencePlaceholderEvidenceTargetNegativeCheck() {
     process.exit(1);
   }
 
-  if (!String(result.stderr).includes("DEPLOYMENT_REGION_TARGET production için gerçek https host olmalı.")) {
+  if (!String(result.stderr).includes("DEPLOYMENT_ROLLBACK_TARGET production için gerçek https host olmalı.")) {
     console.error("Production evidence template kontrolü başarısız: prod evidence placeholder evidence target negative beklenen hata yok.");
     console.error(result.stderr);
     process.exit(1);
@@ -7446,7 +7445,7 @@ function runProdEvidencePlaceholderEvidenceTargetNegativeCheck() {
 
 function runProdEvidenceSecretEvidenceTargetNegativeCheck() {
   const env = createValidProdEnvForNegativeCheck();
-  env.DEPLOYMENT_REGION_TARGET = "https://ops:secret@evidence.o-okul.com/deployment-region.json?token=secret#proof";
+  env.DEPLOYMENT_ROLLBACK_TARGET = "https://ops:secret@evidence.o-okul.com/deployment-rollback.json?token=secret#proof";
 
   const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
     env,
@@ -7458,7 +7457,7 @@ function runProdEvidenceSecretEvidenceTargetNegativeCheck() {
     process.exit(1);
   }
 
-  if (!String(result.stderr).includes("DEPLOYMENT_REGION_TARGET production evidence target URL userinfo, query veya fragment içeremez.")) {
+  if (!String(result.stderr).includes("DEPLOYMENT_ROLLBACK_TARGET production evidence target URL userinfo, query veya fragment içeremez.")) {
     console.error("Production evidence template kontrolü başarısız: prod evidence secret evidence target negative beklenen hata yok.");
     console.error(result.stderr);
     process.exit(1);
@@ -7469,7 +7468,7 @@ function runProdEvidenceTempFileEvidenceTargetNegativeCheck() {
   for (const tempRoot of ["/tmp", "/private/tmp"]) {
     const label = `prod evidence temp file evidence target negative (${tempRoot})`;
     const env = createValidProdEnvForNegativeCheck();
-    env.DEPLOYMENT_REGION_TARGET = `file://${tempRoot}/deployment-region.json`;
+    env.DEPLOYMENT_ROLLBACK_TARGET = `file://${tempRoot}/deployment-rollback.json`;
 
     const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
       env,
@@ -7483,7 +7482,7 @@ function runProdEvidenceTempFileEvidenceTargetNegativeCheck() {
       process.exit(1);
     }
 
-    if (!String(result.stderr).includes("DEPLOYMENT_REGION_TARGET production için lokal temp path olmamalı.")) {
+    if (!String(result.stderr).includes("DEPLOYMENT_ROLLBACK_TARGET production için lokal temp path olmamalı.")) {
       console.error(
         `Production evidence template kontrolü başarısız: ${label} beklenen hata yok.`,
       );
@@ -7497,12 +7496,12 @@ function runProdEvidenceSymlinkEvidenceTargetNegativeCheck() {
   const rootParent = resolve("artifacts/prod-evidence-template-check");
   mkdirSync(rootParent, { recursive: true });
   const root = mkdtempSync(join(rootParent, "prod-evidence-symlink-"));
-  const linkPath = join(root, "deployment-region.json");
-  symlinkSync(resolve("docs/evidence-templates/deployment-region.example.json"), linkPath);
+  const linkPath = join(root, "deployment-rollback.json");
+  symlinkSync(resolve("docs/evidence-templates/deployment-rollback.example.json"), linkPath);
 
   try {
     const env = createValidProdEnvForNegativeCheck();
-    env.DEPLOYMENT_REGION_TARGET = pathToFileURL(linkPath).href;
+    env.DEPLOYMENT_ROLLBACK_TARGET = pathToFileURL(linkPath).href;
 
     const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
       env,
@@ -7514,7 +7513,7 @@ function runProdEvidenceSymlinkEvidenceTargetNegativeCheck() {
       process.exit(1);
     }
 
-    if (!String(result.stderr).includes("DEPLOYMENT_REGION_TARGET production için symlink olmayan file artifact olmalı.")) {
+    if (!String(result.stderr).includes("DEPLOYMENT_ROLLBACK_TARGET production için symlink olmayan file artifact olmalı.")) {
       console.error("Production evidence template kontrolü başarısız: prod evidence symlink evidence target negative beklenen hata yok.");
       console.error(result.stderr);
       process.exit(1);
@@ -7533,14 +7532,14 @@ function runProdEvidenceSymlinkParentEvidenceTargetNegativeCheck() {
   const realNestedDirectory = join(realDirectory, "nested");
   mkdirSync(realNestedDirectory, { recursive: true });
   writeFileSync(
-    join(realNestedDirectory, "deployment-region.json"),
-    readFileSync("docs/evidence-templates/deployment-region.example.json", "utf8"),
+    join(realNestedDirectory, "deployment-rollback.json"),
+    readFileSync("docs/evidence-templates/deployment-rollback.example.json", "utf8"),
   );
   symlinkSync(realDirectory, symlinkDirectory, "dir");
 
   try {
     const env = createValidProdEnvForNegativeCheck();
-    env.DEPLOYMENT_REGION_TARGET = pathToFileURL(join(symlinkDirectory, "nested", "deployment-region.json")).href;
+    env.DEPLOYMENT_ROLLBACK_TARGET = pathToFileURL(join(symlinkDirectory, "nested", "deployment-rollback.json")).href;
 
     const result = spawnSync(process.execPath, ["scripts/check-prod-evidence.mjs"], {
       env,
@@ -7552,7 +7551,7 @@ function runProdEvidenceSymlinkParentEvidenceTargetNegativeCheck() {
       process.exit(1);
     }
 
-    if (!String(result.stderr).includes("DEPLOYMENT_REGION_TARGET production için parent dizini symlink olmayan dizin olmalı.")) {
+    if (!String(result.stderr).includes("DEPLOYMENT_ROLLBACK_TARGET production için parent dizini symlink olmayan dizin olmalı.")) {
       console.error("Production evidence template kontrolü başarısız: prod evidence symlink parent evidence target negative beklenen hata yok.");
       console.error(result.stderr);
       process.exit(1);
