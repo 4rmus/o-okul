@@ -717,8 +717,8 @@ Beklenen akış:
 - Workflow aynı commit'in başarılı `.github/workflows/ci.yml` run'ını GitHub API'dan okuyup
   `artifacts/staging/reports/github-ci.json` üretir, `pnpm github-ci:check` ile doğrular ve
   deploy SHA'sına bağlı `staging-github-ci-evidence-<sha>` artifact'i olarak saklar. Bu job geçmeden image build veya deploy başlamaz.
-- Workflow sonra `pnpm run ci` çalıştırmadan önce web Playwright Chromium bağımlılıklarını
-  `pnpm --filter @o-okul/web exec playwright install --with-deps chromium` ile kurar.
+- Workflow `pnpm run ci` komutunu tekrar çalıştırmaz; deploy kapısı upstream `CI` workflow'unun
+  başarılı run'ı ve bu run'dan üretilen GitHub CI evidence dosyasıdır.
 - `web`, `api`, `worker` ve `queue-board` image'ları GHCR'a commit SHA tag'i ve `staging-latest`
   tag'i ile push edilir.
 - GitHub runner `docker-compose.yml`, `docker-compose.release.yml`, `docker-compose.traefik.yml`,

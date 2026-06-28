@@ -4769,9 +4769,7 @@ requireTokens("apps/web/playwright.next.config.ts", [
   "pnpm --filter @o-okul/ui build && pnpm --filter @o-okul/web next:dev",
 ]);
 
-for (const workflowPath of [".github/workflows/ci.yml", ".github/workflows/staging-deploy.yml"]) {
-  requireTokens(workflowPath, ["pnpm --filter @o-okul/web exec playwright install --with-deps chromium"]);
-}
+requireTokens(".github/workflows/ci.yml", ["pnpm --filter @o-okul/web exec playwright install --with-deps chromium"]);
 
 requireTokens("docs/phase-6-production-readiness.md", [
   "pnpm web:ux-baseline:check",

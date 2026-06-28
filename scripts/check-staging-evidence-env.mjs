@@ -164,7 +164,6 @@ function checkWorkflowContract(output) {
     "Check staging evidence env before deploy",
     "STAGING_EVIDENCE_ENV_B64",
     "pnpm install --frozen-lockfile",
-    "pnpm --filter @o-okul/web exec playwright install --with-deps chromium",
     "trap 'rm -f .staging-evidence.env' EXIT",
     "pnpm staging:evidence-env:check -- --env-file .staging-evidence.env",
     "base64 -d > .staging-evidence.env",
@@ -205,6 +204,14 @@ function checkWorkflowContract(output) {
     if (!workflow.includes(token)) {
       output.push(`${workflowPath} beklenen staging evidence token'ını içermiyor: ${token}`);
     }
+  }
+
+  if (workflow.includes("pnpm run ci")) {
+    output.push(`${workflowPath} tam CI'yi tekrar çalıştırmamalı; başarılı CI evidence deploy kapısıdır.`);
+  }
+
+  if (workflow.includes("playwright install --with-deps chromium")) {
+    output.push(`${workflowPath} Playwright bağımlılığı kurmamalı; bu sorumluluk CI workflow'unda kalmalı.`);
   }
 
   requireWorkflowOrder(output, workflow, "preflight staging env check order", [

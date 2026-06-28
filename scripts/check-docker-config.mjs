@@ -242,9 +242,7 @@ const expectations = {
     "needs: preflight",
     "Generate GitHub CI evidence before deploy",
     "Check staging evidence env before deploy",
-    "pnpm run ci",
     "pnpm install --frozen-lockfile",
-    "pnpm --filter @o-okul/web exec playwright install --with-deps chromium",
     "docker build",
     "--target web",
     "--target api",
@@ -340,6 +338,14 @@ if (queuePrefixOccurrences < 2) {
 const studentPiiHashKeyOccurrences = compose.match(/STUDENT_PII_HASH_KEY: \${STUDENT_PII_HASH_KEY}/g)?.length ?? 0;
 if (studentPiiHashKeyOccurrences < 2) {
   failures.push("docker-compose.yml eksik: STUDENT_PII_HASH_KEY api ve worker içinde olmalı");
+}
+
+if (stagingDeployWorkflow.includes("pnpm run ci")) {
+  failures.push("staging-deploy workflow tam CI'yi tekrar çalıştırmamalı; workflow_run CI başarısı ve GitHub CI evidence kullanılmalı");
+}
+
+if (stagingDeployWorkflow.includes("playwright install --with-deps chromium")) {
+  failures.push("staging-deploy workflow web Playwright bağımlılığı kurmamalı; bu yalnız CI workflow'unda kalmalı");
 }
 
 const logLevelOccurrences = compose.match(/LOG_LEVEL: \${LOG_LEVEL:-info}/g)?.length ?? 0;

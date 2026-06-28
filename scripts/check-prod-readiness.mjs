@@ -1034,7 +1034,6 @@ const expectations = {
     "Generate GitHub CI evidence before deploy",
     "Check staging evidence env before deploy",
     "pnpm install --frozen-lockfile",
-    "pnpm --filter @o-okul/web exec playwright install --with-deps chromium",
     "--target queue-board",
     "QUEUE_BOARD_IMAGE=${IMAGE_PREFIX}/queue-board:${IMAGE_TAG}",
     "queue-board:staging-latest",
@@ -4733,6 +4732,14 @@ for (const [file, tokens] of Object.entries(expectations)) {
       failures.push(`${file} eksik: ${token}`);
     }
   }
+}
+
+if (files[".github/workflows/staging-deploy.yml"].includes("pnpm run ci")) {
+  failures.push("staging-deploy workflow tam CI'yi tekrar çalıştırmamalı; başarılı CI run'ı deploy kapısıdır.");
+}
+
+if (files[".github/workflows/staging-deploy.yml"].includes("playwright install --with-deps chromium")) {
+  failures.push("staging-deploy workflow Playwright bağımlılığı kurmamalı; bu sorumluluk CI workflow'unda kalmalı.");
 }
 
 if (failures.length > 0) {
