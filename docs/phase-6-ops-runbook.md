@@ -742,11 +742,9 @@ Beklenen akış:
   `/evidence/*.json` olarak salt-okunur sunar; eksik kanıt dosyası bilinçli olarak 404 döner.
 - GitHub runner, `STAGING_EVIDENCE_ENV_B64` içeriğini evidence job'da yeniden decode edip
   `pnpm staging:evidence-env:check` ile tekrar doğrular.
-- Evidence job, `DEPLOYMENT_REGION_PROVIDER`, `DEPLOYMENT_REGION_REGION`,
-  `DEPLOYMENT_REGION_DATACENTER_COUNTRY_CODE`, `DEPLOYMENT_REGION_DATA_RESIDENCY_VERIFIED`,
-  `DEPLOYMENT_REGION_EVIDENCE_REFERENCE` ve `DEPLOYMENT_REGION_SERVICES_VERIFIED` değerlerinden
-  `artifacts/staging/reports/deployment-region.json` üretir ve `DEPLOYMENT_REGION_TARGET` değerini
-  bu dosya artifact'ine çevirir.
+- Evidence job, deployment-region artifact üretmez; `DEPLOYMENT_REGION_TARGET` mevcut staging
+  evidence secret içindeki kalıcı kanıt URL'sinden okunur. Provider/region detay env anahtarları
+  uygulama runtime'ı için zorunlu değildir.
 - GitHub runner, deploy öncesi üretilmiş `staging-github-ci-evidence-<sha>` artifact'ini
   `actions/download-artifact@v4` ile `artifacts/staging/reports/github-ci.json` yoluna indirir ve
   `pnpm github-ci:check` ile tekrar doğrular.

@@ -48,14 +48,6 @@ const uiUxRedesignGeneratorKeys = [
   "UI_UX_REDESIGN_APPROVAL_ROLE",
   "UI_UX_REDESIGN_APPROVED_AT",
 ];
-const deploymentRegionGeneratorKeys = [
-  "DEPLOYMENT_REGION_PROVIDER",
-  "DEPLOYMENT_REGION_REGION",
-  "DEPLOYMENT_REGION_DATACENTER_COUNTRY_CODE",
-  "DEPLOYMENT_REGION_DATA_RESIDENCY_VERIFIED",
-  "DEPLOYMENT_REGION_EVIDENCE_REFERENCE",
-  "DEPLOYMENT_REGION_SERVICES_VERIFIED",
-];
 const smsProviderRuntimeKeys = ["NETGSM_USERCODE", "NETGSM_PASSWORD", "NETGSM_MSG_HEADER"];
 const smsSmokeKeys = ["SMS_SMOKE_TO", "SMS_SMOKE_BODY", "SMS_SMOKE_CONFIRM"];
 const runtimeRequiredKeys = ["S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"];
@@ -66,7 +58,6 @@ const requiredKeys = unique([
   ...runtimeRequiredKeys,
   ...(smsEnabled ? smsProviderRuntimeKeys : []),
   ...uiUxRedesignGeneratorKeys,
-  ...deploymentRegionGeneratorKeys,
 ]);
 const keysRequiredInSecret = requiredKeys.filter(
   (key) => !summaryDefaultedSmokeKeys.has(key) && !workflowInjectedKeys.has(key),
@@ -189,14 +180,10 @@ function checkWorkflowContract(output) {
     "Generate UI/UX redesign evidence",
     "UI_UX_REDESIGN_EVIDENCE_OUTPUT=\"artifacts/staging/reports/ui-ux-redesign.json\"",
     "pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env",
-    "Generate deployment region evidence",
-    "pnpm deployment:region:generate --",
-    "--output artifacts/staging/reports/deployment-region.json",
     "prune_old_release_images",
     "require_disk_space_mb 2048",
     "timeout 20m docker compose",
     "echo \"UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json\"",
-    "echo \"DEPLOYMENT_REGION_TARGET=file://$PWD/artifacts/staging/reports/deployment-region.json\"",
     "echo \"SENTRY_RELEASE=$IMAGE_TAG\"",
     "echo \"ROLLBACK_IMAGE_TAG=$ROLLBACK_IMAGE_TAG\"",
     "echo \"GITHUB_CI_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/github-ci.json\"",
@@ -256,13 +243,8 @@ function checkWorkflowContract(output) {
     "Generate UI/UX redesign evidence",
     "UI_UX_REDESIGN_EVIDENCE_OUTPUT=\"artifacts/staging/reports/ui-ux-redesign.json\"",
     "pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env",
-    "Generate deployment region evidence",
-    "pnpm deployment:region:generate --",
-    "--env-file .staging-evidence.env",
-    "--output artifacts/staging/reports/deployment-region.json",
     "Append release evidence metadata",
     "echo \"UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json\"",
-    "echo \"DEPLOYMENT_REGION_TARGET=file://$PWD/artifacts/staging/reports/deployment-region.json\"",
     "Run first staging evidence gates",
     "Run production evidence chain",
     "Check staging release artifact bundle",

@@ -329,17 +329,13 @@ pnpm backup:restore:smoke
   deploy zincirine dahil değildir; Faz 10 kapanışında çalıştırılır.
 - Kurum `/kurum/canli-yayin` ekranı production kanıt zincirini, release özet alanlarını ve dış ortam
   kanıt gereksinimlerini ops görünümünde listeler.
-- TR datacenter/provider kanıtı `pnpm deployment:region:check` ile doğrulanır.
+- TR datacenter/provider kanıtı varsa `pnpm deployment:region:check` ile doğrulanır.
   Rapor top-level alan kümesi ve `api`, `worker`, `postgres`, `redis`, `object-storage` tam servis
   seti ile boş `gaps` listesi `prod:evidence:templates:check` içindeki fazla alan/servis ve
   invalid/non-empty gaps negatifleriyle korunur. Public IP geolocation/ASN lookup tek başına
   provider console, sözleşme veya kalıcı first-party artifact yerine geçemez.
-  Staging artifact'i üretmek için
-  `STAGING_ENVIRONMENT=staging DEPLOYMENT_REGION_OUTPUT=artifacts/staging/reports/deployment-region.json DEPLOYMENT_REGION_PROVIDER=... DEPLOYMENT_REGION_REGION=... DEPLOYMENT_REGION_DATACENTER_COUNTRY_CODE=TR DEPLOYMENT_REGION_DATA_RESIDENCY_VERIFIED=true DEPLOYMENT_REGION_EVIDENCE_REFERENCE=... DEPLOYMENT_REGION_SERVICES_VERIFIED=api,worker,postgres,redis,object-storage pnpm deployment:region:generate`
-  kullanılır. Generator gerçek provider/region/evidence referansı ve exact servis onayı olmadan
-  artifact yazmaz; public IP lookup referansını da final kanıt saymaz. Staging deploy workflow'u
-  bu artifact'i evidence job içinde üretir ve `DEPLOYMENT_REGION_TARGET` değerini file artifact'e
-  çevirir.
+  Staging deploy workflow'u bu artifact'i üretmez; `DEPLOYMENT_REGION_TARGET` secret içindeki
+  mevcut kalıcı kanıt URL'sini kullanır.
 - SMS v1 kapsamı kapalıdır: staging/prod release env içinde `SMS_ENABLED=false`,
   `NEXT_PUBLIC_SMS_ENABLED=false`, `SMS_PROVIDER=noop` ve `SMS_ALLOW_NOOP_IN_PRODUCTION=false`
   kalır; `pnpm sms:smoke` bu kapsam dışı yolu `provider=disabled`, `segments=0` ve
