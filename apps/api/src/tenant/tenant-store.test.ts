@@ -36,7 +36,7 @@ describe("InMemoryTenantStore", () => {
 
     await store.createWithFirstAdmin(
       { id: "tenant-first-admin", name: "First Admin Tenant", slug: "first-admin-tenant", seatLimit: 3 },
-      { name: "First Admin", email: "first.admin@example.test", mode: "password", password: "password1" },
+      { name: "First Admin", email: "first.admin@example.test", nationalId: "10000000450", phone: "5551234567" },
     );
 
     await expect(store.list()).resolves.toContainEqual(
@@ -53,7 +53,7 @@ describe("InMemoryTenantStore", () => {
 
     await store.createWithFirstAdmin(
       { id: "tenant-login-admin", name: "Login Admin Tenant", slug: "login-admin-tenant" },
-      { name: "Login Admin", email: "LOGIN.ADMIN@example.test", mode: "password", password: "password1" },
+      { name: "Login Admin", email: "LOGIN.ADMIN@example.test", nationalId: "10000000450", phone: "5551234567" },
     );
 
     const authUser = await new InMemoryAuthUserStore().findByEmail("login.admin@example.test");
@@ -63,7 +63,7 @@ describe("InMemoryTenantStore", () => {
       tenantId: "tenant-login-admin",
       roles: ["TENANT_ADMIN"],
     });
-    expect(verifyPassword("password1", authUser?.passwordHash ?? "")).toBe(true);
+    expect(verifyPassword("5551234567", authUser?.passwordHash ?? "")).toBe(true);
   });
 });
 
@@ -126,7 +126,7 @@ describe("PostgresTenantStore", () => {
 
     const result = await store.createWithFirstAdmin(
       { id: "tenant-first-admin", name: "First Admin Tenant", slug: "first-admin-tenant" },
-      { name: "First Admin", email: "FIRST.ADMIN@example.test", mode: "password", password: "password1" },
+      { name: "First Admin", email: "FIRST.ADMIN@example.test", nationalId: "10000000450", phone: "5551234567" },
     );
 
     expect(result).toEqual({
@@ -142,7 +142,7 @@ describe("PostgresTenantStore", () => {
     expect(queries.some((query) => query.sql.includes('INSERT INTO "Tenant"'))).toBe(true);
     const insertUser = queries.find((query) => query.sql.includes('INSERT INTO "User"'));
     expect(insertUser?.sql).toContain('ON CONFLICT ("email") DO NOTHING');
-    expect(insertUser?.values).toHaveLength(5);
+    expect(insertUser?.values).toHaveLength(7);
     expect(queries.some((query) => query.sql.includes('INSERT INTO "TenantMembership"'))).toBe(true);
     expect(queries.at(-1)?.sql).toBe("COMMIT");
   });
@@ -170,7 +170,7 @@ describe("PostgresTenantStore", () => {
 
     await expect(store.createWithFirstAdmin(
       { id: "tenant-duplicate-admin", name: "Duplicate Admin Tenant", slug: "duplicate-admin-tenant" },
-      { name: "Existing Admin", email: "existing.admin@example.test", mode: "password", password: "password1" },
+      { name: "Existing Admin", email: "existing.admin@example.test", nationalId: "10000000450", phone: "5551234567" },
     )).rejects.toThrow("TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS");
 
     expect(queries.some((query) => query.sql.includes('INSERT INTO "Tenant"'))).toBe(false);

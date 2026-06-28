@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, type MouseEvent, type ReactNode } from "react";
-import { ActionCard, Button, MetricCard, MetricGrid as UiMetricGrid, Panel, Skeleton, type MetricCardProps, type StatusBadgeProps } from "@o-okul/ui";
-import { useAuth } from "../../../providers.js";
+import { type MouseEvent, type ReactNode } from "react";
+import { ActionCard, MetricCard, MetricGrid as UiMetricGrid, Panel, Skeleton, type MetricCardProps, type StatusBadgeProps } from "@o-okul/ui";
 import { PageFrame } from "../../_shared/page-frame.js";
 
 interface PortalFrameProps {
@@ -32,8 +31,6 @@ interface PortalMetricItem {
   value: number | string;
 }
 
-const demoLoginEnabled = process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN === "true" || process.env.NODE_ENV !== "production";
-
 export function PortalFrame({ actions, children, context, subtitle, title }: PortalFrameProps) {
   return (
     <PageFrame title={title} subtitle={subtitle} actions={actions}>
@@ -56,40 +53,14 @@ function PortalContextStrip({ context }: { context: PortalFrameContext }) {
   );
 }
 
-export function AccessPanel({ title, demoEmail, demoLabel }: { title: string; demoEmail: string; demoLabel: string }) {
-  const { login } = useAuth();
-  const [error, setError] = useState("");
-
-  async function previewAs() {
-    setError("");
-    try {
-      await login(demoEmail, "password");
-    } catch {
-      setError("Demo girişi başarısız.");
-    }
-  }
-
+export function AccessPanel({ title }: { title: string }) {
   return (
     <PortalFrame title={title} subtitle="Bu portal kişiye özeldir; kurum hesabıyla içerik görünmez.">
       <Panel
         aria-label="Portal erişimi"
-        description={
-          demoLoginEnabled
-            ? "Portalı görmek için ilgili kişi hesabıyla giriş yapın. Demo/local ortamda hızlı önizleme için aşağıdaki düğmeyi kullanın."
-            : "Portalı görmek için ilgili kişi hesabıyla giriş yapın."
-        }
+        description="Portalı görmek için ilgili kişi hesabıyla giriş yapın."
         title="Portal erişimi"
-      >
-        {demoLoginEnabled ? (
-          <>
-            <div className="next-portal-preview-action" aria-label="Demo ortam portal önizleme">
-              <Button onClick={() => void previewAs()}>{demoLabel} olarak önizle</Button>
-            </div>
-            <p className="next-status-note">Demo giriş bilgisi yalnız demo/local hızlı önizleme düğmesine bağlıdır.</p>
-          </>
-        ) : null}
-        {error ? <p className="next-form-error">{error}</p> : null}
-      </Panel>
+      />
     </PortalFrame>
   );
 }

@@ -1,10 +1,10 @@
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type { TenantCreateResponse } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
-import { createResetToken, hashResetToken } from "../auth/auth.service.js";
-import { type PasswordResetStore, passwordResetStoreToken } from "../auth/password-reset-store.js";
+import { optionalTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
 import { isSystemAdmin } from "../rbac/roles.js";
+import { encryptTcIdentity, hashTcIdentity, normalizeTcIdentity } from "../student/tc-identity.js";
 import {
   type TenantUserRecord,
   type UserManagementStore,
@@ -34,10 +34,10 @@ export interface TenantWriteBody {
 }
 
 export interface TenantFirstAdminBody {
-  mode?: string;
   name?: string;
   email?: string;
-  password?: string;
+  nationalId?: string;
+  phone?: string;
 }
 
 export type { TenantCreateResponse };
@@ -48,7 +48,6 @@ export class TenantService {
     @Inject(tenantStoreToken) private readonly tenants: TenantStore,
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() @Inject(userManagementStoreToken) private readonly users?: UserManagementStore,
-    @Optional() @Inject(passwordResetStoreToken) private readonly passwordResets?: PasswordResetStore,
   ) {}
 
   async list(context: RequestContext): Promise<TenantRecord[]> {
@@ -83,17 +82,7 @@ export class TenantService {
       const result = await createTenantOrThrow(() => this.tenants.createWithFirstAdmin!(tenantInput, firstAdmin));
       await this.recordTenantCreated(context, result.tenant);
       await this.recordFirstAdminCreated(context, result.tenant.id, result.admin);
-      const activation = await this.issueFirstAdminActivationToken(result.admin, firstAdmin.mode);
-      return {
-        tenant: result.tenant,
-        admin: {
-          ...result.admin,
-          ...(activation ? { activationTokenIssued: true, activationTokenExpiresAt: activation.expiresAt } : {}),
-        },
-      };
-    }
-    if (firstAdmin?.mode === "invitation") {
-      throw new BadRequestException("TENANT_FIRST_ADMIN_INVITATION_REQUIRES_ATOMIC_STORE");
+      return result;
     }
     if (firstAdmin && !users) {
       throw new BadRequestException("TENANT_USER_STORE_REQUIRED");
@@ -108,7 +97,9 @@ export class TenantService {
       tenantId: tenant.id,
       email: firstAdmin.email,
       name: firstAdmin.name,
-      password: firstAdmin.password ?? "",
+      nationalIdEncrypted: encryptTcIdentity(firstAdmin.nationalId),
+      nationalIdHash: hashTcIdentity(firstAdmin.nationalId),
+      password: firstAdmin.phone,
       roles: ["TENANT_ADMIN"],
     });
     await this.recordFirstAdminCreated(context, tenant.id, admin);
@@ -213,25 +204,6 @@ export class TenantService {
     });
   }
 
-  private async issueFirstAdminActivationToken(
-    admin: TenantUserRecord,
-    mode: "password" | "invitation",
-  ): Promise<{ expiresAt: string } | undefined> {
-    if (mode !== "invitation") return undefined;
-    if (!this.passwordResets) {
-      throw new BadRequestException("TENANT_FIRST_ADMIN_INVITATION_TOKEN_STORE_REQUIRED");
-    }
-
-    await this.passwordResets.revokePendingForUser(admin.id);
-    const activationToken = createResetToken();
-    const expiresAt = nextActivationExpiry();
-    await this.passwordResets.create({
-      userId: admin.id,
-      tokenHash: hashResetToken(activationToken),
-      expiresAt,
-    });
-    return { expiresAt };
-  }
 }
 
 function parseCreateTenant(body: TenantWriteBody): CreateTenantInput {
@@ -278,21 +250,24 @@ function parseFirstAdmin(body: TenantFirstAdminBody | undefined):
   | {
       name: string;
       email: string;
-      mode: "password" | "invitation";
-      password?: string;
+      nationalId: string;
+      phone: string;
     }
   | undefined {
   if (!body) return undefined;
-  const mode = body.mode === "invitation" ? "invitation" : "password";
-  const password = body.password;
-  if (mode === "password" && (!password || password.length < 8)) {
-    throw new BadRequestException("TENANT_FIRST_ADMIN_PASSWORD_MIN_8_REQUIRED");
+  const nationalId = normalizeTcIdentity(
+    requiredText(body.nationalId, "TENANT_FIRST_ADMIN_NATIONAL_ID_REQUIRED"),
+    "TENANT_FIRST_ADMIN_NATIONAL_ID_INVALID",
+  );
+  const phone = optionalTurkishMobilePhone(body.phone, "TENANT_FIRST_ADMIN_PHONE_INVALID");
+  if (!phone) {
+    throw new BadRequestException("TENANT_FIRST_ADMIN_PHONE_REQUIRED");
   }
   return {
     name: requiredText(body.name, "TENANT_FIRST_ADMIN_NAME_REQUIRED"),
     email: requiredEmail(body.email, "TENANT_FIRST_ADMIN_EMAIL_REQUIRED"),
-    mode,
-    ...(mode === "password" ? { password } : {}),
+    nationalId,
+    phone,
   };
 }
 
@@ -365,12 +340,6 @@ function optionalPositiveInt(value: number | undefined, errorCode: string): numb
     throw new BadRequestException(errorCode);
   }
   return value;
-}
-
-function nextActivationExpiry(): string {
-  const expiresAt = new Date();
-  expiresAt.setHours(expiresAt.getHours() + 1);
-  return expiresAt.toISOString();
 }
 
 async function createTenantOrThrow<T>(createTenant: () => Promise<T>): Promise<T> {

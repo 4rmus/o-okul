@@ -85,7 +85,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
   );
 
   if (!canReadPortal) {
-    return <AccessPanel title="Veli Portalı" demoEmail="guardian-a@example.test" demoLabel="Demo veli" />;
+    return <AccessPanel title="Veli Portalı" />;
   }
 
   if (studentsQuery.isPending) {

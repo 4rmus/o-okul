@@ -28,13 +28,9 @@ import type { LoginMfaChallenge } from "./totp-mfa.js";
 import type { TokenPair } from "./token-service.js";
 
 const loginBodySchema = z.object({
-  email: z.string().trim().email().optional(),
-  tenantSlug: optionalTrimmedString,
-  nationalId: optionalTrimmedString,
+  tenantSlug: requiredTrimmedString,
+  nationalId: requiredTrimmedString,
   password: requiredTrimmedString,
-}).strict().refine((value) => Boolean(value.email || (value.tenantSlug && value.nationalId)), {
-  message: "E-posta veya kurum kodu + TC zorunlu.",
-  path: ["email"],
 }) satisfies z.ZodType<LoginRequest>;
 const refreshBodySchema = z.preprocess((value) => value ?? {}, z.object({
   refreshToken: optionalTrimmedString,

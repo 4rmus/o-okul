@@ -4,6 +4,7 @@ import type { RequestContext } from "../context/request-context.js";
 import { authUserStoreToken, hashPassword, type AuthUserStore } from "../auth/auth-user-store.js";
 import { optionalTurkishMobilePhone } from "../auth/phone-normalize.js";
 import { authSessionStoreToken, type SessionStore } from "../auth/session-store.js";
+import { encryptTcIdentity, hashTcIdentity, normalizeTcIdentity } from "../student/tc-identity.js";
 import { isTenantAssignableRoleName, type TenantAssignableRoleName } from "@o-okul/shared-types";
 import {
   assertTenantSeatCapacity,
@@ -21,7 +22,8 @@ import {
 export interface CreateTenantUserBody {
   email?: string;
   name?: string;
-  password?: string;
+  nationalId?: string;
+  phone?: string;
   roles?: string[];
 }
 
@@ -153,21 +155,28 @@ export class UserManagementService {
   private parseCreateInput(tenantId: string, body: CreateTenantUserBody): CreateTenantUserInput {
     const email = body.email?.trim().toLowerCase();
     const name = body.name?.trim();
-    const password = body.password;
+    const nationalIdInput = body.nationalId?.trim();
+    const phone = optionalTurkishMobilePhone(body.phone, "PHONE_INVALID");
     if (!email || !email.includes("@")) {
       throw new BadRequestException("EMAIL_REQUIRED");
     }
     if (!name) {
       throw new BadRequestException("NAME_REQUIRED");
     }
-    if (!password || password.length < 8) {
-      throw new BadRequestException("PASSWORD_MIN_8_REQUIRED");
+    if (!nationalIdInput) {
+      throw new BadRequestException("NATIONAL_ID_REQUIRED");
     }
+    if (!phone) {
+      throw new BadRequestException("PHONE_REQUIRED");
+    }
+    const nationalId = normalizeTcIdentity(nationalIdInput, "NATIONAL_ID_INVALID");
     return {
       tenantId,
       email,
       name,
-      password,
+      nationalIdEncrypted: encryptTcIdentity(nationalId),
+      nationalIdHash: hashTcIdentity(nationalId),
+      password: phone,
       roles: parseTenantRoles(body.roles),
     };
   }

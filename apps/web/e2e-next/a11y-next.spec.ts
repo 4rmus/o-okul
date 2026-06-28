@@ -26,12 +26,24 @@ test.describe("Next erişilebilirlik smoke", () => {
     await page.goto("/login");
     await expect(page.getByRole("heading", { name: "Giriş" })).toBeVisible();
     const loginForm = page.getByRole("form", { name: "Giriş formu" });
-    await expect(loginForm.getByRole("textbox", { name: /E-posta/ })).toHaveValue("admin@demo.local");
+    await expect(loginForm.getByLabel("Kurum kodu")).toBeVisible();
+    await expect(loginForm.getByLabel("TC kimlik no")).toBeVisible();
     await expect(loginForm.getByLabel("Şifre", { exact: true })).toBeVisible();
-    await expect(loginForm.getByRole("checkbox", { name: /Beni hatırla/ })).toBeVisible();
-    await expect(loginForm).toContainText("Bu tarayıcıda yalnız e-posta adresi saklanır.");
+    await expect(loginForm.getByRole("textbox", { name: /E-posta/ })).toHaveCount(0);
     await expect(loginForm.getByRole("button", { name: "Giriş yap" })).toBeVisible();
     await expectNoHighImpactA11yViolations(page, "login");
+
+    await page.goto("/k/dna-egitim/giris");
+    const tenantLoginForm = page.getByRole("form", { name: "Giriş formu" });
+    await expect(tenantLoginForm.getByLabel("Kurum kodu")).toHaveCount(0);
+    await expect(tenantLoginForm.getByLabel("TC kimlik no")).toBeVisible();
+    await expectNoHighImpactA11yViolations(page, "tenant-login");
+
+    await page.goto("/sistem/giris");
+    const systemLoginForm = page.getByRole("form", { name: "Giriş formu" });
+    await expect(systemLoginForm.getByLabel("Kurum kodu")).toHaveCount(0);
+    await expect(systemLoginForm.getByLabel("TC kimlik no")).toBeVisible();
+    await expectNoHighImpactA11yViolations(page, "system-login");
   });
 
   test("kurum dashboard shell'inde yüksek etkili axe ihlali yok", async ({ page }) => {

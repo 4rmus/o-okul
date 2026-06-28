@@ -7,7 +7,8 @@ const tenantUserRoleSchema = z.enum(tenantAssignableRoles);
 export const tenantUserCreateBodySchema = z.object({
   email: requiredTrimmedString.refine((value) => value.includes("@"), { message: "EMAIL_REQUIRED" }),
   name: requiredTrimmedString,
-  password: z.string().min(8),
+  nationalId: requiredTrimmedString,
+  phone: requiredTrimmedString,
   roles: z.array(tenantUserRoleSchema).min(1),
 }).strict();
 

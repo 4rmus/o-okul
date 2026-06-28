@@ -15,7 +15,7 @@ import type {
   TeacherImportDryRunResult,
   TeacherImportResult,
 } from "@o-okul/shared-types";
-import { Button, Checkbox, Field, Input, MetricCard, MetricGrid, Panel, SegmentedControl, Select, StatusBadge, TabButton, Tabs } from "@o-okul/ui";
+import { Button, Field, Input, MetricCard, MetricGrid, Panel, SegmentedControl, Select, StatusBadge, TabButton, Tabs } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, queryClient } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
@@ -51,8 +51,6 @@ interface OnboardingDraft {
   };
   people: {
     importOwner: string;
-    inviteGuardians: boolean;
-    inviteTeachers: boolean;
     studentImportFileName: string;
     studentModel: "manual" | "excel";
     teacherImportFileName: string;
@@ -133,8 +131,6 @@ const initialDraft: OnboardingDraft = {
   },
   people: {
     importOwner: "",
-    inviteGuardians: true,
-    inviteTeachers: true,
     studentImportFileName: "",
     studentModel: "excel",
     teacherImportFileName: "",
@@ -1059,18 +1055,6 @@ function PeopleStep({
           placeholder="Operasyon sorumlusu"
         />
       </Field>
-      <Checkbox
-        className="next-onboarding-check"
-        checked={draft.people.inviteTeachers}
-        label="Öğretmen portal davetleri hazırlansın"
-        onChange={(event) => updateDraft("people", { inviteTeachers: event.target.checked })}
-      />
-      <Checkbox
-        className="next-onboarding-check"
-        checked={draft.people.inviteGuardians}
-        label="Veli portal davetleri öğrenci kayıtlarından sonra hazırlansın"
-        onChange={(event) => updateDraft("people", { inviteGuardians: event.target.checked })}
-      />
     </div>
   );
 }

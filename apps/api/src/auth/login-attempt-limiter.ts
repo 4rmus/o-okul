@@ -106,10 +106,10 @@ export function createLoginAttemptLimiter(env = process.env): LoginAttemptLimite
   return useRedis ? new RedisLoginAttemptLimiter() : new LoginAttemptLimiter();
 }
 
-export function loginAttemptKey(email: string, ip = "unknown"): string {
-  const normalized = email.trim().toLowerCase();
+export function loginAttemptKey(identifier: string, ip = "unknown"): string {
+  const normalized = identifier.trim().toLowerCase();
   const normalizedIp = ip.trim().toLowerCase() || "unknown";
-  const material = `email:${normalized || "unknown"}|ip:${normalizedIp}`;
+  const material = `login:${normalized || "unknown"}|ip:${normalizedIp}`;
   return createHash("sha256").update(material).digest("hex");
 }
 

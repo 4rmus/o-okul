@@ -1011,7 +1011,7 @@ export function StudentsPage() {
               onChange={(event) => setForm((current) => ({ ...current, guardianPhone: event.target.value }))}
             />
           </Field>
-          <Field label="Veli e-postası" description="Portal daveti gerekiyorsa bu adres kullanılır.">
+          <Field label="Veli e-postası" description="İletişim için saklanır; giriş TC ve telefonla yapılır.">
             <Input
               type="email"
               value={form.guardianEmail}

@@ -80,10 +80,10 @@ const tenantRecordSchema = objectSchema({
 
 const tenantFirstAdminCreateRequestSchema = objectSchema({
   email: stringSchema({ format: "email" }),
-  mode: { type: "string", enum: ["invitation", "password"] },
   name: stringSchema({ minLength: 1 }),
-  password: stringSchema({ minLength: 8 }),
-}, ["email", "name"]);
+  nationalId: stringSchema({ minLength: 11, maxLength: 11 }),
+  phone: stringSchema({ minLength: 1 }),
+}, ["email", "name", "nationalId", "phone"]);
 
 const tenantCreateRequestSchema = objectSchema({
   contactEmail: stringSchema({ format: "email" }),
@@ -142,8 +142,6 @@ const tenantUserRecordSchema = objectSchema({
 
 const tenantFirstAdminProvisionResultSchema = objectSchema({
   ...(tenantUserRecordSchema.properties as Record<string, JsonSchema>),
-  activationTokenIssued: { type: "boolean" },
-  activationTokenExpiresAt: stringSchema({ format: "date-time" }),
 }, ["id", "email", "name", "tenantId", "roles", "createdAt", "updatedAt"]);
 
 const tenantCreateWithAdminResponseSchema = objectSchema({
@@ -154,9 +152,10 @@ const tenantCreateWithAdminResponseSchema = objectSchema({
 const tenantUserCreateRequestSchema = objectSchema({
   email: stringSchema({ format: "email" }),
   name: stringSchema({ minLength: 1 }),
-  password: stringSchema({ minLength: 8 }),
+  nationalId: stringSchema({ minLength: 11, maxLength: 11 }),
+  phone: stringSchema({ minLength: 1 }),
   roles: arraySchema(tenantUserManagementRoleSchema, { minItems: 1 }),
-}, ["email", "name", "password", "roles"]);
+}, ["email", "name", "nationalId", "phone", "roles"]);
 
 const tenantUserRoleUpdateRequestSchema = objectSchema({
   roles: arraySchema(tenantUserManagementRoleSchema, { minItems: 1 }),
@@ -2257,16 +2256,10 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "post /api/v1/auth/login": {
     requestBody: objectSchema({
-      email: stringSchema({ format: "email" }),
       tenantSlug: stringSchema(),
       nationalId: stringSchema(),
       password: stringSchema(),
-    }, ["password"], {
-      anyOf: [
-        { required: ["email"] },
-        { required: ["tenantSlug", "nationalId"] },
-      ],
-    }),
+    }, ["tenantSlug", "nationalId", "password"]),
     responseBody: {
       oneOf: [
         authResponseSchema,

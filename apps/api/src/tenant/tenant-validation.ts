@@ -20,19 +20,10 @@ const positiveIntegerSchema = z.number().int().positive();
 
 const tenantFirstAdminBodySchema = z.object({
   email: tenantEmailSchema,
-  mode: z.enum(["invitation", "password"]).optional(),
   name: requiredTrimmedString,
-  password: optionalTrimmedString,
-}).strict().superRefine((value, context) => {
-  if ((value.mode ?? "password") !== "password") return;
-  if (!value.password || value.password.length < 8) {
-    context.addIssue({
-      code: "custom",
-      message: "TENANT_FIRST_ADMIN_PASSWORD_MIN_8_REQUIRED",
-      path: ["password"],
-    });
-  }
-});
+  nationalId: requiredTrimmedString,
+  phone: requiredTrimmedString,
+}).strict();
 
 const tenantAdminWritableFields = {
   contactEmail: optionalTenantEmailSchema,

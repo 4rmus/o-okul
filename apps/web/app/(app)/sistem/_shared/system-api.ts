@@ -22,7 +22,6 @@ export interface TenantCreateResponse {
     name: string;
     tenantId: string;
     roles: string[];
-    activationToken?: string;
   };
 }
 

@@ -47,6 +47,8 @@ describe("PostgresUserManagementStore", () => {
       tenantId: "tenant-a",
       email: "CREATED@example.test",
       name: "Created User",
+      nationalIdEncrypted: "encrypted-created",
+      nationalIdHash: "hash-created",
       password: "password1",
       roles: ["TEACHER"],
     });
@@ -54,12 +56,14 @@ describe("PostgresUserManagementStore", () => {
 
     expect(queries.some((query) => query.sql.includes("set_config('app.current_tenant_id'"))).toBe(true);
     const insertUser = queries.find((query) => query.sql.includes('INSERT INTO "User"'));
-    expect(insertUser?.sql).toContain('ON CONFLICT ("email") DO NOTHING');
-    expect(insertUser?.sql).not.toContain('"passwordHash" = EXCLUDED."passwordHash"');
+    expect(insertUser?.sql).toContain('ON CONFLICT ("tenantId", "nationalIdHash") DO UPDATE');
+    expect(insertUser?.sql).toContain('"passwordHash" = EXCLUDED."passwordHash"');
     expect(insertUser?.values).toEqual([
       expect.any(String),
       "tenant-a",
       "created@example.test",
+      "encrypted-created",
+      "hash-created",
       "Created User",
       expect.stringMatching(/^scrypt:/),
     ]);
@@ -117,13 +121,14 @@ describe("PostgresUserManagementStore", () => {
       tenantId: "tenant-a",
       email: "EXISTING@example.test",
       name: "Attacker Supplied Name",
+      nationalIdEncrypted: "encrypted-existing",
+      nationalIdHash: "hash-existing",
       password: "attacker-password",
       roles: ["TEACHER"],
     });
 
     const insertUser = queries.find((query) => query.sql.includes('INSERT INTO "User"'));
-    expect(insertUser?.sql).toContain('ON CONFLICT ("email") DO NOTHING');
-    expect(insertUser?.sql).not.toContain('"passwordHash" = EXCLUDED."passwordHash"');
+    expect(insertUser).toBeUndefined();
     expect(queries.some((query) => query.sql.includes('UPDATE "User"'))).toBe(false);
     expect(queries.some((query) => query.sql.includes('SELECT "id" FROM "User" WHERE lower("email")'))).toBe(true);
     expect(record).toMatchObject({ id: "user-existing", tenantId: "tenant-a", roles: ["TEACHER"] });
@@ -164,6 +169,8 @@ describe("PostgresUserManagementStore", () => {
         tenantId: "tenant-full",
         email: "new-seat@example.test",
         name: "New Seat",
+        nationalIdEncrypted: "encrypted-new-seat",
+        nationalIdHash: "hash-new-seat",
         password: "password1",
         roles: ["TEACHER"],
       }),

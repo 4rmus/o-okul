@@ -6,7 +6,8 @@ interface LiveOnboardingEvidence {
   firstAdmin: {
     email: string;
     name: string;
-    password: string;
+    nationalId: string;
+    phone: string;
   };
   onboarding?: {
     contactEmail?: string;
@@ -14,7 +15,7 @@ interface LiveOnboardingEvidence {
     institutionName?: string;
   };
   systemAdmin: {
-    email: string;
+    nationalId: string;
     password: string;
   };
   tenant: {
@@ -39,8 +40,8 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   const firstAdminEmail = appendRunId ? appendEmailRunId(evidence.firstAdmin.email, runId) : evidence.firstAdmin.email;
   const onboardingInstitutionName = evidence.onboarding?.institutionName ?? tenantName;
 
-  await page.goto("/login");
-  await page.locator('input[name="email"]').fill(evidence.systemAdmin.email);
+  await page.goto("/sistem/giris");
+  await page.locator('input[name="nationalId"]').fill(evidence.systemAdmin.nationalId);
   await page.locator('input[name="password"]').fill(evidence.systemAdmin.password);
   await page.getByRole("button", { name: "Giriş yap" }).click();
 
@@ -56,14 +57,16 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   await createDialog.getByLabel("Koltuk limiti").fill(String(evidence.tenant.seatLimit ?? 25));
   await createDialog.getByLabel("Admin ad soyad").fill(evidence.firstAdmin.name);
   await createDialog.getByLabel("Admin e-posta").fill(firstAdminEmail);
-  await createDialog.getByLabel("Admin şifre").fill(evidence.firstAdmin.password);
+  await createDialog.getByLabel("Admin TC kimlik no").fill(evidence.firstAdmin.nationalId);
+  await createDialog.getByLabel("Admin telefon").fill(evidence.firstAdmin.phone);
   await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
 
   await expect(page.getByRole("row", { name: new RegExp(escapeRegExp(tenantName)) })).toBeVisible();
   await page.getByRole("button", { name: "Çıkış" }).click();
 
-  await page.locator('input[name="email"]').fill(firstAdminEmail);
-  await page.locator('input[name="password"]').fill(evidence.firstAdmin.password);
+  await page.goto(`/k/${encodeURIComponent(tenantSlug)}/giris`);
+  await page.locator('input[name="nationalId"]').fill(evidence.firstAdmin.nationalId);
+  await page.locator('input[name="password"]').fill(evidence.firstAdmin.phone);
   await page.getByRole("button", { name: "Giriş yap" }).click();
   await expect(page).toHaveURL(/\/kurum$/);
 
@@ -90,13 +93,14 @@ function readEvidence(path: string | undefined): LiveOnboardingEvidence {
 
   const parsed = JSON.parse(readFileSync(path, "utf8")) as Partial<LiveOnboardingEvidence>;
   const failures: string[] = [];
-  if (!parsed.systemAdmin?.email) failures.push("systemAdmin.email");
+  if (!parsed.systemAdmin?.nationalId) failures.push("systemAdmin.nationalId");
   if (!parsed.systemAdmin?.password) failures.push("systemAdmin.password");
   if (!parsed.tenant?.name) failures.push("tenant.name");
   if (!parsed.tenant?.slug) failures.push("tenant.slug");
   if (!parsed.firstAdmin?.name) failures.push("firstAdmin.name");
   if (!parsed.firstAdmin?.email) failures.push("firstAdmin.email");
-  if (!parsed.firstAdmin?.password) failures.push("firstAdmin.password");
+  if (!parsed.firstAdmin?.nationalId) failures.push("firstAdmin.nationalId");
+  if (!parsed.firstAdmin?.phone) failures.push("firstAdmin.phone");
 
   if (failures.length > 0) {
     throw new Error(`LIVE_ONBOARDING_EVIDENCE_INVALID: ${failures.join(", ")}`);

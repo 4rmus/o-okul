@@ -63,8 +63,8 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
   });
 
   await page.route("**/auth/login", async (route) => {
-    const body = route.request().postDataJSON() as { email?: string };
-    activeEmail = body.email ?? "";
+    const body = route.request().postDataJSON() as { nationalId?: string };
+    activeEmail = body.nationalId ? "admin-a@example.test" : "";
     await route.fulfill({
       body: JSON.stringify(envelope(createAuthResponse(activeEmail))),
       contentType: "application/json",
@@ -220,7 +220,8 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
 
 async function loginAsTenantAdmin(page: Page) {
   await page.goto("/login");
-  await page.locator('input[name="email"]').fill("admin-a@example.test");
+  await page.locator('input[name="tenantSlug"]').fill("dna-egitim");
+  await page.locator('input[name="nationalId"]').fill("10000000146");
   await page.locator('input[name="password"]').fill("password");
   await page.getByRole("button", { name: "Giriş yap" }).click();
   await expect(page).toHaveURL(/\/kurum$/);

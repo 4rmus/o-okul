@@ -255,8 +255,8 @@ export function GuardiansPage() {
         emptyState={
           <EmptyState
             title="Veli kaydı yok"
-            description="Öğrenci iletişimi ve portal davetleri için ilk veli kaydını oluştur."
-            hint="Veli eklendikten sonra öğrenci bağlantısı ve portal daveti akışına geçebilirsin."
+            description="Öğrenci iletişimi ve portal hesabı için ilk veli kaydını oluştur."
+            hint="Veli eklendikten sonra öğrenci bağlantısı akışına geçebilirsin."
             primaryAction={{ label: "Veli ekle", onClick: openCreateForm }}
           />
         }

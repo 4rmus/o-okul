@@ -2,6 +2,7 @@ import { randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import pg from "pg";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withBypassRlsQuery } from "../db/tenant-query.js";
+import { hashTcIdentity } from "../student/tc-identity.js";
 
 export interface AuthUser {
   id: string;
@@ -59,10 +60,24 @@ export interface PasswordStateUpdate {
 
 export const authUserStoreToken = Symbol("AuthUserStore");
 
+const demoNationalIdHashes = {
+  adminA: hashTcIdentity("10000000146"),
+  system: hashTcIdentity("10000000214"),
+  assistantA: hashTcIdentity("10000000382"),
+  adminB: hashTcIdentity("10000000832"),
+  studentA: hashTcIdentity("10000000528"),
+  teacherA: hashTcIdentity("10000000696"),
+  guardianA: hashTcIdentity("10000000764"),
+  expiredTenant: hashTcIdentity("10000000900"),
+  privacy: hashTcIdentity("10000001068"),
+  financePrivacy: hashTcIdentity("10000001136"),
+};
+
 const demoUsers: AuthUser[] = [
   {
     id: "user-tenant-a",
     email: "admin-a@example.test",
+    nationalIdHash: demoNationalIdHashes.adminA,
     name: "Tenant A Admin",
     passwordHash: hashPassword("password"),
     tenantId: "tenant-a",
@@ -73,6 +88,7 @@ const demoUsers: AuthUser[] = [
   {
     id: "user-tenant-b",
     email: "admin-b@example.test",
+    nationalIdHash: demoNationalIdHashes.adminB,
     name: "Tenant B Admin",
     passwordHash: hashPassword("password"),
     tenantId: "tenant-b",
@@ -83,6 +99,7 @@ const demoUsers: AuthUser[] = [
   {
     id: "assistant-tenant-a",
     email: "assistant-a@example.test",
+    nationalIdHash: demoNationalIdHashes.assistantA,
     name: "Assistant Admin A",
     passwordHash: hashPassword("password"),
     tenantId: "tenant-a",
@@ -93,6 +110,7 @@ const demoUsers: AuthUser[] = [
   {
     id: "teacher-tenant-a",
     email: "teacher-a@example.test",
+    nationalIdHash: demoNationalIdHashes.teacherA,
     name: "Teacher A",
     passwordHash: hashPassword("password"),
     tenantId: "tenant-a",
@@ -103,6 +121,7 @@ const demoUsers: AuthUser[] = [
   {
     id: "student-tenant-a",
     email: "student-a@example.test",
+    nationalIdHash: demoNationalIdHashes.studentA,
     name: "Student A",
     passwordHash: hashPassword("password"),
     tenantId: "tenant-a",
@@ -113,6 +132,7 @@ const demoUsers: AuthUser[] = [
   {
     id: "guardian-tenant-a",
     email: "guardian-a@example.test",
+    nationalIdHash: demoNationalIdHashes.guardianA,
     name: "Guardian A",
     passwordHash: hashPassword("password"),
     tenantId: "tenant-a",
@@ -122,7 +142,7 @@ const demoUsers: AuthUser[] = [
   },
   {
     id: "user-system",
-    email: "system@example.test",
+    nationalIdHash: demoNationalIdHashes.system,
     name: "System Admin",
     passwordHash: hashPassword("password"),
     tenantId: "system",
@@ -133,6 +153,7 @@ const demoUsers: AuthUser[] = [
   {
     id: "user-expired-tenant",
     email: "expired-tenant@example.test",
+    nationalIdHash: demoNationalIdHashes.expiredTenant,
     name: "Expired Tenant User",
     passwordHash: hashPassword("password"),
     tenantId: "tenant-expired",
@@ -143,6 +164,7 @@ const demoUsers: AuthUser[] = [
   {
     id: "user-privacy",
     email: "privacy@example.test",
+    nationalIdHash: demoNationalIdHashes.privacy,
     name: "Privacy User",
     passwordHash: hashPassword("password"),
     tenantId: "tenant-a",
@@ -153,6 +175,7 @@ const demoUsers: AuthUser[] = [
   {
     id: "user-finance-privacy",
     email: "finance-privacy@example.test",
+    nationalIdHash: demoNationalIdHashes.financePrivacy,
     name: "Finance Privacy User",
     passwordHash: hashPassword("password"),
     tenantId: "tenant-a",

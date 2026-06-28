@@ -242,7 +242,7 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
   });
 
   if (!canReadPortal) {
-    return <AccessPanel title="Öğretmen Portalı" demoEmail="teacher-a@example.test" demoLabel="Demo öğretmen" />;
+    return <AccessPanel title="Öğretmen Portalı" />;
   }
 
   if (query.isPending) {

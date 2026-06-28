@@ -120,6 +120,9 @@ export class IdentityInvitationService {
     if (!invitation) throw new NotFoundException("IDENTITY_INVITATION_NOT_FOUND");
     if (invitation.status !== "PENDING") throw new BadRequestException("IDENTITY_INVITATION_NOT_PENDING");
     if (Date.parse(invitation.expiresAt) <= Date.now()) throw new BadRequestException("IDENTITY_INVITATION_EXPIRED");
+    const subject = await this.findSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId);
+    if (!subject) throw new NotFoundException("SUBJECT_NOT_FOUND");
+    if (!subject.nationalIdEncrypted || !subject.nationalIdHash) throw new BadRequestException("SUBJECT_NATIONAL_ID_REQUIRED");
 
     const existingUsers = await this.users.listTenantUsers(invitation.tenantId);
     if (!existingUsers.some((user) => user.email?.toLowerCase() === invitation.email)) {
@@ -132,14 +135,16 @@ export class IdentityInvitationService {
         tenantId: invitation.tenantId,
         email: invitation.email,
         name: body.name?.trim() || invitation.name,
+        nationalIdEncrypted: subject.nationalIdEncrypted,
+        nationalIdHash: subject.nationalIdHash,
         password,
         roles: [invitation.role],
       });
     } catch (error) {
       throwTenantSeatLimitBadRequest(error);
     }
-    const subject = await this.bindSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId, user.id);
-    if (!subject) throw new NotFoundException("SUBJECT_NOT_FOUND");
+    const boundSubject = await this.bindSubject(invitation.tenantId, invitation.subjectType, invitation.subjectId, user.id);
+    if (!boundSubject) throw new NotFoundException("SUBJECT_NOT_FOUND");
 
     const accepted = await this.invitations.markAccepted(invitation.id, user.id, new Date().toISOString());
     if (!accepted) throw new NotFoundException("IDENTITY_INVITATION_NOT_FOUND");
@@ -176,7 +181,7 @@ export class IdentityInvitationService {
   private async findSubject(tenantId: string, subjectType: InvitationSubjectType, subjectId: string) {
     const subject =
       subjectType === "STUDENT"
-        ? await this.students.findById(subjectId)
+        ? await this.students.findProfileById(subjectId)
         : subjectType === "GUARDIAN"
           ? await this.guardians.findById(subjectId)
           : await this.teachers.findById(subjectId);

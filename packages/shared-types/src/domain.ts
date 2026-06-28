@@ -24,9 +24,8 @@ export interface AuthResponse {
 }
 
 export interface LoginRequest {
-  email?: string;
-  tenantSlug?: string;
-  nationalId?: string;
+  tenantSlug: string;
+  nationalId: string;
   password: string;
 }
 
@@ -142,9 +141,9 @@ export interface TenantCurrentProfileUpdateRequest {
 
 export interface TenantFirstAdminCreateRequest {
   email: string;
-  mode?: "invitation" | "password";
   name: string;
-  password?: string;
+  nationalId: string;
+  phone: string;
 }
 
 export interface TenantCreateRequest {
@@ -188,7 +187,8 @@ export interface TenantUserRecord {
 export interface TenantUserCreateRequest {
   email: string;
   name: string;
-  password: string;
+  nationalId: string;
+  phone: string;
   roles: TenantAssignableRoleName[];
 }
 
@@ -202,10 +202,7 @@ export interface TenantUserPasswordResetResponse {
   mustChangePassword: true;
 }
 
-export interface TenantFirstAdminProvisionResult extends TenantUserRecord {
-  activationTokenIssued?: boolean;
-  activationTokenExpiresAt?: string;
-}
+export type TenantFirstAdminProvisionResult = TenantUserRecord;
 
 export type TenantCreateResponse =
   | TenantRecord

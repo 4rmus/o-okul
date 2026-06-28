@@ -1,6 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
-import type { PasswordResetRecord, PasswordResetStore } from "../auth/password-reset-store.js";
 import type { RequestContext } from "../context/request-context.js";
 import { InMemoryTenantStore } from "./tenant-store.js";
 import { TenantService } from "./tenant.service.js";
@@ -89,8 +88,8 @@ describe("TenantService", () => {
       firstAdmin: {
         name: "İlk Yönetici",
         email: "FIRST.ADMIN@example.test",
-        mode: "password",
-        password: "password1",
+        nationalId: "10000000450",
+        phone: "5551234567",
       },
     });
 
@@ -121,8 +120,8 @@ describe("TenantService", () => {
       firstAdmin: {
         name: "Audit Yönetici",
         email: "audit.admin@example.test",
-        mode: "password",
-        password: "password1",
+        nationalId: "10000000450",
+        phone: "5551234567",
       },
     });
 
@@ -138,59 +137,33 @@ describe("TenantService", () => {
     expect(JSON.stringify(records)).not.toContain("audit.admin@example.test");
   });
 
-  it("SystemAdmin ilk tenant admin için davet token kaydı üretir ama ham token döndürmez", async () => {
-    const passwordResetCreates: Array<{ userId: string; tokenHash: string; expiresAt: string }> = [];
-    const passwordResets: PasswordResetStore = {
-      create: async (input) => {
-        passwordResetCreates.push(input);
-        return {
-          id: "password-reset-test",
-          userId: input.userId,
-          tokenHash: input.tokenHash,
-          status: "PENDING",
-          expiresAt: input.expiresAt,
-          createdAt: input.expiresAt,
-          updatedAt: input.expiresAt,
-        } satisfies PasswordResetRecord;
-      },
-      findByTokenHash: async () => undefined,
-      markUsed: async () => undefined,
-      revokePendingForUser: async () => undefined,
-    };
-    const service = new TenantService(new InMemoryTenantStore(), undefined, undefined, passwordResets);
+  it("SystemAdmin ilk tenant admini telefon parolasıyla oluşturur", async () => {
+    const service = new TenantService(new InMemoryTenantStore());
 
     const result = await service.create(systemContext, {
-      id: "tenant-invited-admin",
-      name: "Davetli Admin Kurum",
-      slug: "davetli-admin-kurum",
+      id: "tenant-phone-admin",
+      name: "Telefon Admin Kurum",
+      slug: "telefon-admin-kurum",
       firstAdmin: {
-        name: "Davetli Yönetici",
-        email: "INVITED.ADMIN@example.test",
-        mode: "invitation",
+        name: "Telefon Yönetici",
+        email: "PHONE.ADMIN@example.test",
+        nationalId: "10000000450",
+        phone: "5551234567",
       },
     });
 
     expect(result).toEqual({
-      tenant: expect.objectContaining({ id: "tenant-invited-admin" }),
+      tenant: expect.objectContaining({ id: "tenant-phone-admin" }),
       admin: expect.objectContaining({
-        activationTokenExpiresAt: expect.any(String),
-        activationTokenIssued: true,
-        email: "invited.admin@example.test",
+        email: "phone.admin@example.test",
         roles: ["TENANT_ADMIN"],
-        tenantId: "tenant-invited-admin",
+        tenantId: "tenant-phone-admin",
       }),
     });
     if (!("admin" in result)) {
       throw new Error("FIRST_ADMIN_RESULT_MISSING");
     }
     expect(result.admin).not.toHaveProperty("activationToken");
-    expect(passwordResetCreates).toEqual([
-      expect.objectContaining({
-        userId: result.admin.id,
-        tokenHash: expect.any(String),
-        expiresAt: result.admin.activationTokenExpiresAt,
-      }),
-    ]);
   });
 
   it("slug çakışmasını anlaşılır tenant hatasına çevirir", async () => {
@@ -207,8 +180,8 @@ describe("TenantService", () => {
       firstAdmin: {
         name: "Demo Admin",
         email: "demo-admin@example.test",
-        mode: "password",
-        password: "password1",
+        nationalId: "10000000450",
+        phone: "5551234567",
       },
     })).rejects.toThrow("TENANT_SLUG_ALREADY_EXISTS");
   });
@@ -229,8 +202,8 @@ describe("TenantService", () => {
       firstAdmin: {
         name: "Demo Admin",
         email: "demo-admin@example.test",
-        mode: "password",
-        password: "password1",
+        nationalId: "10000000450",
+        phone: "5551234567",
       },
     })).rejects.toThrow("TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS");
   });

@@ -105,29 +105,28 @@ describe("TenantController", () => {
       .expect(403);
   });
 
-  it("first-admin invitation tenant create response'unda ham aktivasyon tokenı dönmez", async () => {
+  it("first-admin tenant create response'unda davet tokenı dönmez", async () => {
     await request(server)
       .post("/tenants")
       .set("Authorization", `Bearer ${systemToken}`)
       .send({
-        id: "tenant-invitation-e2e",
-        name: "Tenant Invitation E2E",
-        slug: "tenant-invitation-e2e",
+        id: "tenant-phone-admin-e2e",
+        name: "Tenant Phone Admin E2E",
+        slug: "tenant-phone-admin-e2e",
         firstAdmin: {
-          name: "Invitation Admin",
-          email: "invitation-admin@example.test",
-          mode: "invitation",
+          name: "Phone Admin",
+          email: "phone-admin@example.test",
+          nationalId: "10000000450",
+          phone: "5551234567",
         },
       })
       .expect(201)
       .expect(({ body }) => {
         expect(body).toMatchObject({
-          tenant: expect.objectContaining({ id: "tenant-invitation-e2e" }),
+          tenant: expect.objectContaining({ id: "tenant-phone-admin-e2e" }),
           admin: expect.objectContaining({
-            email: "invitation-admin@example.test",
-            tenantId: "tenant-invitation-e2e",
-            activationTokenIssued: true,
-            activationTokenExpiresAt: expect.any(String),
+            email: "phone-admin@example.test",
+            tenantId: "tenant-phone-admin-e2e",
           }),
         });
         expect(body.admin).not.toHaveProperty("activationToken");
@@ -142,9 +141,7 @@ describe("TenantController", () => {
       .send({
         firstAdmin: {
           email: "gecersiz",
-          mode: "password",
           name: " ",
-          password: "short",
         },
         name: " ",
         seatLimit: 1.5,
@@ -158,7 +155,8 @@ describe("TenantController", () => {
         fields: expect.arrayContaining([
           expect.objectContaining({ path: "firstAdmin.email" }),
           expect.objectContaining({ path: "firstAdmin.name" }),
-          expect.objectContaining({ path: "firstAdmin.password" }),
+          expect.objectContaining({ path: "firstAdmin.nationalId" }),
+          expect.objectContaining({ path: "firstAdmin.phone" }),
           expect.objectContaining({ path: "name" }),
           expect.objectContaining({ path: "seatLimit" }),
           expect.objectContaining({ path: "slug" }),
@@ -174,7 +172,8 @@ describe("TenantController", () => {
         firstAdmin: {
           email: "ignored-admin@example.test",
           name: "Ignored Admin",
-          password: "password1",
+          nationalId: "10000000450",
+          phone: "5551234567",
         },
         id: "tenant-forbidden",
         licenseEndsAt: "2026-02-29T00:00:00.000Z",

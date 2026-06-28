@@ -19,11 +19,10 @@ import {
   useConfirmDialog,
 } from "@o-okul/ui";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@o-okul/shared-types";
-import { Eye, Pencil, Plus, Send, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
-import { hasCapabilityForRoles } from "../../_shared/access.js";
 import {
   firstFormError,
   teacherAssignmentFormSchema,
@@ -86,7 +85,6 @@ export function TeachersPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
   const rows = teachersQuery.data?.data ?? [];
-  const canManageUsers = auth ? hasCapabilityForRoles(auth.session.roles, "user:manage") : false;
 
   const referencesQuery = useQuery({
     queryKey: ["next-teacher-assignment-refs", auth?.session.tenantId ?? "anonymous"],
@@ -135,11 +133,6 @@ export function TeachersPage() {
   ];
   const teacherSummaryBadges: OperationSummaryBadge[] = [
     {
-      key: "invite",
-      label: canManageUsers ? "Davet aksiyonu açık" : "Davet yetkisi kapalı",
-      tone: canManageUsers ? "success" : "neutral",
-    },
-    {
       key: "sort",
       label: `Sıralama: ${formatTeacherSort(listQuery.sort)}`,
       tone: "neutral",
@@ -156,10 +149,10 @@ export function TeachersPage() {
     },
     {
       detail: "Öğretmen portal hesabı bağlantısı",
-      key: "portal-invite",
-      label: "Portal daveti",
-      status: canManageUsers ? "Davet açık" : "Yetki kapalı",
-      tone: canManageUsers ? "success" : "neutral",
+      key: "portal-account",
+      label: "Portal hesabı",
+      status: teacherPortalReadyCount > 0 ? "Hazır" : "TC + telefon bekliyor",
+      tone: teacherPortalReadyCount > 0 ? "success" : "neutral",
       value: `${teacherPortalReadyCount}/${rows.length}`,
     },
     {
@@ -209,7 +202,7 @@ export function TeachersPage() {
       header: "Portal",
       priority: "secondary",
       render: (teacher) => (
-        <StatusBadge tone={teacher.userId ? "success" : "neutral"}>{teacher.userId ? "Bağlı" : "Davet bekliyor"}</StatusBadge>
+        <StatusBadge tone={teacher.userId ? "success" : "neutral"}>{teacher.userId ? "Bağlı" : "TC + telefon bekliyor"}</StatusBadge>
       ),
     },
     {
@@ -223,11 +216,6 @@ export function TeachersPage() {
           <Link href={`/kurum/ogretmenler/${encodeURIComponent(teacher.id)}`} aria-label={`${teacher.firstName} detay`}>
             <Eye size={17} aria-hidden="true" />
           </Link>
-          {canManageUsers ? (
-            <Link href={`/kurum/kullanicilar?invite=teacher&subjectId=${encodeURIComponent(teacher.id)}`} aria-label={`${teacher.firstName} portal daveti gönder`}>
-              <Send size={17} aria-hidden="true" />
-            </Link>
-          ) : null}
           <button type="button" onClick={() => openEditForm(teacher)} aria-label={`${teacher.firstName} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
           </button>
@@ -404,7 +392,7 @@ export function TeachersPage() {
         aria-label="Öğretmen yönetimi"
         columns={columns}
         density="compact"
-        description="Ders, sınıf, rehberlik ve portal daveti ilişkilerini tek yerden yönet."
+        description="Ders, sınıf, rehberlik ve portal hesabı ilişkilerini tek yerden yönet."
         emptyState={
           <EmptyState
             title="Henüz öğretmen yok"

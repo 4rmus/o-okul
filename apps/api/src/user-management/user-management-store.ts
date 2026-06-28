@@ -3,7 +3,7 @@ import pg from "pg";
 import type { TenantAssignableRoleName } from "@o-okul/shared-types";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type Queryable, type TenantQueryable, withExplicitTenantQuery } from "../db/tenant-query.js";
-import { hashPassword } from "../auth/auth-user-store.js";
+import { hashPassword, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
 import { assertTenantSeatCapacity } from "../tenant/tenant-seat-limit.js";
 
 export type TenantUserRole = TenantAssignableRoleName;
@@ -28,6 +28,8 @@ export interface CreateTenantUserInput {
   tenantId: string;
   email: string;
   name: string;
+  nationalIdEncrypted: string;
+  nationalIdHash: string;
   password: string;
   roles: TenantUserRole[];
 }
@@ -120,6 +122,15 @@ export class InMemoryUserManagementStore implements UserManagementStore {
       existing.name = input.name;
       existing.roles = [...input.roles];
       existing.updatedAt = new Date().toISOString();
+      upsertInMemoryAuthUser({
+        id: existing.id,
+        email: existing.email,
+        name: existing.name,
+        nationalIdHash: input.nationalIdHash,
+        password: input.password,
+        tenantId: existing.tenantId,
+        roles: existing.roles,
+      });
       return cloneRequiredTenantUser(existing);
     }
 
@@ -134,6 +145,15 @@ export class InMemoryUserManagementStore implements UserManagementStore {
       updatedAt: now,
     };
     this.users.push(record);
+    upsertInMemoryAuthUser({
+      id: record.id,
+      email: record.email,
+      name: record.name,
+      nationalIdHash: input.nationalIdHash,
+      password: input.password,
+      tenantId: record.tenantId,
+      roles: record.roles,
+    });
     return cloneRequiredTenantUser(record);
   }
 
@@ -222,20 +242,26 @@ export class PostgresUserManagementStore implements UserManagementStore {
   async createOrAttachTenantUser(input: CreateTenantUserInput): Promise<TenantUserRecord> {
     return withExplicitTenantQuery(this.pool, input.tenantId, async (client) => {
       const normalizedEmail = input.email.toLowerCase();
-      const created = await client.query<{ id: string }>(
-        `INSERT INTO "User" ("id", "tenantId", "email", "name", "passwordHash", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, now())
-         ON CONFLICT ("email") DO NOTHING
-         RETURNING "id"`,
-        [randomUUID(), input.tenantId, normalizedEmail, input.name, hashPassword(input.password, randomUUID())],
-      );
-      const userId =
-        created.rows[0]?.id ??
-        (
-          await client.query<{ id: string }>(`SELECT "id" FROM "User" WHERE lower("email") = lower($1) LIMIT 1`, [
-            normalizedEmail,
-          ])
-        ).rows[0]?.id;
+      const passwordHash = hashPassword(input.password, randomUUID());
+      const existingByEmail = await client.query<{ id: string }>(`SELECT "id" FROM "User" WHERE lower("email") = lower($1) LIMIT 1`, [
+        normalizedEmail,
+      ]);
+      let userId = existingByEmail.rows[0]?.id;
+      if (!userId) {
+        const created = await client.query<{ id: string }>(
+          `INSERT INTO "User" ("id", "tenantId", "email", "nationalIdEncrypted", "nationalIdHash", "name", "passwordHash", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+           ON CONFLICT ("tenantId", "nationalIdHash") DO UPDATE
+           SET "email" = EXCLUDED."email",
+               "nationalIdEncrypted" = EXCLUDED."nationalIdEncrypted",
+               "name" = EXCLUDED."name",
+               "passwordHash" = EXCLUDED."passwordHash",
+               "updatedAt" = now()
+           RETURNING "id"`,
+          [randomUUID(), input.tenantId, normalizedEmail, input.nationalIdEncrypted, input.nationalIdHash, input.name, passwordHash],
+        );
+        userId = created.rows[0]?.id;
+      }
       if (!userId) {
         throw new Error("USER_CREATE_FAILED");
       }

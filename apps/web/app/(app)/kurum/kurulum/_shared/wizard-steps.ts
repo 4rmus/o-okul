@@ -58,14 +58,14 @@ export const setupWizardSteps: readonly SetupWizardStep[] = [
   {
     id: "guardians",
     title: "Veli",
-    description: "Öğrenci iletişimi ve portal davetleri için ilk veli kaydını oluştur.",
+    description: "Öğrenci iletişimi ve portal hesabı için ilk veli kaydını oluştur.",
     href: "/kurum/veliler?new=1",
     optional: true,
   },
   {
     id: "guardian-links",
     title: "Veli-öğrenci bağı",
-    description: "Veli kaydını öğrenciyle bağla ve portal daveti adımına hazırlan.",
+    description: "Veli kaydını öğrenciyle bağla; TC ve telefon hazırsa portal hesabı otomatik bağlanır.",
     href: "/kurum/veliler",
     optional: true,
   },

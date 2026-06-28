@@ -20,26 +20,31 @@ describe("AuthService", () => {
   });
 
   it("login kullanıcıyı injected store'dan okur ve password hash doğrular", async () => {
+    const nationalId = "10000000146";
+    const user: AuthUser = {
+      id: "user-db-a",
+      email: "db-a@example.test",
+      name: "DB User",
+      passwordHash: hashPassword("password", "test-salt"),
+      tenantId: "tenant-a",
+      nationalIdHash: hashTcIdentity(nationalId),
+      roles: ["TENANT_ADMIN"],
+      membershipVersion: 1,
+    };
     const users = createUserStoreMock({
-      findByEmail: vi.fn(async () => ({
-        id: "user-db-a",
-        email: "db-a@example.test",
-        name: "DB User",
-        passwordHash: hashPassword("password", "test-salt"),
-        tenantId: "tenant-a",
-        roles: ["TENANT_ADMIN"],
-        membershipVersion: 1,
-      })),
+      findByTenantAndNationalIdHash: vi.fn(async (tenantId, nationalIdHash) => (
+        tenantId === user.tenantId && nationalIdHash === user.nationalIdHash ? user : undefined
+      )),
     });
     const identities = {
       resolve: vi.fn(async () => undefined),
     } as unknown as IdentityResolver;
-    const auth = new AuthService(users, new InMemorySessionStore(), new InMemoryPasswordResetStore(), identities);
+    const auth = new AuthService(users, new InMemorySessionStore(), new InMemoryPasswordResetStore(), identities, undefined, undefined, new InMemoryTenantStore());
 
-    const tokenPair = await auth.login("db-a@example.test", "password");
+    const tokenPair = await auth.login(loginCredentials(nationalId));
     if ("status" in tokenPair) throw new Error("MFA challenge beklenmiyordu.");
 
-    expect(users.findByEmail).toHaveBeenCalledWith("db-a@example.test");
+    expect(users.findByTenantAndNationalIdHash).toHaveBeenCalledWith("tenant-a", user.nationalIdHash);
     expect(tokenPair.session).toMatchObject({
       userId: "user-db-a",
       tenantId: "tenant-a",
@@ -48,49 +53,48 @@ describe("AuthService", () => {
   });
 
   it("yanlış parola token üretmez", async () => {
+    const nationalId = "10000000146";
+    const user: AuthUser = {
+      id: "user-db-a",
+      email: "db-a@example.test",
+      name: "DB User",
+      passwordHash: hashPassword("password", "test-salt"),
+      tenantId: "tenant-a",
+      nationalIdHash: hashTcIdentity(nationalId),
+      roles: ["TENANT_ADMIN"],
+      membershipVersion: 1,
+    };
     const users = createUserStoreMock({
-      findByEmail: vi.fn(async () => ({
-        id: "user-db-a",
-        email: "db-a@example.test",
-        name: "DB User",
-        passwordHash: hashPassword("password", "test-salt"),
-        tenantId: "tenant-a",
-        roles: ["TENANT_ADMIN"],
-        membershipVersion: 1,
-      })),
+      findByTenantAndNationalIdHash: vi.fn(async (tenantId, nationalIdHash) => (
+        tenantId === user.tenantId && nationalIdHash === user.nationalIdHash ? user : undefined
+      )),
     });
     const auth = new AuthService(
       users,
       new InMemorySessionStore(),
       new InMemoryPasswordResetStore(),
       { resolve: vi.fn() } as unknown as IdentityResolver,
+      undefined,
+      undefined,
+      new InMemoryTenantStore(),
     );
 
-    await expect(auth.login("db-a@example.test", "wrong")).rejects.toThrow("LOGIN_FAILED");
+    await expect(auth.login(loginCredentials(nationalId, "wrong"))).rejects.toThrow("LOGIN_FAILED");
   });
 
-  it("TC ile provision edilen tenant subject kullanıcısı e-posta ile login olamaz", async () => {
-    const nationalId = "10000000146";
-    const users = createUserStoreMock({
-      findByEmail: vi.fn(async () => ({
-        id: "student-login",
-        email: "student-login@example.test",
-        name: "Student Login",
-        passwordHash: hashPassword("5551234567", "test-salt"),
-        tenantId: "tenant-a",
-        nationalIdHash: hashTcIdentity(nationalId),
-        roles: ["STUDENT"],
-        membershipVersion: 1,
-      })),
-    });
+  it("kurum kodu veya TC eksikse login olmaz", async () => {
+    const users = createUserStoreMock({});
     const auth = new AuthService(
       users,
       new InMemorySessionStore(),
       new InMemoryPasswordResetStore(),
       { resolve: vi.fn() } as unknown as IdentityResolver,
+      undefined,
+      undefined,
+      new InMemoryTenantStore(),
     );
 
-    await expect(auth.login("student-login@example.test", "5551234567")).rejects.toThrow("LOGIN_FAILED");
+    await expect(auth.login({ tenantSlug: "dna-egitim", nationalId: "", password: "5551234567" })).rejects.toThrow("LOGIN_IDENTIFIER_REQUIRED");
   });
 
   it("kurum kodu ve TC ile login olur, ilk giriş şifre değiştirme bilgisini taşır", async () => {
@@ -138,18 +142,63 @@ describe("AuthService", () => {
     });
   });
 
+  it("system hesabı system scope ve TC ile login olur", async () => {
+    const nationalId = "10000000214";
+    const user: AuthUser = {
+      id: "user-system",
+      name: "System Admin",
+      passwordHash: hashPassword("password", "test-salt"),
+      tenantId: "system",
+      nationalIdHash: hashTcIdentity(nationalId),
+      roles: ["SYSTEM_ADMIN"],
+      membershipVersion: 1,
+    };
+    const users = createUserStoreMock({
+      findByTenantAndNationalIdHash: vi.fn(async (tenantId, nationalIdHash) => (
+        tenantId === user.tenantId && nationalIdHash === user.nationalIdHash ? user : undefined
+      )),
+      findById: vi.fn(async (id) => (id === user.id ? user : undefined)),
+    });
+    const tenants = new InMemoryTenantStore();
+    const findBySlug = vi.spyOn(tenants, "findBySlug");
+    const auth = new AuthService(
+      users,
+      new InMemorySessionStore(),
+      new InMemoryPasswordResetStore(),
+      { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
+      undefined,
+      undefined,
+      tenants,
+    );
+
+    const tokenPair = await auth.login({ tenantSlug: "system", nationalId, password: "password" }, "127.0.0.1");
+    if ("status" in tokenPair) throw new Error("MFA challenge beklenmiyordu.");
+
+    expect(findBySlug).not.toHaveBeenCalled();
+    expect(tokenPair.session).toMatchObject({
+      userId: "user-system",
+      tenantId: "system",
+      roles: ["SYSTEM_ADMIN"],
+    });
+  });
+
   it("şifre reset tokenı tek kullanımlık çalışır ve eski şifreyi geçersiz kılar", async () => {
+    const nationalId = "10000000214";
     const user = {
       id: "user-db-a",
       email: "db-a@example.test",
       name: "DB User",
       passwordHash: hashPassword("password", "test-salt"),
       tenantId: "system",
+      nationalIdHash: hashTcIdentity(nationalId),
       roles: ["SYSTEM_ADMIN"],
       membershipVersion: 1,
     };
     const users = createUserStoreMock({
       findByEmail: vi.fn(async (email) => (email === user.email ? { ...user, roles: [...user.roles] } : undefined)),
+      findByTenantAndNationalIdHash: vi.fn(async (tenantId, nationalIdHash) => (
+        tenantId === user.tenantId && nationalIdHash === user.nationalIdHash ? { ...user, roles: [...user.roles] } : undefined
+      )),
       findById: vi.fn(async () => ({ ...user, roles: [...user.roles] })),
       updatePassword: vi.fn(async (_id, passwordHash) => {
         user.passwordHash = passwordHash;
@@ -164,6 +213,8 @@ describe("AuthService", () => {
       new InMemoryPasswordResetStore(),
       { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
       auditLogs as never,
+      undefined,
+      new InMemoryTenantStore(),
     );
 
     const issued = await auth.requestPasswordReset("db-a@example.test");
@@ -177,11 +228,11 @@ describe("AuthService", () => {
 
     await auth.confirmPasswordReset(issued.resetToken ?? "", "new-password");
 
-    await expect(auth.login("db-a@example.test", "password")).rejects.toThrow("LOGIN_FAILED");
+    await expect(auth.login(loginCredentials(nationalId, "password", "system"))).rejects.toThrow("LOGIN_FAILED");
     await expect(auth.confirmPasswordReset(issued.resetToken ?? "", "another-pass")).rejects.toThrow(
       "PASSWORD_RESET_NOT_PENDING",
     );
-    await expect(auth.login("db-a@example.test", "new-password")).resolves.toMatchObject({
+    await expect(auth.login(loginCredentials(nationalId, "new-password", "system"))).resolves.toMatchObject({
       session: { userId: "user-db-a" },
     });
   });
@@ -228,17 +279,21 @@ describe("AuthService", () => {
 
   it("access token session iptalinden sonra aktif kabul edilmez", async () => {
     const sessions = new InMemorySessionStore();
+    const nationalId = "10000000146";
     const user = {
       id: "user-db-a",
       email: "db-a@example.test",
       name: "DB User",
       passwordHash: hashPassword("password", "test-salt"),
       tenantId: "tenant-a",
+      nationalIdHash: hashTcIdentity(nationalId),
       roles: ["TENANT_ADMIN"],
       membershipVersion: 1,
     };
     const users = createUserStoreMock({
-      findByEmail: vi.fn(async () => ({ ...user, roles: [...user.roles] })),
+      findByTenantAndNationalIdHash: vi.fn(async (tenantId, nationalIdHash) => (
+        tenantId === user.tenantId && nationalIdHash === user.nationalIdHash ? { ...user, roles: [...user.roles] } : undefined
+      )),
       findById: vi.fn(async () => ({ ...user, roles: [...user.roles] })),
     });
     const auth = new AuthService(
@@ -246,8 +301,11 @@ describe("AuthService", () => {
       sessions,
       new InMemoryPasswordResetStore(),
       { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
+      undefined,
+      undefined,
+      new InMemoryTenantStore(),
     );
-    const issued = await auth.login("db-a@example.test", "password");
+    const issued = await auth.login(loginCredentials(nationalId));
     if ("status" in issued) throw new Error("MFA challenge beklenmiyordu.");
 
     await expect(auth.verifyActiveAccessToken(issued.accessToken)).resolves.toMatchObject({
@@ -264,6 +322,7 @@ describe("AuthService", () => {
     const user: AuthUser = {
       id: "admin-mfa",
       email: "admin-mfa@example.test",
+      nationalIdHash: hashTcIdentity("10000000146"),
       name: "MFA Admin",
       passwordHash: hashPassword("password", "test-salt"),
       tenantId: "tenant-a",
@@ -277,6 +336,9 @@ describe("AuthService", () => {
       new InMemorySessionStore(),
       new InMemoryPasswordResetStore(),
       { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
+      undefined,
+      undefined,
+      new InMemoryTenantStore(),
     );
 
     const setup = await auth.createTotpSetup({
@@ -293,7 +355,7 @@ describe("AuthService", () => {
       bypassRls: false,
     }, setup.setupToken, setupCode);
 
-    const challenge = await auth.login(user.email!, "password");
+    const challenge = await auth.login(loginCredentials("10000000146"));
     expect(challenge).toMatchObject({ status: "MFA_REQUIRED", methods: ["totp", "recovery_code"] });
     if (!("status" in challenge)) throw new Error("MFA challenge bekleniyordu.");
 
@@ -311,6 +373,7 @@ describe("AuthService", () => {
     const user: AuthUser = {
       id: "admin-recovery",
       email: "admin-recovery@example.test",
+      nationalIdHash: hashTcIdentity("10000000382"),
       name: "Recovery Admin",
       passwordHash: hashPassword("password", "test-salt"),
       tenantId: "tenant-a",
@@ -324,6 +387,9 @@ describe("AuthService", () => {
       new InMemorySessionStore(),
       new InMemoryPasswordResetStore(),
       { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
+      undefined,
+      undefined,
+      new InMemoryTenantStore(),
     );
     const context = {
       userId: user.id,
@@ -333,7 +399,7 @@ describe("AuthService", () => {
     };
     const setup = await auth.createTotpSetup(context);
     await auth.confirmTotpSetup(context, setup.setupToken, createTotpCodeForTest(setup.secret));
-    const challenge = await auth.login(user.email!, "password");
+    const challenge = await auth.login(loginCredentials("10000000382"));
     if (!("status" in challenge)) throw new Error("MFA challenge bekleniyordu.");
 
     await expect(auth.verifyTotpChallenge(challenge.challengeToken, { recoveryCode: setup.recoveryCodes[0] })).resolves.toMatchObject({
@@ -344,6 +410,10 @@ describe("AuthService", () => {
     );
   });
 });
+
+function loginCredentials(nationalId: string, password = "password", tenantSlug = "dna-egitim") {
+  return { tenantSlug, nationalId, password };
+}
 
 function createUserStoreMock(overrides: Partial<AuthUserStore>): AuthUserStore {
   return {
@@ -365,7 +435,9 @@ function createMutableUserStore(user: AuthUser): AuthUserStore {
   const clone = () => ({ ...user, roles: [...user.roles], totpRecoveryCodeHashes: [...(user.totpRecoveryCodeHashes ?? [])] });
   return {
     findByEmail: vi.fn(async (email) => (email === user.email ? clone() : undefined)),
-    findByTenantAndNationalIdHash: vi.fn(),
+    findByTenantAndNationalIdHash: vi.fn(async (tenantId, nationalIdHash) => (
+      tenantId === user.tenantId && nationalIdHash === user.nationalIdHash ? clone() : undefined
+    )),
     findById: vi.fn(async (id) => (id === user.id ? clone() : undefined)),
     createOrAttachTenantIdentity: vi.fn(),
     updatePassword: vi.fn(async (_id, passwordHash) => {

@@ -22,7 +22,7 @@ import type {
   GuardianStudentDetailsResponse,
   GuardianStudentRecord,
 } from "@o-okul/shared-types";
-import { ArrowLeft, Link2, Send } from "lucide-react";
+import { ArrowLeft, Link2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
@@ -61,7 +61,6 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
   const detail = detailQuery.data;
   const guardianName = detail ? `${detail.guardian.firstName} ${detail.guardian.lastName}` : "Veli detayı";
   const availableStudents = detail?.availableStudents ?? [];
-  const canManageUsers = auth ? hasCapabilityForRoles(auth.session.roles, "user:manage") : false;
   const canRevealPhone = hasCapabilityForRoles(auth?.session.roles ?? [], "privacy:manage");
   const guardianSummaryItems = detail ? buildGuardianSummaryItems(detail, { canRevealPhone }) : [];
   const guardianSummaryBadges = detail ? buildGuardianSummaryBadges(detail) : [];
@@ -183,20 +182,6 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
                 </Button>
               </form>
             </Panel>
-            {canManageUsers ? (
-              <Panel
-                aria-label="Veli portal daveti"
-                description="Portal hesabı olmayan veliler için davet kullanıcı yönetimi yetkisiyle gönderilir."
-                title="Portal daveti"
-              >
-                <div className="next-action-link-grid">
-                  <Link className="next-action-link" href={`/kurum/kullanicilar?invite=guardian&subjectId=${encodeURIComponent(guardianId)}`}>
-                    <Send size={17} aria-hidden="true" />
-                    Portal daveti gönder
-                  </Link>
-                </div>
-              </Panel>
-            ) : null}
           </>
         ) : null}
       </section>
@@ -280,7 +265,7 @@ function buildGuardianSummaryBadges(detail: GuardianDetailData): OperationSummar
     },
     {
       key: "portal",
-      label: detail.guardian.userId ? "Portal bağlı" : "Portal daveti bekliyor",
+      label: detail.guardian.userId ? "Portal bağlı" : "TC + telefon bekliyor",
       tone: detail.guardian.userId ? "success" : "warning",
     },
     {
@@ -315,9 +300,9 @@ function buildGuardianSummaryActions(detail: GuardianDetailData): OperationSumma
       detail: "Veli portal erişimi",
       key: "portal-link",
       label: "Portal bağlantısı",
-      status: detail.guardian.userId ? "Bağlı" : "Davet",
+      status: detail.guardian.userId ? "Bağlı" : "TC + telefon",
       tone: detail.guardian.userId ? "success" : "warning",
-      value: detail.guardian.userId ? "Hesap bağlı" : "Davet bekliyor",
+      value: detail.guardian.userId ? "Hesap bağlı" : "Bilgi bekliyor",
     },
   ];
 }

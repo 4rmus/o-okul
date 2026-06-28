@@ -7,6 +7,9 @@ const optionalText = () => z.string().trim();
 const optionalNationalId = optionalText().refine((value) => !value || /^\d{11}$/.test(value), {
   message: "TC Kimlik No 11 rakam olmalıdır.",
 });
+const requiredNationalId = requiredText("TC kimlik no").refine((value) => /^\d{11}$/.test(value), {
+  message: "TC Kimlik No 11 rakam olmalıdır.",
+});
 
 const optionalEmail = optionalText().refine((value) => !value || z.string().email().safeParse(value).success, {
   message: "E-posta geçerli olmalıdır.",
@@ -137,21 +140,13 @@ export const tenantCreateFormSchema = tenantFormSchema.and(z.object({
   firstAdmin: z.object({
     name: requiredText("Admin ad soyad"),
     email: requiredEmail("Admin e-posta"),
-    mode: z.enum(["password", "invitation"]),
-    password: z.string(),
-  }).superRefine((value, context) => {
-    if (value.mode === "password" && value.password.length < 8) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Admin şifresi en az 8 karakter olmalıdır.",
-        path: ["password"],
-      });
-    }
+    nationalId: requiredNationalId,
+    phone: requiredText("Admin telefon"),
   }).transform((value) => ({
     email: value.email,
-    mode: value.mode,
     name: value.name,
-    ...(value.mode === "password" ? { password: value.password } : {}),
+    nationalId: value.nationalId,
+    phone: value.phone,
   })),
 }));
 
@@ -327,7 +322,8 @@ export const userRolesSchema = z.array(z.enum(["TENANT_ADMIN", "ASSISTANT_ADMIN"
 export const tenantUserFormSchema = z.object({
   email: requiredText("E-posta").email("E-posta geçerli olmalıdır."),
   name: requiredText("Ad Soyad"),
-  password: z.string().min(8, "Şifre en az 8 karakter olmalıdır."),
+  nationalId: requiredNationalId,
+  phone: requiredText("Telefon"),
   roles: userRolesSchema,
 });
 

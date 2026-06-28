@@ -63,7 +63,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
   });
 
   if (!canReadPortal) {
-    return <AccessPanel title="Öğrenci Portalı" demoEmail="student-a@example.test" demoLabel="Demo öğrenci" />;
+    return <AccessPanel title="Öğrenci Portalı" />;
   }
 
   if (query.isPending) {

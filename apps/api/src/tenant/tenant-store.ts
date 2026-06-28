@@ -3,6 +3,7 @@ import pg from "pg";
 import { hashPassword, upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
 import { resolvePersistenceDriver } from "../config/persistence.js";
 import { type TenantQueryable, withBypassRlsQuery } from "../db/tenant-query.js";
+import { encryptTcIdentity, hashTcIdentity } from "../student/tc-identity.js";
 import type { TenantUserRecord } from "../user-management/user-management-store.js";
 
 export interface TenantRecord {
@@ -112,8 +113,8 @@ export class InMemoryTenantStore implements TenantStore {
       id: admin.id,
       email: admin.email,
       name: admin.name,
-      password: firstAdmin.mode === "password" ? firstAdmin.password : undefined,
-      passwordHash: firstAdmin.mode === "invitation" ? "" : undefined,
+      nationalIdHash: hashTcIdentity(firstAdmin.nationalId),
+      password: firstAdmin.phone,
       tenantId: admin.tenantId,
       roles: admin.roles,
     });
@@ -301,13 +302,15 @@ export class PostgresTenantStore implements TenantStore {
         ],
       );
       const tenant = mapTenantRow(tenantResult.rows[0]!);
-      const passwordHash = firstAdmin.mode === "invitation" ? "" : hashPassword(firstAdmin.password ?? "", randomUUID());
+      const passwordHash = hashPassword(firstAdmin.phone, randomUUID());
+      const nationalIdEncrypted = encryptTcIdentity(firstAdmin.nationalId);
+      const nationalIdHash = hashTcIdentity(firstAdmin.nationalId);
       const createdUser = await client.query<{ id: string }>(
-        `INSERT INTO "User" ("id", "tenantId", "email", "name", "passwordHash", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, now())
+        `INSERT INTO "User" ("id", "tenantId", "email", "nationalIdEncrypted", "nationalIdHash", "name", "passwordHash", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, now())
          ON CONFLICT ("email") DO NOTHING
          RETURNING "id"`,
-        [randomUUID(), tenant.id, normalizedEmail, firstAdmin.name, passwordHash],
+        [randomUUID(), tenant.id, normalizedEmail, nationalIdEncrypted, nationalIdHash, firstAdmin.name, passwordHash],
       );
       const userId = createdUser.rows[0]?.id;
       if (!userId) {
@@ -456,9 +459,9 @@ export interface CreateTenantInput {
 
 export interface CreateTenantFirstAdminInput {
   email: string;
-  mode: "password" | "invitation";
   name: string;
-  password?: string;
+  nationalId: string;
+  phone: string;
 }
 
 export interface TenantCreateWithAdminResult {

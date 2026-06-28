@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
+const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const corsHeaders = {
   "access-control-allow-credentials": "true",
   "access-control-allow-headers": "authorization,content-type,x-csrf-token",
   "access-control-allow-methods": "DELETE,GET,PATCH,POST,OPTIONS",
-  "access-control-allow-origin": `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`,
+  "access-control-allow-origin": appOrigin,
 };
 const smsEnabled = process.env.NEXT_PUBLIC_SMS_ENABLED === "true";
 
@@ -1381,7 +1382,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
     }
 
     if (path === "/tenant-users" && request.method() === "POST") {
-      const body = request.postDataJSON() as { email: string; name: string; roles: string[] };
+      const body = request.postDataJSON() as { email: string; name: string; nationalId: string; roles: string[] };
       const created: TenantUserFixture = {
         id: "user-created",
         tenantId: "tenant-a",
@@ -3748,9 +3749,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await page.goto("/kurum");
   await expect(page).toHaveURL(/\/login$/);
 
-  await page.getByLabel("E-posta", { exact: true }).fill("admin-a@example.test");
-  await page.getByLabel("Şifre").fill("password");
-  await page.getByRole("button", { name: "Giriş yap" }).click();
+  await loginAs(page, "admin-a@example.test");
 
   await expect(page).toHaveURL(/\/kurum$/);
   await expect(heading(page, { name: "DNA EĞİTİM KURUMU" })).toBeVisible();
@@ -3875,8 +3874,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await Promise.all([page.waitForURL(/\/kurum\/kullanicilar$/), usersLink.click()]);
   await expect(heading(page, { name: "Kullanıcılar" })).toBeVisible();
   await expect(page.getByText("Admin A")).toBeVisible();
-  await expect(heading(page, { name: "Davetler" })).toBeVisible();
-  await expect(page.getByText("ada@example.test")).toBeVisible();
+  await expect(heading(page, { name: "Davetler" })).toHaveCount(0);
 
   await page.getByLabel("Admin A rolleri").getByLabel("Öğretmen").check();
   await page.getByRole("button", { name: "Admin A rollerini kaydet" }).click();
@@ -3886,14 +3884,15 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   const userDialog = page.getByRole("dialog");
   await userDialog.getByLabel("E-posta").fill("merve@example.test");
   await userDialog.getByLabel("Ad Soyad").fill("   ");
-  await userDialog.getByLabel("Şifre").fill("password123");
+  await userDialog.getByLabel("Telefon").fill("5551234567");
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
   await expect(page.getByText("Ad Soyad zorunludur.")).toBeVisible();
   await userDialog.getByLabel("Ad Soyad").fill("Merve Rehber");
-  await userDialog.getByLabel("Öğretmen").uncheck();
+  await userDialog.getByLabel("TC kimlik no").fill("10000001204");
+  await userDialog.getByLabel("Yardımcı yönetici").uncheck();
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
   await expect(page.getByText("En az bir rol seçilmelidir.")).toBeVisible();
-  await userDialog.getByLabel("Veli").check();
+  await userDialog.getByLabel("Yardımcı yönetici").check();
   await page.getByRole("button", { name: "Ekle", exact: true }).click();
   await expect(page.getByText("Merve Rehber")).toBeVisible();
   const userList = page.getByLabel("Kullanıcı ve rol yönetimi");
@@ -3901,25 +3900,6 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(userList.getByText("Merve Rehber")).toBeVisible();
   await expect(userList.getByText("Admin A")).toBeHidden();
   await userList.getByLabel("Ara").fill("");
-
-  await page.getByRole("button", { name: "Davet oluştur" }).click();
-  await page.getByRole("dialog").getByLabel("Kişi türü").selectOption("STUDENT");
-  await page.getByRole("dialog").getByRole("combobox", { name: "Kişi", exact: true }).selectOption("student-a");
-  await page.getByRole("dialog").getByLabel("E-posta").fill("ada-hesap@example.test");
-  await page.getByRole("dialog").getByLabel("Ad Soyad").fill("Ada Hesap");
-  await page.getByRole("button", { name: "Oluştur", exact: true }).click();
-  await expect(page.getByRole("cell", { name: "ada-hesap@example.test" })).toBeVisible();
-  await page.getByLabel("Son aktivasyon tokenı").getByRole("button", { name: "Tokenı göster" }).click();
-  await expect(page.getByText("activation-token-created")).toBeVisible();
-  const invitationList = page.getByLabel("Kimlik davetleri");
-  await invitationList.getByLabel("Ara").fill("ada-hesap");
-  await expect(invitationList.getByRole("cell", { name: "ada-hesap@example.test" })).toBeVisible();
-  await expect(invitationList.getByText("ada@example.test")).toBeHidden();
-  await invitationList.getByLabel("Ara").fill("");
-
-  await page.getByRole("button", { name: "Ada A davetini yenile" }).click();
-  await page.getByLabel("Son aktivasyon tokenı").getByRole("button", { name: "Tokenı göster" }).click();
-  await expect(page.getByText("activation-token-resent")).toBeVisible();
 
   await expandSidebarGroup(page, "Eğitim");
   await clickSidebarLink(page, "Kampüsler", /\/kurum\/kampusler$/);
@@ -5127,10 +5107,9 @@ test("ilk girişte zorunlu şifre değişimi ekranına yönlendirir", async ({ p
   });
 
   await page.goto("/login");
-  await page.getByRole("button", { name: "Kurum + TC" }).click();
   await page.getByLabel("Kurum kodu").fill("dna-egitim");
   await page.getByLabel("TC kimlik no").fill("10000000146");
-  await page.getByLabel("Şifre").fill("5551234567");
+  await page.locator('input[name="password"]').fill("5551234567");
   await page.getByRole("button", { name: "Giriş yap" }).click();
 
   await expect(page).toHaveURL(/\/sifre-degistir$/, { timeout: 15_000 });
@@ -5170,8 +5149,8 @@ test("Next sıfır-veri kurulum adımlarını ve yeni kayıt derin linkini göst
   });
 
   await page.route("**/api/v1/auth/login", async (route) => {
-    const body = route.request().postDataJSON() as { email?: string };
-    activeEmail = body.email ?? "";
+    const body = route.request().postDataJSON() as { email?: string; nationalId?: string };
+    activeEmail = loginEmailFromRequest(body);
     await route.fulfill({
       contentType: "application/json",
       headers: corsHeaders,
@@ -5273,10 +5252,7 @@ test("Next sıfır-veri kurulum adımlarını ve yeni kayıt derin linkini göst
     });
   });
 
-  await page.goto("/login");
-  await page.getByLabel("E-posta", { exact: true }).fill("admin-a@example.test");
-  await page.getByLabel("Şifre").fill("password");
-  await page.getByRole("button", { name: "Giriş yap" }).click();
+  await loginAs(page, "admin-a@example.test");
 
   await expect(page).toHaveURL(/\/kurum$/);
   const setupStart = page.getByLabel("Kurum kurulum başlangıcı");
@@ -5395,13 +5371,13 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   });
 
   await page.route("**/api/v1/auth/login", async (route) => {
-    const body = route.request().postDataJSON() as { email?: string };
-    activeEmail = body.email ?? "";
+    const body = route.request().postDataJSON() as { email?: string; nationalId?: string };
+    activeEmail = loginEmailFromRequest(body);
     await route.fulfill({
       contentType: "application/json",
       headers: corsHeaders,
       status: 200,
-      body: JSON.stringify(envelope(createAuthResponse(body.email))),
+      body: JSON.stringify(envelope(createAuthResponse(activeEmail))),
     });
   });
 
@@ -5442,7 +5418,7 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
 
     if (path === "/tenants" && request.method() === "POST") {
       const body = request.postDataJSON() as typeof tenants[number] & {
-        firstAdmin: { name: string; email: string; mode: "password" | "invitation"; password?: string };
+        firstAdmin: { name: string; email: string; nationalId: string; phone: string };
       };
       tenantCreateCount += 1;
       const id = tenantCreateCount === 1 ? "tenant-created" : `tenant-created-${tenantCreateCount}`;
@@ -5468,7 +5444,6 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
             name: body.firstAdmin.name,
             tenantId: id,
             roles: ["TENANT_ADMIN"],
-            ...(body.firstAdmin.mode === "invitation" ? { activationToken: "tenant-admin-activation-token" } : {}),
           },
         })),
       });
@@ -5526,15 +5501,12 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
     });
   });
 
-  await page.goto("/login");
-  await page.getByLabel("E-posta", { exact: true }).fill("system@example.test");
-  await page.getByLabel("Şifre").fill("password");
-  await page.getByRole("button", { name: "Giriş yap" }).click();
+  await loginAs(page, "system@example.test");
 
   await expect(page).toHaveURL(/\/sistem$/);
   await expect(heading(page, { name: "Sistem Paneli" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Kurumlar" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Sistem Paneli" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Özet" })).toBeVisible();
   await expect(page.getByLabel("Sistem başlangıcı").getByText("Henüz kurum yok")).toBeVisible();
   await expect(page.getByLabel("Sistem başlangıcı").getByRole("link", { name: "Kurum oluştur" })).toBeVisible();
   await page.goto("/kurum");
@@ -5554,7 +5526,8 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   await createDialog.getByLabel("Koltuk limiti").pressSequentially("50");
   await createDialog.getByLabel("Admin ad soyad").pressSequentially("Yeni Yönetici");
   await createDialog.getByLabel("Admin e-posta").fill("first.admin@example.test");
-  await createDialog.getByLabel("Admin şifre").fill("password1");
+  await createDialog.getByLabel("Admin TC kimlik no").fill("10000000450");
+  await createDialog.getByLabel("Admin telefon").fill("5551234567");
   await expect(createDialog.getByLabel("Kurum adı")).toHaveValue("Yeni Kurum");
   await expect(createDialog.getByLabel("Slug")).toHaveValue("yeni-kurum");
   await expect(createDialog.getByLabel("Koltuk limiti")).toHaveValue("50");
@@ -5564,25 +5537,16 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   await expect(page.getByText("1 / 50")).toBeVisible();
 
   await page.getByRole("button", { name: "Kurum oluştur" }).click();
-  await createDialog.getByLabel("Kurum adı").fill("Davetli Kurum");
-  await createDialog.getByLabel("Slug").fill("davetli-kurum");
-  await createDialog.getByLabel("İlk admin modu").selectOption("invitation");
-  await createDialog.getByLabel("Admin ad soyad").fill("Davetli Yönetici");
-  await createDialog.getByLabel("Admin e-posta").fill("invited.admin@example.test");
-  await expect(createDialog.getByLabel("Admin şifre")).toHaveCount(0);
+  await createDialog.getByLabel("Kurum adı").fill("Telefonlu Kurum");
+  await createDialog.getByLabel("Slug").fill("telefonlu-kurum");
+  await createDialog.getByLabel("Admin ad soyad").fill("Telefonlu Yönetici");
+  await createDialog.getByLabel("Admin e-posta").fill("phone.admin@example.test");
+  await createDialog.getByLabel("Admin TC kimlik no").fill("10000001372");
+  await createDialog.getByLabel("Admin telefon").fill("5550000011");
   await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
-  await expect(page.getByLabel("İlk admin aktivasyon tokenı").getByText("invited.admin@example.test")).toBeVisible();
-  await expect(page.getByLabel("İlk admin aktivasyon tokenı")).toContainText("Token maskeli");
-  await expect(page.locator("body")).not.toContainText("tenant-admin-activation-token");
-  await page.getByLabel("İlk admin aktivasyon tokenı").getByRole("button", { name: "Tokenı göster" }).click();
-  await expect(page.getByLabel("İlk admin aktivasyon tokenı").getByText("tenant-admin-activation-token")).toBeVisible();
-  await page.getByLabel("İlk admin aktivasyon tokenı").getByRole("button", { name: "Tokenı gizle" }).click();
-  await expect(page.locator("body")).not.toContainText("tenant-admin-activation-token");
-  await page.getByRole("row", { name: /Davetli Kurum/ }).getByRole("button", { name: "Sil" }).click();
-  await confirmDeleteDialog(page, "Kurumu sil", "Davetli Kurum kurumunu silmek istiyor musun?");
-  await expect(page.getByRole("row", { name: /Davetli Kurum/ })).toHaveCount(0);
-  await expect(page.getByLabel("İlk admin aktivasyon tokenı")).toHaveCount(0);
-  await expect(page.locator("body")).not.toContainText("tenant-admin-activation-token");
+  await page.getByRole("row", { name: /Telefonlu Kurum/ }).getByRole("button", { name: "Sil" }).click();
+  await confirmDeleteDialog(page, "Kurumu sil", "Telefonlu Kurum kurumunu silmek istiyor musun?");
+  await expect(page.getByRole("row", { name: /Telefonlu Kurum/ })).toHaveCount(0);
 
   await page.getByRole("row", { name: /Yeni Kurum/ }).getByRole("link", { name: "Detay" }).click();
   await expect(page).toHaveURL(/\/sistem\/kurumlar\/tenant-created$/);
@@ -5596,23 +5560,17 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   await expect(page.getByLabel("Kurum detayı").getByText("Askıda")).toBeVisible();
   await expect(page.getByLabel("Kurum detayı").getByText("1 / 50")).toBeVisible();
 
-  await page.getByRole("button", { name: "Çıkış" }).click();
-  await page.getByLabel("E-posta", { exact: true }).fill("first.admin@example.test");
-  await page.getByLabel("Şifre").fill("password1");
-  await page.getByRole("button", { name: "Giriş yap" }).click();
+  await page.getByLabel("Üst gezinme").getByRole("button", { name: "Çıkış" }).click();
+  await loginAs(page, "first.admin@example.test", "5551234567");
   await expect(page).toHaveURL(/\/kurum$/);
 
-  await page.getByRole("button", { name: "Çıkış" }).click();
-  await page.getByLabel("E-posta", { exact: true }).fill("admin-a@example.test");
-  await page.getByLabel("Şifre").fill("password");
-  await page.getByRole("button", { name: "Giriş yap" }).click();
+  await page.getByLabel("Üst gezinme").getByRole("button", { name: "Çıkış" }).click();
+  await loginAs(page, "admin-a@example.test");
   await page.goto("/sistem");
   await expect(page).toHaveURL(/\/kurum$/);
 
-  await page.getByRole("button", { name: "Çıkış" }).click();
-  await page.getByLabel("E-posta", { exact: true }).fill("assistant@example.test");
-  await page.getByLabel("Şifre").fill("password");
-  await page.getByRole("button", { name: "Giriş yap" }).click();
+  await page.getByLabel("Üst gezinme").getByRole("button", { name: "Çıkış" }).click();
+  await loginAs(page, "assistant@example.test");
   await expect(page).toHaveURL(/\/kurum$/);
   await expect(page.getByRole("link", { name: "Ödemeler" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Kullanıcılar" })).toHaveCount(0);
@@ -5620,6 +5578,7 @@ test("Next sistem admin ayrı sistem panelinde kurum yönetir", async ({ page })
   await expect(page.getByRole("link", { name: "Denetim" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "KVKK" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Yedekleme" })).toHaveCount(0);
+  await expandSidebarGroup(page, "Finans ve Destek");
   await expect(page.getByRole("link", { name: "Destek", exact: true })).toBeVisible();
   await expect(page.getByLabel("Karar sinyalleri").getByRole("link", { name: /Geciken ödeme/ })).toHaveCount(0);
   await expect(page.getByLabel("Karar sinyalleri").getByRole("link", { name: /Bekleyen destek/ })).toBeVisible();
@@ -5804,12 +5763,13 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   });
 
   await page.route("**/api/v1/auth/login", async (route) => {
-    const body = route.request().postDataJSON() as { email: string };
+    const body = route.request().postDataJSON() as { email?: string; nationalId?: string };
+    const email = loginEmailFromRequest(body);
     await route.fulfill({
       contentType: "application/json",
       headers: corsHeaders,
       status: 200,
-      body: JSON.stringify(envelope(createAuthResponse(body.email))),
+      body: JSON.stringify(envelope(createAuthResponse(email))),
     });
   });
 
@@ -6244,7 +6204,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page.getByLabel("Devamsızlık").getByRole("cell", { name: "Yok", exact: true })).toBeVisible();
   await expect(page.getByLabel("Öğretmen notları").getByText("Problem çözme rutini güçleniyor.")).toBeVisible();
 
-  await page.getByRole("button", { name: "Çıkış" }).click();
+  await page.getByLabel("Üst gezinme").getByRole("button", { name: "Çıkış" }).click();
   await expect(page).toHaveURL(/\/login$/);
   await loginAs(page, "teacher-a@example.test");
   await expect(page).toHaveURL(/\/ogretmen$/);
@@ -6338,7 +6298,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page.getByLabel("Öğretmen sınıf raporları").getByRole("cell", { name: "18,25" })).toBeVisible();
   await expect(page.getByLabel("Öğretmen sınıf raporları").getByRole("cell", { name: "8-B" })).toBeHidden();
 
-  await page.getByRole("button", { name: "Çıkış" }).click();
+  await page.getByLabel("Üst gezinme").getByRole("button", { name: "Çıkış" }).click();
   await expect(page).toHaveURL(/\/login$/);
   await loginAs(page, "guardian-a@example.test");
   await expect(page).toHaveURL(/\/veli$/);
@@ -6416,17 +6376,34 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page.getByLabel("Veli ilişki özeti").getByText(smsEnabled ? "SMS, Duyuru, Destek" : "Duyuru, Destek")).toBeVisible();
 });
 
-async function loginAs(page: Page, email: string) {
-  await page.goto("/login");
-  await page.getByRole("textbox", { name: /^E-posta/ }).fill(email);
-  await page.getByLabel("Şifre").fill("password");
+async function loginAs(page: Page, email: string, password = "password") {
+  await page.goto(email === "system@example.test" ? "/sistem/giris" : "/k/dna-egitim/giris");
+  await page.getByLabel("TC kimlik no").fill(loginNationalIdByEmail[email] ?? loginNationalIdByEmail["admin-a@example.test"]!);
+  await page.locator('input[name="password"]').fill(password);
   await page.getByRole("button", { name: "Giriş yap" }).click();
   const homeUrlByEmail: Record<string, RegExp> = {
+    "system@example.test": /\/sistem$/,
     "student-a@example.test": /\/ogrenci$/,
     "teacher-a@example.test": /\/ogretmen$/,
     "guardian-a@example.test": /\/veli$/,
   };
   await expect(page).toHaveURL(homeUrlByEmail[email] ?? /\/kurum$/, { timeout: 15_000 });
+  await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
+}
+
+const loginNationalIdByEmail: Record<string, string> = {
+  "admin-a@example.test": "10000000146",
+  "system@example.test": "10000000214",
+  "assistant@example.test": "10000000382",
+  "first.admin@example.test": "10000000450",
+  "student-a@example.test": "10000000528",
+  "teacher-a@example.test": "10000000696",
+  "guardian-a@example.test": "10000000764",
+};
+
+function loginEmailFromRequest(body: { email?: string; nationalId?: string }) {
+  if (body.email) return body.email;
+  return Object.entries(loginNationalIdByEmail).find(([, nationalId]) => nationalId === body.nationalId)?.[0] ?? "admin-a@example.test";
 }
 
 type TestAuthSession = {

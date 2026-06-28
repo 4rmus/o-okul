@@ -50,12 +50,7 @@ export const queryClient = new QueryClient({
   },
 });
 
-export async function login(email: string, password: string): Promise<AuthResponse>;
-export async function login(credentials: LoginRequest): Promise<AuthResponse>;
-export async function login(credentialsOrEmail: LoginRequest | string, password?: string): Promise<AuthResponse> {
-  const body = typeof credentialsOrEmail === "string"
-    ? { email: credentialsOrEmail, password: password ?? "" }
-    : credentialsOrEmail;
+export async function login(body: LoginRequest): Promise<AuthResponse> {
   const response = await fetch(`${apiBaseUrl}/auth/login`, {
     body: JSON.stringify(body),
     credentials: "include",

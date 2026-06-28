@@ -18,7 +18,7 @@ import {
 } from "./password-reset-store.js";
 import { authSessionStoreToken, type SessionStore } from "./session-store.js";
 import { TokenService, type AccessTokenPayload, type TokenPair } from "./token-service.js";
-import { type AuthUserStore, authUserStoreToken, hashPassword, verifyPassword } from "./auth-user-store.js";
+import { type AuthUser, type AuthUserStore, authUserStoreToken, hashPassword, verifyPassword } from "./auth-user-store.js";
 import {
   createLoginMfaChallenge,
   createTotpEnrollmentDraft,
@@ -74,9 +74,8 @@ export interface TotpVerificationInput {
 }
 
 export interface LoginCredentials {
-  email?: string;
-  tenantSlug?: string;
-  nationalId?: string;
+  tenantSlug: string;
+  nationalId: string;
   password: string;
 }
 
@@ -98,13 +97,8 @@ export class AuthService {
     this.loginAttempts = loginAttempts ?? createLoginAttemptLimiter();
   }
 
-  async login(email: string, password: string, clientIp?: string): Promise<TokenPair | LoginMfaChallenge>;
   async login(credentials: LoginCredentials, clientIp?: string): Promise<TokenPair | LoginMfaChallenge>;
-  async login(credentialsOrEmail: LoginCredentials | string, passwordOrClientIp = "unknown", maybeClientIp = "unknown"): Promise<TokenPair | LoginMfaChallenge> {
-    const credentials = typeof credentialsOrEmail === "string"
-      ? { email: credentialsOrEmail, password: passwordOrClientIp }
-      : credentialsOrEmail;
-    const clientIp = typeof credentialsOrEmail === "string" ? maybeClientIp : passwordOrClientIp;
+  async login(credentials: LoginCredentials, clientIp = "unknown"): Promise<TokenPair | LoginMfaChallenge> {
     const resolved = await this.resolveLoginUser(credentials, clientIp);
     const attemptKey = resolved.attemptKey;
     await this.loginAttempts.assertAllowed(attemptKey);
@@ -473,25 +467,16 @@ export class AuthService {
     return { changedAt };
   }
 
-  private async resolveLoginUser(credentials: LoginCredentials, clientIp: string): Promise<{ user?: Awaited<ReturnType<AuthUserStore["findByEmail"]>>; attemptKey: string }> {
-    if (credentials.email?.trim()) {
-      const email = credentials.email.trim().toLowerCase();
-      const user = await this.users.findByEmail(email);
-      return {
-        user: user && isProvisionedSubjectEmailLoginAllowed(user) ? user : undefined,
-        attemptKey: loginAttemptKey(email, clientIp),
-      };
-    }
-
+  private async resolveLoginUser(credentials: LoginCredentials, clientIp: string): Promise<{ user?: AuthUser; attemptKey: string }> {
     if (!this.tenants) {
       throw new BadRequestException("TENANT_STORE_REQUIRED");
     }
-    const tenantSlug = credentials.tenantSlug?.trim().toLowerCase();
-    const nationalIdInput = credentials.nationalId?.trim();
+    const tenantSlug = credentials.tenantSlug.trim().toLowerCase();
+    const nationalIdInput = credentials.nationalId.trim();
     if (!tenantSlug || !nationalIdInput) {
       throw new BadRequestException("LOGIN_IDENTIFIER_REQUIRED");
     }
-    const tenant = await this.tenants.findBySlug(tenantSlug);
+    const tenant = tenantSlug === "system" ? { id: "system" } : await this.tenants.findBySlug(tenantSlug);
     if (!tenant) {
       return { user: undefined, attemptKey: loginAttemptKey(`${tenantSlug}:missing`, clientIp) };
     }
@@ -552,11 +537,6 @@ export class AuthService {
 
     throw new UnauthorizedException("MFA_CODE_REQUIRED");
   }
-}
-
-function isProvisionedSubjectEmailLoginAllowed(user: { tenantId: string; nationalIdHash?: string; roles: string[] }): boolean {
-  if (user.tenantId === "system" || !user.nationalIdHash) return true;
-  return user.roles.some((role) => role === "TENANT_ADMIN" || role === "ASSISTANT_ADMIN" || role === "SYSTEM_ADMIN");
 }
 
 export function createResetToken(): string {

@@ -3,13 +3,12 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@o-okul/shared-types";
-import { ArrowLeft, BookOpen, ClipboardList, FileText, NotebookTabs, Send } from "lucide-react";
+import { ArrowLeft, BookOpen, ClipboardList, FileText, NotebookTabs } from "lucide-react";
 import { DataTable, InfoGrid, InfoItem, Panel, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
-import { hasCapabilityForRoles } from "../../_shared/access.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 interface TeacherDetailData {
@@ -23,7 +22,6 @@ interface TeacherDetailData {
 
 export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
   const { auth } = useAuth();
-  const canManageUsers = auth ? hasCapabilityForRoles(auth.session.roles, "user:manage") : false;
   const detailQuery = useQuery({
     queryKey: ["next-teacher-detail", auth?.session.tenantId ?? "anonymous", teacherId],
     queryFn: () => loadTeacherDetail(auth?.accessToken ?? "", teacherId),
@@ -108,12 +106,6 @@ export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
                   <FileText size={17} aria-hidden="true" />
                   Raporlar
                 </Link>
-                {canManageUsers ? (
-                  <Link className="next-action-link" href={`/kurum/kullanicilar?invite=teacher&subjectId=${encodeURIComponent(teacherId)}`}>
-                    <Send size={17} aria-hidden="true" />
-                    Portal daveti gönder
-                  </Link>
-                ) : null}
               </div>
             </Panel>
           </>
@@ -176,7 +168,7 @@ function buildTeacherSummaryBadges(detail: TeacherDetailData): OperationSummaryB
   return [
     {
       key: "portal",
-      label: detail.teacher.userId ? "Portal bağlı" : "Portal daveti bekliyor",
+      label: detail.teacher.userId ? "Portal bağlı" : "TC + telefon bekliyor",
       tone: detail.teacher.userId ? "success" : "warning",
     },
     {

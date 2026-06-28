@@ -1,3 +1,4 @@
+import { createCipheriv, createHmac, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
 import pg from "pg";
@@ -28,6 +29,13 @@ type SeedMode = "demo" | "minimal";
 const seedMode = parseSeedMode(process.env.SEED_MODE);
 const pool = new pg.Pool({ connectionString: databaseUrl });
 const demoPasswordHash = "scrypt:demo-auth-salt:uG-yNMDIMmz8JL5XDnE2Eoc939a2mw8PcRPoJb8CXac";
+const systemAdminNationalId = normalizeTcIdentity(process.env.SYSTEM_ADMIN_NATIONAL_ID ?? "10000000214", "SYSTEM_ADMIN_NATIONAL_ID_INVALID");
+const demoLoginNationalIds = {
+  admin: normalizeTcIdentity("10000000146"),
+  teacher: normalizeTcIdentity("10000000696"),
+  student: normalizeTcIdentity("10000000528"),
+  guardian: normalizeTcIdentity("10000000764"),
+};
 
 type LearningOutcomeSeed = {
   id: string;
@@ -147,11 +155,17 @@ async function main() {
     );
 
     const systemUser = await client.query<{ id: string }>(
-      `INSERT INTO "User" ("id", "tenantId", "email", "name", "passwordHash", "updatedAt")
-       VALUES ('user-system', 'system', 'system@example.test', 'System Admin', $1, now())
-       ON CONFLICT ("email") DO UPDATE SET "tenantId" = EXCLUDED."tenantId", "passwordHash" = EXCLUDED."passwordHash", "updatedAt" = now()
+      `INSERT INTO "User" ("id", "tenantId", "email", "nationalIdEncrypted", "nationalIdHash", "name", "passwordHash", "updatedAt")
+       VALUES ('user-system', 'system', NULL, $1, $2, 'System Admin', $3, now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "email" = NULL,
+           "tenantId" = EXCLUDED."tenantId",
+           "nationalIdEncrypted" = EXCLUDED."nationalIdEncrypted",
+           "nationalIdHash" = EXCLUDED."nationalIdHash",
+           "passwordHash" = EXCLUDED."passwordHash",
+           "updatedAt" = now()
        RETURNING "id"`,
-      [demoPasswordHash],
+      [encryptTcIdentity(systemAdminNationalId), hashTcIdentity(systemAdminNationalId), demoPasswordHash],
     );
     const systemUserId = systemUser.rows[0]?.id;
     if (!systemUserId) throw new Error("SYSTEM_USER_MISSING");
@@ -185,12 +199,19 @@ async function main() {
     const tenantId = tenant.rows[0]?.id;
     if (!tenantId) throw new Error("DEMO_TENANT_MISSING");
 
+    const demoAdminNationalId = demoLoginNationalIds.admin;
     const user = await client.query<{ id: string }>(
-      `INSERT INTO "User" ("id", "tenantId", "email", "name", "passwordHash", "updatedAt")
-       VALUES ('user-demo-admin', $1, 'admin@demo.local', 'Demo Yönetici', $2, now())
-       ON CONFLICT ("email") DO UPDATE SET "tenantId" = EXCLUDED."tenantId", "passwordHash" = EXCLUDED."passwordHash", "updatedAt" = now()
+      `INSERT INTO "User" ("id", "tenantId", "email", "nationalIdEncrypted", "nationalIdHash", "name", "passwordHash", "updatedAt")
+       VALUES ('user-demo-admin', $1, NULL, $2, $3, 'Demo Yönetici', $4, now())
+       ON CONFLICT ("id") DO UPDATE
+       SET "tenantId" = EXCLUDED."tenantId",
+           "email" = NULL,
+           "nationalIdEncrypted" = EXCLUDED."nationalIdEncrypted",
+           "nationalIdHash" = EXCLUDED."nationalIdHash",
+           "passwordHash" = EXCLUDED."passwordHash",
+           "updatedAt" = now()
        RETURNING "id"`,
-      [tenantId, demoPasswordHash],
+      [tenantId, encryptTcIdentity(demoAdminNationalId), hashTcIdentity(demoAdminNationalId), demoPasswordHash],
     );
 
     await client.query(
@@ -249,6 +270,45 @@ function parseSeedMode(value: string | undefined): SeedMode {
   throw new Error("SEED_MODE must be demo or minimal");
 }
 
+function normalizeTcIdentity(value: string, errorCode: string): string {
+  const normalized = value.replace(/\D/g, "");
+  if (!isValidTcIdentity(normalized)) throw new Error(errorCode);
+  return normalized;
+}
+
+function isValidTcIdentity(value: string): boolean {
+  if (!/^[1-9]\d{10}$/.test(value)) return false;
+  const digits = value.split("").map(Number);
+  const digit = (index: number) => digits[index] ?? 0;
+  const oddSum = digit(0) + digit(2) + digit(4) + digit(6) + digit(8);
+  const evenSum = digit(1) + digit(3) + digit(5) + digit(7);
+  return digit(9) === ((oddSum * 7) - evenSum) % 10 && digit(10) === digits.slice(0, 10).reduce((sum, item) => sum + item, 0) % 10;
+}
+
+function encryptTcIdentity(value: string): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", keyFromEnv("STUDENT_PII_ENCRYPTION_KEY", "11111111111111111111111111111111"), iv);
+  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  return `v1:${iv.toString("base64")}:${cipher.getAuthTag().toString("base64")}:${encrypted.toString("base64")}`;
+}
+
+function hashTcIdentity(value: string): string {
+  return createHmac("sha256", keyFromEnv("STUDENT_PII_HASH_KEY", "22222222222222222222222222222222")).update(value).digest("hex");
+}
+
+function keyFromEnv(name: string, fallback: string): Buffer {
+  const configured = process.env[name];
+  if (process.env.NODE_ENV === "production" && (!configured || configured === "change-me")) {
+    throw new Error(`${name}_REQUIRED`);
+  }
+  const value = configured && configured !== "change-me" ? configured : fallback;
+  if (value.startsWith("base64:")) return Buffer.from(value.slice("base64:".length), "base64");
+  if (/^[0-9a-f]{64}$/i.test(value)) return Buffer.from(value, "hex");
+  const key = Buffer.from(value);
+  if (key.length !== 32) throw new Error(`${name}_INVALID_LENGTH`);
+  return key;
+}
+
 async function resetSeedData(client: pg.PoolClient, systemUserId: string): Promise<void> {
   await client.query(`DELETE FROM "Tenant" WHERE "id" <> 'system'`);
   await client.query(`DELETE FROM "User" WHERE "id" <> $1`, [systemUserId]);
@@ -259,35 +319,37 @@ async function seedDemoSubjectUsers(client: pg.PoolClient, tenantId: string, fix
   const accounts = [
     {
       id: DEMO_TEACHER_USER_ID,
-      email: "teacher@demo.local",
       name: `${fixtures.accountTeacher.firstName} ${fixtures.accountTeacher.lastName}`,
+      nationalId: demoLoginNationalIds.teacher,
       role: "TEACHER",
     },
     {
       id: DEMO_STUDENT_USER_ID,
-      email: "student@demo.local",
       name: `${accountStudent.firstName} ${accountStudent.lastName}`,
+      nationalId: demoLoginNationalIds.student,
       role: "STUDENT",
     },
     {
       id: DEMO_GUARDIAN_USER_ID,
-      email: "guardian@demo.local",
       name: `${accountStudent.guardianFirstName} ${accountStudent.guardianLastName}`,
+      nationalId: demoLoginNationalIds.guardian,
       role: "GUARDIAN",
     },
   ] as const;
 
   for (const account of accounts) {
     await client.query(
-      `INSERT INTO "User" ("id", "tenantId", "email", "name", "passwordHash", "updatedAt")
-       VALUES ($1, $2, $3, $4, $5, now())
+      `INSERT INTO "User" ("id", "tenantId", "email", "nationalIdEncrypted", "nationalIdHash", "name", "passwordHash", "updatedAt")
+       VALUES ($1, $2, NULL, $3, $4, $5, $6, now())
        ON CONFLICT ("id") DO UPDATE
        SET "tenantId" = EXCLUDED."tenantId",
-           "email" = EXCLUDED."email",
+           "email" = NULL,
+           "nationalIdEncrypted" = EXCLUDED."nationalIdEncrypted",
+           "nationalIdHash" = EXCLUDED."nationalIdHash",
            "name" = EXCLUDED."name",
            "passwordHash" = EXCLUDED."passwordHash",
            "updatedAt" = now()`,
-      [account.id, tenantId, account.email, account.name, demoPasswordHash],
+      [account.id, tenantId, encryptTcIdentity(account.nationalId), hashTcIdentity(account.nationalId), account.name, demoPasswordHash],
     );
 
     await client.query(

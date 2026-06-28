@@ -109,7 +109,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isBootstrapping && !auth) {
-      router.replace("/login");
+      router.replace(loginPathFor(pathname));
       return;
     }
 
@@ -121,7 +121,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (!isBootstrapping && auth && !isAuthorizedPath) {
       router.replace(getHomePath(auth.session));
     }
-  }, [auth, isAuthorizedPath, isBootstrapping, router]);
+  }, [auth, isAuthorizedPath, isBootstrapping, pathname, router]);
 
   useEffect(() => {
     if (!auth) return;
@@ -199,7 +199,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   async function handleLogout() {
     await logout();
-    router.replace("/login");
+    router.replace(loginPathFor(pathname));
   }
 
   function isActive(href: string) {
@@ -906,6 +906,10 @@ function getHomePath(session: AppSession) {
   if (hasSubjectPortalAccess(session, "STUDENT", "STUDENT")) return "/ogrenci";
   if (hasSubjectPortalAccess(session, "GUARDIAN", "GUARDIAN")) return "/veli";
   return "/login";
+}
+
+function loginPathFor(pathname: string) {
+  return pathname.startsWith("/sistem") ? "/sistem/giris" : "/login";
 }
 
 function hasShellSearchAccess(session: AppSession) {

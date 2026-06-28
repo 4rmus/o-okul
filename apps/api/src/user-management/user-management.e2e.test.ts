@@ -75,7 +75,8 @@ describe("Tenant user management", () => {
       .send({
         email: "created-user-a@example.test",
         name: "Created User A",
-        password: "password1",
+        nationalId: "10000000450",
+        phone: "5551234567",
         roles: ["ASSISTANT_ADMIN"],
       })
       .expect(201);
@@ -88,7 +89,7 @@ describe("Tenant user management", () => {
     });
     expect(created.body).not.toHaveProperty("password");
     expect(created.body).not.toHaveProperty("passwordHash");
-    expect(JSON.stringify(created.body)).not.toContain("password1");
+    expect(JSON.stringify(created.body)).not.toContain("5551234567");
 
     const userId = (created.body as { id: string }).id;
     await request(server)
@@ -123,7 +124,8 @@ describe("Tenant user management", () => {
       .send({
         email,
         name: "Revoked Admin A",
-        password: "password1",
+        nationalId: "10000000450",
+        phone: "5551234567",
         roles: ["TENANT_ADMIN"],
       })
       .expect(201);
@@ -133,7 +135,7 @@ describe("Tenant user management", () => {
       id: userId,
       email,
       name: "Revoked Admin A",
-      password: "password1",
+      password: "5551234567",
       roles: ["TENANT_ADMIN"],
       tenantId: "tenant-a",
     });
@@ -152,7 +154,7 @@ describe("Tenant user management", () => {
     ]));
     expect(JSON.stringify(auditResponse.body)).not.toContain(email);
 
-    const elevatedToken = await login(email, "password1");
+    const elevatedToken = await login(email, "5551234567");
     await request(server).get("/tenant-users").set("Authorization", `Bearer ${elevatedToken}`).expect(200);
 
     await request(server)
@@ -177,20 +179,21 @@ describe("Tenant user management", () => {
         firstAdmin: {
           name: "Seat Users Admin",
           email: "seat-users-admin@example.test",
-          mode: "password",
-          password: "password1",
+          nationalId: "10000000450",
+          phone: "5551234567",
         },
       })
       .expect(201);
 
-    const admin = await login("seat-users-admin@example.test", "password1");
+    const admin = await login("seat-users-admin@example.test", "5551234567");
     await request(server)
       .post("/tenant-users")
       .set("Authorization", `Bearer ${admin}`)
       .send({
         email: "seat-users-new@example.test",
         name: "Seat Users New",
-        password: "password1",
+        nationalId: "10000001372",
+        phone: "5550000011",
         roles: ["ASSISTANT_ADMIN"],
       })
       .expect(400)
@@ -207,7 +210,8 @@ describe("Tenant user management", () => {
       .send({
         email: "gecersiz-email",
         name: " ",
-        password: "short",
+        nationalId: "bad",
+        phone: "",
         roles: [],
       })
       .expect(422);
@@ -218,7 +222,7 @@ describe("Tenant user management", () => {
         fields: expect.arrayContaining([
           expect.objectContaining({ path: "email" }),
           expect.objectContaining({ path: "name" }),
-          expect.objectContaining({ path: "password" }),
+          expect.objectContaining({ path: "phone" }),
           expect.objectContaining({ path: "roles" }),
         ]),
       },
@@ -247,7 +251,8 @@ describe("Tenant user management", () => {
       .send({
         email: "system-role-a@example.test",
         name: "System Role",
-        password: "password1",
+        nationalId: "10000000450",
+        phone: "5551234567",
         roles: ["SYSTEM_ADMIN"],
       })
       .expect(422);
@@ -258,7 +263,8 @@ describe("Tenant user management", () => {
       .send({
         email: "subject-role-a@example.test",
         name: "Subject Role",
-        password: "password1",
+        nationalId: "10000001372",
+        phone: "5550000011",
         roles: ["TEACHER"],
       })
       .expect(400)

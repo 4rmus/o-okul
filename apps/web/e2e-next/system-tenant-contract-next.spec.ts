@@ -52,18 +52,19 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     await expect.poll(() => new URL(page.url()).searchParams.get("page")).toBe("1");
   });
 
-  test("ilk admin tokenını reveal dışında saklı tutar ve kurum silinince temizler", async ({ page }) => {
+  test("ilk admini TC telefonla oluşturur ve davet tokenı göstermez", async ({ page }) => {
     const captured = createCapturedSystemRequests();
     await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar");
 
     await page.getByRole("button", { name: "Kurum oluştur" }).click();
     const createDialog = page.getByRole("dialog", { name: "Kurum oluştur" });
-    await createDialog.getByLabel("Kurum adı").fill("Davetli Kurum");
-    await createDialog.getByLabel("Slug").fill("davetli-kurum");
+    await createDialog.getByLabel("Kurum adı").fill("Telefonlu Kurum");
+    await createDialog.getByLabel("Slug").fill("telefonlu-kurum");
     await createDialog.getByLabel("Plan").selectOption("PRO");
-    await createDialog.getByLabel("İlk admin modu").selectOption("invitation");
-    await createDialog.getByLabel("Admin ad soyad").fill("Davetli Yönetici");
-    await createDialog.getByLabel("Admin e-posta").fill("invited.admin@example.test");
+    await createDialog.getByLabel("Admin ad soyad").fill("Telefonlu Yönetici");
+    await createDialog.getByLabel("Admin e-posta").fill("phone.admin@example.test");
+    await createDialog.getByLabel("Admin TC kimlik no").fill("10000001372");
+    await createDialog.getByLabel("Admin telefon").fill("5551234567");
     await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
 
     await expect.poll(() => captured.tenantCreates).toHaveLength(1);
@@ -71,36 +72,26 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
       authorization: "Bearer system-tenant-access-token",
       body: {
         firstAdmin: {
-          email: "invited.admin@example.test",
-          mode: "invitation",
-          name: "Davetli Yönetici",
+          email: "phone.admin@example.test",
+          name: "Telefonlu Yönetici",
+          nationalId: "10000001372",
+          phone: "5551234567",
         },
-        name: "Davetli Kurum",
+        name: "Telefonlu Kurum",
         plan: "PRO",
-        slug: "davetli-kurum",
+        slug: "telefonlu-kurum",
       },
     });
 
-    const tokenPanel = page.getByLabel("İlk admin aktivasyon tokenı");
-    await expect(tokenPanel).toContainText("invited.admin@example.test");
-    await expect(tokenPanel).toContainText("Token maskeli");
-    await expect(tokenPanel.getByRole("button", { name: "Tokenı kapat" })).toBeVisible();
-    await expect(page.locator("body")).not.toContainText("tenant-admin-activation-token");
-    await tokenPanel.getByRole("button", { name: "Tokenı göster" }).click();
-    await expect(tokenPanel).toContainText("Token açık");
-    await expect(tokenPanel).toContainText("tenant-admin-activation-token");
-    await tokenPanel.getByRole("button", { name: "Tokenı gizle" }).click();
-    await expect(page.locator("body")).not.toContainText("tenant-admin-activation-token");
-
-    await page.getByRole("row", { name: /Davetli Kurum/ }).getByRole("button", { name: "Sil" }).click();
+    await expect(page.getByLabel("İlk admin aktivasyon tokenı")).toHaveCount(0);
+    await page.getByRole("row", { name: /Telefonlu Kurum/ }).getByRole("button", { name: "Sil" }).click();
     const confirmDialog = page.getByRole("dialog", { name: "Kurumu sil" });
-    await expect(confirmDialog).toContainText("Davetli Kurum kurumunu silmek istiyor musun?");
+    await expect(confirmDialog).toContainText("Telefonlu Kurum kurumunu silmek istiyor musun?");
     await confirmDialog.getByRole("button", { name: "Sil" }).click();
     await expect.poll(() => captured.tenantDeletes).toEqual([
       { authorization: "Bearer system-tenant-access-token", id: "tenant-created-invited" },
     ]);
     await expect(page.getByLabel("İlk admin aktivasyon tokenı")).toHaveCount(0);
-    await expect(page.locator("body")).not.toContainText("tenant-admin-activation-token");
     expect(captured.forbiddenTenantScopedPaths).toEqual([]);
   });
 
@@ -214,7 +205,6 @@ async function installSystemTenantApiMocks(page: Page, captured: CapturedSystemR
           name: body.firstAdmin.name,
           roles: ["TENANT_ADMIN"],
           tenantId: tenant.id,
-          ...(body.firstAdmin.mode === "invitation" ? { activationToken: "tenant-admin-activation-token" } : {}),
         },
         tenant,
       });

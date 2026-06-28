@@ -147,7 +147,7 @@ export function SecurityAuditPage() {
       />
       <OperationDecisionNotice
         decision="Karar: son güvenlik olayları canlı okunur."
-        reason="Panel audit log üzerinden auth, kullanıcı, davet, KVKK ve tenant olaylarını salt-okunur gösterir; gizli production denetimi hâlâ CLI kanıt kapısıdır."
+        reason="Panel audit log üzerinden auth, kullanıcı, KVKK ve tenant olaylarını salt-okunur gösterir; gizli production denetimi hâlâ CLI kanıt kapısıdır."
         nextStep="C3'ün sonraki adımı güvenlik denetim raporundaki uyarıları ayrı, PII içermeyen bir kaynakla bağlamaktır."
       />
       <Panel
@@ -161,7 +161,7 @@ export function SecurityAuditPage() {
           caption="Güvenlik olayları"
           columns={securityEventColumns}
           density="compact"
-          description="Kimlik, davet, KVKK, kurum ve kullanıcı olayları PII-safe etiketlerle listelenir."
+          description="Kimlik, KVKK, kurum ve kullanıcı olayları PII-safe etiketlerle listelenir."
           emptyText="Güvenlik olayı yok"
           error={securityEventsQuery.isError ? "Güvenlik olayları alınamadı." : undefined}
           getRowKey={(event) => event.id}

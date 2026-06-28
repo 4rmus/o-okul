@@ -22,7 +22,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 interface AuthStore {
   auth: AuthResponse | null;
   isBootstrapping: boolean;
-  login(credentialsOrEmail: LoginRequest | string, password?: string): Promise<void>;
+  login(credentials: LoginRequest): Promise<void>;
   changePassword(input: MePasswordChangeRequest): Promise<void>;
   verifyMfa(challengeToken: string, input: { totpCode?: string; recoveryCode?: string }): Promise<void>;
   logout(): Promise<void>;
@@ -51,10 +51,8 @@ export function Providers({ children }: { children: ReactNode }) {
     () => ({
       auth,
       isBootstrapping,
-      async login(credentialsOrEmail: LoginRequest | string, password?: string) {
-        setAuth(typeof credentialsOrEmail === "string"
-          ? await requestLogin(credentialsOrEmail, password ?? "")
-          : await requestLogin(credentialsOrEmail));
+      async login(credentials: LoginRequest) {
+        setAuth(await requestLogin(credentials));
       },
       async verifyMfa(challengeToken, input) {
         setAuth(await requestVerifyMfa(challengeToken, input));

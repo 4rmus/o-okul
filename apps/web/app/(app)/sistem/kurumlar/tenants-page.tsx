@@ -46,8 +46,8 @@ const emptyCreateForm: TenantCreateFormState = {
   firstAdmin: {
     name: "",
     email: "",
-    mode: "password",
-    password: "",
+    nationalId: "",
+    phone: "",
   },
 };
 
@@ -67,8 +67,6 @@ export function TenantsPage() {
   });
   const [form, setForm] = useState<TenantCreateFormState>(emptyCreateForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [issuedToken, setIssuedToken] = useState<{ email: string; tenantId: string; token: string } | null>(null);
-  const [isIssuedTokenRevealed, setIsIssuedTokenRevealed] = useState(false);
   const [deletingTenantId, setDeletingTenantId] = useState("");
   const [error, setError] = useState("");
   const rows = tenantsQuery.data?.data ?? [];
@@ -111,11 +109,6 @@ export function TenantsPage() {
       key: "scope",
       label: "SYSTEM_ADMIN kapsamı",
       tone: "info",
-    },
-    {
-      key: "token",
-      label: issuedToken ? (isIssuedTokenRevealed ? "Token açık" : "Token maskeli") : "Token beklemede yok",
-      tone: issuedToken ? (isIssuedTokenRevealed ? "warning" : "neutral") : "neutral",
     },
     {
       key: "sort",
@@ -161,8 +154,6 @@ export function TenantsPage() {
 
   function openCreateForm() {
     setForm(emptyCreateForm);
-    setIssuedToken(null);
-    setIsIssuedTokenRevealed(false);
     setError("");
     setIsFormOpen(true);
   }
@@ -195,12 +186,6 @@ export function TenantsPage() {
       const created = await createTenant(auth.accessToken, parsedForm.data);
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
-      setIssuedToken(
-        created.admin.activationToken
-          ? { email: created.admin.email, tenantId: created.tenant.id, token: created.admin.activationToken }
-          : null,
-      );
-      setIsIssuedTokenRevealed(false);
       void queryClient.invalidateQueries({ queryKey: ["next-tenant", created.tenant.id] });
     } catch (createError) {
       setError(tenantCreateErrorMessage(createError));
@@ -221,10 +206,6 @@ export function TenantsPage() {
     setDeletingTenantId(tenant.id);
     try {
       await deleteTenant(auth.accessToken, tenant.id);
-      if (issuedToken?.tenantId === tenant.id) {
-        setIssuedToken(null);
-        setIsIssuedTokenRevealed(false);
-      }
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       void queryClient.invalidateQueries({ queryKey: ["next-tenant", tenant.id] });
     } catch {
@@ -268,44 +249,6 @@ export function TenantsPage() {
         tableDescription="Platform kurumlarının plan, lisans, koltuk ve erişim durumu."
         title="Kurumlar"
       />
-      {issuedToken ? (
-        <section
-          aria-label="İlk admin aktivasyon tokenı"
-          aria-live="polite"
-          className="next-token-panel"
-          data-token-state={isIssuedTokenRevealed ? "revealed" : "masked"}
-        >
-          <div className="next-token-panel__body">
-            <div className="next-token-panel__status" aria-label="İlk admin token güven durumu">
-              <StatusBadge tone="warning">Tek seferlik</StatusBadge>
-              <StatusBadge tone={isIssuedTokenRevealed ? "warning" : "neutral"}>
-                {isIssuedTokenRevealed ? "Token açık" : "Token maskeli"}
-              </StatusBadge>
-              <StatusBadge tone="info">SYSTEM_ADMIN işlemi</StatusBadge>
-            </div>
-            <strong>{issuedToken.email}</strong>
-            <p>İlk admin aktivasyon tokenı yalnız paylaşılacağı anda gösterilir; işlem tamamlanınca panelden kaldır.</p>
-          </div>
-          <code className="next-token-panel__token">
-            {isIssuedTokenRevealed ? issuedToken.token : maskActivationToken(issuedToken.token)}
-          </code>
-          <div className="next-token-panel__actions">
-            <Button type="button" variant="secondary" onClick={() => setIsIssuedTokenRevealed((current) => !current)}>
-              {isIssuedTokenRevealed ? "Tokenı gizle" : "Tokenı göster"}
-            </Button>
-            <Button
-              type="button"
-              variant={isIssuedTokenRevealed ? "primary" : "secondary"}
-              onClick={() => {
-                setIssuedToken(null);
-                setIsIssuedTokenRevealed(false);
-              }}
-            >
-              Tokenı kapat
-            </Button>
-          </div>
-        </section>
-      ) : null}
       <TenantFormModal
         form={form}
         onCancel={closeForm}
@@ -399,35 +342,23 @@ function TenantFormModal({
           onChange={(event) => onChange({ ...form, firstAdmin: { ...form.firstAdmin, email: event.target.value } })}
         />
       </Field>
-      <Field label="İlk admin modu">
-        <Select
-          value={form.firstAdmin.mode}
-          onChange={(event) =>
-            onChange({
-              ...form,
-              firstAdmin: {
-                ...form.firstAdmin,
-                mode: event.target.value as TenantCreateFormState["firstAdmin"]["mode"],
-                password: "",
-              },
-            })
-          }
-        >
-          <option value="password">Şifre belirle</option>
-          <option value="invitation">Davet gönder</option>
-        </Select>
+      <Field label="Admin TC kimlik no">
+        <Input
+          inputMode="numeric"
+          maxLength={11}
+          required
+          value={form.firstAdmin.nationalId}
+          onChange={(event) => onChange({ ...form, firstAdmin: { ...form.firstAdmin, nationalId: event.target.value } })}
+        />
       </Field>
-      {form.firstAdmin.mode === "password" ? (
-        <Field label="Admin şifre">
-          <Input
-            required
-            minLength={8}
-            type="password"
-            value={form.firstAdmin.password}
-            onChange={(event) => onChange({ ...form, firstAdmin: { ...form.firstAdmin, password: event.target.value } })}
-          />
-        </Field>
-      ) : null}
+      <Field label="Admin telefon">
+        <Input
+          inputMode="tel"
+          required
+          value={form.firstAdmin.phone}
+          onChange={(event) => onChange({ ...form, firstAdmin: { ...form.firstAdmin, phone: event.target.value } })}
+        />
+      </Field>
     </FormModal>
   );
 }
@@ -506,11 +437,6 @@ function tenantCreateErrorMessage(error: unknown) {
 function formatTenantSort(sort: string) {
   const option = tenantSortOptions.find((candidate) => candidate.value === sort);
   return option?.label ?? "Varsayılan";
-}
-
-function maskActivationToken(token: string) {
-  if (token.length <= 8) return "••••••••";
-  return `${token.slice(0, 4)}••••${token.slice(-4)}`;
 }
 
 const tenantSortOptions = [
