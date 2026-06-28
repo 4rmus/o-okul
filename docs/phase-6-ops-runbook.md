@@ -798,7 +798,9 @@ Beklenen akış:
   layout'u lokal temp path veya symlink file/directory üzerinden yazılamaz; birleşik kapı bunu
   evidence check'leri başlamadan önce reddeder. Birleşik kapı ayrıca `*_SMOKE_EVIDENCE_FILE`
   raw smoke target'larını provider/HTTP/DB smoke'ları başlamadan önce production artifact girdisi
-  olarak doğrular; `/tmp`/`/var/tmp`, symlink dosya ve symlink parent directory üzerinden gelen raw
+  olarak doğrular. Evidence job, staging host'a SSH tunnel açar ve `DATABASE_URL`,
+  `DIRECT_DATABASE_URL`, `REDIS_URL` değerlerini runner içindeki `127.0.0.1:15432` ve
+  `127.0.0.1:16379` tunnel portlarına çevirir. `/tmp`/`/var/tmp`, symlink dosya ve symlink parent directory üzerinden gelen raw
   smoke path'i kabul edilmez. Evidence job, artifact upload öncesinde `if: always()` cleanup
   adımıyla `.staging-evidence.env` secret dosyasını workspace'ten siler.
 - Full evidence zinciri PASS olduktan sonra workflow aynı job içinde
