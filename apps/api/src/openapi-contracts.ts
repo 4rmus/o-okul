@@ -202,6 +202,24 @@ const mfaChallengeResponseSchema = objectSchema({
   methods: arraySchema({ type: "string", enum: ["totp", "recovery_code"] }, { minItems: 1 }),
 }, ["status", "challengeToken", "expiresAt", "methods"]);
 
+const tenantSelectionOptionSchema = objectSchema({
+  tenantId: stringSchema(),
+  name: stringSchema(),
+  slug: stringSchema(),
+}, ["tenantId", "name", "slug"]);
+
+const tenantSelectionRequiredResponseSchema = objectSchema({
+  status: { type: "string", enum: ["TENANT_SELECTION_REQUIRED"] },
+  selectionToken: stringSchema(),
+  expiresAt: stringSchema({ format: "date-time" }),
+  tenants: arraySchema(tenantSelectionOptionSchema, { minItems: 1 }),
+}, ["status", "selectionToken", "expiresAt", "tenants"]);
+
+const tenantSelectionRequestSchema = objectSchema({
+  selectionToken: stringSchema({ minLength: 1 }),
+  tenantId: stringSchema({ minLength: 1 }),
+}, ["selectionToken", "tenantId"]);
+
 const refreshRequestSchema = objectSchema({
   refreshToken: stringSchema(),
 });
@@ -2259,7 +2277,17 @@ const operationContracts: Record<string, OperationContract> = {
       tenantSlug: stringSchema(),
       nationalId: stringSchema(),
       password: stringSchema(),
-    }, ["tenantSlug", "nationalId", "password"]),
+    }, ["nationalId", "password"]),
+    responseBody: {
+      oneOf: [
+        authResponseSchema,
+        mfaChallengeResponseSchema,
+        tenantSelectionRequiredResponseSchema,
+      ],
+    },
+  },
+  "post /api/v1/auth/login/select": {
+    requestBody: tenantSelectionRequestSchema,
     responseBody: {
       oneOf: [
         authResponseSchema,

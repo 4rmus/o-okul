@@ -12,6 +12,8 @@ import type {
   PasswordResetConfirmResponse,
   PasswordResetRequest,
   Session,
+  TenantSelectionRequest,
+  TenantSelectionRequiredResponse,
   TotpChallengeVerifyRequest,
   TotpDisableRequest,
   TotpDisableResponse,
@@ -28,10 +30,14 @@ import type { LoginMfaChallenge } from "./totp-mfa.js";
 import type { TokenPair } from "./token-service.js";
 
 const loginBodySchema = z.object({
-  tenantSlug: requiredTrimmedString,
+  tenantSlug: optionalTrimmedString,
   nationalId: requiredTrimmedString,
   password: requiredTrimmedString,
 }) satisfies z.ZodType<LoginRequest>;
+const tenantSelectionBodySchema = z.object({
+  selectionToken: requiredTrimmedString,
+  tenantId: requiredTrimmedString,
+}).strict() satisfies z.ZodType<TenantSelectionRequest>;
 const refreshBodySchema = z.preprocess((value) => value ?? {}, z.object({
   refreshToken: optionalTrimmedString,
 }).strict()) satisfies z.ZodType<AuthRefreshRequest>;
@@ -89,14 +95,30 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<LoginResponse> {
-    const tokenPair = await this.auth.login(body, resolveClientIp(request));
-    if (isLoginMfaChallenge(tokenPair)) {
-      return tokenPair;
+    const result = await this.auth.login(body, resolveClientIp(request));
+    if (isLoginMfaChallenge(result) || isTenantSelectionRequired(result)) {
+      return result;
     }
 
-    response.cookie(refreshCookieName, tokenPair.refreshToken, refreshCookieOptions);
+    response.cookie(refreshCookieName, result.refreshToken, refreshCookieOptions);
     response.cookie(csrfCookieName, createCsrfToken(), csrfCookieOptions);
-    return toAuthResponse(tokenPair);
+    return toAuthResponse(result);
+  }
+
+  @Post("login/select")
+  @HttpCode(200)
+  async selectTenant(
+    @Body(zodBody(tenantSelectionBodySchema)) body: TenantSelectionRequest,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<LoginResponse> {
+    const result = await this.auth.selectTenant(body);
+    if (isLoginMfaChallenge(result)) {
+      return result;
+    }
+
+    response.cookie(refreshCookieName, result.refreshToken, refreshCookieOptions);
+    response.cookie(csrfCookieName, createCsrfToken(), csrfCookieOptions);
+    return toAuthResponse(result);
   }
 
   @Post("totp/verify")
@@ -240,6 +262,10 @@ function toPublicSession(session: TokenPair["session"], mustChangePassword = fal
 
 function isLoginMfaChallenge(value: unknown): value is LoginMfaChallenge {
   return Boolean(value && typeof value === "object" && "status" in value && value.status === "MFA_REQUIRED");
+}
+
+function isTenantSelectionRequired(value: unknown): value is TenantSelectionRequiredResponse {
+  return Boolean(value && typeof value === "object" && "status" in value && value.status === "TENANT_SELECTION_REQUIRED");
 }
 
 function resolveClientIp(request: Request): string {

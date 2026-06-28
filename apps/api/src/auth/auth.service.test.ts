@@ -82,7 +82,7 @@ describe("AuthService", () => {
     await expect(auth.login(loginCredentials(nationalId, "wrong"))).rejects.toThrow("LOGIN_FAILED");
   });
 
-  it("kurum kodu veya TC eksikse login olmaz", async () => {
+  it("TC eksikse login olmaz", async () => {
     const users = createUserStoreMock({});
     const auth = new AuthService(
       users,
@@ -95,6 +95,100 @@ describe("AuthService", () => {
     );
 
     await expect(auth.login({ tenantSlug: "dna-egitim", nationalId: "", password: "5551234567" })).rejects.toThrow("LOGIN_IDENTIFIER_REQUIRED");
+  });
+
+  it("kurum kodu olmadan tek eşleşmede login olur", async () => {
+    const nationalId = "10000000146";
+    const user: AuthUser = {
+      id: "tenantless-login",
+      name: "Tenantless Login",
+      passwordHash: hashPassword("password", "test-salt"),
+      tenantId: "tenant-a",
+      nationalIdHash: hashTcIdentity(nationalId),
+      roles: ["TENANT_ADMIN"],
+      membershipVersion: 1,
+    };
+    const users = createUserStoreMock({
+      findByNationalIdHash: vi.fn(async (nationalIdHash) => (nationalIdHash === user.nationalIdHash ? [user] : [])),
+      findById: vi.fn(async (id) => (id === user.id ? user : undefined)),
+    });
+    const auth = new AuthService(
+      users,
+      new InMemorySessionStore(),
+      new InMemoryPasswordResetStore(),
+      { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
+      undefined,
+      undefined,
+      new InMemoryTenantStore(),
+    );
+
+    const tokenPair = await auth.login({ nationalId, password: "password" }, "127.0.0.1");
+    if ("status" in tokenPair) throw new Error("Token bekleniyordu.");
+
+    expect(users.findByNationalIdHash).toHaveBeenCalledWith(user.nationalIdHash);
+    expect(tokenPair.session).toMatchObject({
+      userId: user.id,
+      tenantId: "tenant-a",
+      roles: ["TENANT_ADMIN"],
+    });
+  });
+
+  it("kurum kodu olmadan birden çok eşleşmede seçim ister ve seçimden sonra session üretir", async () => {
+    const nationalId = "10000000146";
+    const nationalIdHash = hashTcIdentity(nationalId);
+    const usersList: AuthUser[] = [
+      {
+        id: "multi-tenant-a",
+        name: "Multi Tenant A",
+        passwordHash: hashPassword("password", "test-salt"),
+        tenantId: "tenant-a",
+        nationalIdHash,
+        roles: ["TENANT_ADMIN"],
+        membershipVersion: 1,
+      },
+      {
+        id: "multi-tenant-b",
+        name: "Multi Tenant B",
+        passwordHash: hashPassword("password", "test-salt"),
+        tenantId: "tenant-b",
+        nationalIdHash,
+        roles: ["STUDENT"],
+        membershipVersion: 1,
+      },
+    ];
+    const users = createUserStoreMock({
+      findByNationalIdHash: vi.fn(async (hash) => (hash === nationalIdHash ? usersList : [])),
+      findById: vi.fn(async (id) => usersList.find((user) => user.id === id)),
+    });
+    const auth = new AuthService(
+      users,
+      new InMemorySessionStore(),
+      new InMemoryPasswordResetStore(),
+      { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
+      undefined,
+      undefined,
+      new InMemoryTenantStore(),
+    );
+
+    const challenge = await auth.login({ nationalId, password: "password" }, "127.0.0.1");
+    expect(challenge).toMatchObject({
+      status: "TENANT_SELECTION_REQUIRED",
+      tenants: [
+        expect.objectContaining({ tenantId: "tenant-a", slug: "dna-egitim" }),
+        expect.objectContaining({ tenantId: "tenant-b", slug: "demo-kurum-b" }),
+      ],
+    });
+    if (!("status" in challenge) || challenge.status !== "TENANT_SELECTION_REQUIRED") throw new Error("Tenant seçimi bekleniyordu.");
+    expect(challenge).not.toHaveProperty("accessToken");
+
+    await expect(auth.selectTenant({ selectionToken: challenge.selectionToken, tenantId: "tenant-expired" })).rejects.toThrow("LOGIN_FAILED");
+    await expect(auth.selectTenant({ selectionToken: challenge.selectionToken, tenantId: "tenant-b" })).resolves.toMatchObject({
+      session: {
+        userId: "multi-tenant-b",
+        tenantId: "tenant-b",
+        roles: ["STUDENT"],
+      },
+    });
   });
 
   it("kurum kodu ve TC ile login olur, ilk giriş şifre değiştirme bilgisini taşır", async () => {
@@ -357,7 +451,7 @@ describe("AuthService", () => {
 
     const challenge = await auth.login(loginCredentials("10000000146"));
     expect(challenge).toMatchObject({ status: "MFA_REQUIRED", methods: ["totp", "recovery_code"] });
-    if (!("status" in challenge)) throw new Error("MFA challenge bekleniyordu.");
+    if (!("status" in challenge) || challenge.status !== "MFA_REQUIRED") throw new Error("MFA challenge bekleniyordu.");
 
     const loginCode = createTotpCodeForTest(setup.secret, Date.now() + 30_000);
     await expect(auth.verifyTotpChallenge(challenge.challengeToken, { totpCode: loginCode })).resolves.toMatchObject({
@@ -400,7 +494,7 @@ describe("AuthService", () => {
     const setup = await auth.createTotpSetup(context);
     await auth.confirmTotpSetup(context, setup.setupToken, createTotpCodeForTest(setup.secret));
     const challenge = await auth.login(loginCredentials("10000000382"));
-    if (!("status" in challenge)) throw new Error("MFA challenge bekleniyordu.");
+    if (!("status" in challenge) || challenge.status !== "MFA_REQUIRED") throw new Error("MFA challenge bekleniyordu.");
 
     await expect(auth.verifyTotpChallenge(challenge.challengeToken, { recoveryCode: setup.recoveryCodes[0] })).resolves.toMatchObject({
       session: { userId: user.id },
@@ -419,6 +513,7 @@ function createUserStoreMock(overrides: Partial<AuthUserStore>): AuthUserStore {
   return {
     findByEmail: vi.fn(),
     findByTenantAndNationalIdHash: vi.fn(),
+    findByNationalIdHash: vi.fn(async () => []),
     findById: vi.fn(),
     createOrAttachTenantIdentity: vi.fn(),
     updatePassword: vi.fn(),
@@ -437,6 +532,9 @@ function createMutableUserStore(user: AuthUser): AuthUserStore {
     findByEmail: vi.fn(async (email) => (email === user.email ? clone() : undefined)),
     findByTenantAndNationalIdHash: vi.fn(async (tenantId, nationalIdHash) => (
       tenantId === user.tenantId && nationalIdHash === user.nationalIdHash ? clone() : undefined
+    )),
+    findByNationalIdHash: vi.fn(async (nationalIdHash) => (
+      nationalIdHash === user.nationalIdHash && user.tenantId !== "system" ? [clone()] : []
     )),
     findById: vi.fn(async (id) => (id === user.id ? clone() : undefined)),
     createOrAttachTenantIdentity: vi.fn(),

@@ -220,7 +220,6 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
 
 async function loginAsTenantAdmin(page: Page) {
   await page.goto("/login");
-  await page.locator('input[name="tenantSlug"]').fill("dna-egitim");
   await page.locator('input[name="nationalId"]').fill("10000000146");
   await page.locator('input[name="password"]').fill("password");
   await page.getByRole("button", { name: "Giriş yap" }).click();

@@ -1,5 +1,13 @@
 import { QueryClient } from "@tanstack/react-query";
-import type { AuthResponse, LoginRequest, LoginResponse, MePasswordChangeRequest, MePasswordChangeResponse, MfaChallengeResponse } from "@o-okul/shared-types";
+import type {
+  AuthResponse,
+  LoginRequest,
+  LoginResponse,
+  MePasswordChangeRequest,
+  MePasswordChangeResponse,
+  MfaChallengeResponse,
+  TenantSelectionRequiredResponse,
+} from "@o-okul/shared-types";
 
 declare const process: { env: Record<string, string | undefined> };
 
@@ -36,6 +44,12 @@ export class MfaRequiredError extends Error {
   }
 }
 
+export class TenantSelectionRequiredError extends Error {
+  constructor(readonly challenge: TenantSelectionRequiredResponse) {
+    super("TENANT_SELECTION_REQUIRED");
+  }
+}
+
 export const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3100";
 export const apiBaseUrl = `${apiUrl}/api/v1`;
 
@@ -66,6 +80,9 @@ export async function login(body: LoginRequest): Promise<AuthResponse> {
   if (isMfaChallengeResponse(result)) {
     throw new MfaRequiredError(result);
   }
+  if (isTenantSelectionRequiredResponse(result)) {
+    throw new TenantSelectionRequiredError(result);
+  }
 
   return rememberAuth(result);
 }
@@ -95,6 +112,29 @@ export async function verifyMfa(challengeToken: string, input: { totpCode?: stri
   }
 
   return rememberAuth(await readData<AuthResponse>(response));
+}
+
+export async function selectTenant(selectionToken: string, tenantId: string): Promise<AuthResponse> {
+  const response = await fetch(`${apiBaseUrl}/auth/login/select`, {
+    body: JSON.stringify({ selectionToken, tenantId }),
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error("TENANT_SELECTION_FAILED");
+  }
+
+  const result = await readData<LoginResponse>(response);
+  if (isMfaChallengeResponse(result)) {
+    throw new MfaRequiredError(result);
+  }
+  if (isTenantSelectionRequiredResponse(result)) {
+    throw new Error("TENANT_SELECTION_FAILED");
+  }
+
+  return rememberAuth(result);
 }
 
 export async function refreshSession(): Promise<AuthResponse> {
@@ -208,6 +248,10 @@ function rememberAuth(auth: AuthResponse): AuthResponse {
 
 function isMfaChallengeResponse(value: LoginResponse): value is MfaChallengeResponse {
   return "status" in value && value.status === "MFA_REQUIRED";
+}
+
+function isTenantSelectionRequiredResponse(value: LoginResponse): value is TenantSelectionRequiredResponse {
+  return "status" in value && value.status === "TENANT_SELECTION_REQUIRED";
 }
 
 function readCookie(name: string): string {

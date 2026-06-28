@@ -5107,8 +5107,7 @@ test("ilk girişte zorunlu şifre değişimi ekranına yönlendirir", async ({ p
   });
 
   await page.goto("/login");
-  await page.getByLabel("Kurum kodu").fill("dna-egitim");
-  await page.getByLabel("TC kimlik no").fill("10000000146");
+  await page.getByLabel("Kullanıcı Adı").fill("10000000146");
   await page.locator('input[name="password"]').fill("5551234567");
   await page.getByRole("button", { name: "Giriş yap" }).click();
 
@@ -6378,7 +6377,7 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
 
 async function loginAs(page: Page, email: string, password = "password") {
   await page.goto(email === "system@example.test" ? "/sistem/giris" : "/k/dna-egitim/giris");
-  await page.getByLabel("TC kimlik no").fill(loginNationalIdByEmail[email] ?? loginNationalIdByEmail["admin-a@example.test"]!);
+  await page.getByLabel("Kullanıcı Adı").fill(loginNationalIdByEmail[email] ?? loginNationalIdByEmail["admin-a@example.test"]!);
   await page.locator('input[name="password"]').fill(password);
   await page.getByRole("button", { name: "Giriş yap" }).click();
   const homeUrlByEmail: Record<string, RegExp> = {

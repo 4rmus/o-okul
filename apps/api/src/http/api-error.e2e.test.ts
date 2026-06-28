@@ -92,7 +92,7 @@ describe("API error envelope", () => {
   it("auth login gövde validasyon hatalarını 422 alan listesiyle döner", async () => {
     const response = await request(server)
       .post("/auth/login")
-      .send({ tenantSlug: " ", nationalId: " ", password: 123 })
+      .send({ tenantSlug: 123, nationalId: " ", password: 123 })
       .expect(422);
 
     expect(response.body).toMatchObject({
