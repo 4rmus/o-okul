@@ -1,6 +1,6 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional, UnauthorizedException } from "@nestjs/common";
-import type { SelfPurgeResult } from "@o-okul/shared-types";
+import type { SelfPurgeResult, TenantSelectionOption, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { tenantStoreToken, type TenantStore } from "../tenant/tenant-store.js";
@@ -74,9 +74,14 @@ export interface TotpVerificationInput {
 }
 
 export interface LoginCredentials {
-  tenantSlug: string;
+  tenantSlug?: string;
   nationalId: string;
   password: string;
+}
+
+export interface TenantSelectionInput {
+  selectionToken: string;
+  tenantId: string;
 }
 
 @Injectable()
@@ -97,19 +102,72 @@ export class AuthService {
     this.loginAttempts = loginAttempts ?? createLoginAttemptLimiter();
   }
 
-  async login(credentials: LoginCredentials, clientIp?: string): Promise<TokenPair | LoginMfaChallenge>;
-  async login(credentials: LoginCredentials, clientIp = "unknown"): Promise<TokenPair | LoginMfaChallenge> {
+  async login(credentials: LoginCredentials, clientIp?: string): Promise<TokenPair | LoginMfaChallenge | TenantSelectionRequiredResponse>;
+  async login(credentials: LoginCredentials, clientIp = "unknown"): Promise<TokenPair | LoginMfaChallenge | TenantSelectionRequiredResponse> {
     const resolved = await this.resolveLoginUser(credentials, clientIp);
     const attemptKey = resolved.attemptKey;
     await this.loginAttempts.assertAllowed(attemptKey);
 
-    const user = resolved.user;
-    if (!user || !verifyPassword(credentials.password, user.passwordHash)) {
+    const users = resolved.users.filter((user) => verifyPassword(credentials.password, user.passwordHash));
+    if (users.length === 0) {
       await this.loginAttempts.recordFailure(attemptKey);
       throw new UnauthorizedException("LOGIN_FAILED");
     }
 
     await this.loginAttempts.recordSuccess(attemptKey);
+    if (users.length > 1) {
+      return this.createTenantSelectionChallenge(users);
+    }
+
+    const user = users[0];
+    if (!user) throw new UnauthorizedException("LOGIN_FAILED");
+    return this.issueLoginForUser(user);
+  }
+
+  async selectTenant(input: TenantSelectionInput): Promise<TokenPair | LoginMfaChallenge> {
+    let payload: TenantSelectionTokenPayload;
+    try {
+      payload = verifyTenantSelectionToken(input.selectionToken);
+    } catch {
+      throw new UnauthorizedException("LOGIN_FAILED");
+    }
+
+    const candidate = payload.candidates.find((item) => item.tenantId === input.tenantId);
+    if (!candidate) {
+      throw new UnauthorizedException("LOGIN_FAILED");
+    }
+    const selectedUser = await this.users.findById(candidate.userId);
+    if (!selectedUser || selectedUser.tenantId !== input.tenantId) {
+      throw new UnauthorizedException("LOGIN_FAILED");
+    }
+    const tenant = await this.tenants?.findById(selectedUser.tenantId);
+    if (!tenant) {
+      throw new UnauthorizedException("LOGIN_FAILED");
+    }
+    return this.issueLoginForUser(selectedUser);
+  }
+
+  private async createTenantSelectionChallenge(users: AuthUser[]): Promise<TenantSelectionRequiredResponse> {
+    const options: TenantSelectionOption[] = [];
+    for (const user of users) {
+      const tenant = await this.tenants?.findById(user.tenantId);
+      if (tenant) {
+        options.push({ tenantId: tenant.id, name: tenant.name, slug: tenant.slug });
+      }
+    }
+    if (options.length < 2) {
+      throw new UnauthorizedException("LOGIN_FAILED");
+    }
+
+    const { selectionToken, expiresAt } = createTenantSelectionToken(
+      users
+        .filter((user) => options.some((option) => option.tenantId === user.tenantId))
+        .map((user) => ({ userId: user.id, tenantId: user.tenantId })),
+    );
+    return { status: "TENANT_SELECTION_REQUIRED", selectionToken, expiresAt, tenants: options };
+  }
+
+  private async issueLoginForUser(user: AuthUser): Promise<TokenPair | LoginMfaChallenge> {
     if (this.shouldChallengeWithTotp(user)) {
       await this.auditLogs?.record({
         tenantId: user.tenantId === "system" ? undefined : user.tenantId,
@@ -467,22 +525,29 @@ export class AuthService {
     return { changedAt };
   }
 
-  private async resolveLoginUser(credentials: LoginCredentials, clientIp: string): Promise<{ user?: AuthUser; attemptKey: string }> {
+  private async resolveLoginUser(credentials: LoginCredentials, clientIp: string): Promise<{ users: AuthUser[]; attemptKey: string }> {
     if (!this.tenants) {
       throw new BadRequestException("TENANT_STORE_REQUIRED");
     }
-    const tenantSlug = credentials.tenantSlug.trim().toLowerCase();
+    const tenantSlug = credentials.tenantSlug?.trim().toLowerCase();
     const nationalIdInput = credentials.nationalId.trim();
-    if (!tenantSlug || !nationalIdInput) {
+    if (!nationalIdInput) {
       throw new BadRequestException("LOGIN_IDENTIFIER_REQUIRED");
     }
+    const nationalIdHash = hashTcIdentity(normalizeTcIdentity(nationalIdInput, "LOGIN_NATIONAL_ID_INVALID"));
+    if (!tenantSlug) {
+      return {
+        users: await this.users.findByNationalIdHash(nationalIdHash),
+        attemptKey: loginAttemptKey(`global:${nationalIdHash}`, clientIp),
+      };
+    }
+
     const tenant = tenantSlug === "system" ? { id: "system" } : await this.tenants.findBySlug(tenantSlug);
     if (!tenant) {
-      return { user: undefined, attemptKey: loginAttemptKey(`${tenantSlug}:missing`, clientIp) };
+      return { users: [], attemptKey: loginAttemptKey(`${tenantSlug}:missing`, clientIp) };
     }
-    const nationalIdHash = hashTcIdentity(normalizeTcIdentity(nationalIdInput, "LOGIN_NATIONAL_ID_INVALID"));
     return {
-      user: await this.users.findByTenantAndNationalIdHash(tenant.id, nationalIdHash),
+      users: compactUser(await this.users.findByTenantAndNationalIdHash(tenant.id, nationalIdHash)),
       attemptKey: loginAttemptKey(`${tenant.id}:${nationalIdHash}`, clientIp),
     };
   }
@@ -551,4 +616,51 @@ function nextResetExpiry(): string {
   const expiresAt = new Date();
   expiresAt.setHours(expiresAt.getHours() + 1);
   return expiresAt.toISOString();
+}
+
+function compactUser(user: AuthUser | undefined): AuthUser[] {
+  return user ? [user] : [];
+}
+
+interface TenantSelectionTokenPayload {
+  purpose: "tenant-selection";
+  expiresAt: number;
+  candidates: Array<{ userId: string; tenantId: string }>;
+}
+
+const tenantSelectionTtlMs = 5 * 60 * 1000;
+
+function createTenantSelectionToken(candidates: TenantSelectionTokenPayload["candidates"]): { selectionToken: string; expiresAt: string } {
+  const expiresAt = Date.now() + tenantSelectionTtlMs;
+  const payload: TenantSelectionTokenPayload = { purpose: "tenant-selection", expiresAt, candidates };
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return {
+    selectionToken: `${encodedPayload}.${signTenantSelectionPayload(encodedPayload)}`,
+    expiresAt: new Date(expiresAt).toISOString(),
+  };
+}
+
+function verifyTenantSelectionToken(token: string): TenantSelectionTokenPayload {
+  const [encodedPayload, signature] = token.split(".");
+  if (!encodedPayload || !signature || !safeEqual(signature, signTenantSelectionPayload(encodedPayload))) {
+    throw new Error("TENANT_SELECTION_TOKEN_INVALID");
+  }
+
+  const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as TenantSelectionTokenPayload;
+  if (payload.purpose !== "tenant-selection" || payload.expiresAt <= Date.now() || payload.candidates.length === 0) {
+    throw new Error("TENANT_SELECTION_TOKEN_INVALID");
+  }
+  return payload;
+}
+
+function signTenantSelectionPayload(payload: string): string {
+  return createHmac("sha256", process.env.AUTH_SELECTION_SECRET ?? process.env.JWT_ACCESS_SECRET ?? "test-access-secret")
+    .update(payload)
+    .digest("base64url");
+}
+
+function safeEqual(actual: string, expected: string): boolean {
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
 }

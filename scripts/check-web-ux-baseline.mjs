@@ -8,6 +8,7 @@ const files = {
   "apps/web/e2e-next/governance-evidence-contract-next.spec.ts": readFileSync("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", "utf8"),
   "apps/web/e2e-next/guardian-privacy-next.spec.ts": readFileSync("apps/web/e2e-next/guardian-privacy-next.spec.ts", "utf8"),
   "apps/web/e2e-next/kvkk-privacy-next.spec.ts": readFileSync("apps/web/e2e-next/kvkk-privacy-next.spec.ts", "utf8"),
+  "apps/web/e2e-next/login-selection-next.spec.ts": readFileSync("apps/web/e2e-next/login-selection-next.spec.ts", "utf8"),
   "apps/web/e2e-next/optik-workspace-contract-next.spec.ts": readFileSync("apps/web/e2e-next/optik-workspace-contract-next.spec.ts", "utf8"),
   "apps/web/e2e-next/portal-report-panel-next.spec.ts": readFileSync("apps/web/e2e-next/portal-report-panel-next.spec.ts", "utf8"),
   "apps/web/e2e-next/report-workspace-contract-next.spec.ts": readFileSync("apps/web/e2e-next/report-workspace-contract-next.spec.ts", "utf8"),
@@ -169,7 +170,9 @@ requireTokens("apps/web/e2e-next/a11y-next.spec.ts", [
   'await page.goto("/login")',
   'getByRole("form", { name: "Giriş formu" })',
   'loginForm.getByRole("textbox", { name: /E-posta/ })',
-  'loginForm.getByLabel("Telefon", { exact: true })',
+  'loginForm.getByLabel("Kurum kodu")).toHaveCount(0)',
+  'loginForm.getByLabel("Kullanıcı Adı")',
+  'loginForm.getByLabel("Şifre", { exact: true })',
   'getByRole("button", { name: "Giriş yap" })',
   "openInstitutionDashboard(page)",
   'getByRole("navigation", { name: "Ana men',
@@ -208,15 +211,26 @@ requireTokens("apps/web/app/(auth)/login/page.tsx", [
 ]);
 
 requireTokens("apps/web/app/(auth)/tenant-login-page.tsx", [
-  'import { Button, Field, Input, SegmentedControl } from "@o-okul/ui";',
-  'const passwordLabel = lockedTenantSlug === "system" ? "Şifre" : "Telefon";',
+  'import { Button, Field, Input, SegmentedControl, Select } from "@o-okul/ui";',
   'aria-label="Giriş formu"',
-  '<Field label="Kurum kodu">',
-  '<Field label="TC kimlik no">',
-  "<Field label={passwordLabel}>",
+  '<Field label="Kullanıcı Adı">',
+  '<Field label="Şifre">',
+  '<Field label="Okul">',
+  '<Select value={selectedTenantId}',
+  "TenantSelectionRequiredError",
   '<SegmentedControl className="next-segmented" label="Doğrulama yöntemi">',
   '<Field label={mfaMethod === "totp" ? "Doğrulama kodu" : "Kurtarma kodu"}>',
   '<Button type="submit"',
+]);
+
+requireTokens("apps/web/e2e-next/login-selection-next.spec.ts", [
+  'await page.goto("/login")',
+  'page.getByLabel("Kullanıcı Adı")',
+  'page.getByLabel("Şifre", { exact: true })',
+  'status: "TENANT_SELECTION_REQUIRED"',
+  'page.getByLabel("Okul")',
+  'expect(loginBody).not.toHaveProperty("tenantSlug")',
+  'expect(selectionBody).toEqual({ selectionToken: "selection-token", tenantId: "tenant-b" })',
 ]);
 
 requireNoTokens("apps/web/app/(auth)/login/page.tsx", [

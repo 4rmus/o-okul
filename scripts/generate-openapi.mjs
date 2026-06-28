@@ -1702,7 +1702,20 @@ const requiredOperationContracts = [
     path: "/api/v1/auth/login",
     requestBody: true,
     responseEnvelope: true,
-    requestRequired: ["tenantSlug", "nationalId", "password"],
+    requestRequired: ["nationalId", "password"],
+    responseDataOneOfRequired: [
+      ["accessToken", "session"],
+      ["challengeToken", "expiresAt", "methods", "status"],
+      ["expiresAt", "selectionToken", "status", "tenants"],
+    ],
+    responseDataForbiddenDeep: authResponseForbiddenDeep,
+  },
+  {
+    method: "post",
+    path: "/api/v1/auth/login/select",
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["selectionToken", "tenantId"],
     responseDataOneOfRequired: [
       ["accessToken", "session"],
       ["challengeToken", "expiresAt", "methods", "status"],

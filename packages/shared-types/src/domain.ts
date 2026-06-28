@@ -24,9 +24,27 @@ export interface AuthResponse {
 }
 
 export interface LoginRequest {
-  tenantSlug: string;
+  tenantSlug?: string;
   nationalId: string;
   password: string;
+}
+
+export interface TenantSelectionOption {
+  tenantId: string;
+  name: string;
+  slug: string;
+}
+
+export interface TenantSelectionRequiredResponse {
+  status: "TENANT_SELECTION_REQUIRED";
+  selectionToken: string;
+  expiresAt: string;
+  tenants: TenantSelectionOption[];
+}
+
+export interface TenantSelectionRequest {
+  selectionToken: string;
+  tenantId: string;
 }
 
 export interface MfaChallengeResponse {
@@ -36,7 +54,7 @@ export interface MfaChallengeResponse {
   methods: Array<"totp" | "recovery_code">;
 }
 
-export type LoginResponse = AuthResponse | MfaChallengeResponse;
+export type LoginResponse = AuthResponse | MfaChallengeResponse | TenantSelectionRequiredResponse;
 
 export interface AuthRefreshRequest {
   refreshToken?: string;

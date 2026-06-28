@@ -26,6 +26,7 @@ export interface AuthUser {
 export interface AuthUserStore {
   findByEmail(email: string): Promise<AuthUser | undefined>;
   findByTenantAndNationalIdHash(tenantId: string, nationalIdHash: string): Promise<AuthUser | undefined>;
+  findByNationalIdHash(nationalIdHash: string): Promise<AuthUser[]>;
   findById(id: string): Promise<AuthUser | undefined>;
   createOrAttachTenantIdentity(input: CreateTenantIdentityUserInput): Promise<AuthUser>;
   updatePassword(id: string, passwordHash: string, input?: PasswordStateUpdate): Promise<AuthUser | undefined>;
@@ -262,6 +263,12 @@ export class InMemoryAuthUserStore implements AuthUserStore {
     return cloneUser(this.users.find((candidate) => candidate.tenantId === tenantId && candidate.nationalIdHash === nationalIdHash));
   }
 
+  async findByNationalIdHash(nationalIdHash: string): Promise<AuthUser[]> {
+    return this.users
+      .filter((candidate) => candidate.tenantId !== "system" && candidate.nationalIdHash === nationalIdHash)
+      .map(cloneRequiredUser);
+  }
+
   async findById(id: string): Promise<AuthUser | undefined> {
     return cloneUser(this.users.find((candidate) => candidate.id === id));
   }
@@ -384,6 +391,23 @@ export class PostgresAuthUserStore implements AuthUserStore {
       [tenantId, nationalIdHash],
     );
     return result[0];
+  }
+
+  async findByNationalIdHash(nationalIdHash: string): Promise<AuthUser[]> {
+    return this.queryAuthUsers(
+      `WHERE u."tenantId" IS NOT NULL
+         AND u."tenantId" <> 'system'
+         AND u."nationalIdHash" = $1
+         AND m."tenantId" = u."tenantId"
+         AND t."status" = 'ACTIVE'
+         AND (t."licenseEndsAt" IS NULL OR t."licenseEndsAt" >= now())
+       GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
+                u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
+                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
+       ORDER BY min(t."createdAt") ASC
+       LIMIT 20`,
+      [nationalIdHash],
+    );
   }
 
   async findById(id: string): Promise<AuthUser | undefined> {

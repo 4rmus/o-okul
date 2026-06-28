@@ -2,11 +2,11 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { AuthResponse, MfaChallengeResponse } from "@o-okul/shared-types";
-import { Button, Field, Input, SegmentedControl } from "@o-okul/ui";
+import type { AuthResponse, MfaChallengeResponse, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
+import { Button, Field, Input, SegmentedControl, Select } from "@o-okul/ui";
 import { useAuth } from "../providers.js";
 import { appBrand } from "../../src/brand.js";
-import { MfaRequiredError } from "../../src/api-client.js";
+import { MfaRequiredError, TenantSelectionRequiredError } from "../../src/api-client.js";
 
 interface TenantLoginPageProps {
   tenantSlug?: string;
@@ -14,21 +14,17 @@ interface TenantLoginPageProps {
 
 export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPageProps) {
   const router = useRouter();
-  const { auth, isBootstrapping, login, verifyMfa } = useAuth();
+  const { auth, isBootstrapping, login, selectTenant, verifyMfa } = useAuth();
   const lockedTenantSlug = initialTenantSlug?.trim() ?? "";
-  const passwordLabel = lockedTenantSlug === "system" ? "Şifre" : "Telefon";
-  const [tenantSlug, setTenantSlug] = useState(lockedTenantSlug);
   const [nationalId, setNationalId] = useState("");
   const [password, setPassword] = useState("");
+  const [pendingTenantSelection, setPendingTenantSelection] = useState<TenantSelectionRequiredResponse | null>(null);
+  const [selectedTenantId, setSelectedTenantId] = useState("");
   const [pendingMfa, setPendingMfa] = useState<MfaChallengeResponse | null>(null);
   const [mfaMethod, setMfaMethod] = useState<"totp" | "recovery_code">("totp");
   const [mfaCode, setMfaCode] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    setTenantSlug(lockedTenantSlug);
-  }, [lockedTenantSlug]);
 
   useEffect(() => {
     if (!isBootstrapping && auth) {
@@ -41,20 +37,32 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
     setError("");
     setIsSubmitting(true);
     const formData = new FormData(event.currentTarget);
-    const formTenantSlug = lockedTenantSlug || String(formData.get("tenantSlug") ?? "").trim();
     const formNationalId = String(formData.get("nationalId") ?? "").trim();
     const formPassword = String(formData.get("password") ?? "");
 
     try {
       if (pendingMfa) {
         await verifyMfa(pendingMfa.challengeToken, mfaMethod === "totp" ? { totpCode: mfaCode } : { recoveryCode: mfaCode });
+      } else if (pendingTenantSelection) {
+        await selectTenant(pendingTenantSelection.selectionToken, selectedTenantId);
       } else {
-        await login({ tenantSlug: formTenantSlug, nationalId: formNationalId, password: formPassword });
+        await login({
+          ...(lockedTenantSlug ? { tenantSlug: lockedTenantSlug } : {}),
+          nationalId: formNationalId,
+          password: formPassword,
+        });
       }
     } catch (caught) {
       if (caught instanceof MfaRequiredError) {
         setPendingMfa(caught.challenge);
+        setPendingTenantSelection(null);
         setMfaCode("");
+        setError("");
+        return;
+      }
+      if (caught instanceof TenantSelectionRequiredError) {
+        setPendingTenantSelection(caught.challenge);
+        setSelectedTenantId(caught.challenge.tenants[0]?.tenantId ?? "");
         setError("");
         return;
       }
@@ -64,6 +72,14 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
     }
   }
 
+  function resetTenantSelection() {
+    setPendingTenantSelection(null);
+    setSelectedTenantId("");
+    setError("");
+  }
+
+  const isSubmitDisabled = isSubmitting || isBootstrapping || Boolean(pendingTenantSelection && !selectedTenantId);
+
   return (
     <section className="next-auth-panel" aria-labelledby="login-title">
       <div className="next-brand">
@@ -72,20 +88,7 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
       </div>
       <form className="next-form" aria-label="Giriş formu" onSubmit={(event) => void handleSubmit(event)}>
         <h1 id="login-title">Giriş</h1>
-        {!lockedTenantSlug ? (
-          <Field label="Kurum kodu">
-            <Input
-              name="tenantSlug"
-              type="text"
-              value={tenantSlug}
-              onChange={(event) => setTenantSlug(event.target.value)}
-              autoComplete="organization"
-              disabled={Boolean(pendingMfa)}
-              required
-            />
-          </Field>
-        ) : null}
-        <Field label="TC kimlik no">
+        <Field label="Kullanıcı Adı">
           <Input
             name="nationalId"
             type="text"
@@ -93,21 +96,37 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
             onChange={(event) => setNationalId(event.target.value)}
             autoComplete="username"
             inputMode="numeric"
-            disabled={Boolean(pendingMfa)}
+            disabled={Boolean(pendingMfa || pendingTenantSelection)}
             required
           />
         </Field>
-        <Field label={passwordLabel}>
+        <Field label="Şifre">
           <Input
             name="password"
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             autoComplete="current-password"
-            disabled={Boolean(pendingMfa)}
+            disabled={Boolean(pendingMfa || pendingTenantSelection)}
             required
           />
         </Field>
+        {pendingTenantSelection ? (
+          <div className="next-form-section">
+            <Field label="Okul">
+              <Select value={selectedTenantId} onChange={(event) => setSelectedTenantId(event.target.value)} required>
+                {pendingTenantSelection.tenants.map((tenant) => (
+                  <option key={tenant.tenantId} value={tenant.tenantId}>
+                    {tenant.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Button type="button" variant="ghost" onClick={resetTenantSelection}>
+              Bilgileri değiştir
+            </Button>
+          </div>
+        ) : null}
         {pendingMfa ? (
           <div className="next-form-section">
             <SegmentedControl className="next-segmented" label="Doğrulama yöntemi">
@@ -138,9 +157,9 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
             </Field>
           </div>
         ) : null}
-        {error ? <p className="next-form-error">{error}</p> : null}
-        <Button type="submit" disabled={isSubmitting || isBootstrapping}>
-          {isSubmitting ? "Giriş yapılıyor" : pendingMfa ? "Doğrula" : "Giriş yap"}
+        {error ? <p className="next-form-error" role="alert">{error}</p> : null}
+        <Button type="submit" disabled={isSubmitDisabled}>
+          {isSubmitting ? "Giriş yapılıyor" : pendingMfa ? "Doğrula" : pendingTenantSelection ? "Devam et" : "Giriş yap"}
         </Button>
       </form>
     </section>
