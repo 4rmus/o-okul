@@ -276,6 +276,44 @@ describe("AuthService", () => {
     });
   });
 
+  it("system hesabı kurum kodu olmadan TC ile login olur", async () => {
+    const nationalId = "10000000214";
+    const user: AuthUser = {
+      id: "user-system",
+      name: "System Admin",
+      passwordHash: hashPassword("password", "test-salt"),
+      tenantId: "system",
+      nationalIdHash: hashTcIdentity(nationalId),
+      roles: ["SYSTEM_ADMIN"],
+      membershipVersion: 1,
+    };
+    const users = createUserStoreMock({
+      findByTenantAndNationalIdHash: vi.fn(async (tenantId, nationalIdHash) => (
+        tenantId === "system" && nationalIdHash === user.nationalIdHash ? user : undefined
+      )),
+      findById: vi.fn(async (id) => (id === user.id ? user : undefined)),
+    });
+    const auth = new AuthService(
+      users,
+      new InMemorySessionStore(),
+      new InMemoryPasswordResetStore(),
+      { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
+      undefined,
+      undefined,
+      new InMemoryTenantStore(),
+    );
+
+    const tokenPair = await auth.login({ nationalId, password: "password" }, "127.0.0.1");
+    if ("status" in tokenPair) throw new Error("MFA challenge beklenmiyordu.");
+
+    expect(users.findByNationalIdHash).toHaveBeenCalledWith(user.nationalIdHash);
+    expect(tokenPair.session).toMatchObject({
+      userId: "user-system",
+      tenantId: "system",
+      roles: ["SYSTEM_ADMIN"],
+    });
+  });
+
   it("şifre reset tokenı tek kullanımlık çalışır ve eski şifreyi geçersiz kılar", async () => {
     const nationalId = "10000000214";
     const user = {

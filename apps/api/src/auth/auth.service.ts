@@ -537,7 +537,10 @@ export class AuthService {
     const nationalIdHash = hashTcIdentity(normalizeTcIdentity(nationalIdInput, "LOGIN_NATIONAL_ID_INVALID"));
     if (!tenantSlug) {
       return {
-        users: await this.users.findByNationalIdHash(nationalIdHash),
+        users: [
+          ...compactUser(await this.users.findByTenantAndNationalIdHash("system", nationalIdHash)),
+          ...(await this.users.findByNationalIdHash(nationalIdHash)),
+        ],
         attemptKey: loginAttemptKey(`global:${nationalIdHash}`, clientIp),
       };
     }
