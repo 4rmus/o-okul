@@ -768,6 +768,10 @@ function CoursesStep({
   const selectedCourseIds = new Set(draft.courses.selectedCourseIds);
   const selectedVisibleCourseCount = allCourseOptions.filter((course) => selectedCourseIds.has(course.id)).length;
   const allCoursesSelected = allCourseOptions.length > 0 && selectedVisibleCourseCount === allCourseOptions.length;
+  const automaticCourses = selectedCourseOptions(
+    defaultCourseIdsForStages(activeStageIdsFromClassCounts(draft.classes.classCounts), allCourseOptions),
+    allCourseOptions,
+  );
 
   function selectAllCourses() {
     updateDraft("courses", { selectedCourseIds: allCourseOptions.map((course) => course.id) });
@@ -785,6 +789,16 @@ function CoursesStep({
 
   return (
     <div className="next-onboarding-fields">
+      <section className="next-onboarding-auto-classes" aria-label="Otomatik seçilen dersler">
+        <h3>Sınıfa göre otomatik seçilen dersler</h3>
+        <div>
+          {automaticCourses.length > 0 ? (
+            automaticCourses.map((course) => <span key={course.id}>{course.name}</span>)
+          ) : (
+            <span>Sınıf seçildiğinde dersler burada görünür.</span>
+          )}
+        </div>
+      </section>
       <div className="next-onboarding-course-actions">
         <Button
           variant="secondary"
@@ -898,79 +912,6 @@ function PeopleStep({
   teacherImportUploadStatus: SetupUploadStatus;
   updateDraft: (section: "people", nextValue: Partial<OnboardingDraft["people"]>) => void;
 }) {
-  function downloadTeacherTemplate() {
-    const sampleClassName = sampleClassNameFromDraft(draft);
-    downloadCsvFile(
-      "ogretmen-aktarim-sablonu.csv",
-      [
-        ["ad", "soyad", "brans", "atanacak_sinif", "ders"],
-        ["Ayse", "Yilmaz", "Matematik", sampleClassName, "Matematik"],
-      ],
-    );
-  }
-
-  function downloadStudentTemplate() {
-    const sampleClassName = sampleClassNameFromDraft(draft);
-    downloadCsvFile(
-      "ogrenci-aktarim-sablonu.csv",
-      [
-        [
-          "okul_no",
-          "ad",
-          "soyad",
-          "email",
-          "telefon",
-          "dogum_tarihi",
-          "tc_kimlik_no",
-          "sinif",
-          "veli_ad",
-          "veli_soyad",
-          "veli_telefon",
-          "veli_email",
-          "veli_iliski",
-          "veli_birincil",
-          "veli_finans",
-          "veli_sms",
-          "veli_duyuru",
-          "veli_destek",
-        ],
-        [
-          "100",
-          "Ogrenci",
-          "Deneme",
-          "ogrenci@example.com",
-          "5550000000",
-          "2012-09-01",
-          "",
-          sampleClassName,
-          "Veli",
-          "Deneme",
-          "5550000001",
-          "veli@example.com",
-          "anne",
-          "evet",
-          "hayir",
-          "evet",
-          "evet",
-          "hayir",
-        ],
-      ],
-    );
-  }
-
-  function downloadCsvFile(fileName: string, rows: string[][]) {
-    const content = rows
-      .map((row) => row.map(escapeCsvCell).join(";"))
-      .join("\n");
-    const blob = new Blob([`\uFEFF${content}`], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = fileName;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }
-
   return (
     <div className="next-onboarding-fields">
       <section className="next-onboarding-choice" aria-labelledby="teacher-model-label">
@@ -1001,12 +942,12 @@ function PeopleStep({
           <p>Öğretmen ve öğrenci aktarımı için ayrı, sade ve uygulama alanlarına uyumlu dosyalar.</p>
         </div>
         <div className="next-onboarding-template-actions">
-          <Button variant="secondary" type="button" onClick={downloadTeacherTemplate}>
-            Öğretmen CSV şablonu
-          </Button>
-          <Button variant="secondary" type="button" onClick={downloadStudentTemplate}>
-            Öğrenci CSV şablonu
-          </Button>
+          <a className="uh-button uh-button--secondary uh-button--md" href="/templates/ogretmen-aktarim-sablonu.xlsx" download>
+            Öğretmen XLSX şablonu
+          </a>
+          <a className="uh-button uh-button--secondary uh-button--md" href="/templates/ogrenci-aktarim-sablonu.xlsx" download>
+            Öğrenci XLSX şablonu
+          </a>
         </div>
       </section>
       <Field
@@ -1297,7 +1238,7 @@ function generateClasses(classCounts: Record<StageId, string>) {
     return Array.from({ length: Math.min(classCount, 26) }, (_item, index) => {
       const section = String.fromCharCode(65 + index);
       return {
-        name: `${stageClassPrefix(stage.id)} ${section}`,
+        name: `${stageClassPrefix(stage.id)}-${section}`,
         section,
         stageId: stage.id,
       };
@@ -1306,12 +1247,8 @@ function generateClasses(classCounts: Record<StageId, string>) {
 }
 
 function stageClassPrefix(stage: StageId) {
-  if (stage === "8-LGS") return "8 LGS";
+  if (stage === "8-LGS") return "8";
   return stage;
-}
-
-function sampleClassNameFromDraft(draft: OnboardingDraft) {
-  return generateClasses(draft.classes.classCounts)[0]?.name ?? `${stageClassPrefix("8-LGS")} A`;
 }
 
 async function saveSetup(
@@ -1555,11 +1492,6 @@ function studentImportFieldLabel(field: string) {
   if (field === "guardianPhone") return "veli telefonu";
   if (field === "studentNo") return "okul no";
   return field;
-}
-
-function escapeCsvCell(value: string): string {
-  if (!/[;"\n\r]/.test(value)) return value;
-  return `"${value.replace(/"/g, "\"\"")}"`;
 }
 
 function normalizeValue(value: string) {
