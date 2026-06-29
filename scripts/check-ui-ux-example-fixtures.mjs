@@ -1,8 +1,12 @@
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 
 const exampleRoot = resolve("ornek-veriler");
+const publicTemplateRoot = resolve("apps/web/public/templates");
+const requireFromDb = createRequire(resolve("packages/db/package.json"));
+const ExcelJS = requireFromDb("exceljs");
 const expectedFixtures = [
   {
     label: "iSEM LGS 1",
@@ -23,7 +27,34 @@ const expectedFixtures = [
     expectedRows: 21,
   },
 ];
-const importTemplates = ["ogrenci-aktarim-sablonu.xlsx", "ogretmen-aktarim-sablonu.xlsx"];
+const importTemplates = [
+  {
+    file: "ogrenci-aktarim-sablonu.xlsx",
+    sheet: "Ogrenciler",
+    headers: [
+      "okul_no",
+      "ad",
+      "soyad",
+      "sinif",
+      "email",
+      "tc_kimlik_no",
+      "telefon",
+      "veli_ad",
+      "veli_soyad",
+      "veli_telefon",
+      "veli_email",
+      "veli_finans",
+      "veli_sms",
+      "veli_duyuru",
+      "veli_destek",
+    ],
+  },
+  {
+    file: "ogretmen-aktarim-sablonu.xlsx",
+    sheet: "Ogretmenler",
+    headers: ["ad", "soyad", "brans", "atanacak_sinif", "ders", "tc_kimlik_no", "telefon"],
+  },
+];
 const failures = [];
 const seen = new Map();
 let opticalRows = 0;
@@ -48,10 +79,17 @@ for (const fixture of expectedFixtures) {
 }
 
 for (const template of importTemplates) {
-  const templatePath = resolve(exampleRoot, template);
-  requireRegularFile(templatePath, template, 1000);
-  requireXlsxZip(templatePath, template);
+  const templatePath = resolve(exampleRoot, template.file);
+  const publicTemplatePath = resolve(publicTemplateRoot, template.file);
+  requireRegularFile(templatePath, template.file, 1000);
+  requireXlsxZip(templatePath, template.file);
+  await requireWorkbookHeaders(templatePath, `${template.file} kaynak`, template.sheet, template.headers);
+  requireRegularFile(publicTemplatePath, `${template.file} public kopyası`, 1000);
+  requireXlsxZip(publicTemplatePath, `${template.file} public kopyası`);
+  await requireWorkbookHeaders(publicTemplatePath, `${template.file} public kopyası`, template.sheet, template.headers);
+  requireSameHash(templatePath, publicTemplatePath, template.file);
   remember(templatePath);
+  remember(publicTemplatePath);
 }
 
 if (failures.length > 0) {
@@ -89,6 +127,24 @@ function requireXlsxZip(filePath, label) {
   }
 }
 
+async function requireWorkbookHeaders(filePath, label, sheetName, expectedHeaders) {
+  if (!existsSync(filePath)) return;
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(filePath);
+  const worksheet = workbook.getWorksheet(sheetName);
+  if (!worksheet) {
+    failures.push(`${label} içinde ${sheetName} sayfası bulunamadı.`);
+    return;
+  }
+
+  const headers = worksheet.getRow(1).values
+    .slice(1, expectedHeaders.length + 1)
+    .map((value) => String(value ?? "").trim());
+  if (headers.join("|") !== expectedHeaders.join("|")) {
+    failures.push(`${label} başlıkları beklenen alanlarla eşleşmiyor: ${headers.join(", ")}`);
+  }
+}
+
 function requireOpticalRows(filePath, label, expectedRows) {
   if (!existsSync(filePath)) return 0;
   const lines = readFileSync(filePath, "utf8")
@@ -113,4 +169,13 @@ function remember(filePath) {
   if (!existsSync(filePath)) return;
   const digest = createHash("sha256").update(readFileSync(filePath)).digest("hex");
   seen.set(filePath, digest);
+}
+
+function requireSameHash(sourcePath, publicPath, label) {
+  if (!existsSync(sourcePath) || !existsSync(publicPath)) return;
+  const sourceDigest = createHash("sha256").update(readFileSync(sourcePath)).digest("hex");
+  const publicDigest = createHash("sha256").update(readFileSync(publicPath)).digest("hex");
+  if (sourceDigest !== publicDigest) {
+    failures.push(`${label} public kopyası kaynak dosyayla aynı değil.`);
+  }
 }

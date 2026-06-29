@@ -52,12 +52,15 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await classCounts.getByLabel("8. sınıf / LGS").fill("0");
     await classCounts.getByLabel("10. sınıf").fill("1");
     await stepNavigation.getByRole("tab", { name: /Derslerin Oluşturulması/ }).click();
+    await expect(setupForm.getByLabel("Otomatik seçilen dersler")).toContainText("Matematik");
     await expect(setupForm.getByRole("button", { name: /10-MAT/ })).toHaveAttribute("aria-pressed", "true");
     await expect(setupForm.getByRole("button", { name: /LGS-MAT/ })).toHaveAttribute("aria-pressed", "false");
 
     await stepNavigation.getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
     await expect(setupForm.getByRole("group", { name: "Öğretmen veri girişi" })).toHaveClass(/uh-segmented-control/);
     await expect(setupForm.getByRole("group", { name: "Öğrenci veri girişi" })).toHaveClass(/uh-segmented-control/);
+    await expect(setupForm.getByRole("link", { name: "Öğretmen XLSX şablonu" })).toHaveAttribute("href", "/templates/ogretmen-aktarim-sablonu.xlsx");
+    await expect(setupForm.getByRole("link", { name: "Öğrenci XLSX şablonu" })).toHaveAttribute("href", "/templates/ogrenci-aktarim-sablonu.xlsx");
     await setupForm.getByLabel("Öğrenci aktarım dosyası").setInputFiles({
       buffer: Buffer.from("%PDF-1.7"),
       mimeType: "application/pdf",
@@ -163,7 +166,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expect(setupForm).toContainText("Öğretmen aktarım dosyası zorunludur.");
 
     await setupForm.getByLabel("Öğretmen aktarım dosyası").setInputFiles({
-      buffer: Buffer.from("\uFEFFad;soyad;brans;atanacak_sinif;ders\nAyse;Yilmaz;Matematik;8 LGS A;Matematik\n", "utf8"),
+      buffer: Buffer.from("\uFEFFad;soyad;brans;atanacak_sinif;ders\nAyse;Yilmaz;Matematik;8-A;Matematik\n", "utf8"),
       mimeType: "text/csv",
       name: "ogretmen-zeynep-5551112233.csv",
     });
