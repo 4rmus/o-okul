@@ -14,24 +14,23 @@ describe("seed-exams gerçek pipeline", () => {
       "Din Kültürü ve Ahlak Bilgisi",
       "İngilizce",
     ]);
-    expect(fixtures.classes.map((demoClass) => demoClass.name)).toEqual(["8 LGS A", "8 LGS B", "8 LGS C", "8 LGS D"]);
-    expect(fixtures.teachers).toHaveLength(12);
+    expect(fixtures.classes.map((demoClass) => demoClass.name)).toEqual(["8-A", "8-B"]);
+    expect(fixtures.teachers).toHaveLength(3);
     expect(fixtures.students).toHaveLength(21);
     expect(fixtures.accountTeacher).toMatchObject({
       id: "teacher-demo-main",
       firstName: "Ayse",
       lastName: "Hoca",
       branch: "Matematik",
-      assignedClassName: "8 LGS A",
     });
     expect(fixtures.accountStudent).toMatchObject({
       id: "student-demo-101",
-      firstName: "MEHMET",
-      lastName: "KAYA",
+      firstName: "Ali",
+      lastName: "Kaya",
       studentNo: "101",
-      className: "8 LGS A",
-      guardianFirstName: "MEHMET",
-      guardianLastName: "Veli",
+      className: "8-B",
+      guardianFirstName: "Mehmet",
+      guardianLastName: "Kaya",
     });
     expect(fixtures.students.slice(-2).map((student) => ({
       firstName: student.firstName,
@@ -39,8 +38,8 @@ describe("seed-exams gerçek pipeline", () => {
       studentNo: student.studentNo,
       sourceClass: student.className,
     }))).toEqual([
-      { firstName: "ALİ", lastName: "EREN", studentNo: "119", sourceClass: "8 LGS B" },
-      { firstName: "RONİ", lastName: "KAYA", studentNo: "120", sourceClass: "8 LGS B" },
+      { firstName: "ALİ", lastName: "EREN", studentNo: "119", sourceClass: "8-B" },
+      { firstName: "RONİ", lastName: "KAYA", studentNo: "120", sourceClass: "8-B" },
     ]);
   });
 

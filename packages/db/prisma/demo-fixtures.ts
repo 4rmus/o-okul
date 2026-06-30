@@ -231,8 +231,8 @@ export type DemoTeacher = {
   firstName: string;
   lastName: string;
   branch: string;
-  assignedClassName: string;
-  assignedClassId: string;
+  assignedClassName?: string;
+  assignedClassId?: string;
 };
 
 export type DemoStudent = {
@@ -276,7 +276,7 @@ type TeacherWorkbookRow = {
   ad: string;
   soyad: string;
   brans: string;
-  atanacak_sinif: string;
+  atanacak_sinif?: string;
   ders?: string;
   email?: string;
   telefon?: string;
@@ -299,8 +299,8 @@ export async function loadDemoFixtures(): Promise<DemoFixtures> {
     "ad",
     "soyad",
     "brans",
-    "atanacak_sinif",
   ], [
+    "atanacak_sinif",
     "ders",
     "email",
     "telefon",
@@ -310,7 +310,7 @@ export async function loadDemoFixtures(): Promise<DemoFixtures> {
       teacher.ad,
       teacher.soyad,
       normalizeCourseName(teacher.ders || teacher.brans),
-      teacher.atanacak_sinif,
+      teacher.atanacak_sinif || "",
     ]
       .join("|")
       .toLocaleLowerCase("tr-TR"),
@@ -336,7 +336,7 @@ export async function loadDemoFixtures(): Promise<DemoFixtures> {
 
   const classNames = uniqueSorted([
     ...studentRows.map((student) => student.sinif),
-    ...teacherRows.map((teacher) => teacher.atanacak_sinif),
+    ...teacherRows.map((teacher) => teacher.atanacak_sinif || "").filter(Boolean),
   ]);
   const classes = classNames.map((name): DemoClass => ({
     id: classId(name),
@@ -346,18 +346,18 @@ export async function loadDemoFixtures(): Promise<DemoFixtures> {
   const classByName = new Map(classes.map((item) => [item.name, item]));
 
   const teachers = teacherRows.map((teacher, index): DemoTeacher => {
-    const assignedClass = requiredClass(classByName, teacher.atanacak_sinif);
+    const assignedClass = teacher.atanacak_sinif ? requiredClass(classByName, teacher.atanacak_sinif) : undefined;
     return {
       id: index === 0 ? "teacher-demo-main" : `teacher-demo-${slugify(`${teacher.email || teacher.ad}-${index + 1}`)}`,
       firstName: teacher.ad,
       lastName: teacher.soyad,
       branch: normalizeCourseName(teacher.ders || teacher.brans),
-      assignedClassName: assignedClass.name,
-      assignedClassId: assignedClass.id,
+      ...(assignedClass ? { assignedClassName: assignedClass.name, assignedClassId: assignedClass.id } : {}),
     };
   });
   const teacherByClassName = new Map<string, DemoTeacher>();
   for (const teacher of teachers) {
+    if (!teacher.assignedClassName) continue;
     if (!teacherByClassName.has(teacher.assignedClassName)) {
       teacherByClassName.set(teacher.assignedClassName, teacher);
     }

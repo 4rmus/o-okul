@@ -580,6 +580,7 @@ async function seedDemoStudentsAndGuardians(client: pg.PoolClient, tenantId: str
 
 async function seedDemoTeacherAssignments(client: pg.PoolClient, tenantId: string, fixtures: DemoFixtures): Promise<void> {
   for (const teacher of fixtures.teachers) {
+    if (!teacher.assignedClassId) continue;
     await client.query(
       `INSERT INTO "TeacherAssignment" (
          "id", "tenantId", "teacherId", "classId", "studentId", "courseId", "role", "updatedAt"

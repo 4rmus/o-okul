@@ -166,13 +166,13 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expect(setupForm).toContainText("Öğretmen aktarım dosyası zorunludur.");
 
     await setupForm.getByLabel("Öğretmen aktarım dosyası").setInputFiles({
-      buffer: Buffer.from("\uFEFFad;soyad;brans;atanacak_sinif;ders\nAyse;Yilmaz;Matematik;8-A;Matematik\n", "utf8"),
+      buffer: Buffer.from("\uFEFFad;soyad;brans;tc_kimlik_no;telefon\nAyse;Yilmaz;Matematik;10000001440;5550000012\n", "utf8"),
       mimeType: "text/csv",
       name: "ogretmen-zeynep-5551112233.csv",
     });
     await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
 
-    await expect(setupForm).toContainText("2 sınıf, 3 ders, 1 öğretmen, 1 öğretmen ataması");
+    await expect(setupForm).toContainText("2 sınıf, 3 ders, 1 öğretmen, 0 öğretmen ataması");
     await expectNoVisibleTextValues(page, "setup-teacher-import-summary", hostileUploadValues);
     await expectDraftStorageDoesNotContain(page, "setup-teacher-import-storage", hostileUploadValues);
   });
@@ -287,12 +287,12 @@ function mockSetupApiResponse(
       dryRun: true,
       errors: [],
       totalRows: 1,
-      validRows: [{ classId: "class-setup", className: "8-A", firstName: "Ayse", lastName: "Yilmaz", row: 2 }],
+      validRows: [{ firstName: "Ayse", lastName: "Yilmaz", row: 2 }],
       wouldImport: true,
     };
   }
   if (method === "POST" && pathName === "/teachers/imports") {
-    return { assignments: [], createdAssignments: 1, createdTeachers: 1, importedRows: 1, teachers: [] };
+    return { assignments: [], createdAssignments: 0, createdTeachers: 1, importedRows: 1, teachers: [] };
   }
   if (method === "POST" && pathName === "/students/imports/dry-run") {
     if (options.studentDryRun === "duplicate") {

@@ -1129,8 +1129,8 @@ describe("School management API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
         fileBase64: await createTeacherWorkbookBase64(
-          [["Xlsx", "Import", "Matematik", "8-A", "Matematik"]],
-          ["ad", "soyad", "brans", "atanacak_sinif", "ders"],
+          [["Xlsx", "Import", "Matematik", "10000001686", "5550000016"]],
+          ["ad", "soyad", "brans", "tc_kimlik_no", "telefon"],
           [["ogretmen-aktarim-sablonu"]],
         ),
       })
@@ -1143,12 +1143,12 @@ describe("School management API", () => {
           validRows: [
             expect.objectContaining({
               branch: "Matematik",
-              classId: "class-a",
-              className: "8-A",
-              courseId: "course-math",
-              courseName: "Matematik",
               firstName: "Xlsx",
               lastName: "Import",
+              accountPreview: {
+                usernameMasked: "*******1686",
+                willCreate: true,
+              },
               row: 3,
             }),
           ],
