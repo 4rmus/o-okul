@@ -1,7 +1,7 @@
 import "reflect-metadata";
+import { readFile } from "node:fs/promises";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import ExcelJS from "exceljs";
 import request from "supertest";
 import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -1124,36 +1124,34 @@ describe("School management API", () => {
   });
 
   it("öğretmen import XLSX şablonunu dry-run ile doğrular", async () => {
+    const template = await readFile("../web/public/templates/ogretmen-aktarim-sablonu.xlsx");
+
     await request(server)
       .post("/teachers/imports/dry-run")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({
-        fileBase64: await createTeacherWorkbookBase64(
-          [["Xlsx", "Import", "Matematik", "10000001686", "5550000016"]],
-          ["ad", "soyad", "brans", "tc_kimlik_no", "telefon"],
-          [["ogretmen-aktarim-sablonu"]],
-        ),
+        fileBase64: template.toString("base64"),
       })
       .expect(201)
       .expect(({ body }) => {
-        expect(body).toEqual({
-          dryRun: true,
-          errors: [],
-          totalRows: 1,
-          validRows: [
-            expect.objectContaining({
-              branch: "Matematik",
-              firstName: "Xlsx",
-              lastName: "Import",
-              accountPreview: {
-                usernameMasked: "*******1686",
-                willCreate: true,
-              },
-              row: 3,
-            }),
-          ],
-          wouldImport: true,
-        });
+        expect(body.errors).toEqual([]);
+        expect(body.totalRows).toBe(11);
+        expect(body.validRows).toHaveLength(11);
+        expect(body.validRows).toEqual(expect.arrayContaining([
+          expect.objectContaining({
+            branch: "İngilizce",
+            firstName: "Necla",
+            lastName: "Hoca",
+            accountPreview: {
+              usernameMasked: "*******1754",
+              willCreate: true,
+            },
+            row: 5,
+          }),
+        ]));
+        expect(body.wouldImport).toBe(true);
+        expect(JSON.stringify(body)).not.toContain("10000001754");
+        expect(JSON.stringify(body)).not.toContain("5550000017");
       });
   });
 
@@ -1826,19 +1824,4 @@ function expectValidationFields(response: { body: { error?: unknown } }, paths: 
 
 function createCsvBase64(content: string): string {
   return Buffer.from(`\uFEFF${content}`, "utf8").toString("base64");
-}
-
-async function createTeacherWorkbookBase64(rows: string[][], headers: string[], leadingRows: string[][] = []): Promise<string> {
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet("Teachers");
-  for (const row of leadingRows) {
-    worksheet.addRow(row);
-  }
-  worksheet.addRow(headers);
-  for (const row of rows) {
-    worksheet.addRow(row);
-  }
-
-  const buffer = await workbook.xlsx.writeBuffer();
-  return Buffer.from(buffer).toString("base64");
 }
