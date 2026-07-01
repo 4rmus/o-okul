@@ -1,18 +1,25 @@
 ---
 name: o-okul-agent-orchestration
-description: Use when planning or running Codex expert/subagent work in the O-Okul repo, including agent selection, delegation prompts, validation routing, and multi-agent handoff summaries.
+description: Use when coordinating O-Okul Codex expert/subagent work, choosing between the repo skills, routing agent ownership, writing delegation prompts, or summarizing multi-agent handoffs for planning, implementation, release evidence, or PR review.
 ---
 
 # O-Okul Agent Orchestration
 
-Use this skill when the user asks for expert agents, subagents, parallel review, large feature planning, production gate triage, or coordinated development in this repo.
+Use this as the router for O-Okul agent work. Prefer the narrower skill when the task matches it.
 
-## Workflow
+## Skill Routing
 
-1. Read `AGENTS.md` and `docs/codex-agent-architecture.md` if they are relevant to the task.
-2. Decide whether subagents are actually useful. Prefer single-agent work for small edits.
+- Planning, roadmap, production analysis, UAT/DEC alignment, or smallest safe PR -> `o-okul-planning`.
+- Scoped implementation, bug fix, contract update, or test/evidence script change -> `o-okul-implementation-slice`.
+- Deploy, staging/prod truth, GitHub parity, running image, env/secrets, or go-live evidence -> `o-okul-release-evidence`.
+- PR, branch, commit, working-tree, or final gate review -> `o-okul-pr-review`.
+
+## Delegation Rules
+
+1. Read `AGENTS.md` and `docs/codex-agent-architecture.md` when relevant.
+2. Decide whether subagents are useful. Prefer single-agent work for small edits.
 3. If delegating, choose 1-4 agents with disjoint responsibilities.
-4. Prefer read-only agents for discovery, security, docs research, QA strategy, and PR review.
+4. Prefer read-only agents for discovery, security review, docs research, QA strategy, and PR review.
 5. Use only one write-capable agent per file area. Give explicit owned paths and forbidden paths.
 6. Keep the main agent responsible for integration, conflict resolution, final verification, and user-facing summary.
 
@@ -28,7 +35,7 @@ Expected output: findings or changed file list, tests run, residual risk.
 Validation: <targeted commands>
 ```
 
-## Recommended Agent Routing
+## Agent Routing
 
 - Product scope or UAT: `product_scope_planner`
 - RLS/RBAC/tenant isolation: `tenant_security_reviewer`

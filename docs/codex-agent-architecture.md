@@ -2,6 +2,15 @@
 
 This document defines the project-scoped Codex agent system for building o-okul professionally, securely, and with controlled scope.
 
+## Canonical Surfaces
+
+Codex is the canonical agent and skill surface for this repo:
+
+- `.codex/agents/*.toml` defines the project custom agents.
+- `.agents/skills/**/SKILL.md` defines reusable repo workflows.
+- `.codex/config.toml` defines the project subagent limits and MCP configuration.
+- `.claude/agents` and `.cursor/skills` are adapter surfaces only. They must not become independent sources of truth.
+
 ## Research Basis
 
 The configuration follows current agent-system patterns from primary sources:
@@ -30,6 +39,19 @@ o-okul is not a generic CRUD app. The agent split follows the highest-risk seams
 - Privacy and providers: KVKK inventory, PII minimization, upload AV, retention, SMS/notification provider evidence.
 - Verification: focused unit/integration tests, smoke contracts, Playwright reliability, karne visual checks, production-readiness gates.
 
+## Repo Skill Router
+
+Use the narrowest repo skill before spawning agents:
+
+| Skill | Use When | Default Owners |
+|---|---|---|
+| `o-okul-planning` | Repo-grounded analysis, roadmap, production planning, UAT/DEC alignment, smallest safe first PR | `product_scope_planner`, read-only reviewers |
+| `o-okul-implementation-slice` | One scoped implementation, bug fix, contract update, evidence checker, or targeted test slice | One write-capable implementation agent |
+| `o-okul-release-evidence` | Staging/prod truth, GitHub parity, running image, env/secrets, release evidence, go-live gates | `ops_release_engineer` plus domain owner |
+| `o-okul-pr-review` | PR, branch, commit, working tree, or final gate review | `pr_gate_reviewer`, targeted read-only reviewers |
+
+`o-okul-agent-orchestration` remains the compatibility router for choosing among these skills and formatting delegation prompts.
+
 ## Agent Roster
 
 | Agent | Mode | Use When | Owns / Inspects | Key Gates |
@@ -53,12 +75,13 @@ o-okul is not a generic CRUD app. The agent split follows the highest-risk seams
 ## Collaboration Rules
 
 1. The main agent remains the architect of the turn. It decides scope, assigns agents, integrates results, resolves conflicts, and reports the final state.
-2. Spawn subagents only when the user explicitly asks for agents/delegation/parallel work or when the task is large enough that isolated exploration prevents context overload.
-3. Prefer read-only parallelism. Use parallel write work only with disjoint file ownership.
-4. Keep `max_depth = 1`. Subagents should not create further subagent trees.
-5. Use small handoffs. Each agent gets a concrete objective, owned paths, forbidden paths, expected output, and validation commands.
-6. Subagent output must be a summary: findings, changed files, tests run, residual risk. Long logs stay out of the main thread unless an exact error is needed.
-7. The final review should run after integration for high-risk work: security/RLS, report generation, production evidence, schema migrations, and broad UI changes.
+2. Load the narrowest repo skill before spawning agents.
+3. Spawn subagents only when the user explicitly asks for agents/delegation/parallel work or when the task is large enough that isolated exploration prevents context overload.
+4. Prefer read-only parallelism. Use parallel write work only with disjoint file ownership.
+5. Keep `max_depth = 1`. Subagents should not create further subagent trees.
+6. Use small handoffs. Each agent gets a concrete objective, owned paths, forbidden paths, expected output, and validation commands.
+7. Subagent output must be a summary: findings, changed files, tests run, residual risk. Long logs stay out of the main thread unless an exact error is needed.
+8. The final review should run after integration for high-risk work: security/RLS, report generation, production evidence, schema migrations, and broad UI changes.
 
 ## Standard Workflows
 
@@ -119,4 +142,5 @@ Return findings first with file references.
 - Add project hooks only after a deterministic rule is stable enough to enforce mechanically. Good candidates: blocking temp/symlink evidence targets, warning on broad `pnpm run ci` during constrained live-server sessions, and preventing accidental `.env` reads.
 - Add MCP servers only for trusted systems that remove manual copy/paste: GitHub issues/PRs, Sentry, Figma, and internal docs. Each MCP server needs a tight tool allowlist and secret policy.
 - Package the `.agents/skills` workflow into a Codex plugin only if this agent system needs to be shared across multiple repos.
+- Generate Claude or Cursor adapters from the Codex definitions only if those tools need active use in this repo.
 - Do not add an AI-report-summary product agent until `AI_REPORT_SUMMARY_PROVIDER=disabled` is changed by a new DEC and KVKK/provider review.

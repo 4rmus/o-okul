@@ -1,0 +1,4 @@
+interface:
+  display_name: "O-Okul PR Review"
+  short_description: "Findings-first change review"
+  default_prompt: "Use $o-okul-pr-review to review this O-Okul change for correctness, tenant safety, PII, report, and release-evidence regressions."

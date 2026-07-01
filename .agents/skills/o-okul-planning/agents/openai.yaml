@@ -1,0 +1,4 @@
+interface:
+  display_name: "O-Okul Planning"
+  short_description: "Repo-grounded planning workflow"
+  default_prompt: "Use $o-okul-planning to turn this O-Okul request into a repo-grounded, evidence-backed implementation plan."

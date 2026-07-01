@@ -13,6 +13,9 @@
 ## Subagent Orchestration
 
 - Project custom agents live in `.codex/agents`.
+- Project repo skills live in `.agents/skills`; Codex is the canonical agent/skill source for this repo.
+- Use the narrowest repo skill first: `o-okul-planning`, `o-okul-implementation-slice`, `o-okul-release-evidence`, or `o-okul-pr-review`.
+- Treat `.claude/agents` and `.cursor/skills` as adapter surfaces only; do not make them independent sources of truth.
 - Use subagents only when the user asks for agents, delegation, parallel review, or a large task that benefits from isolated exploration.
 - Keep `agents.max_depth = 1`; the main agent owns orchestration, integration, conflict resolution, and final delivery.
 - Prefer read-only parallel agents for exploration, security review, docs research, and PR review.
