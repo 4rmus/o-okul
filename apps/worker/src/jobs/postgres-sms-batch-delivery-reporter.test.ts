@@ -3,6 +3,34 @@ import type { Queryable, TenantQueryable } from "@o-okul/db";
 import { PostgresSmsBatchDeliveryReporter } from "./postgres-sms-batch-delivery-reporter.js";
 
 describe("PostgresSmsBatchDeliveryReporter", () => {
+  it("completed SMS batch raporunu job retry öncesi bulur", async () => {
+    const client = new FakeClient(() => [{
+      tenantId: "tenant-a",
+      jobId: "message-template-a_sms-hash-a",
+      templateId: "message-template-a",
+      sentCount: 2,
+      failedCount: 0,
+      billableSegments: 2,
+    }]);
+    const reporter = new PostgresSmsBatchDeliveryReporter(new FakePool(client));
+
+    await expect(reporter.findCompleted({
+      tenantId: "tenant-a",
+      jobId: "message-template-a_sms-hash-a",
+    })).resolves.toEqual({
+      tenantId: "tenant-a",
+      jobId: "message-template-a_sms-hash-a",
+      templateId: "message-template-a",
+      sentCount: 2,
+      failedCount: 0,
+      billableSegments: 2,
+    });
+
+    const select = client.queries.find((query) => query.sql.includes('FROM "SmsBatchDeliveryReport"'));
+    expect(select?.sql).toContain('"status" = \'completed\'');
+    expect(select?.values).toEqual(["tenant-a", "message-template-a_sms-hash-a"]);
+  });
+
   it("SMS batch raporunu completed olarak günceller", async () => {
     const client = new FakeClient(() => [{ id: "report-a" }]);
     const reporter = new PostgresSmsBatchDeliveryReporter(new FakePool(client));

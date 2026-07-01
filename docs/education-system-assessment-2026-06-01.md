@@ -76,7 +76,7 @@ Son güncelleme: 2026-06-02
   - `corepack pnpm --filter @o-okul/web typecheck` -> Web TypeScript kontrolü geçti.
   - `corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next login gerçek auth store ile kurum paneline geçer"` -> 1 test geçti; kurum Operasyon menüsündeki UAT / Rollback ekranı, UAT kanıt sözleşmesi, zorunlu smoke komutları, UAT akışları ve rollback referansları doğrulandı.
   - `corepack pnpm --filter @o-okul/web typecheck` -> Web TypeScript kontrolü geçti.
-  - `corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next login gerçek auth store ile kurum paneline geçer"` -> 1 test geçti; kurum Operasyon menüsündeki Canlı Yayın ekranı, production evidence zinciri, release özet alanları ve dış ortam kanıt gereksinimleri doğrulandı.
+  - `corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next login gerçek auth store ile kurum paneline geçer"` -> 1 test geçti; kurum Operasyon menüsündeki Release Kanıtı ekranı, production evidence zinciri, release özet alanları ve dış ortam kanıt gereksinimleri doğrulandı.
   - `corepack pnpm --filter @o-okul/web typecheck` -> Web TypeScript kontrolü geçti.
   - `corepack pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts e2e-next/login-next.spec.ts -g "Next login gerçek auth store ile kurum paneline geçer"` -> 1 test geçti; kurum Operasyon menüsündeki Rol Önizleme ekranı, öğretmen/öğrenci/veli portal kapsamı, kişi hesabı şartı, erişim kuralları ve kanıt komutları doğrulandı.
   - `corepack pnpm --filter @o-okul/web typecheck` -> Web TypeScript kontrolü geçti.
@@ -286,7 +286,7 @@ Güçlü taraf:
 
 Eksik taraf:
 
-- Kurum menüsü Kişiler, Akademik, Sınav/Rapor, Finans, İletişim ve Operasyon gruplarına ayrıldı; Akademik altında sınıflar, dersler, ders programı, etütler, devamsızlık, öğretmen notları ve materyaller görünür; Operasyon altında kullanıcı, rol önizleme, denetim, KVKK, güvenlik denetimi, gözlemlenebilirlik, UAT/rollback, canlı yayın, sistem sağlığı ve yedek/restore kanıt ekranları görünür.
+- Kurum menüsü Kişiler, Akademik, Sınav/Rapor, Finans, İletişim ve Operasyon gruplarına ayrıldı; Akademik altında sınıflar, dersler, ders programı, etütler, devamsızlık, öğretmen notları ve materyaller görünür; Operasyon altında kullanıcı, rol önizleme, denetim, KVKK, güvenlik denetimi, gözlemlenebilirlik, UAT/rollback, release kanıtı, sistem sağlığı ve yedek/restore kanıt ekranları görünür.
 - Öğretmen portalı genişlemeye başladı: profil, sınıf bilgili bugünkü dersler, sınıf bilgili ders programı, sınıf bilgili öğrenci seçimleri, ders/dönem seçimli yoklama girişi, ders/dönem seçimli öğretmen notu ekleme, ödev kontrolü, ders/dönem seçimli materyal atama, seçili öğrenci/sınıf/ders/dönem bağlamlı destek talebi, seçili öğrencinin sınıf/kayıt geçmişi, kendi destek taleplerini listeleme, ders/dönem bağlamı görünen seçili öğrenci raporu ve kapsamındaki sınıf raporu var. Kalan günlük iş bu kapsam disiplinini ödev, program ve rapor kararlarında daha tutarlı kullanmak.
 - Öğrenci portalı profil/devamsızlık/not, veli ilişkileri, sınıf ve kayıt geçmişi, hedefli duyuru, duyuru okundu bilgisi, ödev-materyal ataması, destek talebi, gelişim grafiği, ders/dönem bağlamlı son sınav raporu ve hata kitapçığı özetini gösteriyor; kurum tarafı duyuru alıcı/okunma raporu da başladı.
 - Veli portalı ödeme/profil/devamsızlık/not, hedefli duyuru, duyuru okundu bilgisi, destek talebi, bildirim tercihleri, seçili öğrenci ödev-materyal ataması, gelişim grafiği, ders/dönem bağlamlı son sınav raporu ve hata kitapçığı özetini gösteriyor.
@@ -479,7 +479,7 @@ Güvenlik ve Operasyon
   - Güvenlik Denetimi (tamamlandı: audit, env, RLS, HTTPS, header/auth/veri kontrol görünümü)
   - Gözlemlenebilirlik (tamamlandı: observability UAT, alert webhook, Sentry smoke, dashboard/alert görünümü)
   - UAT / Rollback (tamamlandı: UAT kanıt sözleşmesi, smoke komutları, rollback image tag ve restore backup referansı görünümü)
-  - Canlı Yayın (tamamlandı: production evidence zinciri, SMS ve e-posta/push sağlayıcı smoke adımları, release özeti ve dış ortam kanıt gereksinimleri görünümü)
+  - Release Kanıtı (tamamlandı: production evidence zinciri, SMS ve e-posta/push sağlayıcı smoke adımları, release özeti ve dış ortam kanıt gereksinimleri görünümü)
   - Sistem Sağlığı (tamamlandı: `/health`, `/health/ready`, `/metrics` görünümü)
   - Yedek / Restore Kanıtları (tamamlandı: smoke komutları ve restore drill kanıt sözleşmesi görünümü)
 ```
@@ -521,7 +521,7 @@ Bu bölüm, geniş planı küçük ve doğrulanabilir işlere indirger.
 | 15 | Kurum güvenlik denetimi ekranı | Tamamlandı: `/kurum/guvenlik-denetimi` security audit, production env, canlı RLS, HTTPS smoke, header, auth ve veri kontrol kapılarını gösterir; Playwright kurum smoke'unda doğrulanır |
 | 16 | Kurum gözlemlenebilirlik ekranı | Tamamlandı: `/kurum/gozlemlenebilirlik` observability UAT, alert webhook, Sentry smoke, dashboard panelleri ve alert kurallarını gösterir; Playwright kurum smoke'unda doğrulanır |
 | 17 | Kurum UAT/rollback kanıt ekranı | Tamamlandı: `/kurum/uat-rollback` staging/prod UAT kanıt sözleşmesi, UAT akışları, zorunlu smoke komutları, rollback image tag ve restore backup referansını gösterir; Playwright kurum smoke'unda doğrulanır |
-| 18 | Kurum canlı yayın kanıt ekranı | Tamamlandı: `/kurum/canli-yayin` production evidence zinciri, SMS ve e-posta/push sağlayıcı smoke adımları, release özet alanları ve staging/prod dış ortam kanıt gereksinimlerini gösterir; Playwright kurum smoke'unda doğrulanır |
+| 18 | Kurum release kanıtı ekranı | Tamamlandı: `/kurum/canli-yayin` production evidence zinciri, SMS ve e-posta/push sağlayıcı smoke adımları, release özet alanları ve staging/prod dış ortam kanıt gereksinimlerini gösterir; Playwright kurum smoke'unda doğrulanır |
 | 19 | Kurum sistem sağlığı ekranı | Tamamlandı: `/kurum/sistem-sagligi` API yaşam, readiness, Postgres/Redis ve metrics uptime sinyallerini gösterir; Playwright kurum smoke'unda doğrulanır |
 | 20 | Kurum yedek/restore kanıt ekranı | Tamamlandı: `/kurum/yedek-restore` backup/restore smoke, off-host/WAL hedef smoke, restore drill kanıt sözleşmesi ve kritik restore tablolarını gösterir; Playwright kurum smoke'unda doğrulanır |
 

@@ -1956,12 +1956,12 @@ function requireSummaryRollbackServices(report, failures) {
     failures,
     "productionEvidenceSummary.summary.reports.deploymentRollback.servicesVerified",
     "servicesVerified",
-    3,
+    4,
   );
   const value = report.servicesVerified;
   if (!Array.isArray(value)) return;
 
-  for (const service of ["web", "api", "worker"]) {
+  for (const service of ["web", "api", "worker", "queue-board"]) {
     const item = value.find((candidate) => candidate && typeof candidate === "object" && candidate.service === service);
     if (!item) {
       failures.push(`productionEvidenceSummary.summary.reports.deploymentRollback.servicesVerified eksik: ${service}`);
@@ -3534,8 +3534,8 @@ function requireSummaryRateLimit(report, failures) {
     requireObjectString(
       loginAttemptLimiter,
       failures,
-      "productionEvidenceSummary.summary.reports.rateLimit.loginAttemptLimiter.emailHash",
-      "emailHash",
+      "productionEvidenceSummary.summary.reports.rateLimit.loginAttemptLimiter.nationalIdHash",
+      "nationalIdHash",
     );
     requireObjectIntegerAtLeast(
       loginAttemptLimiter,
@@ -3567,8 +3567,8 @@ function requireSummaryRateLimit(report, failures) {
     requireObjectTrue(
       loginAttemptLimiter,
       failures,
-      "productionEvidenceSummary.summary.reports.rateLimit.loginAttemptLimiter.emailAndIpScoped",
-      "emailAndIpScoped",
+      "productionEvidenceSummary.summary.reports.rateLimit.loginAttemptLimiter.nationalIdAndIpScoped",
+      "nationalIdAndIpScoped",
     );
     requireObjectTrue(
       loginAttemptLimiter,

@@ -1,5 +1,6 @@
-import { Controller, Get, HttpCode, Post, UseGuards } from "@nestjs/common";
+import { Controller, Get, HttpCode, Inject, Post, UseGuards } from "@nestjs/common";
 import type { GuardianRecord, KvkkInventoryKind, KvkkInventoryRecord, StudentRecord, TeacherRecord } from "@o-okul/shared-types";
+import { authUserStoreToken, type AuthUser, type AuthUserStore } from "../auth/auth-user-store.js";
 import { AuthService, type SelfPurgeResult } from "../auth/auth.service.js";
 import { getRequestContext } from "../context/request-context.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
@@ -15,6 +16,7 @@ export class PrivacyController {
     private readonly auth: AuthService,
     private readonly school: SchoolService,
     private readonly students: StudentService,
+    @Inject(authUserStoreToken) private readonly users: AuthUserStore,
   ) {}
 
   @Get("inventory")
@@ -22,16 +24,18 @@ export class PrivacyController {
   @RequireCapability("privacy:manage")
   async inventory(): Promise<KvkkInventoryRecord[]> {
     const context = getRequestContext();
-    const [students, teachers, guardians] = await Promise.all([
+    const [students, teachers, guardians, users] = await Promise.all([
       this.students.list(context),
       this.school.listTeachers(context),
       this.school.listGuardians(context),
+      this.users.listByTenant(context.tenantId ?? ""),
     ]);
 
     return [
       ...students.map((record, index) => studentInventoryRecord(record, index)),
       ...teachers.map((record, index) => teacherInventoryRecord(record, index)),
       ...guardians.map((record, index) => guardianInventoryRecord(record, index)),
+      ...users.map((record, index) => userInventoryRecord(record, index)),
     ];
   }
 
@@ -59,6 +63,11 @@ function guardianInventoryRecord(record: GuardianRecord, index: number): KvkkInv
   return inventoryRecord("guardian", record.id, index, categories);
 }
 
+function userInventoryRecord(record: AuthUser, index: number): KvkkInventoryRecord {
+  const categories = purgedUser(record) ? [] : ["e-posta", "ad"];
+  return inventoryRecord("user", `user-record-${index + 1}`, index, categories);
+}
+
 function inventoryRecord(kind: KvkkInventoryKind, id: string, index: number, piiCategories: string[]): KvkkInventoryRecord {
   return {
     displayRef: `${kindLabel(kind)} kaydı ${index + 1}`,
@@ -72,9 +81,14 @@ function inventoryRecord(kind: KvkkInventoryKind, id: string, index: number, pii
 function kindLabel(kind: KvkkInventoryKind) {
   if (kind === "student") return "Öğrenci";
   if (kind === "teacher") return "Öğretmen";
+  if (kind === "user") return "Kullanıcı";
   return "Veli";
 }
 
 function purgedName(record: { firstName: string; lastName: string }, lastName: string) {
   return record.firstName === "Anonim" && record.lastName === lastName;
+}
+
+function purgedUser(record: AuthUser) {
+  return record.name === "Anonim Kullanici" && record.email?.startsWith("purged-");
 }

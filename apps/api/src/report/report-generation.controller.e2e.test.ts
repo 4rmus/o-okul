@@ -440,6 +440,7 @@ describe("ReportGenerationController", () => {
           ],
         },
       ],
+      successRateDelta: 17.5,
       netDelta: 3.5,
       standardScoreDelta: 7.5,
     });
@@ -459,6 +460,7 @@ describe("ReportGenerationController", () => {
       "snapshot-a",
       "snapshot-other-exam",
     ]);
+    expect(response.body.successRateDelta).toBe(30);
     expect(response.body.netDelta).toBe(6);
     expect(response.body.standardScoreDelta).toBe(10);
   });

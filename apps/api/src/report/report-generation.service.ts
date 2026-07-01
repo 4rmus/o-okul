@@ -458,6 +458,7 @@ export class ReportGenerationService implements OnModuleDestroy {
 
     points.sort((a, b) => toTime(a.generatedAt) - toTime(b.generatedAt));
 
+    const successRateDelta = delta(points, (point) => point.total.successRate);
     const netDelta = delta(points, (point) => point.total.net);
     const standardScoreDelta = delta(points, (point) => point.total.standardScore);
 
@@ -466,6 +467,7 @@ export class ReportGenerationService implements OnModuleDestroy {
       examId: resolvedExamId,
       studentId: resolvedStudentId,
       points,
+      ...(successRateDelta !== undefined ? { successRateDelta } : {}),
       ...(netDelta !== undefined ? { netDelta } : {}),
       ...(standardScoreDelta !== undefined ? { standardScoreDelta } : {}),
     };

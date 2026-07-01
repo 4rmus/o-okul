@@ -69,6 +69,7 @@ describe("RawImportController", () => {
     archiveStore.puts = [];
     repository.creates = [];
     producer.inputs = [];
+    producer.failNext = false;
     quarantineStore.reset();
     analysisStore.reset();
   });
@@ -119,9 +120,7 @@ describe("RawImportController", () => {
       },
       status: "uploaded",
     });
-    expect(producer.inputs[0]?.contentHash).toEqual(expect.stringMatching(
-      new RegExp(`^${repository.creates[0]?.sha256}-[0-9a-f-]{36}$`),
-    ));
+    expect(producer.inputs[0]?.contentHash).toBe(repository.creates[0]?.sha256);
     expect(producer.inputs[0]).toMatchObject({
       queueName: "excel-import",
       tenantId: "tenant-a",
@@ -451,6 +450,15 @@ describe("RawImportController", () => {
         resolvedStudentId: "student-a",
       },
     ]);
+    expect(quarantineStore.markResolvedCalls).toEqual([
+      {
+        tenantId: "tenant-a",
+        examId: "exam-a",
+        rawImportId: "raw-import-a",
+        quarantineId: "quarantine-a",
+        resolvedStudentId: "student-a",
+      },
+    ]);
     expect(response.body).toMatchObject({
       id: "quarantine-a",
       status: "RESOLVED",
@@ -478,6 +486,20 @@ describe("RawImportController", () => {
         answerKeyId: "answer-key-a",
       },
     ]);
+  });
+
+  it("karantina resolve enqueue patlarsa kaydı açık bırakır", async () => {
+    const issued = await login("admin-a@example.test");
+    producer.failNext = true;
+
+    await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/quarantines/quarantine-a/resolve")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ resolvedStudentId: "student-a" })
+      .expect(500);
+
+    expect(quarantineStore.records[0]?.status).toBe("OPEN");
+    expect(quarantineStore.markResolvedCalls).toHaveLength(0);
   });
 
   it("karantina çözme kaydı yoksa evaluation işi üretmez", async () => {
@@ -558,9 +580,14 @@ class FakeRepository implements RawImportRepository {
 
 class FakeProducer implements RawImportQueueProducer {
   inputs: Array<Parameters<RawImportQueueProducer["enqueue"]>[0]> = [];
+  failNext = false;
 
   async enqueue(input: Parameters<RawImportQueueProducer["enqueue"]>[0]): Promise<ProducedJob> {
     this.inputs.push(input);
+    if (this.failNext) {
+      this.failNext = false;
+      throw new Error("QUEUE_DOWN");
+    }
     const { queueName: _queueName, ...payload } = input;
     return {
       queueName: input.queueName,
@@ -587,12 +614,20 @@ class FakeQuarantineStore implements RawImportQuarantineStore {
     quarantineId: string;
     resolvedStudentId: string;
   }> = [];
+  markResolvedCalls: Array<{
+    tenantId: string;
+    examId: string;
+    rawImportId: string;
+    quarantineId: string;
+    resolvedStudentId: string;
+  }> = [];
 
   reset(): void {
     this.records = [createQuarantine()];
     this.counts = [];
     this.lists = [];
     this.resolves = [];
+    this.markResolvedCalls = [];
   }
 
   async countOpenByTenant(tenantId: string): Promise<number> {
@@ -617,6 +652,25 @@ class FakeQuarantineStore implements RawImportQuarantineStore {
     resolvedStudentId: string;
   }): Promise<ImportQuarantineRecord | undefined> {
     this.resolves.push(input);
+    const record = this.records.find((item) => (
+      item.tenantId === input.tenantId &&
+      item.examId === input.examId &&
+      item.rawImportId === input.rawImportId &&
+      item.id === input.quarantineId &&
+      item.status === "OPEN"
+    ));
+    if (!record) return undefined;
+    return record;
+  }
+
+  async markResolved(input: {
+    tenantId: string;
+    examId: string;
+    rawImportId: string;
+    quarantineId: string;
+    resolvedStudentId: string;
+  }): Promise<ImportQuarantineRecord | undefined> {
+    this.markResolvedCalls.push(input);
     const record = this.records.find((item) => (
       item.tenantId === input.tenantId &&
       item.examId === input.examId &&

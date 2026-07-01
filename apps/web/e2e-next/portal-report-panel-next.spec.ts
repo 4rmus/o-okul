@@ -76,6 +76,7 @@ test.describe("Portal rapor paneli sözleşmesi", () => {
     await expect(karneSuccessSummary).toContainText("30");
     await expect(karneSuccessSummary).toContainText("Net");
     await expect(karneSuccessSummary).toContainText("20,0");
+    await expect(karneSummary.getByRole("row", { name: /GELİŞİM/ })).toContainText("-%3,3");
     await expect(karneSummary.getByRole("table", { name: "Branş psikometri tablosu" })).toContainText("%");
     await expect(page.getByRole("region", { name: "Sınav raporu detaylı deneme analizi" })).toContainText("Öğrenci cevabı");
 
@@ -260,12 +261,13 @@ function createErrorBooklet() {
 function createProgress() {
   return {
     examId: "exam-demo-isem-lgs-1",
-    netDelta: 3.5,
+    netDelta: -1,
     points: [
       { examTitle: "Mayis Denemesi", generatedAt: "2026-05-10T12:00:00.000Z", snapshotId: "snapshot-prev", total: { blank: 2, correct: 20, net: 21, questionCount: 30, standardScore: 405, successRate: 70, wrong: 8 } },
       { examTitle: "LGS Hazirlik Denemesi", generatedAt: "2026-06-10T12:00:00.000Z", snapshotId: "snapshot-a", total: { blank: 8, correct: 20, net: 20, questionCount: 30, standardScore: 410, successRate: 66.7, wrong: 2 } },
     ],
     standardScoreDelta: 5,
+    successRateDelta: -3.3,
     studentId: "student-a",
     tenantId: "tenant-portal",
   };

@@ -3,8 +3,12 @@ import { existsSync, lstatSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, isAbsolute, normalize, parse, relative, resolve } from "node:path";
 
 const args = process.argv.slice(2);
+const defaultRemoteStagingReleaseHost = "o-okul-prod";
 const host =
-  readOption("--host") ?? process.env.REMOTE_STAGING_RELEASE_HOST ?? process.env.REMOTE_EVIDENCE_HOST ?? "uzman-hocam-server";
+  readOption("--host") ??
+  process.env.REMOTE_STAGING_RELEASE_HOST ??
+  process.env.REMOTE_EVIDENCE_HOST ??
+  defaultRemoteStagingReleaseHost;
 const remoteRoot =
   readOption("--remote-root") ?? process.env.REMOTE_STAGING_RELEASE_ROOT ?? process.env.REMOTE_EVIDENCE_ROOT ?? "/root/o-okul";
 const remoteArtifactsDir =

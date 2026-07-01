@@ -1,6 +1,8 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, parse, resolve } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { validateSmokeEvidenceOutputTarget, writeSmokeEvidence } from "./smoke-evidence.mjs";
 
@@ -44,6 +46,8 @@ if (targetUrl.protocol === "file:") {
   fail("WAL_ARCHIVE_TARGET yalnız file:// veya s3:// destekler.");
 }
 
+const postgresWalArchive = await smokePostgresWalArchive();
+
 await writeSmokeEvidence(evidenceFile, {
   result: "PASS",
   check: "wal_archive_smoke",
@@ -51,6 +55,7 @@ await writeSmokeEvidence(evidenceFile, {
   checkedAt,
   target: summarizeTarget(targetUrl),
   markerSha256: expectedHash,
+  postgresWalArchive,
   commandsPassed: ["pnpm wal:archive:smoke"],
   gaps: [],
 });
@@ -108,6 +113,61 @@ async function smokeS3Target(url, name, body, expected) {
   }
 
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+}
+
+async function smokePostgresWalArchive() {
+  const configLine = runPostgresText(
+    `psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "select current_setting('archive_mode') || E'\\t' || current_setting('wal_level') || E'\\t' || current_setting('archive_command');"`,
+  );
+  const [archiveMode, walLevel, archiveCommand] = configLine.split("\t");
+  if (!["on", "always"].includes(archiveMode)) {
+    fail("Postgres archive_mode on veya always olmalı.");
+  }
+  if (!["replica", "logical"].includes(walLevel)) {
+    fail("Postgres wal_level replica veya logical olmalı.");
+  }
+
+  const walFileName = runPostgresText(
+    `psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "select pg_walfile_name(pg_switch_wal());"`,
+  );
+  if (!/^[0-9A-F]{24}$/i.test(walFileName)) {
+    fail("Postgres WAL switch geçerli WAL dosya adı üretmeli.");
+  }
+
+  return {
+    archiveMode,
+    walLevel,
+    archiveCommandSha256: sha256(archiveCommand ?? ""),
+    switchedWalFileNameHash: sha256(walFileName),
+    archivedWalFileSha256: await readArchivedWalSha256(walFileName),
+  };
+}
+
+async function readArchivedWalSha256(walFileName) {
+  const archiveDirectory = process.env.POSTGRES_WAL_ARCHIVE_DIR || "/var/lib/postgresql/wal-archive";
+  const archivePath = `${archiveDirectory.replace(/\/+$/g, "")}/${walFileName}`;
+  const command = `test -s "${archivePath}" && sha256sum "${archivePath}" | awk '{print $1}'`;
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const result = runPostgresText(command, { failOnError: false });
+    if (/^[a-f0-9]{64}$/i.test(result)) return result;
+    await sleep(500);
+  }
+
+  fail("Postgres WAL archive dosyası archive_command sonrası bulunamadı.");
+}
+
+function runPostgresText(command, { failOnError = true } = {}) {
+  const result = spawnSync("docker", ["compose", "exec", "-T", "postgres", "sh", "-lc", command], {
+    encoding: "utf8",
+    maxBuffer: 16 * 1024 * 1024,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.status !== 0) {
+    if (!failOnError) return "";
+    fail(`Postgres WAL archive doğrulaması çalışmadı: ${(result.stderr || result.stdout || "").trim()}`);
+  }
+  return result.stdout.trim();
 }
 
 function sha256(value) {

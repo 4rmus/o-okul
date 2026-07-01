@@ -16,6 +16,7 @@ writeFakeSsh();
 
 try {
   expectGapSummaryPassesContract();
+  expectDefaultHostIsOOkulProd();
   expectFailure("snapshot outside artifacts/local", ["--snapshot-dir", "../remote-staging-snapshot"], [
     "REMOTE_STAGING_RELEASE_SNAPSHOT_DIR artifacts/local altında olmalı.",
   ]);
@@ -70,6 +71,26 @@ function expectGapSummaryPassesContract() {
   }
 }
 
+function expectDefaultHostIsOOkulProd() {
+  const defaultGapReportFile = join(root, "remote-gap-report-default-host.json");
+  const result = runSummary([
+    "--remote-root",
+    "/root/o-okul",
+    "--snapshot-dir",
+    join(root, "snapshot-default-host"),
+    "--gap-report-file",
+    defaultGapReportFile,
+  ]);
+  if (result.status === 0) {
+    failContract("default host eksik artifact bundle için non-zero dönmeli.", result);
+  }
+
+  const output = combinedOutput(result);
+  if (!output.includes("Remote staging source: o-okul-prod:/root/o-okul/artifacts/staging")) {
+    failContract("default host o-okul-prod olmalı.", result);
+  }
+}
+
 function expectFailure(label, extraArgs, expectedMessages) {
   const result = runSummary([
     "--host",
@@ -86,11 +107,15 @@ function expectFailure(label, extraArgs, expectedMessages) {
 }
 
 function runSummary(args) {
+  const env = { ...process.env };
+  delete env.REMOTE_STAGING_RELEASE_HOST;
+  delete env.REMOTE_EVIDENCE_HOST;
+
   return spawnSync(process.execPath, ["scripts/print-remote-staging-release-gap-summary.mjs", ...args], {
     cwd: process.cwd(),
     encoding: "utf8",
     env: {
-      ...process.env,
+      ...env,
       PATH: `${fakeBinDir}${delimiter}${process.env.PATH}`,
       FAKE_REMOTE_ARTIFACTS_DIR: fakeRemoteArtifacts,
     },
@@ -110,7 +135,8 @@ if (command === "printf remote-ok") {
   process.exit(0);
 }
 if (command.includes("git rev-parse --short HEAD")) {
-  process.stdout.write("Remote staging source: fake-remote:/root/o-okul/artifacts/staging\\n");
+  const host = process.argv.at(-2) ?? "unknown-host";
+  process.stdout.write(\`Remote staging source: \${host}:/root/o-okul/artifacts/staging\\n\`);
   process.stdout.write("Remote commit: contract123\\n");
   process.stdout.write("Remote ui-ux evidence script: present\\n");
   process.exit(0);

@@ -33,6 +33,13 @@ export function formatPercentNumber(value: number | undefined): string {
     : `%${value.toLocaleString("tr-TR", { maximumFractionDigits: 1, minimumFractionDigits: 1 })}`;
 }
 
+export function formatPercentDelta(value: number | undefined): string {
+  if (value === undefined) return "-";
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  const magnitude = Math.abs(value).toLocaleString("tr-TR", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+  return `${sign}%${magnitude}`;
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type {
+  SmsBatchDeliveryCompletedSnapshot,
   SmsBatchDeliveryCompletedInput,
   SmsBatchDeliveryFailedInput,
+  SmsBatchDeliveryLookupInput,
   SmsBatchDeliveryReporter,
 } from "./sms-batch-job.js";
 import { createSmsBatchProcessor } from "./sms-batch-processor.js";
@@ -73,6 +75,10 @@ describe("createSmsBatchProcessor", () => {
 class FakeDeliveryReporter implements SmsBatchDeliveryReporter {
   completed: SmsBatchDeliveryCompletedInput[] = [];
   failed: SmsBatchDeliveryFailedInput[] = [];
+
+  async findCompleted(_input: SmsBatchDeliveryLookupInput): Promise<SmsBatchDeliveryCompletedSnapshot | undefined> {
+    return undefined;
+  }
 
   async markCompleted(input: SmsBatchDeliveryCompletedInput): Promise<void> {
     this.completed.push(input);

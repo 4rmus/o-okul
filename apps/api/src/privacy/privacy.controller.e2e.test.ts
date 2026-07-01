@@ -48,6 +48,12 @@ describe("PrivacyController", () => {
         piiCategories: expect.arrayContaining(["Ad", "soyad"]),
         purgeAvailable: true,
       }),
+      expect.objectContaining({
+        kind: "user",
+        displayRef: expect.any(String),
+        piiCategories: expect.arrayContaining(["e-posta", "ad"]),
+        purgeAvailable: true,
+      }),
     ]));
     const serialized = JSON.stringify(response.body);
     for (const forbidden of [

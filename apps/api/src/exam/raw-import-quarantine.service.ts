@@ -108,9 +108,22 @@ export class RawImportQuarantineService {
       rawImportId: record.rawImportId,
       answerKeyId: record.answerKeyId,
     });
+    const resolvedRecord = await this.store.markResolved({
+      tenantId,
+      examId: record.examId,
+      rawImportId: record.rawImportId,
+      quarantineId: record.id,
+      resolvedStudentId: required(input.resolvedStudentId, "IMPORT_QUARANTINE_STUDENT_REQUIRED"),
+    });
+    if (!resolvedRecord) {
+      throw new NotFoundException("IMPORT_QUARANTINE_NOT_FOUND");
+    }
 
     return {
-      ...record,
+      ...resolvedRecord,
+      resolvedParticipantId: record.resolvedParticipantId,
+      answerKeyId: record.answerKeyId,
+      rawImportSha256: record.rawImportSha256,
       evaluationJob: {
         tenantId,
         examId: record.examId,

@@ -13,8 +13,8 @@ const requiredDashboardPanels = [
 const requiredAlerts = [
   "OOkulApiDown",
   "OOkulReadinessFailing",
-  "OOkulHigh5xxRate",
-  "OOkulSlowRequests",
+  "OOkulApiHighErrorRate",
+  "OOkulApiSlowRequests",
 ];
 const evidenceReferenceEnvNames = [
   "OBSERVABILITY_UAT_PROMETHEUS_EVIDENCE_REFERENCE",

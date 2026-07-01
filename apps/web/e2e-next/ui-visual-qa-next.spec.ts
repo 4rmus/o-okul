@@ -1589,6 +1589,7 @@ function createProgress(examId: string) {
       },
     ],
     standardScoreDelta: 35,
+    successRateDelta: 11.7,
     studentId: "student-a",
     tenantId: "tenant-faz9",
   };

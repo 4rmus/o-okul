@@ -40,8 +40,8 @@ const dashboardPanels = [
 const alertRules = [
   "OOkulApiDown",
   "OOkulReadinessFailing",
-  "OOkulHigh5xxRate",
-  "OOkulSlowRequests",
+  "OOkulApiHighErrorRate",
+  "OOkulApiSlowRequests",
 ];
 
 const telemetryChecks = [

@@ -537,6 +537,7 @@ requireTokens("apps/web/e2e-next/data-table-mobile-contract-next.spec.ts", [
   'listControls.locator(".uh-field")).toHaveCount(3)',
   "financeFilters",
   'financeFilters.locator(".uh-field")).toHaveCount(6)',
+  "successRateDelta: 8.4",
   'getByRole("region", { exact: true, name: "Devamsızlık operasyon özeti" })',
   'getByRole("table", { name: "Devamsızlık operasyon listesi" })',
   'getByRole("region", { exact: true, name: "Öğretmen notu operasyon özeti" })',
@@ -700,16 +701,16 @@ requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
   "KVKK route erişimi privacy capability ile hizalıdır",
   'await expect(page).toHaveURL(/\\/kurum\\/kvkk$/)',
   'getByLabel("Güvenlik güven durumu")',
-  'getByLabel("Canlı yayın güven durumu")',
+  'getByLabel("Release kanıt güven durumu")',
   'getByLabel("UAT rollback güven durumu")',
   'getByLabel("Yedek restore güven durumu")',
   'getByLabel("Sistem sağlık güven durumu")',
   'getByLabel("Gözlemlenebilirlik güven durumu")',
   'getByRole("region", { exact: true, name: "Denetim operasyon özeti" })',
   'getByRole("table", { name: "Denetim kayıtları" })',
-  'getByRole("region", { exact: true, name: "Canlı yayın operasyon özeti" })',
-  "Canlı yayın operasyon özeti aksiyon kuyruğu",
-  'getByRole("table", { name: "Canlı yayın kanıt kapıları" })',
+  'getByRole("region", { exact: true, name: "Release kanıt operasyon özeti" })',
+  "Release kanıt operasyon özeti aksiyon kuyruğu",
+  'getByRole("table", { name: "Release kanıt kapıları" })',
   'getByRole("table", { name: "Production evidence adımları" })',
   'getByRole("table", { name: "Release özeti alanları" })',
   'getByRole("table", { name: "Go-live karar alanları" })',
@@ -1058,6 +1059,7 @@ requireTokens("apps/web/e2e-next/portal-report-panel-next.spec.ts", [
   'karneSummary.getByRole("region", { exact: true, name: "Karne başarı özeti" })',
   "karneSuccessSummary).toHaveClass(/uh-metric-grid/)",
   'karneSuccessSummary.locator(".uh-metric-card")).toHaveCount(7)',
+  'getByRole("row", { name: /GELİŞİM/ })).toContainText("-%3,3")',
   "Ders bilgisi yok",
   "Dönem bilgisi yok",
   "Rapor bağlamı",
@@ -1109,6 +1111,7 @@ requireTokens("apps/web/e2e-next/teacher-portal-contract-next.spec.ts", [
   'getByRole("region", { exact: true, name: "Öğretmen operasyon bağlamı" })',
   'getByRole("region", { name: "Öğretmen günlük aksiyonları" })',
   "expectTeacherFocusMetrics",
+  "successRateDelta: 11.7",
   'getByRole("region", { name: "Öğretmen operasyon bağlam metrikleri" })',
   'focusMetrics).toHaveClass(/uh-info-grid/)',
   'focusMetrics.locator(".uh-info-item")).toHaveCount(8)',
@@ -1246,6 +1249,7 @@ requireTokens("apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts",
   "Destek talebini takip et: 1 açık",
   "Son sınavı incele: %81,7",
   "24,5 net / 30 soru",
+  "successRateDelta: 11.7",
   "Öğrenci seç: Ada Kaya",
   "Ödevi kontrol et: 1 atama",
   "Ödeme durumunu gör: Ödeme izni kapalı",
@@ -1384,6 +1388,8 @@ requireTokens("apps/web/e2e-next/report-workspace-contract-next.spec.ts", [
   'karneSheet.getByRole("region", { exact: true, name: "Karne başarı özeti" })',
   "karneSummary).toHaveClass(/uh-metric-grid/)",
   'karneSummary.locator(".uh-metric-card")).toHaveCount(7)',
+  'getByRole("row", { name: /GELİŞİM/ })).toContainText("-%3,3 başarı")',
+  'getByRole("row", { name: /GELİŞİM/ })).toContainText("-1,0 net")',
   'getByRole("region", { name: "Öğrenci karne özeti özet sayfası" })',
   'getByRole("region", { name: "Rapor özeti" }).locator(".uh-metric-card")).toHaveCount(8)',
   'analyticsPanel.locator(".next-report-summary-card")).toHaveCount(0)',
@@ -1517,11 +1523,13 @@ requireNoTokens("apps/web/app/(app)/kurum/_shared/operation-summary.tsx", [
 ]);
 
 requireTokens("apps/web/app/(app)/_shared/navigation.ts", [
+  'const institutionOperationEvidenceCapability = "operation:manage"',
   '{ href: "/kurum/kurulum", icon: Settings, label: "Kurulum", requiredCapability: "operation:manage" }',
   'label: "Yönetim ve Kanıt"',
   '{ href: "/kurum/denetim", icon: ClipboardList, label: "Denetim", requiredCapability: "audit:read" }',
   '{ href: "/kurum/kvkk", icon: ShieldCheck, label: "KVKK", requiredCapability: "privacy:manage" }',
-  '{ href: "/kurum/guvenlik-denetimi", icon: ShieldCheck, label: "Güvenlik Denetimi", requiredCapability: "system:operations" }',
+  '{ href: "/kurum/guvenlik-denetimi", icon: ShieldCheck, label: "Güvenlik Denetimi", requiredCapability: institutionOperationEvidenceCapability }',
+  '{ href: "/kurum/canli-yayin", icon: Activity, label: "Release Kanıtı", requiredCapability: institutionOperationEvidenceCapability }',
 ]);
 
 requireTokens("apps/web/app/(app)/app-shell.tsx", [
@@ -1544,6 +1552,16 @@ requireNoTokens("apps/web/app/(app)/_shared/access.ts", [
   '"/kurum/kvkk": "system:operations"',
   "findHiddenInstitutionPathCapability",
   "hasCapabilityForRoles(roles, hiddenCapability)",
+]);
+
+requireTokens("apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.tsx", [
+  '"OOkulApiHighErrorRate"',
+  '"OOkulApiSlowRequests"',
+]);
+
+requireNoTokens("apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.tsx", [
+  '"OOkulHigh5xxRate"',
+  '"OOkulSlowRequests"',
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx", [
@@ -3135,8 +3153,8 @@ requireTokens("apps/web/app/(app)/kurum/canli-yayin/live-release-page.tsx", [
   "DataTable",
   "Panel",
   "StatusBadge",
-  'ariaLabel="Canlı yayın operasyon özeti"',
-  'caption="Canlı yayın kanıt kapıları"',
+  'ariaLabel="Release kanıt operasyon özeti"',
+  'caption="Release kanıt kapıları"',
   'caption="Production evidence adımları"',
   'caption="Release özeti alanları"',
   'caption="Go-live karar alanları"',
@@ -4636,6 +4654,7 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   'page.locator(".next-decision-card, .next-dashboard-summary-card")).toHaveCount(0)',
   'not.toContainText("tenant-faz9")',
   'not.toContainText("user-faz9-admin")',
+  "successRateDelta: 11.7",
   "faz9-dashboard-${viewport.width}",
   "`faz9-dashboard-${viewport.width}.png`",
   ".next-dashboard-link-cell.uh-action-card",

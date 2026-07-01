@@ -1,12 +1,29 @@
 import { type Queryable, type TenantQueryable, withTenantDb } from "@o-okul/db";
 import type {
+  SmsBatchDeliveryCompletedSnapshot,
   SmsBatchDeliveryCompletedInput,
   SmsBatchDeliveryFailedInput,
+  SmsBatchDeliveryLookupInput,
   SmsBatchDeliveryReporter,
 } from "./sms-batch-job.js";
 
 export class PostgresSmsBatchDeliveryReporter implements SmsBatchDeliveryReporter {
   constructor(private readonly pool: TenantQueryable) {}
+
+  async findCompleted(input: SmsBatchDeliveryLookupInput): Promise<SmsBatchDeliveryCompletedSnapshot | undefined> {
+    return withTenantDb(this.pool, { tenantId: input.tenantId }, async (client) => {
+      const result = await client.query<SmsBatchDeliveryCompletedSnapshot>(
+        `SELECT "tenantId", "jobId", "templateId", "sentCount", "failedCount", "billableSegments"
+         FROM "SmsBatchDeliveryReport"
+         WHERE "tenantId" = $1
+           AND "jobId" = $2
+           AND "status" = 'completed'
+         LIMIT 1`,
+        [input.tenantId, input.jobId],
+      );
+      return result.rows[0];
+    });
+  }
 
   async markCompleted(input: SmsBatchDeliveryCompletedInput): Promise<void> {
     await withTenantDb(this.pool, { tenantId: input.tenantId }, async (client) => {

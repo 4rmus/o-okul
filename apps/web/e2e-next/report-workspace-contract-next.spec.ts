@@ -230,6 +230,8 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await expect(karneSummary).toContainText("Net");
     await expect(karneSummary).toContainText("20,0");
     await expect(karneSummary).toContainText("Genel sıra");
+    await expect(karnePanel.getByRole("row", { name: /GELİŞİM/ })).toContainText("-%3,3 başarı");
+    await expect(karnePanel.getByRole("row", { name: /GELİŞİM/ })).toContainText("-1,0 net");
     const branchPsychometryTable = karnePanel.getByRole("table", { name: "Öğrenci branş karne tablosu" });
     await expectSuccessRatePrimaryColumns(branchPsychometryTable);
     await expect(branchPsychometryTable.getByRole("row", { name: /Matematik/ })).toContainText("%80,0");
@@ -591,12 +593,13 @@ function createErrorBooklet() {
 function createProgress() {
   return {
     examId: "exam-report-ready",
-    netDelta: 3.5,
+    netDelta: -1,
     points: [
       { examTitle: "Mayıs Denemesi", generatedAt: "2026-05-17T12:00:00.000Z", snapshotId: "snapshot-prev", total: { blank: 2, correct: 22, net: 21, questionCount: 30, standardScore: 405, successRate: 70, wrong: 6 } },
       { examTitle: "LGS Rapor Denemesi", generatedAt: "2026-06-17T12:00:00.000Z", snapshotId: "snapshot-ready", total: { blank: 8, correct: 20, net: 20, questionCount: 30, standardScore: 410, successRate: 66.7, wrong: 2 } },
     ],
     standardScoreDelta: 5,
+    successRateDelta: -3.3,
     studentId: "student-a",
     tenantId: "tenant-report",
   };

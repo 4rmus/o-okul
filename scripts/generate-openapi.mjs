@@ -587,7 +587,7 @@ const portalStudentProfilePaths = [
   "/api/v1/me/student/profile",
   "/api/v1/me/guardian/students/{studentId}/profile",
 ];
-const kvkkInventoryKinds = ["guardian", "student", "teacher"];
+const kvkkInventoryKinds = ["guardian", "student", "teacher", "user"];
 const kvkkInventoryRecordRequired = ["id", "kind", "displayRef", "piiCategories", "purgeAvailable"];
 const kvkkInventoryForbiddenDeep = [
   "birthDate",
@@ -1738,7 +1738,6 @@ const requiredOperationContracts = [
     requestBody: true,
     requestBodyRequired: false,
     responseEnvelope: true,
-    requestProperties: ["refreshToken"],
     requiredHeaders: ["X-CSRF-Token"],
     responseDataRequired: ["accessToken", "session"],
     responseDataForbiddenDeep: authResponseForbiddenDeep,
@@ -1748,7 +1747,6 @@ const requiredOperationContracts = [
     path: "/api/v1/auth/logout",
     requestBody: true,
     requestBodyRequired: false,
-    requestProperties: ["refreshToken"],
     requiredHeaders: ["X-CSRF-Token"],
     responseStatus: "204",
     noResponseBody: true,
@@ -2793,7 +2791,7 @@ const requiredOperationContracts = [
     path: "/api/v1/announcements/{id}/deliveries",
     requestBody: true,
     responseEnvelope: true,
-    idempotencyHeader: true,
+    requiredHeaders: ["Idempotency-Key"],
     requestRequired: ["channel"],
     responseDataRequired: ["tenantId", "announcementId", "channel", "recipientCount", "deliveredCount", "failedCount", "queueName", "jobId", "status"],
     fieldChecks: [

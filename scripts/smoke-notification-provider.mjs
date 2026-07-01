@@ -23,6 +23,10 @@ if (messages.length === 0) {
   fail("NOTIFICATION_SMOKE_EMAIL_TO veya NOTIFICATION_SMOKE_PUSH_TO değerlerinden en az biri gerekli.");
 }
 
+if (provider === "noop") {
+  fail("NOTIFICATION_PROVIDER=noop gerçek notification provider kanıtı değildir; NOTIFICATION_PROVIDER=http gerekli.");
+}
+
 if (provider !== "noop" && process.env.NOTIFICATION_SMOKE_CONFIRM !== "send") {
   fail("Gerçek notification sağlayıcısı için NOTIFICATION_SMOKE_CONFIRM=send gerekli.");
 }

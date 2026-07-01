@@ -783,6 +783,7 @@ describe("ReportGenerationService", () => {
           ],
         },
       ],
+      successRateDelta: 17.5,
       netDelta: 3.5,
       standardScoreDelta: 7.5,
     });
@@ -810,6 +811,7 @@ describe("ReportGenerationService", () => {
     expect(result.examId).toBe("exam-a");
     expect(result.points.map((point) => point.snapshotId)).toEqual(["snapshot-previous", "snapshot-a", "snapshot-other-exam"]);
     expect(result.points.map((point) => point.total.net)).toEqual([14, 17.5, 20]);
+    expect(result.successRateDelta).toBe(30);
     expect(result.netDelta).toBe(6);
     expect(result.standardScoreDelta).toBe(10);
   });

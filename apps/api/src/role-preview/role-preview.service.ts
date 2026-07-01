@@ -42,7 +42,7 @@ type RolePreviewSubjectRecord = { tenantId: string };
 
 @Injectable()
 export class RolePreviewService {
-  private readonly previewSecret = process.env.ROLE_PREVIEW_SECRET ?? process.env.JWT_ACCESS_SECRET ?? "test-access-secret";
+  private readonly previewSecret = resolveRolePreviewSecret();
 
   constructor(
     @Inject(teacherStoreToken) private readonly teacherStore: TeacherStore,
@@ -160,6 +160,13 @@ function required(value: string | undefined, errorCode: string): string {
     throw new BadRequestException(errorCode);
   }
   return trimmed;
+}
+
+function resolveRolePreviewSecret(): string {
+  const secret = process.env.ROLE_PREVIEW_SECRET ?? process.env.JWT_ACCESS_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") throw new Error("ROLE_PREVIEW_SECRET_REQUIRED");
+  return "test-access-secret";
 }
 
 function parsePreviewPayload(encodedPayload: string): RolePreviewTokenPayload {

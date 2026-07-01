@@ -22,8 +22,9 @@ const deploymentRollbackTopLevelKeys = [
   "gaps",
 ];
 const serviceVerifiedItemKeys = ["service", "status", "imageTag", "evidenceReference"];
+const requiredServices = ["web", "api", "worker", "queue-board"];
 const requiredCommandsPassed = [
-  "docker compose pull web api worker",
+  "docker compose pull web api worker queue-board",
   "docker compose up -d --remove-orphans",
   "pnpm compose:health:smoke",
   "pnpm prod:evidence:check",
@@ -348,9 +349,8 @@ function requireServices(report, failures) {
     return;
   }
 
-  const requiredServices = ["web", "api", "worker"];
   if (value.length !== requiredServices.length) {
-    failures.push("servicesVerified tam 3 servis içermeli.");
+    failures.push("servicesVerified tam 4 servis içermeli.");
   }
 
   for (const service of requiredServices) {

@@ -54,6 +54,7 @@ describe("report generation job", () => {
       id: "snapshot-a",
       tenantId: "tenant-a",
       examId: "exam-a",
+      contentHash: "results-v1",
       campusId: "campus-main",
       gradeLevelId: "grade-8",
       classId: "class-a",
@@ -182,7 +183,7 @@ describe("report generation job", () => {
 
   it("boş sonuçla snapshot üretmez", () => {
     expect(() => createExamResultSummarySnapshot(
-      { tenantId: "tenant-a", examId: "exam-a", reportType: examResultSummaryReportType },
+      { tenantId: "tenant-a", examId: "exam-a", reportType: examResultSummaryReportType, contentHash: "results-v1" },
       [],
       "2026-05-30T08:00:00.000Z",
     )).toThrow("REPORT_INPUT_EMPTY");
@@ -190,7 +191,7 @@ describe("report generation job", () => {
 
   it("kazanım kırılımını snapshot ve öğrenci satırına taşır", () => {
     const snapshot = createExamResultSummarySnapshot(
-      { tenantId: "tenant-a", examId: "exam-a", reportType: examResultSummaryReportType },
+      { tenantId: "tenant-a", examId: "exam-a", reportType: examResultSummaryReportType, contentHash: "results-v1" },
       [
         {
           studentId: "student-a",
@@ -217,7 +218,7 @@ describe("report generation job", () => {
 
   it("template provider ile PII içermeyen karne yorum taslağı üretir", () => {
     const snapshot = createExamResultSummarySnapshot(
-      { tenantId: "tenant-a", examId: "exam-a", reportType: examResultSummaryReportType },
+      { tenantId: "tenant-a", examId: "exam-a", reportType: examResultSummaryReportType, contentHash: "results-v1" },
       [
         {
           studentId: "student-a",
@@ -262,7 +263,7 @@ describe("report generation job", () => {
       "AI_REPORT_SUMMARY_EXTERNAL_PROVIDER_NOT_ENABLED",
     );
     expect(() => createExamResultSummarySnapshot(
-      { tenantId: "tenant-a", examId: "exam-a", reportType: examResultSummaryReportType },
+      { tenantId: "tenant-a", examId: "exam-a", reportType: examResultSummaryReportType, contentHash: "results-v1" },
       [{
         studentId: "student-a",
         resultKey: "result-a",
@@ -282,7 +283,7 @@ describe("report generation job", () => {
 
     const startedAt = performance.now();
     const snapshot = createExamResultSummarySnapshot(
-      { tenantId: "tenant-a", examId: "exam-large", reportType: examResultSummaryReportType },
+      { tenantId: "tenant-a", examId: "exam-large", reportType: examResultSummaryReportType, contentHash: "results-large" },
       results,
       "2026-05-30T08:00:00.000Z",
     );

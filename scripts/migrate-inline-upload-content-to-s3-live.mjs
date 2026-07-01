@@ -188,7 +188,7 @@ async function migrateSubject(subject) {
 
   while (true) {
     const result = await client.query(
-      `SELECT "id", "tenantId", "contentType", "sha256", "contentBase64"
+      `SELECT "id", "tenantId", "${subject.parentColumn}", "contentType", "sha256", "contentBase64"
        FROM "${subject.table}"
        WHERE "storageKey" IS NULL
          AND "contentBase64" IS NOT NULL
@@ -290,7 +290,7 @@ async function hasDbStorageKeyReference(storageKey) {
 }
 
 function createStorageKey(subject, row) {
-  return [subject.prefix, row.sha256].join("/");
+  return [subject.prefix, row.tenantId, row[subject.parentColumn], row.sha256, "source"].map(encodeURIComponent).join("/");
 }
 
 function decodeBase64(value, label) {

@@ -55,6 +55,7 @@ export interface ExamResultForReport {
 export interface ReportSnapshotCandidate {
   tenantId: string;
   examId: string;
+  contentHash: string;
   campusId?: string;
   gradeLevelId?: string;
   classId?: string;
@@ -236,7 +237,7 @@ export async function processReportGenerationJob(
 }
 
 export function createExamResultSummarySnapshot(
-  input: Pick<ReportGenerationJobInput, "tenantId" | "examId" | "reportType" | "campusId" | "classId" | "courseId" | "gradeLevelId" | "termId">,
+  input: Pick<ReportGenerationJobInput, "tenantId" | "examId" | "reportType" | "contentHash" | "campusId" | "classId" | "courseId" | "gradeLevelId" | "termId">,
   results: ExamResultForReport[],
   generatedAt: string,
   summaryOptions: ReportSummaryOptions = {},
@@ -282,6 +283,7 @@ export function createExamResultSummarySnapshot(
   return {
     tenantId: input.tenantId,
     examId: input.examId,
+    contentHash: input.contentHash,
     ...resolveReportContext(input),
     reportType: input.reportType,
     status: "READY",

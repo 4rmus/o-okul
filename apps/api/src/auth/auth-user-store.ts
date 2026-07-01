@@ -28,6 +28,7 @@ export interface AuthUserStore {
   findByTenantAndNationalIdHash(tenantId: string, nationalIdHash: string): Promise<AuthUser | undefined>;
   findByNationalIdHash(nationalIdHash: string): Promise<AuthUser[]>;
   findById(id: string): Promise<AuthUser | undefined>;
+  listByTenant(tenantId: string): Promise<AuthUser[]>;
   createOrAttachTenantIdentity(input: CreateTenantIdentityUserInput): Promise<AuthUser>;
   updatePassword(id: string, passwordHash: string, input?: PasswordStateUpdate): Promise<AuthUser | undefined>;
   enableTotp(input: {
@@ -273,6 +274,10 @@ export class InMemoryAuthUserStore implements AuthUserStore {
     return cloneUser(this.users.find((candidate) => candidate.id === id));
   }
 
+  async listByTenant(tenantId: string): Promise<AuthUser[]> {
+    return this.users.filter((candidate) => candidate.tenantId === tenantId).map(cloneRequiredUser);
+  }
+
   async createOrAttachTenantIdentity(input: CreateTenantIdentityUserInput): Promise<AuthUser> {
     return upsertInMemoryAuthUser({
       id: `user-${this.users.length + 1}`,
@@ -422,6 +427,18 @@ export class PostgresAuthUserStore implements AuthUserStore {
       [id],
     );
     return result[0];
+  }
+
+  async listByTenant(tenantId: string): Promise<AuthUser[]> {
+    return this.queryAuthUsers(
+      `WHERE m."tenantId" = $1
+         AND t."status" = 'ACTIVE'
+       GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
+                u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
+                u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
+       ORDER BY lower(u."name") ASC, u."id" ASC`,
+      [tenantId],
+    );
   }
 
   async purgePii(id: string, input: { email: string; name: string; purgedAt: string }): Promise<AuthUser | undefined> {

@@ -48,7 +48,7 @@ import { ClassCompareBar, ExamResultDonut, ProgressLineChart, TopicRadarChart } 
 import { formatNetNumber, OutcomeNetTable } from "../../_shared/outcome-net-table.js";
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 import { buildReportAnalysisRows, type ReportAnalysisRow } from "../../_shared/report-analysis.js";
-import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
+import { formatPercentDelta, formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 
 interface ReportData {
   errorBooklet: ReportErrorBooklet | null;
@@ -749,13 +749,16 @@ function readLgsScore(total: { estimatedRawScore?: number; standardScore?: numbe
 
 function formatTrend(progress: ReportStudentProgress | null | undefined) {
   if (!progress) return "-";
+  const successRate = progress.successRateDelta === undefined
+    ? "-"
+    : `${formatPercentDelta(progress.successRateDelta)} başarı`;
   const net = progress.netDelta === undefined ? "-" : `${progress.netDelta > 0 ? "+" : ""}${formatNetNumber(progress.netDelta)} net`;
   const score = progress.standardScoreDelta === undefined
     ? "-"
     : `${progress.standardScoreDelta > 0 ? "+" : ""}${formatNumber(progress.standardScoreDelta)} puan`;
-  if (net === "-") return score;
-  if (score === "-") return net;
-  return `${net} / ${score}`;
+  const context = [net, score].filter((item) => item !== "-").join(" / ");
+  if (successRate === "-") return context || "-";
+  return context ? `${successRate} (${context})` : successRate;
 }
 
 function formatReportContext(

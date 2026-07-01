@@ -69,6 +69,8 @@ type RolePortalNavigationItem = {
   label: string;
 };
 
+const institutionOperationEvidenceCapability = "operation:manage";
+
 export const institutionNavGroups: readonly InstitutionNavGroup[] = [
   {
     label: "Başlangıç",
@@ -131,11 +133,11 @@ export const institutionNavGroups: readonly InstitutionNavGroup[] = [
       { href: "/kurum/yedek-restore", icon: Activity, label: "Yedekleme", requiredCapability: "operation:manage" },
       { href: "/kurum/kvkk", icon: ShieldCheck, label: "KVKK", requiredCapability: "privacy:manage" },
       { href: "/kurum/denetim", icon: ClipboardList, label: "Denetim", requiredCapability: "audit:read" },
-      { href: "/kurum/sistem-sagligi", icon: Activity, label: "Sistem Sağlığı", requiredCapability: "system:operations" },
-      { href: "/kurum/gozlemlenebilirlik", icon: BarChart3, label: "Gözlemlenebilirlik", requiredCapability: "system:operations" },
-      { href: "/kurum/uat-rollback", icon: ClipboardCheck, label: "UAT / Rollback", requiredCapability: "system:operations" },
-      { href: "/kurum/guvenlik-denetimi", icon: ShieldCheck, label: "Güvenlik Denetimi", requiredCapability: "system:operations" },
-      { href: "/kurum/canli-yayin", icon: Activity, label: "Canlı Yayın", requiredCapability: "system:operations" },
+      { href: "/kurum/sistem-sagligi", icon: Activity, label: "Sistem Sağlığı", requiredCapability: institutionOperationEvidenceCapability },
+      { href: "/kurum/gozlemlenebilirlik", icon: BarChart3, label: "Gözlemlenebilirlik", requiredCapability: institutionOperationEvidenceCapability },
+      { href: "/kurum/uat-rollback", icon: ClipboardCheck, label: "UAT / Rollback", requiredCapability: institutionOperationEvidenceCapability },
+      { href: "/kurum/guvenlik-denetimi", icon: ShieldCheck, label: "Güvenlik Denetimi", requiredCapability: institutionOperationEvidenceCapability },
+      { href: "/kurum/canli-yayin", icon: Activity, label: "Release Kanıtı", requiredCapability: institutionOperationEvidenceCapability },
     ],
   },
 ];
@@ -242,7 +244,7 @@ export const staticBreadcrumbLabels: Record<string, string> = {
   "/veli/bildirimler": "Bildirimler",
   "/veli/destek": "Destek",
   "/kurum/akademik-takvim": "Takvim",
-  "/kurum/canli-yayin": "Canlı Yayın",
+  "/kurum/canli-yayin": "Release Kanıtı",
   "/kurum/denetim": "Denetim",
   "/kurum/dersler": "Dersler",
   "/kurum/destek": "Destek",

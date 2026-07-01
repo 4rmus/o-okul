@@ -1,6 +1,7 @@
 import { ForbiddenException, HttpException, Inject, Injectable, NestMiddleware } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
 import { AuthService } from "../auth/auth.service.js";
+import { missingBoundSubjectRole } from "../auth/subject-binding.js";
 import { setApiLogContext } from "../observability/log-context.js";
 import { capabilitiesForRoles } from "../rbac/role-capabilities.js";
 import { isSystemAdmin } from "../rbac/roles.js";
@@ -26,6 +27,9 @@ export class RequestContextMiddleware implements NestMiddleware {
     const payload = await this.auth.verifyActiveAccessToken(authHeader.slice("Bearer ".length));
     if (payload.mustChangePassword && !isPasswordChangeAllowed(request)) {
       throw new HttpException("PASSWORD_CHANGE_REQUIRED", 423);
+    }
+    if (missingBoundSubjectRole(payload)) {
+      throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
     }
     const tenantId = payload.tenantId === "system" ? null : payload.tenantId;
     const tenantAccessMode = tenantId ? await this.resolveTenantAccessMode(tenantId, request.method) : "active";

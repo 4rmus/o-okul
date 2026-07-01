@@ -30,6 +30,13 @@ export interface RawImportQuarantineStore {
     quarantineId: string;
     resolvedStudentId: string;
   }): Promise<ImportQuarantineRecord | undefined>;
+  markResolved(input: {
+    tenantId: string;
+    examId: string;
+    rawImportId: string;
+    quarantineId: string;
+    resolvedStudentId: string;
+  }): Promise<ImportQuarantineRecord | undefined>;
 }
 
 export class PostgresRawImportQuarantineStore implements RawImportQuarantineStore {
@@ -74,11 +81,9 @@ export class PostgresRawImportQuarantineStore implements RawImportQuarantineStor
   }): Promise<ImportQuarantineRecord | undefined> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<ImportQuarantineRow>(
-        `WITH resolved AS (
-           UPDATE "ImportQuarantine"
-           SET "status" = 'RESOLVED',
-               "resolvedStudentId" = $5,
-               "updatedAt" = now()
+        `WITH candidate AS (
+           SELECT *
+           FROM "ImportQuarantine"
            WHERE "tenantId" = $1
              AND "examId" = $2
              AND "rawImportId" = $3
@@ -92,33 +97,58 @@ export class PostgresRawImportQuarantineStore implements RawImportQuarantineStor
                  AND "Student"."id" = $5
                  AND "Student"."deletedAt" IS NULL
              )
-           RETURNING *
          )
          SELECT
-           resolved.*,
+           candidate.*,
            ep."id" AS "resolvedParticipantId",
            ak."id" AS "answerKeyId",
            ri."sha256" AS "rawImportSha256"
-         FROM resolved
+         FROM candidate
          INNER JOIN "ExamParticipant" ep
-           ON ep."tenantId" = resolved."tenantId"
-          AND ep."examId" = resolved."examId"
-          AND ep."studentId" = resolved."resolvedStudentId"
+           ON ep."tenantId" = candidate."tenantId"
+          AND ep."examId" = candidate."examId"
+          AND ep."studentId" = $5
           AND ep."deletedAt" IS NULL
          INNER JOIN "RawImport" ri
-           ON ri."tenantId" = resolved."tenantId"
-          AND ri."examId" = resolved."examId"
-          AND ri."id" = resolved."rawImportId"
+           ON ri."tenantId" = candidate."tenantId"
+          AND ri."examId" = candidate."examId"
+          AND ri."id" = candidate."rawImportId"
           AND ri."deletedAt" IS NULL
          INNER JOIN LATERAL (
            SELECT "id"
            FROM "AnswerKey"
-           WHERE "tenantId" = resolved."tenantId"
-             AND "examId" = resolved."examId"
+           WHERE "tenantId" = candidate."tenantId"
+             AND "examId" = candidate."examId"
              AND "deletedAt" IS NULL
            ORDER BY "publishedAt" DESC NULLS LAST, "updatedAt" DESC
            LIMIT 1
          ) ak ON TRUE`,
+        [input.tenantId, input.examId, input.rawImportId, input.quarantineId, input.resolvedStudentId],
+      );
+      return result.rows[0] ? toRecord(result.rows[0]) : undefined;
+    });
+  }
+
+  async markResolved(input: {
+    tenantId: string;
+    examId: string;
+    rawImportId: string;
+    quarantineId: string;
+    resolvedStudentId: string;
+  }): Promise<ImportQuarantineRecord | undefined> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<ImportQuarantineRow>(
+        `UPDATE "ImportQuarantine"
+         SET "status" = 'RESOLVED',
+             "resolvedStudentId" = $5,
+             "updatedAt" = now()
+         WHERE "tenantId" = $1
+           AND "examId" = $2
+           AND "rawImportId" = $3
+           AND "id" = $4
+           AND "status" = 'OPEN'
+           AND "deletedAt" IS NULL
+         RETURNING *`,
         [input.tenantId, input.examId, input.rawImportId, input.quarantineId, input.resolvedStudentId],
       );
       return result.rows[0] ? toRecord(result.rows[0]) : undefined;

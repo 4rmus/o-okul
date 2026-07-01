@@ -108,6 +108,25 @@ describe("RolePreviewService", () => {
     expect(() => service.verifyPreviewToken(session.previewToken)).toThrow(ForbiddenException);
     vi.useRealTimers();
   });
+
+  it("production'da secret yoksa test fallback ile açılmaz", () => {
+    const previousEnv = {
+      JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET,
+      NODE_ENV: process.env.NODE_ENV,
+      ROLE_PREVIEW_SECRET: process.env.ROLE_PREVIEW_SECRET,
+    };
+    try {
+      process.env.NODE_ENV = "production";
+      delete process.env.JWT_ACCESS_SECRET;
+      delete process.env.ROLE_PREVIEW_SECRET;
+
+      expect(() => createService()).toThrow("ROLE_PREVIEW_SECRET_REQUIRED");
+    } finally {
+      restoreEnv("JWT_ACCESS_SECRET", previousEnv.JWT_ACCESS_SECRET);
+      restoreEnv("NODE_ENV", previousEnv.NODE_ENV);
+      restoreEnv("ROLE_PREVIEW_SECRET", previousEnv.ROLE_PREVIEW_SECRET);
+    }
+  });
 });
 
 const tenantAdminContext: RequestContext = {
@@ -149,6 +168,14 @@ function createSubjectStores() {
       { id: "guardian-b", tenantId: "tenant-b" },
     ]),
   };
+}
+
+function restoreEnv(key: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = value;
+  }
 }
 
 class FakeSubjectStore<TRecord extends { id: string; tenantId: string }> {

@@ -775,11 +775,19 @@ function createErrorBooklet(studentId: string) {
 }
 
 function createProgress(studentId: string) {
+  const current = createStudentReport(studentId as "student-a" | "student-b").total;
+  const previous = studentId === "student-a"
+    ? { blank: 2, correct: 20, net: 21, questionCount: 30, standardScore: 405, successRate: 70, wrong: 8 }
+    : { blank: 2, correct: 16, net: 15.5, questionCount: 30, standardScore: 360, successRate: 51.6, wrong: 12 };
   return {
     examId: "exam-demo-isem-lgs-1",
     netDelta: 3.5,
-    points: [{ examTitle: "LGS Hazırlık Denemesi", generatedAt: "2026-06-10T12:00:00.000Z", snapshotId: "snapshot-ready", total: createStudentReport(studentId as "student-a" | "student-b").total }],
+    points: [
+      { examTitle: "Mayıs Denemesi", generatedAt: "2026-05-10T12:00:00.000Z", snapshotId: "snapshot-prev", total: previous },
+      { examTitle: "LGS Hazırlık Denemesi", generatedAt: "2026-06-10T12:00:00.000Z", snapshotId: "snapshot-ready", total: current },
+    ],
     standardScoreDelta: 35,
+    successRateDelta: 11.7,
     studentId,
     tenantId: "tenant-portal-contract",
   };

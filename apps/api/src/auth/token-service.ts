@@ -7,6 +7,8 @@ export interface AccessTokenPayload {
   roles: string[];
   sessionId: string;
   membershipVersion: number;
+  iat: number;
+  exp: number;
   mustChangePassword?: boolean;
   subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER";
   subjectId?: string;
@@ -20,13 +22,21 @@ export interface TokenPair {
 }
 
 export class TokenService {
+  private readonly accessTokenTtlMs: number;
+  private readonly refreshTokenTtlMs: number;
+
   constructor(
     private readonly store: SessionStore,
     private readonly accessSecret: string,
-  ) {}
+    options: { accessTokenTtlMs?: number; refreshTokenTtlMs?: number } = {},
+  ) {
+    this.accessTokenTtlMs = options.accessTokenTtlMs ?? resolveAccessTokenTtlMs();
+    this.refreshTokenTtlMs = options.refreshTokenTtlMs ?? resolveRefreshTokenTtlMs();
+  }
 
-  async issue(input: Omit<AccessTokenPayload, "sessionId">): Promise<TokenPair> {
+  async issue(input: Omit<AccessTokenPayload, "sessionId" | "iat" | "exp">): Promise<TokenPair> {
     const refreshToken = createRefreshToken();
+    const expiresAt = new Date(Date.now() + this.refreshTokenTtlMs);
     const session = await this.store.create({
       userId: input.sub,
       tenantId: input.tenantId,
@@ -35,6 +45,7 @@ export class TokenService {
       subjectId: input.subjectId,
       refreshToken,
       membershipVersion: input.membershipVersion,
+      expiresAt,
     });
 
     return {
@@ -59,9 +70,12 @@ export class TokenService {
       await this.store.markFamilyCompromised(session.tokenFamilyId);
       throw new Error("REFRESH_TOKEN_REUSE_DETECTED");
     }
+    if (session.expiresAt.getTime() <= Date.now()) {
+      throw new Error("REFRESH_TOKEN_EXPIRED");
+    }
 
     const nextRefreshToken = createRefreshToken();
-    const updated = await this.store.updateRefreshToken(session.id, nextRefreshToken);
+    const updated = await this.store.updateRefreshToken(session.id, nextRefreshToken, new Date(Date.now() + this.refreshTokenTtlMs));
 
     return {
       accessToken: this.signAccessToken({
@@ -89,7 +103,11 @@ export class TokenService {
       throw new Error("ACCESS_TOKEN_INVALID");
     }
 
-    return JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as AccessTokenPayload;
+    const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as AccessTokenPayload;
+    if (typeof payload.exp !== "number" || payload.exp * 1000 <= Date.now()) {
+      throw new Error("ACCESS_TOKEN_EXPIRED");
+    }
+    return payload;
   }
 
   async revoke(sessionId: string): Promise<void> {
@@ -104,10 +122,36 @@ export class TokenService {
     await this.store.revokeByUser(userId);
   }
 
-  private signAccessToken(payload: AccessTokenPayload): string {
-    const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  private signAccessToken(payload: Omit<AccessTokenPayload, "iat" | "exp">): string {
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const encodedPayload = Buffer.from(JSON.stringify({
+      ...payload,
+      iat: nowSeconds,
+      exp: nowSeconds + Math.ceil(this.accessTokenTtlMs / 1000),
+    })).toString("base64url");
     return `${encodedPayload}.${sign(encodedPayload, this.accessSecret)}`;
   }
+}
+
+export function resolveRefreshTokenTtlMs(): number {
+  return parseDurationMs(process.env.REFRESH_TOKEN_TTL, 30 * 24 * 60 * 60 * 1000);
+}
+
+function resolveAccessTokenTtlMs(): number {
+  return parseDurationMs(process.env.ACCESS_TOKEN_TTL, 15 * 60 * 1000);
+}
+
+function parseDurationMs(value: string | undefined, fallbackMs: number): number {
+  const raw = value?.trim();
+  if (!raw) return fallbackMs;
+  const match = raw.match(/^(\d+)(ms|s|m|h|d)$/);
+  if (!match) throw new Error("AUTH_TOKEN_TTL_INVALID");
+  const amount = Number(match[1]);
+  const unit = match[2];
+  const multiplier = unit === "ms" ? 1 : unit === "s" ? 1000 : unit === "m" ? 60_000 : unit === "h" ? 3_600_000 : 86_400_000;
+  const ttlMs = amount * multiplier;
+  if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0) throw new Error("AUTH_TOKEN_TTL_INVALID");
+  return ttlMs;
 }
 
 function createRefreshToken(): string {

@@ -115,9 +115,10 @@ describe("postgres report generation adapter", () => {
           tenantId: values?.[1],
           examId: values?.[2],
           reportType: values?.[8],
-          inputRefs: JSON.parse(values?.[10] as string),
-          snapshotData: JSON.parse(values?.[11] as string),
-          generatedAt: values?.[12],
+          contentHash: values?.[9],
+          inputRefs: JSON.parse(values?.[11] as string),
+          snapshotData: JSON.parse(values?.[12] as string),
+          generatedAt: values?.[13],
         }];
       }
       return [];
@@ -133,10 +134,12 @@ describe("postgres report generation adapter", () => {
     expect(insert?.values?.[2]).toBe("exam-a");
     expect(insert?.values?.slice(3, 8)).toEqual(["campus-main", "grade-8", "class-a", "course-math", "term-2026-spring"]);
     expect(insert?.values?.[8]).toBe(examResultSummaryReportType);
-    expect(insert?.values?.[9]).toBe("READY");
-    expect(JSON.parse(insert?.values?.[10] as string)).toEqual(snapshot.inputRefs);
-    expect(JSON.parse(insert?.values?.[11] as string)).toEqual(snapshot.snapshotData);
-    expect(insert?.values?.[12]).toBe("2026-05-30T08:00:00.000Z");
+    expect(insert?.values?.[9]).toBe("results-v1");
+    expect(insert?.values?.[10]).toBe("READY");
+    expect(JSON.parse(insert?.values?.[11] as string)).toEqual(snapshot.inputRefs);
+    expect(JSON.parse(insert?.values?.[12] as string)).toEqual(snapshot.snapshotData);
+    expect(insert?.values?.[13]).toBe("2026-05-30T08:00:00.000Z");
+    expect(insert?.sql).toContain('ON CONFLICT ("tenantId", "contentHash") DO UPDATE');
   });
 
   it("hatalı scoreData değerini reddeder", async () => {
@@ -171,6 +174,7 @@ function createSnapshot(): ReportSnapshotCandidate {
   return {
     tenantId: "tenant-a",
     examId: "exam-a",
+    contentHash: "results-v1",
     campusId: "campus-main",
     gradeLevelId: "grade-8",
     classId: "class-a",

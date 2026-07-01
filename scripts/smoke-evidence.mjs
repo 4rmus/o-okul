@@ -277,15 +277,20 @@ function validateCheckSpecificPayload(payload, failures, label, allowExampleEvid
         "checkedAt",
         "target",
         "markerSha256",
+        "postgresWalArchive",
         "commandsPassed",
         "gaps",
       ]);
       requireSmokeRunMetadata(payload, failures, label, "pnpm wal:archive:smoke", allowExampleEvidence);
       requireSmokeTarget(payload, failures, `${label}.target`, "target", allowExampleEvidence);
       requireSha256(payload, failures, `${label}.markerSha256`, "markerSha256");
+      requirePostgresWalArchive(payload.postgresWalArchive, failures, `${label}.postgresWalArchive`);
       break;
     case "backup_restore_smoke":
       requireBackupRestoreSmoke(payload, failures, label, allowExampleEvidence);
+      break;
+    case "backup_offsite_restore_smoke":
+      requireBackupOffsiteRestoreSmoke(payload, failures, label, allowExampleEvidence);
       break;
     case "rate_limit_redis_smoke":
       requireRateLimitRedisSmoke(payload, failures, label, allowExampleEvidence);
@@ -329,6 +334,32 @@ function requireBackupRestoreSmoke(payload, failures, label, allowExampleEvidenc
   requireNoForbiddenKeys(payload, failures, label, ["restoreDb", "databaseUrl", "directDatabaseUrl", "dumpPath", "password"]);
 }
 
+function requireBackupOffsiteRestoreSmoke(payload, failures, label, allowExampleEvidence) {
+  requireObjectKeySet(payload, failures, label, "backupOffsiteRestoreSmoke", [
+    "generatedAt",
+    "result",
+    "check",
+    "environment",
+    "checkedAt",
+    "target",
+    "backupSha256",
+    "restoreDatabaseHash",
+    "dumpFormat",
+    "tableCounts",
+    "durationMs",
+    "commandsPassed",
+    "gaps",
+  ]);
+  requireSmokeRunMetadata(payload, failures, label, "pnpm backup:offsite-restore:smoke", allowExampleEvidence);
+  requireSmokeTarget(payload, failures, `${label}.target`, "target", allowExampleEvidence);
+  requireSha256(payload, failures, `${label}.backupSha256`, "backupSha256");
+  requireSha256(payload, failures, `${label}.restoreDatabaseHash`, "restoreDatabaseHash");
+  requireLiteral(payload, failures, `${label}.dumpFormat`, "dumpFormat", "custom");
+  requireIntegerAtLeast(payload, failures, `${label}.durationMs`, "durationMs", 0);
+  requireBackupRestoreTableCounts(payload.tableCounts, failures, `${label}.tableCounts`);
+  requireNoForbiddenKeys(payload, failures, label, ["restoreDb", "databaseUrl", "directDatabaseUrl", "dumpPath", "password", "objectKey"]);
+}
+
 function requireBackupRestoreTableCounts(tableCounts, failures, label) {
   if (
     !requireObjectKeySet(tableCounts, failures, label, "tableCounts", [
@@ -359,7 +390,7 @@ function requireRateLimitRedisSmoke(payload, failures, label, allowExampleEviden
   ]);
   requireStringArray(payload, failures, `${label}.evidenceReferences`, "evidenceReferences");
   requireEmptyArray(payload, failures, `${label}.gaps`, "gaps");
-  requireNoForbiddenKeys(payload, failures, label, ["clientIp", "loginClientIp", "otherLoginIp", "loginEmail", "email"]);
+  requireNoForbiddenKeys(payload, failures, label, ["clientIp", "loginClientIp", "otherLoginIp", "loginNationalId", "nationalId", "email"]);
 }
 
 function requireRateLimitConfig(config, failures, label) {
@@ -448,24 +479,24 @@ function requireRateLimitApiResult(apiRateLimit, config, failures, label) {
 function requireRateLimitLoginResult(loginAttemptLimiter, config, failures, label) {
   if (!requireObjectKeySet(loginAttemptLimiter, failures, label, "loginAttemptLimiter", [
     "clientIpHash",
-    "emailHash",
+    "nationalIdHash",
     "attemptsSent",
     "lockStatusCode",
     "errorCode",
     "sharedAcrossInstances",
-    "emailAndIpScoped",
+    "nationalIdAndIpScoped",
     "differentIpNotLocked",
   ])) {
     return;
   }
 
   requireSha256(loginAttemptLimiter, failures, `${label}.clientIpHash`, "clientIpHash");
-  requireSha256(loginAttemptLimiter, failures, `${label}.emailHash`, "emailHash");
+  requireSha256(loginAttemptLimiter, failures, `${label}.nationalIdHash`, "nationalIdHash");
   requireIntegerAtLeast(loginAttemptLimiter, failures, `${label}.attemptsSent`, "attemptsSent", 1);
   requireEqual(loginAttemptLimiter, failures, `${label}.lockStatusCode`, "lockStatusCode", 429);
   requireLiteral(loginAttemptLimiter, failures, `${label}.errorCode`, "errorCode", "LOGIN_LOCKED");
   requireEqual(loginAttemptLimiter, failures, `${label}.sharedAcrossInstances`, "sharedAcrossInstances", true);
-  requireEqual(loginAttemptLimiter, failures, `${label}.emailAndIpScoped`, "emailAndIpScoped", true);
+  requireEqual(loginAttemptLimiter, failures, `${label}.nationalIdAndIpScoped`, "nationalIdAndIpScoped", true);
   requireEqual(loginAttemptLimiter, failures, `${label}.differentIpNotLocked`, "differentIpNotLocked", true);
 
   if (Number.isInteger(config?.loginMaxAttempts) && loginAttemptLimiter.attemptsSent < config.loginMaxAttempts + 1) {
@@ -864,6 +895,30 @@ function requireRlsLoadSmoke(payload, failures, label, allowExampleEvidence) {
   requireNoForbiddenKeys(payload, failures, label, ["tenantA", "tenantB", "tenantId", "studentId"]);
 }
 
+function requirePostgresWalArchive(value, failures, label) {
+  if (
+    !requireObjectKeySet(value, failures, label, "postgresWalArchive", [
+      "archiveMode",
+      "walLevel",
+      "archiveCommandSha256",
+      "switchedWalFileNameHash",
+      "archivedWalFileSha256",
+    ])
+  ) {
+    return;
+  }
+
+  if (!["on", "always"].includes(value.archiveMode)) {
+    failures.push(`${label}.archiveMode on veya always olmalı.`);
+  }
+  if (!["replica", "logical"].includes(value.walLevel)) {
+    failures.push(`${label}.walLevel replica veya logical olmalı.`);
+  }
+  requireSha256(value, failures, `${label}.archiveCommandSha256`, "archiveCommandSha256");
+  requireSha256(value, failures, `${label}.switchedWalFileNameHash`, "switchedWalFileNameHash");
+  requireSha256(value, failures, `${label}.archivedWalFileSha256`, "archivedWalFileSha256");
+}
+
 function requireString(scope, failures, label, key) {
   if (typeof scope[key] !== "string" || scope[key].trim() === "") {
     failures.push(`${label} boş olmayan metin olmalı.`);
@@ -1084,15 +1139,17 @@ function requireSmokeTarget(scope, failures, label, key, allowExampleEvidence) {
   }
 
   if (target.protocol === "file") {
+    requireObjectKeySet(target, failures, label, "smokeFileTarget", ["protocol", "pathRedacted"]);
     if (target.pathRedacted !== true) {
       failures.push(`${label}.pathRedacted true olmalı.`);
     }
     return;
   }
 
+  requireObjectKeySet(target, failures, label, "smokeS3Target", ["protocol", "bucket", "prefix"]);
   requireString(target, failures, `${label}.bucket`, "bucket");
   requireNonPlaceholderString(target, failures, `${label}.bucket`, "bucket", allowExampleEvidence);
-  if ("prefix" in target && typeof target.prefix !== "string") {
+  if (typeof target.prefix !== "string") {
     failures.push(`${label}.prefix metin olmalı.`);
   }
   if (typeof target.prefix === "string" && target.prefix.trim() !== "") {
@@ -1113,7 +1170,7 @@ function requireNoForbiddenKeys(value, failures, label, forbiddenKeys, path = ""
   for (const [key, child] of Object.entries(value)) {
     const childPath = path ? `${path}.${key}` : key;
     if (forbiddenKeys.includes(key)) {
-      failures.push(`${label}.${childPath} ham IP/e-posta içermemeli.`);
+      failures.push(`${label}.${childPath} ham IP/e-posta/T.C. kimlik içermemeli.`);
     }
     requireNoForbiddenKeys(child, failures, label, forbiddenKeys, childPath);
   }

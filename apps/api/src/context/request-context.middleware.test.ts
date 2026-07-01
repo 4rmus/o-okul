@@ -57,6 +57,28 @@ describe("RequestContextMiddleware", () => {
     });
   });
 
+  it.each(["TEACHER", "STUDENT", "GUARDIAN"])("rejects %s tokens without subject binding", async (role) => {
+    const middleware = createMiddleware({ roles: [role], tenantId: "tenant-a" });
+
+    await expect(
+      middleware.use(createRequest({ authorization: "Bearer tenant-token" }), {} as never, vi.fn()),
+    ).rejects.toThrow("SUBJECT_CONTEXT_MISSING");
+  });
+
+  it("keeps TENANT_ADMIN tokens valid without portal subject binding", async () => {
+    const middleware = createMiddleware({ roles: ["TENANT_ADMIN"], tenantId: "tenant-a" });
+    let captured;
+
+    await middleware.use(createRequest({ authorization: "Bearer tenant-token" }), {} as never, () => {
+      captured = getRequestContext();
+    });
+
+    expect(captured).toMatchObject({
+      tenantId: "tenant-a",
+      roles: ["TENANT_ADMIN"],
+    });
+  });
+
   it("keeps expired active tenants read-only on safe methods", async () => {
     const middleware = createMiddleware({
       roles: ["TENANT_ADMIN"],
@@ -100,6 +122,8 @@ function createMiddleware(input: {
   roles: string[];
   tenantId?: string;
   licenseEndsAt?: string;
+  subjectType?: "STUDENT" | "GUARDIAN" | "TEACHER";
+  subjectId?: string;
 }) {
   return new RequestContextMiddleware(
     {
@@ -107,6 +131,8 @@ function createMiddleware(input: {
         sub: input.tenantId ? "user-tenant" : "user-system",
         tenantId: input.tenantId ?? "system",
         roles: input.roles,
+        subjectType: input.subjectType,
+        subjectId: input.subjectId,
       }),
     } as never,
     { verifyPreviewToken: vi.fn() } as never,

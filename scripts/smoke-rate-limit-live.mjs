@@ -13,7 +13,7 @@ const loginMaxAttempts = readPositiveInteger(process.env.LOGIN_ATTEMPT_LIMITER_M
 const clientIp = process.env.RATE_LIMIT_SMOKE_CLIENT_IP ?? `198.51.100.${randomInt(10, 240)}`;
 const loginClientIp = process.env.RATE_LIMIT_LOGIN_SMOKE_CLIENT_IP ?? `203.0.113.${randomInt(10, 240)}`;
 const otherLoginIp = process.env.RATE_LIMIT_LOGIN_SMOKE_OTHER_IP ?? `203.0.113.${randomInt(10, 240)}`;
-const loginEmail = process.env.RATE_LIMIT_LOGIN_SMOKE_EMAIL ?? `rate-limit-smoke-${Date.now()}@example.invalid`;
+const loginNationalId = process.env.RATE_LIMIT_LOGIN_SMOKE_NATIONAL_ID ?? createSmokeNationalId();
 const loginUrl = readUrl("RATE_LIMIT_LOGIN_SMOKE_URL", defaultLoginUrl(apiUrl));
 const secondLoginUrl = readUrl("RATE_LIMIT_LOGIN_SMOKE_SECOND_INSTANCE_URL", defaultLoginUrl(secondUrl?.origin));
 const otherIpLoginUrl = readUrl("RATE_LIMIT_LOGIN_SMOKE_OTHER_IP_URL", loginUrl?.href);
@@ -135,13 +135,13 @@ async function verifyApiRateLimit() {
 
 async function verifyLoginAttemptLimiter() {
   for (let index = 1; index <= loginMaxAttempts; index += 1) {
-    const response = await postLogin(loginUrl, loginEmail, loginClientIp);
+    const response = await postLogin(loginUrl, loginNationalId, loginClientIp);
     if (response.statusCode === 429) {
       fail(`Login limiter beklenenden erken kilitledi: deneme ${index}/${loginMaxAttempts}.`);
     }
   }
 
-  const lockedResponse = await postLogin(secondLoginUrl, loginEmail, loginClientIp);
+  const lockedResponse = await postLogin(secondLoginUrl, loginNationalId, loginClientIp);
   if (lockedResponse.statusCode !== 429) {
     fail(`Login limiter ikinci instance uzerinde 429 donmedi: HTTP ${lockedResponse.statusCode}.`);
   }
@@ -149,16 +149,16 @@ async function verifyLoginAttemptLimiter() {
     fail(`Login limiter hata kodu ${expectedLoginLockCode} olmali.`);
   }
 
-  const otherIpResponse = await postLogin(otherIpLoginUrl, loginEmail, otherLoginIp);
+  const otherIpResponse = await postLogin(otherIpLoginUrl, loginNationalId, otherLoginIp);
 
   return {
     clientIpHash: sha256(loginClientIp),
-    emailHash: sha256(loginEmail.toLowerCase()),
+    nationalIdHash: sha256(loginNationalId),
     attemptsSent: loginMaxAttempts + 1,
     lockStatusCode: lockedResponse.statusCode,
     errorCode: expectedLoginLockCode,
     sharedAcrossInstances: true,
-    emailAndIpScoped: true,
+    nationalIdAndIpScoped: true,
     differentIpNotLocked: otherIpResponse.statusCode !== 429,
   };
 }
@@ -172,7 +172,7 @@ function rateLimitHeaders(ip) {
   };
 }
 
-function postLogin(url, email, ip) {
+function postLogin(url, nationalId, ip) {
   return request(url, {
     method: "POST",
     headers: {
@@ -180,7 +180,7 @@ function postLogin(url, email, ip) {
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      email,
+      nationalId,
       password: `invalid-${Date.now()}`,
     }),
   });
@@ -254,6 +254,15 @@ function readPositiveInteger(value, fallback) {
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function createSmokeNationalId() {
+  const digits = Array.from({ length: 9 }, (_, index) => (index === 0 ? randomInt(1, 10) : randomInt(0, 10)));
+  const oddSum = digits[0] + digits[2] + digits[4] + digits[6] + digits[8];
+  const evenSum = digits[1] + digits[3] + digits[5] + digits[7];
+  const digit10 = ((oddSum * 7 - evenSum) % 10 + 10) % 10;
+  const digit11 = (digits.reduce((sum, digit) => sum + digit, 0) + digit10) % 10;
+  return [...digits, digit10, digit11].join("");
 }
 
 async function resetApiRateLimitKey(ip) {

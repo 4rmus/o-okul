@@ -152,17 +152,17 @@ export function LiveReleasePage() {
   return (
     <PageFrame
       actions={<ReferenceBadge />}
-      title="Canlı Yayın"
+      title="Release Kanıtı"
       subtitle="Release öncesi production kanıt zincirini, özet dosyasını ve dış ortam gereksinimlerini izle."
     >
       <OperationSummary
         actions={summaryActions}
-        ariaLabel="Canlı yayın operasyon özeti"
+        ariaLabel="Release kanıt operasyon özeti"
         badges={summaryBadges}
         items={summaryItems}
       />
       <EvidenceTrustPanel
-        ariaLabel="Canlı yayın güven durumu"
+        ariaLabel="Release kanıt güven durumu"
         title="Release Kanıt Gücü"
         description="Bu ekran release kararını özetler; production evidence summary, pilot kapanışı ve go-live onayları tamamlanmadan yayın aksiyonu gösterilmez."
         items={[
@@ -191,16 +191,16 @@ export function LiveReleasePage() {
       />
       <OperationDecisionNotice
         decision="Karar: panel şu an CLI-only release rehberidir."
-        reason="Canlı yayın üretim ortamını etkiler; prod evidence zinciri geçmeden panelde tek tık yayın aksiyonu gösterilmez."
+        reason="Release aksiyonu üretim ortamını etkiler; prod evidence zinciri geçmeden panelde tek tık yayın aksiyonu gösterilmez."
         nextStep="Panel aksiyonu ancak C1/D1 kapıları, audit log ve çift onay modeli tamamlanınca değerlendirilir."
       />
       <Panel
-        aria-label="Canlı yayın kapıları"
+        aria-label="Release kanıt kapıları"
         description="Release adayı, production evidence, pilot ve go-live karar kapıları tek operasyonal tabloda izlenir."
         title="Kanıt Kapıları"
       >
         <DataTable
-          caption="Canlı yayın kanıt kapıları"
+          caption="Release kanıt kapıları"
           columns={liveReleaseColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -319,7 +319,7 @@ function buildLiveReleaseSummaryItems(): OperationSummaryItem[] {
       value: "14+ gün",
     },
     {
-      description: "Tek tık canlı yayın aksiyonu",
+      description: "Tek tık release aksiyonu",
       key: "panel-action",
       label: "Panel aksiyonu",
       tone: "info",

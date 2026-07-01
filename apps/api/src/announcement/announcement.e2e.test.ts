@@ -344,6 +344,7 @@ describe("Announcement API", () => {
     const response = await request(server)
       .post("/announcements/announcement-a/deliveries")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", "announcement-delivery-send-email-a")
       .send({ channel: "EMAIL" })
       .expect(201);
 
@@ -391,6 +392,21 @@ describe("Announcement API", () => {
       jobId: `${producer.inputs[0]?.entityId}_${producer.inputs[0]?.contentHash}`,
       status: "queued",
     });
+  });
+
+  it("tenant admin dış duyuru gönderiminde Idempotency-Key zorunludur", async () => {
+    notificationAdapter.results = [
+      { channel: "EMAIL", to: "guardian-a@example.test", status: "sent", providerMessageId: "mail-1" },
+    ];
+
+    await request(server)
+      .post("/announcements/announcement-a/deliveries")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ channel: "EMAIL" })
+      .expect(400);
+
+    expect(notificationAdapter.sendCalls).toHaveLength(0);
+    expect(producer.inputs).toHaveLength(0);
   });
 
   it("tenant admin dış duyuru gönderimini Idempotency-Key ile tekilleştirir", async () => {
@@ -449,6 +465,7 @@ describe("Announcement API", () => {
     const response = await request(server)
       .post("/announcements/announcement-a/deliveries")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", "announcement-delivery-send-push-a")
       .send({ channel: "PUSH" })
       .expect(201);
 

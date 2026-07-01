@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, Optional } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import { lstat } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
@@ -247,12 +248,10 @@ async function assertParentPathAllowed(parentPath: string, errorCode: string): P
 
 function isLocalTempEvidencePath(filePath: string): boolean {
   const normalizedPath = filePath.replace(/\/+$/g, "") || "/";
-  return (
-    normalizedPath === "/tmp" ||
-    normalizedPath.startsWith("/tmp/") ||
-    normalizedPath === "/var/tmp" ||
-    normalizedPath.startsWith("/var/tmp/")
-  );
+  return ["/tmp", "/var/tmp", resolve(tmpdir())].some((rootPath) => {
+    const normalizedRoot = rootPath.replace(/\/+$/g, "") || "/";
+    return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`);
+  });
 }
 
 function isLocalTempOrRootPath(filePath: string): boolean {

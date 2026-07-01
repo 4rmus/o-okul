@@ -27,8 +27,8 @@ const requiredDashboardPanels = [
 const requiredAlerts = [
   "OOkulApiDown",
   "OOkulReadinessFailing",
-  "OOkulHigh5xxRate",
-  "OOkulSlowRequests",
+  "OOkulApiHighErrorRate",
+  "OOkulApiSlowRequests",
 ];
 
 if (!target) {

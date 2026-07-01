@@ -230,7 +230,6 @@ function buildValidEnvFile() {
     ["__SET_MIGRATION_DB_PASSWORD__", "contractMigrationDbPasswordValue001"],
     ["__SET_STAGING_DB_HOST__", "db.staging.o-okul.internal"],
     ["__SET_REAL_ACCESS_SECRET__", "contractAccessSecretValue000000000001"],
-    ["__SET_REAL_REFRESH_SECRET__", "contractRefreshSecretValue000000000002"],
     ["__SET_REAL_STUDENT_PII_ENCRYPTION_KEY__", "contractStudentPiiEncryption00000003"],
     ["__SET_REAL_STUDENT_PII_HASH_KEY__", "contractStudentPiiHashValue000000004"],
     ["__SET_REAL_ADMIN_MFA_SECRET_ENCRYPTION_KEY__", "contractAdminMfaEncryption000000005"],

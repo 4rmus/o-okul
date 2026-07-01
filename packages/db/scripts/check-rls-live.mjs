@@ -833,7 +833,13 @@ async function seedFixtures() {
        VALUES
          ($1, $2, $3, 'RlsSmoke', $4, 'CREATE', '{"tenant":"A"}'::jsonb, '2026-06-12T00:00:00.000Z'),
          ($5, $6, $7, 'RlsSmoke', $8, 'CREATE', '{"tenant":"B"}'::jsonb, '2026-06-12T00:00:00.000Z')
-       ON CONFLICT ("id", "createdAt") DO NOTHING`,
+       ON CONFLICT ("id", "createdAt") DO UPDATE
+       SET "tenantId" = EXCLUDED."tenantId",
+           "actorUserId" = EXCLUDED."actorUserId",
+           "entityType" = EXCLUDED."entityType",
+           "entityId" = EXCLUDED."entityId",
+           "action" = EXCLUDED."action",
+           "diff" = EXCLUDED."diff"`,
       [ids.auditLogA, ids.tenantA, ids.userA, ids.studentA, ids.auditLogB, ids.tenantB, ids.userB, ids.studentB],
     );
   });

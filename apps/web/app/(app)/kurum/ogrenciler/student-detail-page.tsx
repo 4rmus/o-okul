@@ -39,7 +39,7 @@ import { formatCourseName, formatOutcomeCode, shortCourseName } from "../../_sha
 import { ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
 import { formatNetNumber, OutcomeNetTable } from "../../_shared/outcome-net-table.js";
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
-import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
+import { formatPercentDelta, formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { fallbackReportExamId, readReportExamId } from "../../_shared/report-exam-selection.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 import { RevealablePhone } from "../_shared/revealable-phone.js";
@@ -750,7 +750,7 @@ function buildStudentDashboardSummaryItems(
       value: formatCount(detail.guardianLinks.length),
     },
     {
-      description: `Net gelişimi ${formatDelta(progress?.netDelta)}`,
+      description: `Başarı gelişimi ${formatPercentDelta(progress?.successRateDelta)}`,
       key: "follow-up",
       label: "Takip odağı",
       tone: detail.teacherNotes.length > 0 ? "info" : "default",
@@ -829,8 +829,8 @@ function buildStudentDashboardSummaryActions({
     },
     {
       detail: canViewFinance
-        ? `${formatPendingPayment(detail.paymentPlans)} bekleyen ödeme; net gelişimi ${formatDelta(progress?.netDelta)}`
-        : `Finans bilgisi yetkiye bağlı; net gelişimi ${formatDelta(progress?.netDelta)}`,
+        ? `${formatPendingPayment(detail.paymentPlans)} bekleyen ödeme; başarı gelişimi ${formatPercentDelta(progress?.successRateDelta)}`
+        : `Finans bilgisi yetkiye bağlı; başarı gelişimi ${formatPercentDelta(progress?.successRateDelta)}`,
       key: "finance-and-follow-up",
       label: canViewFinance ? "Finans ve takip" : "Takip yetkisi",
       status: errorBooklet ? "Takip" : "Normal",
@@ -1037,7 +1037,7 @@ function buildStudentExamSummaryItems(
       value: formatNetNumber(report?.total?.net),
     },
     {
-      description: `Net gelişimi ${formatDelta(progress?.netDelta)}`,
+      description: `Başarı gelişimi ${formatPercentDelta(progress?.successRateDelta)}`,
       key: "question-count",
       label: "Soru",
       value: formatNumber(reportQuestionCount(report?.total)),
@@ -1098,7 +1098,7 @@ function buildStudentExamSummaryActions(
       value: formatPercentNumber(reportSuccessRate(report?.total)),
     },
     {
-      detail: `Net gelişimi ${formatDelta(progress?.netDelta)}`,
+      detail: `Başarı gelişimi ${formatPercentDelta(progress?.successRateDelta)}`,
       key: "progress",
       label: "Gelişim",
       status: progress ? "İzleniyor" : "Veri yok",
@@ -1354,11 +1354,6 @@ function formatCount(value: number) {
 
 function readLgsScore(total: { estimatedRawScore?: number; standardScore?: number } | undefined) {
   return total?.estimatedRawScore ?? total?.standardScore;
-}
-
-function formatDelta(value: number | undefined) {
-  if (value === undefined) return "-";
-  return value > 0 ? `+${formatNetNumber(value)}` : formatNetNumber(value);
 }
 
 function formatTeacherNoteSummary(notes: TeacherNoteRecord[]) {

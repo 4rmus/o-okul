@@ -4,12 +4,12 @@ import { dirname, parse, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const requiredCommandsPassed = [
-  "docker compose pull web api worker",
+  "docker compose pull web api worker queue-board",
   "docker compose up -d --remove-orphans",
   "pnpm compose:health:smoke",
   "pnpm prod:evidence:check",
 ];
-const serviceNames = ["web", "api", "worker"];
+const serviceNames = ["web", "api", "worker", "queue-board"];
 
 const outputPath = readOption("--output") ?? process.env.DEPLOYMENT_ROLLBACK_OUTPUT;
 const environment = readOption("--environment") ?? process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV ?? "staging";
@@ -87,7 +87,7 @@ runCheck(outputFile);
 console.log(`Deployment rollback kanıtı yazıldı: ${outputFile}`);
 
 function readService(service, output) {
-  const prefix = `DEPLOYMENT_ROLLBACK_${service.toUpperCase()}`;
+  const prefix = `DEPLOYMENT_ROLLBACK_${service.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
   const status = process.env[`${prefix}_STATUS`]?.trim();
   const imageTag = process.env[`${prefix}_IMAGE_TAG`]?.trim();
   const evidenceReference = process.env[`${prefix}_EVIDENCE_REFERENCE`]?.trim();
