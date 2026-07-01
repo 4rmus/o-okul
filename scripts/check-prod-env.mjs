@@ -53,7 +53,6 @@ function checkContract(file) {
     "DATABASE_URL",
     "DIRECT_DATABASE_URL",
     "JWT_ACCESS_SECRET",
-    "JWT_REFRESH_SECRET",
     "STUDENT_PII_ENCRYPTION_KEY",
     "STUDENT_PII_HASH_KEY",
     "ADMIN_MFA_MODE",
@@ -170,7 +169,6 @@ function checkProductionEnv(env) {
   requireDatabaseUrlSafe(env, failures, "DATABASE_URL", ["app:app"], dbTunnelPort);
   requireDatabaseUrlSafe(env, failures, "DIRECT_DATABASE_URL", ["migration:migration"], dbTunnelPort);
   requireSecret(env, failures, "JWT_ACCESS_SECRET");
-  requireSecret(env, failures, "JWT_REFRESH_SECRET");
   requireSecret(env, failures, "STUDENT_PII_ENCRYPTION_KEY");
   requireSecret(env, failures, "STUDENT_PII_HASH_KEY");
   requireOneOf(env, failures, "ADMIN_MFA_MODE", ["optional", "required"]);
@@ -180,9 +178,6 @@ function checkProductionEnv(env) {
   requireSet(env, failures, "ADMIN_MFA_ISSUER");
   requireNoPlaceholderValue(env, failures, "ADMIN_MFA_ISSUER");
   requireEqual(env, failures, "AI_REPORT_SUMMARY_PROVIDER", "disabled");
-  if (env.JWT_ACCESS_SECRET && env.JWT_REFRESH_SECRET && env.JWT_ACCESS_SECRET === env.JWT_REFRESH_SECRET) {
-    failures.push("JWT_ACCESS_SECRET ve JWT_REFRESH_SECRET farklı olmalı.");
-  }
   if (env.STUDENT_PII_ENCRYPTION_KEY && env.STUDENT_PII_HASH_KEY && env.STUDENT_PII_ENCRYPTION_KEY === env.STUDENT_PII_HASH_KEY) {
     failures.push("STUDENT_PII_ENCRYPTION_KEY ve STUDENT_PII_HASH_KEY farklı olmalı.");
   }

@@ -17,6 +17,7 @@ describe("PostgresSessionStore", () => {
       refreshTokenHash: hashRefreshToken("refresh-old"),
       status: "ACTIVE",
       membershipVersion: 1,
+      expiresAt: new Date("2026-07-01T12:00:00.000Z"),
       createdAt: now,
       updatedAt: now,
     };
@@ -37,6 +38,7 @@ describe("PostgresSessionStore", () => {
                 tokenFamilyId: values?.[6],
                 refreshTokenHash: values?.[7],
                 membershipVersion: values?.[8],
+                expiresAt: values?.[9],
               },
             ] as T[],
           };
@@ -80,9 +82,10 @@ describe("PostgresSessionStore", () => {
       roles: ["TENANT_ADMIN"],
       refreshToken: "refresh-new",
       membershipVersion: 1,
+      expiresAt: new Date("2026-07-01T12:00:00.000Z"),
     });
     await store.findByRefreshToken("refresh-old");
-    await store.updateRefreshToken("session-a", "refresh-next");
+    await store.updateRefreshToken("session-a", "refresh-next", new Date("2026-07-02T12:00:00.000Z"));
     await store.findConsumedTokenFamily("refresh-old");
     await store.revoke("session-a");
     await store.revokeByMembership("user-tenant-a", "tenant-a", 2);
@@ -100,11 +103,16 @@ describe("PostgresSessionStore", () => {
       expect.any(String),
       hashRefreshToken("refresh-new"),
       1,
+      new Date("2026-07-01T12:00:00.000Z"),
     ]);
     const insertConsumed = queries.find((query) => query.sql.includes('INSERT INTO "ConsumedRefreshToken"'));
     expect(insertConsumed?.values).toEqual([hashRefreshToken("refresh-old"), "family-a"]);
     const updateRefresh = queries.find((query) => query.sql.includes('"refreshTokenHash" = $2'));
-    expect(updateRefresh?.values).toEqual(["session-a", hashRefreshToken("refresh-next")]);
+    expect(updateRefresh?.values).toEqual([
+      "session-a",
+      hashRefreshToken("refresh-next"),
+      new Date("2026-07-02T12:00:00.000Z"),
+    ]);
     const revokeByMembership = queries.find((query) => query.sql.includes('"membershipVersion" < $3'));
     expect(revokeByMembership?.values).toEqual(["user-tenant-a", "tenant-a", 2]);
   });

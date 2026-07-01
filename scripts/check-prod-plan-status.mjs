@@ -415,7 +415,7 @@ const requiredArchitecturePendingTokens = [
   "Broad CI ve staging kaniti Faz 5/Faz 10 kapsaminda.",
   "gercek live/staging DB artifact'i",
   "KVKK staging artifact'inin production summary/live-status zincirine baglanmasi",
-  "remote/staging `uzman-hocam-server` uzerinde `artifacts/staging/isem-optical-pipeline.json`",
+  "`artifacts/staging/isem-optical-pipeline.json` 254 matched",
   "`artifacts/staging/live-ui-worker-result.json` PDF/XLSX indirme",
   "UI-worker result",
   "pilot/go-live kanitlari uretilmeli",

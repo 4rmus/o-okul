@@ -223,6 +223,7 @@ model AuthSession {
   refreshTokenHash  String   @unique
   status            String   @default("ACTIVE")
   membershipVersion Int      @default(1)
+  expiresAt         DateTime @db.Timestamptz(6)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -230,6 +231,7 @@ model AuthSession {
 
   @@index([tenantId, userId, status])
   @@index([tokenFamilyId])
+  @@index([expiresAt])
 }
 
 model IdempotencyKey {
@@ -1215,6 +1217,7 @@ model ReportSnapshot {
   courseId     String?
   termId       String?
   reportType   String
+  contentHash  String
   status       String    @default("PENDING")
   inputRefs    Json
   snapshotData Json?
@@ -1232,6 +1235,7 @@ model ReportSnapshot {
   term         AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
 
   @@unique([tenantId, id])
+  @@unique([tenantId, contentHash])
   @@index([tenantId, examId])
   @@index([tenantId, status, deletedAt])
   @@index([tenantId, campusId])

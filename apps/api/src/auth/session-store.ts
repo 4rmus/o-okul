@@ -15,6 +15,7 @@ export interface SessionRecord {
   refreshTokenHash: string;
   status: SessionStatus;
   membershipVersion: number;
+  expiresAt: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,13 +28,14 @@ export interface SessionIssueInput {
   subjectId?: string;
   refreshToken: string;
   membershipVersion: number;
+  expiresAt: Date;
 }
 
 export interface SessionStore {
   create(input: SessionIssueInput): Promise<SessionRecord>;
   findById(sessionId: string): Promise<SessionRecord | null>;
   findByRefreshToken(refreshToken: string): Promise<SessionRecord | null>;
-  updateRefreshToken(sessionId: string, refreshToken: string): Promise<SessionRecord>;
+  updateRefreshToken(sessionId: string, refreshToken: string, expiresAt: Date): Promise<SessionRecord>;
   markFamilyCompromised(tokenFamilyId: string): Promise<void>;
   findConsumedTokenFamily(refreshToken: string): Promise<string | null>;
   revoke(sessionId: string): Promise<void>;
@@ -61,6 +63,7 @@ export class InMemorySessionStore implements SessionStore {
       refreshTokenHash: hashRefreshToken(input.refreshToken),
       status: "ACTIVE",
       membershipVersion: input.membershipVersion,
+      expiresAt: input.expiresAt,
       createdAt: now,
       updatedAt: now,
     };
@@ -83,12 +86,13 @@ export class InMemorySessionStore implements SessionStore {
     return null;
   }
 
-  async updateRefreshToken(sessionId: string, refreshToken: string): Promise<SessionRecord> {
+  async updateRefreshToken(sessionId: string, refreshToken: string, expiresAt: Date): Promise<SessionRecord> {
     const session = this.requireSession(sessionId);
     this.consumedRefreshTokens.set(session.refreshTokenHash, session.tokenFamilyId);
     const updated = {
       ...session,
       refreshTokenHash: hashRefreshToken(refreshToken),
+      expiresAt,
       updatedAt: new Date(),
     };
     this.sessions.set(sessionId, updated);
@@ -157,9 +161,9 @@ export class PostgresSessionStore implements SessionStore {
       const result = await client.query<SessionRow>(
         `INSERT INTO "AuthSession" (
            "id", "userId", "tenantId", "roles", "subjectType", "subjectId",
-           "tokenFamilyId", "refreshTokenHash", "status", "membershipVersion", "updatedAt"
+           "tokenFamilyId", "refreshTokenHash", "status", "membershipVersion", "expiresAt", "updatedAt"
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ACTIVE', $9, now())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ACTIVE', $9, $10, now())
          RETURNING *`,
         [
           randomUUID(),
@@ -171,6 +175,7 @@ export class PostgresSessionStore implements SessionStore {
           randomUUID(),
           hashRefreshToken(input.refreshToken),
           input.membershipVersion,
+          input.expiresAt,
         ],
       );
       const record = result.rows[0];
@@ -200,7 +205,7 @@ export class PostgresSessionStore implements SessionStore {
     });
   }
 
-  async updateRefreshToken(sessionId: string, refreshToken: string): Promise<SessionRecord> {
+  async updateRefreshToken(sessionId: string, refreshToken: string, expiresAt: Date): Promise<SessionRecord> {
     return this.withClient(async (client) => {
       const existing = await client.query<SessionRow>(`SELECT * FROM "AuthSession" WHERE "id" = $1 LIMIT 1`, [
         sessionId,
@@ -222,10 +227,11 @@ export class PostgresSessionStore implements SessionStore {
       const updated = await client.query<SessionRow>(
         `UPDATE "AuthSession"
          SET "refreshTokenHash" = $2,
+             "expiresAt" = $3,
              "updatedAt" = now()
          WHERE "id" = $1
          RETURNING *`,
-        [sessionId, hashRefreshToken(refreshToken)],
+        [sessionId, hashRefreshToken(refreshToken), expiresAt],
       );
       const record = updated.rows[0];
       if (!record) {
@@ -348,6 +354,7 @@ interface SessionRow {
   refreshTokenHash: string;
   status: SessionStatus;
   membershipVersion: number;
+  expiresAt: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -364,6 +371,7 @@ function toSessionRecord(row: SessionRow): SessionRecord {
     refreshTokenHash: row.refreshTokenHash,
     status: row.status,
     membershipVersion: row.membershipVersion,
+    expiresAt: row.expiresAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

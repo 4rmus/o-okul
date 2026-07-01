@@ -10,6 +10,9 @@ describe("auth user store", () => {
       tenantId: "tenant-a",
       roles: ["TENANT_ADMIN"],
     });
+    await expect(store.listByTenant("tenant-a")).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "user-tenant-a", tenantId: "tenant-a" }),
+    ]));
   });
 
   it("scrypt password hash doğrulaması yapar", () => {

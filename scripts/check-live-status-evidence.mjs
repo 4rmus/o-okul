@@ -21,7 +21,7 @@ const liveStatusGateKeys = ["label", "status", "command", "source", "checkedAt",
 const requiredStaticPassRows = new Map([
   ["Repo gate", "PASS"],
   ["Yerel geliştirme canlı smoke", "PASS"],
-  ["Kurum canlı yayın kanıt ekranı", "PASS"],
+  ["Kurum release kanıt ekranı", "PASS"],
 ]);
 const allowedExternalGateStatuses = ["NOT_RUN", "STAGING_PASS_WITH_FINAL_CHAIN_PENDING", "PASS"];
 

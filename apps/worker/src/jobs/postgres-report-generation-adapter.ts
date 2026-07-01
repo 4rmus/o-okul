@@ -80,6 +80,7 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
         id: row.id,
         tenantId: row.tenantId,
         examId: row.examId,
+        contentHash: snapshot.contentHash,
         campusId: snapshot.campusId,
         gradeLevelId: snapshot.gradeLevelId,
         classId: snapshot.classId,
@@ -112,6 +113,7 @@ interface ReportSnapshotRow {
   tenantId: string;
   examId: string;
   reportType: string;
+  contentHash: string;
   inputRefs: unknown;
   snapshotData: unknown;
   generatedAt: Date | string;
@@ -132,14 +134,30 @@ async function insertSnapshot(
        "courseId",
        "termId",
        "reportType",
+       "contentHash",
        "status",
        "inputRefs",
        "snapshotData",
        "generatedAt",
        "updatedAt"
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb, $13, now())
-     RETURNING "id", "tenantId", "examId", "reportType", "inputRefs", "snapshotData", "generatedAt"`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, now())
+     ON CONFLICT ("tenantId", "contentHash") DO UPDATE
+     SET "examId" = EXCLUDED."examId",
+         "campusId" = EXCLUDED."campusId",
+         "gradeLevelId" = EXCLUDED."gradeLevelId",
+         "classId" = EXCLUDED."classId",
+         "courseId" = EXCLUDED."courseId",
+         "termId" = EXCLUDED."termId",
+         "reportType" = EXCLUDED."reportType",
+         "status" = EXCLUDED."status",
+         "inputRefs" = EXCLUDED."inputRefs",
+         "snapshotData" = EXCLUDED."snapshotData",
+         "generatedAt" = EXCLUDED."generatedAt",
+         "staleAt" = NULL,
+         "deletedAt" = NULL,
+         "updatedAt" = now()
+     RETURNING "id", "tenantId", "examId", "reportType", "contentHash", "inputRefs", "snapshotData", "generatedAt"`,
     [
       randomUUID(),
       snapshot.tenantId,
@@ -150,6 +168,7 @@ async function insertSnapshot(
       snapshot.courseId ?? null,
       snapshot.termId ?? null,
       snapshot.reportType,
+      snapshot.contentHash,
       snapshot.status,
       JSON.stringify(snapshot.inputRefs),
       JSON.stringify(snapshot.snapshotData),

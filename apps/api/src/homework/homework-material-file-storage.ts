@@ -148,7 +148,13 @@ export function createHomeworkMaterialFileStorageFromEnv(
 }
 
 function createHomeworkMaterialFileStorageKey(input: StoreHomeworkMaterialFileInput): string {
-  return ["homework-material-files", input.sha256].join("/");
+  return [
+    "homework-material-files",
+    input.tenantId,
+    input.materialId,
+    input.sha256,
+    "source",
+  ].map(encodeURIComponent).join("/");
 }
 
 function presignS3GetObjectUrl(

@@ -192,6 +192,7 @@ function buildIsemProgress(examId: string) {
     ],
     netDelta: 3,
     standardScoreDelta: 40,
+    successRateDelta: 3.3,
   };
 }
 
@@ -3785,7 +3786,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByRole("link", { name: "Güvenlik Denetimi" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Gözlemlenebilirlik" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "UAT / Rollback" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Canlı Yayın" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Release Kanıtı" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Sistem Sağlığı" })).toHaveCount(0);
   await expandSidebarGroup(page, "Kişiler");
   await expandSidebarGroup(page, "Yönetim ve Kanıt");
@@ -6818,6 +6819,7 @@ function readPortalFixture(path: string): unknown {
       ],
       netDelta: 3,
       standardScoreDelta: 40,
+      successRateDelta: 15,
     };
   }
   if (path === "/me/guardian/students") {
@@ -7739,6 +7741,7 @@ function readFixture(path: string) {
       ],
       netDelta: 3,
       standardScoreDelta: 40,
+      successRateDelta: 15,
     };
   }
 
@@ -7769,6 +7772,7 @@ function readFixture(path: string) {
       ],
       netDelta: 1,
       standardScoreDelta: 20,
+      successRateDelta: 5,
     };
   }
 
@@ -7783,6 +7787,7 @@ function readFixture(path: string) {
       ],
       netDelta: 1.75,
       standardScoreDelta: 20,
+      successRateDelta: 8.8,
     };
   }
 

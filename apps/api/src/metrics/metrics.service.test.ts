@@ -33,6 +33,22 @@ describe("MetricsService", () => {
     expect(output).not.toContain("queue=\"exam-evaluation\"");
   });
 
+  it("normalizes dynamic path labels before rendering", async () => {
+    const service = new MetricsService();
+
+    service.recordRequest({
+      method: "GET",
+      path: "/api/v1/tenants/dna-egitim/users/a@example.test/students/123",
+      statusCode: 200,
+      durationSeconds: 0.01,
+    });
+    const output = await service.render();
+
+    expect(output).toContain('path="/api/v1/tenants/:slug/users/:slug/students/:id"');
+    expect(output).not.toContain("dna-egitim");
+    expect(output).not.toContain("a@example.test");
+  });
+
   it("enables queue metrics by default only for durable deployments", () => {
     expect(isQueueMetricsEnabled({ NODE_ENV: "test", PERSISTENCE_DRIVER: "memory" })).toBe(false);
     expect(isQueueMetricsEnabled({ NODE_ENV: "production", PERSISTENCE_DRIVER: "postgres" })).toBe(true);

@@ -1872,13 +1872,13 @@ runDeploymentRollbackNegativeCheck({
 runDeploymentRollbackNegativeCheck({
   label: "Deployment rollback extra service negative",
   path: "docs/evidence-templates/deployment-rollback.extra-service.tmp.json",
-  expectedFailure: "servicesVerified tam 3 servis içermeli.",
+  expectedFailure: "servicesVerified tam 4 servis içermeli.",
   mutate: (fixture) => {
     fixture.servicesVerified.push({
-      service: "queue-board",
+      service: "scheduler",
       status: "healthy",
-      imageTag: "ghcr.io/example/o-okul/queue-board:previous-pass",
-      evidenceReference: "https://staging.example.test/queues",
+      imageTag: "ghcr.io/example/o-okul/scheduler:previous-pass",
+      evidenceReference: "docker compose ps scheduler",
     });
   },
 });
@@ -3560,7 +3560,7 @@ function runObservabilityUatGeneratorLocalArtifactNegativeChecks() {
     OBSERVABILITY_UAT_LOKI_URL: "https://loki.o-okul.com",
     OBSERVABILITY_UAT_DASHBOARD_PANELS_VERIFIED: "API up,Request rate,Average duration,Readiness failures,Docker logs",
     OBSERVABILITY_UAT_ALERTS_VERIFIED:
-      "OOkulApiDown,OOkulReadinessFailing,OOkulHigh5xxRate,OOkulSlowRequests",
+      "OOkulApiDown,OOkulReadinessFailing,OOkulApiHighErrorRate,OOkulApiSlowRequests",
     OBSERVABILITY_UAT_PROMETHEUS_EVIDENCE_REFERENCE: "run:prometheus-ready-2026-06-24",
     OBSERVABILITY_UAT_GRAFANA_EVIDENCE_REFERENCE: "run:grafana-ready-2026-06-24",
     OBSERVABILITY_UAT_LOKI_EVIDENCE_REFERENCE: "run:loki-ready-2026-06-24",
@@ -7841,7 +7841,6 @@ function createValidProdEnvForNegativeCheck() {
     DATABASE_URL: "postgresql://app_user:strong-password@db.o-okul.internal:5432/o_okul",
     DIRECT_DATABASE_URL: "postgresql://migration_user:strong-password@db.o-okul.internal:5432/o_okul",
     JWT_ACCESS_SECRET: "access-secret-123456789012345678901234",
-    JWT_REFRESH_SECRET: "refresh-secret-12345678901234567890123",
     STUDENT_PII_ENCRYPTION_KEY: "student-pii-encryption-123456789012",
     STUDENT_PII_HASH_KEY: "student-pii-hash-123456789012345678",
     ADMIN_MFA_MODE: "required",

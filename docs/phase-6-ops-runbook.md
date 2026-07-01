@@ -61,7 +61,7 @@ Kontroller:
   çalıştırılır; smoke çıktısı `RATE_LIMIT_SMOKE_EVIDENCE_FILE` altında `rate_limit_redis_smoke`
   artifact'i olarak saklanır ve `RATE_LIMIT_EVIDENCE_TARGET=file:///... pnpm rate-limit:check` ile
   doğrulanır. Artifact global API limiter ve login attempt limiter için Redis store, paylaşılan
-  pencere, `LOGIN_LOCKED`/`RATE_LIMITED` 429 ve email+IP kapsamını göstermeli; ham IP/e-posta yerine
+  pencere, `LOGIN_LOCKED`/`RATE_LIMITED` 429 ve T.C. kimlik hash'i + IP kapsamını göstermeli; ham IP/T.C. kimlik yerine
   SHA-256 hash, tam `commandsPassed=["pnpm rate-limit:smoke", "pnpm rate-limit:check"]` ve boş
   `gaps` listesi taşımalıdır.
   `RATE_LIMIT_EVIDENCE_TARGET`, `instances[].baseUrl` ve `evidenceReferences[]` userinfo/query/fragment
@@ -156,7 +156,7 @@ OBSERVABILITY_UAT_GRAFANA_URL=https://... \
 OBSERVABILITY_UAT_LOKI_URL=https://... \
 OBSERVABILITY_UAT_ALERT_WEBHOOK_TARGET=file:///.../alert-webhook.json \
 OBSERVABILITY_UAT_DASHBOARD_PANELS_VERIFIED="API up,Request rate,Average duration,Readiness failures,Docker logs" \
-OBSERVABILITY_UAT_ALERTS_VERIFIED="OOkulApiDown,OOkulReadinessFailing,OOkulHigh5xxRate,OOkulSlowRequests" \
+OBSERVABILITY_UAT_ALERTS_VERIFIED="OOkulApiDown,OOkulReadinessFailing,OOkulApiHighErrorRate,OOkulApiSlowRequests" \
 OBSERVABILITY_UAT_PROMETHEUS_EVIDENCE_REFERENCE=... \
 OBSERVABILITY_UAT_GRAFANA_EVIDENCE_REFERENCE=... \
 OBSERVABILITY_UAT_LOKI_EVIDENCE_REFERENCE=... \
@@ -847,7 +847,7 @@ Beklenen akış:
   yeşile çevirmez.
   Remote staging hosttaki bundle gap'i secret veya `.env` dosyası okumadan tekrarlanabilir biçimde
   almak için
-  `corepack pnpm staging:remote-release-gaps:summary -- --host uzman-hocam-server --snapshot-dir artifacts/local/remote-staging-snapshot --gap-report-file artifacts/local/remote-staging-gap-report.json`
+  `corepack pnpm staging:remote-release-gaps:summary -- --host o-okul-prod --snapshot-dir artifacts/local/remote-staging-snapshot --gap-report-file artifacts/local/remote-staging-gap-report.json`
   kullanılır; komut remote `artifacts/staging` içeriğini `artifacts/local/**` altına snapshot olarak
   alır ve aynı gap özetini çalıştırır. Bu komutun non-zero dönmesi eksik kanıt varken beklenen
   davranıştır; `NOT_RELEASE_EVIDENCE` çıktısı release PASS değildir.
@@ -899,7 +899,7 @@ Beklenen akış:
   `docs/evidence-templates/**` fixture hedefi, symlink target ve userinfo/query/fragment taşıyan
   URL veya placeholder/example/redacted HTTPS host kullanımı final kapıda reddedilir.
 - Remote/staging final readiness kapısı aynı target setini remote hostta salt-okunur doğrular:
-  `REMOTE_EVIDENCE_HOST=uzman-hocam-server REMOTE_EVIDENCE_ROOT=/root/o-okul PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///root/o-okul/artifacts/staging/release-summary.json LIVE_STATUS_EVIDENCE_TARGET=file:///root/o-okul/artifacts/staging/live-status.json PILOT_EVIDENCE_TARGET=file:///root/o-okul/artifacts/staging/pilot.json GO_LIVE_EVIDENCE_TARGET=file:///root/o-okul/artifacts/staging/go-live.json pnpm prod:remote-evidence:check`.
+  `REMOTE_EVIDENCE_HOST=o-okul-prod REMOTE_EVIDENCE_ROOT=/root/o-okul PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///root/o-okul/artifacts/staging/release-summary.json LIVE_STATUS_EVIDENCE_TARGET=file:///root/o-okul/artifacts/staging/live-status.json PILOT_EVIDENCE_TARGET=file:///root/o-okul/artifacts/staging/pilot.json GO_LIVE_EVIDENCE_TARGET=file:///root/o-okul/artifacts/staging/go-live.json pnpm prod:remote-evidence:check`.
   Bu komut deploy yapmaz; remote repo final checker'ı, tam Canlı Durum ve target'lı
   `prod:external-evidence:check` sonucunu kanıtlar. Remote target'lar da placeholder HTTPS host,
   remote temp path, `artifacts/local/**`, `docs/evidence-templates/**` ve userinfo/query/fragment
@@ -958,18 +958,18 @@ Minimum tatbikat akışı:
 
 - Staging'e bilinçli bozuk veya healthcheck'i geçmeyen bir image tag'i release adayı olarak uygulanır.
 - Health/readiness başarısızlığı kaydedilir; veri migrasyon uyumluluğu geri dönüş için onaylanır.
-- `.env.release` içindeki `WEB_IMAGE`, `API_IMAGE` ve `WORKER_IMAGE` değerleri
+- `.env.release` içindeki `WEB_IMAGE`, `API_IMAGE`, `WORKER_IMAGE` ve `QUEUE_BOARD_IMAGE` değerleri
   `ROLLBACK_IMAGE_TAG` zincirindeki son bilinen iyi tag'e çekilir.
-- `docker compose pull web api worker` ve `docker compose up -d --remove-orphans` çalıştırılır.
+- `docker compose pull web api worker queue-board` ve `docker compose up -d --remove-orphans` çalıştırılır.
 - `pnpm compose:health:smoke` ve `pnpm prod:evidence:check` tekrar PASS olur.
 - Rapor `DEPLOYMENT_ROLLBACK_TARGET` altında `releaseCandidate`, `failedImageTag`, `rollbackImageTag`,
   `failureInjected=true`, `migrationRollbackSafe=true`, `servicesVerified` ve artifact referanslarını taşır.
-- Generator gerçek drill onayı, command log, bozuk release summary, rollback summary ve üç servis
+- Generator gerçek drill onayı, command log, bozuk release summary, rollback summary ve dört servis
   kanıt referansı olmadan artifact yazmaz.
 - `checkedAt`, `drillStartedAt` ve `drillCompletedAt` gelecekte olamaz;
   `drillStartedAt <= drillCompletedAt <= checkedAt` sırası korunmalıdır.
 - `releaseCandidate` ile `rollbackImageTag` aynı tag olamaz.
-- Rollback raporu top-level alan kümesi, üç servislik `servicesVerified` seti, dört komutluk
+- Rollback raporu top-level alan kümesi, dört servislik `servicesVerified` seti, dört komutluk
   `commandsPassed` seti ve boş `gaps` listesi `prod:evidence:templates:check` içindeki fazla
   alan/servis/komut, ters kronoloji, release=rollback ve invalid/non-empty gaps negatifleriyle korunur.
 - Image tag ve evidence reference değerleri gerçek release/artifact referansı olmalı; `ghcr.io/example`,
@@ -1362,7 +1362,9 @@ finans, sınav, rapor, duyuru ve destek kayıtlarını JSON olarak bilgisayarın
 sunucu dışındaki kurum cihazında saklanması pilot yedek kanıtıdır.
 
 Ops seviyesinde kalıcı `BACKUP_OFFSITE_TARGET` hedefi ileride tekrar açılırsa hedefin yalnız yazılı değil,
-gerçekten yaz/oku/sil döngüsünü tamamladığı ayrıca kanıtlanır.
+gerçekten yaz/oku/sil döngüsünü tamamladığı ayrıca kanıtlanır. Release kanıtı için yalnız marker
+smoke yeterli değildir; canlı dump'ın off-host hedefe yazılıp aynı dump'tan restore edildiği
+`backup:offsite-restore:smoke` artifact'i gerekir.
 
 Komut:
 
@@ -1382,6 +1384,21 @@ olamaz; mount hedefi kalıcı, symlink olmayan dizin olmalıdır.
 Artifact `checkedAt`, target özeti, marker sha256, tek
 `commandsPassed=["pnpm backup:offsite:smoke"]` ve boş `gaps` listesi taşır; raw path/credential
 yazılmaz.
+
+Off-host hedef restore kanıtı:
+
+```sh
+BACKUP_OFFSITE_RESTORE_SMOKE_EVIDENCE_FILE=artifacts/staging/backup-offsite-restore.json \
+BACKUP_OFFSITE_RESTORE_TARGET=s3://o-okul-prod-backups/restore-smoke \
+pnpm backup:offsite-restore:smoke
+```
+
+Bu komut Postgres container içinde custom-format dump alır, dump'ı off-host hedefe yazar, aynı
+dump'ı hedeften geri okur, hash eşleşmesini kontrol eder ve geçici restore DB'de `Tenant`,
+`AuditLog`, `ReportSnapshot`, `_prisma_migrations` sayımlarını doğrular. Artifact
+`backup_offsite_restore_smoke`, `backupSha256`, hash'li restore DB adı, `dumpFormat=custom`,
+dört tablo sayımı, tek `commandsPassed=["pnpm backup:offsite-restore:smoke"]` ve boş `gaps`
+listesi taşır; raw path, object key, DB adı veya credential yazılmaz.
 
 Desteklenen hedefler:
 
@@ -1444,9 +1461,13 @@ STAGING_ENVIRONMENT=staging \
 - Staging/prod API ortamlarında `SUPPORT_ATTACHMENT_STORAGE=s3` ve
   `HOMEWORK_MATERIAL_FILE_STORAGE=s3` tanımlıdır.
 - API production boot sırasında inline veya geçersiz upload storage modunu reddeder.
-- Support ticket ekleri `support-ticket-attachments/<sha256>`, homework materyal dosyaları
-  `homework-material-files/<sha256>` S3 key kalıbıyla yazılır; tenant id, parent id ve ham dosya
-  adı object key'e girmez.
+- Support ticket ekleri `support-ticket-attachments/<tenantId>/<ticketId>/<sha256>/source`,
+  homework materyal dosyaları `homework-material-files/<tenantId>/<materialId>/<sha256>/source`
+  ve raw import arşivleri `raw-imports/<tenantId>/<examId>/<parserConfigVersion>/<sha256>/source`
+  S3 key kalıbıyla yazılır; ham dosya adı object key'e girmez.
+- Upload retention kontratı `pnpm upload-retention:check` ile korunur: support ticket ekleri,
+  homework materyal dosyaları ve raw import kayıtlarında `deletedAt`/tenant indexleri, aktif
+  indirme/listeleme yollarında soft-delete filtresi ve tenant-prefix storage key kalıbı birlikte aranır.
 - S3 `storageKey` ile saklanan support ticket ekleri ve homework materyal dosyaları API üzerinden
   base64 proxy edilmez; indirme yanıtı kısa ömürlü imzalı GET URL'si döndürür. URL TTL'i en fazla
   5 dakikadır (`downloadUrlExpiresInSeconds <= 300`).
@@ -1454,7 +1475,7 @@ STAGING_ENVIRONMENT=staging \
   uyumluluk için okunabilir kalır.
 - Mevcut inline kayıt sayımı ve tablo boyutu raporu `pnpm inline-upload-content:audit` ile alınır.
   Gerçek taşıma yalnız `INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true pnpm inline-upload-content:migrate`
-  ile çalışır; script her satırda sha256 doğrular, hash-only S3 key'e yazar, sonra `storageKey`
+  ile çalışır; script her satırda sha256 doğrular, tenant-prefix S3 key'e yazar, sonra `storageKey`
   set edip `contentBase64` alanını `NULL` yapar. S3 put sonrası DB update satırı kaybolursa
   önce aynı `storageKey` için DB referansı aranır; referans yoksa yazılan obje
   `DeleteObjectCommand` ile temizlenir, referans varsa obje silinmeden ham row id/key loglanmadan durur.
@@ -1527,8 +1548,11 @@ Desteklenen hedefler `file:///...` veya `s3://bucket/prefix` değerleridir.
 `file://` hedef root, lokal temp path (`/tmp`, `/var/tmp`) veya symlink dizin/parent path
 olamaz; mount hedefi kalıcı, symlink olmayan dizin olmalıdır.
 Production env kontrolü WAL hedefinin geçerli, placeholder olmayan bir hedef olmasını zorunlu tutar.
-Bu smoke Postgres'in gerçek WAL üretimini test etmez; arşiv hedefinin erişilebilirliğini kanıtlar.
-Artifact `checkedAt`, target özeti, marker sha256, tek
+Bu smoke hedef marker yaz/oku/sil adımına ek olarak çalışan Postgres üzerinde `pg_switch_wal()`
+tetikler ve `archive_mode=on|always`, `wal_level=replica|logical`, archive command hash'i,
+WAL dosya adı hash'i ve arşivlenen WAL dosyasının sha256 özetini kanıtlar. Compose `archive_mode`
+değişikliği canlı konteynere uygulanmadıysa Postgres servisi recreate edilmeden bu smoke PASS vermez.
+Artifact `checkedAt`, target özeti, marker sha256, `postgresWalArchive`, tek
 `commandsPassed=["pnpm wal:archive:smoke"]` ve boş `gaps` listesi taşır.
 
 ## AuditLog Null Tenant Kanıtı

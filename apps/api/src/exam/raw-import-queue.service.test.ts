@@ -30,14 +30,14 @@ describe("RawImportQueueService", () => {
       tenantId: "tenant-a",
       userId: "user-a",
       entityId: "raw-import-a",
-      contentHash: expect.stringMatching(/^hash-a-[0-9a-f-]{36}$/),
+      contentHash: "hash-a",
     }]);
     expect(result).toEqual({
       tenantId: "tenant-a",
       examId: "exam-a",
       rawImportId: "raw-import-a",
       queueName: "excel-import",
-      jobId: expect.stringMatching(/^raw-import-a_hash-a-[0-9a-f-]{36}$/),
+      jobId: "raw-import-a_hash-a",
       status: "queued",
     });
   });

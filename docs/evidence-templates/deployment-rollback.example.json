@@ -11,7 +11,7 @@
   "failureMode": "broken image deploy rejected by healthcheck",
   "migrationRollbackSafe": true,
   "commandsPassed": [
-    "docker compose pull web api worker",
+    "docker compose pull web api worker queue-board",
     "docker compose up -d --remove-orphans",
     "pnpm compose:health:smoke",
     "pnpm prod:evidence:check"
@@ -34,6 +34,12 @@
       "status": "running",
       "imageTag": "ghcr.io/example/o-okul/worker:previous-pass",
       "evidenceReference": "docker compose ps worker"
+    },
+    {
+      "service": "queue-board",
+      "status": "healthy",
+      "imageTag": "ghcr.io/example/o-okul/queue-board:previous-pass",
+      "evidenceReference": "docker compose ps queue-board"
     }
   ],
   "evidenceReferences": [

@@ -8,15 +8,19 @@ import { createTotpCodeForTest } from "./totp-mfa.js";
 import { hashTcIdentity } from "../student/tc-identity.js";
 import { InMemoryTenantStore } from "../tenant/tenant-store.js";
 
-const previousAdminMfaMode = process.env.ADMIN_MFA_MODE;
+const previousEnv = {
+  ADMIN_MFA_MODE: process.env.ADMIN_MFA_MODE,
+  AUTH_SELECTION_SECRET: process.env.AUTH_SELECTION_SECRET,
+  JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET,
+  NODE_ENV: process.env.NODE_ENV,
+};
 
 describe("AuthService", () => {
   afterEach(() => {
-    if (previousAdminMfaMode === undefined) {
-      delete process.env.ADMIN_MFA_MODE;
-    } else {
-      process.env.ADMIN_MFA_MODE = previousAdminMfaMode;
-    }
+    restoreEnv("ADMIN_MFA_MODE", previousEnv.ADMIN_MFA_MODE);
+    restoreEnv("AUTH_SELECTION_SECRET", previousEnv.AUTH_SELECTION_SECRET);
+    restoreEnv("JWT_ACCESS_SECRET", previousEnv.JWT_ACCESS_SECRET);
+    restoreEnv("NODE_ENV", previousEnv.NODE_ENV);
   });
 
   it("login kullanıcıyı injected store'dan okur ve password hash doğrular", async () => {
@@ -164,7 +168,9 @@ describe("AuthService", () => {
       users,
       new InMemorySessionStore(),
       new InMemoryPasswordResetStore(),
-      { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
+      { resolve: vi.fn(async (input) => (
+        input.userId === "multi-tenant-b" ? { subjectType: "STUDENT", subjectId: "student-b" } : undefined
+      )) } as unknown as IdentityResolver,
       undefined,
       undefined,
       new InMemoryTenantStore(),
@@ -187,6 +193,8 @@ describe("AuthService", () => {
         userId: "multi-tenant-b",
         tenantId: "tenant-b",
         roles: ["STUDENT"],
+        subjectType: "STUDENT",
+        subjectId: "student-b",
       },
     });
   });
@@ -234,6 +242,36 @@ describe("AuthService", () => {
       mustChangePassword: true,
       sessionId: tokenPair.session.id,
     });
+  });
+
+  it("literal portal rolü subject bağı çözülemezse token üretmez", async () => {
+    const nationalId = "10000000450";
+    const user: AuthUser = {
+      id: "teacher-unbound-login",
+      name: "Unbound Teacher Login",
+      passwordHash: hashPassword("password", "test-salt"),
+      tenantId: "tenant-a",
+      nationalIdHash: hashTcIdentity(nationalId),
+      roles: ["TEACHER"],
+      membershipVersion: 1,
+    };
+    const users = createUserStoreMock({
+      findByTenantAndNationalIdHash: vi.fn(async (tenantId, nationalIdHash) => (
+        tenantId === user.tenantId && nationalIdHash === user.nationalIdHash ? user : undefined
+      )),
+      findById: vi.fn(async (id) => (id === user.id ? user : undefined)),
+    });
+    const auth = new AuthService(
+      users,
+      new InMemorySessionStore(),
+      new InMemoryPasswordResetStore(),
+      { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
+      undefined,
+      undefined,
+      new InMemoryTenantStore(),
+    );
+
+    await expect(auth.login(loginCredentials(nationalId))).rejects.toThrow("SUBJECT_CONTEXT_MISSING");
   });
 
   it("system hesabı system scope ve TC ile login olur", async () => {
@@ -449,6 +487,44 @@ describe("AuthService", () => {
     await expect(auth.verifyActiveAccessToken(issued.accessToken)).rejects.toThrow("ACCESS_SESSION_INACTIVE");
   });
 
+  it("production'da JWT access secret yoksa başlamaz", () => {
+    process.env.NODE_ENV = "production";
+    delete process.env.JWT_ACCESS_SECRET;
+
+    expect(() => new AuthService(
+      createUserStoreMock({}),
+      new InMemorySessionStore(),
+      new InMemoryPasswordResetStore(),
+      { resolve: vi.fn() } as unknown as IdentityResolver,
+    )).toThrow("JWT_ACCESS_SECRET_REQUIRED");
+  });
+
+  it("admin MFA required iken TOTP kaydı olmayan admin'e token üretmez", async () => {
+    process.env.ADMIN_MFA_MODE = "required";
+    const user: AuthUser = {
+      id: "admin-mfa-required",
+      email: "admin-required@example.test",
+      nationalIdHash: hashTcIdentity("10000000146"),
+      name: "Required MFA Admin",
+      passwordHash: hashPassword("password", "test-salt"),
+      tenantId: "tenant-a",
+      roles: ["TENANT_ADMIN"],
+      membershipVersion: 1,
+    };
+    const users = createMutableUserStore(user);
+    const auth = new AuthService(
+      users,
+      new InMemorySessionStore(),
+      new InMemoryPasswordResetStore(),
+      { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
+      undefined,
+      undefined,
+      new InMemoryTenantStore(),
+    );
+
+    await expect(auth.login(loginCredentials("10000000146"))).rejects.toThrow("MFA_ENROLLMENT_REQUIRED");
+  });
+
   it("admin TOTP etkinleştikten sonra login'i MFA challenge'a böler ve TOTP reuse'u reddeder", async () => {
     process.env.ADMIN_MFA_MODE = "optional";
     const user: AuthUser = {
@@ -547,12 +623,21 @@ function loginCredentials(nationalId: string, password = "password", tenantSlug 
   return { tenantSlug, nationalId, password };
 }
 
+function restoreEnv(name: keyof NodeJS.ProcessEnv, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}
+
 function createUserStoreMock(overrides: Partial<AuthUserStore>): AuthUserStore {
   return {
     findByEmail: vi.fn(),
     findByTenantAndNationalIdHash: vi.fn(),
     findByNationalIdHash: vi.fn(async () => []),
     findById: vi.fn(),
+    listByTenant: vi.fn(async () => []),
     createOrAttachTenantIdentity: vi.fn(),
     updatePassword: vi.fn(),
     enableTotp: vi.fn(),
@@ -575,6 +660,7 @@ function createMutableUserStore(user: AuthUser): AuthUserStore {
       nationalIdHash === user.nationalIdHash && user.tenantId !== "system" ? [clone()] : []
     )),
     findById: vi.fn(async (id) => (id === user.id ? clone() : undefined)),
+    listByTenant: vi.fn(async (tenantId) => (tenantId === user.tenantId ? [clone()] : [])),
     createOrAttachTenantIdentity: vi.fn(),
     updatePassword: vi.fn(async (_id, passwordHash) => {
       user.passwordHash = passwordHash;

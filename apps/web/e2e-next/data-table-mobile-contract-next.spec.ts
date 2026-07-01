@@ -1106,7 +1106,7 @@ function createStudentAttendanceSummary() {
 }
 
 function createStudentReportProgress() {
-  return { netDelta: 2.5, studentId: "student-a" };
+  return { netDelta: 2.5, studentId: "student-a", successRateDelta: 8.4 };
 }
 
 function createStudentClassHistory() {

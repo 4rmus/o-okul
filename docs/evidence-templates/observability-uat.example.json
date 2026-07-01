@@ -16,8 +16,8 @@
   "alertsVerified": [
     "OOkulApiDown",
     "OOkulReadinessFailing",
-    "OOkulHigh5xxRate",
-    "OOkulSlowRequests"
+    "OOkulApiHighErrorRate",
+    "OOkulApiSlowRequests"
   ],
   "evidenceReferences": [
     "artifacts/example/observability/prometheus-targets.png",

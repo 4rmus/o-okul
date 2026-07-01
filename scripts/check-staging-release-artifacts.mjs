@@ -328,7 +328,7 @@ const missingArtifactRemediation = new Map([
   [
     "reports/admin-mfa.json",
     {
-      command: "ADMIN_MFA_EVIDENCE_OUTPUT=artifacts/staging/reports/admin-mfa.json corepack pnpm admin-mfa:generate",
+      command: "ADMIN_MFA_OUTPUT=artifacts/staging/reports/admin-mfa.json corepack pnpm admin-mfa:generate",
       prerequisite: "Admin MFA enrollment, TOTP/recovery reuse negatives, and session revoke verification.",
       blocker: "Real admin enrollment and login verification evidence references are required.",
     },

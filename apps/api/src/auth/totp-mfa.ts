@@ -201,12 +201,15 @@ function withAuthenticatorOptions<T>(options: AuthenticatorOptionOverrides, call
 }
 
 function getChallengeSecret(): Buffer {
-  const value = process.env.ADMIN_MFA_CHALLENGE_SECRET ?? process.env.JWT_ACCESS_SECRET;
+  const value = process.env.ADMIN_MFA_CHALLENGE_SECRET;
   if (!value) {
     if (process.env.NODE_ENV === "production") {
       throw new Error("ADMIN_MFA_CHALLENGE_SECRET_REQUIRED");
     }
-    return Buffer.from(defaultTestChallengeSecret);
+    return Buffer.from(process.env.JWT_ACCESS_SECRET ?? defaultTestChallengeSecret);
+  }
+  if (process.env.NODE_ENV === "production" && value === process.env.JWT_ACCESS_SECRET) {
+    throw new Error("ADMIN_MFA_CHALLENGE_SECRET_MUST_DIFFER");
   }
   return Buffer.from(value);
 }

@@ -3,8 +3,10 @@ import type { SmsAdapter, SmsMessage, SmsSendResult } from "@o-okul/sms-adapter"
 import { getJobContext } from "../context/job-context.js";
 import {
   processSmsBatchJob,
+  type SmsBatchDeliveryCompletedSnapshot,
   type SmsBatchDeliveryCompletedInput,
   type SmsBatchDeliveryFailedInput,
+  type SmsBatchDeliveryLookupInput,
   type SmsBatchDeliveryReporter,
 } from "./sms-batch-job.js";
 
@@ -125,6 +127,91 @@ describe("processSmsBatchJob", () => {
     }]);
   });
 
+  it("completed delivery raporu varsa provider'a tekrar SMS göndermez", async () => {
+    const deliveryReporter = new FakeDeliveryReporter({
+      tenantId: "tenant-a",
+      jobId: "message-template-a_sms-hash-a",
+      templateId: "message-template-a",
+      sentCount: 2,
+      failedCount: 0,
+      billableSegments: 2,
+    });
+    const adapter = new FakeSmsAdapter([]);
+
+    const result = await processSmsBatchJob(
+      {
+        id: "message-template-a_sms-hash-a",
+        name: "sms-batch",
+        payload: {
+          tenantId: "tenant-a",
+          userId: "user-a",
+          entityId: "message-template-a",
+          contentHash: "sms-hash-a",
+          templateId: "message-template-a",
+          messageBody: "Mesaj",
+          recipients: [{ to: "5000000001" }, { to: "5000000002" }],
+        },
+      },
+      adapter,
+      deliveryReporter,
+    );
+
+    expect(adapter.messages).toEqual([]);
+    expect(deliveryReporter.lookups).toEqual([{
+      tenantId: "tenant-a",
+      jobId: "message-template-a_sms-hash-a",
+    }]);
+    expect(result).toEqual({
+      tenantId: "tenant-a",
+      templateId: "message-template-a",
+      sentCount: 2,
+      failedCount: 0,
+      billableSegments: 2,
+      status: "completed",
+    });
+  });
+
+  it("provider başarılıysa delivery raporu yazılamasa bile retry tetiklemez", async () => {
+    const deliveryReporter = new FakeDeliveryReporter(undefined, new Error("DB_DOWN"));
+    const adapter = new FakeSmsAdapter([{
+      to: "5000000001",
+      status: "sent",
+      segmentEstimate: {
+        encoding: "GSM_7",
+        characterCount: 5,
+        messageUnits: 5,
+        segments: 1,
+        singleSegmentLimit: 160,
+        multipartSegmentLimit: 153,
+      },
+    }]);
+
+    await expect(processSmsBatchJob(
+      {
+        id: "message-template-a_sms-hash-a",
+        name: "sms-batch",
+        payload: {
+          tenantId: "tenant-a",
+          userId: "user-a",
+          entityId: "message-template-a",
+          contentHash: "sms-hash-a",
+          templateId: "message-template-a",
+          messageBody: "Mesaj",
+          recipients: [{ to: "5000000001" }],
+        },
+      },
+      adapter,
+      deliveryReporter,
+    )).resolves.toEqual({
+      tenantId: "tenant-a",
+      templateId: "message-template-a",
+      sentCount: 1,
+      failedCount: 0,
+      billableSegments: 1,
+      status: "completed",
+    });
+  });
+
   it("yanlış job adı veya eksik alıcıda işi başlatmaz", async () => {
     const adapter = new FakeSmsAdapter([]);
 
@@ -217,8 +304,20 @@ class FakeSmsAdapter implements SmsAdapter {
 class FakeDeliveryReporter implements SmsBatchDeliveryReporter {
   completed: SmsBatchDeliveryCompletedInput[] = [];
   failed: SmsBatchDeliveryFailedInput[] = [];
+  lookups: SmsBatchDeliveryLookupInput[] = [];
+
+  constructor(
+    private readonly completedSnapshot?: SmsBatchDeliveryCompletedSnapshot,
+    private readonly markCompletedError?: Error,
+  ) {}
+
+  async findCompleted(input: SmsBatchDeliveryLookupInput): Promise<SmsBatchDeliveryCompletedSnapshot | undefined> {
+    this.lookups.push(input);
+    return this.completedSnapshot;
+  }
 
   async markCompleted(input: SmsBatchDeliveryCompletedInput): Promise<void> {
+    if (this.markCompletedError) throw this.markCompletedError;
     this.completed.push(input);
   }
 

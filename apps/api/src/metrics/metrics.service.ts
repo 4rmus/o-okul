@@ -88,10 +88,30 @@ export class MetricsService implements OnModuleDestroy {
 }
 
 function normalizePath(path: string): string {
-  return path
-    .replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ":id")
-    .replace(/\/[0-9]+(?=\/|$)/g, "/:id");
+  return path.split("/").map((segment) => {
+    if (!segment) return segment;
+    if (staticPathSegments.has(segment)) return segment;
+    if (/^[0-9]+$/.test(segment)) return ":id";
+    if (/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(segment)) return ":id";
+    if (/^[0-9a-f]{16,}$/i.test(segment)) return ":id";
+    if (segment.includes("@") || segment.includes(".")) return ":slug";
+    if (/[0-9]/.test(segment) && /[a-z]/i.test(segment)) return ":slug";
+    if (/^[a-z0-9]+(?:-[a-z0-9]+)+$/i.test(segment) && !staticPathSegments.has(segment)) return ":slug";
+    return segment;
+  }).join("/");
 }
+
+const staticPathSegments = new Set([
+  "backup-restore-jobs",
+  "grade-levels",
+  "import-quarantines",
+  "raw-imports",
+  "report-generation",
+  "role-preview",
+  "teacher-notes",
+  "tenant-export",
+  "v1",
+]);
 
 function escapeLabel(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");

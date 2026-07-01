@@ -9,7 +9,7 @@ import type {
   ReportStudentSnapshot,
 } from "@o-okul/shared-types";
 import { formatCourseName, formatOutcomeCode } from "./academic-labels.js";
-import { clampSuccessRate, formatPercentNumber, reportQuestionCount, reportSuccessRate } from "./report-metrics.js";
+import { clampSuccessRate, formatPercentDelta, formatPercentNumber, reportQuestionCount, reportSuccessRate } from "./report-metrics.js";
 
 type KarneHeadingLevel = "h2" | "h3" | "h4";
 
@@ -214,7 +214,7 @@ export function KarneSheet({
                 </tr>
                 <tr>
                   <th colSpan={2}>GELİŞİM</th>
-                  <td>{showProgressHistory ? formatDelta(progress?.netDelta) : scoreExtra}</td>
+                  <td>{showProgressHistory ? formatPercentDelta(progress?.successRateDelta) : scoreExtra}</td>
                 </tr>
               </tbody>
             </table>

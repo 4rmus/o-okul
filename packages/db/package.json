@@ -22,7 +22,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "dev": "tsc -p tsconfig.json --watch",
     "lint": "prisma validate --config prisma.config.ts && tsc -p tsconfig.json --noEmit",
-    "test": "prisma validate --config prisma.config.ts && pnpm db:rls:check && pnpm db:audit-log-partition:check && pnpm db:audit-log-partition:maintain-contract && tsc -p tsconfig.json --noEmit",
+    "test": "prisma validate --config prisma.config.ts && pnpm db:rls:check && pnpm db:audit-log-partition:check && pnpm db:audit-log-partition:maintain-contract && tsc -p tsconfig.json --noEmit && vitest run prisma/seed-exams.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:seed-exams": "tsx prisma/seed-exams.ts"
   },

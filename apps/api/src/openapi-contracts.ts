@@ -12,6 +12,7 @@ interface OperationContract {
   listResponse?: boolean;
   noContent?: boolean;
   idempotent?: boolean;
+  idempotencyRequired?: boolean;
   requiredHeaders?: Array<{ name: string; description?: string; schema?: JsonSchema }>;
 }
 
@@ -220,9 +221,7 @@ const tenantSelectionRequestSchema = objectSchema({
   tenantId: stringSchema({ minLength: 1 }),
 }, ["selectionToken", "tenantId"]);
 
-const refreshRequestSchema = objectSchema({
-  refreshToken: stringSchema(),
-});
+const refreshRequestSchema = objectSchema({});
 
 const passwordResetAcceptedResponseSchema = objectSchema({
   status: { type: "string", enum: ["ACCEPTED"] },
@@ -312,7 +311,7 @@ const publicNotificationDeviceRecordSchema = objectSchema({
 
 const kvkkInventoryRecordSchema = objectSchema({
   id: stringSchema(),
-  kind: { type: "string", enum: ["student", "teacher", "guardian"] },
+  kind: { type: "string", enum: ["student", "teacher", "guardian", "user"] },
   displayRef: stringSchema(),
   piiCategories: arraySchema(stringSchema()),
   purgeAvailable: { type: "boolean" },
@@ -1893,6 +1892,7 @@ const reportStudentProgressSchema = objectSchema({
   examId: stringSchema(),
   studentId: stringSchema(),
   points: arraySchema(reportStudentProgressPointSchema),
+  successRateDelta: numberSchema(),
   netDelta: numberSchema(),
   standardScoreDelta: numberSchema(),
 }, ["tenantId", "examId", "studentId", "points"]);
@@ -2861,6 +2861,7 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "post /api/v1/announcements/{id}/deliveries": {
     idempotent: true,
+    idempotencyRequired: true,
     requestBody: objectSchema({
       channel: announcementDeliveryChannelSchema,
     }, ["channel"]),
@@ -3499,6 +3500,7 @@ export function applyOpenApiContracts(document: OpenAPIObject): OpenAPIObject {
     }
 
     if (contract.idempotent) {
+      const required = contract.idempotencyRequired === true;
       operation.parameters ??= [];
       const idempotencyHeader = operation.parameters.find((parameter: any) =>
         typeof parameter === "object" &&
@@ -3508,22 +3510,28 @@ export function applyOpenApiContracts(document: OpenAPIObject): OpenAPIObject {
       );
       if (idempotencyHeader) {
         idempotencyHeader.name = "Idempotency-Key";
-        idempotencyHeader.required = false;
+        idempotencyHeader.required = required;
         idempotencyHeader.schema = stringSchema({ maxLength: 128 });
-        idempotencyHeader.description = "Optional retry key. Reusing the same key with a different body returns 409.";
+        idempotencyHeader.description = idempotencyDescription(required);
       } else {
         operation.parameters.push({
           in: "header",
           name: "Idempotency-Key",
-          required: false,
+          required,
           schema: stringSchema({ maxLength: 128 }),
-          description: "Optional retry key. Reusing the same key with a different body returns 409.",
+          description: idempotencyDescription(required),
         });
       }
     }
   }
 
   return document;
+}
+
+function idempotencyDescription(required: boolean): string {
+  return required
+    ? "Required retry key. Reusing the same key with a different body returns 409."
+    : "Optional retry key. Reusing the same key with a different body returns 409.";
 }
 
 function upsertHeaderParameter(

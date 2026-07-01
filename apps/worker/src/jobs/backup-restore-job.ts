@@ -1,4 +1,5 @@
 import { lstat, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join, parse, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runWithJobContext } from "../context/job-context.js";
@@ -246,12 +247,10 @@ async function assertEvidenceFileParentPath(filePath: string): Promise<void> {
 
 function isLocalTempEvidencePath(filePath: string): boolean {
   const normalizedPath = filePath.replace(/\/+$/g, "") || "/";
-  return (
-    normalizedPath === "/tmp" ||
-    normalizedPath.startsWith("/tmp/") ||
-    normalizedPath === "/var/tmp" ||
-    normalizedPath.startsWith("/var/tmp/")
-  );
+  return ["/tmp", "/var/tmp", resolve(tmpdir())].some((rootPath) => {
+    const normalizedRoot = rootPath.replace(/\/+$/g, "") || "/";
+    return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`);
+  });
 }
 
 function isLocalTempOrRootPath(filePath: string): boolean {

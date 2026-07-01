@@ -38,7 +38,7 @@ import {
 } from "../../../../src/form-validation.js";
 import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
-import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
+import { formatPercentDelta, formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { readReportExamId } from "../../_shared/report-exam-selection.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 import { RevealablePhone } from "../_shared/revealable-phone.js";
@@ -1179,7 +1179,7 @@ function StudentDetailPanel({
         <InfoItem label="LGS puanı" value={formatNumber(readLgsScore(detail?.report?.total))} />
         <InfoItem label="Son net" value={formatNumber(detail?.report?.total?.net)} />
         <InfoItem label="Hata kitapçığı" value={detail?.errorBooklet?.items ? `${detail.errorBooklet.items.length} soru` : "-"} />
-        <InfoItem label="Net gelişimi" value={formatDelta(detail?.progress?.netDelta)} />
+        <InfoItem label="Başarı gelişimi" value={formatPercentDelta(detail?.progress?.successRateDelta)} />
       </InfoGrid>
       {detail && detail.teacherNotes.length > 0 ? (
         <div className="next-form-guardians">
@@ -1576,11 +1576,6 @@ function formatNumber(value: number | undefined) {
 
 function readLgsScore(total: { estimatedRawScore?: number; standardScore?: number } | undefined) {
   return total?.estimatedRawScore ?? total?.standardScore;
-}
-
-function formatDelta(value: number | undefined) {
-  if (value === undefined) return "-";
-  return value > 0 ? `+${formatNumber(value)}` : formatNumber(value);
 }
 
 function formatCount(value: number) {

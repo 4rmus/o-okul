@@ -46,12 +46,12 @@ const apiRateLimitKeys = [
 ];
 const loginAttemptLimiterKeys = [
   "clientIpHash",
-  "emailHash",
+  "nationalIdHash",
   "attemptsSent",
   "lockStatusCode",
   "errorCode",
   "sharedAcrossInstances",
-  "emailAndIpScoped",
+  "nationalIdAndIpScoped",
   "differentIpNotLocked",
 ];
 
@@ -310,12 +310,12 @@ function requireLoginAttemptLimiter(loginAttemptLimiter, config, failures) {
 
   requireObjectKeySet(loginAttemptLimiter, loginAttemptLimiterKeys, failures, "loginAttemptLimiter");
   requireObjectString(loginAttemptLimiter, failures, "loginAttemptLimiter.clientIpHash", "clientIpHash");
-  requireObjectString(loginAttemptLimiter, failures, "loginAttemptLimiter.emailHash", "emailHash");
+  requireObjectString(loginAttemptLimiter, failures, "loginAttemptLimiter.nationalIdHash", "nationalIdHash");
   requireObjectIntegerAtLeast(loginAttemptLimiter, failures, "loginAttemptLimiter.attemptsSent", "attemptsSent", 1);
   requireObjectEqual(loginAttemptLimiter, failures, "loginAttemptLimiter.lockStatusCode", "lockStatusCode", 429);
   requireObjectEqual(loginAttemptLimiter, failures, "loginAttemptLimiter.errorCode", "errorCode", "LOGIN_LOCKED");
   requireObjectTrue(loginAttemptLimiter, failures, "loginAttemptLimiter.sharedAcrossInstances", "sharedAcrossInstances");
-  requireObjectTrue(loginAttemptLimiter, failures, "loginAttemptLimiter.emailAndIpScoped", "emailAndIpScoped");
+  requireObjectTrue(loginAttemptLimiter, failures, "loginAttemptLimiter.nationalIdAndIpScoped", "nationalIdAndIpScoped");
   requireObjectTrue(loginAttemptLimiter, failures, "loginAttemptLimiter.differentIpNotLocked", "differentIpNotLocked");
 
   if (Number.isInteger(config?.loginMaxAttempts) && Number.isInteger(loginAttemptLimiter.attemptsSent)) {

@@ -27,7 +27,7 @@ import { optionalTrimmedString, requiredTrimmedString, zodBody } from "../http/z
 import { Roles } from "../rbac/roles.decorator.js";
 import { AuthService } from "./auth.service.js";
 import type { LoginMfaChallenge } from "./totp-mfa.js";
-import type { TokenPair } from "./token-service.js";
+import { resolveRefreshTokenTtlMs, type TokenPair } from "./token-service.js";
 
 const loginBodySchema = z.object({
   tenantSlug: optionalTrimmedString,
@@ -38,9 +38,7 @@ const tenantSelectionBodySchema = z.object({
   selectionToken: requiredTrimmedString,
   tenantId: requiredTrimmedString,
 }).strict() satisfies z.ZodType<TenantSelectionRequest>;
-const refreshBodySchema = z.preprocess((value) => value ?? {}, z.object({
-  refreshToken: optionalTrimmedString,
-}).strict()) satisfies z.ZodType<AuthRefreshRequest>;
+const refreshBodySchema = z.preprocess((value) => value ?? {}, z.object({}).strict()) satisfies z.ZodType<AuthRefreshRequest>;
 const passwordResetRequestBodySchema = z.object({
   email: z.string().trim().email(),
 }).strict() satisfies z.ZodType<PasswordResetRequest>;
@@ -77,6 +75,7 @@ const refreshCookieOptions = {
   sameSite: "strict" as const,
   secure: process.env.COOKIE_SECURE === "true",
   path: "/api/v1/auth",
+  maxAge: resolveRefreshTokenTtlMs(),
 };
 const csrfCookieOptions = {
   sameSite: "strict" as const,
@@ -139,13 +138,13 @@ export class AuthController {
   @Post("refresh")
   @HttpCode(200)
   async refresh(
-    @Body(zodBody(refreshBodySchema)) body: RefreshBody,
+    @Body(zodBody(refreshBodySchema)) _body: RefreshBody,
     @Headers("cookie") cookieHeader: string | undefined,
     @Headers("x-csrf-token") csrfHeader: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthResponse> {
     assertCsrfToken(cookieHeader, csrfHeader);
-    const tokenPair = await this.auth.refresh(body?.refreshToken ?? readRefreshCookie(cookieHeader));
+    const tokenPair = await this.auth.refresh(readRefreshCookie(cookieHeader));
     response.cookie(refreshCookieName, tokenPair.refreshToken, refreshCookieOptions);
     response.cookie(csrfCookieName, createCsrfToken(), csrfCookieOptions);
     return toAuthResponse(tokenPair);
@@ -154,13 +153,13 @@ export class AuthController {
   @Post("logout")
   @HttpCode(204)
   async logout(
-    @Body(zodBody(refreshBodySchema)) body: RefreshBody,
+    @Body(zodBody(refreshBodySchema)) _body: RefreshBody,
     @Headers("cookie") cookieHeader: string | undefined,
     @Headers("x-csrf-token") csrfHeader: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ) {
     assertCsrfToken(cookieHeader, csrfHeader);
-    await this.auth.logout(body?.refreshToken ?? readRefreshCookie(cookieHeader));
+    await this.auth.logout(readRefreshCookie(cookieHeader));
     response.clearCookie(refreshCookieName, refreshCookieOptions);
     response.clearCookie(csrfCookieName, csrfCookieOptions);
   }

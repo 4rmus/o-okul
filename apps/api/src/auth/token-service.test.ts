@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { InMemorySessionStore } from "./session-store.js";
 import { TokenService } from "./token-service.js";
 
 describe("TokenService", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("refresh token rotate eder ve eski token tekrar kullanılamaz", async () => {
     const store = new InMemorySessionStore();
     const service = new TokenService(store, "test-secret");
@@ -68,5 +72,39 @@ describe("TokenService", () => {
 
     expect(payload.subjectType).toBe("STUDENT");
     expect(payload.subjectId).toBe("student-a");
+  });
+
+  it("süresi geçmiş access token'ı reddeder", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const store = new InMemorySessionStore();
+    const service = new TokenService(store, "test-secret", { accessTokenTtlMs: 1_000 });
+    const issued = await service.issue({
+      sub: "user-1",
+      tenantId: "tenant-a",
+      roles: ["TENANT_ADMIN"],
+      membershipVersion: 1,
+    });
+
+    vi.setSystemTime(new Date("2026-01-01T00:00:02.000Z"));
+
+    expect(() => service.verifyAccessToken(issued.accessToken)).toThrow("ACCESS_TOKEN_EXPIRED");
+  });
+
+  it("süresi geçmiş refresh session'ı rotate etmez", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const store = new InMemorySessionStore();
+    const service = new TokenService(store, "test-secret", { refreshTokenTtlMs: 1_000 });
+    const issued = await service.issue({
+      sub: "user-1",
+      tenantId: "tenant-a",
+      roles: ["TENANT_ADMIN"],
+      membershipVersion: 1,
+    });
+
+    vi.setSystemTime(new Date("2026-01-01T00:00:02.000Z"));
+
+    await expect(service.rotate(issued.refreshToken)).rejects.toThrow("REFRESH_TOKEN_EXPIRED");
   });
 });

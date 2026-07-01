@@ -604,6 +604,7 @@ function createReportGenerationResult(): ReportGenerationJobResult {
     id: "snapshot-a",
     tenantId: "tenant-a",
     examId: "exam-a",
+    contentHash: "results-v1",
     reportType: examResultSummaryReportType,
     status: "READY",
     inputRefs: {

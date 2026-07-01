@@ -1,5 +1,6 @@
 import type { SmsAdapter, SmsMessage, SmsSendResult } from "@o-okul/sms-adapter";
 import { runWithJobContext } from "../context/job-context.js";
+import { workerLogger } from "../observability/logging.js";
 import { assertTenantJobPayload, type QueueJob, type TenantJobPayload } from "../queue/queues.js";
 
 export interface SmsBatchJobPayload extends TenantJobPayload {
@@ -35,7 +36,22 @@ export interface SmsBatchDeliveryFailedInput {
   providerErrorCode: string;
 }
 
+export interface SmsBatchDeliveryLookupInput {
+  tenantId: string;
+  jobId: string;
+}
+
+export interface SmsBatchDeliveryCompletedSnapshot {
+  tenantId: string;
+  jobId: string;
+  templateId: string;
+  sentCount: number;
+  failedCount: number;
+  billableSegments: number;
+}
+
 export interface SmsBatchDeliveryReporter {
+  findCompleted(input: SmsBatchDeliveryLookupInput): Promise<SmsBatchDeliveryCompletedSnapshot | undefined>;
   markCompleted(input: SmsBatchDeliveryCompletedInput): Promise<void>;
   markFailed(input: SmsBatchDeliveryFailedInput): Promise<void>;
 }
@@ -58,6 +74,21 @@ export async function processSmsBatchJob(
       jobId: job.id,
     },
     async () => {
+      const completed = await deliveryReporter?.findCompleted({
+        tenantId: job.payload.tenantId,
+        jobId: job.id,
+      });
+      if (completed) {
+        return {
+          tenantId: completed.tenantId,
+          templateId: completed.templateId,
+          sentCount: completed.sentCount,
+          failedCount: completed.failedCount,
+          billableSegments: completed.billableSegments,
+          status: "completed" as const,
+        };
+      }
+
       let results: SmsSendResult[];
       try {
         results = await adapter.sendBatch(createMessages(job.payload));
@@ -83,7 +114,7 @@ export async function processSmsBatchJob(
         ),
         status: "completed" as const,
       };
-      await deliveryReporter?.markCompleted({
+      await markCompletedWithoutRetry(deliveryReporter, {
         tenantId: job.payload.tenantId,
         jobId: job.id,
         templateId: job.payload.templateId,
@@ -95,6 +126,23 @@ export async function processSmsBatchJob(
       return result;
     },
   );
+}
+
+async function markCompletedWithoutRetry(
+  deliveryReporter: SmsBatchDeliveryReporter | undefined,
+  input: SmsBatchDeliveryCompletedInput,
+): Promise<void> {
+  if (!deliveryReporter) return;
+  try {
+    await deliveryReporter.markCompleted(input);
+  } catch (error) {
+    workerLogger.warn({
+      err: error,
+      jobId: input.jobId,
+      tenantId: input.tenantId,
+      templateId: input.templateId,
+    }, "sms_batch_delivery_report_write_failed_after_provider_success");
+  }
 }
 
 function resolveProviderErrorCode(error: unknown): string {

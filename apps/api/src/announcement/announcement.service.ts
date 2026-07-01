@@ -166,19 +166,23 @@ export class AnnouncementService {
     input: Partial<AnnouncementDeliverySendRequest>,
     idempotencyKey?: string,
   ): Promise<AnnouncementDeliveryQueueResult> {
-    if (idempotencyKey && this.idempotency) {
-      return this.idempotency.run(
-        context,
-        {
-          key: idempotencyKey,
-          operation: "announcement.delivery.send",
-          request: { announcementId: id, ...input },
-        },
-        () => this.sendExternalDeliveryOnce(context, id, input),
-      );
+    const key = idempotencyKey?.trim();
+    if (!key) {
+      throw new BadRequestException("IDEMPOTENCY_KEY_REQUIRED");
+    }
+    if (!this.idempotency) {
+      throw new BadRequestException("IDEMPOTENCY_SERVICE_UNAVAILABLE");
     }
 
-    return this.sendExternalDeliveryOnce(context, id, input);
+    return this.idempotency.run(
+      context,
+      {
+        key,
+        operation: "announcement.delivery.send",
+        request: { announcementId: id, ...input },
+      },
+      () => this.sendExternalDeliveryOnce(context, id, input),
+    );
   }
 
   private async sendExternalDeliveryOnce(

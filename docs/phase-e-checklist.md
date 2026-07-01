@@ -13,7 +13,7 @@ Bu dosya `MASTER_PLAN.md` §10.6 Faz E kapsamını güvenli sıraya koyar.
 | Parça | Mevcut durum | Sonraki kanıt |
 |---|---|---|
 | Vite artefakt sökümü | Tamamlandı: Vite config, eski Playwright e2e, Vite entry dosyaları ve `dist` çıktıları kaldırıldı; `build/dev/test:e2e` Next'e bağlı | `pnpm --filter @o-okul/web build`, `pnpm --filter @o-okul/web test:e2e` |
-| Playwright e2e yeniden yazımı | Tamamlandı: Next e2e kurum CRUD, materyal/ödev, optik parser, rapor ayrıntı/export, destek bildirimi+ek+yorum, finans, rol önizleme, güvenlik denetimi, gözlemlenebilirlik, UAT/rollback, canlı yayın kanıtı, sistem sağlığı, yedek/restore kanıt ekranı, rol portalı ve single-flight refresh akışlarını doğruluyor | `pnpm --filter @o-okul/web test:e2e` |
+| Playwright e2e yeniden yazımı | Tamamlandı: Next e2e kurum CRUD, materyal/ödev, optik parser, rapor ayrıntı/export, destek bildirimi+ek+yorum, finans, rol önizleme, güvenlik denetimi, gözlemlenebilirlik, UAT/rollback, release kanıtı, sistem sağlığı, yedek/restore kanıt ekranı, rol portalı ve single-flight refresh akışlarını doğruluyor | `pnpm --filter @o-okul/web test:e2e` |
 | Kimlik-bağı envanter audit'i | Tamamlandı: audit RLS bypass ile tüm tenantları okur ve canlı DB'de `READY` döner | `pnpm identity-link:audit` |
 | Kimlik-bağı davet/göç kanıt kapısı | Tamamlandı: karar referansı, role göre link/membership sayımı, davet akışı ve negatif erişim kanıtı JSON raporuyla doğrulanıyor | `pnpm identity-migration:check` |
 | Kimlik-bağı davet/göç modeli | Tamamlandı: davet/aktivasyon API'si, kurum web ekranı ve idempotent `identity-link:migrate` script'i var; script onay env'i olmadan çalışmaz | `IDENTITY_LINK_MIGRATION_APPROVED=true pnpm identity-link:migrate`, onay sonrası `IDENTITY_MIGRATION_TARGET` gerçek raporu |

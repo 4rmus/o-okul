@@ -93,7 +93,7 @@ const templateEvidencePhrases = [
   "pdf and excel download verified",
   "payment plan created",
   "idempotency retry verified",
-  "announcement and sms smoke passed",
+  "announcement and sms disabled path verified",
   "support and material upload verified",
   "teacher scoped student list opened",
   "teacher scoped report opened",

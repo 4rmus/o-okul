@@ -17,6 +17,7 @@ import {
   passwordResetStoreToken,
 } from "./password-reset-store.js";
 import { authSessionStoreToken, type SessionStore } from "./session-store.js";
+import { missingBoundSubjectRole } from "./subject-binding.js";
 import { TokenService, type AccessTokenPayload, type TokenPair } from "./token-service.js";
 import { type AuthUser, type AuthUserStore, authUserStoreToken, hashPassword, verifyPassword } from "./auth-user-store.js";
 import {
@@ -98,7 +99,7 @@ export class AuthService {
     @Optional() @Inject(loginAttemptLimiterToken) loginAttempts?: LoginAttemptLimiterStore,
     @Optional() @Inject(tenantStoreToken) private readonly tenants?: TenantStore,
   ) {
-    this.tokens = new TokenService(this.sessions, process.env.JWT_ACCESS_SECRET ?? "test-access-secret");
+    this.tokens = new TokenService(this.sessions, getAccessSecret());
     this.loginAttempts = loginAttempts ?? createLoginAttemptLimiter();
   }
 
@@ -168,6 +169,9 @@ export class AuthService {
   }
 
   private async issueLoginForUser(user: AuthUser): Promise<TokenPair | LoginMfaChallenge> {
+    if (this.shouldRequireTotpEnrollment(user)) {
+      throw new UnauthorizedException("MFA_ENROLLMENT_REQUIRED");
+    }
     if (this.shouldChallengeWithTotp(user)) {
       await this.auditLogs?.record({
         tenantId: user.tenantId === "system" ? undefined : user.tenantId,
@@ -312,6 +316,9 @@ export class AuthService {
       tenantId: user.tenantId,
       roles: user.roles,
     });
+    if (missingBoundSubjectRole({ roles: user.roles, subjectType: subject?.subjectType, subjectId: subject?.subjectId })) {
+      throw new UnauthorizedException("SUBJECT_CONTEXT_MISSING");
+    }
     const tokenPair = await this.tokens.issue({
       sub: user.id,
       tenantId: user.tenantId,
@@ -472,12 +479,18 @@ export class AuthService {
     if (!session || session.status !== "ACTIVE") {
       throw new UnauthorizedException("ACCESS_SESSION_INACTIVE");
     }
+    if (session.expiresAt.getTime() <= Date.now()) {
+      throw new UnauthorizedException("ACCESS_SESSION_EXPIRED");
+    }
     if (
       session.userId !== payload.sub ||
       session.tenantId !== payload.tenantId ||
       session.membershipVersion !== payload.membershipVersion
     ) {
       throw new UnauthorizedException("ACCESS_SESSION_MISMATCH");
+    }
+    if (missingBoundSubjectRole({ roles: session.roles, subjectType: session.subjectType, subjectId: session.subjectId })) {
+      throw new UnauthorizedException("SUBJECT_CONTEXT_MISSING");
     }
     const user = await this.users.findById(payload.sub);
     if (!user) {
@@ -557,6 +570,10 @@ export class AuthService {
 
   private shouldChallengeWithTotp(user: { roles: string[]; totpSecretEncrypted?: string; totpEnabledAt?: string }): boolean {
     return resolveAdminMfaMode() !== "off" && isAdminMfaRole(user.roles) && Boolean(user.totpSecretEncrypted && user.totpEnabledAt);
+  }
+
+  private shouldRequireTotpEnrollment(user: { roles: string[]; totpSecretEncrypted?: string; totpEnabledAt?: string }): boolean {
+    return resolveAdminMfaMode() === "required" && isAdminMfaRole(user.roles) && !Boolean(user.totpSecretEncrypted && user.totpEnabledAt);
   }
 
   private assertAdminMfaManageable(context: RequestContext): void {
@@ -657,9 +674,27 @@ function verifyTenantSelectionToken(token: string): TenantSelectionTokenPayload 
 }
 
 function signTenantSelectionPayload(payload: string): string {
-  return createHmac("sha256", process.env.AUTH_SELECTION_SECRET ?? process.env.JWT_ACCESS_SECRET ?? "test-access-secret")
+  return createHmac("sha256", getTenantSelectionSecret())
     .update(payload)
     .digest("base64url");
+}
+
+const defaultTestAccessSecret = "test-access-secret";
+
+function getAccessSecret(): string {
+  const secret = process.env.JWT_ACCESS_SECRET;
+  if (process.env.NODE_ENV === "production" && (!secret || secret === defaultTestAccessSecret)) {
+    throw new Error("JWT_ACCESS_SECRET_REQUIRED");
+  }
+  return secret ?? defaultTestAccessSecret;
+}
+
+function getTenantSelectionSecret(): string {
+  const secret = process.env.AUTH_SELECTION_SECRET ?? process.env.JWT_ACCESS_SECRET;
+  if (process.env.NODE_ENV === "production" && (!secret || secret === defaultTestAccessSecret)) {
+    throw new Error("AUTH_SELECTION_SECRET_REQUIRED");
+  }
+  return secret ?? defaultTestAccessSecret;
 }
 
 function safeEqual(actual: string, expected: string): boolean {

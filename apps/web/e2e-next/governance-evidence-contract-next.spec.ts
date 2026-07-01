@@ -316,21 +316,21 @@ test.describe("Governance evidence sözleşmesi", () => {
 
   test("release ve operasyon kanıt panelleri kapsam ayrımını görünür tutar", async ({ page }) => {
     await openWithGovernanceMocks(page, "/kurum/canli-yayin", { height: 900, width: 390 }, {
-      roles: ["TENANT_ADMIN", "SYSTEM_ADMIN"],
+      roles: ["TENANT_ADMIN"],
     });
-    await expectEvidenceScopes(page.getByLabel("Canlı yayın güven durumu"), {
+    await expectEvidenceScopes(page.getByLabel("Release kanıt güven durumu"), {
       "Kanıt kapsamı: Yerel/statik": 1,
       "Kanıt kapsamı: Staging/prod": 1,
       "Kanıt kapsamı: Canlı kanıt": 1,
     });
-    await expectEvidenceTiers(page.getByLabel("Canlı yayın güven durumu"), {
+    await expectEvidenceTiers(page.getByLabel("Release kanıt güven durumu"), {
       evidence: 1,
       live: 1,
       reference: 1,
     });
-    await expect(page.getByLabel("Canlı yayın güven durumu")).toContainText("Release kararına yetmez");
-    await expect(page.getByLabel("Canlı yayın güven durumu")).toContainText("Canlı kanıt gerekir");
-    const liveSummary = page.getByRole("region", { exact: true, name: "Canlı yayın operasyon özeti" });
+    await expect(page.getByLabel("Release kanıt güven durumu")).toContainText("Release kararına yetmez");
+    await expect(page.getByLabel("Release kanıt güven durumu")).toContainText("Canlı kanıt gerekir");
+    const liveSummary = page.getByRole("region", { exact: true, name: "Release kanıt operasyon özeti" });
     await expect(liveSummary).toContainText("Kanıt zinciri");
     await expect(liveSummary).toContainText("PASS gerekir");
     await expect(liveSummary).toContainText("CLI-only");
@@ -338,10 +338,10 @@ test.describe("Governance evidence sözleşmesi", () => {
     await expect(liveSummary).toContainText("Staging/prod evidence");
     await expect(liveSummary).toContainText("Pilot kapanış");
     await expect(liveSummary).toContainText("Panel aksiyonu");
-    await expect(liveSummary.getByLabel("Canlı yayın operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(liveSummary.getByLabel("Release kanıt operasyon özeti aksiyon kuyruğu")).toBeVisible();
     await expect(page.getByRole("button", { name: /Canlı yayına al|Yayınla|Go-live başlat|Release başlat/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /Canlı yayına al|Yayınla|Go-live başlat|Release başlat/i })).toHaveCount(0);
-    const liveGateTable = page.getByRole("table", { name: "Canlı yayın kanıt kapıları" });
+    const liveGateTable = page.getByRole("table", { name: "Release kanıt kapıları" });
     await expect(liveGateTable).toContainText("Toplu kanıt zinciri");
     await expect(liveGateTable).toContainText("pnpm prod:evidence:check");
     await expect(liveGateTable).toContainText("pnpm pilot:check");
@@ -373,6 +373,11 @@ test.describe("Governance evidence sözleşmesi", () => {
     await expect(externalEvidenceTable).toContainText("Go-live karar paketi");
     await expectNoHorizontalOverflow(page, "live-release-governance-mobile");
     await expectNoUnlabeledControls(page, "live-release-governance-mobile");
+
+    await openWithGovernanceMocks(page, "/kurum/canli-yayin", { height: 900, width: 390 }, { roles: ["ASSISTANT_ADMIN"] });
+    await expect(page).toHaveURL(/\/kurum$/);
+    await expect(page.getByRole("region", { exact: true, name: "Release kanıt operasyon özeti" })).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Release Kanıtı" })).toHaveCount(0);
 
     await openWithGovernanceMocks(page, "/kurum/uat-rollback", { height: 900, width: 768 }, {
       roles: ["TENANT_ADMIN", "SYSTEM_ADMIN"],

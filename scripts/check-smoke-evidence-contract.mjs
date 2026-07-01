@@ -117,6 +117,17 @@ const negativeCases = [
     "wal_archive_smoke",
   ],
   [
+    "WAL archive_mode kapalı reddedilir",
+    {
+      ...summary.smokeEvidence?.walArchive,
+      postgresWalArchive: {
+        ...summary.smokeEvidence?.walArchive?.postgresWalArchive,
+        archiveMode: "off",
+      },
+    },
+    "wal_archive_smoke",
+  ],
+  [
     "WAL beklenmeyen alan reddedilir",
     {
       ...summary.smokeEvidence?.walArchive,
@@ -216,6 +227,14 @@ const negativeCases = [
     "notification_provider_smoke",
   ],
   [
+    "noop Notification provider reddedilir",
+    {
+      ...summary.smokeEvidence?.notificationProvider,
+      provider: "noop",
+    },
+    "notification_provider_smoke",
+  ],
+  [
     "Notification ham e-posta recipient reddedilir",
     {
       ...summary.smokeEvidence?.notificationProvider,
@@ -283,12 +302,12 @@ const negativeCases = [
     "rate_limit_redis_smoke",
   ],
   [
-    "Rate limit ham email reddedilir",
+    "Rate limit ham nationalId reddedilir",
     {
       ...rateLimitRedisSmokePayload(),
       loginAttemptLimiter: {
         ...rateLimitRedisSmokePayload().loginAttemptLimiter,
-        email: "rate-limit-smoke@example.invalid",
+        nationalId: "10000000146",
       },
     },
     "rate_limit_redis_smoke",
@@ -558,6 +577,45 @@ const negativeCases = [
     "backup_restore_smoke",
   ],
   [
+    "Backup offsite restore migration count reddedilir",
+    {
+      ...backupOffsiteRestoreSmokePayload(),
+      tableCounts: {
+        ...backupOffsiteRestoreSmokePayload().tableCounts,
+        _prisma_migrations: 0,
+      },
+    },
+    "backup_offsite_restore_smoke",
+  ],
+  [
+    "Backup offsite restore yanlış komut reddedilir",
+    {
+      ...backupOffsiteRestoreSmokePayload(),
+      commandsPassed: ["pnpm backup:offsite:smoke"],
+    },
+    "backup_offsite_restore_smoke",
+  ],
+  [
+    "Backup offsite restore ham file path reddedilir",
+    {
+      ...backupOffsiteRestoreSmokePayload(),
+      target: {
+        protocol: "file",
+        pathRedacted: true,
+        path: "/mnt/offsite/o_okul_restore_smoke.dump",
+      },
+    },
+    "backup_offsite_restore_smoke",
+  ],
+  [
+    "Backup offsite restore ham DB adı reddedilir",
+    {
+      ...backupOffsiteRestoreSmokePayload(),
+      restoreDb: "o_okul_offsite_restore_smoke_20260701",
+    },
+    "backup_offsite_restore_smoke",
+  ],
+  [
     "Live UI-worker result raw student id reddedilir",
     {
       ...liveUiWorkerResultPayload(),
@@ -612,6 +670,14 @@ failures.push(
     expectedCheck: "backup_restore_smoke",
     allowedEnvironments: ["staging", "production"],
     label: "backupRestoreSmoke",
+    allowExampleEvidence: true,
+  }),
+);
+failures.push(
+  ...validateSmokeEvidencePayload(backupOffsiteRestoreSmokePayload(), {
+    expectedCheck: "backup_offsite_restore_smoke",
+    allowedEnvironments: ["staging", "production"],
+    label: "backupOffsiteRestoreSmoke",
     allowExampleEvidence: true,
   }),
 );
@@ -740,12 +806,12 @@ function rateLimitRedisSmokePayload() {
     },
     loginAttemptLimiter: {
       clientIpHash: "4".repeat(64),
-      emailHash: "5".repeat(64),
+      nationalIdHash: "5".repeat(64),
       attemptsSent: 6,
       lockStatusCode: 429,
       errorCode: "LOGIN_LOCKED",
       sharedAcrossInstances: true,
-      emailAndIpScoped: true,
+      nationalIdAndIpScoped: true,
       differentIpNotLocked: true,
     },
     commandsPassed: ["pnpm rate-limit:smoke", "pnpm rate-limit:check"],
@@ -771,6 +837,33 @@ function backupRestoreSmokePayload() {
     },
     durationMs: 1250,
     commandsPassed: ["pnpm backup:restore:smoke"],
+    gaps: [],
+  };
+}
+
+function backupOffsiteRestoreSmokePayload() {
+  return {
+    generatedAt: "2026-05-31T11:30:00.000Z",
+    result: "PASS",
+    check: "backup_offsite_restore_smoke",
+    environment: "staging",
+    checkedAt: "2026-05-31T11:30:00.000Z",
+    target: {
+      protocol: "s3",
+      bucket: "o-okul-staging-backups",
+      prefix: "restore-smoke",
+    },
+    backupSha256: "7".repeat(64),
+    restoreDatabaseHash: "8".repeat(64),
+    dumpFormat: "custom",
+    tableCounts: {
+      Tenant: 2,
+      AuditLog: 1,
+      ReportSnapshot: 1,
+      _prisma_migrations: 56,
+    },
+    durationMs: 2500,
+    commandsPassed: ["pnpm backup:offsite-restore:smoke"],
     gaps: [],
   };
 }

@@ -97,6 +97,28 @@ describe("API auth + tenant isolation", () => {
     await request(server).post("/auth/logout").set("Cookie", [issued.refreshCookie, issued.csrfCookie]).expect(403);
   });
 
+  it("refresh ve logout refresh token'ı sadece HttpOnly cookie'den okur", async () => {
+    const issued = await login("admin-a@example.test");
+
+    await request(server)
+      .post("/auth/refresh")
+      .set("Cookie", [issued.refreshCookie, issued.csrfCookie])
+      .set("X-CSRF-Token", issued.csrfToken)
+      .send({ refreshToken: "body-token" })
+      .expect(422);
+    await request(server)
+      .post("/auth/logout")
+      .set("Cookie", [issued.refreshCookie, issued.csrfCookie])
+      .set("X-CSRF-Token", issued.csrfToken)
+      .send({ refreshToken: "body-token" })
+      .expect(422);
+    await request(server)
+      .post("/auth/refresh")
+      .set("Cookie", [issued.refreshCookie, issued.csrfCookie])
+      .set("X-CSRF-Token", issued.csrfToken)
+      .expect(200);
+  });
+
   it("şifre reset isteği token sızdırmadan nötr yanıt döner", async () => {
     await login("system@example.test");
     const resetRequest = await request(server)

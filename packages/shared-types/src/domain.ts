@@ -56,9 +56,7 @@ export interface MfaChallengeResponse {
 
 export type LoginResponse = AuthResponse | MfaChallengeResponse | TenantSelectionRequiredResponse;
 
-export interface AuthRefreshRequest {
-  refreshToken?: string;
-}
+export type AuthRefreshRequest = Record<string, never>;
 
 export interface PasswordResetRequest {
   email: string;
@@ -255,7 +253,7 @@ export interface TeacherPortalLookupsResponse {
   terms: AcademicTermRecord[];
 }
 
-export type KvkkInventoryKind = "student" | "teacher" | "guardian";
+export type KvkkInventoryKind = "student" | "teacher" | "guardian" | "user";
 
 export interface KvkkInventoryRecord {
   id: string;
@@ -1875,6 +1873,7 @@ export interface ReportStudentProgress {
   examId: string;
   studentId: string;
   points: ReportStudentProgressPoint[];
+  successRateDelta?: number;
   netDelta?: number;
   standardScoreDelta?: number;
 }

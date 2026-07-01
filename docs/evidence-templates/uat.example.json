@@ -102,7 +102,7 @@
       "id": "UAT-KURUM-08",
       "persona": "TENANT_ADMIN",
       "status": "PASS",
-      "evidence": ["announcement and SMS smoke passed", "support and material upload verified"]
+      "evidence": ["announcement and SMS disabled path verified", "support and material upload verified"]
     },
     {
       "id": "UAT-TEACHER-01",

@@ -77,7 +77,7 @@ async function auditSubject(subject) {
   let legacyDbStorageKeyRows = 0;
 
   for (const key of listedKeys) {
-    if (isHashOnlyStorageKey(key, subject.prefix)) {
+    if (isTenantScopedStorageKey(key, subject.prefix)) {
       validListedKeys.add(key);
     } else {
       invalidKeyObjects += 1;
@@ -87,7 +87,7 @@ async function auditSubject(subject) {
   const dbKeySet = new Set();
   for (const key of dbKeys) {
     dbKeySet.add(key);
-    if (!isHashOnlyStorageKey(key, subject.prefix)) {
+    if (!isTenantScopedStorageKey(key, subject.prefix)) {
       legacyDbStorageKeyRows += 1;
     }
   }
@@ -181,9 +181,9 @@ async function createS3ClientFromEnv() {
   };
 }
 
-function isHashOnlyStorageKey(key, prefix) {
+function isTenantScopedStorageKey(key, prefix) {
   const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`^${escapedPrefix}[a-f0-9]{64}$`, "i").test(key);
+  return new RegExp(`^${escapedPrefix}[^/]+/[^/]+/[a-f0-9]{64}/source$`, "i").test(key);
 }
 
 function determineStatus(totals) {

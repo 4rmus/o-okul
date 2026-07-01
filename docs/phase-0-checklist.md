@@ -66,7 +66,7 @@ isimlerini ekler.
 |---|---|---|
 | Runtime | `NODE_ENV`, `APP_URL`, `API_URL`, `WEB_URL`, `PORT`, `LOG_LEVEL` | `.env.example` |
 | DB/RLS | `DATABASE_URL`, `DIRECT_DATABASE_URL`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `APP_DB_USER`, `APP_DB_PASSWORD`, `MIGRATION_DB_USER`, `MIGRATION_DB_PASSWORD` | `.env.example`, RLS integration test |
-| Auth | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `ACCESS_TOKEN_TTL`, `REFRESH_TOKEN_TTL`, `COOKIE_DOMAIN`, `COOKIE_SECURE` | auth testleri |
+| Auth | `JWT_ACCESS_SECRET`, `ACCESS_TOKEN_TTL`, `REFRESH_TOKEN_TTL`, `COOKIE_DOMAIN`, `COOKIE_SECURE` | auth testleri |
 | Redis/Queue | `REDIS_URL`, `QUEUE_PREFIX` | worker testleri |
 | S3/MinIO | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE` | upload smoke testi |
 | Sentry | `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_SEND_DEFAULT_PII=false` | test hata kaydı |

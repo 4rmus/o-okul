@@ -130,6 +130,13 @@
         "prefix": "wal/staging"
       },
       "markerSha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "postgresWalArchive": {
+        "archiveMode": "on",
+        "walLevel": "replica",
+        "archiveCommandSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "switchedWalFileNameHash": "123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0",
+        "archivedWalFileSha256": "23456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01"
+      },
       "commandsPassed": ["pnpm wal:archive:smoke"],
       "gaps": []
     },
@@ -190,7 +197,7 @@
       "failureMode": "broken image deploy rejected by healthcheck",
       "migrationRollbackSafe": true,
       "commandsPassed": [
-        "docker compose pull web api worker",
+        "docker compose pull web api worker queue-board",
         "docker compose up -d --remove-orphans",
         "pnpm compose:health:smoke",
         "pnpm prod:evidence:check"
@@ -213,6 +220,12 @@
           "status": "running",
           "imageTag": "ghcr.io/example/o-okul/worker:2026-06-14.2",
           "evidenceReference": "docker compose ps worker"
+        },
+        {
+          "service": "queue-board",
+          "status": "healthy",
+          "imageTag": "ghcr.io/example/o-okul/queue-board:2026-06-14.2",
+          "evidenceReference": "docker compose ps queue-board"
         }
       ],
       "evidenceReferences": [
@@ -407,8 +420,8 @@
       "alertsVerified": [
         "OOkulApiDown",
         "OOkulReadinessFailing",
-        "OOkulHigh5xxRate",
-        "OOkulSlowRequests"
+        "OOkulApiHighErrorRate",
+        "OOkulApiSlowRequests"
       ],
       "evidenceReferences": [
         "artifacts/example/observability/prometheus-targets.png",
@@ -1040,12 +1053,12 @@
       },
       "loginAttemptLimiter": {
         "clientIpHash": "e0f2f7e2cfd4f1e7a41db3f6b1a5369bd4dfb9fb8f77060f72a89f3ea2ed92d3",
-        "emailHash": "8b9c7fd58536f6c82840e521a4fd26c7faeb3bf7ac93d77dfc41273512f34072",
+        "nationalIdHash": "8b9c7fd58536f6c82840e521a4fd26c7faeb3bf7ac93d77dfc41273512f34072",
         "attemptsSent": 6,
         "lockStatusCode": 429,
         "errorCode": "LOGIN_LOCKED",
         "sharedAcrossInstances": true,
-        "emailAndIpScoped": true,
+        "nationalIdAndIpScoped": true,
         "differentIpNotLocked": true
       },
       "commandsPassed": ["pnpm rate-limit:smoke", "pnpm rate-limit:check"],
@@ -1310,7 +1323,7 @@
           "id": "UAT-KURUM-08",
           "persona": "TENANT_ADMIN",
           "status": "PASS",
-          "evidence": ["announcement and SMS smoke passed", "support and material upload verified"]
+          "evidence": ["announcement and SMS disabled path verified", "support and material upload verified"]
         },
         {
           "id": "UAT-TEACHER-01",
