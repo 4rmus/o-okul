@@ -1,0 +1,4 @@
+interface:
+  display_name: "O-Okul Release Evidence"
+  short_description: "Staging and production evidence"
+  default_prompt: "Use $o-okul-release-evidence to verify O-Okul staging or production readiness with live evidence separated from static checks."

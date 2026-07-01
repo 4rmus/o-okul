@@ -1,0 +1,4 @@
+interface:
+  display_name: "O-Okul Slice"
+  short_description: "Scoped implementation workflow"
+  default_prompt: "Use $o-okul-implementation-slice to implement this O-Okul change as one scoped, verified slice."
