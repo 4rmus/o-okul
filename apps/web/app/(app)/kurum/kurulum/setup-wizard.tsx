@@ -265,9 +265,7 @@ export function SetupWizard() {
   );
   const courseTemplateError = courseTemplatesQuery.isError
     ? "Ders şablonları alınamadı."
-    : courseTemplatesQuery.isSuccess && (!courseTemplatesQuery.data || courseTemplatesQuery.data.length === 0)
-      ? "Ders şablonu bulunamadı."
-      : "";
+    : "";
   const activeStepIndex = Math.max(0, steps.findIndex((step) => step.id === activeStepId));
   const activeStep = steps[activeStepIndex]!;
   const stepValidation = useMemo(
