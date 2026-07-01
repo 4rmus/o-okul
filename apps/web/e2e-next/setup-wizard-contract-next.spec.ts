@@ -176,12 +176,25 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expectNoVisibleTextValues(page, "setup-teacher-import-summary", hostileUploadValues);
     await expectDraftStorageDoesNotContain(page, "setup-teacher-import-storage", hostileUploadValues);
   });
+
+  test("boş ders şablonu cevabında yerel derslerle kaydı tamamlar", async ({ page }) => {
+    await openSetupWizard(page, { height: 844, width: 390 }, { emptyCourseTemplates: true, roles: ["TENANT_ADMIN"] });
+
+    const setupForm = page.getByLabel("Kurulum formu");
+    await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
+    await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+    await setupForm.getByLabel("Veri sorumlusu").fill("Operasyon sorumlusu");
+    await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
+
+    await expect(setupForm).not.toContainText("Ders şablonu bulunamadı.");
+    await expect(setupForm).toContainText("2 sınıf, 6 ders");
+  });
 });
 
 async function openSetupWizard(
   page: Page,
   viewport: { height: number; width: number },
-  options: { roles?: string[]; studentDryRun?: "duplicate"; unexpectedMutations?: string[] } = {},
+  options: { emptyCourseTemplates?: boolean; roles?: string[]; studentDryRun?: "duplicate"; unexpectedMutations?: string[] } = {},
 ) {
   await page.setViewportSize(viewport);
   await installSetupApiMocks(page, options);
@@ -196,7 +209,7 @@ async function openSetupWizard(
 
 async function installSetupApiMocks(
   page: Page,
-  options: { roles?: string[]; studentDryRun?: "duplicate"; unexpectedMutations?: string[] } = {},
+  options: { emptyCourseTemplates?: boolean; roles?: string[]; studentDryRun?: "duplicate"; unexpectedMutations?: string[] } = {},
 ) {
   await page.unroute("**/api/v1/**").catch(() => undefined);
   await page.route("**/api/v1/**", async (route) => {
@@ -219,12 +232,13 @@ async function installSetupApiMocks(
 function mockSetupApiResponse(
   pathName: string,
   method: string,
-  options: { roles?: string[]; studentDryRun?: "duplicate" } = {},
+  options: { emptyCourseTemplates?: boolean; roles?: string[]; studentDryRun?: "duplicate" } = {},
 ) {
   if (pathName === "/auth/refresh") return createAuthResponse(options.roles ?? ["TENANT_ADMIN"]);
   if (pathName === "/me/tenant") return createTenantResponse();
   if (pathName === "/me/notification-devices") return [];
   if (method === "GET" && pathName === "/grade-levels") {
+    if (options.emptyCourseTemplates) return [];
     return [
       { code: "8-LGS", id: "grade-setup-lgs", name: "8. sınıf / LGS", tenantId: "tenant-setup" },
       { code: "10", id: "grade-setup-10", name: "10. sınıf", tenantId: "tenant-setup" },
