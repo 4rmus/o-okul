@@ -1,8 +1,12 @@
+import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { loadDemoFixtures } from "./demo-fixtures.js";
+import { fixturePath, loadDemoFixtures } from "./demo-fixtures.js";
 import { buildSeedExams } from "./seed-exams.js";
 
-describe("seed-exams gerçek pipeline", () => {
+// ponytail: ornek-veriler is local-only; keep real fixture tests active only when present.
+const describeWithDemoFixtures = existsSync(fixturePath("iSEM .txt")) ? describe : describe.skip;
+
+describeWithDemoFixtures("seed-exams gerçek pipeline", () => {
   it("demo kişi fixture'larını Excel ve TXT kaynaklarından üretir", async () => {
     const fixtures = await loadDemoFixtures();
 
@@ -14,8 +18,8 @@ describe("seed-exams gerçek pipeline", () => {
       "Din Kültürü ve Ahlak Bilgisi",
       "İngilizce",
     ]);
-    expect(fixtures.classes.map((demoClass) => demoClass.name)).toEqual(["8-A", "8-B"]);
-    expect(fixtures.teachers).toHaveLength(3);
+    expect(fixtures.classes.map((demoClass) => demoClass.name)).toEqual(["8-A", "8-B", "TYT/AYT-A", "TYT/AYT-B"]);
+    expect(fixtures.teachers).toHaveLength(11);
     expect(fixtures.students).toHaveLength(21);
     expect(fixtures.accountTeacher).toMatchObject({
       id: "teacher-demo-main",
@@ -28,7 +32,7 @@ describe("seed-exams gerçek pipeline", () => {
       firstName: "Ali",
       lastName: "Kaya",
       studentNo: "101",
-      className: "8-B",
+      className: "8-A",
       guardianFirstName: "Mehmet",
       guardianLastName: "Kaya",
     });
@@ -38,8 +42,8 @@ describe("seed-exams gerçek pipeline", () => {
       studentNo: student.studentNo,
       sourceClass: student.className,
     }))).toEqual([
-      { firstName: "ALİ", lastName: "EREN", studentNo: "119", sourceClass: "8-B" },
-      { firstName: "RONİ", lastName: "KAYA", studentNo: "120", sourceClass: "8-B" },
+      { firstName: "Necla", lastName: "Salla", studentNo: "119", sourceClass: "TYT/AYT-B" },
+      { firstName: "Mustafa", lastName: "Orak", studentNo: "120", sourceClass: "TYT/AYT-B" },
     ]);
   });
 

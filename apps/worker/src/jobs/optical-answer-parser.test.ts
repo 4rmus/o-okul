@@ -1,9 +1,13 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { getParserConfigPresetSuggestion } from "./format-analyzer-service.js";
 import { OpticalAnswerParser } from "./optical-answer-parser.js";
 import type { ParserConfigSuggestion } from "./format-analyzer-service.js";
+
+const isemTxtPath = "../../ornek-veriler/iSEM .txt";
+// ponytail: ornek-veriler is local-only; keep real fixture tests active only when present.
+const itWithIsemFixture = existsSync(isemTxtPath) ? it : it.skip;
 
 describe("OpticalAnswerParser", () => {
   it("başlıklı TAB içeriğini MATCHED ParsedAnswer adayına çevirir", () => {
@@ -73,7 +77,7 @@ describe("OpticalAnswerParser", () => {
     });
   });
 
-  it("OPTİK-7108 gerçek satırındaki sol boşluk dolgusunu fixed kolonlarda korur", () => {
+  itWithIsemFixture("OPTİK-7108 gerçek satırındaki sol boşluk dolgusunu fixed kolonlarda korur", () => {
     const parser = new OpticalAnswerParser();
     const firstLine = readFirstValidIsemARow();
 
@@ -101,7 +105,7 @@ describe("OpticalAnswerParser", () => {
     expect(result.matched[0]?.answers.map((item) => item.answer).join("")).toBe("CBCCDCBABDBCBDABCAAA");
   });
 
-  it("OPTİK-7108 gerçek satırındaki bitişik olmayan ders bloklarını 90 soruya birleştirir", () => {
+  itWithIsemFixture("OPTİK-7108 gerçek satırındaki bitişik olmayan ders bloklarını 90 soruya birleştirir", () => {
     const parser = new OpticalAnswerParser();
     const firstLine = readFirstValidIsemARow();
 
@@ -143,7 +147,7 @@ describe("OpticalAnswerParser", () => {
     expect(answers[89]).toEqual({ questionNo: 90, answer: "A" });
   });
 
-  it("OPTİK-7108 LGS preset'i gerçek satırı 90 soruya parse eder", () => {
+  itWithIsemFixture("OPTİK-7108 LGS preset'i gerçek satırı 90 soruya parse eder", () => {
     const parser = new OpticalAnswerParser();
     const firstLine = readFirstValidIsemARow();
     const preset = getParserConfigPresetSuggestion("OPTIK_7108_LGS");
@@ -160,7 +164,7 @@ describe("OpticalAnswerParser", () => {
     expect(result.matched[0]?.answers[54]).toEqual({ questionNo: 55, answer: "" });
   });
 
-  it("OPTİK-7108 tablı gerçek satırı fixed kolonlara göre hizalar", () => {
+  itWithIsemFixture("OPTİK-7108 tablı gerçek satırı fixed kolonlara göre hizalar", () => {
     const parser = new OpticalAnswerParser();
     const firstLine = readFirstIsemRow();
     const preset = getParserConfigPresetSuggestion("OPTIK_7108_LGS");
@@ -476,7 +480,7 @@ function createDelimitedConfig(): Pick<ParserConfigSuggestion, "delimiter" | "sk
 }
 
 function readFirstValidIsemARow(): string {
-  const row = readFileSync("../../ornek-veriler/iSEM .txt", "utf8")
+  const row = readFileSync(isemTxtPath, "utf8")
     .replace(/\r\n/g, "\n")
     .split("\n")
     .find((line) => line.length >= 171 && line.slice(50, 51).trim() === "A");
@@ -485,7 +489,7 @@ function readFirstValidIsemARow(): string {
 }
 
 function readFirstIsemRow(): string {
-  const row = readFileSync("../../ornek-veriler/iSEM .txt", "utf8")
+  const row = readFileSync(isemTxtPath, "utf8")
     .replace(/\r\n/g, "\n")
     .split("\n")
     .find((line) => line.trim());

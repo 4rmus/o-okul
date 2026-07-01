@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import { alignAnswersToMaster } from "./booklet-alignment.js";
@@ -117,7 +117,12 @@ const fixtures: RealExamFixture[] = [
   },
 ];
 
-describe("OPTİK-7108 gerçek veri pipeline fixture", () => {
+// ponytail: ornek-veriler is local-only; keep real fixture tests active only when present.
+const describeWithRealFixtures = fixtures.every((fixture) => existsSync(fixture.txtPath) && existsSync(fixture.answerKeyPath))
+  ? describe
+  : describe.skip;
+
+describeWithRealFixtures("OPTİK-7108 gerçek veri pipeline fixture", () => {
   it.each(fixtures)(
     "$id gerçek TXT ve gerçek cevap anahtarıyla A/B parse→hizala→puan zincirini deterministik çalıştırır",
     async (fixture) => {

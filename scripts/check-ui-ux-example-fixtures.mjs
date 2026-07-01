@@ -60,7 +60,9 @@ const seen = new Map();
 let opticalRows = 0;
 
 if (!existsSync(exampleRoot)) {
-  failures.push("ornek-veriler dizini bulunamadı.");
+  // ponytail: ornek-veriler local-only; CI should not fail when the ignored folder is absent.
+  console.log("UI/UX örnek fixture kontrolü atlandı: ornek-veriler dizini yok.");
+  process.exit(0);
 } else if (lstatSync(exampleRoot).isSymbolicLink() || !lstatSync(exampleRoot).isDirectory()) {
   failures.push("ornek-veriler symlink olmayan dizin olmalı.");
 }

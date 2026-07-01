@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import type { AnswerKeyRecord } from "@o-okul/shared-types";
@@ -7,15 +7,19 @@ import type { LearningOutcomeRecord, LearningOutcomeStore } from "../school/lear
 import { AnswerKeyExcelImportService } from "./answer-key-excel-import.service.js";
 import { AnswerKeyService, type AnswerKeyRepository, type SaveAnswerKeyInput } from "./answer-key.service.js";
 
+const isemAnswerKeyPath = "../../ornek-veriler/iSEM - LGS - 1 Detaylı Cevap Anahtarı.xlsx";
+// ponytail: ornek-veriler is local-only; keep real fixture tests active only when present.
+const itWithIsemAnswerKey = existsSync(isemAnswerKeyPath) ? it : it.skip;
+
 describe("AnswerKeyExcelImportService", () => {
-  it("gerçek iSEM cevap anahtarı Excel dosyasından 90 soru ve B permütasyonu çıkarır", async () => {
+  itWithIsemAnswerKey("gerçek iSEM cevap anahtarı Excel dosyasından 90 soru ve B permütasyonu çıkarır", async () => {
     const repository = new FakeAnswerKeyRepository();
     const service = new AnswerKeyExcelImportService(new AnswerKeyService(repository));
 
     const result = await service.dryRun(createContext(), {
       examId: "exam-a",
       version: "v1",
-      fileBase64: readFileSync("../../ornek-veriler/iSEM - LGS - 1 Detaylı Cevap Anahtarı.xlsx").toString("base64"),
+      fileBase64: readFileSync(isemAnswerKeyPath).toString("base64"),
       scoringConfig: { wrongPenalty: 0.333333 },
     });
 
@@ -39,14 +43,14 @@ describe("AnswerKeyExcelImportService", () => {
     ]);
   });
 
-  it("gerçek Excel importunda AnswerKey ve B variant kaydı üretir", async () => {
+  itWithIsemAnswerKey("gerçek Excel importunda AnswerKey ve B variant kaydı üretir", async () => {
     const repository = new FakeAnswerKeyRepository();
     const service = new AnswerKeyExcelImportService(new AnswerKeyService(repository));
 
     const result = await service.import(createContext(), {
       examId: "exam-a",
       version: "v1",
-      fileBase64: readFileSync("../../ornek-veriler/iSEM - LGS - 1 Detaylı Cevap Anahtarı.xlsx").toString("base64"),
+      fileBase64: readFileSync(isemAnswerKeyPath).toString("base64"),
       scoringConfig: { wrongPenalty: 0.333333 },
     });
 

@@ -535,8 +535,12 @@ function readClassLevel(name: string): string {
 }
 
 function readClassGradeLevelId(name: string): string | undefined {
-  if (name.toLocaleLowerCase("tr-TR").includes("lgs")) return "grade-demo-lgs";
+  const normalized = name.toLocaleLowerCase("tr-TR");
+  if (normalized.includes("lgs")) return "grade-demo-lgs";
+  if (normalized.includes("tyt") || normalized.includes("ayt")) return "grade-demo-tyt-ayt";
+  if (normalized.includes("kpss")) return "grade-demo-kpss";
   const level = readClassLevel(name);
+  if (level === "8") return "grade-demo-lgs";
   return level ? `grade-demo-${level}` : undefined;
 }
 
