@@ -48,6 +48,7 @@ const importTemplates = [
       "veli_duyuru",
       "veli_destek",
     ],
+    validateNationalIds: true,
   },
   {
     file: "ogretmen-aktarim-sablonu.xlsx",

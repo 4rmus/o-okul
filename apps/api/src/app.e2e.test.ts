@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import { readFile } from "node:fs/promises";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import ExcelJS from "exceljs";
@@ -959,6 +960,22 @@ describe("API auth + tenant isolation", () => {
       errors: [],
       wouldImport: true,
     });
+  });
+
+  it("student import XLSX şablonunda TC hatası üretmez", async () => {
+    const issued = await login("admin-a@example.test");
+    const template = await readFile("../web/public/templates/ogrenci-aktarim-sablonu.xlsx");
+
+    const response = await request(server)
+      .post("/students/imports/dry-run")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ fileBase64: template.toString("base64") })
+      .expect(201);
+
+    expect(response.body.totalRows).toBe(21);
+    expect(response.body.errors).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ field: "nationalId", code: "INVALID_NATIONAL_ID" })]),
+    );
   });
 
   it("student Excel import veli bilgilerini oluşturup öğrenciye bağlar", async () => {
