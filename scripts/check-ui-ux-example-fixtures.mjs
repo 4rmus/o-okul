@@ -53,6 +53,7 @@ const importTemplates = [
     file: "ogretmen-aktarim-sablonu.xlsx",
     sheet: "Ogretmenler",
     headers: ["ad", "soyad", "brans", "tc_kimlik_no", "telefon"],
+    validateNationalIds: true,
   },
 ];
 const failures = [];
@@ -85,10 +86,10 @@ for (const template of importTemplates) {
   const publicTemplatePath = resolve(publicTemplateRoot, template.file);
   requireRegularFile(templatePath, template.file, 1000);
   requireXlsxZip(templatePath, template.file);
-  await requireWorkbookHeaders(templatePath, `${template.file} kaynak`, template.sheet, template.headers);
+  await requireWorkbookHeaders(templatePath, `${template.file} kaynak`, template.sheet, template.headers, template);
   requireRegularFile(publicTemplatePath, `${template.file} public kopyası`, 1000);
   requireXlsxZip(publicTemplatePath, `${template.file} public kopyası`);
-  await requireWorkbookHeaders(publicTemplatePath, `${template.file} public kopyası`, template.sheet, template.headers);
+  await requireWorkbookHeaders(publicTemplatePath, `${template.file} public kopyası`, template.sheet, template.headers, template);
   requireSameHash(templatePath, publicTemplatePath, template.file);
   remember(templatePath);
   remember(publicTemplatePath);
@@ -129,7 +130,7 @@ function requireXlsxZip(filePath, label) {
   }
 }
 
-async function requireWorkbookHeaders(filePath, label, sheetName, expectedHeaders) {
+async function requireWorkbookHeaders(filePath, label, sheetName, expectedHeaders, options = {}) {
   if (!existsSync(filePath)) return;
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(filePath);
@@ -145,6 +146,32 @@ async function requireWorkbookHeaders(filePath, label, sheetName, expectedHeader
   if (headers.join("|") !== expectedHeaders.join("|")) {
     failures.push(`${label} başlıkları beklenen alanlarla eşleşmiyor: ${headers.join(", ")}`);
   }
+  if (options.validateNationalIds) {
+    requireValidNationalIds(worksheet, label, expectedHeaders.indexOf("tc_kimlik_no") + 1);
+  }
+}
+
+function requireValidNationalIds(worksheet, label, nationalIdColumn) {
+  if (nationalIdColumn < 1) return;
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const nationalId = String(row.getCell(nationalIdColumn).value ?? "").trim();
+    if (nationalId && !isValidTcIdentity(nationalId)) {
+      failures.push(`${label} geçersiz TC kimlik no içeriyor: satır ${rowNumber}.`);
+    }
+  });
+}
+
+function isValidTcIdentity(value) {
+  const normalized = value.replace(/\D/g, "");
+  if (!/^[1-9]\d{10}$/.test(normalized)) return false;
+
+  const digits = normalized.split("").map(Number);
+  const oddSum = digits[0] + digits[2] + digits[4] + digits[6] + digits[8];
+  const evenSum = digits[1] + digits[3] + digits[5] + digits[7];
+  const tenth = ((oddSum * 7 - evenSum) % 10 + 10) % 10;
+  const total = digits.slice(0, 10).reduce((sum, digit) => sum + digit, 0) % 10;
+  return digits[9] === tenth && digits[10] === total;
 }
 
 function requireOpticalRows(filePath, label, expectedRows) {
