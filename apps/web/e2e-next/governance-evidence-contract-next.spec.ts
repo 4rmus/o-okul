@@ -253,7 +253,7 @@ test.describe("Governance evidence sözleşmesi", () => {
     await page.getByRole("button", { name: "Komut paleti" }).click();
     const auditCommandDialog = page.getByRole("dialog", { name: "Komut paleti" });
     await auditCommandDialog.getByLabel("Komut ara").fill("denetim");
-    await expect(auditCommandDialog.getByRole("link", { name: /Denetim/ })).toBeVisible();
+    await expect(auditCommandDialog.getByRole("link", { exact: true, name: "Denetim Yönetim ve Kanıt" })).toBeVisible();
     await auditCommandDialog.getByRole("button", { name: "Kapat" }).click();
     await page.getByRole("button", { name: "Ana menüyü aç" }).click();
     await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Denetim", exact: true })).toBeVisible();
