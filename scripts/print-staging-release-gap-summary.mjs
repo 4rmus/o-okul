@@ -65,7 +65,9 @@ function printSummary(report, reportFile) {
     console.log(`  blocker: ${item.remediation?.blocker ?? item.reason ?? "n/a"}`);
   }
 
-  const summaryBlocker = (report.blockedChecks ?? []).find((item) => item.path === "release-summary-*.json");
+  const summaryBlocker = (report.blockedChecks ?? []).find(
+    (item) => item.path === "release-summary-*.json" || item.kind === "release_summary",
+  );
   if (summaryBlocker) {
     console.log("");
     console.log("* release-summary-*.json");
