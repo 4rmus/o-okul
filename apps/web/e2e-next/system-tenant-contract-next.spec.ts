@@ -65,6 +65,7 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     await createDialog.getByLabel("Admin e-posta").fill("phone.admin@example.test");
     await createDialog.getByLabel("Admin TC kimlik no").fill("10000001372");
     await createDialog.getByLabel("Admin telefon").fill("5551234567");
+    await expect(createDialog.getByLabel("Admin telefon")).toHaveValue("+90 555 123 45 67");
     await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
 
     await expect.poll(() => captured.tenantCreates).toHaveLength(1);
@@ -75,7 +76,7 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
           email: "phone.admin@example.test",
           name: "Telefonlu Yönetici",
           nationalId: "10000001372",
-          phone: "5551234567",
+          phone: "+90 555 123 45 67",
         },
         name: "Telefonlu Kurum",
         plan: "PRO",

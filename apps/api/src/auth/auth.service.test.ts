@@ -244,6 +244,43 @@ describe("AuthService", () => {
     });
   });
 
+  it("telefon parolasını başında sıfırla girilse de kabul eder", async () => {
+    const nationalId = "10000000146";
+    const user: AuthUser = {
+      id: "phone-login",
+      name: "Phone Login",
+      passwordHash: hashPassword("5551234567", "test-salt"),
+      tenantId: "tenant-a",
+      nationalIdHash: hashTcIdentity(nationalId),
+      roles: ["TENANT_ADMIN"],
+      membershipVersion: 1,
+    };
+    const users = createUserStoreMock({
+      findByTenantAndNationalIdHash: vi.fn(async (tenantId, nationalIdHash) => (
+        tenantId === user.tenantId && nationalIdHash === user.nationalIdHash ? user : undefined
+      )),
+      findById: vi.fn(async (id) => (id === user.id ? user : undefined)),
+    });
+    const auth = new AuthService(
+      users,
+      new InMemorySessionStore(),
+      new InMemoryPasswordResetStore(),
+      { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
+      undefined,
+      undefined,
+      new InMemoryTenantStore(),
+    );
+
+    const tokenPair = await auth.login({ tenantSlug: "dna-egitim", nationalId, password: "05551234567" }, "127.0.0.1");
+    if ("status" in tokenPair) throw new Error("MFA challenge beklenmiyordu.");
+
+    expect(tokenPair.session).toMatchObject({
+      userId: user.id,
+      tenantId: "tenant-a",
+      roles: ["TENANT_ADMIN"],
+    });
+  });
+
   it("literal portal rolü subject bağı çözülemezse token üretmez", async () => {
     const nationalId = "10000000450";
     const user: AuthUser = {
