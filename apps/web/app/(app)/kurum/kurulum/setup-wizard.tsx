@@ -10,6 +10,8 @@ import type {
   CourseRecord,
   GradeLevelCourseRecord,
   GradeLevelRecord,
+  LearningOutcomeImportDryRunResult,
+  LearningOutcomeImportResult,
   StudentImportDryRunResult,
   StudentImportResult,
   TeacherImportDryRunResult,
@@ -52,6 +54,7 @@ interface OnboardingDraft {
   };
   people: {
     importOwner: string;
+    kazanimImportFileName: string;
     studentImportFileName: string;
     studentModel: "manual" | "excel";
     teacherImportFileName: string;
@@ -132,6 +135,7 @@ const initialDraft: OnboardingDraft = {
   },
   people: {
     importOwner: "",
+    kazanimImportFileName: "",
     studentImportFileName: "",
     studentModel: "excel",
     teacherImportFileName: "",
@@ -239,8 +243,12 @@ export function SetupWizard() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [savedSummary, setSavedSummary] = useState("");
+  const [kazanimImportFileBase64, setKazanimImportFileBase64] = useState("");
   const [studentImportFileBase64, setStudentImportFileBase64] = useState("");
   const [teacherImportFileBase64, setTeacherImportFileBase64] = useState("");
+  const [kazanimImportUploadStatus, setKazanimImportUploadStatus] = useState<SetupUploadStatus>(() =>
+    createIdleUploadStatus(),
+  );
   const [studentImportUploadStatus, setStudentImportUploadStatus] = useState<SetupUploadStatus>(() =>
     createIdleUploadStatus(),
   );
@@ -396,6 +404,29 @@ export function SetupWizard() {
     }
   }
 
+  async function changeKazanimImportFile(file: File | undefined) {
+    setKazanimImportFileBase64("");
+    setSaveError("");
+    if (!file) {
+      setKazanimImportUploadStatus(createIdleUploadStatus());
+      updateDraft("people", { kazanimImportFileName: "" });
+      return;
+    }
+
+    const validation = validateSetupImportFile(file);
+    setKazanimImportUploadStatus(validation.status);
+    updateDraft("people", { kazanimImportFileName: validation.accepted ? validation.notice : "" });
+    if (!validation.accepted) return;
+
+    try {
+      setKazanimImportFileBase64(await readFileAsBase64(file));
+    } catch {
+      setKazanimImportUploadStatus(createErrorUploadStatus(file, "Dosya okunamadı. Lütfen dosyayı yeniden seçin."));
+      updateDraft("people", { kazanimImportFileName: "" });
+      setSaveError("Kazanım aktarım dosyası okunamadı.");
+    }
+  }
+
   function changeStudentModel(model: OnboardingDraft["people"]["studentModel"]) {
     setStudentImportFileBase64("");
     setStudentImportUploadStatus(createIdleUploadStatus());
@@ -445,6 +476,11 @@ export function SetupWizard() {
       setSaveError("Öğretmen aktarım dosyasını desteklenen tür ve boyutla yeniden seçin.");
       return;
     }
+    if (kazanimImportUploadStatus.state === "error") {
+      setActiveStepId("people");
+      setSaveError("Kazanım aktarım dosyasını desteklenen tür ve boyutla yeniden seçin.");
+      return;
+    }
     if (draft.people.teacherModel === "excel" && !teacherImportFileBase64) {
       setActiveStepId("people");
       setSaveError("Öğretmen aktarım dosyası seçilmelidir.");
@@ -468,6 +504,7 @@ export function SetupWizard() {
         draft,
         teacherImportFileBase64,
         studentImportFileBase64,
+        kazanimImportFileBase64,
         allCourseOptions,
       );
       await Promise.all([
@@ -480,6 +517,7 @@ export function SetupWizard() {
         queryClient.invalidateQueries({ queryKey: ["next-students", tenantId] }),
         queryClient.invalidateQueries({ queryKey: ["next-student-refs", tenantId] }),
         queryClient.invalidateQueries({ queryKey: ["next-guardians", tenantId] }),
+        queryClient.invalidateQueries({ queryKey: ["next-learning-outcomes", tenantId] }),
         queryClient.invalidateQueries({ queryKey: ["next-setup-progress", tenantId] }),
         queryClient.invalidateQueries({ queryKey: ["next-current-tenant", tenantId] }),
         queryClient.invalidateQueries({ queryKey: ["next-user-subject-refs", tenantId] }),
@@ -488,8 +526,9 @@ export function SetupWizard() {
         result.importedStudents > 0
           ? `${result.importedStudents} öğrenci ve dosyadaki veli bağlantıları işlendi`
           : `${result.importedStudents} öğrenci eklendi`;
+      const outcomeSummary = result.importedOutcomes > 0 ? `, ${result.importedOutcomes} kazanım` : "";
       setSavedSummary(
-        `${result.createdClasses} sınıf, ${result.createdCourses} ders, ${result.createdTeachers} öğretmen, ${result.createdTeacherAssignments} öğretmen ataması, ${result.createdAcademicYears} akademik yıl, ${result.createdAcademicTerms} dönem, ${studentSummary}. Mevcut kayıtlar tekrar eklenmedi.`,
+        `${result.createdClasses} sınıf, ${result.createdCourses} ders, ${result.createdTeachers} öğretmen, ${result.createdTeacherAssignments} öğretmen ataması, ${result.createdAcademicYears} akademik yıl, ${result.createdAcademicTerms} dönem, ${studentSummary}${outcomeSummary}. Mevcut kayıtlar tekrar eklenmedi.`,
       );
     } catch (error) {
       setSaveError(
@@ -503,8 +542,10 @@ export function SetupWizard() {
     }
     writeCookie(completedCookieName, "true");
     window.sessionStorage.removeItem(draftStorageKey);
+    setKazanimImportFileBase64("");
     setStudentImportFileBase64("");
     setTeacherImportFileBase64("");
+    setKazanimImportUploadStatus(createIdleUploadStatus());
     setStudentImportUploadStatus(createIdleUploadStatus());
     setTeacherImportUploadStatus(createIdleUploadStatus());
     setIsFinished(true);
@@ -575,6 +616,8 @@ export function SetupWizard() {
             <PeopleStep
               draft={draft}
               errors={errors}
+              kazanimImportUploadStatus={kazanimImportUploadStatus}
+              onKazanimImportFileChange={(file) => void changeKazanimImportFile(file)}
               onStudentModelChange={changeStudentModel}
               onTeacherImportFileChange={(file) => void changeTeacherImportFile(file)}
               onTeacherModelChange={changeTeacherModel}
@@ -898,6 +941,8 @@ function ClassesStep({
 function PeopleStep({
   draft,
   errors,
+  kazanimImportUploadStatus,
+  onKazanimImportFileChange,
   onStudentModelChange,
   onTeacherImportFileChange,
   onTeacherModelChange,
@@ -908,6 +953,8 @@ function PeopleStep({
 }: {
   draft: OnboardingDraft;
   errors: StepErrors;
+  kazanimImportUploadStatus: SetupUploadStatus;
+  onKazanimImportFileChange(file: File | undefined): void;
   onStudentModelChange(model: OnboardingDraft["people"]["studentModel"]): void;
   onTeacherImportFileChange(file: File | undefined): void;
   onTeacherModelChange(model: OnboardingDraft["people"]["teacherModel"]): void;
@@ -979,6 +1026,24 @@ function PeopleStep({
         />
       </Field>
       <ImportUploadStatus label="Öğrenci aktarım güven durumu" status={studentImportUploadStatus} />
+      <Field
+        label="Kazanım aktarım dosyası (opsiyonel)"
+        description={describeSelectedUploadFileNotice(
+          draft.people.kazanimImportFileName,
+          "Kazanım XLSX veya CSV dosyası seçilebilir.",
+        )}
+      >
+        <Input
+          type="file"
+          accept=".xlsx,.csv"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            onKazanimImportFileChange(file);
+            event.currentTarget.value = "";
+          }}
+        />
+      </Field>
+      <ImportUploadStatus label="Kazanım aktarım güven durumu" status={kazanimImportUploadStatus} />
       <Field label="Veri sorumlusu" error={errors.importOwner ?? errors["people.importOwner"]}>
         <Input
           invalid={Boolean(errors.importOwner ?? errors["people.importOwner"])}
@@ -1247,6 +1312,7 @@ async function saveSetup(
   draft: OnboardingDraft,
   teacherImportFileBase64: string,
   studentImportFileBase64: string,
+  kazanimImportFileBase64: string,
   courseOptions: SetupCourseOption[],
 ) {
   await apiRequest<TenantProfileRecord>(accessToken, `${apiBaseUrl}/me/tenant`, {
@@ -1282,6 +1348,7 @@ async function saveSetup(
   let createdTeachers = 0;
   let createdTeacherAssignments = 0;
   let importedStudents = 0;
+  let importedOutcomes = 0;
 
   const academicYear = existingYear ?? await apiRequest<AcademicYearRecord>(accessToken, `${apiBaseUrl}/academic-years`, {
     body: JSON.stringify({
@@ -1372,6 +1439,23 @@ async function saveSetup(
     importedStudents = imported.importedRows;
   }
 
+  if (kazanimImportFileBase64) {
+    const dryRun = await apiRequest<LearningOutcomeImportDryRunResult>(accessToken, `${apiBaseUrl}/learning-outcomes/imports/dry-run`, {
+      body: JSON.stringify({ fileBase64: kazanimImportFileBase64 }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    if (!dryRun.wouldImport) {
+      throw new Error(kazanimImportErrorMessage(dryRun));
+    }
+    const imported = await apiRequest<LearningOutcomeImportResult>(accessToken, `${apiBaseUrl}/learning-outcomes/imports`, {
+      body: JSON.stringify({ fileBase64: kazanimImportFileBase64 }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    importedOutcomes = imported.importedRows;
+  }
+
   return {
     createdAcademicTerms,
     createdAcademicYears,
@@ -1379,8 +1463,30 @@ async function saveSetup(
     createdCourses,
     createdTeacherAssignments,
     createdTeachers,
+    importedOutcomes,
     importedStudents,
   };
+}
+
+function kazanimImportErrorMessage(dryRun: LearningOutcomeImportDryRunResult) {
+  const requiredError = dryRun.errors.find((error) => error.code === "REQUIRED");
+  if (requiredError) {
+    return `Kazanım dosyasında zorunlu ${kazanimImportFieldLabel(requiredError.field)} alanı eksik. Satır: ${requiredError.row}.`;
+  }
+
+  const duplicateCode = dryRun.errors.find((error) => error.code === "DUPLICATE_CODE");
+  if (duplicateCode) {
+    return `Kazanım dosyasında tekrar eden kod var. Satır: ${duplicateCode.row}.`;
+  }
+
+  return "Kazanım aktarım dosyası içe aktarılamadı. Dosyayı kontrol edip tekrar deneyin.";
+}
+
+function kazanimImportFieldLabel(field: string) {
+  if (field === "code") return "kod";
+  if (field === "branch") return "branş";
+  if (field === "title") return "başlık";
+  return field;
 }
 
 function teacherImportErrorMessage(dryRun: TeacherImportDryRunResult) {
@@ -1597,6 +1703,10 @@ function mergeDraft(rawDraft: string): OnboardingDraft {
       },
       people: {
         importOwner: typeof parsedPeople.importOwner === "string" ? parsedPeople.importOwner : initialDraft.people.importOwner,
+        kazanimImportFileName:
+          typeof parsedPeople.kazanimImportFileName === "string"
+            ? parsedPeople.kazanimImportFileName
+            : initialDraft.people.kazanimImportFileName,
         studentImportFileName:
           typeof parsedPeople.studentImportFileName === "string"
             ? parsedPeople.studentImportFileName
@@ -1625,6 +1735,7 @@ function sanitizeDraftForStorage(draft: OnboardingDraft): OnboardingDraft {
     people: {
       ...draft.people,
       importOwner: "",
+      kazanimImportFileName: "",
       studentImportFileName: "",
       teacherImportFileName: "",
     },
