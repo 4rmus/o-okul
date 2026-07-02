@@ -65,6 +65,21 @@ describe("InMemoryTenantStore", () => {
     });
     expect(verifyPassword("5551234567", authUser?.passwordHash ?? "")).toBe(true);
   });
+
+  it("tenant silinince listeden ve admin görünümünden fiziksel olarak kalkar", async () => {
+    const store = new InMemoryTenantStore();
+    await store.createWithFirstAdmin(
+      { id: "tenant-delete", name: "Delete Tenant", slug: "delete-tenant" },
+      { name: "Delete Admin", email: "delete.admin@example.test", nationalId: "10000000450", phone: "5551234567" },
+    );
+
+    await expect(store.delete("tenant-delete")).resolves.toMatchObject({
+      id: "tenant-delete",
+      status: "DELETED",
+    });
+    await expect(store.findForAdmin("tenant-delete")).resolves.toBeUndefined();
+    await expect(store.list()).resolves.not.toEqual(expect.arrayContaining([expect.objectContaining({ id: "tenant-delete" })]));
+  });
 });
 
 describe("PostgresTenantStore", () => {
@@ -175,5 +190,54 @@ describe("PostgresTenantStore", () => {
 
     expect(queries.some((query) => query.sql.includes('INSERT INTO "Tenant"'))).toBe(false);
     expect(queries.at(-1)?.sql).toBe("ROLLBACK");
+  });
+
+  it("tenant silerken soft-delete yerine Tenant satırını siler", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const pool = {
+      async query<T>() {
+        return { rows: [] as T[] };
+      },
+      async connect() {
+        return {
+          async query<T>(sql: string, values?: unknown[]) {
+            queries.push({ sql, values });
+            if (sql.includes('FROM "Tenant" t') && sql.includes('WHERE t."id" = $1')) {
+              return {
+                rows: [
+                  {
+                    id: "tenant-delete",
+                    name: "Delete Tenant",
+                    slug: "delete-tenant",
+                    plan: "TRIAL",
+                    licenseStartsAt: null,
+                    licenseEndsAt: null,
+                    institutionType: null,
+                    contactEmail: null,
+                    logoUrl: null,
+                    seatLimit: null,
+                    activeSeatCount: 3,
+                    status: "ACTIVE",
+                  },
+                ] as T[],
+              };
+            }
+            return { rows: [] as T[] };
+          },
+          release() {},
+        };
+      },
+    };
+    const store = new PostgresTenantStore(pool);
+
+    await expect(store.delete("tenant-delete")).resolves.toMatchObject({
+      id: "tenant-delete",
+      status: "DELETED",
+      activeSeatCount: 3,
+    });
+
+    expect(queries.some((query) => query.sql.includes('DELETE FROM "Tenant"'))).toBe(true);
+    expect(queries.some((query) => query.sql.includes('UPDATE "Tenant"'))).toBe(false);
+    expect(queries.at(-1)?.sql).toBe("COMMIT");
   });
 });

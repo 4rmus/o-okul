@@ -153,19 +153,24 @@ export class TenantService {
 
   async delete(context: RequestContext, id: string): Promise<TenantRecord> {
     this.assertSystemAdmin(context);
-    const tenant = await this.tenants.delete(id);
-    if (!tenant) {
+    const tenant = await this.tenants.findForAdmin(id);
+    if (!tenant || tenant.id === "system") {
       throw new NotFoundException("TENANT_NOT_FOUND");
     }
+    const deletedTenant = { ...tenant, status: "DELETED" };
     await this.auditLogs?.record({
       tenantId: tenant.id,
       actorUserId: context.userId,
       entityType: "Tenant",
       entityId: tenant.id,
       action: "tenant.deleted",
-      diff: { status: tenant.status },
+      diff: { status: deletedTenant.status },
     });
-    return tenant;
+    const removedTenant = await this.tenants.delete(id);
+    if (!removedTenant) {
+      throw new NotFoundException("TENANT_NOT_FOUND");
+    }
+    return deletedTenant;
   }
 
   private assertSystemAdmin(context: RequestContext): void {

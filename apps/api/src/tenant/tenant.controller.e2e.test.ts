@@ -89,6 +89,11 @@ describe("TenantController", () => {
       });
 
     await request(server)
+      .get("/tenants/tenant-e2e")
+      .set("Authorization", `Bearer ${systemToken}`)
+      .expect(404);
+
+    await request(server)
       .get("/tenants")
       .set("Authorization", `Bearer ${systemToken}`)
       .expect(200)

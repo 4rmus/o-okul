@@ -6,15 +6,22 @@ const optionalText = () => z.string().trim();
 
 const optionalNationalId = optionalText().refine((value) => !value || /^\d{11}$/.test(value), {
   message: "TC Kimlik No 11 rakam olmalıdır.",
+}).refine((value) => !value || isValidTcIdentity(value), {
+  message: "TC Kimlik No geçerli olmalıdır.",
 });
 const requiredNationalId = requiredText("TC kimlik no").refine((value) => /^\d{11}$/.test(value), {
   message: "TC Kimlik No 11 rakam olmalıdır.",
+}).refine(isValidTcIdentity, {
+  message: "TC Kimlik No geçerli olmalıdır.",
 });
 
 const optionalEmail = optionalText().refine((value) => !value || z.string().email().safeParse(value).success, {
   message: "E-posta geçerli olmalıdır.",
 });
 const requiredEmail = (fieldName: string) => requiredText(fieldName).email("E-posta geçerli olmalıdır.");
+const requiredTurkishMobilePhone = (fieldName: string) => requiredText(fieldName).refine(isTurkishMobilePhone, {
+  message: "Telefon geçerli bir Türkiye cep telefonu olmalıdır.",
+});
 
 const optionalDate = optionalText().refine((value) => !value || isCalendarDateString(value), {
   message: "Doğum tarihi geçerli olmalıdır.",
@@ -141,7 +148,7 @@ export const tenantCreateFormSchema = tenantFormSchema.and(z.object({
     name: requiredText("Admin ad soyad"),
     email: requiredEmail("Admin e-posta"),
     nationalId: requiredNationalId,
-    phone: requiredText("Admin telefon"),
+    phone: requiredTurkishMobilePhone("Admin telefon"),
   }).transform((value) => ({
     email: value.email,
     name: value.name,
@@ -495,4 +502,28 @@ function isIsoDateTimeString(value: string): boolean {
 function isCalendarDateString(value: string): boolean {
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function isValidTcIdentity(value: string): boolean {
+  if (!/^[1-9]\d{10}$/.test(value)) return false;
+  const digits = value.split("").map(Number);
+  const digit = (index: number) => digits[index] ?? 0;
+  const oddSum = digit(0) + digit(2) + digit(4) + digit(6) + digit(8);
+  const evenSum = digit(1) + digit(3) + digit(5) + digit(7);
+  const tenth = ((oddSum * 7) - evenSum) % 10;
+  const total = digits.slice(0, 10).reduce((sum, current) => sum + current, 0) % 10;
+  return digit(9) === tenth && digit(10) === total;
+}
+
+function isTurkishMobilePhone(value: string): boolean {
+  let digits = value.replace(/\D/g, "");
+  if (digits.startsWith("0090")) {
+    digits = digits.slice(4);
+  } else if (digits.startsWith("90") && digits.length === 12) {
+    digits = digits.slice(2);
+  }
+  if (digits.startsWith("0") && digits.length === 11) {
+    digits = digits.slice(1);
+  }
+  return /^5\d{9}$/.test(digits);
 }

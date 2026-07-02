@@ -129,7 +129,17 @@ export class InMemoryTenantStore implements TenantStore {
   }
 
   async delete(id: string): Promise<TenantRecord | undefined> {
-    return this.update(id, { status: "DELETED" });
+    const index = this.tenants.findIndex((record) => record.id === id && record.id !== "system");
+    if (index === -1) return undefined;
+    const tenant = this.tenants[index];
+    if (!tenant) return undefined;
+    this.tenants.splice(index, 1);
+    for (let i = this.firstAdmins.length - 1; i >= 0; i -= 1) {
+      if (this.firstAdmins[i]?.tenantId === id) {
+        this.firstAdmins.splice(i, 1);
+      }
+    }
+    return { ...tenant, status: "DELETED" };
   }
 }
 
@@ -408,7 +418,33 @@ export class PostgresTenantStore implements TenantStore {
   }
 
   async delete(id: string): Promise<TenantRecord | undefined> {
-    return this.update(id, { status: "DELETED" });
+    return withBypassRlsQuery(this.pool, async (client) => {
+      const currentResult = await client.query<TenantRow>(
+        `SELECT
+           t."id",
+           t."name",
+           t."slug",
+           t."plan",
+           t."licenseStartsAt",
+           t."licenseEndsAt",
+           t."institutionType",
+           t."contactEmail",
+           t."logoUrl",
+           t."seatLimit",
+           COUNT(DISTINCT m."userId")::int AS "activeSeatCount",
+           t."status"
+         FROM "Tenant" t
+         LEFT JOIN "TenantMembership" m ON m."tenantId" = t."id"
+         WHERE t."id" = $1 AND t."id" <> 'system' AND t."status" <> 'DELETED'
+         GROUP BY t."id", t."name", t."slug", t."plan", t."licenseStartsAt", t."licenseEndsAt", t."institutionType", t."contactEmail", t."logoUrl", t."seatLimit", t."status"
+         LIMIT 1`,
+        [id],
+      );
+      const current = currentResult.rows[0] ? mapTenantRow(currentResult.rows[0]) : undefined;
+      if (!current) return undefined;
+      await client.query(`DELETE FROM "Tenant" WHERE "id" = $1 AND "id" <> 'system'`, [id]);
+      return { ...current, status: "DELETED" };
+    });
   }
 }
 
