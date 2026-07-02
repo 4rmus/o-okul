@@ -6,27 +6,111 @@
   "apiUrl": "https://staging-api.example.test",
   "webUrl": "https://staging.example.test",
   "checks": [
-    { "label": "Production env", "script": "scripts/check-prod-env.mjs", "status": "PASS" },
-    { "label": "Traefik HTTPS", "script": "scripts/smoke-traefik-https.mjs", "status": "PASS" },
-    { "label": "SMS disabled path", "script": "scripts/smoke-sms-provider.mjs", "status": "PASS" },
-    { "label": "Notification provider", "script": "scripts/smoke-notification-provider.mjs", "status": "PASS" },
-    { "label": "Sentry test event", "script": "scripts/smoke-sentry-event.mjs", "status": "PASS" },
-    { "label": "Alert webhook", "script": "scripts/smoke-alert-webhook.mjs", "status": "PASS" },
-    { "label": "WAL archive target", "script": "scripts/smoke-wal-archive-target.mjs", "status": "PASS" },
-    { "label": "Report generation smoke", "script": "scripts/smoke-report-generation-live.mjs", "status": "PASS" },
-    { "label": "Deployment rollback evidence", "script": "scripts/check-deployment-rollback-evidence.mjs", "status": "PASS" },
-    { "label": "GitHub CI evidence", "script": "scripts/check-github-ci-evidence.mjs", "status": "PASS" },
-    { "label": "Restore drill evidence", "script": "scripts/check-restore-drill-evidence.mjs", "status": "PASS" },
-    { "label": "KVKK inventory evidence", "script": "scripts/check-kvkk-inventory-evidence.mjs", "status": "PASS" },
-    { "label": "Identity migration evidence", "script": "scripts/check-identity-migration-evidence.mjs", "status": "PASS" },
-    { "label": "Financial retention evidence", "script": "scripts/check-financial-retention-evidence.mjs", "status": "PASS" },
-    { "label": "Upload AV evidence", "script": "scripts/check-upload-av-evidence.mjs", "status": "PASS" },
-    { "label": "Observability UAT evidence", "script": "scripts/check-observability-uat-evidence.mjs", "status": "PASS" },
-    { "label": "External monitoring evidence", "script": "scripts/check-external-monitoring-evidence.mjs", "status": "PASS" },
-    { "label": "Admin MFA evidence", "script": "scripts/check-admin-mfa-evidence.mjs", "status": "PASS" },
-    { "label": "AI report summary evidence", "script": "scripts/check-ai-report-summary-evidence.mjs", "status": "PASS" },
-    { "label": "Security audit evidence", "script": "scripts/check-security-audit-evidence.mjs", "status": "PASS" },
-    { "label": "Live exam cycle evidence", "script": "scripts/check-live-exam-cycle-evidence.mjs", "status": "PASS" },
+    {
+      "label": "Production env",
+      "script": "scripts/check-prod-env.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "Traefik HTTPS",
+      "script": "scripts/smoke-traefik-https.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "SMS disabled path",
+      "script": "scripts/smoke-sms-provider.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "Notification provider",
+      "script": "scripts/smoke-notification-provider.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "Sentry test event",
+      "script": "scripts/smoke-sentry-event.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "Alert webhook",
+      "script": "scripts/smoke-alert-webhook.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "WAL archive target",
+      "script": "scripts/smoke-wal-archive-target.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "Report generation smoke",
+      "script": "scripts/smoke-report-generation-live.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "Deployment rollback evidence",
+      "script": "scripts/check-deployment-rollback-evidence.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "GitHub CI evidence",
+      "script": "scripts/check-github-ci-evidence.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "Restore drill evidence",
+      "script": "scripts/check-restore-drill-evidence.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "KVKK inventory evidence",
+      "script": "scripts/check-kvkk-inventory-evidence.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "Identity migration evidence",
+      "script": "scripts/check-identity-migration-evidence.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "Financial retention evidence",
+      "script": "scripts/check-financial-retention-evidence.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "Upload AV evidence",
+      "script": "scripts/check-upload-av-evidence.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "Observability UAT evidence",
+      "script": "scripts/check-observability-uat-evidence.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "External monitoring evidence",
+      "script": "scripts/check-external-monitoring-evidence.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "Admin MFA evidence",
+      "script": "scripts/check-admin-mfa-evidence.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "AI report summary evidence",
+      "script": "scripts/check-ai-report-summary-evidence.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "Security audit evidence",
+      "script": "scripts/check-security-audit-evidence.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "Live exam cycle evidence",
+      "script": "scripts/check-live-exam-cycle-evidence.mjs",
+      "status": "PASS"
+    },
     {
       "label": "iSEM optical pipeline evidence",
       "script": "scripts/check-isem-optical-pipeline-evidence.mjs",
@@ -52,9 +136,21 @@
       "script": "scripts/check-audit-null-tenant-evidence.mjs",
       "status": "PASS"
     },
-    { "label": "Rate limit Redis evidence", "script": "scripts/check-rate-limit-evidence.mjs", "status": "PASS" },
-    { "label": "RLS live evidence", "script": "scripts/check-rls-live-evidence.mjs", "status": "PASS" },
-    { "label": "UAT evidence", "script": "scripts/check-uat-evidence.mjs", "status": "PASS" }
+    {
+      "label": "Rate limit Redis evidence",
+      "script": "scripts/check-rate-limit-evidence.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "RLS live evidence",
+      "script": "scripts/check-rls-live-evidence.mjs",
+      "status": "PASS"
+    },
+    {
+      "label": "UAT evidence",
+      "script": "scripts/check-uat-evidence.mjs",
+      "status": "PASS"
+    }
   ],
   "smokeEvidence": {
     "traefikHttps": {
@@ -67,7 +163,9 @@
       "expectedStatus": 200,
       "statusCode": 200,
       "strictTransportSecurity": "max-age=31536000",
-      "commandsPassed": ["pnpm traefik:https:smoke"],
+      "commandsPassed": [
+        "pnpm traefik:https:smoke"
+      ],
       "gaps": []
     },
     "smsProvider": {
@@ -80,7 +178,9 @@
       "recipient": "****disabled",
       "segments": 0,
       "providerMessageId": "sms-disabled-v1",
-      "commandsPassed": ["pnpm sms:smoke"],
+      "commandsPassed": [
+        "pnpm sms:smoke"
+      ],
       "gaps": []
     },
     "notificationProvider": {
@@ -90,9 +190,15 @@
       "environment": "production",
       "checkedAt": "2026-06-15T09:10:00.000Z",
       "provider": "http",
-      "channels": ["EMAIL"],
-      "recipients": ["***********.test"],
-      "commandsPassed": ["pnpm notification:smoke"],
+      "channels": [
+        "EMAIL"
+      ],
+      "recipients": [
+        "***********.test"
+      ],
+      "commandsPassed": [
+        "pnpm notification:smoke"
+      ],
       "gaps": []
     },
     "sentryEvent": {
@@ -103,7 +209,9 @@
       "checkedAt": "2026-06-15T09:15:00.000Z",
       "dsn": "https://public@example.test/1",
       "eventId": "sentry-event-redacted",
-      "commandsPassed": ["pnpm sentry:smoke"],
+      "commandsPassed": [
+        "pnpm sentry:smoke"
+      ],
       "gaps": []
     },
     "alertWebhook": {
@@ -115,7 +223,9 @@
       "webhookUrl": "https://hooks.example.test/alerts",
       "statusCode": 200,
       "authorizationScheme": "bearer",
-      "commandsPassed": ["pnpm alert:webhook:smoke"],
+      "commandsPassed": [
+        "pnpm alert:webhook:smoke"
+      ],
       "gaps": []
     },
     "walArchive": {
@@ -137,7 +247,9 @@
         "switchedWalFileNameHash": "123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0",
         "archivedWalFileSha256": "23456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01"
       },
-      "commandsPassed": ["pnpm wal:archive:smoke"],
+      "commandsPassed": [
+        "pnpm wal:archive:smoke"
+      ],
       "gaps": []
     },
     "reportGeneration": {
@@ -170,7 +282,9 @@
         "generationDurationMsMax": 60000,
         "generationDurationPassed": true
       },
-      "commandsPassed": ["pnpm report-generation:perf"],
+      "commandsPassed": [
+        "pnpm report-generation:perf"
+      ],
       "gaps": []
     }
   },
@@ -268,7 +382,10 @@
           ]
         }
       ],
-      "commandsPassed": ["pnpm run ci", "pnpm github-ci:check"],
+      "commandsPassed": [
+        "pnpm run ci",
+        "pnpm github-ci:check"
+      ],
       "evidenceReferences": [
         "https://github.com/example/o-okul/actions/runs/1234567890",
         "artifacts/example/github-ci/ci-run-log.txt"
@@ -285,10 +402,25 @@
         "user": 42
       },
       "purgeCoverage": {
-        "student": ["firstName", "lastName", "phone", "email"],
-        "teacher": ["firstName", "lastName"],
-        "guardian": ["firstName", "lastName", "phone"],
-        "user": ["email", "name"]
+        "student": [
+          "firstName",
+          "lastName",
+          "phone",
+          "email"
+        ],
+        "teacher": [
+          "firstName",
+          "lastName"
+        ],
+        "guardian": [
+          "firstName",
+          "lastName",
+          "phone"
+        ],
+        "user": [
+          "email",
+          "name"
+        ]
       },
       "auditActionsVerified": [
         "kvkk.student_pii_purged",
@@ -403,7 +535,10 @@
         "signatureVersion": "2026.05.31",
         "failClosed": true
       },
-      "uploadSurfaces": ["homework_material_file", "support_ticket_attachment"],
+      "uploadSurfaces": [
+        "homework_material_file",
+        "support_ticket_attachment"
+      ],
       "scanResults": {
         "cleanFileAccepted": true,
         "eicarRejected": true,
@@ -488,7 +623,10 @@
       "checkedAt": "2026-06-01",
       "policy": {
         "mode": "optional",
-        "requiredRoles": ["SYSTEM_ADMIN", "TENANT_ADMIN"],
+        "requiredRoles": [
+          "SYSTEM_ADMIN",
+          "TENANT_ADMIN"
+        ],
         "secretStorage": "aes-256-gcm",
         "secretEncryptionKeyEnv": "ADMIN_MFA_SECRET_ENCRYPTION_KEY",
         "recoveryCodeHashKeyEnv": "ADMIN_MFA_RECOVERY_HASH_KEY",
@@ -715,7 +853,9 @@
         "pipelineDurationPassed": true
       },
       "pipelineDurationMs": 12000,
-      "commandsPassed": ["pnpm isem-optical-pipeline:smoke"]
+      "commandsPassed": [
+        "pnpm isem-optical-pipeline:smoke"
+      ]
     },
     "liveUiWorkerResult": {
       "generatedAt": "2026-06-15T09:45:00.000Z",
@@ -726,12 +866,17 @@
       "examHash": "1111111111111111111111111111111111111111111111111111111111111111",
       "firstStudentHash": "2222222222222222222222222222222222222222222222222222222222222222",
       "reportStatus": "READY",
-      "downloadedArtifacts": ["xlsx", "pdf"],
+      "downloadedArtifacts": [
+        "xlsx",
+        "pdf"
+      ],
       "karnePdfDownloaded": true,
       "excelDownloaded": true,
       "studentPortalViewed": true,
       "guardianPortalViewed": true,
-      "commandsPassed": ["pnpm live:ui-worker:smoke"],
+      "commandsPassed": [
+        "pnpm live:ui-worker:smoke"
+      ],
       "gaps": []
     },
     "uiUxRedesign": {
@@ -775,49 +920,82 @@
           "phase": "Faz 0",
           "status": "PASS",
           "scope": "staging-production",
-          "commandsPassed": ["pnpm --filter @o-okul/web typecheck", "pnpm web:a11y:check"],
-          "evidenceReferences": ["artifact:artifacts/ui-ux-redesign/phase-0/a11y-production-summary.json"]
+          "commandsPassed": [
+            "pnpm --filter @o-okul/web typecheck",
+            "pnpm web:a11y:check"
+          ],
+          "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-0/a11y-production-summary.json"
+          ]
         },
         {
           "phase": "Faz 1",
           "status": "PASS",
           "scope": "staging-production",
-          "commandsPassed": ["pnpm web:ux-contract:check"],
-          "evidenceReferences": ["artifact:artifacts/ui-ux-redesign/phase-1/portal-context-768.png"]
+          "commandsPassed": [
+            "pnpm web:ux-contract:check"
+          ],
+          "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-1/portal-context-768.png"
+          ]
         },
         {
           "phase": "Faz 2",
           "status": "PASS",
           "scope": "staging-production",
-          "commandsPassed": ["pnpm --filter @o-okul/ui build", "pnpm web:ux-contract:check"],
-          "evidenceReferences": ["artifact:artifacts/ui-ux-redesign/phase-2/data-table-375.png"]
+          "commandsPassed": [
+            "pnpm --filter @o-okul/ui build",
+            "pnpm web:ux-contract:check"
+          ],
+          "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-2/data-table-375.png"
+          ]
         },
         {
           "phase": "Faz 3",
           "status": "PASS",
           "scope": "staging-production",
-          "commandsPassed": ["pnpm karne:visual-contract:check", "pnpm live:ui-worker:smoke"],
-          "evidenceReferences": ["artifact:artifacts/ui-ux-redesign/phase-3/report-workspace-1024.png"]
+          "commandsPassed": [
+            "pnpm karne:visual-contract:check",
+            "pnpm live:ui-worker:smoke"
+          ],
+          "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-3/report-workspace-1024.png"
+          ]
         },
         {
           "phase": "Faz 4",
           "status": "PASS",
           "scope": "staging-production",
-          "commandsPassed": ["pnpm web:ux-contract:check"],
-          "evidenceReferences": ["artifact:artifacts/ui-ux-redesign/phase-4/guardian-portal-1440.png"]
+          "commandsPassed": [
+            "pnpm web:ux-contract:check"
+          ],
+          "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-4/guardian-portal-1440.png"
+          ]
         },
         {
           "phase": "Faz 5",
           "status": "PASS",
           "scope": "staging-production",
-          "commandsPassed": ["pnpm prod:evidence:templates:check", "pnpm uat:check"],
-          "evidenceReferences": ["run:https://github.com/example/o-okul/actions/runs/1234567890"]
+          "commandsPassed": [
+            "pnpm prod:evidence:templates:check",
+            "pnpm uat:check"
+          ],
+          "evidenceReferences": [
+            "run:https://github.com/example/o-okul/actions/runs/1234567890"
+          ]
         }
       ],
       "viewportCoverage": [
         {
           "surface": "kurum dashboard",
-          "widths": [375, 768, 1024, 1440],
+          "widths": [
+            375,
+            768,
+            1024,
+            1440
+          ],
           "evidenceReferences": [
             "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-375.png",
             "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-768.png",
@@ -827,7 +1005,12 @@
         },
         {
           "surface": "optik workspace",
-          "widths": [375, 768, 1024, 1440],
+          "widths": [
+            375,
+            768,
+            1024,
+            1440
+          ],
           "evidenceReferences": [
             "artifact:artifacts/ui-ux-redesign/phase-3/optik-375.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/optik-768.png",
@@ -837,7 +1020,12 @@
         },
         {
           "surface": "rapor workspace",
-          "widths": [375, 768, 1024, 1440],
+          "widths": [
+            375,
+            768,
+            1024,
+            1440
+          ],
           "evidenceReferences": [
             "artifact:artifacts/ui-ux-redesign/phase-3/rapor-375.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/rapor-768.png",
@@ -847,7 +1035,12 @@
         },
         {
           "surface": "portal shell",
-          "widths": [375, 768, 1024, 1440],
+          "widths": [
+            375,
+            768,
+            1024,
+            1440
+          ],
           "evidenceReferences": [
             "artifact:artifacts/ui-ux-redesign/phase-4/portal-375.png",
             "artifact:artifacts/ui-ux-redesign/phase-4/portal-768.png",
@@ -861,7 +1054,14 @@
         "rawPiiInArtifacts": false,
         "smsRecipientPreviewExported": false,
         "guardianFinanceLeakageChecked": true,
-        "forbiddenRawFields": ["email", "phone", "nationalId", "rawAnswer", "rawLine", "rawRow"]
+        "forbiddenRawFields": [
+          "email",
+          "phone",
+          "nationalId",
+          "rawAnswer",
+          "rawLine",
+          "rawRow"
+        ]
       },
       "approvals": [
         {
@@ -908,7 +1108,7 @@
           }
         ]
       },
-	      "migration": {
+      "migration": {
         "status": "MIGRATED",
         "generatedAt": "2026-05-31T09:30:00.000Z",
         "approvedBy": "ops-owner-redacted",
@@ -945,51 +1145,53 @@
             "migratedRows": 2,
             "migratedBytes": 3072
           }
-	        ]
-	      },
-	      "orphanAudit": {
-	        "result": "PASS",
-	        "status": "NO_ORPHANS",
-	        "environment": "production",
-	        "checkedAt": "2026-05-31T09:45:00.000Z",
-	        "bucketVerified": true,
-	        "subjects": [
-	          {
-	            "subject": "homework_material_files",
-	            "prefix": "homework-material-files/",
-	            "listedObjects": 4,
-	            "dbReferencedObjects": 4,
-	            "referencedObjectsPresent": 4,
-	            "dbReferencedMissingObjects": 0,
-	            "orphanObjects": 0,
-	            "invalidKeyObjects": 0,
-	            "legacyDbStorageKeyRows": 0
-	          },
-	          {
-	            "subject": "support_ticket_attachments",
-	            "prefix": "support-ticket-attachments/",
-	            "listedObjects": 2,
-	            "dbReferencedObjects": 2,
-	            "referencedObjectsPresent": 2,
-	            "dbReferencedMissingObjects": 0,
-	            "orphanObjects": 0,
-	            "invalidKeyObjects": 0,
-	            "legacyDbStorageKeyRows": 0
-	          }
-	        ],
-	        "commandsPassed": ["pnpm inline-upload-content:orphan-audit"],
-	        "gaps": []
-	      },
-	      "commandsPassed": [
-	        "pnpm inline-upload-content:audit",
-	        "INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true pnpm inline-upload-content:migrate",
-	        "pnpm inline-upload-content:orphan-audit"
-	      ],
-	      "evidenceReferences": [
-	        "artifacts/example/inline-upload-content/dry-run.json",
-	        "artifacts/example/inline-upload-content/migrated.json",
-	        "artifacts/example/inline-upload-content/orphan-audit.json"
-	      ]
+        ]
+      },
+      "orphanAudit": {
+        "result": "PASS",
+        "status": "NO_ORPHANS",
+        "environment": "production",
+        "checkedAt": "2026-05-31T09:45:00.000Z",
+        "bucketVerified": true,
+        "subjects": [
+          {
+            "subject": "homework_material_files",
+            "prefix": "homework-material-files/",
+            "listedObjects": 4,
+            "dbReferencedObjects": 4,
+            "referencedObjectsPresent": 4,
+            "dbReferencedMissingObjects": 0,
+            "orphanObjects": 0,
+            "invalidKeyObjects": 0,
+            "legacyDbStorageKeyRows": 0
+          },
+          {
+            "subject": "support_ticket_attachments",
+            "prefix": "support-ticket-attachments/",
+            "listedObjects": 2,
+            "dbReferencedObjects": 2,
+            "referencedObjectsPresent": 2,
+            "dbReferencedMissingObjects": 0,
+            "orphanObjects": 0,
+            "invalidKeyObjects": 0,
+            "legacyDbStorageKeyRows": 0
+          }
+        ],
+        "commandsPassed": [
+          "pnpm inline-upload-content:orphan-audit"
+        ],
+        "gaps": []
+      },
+      "commandsPassed": [
+        "pnpm inline-upload-content:audit",
+        "INLINE_UPLOAD_CONTENT_MIGRATION_APPROVED=true pnpm inline-upload-content:migrate",
+        "pnpm inline-upload-content:orphan-audit"
+      ],
+      "evidenceReferences": [
+        "artifacts/example/inline-upload-content/dry-run.json",
+        "artifacts/example/inline-upload-content/migrated.json",
+        "artifacts/example/inline-upload-content/orphan-audit.json"
+      ]
     },
     "auditNullTenant": {
       "environment": "production",
@@ -1013,8 +1215,12 @@
           }
         }
       },
-      "commandsPassed": ["pnpm audit-null-tenant:check"],
-      "evidenceReferences": ["artifacts/example/audit-null-tenant/classification-query.json"]
+      "commandsPassed": [
+        "pnpm audit-null-tenant:check"
+      ],
+      "evidenceReferences": [
+        "artifacts/example/audit-null-tenant/classification-query.json"
+      ]
     },
     "rateLimit": {
       "environment": "production",
@@ -1027,7 +1233,10 @@
         "maxRequests": 300,
         "loginMaxAttempts": 5,
         "keyIncludesClientIpHash": true,
-        "excludedPaths": ["/health", "/metrics"]
+        "excludedPaths": [
+          "/health",
+          "/metrics"
+        ]
       },
       "instances": [
         {
@@ -1061,7 +1270,10 @@
         "nationalIdAndIpScoped": true,
         "differentIpNotLocked": true
       },
-      "commandsPassed": ["pnpm rate-limit:smoke", "pnpm rate-limit:check"],
+      "commandsPassed": [
+        "pnpm rate-limit:smoke",
+        "pnpm rate-limit:check"
+      ],
       "evidenceReferences": [
         "artifacts/example/rate-limit/rate-limit-smoke.json",
         "artifacts/example/rate-limit/redis-shared-window-observation.txt"
@@ -1071,7 +1283,7 @@
       "environment": "production",
       "checkedAt": "2026-05-31T11:30:00.000Z",
       "schema": {
-        "tenantScopedTables": 57,
+        "tenantScopedTables": 56,
         "derivedFromSchema": true,
         "staticCheckPassed": true,
         "liveCheckPassed": true,
@@ -1094,7 +1306,6 @@
           "AcademicYear",
           "AcademicTerm",
           "Student",
-          "StudentClassHistory",
           "StudentEnrollment",
           "Teacher",
           "TeacherAssignment",
@@ -1139,7 +1350,7 @@
         "tenantAHash": "tenant-a-redacted",
         "tenantBHash": "tenant-b-redacted",
         "crossTenantReadRows": 0,
-        "crossTenantReadChecks": 57,
+        "crossTenantReadChecks": 56,
         "withCheckRejects": [
           "Student wrong tenant insert",
           "Homework wrong tenant insert",
@@ -1155,7 +1366,7 @@
         "auditBypassAction": "system.rls_bypass_requested"
       },
       "tenantFkPreflight": {
-        "requiredCompositeRelations": 24,
+        "requiredCompositeRelations": 23,
         "relationsVerified": [
           "AnnouncementReceipt.announcement",
           "AnnouncementDeliveryReport.announcement",
@@ -1177,7 +1388,6 @@
           "SupportTicket.class",
           "PaymentPlan.class",
           "ReportSnapshot.class",
-          "StudentClassHistory.class",
           "StudentEnrollment.class",
           "Student.class",
           "Student.responsibleTeacher"
@@ -1206,7 +1416,6 @@
           "SupportTicket.class cross tenant insert",
           "PaymentPlan.class cross tenant insert",
           "ReportSnapshot.class cross tenant insert",
-          "StudentClassHistory.class cross tenant insert",
           "StudentEnrollment.class cross tenant insert",
           "Student.class cross tenant insert",
           "Student.responsibleTeacher cross tenant insert"
@@ -1257,127 +1466,189 @@
           "id": "UAT-SYS-01",
           "persona": "SYSTEM_ADMIN",
           "status": "PASS",
-          "evidence": ["system dashboard opened", "audit and observability screens checked"]
+          "evidence": [
+            "system dashboard opened",
+            "audit and observability screens checked"
+          ]
         },
         {
           "id": "UAT-SYS-02",
           "persona": "SYSTEM_ADMIN",
           "status": "PASS",
-          "evidence": ["tenant created", "first admin logged in"]
+          "evidence": [
+            "tenant created",
+            "first admin logged in"
+          ]
         },
         {
           "id": "UAT-SYS-03",
           "persona": "SYSTEM_ADMIN",
           "status": "PASS",
-          "evidence": ["expired tenant read request passed", "expired tenant write request returned 403"]
+          "evidence": [
+            "expired tenant read request passed",
+            "expired tenant write request returned 403"
+          ]
         },
         {
           "id": "UAT-SYS-04",
           "persona": "SYSTEM_ADMIN",
           "status": "PASS",
-          "evidence": ["prod evidence check passed", "rollback reference reviewed"]
+          "evidence": [
+            "prod evidence check passed",
+            "rollback reference reviewed"
+          ]
         },
         {
           "id": "UAT-KURUM-01",
           "persona": "TENANT_ADMIN",
           "status": "PASS",
-          "evidence": ["setup wizard completed", "academic structure visible"]
+          "evidence": [
+            "setup wizard completed",
+            "academic structure visible"
+          ]
         },
         {
           "id": "UAT-KURUM-02",
           "persona": "TENANT_ADMIN",
           "status": "PASS",
-          "evidence": ["student created", "guardian and teacher relation verified"]
+          "evidence": [
+            "student created",
+            "guardian and teacher relation verified"
+          ]
         },
         {
           "id": "UAT-KURUM-03",
           "persona": "TENANT_ADMIN",
           "status": "PASS",
-          "evidence": ["tenant user role updated", "identity invitation accepted"]
+          "evidence": [
+            "tenant user role updated",
+            "identity invitation accepted"
+          ]
         },
         {
           "id": "UAT-KURUM-04",
           "persona": "TENANT_ADMIN",
           "status": "PASS",
-          "evidence": ["schedule created", "attendance and study session flows verified"]
+          "evidence": [
+            "schedule created",
+            "attendance and study session flows verified"
+          ]
         },
         {
           "id": "UAT-KURUM-05",
           "persona": "TENANT_ADMIN",
           "status": "PASS",
-          "evidence": ["exam created", "answer key and raw import smoke passed"]
+          "evidence": [
+            "exam created",
+            "answer key and raw import smoke passed"
+          ]
         },
         {
           "id": "UAT-KURUM-06",
           "persona": "TENANT_ADMIN",
           "status": "PASS",
-          "evidence": ["report generation smoke passed", "PDF and Excel download verified"]
+          "evidence": [
+            "report generation smoke passed",
+            "PDF and Excel download verified"
+          ]
         },
         {
           "id": "UAT-KURUM-07",
           "persona": "TENANT_ADMIN",
           "status": "PASS",
-          "evidence": ["payment plan created", "idempotency retry verified"]
+          "evidence": [
+            "payment plan created",
+            "idempotency retry verified"
+          ]
         },
         {
           "id": "UAT-KURUM-08",
           "persona": "TENANT_ADMIN",
           "status": "PASS",
-          "evidence": ["announcement and SMS disabled path verified", "support and material upload verified"]
+          "evidence": [
+            "announcement and SMS disabled path verified",
+            "support and material upload verified"
+          ]
         },
         {
           "id": "UAT-TEACHER-01",
           "persona": "TEACHER",
           "status": "PASS",
-          "evidence": ["teacher scoped student list opened", "teacher scoped report opened"]
+          "evidence": [
+            "teacher scoped student list opened",
+            "teacher scoped report opened"
+          ]
         },
         {
           "id": "UAT-TEACHER-02",
           "persona": "TEACHER",
           "status": "PASS",
-          "evidence": ["teacher support flow verified", "teacher homework and announcement flow verified"]
+          "evidence": [
+            "teacher support flow verified",
+            "teacher homework and announcement flow verified"
+          ]
         },
         {
           "id": "UAT-TEACHER-03",
           "persona": "TEACHER",
           "status": "PASS",
-          "evidence": ["out-of-scope student read rejected", "out-of-scope write rejected"]
+          "evidence": [
+            "out-of-scope student read rejected",
+            "out-of-scope write rejected"
+          ]
         },
         {
           "id": "UAT-STUDENT-01",
           "persona": "STUDENT",
           "status": "PASS",
-          "evidence": ["student portal profile opened", "student homework attendance and report opened"]
+          "evidence": [
+            "student portal profile opened",
+            "student homework attendance and report opened"
+          ]
         },
         {
           "id": "UAT-STUDENT-02",
           "persona": "STUDENT",
           "status": "PASS",
-          "evidence": ["student announcement marked read", "student support ticket created"]
+          "evidence": [
+            "student announcement marked read",
+            "student support ticket created"
+          ]
         },
         {
           "id": "UAT-STUDENT-03",
           "persona": "STUDENT",
           "status": "PASS",
-          "evidence": ["other student access returned 403"]
+          "evidence": [
+            "other student access returned 403"
+          ]
         },
         {
           "id": "UAT-GUARDIAN-01",
           "persona": "GUARDIAN",
           "status": "PASS",
-          "evidence": ["guardian linked student profile opened", "guardian finance and report permission verified"]
+          "evidence": [
+            "guardian linked student profile opened",
+            "guardian finance and report permission verified"
+          ]
         },
         {
           "id": "UAT-GUARDIAN-02",
           "persona": "GUARDIAN",
           "status": "PASS",
-          "evidence": ["guardian announcement read", "guardian support and notification preference verified"]
+          "evidence": [
+            "guardian announcement read",
+            "guardian support and notification preference verified"
+          ]
         },
         {
           "id": "UAT-GUARDIAN-03",
           "persona": "GUARDIAN",
           "status": "PASS",
-          "evidence": ["unlinked student access returned 403", "finance permission denial verified"]
+          "evidence": [
+            "unlinked student access returned 403",
+            "finance permission denial verified"
+          ]
         }
       ],
       "commandsPassed": [

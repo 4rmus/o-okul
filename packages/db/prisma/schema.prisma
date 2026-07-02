@@ -272,6 +272,8 @@ model IdentityInvitation {
   @@index([tenantId, email])
 }
 
+/// Global auth altyapı tablosu: token aile takibi User üzerinden yapılır ve
+/// sistem kullanıcıları (User.tenantId NULL) da kapsandığı için tenant RLS uygulanamaz.
 model ConsumedRefreshToken {
   refreshTokenHash String   @id
   tokenFamilyId    String
@@ -281,6 +283,8 @@ model ConsumedRefreshToken {
   @@index([tokenFamilyId])
 }
 
+/// Global auth altyapı tablosu: global User kimliğine bağlıdır ve sistem
+/// kullanıcıları (User.tenantId NULL) da şifre sıfırlayabildiği için tenant RLS uygulanamaz.
 model PasswordResetToken {
   id        String   @id @default(uuid())
   userId    String

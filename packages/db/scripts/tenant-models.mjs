@@ -5,6 +5,11 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const defaultSchemaPath = join(__dirname, "../prisma/schema.prisma");
 
+// RLS zorunluluğu `tenantId` kolonu taşıyan her modelden türetilir. Tenant'sız
+// kalan tablolar (PasswordResetToken, ConsumedRefreshToken, AuditLog) global
+// auth/denetim altyapısıdır: global User kimliğine (User.tenantId NULL olabilen
+// sistem kullanıcıları dahil) bağlandıkları için tenant policy uygulanamaz.
+// Bu listeye ekleme, tenantId taşıdığı halde RLS dışı bırakılacak model içindir.
 export const tenantScopedTableExceptions = [];
 
 export function getTenantScopedTables(schemaPath = defaultSchemaPath) {
