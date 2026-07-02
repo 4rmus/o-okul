@@ -3,7 +3,7 @@
   "environment": "staging",
   "checkedAt": "2026-05-31T11:30:00.000Z",
   "schema": {
-    "tenantScopedTables": 56,
+    "tenantScopedTables": 57,
     "derivedFromSchema": true,
     "staticCheckPassed": true,
     "liveCheckPassed": true,
@@ -35,6 +35,7 @@
       "TeacherNote",
       "PaymentPlan",
       "PaymentInstallment",
+      "PaymentTransaction",
       "ScheduleLesson",
       "StudySession",
       "StudySessionStudent",
@@ -70,7 +71,7 @@
     "tenantAHash": "tenant-a-redacted",
     "tenantBHash": "tenant-b-redacted",
     "crossTenantReadRows": 0,
-    "crossTenantReadChecks": 56,
+    "crossTenantReadChecks": 57,
     "withCheckRejects": [
       "Student wrong tenant insert",
       "Homework wrong tenant insert",
