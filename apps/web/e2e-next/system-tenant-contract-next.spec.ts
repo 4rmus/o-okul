@@ -115,6 +115,31 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     expect(captured.forbiddenTenantScopedPaths).toEqual([]);
   });
 
+  test("geçersiz ilk admin TC ve telefonu API'ye göndermeden gösterir", async ({ page }) => {
+    const captured = createCapturedSystemRequests();
+    await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar");
+
+    await page.getByRole("button", { name: "Kurum oluştur" }).click();
+    const createDialog = page.getByRole("dialog", { name: "Kurum oluştur" });
+    await createDialog.getByLabel("Kurum adı").fill("Geçersiz Admin Kurumu");
+    await createDialog.getByLabel("Slug").fill("gecersiz-admin-kurumu");
+    await createDialog.getByLabel("Admin ad soyad").fill("Geçersiz Yönetici");
+    await createDialog.getByLabel("Admin e-posta").fill("invalid-admin@example.test");
+    await createDialog.getByLabel("Admin TC kimlik no").fill("11111111111");
+    await createDialog.getByLabel("Admin telefon").fill("2121234567");
+    await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
+
+    await expect(createDialog.getByText("TC Kimlik No geçerli olmalıdır.")).toBeVisible();
+    await expect.poll(() => captured.tenantCreates).toHaveLength(0);
+
+    await createDialog.getByLabel("Admin TC kimlik no").fill("10000001372");
+    await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
+
+    await expect(createDialog.getByText("Telefon geçerli bir Türkiye cep telefonu olmalıdır.")).toBeVisible();
+    await expect.poll(() => captured.tenantCreates).toHaveLength(0);
+    expect(captured.forbiddenTenantScopedPaths).toEqual([]);
+  });
+
   test("sistem referans ekranları statik kanıtı kontrol listesi olarak gösterir", async ({ page }) => {
     const captured = createCapturedSystemRequests();
     await openWithSystemTenantMocks(page, captured, "/sistem/sistem-sagligi");

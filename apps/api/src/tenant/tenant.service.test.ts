@@ -78,6 +78,84 @@ describe("TenantService", () => {
     ]);
   });
 
+  it("tenant silme audit kaydını fiziksel silmeden önce yazar", async () => {
+    const events: string[] = [];
+    const store = {
+      list: async () => [],
+      findById: async () => undefined,
+      findBySlug: async () => undefined,
+      findForAdmin: async () => {
+        events.push("find");
+        return {
+          id: "tenant-delete-order",
+          name: "Delete Order Tenant",
+          slug: "delete-order-tenant",
+          plan: "TRIAL",
+          status: "ACTIVE",
+        };
+      },
+      create: async () => {
+        throw new Error("unexpected");
+      },
+      update: async () => undefined,
+      delete: async () => {
+        events.push("delete");
+        return {
+          id: "tenant-delete-order",
+          name: "Delete Order Tenant",
+          slug: "delete-order-tenant",
+          plan: "TRIAL",
+          status: "DELETED",
+        };
+      },
+    };
+    const auditLogs = {
+      record: async () => {
+        events.push("audit");
+      },
+    };
+    const service = new TenantService(store as never, auditLogs as never);
+
+    await expect(service.delete(systemContext, "tenant-delete-order")).resolves.toMatchObject({
+      id: "tenant-delete-order",
+      status: "DELETED",
+    });
+    expect(events).toEqual(["find", "audit", "delete"]);
+  });
+
+  it("system tenant silinmez ve audit kaydı yazılmaz", async () => {
+    const events: string[] = [];
+    const store = {
+      list: async () => [],
+      findById: async () => undefined,
+      findBySlug: async () => undefined,
+      findForAdmin: async () => ({
+        id: "system",
+        name: "System",
+        slug: "system",
+        plan: "SYSTEM",
+        status: "ACTIVE",
+      }),
+      create: async () => {
+        throw new Error("unexpected");
+      },
+      update: async () => undefined,
+      delete: async () => {
+        events.push("delete");
+        return undefined;
+      },
+    };
+    const auditLogs = {
+      record: async () => {
+        events.push("audit");
+      },
+    };
+    const service = new TenantService(store as never, auditLogs as never);
+
+    await expect(service.delete(systemContext, "system")).rejects.toThrow("TENANT_NOT_FOUND");
+    expect(events).toEqual([]);
+  });
+
   it("SystemAdmin kurum oluştururken ilk tenant admin üyeliğini provision eder", async () => {
     const service = new TenantService(new InMemoryTenantStore());
 
