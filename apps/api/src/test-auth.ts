@@ -45,3 +45,23 @@ export async function loginAs(server: TestServer, email: string, password?: stri
   const response = await request(server).post("/auth/login").send(testLoginBody(email, password)).expect(200);
   return (response.body as { accessToken: string }).accessToken;
 }
+
+export async function loginAsSettled(server: TestServer, email: string, password?: string): Promise<string> {
+  const firstLogin = await request(server).post("/auth/login").send(testLoginBody(email, password)).expect(200);
+  const body = firstLogin.body as { accessToken: string; session?: { mustChangePassword?: boolean } };
+  if (!body.session?.mustChangePassword) return body.accessToken;
+
+  const identity = testLoginIdentities.get(email.toLowerCase());
+  if (!identity) throw new Error(`UNKNOWN_TEST_LOGIN_IDENTITY:${email}`);
+  const currentPassword = password ?? identity.password;
+  const newPassword = `${currentPassword}-changed`;
+  await request(server)
+    .post("/me/password")
+    .set("Authorization", `Bearer ${body.accessToken}`)
+    .send({ currentPassword, newPassword })
+    .expect(200);
+  identity.password = newPassword;
+
+  const nextLogin = await request(server).post("/auth/login").send(testLoginBody(email)).expect(200);
+  return (nextLogin.body as { accessToken: string }).accessToken;
+}

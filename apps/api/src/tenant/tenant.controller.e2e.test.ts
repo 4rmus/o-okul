@@ -2,7 +2,7 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
-import { registerTestLoginIdentity, testLoginBody } from "../test-auth.js";
+import { loginAsSettled, registerTestLoginIdentity } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 
@@ -30,8 +30,7 @@ describe("TenantController", () => {
   });
 
   async function login(email: string, password?: string): Promise<string> {
-    const response = await request(server).post("/auth/login").send(testLoginBody(email, password)).expect(200);
-    return (response.body as { accessToken: string }).accessToken;
+    return loginAsSettled(server, email, password);
   }
 
   it("SYSTEM_ADMIN tenant listesini görür, oluşturur ve lisans alanlarını günceller", async () => {

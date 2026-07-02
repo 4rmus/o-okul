@@ -2,7 +2,7 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
-import { registerTestLoginIdentity, testLoginBody } from "../test-auth.js";
+import { loginAsSettled, registerTestLoginIdentity, testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 import { upsertInMemoryAuthUser } from "../auth/auth-user-store.js";
@@ -26,8 +26,7 @@ describe("Tenant user management", () => {
   });
 
   async function login(email: string, password = "password"): Promise<string> {
-    const response = await request(server).post("/auth/login").send(testLoginBody(email, password)).expect(200);
-    return (response.body as { accessToken: string }).accessToken;
+    return loginAsSettled(server, email, password);
   }
 
   it("kurum admin yalnız kendi tenant kullanıcılarını listeler", async () => {

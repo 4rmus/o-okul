@@ -2,7 +2,7 @@ import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
-import { registerTestLoginIdentity, testLoginBody } from "../test-auth.js";
+import { loginAsSettled, registerTestLoginIdentity } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../app.module.js";
 import { IdentityInvitationService } from "./identity-invitation.service.js";
@@ -28,8 +28,7 @@ describe("Identity invitations", () => {
   });
 
   async function login(email: string, password = "password"): Promise<string> {
-    const response = await request(server).post("/auth/login").send(testLoginBody(email, password)).expect(200);
-    return (response.body as { accessToken: string }).accessToken;
+    return loginAsSettled(server, email, password);
   }
 
   async function captureCreateActivationToken(action: () => Promise<request.Response>): Promise<{
