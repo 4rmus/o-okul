@@ -124,7 +124,7 @@ const emptyForm: StudentFormState = {
   guardianLastName: "",
   guardianPhone: "",
   guardianCanViewFinance: true,
-  guardianCanReceiveSms: false,
+  guardianCanReceiveSms: true,
   guardianCanReceiveAnnouncements: true,
   guardianCanOpenSupportTickets: true,
 };

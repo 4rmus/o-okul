@@ -214,11 +214,7 @@ export class StudentImportService {
       firstName: findHeaderIndex(header, ["guardianFirstName", "veliAd", "veliAdi", "veliAdı"]),
       lastName: findHeaderIndex(header, ["guardianLastName", "veliSoyad", "veliSoyadi", "veliSoyadı"]),
       phone: findHeaderIndex(header, ["guardianPhone", "veliTelefon", "veliTel", "veliCep"]),
-      nationalId: findHeaderIndex(header, ["guardianNationalId", "guardianTc", "veliTc", "veliTckn", "veliKimlikNo"]),
-      canViewFinance: findHeaderIndex(header, ["guardianCanViewFinance", "veliFinans", "veliFinansGoruntuleme", "veliFinansGörme"]),
-      canReceiveSms: findHeaderIndex(header, ["guardianCanReceiveSms", "veliSms", "veliSmsIzni", "veliSmsİzni"]),
-      canReceiveAnnouncements: findHeaderIndex(header, ["guardianCanReceiveAnnouncements", "veliDuyuru", "veliDuyuruIzni", "veliDuyuruİzni"]),
-      canOpenSupportTickets: findHeaderIndex(header, ["guardianCanOpenSupportTickets", "veliDestek", "veliDestekTalebi", "veliDestekIzni"]),
+      nationalId: findHeaderIndex(header, ["guardianNationalId", "guardianTc", "veliTc", "veliTcKimlikNo", "veliTckn", "veliKimlikNo"]),
     };
 
     for (const row of matrix.slice(headerRowIndex + 1)) {
@@ -463,10 +459,6 @@ interface GuardianColumnIndexes {
   lastName?: number;
   phone?: number;
   nationalId?: number;
-  canViewFinance?: number;
-  canReceiveSms?: number;
-  canReceiveAnnouncements?: number;
-  canOpenSupportTickets?: number;
 }
 
 function filterValidRows<T extends { row: number }>(rows: T[], errors: StudentImportError[]): T[] {
@@ -502,23 +494,11 @@ function readGuardian(cells: string[], indexes: GuardianColumnIndexes): StudentG
     lastName: lastName || undefined,
     nationalId: nationalId || undefined,
     phone: phone || undefined,
-    canViewFinance: readBooleanCell(cells, indexes.canViewFinance) ?? true,
-    canReceiveSms: readBooleanCell(cells, indexes.canReceiveSms) ?? false,
-    canReceiveAnnouncements: readBooleanCell(cells, indexes.canReceiveAnnouncements) ?? true,
-    canOpenSupportTickets: readBooleanCell(cells, indexes.canOpenSupportTickets) ?? true,
   };
 }
 
 function readOptionalCell(cells: string[], index: number | undefined): string {
   return index === undefined ? "" : cells[index]?.trim() ?? "";
-}
-
-function readBooleanCell(cells: string[], index: number | undefined): boolean | undefined {
-  const value = readOptionalCell(cells, index).toLocaleLowerCase("tr-TR");
-  if (!value) return undefined;
-  if (["1", "true", "evet", "e", "var", "x", "açık", "acik", "aktif"].includes(value)) return true;
-  if (["0", "false", "hayır", "hayir", "h", "yok", "kapalı", "kapali", "pasif"].includes(value)) return false;
-  return undefined;
 }
 
 function isEmailLike(value: string): boolean {

@@ -1,21 +1,16 @@
 import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type {
-  GuardianImportDryRunResult,
-  GuardianImportRequest,
-  GuardianImportResult,
   GuardianRecord,
   GuardianStudentDetailsResponse,
   GuardianStudentRecord,
 } from "@o-okul/shared-types";
-import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
-import { requiredTrimmedString, zodBody } from "../http/zod-validation.js";
+import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { GuardianService } from "./guardian.service.js";
-import { GuardianImportService } from "./guardian-import.service.js";
 import {
   guardianCreateBodySchema,
   guardianStudentLinkBodySchema,
@@ -27,17 +22,10 @@ import {
   type GuardianUpdateBody,
 } from "../school/school-validation.js";
 
-const guardianImportBodySchema = z.object({
-  fileBase64: requiredTrimmedString,
-}).strict() satisfies z.ZodType<GuardianImportRequest>;
-
 @Controller("guardians")
 @UseGuards(RolesGuard)
 export class GuardiansController {
-  constructor(
-    private readonly guardians: GuardianService,
-    private readonly imports: GuardianImportService,
-  ) {}
+  constructor(private readonly guardians: GuardianService) {}
 
   @Get()
   @Roles("TEACHER")
@@ -70,25 +58,6 @@ export class GuardiansController {
     @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<GuardianRecord> {
     return toGuardianResponse(await this.guardians.createGuardian(getRequestContext(), body, idempotencyKey));
-  }
-
-  @Post("imports/dry-run")
-  @RequireCapability("student:manage")
-  dryRunImport(@Body(zodBody(guardianImportBodySchema)) body: GuardianImportRequest): Promise<GuardianImportDryRunResult> {
-    return this.imports.dryRun(getRequestContext(), body);
-  }
-
-  @Post("imports")
-  @RequireCapability("student:manage")
-  async import(
-    @Body(zodBody(guardianImportBodySchema)) body: GuardianImportRequest,
-    @Headers("idempotency-key") idempotencyKey?: string,
-  ): Promise<GuardianImportResult> {
-    const result = await this.imports.import(getRequestContext(), body, idempotencyKey);
-    return {
-      ...result,
-      guardians: result.guardians.map(toGuardianResponse),
-    };
   }
 
   @Patch(":id")

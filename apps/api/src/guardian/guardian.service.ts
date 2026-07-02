@@ -563,7 +563,7 @@ function resolveGuardianStudentRelation(
     relation.canViewFinance = resolveBoolean(input.canViewFinance, true);
   }
   if (applyDefaults || input.canReceiveSms !== undefined) {
-    relation.canReceiveSms = resolveBoolean(input.canReceiveSms, false);
+    relation.canReceiveSms = resolveBoolean(input.canReceiveSms, true);
   }
   if (applyDefaults || input.canReceiveAnnouncements !== undefined) {
     relation.canReceiveAnnouncements = resolveBoolean(input.canReceiveAnnouncements, true);

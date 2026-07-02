@@ -17,6 +17,7 @@ import { createGradeLevelCourseStore, gradeLevelCourseStoreToken } from "./grade
 import { createGradeLevelStore, gradeLevelStoreToken } from "./grade-level-store.js";
 import { GradeLevelsController } from "./grade-levels.controller.js";
 import { createLearningOutcomeStore, learningOutcomeStoreToken } from "./learning-outcome-store.js";
+import { LearningOutcomeImportService } from "./learning-outcome-import.service.js";
 import { LearningOutcomesController } from "./learning-outcomes.controller.js";
 import { SchoolService } from "./school.service.js";
 import { createTeacherAssignmentStore, teacherAssignmentStoreToken } from "./teacher-assignment-store.js";
@@ -84,7 +85,7 @@ const schoolStoreProviders = [
     GradeLevelsController,
     LearningOutcomesController,
   ],
-  providers: [...schoolStoreProviders, SchoolService],
+  providers: [...schoolStoreProviders, LearningOutcomeImportService, SchoolService],
   exports: [
     StudentPersistenceModule,
     academicCalendarStoreToken,

@@ -62,6 +62,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expect(setupForm.getByRole("group", { name: "Veli veri girişi" })).toHaveCount(0);
     await expect(setupForm.getByRole("link", { name: "Öğretmen XLSX şablonu" })).toHaveAttribute("href", "/templates/ogretmen-aktarim-sablonu.xlsx");
     await expect(setupForm.getByRole("link", { name: "Öğrenci XLSX şablonu" })).toHaveAttribute("href", "/templates/ogrenci-aktarim-sablonu.xlsx");
+    await expect(setupForm.getByRole("link", { name: "Kazanım XLSX şablonu" })).toHaveAttribute("href", "/templates/kazanim-aktarim-sablonu.xlsx");
     await expect(setupForm.getByRole("link", { name: "Veli XLSX şablonu" })).toHaveCount(0);
     await setupForm.getByLabel("Öğrenci aktarım dosyası").setInputFiles({
       buffer: Buffer.from("%PDF-1.7"),
@@ -106,6 +107,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     );
     expect(storedDraft.general.contactEmail).toBe("");
     expect(storedDraft.people.importOwner).toBe("");
+    expect(storedDraft.people.kazanimImportFileName).toBe("");
     expect(storedDraft.people.teacherImportFileName).toBe("");
     expect(storedDraft.people.studentImportFileName).toBe("");
 
@@ -129,6 +131,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
     await expect(page.getByLabel("Öğretmen aktarım dosyası")).toBeVisible();
     await expect(page.getByLabel("Öğrenci aktarım dosyası")).toBeVisible();
+    await expect(page.getByLabel("Kazanım aktarım dosyası (opsiyonel)")).toBeVisible();
     await expect(page.getByLabel("Veli aktarım dosyası")).toHaveCount(0);
     await page.getByRole("button", { name: "Komut paleti" }).click();
     const commandDialog = page.getByRole("dialog", { name: "Komut paleti" });
@@ -190,7 +193,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expect(setupForm).toContainText("Öğrenci aktarım dosyası zorunludur.");
 
     await setupForm.getByLabel("Öğrenci aktarım dosyası").setInputFiles({
-      buffer: Buffer.from("\uFEFFokul_no;ad;soyad;sinif;veli_ad;veli_soyad;veli_telefon;veli_finans\n100;Ada;Kaya;8-A;Ayse;Veli;05550000101;evet\n", "utf8"),
+      buffer: Buffer.from("\uFEFFokul_no;ad;soyad;sinif;veli_ad;veli_soyad;veli_telefon;veli_tc_kimlik_no\n100;Ada;Kaya;8-A;Ayse;Veli;05550000101;10000001990\n", "utf8"),
       mimeType: "text/csv",
       name: "ogrenci-ada-veli-5550000101.csv",
     });
@@ -222,6 +225,25 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
 
     await expect(setupForm).not.toContainText("Ders şablonu bulunamadı.");
     await expect(setupForm).toContainText("2 sınıf, 6 ders");
+  });
+
+  test("kazanım aktarım dosyası opsiyoneldir ve seçilirse özetlenir", async ({ page }) => {
+    await openSetupWizard(page, { height: 844, width: 390 }, { roles: ["TENANT_ADMIN"] });
+
+    const setupForm = page.getByLabel("Kurulum formu");
+    await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
+    await setupForm.getByRole("group", { name: "Öğretmen veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+    await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+    await setupForm.getByLabel("Kazanım aktarım dosyası (opsiyonel)").setInputFiles({
+      buffer: Buffer.from("\uFEFFkod;brans;baslik\nMAT.8.1.1;Matematik;Çarpanlar ve katlar\n", "utf8"),
+      mimeType: "text/csv",
+      name: "kazanimlar.csv",
+    });
+    await expect(page.getByLabel("Kazanım aktarım güven durumu")).toContainText("Yerel kontrol tamam");
+    await setupForm.getByLabel("Veri sorumlusu").fill("Operasyon sorumlusu");
+    await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
+
+    await expect(setupForm).toContainText("1 kazanım");
   });
 });
 
@@ -363,6 +385,23 @@ function mockSetupApiResponse(
     };
   }
   if (method === "POST" && pathName === "/students/imports") return { importedRows: 1, students: [] };
+  if (method === "POST" && pathName === "/learning-outcomes/imports/dry-run") {
+    return {
+      dryRun: true,
+      errors: [],
+      totalRows: 1,
+      validRows: [{ branch: "Matematik", code: "MAT.8.1.1", row: 2, title: "Çarpanlar ve katlar" }],
+      wouldImport: true,
+    };
+  }
+  if (method === "POST" && pathName === "/learning-outcomes/imports") {
+    return {
+      createdOutcomes: 1,
+      importedRows: 1,
+      outcomes: [{ branch: "Matematik", code: "MAT.8.1.1", id: "learning-outcome-setup", tenantId: "tenant-setup", title: "Çarpanlar ve katlar" }],
+      updatedOutcomes: 0,
+    };
+  }
   return [];
 }
 

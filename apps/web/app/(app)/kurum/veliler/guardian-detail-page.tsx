@@ -41,7 +41,7 @@ interface GuardianDetailData {
 const emptyLinkForm = {
   canOpenSupportTickets: true,
   canReceiveAnnouncements: true,
-  canReceiveSms: false,
+  canReceiveSms: true,
   canViewFinance: true,
   studentId: "",
 };

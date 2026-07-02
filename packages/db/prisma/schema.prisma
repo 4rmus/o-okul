@@ -647,7 +647,7 @@ model GuardianStudent {
   guardianId              String
   studentId               String
   canViewFinance          Boolean  @default(true)
-  canReceiveSms           Boolean  @default(false)
+  canReceiveSms           Boolean  @default(true)
   canReceiveAnnouncements Boolean  @default(true)
   canOpenSupportTickets   Boolean  @default(true)
   createdAt               DateTime @default(now())

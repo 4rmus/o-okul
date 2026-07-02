@@ -284,7 +284,7 @@ type TeacherWorkbookRow = {
 };
 
 export async function loadDemoFixtures(): Promise<DemoFixtures> {
-  const studentRows = await readWorkbookRows<StudentWorkbookRow>(studentWorkbookPath, [
+  let studentRows = await readWorkbookRows<StudentWorkbookRow>(studentWorkbookPath, [
     "okul_no",
     "ad",
     "soyad",
@@ -295,7 +295,7 @@ export async function loadDemoFixtures(): Promise<DemoFixtures> {
     "veli_soyad",
     "veli_telefon",
   ]);
-  const teacherRows = uniqueBy(await readWorkbookRows<TeacherWorkbookRow>(teacherWorkbookPath, [
+  let teacherRows = uniqueBy(await readWorkbookRows<TeacherWorkbookRow>(teacherWorkbookPath, [
     "ad",
     "soyad",
     "brans",
@@ -316,6 +316,8 @@ export async function loadDemoFixtures(): Promise<DemoFixtures> {
       .toLocaleLowerCase("tr-TR"),
   );
   const optikDirectory = readOptikStudentDirectory();
+  if (studentRows.length === 0) studentRows = fallbackStudentRows(optikDirectory.students);
+  if (teacherRows.length === 0) teacherRows = fallbackTeacherRows();
   const fallbackClassName = studentRows.at(-1)?.sinif || "8 LGS A";
   const studentRowsByNo = new Map(studentRows.map((student) => [student.okul_no, student]));
 
@@ -392,6 +394,52 @@ export async function loadDemoFixtures(): Promise<DemoFixtures> {
   }
 
   return { courses: STANDARD_COURSES, classes, teachers, students, accountTeacher, accountStudent };
+}
+
+function fallbackStudentRows(students: Array<{ firstName: string; lastName: string; studentNo: string }>): StudentWorkbookRow[] {
+  return students.map((student, index) => ({
+    okul_no: student.studentNo,
+    ad: fallbackStudentName(student.studentNo, student.firstName, "firstName"),
+    soyad: fallbackStudentName(student.studentNo, student.lastName, "lastName"),
+    email: `ogrenci-${student.studentNo}@demo.local`,
+    telefon: "",
+    sinif: fallbackClassNameForStudentIndex(index),
+    veli_ad: student.studentNo === "101" ? "Mehmet" : student.firstName,
+    veli_soyad: student.studentNo === "101" ? "Kaya" : "Veli",
+    veli_telefon: "",
+  }));
+}
+
+function fallbackStudentName(studentNo: string, value: string, field: "firstName" | "lastName"): string {
+  const legacyNames: Record<string, { firstName: string; lastName: string }> = {
+    "101": { firstName: "Ali", lastName: "Kaya" },
+    "119": { firstName: "Necla", lastName: "Salla" },
+    "120": { firstName: "Mustafa", lastName: "Orak" },
+  };
+  return legacyNames[studentNo]?.[field] ?? value;
+}
+
+function fallbackClassNameForStudentIndex(index: number): string {
+  if (index < 10) return "8-A";
+  if (index < 15) return "8-B";
+  if (index < 18) return "TYT/AYT-A";
+  return "TYT/AYT-B";
+}
+
+function fallbackTeacherRows(): TeacherWorkbookRow[] {
+  return [
+    { ad: "Ayse", soyad: "Hoca", brans: "Matematik", atanacak_sinif: "8-A", ders: "Matematik" },
+    { ad: "Zeynep", soyad: "Hoca", brans: "Türkçe", atanacak_sinif: "8-A", ders: "Türkçe" },
+    { ad: "Murat", soyad: "Hoca", brans: "Fen Bilimleri", atanacak_sinif: "8-B", ders: "Fen Bilimleri" },
+    { ad: "Selin", soyad: "Hoca", brans: "T.C. İnkılap Tarihi ve Atatürkçülük", atanacak_sinif: "8-B", ders: "T.C. İnkılap Tarihi ve Atatürkçülük" },
+    { ad: "Elif", soyad: "Hoca", brans: "Din Kültürü ve Ahlak Bilgisi", atanacak_sinif: "TYT/AYT-A", ders: "Din Kültürü ve Ahlak Bilgisi" },
+    { ad: "Can", soyad: "Hoca", brans: "İngilizce", atanacak_sinif: "TYT/AYT-B", ders: "İngilizce" },
+    { ad: "Deniz", soyad: "Hoca", brans: "Matematik" },
+    { ad: "Bora", soyad: "Hoca", brans: "Türkçe" },
+    { ad: "Ece", soyad: "Hoca", brans: "Fen Bilimleri" },
+    { ad: "Ozan", soyad: "Hoca", brans: "İngilizce" },
+    { ad: "Nehir", soyad: "Hoca", brans: "Rehberlik" },
+  ];
 }
 
 export function courseIdForName(name: string): string {

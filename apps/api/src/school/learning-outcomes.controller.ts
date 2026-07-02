@@ -1,5 +1,10 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
-import type { LearningOutcomeRecord } from "@o-okul/shared-types";
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import type {
+  LearningOutcomeImportDryRunResult,
+  LearningOutcomeImportRequest,
+  LearningOutcomeImportResult,
+  LearningOutcomeRecord,
+} from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
@@ -7,8 +12,10 @@ import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { SchoolService } from "./school.service.js";
+import { LearningOutcomeImportService } from "./learning-outcome-import.service.js";
 import {
   learningOutcomeCreateBodySchema,
+  learningOutcomeImportBodySchema,
   learningOutcomeUpdateBodySchema,
   type LearningOutcomeCreateBody,
   type LearningOutcomeUpdateBody,
@@ -17,7 +24,10 @@ import {
 @Controller("learning-outcomes")
 @UseGuards(RolesGuard)
 export class LearningOutcomesController {
-  constructor(private readonly school: SchoolService) {}
+  constructor(
+    private readonly school: SchoolService,
+    private readonly imports: LearningOutcomeImportService,
+  ) {}
 
   @Get()
   @Roles("TEACHER", "STUDENT", "GUARDIAN")
@@ -35,6 +45,23 @@ export class LearningOutcomesController {
   @RequireCapability("academic:manage")
   create(@Body(zodBody(learningOutcomeCreateBodySchema)) body: LearningOutcomeCreateBody): Promise<LearningOutcomeRecord> {
     return this.school.createLearningOutcome(getRequestContext(), body);
+  }
+
+  @Post("imports/dry-run")
+  @RequireCapability("academic:manage")
+  dryRunImport(
+    @Body(zodBody(learningOutcomeImportBodySchema)) body: LearningOutcomeImportRequest,
+  ): Promise<LearningOutcomeImportDryRunResult> {
+    return this.imports.dryRun(getRequestContext(), body);
+  }
+
+  @Post("imports")
+  @RequireCapability("academic:manage")
+  import(
+    @Body(zodBody(learningOutcomeImportBodySchema)) body: LearningOutcomeImportRequest,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<LearningOutcomeImportResult> {
+    return this.imports.import(getRequestContext(), body, idempotencyKey);
   }
 
   @Patch(":id")

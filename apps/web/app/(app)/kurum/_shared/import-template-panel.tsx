@@ -5,6 +5,7 @@ interface ImportTemplatePanelProps {
 const importTemplates = [
   { href: "/templates/ogretmen-aktarim-sablonu.xlsx", label: "Öğretmen XLSX şablonu" },
   { href: "/templates/ogrenci-aktarim-sablonu.xlsx", label: "Öğrenci XLSX şablonu" },
+  { href: "/templates/kazanim-aktarim-sablonu.xlsx", label: "Kazanım XLSX şablonu" },
 ] as const;
 
 export function ImportTemplatePanel({ className }: ImportTemplatePanelProps) {

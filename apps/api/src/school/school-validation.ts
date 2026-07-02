@@ -19,6 +19,7 @@ import type {
   GuardianStudentRelationRequest,
   GuardianUpdateRequest,
   LearningOutcomeCreateRequest,
+  LearningOutcomeImportRequest,
   LearningOutcomeUpdateRequest,
   TeacherAssignmentCreateRequest,
   TeacherAssignmentUpdateRequest,
@@ -122,6 +123,10 @@ export const learningOutcomeUpdateBodySchema = z.object({
   level: optionalTrimmedString,
   title: optionalNonEmptyString,
 }).strict() satisfies z.ZodType<LearningOutcomeUpdateRequest>;
+
+export const learningOutcomeImportBodySchema = z.object({
+  fileBase64: requiredTrimmedString,
+}).strict() satisfies z.ZodType<LearningOutcomeImportRequest>;
 
 export const academicYearCreateBodySchema = z.object({
   endsAt: dateString,

@@ -1026,104 +1026,115 @@ describe("School management API", () => {
     await request(server).delete(`/guardians/${created.body.id}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
   });
 
-  it("veli import dry-run ve commit işlemini öğrenci okul no ile idempotent işler", async () => {
-    const fileBase64 = createCsvBase64("ad;soyad;telefon;tc_kimlik_no;email;okul_no\nVeli;Import;0555 000 0099;10000001990;veli-import@example.test;100\n");
-    let guardianId = "";
+  it("kazanım import dry-run geçerli CSV dosyasını önizler", async () => {
+    await request(server)
+      .post("/learning-outcomes/imports/dry-run")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ fileBase64: createCsvBase64("kod;brans;baslik;seviye\nMAT.8.TEST;Matematik;Test kazanımı;8\n") })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual({
+          dryRun: true,
+          errors: [],
+          totalRows: 1,
+          validRows: [
+            expect.objectContaining({
+              branch: "Matematik",
+              code: "MAT.8.TEST",
+              level: "8",
+              row: 2,
+              title: "Test kazanımı",
+            }),
+          ],
+          wouldImport: true,
+        });
+      });
+  });
+
+  it("kazanım import dry-run zorunlu alan ve dosya içi tekrar hatası verir", async () => {
+    await request(server)
+      .post("/learning-outcomes/imports/dry-run")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ fileBase64: createCsvBase64("kod;brans;baslik\n;Matematik;\nMAT.DUP;Matematik;İlk\nMAT.DUP;Matematik;İkinci\n") })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body.wouldImport).toBe(false);
+        expect(body.validRows).toEqual([]);
+        expect(body.errors).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ code: "REQUIRED", field: "code", row: 2 }),
+            expect.objectContaining({ code: "REQUIRED", field: "title", row: 2 }),
+            expect.objectContaining({ code: "DUPLICATE_CODE", field: "code", row: 4, value: "MAT.DUP" }),
+          ]),
+        );
+      });
+  });
+
+  it("kazanım import commit idempotent işler ve aynı kodu günceller", async () => {
+    const key = "learning-outcome-import-idempotency-a";
+    const firstFileBase64 = createCsvBase64("kod;brans;baslik;seviye\nMAT.8.IDEMP;Matematik;İlk başlık;8\n");
+    const secondFileBase64 = createCsvBase64("kod;brans;baslik;seviye\nMAT.8.IDEMP;Matematik;Güncel başlık;8\n");
+    let outcomeId = "";
 
     try {
-      await request(server)
-        .post("/guardians/imports/dry-run")
-        .set("Authorization", `Bearer ${tenantAAccessToken}`)
-        .send({ fileBase64 })
-        .expect(201)
-        .expect(({ body }) => {
-          expect(body).toEqual({
-            dryRun: true,
-            errors: [],
-            totalRows: 1,
-            validRows: [
-              expect.objectContaining({
-                email: "veli-import@example.test",
-                firstName: "Veli",
-                lastName: "Import",
-                row: 2,
-                studentId: "student-a",
-                studentNo: "100",
-              }),
-            ],
-            wouldImport: true,
-          });
-          expect(JSON.stringify(body)).not.toContain("10000001990");
-          expect(JSON.stringify(body)).not.toContain("5550000099");
-        });
-
-      const key = "guardian-import-idempotency-a";
       const first = await request(server)
-        .post("/guardians/imports")
+        .post("/learning-outcomes/imports")
         .set("Authorization", `Bearer ${tenantAAccessToken}`)
         .set("Idempotency-Key", key)
-        .send({ fileBase64 })
+        .send({ fileBase64: firstFileBase64 })
         .expect(201);
-      guardianId = first.body.guardians[0].id;
+      outcomeId = first.body.outcomes[0].id;
+
+      expect(first.body).toMatchObject({
+        createdOutcomes: 1,
+        importedRows: 1,
+        updatedOutcomes: 0,
+        outcomes: [expect.objectContaining({ code: "MAT.8.IDEMP", title: "İlk başlık" })],
+      });
 
       await request(server)
-        .post("/guardians/imports")
+        .post("/learning-outcomes/imports")
         .set("Authorization", `Bearer ${tenantAAccessToken}`)
         .set("Idempotency-Key", key)
-        .send({ fileBase64 })
+        .send({ fileBase64: firstFileBase64 })
         .expect(201)
         .expect(({ body }) => {
           expect(body).toEqual(first.body);
         });
 
       await request(server)
-        .post("/guardians/imports")
+        .post("/learning-outcomes/imports")
         .set("Authorization", `Bearer ${tenantAAccessToken}`)
         .set("Idempotency-Key", key)
-        .send({ fileBase64: createCsvBase64("ad;soyad;okul_no\nFarkli;Veli;100\n") })
+        .send({ fileBase64: secondFileBase64 })
         .expect(409);
 
-      expect(first.body).toMatchObject({
-        createdOrMatchedGuardians: 1,
-        importedRows: 1,
-        linkedStudents: 1,
-        guardians: [expect.objectContaining({ firstName: "Veli", lastName: "Import" })],
-        links: [expect.objectContaining({ studentId: "student-a" })],
-      });
-      expect(JSON.stringify(first.body)).not.toContain("10000001990");
-      expect(JSON.stringify(first.body)).not.toContain("nationalId");
+      await request(server)
+        .post("/learning-outcomes/imports")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ fileBase64: secondFileBase64 })
+        .expect(201)
+        .expect(({ body }) => {
+          expect(body).toMatchObject({
+            createdOutcomes: 0,
+            importedRows: 1,
+            updatedOutcomes: 1,
+            outcomes: [expect.objectContaining({ id: outcomeId, code: "MAT.8.IDEMP", title: "Güncel başlık" })],
+          });
+        });
     } finally {
-      if (guardianId) {
-        await request(server).delete(`/guardians/${guardianId}/students/student-a`).set("Authorization", `Bearer ${tenantAAccessToken}`);
-        await request(server).delete(`/guardians/${guardianId}`).set("Authorization", `Bearer ${tenantAAccessToken}`);
+      if (outcomeId) {
+        await request(server).delete(`/learning-outcomes/${outcomeId}`).set("Authorization", `Bearer ${tenantAAccessToken}`);
       }
     }
   });
 
-  it("veli import dry-run geçersiz PII değerlerini hata yanıtında açmaz", async () => {
-    const fileBase64 = createCsvBase64(
-      "ad;soyad;telefon;tc_kimlik_no;email;okul_no\nVeli;Hata;bad-phone;11111111111;bad-email;100\n",
-    );
-
+  it("kazanım import öğretmen rolüne kapalıdır", async () => {
     await request(server)
-      .post("/guardians/imports/dry-run")
-      .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ fileBase64 })
-      .expect(201)
-      .expect(({ body }) => {
-        expect(body.wouldImport).toBe(false);
-        expect(body.errors).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({ field: "email", code: "INVALID_EMAIL" }),
-            expect.objectContaining({ field: "nationalId", code: "INVALID" }),
-            expect.objectContaining({ field: "phone", code: "INVALID" }),
-          ]),
-        );
-        const serialized = JSON.stringify(body);
-        expect(serialized).not.toContain("bad-email");
-        expect(serialized).not.toContain("bad-phone");
-        expect(serialized).not.toContain("11111111111");
-      });
+      .post("/learning-outcomes/imports/dry-run")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({ fileBase64: createCsvBase64("kod;brans;baslik\nMAT.8.RBAC;Matematik;Yetki testi\n") })
+      .expect(403);
   });
 
   it("tenant admin veli-öğrenci bağlantısını tenant içinde yönetir", async () => {
@@ -1156,7 +1167,7 @@ describe("School management API", () => {
       guardianId,
       studentId: "student-a",
       canViewFinance: true,
-      canReceiveSms: false,
+      canReceiveSms: true,
       canReceiveAnnouncements: true,
       canOpenSupportTickets: false,
     }));
@@ -1292,7 +1303,7 @@ describe("School management API", () => {
   it("öğrenciye bağlı velileri listeler", async () => {
     await request(server)
       .get("/students/student-a/guardians")
-      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
         expect(body).toEqual(
