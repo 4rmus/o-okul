@@ -241,7 +241,7 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     ];
 
     for (const routeCase of routeCases) {
-      await clickSidebarRoute(page, "Öğretmen Paneli", routeCase.label);
+      await clickSidebarRoute(page, "Öğretmen Paneli", routeCase.label, routeCase.path);
       await expect(page).toHaveURL(new RegExp(`${routeCase.path}$`));
       await expect(page.getByRole("heading", { level: 1, name: "Öğretmen Portalı" })).toBeVisible();
       await expect(page.getByRole("region", { exact: true, name: "Portal görev bağlamı" })).toContainText(routeCase.context);
@@ -428,13 +428,15 @@ async function openTeacherPortal(
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 
-async function clickSidebarRoute(page: Page, groupName: string, linkName: string) {
+async function clickSidebarRoute(page: Page, groupName: string, linkName: string, expectedPath: string) {
   const navigation = page.getByRole("navigation", { name: "Ana menü" });
   const groupButton = navigation.getByRole("button", { exact: true, name: groupName });
   if ((await groupButton.getAttribute("aria-expanded")) !== "true") {
     await groupButton.click();
   }
-  await navigation.getByRole("link", { exact: true, name: linkName }).click();
+  const link = navigation.getByRole("link", { exact: true, name: linkName });
+  await expect(link).toHaveAttribute("href", expectedPath);
+  await Promise.all([page.waitForURL(new RegExp(`${expectedPath}$`), { timeout: 15_000 }), link.click()]);
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 
