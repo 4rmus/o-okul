@@ -95,6 +95,25 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     expect(captured.forbiddenTenantScopedPaths).toEqual([]);
   });
 
+  test("ilk admin e-postası çakışmasını açık gösterir", async ({ page }) => {
+    const captured = createCapturedSystemRequests();
+    await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar");
+
+    await page.getByRole("button", { name: "Kurum oluştur" }).click();
+    const createDialog = page.getByRole("dialog", { name: "Kurum oluştur" });
+    await createDialog.getByLabel("Kurum adı").fill("Demo Kurum");
+    await createDialog.getByLabel("Slug").fill("demo");
+    await createDialog.getByLabel("Admin ad soyad").fill("Demo Yönetici");
+    await createDialog.getByLabel("Admin e-posta").fill("used.admin@example.test");
+    await createDialog.getByLabel("Admin TC kimlik no").fill("10000001372");
+    await createDialog.getByLabel("Admin telefon").fill("5551234567");
+    await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
+
+    await expect(createDialog.getByText("Bu admin e-postası zaten kullanımda. Farklı bir e-posta gir.")).toBeVisible();
+    await expect.poll(() => captured.tenantCreates).toHaveLength(1);
+    expect(captured.forbiddenTenantScopedPaths).toEqual([]);
+  });
+
   test("sistem referans ekranları statik kanıtı kontrol listesi olarak gösterir", async ({ page }) => {
     const captured = createCapturedSystemRequests();
     await openWithSystemTenantMocks(page, captured, "/sistem/sistem-sagligi");
@@ -186,6 +205,10 @@ async function installSystemTenantApiMocks(page: Page, captured: CapturedSystemR
         authorization: route.request().headers().authorization,
         body,
       });
+      if (body.firstAdmin.email === "used.admin@example.test") {
+        await fulfillError(route, "TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS", 422);
+        return;
+      }
       const tenant = {
         activeSeatCount: 1,
         id: "tenant-created-invited",
@@ -303,6 +326,17 @@ async function fulfillData(route: Route, data: unknown, meta?: { limit: number; 
       "content-type": "application/json",
     },
     status: 200,
+  });
+}
+
+async function fulfillError(route: Route, code: string, status: number) {
+  await route.fulfill({
+    body: JSON.stringify({ error: { code } }),
+    headers: {
+      ...corsHeadersFor(route),
+      "content-type": "application/json",
+    },
+    status,
   });
 }
 
