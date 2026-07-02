@@ -1368,6 +1368,7 @@ const studentGuardianProvisionRequestSchema = objectSchema({
   email: stringSchema(),
   firstName: stringSchema(),
   lastName: stringSchema(),
+  nationalId: stringSchema(),
   phone: stringSchema(),
 });
 
@@ -2137,7 +2138,7 @@ const studentImportRequestSchema = objectSchema({
 
 const studentImportErrorSchema = objectSchema({
   row: integerSchema({ minimum: 0 }),
-  field: { type: "string", enum: ["className", "email", "firstName", "guardianEmail", "lastName", "nationalId", "phone", "quota", "studentNo"] },
+  field: { type: "string", enum: ["className", "email", "firstName", "guardianNationalId", "guardianPhone", "lastName", "nationalId", "phone", "quota", "studentNo"] },
   code: {
     type: "string",
     enum: [

@@ -245,14 +245,13 @@ export const studentFormSchema = z.object({
   guardianFirstName: optionalText(),
   guardianLastName: optionalText(),
   guardianPhone: optionalText(),
-  guardianEmail: optionalEmail,
   guardianCanViewFinance: z.boolean(),
   guardianCanReceiveSms: z.boolean(),
   guardianCanReceiveAnnouncements: z.boolean(),
   guardianCanOpenSupportTickets: z.boolean(),
 }).superRefine((value, context) => {
   const hasGuardianName = Boolean(value.guardianFirstName || value.guardianLastName);
-  const hasGuardianContact = Boolean(value.guardianPhone || value.guardianEmail);
+  const hasGuardianContact = Boolean(value.guardianPhone);
   const hasGuardianInput = hasGuardianName || hasGuardianContact;
   if (value.guardianFirstName && !value.guardianLastName) {
     context.addIssue({
@@ -285,7 +284,7 @@ export const studentFormSchema = z.object({
   if (hasGuardianInput && !hasGuardianContact) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Veli telefonu veya e-postası zorunludur.",
+      message: "Veli telefonu zorunludur.",
       path: ["guardianPhone"],
     });
   }

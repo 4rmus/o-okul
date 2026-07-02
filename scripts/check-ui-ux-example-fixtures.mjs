@@ -42,7 +42,6 @@ const importTemplates = [
       "veli_ad",
       "veli_soyad",
       "veli_telefon",
-      "veli_email",
       "veli_finans",
       "veli_sms",
       "veli_duyuru",
@@ -56,50 +55,49 @@ const importTemplates = [
     headers: ["ad", "soyad", "brans", "tc_kimlik_no", "telefon"],
     validateNationalIds: true,
   },
-  {
-    file: "veli-aktarim-sablonu.xlsx",
-    sheet: "Veliler",
-    headers: ["ad", "soyad", "telefon", "tc_kimlik_no", "email", "okul_no"],
-    validateNationalIds: true,
-  },
 ];
 const failures = [];
 const seen = new Map();
 let opticalRows = 0;
+const hasExampleRoot = existsSync(exampleRoot) && !lstatSync(exampleRoot).isSymbolicLink() && lstatSync(exampleRoot).isDirectory();
 
 if (!existsSync(exampleRoot)) {
   // ponytail: ornek-veriler local-only; CI should not fail when the ignored folder is absent.
-  console.log("UI/UX örnek fixture kontrolü atlandı: ornek-veriler dizini yok.");
-  process.exit(0);
+  console.log("UI/UX örnek fixture kaynak kontrolü atlandı: ornek-veriler dizini yok.");
 } else if (lstatSync(exampleRoot).isSymbolicLink() || !lstatSync(exampleRoot).isDirectory()) {
   failures.push("ornek-veriler symlink olmayan dizin olmalı.");
 }
 
-for (const fixture of expectedFixtures) {
-  const txtPath = resolve(exampleRoot, fixture.txt);
-  const answerKeyPath = resolve(exampleRoot, fixture.answerKey);
+if (hasExampleRoot) {
+  for (const fixture of expectedFixtures) {
+    const txtPath = resolve(exampleRoot, fixture.txt);
+    const answerKeyPath = resolve(exampleRoot, fixture.answerKey);
 
-  requireRegularFile(txtPath, `${fixture.label} TXT`, 1000);
-  requireRegularFile(answerKeyPath, `${fixture.label} cevap anahtarı`, 1000);
-  requireXlsxZip(answerKeyPath, `${fixture.label} cevap anahtarı`);
-  opticalRows += requireOpticalRows(txtPath, fixture.label, fixture.expectedRows);
+    requireRegularFile(txtPath, `${fixture.label} TXT`, 1000);
+    requireRegularFile(answerKeyPath, `${fixture.label} cevap anahtarı`, 1000);
+    requireXlsxZip(answerKeyPath, `${fixture.label} cevap anahtarı`);
+    opticalRows += requireOpticalRows(txtPath, fixture.label, fixture.expectedRows);
 
-  remember(txtPath);
-  remember(answerKeyPath);
+    remember(txtPath);
+    remember(answerKeyPath);
+  }
 }
 
 for (const template of importTemplates) {
   const templatePath = resolve(exampleRoot, template.file);
   const publicTemplatePath = resolve(publicTemplateRoot, template.file);
-  requireRegularFile(templatePath, template.file, 1000);
-  requireXlsxZip(templatePath, template.file);
-  await requireWorkbookHeaders(templatePath, `${template.file} kaynak`, template.sheet, template.headers, template);
   requireRegularFile(publicTemplatePath, `${template.file} public kopyası`, 1000);
   requireXlsxZip(publicTemplatePath, `${template.file} public kopyası`);
   await requireWorkbookHeaders(publicTemplatePath, `${template.file} public kopyası`, template.sheet, template.headers, template);
-  requireSameHash(templatePath, publicTemplatePath, template.file);
-  remember(templatePath);
   remember(publicTemplatePath);
+
+  if (hasExampleRoot) {
+    requireRegularFile(templatePath, template.file, 1000);
+    requireXlsxZip(templatePath, template.file);
+    await requireWorkbookHeaders(templatePath, `${template.file} kaynak`, template.sheet, template.headers, template);
+    requireSameHash(templatePath, publicTemplatePath, template.file);
+    remember(templatePath);
+  }
 }
 
 if (failures.length > 0) {
@@ -153,9 +151,22 @@ async function requireWorkbookHeaders(filePath, label, sheetName, expectedHeader
   if (headers.join("|") !== expectedHeaders.join("|")) {
     failures.push(`${label} başlıkları beklenen alanlarla eşleşmiyor: ${headers.join(", ")}`);
   }
+  requireNoDataRows(worksheet, label, expectedHeaders.length);
   if (options.validateNationalIds) {
     requireValidNationalIds(worksheet, label, expectedHeaders.indexOf("tc_kimlik_no") + 1);
   }
+}
+
+function requireNoDataRows(worksheet, label, expectedColumnCount) {
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const hasData = Array.from({ length: expectedColumnCount }, (_item, index) =>
+      String(row.getCell(index + 1).value ?? "").trim(),
+    ).some(Boolean);
+    if (hasData) {
+      failures.push(`${label} örnek kişi verisi içermemeli: satır ${rowNumber}.`);
+    }
+  });
 }
 
 function requireValidNationalIds(worksheet, label, nationalIdColumn) {

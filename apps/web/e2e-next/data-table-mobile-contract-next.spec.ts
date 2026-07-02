@@ -139,7 +139,9 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(templateSummary).toContainText("Şablon toplamı");
     await expect(templateSummary).toContainText("SMS hazır");
     await expect(templateSummary.getByLabel("Şablon operasyon özeti aksiyon kuyruğu")).toBeVisible();
-    await expect(page.getByLabel("Aktarım şablonları").getByRole("link", { name: "Veli XLSX şablonu" })).toHaveAttribute("href", "/templates/veli-aktarim-sablonu.xlsx");
+    await expect(page.getByLabel("Aktarım şablonları").getByRole("link", { name: "Öğretmen XLSX şablonu" })).toHaveAttribute("href", "/templates/ogretmen-aktarim-sablonu.xlsx");
+    await expect(page.getByLabel("Aktarım şablonları").getByRole("link", { name: "Öğrenci XLSX şablonu" })).toHaveAttribute("href", "/templates/ogrenci-aktarim-sablonu.xlsx");
+    await expect(page.getByLabel("Aktarım şablonları").getByRole("link", { name: "Veli XLSX şablonu" })).toHaveCount(0);
     const templateTable = templateRegion.getByRole("table", { name: "Şablon yönetimi" });
     await expect(templateTable.getByRole("columnheader", { name: "Şablon" })).toBeVisible();
     await expect(templateTable.getByRole("columnheader", { name: "Metin" })).toHaveCount(0);

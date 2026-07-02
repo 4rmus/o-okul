@@ -8,8 +8,6 @@ import type {
   AcademicYearRecord,
   ClassRecord,
   CourseRecord,
-  GuardianImportDryRunResult,
-  GuardianImportResult,
   GradeLevelCourseRecord,
   GradeLevelRecord,
   StudentImportDryRunResult,
@@ -53,8 +51,6 @@ interface OnboardingDraft {
     logoUrl: string;
   };
   people: {
-    guardianImportFileName: string;
-    guardianModel: "manual" | "excel";
     importOwner: string;
     studentImportFileName: string;
     studentModel: "manual" | "excel";
@@ -135,8 +131,6 @@ const initialDraft: OnboardingDraft = {
     logoUrl: "",
   },
   people: {
-    guardianImportFileName: "",
-    guardianModel: "manual",
     importOwner: "",
     studentImportFileName: "",
     studentModel: "excel",
@@ -245,12 +239,8 @@ export function SetupWizard() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [savedSummary, setSavedSummary] = useState("");
-  const [guardianImportFileBase64, setGuardianImportFileBase64] = useState("");
   const [studentImportFileBase64, setStudentImportFileBase64] = useState("");
   const [teacherImportFileBase64, setTeacherImportFileBase64] = useState("");
-  const [guardianImportUploadStatus, setGuardianImportUploadStatus] = useState<SetupUploadStatus>(() =>
-    createIdleUploadStatus(),
-  );
   const [studentImportUploadStatus, setStudentImportUploadStatus] = useState<SetupUploadStatus>(() =>
     createIdleUploadStatus(),
   );
@@ -384,29 +374,6 @@ export function SetupWizard() {
     }
   }
 
-  async function changeGuardianImportFile(file: File | undefined) {
-    setGuardianImportFileBase64("");
-    setSaveError("");
-    if (!file) {
-      setGuardianImportUploadStatus(createIdleUploadStatus());
-      updateDraft("people", { guardianImportFileName: "" });
-      return;
-    }
-
-    const validation = validateSetupImportFile(file);
-    setGuardianImportUploadStatus(validation.status);
-    updateDraft("people", { guardianImportFileName: validation.accepted ? validation.notice : "" });
-    if (!validation.accepted) return;
-
-    try {
-      setGuardianImportFileBase64(await readFileAsBase64(file));
-    } catch {
-      setGuardianImportUploadStatus(createErrorUploadStatus(file, "Dosya okunamadı. Lütfen dosyayı yeniden seçin."));
-      updateDraft("people", { guardianImportFileName: "" });
-      setSaveError("Veli aktarım dosyası okunamadı.");
-    }
-  }
-
   async function changeTeacherImportFile(file: File | undefined) {
     setTeacherImportFileBase64("");
     setSaveError("");
@@ -433,12 +400,6 @@ export function SetupWizard() {
     setStudentImportFileBase64("");
     setStudentImportUploadStatus(createIdleUploadStatus());
     updateDraft("people", { studentImportFileName: "", studentModel: model });
-  }
-
-  function changeGuardianModel(model: OnboardingDraft["people"]["guardianModel"]) {
-    setGuardianImportFileBase64("");
-    setGuardianImportUploadStatus(createIdleUploadStatus());
-    updateDraft("people", { guardianImportFileName: "", guardianModel: model });
   }
 
   function changeTeacherModel(model: OnboardingDraft["people"]["teacherModel"]) {
@@ -474,11 +435,6 @@ export function SetupWizard() {
       setSaveError(courseTemplateError);
       return;
     }
-    if (guardianImportUploadStatus.state === "error") {
-      setActiveStepId("people");
-      setSaveError("Veli aktarım dosyasını desteklenen tür ve boyutla yeniden seçin.");
-      return;
-    }
     if (studentImportUploadStatus.state === "error") {
       setActiveStepId("people");
       setSaveError("Öğrenci aktarım dosyasını desteklenen tür ve boyutla yeniden seçin.");
@@ -499,11 +455,6 @@ export function SetupWizard() {
       setSaveError("Öğrenci aktarım dosyası seçilmelidir.");
       return;
     }
-    if (draft.people.guardianModel === "excel" && !guardianImportFileBase64) {
-      setActiveStepId("people");
-      setSaveError("Veli aktarım dosyası seçilmelidir.");
-      return;
-    }
     if (!auth?.accessToken) {
       setSaveError("Oturum bulunamadı. Yeniden giriş yapıp tekrar deneyin.");
       return;
@@ -517,7 +468,6 @@ export function SetupWizard() {
         draft,
         teacherImportFileBase64,
         studentImportFileBase64,
-        guardianImportFileBase64,
         allCourseOptions,
       );
       await Promise.all([
@@ -534,8 +484,12 @@ export function SetupWizard() {
         queryClient.invalidateQueries({ queryKey: ["next-current-tenant", tenantId] }),
         queryClient.invalidateQueries({ queryKey: ["next-user-subject-refs", tenantId] }),
       ]);
+      const studentSummary =
+        result.importedStudents > 0
+          ? `${result.importedStudents} öğrenci ve dosyadaki veli bağlantıları işlendi`
+          : `${result.importedStudents} öğrenci eklendi`;
       setSavedSummary(
-        `${result.createdClasses} sınıf, ${result.createdCourses} ders, ${result.createdTeachers} öğretmen, ${result.createdTeacherAssignments} öğretmen ataması, ${result.createdAcademicYears} akademik yıl, ${result.createdAcademicTerms} dönem, ${result.importedStudents} öğrenci, ${result.importedGuardians} veli eklendi. Mevcut kayıtlar tekrar eklenmedi.`,
+        `${result.createdClasses} sınıf, ${result.createdCourses} ders, ${result.createdTeachers} öğretmen, ${result.createdTeacherAssignments} öğretmen ataması, ${result.createdAcademicYears} akademik yıl, ${result.createdAcademicTerms} dönem, ${studentSummary}. Mevcut kayıtlar tekrar eklenmedi.`,
       );
     } catch (error) {
       setSaveError(
@@ -549,10 +503,8 @@ export function SetupWizard() {
     }
     writeCookie(completedCookieName, "true");
     window.sessionStorage.removeItem(draftStorageKey);
-    setGuardianImportFileBase64("");
     setStudentImportFileBase64("");
     setTeacherImportFileBase64("");
-    setGuardianImportUploadStatus(createIdleUploadStatus());
     setStudentImportUploadStatus(createIdleUploadStatus());
     setTeacherImportUploadStatus(createIdleUploadStatus());
     setIsFinished(true);
@@ -623,13 +575,10 @@ export function SetupWizard() {
             <PeopleStep
               draft={draft}
               errors={errors}
-              onGuardianImportFileChange={(file) => void changeGuardianImportFile(file)}
-              onGuardianModelChange={changeGuardianModel}
               onStudentModelChange={changeStudentModel}
               onTeacherImportFileChange={(file) => void changeTeacherImportFile(file)}
               onTeacherModelChange={changeTeacherModel}
               onStudentImportFileChange={(file) => void changeStudentImportFile(file)}
-              guardianImportUploadStatus={guardianImportUploadStatus}
               studentImportUploadStatus={studentImportUploadStatus}
               teacherImportUploadStatus={teacherImportUploadStatus}
               updateDraft={updateDraft}
@@ -949,26 +898,20 @@ function ClassesStep({
 function PeopleStep({
   draft,
   errors,
-  onGuardianImportFileChange,
-  onGuardianModelChange,
   onStudentModelChange,
   onTeacherImportFileChange,
   onTeacherModelChange,
   onStudentImportFileChange,
-  guardianImportUploadStatus,
   studentImportUploadStatus,
   teacherImportUploadStatus,
   updateDraft,
 }: {
   draft: OnboardingDraft;
   errors: StepErrors;
-  onGuardianImportFileChange(file: File | undefined): void;
-  onGuardianModelChange(model: OnboardingDraft["people"]["guardianModel"]): void;
   onStudentModelChange(model: OnboardingDraft["people"]["studentModel"]): void;
   onTeacherImportFileChange(file: File | undefined): void;
   onTeacherModelChange(model: OnboardingDraft["people"]["teacherModel"]): void;
   onStudentImportFileChange(file: File | undefined): void;
-  guardianImportUploadStatus: SetupUploadStatus;
   studentImportUploadStatus: SetupUploadStatus;
   teacherImportUploadStatus: SetupUploadStatus;
   updateDraft: (section: "people", nextValue: Partial<OnboardingDraft["people"]>) => void;
@@ -997,17 +940,6 @@ function PeopleStep({
           </button>
         </SegmentedControl>
       </section>
-      <section className="next-onboarding-choice" aria-labelledby="guardian-model-label">
-        <span className="next-onboarding-choice__label" id="guardian-model-label">Veli veri girişi</span>
-        <SegmentedControl label="Veli veri girişi">
-          <button type="button" aria-pressed={draft.people.guardianModel === "manual"} onClick={() => onGuardianModelChange("manual")}>
-            Tek tek giriş
-          </button>
-          <button type="button" aria-pressed={draft.people.guardianModel === "excel"} onClick={() => onGuardianModelChange("excel")}>
-            Excel aktarımı
-          </button>
-        </SegmentedControl>
-      </section>
       <ImportTemplatePanel />
       <Field
         label="Öğretmen aktarım dosyası"
@@ -1032,7 +964,7 @@ function PeopleStep({
         label="Öğrenci aktarım dosyası"
         description={describeSelectedUploadFileNotice(
           draft.people.studentImportFileName,
-          "Öğrenci XLSX veya CSV dosyası seçilebilir.",
+          "Öğrenci ve opsiyonel veli bilgileri için XLSX veya CSV dosyası seçilebilir.",
         )}
         error={errors.studentImportFileName ?? errors["people.studentImportFileName"]}
       >
@@ -1047,25 +979,6 @@ function PeopleStep({
         />
       </Field>
       <ImportUploadStatus label="Öğrenci aktarım güven durumu" status={studentImportUploadStatus} />
-      <Field
-        label="Veli aktarım dosyası"
-        description={describeSelectedUploadFileNotice(
-          draft.people.guardianImportFileName,
-          "Veli XLSX veya CSV dosyası seçilebilir.",
-        )}
-        error={errors.guardianImportFileName ?? errors["people.guardianImportFileName"]}
-      >
-        <Input
-          type="file"
-          accept=".xlsx,.csv"
-          onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
-            onGuardianImportFileChange(file);
-            event.currentTarget.value = "";
-          }}
-        />
-      </Field>
-      <ImportUploadStatus label="Veli aktarım güven durumu" status={guardianImportUploadStatus} />
       <Field label="Veri sorumlusu" error={errors.importOwner ?? errors["people.importOwner"]}>
         <Input
           invalid={Boolean(errors.importOwner ?? errors["people.importOwner"])}
@@ -1167,9 +1080,6 @@ function validatePeople(people: OnboardingDraft["people"]): StepErrors {
   }
   if (people.studentModel === "excel" && !people.studentImportFileName) {
     errors.studentImportFileName = "Öğrenci aktarım dosyası zorunludur.";
-  }
-  if (people.guardianModel === "excel" && !people.guardianImportFileName) {
-    errors.guardianImportFileName = "Veli aktarım dosyası zorunludur.";
   }
   return errors;
 }
@@ -1337,7 +1247,6 @@ async function saveSetup(
   draft: OnboardingDraft,
   teacherImportFileBase64: string,
   studentImportFileBase64: string,
-  guardianImportFileBase64: string,
   courseOptions: SetupCourseOption[],
 ) {
   await apiRequest<TenantProfileRecord>(accessToken, `${apiBaseUrl}/me/tenant`, {
@@ -1373,7 +1282,6 @@ async function saveSetup(
   let createdTeachers = 0;
   let createdTeacherAssignments = 0;
   let importedStudents = 0;
-  let importedGuardians = 0;
 
   const academicYear = existingYear ?? await apiRequest<AcademicYearRecord>(accessToken, `${apiBaseUrl}/academic-years`, {
     body: JSON.stringify({
@@ -1464,23 +1372,6 @@ async function saveSetup(
     importedStudents = imported.importedRows;
   }
 
-  if (draft.people.guardianModel === "excel" && guardianImportFileBase64) {
-    const dryRun = await apiRequest<GuardianImportDryRunResult>(accessToken, `${apiBaseUrl}/guardians/imports/dry-run`, {
-      body: JSON.stringify({ fileBase64: guardianImportFileBase64 }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
-    if (!dryRun.wouldImport) {
-      throw new Error(guardianImportErrorMessage(dryRun));
-    }
-    const imported = await apiRequest<GuardianImportResult>(accessToken, `${apiBaseUrl}/guardians/imports`, {
-      body: JSON.stringify({ fileBase64: guardianImportFileBase64 }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
-    importedGuardians = imported.importedRows;
-  }
-
   return {
     createdAcademicTerms,
     createdAcademicYears,
@@ -1488,43 +1379,8 @@ async function saveSetup(
     createdCourses,
     createdTeacherAssignments,
     createdTeachers,
-    importedGuardians,
     importedStudents,
   };
-}
-
-function guardianImportErrorMessage(dryRun: GuardianImportDryRunResult) {
-  const studentError = dryRun.errors.find((error) => error.code === "STUDENT_NOT_FOUND");
-  if (studentError) {
-    return `Veli dosyasında sistemde olmayan okul no var. Satır: ${studentError.row}.`;
-  }
-
-  const requiredError = dryRun.errors.find((error) => error.code === "REQUIRED");
-  if (requiredError) {
-    return `Veli dosyasında zorunlu ${guardianImportFieldLabel(requiredError.field)} alanı eksik. Satır: ${requiredError.row}.`;
-  }
-
-  const invalidEmail = dryRun.errors.find((error) => error.code === "INVALID_EMAIL");
-  if (invalidEmail) {
-    return `Veli dosyasında geçersiz e-posta var. Satır: ${invalidEmail.row}.`;
-  }
-
-  const invalidError = dryRun.errors.find((error) => error.code === "INVALID");
-  if (invalidError) {
-    return `Veli dosyasında geçersiz ${guardianImportFieldLabel(invalidError.field)} var. Satır: ${invalidError.row}.`;
-  }
-
-  return "Veli aktarım dosyası içe aktarılamadı. Dosyayı kontrol edip tekrar deneyin.";
-}
-
-function guardianImportFieldLabel(field: string) {
-  if (field === "firstName") return "ad";
-  if (field === "lastName") return "soyad";
-  if (field === "nationalId") return "TC kimlik";
-  if (field === "phone") return "telefon";
-  if (field === "email") return "e-posta";
-  if (field === "studentNo") return "okul no";
-  return field;
 }
 
 function teacherImportErrorMessage(dryRun: TeacherImportDryRunResult) {
@@ -1622,7 +1478,6 @@ function studentImportFieldLabel(field: string) {
   if (field === "phone") return "telefon";
   if (field === "className") return "sınıf";
   if (field === "email") return "e-posta";
-  if (field === "guardianEmail") return "veli e-postası";
   if (field === "guardianNationalId") return "veli TC kimlik";
   if (field === "guardianPhone") return "veli telefonu";
   if (field === "studentNo") return "okul no";
@@ -1741,10 +1596,16 @@ function mergeDraft(rawDraft: string): OnboardingDraft {
         institutionType: normalizeInstitutionType(parsed.general?.institutionType),
       },
       people: {
-        ...initialDraft.people,
-        ...parsedPeople,
-        guardianModel: isPeopleModel(parsedPeople.guardianModel) ? parsedPeople.guardianModel : initialDraft.people.guardianModel,
+        importOwner: typeof parsedPeople.importOwner === "string" ? parsedPeople.importOwner : initialDraft.people.importOwner,
+        studentImportFileName:
+          typeof parsedPeople.studentImportFileName === "string"
+            ? parsedPeople.studentImportFileName
+            : initialDraft.people.studentImportFileName,
         studentModel: isPeopleModel(parsedPeople.studentModel) ? parsedPeople.studentModel : initialDraft.people.studentModel,
+        teacherImportFileName:
+          typeof parsedPeople.teacherImportFileName === "string"
+            ? parsedPeople.teacherImportFileName
+            : initialDraft.people.teacherImportFileName,
         teacherModel: isPeopleModel(parsedPeople.teacherModel) ? parsedPeople.teacherModel : initialDraft.people.teacherModel,
       },
       term: { ...initialDraft.term, ...parsed.term },
@@ -1763,7 +1624,6 @@ function sanitizeDraftForStorage(draft: OnboardingDraft): OnboardingDraft {
     },
     people: {
       ...draft.people,
-      guardianImportFileName: "",
       importOwner: "",
       studentImportFileName: "",
       teacherImportFileName: "",

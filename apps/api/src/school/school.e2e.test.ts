@@ -1100,6 +1100,32 @@ describe("School management API", () => {
     }
   });
 
+  it("veli import dry-run geçersiz PII değerlerini hata yanıtında açmaz", async () => {
+    const fileBase64 = createCsvBase64(
+      "ad;soyad;telefon;tc_kimlik_no;email;okul_no\nVeli;Hata;bad-phone;11111111111;bad-email;100\n",
+    );
+
+    await request(server)
+      .post("/guardians/imports/dry-run")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ fileBase64 })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body.wouldImport).toBe(false);
+        expect(body.errors).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ field: "email", code: "INVALID_EMAIL" }),
+            expect.objectContaining({ field: "nationalId", code: "INVALID" }),
+            expect.objectContaining({ field: "phone", code: "INVALID" }),
+          ]),
+        );
+        const serialized = JSON.stringify(body);
+        expect(serialized).not.toContain("bad-email");
+        expect(serialized).not.toContain("bad-phone");
+        expect(serialized).not.toContain("11111111111");
+      });
+  });
+
   it("tenant admin veli-öğrenci bağlantısını tenant içinde yönetir", async () => {
     const created = await request(server)
       .post("/guardians")
@@ -1462,20 +1488,8 @@ describe("School management API", () => {
       .expect(201)
       .expect(({ body }) => {
         expect(body.errors).toEqual([]);
-        expect(body.totalRows).toBe(11);
-        expect(body.validRows).toHaveLength(11);
-        expect(body.validRows).toEqual(expect.arrayContaining([
-          expect.objectContaining({
-            branch: "İngilizce",
-            firstName: "Necla",
-            lastName: "Hoca",
-            accountPreview: {
-              usernameMasked: "*******1754",
-              willCreate: true,
-            },
-            row: 5,
-          }),
-        ]));
+        expect(body.totalRows).toBe(0);
+        expect(body.validRows).toEqual([]);
         expect(body.wouldImport).toBe(true);
         expect(JSON.stringify(body)).not.toContain("10000001754");
         expect(JSON.stringify(body)).not.toContain("5550000017");

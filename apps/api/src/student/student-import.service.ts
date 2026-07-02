@@ -214,7 +214,6 @@ export class StudentImportService {
       firstName: findHeaderIndex(header, ["guardianFirstName", "veliAd", "veliAdi", "veliAdı"]),
       lastName: findHeaderIndex(header, ["guardianLastName", "veliSoyad", "veliSoyadi", "veliSoyadı"]),
       phone: findHeaderIndex(header, ["guardianPhone", "veliTelefon", "veliTel", "veliCep"]),
-      email: findHeaderIndex(header, ["guardianEmail", "veliEmail", "veliEposta", "veliEPosta"]),
       nationalId: findHeaderIndex(header, ["guardianNationalId", "guardianTc", "veliTc", "veliTckn", "veliKimlikNo"]),
       canViewFinance: findHeaderIndex(header, ["guardianCanViewFinance", "veliFinans", "veliFinansGoruntuleme", "veliFinansGörme"]),
       canReceiveSms: findHeaderIndex(header, ["guardianCanReceiveSms", "veliSms", "veliSmsIzni", "veliSmsİzni"]),
@@ -331,9 +330,6 @@ export class StudentImportService {
           usernameMasked: maskTcIdentity(row.nationalId),
           willCreate: true,
         };
-      }
-      if (row.guardian?.email && !isEmailLike(row.guardian.email)) {
-        errors.push({ row: row.row, field: "guardianEmail", code: "INVALID_EMAIL" });
       }
       if (row.guardian?.nationalId) {
         try {
@@ -466,7 +462,6 @@ interface GuardianColumnIndexes {
   firstName?: number;
   lastName?: number;
   phone?: number;
-  email?: number;
   nationalId?: number;
   canViewFinance?: number;
   canReceiveSms?: number;
@@ -499,16 +494,14 @@ function readGuardian(cells: string[], indexes: GuardianColumnIndexes): StudentG
   const firstName = readOptionalCell(cells, indexes.firstName);
   const lastName = readOptionalCell(cells, indexes.lastName);
   const phone = readOptionalCell(cells, indexes.phone);
-  const email = readOptionalCell(cells, indexes.email);
   const nationalId = readOptionalCell(cells, indexes.nationalId);
-  if (!firstName && !lastName && !phone && !email && !nationalId) return undefined;
+  if (!firstName && !lastName && !phone && !nationalId) return undefined;
 
   return {
     firstName: firstName || undefined,
     lastName: lastName || undefined,
     nationalId: nationalId || undefined,
     phone: phone || undefined,
-    email: email || undefined,
     canViewFinance: readBooleanCell(cells, indexes.canViewFinance) ?? true,
     canReceiveSms: readBooleanCell(cells, indexes.canReceiveSms) ?? false,
     canReceiveAnnouncements: readBooleanCell(cells, indexes.canReceiveAnnouncements) ?? true,

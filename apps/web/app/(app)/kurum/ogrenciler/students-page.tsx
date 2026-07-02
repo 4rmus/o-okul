@@ -123,7 +123,6 @@ const emptyForm: StudentFormState = {
   guardianFirstName: "",
   guardianLastName: "",
   guardianPhone: "",
-  guardianEmail: "",
   guardianCanViewFinance: true,
   guardianCanReceiveSms: false,
   guardianCanReceiveAnnouncements: true,
@@ -1009,13 +1008,6 @@ export function StudentsPage() {
               onChange={(event) => setForm((current) => ({ ...current, guardianPhone: event.target.value }))}
             />
           </Field>
-          <Field label="Veli e-postası" description="İletişim için saklanır; giriş TC ve telefonla yapılır.">
-            <Input
-              type="email"
-              value={form.guardianEmail}
-              onChange={(event) => setForm((current) => ({ ...current, guardianEmail: event.target.value }))}
-            />
-          </Field>
           <fieldset className="next-permission-fieldset">
             <legend>Veli izinleri</legend>
             <Checkbox
@@ -1186,7 +1178,7 @@ function buildProfilePayload(form: StudentFormPayload): StudentProfilePayload | 
 }
 
 function buildGuardianPayload(form: StudentFormPayload) {
-  if (!form.guardianFirstName.trim() && !form.guardianLastName.trim() && !form.guardianPhone.trim() && !form.guardianEmail.trim()) {
+  if (!form.guardianFirstName.trim() && !form.guardianLastName.trim() && !form.guardianPhone.trim()) {
     return null;
   }
 
@@ -1194,7 +1186,6 @@ function buildGuardianPayload(form: StudentFormPayload) {
     firstName: form.guardianFirstName.trim(),
     lastName: form.guardianLastName.trim(),
     phone: form.guardianPhone.trim() || undefined,
-    email: form.guardianEmail.trim() || undefined,
     canViewFinance: form.guardianCanViewFinance,
     canReceiveSms: form.guardianCanReceiveSms,
     canReceiveAnnouncements: form.guardianCanReceiveAnnouncements,
@@ -1616,7 +1607,6 @@ function studentImportFieldLabel(field: StudentImportDryRunResult["errors"][numb
     className: "sınıf",
     email: "e-posta",
     firstName: "ad",
-    guardianEmail: "veli e-postası",
     guardianNationalId: "veli TC kimlik no",
     guardianPhone: "veli telefonu",
     lastName: "soyad",

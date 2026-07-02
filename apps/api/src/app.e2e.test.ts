@@ -994,7 +994,8 @@ describe("API auth + tenant isolation", () => {
       .send({ fileBase64: template.toString("base64") })
       .expect(201);
 
-    expect(response.body.totalRows).toBe(21);
+    expect(response.body.totalRows).toBe(0);
+    expect(response.body.validRows).toEqual([]);
     expect(response.body.errors).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ field: "nationalId", code: "INVALID_NATIONAL_ID" })]),
     );
@@ -1014,17 +1015,13 @@ describe("API auth + tenant isolation", () => {
               "321",
               "Ece",
               "Velili",
-              "ece.velili@example.test",
-              "5553219999",
-              "2012-09-01",
-              "10000001440",
               "8-A",
+              "ece.velili@example.test",
+              "10000001440",
+              "5553219999",
               "Fatma",
               "Velili",
               "5553210000",
-              "fatma.velili@example.test",
-              "anne",
-              "evet",
               "hayir",
               "evet",
               "evet",
@@ -1034,17 +1031,13 @@ describe("API auth + tenant isolation", () => {
               "okul_no",
               "ad",
               "soyad",
-              "email",
-              "telefon",
-              "dogum_tarihi",
-              "tc_kimlik_no",
               "sinif",
+              "email",
+              "tc_kimlik_no",
+              "telefon",
               "veli_ad",
               "veli_soyad",
               "veli_telefon",
-              "veli_email",
-              "veli_iliski",
-              "veli_birincil",
               "veli_finans",
               "veli_sms",
               "veli_duyuru",

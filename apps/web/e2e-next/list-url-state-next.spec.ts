@@ -325,7 +325,9 @@ test.describe("Liste URL state", () => {
     await expect(templateSummary).toContainText("SMS hazır");
     await expect(templateSummary.getByLabel("Şablon operasyon özeti aksiyon kuyruğu")).toBeVisible();
     await expect(templateSummary).toContainText("Alıcı kontrolü");
-    await expect(page.getByLabel("Aktarım şablonları").getByRole("link", { name: "Veli XLSX şablonu" })).toHaveAttribute("href", "/templates/veli-aktarim-sablonu.xlsx");
+    await expect(page.getByLabel("Aktarım şablonları").getByRole("link", { name: "Öğretmen XLSX şablonu" })).toHaveAttribute("href", "/templates/ogretmen-aktarim-sablonu.xlsx");
+    await expect(page.getByLabel("Aktarım şablonları").getByRole("link", { name: "Öğrenci XLSX şablonu" })).toHaveAttribute("href", "/templates/ogrenci-aktarim-sablonu.xlsx");
+    await expect(page.getByLabel("Aktarım şablonları").getByRole("link", { name: "Veli XLSX şablonu" })).toHaveCount(0);
     await expect(templatesRegion.getByLabel("Ara")).toHaveValue("hafta");
     await expect(templatesRegion.getByLabel("Sırala")).toHaveValue("-name");
     await expect(templatesRegion.getByLabel("Göster")).toHaveValue("20");

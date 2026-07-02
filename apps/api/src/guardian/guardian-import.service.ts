@@ -107,20 +107,20 @@ export class GuardianImportService {
       if (row.studentNo && !student) errors.push({ row: row.row, field: "studentNo", code: "STUDENT_NOT_FOUND", value: row.studentNo });
       if (student) row.studentId = student.id;
       if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
-        errors.push({ row: row.row, field: "email", code: "INVALID_EMAIL", value: row.email });
+        errors.push({ row: row.row, field: "email", code: "INVALID_EMAIL" });
       }
       if (row.nationalId) {
         try {
           row.nationalId = normalizeTcIdentity(row.nationalId, "GUARDIAN_NATIONAL_ID_INVALID");
         } catch {
-          errors.push({ row: row.row, field: "nationalId", code: "INVALID", value: row.nationalId });
+          errors.push({ row: row.row, field: "nationalId", code: "INVALID" });
         }
       }
       if (row.phone) {
         try {
           row.phone = normalizeTurkishMobilePhone(row.phone, "GUARDIAN_PHONE_INVALID");
         } catch {
-          errors.push({ row: row.row, field: "phone", code: "INVALID", value: row.phone });
+          errors.push({ row: row.row, field: "phone", code: "INVALID" });
         }
       }
     }

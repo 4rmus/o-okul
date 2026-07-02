@@ -762,7 +762,7 @@ export interface StudentImportRequest {
 
 export interface StudentImportError {
   row: number;
-  field: "className" | "email" | "firstName" | "guardianEmail" | "guardianNationalId" | "guardianPhone" | "lastName" | "nationalId" | "phone" | "quota" | "studentNo";
+  field: "className" | "email" | "firstName" | "guardianNationalId" | "guardianPhone" | "lastName" | "nationalId" | "phone" | "quota" | "studentNo";
   code:
     | "CLASS_NOT_FOUND"
     | "INVALID_DATE"

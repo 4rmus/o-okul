@@ -59,10 +59,10 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await stepNavigation.getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
     await expect(setupForm.getByRole("group", { name: "Öğretmen veri girişi" })).toHaveClass(/uh-segmented-control/);
     await expect(setupForm.getByRole("group", { name: "Öğrenci veri girişi" })).toHaveClass(/uh-segmented-control/);
-    await expect(setupForm.getByRole("group", { name: "Veli veri girişi" })).toHaveClass(/uh-segmented-control/);
+    await expect(setupForm.getByRole("group", { name: "Veli veri girişi" })).toHaveCount(0);
     await expect(setupForm.getByRole("link", { name: "Öğretmen XLSX şablonu" })).toHaveAttribute("href", "/templates/ogretmen-aktarim-sablonu.xlsx");
     await expect(setupForm.getByRole("link", { name: "Öğrenci XLSX şablonu" })).toHaveAttribute("href", "/templates/ogrenci-aktarim-sablonu.xlsx");
-    await expect(setupForm.getByRole("link", { name: "Veli XLSX şablonu" })).toHaveAttribute("href", "/templates/veli-aktarim-sablonu.xlsx");
+    await expect(setupForm.getByRole("link", { name: "Veli XLSX şablonu" })).toHaveCount(0);
     await setupForm.getByLabel("Öğrenci aktarım dosyası").setInputFiles({
       buffer: Buffer.from("%PDF-1.7"),
       mimeType: "application/pdf",
@@ -106,7 +106,6 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     );
     expect(storedDraft.general.contactEmail).toBe("");
     expect(storedDraft.people.importOwner).toBe("");
-    expect(storedDraft.people.guardianImportFileName).toBe("");
     expect(storedDraft.people.teacherImportFileName).toBe("");
     expect(storedDraft.people.studentImportFileName).toBe("");
 
@@ -130,7 +129,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
     await expect(page.getByLabel("Öğretmen aktarım dosyası")).toBeVisible();
     await expect(page.getByLabel("Öğrenci aktarım dosyası")).toBeVisible();
-    await expect(page.getByLabel("Veli aktarım dosyası")).toBeVisible();
+    await expect(page.getByLabel("Veli aktarım dosyası")).toHaveCount(0);
     await page.getByRole("button", { name: "Komut paleti" }).click();
     const commandDialog = page.getByRole("dialog", { name: "Komut paleti" });
     await commandDialog.getByLabel("Komut ara").fill("kurulum");
@@ -179,40 +178,36 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expectDraftStorageDoesNotContain(page, "setup-teacher-import-storage", hostileUploadValues);
   });
 
-  test("veli Excel dosyasını zorunlu tutar ve import sonucunu özetler", async ({ page }) => {
+  test("öğrenci Excel dosyasını zorunlu tutar ve veli bağlantı mesajını özetler", async ({ page }) => {
     await openSetupWizard(page, { height: 844, width: 390 }, { roles: ["TENANT_ADMIN"] });
 
     const setupForm = page.getByLabel("Kurulum formu");
     await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
     await setupForm.getByRole("group", { name: "Öğretmen veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
-    await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
-    await setupForm.getByRole("group", { name: "Veli veri girişi" }).getByRole("button", { name: "Excel aktarımı" }).click();
+    await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Excel aktarımı" }).click();
     await setupForm.getByLabel("Veri sorumlusu").fill("Operasyon sorumlusu");
     await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
-    await expect(setupForm).toContainText("Veli aktarım dosyası zorunludur.");
+    await expect(setupForm).toContainText("Öğrenci aktarım dosyası zorunludur.");
 
-    await setupForm.getByLabel("Veli aktarım dosyası").setInputFiles({
-      buffer: Buffer.from("\uFEFFad;soyad;telefon;tc_kimlik_no;email;okul_no\nAyse;Veli;05550000101;10000002058;ayse.veli@example.test;100\n", "utf8"),
+    await setupForm.getByLabel("Öğrenci aktarım dosyası").setInputFiles({
+      buffer: Buffer.from("\uFEFFokul_no;ad;soyad;sinif;veli_ad;veli_soyad;veli_telefon;veli_finans\n100;Ada;Kaya;8-A;Ayse;Veli;05550000101;evet\n", "utf8"),
       mimeType: "text/csv",
-      name: "veli-ayse-5550000101-tckn-10000002058.csv",
+      name: "ogrenci-ada-veli-5550000101.csv",
     });
     await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
 
     await expect(setupForm).toContainText("2 sınıf, 3 ders, 0 öğretmen, 0 öğretmen ataması");
-    await expect(setupForm).toContainText("1 veli eklendi");
-    await expectNoVisibleTextValues(page, "setup-guardian-import-summary", [
+    await expect(setupForm).toContainText("1 öğrenci ve dosyadaki veli bağlantıları işlendi");
+    await expect(setupForm).not.toContainText("veli eklendi");
+    await expectNoVisibleTextValues(page, "setup-student-guardian-link-summary", [
       ...hostileUploadValues,
-      "veli-ayse-5550000101-tckn-10000002058.csv",
-      "10000002058",
+      "ogrenci-ada-veli-5550000101.csv",
       "5550000101",
-      "ayse.veli@example.test",
     ]);
-    await expectDraftStorageDoesNotContain(page, "setup-guardian-import-storage", [
+    await expectDraftStorageDoesNotContain(page, "setup-student-guardian-link-storage", [
       ...hostileUploadValues,
-      "veli-ayse-5550000101-tckn-10000002058.csv",
-      "10000002058",
+      "ogrenci-ada-veli-5550000101.csv",
       "5550000101",
-      "ayse.veli@example.test",
     ]);
   });
 
@@ -368,18 +363,6 @@ function mockSetupApiResponse(
     };
   }
   if (method === "POST" && pathName === "/students/imports") return { importedRows: 1, students: [] };
-  if (method === "POST" && pathName === "/guardians/imports/dry-run") {
-    return {
-      dryRun: true,
-      errors: [],
-      totalRows: 1,
-      validRows: [{ firstName: "Ayse", lastName: "Veli", row: 2, studentId: "student-setup-100", studentNo: "100" }],
-      wouldImport: true,
-    };
-  }
-  if (method === "POST" && pathName === "/guardians/imports") {
-    return { createdOrMatchedGuardians: 1, guardians: [], importedRows: 1, linkedStudents: 1, links: [] };
-  }
   return [];
 }
 
