@@ -550,7 +550,7 @@ async function seedDemoStudentsAndGuardians(client: pg.PoolClient, tenantId: str
        "canOpenSupportTickets",
        "updatedAt"
      )
-     VALUES ($1, $2, $3, $4, true, false, true, true, now())
+     VALUES ($1, $2, $3, $4, true, true, true, true, now())
      ON CONFLICT ("tenantId", "guardianId", "studentId") DO UPDATE SET
        "canViewFinance" = EXCLUDED."canViewFinance",
          "canReceiveSms" = EXCLUDED."canReceiveSms",

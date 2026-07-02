@@ -1022,10 +1022,7 @@ describe("API auth + tenant isolation", () => {
               "Fatma",
               "Velili",
               "5553210000",
-              "hayir",
-              "evet",
-              "evet",
-              "hayir",
+              "10000001990",
             ]],
             [
               "okul_no",
@@ -1038,10 +1035,7 @@ describe("API auth + tenant isolation", () => {
               "veli_ad",
               "veli_soyad",
               "veli_telefon",
-              "veli_finans",
-              "veli_sms",
-              "veli_duyuru",
-              "veli_destek",
+              "veli_tc_kimlik_no",
             ],
           ),
         })
@@ -1068,10 +1062,10 @@ describe("API auth + tenant isolation", () => {
         .expect(({ body }) => {
           expect(body).toEqual([
             expect.objectContaining({
-              canViewFinance: false,
+              canViewFinance: true,
               canReceiveSms: true,
               canReceiveAnnouncements: true,
-              canOpenSupportTickets: false,
+              canOpenSupportTickets: true,
             }),
           ]);
         });

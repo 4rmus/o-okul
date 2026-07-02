@@ -246,7 +246,7 @@ function toGuardianStudentRecord(row: GuardianStudentRow): GuardianStudentRecord
     guardianId: row.guardianId,
     studentId: row.studentId,
     canViewFinance: row.canViewFinance ?? true,
-    canReceiveSms: row.canReceiveSms ?? false,
+    canReceiveSms: row.canReceiveSms ?? true,
     canReceiveAnnouncements: row.canReceiveAnnouncements ?? true,
     canOpenSupportTickets: row.canOpenSupportTickets ?? true,
     createdAt: row.createdAt ? toIsoString(row.createdAt) : undefined,
@@ -260,7 +260,7 @@ function withGuardianStudentDefaults(input: GuardianStudentInput): Omit<Guardian
     guardianId: input.guardianId,
     studentId: input.studentId,
     canViewFinance: input.canViewFinance ?? true,
-    canReceiveSms: input.canReceiveSms ?? false,
+    canReceiveSms: input.canReceiveSms ?? true,
     canReceiveAnnouncements: input.canReceiveAnnouncements ?? true,
     canOpenSupportTickets: input.canOpenSupportTickets ?? true,
   };

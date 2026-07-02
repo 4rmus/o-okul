@@ -100,7 +100,7 @@ describe("PostgresGuardianStudentStore", () => {
     expect(record.id).toBe("guardian-student-a");
     expect(record).toEqual(expect.objectContaining({
       canViewFinance: true,
-      canReceiveSms: false,
+      canReceiveSms: true,
       canReceiveAnnouncements: true,
       canOpenSupportTickets: true,
     }));
@@ -110,7 +110,7 @@ describe("PostgresGuardianStudentStore", () => {
       "guardian-a",
       "student-a",
       true,
-      false,
+      true,
       true,
       true,
     ]);
