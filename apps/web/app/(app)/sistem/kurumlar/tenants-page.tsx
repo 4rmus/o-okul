@@ -19,7 +19,7 @@ import {
 } from "@o-okul/ui";
 import { Plus } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { ApiRequestError } from "../../../../src/api-client.js";
+import { ApiRequestError, apiErrorMessage } from "../../../../src/api-client.js";
 import {
   firstFormError,
   tenantCreateFormSchema,
@@ -238,7 +238,7 @@ export function TenantsPage() {
           />
         }
         emptyText="Kurum kaydı yok"
-        error={error || (tenantsQuery.isError ? "Kurumlar alınamadı." : undefined)}
+        error={!isFormOpen && error ? error : tenantsQuery.isError ? "Kurumlar alınamadı." : undefined}
         getRowKey={(tenant) => tenant.id}
         loading={tenantsQuery.isPending}
         rows={rows}
@@ -250,6 +250,7 @@ export function TenantsPage() {
         title="Kurumlar"
       />
       <TenantFormModal
+        error={error}
         form={form}
         onCancel={closeForm}
         onChange={setForm}
@@ -266,6 +267,7 @@ export function TenantsPage() {
 
 function TenantFormModal({
   form,
+  error,
   onCancel,
   onChange,
   onNameChange,
@@ -275,6 +277,7 @@ function TenantFormModal({
   title,
 }: {
   form: TenantCreateFormState;
+  error: string;
   onCancel(): void;
   onChange(value: TenantCreateFormState): void;
   onNameChange(value: string): void;
@@ -292,6 +295,7 @@ function TenantFormModal({
       submitLabel={submitLabel}
       title={title}
     >
+      {error ? <p className="next-form-error" role="alert">{error}</p> : null}
       <Field label="Kurum adı">
         <Input required value={form.name} onChange={(event) => onNameChange(event.target.value)} />
       </Field>
@@ -431,7 +435,10 @@ function tenantCreateErrorMessage(error: unknown) {
   if (error instanceof ApiRequestError && error.code === "TENANT_SLUG_ALREADY_EXISTS") {
     return "Bu slug zaten kullanımda. Farklı bir slug gir.";
   }
-  return "Kurum oluşturulamadı.";
+  if (error instanceof ApiRequestError && error.code === "TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS") {
+    return "Bu admin e-postası zaten kullanımda. Farklı bir e-posta gir.";
+  }
+  return apiErrorMessage(error, "Kurum oluşturulamadı.");
 }
 
 function formatTenantSort(sort: string) {
