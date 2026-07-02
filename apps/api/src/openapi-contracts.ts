@@ -673,6 +673,41 @@ const learningOutcomeUpdateRequestSchema = objectSchema({
   title: stringSchema(),
 });
 
+const learningOutcomeImportRequestSchema = objectSchema({
+  fileBase64: stringSchema({ minLength: 1 }),
+}, ["fileBase64"]);
+
+const learningOutcomeImportErrorSchema = objectSchema({
+  row: integerSchema({ minimum: 1 }),
+  field: { type: "string", enum: ["code", "branch", "title"] },
+  code: { type: "string", enum: ["DUPLICATE_CODE", "REQUIRED"] },
+  value: stringSchema(),
+}, ["row", "field", "code"]);
+
+const learningOutcomeImportPreviewRowSchema = objectSchema({
+  row: integerSchema({ minimum: 1 }),
+  code: stringSchema(),
+  branch: stringSchema(),
+  title: stringSchema(),
+  level: stringSchema(),
+  willUpdate: { type: "boolean" },
+}, ["row", "code", "branch", "title"]);
+
+const learningOutcomeImportDryRunResultSchema = objectSchema({
+  dryRun: { type: "boolean", enum: [true] },
+  totalRows: integerSchema({ minimum: 0 }),
+  validRows: arraySchema(learningOutcomeImportPreviewRowSchema),
+  errors: arraySchema(learningOutcomeImportErrorSchema),
+  wouldImport: { type: "boolean" },
+}, ["dryRun", "totalRows", "validRows", "errors", "wouldImport"]);
+
+const learningOutcomeImportResultSchema = objectSchema({
+  importedRows: integerSchema({ minimum: 0 }),
+  createdOutcomes: integerSchema({ minimum: 0 }),
+  updatedOutcomes: integerSchema({ minimum: 0 }),
+  outcomes: arraySchema(learningOutcomeRecordSchema),
+}, ["importedRows", "createdOutcomes", "updatedOutcomes", "outcomes"]);
+
 const academicYearRecordSchema = objectSchema({
   id: stringSchema(),
   tenantId: stringSchema(),
@@ -1408,34 +1443,6 @@ const guardianUpdateRequestSchema = objectSchema({
   phone: stringSchema(),
 });
 
-const guardianImportRequestSchema = objectSchema({
-  fileBase64: stringSchema({ minLength: 1 }),
-}, ["fileBase64"]);
-
-const guardianImportErrorSchema = objectSchema({
-  row: integerSchema({ minimum: 1 }),
-  field: { type: "string", enum: ["email", "firstName", "lastName", "nationalId", "phone", "studentNo"] },
-  code: { type: "string", enum: ["INVALID", "INVALID_EMAIL", "REQUIRED", "STUDENT_NOT_FOUND"] },
-  value: stringSchema(),
-}, ["row", "field", "code"]);
-
-const guardianImportPreviewRowSchema = objectSchema({
-  row: integerSchema({ minimum: 1 }),
-  email: stringSchema({ format: "email" }),
-  firstName: stringSchema(),
-  lastName: stringSchema(),
-  studentId: stringSchema(),
-  studentNo: stringSchema(),
-}, ["row", "firstName", "lastName", "studentId", "studentNo"]);
-
-const guardianImportDryRunResultSchema = objectSchema({
-  dryRun: { type: "boolean", enum: [true] },
-  totalRows: integerSchema({ minimum: 0 }),
-  validRows: arraySchema(guardianImportPreviewRowSchema),
-  errors: arraySchema(guardianImportErrorSchema),
-  wouldImport: { type: "boolean" },
-}, ["dryRun", "totalRows", "validRows", "errors", "wouldImport"]);
-
 const guardianStudentRelationRequestProperties: Record<string, JsonSchema> = {
   canOpenSupportTickets: { type: "boolean" },
   canReceiveAnnouncements: { type: "boolean" },
@@ -1471,14 +1478,6 @@ const guardianStudentRecordSchema = objectSchema({
   "canReceiveAnnouncements",
   "canOpenSupportTickets",
 ]);
-
-const guardianImportResultSchema = objectSchema({
-  importedRows: integerSchema({ minimum: 0 }),
-  createdOrMatchedGuardians: integerSchema({ minimum: 0 }),
-  linkedStudents: integerSchema({ minimum: 0 }),
-  guardians: arraySchema(guardianRecordSchema),
-  links: arraySchema(guardianStudentRecordSchema),
-}, ["importedRows", "createdOrMatchedGuardians", "linkedStudents", "guardians", "links"]);
 
 const studentRecordSchema = objectSchema({
   id: stringSchema(),
@@ -2853,15 +2852,6 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: guardianRecordSchema,
     idempotent: true,
   },
-  "post /api/v1/guardians/imports/dry-run": {
-    requestBody: guardianImportRequestSchema,
-    responseBody: guardianImportDryRunResultSchema,
-  },
-  "post /api/v1/guardians/imports": {
-    requestBody: guardianImportRequestSchema,
-    responseBody: guardianImportResultSchema,
-    idempotent: true,
-  },
   "get /api/v1/guardians/{id}": {
     responseBody: guardianRecordSchema,
   },
@@ -3121,6 +3111,15 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/learning-outcomes": {
     requestBody: learningOutcomeCreateRequestSchema,
     responseBody: learningOutcomeRecordSchema,
+  },
+  "post /api/v1/learning-outcomes/imports/dry-run": {
+    requestBody: learningOutcomeImportRequestSchema,
+    responseBody: learningOutcomeImportDryRunResultSchema,
+  },
+  "post /api/v1/learning-outcomes/imports": {
+    requestBody: learningOutcomeImportRequestSchema,
+    responseBody: learningOutcomeImportResultSchema,
+    idempotent: true,
   },
   "get /api/v1/learning-outcomes/{id}": {
     responseBody: learningOutcomeRecordSchema,

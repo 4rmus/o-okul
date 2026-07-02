@@ -425,6 +425,41 @@ export interface LearningOutcomeUpdateRequest {
   level?: string;
 }
 
+export interface LearningOutcomeImportRequest {
+  fileBase64: string;
+}
+
+export interface LearningOutcomeImportError {
+  row: number;
+  field: "code" | "branch" | "title";
+  code: "DUPLICATE_CODE" | "REQUIRED";
+  value?: string;
+}
+
+export interface LearningOutcomeImportPreviewRow {
+  row: number;
+  code: string;
+  branch: string;
+  title: string;
+  level?: string;
+  willUpdate?: boolean;
+}
+
+export interface LearningOutcomeImportDryRunResult {
+  dryRun: true;
+  totalRows: number;
+  validRows: LearningOutcomeImportPreviewRow[];
+  errors: LearningOutcomeImportError[];
+  wouldImport: boolean;
+}
+
+export interface LearningOutcomeImportResult {
+  importedRows: number;
+  createdOutcomes: number;
+  updatedOutcomes: number;
+  outcomes: LearningOutcomeRecord[];
+}
+
 export interface AcademicYearRecord {
   id: string;
   tenantId: string;
@@ -599,42 +634,6 @@ export interface GuardianRecord {
 }
 
 export type GuardianRelationshipType = "MOTHER" | "FATHER" | "GUARDIAN" | "EMERGENCY_CONTACT" | "OTHER";
-
-export interface GuardianImportRequest {
-  fileBase64: string;
-}
-
-export interface GuardianImportError {
-  row: number;
-  field: "email" | "firstName" | "lastName" | "nationalId" | "phone" | "studentNo";
-  code: "INVALID" | "INVALID_EMAIL" | "REQUIRED" | "STUDENT_NOT_FOUND";
-  value?: string;
-}
-
-export interface GuardianImportPreviewRow {
-  row: number;
-  email?: string;
-  firstName: string;
-  lastName: string;
-  studentId: string;
-  studentNo: string;
-}
-
-export interface GuardianImportDryRunResult {
-  dryRun: true;
-  totalRows: number;
-  validRows: GuardianImportPreviewRow[];
-  errors: GuardianImportError[];
-  wouldImport: boolean;
-}
-
-export interface GuardianImportResult {
-  importedRows: number;
-  createdOrMatchedGuardians: number;
-  linkedStudents: number;
-  guardians: GuardianRecord[];
-  links: GuardianStudentRecord[];
-}
 
 export interface GuardianCreateRequest {
   tenantId?: string;
