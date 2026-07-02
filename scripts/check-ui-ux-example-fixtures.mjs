@@ -42,18 +42,20 @@ const importTemplates = [
       "veli_ad",
       "veli_soyad",
       "veli_telefon",
-      "veli_finans",
-      "veli_sms",
-      "veli_duyuru",
-      "veli_destek",
+      "veli_tc_kimlik_no",
     ],
     validateNationalIds: true,
   },
   {
     file: "ogretmen-aktarim-sablonu.xlsx",
     sheet: "Ogretmenler",
-    headers: ["ad", "soyad", "brans", "tc_kimlik_no", "telefon"],
+    headers: ["ad", "soyad", "brans", "tc_kimlik_no", "telefon", "atanacak_sinif", "ders"],
     validateNationalIds: true,
+  },
+  {
+    file: "kazanim-aktarim-sablonu.xlsx",
+    sheet: "Kazanimlar",
+    headers: ["kod", "brans", "baslik", "seviye"],
   },
 ];
 const failures = [];

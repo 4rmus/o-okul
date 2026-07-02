@@ -233,7 +233,7 @@ export class TeacherImportService {
           row.nationalId = normalizeTcIdentity(row.nationalId, "TEACHER_NATIONAL_ID_INVALID");
         } catch {
           identityValid = false;
-          errors.push({ row: row.row, field: "nationalId", code: "INVALID", value: row.nationalId });
+          errors.push({ row: row.row, field: "nationalId", code: "INVALID", ...maskedNationalIdValue(row.nationalId) });
         }
       }
       if (row.phone) {
@@ -241,7 +241,7 @@ export class TeacherImportService {
           row.phone = normalizeTurkishMobilePhone(row.phone, "TEACHER_PHONE_INVALID");
         } catch {
           identityValid = false;
-          errors.push({ row: row.row, field: "phone", code: "INVALID", value: row.phone });
+          errors.push({ row: row.row, field: "phone", code: "INVALID" });
         }
       }
       if (identityValid && row.nationalId && row.phone) {
@@ -285,6 +285,11 @@ function createSha256(bytes: Buffer): string {
 function toPreviewRow(row: ParsedTeacherImportRow): TeacherImportPreviewRow {
   const { hasCourseColumn: _hasCourseColumn, nationalId: _nationalId, phone: _phone, ...previewRow } = row;
   return previewRow;
+}
+
+function maskedNationalIdValue(value: string): { value?: string } {
+  const digits = value.replace(/\D/g, "");
+  return digits.length >= 4 ? { value: `*******${digits.slice(-4)}` } : {};
 }
 
 function readMatrixRows(matrix: Array<{ rowNumber: number; cells: string[] }>): ParsedTeacherImportRow[] {
