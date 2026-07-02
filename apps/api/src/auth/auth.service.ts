@@ -20,6 +20,7 @@ import { authSessionStoreToken, type SessionStore } from "./session-store.js";
 import { missingBoundSubjectRole } from "./subject-binding.js";
 import { TokenService, type AccessTokenPayload, type TokenPair } from "./token-service.js";
 import { type AuthUser, type AuthUserStore, authUserStoreToken, hashPassword, verifyPassword } from "./auth-user-store.js";
+import { normalizeTurkishMobilePhone } from "./phone-normalize.js";
 import {
   createLoginMfaChallenge,
   createTotpEnrollmentDraft,
@@ -109,7 +110,7 @@ export class AuthService {
     const attemptKey = resolved.attemptKey;
     await this.loginAttempts.assertAllowed(attemptKey);
 
-    const users = resolved.users.filter((user) => verifyPassword(credentials.password, user.passwordHash));
+    const users = resolved.users.filter((user) => verifyLoginPassword(credentials.password, user.passwordHash));
     if (users.length === 0) {
       await this.loginAttempts.recordFailure(attemptKey);
       throw new UnauthorizedException("LOGIN_FAILED");
@@ -640,6 +641,20 @@ function nextResetExpiry(): string {
 
 function compactUser(user: AuthUser | undefined): AuthUser[] {
   return user ? [user] : [];
+}
+
+function verifyLoginPassword(password: string, passwordHash: string): boolean {
+  if (verifyPassword(password, passwordHash)) return true;
+  const normalizedPhone = normalizePhonePassword(password);
+  return Boolean(normalizedPhone && normalizedPhone !== password && verifyPassword(normalizedPhone, passwordHash));
+}
+
+function normalizePhonePassword(password: string): string | undefined {
+  try {
+    return normalizeTurkishMobilePhone(password);
+  } catch {
+    return undefined;
+  }
 }
 
 interface TenantSelectionTokenPayload {

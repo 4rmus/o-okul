@@ -118,6 +118,8 @@ test.describe("Liste URL state", () => {
     await expect(userDialog.locator(".next-role-fieldset .uh-checkbox")).toHaveCount(2);
     await expect(userDialog).toContainText("Kullanıcının kurum yönetim kapsamını seç.");
     await expect(userDialog.getByRole("checkbox", { name: /Yardımcı yönetici/ })).toBeChecked();
+    await userDialog.getByLabel("Telefon").fill("5551234567");
+    await expect(userDialog.getByLabel("Telefon")).toHaveValue("+90 555 123 45 67");
     await userDialog.getByRole("button", { name: "Vazgeç" }).click();
 
     for (const value of ["12345678901", "+905551234567", "guardian-private@example.test"]) {

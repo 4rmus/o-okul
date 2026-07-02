@@ -30,6 +30,7 @@ import {
   type TenantUserFormState,
 } from "../../../../src/form-validation.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { formatTurkishPhoneInput } from "../../../../src/phone-format.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 
 type Role = TenantAssignableRoleName;
@@ -356,9 +357,10 @@ export function UsersPage() {
         <Field label="Telefon">
           <Input
             inputMode="tel"
+            placeholder="+90 5xx xxx xx xx"
             required
             value={userForm.phone}
-            onChange={(event) => setUserForm((current) => ({ ...current, phone: event.target.value }))}
+            onChange={(event) => setUserForm((current) => ({ ...current, phone: formatTurkishPhoneInput(event.target.value) }))}
           />
         </Field>
         <fieldset className="next-role-fieldset">

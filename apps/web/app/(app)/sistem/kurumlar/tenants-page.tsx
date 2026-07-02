@@ -27,6 +27,7 @@ import {
   type TenantFormState,
 } from "../../../../src/form-validation.js";
 import { ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
+import { formatTurkishPhoneInput } from "../../../../src/phone-format.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../../kurum/_shared/operation-summary.js";
 import { PageFrame } from "../../kurum/_shared/page-frame.js";
 import { createTenant, deleteTenant, loadTenants, type TenantRecord } from "../_shared/system-api.js";
@@ -358,9 +359,10 @@ function TenantFormModal({
       <Field label="Admin telefon">
         <Input
           inputMode="tel"
+          placeholder="+90 5xx xxx xx xx"
           required
           value={form.firstAdmin.phone}
-          onChange={(event) => onChange({ ...form, firstAdmin: { ...form.firstAdmin, phone: event.target.value } })}
+          onChange={(event) => onChange({ ...form, firstAdmin: { ...form.firstAdmin, phone: formatTurkishPhoneInput(event.target.value) } })}
         />
       </Field>
     </FormModal>
