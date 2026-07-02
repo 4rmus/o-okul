@@ -114,6 +114,7 @@ export class InMemoryTenantStore implements TenantStore {
       email: admin.email,
       name: admin.name,
       nationalIdHash: hashTcIdentity(firstAdmin.nationalId),
+      mustChangePassword: true,
       password: firstAdmin.phone,
       tenantId: admin.tenantId,
       roles: admin.roles,
@@ -316,8 +317,8 @@ export class PostgresTenantStore implements TenantStore {
       const nationalIdEncrypted = encryptTcIdentity(firstAdmin.nationalId);
       const nationalIdHash = hashTcIdentity(firstAdmin.nationalId);
       const createdUser = await client.query<{ id: string }>(
-        `INSERT INTO "User" ("id", "tenantId", "email", "nationalIdEncrypted", "nationalIdHash", "name", "passwordHash", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+        `INSERT INTO "User" ("id", "tenantId", "email", "nationalIdEncrypted", "nationalIdHash", "name", "passwordHash", "mustChangePassword", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, true, now())
          ON CONFLICT ("email") DO NOTHING
          RETURNING "id"`,
         [randomUUID(), tenant.id, normalizedEmail, nationalIdEncrypted, nationalIdHash, firstAdmin.name, passwordHash],

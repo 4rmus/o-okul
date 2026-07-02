@@ -156,6 +156,7 @@ describe("PostgresTenantStore", () => {
     expect(queries.some((query) => query.sql.includes("set_config('app.bypass_rls'") && query.values?.[0] === "true")).toBe(true);
     expect(queries.some((query) => query.sql.includes('INSERT INTO "Tenant"'))).toBe(true);
     const insertUser = queries.find((query) => query.sql.includes('INSERT INTO "User"'));
+    expect(insertUser?.sql).toContain('"mustChangePassword"');
     expect(insertUser?.sql).toContain('ON CONFLICT ("email") DO NOTHING');
     expect(insertUser?.values).toHaveLength(7);
     expect(queries.some((query) => query.sql.includes('INSERT INTO "TenantMembership"'))).toBe(true);
