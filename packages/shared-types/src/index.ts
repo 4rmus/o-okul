@@ -197,7 +197,6 @@ export type {
   SmsBatchRecipientPreviewRecord,
   SmsBatchRecipientPreviewRequest,
   SmsBatchRecipientPreviewResult,
-  StudentClassHistoryRecord,
   StudentCreateRequest,
   StudentBulkEnrollmentRequest,
   StudentBulkEnrollmentResult,

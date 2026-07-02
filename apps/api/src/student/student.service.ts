@@ -1,6 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type {
-  StudentClassHistoryRecord,
   StudentBulkEnrollmentRequest,
   StudentBulkEnrollmentResult as SharedStudentBulkEnrollmentResult,
   StudentCreateRequest,
@@ -41,10 +40,6 @@ import {
   teacherAssignmentStoreToken,
 } from "../school/teacher-assignment-store.js";
 import { type StudentProfileUpdate, type StudentStore, studentStoreToken } from "./student-store.js";
-import {
-  type StudentClassHistoryStore,
-  studentClassHistoryStoreToken,
-} from "./student-class-history-store.js";
 import {
   type StudentEnrollmentStore,
   studentEnrollmentStoreToken,
@@ -93,7 +88,6 @@ export class StudentService {
     @Inject(guardianStudentStoreToken) private readonly guardianStudentStore: GuardianStudentStore,
     @Inject(guardianStoreToken) private readonly guardianStore: GuardianStore,
     @Inject(teacherAssignmentStoreToken) private readonly teacherAssignmentStore: TeacherAssignmentStore,
-    @Inject(studentClassHistoryStoreToken) private readonly classHistoryStore: StudentClassHistoryStore,
     @Inject(studentEnrollmentStoreToken) private readonly enrollmentStore: StudentEnrollmentStore,
     @Inject(academicCalendarStoreToken) private readonly academicCalendarStore: AcademicCalendarStore,
     @Inject(campusStoreToken) private readonly campusStore: CampusStore,
@@ -189,11 +183,6 @@ export class StudentService {
     }
 
     return this.findProfileForViewer(context, context.subjectId);
-  }
-
-  async listClassHistory(context: RequestContext, id: string): Promise<StudentClassHistoryRecord[]> {
-    await this.findOneForViewer(context, id);
-    return this.withClassNames(filterTenantResources(context, await this.classHistoryStore.listByStudent(id)));
   }
 
   async listEnrollments(context: RequestContext, id: string): Promise<StudentEnrollmentRecord[]> {
@@ -301,14 +290,6 @@ export class StudentService {
     });
     if (student.classId) {
       const academicContext = await this.resolveCurrentAcademicContext(context);
-      await this.classHistoryStore.create({
-        tenantId: student.tenantId,
-        studentId: student.id,
-        classId: student.classId,
-        ...academicContext,
-        startsAt: todayDateString(),
-        reason: "CREATED",
-      });
       await this.enrollmentStore.create({
         tenantId: student.tenantId,
         studentId: student.id,
@@ -383,14 +364,6 @@ export class StudentService {
     const academicContext = await this.resolveCurrentAcademicContext(context);
     for (const student of students) {
       if (!student.classId) continue;
-      await this.classHistoryStore.create({
-        tenantId: student.tenantId,
-        studentId: student.id,
-        classId: student.classId,
-        ...academicContext,
-        startsAt: todayDateString(),
-        reason: "CREATED",
-      });
       await this.enrollmentStore.create({
         tenantId: student.tenantId,
         studentId: student.id,
@@ -461,8 +434,7 @@ export class StudentService {
     if (!updated) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
-    await this.recordClassHistoryIfChanged(context, previous, updated, input);
-    await this.closeClassHistoryForTerminalStatus(previous, updated);
+    await this.recordEnrollmentIfClassChanged(context, previous, updated, input);
     await this.closeEnrollmentForTerminalStatus(previous, updated);
     await this.auditLogs?.record({
       tenantId: updated.tenantId,
@@ -510,17 +482,6 @@ export class StudentService {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
 
-    await this.classHistoryStore.closeActiveForStudent(updated.id, startsAt);
-    if (classId) {
-      await this.classHistoryStore.create({
-        tenantId: updated.tenantId,
-        studentId: updated.id,
-        classId,
-        ...academicContext,
-        startsAt,
-        reason: "RENEWED",
-      });
-    }
     await this.enrollmentStore.closeActiveForStudent(updated.id, startsAt);
     const enrollment = await this.enrollmentStore.create({
       tenantId: updated.tenantId,
@@ -653,7 +614,6 @@ export class StudentService {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
 
-    await this.classHistoryStore.closeActiveForStudent(updated.id, startsAt);
     await this.enrollmentStore.closeActiveForStudent(updated.id, startsAt, classId ? undefined : "TRANSFERRED");
     if (!classId) {
       await this.auditLogs?.record({
@@ -667,14 +627,6 @@ export class StudentService {
       return null;
     }
 
-    await this.classHistoryStore.create({
-      tenantId: updated.tenantId,
-      studentId: updated.id,
-      classId,
-      ...academicContext,
-      startsAt,
-      reason: "TRANSFERRED",
-    });
     const enrollment = await this.enrollmentStore.create({
       tenantId: updated.tenantId,
       studentId: updated.id,
@@ -1038,7 +990,7 @@ export class StudentService {
       );
   }
 
-  private async recordClassHistoryIfChanged(
+  private async recordEnrollmentIfClassChanged(
     context: RequestContext,
     existing: StudentRecord,
     updated: StudentRecord,
@@ -1050,17 +1002,8 @@ export class StudentService {
 
     const changedAt = todayDateString();
     const academicContext = await this.resolveCurrentAcademicContext(context);
-    await this.classHistoryStore.closeActiveForStudent(updated.id, changedAt);
     await this.enrollmentStore.closeActiveForStudent(updated.id, changedAt);
     if (updated.classId) {
-      await this.classHistoryStore.create({
-        tenantId: updated.tenantId,
-        studentId: updated.id,
-        classId: updated.classId,
-        ...academicContext,
-        startsAt: changedAt,
-        reason: "CLASS_CHANGED",
-      });
       await this.enrollmentStore.create({
         tenantId: updated.tenantId,
         studentId: updated.id,
@@ -1071,14 +1014,6 @@ export class StudentService {
         reason: "CLASS_CHANGED",
       });
     }
-  }
-
-  private async closeClassHistoryForTerminalStatus(existing: StudentRecord, updated: StudentRecord): Promise<void> {
-    if (existing.status === updated.status || !terminalStudentStatuses.includes(updated.status)) {
-      return;
-    }
-
-    await this.classHistoryStore.closeActiveForStudent(updated.id, todayDateString());
   }
 
   private async closeEnrollmentForTerminalStatus(existing: StudentRecord, updated: StudentRecord): Promise<void> {

@@ -1306,11 +1306,11 @@ describe("API auth + tenant isolation", () => {
     expectStudentCoreResponseIsPublic(imported.body.students);
 
     await request(server)
-      .get(`/students/${encodeURIComponent(imported.body.students[0].id)}/class-history`)
+      .get(`/students/${encodeURIComponent(imported.body.students[0].id)}/enrollments`)
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .expect(200)
       .expect(({ body }) => {
-        expect(body).toEqual([expect.objectContaining({ classId: "class-a", reason: "CREATED" })]);
+        expect(body).toEqual([expect.objectContaining({ classId: "class-a", status: "ACTIVE", reason: "CREATED" })]);
       });
 
     await request(server)

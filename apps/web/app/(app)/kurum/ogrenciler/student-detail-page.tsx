@@ -20,7 +20,6 @@ import type {
   ReportSnapshotRecord,
   ReportStudentProgress,
   ReportStudentSnapshot,
-  StudentClassHistoryRecord,
   StudentEnrollmentRecord,
   StudentAuditSummaryRecord,
   StudentProfileRecord,
@@ -54,7 +53,6 @@ interface StudentBaseDetail {
   guardians: GuardianRecord[];
   homeworkAssignments: HomeworkMaterialAssignmentRecord[];
   paymentPlans: PaymentPlanWithInstallmentsRecord[];
-  classHistory: StudentClassHistoryRecord[];
   enrollments: StudentEnrollmentRecord[];
   teacherAssignments: TeacherAssignmentRecord[];
   teachers: TeacherRecord[];
@@ -489,19 +487,6 @@ function StudentDashboard({
         </Panel>
 
         <Panel
-          aria-label="Sınıf geçmişi"
-          className="next-student-detail-panel next-student-detail-panel--wide"
-          description="Sınıf ve akademik dönem geçmişi ham kayıt anahtarı göstermeden takip edilir."
-          title="Sınıf geçmişi"
-        >
-          <StudentDetailRowsTable
-            caption="Sınıf geçmişi kayıtları"
-            emptyText="Sınıf geçmişi yok"
-            rows={buildClassHistoryRows(detail.classHistory, classNameById, termNameById)}
-          />
-        </Panel>
-
-        <Panel
           aria-label="Kayıt geçmişi"
           className="next-student-detail-panel next-student-detail-panel--wide"
           description="Kayıt başlangıcı, durum ve akademik dönem geçmişi operasyon bağlamında listelenir."
@@ -657,21 +642,6 @@ function buildTeacherNoteRows(notes: TeacherNoteRecord[]): StudentDetailTableRow
   }));
 }
 
-function buildClassHistoryRows(
-  records: StudentClassHistoryRecord[],
-  classNameById: ReadonlyMap<string, string>,
-  termNameById: ReadonlyMap<string, string>,
-): StudentDetailTableRow[] {
-  return records.map((record) => ({
-    detail: formatClassHistoryAcademicContext(record, termNameById),
-    id: record.id,
-    meta: formatDateRange(record.startsAt, record.endsAt),
-    primary: record.classId ? classNameById.get(record.classId) ?? "Sınıf kaydı" : "Sınıfsız",
-    status: record.endsAt ? "Tamamlandı" : "Devam ediyor",
-    tone: record.endsAt ? "neutral" : "success",
-  }));
-}
-
 function buildEnrollmentRows(
   records: StudentEnrollmentRecord[],
   classNameById: ReadonlyMap<string, string>,
@@ -680,7 +650,7 @@ function buildEnrollmentRows(
   return records.map((record) => ({
     detail: [
       record.classId ? classNameById.get(record.classId) ?? "Sınıf kaydı" : "Sınıfsız",
-      formatClassHistoryAcademicContext(record, termNameById),
+      formatEnrollmentAcademicContext(record, termNameById),
     ].join(" · "),
     id: record.id,
     meta: formatDateRange(record.startsAt, record.endsAt),
@@ -1194,7 +1164,6 @@ async function loadStudentBaseDetail(
     guardians,
     homeworkAssignments,
     paymentPlans,
-    classHistory,
     enrollments,
     teacherAssignments,
     teachers,
@@ -1215,7 +1184,6 @@ async function loadStudentBaseDetail(
     options.canViewFinance
       ? apiRequest<PaymentPlanWithInstallmentsRecord[]>(accessToken, `${apiBaseUrl}/payment-plans?studentId=${encodeURIComponent(id)}`)
       : Promise.resolve([]),
-    apiRequest<StudentClassHistoryRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/class-history`),
     apiRequest<StudentEnrollmentRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/enrollments`),
     apiRequest<TeacherAssignmentRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/teacher-assignments`),
     apiRequest<TeacherRecord[]>(accessToken, `${apiBaseUrl}/teachers`),
@@ -1234,7 +1202,6 @@ async function loadStudentBaseDetail(
     homeworkAssignments,
     paymentPlans,
     profile,
-    classHistory,
     enrollments,
     teacherAssignments,
     teachers,
@@ -1436,7 +1403,7 @@ function resolveActiveEnrollment(records: StudentEnrollmentRecord[]) {
   return records.find((record) => !record.endsAt) ?? records[0];
 }
 
-function formatClassHistoryAcademicContext(record: { termId?: string }, termNameById: ReadonlyMap<string, string>) {
+function formatEnrollmentAcademicContext(record: { termId?: string }, termNameById: ReadonlyMap<string, string>) {
   return record.termId ? termNameById.get(record.termId) ?? "Dönem kaydı" : "Akademik dönem yok";
 }
 

@@ -43,7 +43,6 @@ model Tenant {
   academicYears AcademicYear[]
   academicTerms AcademicTerm[]
   students    Student[]
-  studentClassHistory StudentClassHistory[]
   studentEnrollments StudentEnrollment[]
   teacherAssignments TeacherAssignment[]
   attendance  Attendance[]
@@ -312,7 +311,6 @@ model Class {
   gradeLevel GradeLevel? @relation(fields: [tenantId, gradeLevelId], references: [tenantId, id], onDelete: Restrict)
   alan      Alan?     @relation(fields: [tenantId, alanId], references: [tenantId, id], onDelete: Restrict)
   students  Student[]
-  studentClassHistory StudentClassHistory[]
   studentEnrollments StudentEnrollment[]
   teacherAssignments TeacherAssignment[]
   scheduleLessons ScheduleLesson[]
@@ -449,7 +447,6 @@ model AcademicYear {
   updatedAt DateTime  @updatedAt
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   terms     AcademicTerm[]
-  studentClassHistory StudentClassHistory[]
   studentEnrollments StudentEnrollment[]
 
   @@unique([tenantId, id])
@@ -479,7 +476,6 @@ model AcademicTerm {
   supportTickets SupportTicket[]
   reportSnapshots ReportSnapshot[]
   paymentPlans PaymentPlan[]
-  studentClassHistory StudentClassHistory[]
   studentEnrollments StudentEnrollment[]
 
   @@unique([tenantId, id])
@@ -524,7 +520,6 @@ model Student {
   developmentAssessments DevelopmentAssessment[]
   paymentPlans PaymentPlan[]
   teacherAssignments TeacherAssignment[]
-  classHistory StudentClassHistory[]
   enrollments StudentEnrollment[]
 
   @@index([tenantId, deletedAt])
@@ -535,31 +530,6 @@ model Student {
   @@unique([tenantId, nationalIdHash])
   @@unique([tenantId, userId])
   @@unique([tenantId, id])
-}
-
-model StudentClassHistory {
-  id        String    @id @default(uuid())
-  tenantId  String
-  studentId String
-  classId   String?
-  academicYearId String?
-  termId    String?
-  startsAt  DateTime  @db.Date
-  endsAt    DateTime? @db.Date
-  reason    String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  student   Student   @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
-  class     Class?    @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
-  academicYear AcademicYear? @relation(fields: [tenantId, academicYearId], references: [tenantId, id], onDelete: Restrict)
-  term      AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
-
-  @@index([tenantId, studentId, startsAt])
-  @@index([tenantId, classId])
-  @@index([tenantId, academicYearId])
-  @@index([tenantId, termId])
-  @@index([tenantId, endsAt])
 }
 
 model StudentEnrollment {

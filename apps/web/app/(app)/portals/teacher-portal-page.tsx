@@ -20,7 +20,6 @@ import type {
   ReportStudentProgress,
   ReportStudentSnapshot,
   ScheduleLessonRecord,
-  StudentClassHistoryRecord,
   StudentEnrollmentRecord,
   StudentRecord,
   SupportTicketRecord,
@@ -93,7 +92,6 @@ interface TeacherStudentReportData {
 }
 
 interface TeacherStudentHistoryData {
-  classHistory: StudentClassHistoryRecord[];
   enrollments: StudentEnrollmentRecord[];
 }
 
@@ -931,7 +929,6 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
           termNames={termNameById}
         /> : null}
         {showStudentTracking ? <StudentHistoryPanel
-          classHistory={historyQuery.data?.classHistory ?? []}
           enrollments={historyQuery.data?.enrollments ?? []}
           termNames={termNameById}
         /> : null}
@@ -1130,13 +1127,12 @@ async function loadTeacherStudentReport(
 }
 
 async function loadTeacherStudentHistory(accessToken: string, studentId: string, rolePreviewToken = ""): Promise<TeacherStudentHistoryData> {
-  const teacherStudentBasePath = `${apiBaseUrl}/me/teacher/students/${encodeURIComponent(studentId)}`;
-  const [classHistory, enrollments] = await Promise.all([
-    apiRequestOrNull<StudentClassHistoryRecord[]>(accessToken, `${teacherStudentBasePath}/class-history`, rolePreviewToken),
-    apiRequestOrNull<StudentEnrollmentRecord[]>(accessToken, `${teacherStudentBasePath}/enrollments`, rolePreviewToken),
-  ]);
+  const enrollments = await apiRequestOrNull<StudentEnrollmentRecord[]>(
+    accessToken,
+    `${apiBaseUrl}/me/teacher/students/${encodeURIComponent(studentId)}/enrollments`,
+    rolePreviewToken,
+  );
   return {
-    classHistory: classHistory ?? [],
     enrollments: enrollments ?? [],
   };
 }

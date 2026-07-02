@@ -31,7 +31,6 @@ const exportTables = [
   table("academicYears", "AcademicYear"),
   table("academicTerms", "AcademicTerm"),
   table("students", "Student", ["nationalIdEncrypted", "nationalIdHash", "photoKey"]),
-  table("studentClassHistory", "StudentClassHistory", [], false),
   table("studentEnrollments", "StudentEnrollment", [], false),
   table("teachers", "Teacher"),
   table("teacherAssignments", "TeacherAssignment", [], false),

@@ -149,7 +149,6 @@ function createService() {
       {} as never,
       {} as never,
       {} as never,
-      {} as never,
       identityInvitations as never,
       auditLogs as never,
       undefined,

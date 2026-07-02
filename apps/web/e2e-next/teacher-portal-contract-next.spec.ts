@@ -31,9 +31,7 @@ const expectedTeacherScopedReadPaths = [
   "/me/teacher/teacher-notes",
   "/me/teacher/support-tickets",
   "/me/teacher/lookups",
-  "/me/teacher/students/student-a/class-history",
   "/me/teacher/students/student-a/enrollments",
-  "/me/teacher/students/student-b/class-history",
   "/me/teacher/students/student-b/enrollments",
   "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots",
   "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-a",
@@ -507,7 +505,6 @@ function teacherApiResponse(pathName: string, mode: "teacher" | "role-preview"):
   if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-b/error-booklet") return createErrorBooklet("student-b");
   if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/students/student-a/progress") return createProgress("student-a");
   if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/students/student-b/progress") return createProgress("student-b");
-  if (pathName === "/me/teacher/students/student-a/class-history" || pathName === "/me/teacher/students/student-b/class-history") return createClassHistory();
   if (pathName === "/me/teacher/students/student-a/enrollments" || pathName === "/me/teacher/students/student-b/enrollments") return createEnrollments();
   return [];
 }
@@ -727,10 +724,6 @@ function createProgress(studentId: string) {
     studentId,
     tenantId: "tenant-teacher",
   };
-}
-
-function createClassHistory() {
-  return [{ classId: "class-8a", className: "8-A", id: "history-a", startsAt: "2026-09-01T00:00:00.000Z", studentId: "student-a", tenantId: "tenant-teacher", termId: "term-2026" }];
 }
 
 function createEnrollments() {

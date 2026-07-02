@@ -25,7 +25,6 @@ import type {
   PublicStudentProfileRecord,
   PublicStudentRecord,
   StudentEnrollmentRecord,
-  StudentClassHistoryRecord,
   StudentExportResult,
   StudentImportDryRunResult,
   StudentImportRequest,
@@ -139,12 +138,6 @@ export class StudentController {
   @Roles("GUARDIAN")
   profile(@Param("id") id: string): Promise<PublicStudentProfileRecord> {
     return this.students.findProfileForViewer(getRequestContext(), id);
-  }
-
-  @Get(":id/class-history")
-  @Roles("TEACHER")
-  classHistory(@Param("id") id: string): Promise<StudentClassHistoryRecord[]> {
-    return this.students.listClassHistory(getRequestContext(), id);
   }
 
   @Get(":id/enrollments")

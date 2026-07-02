@@ -1994,24 +1994,6 @@ const studentBulkEnrollmentRequestSchema = objectSchema({
   useAutomaticClassMapping: { type: "boolean" },
 });
 
-const studentClassHistoryRecordSchema = objectSchema({
-  id: stringSchema(),
-  tenantId: stringSchema(),
-  studentId: stringSchema(),
-  classId: stringSchema(),
-  className: stringSchema(),
-  campusName: stringSchema(),
-  gradeLevelName: stringSchema(),
-  section: stringSchema(),
-  academicYearId: stringSchema(),
-  termId: stringSchema(),
-  startsAt: stringSchema({ format: "date" }),
-  endsAt: stringSchema({ format: "date" }),
-  reason: stringSchema(),
-  createdAt: stringSchema({ format: "date-time" }),
-  updatedAt: stringSchema({ format: "date-time" }),
-}, ["id", "tenantId", "studentId", "startsAt"]);
-
 const studentEnrollmentRecordSchema = objectSchema({
   id: stringSchema(),
   tenantId: stringSchema(),
@@ -2483,10 +2465,6 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: arraySchema(teacherNoteRecordSchema),
     listResponse: true,
   },
-  "get /api/v1/me/student/class-history": {
-    responseBody: arraySchema(studentClassHistoryRecordSchema),
-    listResponse: true,
-  },
   "get /api/v1/me/student/enrollments": {
     responseBody: arraySchema(studentEnrollmentRecordSchema),
     listResponse: true,
@@ -2506,11 +2484,11 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: arraySchema(portalTeacherNoteRecordSchema),
     listResponse: true,
   },
-  "get /api/v1/me/guardian/students/{studentId}/class-history": {
-    responseBody: arraySchema(studentClassHistoryRecordSchema),
+  "get /api/v1/me/guardian/students/{studentId}/enrollments": {
+    responseBody: arraySchema(studentEnrollmentRecordSchema),
     listResponse: true,
   },
-  "get /api/v1/me/guardian/students/{studentId}/enrollments": {
+  "get /api/v1/me/teacher/students/{studentId}/enrollments": {
     responseBody: arraySchema(studentEnrollmentRecordSchema),
     listResponse: true,
   },
@@ -2732,10 +2710,6 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "delete /api/v1/students/{id}": {
     noContent: true,
-  },
-  "get /api/v1/students/{id}/class-history": {
-    responseBody: arraySchema(studentClassHistoryRecordSchema),
-    listResponse: true,
   },
   "get /api/v1/students/{id}/enrollments": {
     responseBody: arraySchema(studentEnrollmentRecordSchema),

@@ -448,13 +448,10 @@ const studentAcademicTimelineForbiddenDeep = [
   "token",
   "userId",
 ];
-const studentAcademicTimelineClassHistoryPaths = [
-  "/api/v1/me/student/class-history",
-  "/api/v1/me/guardian/students/{studentId}/class-history",
-];
 const studentAcademicTimelineEnrollmentPaths = [
   "/api/v1/me/student/enrollments",
   "/api/v1/me/guardian/students/{studentId}/enrollments",
+  "/api/v1/me/teacher/students/{studentId}/enrollments",
 ];
 const studentAcademicTimelineAttendancePaths = [
   "/api/v1/me/student/attendance",
@@ -1387,19 +1384,6 @@ const requiredOperationContracts = [
       { path: ["responseDataItem", "createdAt"], format: "date-time" },
     ],
   },
-  ...studentAcademicTimelineClassHistoryPaths.map((path) => ({
-    method: "get",
-    path,
-    responseListEnvelope: true,
-    responseDataItemsRequired: ["id", "tenantId", "studentId", "startsAt"],
-    responseDataForbiddenDeep: studentAcademicTimelineForbiddenDeep,
-    fieldChecks: [
-      { path: ["responseDataItem", "startsAt"], format: "date" },
-      { path: ["responseDataItem", "endsAt"], format: "date" },
-      { path: ["responseDataItem", "createdAt"], format: "date-time" },
-      { path: ["responseDataItem", "updatedAt"], format: "date-time" },
-    ],
-  })),
   ...studentAcademicTimelineEnrollmentPaths.map((path) => ({
     method: "get",
     path,
@@ -2427,19 +2411,6 @@ const requiredOperationContracts = [
     responseStatus: "204",
     noResponseBody: true,
   })),
-  {
-    method: "get",
-    path: "/api/v1/students/{id}/class-history",
-    responseListEnvelope: true,
-    responseDataItemsRequired: ["id", "tenantId", "studentId", "startsAt"],
-    responseDataForbiddenDeep: studentEnrollmentForbiddenDeep,
-    fieldChecks: [
-      { path: ["responseDataItem", "startsAt"], format: "date" },
-      { path: ["responseDataItem", "endsAt"], format: "date" },
-      { path: ["responseDataItem", "createdAt"], format: "date-time" },
-      { path: ["responseDataItem", "updatedAt"], format: "date-time" },
-    ],
-  },
   {
     method: "get",
     path: "/api/v1/students/{id}/enrollments",

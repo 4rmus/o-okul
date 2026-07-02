@@ -4,7 +4,6 @@ import { DataTable, InfoGrid, InfoItem, Panel, StatusBadge, type DataTableColumn
 import type {
   GuardianRecord,
   GuardianStudentRecord,
-  StudentClassHistoryRecord,
   StudentEnrollmentRecord,
   StudentProfileRecord,
 } from "@o-okul/shared-types";
@@ -134,49 +133,30 @@ export function GuardianRelationsPanel({ guardians, links }: { guardians: Guardi
 }
 
 export function StudentHistoryPanel({
-  classHistory,
   enrollments,
   termNames,
 }: {
-  classHistory: StudentClassHistoryRecord[];
   enrollments: StudentEnrollmentRecord[];
   termNames: ReadonlyMap<string, string>;
 }) {
-  const rows = [
-    ...classHistory.map((record) => ({
-      id: `class-${record.id}`,
-      type: "Sınıf",
-      className: record.className ?? "Sınıf bilgisi yok",
-      organization: formatClassOrganization(record),
-      context: record.termId ? termNames.get(record.termId) ?? "Dönem bilgisi yok" : "-",
-      startsAt: record.startsAt,
-      result: record.endsAt ? formatDate(record.endsAt) : "Devam ediyor",
-      reason: formatEnrollmentReason(record.reason),
-    })),
-    ...enrollments.map((record) => ({
+  const rows = enrollments
+    .map((record) => ({
       id: `enrollment-${record.id}`,
-      type: "Kayıt",
       className: record.className ?? "Sınıf bilgisi yok",
       organization: formatClassOrganization(record),
       context: record.termId ? termNames.get(record.termId) ?? "Dönem bilgisi yok" : "-",
       startsAt: record.startsAt,
       result: record.endsAt ? `${formatStudentStatus(record.status)} / ${formatDate(record.endsAt)}` : formatStudentStatus(record.status),
       reason: formatEnrollmentReason(record.reason),
-    })),
-  ].sort((first, second) => second.startsAt.localeCompare(first.startsAt));
+    }))
+    .sort((first, second) => second.startsAt.localeCompare(first.startsAt));
   const columns: Array<DataTableColumn<(typeof rows)[number]>> = [
-    {
-      header: "Tür",
-      key: "type",
-      priority: "primary",
-      render: (row) => row.type,
-      sticky: "left",
-    },
     {
       header: "Sınıf",
       key: "class",
       priority: "primary",
       render: (row) => row.className,
+      sticky: "left",
     },
     {
       header: "Organizasyon",

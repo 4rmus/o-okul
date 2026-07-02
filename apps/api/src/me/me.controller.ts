@@ -16,7 +16,6 @@ import type {
   PublicStudentRecord,
   ScheduleLessonRecord,
   StudentRecord,
-  StudentClassHistoryRecord,
   StudentEnrollmentRecord,
   StudentProfileRecord,
   TeacherPortalLookupsResponse,
@@ -173,14 +172,6 @@ export class MeController {
     return this.school.listCurrentStudentGuardianLinks(getRequestContext());
   }
 
-  @Get("student/class-history")
-  @Roles("STUDENT")
-  studentClassHistory(): Promise<StudentClassHistoryRecord[]> {
-    const context = getRequestContext();
-    assertStudentContext(context);
-    return this.students.listClassHistory(context, context.subjectId);
-  }
-
   @Get("student/enrollments")
   @Roles("STUDENT")
   studentEnrollments(): Promise<StudentEnrollmentRecord[]> {
@@ -307,14 +298,6 @@ export class MeController {
     return this.students.findProfileForViewer(context, studentId);
   }
 
-  @Get("guardian/students/:studentId/class-history")
-  @Roles("GUARDIAN")
-  guardianStudentClassHistory(@Param("studentId") studentId: string): Promise<StudentClassHistoryRecord[]> {
-    const context = getRequestContext();
-    assertGuardianContext(context);
-    return this.students.listClassHistory(context, studentId);
-  }
-
   @Get("guardian/students/:studentId/enrollments")
   @Roles("GUARDIAN")
   guardianStudentEnrollments(@Param("studentId") studentId: string): Promise<StudentEnrollmentRecord[]> {
@@ -432,6 +415,14 @@ export class MeController {
     const context = getRequestContext();
     assertTeacherContext(context);
     return this.students.listForViewer(context);
+  }
+
+  @Get("teacher/students/:studentId/enrollments")
+  @Roles("TEACHER")
+  teacherStudentEnrollments(@Param("studentId") studentId: string): Promise<StudentEnrollmentRecord[]> {
+    const context = getRequestContext();
+    assertTeacherContext(context);
+    return this.students.listEnrollments(context, studentId);
   }
 
   @Get("teacher/attendance")

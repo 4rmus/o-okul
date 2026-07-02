@@ -16,7 +16,6 @@ import type {
   ReportErrorBooklet,
   ReportStudentProgress,
   ReportStudentSnapshot,
-  StudentClassHistoryRecord,
   StudentEnrollmentRecord,
   StudentProfileRecord,
   StudentRecord,
@@ -406,7 +405,6 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
           <>
             {view === "overview" || view === "student" ? <ProfilePanel profile={data?.profile} /> : null}
             {view === "overview" || view === "student" ? <StudentHistoryPanel
-              classHistory={data?.classHistory ?? []}
               enrollments={data?.enrollments ?? []}
               termNames={termNameById}
             /> : null}
@@ -462,13 +460,8 @@ async function loadGuardianStudentPortal(accessToken: string, studentId: string,
         rolePreviewToken,
       )
     : Promise.resolve(null);
-  const [profile, classHistory, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, paymentPlans, report, errorBooklet, progress, courses, terms] = await Promise.all([
+  const [profile, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, paymentPlans, report, errorBooklet, progress, courses, terms] = await Promise.all([
     readOnlyRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/profile`, rolePreviewToken),
-    readOnlyRequest<StudentClassHistoryRecord[]>(
-      accessToken,
-      `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/class-history`,
-      rolePreviewToken,
-    ),
     readOnlyRequest<StudentEnrollmentRecord[]>(
       accessToken,
       `${apiBaseUrl}/me/guardian/students/${encodeURIComponent(studentId)}/enrollments`,
@@ -513,7 +506,6 @@ async function loadGuardianStudentPortal(accessToken: string, studentId: string,
 
   return {
     profile,
-    classHistory,
     enrollments,
     notificationPreferences,
     announcements,

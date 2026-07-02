@@ -45,8 +45,6 @@ const ids = {
   classB: "00000000-0000-4000-8000-0000000000b2",
   studentA: "00000000-0000-4000-8000-0000000000a3",
   studentB: "00000000-0000-4000-8000-0000000000b3",
-  studentClassHistoryA: "00000000-0000-4000-8000-000000000018a1",
-  studentClassHistoryB: "00000000-0000-4000-8000-000000000018b1",
   studentEnrollmentA: "00000000-0000-4000-8000-0000000000f3",
   studentEnrollmentB: "00000000-0000-4000-8000-0000000000f4",
   attendanceA: "00000000-0000-4000-8000-0000000000e3",
@@ -319,28 +317,6 @@ async function seedFixtures() {
        VALUES ($1, $2, $3, 'Ada', 'A', 'A-001', now()), ($4, $5, $6, 'Bora', 'B', 'B-001', now())
        ON CONFLICT ("id") DO NOTHING`,
       [ids.studentA, ids.tenantA, ids.classA, ids.studentB, ids.tenantB, ids.classB],
-    );
-
-    await adminClient.query(
-      `INSERT INTO "StudentClassHistory" ("id", "tenantId", "studentId", "classId", "academicYearId", "termId", "startsAt", "reason", "updatedAt")
-       VALUES
-         ($1, $2, $3, $4, $5, $6, '2026-01-01', 'RLS', now()),
-         ($7, $8, $9, $10, $11, $12, '2026-01-01', 'RLS', now())
-       ON CONFLICT ("id") DO NOTHING`,
-      [
-        ids.studentClassHistoryA,
-        ids.tenantA,
-        ids.studentA,
-        ids.classA,
-        ids.academicYearA,
-        ids.academicTermA,
-        ids.studentClassHistoryB,
-        ids.tenantB,
-        ids.studentB,
-        ids.classB,
-        ids.academicYearB,
-        ids.academicTermB,
-      ],
     );
 
     await adminClient.query(

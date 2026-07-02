@@ -373,7 +373,6 @@ const expectedTenantCompositeRelations = [
   "SupportTicket.class",
   "PaymentPlan.class",
   "ReportSnapshot.class",
-  "StudentClassHistory.class",
   "StudentEnrollment.class",
   "Student.class",
   "Student.responsibleTeacher",

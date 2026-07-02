@@ -508,22 +508,6 @@ async function seedDemoStudentsAndGuardians(client: pg.PoolClient, tenantId: str
     );
 
     await client.query(
-      `INSERT INTO "StudentClassHistory" (
-         "id", "tenantId", "studentId", "classId", "startsAt", "reason", "updatedAt"
-       )
-       VALUES ($1, $2, $3, $4, $5::date, 'CREATED', now())
-       ON CONFLICT ("id") DO UPDATE
-       SET "tenantId" = EXCLUDED."tenantId",
-           "studentId" = EXCLUDED."studentId",
-           "classId" = EXCLUDED."classId",
-           "startsAt" = EXCLUDED."startsAt",
-           "endsAt" = NULL,
-           "reason" = EXCLUDED."reason",
-           "updatedAt" = now()`,
-      [`student-class-history-${student.id}`, tenantId, student.id, student.classId, DEMO_CLASS_START_DATE],
-    );
-
-    await client.query(
       `INSERT INTO "StudentEnrollment" (
          "id", "tenantId", "studentId", "classId", "status", "startsAt", "reason", "updatedAt"
        )

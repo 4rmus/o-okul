@@ -799,24 +799,6 @@ export interface GlobalSearchResultRecord {
   href: string;
 }
 
-export interface StudentClassHistoryRecord {
-  id: string;
-  tenantId: string;
-  studentId: string;
-  classId?: string;
-  className?: string;
-  campusName?: string;
-  gradeLevelName?: string;
-  section?: string;
-  academicYearId?: string;
-  termId?: string;
-  startsAt: string;
-  endsAt?: string;
-  reason?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
 export interface StudentEnrollmentRecord {
   id: string;
   tenantId: string;

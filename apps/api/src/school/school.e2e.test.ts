@@ -1439,7 +1439,7 @@ describe("School management API", () => {
       });
 
     await request(server)
-      .get(`/students/${studentId}/class-history`)
+      .get(`/students/${studentId}/enrollments`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
@@ -1466,14 +1466,6 @@ describe("School management API", () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body).toEqual([expect.objectContaining({ id: studentId, status: "GRADUATED" })]);
-      });
-
-    await request(server)
-      .get(`/students/${studentId}/class-history`)
-      .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .expect(200)
-      .expect(({ body }) => {
-        expect(body[1]).toEqual(expect.objectContaining({ studentId, classId: nextClassId, reason: "CLASS_CHANGED", endsAt: expect.any(String) }));
       });
 
     await request(server)
