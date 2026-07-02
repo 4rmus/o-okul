@@ -14,6 +14,7 @@ export interface GuardianStore {
   list(): Promise<GuardianRecord[]>;
   findById(id: string): Promise<GuardianRecord | undefined>;
   findByNationalIdHash(tenantId: string, nationalIdHash: string): Promise<GuardianRecord | undefined>;
+  findByPhone(tenantId: string, phone: string): Promise<GuardianRecord | undefined>;
   findByUserId(tenantId: string, userId: string): Promise<GuardianRecord | undefined>;
   create(input: Omit<GuardianRecord, "id">): Promise<GuardianRecord>;
   update(
@@ -52,6 +53,10 @@ export class InMemoryGuardianStore implements GuardianStore {
 
   async findByNationalIdHash(tenantId: string, nationalIdHash: string): Promise<GuardianRecord | undefined> {
     return this.guardians.find((candidate) => candidate.tenantId === tenantId && candidate.nationalIdHash === nationalIdHash && !candidate.deletedAt);
+  }
+
+  async findByPhone(tenantId: string, phone: string): Promise<GuardianRecord | undefined> {
+    return this.guardians.find((candidate) => candidate.tenantId === tenantId && candidate.phone === phone && !candidate.deletedAt);
   }
 
   async findByUserId(tenantId: string, userId: string): Promise<GuardianRecord | undefined> {
@@ -140,6 +145,20 @@ export class PostgresGuardianStore implements GuardianStore {
            AND "deletedAt" IS NULL
          LIMIT 1`,
         [tenantId, nationalIdHash],
+      );
+      return result.rows[0] ? toGuardianRecord(result.rows[0]) : undefined;
+    });
+  }
+
+  async findByPhone(tenantId: string, phone: string): Promise<GuardianRecord | undefined> {
+    return withExplicitTenantQuery(this.pool, tenantId, async (client) => {
+      const result = await client.query<GuardianRow>(
+        `SELECT * FROM "Guardian"
+         WHERE "tenantId" = $1
+           AND "phone" = $2
+           AND "deletedAt" IS NULL
+         LIMIT 1`,
+        [tenantId, phone],
       );
       return result.rows[0] ? toGuardianRecord(result.rows[0]) : undefined;
     });

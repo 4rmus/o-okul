@@ -118,6 +118,15 @@ interface ImportQuarantineRecord {
   };
 }
 
+interface ImportQuarantineResolveBulkResponse {
+  results: Array<{
+    errorCode?: string;
+    quarantine?: ImportQuarantineRecord;
+    quarantineId: string;
+    status: "RESOLVED" | "FAILED";
+  }>;
+}
+
 interface ReportGenerationQueueResult {
   tenantId: string;
   examId: string;
@@ -714,6 +723,44 @@ export function ParserConfigPage() {
     }
   }
 
+  async function resolveSelectedQuarantines() {
+    if (!auth) return;
+
+    const rawImportId = (rawImport?.rawImport.id ?? quarantineRawImportId).trim();
+    const items = quarantines
+      .filter((record) => record.status !== "RESOLVED")
+      .map((record) => ({
+        quarantineId: record.id,
+        resolvedStudentId: selectedStudentByQuarantine[record.id] ?? "",
+      }))
+      .filter((item) => item.resolvedStudentId);
+    if (!rawImportId || items.length === 0) {
+      setError("Bulk çözüm için öğrenci seçilmiş açık satır bulunamadı.");
+      return;
+    }
+
+    setError("");
+    try {
+      const response = await resolveImportQuarantinesBulk(auth.accessToken, {
+        examId,
+        rawImportId,
+        items,
+      });
+      const resolvedById = new Map(response.results.flatMap((result) => result.quarantine ? [[result.quarantineId, result.quarantine]] : []));
+      setQuarantines((current) => current.map((item) => resolvedById.get(item.id) ?? item));
+      const resolved = response.results.find((result) => result.quarantine?.rawImportSha256 && result.quarantine.answerKeyId)?.quarantine;
+      if (resolved?.rawImportSha256 && resolved.answerKeyId) {
+        setReportContentHash(`${resolved.rawImportSha256}-${resolved.answerKeyId}`);
+      }
+      const failedCount = response.results.filter((result) => result.status === "FAILED").length;
+      if (failedCount > 0) {
+        setError(`${failedCount} karantina satırı çözülemedi.`);
+      }
+    } catch (resolveError) {
+      setError(apiErrorMessage(resolveError, "Karantina satırları bulk çözülemedi."));
+    }
+  }
+
   async function submitReportGeneration(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!auth) return;
@@ -907,6 +954,7 @@ export function ParserConfigPage() {
               onLookupSubmit={submitQuarantineLookup}
               onQuarantineRawImportIdChange={setQuarantineRawImportId}
               onResolve={resolveQuarantine}
+              onResolveBulk={resolveSelectedQuarantines}
               onSelectedStudentChange={setSelectedStudentByQuarantine}
               onStudentSearchQueryChange={setQuarantineStudentQuery}
               onStudentSearchSubmit={submitQuarantineStudentSearch}
@@ -1253,6 +1301,7 @@ interface QuarantineResolutionPanelProps {
   onLookupSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onQuarantineRawImportIdChange: (value: string) => void;
   onResolve: (record: ImportQuarantineRecord) => void | Promise<void>;
+  onResolveBulk: () => void | Promise<void>;
   onSelectedStudentChange: (updater: (current: Record<string, string>) => Record<string, string>) => void;
   onStudentSearchQueryChange: (value: string) => void;
   onStudentSearchSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -1268,6 +1317,7 @@ function QuarantineResolutionPanel({
   onLookupSubmit,
   onQuarantineRawImportIdChange,
   onResolve,
+  onResolveBulk,
   onSelectedStudentChange,
   onStudentSearchQueryChange,
   onStudentSearchSubmit,
@@ -1281,6 +1331,9 @@ function QuarantineResolutionPanel({
       )),
     [students],
   );
+  const bulkResolvableCount = quarantines.filter((record) =>
+    record.status !== "RESOLVED" && Boolean(selectedStudentByQuarantine[record.id]),
+  ).length;
   const quarantineColumns = useMemo<Array<DataTableColumn<ImportQuarantineRecord>>>(
     () => [
       {
@@ -1380,6 +1433,13 @@ function QuarantineResolutionPanel({
             Öğrencileri ara
           </Button>
         </form>
+        <div className="next-inline-form" role="group" aria-label="Bulk karantina çözümü">
+          <Button type="button" disabled={bulkResolvableCount === 0} onClick={() => void onResolveBulk()}>
+            <CheckCircle2 size={17} aria-hidden="true" />
+            Seçili satırları çöz
+          </Button>
+          <span className="next-status-note">{bulkResolvableCount} satır hazır</span>
+        </div>
         <div className="next-grid-scroll">
           <DataTable
             caption="Eşleşmeyen satır listesi"
@@ -2089,6 +2149,10 @@ function uniqueStrings(values: string[]) {
   return result;
 }
 
+function createClientIdempotencyKey(prefix: string) {
+  return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
+}
+
 async function resolveImportQuarantine(
   accessToken: string,
   input: { examId: string; rawImportId: string; quarantineId: string; resolvedStudentId: string },
@@ -2099,6 +2163,24 @@ async function resolveImportQuarantine(
     {
       body: JSON.stringify({ resolvedStudentId: input.resolvedStudentId }),
       headers: { "content-type": "application/json" },
+      method: "POST",
+    },
+  );
+}
+
+async function resolveImportQuarantinesBulk(
+  accessToken: string,
+  input: { examId: string; rawImportId: string; items: Array<{ quarantineId: string; resolvedStudentId: string }> },
+) {
+  return apiRequest<ImportQuarantineResolveBulkResponse>(
+    accessToken,
+    `${apiBaseUrl}/exams/${encodeURIComponent(input.examId)}/raw-imports/${encodeURIComponent(input.rawImportId)}/quarantines/resolve-bulk`,
+    {
+      body: JSON.stringify({ items: input.items }),
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": createClientIdempotencyKey("raw-import-quarantine-bulk"),
+      },
       method: "POST",
     },
   );

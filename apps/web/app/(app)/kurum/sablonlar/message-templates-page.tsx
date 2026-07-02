@@ -37,6 +37,7 @@ import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
+import { ImportTemplatePanel } from "../_shared/import-template-panel.js";
 import {
   firstFormError,
   messageTemplateFormSchema,
@@ -371,6 +372,7 @@ export function MessageTemplatesPage() {
         tableDescription="SMS mesaj şablonları ve yeniden kullanılabilir gönderim metinleri."
         title="Şablonlar"
       />
+      <ImportTemplatePanel />
       {isSmsEnabled ? (
         <Panel
         aria-label="SMS gönderim"

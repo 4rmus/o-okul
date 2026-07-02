@@ -43,7 +43,6 @@ model Tenant {
   academicYears AcademicYear[]
   academicTerms AcademicTerm[]
   students    Student[]
-  studentClassHistory StudentClassHistory[]
   studentEnrollments StudentEnrollment[]
   teacherAssignments TeacherAssignment[]
   attendance  Attendance[]
@@ -53,6 +52,7 @@ model Tenant {
   developmentScores DevelopmentScore[]
   paymentPlans PaymentPlan[]
   paymentInstallments PaymentInstallment[]
+  paymentTransactions PaymentTransaction[]
   teachers    Teacher[]
   guardians   Guardian[]
   guardianStudents GuardianStudent[]
@@ -273,6 +273,8 @@ model IdentityInvitation {
   @@index([tenantId, email])
 }
 
+/// Global auth altyapı tablosu: token aile takibi User üzerinden yapılır ve
+/// sistem kullanıcıları (User.tenantId NULL) da kapsandığı için tenant RLS uygulanamaz.
 model ConsumedRefreshToken {
   refreshTokenHash String   @id
   tokenFamilyId    String
@@ -282,6 +284,8 @@ model ConsumedRefreshToken {
   @@index([tokenFamilyId])
 }
 
+/// Global auth altyapı tablosu: global User kimliğine bağlıdır ve sistem
+/// kullanıcıları (User.tenantId NULL) da şifre sıfırlayabildiği için tenant RLS uygulanamaz.
 model PasswordResetToken {
   id        String   @id @default(uuid())
   userId    String
@@ -312,7 +316,6 @@ model Class {
   gradeLevel GradeLevel? @relation(fields: [tenantId, gradeLevelId], references: [tenantId, id], onDelete: Restrict)
   alan      Alan?     @relation(fields: [tenantId, alanId], references: [tenantId, id], onDelete: Restrict)
   students  Student[]
-  studentClassHistory StudentClassHistory[]
   studentEnrollments StudentEnrollment[]
   teacherAssignments TeacherAssignment[]
   scheduleLessons ScheduleLesson[]
@@ -449,7 +452,6 @@ model AcademicYear {
   updatedAt DateTime  @updatedAt
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   terms     AcademicTerm[]
-  studentClassHistory StudentClassHistory[]
   studentEnrollments StudentEnrollment[]
 
   @@unique([tenantId, id])
@@ -479,7 +481,6 @@ model AcademicTerm {
   supportTickets SupportTicket[]
   reportSnapshots ReportSnapshot[]
   paymentPlans PaymentPlan[]
-  studentClassHistory StudentClassHistory[]
   studentEnrollments StudentEnrollment[]
 
   @@unique([tenantId, id])
@@ -524,7 +525,6 @@ model Student {
   developmentAssessments DevelopmentAssessment[]
   paymentPlans PaymentPlan[]
   teacherAssignments TeacherAssignment[]
-  classHistory StudentClassHistory[]
   enrollments StudentEnrollment[]
 
   @@index([tenantId, deletedAt])
@@ -535,31 +535,6 @@ model Student {
   @@unique([tenantId, nationalIdHash])
   @@unique([tenantId, userId])
   @@unique([tenantId, id])
-}
-
-model StudentClassHistory {
-  id        String    @id @default(uuid())
-  tenantId  String
-  studentId String
-  classId   String?
-  academicYearId String?
-  termId    String?
-  startsAt  DateTime  @db.Date
-  endsAt    DateTime? @db.Date
-  reason    String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  student   Student   @relation(fields: [tenantId, studentId], references: [tenantId, id], onDelete: Cascade)
-  class     Class?    @relation(fields: [tenantId, classId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
-  academicYear AcademicYear? @relation(fields: [tenantId, academicYearId], references: [tenantId, id], onDelete: Restrict)
-  term      AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
-
-  @@index([tenantId, studentId, startsAt])
-  @@index([tenantId, classId])
-  @@index([tenantId, academicYearId])
-  @@index([tenantId, termId])
-  @@index([tenantId, endsAt])
 }
 
 model StudentEnrollment {
@@ -756,6 +731,7 @@ model PaymentPlan {
   course      Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
   term        AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
   installments PaymentInstallment[]
+  transactions PaymentTransaction[]
 
   @@index([tenantId, studentId, deletedAt])
   @@index([tenantId, campusId])
@@ -780,9 +756,37 @@ model PaymentInstallment {
   updatedAt     DateTime  @updatedAt
   tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   plan          PaymentPlan @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Cascade)
+  transactions  PaymentTransaction[]
 
   @@unique([tenantId, planId, installmentNo])
+  @@unique([tenantId, id])
   @@index([tenantId, planId, dueDate, deletedAt])
+}
+
+model PaymentTransaction {
+  id               String    @id @default(uuid())
+  tenantId         String
+  planId           String
+  installmentId    String?
+  amount           Int
+  currency         String    @default("TRY")
+  method           String
+  paidAt           DateTime
+  receiptNo        String
+  note             String?
+  recordedByUserId String?
+  voidedAt         DateTime?
+  voidReason       String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan             PaymentPlan @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Cascade)
+  installment      PaymentInstallment? @relation(fields: [tenantId, installmentId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, receiptNo])
+  @@index([tenantId, planId, voidedAt])
+  @@index([tenantId, installmentId])
 }
 
 model ScheduleLesson {

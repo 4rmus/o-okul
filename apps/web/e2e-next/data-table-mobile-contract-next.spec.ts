@@ -23,21 +23,17 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(student360.getByText("Devamsızlık")).toBeVisible();
     await expect(student360.getByText("Problem çözüm adımlarında takip yapılacak.")).toBeVisible();
 
-    const classHistoryTable = student360.getByRole("table", { name: "Sınıf geçmişi" });
-    await expect(classHistoryTable.getByRole("columnheader", { name: "Sınıf" })).toBeVisible();
-    await expect(classHistoryTable.locator('th[data-column-key="class"]')).toHaveAttribute("data-mobile-priority", "primary");
-    await expect(classHistoryTable.locator('th[data-column-key="class"]')).toHaveAttribute("data-sticky", "left");
-    await expectMobileDataCells(classHistoryTable, [
-      { key: "class", label: "Sınıf", text: "8-A" },
-      { key: "context", label: "Bağlam", text: "Ana Kampüs" },
-      { key: "dates", label: "Tarih", text: "devam ediyor" },
-    ]);
-
     const enrollmentTable = student360.getByRole("table", { name: "Kayıt geçmişi" });
     await expect(enrollmentTable.getByRole("columnheader", { name: "İşlem" })).toBeVisible();
     await expect(enrollmentTable.locator('th[data-column-key="reason"]')).toHaveAttribute("data-mobile-priority", "primary");
     await expect(enrollmentTable.locator('th[data-column-key="reason"]')).toHaveAttribute("data-sticky", "left");
+    await expect(enrollmentTable.locator('th[data-column-key="class"]')).toHaveAttribute("data-mobile-priority", "secondary");
     await expect(enrollmentTable.locator('th[data-column-key="context"]')).toHaveAttribute("data-mobile-priority", "hidden");
+    await expectMobileDataCells(enrollmentTable, [
+      { key: "reason", label: "İşlem", text: "İlk kayıt" },
+      { key: "class", label: "Sınıf", text: "8-A" },
+      { key: "dates", label: "Tarih", text: "devam ediyor" },
+    ]);
     await expect(enrollmentTable).toContainText("Nakil");
     await expect(enrollmentTable).toContainText("9-B");
     await expect(enrollmentTable).toContainText("Sınıf eşleşmedi");
@@ -143,6 +139,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(templateSummary).toContainText("Şablon toplamı");
     await expect(templateSummary).toContainText("SMS hazır");
     await expect(templateSummary.getByLabel("Şablon operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(page.getByLabel("Aktarım şablonları").getByRole("link", { name: "Veli XLSX şablonu" })).toHaveAttribute("href", "/templates/veli-aktarim-sablonu.xlsx");
     const templateTable = templateRegion.getByRole("table", { name: "Şablon yönetimi" });
     await expect(templateTable.getByRole("columnheader", { name: "Şablon" })).toBeVisible();
     await expect(templateTable.getByRole("columnheader", { name: "Metin" })).toHaveCount(0);
@@ -904,7 +901,6 @@ function mockApiResponse(pathName: string, method: string): { data: unknown; met
   if (pathName === "/students") return listResponse(createStudents());
   if (pathName === "/students/student-a/profile") return { data: createStudentProfile() };
   if (pathName === "/students/student-a/guardians") return { data: createStudentGuardians() };
-  if (pathName === "/students/student-a/class-history") return { data: createStudentClassHistory() };
   if (pathName === "/students/student-a/enrollments") return { data: createStudentEnrollments() };
   if (pathName === "/teachers/teacher-a" && method === "GET") return { data: createTeachers()[0] };
   if (pathName === "/teachers/teacher-a/assignments" && method === "GET") return { data: createTeacherDetailAssignments() };
@@ -1107,25 +1103,6 @@ function createStudentAttendanceSummary() {
 
 function createStudentReportProgress() {
   return { netDelta: 2.5, studentId: "student-a", successRateDelta: 8.4 };
-}
-
-function createStudentClassHistory() {
-  return [
-    {
-      academicYearId: "academic-year-2026",
-      campusName: "Ana Kampüs",
-      classId: "class-8a",
-      className: "8-A",
-      gradeLevelName: "8. Sınıf",
-      id: "student-class-history-a",
-      reason: "CREATED",
-      section: "A",
-      startsAt: "2026-06-01",
-      studentId: "student-a",
-      tenantId: "tenant-datatable",
-      termId: "term-2026",
-    },
-  ];
 }
 
 function createStudentEnrollments() {

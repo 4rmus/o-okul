@@ -121,12 +121,15 @@ describe("Capability access matrix", () => {
       .expect(200);
   });
 
-  it("tenant profilini TENANT_ADMIN günceller, ASSISTANT_ADMIN güncelleyemez", async () => {
+  it("tenant profilini TENANT_ADMIN ve ASSISTANT_ADMIN kurulum yetkisiyle günceller", async () => {
     await request(server)
       .patch("/me/tenant")
       .set("Authorization", `Bearer ${assistantToken}`)
-      .send({ name: "Yardımcı Güncelleme Denemesi" })
-      .expect(403);
+      .send({ name: "Yardımcı Kurulum Güncellemesi" })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({ id: "tenant-a", name: "Yardımcı Kurulum Güncellemesi" });
+      });
 
     await request(server)
       .patch("/me/tenant")

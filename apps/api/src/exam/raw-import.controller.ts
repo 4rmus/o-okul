@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from "@nestjs/common";
 import type {
   RawImportEvaluationRequest,
+  RawImportQuarantineResolveBulkRequest,
   RawImportQuarantineResolveRequest,
   RawImportUploadRequest,
   RawImportUploadResult,
@@ -27,10 +28,17 @@ const rawImportEvaluationBodySchema = z.preprocess((value) => value ?? {}, z.obj
 const rawImportResolveBodySchema = z.object({
   resolvedStudentId: requiredTrimmedString,
 }).strict() satisfies z.ZodType<RawImportQuarantineResolveRequest>;
+const rawImportResolveBulkBodySchema = z.object({
+  items: z.array(z.object({
+    quarantineId: requiredTrimmedString,
+    resolvedStudentId: requiredTrimmedString,
+  }).strict()).min(1).max(100),
+}).strict() satisfies z.ZodType<RawImportQuarantineResolveBulkRequest>;
 
 type RawImportUploadBody = RawImportUploadRequest;
 type RawImportEvaluationBody = RawImportEvaluationRequest;
 type RawImportResolveBody = RawImportQuarantineResolveRequest;
+type RawImportResolveBulkBody = RawImportQuarantineResolveBulkRequest;
 
 @Controller("exams/:examId/raw-imports")
 @UseGuards(RolesGuard)
@@ -119,6 +127,21 @@ export class RawImportController {
       rawImportId,
       quarantineId,
       resolvedStudentId: body.resolvedStudentId,
+    }, idempotencyKey);
+  }
+
+  @Post(":rawImportId/quarantines/resolve-bulk")
+  @RequireCapability("academic:manage")
+  resolveQuarantinesBulk(
+    @Param("examId") examId: string,
+    @Param("rawImportId") rawImportId: string,
+    @Body(zodBody(rawImportResolveBulkBodySchema)) body: RawImportResolveBulkBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ) {
+    return this.quarantines.resolveBulk(getRequestContext(), {
+      examId,
+      rawImportId,
+      items: body.items,
     }, idempotencyKey);
   }
 }

@@ -26,7 +26,6 @@
       "AcademicYear",
       "AcademicTerm",
       "Student",
-      "StudentClassHistory",
       "StudentEnrollment",
       "Teacher",
       "TeacherAssignment",
@@ -36,6 +35,7 @@
       "TeacherNote",
       "PaymentPlan",
       "PaymentInstallment",
+      "PaymentTransaction",
       "ScheduleLesson",
       "StudySession",
       "StudySessionStudent",
@@ -87,7 +87,7 @@
     "auditBypassAction": "system.rls_bypass_requested"
   },
   "tenantFkPreflight": {
-    "requiredCompositeRelations": 24,
+    "requiredCompositeRelations": 23,
     "relationsVerified": [
       "AnnouncementReceipt.announcement",
       "AnnouncementDeliveryReport.announcement",
@@ -109,7 +109,6 @@
       "SupportTicket.class",
       "PaymentPlan.class",
       "ReportSnapshot.class",
-      "StudentClassHistory.class",
       "StudentEnrollment.class",
       "Student.class",
       "Student.responsibleTeacher"
@@ -138,7 +137,6 @@
       "SupportTicket.class cross tenant insert",
       "PaymentPlan.class cross tenant insert",
       "ReportSnapshot.class cross tenant insert",
-      "StudentClassHistory.class cross tenant insert",
       "StudentEnrollment.class cross tenant insert",
       "Student.class cross tenant insert",
       "Student.responsibleTeacher cross tenant insert"

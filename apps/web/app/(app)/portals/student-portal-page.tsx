@@ -14,7 +14,6 @@ import type {
   ReportErrorBooklet,
   ReportStudentProgress,
   ReportStudentSnapshot,
-  StudentClassHistoryRecord,
   StudentEnrollmentRecord,
   StudentProfileRecord,
   SupportTicketRecord,
@@ -305,7 +304,6 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
             {view !== "announcements" && view !== "homework" && view !== "reports" && view !== "support" ? <ProfilePanel profile={data?.profile} /> : null}
             {view === "overview" || view === "profile" ? <GuardianRelationsPanel guardians={data?.guardians ?? []} links={data?.guardianLinks ?? []} /> : null}
             {view === "overview" || view === "profile" ? <StudentHistoryPanel
-              classHistory={data?.classHistory ?? []}
               enrollments={data?.enrollments ?? []}
               termNames={termNameById}
             /> : null}
@@ -336,11 +334,10 @@ async function loadStudentPortal(accessToken: string, rolePreviewToken = "", rep
     ? apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/me/student/reports/${encodeURIComponent(reportExamId)}/progress?scope=all`, rolePreviewToken)
     : Promise.resolve(null);
 
-  const [profile, guardians, guardianLinks, classHistory, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, report, errorBooklet, progress, courses, terms] = await Promise.all([
+  const [profile, guardians, guardianLinks, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, report, errorBooklet, progress, courses, terms] = await Promise.all([
     readOnlyRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/student/profile`, rolePreviewToken),
     readOnlyRequest<GuardianRecord[]>(accessToken, `${apiBaseUrl}/me/student/guardians`, rolePreviewToken),
     readOnlyRequest<GuardianStudentRecord[]>(accessToken, `${apiBaseUrl}/me/student/guardian-links`, rolePreviewToken),
-    readOnlyRequest<StudentClassHistoryRecord[]>(accessToken, `${apiBaseUrl}/me/student/class-history`, rolePreviewToken),
     readOnlyRequest<StudentEnrollmentRecord[]>(accessToken, `${apiBaseUrl}/me/student/enrollments`, rolePreviewToken),
     readOnlyRequest<AnnouncementRecord[]>(accessToken, `${apiBaseUrl}/me/student/announcements`, rolePreviewToken),
     readOnlyRequest<HomeworkMaterialAssignmentRecord[]>(
@@ -360,7 +357,7 @@ async function loadStudentPortal(accessToken: string, rolePreviewToken = "", rep
     readOnlyRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`, rolePreviewToken),
   ]);
 
-  return { profile, guardians, guardianLinks, classHistory, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, report, errorBooklet, progress, courses, terms };
+  return { profile, guardians, guardianLinks, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, report, errorBooklet, progress, courses, terms };
 }
 
 async function markAnnouncementRead(accessToken: string, path: string) {

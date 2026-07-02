@@ -4,6 +4,7 @@ import { InMemoryGuardianStudentStore } from "../school/guardian-student-store.j
 import { InMemoryGuardianStore } from "../school/guardian-store.js";
 import { InMemoryStudentStore } from "./student-store.js";
 import { StudentService } from "./student.service.js";
+import { hashTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
 
 describe("StudentService", () => {
   it("ogrenci olustururken yeni veli, link ve davet uretir", async () => {
@@ -70,6 +71,38 @@ describe("StudentService", () => {
     expect(setup.invitations).toEqual([]);
   });
 
+  it("TC eslesirse mevcut veliyi telefon farkli olsa da yeniden kullanir", async () => {
+    const setup = createService();
+    const nationalId = "10000001372";
+    const existingGuardian = await setup.guardianStore.create({
+      tenantId: "tenant-a",
+      firstName: "Tc",
+      lastName: "Veli",
+      phone: "5000000099",
+      nationalIdHash: hashTcIdentity(normalizeTcIdentity(nationalId)),
+    });
+
+    const student = await setup.service.create(adminContext, {
+      firstName: "Tc",
+      lastName: "Ogrenci",
+      guardian: {
+        nationalId,
+        phone: "0 500 000 00 98",
+      },
+    });
+
+    await expect(setup.guardianStudentStore.listByStudent(student.id)).resolves.toEqual([
+      expect.objectContaining({
+        guardianId: existingGuardian.id,
+        studentId: student.id,
+      }),
+    ]);
+    await expect(setup.guardianStore.findById(existingGuardian.id)).resolves.toMatchObject({
+      phone: "5000000099",
+      nationalIdEncrypted: expect.any(String),
+    });
+  });
+
   it("veli TC ve telefonuyla tenant hesabi baglar", async () => {
     const setup = createService();
 
@@ -126,6 +159,17 @@ function createService() {
     },
   };
   const identityProvisioning = {
+    provisionOrInvite: async (_context: RequestContext, input: { email?: string; nationalId?: string; phone?: string }) => {
+      if (input.nationalId && input.phone) {
+        provisionedSubjects.push(input);
+        return { status: "PROVISIONED", userId: "guardian-user-test", initialPassword: "5550000013" };
+      }
+      if (input.email) {
+        invitations.push(input);
+        return { status: "INVITED", invitationId: "identity-invitation-test" };
+      }
+      return { status: "SKIPPED" };
+    },
     provisionTenantSubject: async (input: unknown) => {
       provisionedSubjects.push(input);
       return { userId: "guardian-user-test", initialPassword: "5550000013" };
@@ -142,7 +186,6 @@ function createService() {
       studentStore,
       guardianStudentStore,
       guardianStore,
-      {} as never,
       {} as never,
       {} as never,
       {} as never,

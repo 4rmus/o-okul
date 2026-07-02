@@ -56,6 +56,12 @@ const importTemplates = [
     headers: ["ad", "soyad", "brans", "tc_kimlik_no", "telefon"],
     validateNationalIds: true,
   },
+  {
+    file: "veli-aktarim-sablonu.xlsx",
+    sheet: "Veliler",
+    headers: ["ad", "soyad", "telefon", "tc_kimlik_no", "email", "okul_no"],
+    validateNationalIds: true,
+  },
 ];
 const failures = [];
 const seen = new Map();

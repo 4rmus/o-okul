@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Checkbox, DataTable, InfoGrid, InfoItem, Panel, type DataTableColumn } from "@o-okul/ui";
-import type { GuardianStudentRecord, PaymentPlanWithInstallmentsRecord } from "@o-okul/shared-types";
+import type { GuardianStudentRecord, PaymentPlanWithInstallmentsRecord, PaymentTransactionRecord } from "@o-okul/shared-types";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
 
 export function NotificationPreferencesPanel({
@@ -118,6 +118,46 @@ export function PaymentPlansPanel({
       render: (plan) => formatNextInstallmentSummary(plan),
     },
   ];
+  const transactions = plans.flatMap((plan) =>
+    (plan.transactions ?? []).map((transaction) => ({
+      plan,
+      transaction,
+    })),
+  );
+  const transactionColumns: Array<DataTableColumn<{ plan: PaymentPlanWithInstallmentsRecord; transaction: PaymentTransactionRecord }>> = [
+    {
+      header: "Makbuz",
+      key: "receipt",
+      priority: "primary",
+      render: ({ transaction }) => transaction.receiptNo,
+      sticky: "left",
+    },
+    {
+      header: "Plan",
+      key: "plan",
+      priority: "secondary",
+      render: ({ plan }) => plan.title,
+    },
+    {
+      align: "right",
+      header: "Tutar",
+      key: "amount",
+      priority: "primary",
+      render: ({ transaction }) => formatMoney(transaction.amount, transaction.currency),
+    },
+    {
+      header: "Tarih",
+      key: "paidAt",
+      priority: "secondary",
+      render: ({ transaction }) => formatDateTime(transaction.paidAt),
+    },
+    {
+      header: "Durum",
+      key: "status",
+      priority: "secondary",
+      render: ({ transaction }) => transaction.voidedAt ? "İptal" : "Geçerli",
+    },
+  ];
 
   return (
     <Panel aria-label="Ödeme planları" title="Ödeme Planları">
@@ -128,6 +168,14 @@ export function PaymentPlansPanel({
         emptyText="Ödeme planı yok."
         getRowKey={(plan) => plan.id}
         rows={plans}
+      />
+      <DataTable
+        caption="Makbuzlar"
+        columns={transactionColumns}
+        description="Veli finans izni açık olan öğrencinin tahsilat makbuzları."
+        emptyText="Makbuz yok."
+        getRowKey={({ transaction }) => transaction.id}
+        rows={transactions}
       />
     </Panel>
   );
@@ -176,4 +224,8 @@ function paymentInstallmentStatusLabel(status: PaymentPlanWithInstallmentsRecord
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("tr-TR", { dateStyle: "short" }).format(new Date(value));
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("tr-TR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
 }

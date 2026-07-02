@@ -3,12 +3,13 @@ import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
 import type { SchoolService } from "../school/school.service.js";
 import type { StudentService } from "../student/student.service.js";
+import type { TeacherService } from "../teacher/teacher.service.js";
 import type { StudySessionStore } from "./study-session-store.js";
 import { StudySessionService, type StudySessionRecord } from "./study-session.service.js";
 
 describe("StudySessionService", () => {
   it("öğretmen etüt listesini kendi kayıtlarıyla sınırlar", async () => {
-    const service = new StudySessionService({} as SchoolService, {} as StudentService, createStudySessionStore());
+    const service = new StudySessionService({} as SchoolService, {} as TeacherService, {} as StudentService, createStudySessionStore());
 
     await expect(service.list(createTeacherContext("teacher-a"))).resolves.toEqual([
       expect.objectContaining({ id: "study-a", teacherId: "teacher-a" }),
@@ -16,13 +17,13 @@ describe("StudySessionService", () => {
   });
 
   it("öğretmen aynı tenant içindeki başka öğretmenin etüdünü okuyamaz", async () => {
-    const service = new StudySessionService({} as SchoolService, {} as StudentService, createStudySessionStore());
+    const service = new StudySessionService({} as SchoolService, {} as TeacherService, {} as StudentService, createStudySessionStore());
 
     await expect(service.findOne(createTeacherContext("teacher-a"), "study-other")).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("kurum yöneticisi tenant içindeki tüm etütleri okuyabilir", async () => {
-    const service = new StudySessionService({} as SchoolService, {} as StudentService, createStudySessionStore());
+    const service = new StudySessionService({} as SchoolService, {} as TeacherService, {} as StudentService, createStudySessionStore());
 
     await expect(service.list(createTenantAdminContext())).resolves.toEqual([
       expect.objectContaining({ id: "study-a" }),

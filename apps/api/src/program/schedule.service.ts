@@ -2,7 +2,9 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import type { ScheduleLessonRecord as SharedScheduleLessonRecord } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import { SchoolService } from "../school/school.service.js";
+import { TeacherService } from "../teacher/teacher.service.js";
 import { assertTenantResourceAccess, filterTenantResources, isTeacherSubjectContext } from "../tenant/tenant-access.js";
 import { type ScheduleStore, scheduleStoreToken } from "./schedule-store.js";
 
@@ -14,8 +16,10 @@ export interface ScheduleLessonRecord extends SharedScheduleLessonRecord {
 export class ScheduleService {
   constructor(
     private readonly school: SchoolService,
+    private readonly teachers: TeacherService,
     @Inject(scheduleStoreToken) private readonly store: ScheduleStore,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async list(context: RequestContext): Promise<ScheduleLessonRecord[]> {
@@ -43,7 +47,19 @@ export class ScheduleService {
     return lesson;
   }
 
-  async create(context: RequestContext, input: Partial<ScheduleLessonRecord>): Promise<ScheduleLessonRecord> {
+  async create(context: RequestContext, input: Partial<ScheduleLessonRecord>, idempotencyKey?: string): Promise<ScheduleLessonRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "schedule-lesson.create", request: input },
+        () => this.createOnce(context, input),
+      );
+    }
+
+    return this.createOnce(context, input);
+  }
+
+  private async createOnce(context: RequestContext, input: Partial<ScheduleLessonRecord>): Promise<ScheduleLessonRecord> {
     const tenantId = this.resolveTenantId(context, input.tenantId);
     await this.assertClassAndTeacher(context, input.classId, input.teacherId);
     await this.assertCourse(context, input.courseId);
@@ -148,7 +164,7 @@ export class ScheduleService {
     }
 
     await this.school.findClass(context, classId);
-    await this.school.findTeacher(context, teacherId);
+    await this.teachers.findTeacher(context, teacherId);
   }
 
   private async assertCourse(context: RequestContext, courseId: string | undefined) {

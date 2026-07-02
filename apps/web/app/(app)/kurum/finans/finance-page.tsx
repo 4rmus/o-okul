@@ -12,10 +12,13 @@ import type {
   PaymentInstallmentRecord,
   PaymentInstallmentStatus,
   PaymentPlanWithInstallmentsRecord,
+  PaymentTransactionCreateRequest,
+  PaymentTransactionMethod,
+  PaymentTransactionRecord,
   StudentRecord,
 } from "@o-okul/shared-types";
-import { CrudPage, EmptyState, Field, FilterBar, FormModal, Input, Select, StatusBadge, type DataTableColumn } from "@o-okul/ui";
-import { CheckCircle2, Pencil, RotateCcw, TriangleAlert } from "lucide-react";
+import { Button, CrudPage, DataTable, Dialog, EmptyState, Field, FilterBar, FormModal, Input, Select, StatusBadge, type DataTableColumn } from "@o-okul/ui";
+import { Banknote, CheckCircle2, Pencil, Receipt, RotateCcw, TriangleAlert } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, type ListMeta } from "../../../../src/api-client.js";
 import { buildListUrl, initialListQuery, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
@@ -50,6 +53,13 @@ interface InstallmentForm {
   amount: string;
   dueDate: string;
   status: PaymentInstallmentStatus;
+}
+
+interface TransactionForm {
+  amount: string;
+  method: PaymentTransactionMethod;
+  note: string;
+  paidAt: string;
 }
 
 interface QueryParamReader {
@@ -89,7 +99,15 @@ export function FinancePage() {
   });
   const [filters, setFilters] = useState<FinanceFilters>(() => readFinanceFilters(searchParams));
   const [editingRow, setEditingRow] = useState<InstallmentRow | null>(null);
+  const [collectingRow, setCollectingRow] = useState<InstallmentRow | null>(null);
+  const [receiptRow, setReceiptRow] = useState<InstallmentRow | null>(null);
   const [form, setForm] = useState<InstallmentForm>({ amount: "", dueDate: "", status: "PENDING" });
+  const [transactionForm, setTransactionForm] = useState<TransactionForm>({
+    amount: "",
+    method: "CASH",
+    note: "",
+    paidAt: defaultLocalDateTime(),
+  });
   const [error, setError] = useState("");
   const listQueryKey = ["next-finance-payment-plans", tenantId];
   const plansQuery = useQuery({
@@ -102,6 +120,12 @@ export function FinancePage() {
     queryKey: ["next-finance-refs", tenantId],
     queryFn: () => loadReferences(auth?.accessToken ?? ""),
     enabled: Boolean(auth),
+    refetchOnWindowFocus: false,
+  });
+  const transactionsQuery = useQuery({
+    queryKey: ["next-finance-payment-transactions", tenantId, receiptRow?.plan.id],
+    queryFn: () => loadPaymentTransactions(auth?.accessToken ?? "", receiptRow?.plan.id ?? ""),
+    enabled: Boolean(auth && receiptRow),
     refetchOnWindowFocus: false,
   });
 
@@ -193,6 +217,12 @@ export function FinancePage() {
       priority: "primary",
       render: (row) => (
         <span className="next-row-actions">
+          <button type="button" onClick={() => openTransactionForm(row)} aria-label={`${row.plan.title} ${row.installment.installmentNo}. taksit tahsilat kaydet`}>
+            <Banknote size={17} aria-hidden="true" />
+          </button>
+          <button type="button" onClick={() => setReceiptRow(row)} aria-label={`${row.plan.title} makbuzları görüntüle`}>
+            <Receipt size={17} aria-hidden="true" />
+          </button>
           <button type="button" onClick={() => openEditForm(row)} aria-label={`${row.plan.title} ${row.installment.installmentNo}. taksit düzenle`}>
             <Pencil size={17} aria-hidden="true" />
           </button>
@@ -230,6 +260,60 @@ export function FinancePage() {
   function closeForm() {
     setEditingRow(null);
     setForm({ amount: "", dueDate: "", status: "PENDING" });
+  }
+
+  function openTransactionForm(row: InstallmentRow) {
+    setCollectingRow(row);
+    setTransactionForm({
+      amount: formatAmountInput(row.installment.amount),
+      method: "CASH",
+      note: "",
+      paidAt: defaultLocalDateTime(),
+    });
+    setError("");
+  }
+
+  function closeTransactionForm() {
+    setCollectingRow(null);
+    setTransactionForm({ amount: "", method: "CASH", note: "", paidAt: defaultLocalDateTime() });
+  }
+
+  async function handleTransactionSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!auth || !collectingRow) return;
+
+    const amount = parseAmountInput(transactionForm.amount);
+    if (!amount) {
+      setError("Tahsilat tutarı pozitif olmalıdır.");
+      return;
+    }
+
+    const paidAt = toIsoDateTime(transactionForm.paidAt);
+    if (!paidAt) {
+      setError("Tahsilat tarihi geçersiz.");
+      return;
+    }
+
+    setError("");
+    try {
+      await createPaymentTransaction(
+        auth.accessToken,
+        collectingRow.plan.id,
+        {
+          amount,
+          installmentId: collectingRow.installment.id,
+          method: transactionForm.method,
+          note: transactionForm.note.trim() || undefined,
+          paidAt,
+        },
+      );
+      void queryClient.invalidateQueries({ queryKey: listQueryKey });
+      void queryClient.invalidateQueries({ queryKey: ["next-finance-payment-transactions", tenantId, collectingRow.plan.id] });
+      setReceiptRow(collectingRow);
+      closeTransactionForm();
+    } catch {
+      setError("Tahsilat kaydedilemedi.");
+    }
   }
 
   async function updateInstallmentStatus(row: InstallmentRow, status: PaymentInstallmentStatus) {
@@ -310,6 +394,22 @@ export function FinancePage() {
         onChange={setForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={Boolean(editingRow)}
+      />
+      <TransactionFormModal
+        form={transactionForm}
+        onCancel={closeTransactionForm}
+        onChange={setTransactionForm}
+        onSubmit={(event) => void handleTransactionSubmit(event)}
+        open={Boolean(collectingRow)}
+      />
+      <ReceiptDialog
+        installment={receiptRow?.installment}
+        loading={transactionsQuery.isPending}
+        onClose={() => setReceiptRow(null)}
+        open={Boolean(receiptRow)}
+        plan={receiptRow?.plan}
+        studentName={receiptRow ? (studentNameById.get(receiptRow.plan.studentId) ?? "Öğrenci kapsamı doğrulanmadı") : ""}
+        transactions={transactionsQuery.data ?? []}
       />
     </>
   );
@@ -430,6 +530,166 @@ function InstallmentFormModal({
   );
 }
 
+function TransactionFormModal({
+  form,
+  onCancel,
+  onChange,
+  onSubmit,
+  open,
+}: {
+  form: TransactionForm;
+  onCancel(): void;
+  onChange(form: TransactionForm): void;
+  onSubmit(event: FormEvent<HTMLFormElement>): void;
+  open: boolean;
+}) {
+  return (
+    <FormModal
+      description="Tahsilat tutarı, yöntemi ve tarihi ile işlem kaydı oluştur."
+      onCancel={onCancel}
+      onSubmit={onSubmit}
+      open={open}
+      submitLabel="Tahsilatı kaydet"
+      title="Tahsilat kaydet"
+    >
+      <Field label="Tutar">
+        <Input required inputMode="decimal" value={form.amount} onChange={(event) => onChange({ ...form, amount: event.target.value })} />
+      </Field>
+      <Field label="Yöntem">
+        <Select value={form.method} onChange={(event) => onChange({ ...form, method: event.target.value as PaymentTransactionMethod })}>
+          <option value="CASH">Nakit</option>
+          <option value="BANK_TRANSFER">Banka havalesi</option>
+          <option value="CARD_POS">Kart POS</option>
+          <option value="OTHER">Diğer</option>
+        </Select>
+      </Field>
+      <Field label="Tarih">
+        <Input required type="datetime-local" value={form.paidAt} onChange={(event) => onChange({ ...form, paidAt: event.target.value })} />
+      </Field>
+      <Field label="Not">
+        <Input value={form.note} onChange={(event) => onChange({ ...form, note: event.target.value })} />
+      </Field>
+    </FormModal>
+  );
+}
+
+function ReceiptDialog({
+  installment,
+  loading,
+  onClose,
+  open,
+  plan,
+  studentName,
+  transactions,
+}: {
+  installment?: PaymentInstallmentRecord;
+  loading: boolean;
+  onClose(): void;
+  open: boolean;
+  plan?: PaymentPlanWithInstallmentsRecord;
+  studentName: string;
+  transactions: PaymentTransactionRecord[];
+}) {
+  const relatedTransactions = installment
+    ? transactions.filter((transaction) => transaction.installmentId === installment.id)
+    : transactions;
+  const columns: Array<DataTableColumn<PaymentTransactionRecord>> = [
+    {
+      header: "Makbuz",
+      key: "receipt",
+      priority: "primary",
+      render: (transaction) => transaction.receiptNo,
+      sticky: "left",
+    },
+    {
+      align: "right",
+      header: "Tutar",
+      key: "amount",
+      priority: "primary",
+      render: (transaction) => formatMoney(transaction.amount, transaction.currency),
+    },
+    {
+      header: "Yöntem",
+      key: "method",
+      priority: "secondary",
+      render: (transaction) => transactionMethodLabel(transaction.method),
+    },
+    {
+      header: "Tarih",
+      key: "paidAt",
+      priority: "secondary",
+      render: (transaction) => formatDateTime(transaction.paidAt),
+    },
+    {
+      header: "Durum",
+      key: "status",
+      priority: "secondary",
+      render: (transaction) => (
+        <StatusBadge tone={transaction.voidedAt ? "neutral" : "success"}>
+          {transaction.voidedAt ? "İptal" : "Geçerli"}
+        </StatusBadge>
+      ),
+    },
+  ];
+
+  return (
+    <Dialog
+      description="Tahsilat işlemleri ve yazdırılabilir makbuz kayıtları."
+      footer={
+        <div className="uh-form-modal__footer">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Kapat
+          </Button>
+          <Button type="button" onClick={() => window.print()}>
+            Yazdır
+          </Button>
+        </div>
+      }
+      onClose={onClose}
+      open={open}
+      title="Makbuzlar"
+    >
+      {loading ? <p>Makbuzlar yükleniyor.</p> : null}
+      <DataTable
+        caption="Tahsilat makbuzları"
+        columns={columns}
+        description="Seçili ödeme planına ait tahsilat işlemleri."
+        emptyText="Makbuz yok."
+        getRowKey={(transaction) => transaction.id}
+        rows={relatedTransactions}
+      />
+      <div className="next-receipt-print-list" aria-label="Yazdırılabilir makbuzlar">
+        {relatedTransactions.map((transaction) => (
+          <article className="next-receipt-print-card" key={transaction.id}>
+            <h3>Makbuz {transaction.receiptNo}</h3>
+            <p>{studentName}</p>
+            <p>{plan?.title ?? "-"}</p>
+            <dl>
+              <div>
+                <dt>Tutar</dt>
+                <dd>{formatMoney(transaction.amount, transaction.currency)}</dd>
+              </div>
+              <div>
+                <dt>Yöntem</dt>
+                <dd>{transactionMethodLabel(transaction.method)}</dd>
+              </div>
+              <div>
+                <dt>Tarih</dt>
+                <dd>{formatDateTime(transaction.paidAt)}</dd>
+              </div>
+              <div>
+                <dt>Durum</dt>
+                <dd>{transaction.voidedAt ? `İptal: ${transaction.voidReason ?? "-"}` : "Geçerli"}</dd>
+              </div>
+            </dl>
+            {transaction.note ? <p>Not: {transaction.note}</p> : null}
+          </article>
+        ))}
+      </div>
+    </Dialog>
+  );
+}
+
 const paymentSortOptions = [
   { label: "Vade eski-yeni", value: "dueDate" },
   { label: "Vade yeni-eski", value: "-dueDate" },
@@ -480,6 +740,32 @@ async function updateInstallment(
       body: JSON.stringify(input),
       headers: { "content-type": "application/json" },
       method: "PATCH",
+    },
+  );
+}
+
+async function loadPaymentTransactions(accessToken: string, planId: string) {
+  return apiListRequest<PaymentTransactionRecord>(
+    accessToken,
+    `${apiBaseUrl}/payment-plans/${encodeURIComponent(planId)}/transactions`,
+  ).then((result) => result.data);
+}
+
+async function createPaymentTransaction(
+  accessToken: string,
+  planId: string,
+  input: PaymentTransactionCreateRequest,
+) {
+  return apiRequest<PaymentTransactionRecord>(
+    accessToken,
+    `${apiBaseUrl}/payment-plans/${encodeURIComponent(planId)}/transactions`,
+    {
+      body: JSON.stringify(input),
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": createClientIdempotencyKey("payment-transaction"),
+      },
+      method: "POST",
     },
   );
 }
@@ -689,4 +975,40 @@ function formatMoney(amount: number, currency: string) {
 
 function formatAmountInput(amount: number) {
   return new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(amount / 100);
+}
+
+function parseAmountInput(value: string) {
+  const normalized = value.includes(",") ? value.replace(/\./g, "").replace(",", ".") : value;
+  const amount = Number(normalized);
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  return Math.round(amount * 100);
+}
+
+function defaultLocalDateTime() {
+  const now = new Date();
+  const offsetMs = now.getTimezoneOffset() * 60_000;
+  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function toIsoDateTime(value: string) {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
+}
+
+function createClientIdempotencyKey(prefix: string) {
+  return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
+}
+
+function transactionMethodLabel(method: PaymentTransactionMethod) {
+  const labels: Record<PaymentTransactionMethod, string> = {
+    BANK_TRANSFER: "Banka havalesi",
+    CARD_POS: "Kart POS",
+    CASH: "Nakit",
+    OTHER: "Diğer",
+  };
+  return labels[method];
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("tr-TR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
 }

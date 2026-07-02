@@ -1,6 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type {
-  StudentClassHistoryRecord,
   StudentBulkEnrollmentRequest,
   StudentBulkEnrollmentResult as SharedStudentBulkEnrollmentResult,
   StudentCreateRequest,
@@ -15,6 +14,7 @@ import type {
   StudentStatus,
 } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
+import { optionalTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
 import {
   assertSubjectResourceAccess,
@@ -41,10 +41,6 @@ import {
   teacherAssignmentStoreToken,
 } from "../school/teacher-assignment-store.js";
 import { type StudentProfileUpdate, type StudentStore, studentStoreToken } from "./student-store.js";
-import {
-  type StudentClassHistoryStore,
-  studentClassHistoryStoreToken,
-} from "./student-class-history-store.js";
 import {
   type StudentEnrollmentStore,
   studentEnrollmentStoreToken,
@@ -93,7 +89,6 @@ export class StudentService {
     @Inject(guardianStudentStoreToken) private readonly guardianStudentStore: GuardianStudentStore,
     @Inject(guardianStoreToken) private readonly guardianStore: GuardianStore,
     @Inject(teacherAssignmentStoreToken) private readonly teacherAssignmentStore: TeacherAssignmentStore,
-    @Inject(studentClassHistoryStoreToken) private readonly classHistoryStore: StudentClassHistoryStore,
     @Inject(studentEnrollmentStoreToken) private readonly enrollmentStore: StudentEnrollmentStore,
     @Inject(academicCalendarStoreToken) private readonly academicCalendarStore: AcademicCalendarStore,
     @Inject(campusStoreToken) private readonly campusStore: CampusStore,
@@ -189,11 +184,6 @@ export class StudentService {
     }
 
     return this.findProfileForViewer(context, context.subjectId);
-  }
-
-  async listClassHistory(context: RequestContext, id: string): Promise<StudentClassHistoryRecord[]> {
-    await this.findOneForViewer(context, id);
-    return this.withClassNames(filterTenantResources(context, await this.classHistoryStore.listByStudent(id)));
   }
 
   async listEnrollments(context: RequestContext, id: string): Promise<StudentEnrollmentRecord[]> {
@@ -301,14 +291,6 @@ export class StudentService {
     });
     if (student.classId) {
       const academicContext = await this.resolveCurrentAcademicContext(context);
-      await this.classHistoryStore.create({
-        tenantId: student.tenantId,
-        studentId: student.id,
-        classId: student.classId,
-        ...academicContext,
-        startsAt: todayDateString(),
-        reason: "CREATED",
-      });
       await this.enrollmentStore.create({
         tenantId: student.tenantId,
         studentId: student.id,
@@ -383,14 +365,6 @@ export class StudentService {
     const academicContext = await this.resolveCurrentAcademicContext(context);
     for (const student of students) {
       if (!student.classId) continue;
-      await this.classHistoryStore.create({
-        tenantId: student.tenantId,
-        studentId: student.id,
-        classId: student.classId,
-        ...academicContext,
-        startsAt: todayDateString(),
-        reason: "CREATED",
-      });
       await this.enrollmentStore.create({
         tenantId: student.tenantId,
         studentId: student.id,
@@ -461,8 +435,7 @@ export class StudentService {
     if (!updated) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
-    await this.recordClassHistoryIfChanged(context, previous, updated, input);
-    await this.closeClassHistoryForTerminalStatus(previous, updated);
+    await this.recordEnrollmentIfClassChanged(context, previous, updated, input);
     await this.closeEnrollmentForTerminalStatus(previous, updated);
     await this.auditLogs?.record({
       tenantId: updated.tenantId,
@@ -510,17 +483,6 @@ export class StudentService {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
 
-    await this.classHistoryStore.closeActiveForStudent(updated.id, startsAt);
-    if (classId) {
-      await this.classHistoryStore.create({
-        tenantId: updated.tenantId,
-        studentId: updated.id,
-        classId,
-        ...academicContext,
-        startsAt,
-        reason: "RENEWED",
-      });
-    }
     await this.enrollmentStore.closeActiveForStudent(updated.id, startsAt);
     const enrollment = await this.enrollmentStore.create({
       tenantId: updated.tenantId,
@@ -653,7 +615,6 @@ export class StudentService {
       throw new NotFoundException("STUDENT_NOT_FOUND");
     }
 
-    await this.classHistoryStore.closeActiveForStudent(updated.id, startsAt);
     await this.enrollmentStore.closeActiveForStudent(updated.id, startsAt, classId ? undefined : "TRANSFERRED");
     if (!classId) {
       await this.auditLogs?.record({
@@ -667,14 +628,6 @@ export class StudentService {
       return null;
     }
 
-    await this.classHistoryStore.create({
-      tenantId: updated.tenantId,
-      studentId: updated.id,
-      classId,
-      ...academicContext,
-      startsAt,
-      reason: "TRANSFERRED",
-    });
     const enrollment = await this.enrollmentStore.create({
       tenantId: updated.tenantId,
       studentId: updated.id,
@@ -800,9 +753,17 @@ export class StudentService {
     input: StudentGuardianProvisionInput,
   ): Promise<void> {
     const guardianInput = parseGuardianProvisionInput(input, student);
-    const existingGuardian = await this.findGuardianByPhone(student.tenantId, guardianInput.phone);
-    const identity = await this.resolveGuardianIdentityInput(context, student.tenantId, guardianInput.nationalId, existingGuardian?.id);
-    let guardian = existingGuardian ? await this.updateGuardianIdentity(existingGuardian, identity) : undefined;
+    const identity = this.resolveGuardianIdentity(guardianInput.nationalId);
+    const nationalIdMatch = identity.nationalIdHash
+      ? await this.guardianStore.findByNationalIdHash(student.tenantId, identity.nationalIdHash)
+      : undefined;
+    const phoneMatch = await this.findGuardianByPhone(student.tenantId, guardianInput.phone);
+    if (nationalIdMatch && phoneMatch && nationalIdMatch.id !== phoneMatch.id) {
+      throw new ConflictException("GUARDIAN_IDENTITY_CONFLICT");
+    }
+
+    const existingGuardian = nationalIdMatch ?? phoneMatch;
+    let guardian = existingGuardian ? await this.updateMatchedGuardian(existingGuardian, guardianInput.phone, identity) : undefined;
     if (!guardian) {
       guardian = await this.guardianStore.create({
         tenantId: student.tenantId,
@@ -823,17 +784,7 @@ export class StudentService {
       canOpenSupportTickets: guardianInput.canOpenSupportTickets,
     });
 
-    const provisionedUserId = await this.autoProvisionGuardianAccount(context, guardian, guardianInput);
-    let invitationId: string | undefined;
-    if (guardianInput.email && !guardian.userId && !provisionedUserId) {
-      const invitation = await this.identityInvitations.create(context, {
-        subjectType: "GUARDIAN",
-        subjectId: guardian.id,
-        email: guardianInput.email,
-        name: `${guardian.firstName} ${guardian.lastName}`,
-      });
-      invitationId = invitation.invitation.id;
-    }
+    const { invitationId, provisionedUserId } = await this.provisionOrInviteGuardianAccount(context, guardian, guardianInput);
 
     await this.auditLogs?.record({
       tenantId: student.tenantId,
@@ -850,71 +801,85 @@ export class StudentService {
     });
   }
 
-  private async resolveGuardianIdentityInput(
-    context: RequestContext,
-    tenantId: string,
-    nationalIdInput: string | undefined,
-    currentGuardianId?: string,
-  ): Promise<Pick<GuardianRecord, "nationalIdEncrypted" | "nationalIdHash">> {
+  private resolveGuardianIdentity(nationalIdInput: string | undefined): Pick<GuardianRecord, "nationalIdEncrypted" | "nationalIdHash"> {
     const nationalIdText = optionalText(nationalIdInput);
     if (!nationalIdText) return {};
 
     const nationalId = normalizeTcIdentity(nationalIdText, "GUARDIAN_NATIONAL_ID_INVALID");
     const nationalIdHash = hashTcIdentity(nationalId);
-    const duplicate = await this.guardianStore.findByNationalIdHash(tenantId, nationalIdHash);
-    if (duplicate && duplicate.id !== currentGuardianId) {
-      throw new ConflictException("GUARDIAN_NATIONAL_ID_CONFLICT");
-    }
-    this.assertAccess(context, { tenantId });
     return {
       nationalIdEncrypted: encryptTcIdentity(nationalId),
       nationalIdHash,
     };
   }
 
-  private async updateGuardianIdentity(
+  private async updateMatchedGuardian(
     guardian: GuardianRecord,
+    phone: string | undefined,
     identity: Pick<GuardianRecord, "nationalIdEncrypted" | "nationalIdHash">,
   ): Promise<GuardianRecord | undefined> {
-    if (!identity.nationalIdEncrypted && !identity.nationalIdHash) return guardian;
-    return await this.guardianStore.update(guardian.id, identity) ?? guardian;
+    if (identity.nationalIdHash && guardian.nationalIdHash && guardian.nationalIdHash !== identity.nationalIdHash) {
+      throw new ConflictException("GUARDIAN_NATIONAL_ID_CONFLICT");
+    }
+
+    const update: Partial<Pick<GuardianRecord, "phone" | "nationalIdEncrypted" | "nationalIdHash">> = {};
+    if (phone && !guardian.phone) {
+      update.phone = phone;
+    }
+    if (identity.nationalIdHash && (!guardian.nationalIdHash || !guardian.nationalIdEncrypted)) {
+      update.nationalIdEncrypted = identity.nationalIdEncrypted;
+      update.nationalIdHash = identity.nationalIdHash;
+    }
+
+    if (Object.keys(update).length === 0) return guardian;
+    return await this.guardianStore.update(guardian.id, update) ?? guardian;
   }
 
-  private async autoProvisionGuardianAccount(
+  private async provisionOrInviteGuardianAccount(
     context: RequestContext,
     guardian: GuardianRecord,
     input: ReturnType<typeof parseGuardianProvisionInput>,
-  ): Promise<string | undefined> {
-    if (!this.identityProvisioning || guardian.userId || !input.nationalId || !guardian.phone) return undefined;
+  ): Promise<{ invitationId?: string; provisionedUserId?: string }> {
+    if (guardian.userId) return {};
 
-    const provisioned = await this.identityProvisioning.provisionTenantSubject({
-      tenantId: guardian.tenantId,
+    if (this.identityProvisioning) {
+      const provisioning = await this.identityProvisioning.provisionOrInvite(context, {
+        tenantId: guardian.tenantId,
+        subjectType: "GUARDIAN",
+        subjectId: guardian.id,
+        displayName: `${guardian.firstName} ${guardian.lastName}`.trim(),
+        nationalId: input.nationalId,
+        phone: guardian.phone,
+        email: input.email,
+      });
+      if (provisioning.status === "INVITED") return { invitationId: provisioning.invitationId };
+      if (provisioning.status !== "PROVISIONED" || !provisioning.userId) return {};
+
+      await this.guardianStore.bindUser(guardian.tenantId, guardian.id, provisioning.userId);
+      await this.auditLogs?.record({
+        tenantId: guardian.tenantId,
+        actorUserId: context.userId,
+        entityType: "Guardian",
+        entityId: guardian.id,
+        action: "guardian.account_auto_provisioned",
+        diff: { userId: provisioning.userId, mustChangePassword: true },
+      });
+      return { provisionedUserId: provisioning.userId };
+    }
+
+    if (!input.email) return {};
+    const invitation = await this.identityInvitations.create(context, {
       subjectType: "GUARDIAN",
       subjectId: guardian.id,
-      displayName: `${guardian.firstName} ${guardian.lastName}`.trim(),
-      nationalId: input.nationalId,
-      phone: guardian.phone,
       email: input.email,
+      name: `${guardian.firstName} ${guardian.lastName}`,
     });
-    if (!provisioned) return undefined;
-
-    await this.guardianStore.bindUser(guardian.tenantId, guardian.id, provisioned.userId);
-    await this.auditLogs?.record({
-      tenantId: guardian.tenantId,
-      actorUserId: context.userId,
-      entityType: "Guardian",
-      entityId: guardian.id,
-      action: "guardian.account_auto_provisioned",
-      diff: { userId: provisioned.userId, mustChangePassword: true },
-    });
-    return provisioned.userId;
+    return { invitationId: invitation.invitation.id };
   }
 
   private async findGuardianByPhone(tenantId: string, phone: string | undefined): Promise<GuardianRecord | undefined> {
     if (!phone) return undefined;
-    return (await this.guardianStore.list()).find(
-      (guardian) => guardian.tenantId === tenantId && guardian.phone === phone && !guardian.deletedAt,
-    );
+    return this.guardianStore.findByPhone(tenantId, phone);
   }
 
   private async resolveProfileUpdateForCreate(
@@ -1038,7 +1003,7 @@ export class StudentService {
       );
   }
 
-  private async recordClassHistoryIfChanged(
+  private async recordEnrollmentIfClassChanged(
     context: RequestContext,
     existing: StudentRecord,
     updated: StudentRecord,
@@ -1050,17 +1015,8 @@ export class StudentService {
 
     const changedAt = todayDateString();
     const academicContext = await this.resolveCurrentAcademicContext(context);
-    await this.classHistoryStore.closeActiveForStudent(updated.id, changedAt);
     await this.enrollmentStore.closeActiveForStudent(updated.id, changedAt);
     if (updated.classId) {
-      await this.classHistoryStore.create({
-        tenantId: updated.tenantId,
-        studentId: updated.id,
-        classId: updated.classId,
-        ...academicContext,
-        startsAt: changedAt,
-        reason: "CLASS_CHANGED",
-      });
       await this.enrollmentStore.create({
         tenantId: updated.tenantId,
         studentId: updated.id,
@@ -1071,14 +1027,6 @@ export class StudentService {
         reason: "CLASS_CHANGED",
       });
     }
-  }
-
-  private async closeClassHistoryForTerminalStatus(existing: StudentRecord, updated: StudentRecord): Promise<void> {
-    if (existing.status === updated.status || !terminalStudentStatuses.includes(updated.status)) {
-      return;
-    }
-
-    await this.classHistoryStore.closeActiveForStudent(updated.id, todayDateString());
   }
 
   private async closeEnrollmentForTerminalStatus(existing: StudentRecord, updated: StudentRecord): Promise<void> {
@@ -1335,7 +1283,7 @@ function todayDateString(): string {
 }
 
 function parseGuardianProvisionInput(input: StudentGuardianProvisionInput, student: Pick<StudentRecord, "lastName">) {
-  const phone = optionalGuardianText(input.phone);
+  const phone = optionalTurkishMobilePhone(input.phone, "GUARDIAN_PHONE_INVALID");
   const email = optionalGuardianEmail(input.email);
   if (!phone && !email) {
     throw new BadRequestException("GUARDIAN_CONTACT_REQUIRED");

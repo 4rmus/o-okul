@@ -1,12 +1,21 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
-import type { GuardianRecord, GuardianStudentDetailsResponse, GuardianStudentRecord } from "@o-okul/shared-types";
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import type {
+  GuardianImportDryRunResult,
+  GuardianImportRequest,
+  GuardianImportResult,
+  GuardianRecord,
+  GuardianStudentDetailsResponse,
+  GuardianStudentRecord,
+} from "@o-okul/shared-types";
+import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
-import { zodBody } from "../http/zod-validation.js";
+import { requiredTrimmedString, zodBody } from "../http/zod-validation.js";
 import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
-import { SchoolService } from "./school.service.js";
+import { GuardianService } from "./guardian.service.js";
+import { GuardianImportService } from "./guardian-import.service.js";
 import {
   guardianCreateBodySchema,
   guardianStudentLinkBodySchema,
@@ -16,53 +25,82 @@ import {
   type GuardianStudentLinkBody,
   type GuardianStudentRelationBody,
   type GuardianUpdateBody,
-} from "./school-validation.js";
+} from "../school/school-validation.js";
+
+const guardianImportBodySchema = z.object({
+  fileBase64: requiredTrimmedString,
+}).strict() satisfies z.ZodType<GuardianImportRequest>;
 
 @Controller("guardians")
 @UseGuards(RolesGuard)
 export class GuardiansController {
-  constructor(private readonly school: SchoolService) {}
+  constructor(
+    private readonly guardians: GuardianService,
+    private readonly imports: GuardianImportService,
+  ) {}
 
   @Get()
   @Roles("TEACHER")
   async list(@Query() query: ListQuery): Promise<GuardianRecord[]> {
-    return applyListQuery(await this.school.listGuardians(getRequestContext()), query, guardianListFields).map(toGuardianResponse);
+    return applyListQuery(await this.guardians.listGuardians(getRequestContext()), query, guardianListFields).map(toGuardianResponse);
   }
 
   @Get(":id")
   @Roles("TEACHER")
   async findOne(@Param("id") id: string): Promise<GuardianRecord> {
-    return toGuardianResponse(await this.school.findGuardian(getRequestContext(), id));
+    return toGuardianResponse(await this.guardians.findGuardian(getRequestContext(), id));
   }
 
   @Get(":id/students")
   @Roles("TEACHER")
   listStudents(@Param("id") id: string): Promise<GuardianStudentRecord[]> {
-    return this.school.listGuardianStudents(getRequestContext(), id);
+    return this.guardians.listGuardianStudents(getRequestContext(), id);
   }
 
   @Get(":id/student-details")
   @RequireCapability("student:manage")
   listStudentDetails(@Param("id") id: string): Promise<GuardianStudentDetailsResponse> {
-    return this.school.listGuardianStudentDetails(getRequestContext(), id);
+    return this.guardians.listGuardianStudentDetails(getRequestContext(), id);
   }
 
   @Post()
   @RequireCapability("student:manage")
-  async create(@Body(zodBody(guardianCreateBodySchema)) body: GuardianCreateBody): Promise<GuardianRecord> {
-    return toGuardianResponse(await this.school.createGuardian(getRequestContext(), body));
+  async create(
+    @Body(zodBody(guardianCreateBodySchema)) body: GuardianCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<GuardianRecord> {
+    return toGuardianResponse(await this.guardians.createGuardian(getRequestContext(), body, idempotencyKey));
+  }
+
+  @Post("imports/dry-run")
+  @RequireCapability("student:manage")
+  dryRunImport(@Body(zodBody(guardianImportBodySchema)) body: GuardianImportRequest): Promise<GuardianImportDryRunResult> {
+    return this.imports.dryRun(getRequestContext(), body);
+  }
+
+  @Post("imports")
+  @RequireCapability("student:manage")
+  async import(
+    @Body(zodBody(guardianImportBodySchema)) body: GuardianImportRequest,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<GuardianImportResult> {
+    const result = await this.imports.import(getRequestContext(), body, idempotencyKey);
+    return {
+      ...result,
+      guardians: result.guardians.map(toGuardianResponse),
+    };
   }
 
   @Patch(":id")
   @RequireCapability("student:manage")
   async update(@Param("id") id: string, @Body(zodBody(guardianUpdateBodySchema)) body: GuardianUpdateBody): Promise<GuardianRecord> {
-    return toGuardianResponse(await this.school.updateGuardian(getRequestContext(), id, body));
+    return toGuardianResponse(await this.guardians.updateGuardian(getRequestContext(), id, body));
   }
 
   @Post(":id/purge-pii")
   @RequireCapability("privacy:manage")
   async purgePii(@Param("id") id: string): Promise<GuardianRecord> {
-    return toGuardianResponse(await this.school.purgeGuardianPii(getRequestContext(), id));
+    return toGuardianResponse(await this.guardians.purgeGuardianPii(getRequestContext(), id));
   }
 
   @Post(":id/students")
@@ -70,8 +108,9 @@ export class GuardiansController {
   linkStudent(
     @Param("id") id: string,
     @Body(zodBody(guardianStudentLinkBodySchema)) body: GuardianStudentLinkBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<GuardianStudentRecord> {
-    return this.school.linkGuardianStudent(getRequestContext(), id, body.studentId, body);
+    return this.guardians.linkGuardianStudent(getRequestContext(), id, body.studentId, body, idempotencyKey);
   }
 
   @Patch(":id/students/:studentId")
@@ -81,21 +120,21 @@ export class GuardiansController {
     @Param("studentId") studentId: string,
     @Body(zodBody(guardianStudentRelationBodySchema)) body: GuardianStudentRelationBody,
   ): Promise<GuardianStudentRecord> {
-    return this.school.updateGuardianStudent(getRequestContext(), id, studentId, body);
+    return this.guardians.updateGuardianStudent(getRequestContext(), id, studentId, body);
   }
 
   @Delete(":id/students/:studentId")
   @HttpCode(204)
   @RequireCapability("student:manage")
   async unlinkStudent(@Param("id") id: string, @Param("studentId") studentId: string): Promise<void> {
-    await this.school.unlinkGuardianStudent(getRequestContext(), id, studentId);
+    await this.guardians.unlinkGuardianStudent(getRequestContext(), id, studentId);
   }
 
   @Delete(":id")
   @HttpCode(204)
   @RequireCapability("student:manage")
   async delete(@Param("id") id: string): Promise<void> {
-    await this.school.deleteGuardian(getRequestContext(), id);
+    await this.guardians.deleteGuardian(getRequestContext(), id);
   }
 }
 

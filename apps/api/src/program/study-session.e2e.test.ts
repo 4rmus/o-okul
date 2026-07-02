@@ -119,6 +119,51 @@ describe("Study Session API", () => {
     await request(server).get(`/study-sessions/${sessionId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(404);
   });
 
+  it("etüt oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const key = "study-session-create-idempotency-a";
+    let sessionId = "";
+
+    try {
+      const body = {
+        classId: "class-a",
+        teacherId: "teacher-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
+        studentIds: ["student-a"],
+        title: "Tekil Etut",
+        capacity: 2,
+        startsAt: "2026-06-02T15:00:00.000Z",
+        endsAt: "2026-06-02T16:00:00.000Z",
+      };
+      const first = await request(server)
+        .post("/study-sessions")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send(body)
+        .expect(201);
+      sessionId = first.body.id;
+
+      const second = await request(server)
+        .post("/study-sessions")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send(body)
+        .expect(201);
+      expect(second.body).toEqual(first.body);
+
+      await request(server)
+        .post("/study-sessions")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ ...body, title: "Farkli Etut" })
+        .expect(409);
+    } finally {
+      if (sessionId) {
+        await request(server).delete(`/study-sessions/${sessionId}`).set("Authorization", `Bearer ${tenantAAccessToken}`);
+      }
+    }
+  });
+
   it("öğretmen saat çakışmasını tenant içinde 409 ile engeller", async () => {
     await request(server)
       .post("/study-sessions")

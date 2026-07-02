@@ -443,15 +443,6 @@ async function seedStudents(client: pg.PoolClient, fixtures: DemoFixtures): Prom
 
     await client.query(
       `
-        INSERT INTO "StudentClassHistory" ("id","tenantId","studentId","classId","startsAt","reason","updatedAt")
-        VALUES ($1,$2,$3,$4,'2026-06-01'::date,'CREATED',now())
-        ON CONFLICT ("id") DO UPDATE SET "classId"=EXCLUDED."classId","endsAt"=NULL,"updatedAt"=now()
-      `,
-      [`student-class-history-${student.id}`, TENANT_ID, student.id, student.classId],
-    );
-
-    await client.query(
-      `
         INSERT INTO "StudentEnrollment" ("id","tenantId","studentId","classId","status","startsAt","reason","updatedAt")
         VALUES ($1,$2,$3,$4,'ACTIVE','2026-06-01'::date,'CREATED',now())
         ON CONFLICT ("id") DO UPDATE SET "classId"=EXCLUDED."classId","status"=EXCLUDED."status","endsAt"=NULL,"updatedAt"=now()

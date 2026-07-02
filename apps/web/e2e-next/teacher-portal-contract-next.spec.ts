@@ -31,9 +31,7 @@ const expectedTeacherScopedReadPaths = [
   "/me/teacher/teacher-notes",
   "/me/teacher/support-tickets",
   "/me/teacher/lookups",
-  "/me/teacher/students/student-a/class-history",
   "/me/teacher/students/student-a/enrollments",
-  "/me/teacher/students/student-b/class-history",
   "/me/teacher/students/student-b/enrollments",
   "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots",
   "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-a",
@@ -243,7 +241,7 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     ];
 
     for (const routeCase of routeCases) {
-      await clickSidebarRoute(page, "Öğretmen Paneli", routeCase.label);
+      await clickSidebarRoute(page, "Öğretmen Paneli", routeCase.label, routeCase.path);
       await expect(page).toHaveURL(new RegExp(`${routeCase.path}$`));
       await expect(page.getByRole("heading", { level: 1, name: "Öğretmen Portalı" })).toBeVisible();
       await expect(page.getByRole("region", { exact: true, name: "Portal görev bağlamı" })).toContainText(routeCase.context);
@@ -430,13 +428,15 @@ async function openTeacherPortal(
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 
-async function clickSidebarRoute(page: Page, groupName: string, linkName: string) {
+async function clickSidebarRoute(page: Page, groupName: string, linkName: string, expectedPath: string) {
   const navigation = page.getByRole("navigation", { name: "Ana menü" });
   const groupButton = navigation.getByRole("button", { exact: true, name: groupName });
   if ((await groupButton.getAttribute("aria-expanded")) !== "true") {
     await groupButton.click();
   }
-  await navigation.getByRole("link", { exact: true, name: linkName }).click();
+  const link = navigation.getByRole("link", { exact: true, name: linkName });
+  await expect(link).toHaveAttribute("href", expectedPath);
+  await Promise.all([page.waitForURL(new RegExp(`${expectedPath}$`), { timeout: 15_000 }), link.click()]);
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 
@@ -507,7 +507,6 @@ function teacherApiResponse(pathName: string, mode: "teacher" | "role-preview"):
   if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-b/error-booklet") return createErrorBooklet("student-b");
   if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/students/student-a/progress") return createProgress("student-a");
   if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/students/student-b/progress") return createProgress("student-b");
-  if (pathName === "/me/teacher/students/student-a/class-history" || pathName === "/me/teacher/students/student-b/class-history") return createClassHistory();
   if (pathName === "/me/teacher/students/student-a/enrollments" || pathName === "/me/teacher/students/student-b/enrollments") return createEnrollments();
   return [];
 }
@@ -727,10 +726,6 @@ function createProgress(studentId: string) {
     studentId,
     tenantId: "tenant-teacher",
   };
-}
-
-function createClassHistory() {
-  return [{ classId: "class-8a", className: "8-A", id: "history-a", startsAt: "2026-09-01T00:00:00.000Z", studentId: "student-a", tenantId: "tenant-teacher", termId: "term-2026" }];
 }
 
 function createEnrollments() {

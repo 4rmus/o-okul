@@ -3,6 +3,7 @@ import { AnnouncementModule } from "../announcement/announcement.module.js";
 import { AttendanceModule } from "../attendance/attendance.module.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { DevelopmentModule } from "../development/development.module.js";
+import { GuardianModule } from "../guardian/guardian.module.js";
 import { HomeworkModule } from "../homework/homework.module.js";
 import { NotificationDeviceModule } from "../notification-device/notification-device.module.js";
 import { PaymentModule } from "../payment/payment.module.js";
@@ -11,6 +12,7 @@ import { ReportModule } from "../report/report.module.js";
 import { SchoolModule } from "../school/school.module.js";
 import { StudentModule } from "../student/student.module.js";
 import { SupportTicketModule } from "../support-ticket/support-ticket.module.js";
+import { TeacherModule } from "../teacher/teacher.module.js";
 import { TeacherNoteModule } from "../teacher-note/teacher-note.module.js";
 import { TenantModule } from "../tenant/tenant.module.js";
 import { MeController } from "./me.controller.js";
@@ -21,6 +23,7 @@ import { MeController } from "./me.controller.js";
     AttendanceModule,
     AuthModule,
     DevelopmentModule,
+    GuardianModule,
     HomeworkModule,
     NotificationDeviceModule,
     PaymentModule,
@@ -29,6 +32,7 @@ import { MeController } from "./me.controller.js";
     SchoolModule,
     StudentModule,
     SupportTicketModule,
+    TeacherModule,
     TeacherNoteModule,
     TenantModule,
   ],

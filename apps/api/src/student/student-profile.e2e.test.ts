@@ -141,7 +141,7 @@ describe("Student profile + TC API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(200);
     const beforeHistory = await request(server)
-      .get("/me/student/class-history")
+      .get("/me/student/enrollments")
       .set("Authorization", `Bearer ${studentAAccessToken}`)
       .expect(200);
 
@@ -187,7 +187,7 @@ describe("Student profile + TC API", () => {
       });
 
     await request(server)
-      .get("/me/student/class-history")
+      .get("/me/student/enrollments")
       .set("Authorization", `Bearer ${studentAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
@@ -234,18 +234,6 @@ describe("Student profile + TC API", () => {
         expect(JSON.stringify(body)).not.toContain("userId");
       });
     await request(server)
-      .get("/me/student/class-history")
-      .set("Authorization", `Bearer ${studentAAccessToken}`)
-      .expect(200)
-      .expect(({ body }) => {
-        expect(body[0]).toMatchObject({
-          className: "8-A",
-          campusName: "Merkez Kampus",
-          gradeLevelName: "8. Sınıf",
-          section: "A",
-        });
-      });
-    await request(server)
       .get("/me/student/enrollments")
       .set("Authorization", `Bearer ${studentAAccessToken}`)
       .expect(200)
@@ -269,18 +257,6 @@ describe("Student profile + TC API", () => {
         expect(body.gradeLevelName).toBe("8. Sınıf");
         expect(body.section).toBe("A");
         expect(body.responsibleTeacherName).toBe("Ayse Ogretmen");
-      });
-    await request(server)
-      .get("/me/guardian/students/student-a/class-history")
-      .set("Authorization", `Bearer ${guardianAAccessToken}`)
-      .expect(200)
-      .expect(({ body }) => {
-        expect(body[0]).toMatchObject({
-          className: "8-A",
-          campusName: "Merkez Kampus",
-          gradeLevelName: "8. Sınıf",
-          section: "A",
-        });
       });
     await request(server)
       .get("/me/guardian/students/student-a/enrollments")

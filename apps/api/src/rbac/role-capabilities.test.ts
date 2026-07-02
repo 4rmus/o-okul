@@ -11,6 +11,7 @@ describe("role capabilities", () => {
     expect(hasCapability(context, "operation:manage")).toBe(true);
     expect(hasCapability(context, "privacy:manage")).toBe(true);
     expect(hasCapability(context, "role-preview:manage")).toBe(true);
+    expect(hasCapability(context, "setup:manage")).toBe(true);
     expect(hasCapability(context, "support:manage")).toBe(true);
     expect(hasCapability(context, "user:manage")).toBe(true);
   });
@@ -22,6 +23,7 @@ describe("role capabilities", () => {
     expect(hasCapability(context, "staff:manage")).toBe(true);
     expect(hasCapability(context, "student:manage")).toBe(true);
     expect(hasCapability(context, "support:manage")).toBe(true);
+    expect(hasCapability(context, "setup:manage")).toBe(true);
     expect(hasCapability(context, "audit:read")).toBe(false);
     expect(hasCapability(context, "finance:manage")).toBe(false);
     expect(hasCapability(context, "operation:manage")).toBe(false);

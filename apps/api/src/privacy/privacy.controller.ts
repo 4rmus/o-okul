@@ -6,16 +6,18 @@ import { getRequestContext } from "../context/request-context.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
-import { SchoolService } from "../school/school.service.js";
+import { GuardianService } from "../guardian/guardian.service.js";
 import { StudentService } from "../student/student.service.js";
+import { TeacherService } from "../teacher/teacher.service.js";
 
 @Controller("privacy")
 @UseGuards(RolesGuard)
 export class PrivacyController {
   constructor(
     private readonly auth: AuthService,
-    private readonly school: SchoolService,
+    private readonly guardians: GuardianService,
     private readonly students: StudentService,
+    private readonly teachers: TeacherService,
     @Inject(authUserStoreToken) private readonly users: AuthUserStore,
   ) {}
 
@@ -26,8 +28,8 @@ export class PrivacyController {
     const context = getRequestContext();
     const [students, teachers, guardians, users] = await Promise.all([
       this.students.list(context),
-      this.school.listTeachers(context),
-      this.school.listGuardians(context),
+      this.teachers.listTeachers(context),
+      this.guardians.listGuardians(context),
       this.users.listByTenant(context.tenantId ?? ""),
     ]);
 

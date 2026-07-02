@@ -97,6 +97,14 @@ export class PostgresRawImportQuarantineStore implements RawImportQuarantineStor
                  AND "Student"."id" = $5
                  AND "Student"."deletedAt" IS NULL
              )
+             AND EXISTS (
+               SELECT 1
+               FROM "StudentEnrollment" se
+               WHERE se."tenantId" = $1
+                 AND se."studentId" = $5
+                 AND se."status" = 'ACTIVE'
+                 AND se."endsAt" IS NULL
+             )
          )
          SELECT
            candidate.*,

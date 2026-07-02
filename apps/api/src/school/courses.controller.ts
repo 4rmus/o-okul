@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type { CourseRecord } from "@o-okul/shared-types";
 import { getRequestContext } from "../context/request-context.js";
 import { zodBody } from "../http/zod-validation.js";
@@ -33,8 +33,11 @@ export class CoursesController {
 
   @Post()
   @RequireCapability("academic:manage")
-  create(@Body(zodBody(courseCreateBodySchema)) body: CourseCreateBody): Promise<CourseRecord> {
-    return this.school.createCourse(getRequestContext(), body);
+  create(
+    @Body(zodBody(courseCreateBodySchema)) body: CourseCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<CourseRecord> {
+    return this.school.createCourse(getRequestContext(), body, idempotencyKey);
   }
 
   @Patch(":id")

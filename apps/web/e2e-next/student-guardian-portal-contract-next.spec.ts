@@ -311,7 +311,7 @@ async function expectStudentProfileAndHistoryPanels(page: Page) {
   await expect(history.getByRole("heading", { name: "Sınıf ve Kayıt Geçmişi" })).toBeVisible();
   const historyTable = history.getByRole("table", { name: "Sınıf ve kayıt geçmişi" });
   await expect(historyTable).toBeVisible();
-  await expect(historyTable.locator("thead th")).toHaveText(["Tür", "Sınıf", "Organizasyon", "Dönem", "Başlangıç", "Durum", "Neden"]);
+  await expect(historyTable.locator("thead th")).toHaveText(["Sınıf", "Organizasyon", "Dönem", "Başlangıç", "Durum", "Neden"]);
   await expect(history).toContainText("Sınıf bilgisi yok");
   await expect(history).toContainText("Dönem bilgisi yok");
 
@@ -513,7 +513,6 @@ function studentApiResponse(pathName: string, mode: "student" | "role-preview"):
   if (pathName === "/me/student/profile") return createStudentProfile("student-a");
   if (pathName === "/me/student/guardians") return createStudentGuardians();
   if (pathName === "/me/student/guardian-links") return createStudentGuardianLinks();
-  if (pathName === "/me/student/class-history") return createClassHistory("student-a");
   if (pathName === "/me/student/enrollments") return createEnrollments("student-a");
   if (pathName === "/me/student/announcements") return createAnnouncements();
   if (pathName === "/me/student/homework/material-assignments") return createHomeworkAssignments("student-a");
@@ -543,7 +542,6 @@ function guardianApiResponse(
       return createGuardianPreferences(studentId, options.financeVisibility !== "false", options.mode === "role-preview");
     }
     if (pathName === `/me/guardian/students/${studentId}/profile`) return createStudentProfile(studentId);
-    if (pathName === `/me/guardian/students/${studentId}/class-history`) return createClassHistory(studentId);
     if (pathName === `/me/guardian/students/${studentId}/enrollments`) return createEnrollments(studentId);
     if (pathName === `/me/guardian/students/${studentId}/announcements`) return createAnnouncements();
     if (pathName === `/me/guardian/students/${studentId}/support-tickets`) return createSupportTickets();
@@ -718,15 +716,11 @@ function createDevelopmentAssessments(studentId: string) {
   return [{ createdAt: "2026-06-10T09:00:00.000Z", id: `development-${studentId}`, mentorNote: "Çalışma disiplini güçleniyor.", periodLabel: "Haziran", scores: [], studentId, tenantId: "tenant-portal-contract" }];
 }
 
-function createClassHistory(studentId: string) {
-  return [
-    { classId: "class-8a", className: "8-A", id: `history-${studentId}`, startsAt: "2026-09-01T00:00:00.000Z", studentId, tenantId: "tenant-portal-contract", termId: "term-2026" },
-    { classId: "class-missing", id: `history-missing-${studentId}`, startsAt: "2026-01-01T00:00:00.000Z", studentId, tenantId: "tenant-portal-contract", termId: "term-missing" },
-  ];
-}
-
 function createEnrollments(studentId: string) {
-  return [{ classId: "class-8a", className: "8-A", id: `enrollment-${studentId}`, startsAt: "2026-09-01T00:00:00.000Z", status: "ACTIVE", studentId, tenantId: "tenant-portal-contract", termId: "term-2026" }];
+  return [
+    { classId: "class-8a", className: "8-A", id: `enrollment-${studentId}`, startsAt: "2026-09-01T00:00:00.000Z", status: "ACTIVE", studentId, tenantId: "tenant-portal-contract", termId: "term-2026" },
+    { classId: "class-missing", id: `enrollment-missing-${studentId}`, startsAt: "2026-01-01T00:00:00.000Z", status: "ACTIVE", studentId, tenantId: "tenant-portal-contract", termId: "term-missing" },
+  ];
 }
 
 function createStudentReport(studentId: "student-a" | "student-b") {

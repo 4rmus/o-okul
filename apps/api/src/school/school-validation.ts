@@ -34,6 +34,9 @@ import {
 } from "../http/zod-validation.js";
 
 const optionalNonEmptyString = requiredTrimmedString.optional();
+const optionalEmailString = optionalTrimmedString.refine((value) => value === undefined || value === "" || value.includes("@"), {
+  message: "EMAIL_INVALID",
+});
 const dateString = requiredDateString("DATE_INVALID");
 const optionalDateString = optionalCalendarDateString("DATE_INVALID");
 const teacherAssignmentRoleSchema = z.enum(["CLASS_TEACHER", "BRANCH_TEACHER", "GUIDANCE_COUNSELOR", "RESPONSIBLE_TEACHER"]);
@@ -154,6 +157,7 @@ export const academicTermUpdateBodySchema = z.object({
 
 export const teacherCreateBodySchema = z.object({
   branch: optionalTrimmedString,
+  email: optionalEmailString,
   firstName: requiredTrimmedString,
   lastName: requiredTrimmedString,
   nationalId: optionalTrimmedString,
@@ -163,6 +167,7 @@ export const teacherCreateBodySchema = z.object({
 
 export const teacherUpdateBodySchema = z.object({
   branch: optionalTrimmedString,
+  email: optionalEmailString,
   firstName: optionalNonEmptyString,
   lastName: optionalNonEmptyString,
   nationalId: optionalTrimmedString,
@@ -193,6 +198,7 @@ export const teacherImportBodySchema = z.object({
 }).strict() satisfies z.ZodType<TeacherImportRequest>;
 
 export const guardianCreateBodySchema = z.object({
+  email: optionalEmailString,
   firstName: requiredTrimmedString,
   lastName: requiredTrimmedString,
   nationalId: optionalTrimmedString,
@@ -201,6 +207,7 @@ export const guardianCreateBodySchema = z.object({
 }).strict() satisfies z.ZodType<GuardianCreateRequest>;
 
 export const guardianUpdateBodySchema = z.object({
+  email: optionalEmailString,
   firstName: optionalNonEmptyString,
   lastName: optionalNonEmptyString,
   nationalId: optionalTrimmedString,

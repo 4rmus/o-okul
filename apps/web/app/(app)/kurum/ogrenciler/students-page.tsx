@@ -17,7 +17,6 @@ import type {
   ReportSnapshotRecord,
   ReportStudentProgress,
   ReportStudentSnapshot,
-  StudentClassHistoryRecord,
   StudentEnrollmentRecord,
   StudentImportDryRunResult,
   StudentImportResult,
@@ -58,7 +57,6 @@ interface StudentDetail {
   paymentPlans: PaymentPlanWithInstallmentsRecord[];
   progress: ReportStudentProgress | null;
   report: ReportStudentSnapshot | null;
-  classHistory: StudentClassHistoryRecord[];
   enrollments: StudentEnrollmentRecord[];
   teacherNotes: TeacherNoteRecord[];
 }
@@ -1093,30 +1091,6 @@ function StudentDetailPanel({
   detail?: StudentDetail;
   loading: boolean;
 }) {
-  const classHistoryColumns: Array<DataTableColumn<StudentClassHistoryRecord>> = [
-    {
-      key: "class",
-      header: "Sınıf",
-      mobilePriority: "primary",
-      priority: "primary",
-      render: (record) => formatStudentClassLabel(record, classNameById),
-      sticky: true,
-    },
-    {
-      key: "context",
-      header: "Bağlam",
-      mobilePriority: "secondary",
-      priority: "secondary",
-      render: formatStudentAcademicContext,
-    },
-    {
-      key: "dates",
-      header: "Tarih",
-      mobilePriority: "secondary",
-      priority: "secondary",
-      render: formatStudentRecordDateRange,
-    },
-  ];
   const enrollmentColumns: Array<DataTableColumn<StudentEnrollmentRecord>> = [
     {
       key: "reason",
@@ -1188,16 +1162,6 @@ function StudentDetailPanel({
             <li>{detail.teacherNotes[0]?.body}</li>
           </ul>
         </div>
-      ) : null}
-      {detail && detail.classHistory.length > 0 ? (
-        <DataTable
-          caption="Sınıf geçmişi"
-          columns={classHistoryColumns}
-          density="compact"
-          description="Öğrencinin sınıf geçişleri ve akademik bağlamı"
-          getRowKey={(record) => record.id}
-          rows={detail.classHistory}
-        />
       ) : null}
       {detail && detail.enrollments.length > 0 ? (
         <DataTable
@@ -1389,7 +1353,6 @@ async function loadStudentDetail(accessToken: string, id: string, reportExamId: 
     paymentPlans,
     progress,
     report,
-    classHistory,
     enrollments,
     teacherNotes,
   ] = await Promise.all([
@@ -1401,7 +1364,6 @@ async function loadStudentDetail(accessToken: string, id: string, reportExamId: 
     apiRequest<PaymentPlanWithInstallmentsRecord[]>(accessToken, `${apiBaseUrl}/payment-plans?studentId=${encodeURIComponent(id)}`),
     apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/students/${encodeURIComponent(id)}/progress?scope=all`),
     loadLatestStudentReport(accessToken, id, reportExamId),
-    apiRequest<StudentClassHistoryRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/class-history`),
     apiRequest<StudentEnrollmentRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/enrollments`),
     apiRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/teacher-notes?studentId=${encodeURIComponent(id)}`),
   ]);
@@ -1414,7 +1376,6 @@ async function loadStudentDetail(accessToken: string, id: string, reportExamId: 
     profile,
     progress,
     report,
-    classHistory,
     enrollments,
     teacherNotes,
   };

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { InMemoryAuthUserStore, verifyPassword } from "../auth/auth-user-store.js";
+import type { RequestContext } from "../context/request-context.js";
 import { hashTcIdentity } from "../student/tc-identity.js";
 import { IdentityProvisioningService } from "./identity-provisioning.service.js";
 
@@ -28,4 +29,33 @@ describe("IdentityProvisioningService", () => {
     });
     expect(verifyPassword("5551234567", user?.passwordHash ?? "")).toBe(true);
   });
+
+  it("TC ve telefon yoksa e-posta davetine düşer", async () => {
+    const invitations = {
+      create: async (context: RequestContext, body: unknown) => ({
+        context,
+        invitation: { id: "invite-teacher-a" },
+        body,
+      }),
+    };
+    const service = new IdentityProvisioningService(new InMemoryAuthUserStore(), invitations as never);
+
+    const result = await service.provisionOrInvite(adminContext, {
+      tenantId: "tenant-a",
+      subjectType: "TEACHER",
+      subjectId: "teacher-invited",
+      displayName: "Davet Ogretmen",
+      email: "Teacher.Invite@example.test",
+    });
+
+    expect(result).toEqual({ status: "INVITED", invitationId: "invite-teacher-a" });
+  });
 });
+
+const adminContext: RequestContext = {
+  userId: "admin-a",
+  tenantId: "tenant-a",
+  roles: ["TENANT_ADMIN"],
+  capabilities: ["staff:manage"],
+  bypassRls: false,
+};

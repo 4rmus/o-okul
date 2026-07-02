@@ -33,7 +33,6 @@ const allowedStorageSnippets = {
   ],
   "apps/web/e2e-next/setup-wizard-contract-next.spec.ts": [
     'window.sessionStorage.getItem("uh_onboarding_tenant-setup_draft")',
-    "Object.keys(window.sessionStorage)",
     "window.sessionStorage.clear()",
   ],
   "apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts": [
