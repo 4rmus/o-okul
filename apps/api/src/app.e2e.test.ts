@@ -835,6 +835,25 @@ describe("API auth + tenant isolation", () => {
       });
   });
 
+  it("student Excel dry-run Numbers özet sayfasını atlayıp veri sayfasını okur", async () => {
+    const issued = await login("admin-a@example.test");
+    const fileBase64 = await createStudentWorkbookBase64([["Ece", "Import"]], undefined, [], true);
+
+    const response = await request(server)
+      .post("/students/imports/dry-run")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ fileBase64 })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      dryRun: true,
+      totalRows: 1,
+      validRows: [{ row: 2, firstName: "Ece", lastName: "Import" }],
+      errors: [],
+      wouldImport: true,
+    });
+  });
+
   it("student Excel dry-run geçerli satırları yazmadan raporlar", async () => {
     const issued = await login("admin-a@example.test");
     const fileBase64 = await createStudentWorkbookBase64([["Ece", "Import"]]);
@@ -1419,8 +1438,19 @@ function readCookieValue(cookie: string, name: string): string {
   return decodeURIComponent(value?.slice(name.length + 1) ?? "");
 }
 
-async function createStudentWorkbookBase64(rows: string[][], headers = ["firstName", "lastName"], leadingRows: string[][] = []): Promise<string> {
+async function createStudentWorkbookBase64(
+  rows: string[][],
+  headers = ["firstName", "lastName"],
+  leadingRows: string[][] = [],
+  withSummarySheet = false,
+): Promise<string> {
   const workbook = new ExcelJS.Workbook();
+  if (withSummarySheet) {
+    // Numbers xlsx dışa aktarımı ilk sayfa olarak özet sayfası ekler.
+    const summary = workbook.addWorksheet("Dışa Aktarma Özeti");
+    summary.addRow(["Bu belge Numbers'dan dışa aktarıldı."]);
+    summary.addRow(["Numbers Sayfası Adı", "Numbers Tablosu Adı", "Excel Çalışma Sayfası Adı"]);
+  }
   const worksheet = workbook.addWorksheet("Students");
   for (const row of leadingRows) {
     worksheet.addRow(row);

@@ -135,19 +135,13 @@ export class LearningOutcomeImportService {
       const workbook = new ExcelJS.Workbook();
       const file = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
       await workbook.xlsx.load(file as Parameters<ExcelJS.Workbook["xlsx"]["load"]>[0]);
-      const worksheet = workbook.worksheets[0];
-      if (!worksheet) {
+      if (workbook.worksheets.length === 0) {
         throw new BadRequestException("IMPORT_WORKSHEET_REQUIRED");
       }
 
-      const matrix: Array<{ rowNumber: number; cells: string[] }> = [];
-      worksheet.eachRow((row, rowNumber) => {
-        const cells: string[] = [];
-        for (let index = 1; index <= row.cellCount; index += 1) {
-          cells.push(cellText(row.getCell(index).value));
-        }
-        matrix.push({ rowNumber, cells });
-      });
+      // Numbers/Excel dışa aktarımları başa özet sayfası ekleyebilir; başlık satırı içeren ilk sayfayı al.
+      const matrices = workbook.worksheets.map(worksheetMatrix);
+      const matrix = matrices.find((candidate) => candidate.some((row) => isHeaderRow(row.cells))) ?? matrices[0] ?? [];
       return readMatrixRows(matrix);
     }
 
@@ -275,11 +269,25 @@ function parseDelimitedLine(line: string, delimiter: string): string[] {
   return cells;
 }
 
+function worksheetMatrix(worksheet: ExcelJS.Worksheet): Array<{ rowNumber: number; cells: string[] }> {
+  const matrix: Array<{ rowNumber: number; cells: string[] }> = [];
+  worksheet.eachRow((row, rowNumber) => {
+    const cells: string[] = [];
+    for (let index = 1; index <= row.cellCount; index += 1) {
+      cells.push(cellText(row.getCell(index).value));
+    }
+    matrix.push({ rowNumber, cells });
+  });
+  return matrix;
+}
+
+function isHeaderRow(cells: string[]): boolean {
+  return findHeaderIndex(cells, ["code", "kod", "kazanimKodu", "kazanımKodu"]) !== undefined &&
+    findHeaderIndex(cells, ["title", "baslik", "başlık", "kazanim", "kazanım", "kazanimAdi", "kazanımAdı"]) !== undefined;
+}
+
 function findHeaderRowIndex(matrix: Array<{ cells: string[] }>): number {
-  const index = matrix.findIndex((row) =>
-    findHeaderIndex(row.cells, ["code", "kod", "kazanimKodu", "kazanımKodu"]) !== undefined &&
-    findHeaderIndex(row.cells, ["title", "baslik", "başlık", "kazanim", "kazanım", "kazanimAdi", "kazanımAdı"]) !== undefined,
-  );
+  const index = matrix.findIndex((row) => isHeaderRow(row.cells));
   return index === -1 ? 0 : index;
 }
 

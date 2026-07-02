@@ -148,8 +148,14 @@ export class StudentImportService {
       throw new PayloadTooLargeException("IMPORT_FILE_TOO_LARGE");
     }
     if (isXlsx(bytes)) {
-      const worksheet = await this.readFirstWorksheet(bytes);
-      return this.readWorksheetRows(worksheet);
+      const workbook = await this.loadWorkbook(bytes);
+      if (workbook.worksheets.length === 0) {
+        throw new BadRequestException("IMPORT_WORKSHEET_REQUIRED");
+      }
+      // Numbers/Excel dışa aktarımları başa özet sayfası ekleyebilir; başlık satırı içeren ilk sayfayı al.
+      const matrices = workbook.worksheets.map((worksheet) => this.worksheetMatrix(worksheet));
+      const matrix = matrices.find((candidate) => candidate.some((row) => isHeaderRow(row.cells))) ?? matrices[0] ?? [];
+      return this.readMatrixRows(matrix);
     }
     if (isLegacyXls(bytes)) {
       throw new BadRequestException("IMPORT_FILE_UNSUPPORTED");
@@ -158,7 +164,7 @@ export class StudentImportService {
     return this.readDelimitedRows(bytes.toString("utf8"));
   }
 
-  private async readFirstWorksheet(bytes: Buffer): Promise<ExcelJS.Worksheet> {
+  private async loadWorkbook(bytes: Buffer): Promise<ExcelJS.Workbook> {
     const workbook = new ExcelJS.Workbook();
     const file = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
     try {
@@ -167,15 +173,10 @@ export class StudentImportService {
       throw new BadRequestException("IMPORT_FILE_INVALID");
     }
 
-    const worksheet = workbook.worksheets[0];
-    if (!worksheet) {
-      throw new BadRequestException("IMPORT_WORKSHEET_REQUIRED");
-    }
-
-    return worksheet;
+    return workbook;
   }
 
-  private readWorksheetRows(worksheet: ExcelJS.Worksheet): ParsedStudentImportRow[] {
+  private worksheetMatrix(worksheet: ExcelJS.Worksheet): Array<{ rowNumber: number; cells: string[] }> {
     const matrix: Array<{ rowNumber: number; cells: string[] }> = [];
 
     worksheet.eachRow((row, rowNumber) => {
@@ -186,7 +187,7 @@ export class StudentImportService {
       matrix.push({ rowNumber, cells });
     });
 
-    return this.readMatrixRows(matrix);
+    return matrix;
   }
 
   private readDelimitedRows(content: string): ParsedStudentImportRow[] {
@@ -446,11 +447,13 @@ function findHeaderIndex(header: string[], names: string[]): number | undefined 
   return index === -1 ? undefined : index;
 }
 
+function isHeaderRow(cells: string[]): boolean {
+  return findHeaderIndex(cells, ["firstName", "ad", "adi", "adı", "isim"]) !== undefined &&
+    findHeaderIndex(cells, ["lastName", "soyad", "soyadi", "soyadı"]) !== undefined;
+}
+
 function findHeaderRowIndex(matrix: Array<{ cells: string[] }>): number {
-  const index = matrix.findIndex((row) =>
-    findHeaderIndex(row.cells, ["firstName", "ad", "adi", "adı", "isim"]) !== undefined &&
-    findHeaderIndex(row.cells, ["lastName", "soyad", "soyadi", "soyadı"]) !== undefined,
-  );
+  const index = matrix.findIndex((row) => isHeaderRow(row.cells));
   return index === -1 ? 0 : index;
 }
 
