@@ -11,7 +11,6 @@ import { applyListQuery, type ListQuery } from "../listing/list-query.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
-import { SchoolService } from "./school.service.js";
 import {
   teacherAssignmentCreateBodySchema,
   teacherAssignmentUpdateBodySchema,
@@ -23,39 +22,43 @@ import {
   type TeacherCreateBody,
   type TeacherImportBody,
   type TeacherUpdateBody,
-} from "./school-validation.js";
+} from "../school/school-validation.js";
 import { TeacherImportService } from "./teacher-import.service.js";
+import { TeacherService } from "./teacher.service.js";
 
 @Controller("teachers")
 @UseGuards(RolesGuard)
 export class TeachersController {
   constructor(
-    private readonly school: SchoolService,
+    private readonly teachers: TeacherService,
     private readonly imports: TeacherImportService,
   ) {}
 
   @Get()
   @Roles("TEACHER")
   async list(@Query() query: ListQuery): Promise<TeacherRecord[]> {
-    return applyListQuery(await this.school.listTeachers(getRequestContext()), query, teacherListFields).map(toTeacherResponse);
+    return applyListQuery(await this.teachers.listTeachers(getRequestContext()), query, teacherListFields).map(toTeacherResponse);
   }
 
   @Get(":id")
   @Roles("TEACHER")
   async findOne(@Param("id") id: string): Promise<TeacherRecord> {
-    return toTeacherResponse(await this.school.findTeacher(getRequestContext(), id));
+    return toTeacherResponse(await this.teachers.findTeacher(getRequestContext(), id));
   }
 
   @Get(":id/assignments")
   @Roles("TEACHER")
   assignments(@Param("id") id: string): Promise<TeacherAssignmentRecord[]> {
-    return this.school.listTeacherAssignments(getRequestContext(), id);
+    return this.teachers.listTeacherAssignments(getRequestContext(), id);
   }
 
   @Post()
   @RequireCapability("staff:manage")
-  async create(@Body(zodBody(teacherCreateBodySchema)) body: TeacherCreateBody): Promise<TeacherRecord> {
-    return toTeacherResponse(await this.school.createTeacher(getRequestContext(), body));
+  async create(
+    @Body(zodBody(teacherCreateBodySchema)) body: TeacherCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ): Promise<TeacherRecord> {
+    return toTeacherResponse(await this.teachers.createTeacher(getRequestContext(), body, idempotencyKey));
   }
 
   @Post("imports/dry-run")
@@ -82,14 +85,15 @@ export class TeachersController {
   createAssignment(
     @Param("id") id: string,
     @Body(zodBody(teacherAssignmentCreateBodySchema)) body: TeacherAssignmentCreateBody,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ): Promise<TeacherAssignmentRecord> {
-    return this.school.createTeacherAssignment(getRequestContext(), id, body);
+    return this.teachers.createTeacherAssignment(getRequestContext(), id, body, idempotencyKey);
   }
 
   @Patch(":id")
   @RequireCapability("staff:manage")
   async update(@Param("id") id: string, @Body(zodBody(teacherUpdateBodySchema)) body: TeacherUpdateBody): Promise<TeacherRecord> {
-    return toTeacherResponse(await this.school.updateTeacher(getRequestContext(), id, body));
+    return toTeacherResponse(await this.teachers.updateTeacher(getRequestContext(), id, body));
   }
 
   @Patch(":id/assignments/:assignmentId")
@@ -99,27 +103,27 @@ export class TeachersController {
     @Param("assignmentId") assignmentId: string,
     @Body(zodBody(teacherAssignmentUpdateBodySchema)) body: TeacherAssignmentUpdateBody,
   ): Promise<TeacherAssignmentRecord> {
-    return this.school.updateTeacherAssignment(getRequestContext(), id, assignmentId, body);
+    return this.teachers.updateTeacherAssignment(getRequestContext(), id, assignmentId, body);
   }
 
   @Post(":id/purge-pii")
   @RequireCapability("privacy:manage")
   async purgePii(@Param("id") id: string): Promise<TeacherRecord> {
-    return toTeacherResponse(await this.school.purgeTeacherPii(getRequestContext(), id));
+    return toTeacherResponse(await this.teachers.purgeTeacherPii(getRequestContext(), id));
   }
 
   @Delete(":id")
   @HttpCode(204)
   @RequireCapability("staff:manage")
   async delete(@Param("id") id: string): Promise<void> {
-    await this.school.deleteTeacher(getRequestContext(), id);
+    await this.teachers.deleteTeacher(getRequestContext(), id);
   }
 
   @Delete(":id/assignments/:assignmentId")
   @HttpCode(204)
   @RequireCapability("staff:manage")
   async deleteAssignment(@Param("id") id: string, @Param("assignmentId") assignmentId: string): Promise<void> {
-    await this.school.deleteTeacherAssignment(getRequestContext(), id, assignmentId);
+    await this.teachers.deleteTeacherAssignment(getRequestContext(), id, assignmentId);
   }
 }
 

@@ -2,12 +2,13 @@ import { ForbiddenException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
 import type { SchoolService } from "../school/school.service.js";
+import type { TeacherService } from "../teacher/teacher.service.js";
 import type { ScheduleStore } from "./schedule-store.js";
 import { ScheduleService, type ScheduleLessonRecord } from "./schedule.service.js";
 
 describe("ScheduleService", () => {
   it("öğretmen ders programı listesini kendi kayıtlarıyla sınırlar", async () => {
-    const service = new ScheduleService({} as SchoolService, createScheduleStore());
+    const service = new ScheduleService({} as SchoolService, {} as TeacherService, createScheduleStore());
 
     await expect(service.list(createTeacherContext("teacher-a"))).resolves.toEqual([
       expect.objectContaining({ id: "lesson-a", teacherId: "teacher-a" }),
@@ -15,13 +16,13 @@ describe("ScheduleService", () => {
   });
 
   it("öğretmen aynı tenant içindeki başka öğretmenin dersini okuyamaz", async () => {
-    const service = new ScheduleService({} as SchoolService, createScheduleStore());
+    const service = new ScheduleService({} as SchoolService, {} as TeacherService, createScheduleStore());
 
     await expect(service.findOne(createTeacherContext("teacher-a"), "lesson-other")).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("kurum yöneticisi tenant içindeki tüm dersleri okuyabilir", async () => {
-    const service = new ScheduleService({} as SchoolService, createScheduleStore());
+    const service = new ScheduleService({} as SchoolService, {} as TeacherService, createScheduleStore());
 
     await expect(service.list(createTenantAdminContext())).resolves.toEqual([
       expect.objectContaining({ id: "lesson-a" }),

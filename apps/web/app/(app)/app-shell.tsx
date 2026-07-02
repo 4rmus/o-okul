@@ -929,7 +929,7 @@ function buildCommandItems(
   ];
   const actionItems = hasInstitutionAccess(roles)
     ? [
-        hasCapabilityForRoles(roles, "operation:manage") ? commandItem("/kurum/kurulum", "Yeni dönem açılışı", "İş akışı") : null,
+        hasCapabilityForRoles(roles, "setup:manage") ? commandItem("/kurum/kurulum", "Yeni dönem açılışı", "İş akışı") : null,
         hasCapabilityForRoles(roles, "academic:manage") ? commandItem("/kurum/raporlar", "Sınav sonrası kapanış", "İş akışı") : null,
         hasCapabilityForRoles(roles, "class:manage") ? commandItem("/kurum/kampusler?new=1", "Kampüs ekle", "Hızlı işlem") : null,
         hasCapabilityForRoles(roles, "class:manage") ? commandItem("/kurum/seviyeler?new=1", "Seviye ekle", "Hızlı işlem") : null,

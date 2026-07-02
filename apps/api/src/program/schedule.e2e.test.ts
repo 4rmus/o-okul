@@ -118,6 +118,49 @@ describe("Schedule API", () => {
       .expect(404);
   });
 
+  it("ders programı oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const key = "schedule-lesson-create-idempotency-a";
+    let lessonId = "";
+
+    try {
+      const body = {
+        classId: "class-a",
+        teacherId: "teacher-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
+        title: "Tekil Ders",
+        startsAt: "2026-06-01T11:00:00.000Z",
+        endsAt: "2026-06-01T12:00:00.000Z",
+      };
+      const first = await request(server)
+        .post("/schedule-lessons")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send(body)
+        .expect(201);
+      lessonId = first.body.id;
+
+      const second = await request(server)
+        .post("/schedule-lessons")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send(body)
+        .expect(201);
+      expect(second.body).toEqual(first.body);
+
+      await request(server)
+        .post("/schedule-lessons")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ ...body, title: "Farkli Ders" })
+        .expect(409);
+    } finally {
+      if (lessonId) {
+        await request(server).delete(`/schedule-lessons/${lessonId}`).set("Authorization", `Bearer ${tenantAAccessToken}`);
+      }
+    }
+  });
+
   it("öğretmen saat çakışmasını tenant içinde 409 ile engeller", async () => {
     await request(server)
       .post("/schedule-lessons")

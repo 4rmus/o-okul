@@ -103,6 +103,9 @@ describe("PostgresRawImportQuarantineStore", () => {
     expect(businessQueries[0]?.sql).toContain('FROM "Student"');
     expect(businessQueries[0]?.sql).toContain('"Student"."tenantId" = $1');
     expect(businessQueries[0]?.sql).toContain('"Student"."id" = $5');
+    expect(businessQueries[0]?.sql).toContain('FROM "StudentEnrollment" se');
+    expect(businessQueries[0]?.sql).toContain('se."status" = \'ACTIVE\'');
+    expect(businessQueries[0]?.sql).toContain('se."endsAt" IS NULL');
     expect(businessQueries[0]?.sql).toContain('INNER JOIN "ExamParticipant" ep');
     expect(businessQueries[0]?.sql).toContain('INNER JOIN "RawImport" ri');
     expect(businessQueries[0]?.sql).toContain('FROM "AnswerKey"');

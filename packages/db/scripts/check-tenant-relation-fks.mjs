@@ -28,6 +28,8 @@ const requiredCompositeRelations = new Set([
   "Homework.sourceMaterial",
   "SupportTicket.class",
   "PaymentPlan.class",
+  "PaymentTransaction.installment",
+  "PaymentTransaction.plan",
   "ReportSnapshot.class",
   "StudentEnrollment.class",
   "Student.class",

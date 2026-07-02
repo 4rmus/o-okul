@@ -1,4 +1,8 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import type {
+  RawImportQuarantineResolveBulkItem,
+  RawImportQuarantineResolveBulkResponse,
+} from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import {
@@ -33,6 +37,12 @@ export interface ResolveImportQuarantineInput {
   rawImportId?: string;
   quarantineId?: string;
   resolvedStudentId?: string;
+}
+
+export interface ResolveImportQuarantineBulkInput {
+  examId?: string;
+  rawImportId?: string;
+  items?: RawImportQuarantineResolveBulkItem[];
 }
 
 @Injectable()
@@ -77,6 +87,53 @@ export class RawImportQuarantineService {
     }
 
     return this.resolveOnce(context, input);
+  }
+
+  async resolveBulk(
+    context: RequestContext,
+    input: ResolveImportQuarantineBulkInput,
+    idempotencyKey?: string,
+  ): Promise<RawImportQuarantineResolveBulkResponse> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "raw-import.quarantine.resolve-bulk", request: input },
+        () => this.resolveBulkOnce(context, input),
+      );
+    }
+
+    return this.resolveBulkOnce(context, input);
+  }
+
+  private async resolveBulkOnce(
+    context: RequestContext,
+    input: ResolveImportQuarantineBulkInput,
+  ): Promise<RawImportQuarantineResolveBulkResponse> {
+    const items = input.items;
+    if (!items || items.length === 0) {
+      throw new BadRequestException("IMPORT_QUARANTINE_BULK_ITEMS_REQUIRED");
+    }
+
+    const results: RawImportQuarantineResolveBulkResponse["results"] = [];
+    for (const item of items) {
+      try {
+        const quarantine = await this.resolveOnce(context, {
+          examId: input.examId,
+          rawImportId: input.rawImportId,
+          quarantineId: item.quarantineId,
+          resolvedStudentId: item.resolvedStudentId,
+        });
+        results.push({ quarantineId: item.quarantineId, status: "RESOLVED", quarantine });
+      } catch (error) {
+        results.push({
+          quarantineId: item.quarantineId,
+          status: "FAILED",
+          errorCode: readExceptionCode(error),
+        });
+      }
+    }
+
+    return { results };
   }
 
   private async resolveOnce(
@@ -151,4 +208,17 @@ function required(value: string | undefined, errorCode: string): string {
     throw new BadRequestException(errorCode);
   }
   return trimmed;
+}
+
+function readExceptionCode(error: unknown): string {
+  const response = typeof (error as { getResponse?: () => unknown })?.getResponse === "function"
+    ? (error as { getResponse: () => unknown }).getResponse()
+    : undefined;
+  if (typeof response === "string") return response;
+  if (response && typeof response === "object") {
+    const message = (response as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+    if (Array.isArray(message) && typeof message[0] === "string") return message[0];
+  }
+  return error instanceof Error ? error.message : "IMPORT_QUARANTINE_RESOLVE_FAILED";
 }

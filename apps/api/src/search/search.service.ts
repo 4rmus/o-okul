@@ -2,8 +2,10 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import type { ClassRecord, GlobalSearchResultRecord, GlobalSearchType, GuardianRecord, PublicStudentRecord, TeacherRecord } from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
 import { hasCapability } from "../rbac/role-capabilities.js";
+import { GuardianService } from "../guardian/guardian.service.js";
 import { SchoolService } from "../school/school.service.js";
 import { StudentService } from "../student/student.service.js";
+import { TeacherService } from "../teacher/teacher.service.js";
 
 interface SearchQuery {
   limit?: string;
@@ -21,6 +23,8 @@ export class SearchService {
   constructor(
     private readonly students: StudentService,
     private readonly school: SchoolService,
+    private readonly teachers: TeacherService,
+    private readonly guardians: GuardianService,
   ) {}
 
   async search(context: RequestContext, query: SearchQuery): Promise<GlobalSearchResultRecord[]> {
@@ -38,10 +42,10 @@ export class SearchService {
       results.push(...await this.searchStudents(context, query.q, searchText, canSearchPii));
     }
     if (selectedTypes.includes("teachers")) {
-      results.push(...this.searchTeachers(context, await this.school.listTeachers(context), searchText));
+      results.push(...this.searchTeachers(context, await this.teachers.listTeachers(context), searchText));
     }
     if (selectedTypes.includes("guardians")) {
-      results.push(...this.searchGuardians(context, await this.school.listGuardians(context), searchText, query.q, canSearchPii));
+      results.push(...this.searchGuardians(context, await this.guardians.listGuardians(context), searchText, query.q, canSearchPii));
     }
     if (selectedTypes.includes("classes")) {
       results.push(...this.searchClasses(context, await this.school.listClasses(context), searchText));

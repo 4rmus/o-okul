@@ -53,6 +53,8 @@ const ids = {
   paymentPlanB: "00000000-0000-4000-8000-0000000000e8",
   paymentInstallmentA: "00000000-0000-4000-8000-0000000000e9",
   paymentInstallmentB: "00000000-0000-4000-8000-0000000000e0",
+  paymentTransactionA: "00000000-0000-4000-8000-00000000002ea1",
+  paymentTransactionB: "00000000-0000-4000-8000-00000000002eb1",
   teacherA: "00000000-0000-4000-8000-0000000000a4",
   teacherB: "00000000-0000-4000-8000-0000000000b4",
   teacherAssignmentA: "00000000-0000-4000-8000-000000000019a1",
@@ -359,6 +361,26 @@ async function seedFixtures() {
         ids.paymentInstallmentB,
         ids.tenantB,
         ids.paymentPlanB,
+      ],
+    );
+
+    await adminClient.query(
+      `INSERT INTO "PaymentTransaction" ("id", "tenantId", "planId", "installmentId", "amount", "currency", "method", "paidAt", "receiptNo", "recordedByUserId", "updatedAt")
+       VALUES
+         ($1, $2, $3, $4, 50000, 'TRY', 'CASH', '2026-07-01T09:00:00.000Z', 'RLS-A-000001', $5, now()),
+         ($6, $7, $8, $9, 50000, 'TRY', 'CASH', '2026-07-01T09:00:00.000Z', 'RLS-B-000001', $10, now())
+       ON CONFLICT ("tenantId", "receiptNo") DO NOTHING`,
+      [
+        ids.paymentTransactionA,
+        ids.tenantA,
+        ids.paymentPlanA,
+        ids.paymentInstallmentA,
+        ids.userA,
+        ids.paymentTransactionB,
+        ids.tenantB,
+        ids.paymentPlanB,
+        ids.paymentInstallmentB,
+        ids.userB,
       ],
     );
 

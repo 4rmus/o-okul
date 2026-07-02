@@ -14,6 +14,7 @@ import type {
   StudentStatus,
 } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
+import { optionalTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
 import {
   assertSubjectResourceAccess,
@@ -752,9 +753,17 @@ export class StudentService {
     input: StudentGuardianProvisionInput,
   ): Promise<void> {
     const guardianInput = parseGuardianProvisionInput(input, student);
-    const existingGuardian = await this.findGuardianByPhone(student.tenantId, guardianInput.phone);
-    const identity = await this.resolveGuardianIdentityInput(context, student.tenantId, guardianInput.nationalId, existingGuardian?.id);
-    let guardian = existingGuardian ? await this.updateGuardianIdentity(existingGuardian, identity) : undefined;
+    const identity = this.resolveGuardianIdentity(guardianInput.nationalId);
+    const nationalIdMatch = identity.nationalIdHash
+      ? await this.guardianStore.findByNationalIdHash(student.tenantId, identity.nationalIdHash)
+      : undefined;
+    const phoneMatch = await this.findGuardianByPhone(student.tenantId, guardianInput.phone);
+    if (nationalIdMatch && phoneMatch && nationalIdMatch.id !== phoneMatch.id) {
+      throw new ConflictException("GUARDIAN_IDENTITY_CONFLICT");
+    }
+
+    const existingGuardian = nationalIdMatch ?? phoneMatch;
+    let guardian = existingGuardian ? await this.updateMatchedGuardian(existingGuardian, guardianInput.phone, identity) : undefined;
     if (!guardian) {
       guardian = await this.guardianStore.create({
         tenantId: student.tenantId,
@@ -775,17 +784,7 @@ export class StudentService {
       canOpenSupportTickets: guardianInput.canOpenSupportTickets,
     });
 
-    const provisionedUserId = await this.autoProvisionGuardianAccount(context, guardian, guardianInput);
-    let invitationId: string | undefined;
-    if (guardianInput.email && !guardian.userId && !provisionedUserId) {
-      const invitation = await this.identityInvitations.create(context, {
-        subjectType: "GUARDIAN",
-        subjectId: guardian.id,
-        email: guardianInput.email,
-        name: `${guardian.firstName} ${guardian.lastName}`,
-      });
-      invitationId = invitation.invitation.id;
-    }
+    const { invitationId, provisionedUserId } = await this.provisionOrInviteGuardianAccount(context, guardian, guardianInput);
 
     await this.auditLogs?.record({
       tenantId: student.tenantId,
@@ -802,71 +801,85 @@ export class StudentService {
     });
   }
 
-  private async resolveGuardianIdentityInput(
-    context: RequestContext,
-    tenantId: string,
-    nationalIdInput: string | undefined,
-    currentGuardianId?: string,
-  ): Promise<Pick<GuardianRecord, "nationalIdEncrypted" | "nationalIdHash">> {
+  private resolveGuardianIdentity(nationalIdInput: string | undefined): Pick<GuardianRecord, "nationalIdEncrypted" | "nationalIdHash"> {
     const nationalIdText = optionalText(nationalIdInput);
     if (!nationalIdText) return {};
 
     const nationalId = normalizeTcIdentity(nationalIdText, "GUARDIAN_NATIONAL_ID_INVALID");
     const nationalIdHash = hashTcIdentity(nationalId);
-    const duplicate = await this.guardianStore.findByNationalIdHash(tenantId, nationalIdHash);
-    if (duplicate && duplicate.id !== currentGuardianId) {
-      throw new ConflictException("GUARDIAN_NATIONAL_ID_CONFLICT");
-    }
-    this.assertAccess(context, { tenantId });
     return {
       nationalIdEncrypted: encryptTcIdentity(nationalId),
       nationalIdHash,
     };
   }
 
-  private async updateGuardianIdentity(
+  private async updateMatchedGuardian(
     guardian: GuardianRecord,
+    phone: string | undefined,
     identity: Pick<GuardianRecord, "nationalIdEncrypted" | "nationalIdHash">,
   ): Promise<GuardianRecord | undefined> {
-    if (!identity.nationalIdEncrypted && !identity.nationalIdHash) return guardian;
-    return await this.guardianStore.update(guardian.id, identity) ?? guardian;
+    if (identity.nationalIdHash && guardian.nationalIdHash && guardian.nationalIdHash !== identity.nationalIdHash) {
+      throw new ConflictException("GUARDIAN_NATIONAL_ID_CONFLICT");
+    }
+
+    const update: Partial<Pick<GuardianRecord, "phone" | "nationalIdEncrypted" | "nationalIdHash">> = {};
+    if (phone && !guardian.phone) {
+      update.phone = phone;
+    }
+    if (identity.nationalIdHash && (!guardian.nationalIdHash || !guardian.nationalIdEncrypted)) {
+      update.nationalIdEncrypted = identity.nationalIdEncrypted;
+      update.nationalIdHash = identity.nationalIdHash;
+    }
+
+    if (Object.keys(update).length === 0) return guardian;
+    return await this.guardianStore.update(guardian.id, update) ?? guardian;
   }
 
-  private async autoProvisionGuardianAccount(
+  private async provisionOrInviteGuardianAccount(
     context: RequestContext,
     guardian: GuardianRecord,
     input: ReturnType<typeof parseGuardianProvisionInput>,
-  ): Promise<string | undefined> {
-    if (!this.identityProvisioning || guardian.userId || !input.nationalId || !guardian.phone) return undefined;
+  ): Promise<{ invitationId?: string; provisionedUserId?: string }> {
+    if (guardian.userId) return {};
 
-    const provisioned = await this.identityProvisioning.provisionTenantSubject({
-      tenantId: guardian.tenantId,
+    if (this.identityProvisioning) {
+      const provisioning = await this.identityProvisioning.provisionOrInvite(context, {
+        tenantId: guardian.tenantId,
+        subjectType: "GUARDIAN",
+        subjectId: guardian.id,
+        displayName: `${guardian.firstName} ${guardian.lastName}`.trim(),
+        nationalId: input.nationalId,
+        phone: guardian.phone,
+        email: input.email,
+      });
+      if (provisioning.status === "INVITED") return { invitationId: provisioning.invitationId };
+      if (provisioning.status !== "PROVISIONED" || !provisioning.userId) return {};
+
+      await this.guardianStore.bindUser(guardian.tenantId, guardian.id, provisioning.userId);
+      await this.auditLogs?.record({
+        tenantId: guardian.tenantId,
+        actorUserId: context.userId,
+        entityType: "Guardian",
+        entityId: guardian.id,
+        action: "guardian.account_auto_provisioned",
+        diff: { userId: provisioning.userId, mustChangePassword: true },
+      });
+      return { provisionedUserId: provisioning.userId };
+    }
+
+    if (!input.email) return {};
+    const invitation = await this.identityInvitations.create(context, {
       subjectType: "GUARDIAN",
       subjectId: guardian.id,
-      displayName: `${guardian.firstName} ${guardian.lastName}`.trim(),
-      nationalId: input.nationalId,
-      phone: guardian.phone,
       email: input.email,
+      name: `${guardian.firstName} ${guardian.lastName}`,
     });
-    if (!provisioned) return undefined;
-
-    await this.guardianStore.bindUser(guardian.tenantId, guardian.id, provisioned.userId);
-    await this.auditLogs?.record({
-      tenantId: guardian.tenantId,
-      actorUserId: context.userId,
-      entityType: "Guardian",
-      entityId: guardian.id,
-      action: "guardian.account_auto_provisioned",
-      diff: { userId: provisioned.userId, mustChangePassword: true },
-    });
-    return provisioned.userId;
+    return { invitationId: invitation.invitation.id };
   }
 
   private async findGuardianByPhone(tenantId: string, phone: string | undefined): Promise<GuardianRecord | undefined> {
     if (!phone) return undefined;
-    return (await this.guardianStore.list()).find(
-      (guardian) => guardian.tenantId === tenantId && guardian.phone === phone && !guardian.deletedAt,
-    );
+    return this.guardianStore.findByPhone(tenantId, phone);
   }
 
   private async resolveProfileUpdateForCreate(
@@ -1270,7 +1283,7 @@ function todayDateString(): string {
 }
 
 function parseGuardianProvisionInput(input: StudentGuardianProvisionInput, student: Pick<StudentRecord, "lastName">) {
-  const phone = optionalGuardianText(input.phone);
+  const phone = optionalTurkishMobilePhone(input.phone, "GUARDIAN_PHONE_INVALID");
   const email = optionalGuardianEmail(input.email);
   if (!phone && !email) {
     throw new BadRequestException("GUARDIAN_CONTACT_REQUIRED");

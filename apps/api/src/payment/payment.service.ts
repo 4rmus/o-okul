@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type {
   PaymentInstallmentRecord,
   PaymentInstallmentStatus,
@@ -6,6 +6,10 @@ import type {
   PaymentPlanCreateRequest,
   PaymentPlanInstallmentInput,
   PaymentPlanWithInstallmentsRecord,
+  PaymentTransactionCreateRequest,
+  PaymentTransactionMethod,
+  PaymentTransactionRecord,
+  PaymentTransactionVoidRequest,
 } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
@@ -27,6 +31,7 @@ export interface PaymentPlanListFilters extends StorePaymentPlanListFilters {
 type PaymentPlanContextFields = Required<Pick<StorePaymentPlanListFilters, "campusId" | "gradeLevelId" | "classId" | "courseId" | "termId">>;
 
 const installmentStatuses: PaymentInstallmentStatus[] = ["PENDING", "PAID", "OVERDUE", "CANCELED"];
+const transactionMethods: PaymentTransactionMethod[] = ["CASH", "BANK_TRANSFER", "CARD_POS", "OTHER"];
 
 @Injectable()
 export class PaymentService {
@@ -71,7 +76,11 @@ export class PaymentService {
       throw new ForbiddenException("FORBIDDEN_FINANCE_PERMISSION");
     }
 
-    return filterTenantResources(context, await this.store.listByStudent(student.id)).filter((record) => !record.deletedAt);
+    const plans = filterTenantResources(context, await this.store.listByStudent(student.id)).filter((record) => !record.deletedAt);
+    return Promise.all(plans.map(async (plan) => ({
+      ...plan,
+      transactions: (await this.store.listTransactions(plan.id)).map(toPublicPaymentTransaction),
+    })));
   }
 
   async create(
@@ -184,6 +193,172 @@ export class PaymentService {
     });
 
     return record;
+  }
+
+  async listTransactions(context: RequestContext, planId: string): Promise<PaymentTransactionRecord[]> {
+    this.assertTenantAdmin(context);
+    const plan = await this.findPlanForTenant(context, planId);
+    return (await this.store.listTransactions(plan.id)).map(toPublicPaymentTransaction);
+  }
+
+  async createTransaction(
+    context: RequestContext,
+    planId: string,
+    input: PaymentTransactionCreateRequest,
+    idempotencyKey?: string,
+  ): Promise<PaymentTransactionRecord> {
+    return this.idempotency.run(
+      context,
+      { key: idempotencyKey, operation: "payment.transaction.create", request: { planId, input } },
+      () => this.createPaymentTransaction(context, planId, input),
+    );
+  }
+
+  private async createPaymentTransaction(
+    context: RequestContext,
+    planId: string,
+    input: PaymentTransactionCreateRequest,
+  ): Promise<PaymentTransactionRecord> {
+    this.assertTenantAdmin(context);
+    const plan = await this.findPlanForTenant(context, planId);
+    const installment = input.installmentId ? this.findPlanInstallment(plan, input.installmentId) : undefined;
+    const record = await this.store.createTransaction({
+      tenantId: plan.tenantId,
+      planId: plan.id,
+      installmentId: installment?.id,
+      amount: positiveInt(input.amount, "PAYMENT_TRANSACTION_AMOUNT_INVALID"),
+      currency: optionalCurrency(input.currency ?? plan.currency),
+      method: resolveTransactionMethod(input.method),
+      paidAt: requiredDateTime(input.paidAt, "PAYMENT_TRANSACTION_PAID_AT_INVALID"),
+      note: optionalText(input.note),
+      recordedByUserId: context.userId,
+    });
+    if (installment) {
+      await this.syncInstallmentPaymentStatus(context, plan.id, installment.id);
+    }
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "PaymentTransaction",
+      entityId: record.id,
+      action: "payment_transaction.created",
+      diff: {
+        planId: record.planId,
+        installmentId: record.installmentId,
+        amount: record.amount,
+        method: record.method,
+        receiptNo: record.receiptNo,
+      },
+    });
+    return toPublicPaymentTransaction(record);
+  }
+
+  async voidTransaction(
+    context: RequestContext,
+    planId: string,
+    transactionId: string,
+    input: PaymentTransactionVoidRequest,
+    idempotencyKey?: string,
+  ): Promise<PaymentTransactionRecord> {
+    return this.idempotency.run(
+      context,
+      { key: idempotencyKey, operation: "payment.transaction.void", request: { planId, transactionId, input } },
+      () => this.voidPaymentTransaction(context, planId, transactionId, input),
+    );
+  }
+
+  private async voidPaymentTransaction(
+    context: RequestContext,
+    planId: string,
+    transactionId: string,
+    input: PaymentTransactionVoidRequest,
+  ): Promise<PaymentTransactionRecord> {
+    this.assertTenantAdmin(context);
+    const plan = await this.findPlanForTenant(context, planId);
+    const existing = (await this.store.listTransactions(plan.id)).find((transaction) => transaction.id === transactionId);
+    if (!existing) {
+      throw new NotFoundException("PAYMENT_TRANSACTION_NOT_FOUND");
+    }
+    const record = await this.store.voidTransaction(plan.tenantId, plan.id, existing.id, new Date().toISOString(), optionalText(input.note));
+    if (!record) {
+      throw new NotFoundException("PAYMENT_TRANSACTION_NOT_FOUND");
+    }
+    if (record.installmentId) {
+      await this.syncInstallmentPaymentStatus(context, plan.id, record.installmentId);
+    }
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "PaymentTransaction",
+      entityId: record.id,
+      action: "payment_transaction.voided",
+      diff: { planId: record.planId, installmentId: record.installmentId, voidedAt: record.voidedAt },
+    });
+    return toPublicPaymentTransaction(record);
+  }
+
+  async cancelPlan(context: RequestContext, planId: string, idempotencyKey?: string): Promise<PaymentPlanWithInstallmentsRecord> {
+    return this.idempotency.run(
+      context,
+      { key: idempotencyKey, operation: "payment.plan.cancel", request: { planId } },
+      () => this.cancelPaymentPlan(context, planId),
+    );
+  }
+
+  private async cancelPaymentPlan(context: RequestContext, planId: string): Promise<PaymentPlanWithInstallmentsRecord> {
+    this.assertTenantAdmin(context);
+    const plan = await this.findPlanForTenant(context, planId);
+    const transactions = await this.store.listTransactions(plan.id);
+    if (transactions.some((transaction) => !transaction.voidedAt)) {
+      throw new ConflictException("PAYMENT_PLAN_HAS_TRANSACTIONS");
+    }
+    const record = await this.store.cancelPlan(plan.id, new Date().toISOString());
+    if (!record) {
+      throw new NotFoundException("PAYMENT_PLAN_NOT_FOUND");
+    }
+    await this.auditLogs?.record({
+      tenantId: record.tenantId,
+      actorUserId: context.userId,
+      entityType: "PaymentPlan",
+      entityId: record.id,
+      action: "payment_plan.canceled",
+      diff: { studentId: record.studentId, installmentCount: record.installments.length },
+    });
+    return record;
+  }
+
+  private findPlanInstallment(
+    plan: PaymentPlanWithInstallmentsRecord,
+    installmentId: string,
+  ): PaymentInstallmentRecord {
+    const installment = plan.installments.find((candidate) => candidate.id === installmentId);
+    if (!installment) {
+      throw new NotFoundException("PAYMENT_INSTALLMENT_NOT_FOUND");
+    }
+    return installment;
+  }
+
+  private async syncInstallmentPaymentStatus(context: RequestContext, planId: string, installmentId: string): Promise<void> {
+    const plan = await this.findPlanForTenant(context, planId);
+    const installment = this.findPlanInstallment(plan, installmentId);
+    if (installment.status === "CANCELED") return;
+
+    const transactions = (await this.store.listTransactions(plan.id)).filter((transaction) =>
+      transaction.installmentId === installment.id && !transaction.voidedAt
+    );
+    const paidAmount = transactions.reduce((total, transaction) => total + transaction.amount, 0);
+    const nextStatus: PaymentInstallmentStatus = paidAmount >= installment.amount ? "PAID" : "PENDING";
+    const nextPaidAt = nextStatus === "PAID"
+      ? [...transactions].sort((left, right) => left.paidAt.localeCompare(right.paidAt)).at(-1)?.paidAt
+      : undefined;
+    if (installment.status === nextStatus && installment.paidAt === nextPaidAt) return;
+
+    await this.store.updateInstallment(plan.id, installment.id, {
+      amount: installment.amount,
+      dueDate: installment.dueDate,
+      status: nextStatus,
+      paidAt: nextPaidAt,
+    });
   }
 
   private async resolvePaymentContext(
@@ -373,10 +548,25 @@ function optionalDateTime(value: string | undefined): string | undefined {
   return parsed.toISOString();
 }
 
+function requiredDateTime(value: string | undefined, errorCode: string): string {
+  const parsed = new Date(requiredText(value, errorCode));
+  if (Number.isNaN(parsed.getTime())) {
+    throw new BadRequestException(errorCode);
+  }
+  return parsed.toISOString();
+}
+
 function resolveStatus(value: PaymentInstallmentStatus | undefined): PaymentInstallmentStatus {
   if (!value) return "PENDING";
   if (!installmentStatuses.includes(value)) {
     throw new BadRequestException("PAYMENT_INSTALLMENT_STATUS_INVALID");
+  }
+  return value;
+}
+
+function resolveTransactionMethod(value: PaymentTransactionMethod): PaymentTransactionMethod {
+  if (!transactionMethods.includes(value)) {
+    throw new BadRequestException("PAYMENT_TRANSACTION_METHOD_INVALID");
   }
   return value;
 }
@@ -388,4 +578,9 @@ function resolveUpdatedPaidAt(
 ): string | undefined {
   if (status !== "PAID") return undefined;
   return optionalDateTime(inputPaidAt) ?? existingPaidAt ?? new Date().toISOString();
+}
+
+function toPublicPaymentTransaction(record: PaymentTransactionRecord): PaymentTransactionRecord {
+  const { recordedByUserId: _recordedByUserId, ...publicRecord } = record;
+  return publicRecord;
 }

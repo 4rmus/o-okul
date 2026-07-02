@@ -6,7 +6,7 @@ import request from "supertest";
 import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
-import { TeacherImportService } from "./teacher-import.service.js";
+import { TeacherImportService } from "../teacher/teacher-import.service.js";
 
 describe("School management API", () => {
   let app: INestApplication;
@@ -341,11 +341,13 @@ describe("School management API", () => {
       .send({ firstName: "Ziya", lastName: "Ogretmen", branch: "Fen" })
       .expect(201);
     expect(teacherCreated.body).not.toHaveProperty("userId");
+    expect(teacherCreated.body.provisioning).toBe("SKIPPED");
     const guardianCreated = await request(server)
       .post("/guardians")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ firstName: "Yasemin", lastName: "Veli", phone: "5000000030" })
       .expect(201);
+    expect(guardianCreated.body.provisioning).toBe("SKIPPED");
     const studentCreated = await request(server)
       .post("/students")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
@@ -660,6 +662,40 @@ describe("School management API", () => {
       .expect(403);
   });
 
+  it("class oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const key = "class-create-idempotency-a";
+    let classId = "";
+
+    try {
+      const first = await request(server)
+        .post("/classes")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ name: "Tekil Sube", section: "T" })
+        .expect(201);
+      classId = first.body.id;
+
+      const second = await request(server)
+        .post("/classes")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ name: "Tekil Sube", section: "T" })
+        .expect(201);
+      expect(second.body).toEqual(first.body);
+
+      await request(server)
+        .post("/classes")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ name: "Farkli Sube", section: "F" })
+        .expect(409);
+    } finally {
+      if (classId) {
+        await request(server).delete(`/classes/${classId}`).set("Authorization", `Bearer ${tenantAAccessToken}`);
+      }
+    }
+  });
+
   it("tenant A başka tenant kampüsü ile class oluşturamaz", async () => {
     await request(server)
       .post("/classes")
@@ -684,6 +720,40 @@ describe("School management API", () => {
       .expect(403);
   });
 
+  it("ders oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const key = "course-create-idempotency-a";
+    let courseId = "";
+
+    try {
+      const first = await request(server)
+        .post("/courses")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ name: "Tekil Ders", code: "TD" })
+        .expect(201);
+      courseId = first.body.id;
+
+      const second = await request(server)
+        .post("/courses")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ name: "Tekil Ders", code: "TD" })
+        .expect(201);
+      expect(second.body).toEqual(first.body);
+
+      await request(server)
+        .post("/courses")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ name: "Farkli Ders", code: "FD" })
+        .expect(409);
+    } finally {
+      if (courseId) {
+        await request(server).delete(`/courses/${courseId}`).set("Authorization", `Bearer ${tenantAAccessToken}`);
+      }
+    }
+  });
+
   it("tenant A başka tenant akademik yılına dönem oluşturamaz", async () => {
     await request(server)
       .post("/academic-terms")
@@ -702,6 +772,7 @@ describe("School management API", () => {
     expect(created.body).not.toHaveProperty("userId");
     expect(created.body).not.toHaveProperty("nationalIdEncrypted");
     expect(created.body).not.toHaveProperty("nationalIdHash");
+    expect(created.body.provisioning).toBe("PROVISIONED");
     expect(created.body.phone).toBe("5550000010");
 
     await request(server)
@@ -747,6 +818,86 @@ describe("School management API", () => {
       .expect(403);
   });
 
+  it("öğretmen oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const key = "teacher-create-idempotency-a";
+    let teacherId = "";
+
+    try {
+      const first = await request(server)
+        .post("/teachers")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ firstName: "Tekil", lastName: "Ogretmen", branch: "Matematik" })
+        .expect(201);
+      teacherId = first.body.id;
+
+      const second = await request(server)
+        .post("/teachers")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ firstName: "Tekil", lastName: "Ogretmen", branch: "Matematik" })
+        .expect(201);
+      expect(second.body).toEqual(first.body);
+
+      await request(server)
+        .post("/teachers")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ firstName: "Farkli", lastName: "Ogretmen", branch: "Matematik" })
+        .expect(409);
+    } finally {
+      if (teacherId) {
+        await request(server).delete(`/teachers/${teacherId}`).set("Authorization", `Bearer ${tenantAAccessToken}`);
+      }
+    }
+  });
+
+  it("öğretmen oluştururken telefon/TC yoksa e-posta daveti açar", async () => {
+    const created = await request(server)
+      .post("/teachers")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Davet", lastName: "Ogretmen", email: "teacher.invite@example.test" })
+      .expect(201);
+    expect(created.body.provisioning).toBe("INVITED");
+    expect(created.body).not.toHaveProperty("userId");
+
+    await request(server).delete(`/teachers/${created.body.id}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+  });
+
+  it("öğretmen sınıf atamasını Idempotency-Key ile tekilleştirir", async () => {
+    const key = "teacher-assignment-create-idempotency-a";
+    let assignmentId = "";
+
+    try {
+      const first = await request(server)
+        .post("/teachers/teacher-a/assignments")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ classId: "class-a", role: "CLASS_TEACHER" })
+        .expect(201);
+      assignmentId = first.body.id;
+
+      const second = await request(server)
+        .post("/teachers/teacher-a/assignments")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ classId: "class-a", role: "CLASS_TEACHER" })
+        .expect(201);
+      expect(second.body).toEqual(first.body);
+
+      await request(server)
+        .post("/teachers/teacher-a/assignments")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ classId: "class-a", role: "GUIDANCE_COUNSELOR" })
+        .expect(409);
+    } finally {
+      if (assignmentId) {
+        await request(server).delete(`/teachers/teacher-a/assignments/${assignmentId}`).set("Authorization", `Bearer ${tenantAAccessToken}`);
+      }
+    }
+  });
+
   it("guardian CRUD için bağımsız kayıtları yönetir", async () => {
     const created = await request(server)
       .post("/guardians")
@@ -754,16 +905,33 @@ describe("School management API", () => {
       .send({ firstName: "Can", lastName: "Veli", nationalId: "10000001372", phone: "+90 500 000 00 10" })
       .expect(201);
     expect(created.body.phone).toBe("5000000010");
+    expect(created.body.matched).toBe(false);
+    expect(created.body.provisioning).toBe("PROVISIONED");
     expect(created.body).not.toHaveProperty("nationalIdEncrypted");
     expect(created.body).not.toHaveProperty("nationalIdHash");
 
     const guardianId = (created.body as { id: string }).id;
 
-    await request(server)
+    const nationalIdMatched = await request(server)
       .post("/guardians")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .send({ firstName: "Ayni", lastName: "Veli", nationalId: "10000001372", phone: "5000000012" })
-      .expect(409);
+      .expect(201);
+    expect(nationalIdMatched.body.id).toBe(guardianId);
+    expect(nationalIdMatched.body.matched).toBe(true);
+    expect(nationalIdMatched.body.phone).toBe("5000000010");
+    expect(nationalIdMatched.body).not.toHaveProperty("nationalIdEncrypted");
+    expect(nationalIdMatched.body).not.toHaveProperty("nationalIdHash");
+
+    const phoneMatched = await request(server)
+      .post("/guardians")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Telefon", lastName: "Veli", phone: "+90 500 000 00 10" })
+      .expect(201);
+    expect(phoneMatched.body.id).toBe(guardianId);
+    expect(phoneMatched.body.matched).toBe(true);
+    expect(phoneMatched.body).not.toHaveProperty("nationalIdEncrypted");
+    expect(phoneMatched.body).not.toHaveProperty("nationalIdHash");
 
     await request(server)
       .patch(`/guardians/${guardianId}`)
@@ -808,6 +976,128 @@ describe("School management API", () => {
       .get(`/guardians/${guardianId}`)
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(404);
+  });
+
+  it("veli oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
+    const key = "guardian-create-idempotency-a";
+    let guardianId = "";
+
+    try {
+      const first = await request(server)
+        .post("/guardians")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ firstName: "Tekil", lastName: "Veli", phone: "5000000030" })
+        .expect(201);
+      guardianId = first.body.id;
+      expect(first.body.matched).toBe(false);
+
+      const second = await request(server)
+        .post("/guardians")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ firstName: "Tekil", lastName: "Veli", phone: "5000000030" })
+        .expect(201);
+      expect(second.body).toEqual(first.body);
+
+      await request(server)
+        .post("/guardians")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ firstName: "Farkli", lastName: "Veli", phone: "5000000031" })
+        .expect(409);
+    } finally {
+      if (guardianId) {
+        await request(server).delete(`/guardians/${guardianId}`).set("Authorization", `Bearer ${tenantAAccessToken}`);
+      }
+    }
+  });
+
+  it("veli oluştururken telefon/TC yoksa e-posta daveti açar", async () => {
+    const created = await request(server)
+      .post("/guardians")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "Davet", lastName: "Veli", email: "guardian.invite@example.test" })
+      .expect(201);
+    expect(created.body.provisioning).toBe("INVITED");
+    expect(created.body.matched).toBe(false);
+    expect(created.body).not.toHaveProperty("userId");
+
+    await request(server).delete(`/guardians/${created.body.id}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+  });
+
+  it("veli import dry-run ve commit işlemini öğrenci okul no ile idempotent işler", async () => {
+    const fileBase64 = createCsvBase64("ad;soyad;telefon;tc_kimlik_no;email;okul_no\nVeli;Import;0555 000 0099;10000001990;veli-import@example.test;100\n");
+    let guardianId = "";
+
+    try {
+      await request(server)
+        .post("/guardians/imports/dry-run")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .send({ fileBase64 })
+        .expect(201)
+        .expect(({ body }) => {
+          expect(body).toEqual({
+            dryRun: true,
+            errors: [],
+            totalRows: 1,
+            validRows: [
+              expect.objectContaining({
+                email: "veli-import@example.test",
+                firstName: "Veli",
+                lastName: "Import",
+                row: 2,
+                studentId: "student-a",
+                studentNo: "100",
+              }),
+            ],
+            wouldImport: true,
+          });
+          expect(JSON.stringify(body)).not.toContain("10000001990");
+          expect(JSON.stringify(body)).not.toContain("5550000099");
+        });
+
+      const key = "guardian-import-idempotency-a";
+      const first = await request(server)
+        .post("/guardians/imports")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ fileBase64 })
+        .expect(201);
+      guardianId = first.body.guardians[0].id;
+
+      await request(server)
+        .post("/guardians/imports")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ fileBase64 })
+        .expect(201)
+        .expect(({ body }) => {
+          expect(body).toEqual(first.body);
+        });
+
+      await request(server)
+        .post("/guardians/imports")
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ fileBase64: createCsvBase64("ad;soyad;okul_no\nFarkli;Veli;100\n") })
+        .expect(409);
+
+      expect(first.body).toMatchObject({
+        createdOrMatchedGuardians: 1,
+        importedRows: 1,
+        linkedStudents: 1,
+        guardians: [expect.objectContaining({ firstName: "Veli", lastName: "Import" })],
+        links: [expect.objectContaining({ studentId: "student-a" })],
+      });
+      expect(JSON.stringify(first.body)).not.toContain("10000001990");
+      expect(JSON.stringify(first.body)).not.toContain("nationalId");
+    } finally {
+      if (guardianId) {
+        await request(server).delete(`/guardians/${guardianId}/students/student-a`).set("Authorization", `Bearer ${tenantAAccessToken}`);
+        await request(server).delete(`/guardians/${guardianId}`).set("Authorization", `Bearer ${tenantAAccessToken}`);
+      }
+    }
   });
 
   it("tenant admin veli-öğrenci bağlantısını tenant içinde yönetir", async () => {
@@ -932,8 +1222,45 @@ describe("School management API", () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body).toEqual([]);
-      });
+    });
     await request(server).delete(`/guardians/${guardianId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
+  });
+
+  it("veli-öğrenci bağlantısını Idempotency-Key ile tekilleştirir", async () => {
+    const key = "guardian-student-link-create-idempotency-a";
+    const created = await request(server)
+      .post("/guardians")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({ firstName: "TekilBag", lastName: "Veli", phone: "5000000032" })
+      .expect(201);
+    const guardianId = (created.body as { id: string }).id;
+
+    try {
+      const first = await request(server)
+        .post(`/guardians/${guardianId}/students`)
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ studentId: "student-a", canOpenSupportTickets: false })
+        .expect(201);
+
+      const second = await request(server)
+        .post(`/guardians/${guardianId}/students`)
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ studentId: "student-a", canOpenSupportTickets: false })
+        .expect(201);
+      expect(second.body).toEqual(first.body);
+
+      await request(server)
+        .post(`/guardians/${guardianId}/students`)
+        .set("Authorization", `Bearer ${tenantAAccessToken}`)
+        .set("Idempotency-Key", key)
+        .send({ studentId: "student-a", canOpenSupportTickets: true })
+        .expect(409);
+    } finally {
+      await request(server).delete(`/guardians/${guardianId}/students/student-a`).set("Authorization", `Bearer ${tenantAAccessToken}`);
+      await request(server).delete(`/guardians/${guardianId}`).set("Authorization", `Bearer ${tenantAAccessToken}`);
+    }
   });
 
   it("öğrenciye bağlı velileri listeler", async () => {

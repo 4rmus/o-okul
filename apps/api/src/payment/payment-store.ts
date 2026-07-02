@@ -7,11 +7,25 @@ import type {
   PaymentInstallmentStatus,
   PaymentPlanRecord,
   PaymentPlanWithInstallmentsRecord,
+  PaymentTransactionMethod,
+  PaymentTransactionRecord,
 } from "@o-okul/shared-types";
 
 export interface CreatePaymentPlanStoreInput {
   plan: Omit<PaymentPlanRecord, "id" | "createdAt">;
   installments: Array<Omit<PaymentInstallmentRecord, "id" | "tenantId" | "planId" | "createdAt">>;
+}
+
+export interface CreatePaymentTransactionStoreInput {
+  tenantId: string;
+  planId: string;
+  installmentId?: string;
+  amount: number;
+  currency: string;
+  method: PaymentTransactionMethod;
+  paidAt: string;
+  note?: string;
+  recordedByUserId?: string;
 }
 
 export interface PaymentPlanListFilters {
@@ -27,11 +41,21 @@ export interface PaymentPlanStore {
   listByStudent(studentId: string, filters?: PaymentPlanListFilters): Promise<PaymentPlanWithInstallmentsRecord[]>;
   findById(id: string): Promise<PaymentPlanWithInstallmentsRecord | undefined>;
   create(input: CreatePaymentPlanStoreInput): Promise<PaymentPlanWithInstallmentsRecord>;
+  cancelPlan(planId: string, deletedAt: string): Promise<PaymentPlanWithInstallmentsRecord | undefined>;
   updateInstallment(
     planId: string,
     installmentId: string,
     input: Pick<PaymentInstallmentRecord, "amount" | "dueDate" | "status"> & Pick<Partial<PaymentInstallmentRecord>, "paidAt">,
   ): Promise<PaymentPlanWithInstallmentsRecord | undefined>;
+  listTransactions(planId: string): Promise<PaymentTransactionRecord[]>;
+  createTransaction(input: CreatePaymentTransactionStoreInput): Promise<PaymentTransactionRecord>;
+  voidTransaction(
+    tenantId: string,
+    planId: string,
+    transactionId: string,
+    voidedAt: string,
+    voidReason?: string,
+  ): Promise<PaymentTransactionRecord | undefined>;
 }
 
 export const paymentPlanStoreToken = Symbol("PaymentPlanStore");
@@ -93,6 +117,7 @@ const demoPaymentInstallments: PaymentInstallmentRecord[] = [
 export class InMemoryPaymentPlanStore implements PaymentPlanStore {
   private readonly plans = demoPaymentPlans.map((record) => ({ ...record }));
   private readonly installments = demoPaymentInstallments.map((record) => ({ ...record }));
+  private readonly transactions: PaymentTransactionRecord[] = [];
 
   async list(filters: PaymentPlanListFilters = {}): Promise<PaymentPlanWithInstallmentsRecord[]> {
     return this.withInstallments(filterPaymentPlans(this.plans.filter((record) => !record.deletedAt), filters));
@@ -141,6 +166,52 @@ export class InMemoryPaymentPlanStore implements PaymentPlanStore {
     installment.status = input.status;
     installment.paidAt = input.paidAt;
     return this.withInstallments([plan]).then((records) => records[0]);
+  }
+
+  async cancelPlan(planId: string, deletedAt: string): Promise<PaymentPlanWithInstallmentsRecord | undefined> {
+    const plan = this.plans.find((record) => record.id === planId && !record.deletedAt);
+    if (!plan) return undefined;
+
+    plan.deletedAt = deletedAt;
+    for (const installment of this.installments.filter((record) => record.planId === plan.id && !record.deletedAt)) {
+      if (installment.status !== "PAID") installment.status = "CANCELED";
+    }
+    return this.withInstallments([plan]).then((records) => records[0]);
+  }
+
+  async listTransactions(planId: string): Promise<PaymentTransactionRecord[]> {
+    return this.transactions
+      .filter((record) => record.planId === planId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  }
+
+  async createTransaction(input: CreatePaymentTransactionStoreInput): Promise<PaymentTransactionRecord> {
+    const tenantTransactionCount = this.transactions.filter((record) => record.tenantId === input.tenantId).length + 1;
+    const record: PaymentTransactionRecord = {
+      id: `payment-transaction-${this.transactions.length + 1}`,
+      createdAt: new Date().toISOString(),
+      receiptNo: `R-${String(tenantTransactionCount).padStart(6, "0")}`,
+      ...input,
+    };
+    this.transactions.push(record);
+    return record;
+  }
+
+  async voidTransaction(
+    tenantId: string,
+    planId: string,
+    transactionId: string,
+    voidedAt: string,
+    voidReason?: string,
+  ): Promise<PaymentTransactionRecord | undefined> {
+    const record = this.transactions.find((candidate) =>
+      candidate.tenantId === tenantId && candidate.planId === planId && candidate.id === transactionId
+    );
+    if (!record) return undefined;
+
+    record.voidedAt ??= voidedAt;
+    if (voidReason !== undefined) record.voidReason = voidReason;
+    return record;
   }
 
   private async withInstallments(plans: PaymentPlanRecord[]): Promise<PaymentPlanWithInstallmentsRecord[]> {
@@ -276,6 +347,111 @@ export class PostgresPaymentPlanStore implements PaymentPlanStore {
       return records[0];
     });
   }
+
+  async cancelPlan(planId: string, deletedAt: string): Promise<PaymentPlanWithInstallmentsRecord | undefined> {
+    return withTenantQuery(this.pool, async (client) => {
+      const updated = await client.query<PaymentPlanRow>(
+        `UPDATE "PaymentPlan"
+         SET "deletedAt" = $2,
+             "updatedAt" = now()
+         WHERE "id" = $1
+           AND "deletedAt" IS NULL
+         RETURNING *`,
+        [planId, deletedAt],
+      );
+      const plan = updated.rows[0];
+      if (!plan) return undefined;
+
+      await client.query(
+        `UPDATE "PaymentInstallment"
+         SET "status" = 'CANCELED',
+             "paidAt" = NULL,
+             "updatedAt" = now()
+         WHERE "tenantId" = $1
+           AND "planId" = $2
+           AND "status" <> 'PAID'
+           AND "deletedAt" IS NULL`,
+        [plan.tenantId, plan.id],
+      );
+
+      const records = await withInstallments(client, [toPaymentPlanRecord(plan)]);
+      return records[0];
+    });
+  }
+
+  async listTransactions(planId: string): Promise<PaymentTransactionRecord[]> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<PaymentTransactionRow>(
+        `SELECT *
+         FROM "PaymentTransaction"
+         WHERE "planId" = $1
+         ORDER BY "createdAt" ASC, "id" ASC`,
+        [planId],
+      );
+      return result.rows.map(toPaymentTransactionRecord);
+    });
+  }
+
+  async createTransaction(input: CreatePaymentTransactionStoreInput): Promise<PaymentTransactionRecord> {
+    return withTenantQuery(this.pool, async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`PaymentTransaction:${input.tenantId}`]);
+      const receiptResult = await client.query<{ next: number }>(
+        `SELECT count(*)::int + 1 AS next
+         FROM "PaymentTransaction"
+         WHERE "tenantId" = $1`,
+        [input.tenantId],
+      );
+      const receiptNo = `R-${String(receiptResult.rows[0]?.next ?? 1).padStart(6, "0")}`;
+      const result = await client.query<PaymentTransactionRow>(
+        `INSERT INTO "PaymentTransaction" (
+           "id", "tenantId", "planId", "installmentId", "amount", "currency", "method", "paidAt", "receiptNo", "note", "recordedByUserId", "updatedAt"
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+         RETURNING *`,
+        [
+          randomUUID(),
+          input.tenantId,
+          input.planId,
+          input.installmentId ?? null,
+          input.amount,
+          input.currency,
+          input.method,
+          input.paidAt,
+          receiptNo,
+          input.note ?? null,
+          input.recordedByUserId ?? null,
+        ],
+      );
+      const record = result.rows[0];
+      if (!record) {
+        throw new Error("PAYMENT_TRANSACTION_CREATE_FAILED");
+      }
+      return toPaymentTransactionRecord(record);
+    });
+  }
+
+  async voidTransaction(
+    tenantId: string,
+    planId: string,
+    transactionId: string,
+    voidedAt: string,
+    voidReason?: string,
+  ): Promise<PaymentTransactionRecord | undefined> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<PaymentTransactionRow>(
+        `UPDATE "PaymentTransaction"
+         SET "voidedAt" = COALESCE("voidedAt", $4),
+             "voidReason" = COALESCE($5, "voidReason"),
+             "updatedAt" = now()
+         WHERE "tenantId" = $1
+           AND "planId" = $2
+           AND "id" = $3
+         RETURNING *`,
+        [tenantId, planId, transactionId, voidedAt, voidReason ?? null],
+      );
+      return result.rows[0] ? toPaymentTransactionRecord(result.rows[0]) : undefined;
+    });
+  }
 }
 
 export function createPaymentPlanStore(): PaymentPlanStore {
@@ -309,6 +485,23 @@ interface PaymentInstallmentRow {
   paidAt: Date | null;
   createdAt: Date;
   deletedAt: Date | null;
+}
+
+interface PaymentTransactionRow {
+  id: string;
+  tenantId: string;
+  planId: string;
+  installmentId: string | null;
+  amount: number;
+  currency: string;
+  method: PaymentTransactionMethod;
+  paidAt: Date;
+  receiptNo: string;
+  note: string | null;
+  recordedByUserId: string | null;
+  voidedAt: Date | null;
+  voidReason: string | null;
+  createdAt: Date;
 }
 
 interface PaymentPlanQueryFilters extends PaymentPlanListFilters {
@@ -412,6 +605,25 @@ function toPaymentInstallmentRecord(row: PaymentInstallmentRow): PaymentInstallm
     paidAt: row.paidAt?.toISOString(),
     createdAt: row.createdAt.toISOString(),
     deletedAt: row.deletedAt?.toISOString(),
+  };
+}
+
+function toPaymentTransactionRecord(row: PaymentTransactionRow): PaymentTransactionRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    planId: row.planId,
+    installmentId: row.installmentId ?? undefined,
+    amount: row.amount,
+    currency: row.currency,
+    method: row.method,
+    paidAt: row.paidAt.toISOString(),
+    receiptNo: row.receiptNo,
+    note: row.note ?? undefined,
+    recordedByUserId: row.recordedByUserId ?? undefined,
+    voidedAt: row.voidedAt?.toISOString(),
+    voidReason: row.voidReason ?? undefined,
+    createdAt: row.createdAt.toISOString(),
   };
 }
 

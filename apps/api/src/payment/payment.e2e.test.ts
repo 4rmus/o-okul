@@ -80,6 +80,23 @@ describe("PaymentPlan API", () => {
       });
   });
 
+  it("ödeme planı listesinde page/limit/q/sort uygular", async () => {
+    await request(server)
+      .get("/payment-plans")
+      .query({ q: "haziran", sort: "-totalAmount", page: "1", limit: "1" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: "payment-plan-a", title: "2026 Haziran ödeme planı" })]);
+      });
+
+    await request(server)
+      .get("/payment-plans")
+      .query({ sort: "unknown" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(400);
+  });
+
   it("yalnız kurum tenant içi öğrenci için ödeme planı oluşturur", async () => {
     const created = await request(server)
       .post("/payment-plans")
@@ -392,6 +409,169 @@ describe("PaymentPlan API", () => {
       .expect(409)
       .expect(({ body }) => {
         expect(JSON.stringify(body)).toContain("IDEMPOTENCY_KEY_BODY_MISMATCH");
+      });
+  });
+
+  it("tahsilat işlemini kaydeder, void eder ve işlem durumuna göre plan iptalini yönetir", async () => {
+    const created = await request(server)
+      .post("/payment-plans")
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .send({
+        studentId: "student-a",
+        title: "Tahsilat test planı",
+        totalAmount: 100000,
+        installments: [{ installmentNo: 1, amount: 100000, dueDate: "2026-11-01" }],
+      })
+      .expect(201);
+    const planId = created.body.id as string;
+    const installmentId = created.body.installments[0].id as string;
+
+    const transactionBody = {
+      installmentId,
+      amount: 100000,
+      method: "CASH",
+      paidAt: "2026-11-02T09:00:00.000Z",
+      note: "Elden tahsilat",
+    };
+    const transactionKey = "payment-transaction-create-idempotency-a";
+    const firstTransaction = await request(server)
+      .post(`/payment-plans/${planId}/transactions`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", transactionKey)
+      .send(transactionBody)
+      .expect(201);
+    expect(firstTransaction.body).toMatchObject({
+      tenantId: "tenant-a",
+      planId,
+      installmentId,
+      amount: 100000,
+      currency: "TRY",
+      method: "CASH",
+      paidAt: "2026-11-02T09:00:00.000Z",
+      note: "Elden tahsilat",
+    });
+    expect(firstTransaction.body.receiptNo).toEqual(expect.any(String));
+
+    await request(server)
+      .post(`/payment-plans/${planId}/transactions`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", transactionKey)
+      .send(transactionBody)
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual(firstTransaction.body);
+      });
+
+    await request(server)
+      .post(`/payment-plans/${planId}/transactions`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", transactionKey)
+      .send({ ...transactionBody, amount: 90000 })
+      .expect(409);
+
+    await request(server)
+      .get("/payment-plans")
+      .query({ studentId: "student-a" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.arrayContaining([
+          expect.objectContaining({
+            id: planId,
+            installments: [expect.objectContaining({ id: installmentId, status: "PAID" })],
+          }),
+        ]));
+      });
+
+    await request(server)
+      .get(`/payment-plans/${planId}/transactions`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: firstTransaction.body.id, receiptNo: firstTransaction.body.receiptNo })]);
+      });
+
+    await request(server)
+      .get("/me/guardian/students/student-a/payment-plans")
+      .set("Authorization", `Bearer ${guardianAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.arrayContaining([
+          expect.objectContaining({
+            id: planId,
+            transactions: [expect.objectContaining({ id: firstTransaction.body.id, receiptNo: firstTransaction.body.receiptNo })],
+          }),
+        ]));
+      });
+
+    await request(server)
+      .delete(`/payment-plans/${planId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", "payment-plan-cancel-blocked-idempotency-a")
+      .expect(409);
+
+    const voidKey = "payment-transaction-void-idempotency-a";
+    const voided = await request(server)
+      .post(`/payment-plans/${planId}/transactions/${firstTransaction.body.id}/void`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", voidKey)
+      .send({ note: "Hatalı tahsilat" })
+      .expect(201);
+    expect(voided.body).toMatchObject({
+      id: firstTransaction.body.id,
+      voidReason: "Hatalı tahsilat",
+    });
+    expect(voided.body.voidedAt).toEqual(expect.any(String));
+
+    await request(server)
+      .post(`/payment-plans/${planId}/transactions/${firstTransaction.body.id}/void`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", voidKey)
+      .send({ note: "Hatalı tahsilat" })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual(voided.body);
+      });
+
+    await request(server)
+      .post(`/payment-plans/${planId}/transactions/${firstTransaction.body.id}/void`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", voidKey)
+      .send({ note: "Farklı gerekçe" })
+      .expect(409);
+
+    await request(server)
+      .get("/payment-plans")
+      .query({ studentId: "student-a" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.arrayContaining([
+          expect.objectContaining({
+            id: planId,
+            installments: [expect.objectContaining({ id: installmentId, status: "PENDING" })],
+          }),
+        ]));
+      });
+
+    const cancelKey = "payment-plan-cancel-idempotency-a";
+    const canceled = await request(server)
+      .delete(`/payment-plans/${planId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", cancelKey)
+      .expect(200);
+    expect(canceled.body.deletedAt).toEqual(expect.any(String));
+    expect(canceled.body.installments).toEqual([
+      expect.objectContaining({ id: installmentId, status: "CANCELED" }),
+    ]);
+
+    await request(server)
+      .delete(`/payment-plans/${planId}`)
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .set("Idempotency-Key", cancelKey)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(canceled.body);
       });
   });
 

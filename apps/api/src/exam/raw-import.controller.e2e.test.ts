@@ -488,6 +488,73 @@ describe("RawImportController", () => {
     ]);
   });
 
+  it("TENANT_ADMIN karantina satırlarını bulk çözer ve satır bazlı hata döndürür", async () => {
+    const issued = await login("admin-a@example.test");
+    quarantineStore.records = [
+      createQuarantine(),
+      { ...createQuarantine(), id: "quarantine-b", rowNumber: 13, resolvedParticipantId: "participant-b" },
+    ];
+    const key = "raw-import-quarantine-resolve-bulk-idempotency-a";
+    const body = {
+      items: [
+        { quarantineId: "quarantine-a", resolvedStudentId: "student-a" },
+        { quarantineId: "quarantine-missing", resolvedStudentId: "student-b" },
+      ],
+    };
+
+    const response = await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/quarantines/resolve-bulk")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201);
+
+    await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/quarantines/resolve-bulk")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send(body)
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual(response.body);
+      });
+
+    await request(server)
+      .post("/exams/exam-a/raw-imports/raw-import-a/quarantines/resolve-bulk")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .set("Idempotency-Key", key)
+      .send({ items: [{ quarantineId: "quarantine-b", resolvedStudentId: "student-b" }] })
+      .expect(409);
+
+    expect(response.body.results).toEqual([
+      expect.objectContaining({
+        quarantineId: "quarantine-a",
+        status: "RESOLVED",
+        quarantine: expect.objectContaining({ id: "quarantine-a", resolvedStudentId: "student-a" }),
+      }),
+      expect.objectContaining({
+        quarantineId: "quarantine-missing",
+        status: "FAILED",
+        errorCode: "IMPORT_QUARANTINE_NOT_FOUND",
+      }),
+    ]);
+    expect(quarantineStore.markResolvedCalls).toEqual([
+      {
+        tenantId: "tenant-a",
+        examId: "exam-a",
+        rawImportId: "raw-import-a",
+        quarantineId: "quarantine-a",
+        resolvedStudentId: "student-a",
+      },
+    ]);
+    expect(producer.inputs).toEqual([
+      expect.objectContaining({
+        entityId: "quarantine-a",
+        participantId: "participant-a",
+      }),
+    ]);
+  });
+
   it("karantina resolve enqueue patlarsa kaydı açık bırakır", async () => {
     const issued = await login("admin-a@example.test");
     producer.failNext = true;

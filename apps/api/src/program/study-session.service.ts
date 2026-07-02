@@ -2,7 +2,9 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import type { StudySessionRecord as SharedStudySessionRecord } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { IdempotencyService } from "../http/idempotency.js";
 import { SchoolService } from "../school/school.service.js";
+import { TeacherService } from "../teacher/teacher.service.js";
 import { StudentService } from "../student/student.service.js";
 import { assertTenantResourceAccess, filterTenantResources, isTeacherSubjectContext } from "../tenant/tenant-access.js";
 import { type StudySessionStore, studySessionStoreToken } from "./study-session-store.js";
@@ -15,9 +17,11 @@ export interface StudySessionRecord extends SharedStudySessionRecord {
 export class StudySessionService {
   constructor(
     private readonly school: SchoolService,
+    private readonly teachers: TeacherService,
     private readonly students: StudentService,
     @Inject(studySessionStoreToken) private readonly store: StudySessionStore,
     @Optional() private readonly auditLogs?: AuditLogService,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   async list(context: RequestContext): Promise<StudySessionRecord[]> {
@@ -37,7 +41,19 @@ export class StudySessionService {
     return session;
   }
 
-  async create(context: RequestContext, input: Partial<StudySessionRecord>): Promise<StudySessionRecord> {
+  async create(context: RequestContext, input: Partial<StudySessionRecord>, idempotencyKey?: string): Promise<StudySessionRecord> {
+    if (idempotencyKey && this.idempotency) {
+      return this.idempotency.run(
+        context,
+        { key: idempotencyKey, operation: "study-session.create", request: input },
+        () => this.createOnce(context, input),
+      );
+    }
+
+    return this.createOnce(context, input);
+  }
+
+  private async createOnce(context: RequestContext, input: Partial<StudySessionRecord>): Promise<StudySessionRecord> {
     const tenantId = this.resolveTenantId(context, input.tenantId);
     await this.assertLinks(context, input.classId, input.teacherId, input.studentIds);
     await this.assertCourse(context, input.courseId);
@@ -156,7 +172,7 @@ export class StudySessionService {
     }
 
     await this.school.findClass(context, classId);
-    await this.school.findTeacher(context, teacherId);
+    await this.teachers.findTeacher(context, teacherId);
     await Promise.all(studentIds.map((studentId) => this.students.findOne(context, studentId)));
   }
 

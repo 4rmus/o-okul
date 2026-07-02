@@ -59,8 +59,10 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await stepNavigation.getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
     await expect(setupForm.getByRole("group", { name: "Öğretmen veri girişi" })).toHaveClass(/uh-segmented-control/);
     await expect(setupForm.getByRole("group", { name: "Öğrenci veri girişi" })).toHaveClass(/uh-segmented-control/);
+    await expect(setupForm.getByRole("group", { name: "Veli veri girişi" })).toHaveClass(/uh-segmented-control/);
     await expect(setupForm.getByRole("link", { name: "Öğretmen XLSX şablonu" })).toHaveAttribute("href", "/templates/ogretmen-aktarim-sablonu.xlsx");
     await expect(setupForm.getByRole("link", { name: "Öğrenci XLSX şablonu" })).toHaveAttribute("href", "/templates/ogrenci-aktarim-sablonu.xlsx");
+    await expect(setupForm.getByRole("link", { name: "Veli XLSX şablonu" })).toHaveAttribute("href", "/templates/veli-aktarim-sablonu.xlsx");
     await setupForm.getByLabel("Öğrenci aktarım dosyası").setInputFiles({
       buffer: Buffer.from("%PDF-1.7"),
       mimeType: "application/pdf",
@@ -104,6 +106,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     );
     expect(storedDraft.general.contactEmail).toBe("");
     expect(storedDraft.people.importOwner).toBe("");
+    expect(storedDraft.people.guardianImportFileName).toBe("");
     expect(storedDraft.people.teacherImportFileName).toBe("");
     expect(storedDraft.people.studentImportFileName).toBe("");
 
@@ -112,7 +115,7 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expectNoClippedVisibleText(page, "setup-wizard-mobile");
   });
 
-  test("tablette taşma üretmez ve assistant rolünde mutasyon yüzeyini açmaz", async ({ page }) => {
+  test("tablette taşma üretmez ve assistant rolünde kurulum yüzeyini açar", async ({ page }) => {
     const unexpectedMutations: string[] = [];
     await openSetupWizard(page, { height: 1024, width: 768 }, { roles: ["TENANT_ADMIN"], unexpectedMutations });
     await expect(page.getByLabel("Kurulum operasyon metrikleri")).toContainText("Sınıf");
@@ -121,18 +124,17 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expectNoClippedVisibleText(page, "setup-wizard-tablet");
 
     await openSetupWizard(page, { height: 844, width: 390 }, { roles: ["ASSISTANT_ADMIN"], unexpectedMutations });
-    await expect(page).toHaveURL(/\/kurum$/);
-    await expect(page.getByRole("heading", { level: 1, name: "Kurulum Sihirbazı" })).toHaveCount(0);
-    await expect(page.getByLabel("Kurulum formu")).toHaveCount(0);
-    await expect(page.getByLabel("Öğretmen aktarım dosyası")).toHaveCount(0);
-    await expect(page.getByLabel("Öğrenci aktarım dosyası")).toHaveCount(0);
+    await expect(page).toHaveURL(/\/kurum\/kurulum$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Kurulum Sihirbazı" })).toBeVisible();
+    await expect(page.getByLabel("Kurulum formu")).toBeVisible();
+    await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
+    await expect(page.getByLabel("Öğretmen aktarım dosyası")).toBeVisible();
+    await expect(page.getByLabel("Öğrenci aktarım dosyası")).toBeVisible();
+    await expect(page.getByLabel("Veli aktarım dosyası")).toBeVisible();
     await page.getByRole("button", { name: "Komut paleti" }).click();
     const commandDialog = page.getByRole("dialog", { name: "Komut paleti" });
     await commandDialog.getByLabel("Komut ara").fill("kurulum");
-    await expect(commandDialog.getByRole("link", { name: /Yeni dönem açılışı|Kurulum/ })).toHaveCount(0);
-    await expect
-      .poll(() => page.evaluate(() => Object.keys(window.sessionStorage).filter((key) => key.startsWith("uh_onboarding_"))))
-      .toEqual([]);
+    await expect(commandDialog.getByRole("link", { name: /Yeni dönem açılışı|Kurulum/ }).first()).toBeVisible();
     expect(unexpectedMutations).toEqual([]);
   });
 
@@ -175,6 +177,43 @@ test.describe("Kurulum sihirbazı UX sözleşmesi", () => {
     await expect(setupForm).toContainText("2 sınıf, 3 ders, 1 öğretmen, 0 öğretmen ataması");
     await expectNoVisibleTextValues(page, "setup-teacher-import-summary", hostileUploadValues);
     await expectDraftStorageDoesNotContain(page, "setup-teacher-import-storage", hostileUploadValues);
+  });
+
+  test("veli Excel dosyasını zorunlu tutar ve import sonucunu özetler", async ({ page }) => {
+    await openSetupWizard(page, { height: 844, width: 390 }, { roles: ["TENANT_ADMIN"] });
+
+    const setupForm = page.getByLabel("Kurulum formu");
+    await page.getByLabel("Adım ilerlemesi").getByRole("tab", { name: /Kişi Yönetim Altyapısı/ }).click();
+    await setupForm.getByRole("group", { name: "Öğretmen veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+    await setupForm.getByRole("group", { name: "Öğrenci veri girişi" }).getByRole("button", { name: "Tek tek giriş" }).click();
+    await setupForm.getByRole("group", { name: "Veli veri girişi" }).getByRole("button", { name: "Excel aktarımı" }).click();
+    await setupForm.getByLabel("Veri sorumlusu").fill("Operasyon sorumlusu");
+    await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
+    await expect(setupForm).toContainText("Veli aktarım dosyası zorunludur.");
+
+    await setupForm.getByLabel("Veli aktarım dosyası").setInputFiles({
+      buffer: Buffer.from("\uFEFFad;soyad;telefon;tc_kimlik_no;email;okul_no\nAyse;Veli;05550000101;10000002058;ayse.veli@example.test;100\n", "utf8"),
+      mimeType: "text/csv",
+      name: "veli-ayse-5550000101-tckn-10000002058.csv",
+    });
+    await setupForm.getByRole("button", { name: "Kaydet ve bitir" }).click();
+
+    await expect(setupForm).toContainText("2 sınıf, 3 ders, 0 öğretmen, 0 öğretmen ataması");
+    await expect(setupForm).toContainText("1 veli eklendi");
+    await expectNoVisibleTextValues(page, "setup-guardian-import-summary", [
+      ...hostileUploadValues,
+      "veli-ayse-5550000101-tckn-10000002058.csv",
+      "10000002058",
+      "5550000101",
+      "ayse.veli@example.test",
+    ]);
+    await expectDraftStorageDoesNotContain(page, "setup-guardian-import-storage", [
+      ...hostileUploadValues,
+      "veli-ayse-5550000101-tckn-10000002058.csv",
+      "10000002058",
+      "5550000101",
+      "ayse.veli@example.test",
+    ]);
   });
 
   test("boş ders şablonu cevabında yerel derslerle kaydı tamamlar", async ({ page }) => {
@@ -329,6 +368,18 @@ function mockSetupApiResponse(
     };
   }
   if (method === "POST" && pathName === "/students/imports") return { importedRows: 1, students: [] };
+  if (method === "POST" && pathName === "/guardians/imports/dry-run") {
+    return {
+      dryRun: true,
+      errors: [],
+      totalRows: 1,
+      validRows: [{ firstName: "Ayse", lastName: "Veli", row: 2, studentId: "student-setup-100", studentNo: "100" }],
+      wouldImport: true,
+    };
+  }
+  if (method === "POST" && pathName === "/guardians/imports") {
+    return { createdOrMatchedGuardians: 1, guardians: [], importedRows: 1, linkedStudents: 1, links: [] };
+  }
   return [];
 }
 

@@ -4668,7 +4668,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByLabel("Katılan öğrenciler").getByRole("row", { name: /Bora B.*Sonuç var.*%73,8.*14,75.*20.*2\/2/ })).toBeVisible();
 
   await expandSidebarGroup(page, "Sınav ve Analiz");
-  await clickSidebarLink(page, "Raporlar", /\/kurum\/raporlar$/);
+  await clickSidebarLink(page, "Sınav Raporları", /\/kurum\/raporlar$/);
   await expect(heading(page, { name: "Sınav Raporu" })).toBeVisible();
   await fillReportExamReference(page, "exam-a");
   await page.getByRole("button", { name: "Raporu getir" }).click();

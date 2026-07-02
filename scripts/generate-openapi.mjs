@@ -47,6 +47,7 @@ const guardianStudentRecordRequired = [
 ];
 const guardianStudentDetailStudentRequired = ["id", "firstName", "lastName", "status", "hasPortalUser"];
 const paymentInstallmentStatuses = ["PENDING", "PAID", "OVERDUE", "CANCELED"];
+const paymentTransactionMethods = ["CASH", "BANK_TRANSFER", "CARD_POS", "OTHER"];
 const paymentPlanWithInstallmentsRequired = ["id", "tenantId", "studentId", "title", "totalAmount", "currency", "createdAt", "installments"];
 const paymentPlanPortalForbiddenDeep = [
   "birthDate",
@@ -2275,6 +2276,19 @@ const requiredOperationContracts = [
     ],
   },
   {
+    method: "post",
+    path: "/api/v1/exams/{examId}/raw-imports/{rawImportId}/quarantines/resolve-bulk",
+    requestBody: true,
+    responseEnvelope: true,
+    idempotencyHeader: true,
+    requestRequired: ["items"],
+    responseDataRequired: ["results"],
+    fieldChecks: [
+      { path: ["requestBody", "items"], minItems: 1 },
+      { path: ["responseData", "results", "items", "status"], enum: ["RESOLVED", "FAILED"] },
+    ],
+  },
+  {
     method: "get",
     path: "/api/v1/import-quarantines/summary",
     responseEnvelope: true,
@@ -2596,6 +2610,25 @@ const requiredOperationContracts = [
     responseEnvelope: true,
     requestRequired: ["firstName", "lastName"],
     responseDataRequired: guardianRecordRequired,
+  },
+  {
+    method: "post",
+    path: "/api/v1/guardians/imports/dry-run",
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["fileBase64"],
+    responseDataRequired: ["dryRun", "totalRows", "validRows", "errors", "wouldImport"],
+    responseDataForbiddenDeep: ["fileBase64", "nationalId", "nationalIdEncrypted", "nationalIdHash"],
+  },
+  {
+    method: "post",
+    path: "/api/v1/guardians/imports",
+    requestBody: true,
+    responseEnvelope: true,
+    idempotencyHeader: true,
+    requestRequired: ["fileBase64"],
+    responseDataRequired: ["importedRows", "createdOrMatchedGuardians", "linkedStudents", "guardians", "links"],
+    responseDataForbiddenDeep: ["fileBase64", "nationalId", "nationalIdEncrypted", "nationalIdHash"],
   },
   {
     method: "get",
@@ -3356,6 +3389,61 @@ const requiredOperationContracts = [
     fieldChecks: [
       { path: ["requestBody", "status"], enum: paymentInstallmentStatuses },
       { path: ["responseData", "installments", "items", "status"], enum: paymentInstallmentStatuses },
+    ],
+  },
+  {
+    method: "delete",
+    path: "/api/v1/payment-plans/{planId}",
+    responseEnvelope: true,
+    idempotencyHeader: true,
+    responseDataRequired: ["id", "tenantId", "studentId", "title", "totalAmount", "currency", "createdAt", "installments"],
+    fieldChecks: [
+      { path: ["responseData", "installments", "items", "status"], enum: paymentInstallmentStatuses },
+    ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/payment-plans/{planId}/transactions",
+    responseListEnvelope: true,
+    responseDataItemsRequired: ["id", "tenantId", "planId", "amount", "currency", "method", "paidAt", "receiptNo", "createdAt"],
+    fieldChecks: [
+      { path: ["responseDataItem", "amount"], minimum: 1 },
+      { path: ["responseDataItem", "method"], enum: paymentTransactionMethods },
+      { path: ["responseDataItem", "paidAt"], format: "date-time" },
+      { path: ["responseDataItem", "createdAt"], format: "date-time" },
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/payment-plans/{planId}/transactions",
+    requestBody: true,
+    responseEnvelope: true,
+    idempotencyHeader: true,
+    requestRequired: ["amount", "method", "paidAt"],
+    responseDataRequired: ["id", "tenantId", "planId", "amount", "currency", "method", "paidAt", "receiptNo", "createdAt"],
+    fieldChecks: [
+      { path: ["requestBody", "amount"], minimum: 1 },
+      { path: ["requestBody", "method"], enum: paymentTransactionMethods },
+      { path: ["requestBody", "paidAt"], format: "date-time" },
+      { path: ["responseData", "amount"], minimum: 1 },
+      { path: ["responseData", "method"], enum: paymentTransactionMethods },
+      { path: ["responseData", "paidAt"], format: "date-time" },
+      { path: ["responseData", "createdAt"], format: "date-time" },
+    ],
+  },
+  {
+    method: "post",
+    path: "/api/v1/payment-plans/{planId}/transactions/{transactionId}/void",
+    requestBody: true,
+    responseEnvelope: true,
+    idempotencyHeader: true,
+    responseDataRequired: ["id", "tenantId", "planId", "amount", "currency", "method", "paidAt", "receiptNo", "createdAt", "voidedAt"],
+    fieldChecks: [
+      { path: ["responseData", "amount"], minimum: 1 },
+      { path: ["responseData", "method"], enum: paymentTransactionMethods },
+      { path: ["responseData", "paidAt"], format: "date-time" },
+      { path: ["responseData", "createdAt"], format: "date-time" },
+      { path: ["responseData", "voidedAt"], format: "date-time" },
     ],
   },
   {

@@ -13,14 +13,14 @@ import { normalizeTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { maskTcIdentity, normalizeTcIdentity } from "../student/tc-identity.js";
-import { type ClassStore, classStoreToken } from "./class-store.js";
-import { type CourseStore, courseStoreToken } from "./course-store.js";
-import { SchoolService } from "./school.service.js";
+import { type ClassStore, classStoreToken } from "../school/class-store.js";
+import { type CourseStore, courseStoreToken } from "../school/course-store.js";
+import { TeacherService } from "./teacher.service.js";
 import {
   type TeacherAssignmentStore,
   teacherAssignmentStoreToken,
-} from "./teacher-assignment-store.js";
-import { type TeacherStore, teacherStoreToken } from "./teacher-store.js";
+} from "../school/teacher-assignment-store.js";
+import { type TeacherStore, teacherStoreToken } from "../school/teacher-store.js";
 
 interface TeacherImportInput {
   fileBase64?: string;
@@ -37,7 +37,7 @@ const maxTeacherImportBytes = 5 * 1024 * 1024;
 @Injectable()
 export class TeacherImportService {
   constructor(
-    private readonly school: SchoolService,
+    private readonly teacherService: TeacherService,
     @Inject(classStoreToken) private readonly classes: ClassStore,
     @Inject(courseStoreToken) private readonly courses: CourseStore,
     @Inject(teacherStoreToken) private readonly teachers: TeacherStore,
@@ -107,7 +107,7 @@ export class TeacherImportService {
       const key = teacherKey(row);
       let teacher = teacherByKey.get(key);
       if (!teacher) {
-        teacher = await this.school.createTeacher(context, {
+        teacher = await this.teacherService.createTeacher(context, {
           branch: row.branch,
           firstName: row.firstName,
           lastName: row.lastName,
@@ -117,7 +117,7 @@ export class TeacherImportService {
         teacherByKey.set(key, teacher);
         createdTeachers += 1;
       } else if (row.nationalId && row.phone && !teacher.userId) {
-        teacher = await this.school.updateTeacher(context, teacher.id, {
+        teacher = await this.teacherService.updateTeacher(context, teacher.id, {
           nationalId: row.nationalId,
           phone: row.phone,
         });
@@ -136,7 +136,7 @@ export class TeacherImportService {
       });
       if (assignmentKeys.has(nextAssignmentKey)) continue;
 
-      const assignment = await this.school.createTeacherAssignment(context, teacher.id, {
+      const assignment = await this.teacherService.createTeacherAssignment(context, teacher.id, {
         classId: row.classId,
         courseId: row.courseId,
         role,

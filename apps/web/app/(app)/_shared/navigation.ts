@@ -76,7 +76,7 @@ export const institutionNavGroups: readonly InstitutionNavGroup[] = [
     label: "Başlangıç",
     items: [
       { href: "/kurum", icon: LayoutDashboard, label: "Özet" },
-      { href: "/kurum/kurulum", icon: Settings, label: "Kurulum", requiredCapability: "operation:manage" },
+      { href: "/kurum/kurulum", icon: Settings, label: "Kurulum", requiredCapability: "setup:manage" },
     ],
   },
   {
@@ -106,7 +106,7 @@ export const institutionNavGroups: readonly InstitutionNavGroup[] = [
       { href: "/kurum/sinavlar", icon: FileText, label: "Sınavlar", requiredCapability: "academic:manage" },
       { href: "/kurum/kazanimlar", icon: ClipboardList, label: "Kazanımlar", requiredCapability: "academic:manage" },
       { href: "/kurum/optik", icon: ScanLine, label: "Optik Okuma", requiredCapability: "academic:manage" },
-      { href: "/kurum/raporlar", icon: BarChart3, label: "Raporlar", requiredCapability: "academic:manage" },
+      { href: "/kurum/raporlar", icon: BarChart3, label: "Sınav Raporları", requiredCapability: "academic:manage" },
     ],
   },
   {
@@ -264,7 +264,7 @@ export const staticBreadcrumbLabels: Record<string, string> = {
   "/kurum/ogretmenler": "Öğretmenler",
   "/kurum/optik": "Optik Okuma",
   "/kurum/program": "Program",
-  "/kurum/raporlar": "Raporlar",
+  "/kurum/raporlar": "Sınav Raporları",
   "/kurum/rol-onizleme": "Rol Önizleme",
   "/kurum/seviyeler": "Seviyeler",
   "/kurum/sinavlar": "Sınavlar",

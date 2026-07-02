@@ -49,12 +49,14 @@ import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { ReportGenerationService, type ReportSnapshotListFilters } from "../report/report-generation.service.js";
+import { GuardianService } from "../guardian/guardian.service.js";
 import { SchoolService } from "../school/school.service.js";
 import {
   guardianNotificationPreferenceBodySchema,
   type GuardianNotificationPreferenceBody,
 } from "../school/school-validation.js";
 import { StudentService } from "../student/student.service.js";
+import { TeacherService } from "../teacher/teacher.service.js";
 import { SupportTicketService } from "../support-ticket/support-ticket.service.js";
 import {
   type PortalSupportTicketCreateBody,
@@ -84,10 +86,12 @@ export class MeController {
     private readonly notificationDevices: NotificationDeviceService,
     private readonly payments: PaymentService,
     private readonly reports: ReportGenerationService,
+    private readonly guardians: GuardianService,
     private readonly school: SchoolService,
     private readonly schedules: ScheduleService,
     private readonly students: StudentService,
     private readonly supportTickets: SupportTicketService,
+    private readonly teachers: TeacherService,
     private readonly teacherNotes: TeacherNoteService,
     private readonly tenants: TenantService,
   ) {}
@@ -121,7 +125,7 @@ export class MeController {
 
   @Patch("tenant")
   @Roles("TENANT_ADMIN", "ASSISTANT_ADMIN")
-  @RequireCapability("operation:manage")
+  @RequireCapability("setup:manage")
   updateTenant(
     @Body(zodBody(tenantCurrentProfileBodySchema)) body: TenantCurrentProfileBody,
   ): Promise<TenantRecord> {
@@ -163,13 +167,13 @@ export class MeController {
   @Get("student/guardians")
   @Roles("STUDENT")
   studentGuardians(): Promise<GuardianRecord[]> {
-    return this.school.listCurrentStudentGuardians(getRequestContext());
+    return this.guardians.listCurrentStudentGuardians(getRequestContext());
   }
 
   @Get("student/guardian-links")
   @Roles("STUDENT")
   studentGuardianLinks(): Promise<GuardianStudentRecord[]> {
-    return this.school.listCurrentStudentGuardianLinks(getRequestContext());
+    return this.guardians.listCurrentStudentGuardianLinks(getRequestContext());
   }
 
   @Get("student/enrollments")
@@ -362,7 +366,7 @@ export class MeController {
   @Get("guardian/students/:studentId/notification-preferences")
   @Roles("GUARDIAN")
   guardianStudentNotificationPreferences(@Param("studentId") studentId: string): Promise<GuardianStudentRecord> {
-    return this.school.findCurrentGuardianNotificationPreferences(getRequestContext(), studentId);
+    return this.guardians.findCurrentGuardianNotificationPreferences(getRequestContext(), studentId);
   }
 
   @Patch("guardian/students/:studentId/notification-preferences")
@@ -371,7 +375,7 @@ export class MeController {
     @Param("studentId") studentId: string,
     @Body(zodBody(guardianNotificationPreferenceBodySchema)) body: GuardianNotificationPreferenceBody,
   ): Promise<GuardianStudentRecord> {
-    return this.school.updateCurrentGuardianNotificationPreferences(getRequestContext(), studentId, body);
+    return this.guardians.updateCurrentGuardianNotificationPreferences(getRequestContext(), studentId, body);
   }
 
   @Get("guardian/students/:studentId/payment-plans")
@@ -656,7 +660,7 @@ export class MeController {
   @Get("teacher")
   @Roles("TEACHER")
   async teacher(): Promise<TeacherRecord> {
-    return toPublicTeacherResponse(await this.school.findCurrentTeacher(getRequestContext()));
+    return toPublicTeacherResponse(await this.teachers.findCurrentTeacher(getRequestContext()));
   }
 
   @Get("teacher/schedule")

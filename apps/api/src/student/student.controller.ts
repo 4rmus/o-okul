@@ -6,6 +6,8 @@ import { optionalDateString, optionalTrimmedString, requiredTrimmedString, zodBo
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
+import { GuardianService } from "../guardian/guardian.service.js";
+import { TeacherService } from "../teacher/teacher.service.js";
 import {
   StudentImportService,
 } from "./student-import.service.js";
@@ -113,6 +115,8 @@ export class StudentController {
     private readonly students: StudentService,
     private readonly imports: StudentImportService,
     private readonly school: SchoolService,
+    private readonly guardianService: GuardianService,
+    private readonly teacherService: TeacherService,
   ) {}
 
   @Get()
@@ -149,19 +153,19 @@ export class StudentController {
   @Get(":id/guardians")
   @Roles("TEACHER")
   guardians(@Param("id") id: string): Promise<GuardianRecord[]> {
-    return this.school.listStudentGuardians(getRequestContext(), id);
+    return this.guardianService.listStudentGuardians(getRequestContext(), id);
   }
 
   @Get(":id/guardian-links")
   @Roles("TEACHER")
   guardianLinks(@Param("id") id: string): Promise<GuardianStudentRecord[]> {
-    return this.school.listStudentGuardianLinks(getRequestContext(), id);
+    return this.guardianService.listStudentGuardianLinks(getRequestContext(), id);
   }
 
   @Get(":id/teacher-assignments")
   @Roles("TEACHER")
   teacherAssignments(@Param("id") id: string): Promise<TeacherAssignmentRecord[]> {
-    return this.school.listStudentTeacherAssignments(getRequestContext(), id);
+    return this.teacherService.listStudentTeacherAssignments(getRequestContext(), id);
   }
 
   @Post()
@@ -272,7 +276,7 @@ export class StudentController {
       const linked = await Promise.all(
         filtered.map(async (student) => ({
           id: student.id,
-          hasGuardian: (await this.school.listStudentGuardianLinks(getRequestContext(), student.id)).length > 0,
+          hasGuardian: (await this.guardianService.listStudentGuardianLinks(getRequestContext(), student.id)).length > 0,
         })),
       );
       const linkedById = new Map(linked.map((record) => [record.id, record.hasGuardian]));

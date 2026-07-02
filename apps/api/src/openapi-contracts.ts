@@ -471,6 +471,10 @@ const paymentInstallmentStatusSchema = {
   type: "string",
   enum: ["PENDING", "PAID", "OVERDUE", "CANCELED"],
 };
+const paymentTransactionMethodSchema = {
+  type: "string",
+  enum: ["CASH", "BANK_TRANSFER", "CARD_POS", "OTHER"],
+};
 
 const teacherAssignmentRoleSchema = {
   type: "string",
@@ -802,10 +806,12 @@ const teacherRecordSchema = objectSchema({
   lastName: stringSchema(),
   branch: stringSchema(),
   phone: stringSchema(),
+  provisioning: { type: "string", enum: ["PROVISIONED", "INVITED", "SKIPPED"] },
 }, ["id", "tenantId", "firstName", "lastName"]);
 
 const teacherCreateRequestSchema = objectSchema({
   branch: stringSchema(),
+  email: stringSchema(),
   firstName: stringSchema(),
   lastName: stringSchema(),
   nationalId: stringSchema(),
@@ -815,6 +821,7 @@ const teacherCreateRequestSchema = objectSchema({
 
 const teacherUpdateRequestSchema = objectSchema({
   branch: stringSchema(),
+  email: stringSchema(),
   firstName: stringSchema(),
   lastName: stringSchema(),
   nationalId: stringSchema(),
@@ -1239,6 +1246,19 @@ const paymentInstallmentUpdateRequestSchema = objectSchema({
   status: paymentInstallmentStatusSchema,
 });
 
+const paymentTransactionCreateRequestSchema = objectSchema({
+  amount: integerSchema({ minimum: 1 }),
+  currency: stringSchema({ minLength: 3, maxLength: 3 }),
+  installmentId: stringSchema(),
+  method: paymentTransactionMethodSchema,
+  note: stringSchema(),
+  paidAt: stringSchema({ format: "date-time" }),
+}, ["amount", "method", "paidAt"]);
+
+const paymentTransactionVoidRequestSchema = objectSchema({
+  note: stringSchema(),
+});
+
 const paymentInstallmentRecordSchema = objectSchema({
   id: stringSchema(),
   tenantId: stringSchema(),
@@ -1251,6 +1271,37 @@ const paymentInstallmentRecordSchema = objectSchema({
   createdAt: stringSchema({ format: "date-time" }),
   deletedAt: stringSchema({ format: "date-time" }),
 }, ["id", "tenantId", "planId", "installmentNo", "amount", "dueDate", "status", "createdAt"]);
+
+const paymentTransactionRecordSchema = objectSchema({
+  id: stringSchema(),
+  tenantId: stringSchema(),
+  planId: stringSchema(),
+  installmentId: stringSchema(),
+  amount: integerSchema({ minimum: 1 }),
+  currency: stringSchema({ minLength: 3, maxLength: 3 }),
+  method: paymentTransactionMethodSchema,
+  paidAt: stringSchema({ format: "date-time" }),
+  receiptNo: stringSchema(),
+  note: stringSchema(),
+  voidedAt: stringSchema({ format: "date-time" }),
+  voidReason: stringSchema(),
+  createdAt: stringSchema({ format: "date-time" }),
+}, ["id", "tenantId", "planId", "amount", "currency", "method", "paidAt", "receiptNo", "createdAt"]);
+const voidedPaymentTransactionRecordSchema = objectSchema({
+  id: stringSchema(),
+  tenantId: stringSchema(),
+  planId: stringSchema(),
+  installmentId: stringSchema(),
+  amount: integerSchema({ minimum: 1 }),
+  currency: stringSchema({ minLength: 3, maxLength: 3 }),
+  method: paymentTransactionMethodSchema,
+  paidAt: stringSchema({ format: "date-time" }),
+  receiptNo: stringSchema(),
+  note: stringSchema(),
+  voidedAt: stringSchema({ format: "date-time" }),
+  voidReason: stringSchema(),
+  createdAt: stringSchema({ format: "date-time" }),
+}, ["id", "tenantId", "planId", "amount", "currency", "method", "paidAt", "receiptNo", "createdAt", "voidedAt"]);
 
 const paymentPlanWithInstallmentsRecordSchema = objectSchema({
   id: stringSchema(),
@@ -1267,6 +1318,7 @@ const paymentPlanWithInstallmentsRecordSchema = objectSchema({
   createdAt: stringSchema({ format: "date-time" }),
   deletedAt: stringSchema({ format: "date-time" }),
   installments: arraySchema(paymentInstallmentRecordSchema),
+  transactions: arraySchema(paymentTransactionRecordSchema),
 }, ["id", "tenantId", "studentId", "title", "totalAmount", "currency", "createdAt", "installments"]);
 
 const attendanceRecordSchema = objectSchema({
@@ -1326,6 +1378,8 @@ const guardianRecordSchema = objectSchema({
   lastName: stringSchema(),
   phone: stringSchema(),
   userId: stringSchema(),
+  matched: { type: "boolean" },
+  provisioning: { type: "string", enum: ["PROVISIONED", "INVITED", "SKIPPED"] },
 }, ["id", "tenantId", "firstName", "lastName"]);
 
 const guardianPiiPurgedRecordSchema = objectSchema({
@@ -1337,6 +1391,7 @@ const guardianPiiPurgedRecordSchema = objectSchema({
 }, ["id", "tenantId", "firstName", "lastName"]);
 
 const guardianCreateRequestSchema = objectSchema({
+  email: stringSchema(),
   firstName: stringSchema(),
   lastName: stringSchema(),
   nationalId: stringSchema(),
@@ -1345,11 +1400,40 @@ const guardianCreateRequestSchema = objectSchema({
 }, ["firstName", "lastName"]);
 
 const guardianUpdateRequestSchema = objectSchema({
+  email: stringSchema(),
   firstName: stringSchema(),
   lastName: stringSchema(),
   nationalId: stringSchema(),
   phone: stringSchema(),
 });
+
+const guardianImportRequestSchema = objectSchema({
+  fileBase64: stringSchema({ minLength: 1 }),
+}, ["fileBase64"]);
+
+const guardianImportErrorSchema = objectSchema({
+  row: integerSchema({ minimum: 1 }),
+  field: { type: "string", enum: ["email", "firstName", "lastName", "nationalId", "phone", "studentNo"] },
+  code: { type: "string", enum: ["INVALID", "INVALID_EMAIL", "REQUIRED", "STUDENT_NOT_FOUND"] },
+  value: stringSchema(),
+}, ["row", "field", "code"]);
+
+const guardianImportPreviewRowSchema = objectSchema({
+  row: integerSchema({ minimum: 1 }),
+  email: stringSchema({ format: "email" }),
+  firstName: stringSchema(),
+  lastName: stringSchema(),
+  studentId: stringSchema(),
+  studentNo: stringSchema(),
+}, ["row", "firstName", "lastName", "studentId", "studentNo"]);
+
+const guardianImportDryRunResultSchema = objectSchema({
+  dryRun: { type: "boolean", enum: [true] },
+  totalRows: integerSchema({ minimum: 0 }),
+  validRows: arraySchema(guardianImportPreviewRowSchema),
+  errors: arraySchema(guardianImportErrorSchema),
+  wouldImport: { type: "boolean" },
+}, ["dryRun", "totalRows", "validRows", "errors", "wouldImport"]);
 
 const guardianStudentRelationRequestProperties: Record<string, JsonSchema> = {
   canOpenSupportTickets: { type: "boolean" },
@@ -1386,6 +1470,14 @@ const guardianStudentRecordSchema = objectSchema({
   "canReceiveAnnouncements",
   "canOpenSupportTickets",
 ]);
+
+const guardianImportResultSchema = objectSchema({
+  importedRows: integerSchema({ minimum: 0 }),
+  createdOrMatchedGuardians: integerSchema({ minimum: 0 }),
+  linkedStudents: integerSchema({ minimum: 0 }),
+  guardians: arraySchema(guardianRecordSchema),
+  links: arraySchema(guardianStudentRecordSchema),
+}, ["importedRows", "createdOrMatchedGuardians", "linkedStudents", "guardians", "links"]);
 
 const studentRecordSchema = objectSchema({
   id: stringSchema(),
@@ -1602,6 +1694,13 @@ const rawImportQuarantineResolveRequestSchema = objectSchema({
   resolvedStudentId: stringSchema(),
 }, ["resolvedStudentId"]);
 
+const rawImportQuarantineResolveBulkRequestSchema = objectSchema({
+  items: arraySchema(objectSchema({
+    quarantineId: stringSchema(),
+    resolvedStudentId: stringSchema(),
+  }, ["quarantineId", "resolvedStudentId"]), { minItems: 1 }),
+}, ["items"]);
+
 const rawImportEvaluationQueueJobSchema = objectSchema({
   participantId: stringSchema(),
   jobId: stringSchema(),
@@ -1691,6 +1790,15 @@ const resolvedRawImportQuarantineRecordSchema = objectSchema({
   "createdAt",
   "updatedAt",
 ]);
+
+const rawImportQuarantineResolveBulkResponseSchema = objectSchema({
+  results: arraySchema(objectSchema({
+    errorCode: stringSchema(),
+    quarantine: resolvedRawImportQuarantineRecordSchema,
+    quarantineId: stringSchema(),
+    status: { type: "string", enum: ["RESOLVED", "FAILED"] },
+  }, ["quarantineId", "status"])),
+}, ["results"]);
 
 const rawImportQuarantineSummarySchema = objectSchema({
   openCount: integerSchema({ minimum: 0 }),
@@ -2742,6 +2850,16 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/guardians": {
     requestBody: guardianCreateRequestSchema,
     responseBody: guardianRecordSchema,
+    idempotent: true,
+  },
+  "post /api/v1/guardians/imports/dry-run": {
+    requestBody: guardianImportRequestSchema,
+    responseBody: guardianImportDryRunResultSchema,
+  },
+  "post /api/v1/guardians/imports": {
+    requestBody: guardianImportRequestSchema,
+    responseBody: guardianImportResultSchema,
+    idempotent: true,
   },
   "get /api/v1/guardians/{id}": {
     responseBody: guardianRecordSchema,
@@ -2765,6 +2883,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/guardians/{id}/students": {
     requestBody: guardianStudentLinkRequestSchema,
     responseBody: guardianStudentRecordSchema,
+    idempotent: true,
   },
   "patch /api/v1/guardians/{id}/students/{studentId}": {
     requestBody: guardianStudentRelationRequestSchema,
@@ -2937,6 +3056,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/classes": {
     requestBody: classCreateRequestSchema,
     responseBody: classRecordSchema,
+    idempotent: true,
   },
   "get /api/v1/classes": {
     responseBody: arraySchema(classRecordSchema),
@@ -2959,6 +3079,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/courses": {
     requestBody: namedSchoolReferenceCreateRequestSchema,
     responseBody: namedSchoolReferenceRecordSchema,
+    idempotent: true,
   },
   "get /api/v1/courses/{id}": {
     responseBody: namedSchoolReferenceRecordSchema,
@@ -3017,6 +3138,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/teachers": {
     requestBody: teacherCreateRequestSchema,
     responseBody: teacherRecordSchema,
+    idempotent: true,
   },
   "get /api/v1/teachers/{id}": {
     responseBody: teacherRecordSchema,
@@ -3043,6 +3165,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/teachers/{id}/assignments": {
     requestBody: teacherAssignmentCreateRequestSchema,
     responseBody: teacherAssignmentRecordSchema,
+    idempotent: true,
   },
   "patch /api/v1/teachers/{id}/assignments/{assignmentId}": {
     requestBody: teacherAssignmentUpdateRequestSchema,
@@ -3060,6 +3183,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/schedule-lessons": {
     requestBody: scheduleLessonCreateRequestSchema,
     responseBody: scheduleLessonRecordSchema,
+    idempotent: true,
   },
   "get /api/v1/schedule-lessons": {
     responseBody: arraySchema(scheduleLessonRecordSchema),
@@ -3078,6 +3202,7 @@ const operationContracts: Record<string, OperationContract> = {
   "post /api/v1/study-sessions": {
     requestBody: studySessionCreateRequestSchema,
     responseBody: studySessionRecordSchema,
+    idempotent: true,
   },
   "get /api/v1/study-sessions": {
     responseBody: arraySchema(studySessionRecordSchema),
@@ -3272,6 +3397,24 @@ const operationContracts: Record<string, OperationContract> = {
     requestBody: paymentInstallmentUpdateRequestSchema,
     responseBody: paymentPlanWithInstallmentsRecordSchema,
   },
+  "delete /api/v1/payment-plans/{planId}": {
+    idempotent: true,
+    responseBody: paymentPlanWithInstallmentsRecordSchema,
+  },
+  "get /api/v1/payment-plans/{planId}/transactions": {
+    responseBody: arraySchema(paymentTransactionRecordSchema),
+    listResponse: true,
+  },
+  "post /api/v1/payment-plans/{planId}/transactions": {
+    idempotent: true,
+    requestBody: paymentTransactionCreateRequestSchema,
+    responseBody: paymentTransactionRecordSchema,
+  },
+  "post /api/v1/payment-plans/{planId}/transactions/{transactionId}/void": {
+    idempotent: true,
+    requestBody: paymentTransactionVoidRequestSchema,
+    responseBody: voidedPaymentTransactionRecordSchema,
+  },
   "get /api/v1/payment-plans": {
     responseBody: arraySchema(paymentPlanWithInstallmentsRecordSchema),
     listResponse: true,
@@ -3341,6 +3484,11 @@ const operationContracts: Record<string, OperationContract> = {
     idempotent: true,
     requestBody: rawImportQuarantineResolveRequestSchema,
     responseBody: resolvedRawImportQuarantineRecordSchema,
+  },
+  "post /api/v1/exams/{examId}/raw-imports/{rawImportId}/quarantines/resolve-bulk": {
+    idempotent: true,
+    requestBody: rawImportQuarantineResolveBulkRequestSchema,
+    responseBody: rawImportQuarantineResolveBulkResponseSchema,
   },
   "post /api/v1/students/imports": {
     idempotent: true,

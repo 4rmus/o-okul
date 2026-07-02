@@ -476,6 +476,8 @@ export interface AcademicTermUpdateRequest {
   isActive?: boolean;
 }
 
+export type IdentityProvisioningStatus = "PROVISIONED" | "INVITED" | "SKIPPED";
+
 export interface TeacherRecord {
   id: string;
   tenantId: string;
@@ -484,6 +486,7 @@ export interface TeacherRecord {
   branch?: string;
   phone?: string;
   userId?: string;
+  provisioning?: IdentityProvisioningStatus;
 }
 
 export interface TeacherCreateRequest {
@@ -491,6 +494,7 @@ export interface TeacherCreateRequest {
   firstName: string;
   lastName: string;
   branch?: string;
+  email?: string;
   nationalId?: string;
   phone?: string;
 }
@@ -499,6 +503,7 @@ export interface TeacherUpdateRequest {
   firstName?: string;
   lastName?: string;
   branch?: string;
+  email?: string;
   nationalId?: string;
   phone?: string;
 }
@@ -589,14 +594,53 @@ export interface GuardianRecord {
   lastName: string;
   phone?: string;
   userId?: string;
+  matched?: boolean;
+  provisioning?: IdentityProvisioningStatus;
 }
 
 export type GuardianRelationshipType = "MOTHER" | "FATHER" | "GUARDIAN" | "EMERGENCY_CONTACT" | "OTHER";
+
+export interface GuardianImportRequest {
+  fileBase64: string;
+}
+
+export interface GuardianImportError {
+  row: number;
+  field: "email" | "firstName" | "lastName" | "nationalId" | "phone" | "studentNo";
+  code: "INVALID" | "INVALID_EMAIL" | "REQUIRED" | "STUDENT_NOT_FOUND";
+  value?: string;
+}
+
+export interface GuardianImportPreviewRow {
+  row: number;
+  email?: string;
+  firstName: string;
+  lastName: string;
+  studentId: string;
+  studentNo: string;
+}
+
+export interface GuardianImportDryRunResult {
+  dryRun: true;
+  totalRows: number;
+  validRows: GuardianImportPreviewRow[];
+  errors: GuardianImportError[];
+  wouldImport: boolean;
+}
+
+export interface GuardianImportResult {
+  importedRows: number;
+  createdOrMatchedGuardians: number;
+  linkedStudents: number;
+  guardians: GuardianRecord[];
+  links: GuardianStudentRecord[];
+}
 
 export interface GuardianCreateRequest {
   tenantId?: string;
   firstName: string;
   lastName: string;
+  email?: string;
   phone?: string;
   nationalId?: string;
 }
@@ -604,6 +648,7 @@ export interface GuardianCreateRequest {
 export interface GuardianUpdateRequest {
   firstName?: string;
   lastName?: string;
+  email?: string;
   phone?: string;
   nationalId?: string;
 }
@@ -1389,6 +1434,7 @@ export interface DevelopmentTrendItem {
 }
 
 export type PaymentInstallmentStatus = "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
+export type PaymentTransactionMethod = "CASH" | "BANK_TRANSFER" | "CARD_POS" | "OTHER";
 
 export interface PaymentPlanInstallmentInput {
   installmentNo: number;
@@ -1416,6 +1462,19 @@ export interface PaymentInstallmentUpdateRequest {
   dueDate?: string;
   status?: PaymentInstallmentStatus;
   paidAt?: string;
+}
+
+export interface PaymentTransactionCreateRequest {
+  installmentId?: string;
+  amount: number;
+  currency?: string;
+  method: PaymentTransactionMethod;
+  paidAt: string;
+  note?: string;
+}
+
+export interface PaymentTransactionVoidRequest {
+  note?: string;
 }
 
 export interface PaymentInstallmentRecord {
@@ -1449,6 +1508,24 @@ export interface PaymentPlanRecord {
 
 export interface PaymentPlanWithInstallmentsRecord extends PaymentPlanRecord {
   installments: PaymentInstallmentRecord[];
+  transactions?: PaymentTransactionRecord[];
+}
+
+export interface PaymentTransactionRecord {
+  id: string;
+  tenantId: string;
+  planId: string;
+  installmentId?: string;
+  amount: number;
+  currency: string;
+  method: PaymentTransactionMethod;
+  paidAt: string;
+  receiptNo: string;
+  note?: string;
+  recordedByUserId?: string;
+  voidedAt?: string;
+  voidReason?: string;
+  createdAt: string;
 }
 
 export type SupportTicketPriority = "LOW" | "NORMAL" | "HIGH";
@@ -1949,6 +2026,15 @@ export interface RawImportQuarantineResolveRequest {
   resolvedStudentId: string;
 }
 
+export interface RawImportQuarantineResolveBulkItem {
+  quarantineId: string;
+  resolvedStudentId: string;
+}
+
+export interface RawImportQuarantineResolveBulkRequest {
+  items: RawImportQuarantineResolveBulkItem[];
+}
+
 export interface RawImportQuarantineEvaluationJob {
   tenantId: string;
   examId: string;
@@ -1976,6 +2062,17 @@ export interface RawImportQuarantineRecord {
   evaluationJob?: RawImportQuarantineEvaluationJob;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface RawImportQuarantineResolveBulkResult {
+  errorCode?: string;
+  quarantine?: RawImportQuarantineRecord;
+  quarantineId: string;
+  status: "RESOLVED" | "FAILED";
+}
+
+export interface RawImportQuarantineResolveBulkResponse {
+  results: RawImportQuarantineResolveBulkResult[];
 }
 
 export interface RawImportQuarantineSummary {

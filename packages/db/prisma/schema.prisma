@@ -52,6 +52,7 @@ model Tenant {
   developmentScores DevelopmentScore[]
   paymentPlans PaymentPlan[]
   paymentInstallments PaymentInstallment[]
+  paymentTransactions PaymentTransaction[]
   teachers    Teacher[]
   guardians   Guardian[]
   guardianStudents GuardianStudent[]
@@ -730,6 +731,7 @@ model PaymentPlan {
   course      Course?   @relation(fields: [tenantId, courseId], references: [tenantId, id], onDelete: Restrict)
   term        AcademicTerm? @relation(fields: [tenantId, termId], references: [tenantId, id], onDelete: Restrict)
   installments PaymentInstallment[]
+  transactions PaymentTransaction[]
 
   @@index([tenantId, studentId, deletedAt])
   @@index([tenantId, campusId])
@@ -754,9 +756,37 @@ model PaymentInstallment {
   updatedAt     DateTime  @updatedAt
   tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   plan          PaymentPlan @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Cascade)
+  transactions  PaymentTransaction[]
 
   @@unique([tenantId, planId, installmentNo])
+  @@unique([tenantId, id])
   @@index([tenantId, planId, dueDate, deletedAt])
+}
+
+model PaymentTransaction {
+  id               String    @id @default(uuid())
+  tenantId         String
+  planId           String
+  installmentId    String?
+  amount           Int
+  currency         String    @default("TRY")
+  method           String
+  paidAt           DateTime
+  receiptNo        String
+  note             String?
+  recordedByUserId String?
+  voidedAt         DateTime?
+  voidReason       String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan             PaymentPlan @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Cascade)
+  installment      PaymentInstallment? @relation(fields: [tenantId, installmentId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, receiptNo])
+  @@index([tenantId, planId, voidedAt])
+  @@index([tenantId, installmentId])
 }
 
 model ScheduleLesson {
