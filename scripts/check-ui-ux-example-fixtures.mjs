@@ -49,7 +49,7 @@ const importTemplates = [
   {
     file: "ogretmen-aktarim-sablonu.xlsx",
     sheet: "Ogretmenler",
-    headers: ["ad", "soyad", "brans", "tc_kimlik_no", "telefon", "atanacak_sinif"],
+    headers: ["ad", "soyad", "brans", "tc_kimlik_no", "telefon"],
     validateNationalIds: true,
   },
   {
