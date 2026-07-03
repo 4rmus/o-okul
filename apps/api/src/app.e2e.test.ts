@@ -909,7 +909,7 @@ describe("API auth + tenant isolation", () => {
 
   it("student CSV dry-run TC hatasında ham kimlik numarası döndürmez", async () => {
     const issued = await login("admin-a@example.test");
-    const fileBase64 = Buffer.from("\uFEFFad;soyad;tc_kimlik_no;telefon\nEce;Kimlik;11111111111;5550000014\n", "utf8").toString("base64");
+    const fileBase64 = Buffer.from("\uFEFFad;soyad;tc_kimlik_no;telefon\nEce;Kimlik;1111111111;5550000014\n", "utf8").toString("base64");
 
     const response = await request(server)
       .post("/students/imports/dry-run")
@@ -924,7 +924,7 @@ describe("API auth + tenant isolation", () => {
       errors: [{ row: 2, field: "nationalId", code: "INVALID_NATIONAL_ID", value: "*******1111" }],
       wouldImport: false,
     });
-    expect(JSON.stringify(response.body)).not.toContain("11111111111");
+    expect(JSON.stringify(response.body)).not.toContain("1111111111");
   });
 
   it("student CSV dry-run hesap önizlemesini maskeli döner", async () => {

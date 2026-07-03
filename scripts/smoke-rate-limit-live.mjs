@@ -257,12 +257,7 @@ function sha256(value) {
 }
 
 function createSmokeNationalId() {
-  const digits = Array.from({ length: 9 }, (_, index) => (index === 0 ? randomInt(1, 10) : randomInt(0, 10)));
-  const oddSum = digits[0] + digits[2] + digits[4] + digits[6] + digits[8];
-  const evenSum = digits[1] + digits[3] + digits[5] + digits[7];
-  const digit10 = ((oddSum * 7 - evenSum) % 10 + 10) % 10;
-  const digit11 = (digits.reduce((sum, digit) => sum + digit, 0) + digit10) % 10;
-  return [...digits, digit10, digit11].join("");
+  return Array.from({ length: 11 }, () => randomInt(0, 10)).join("");
 }
 
 async function resetApiRateLimitKey(ip) {

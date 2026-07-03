@@ -277,12 +277,7 @@ function normalizeTcIdentity(value: string, errorCode: string): string {
 }
 
 function isValidTcIdentity(value: string): boolean {
-  if (!/^[1-9]\d{10}$/.test(value)) return false;
-  const digits = value.split("").map(Number);
-  const digit = (index: number) => digits[index] ?? 0;
-  const oddSum = digit(0) + digit(2) + digit(4) + digit(6) + digit(8);
-  const evenSum = digit(1) + digit(3) + digit(5) + digit(7);
-  return digit(9) === ((oddSum * 7) - evenSum) % 10 && digit(10) === digits.slice(0, 10).reduce((sum, item) => sum + item, 0) % 10;
+  return /^\d{11}$/.test(value);
 }
 
 function encryptTcIdentity(value: string): string {

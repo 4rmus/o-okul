@@ -116,7 +116,7 @@ describe("Student profile + TC API", () => {
     await request(server)
       .patch("/students/student-a/profile")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ nationalId: "10000000145" })
+      .send({ nationalId: "1000000014" })
       .expect(422);
 
   });
