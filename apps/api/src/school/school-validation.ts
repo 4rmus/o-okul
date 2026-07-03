@@ -29,9 +29,12 @@ import type {
 } from "@o-okul/shared-types";
 import {
   optionalDateString as optionalCalendarDateString,
+  optionalNonEmptyUppercaseString,
   optionalTrimmedString,
+  optionalUppercaseString,
   requiredDateString,
   requiredTrimmedString,
+  requiredUppercaseString,
 } from "../http/zod-validation.js";
 
 const optionalNonEmptyString = requiredTrimmedString.optional();
@@ -44,37 +47,37 @@ const teacherAssignmentRoleSchema = z.enum(["CLASS_TEACHER", "BRANCH_TEACHER", "
 
 export const campusCreateBodySchema = z.object({
   code: optionalTrimmedString,
-  name: requiredTrimmedString,
+  name: requiredUppercaseString,
   tenantId: optionalNonEmptyString,
 }).strict() satisfies z.ZodType<CampusCreateRequest>;
 
 export const campusUpdateBodySchema = z.object({
   code: optionalTrimmedString,
-  name: optionalNonEmptyString,
+  name: optionalNonEmptyUppercaseString,
 }).strict() satisfies z.ZodType<CampusUpdateRequest>;
 
 export const gradeLevelCreateBodySchema = z.object({
   code: optionalTrimmedString,
-  name: requiredTrimmedString,
+  name: requiredUppercaseString,
   tenantId: optionalNonEmptyString,
 }).strict() satisfies z.ZodType<GradeLevelCreateRequest>;
 
 export const gradeLevelUpdateBodySchema = z.object({
   code: optionalTrimmedString,
-  name: optionalNonEmptyString,
+  name: optionalNonEmptyUppercaseString,
 }).strict() satisfies z.ZodType<GradeLevelUpdateRequest>;
 
 export const alanCreateBodySchema = z.object({
   code: optionalTrimmedString,
   gradeLevelId: optionalNonEmptyString,
-  name: requiredTrimmedString,
+  name: requiredUppercaseString,
   tenantId: optionalNonEmptyString,
 }).strict() satisfies z.ZodType<AlanCreateRequest>;
 
 export const alanUpdateBodySchema = z.object({
   code: optionalTrimmedString,
   gradeLevelId: optionalNonEmptyString,
-  name: optionalNonEmptyString,
+  name: optionalNonEmptyUppercaseString,
 }).strict().refine(hasAtLeastOneField, {
   message: "UPDATE_BODY_EMPTY",
 }) satisfies z.ZodType<AlanUpdateRequest>;
@@ -83,8 +86,8 @@ export const classCreateBodySchema = z.object({
   alanId: optionalNonEmptyString,
   campusId: optionalNonEmptyString,
   gradeLevelId: optionalNonEmptyString,
-  name: requiredTrimmedString,
-  section: optionalTrimmedString,
+  name: requiredUppercaseString,
+  section: optionalUppercaseString,
   tenantId: optionalNonEmptyString,
 }).strict() satisfies z.ZodType<ClassCreateRequest>;
 
@@ -92,25 +95,25 @@ export const classUpdateBodySchema = z.object({
   alanId: optionalNonEmptyString,
   campusId: optionalNonEmptyString,
   gradeLevelId: optionalNonEmptyString,
-  name: optionalNonEmptyString,
-  section: optionalTrimmedString,
+  name: optionalNonEmptyUppercaseString,
+  section: optionalUppercaseString,
 }).strict().refine(hasAtLeastOneField, {
   message: "UPDATE_BODY_EMPTY",
 }) satisfies z.ZodType<ClassUpdateRequest>;
 
 export const courseCreateBodySchema = z.object({
   code: optionalTrimmedString,
-  name: requiredTrimmedString,
+  name: requiredUppercaseString,
   tenantId: optionalNonEmptyString,
 }).strict() satisfies z.ZodType<CourseCreateRequest>;
 
 export const courseUpdateBodySchema = z.object({
   code: optionalTrimmedString,
-  name: optionalNonEmptyString,
+  name: optionalNonEmptyUppercaseString,
 }).strict() satisfies z.ZodType<CourseUpdateRequest>;
 
 export const learningOutcomeCreateBodySchema = z.object({
-  branch: requiredTrimmedString,
+  branch: requiredUppercaseString,
   code: requiredTrimmedString,
   level: optionalTrimmedString,
   tenantId: optionalNonEmptyString,
@@ -118,7 +121,7 @@ export const learningOutcomeCreateBodySchema = z.object({
 }).strict() satisfies z.ZodType<LearningOutcomeCreateRequest>;
 
 export const learningOutcomeUpdateBodySchema = z.object({
-  branch: optionalNonEmptyString,
+  branch: optionalNonEmptyUppercaseString,
   code: optionalNonEmptyString,
   level: optionalTrimmedString,
   title: optionalNonEmptyString,
@@ -131,7 +134,7 @@ export const learningOutcomeImportBodySchema = z.object({
 export const academicYearCreateBodySchema = z.object({
   endsAt: dateString,
   isActive: z.boolean().optional(),
-  name: requiredTrimmedString,
+  name: requiredUppercaseString,
   startsAt: dateString,
   tenantId: optionalNonEmptyString,
 }).strict() satisfies z.ZodType<AcademicYearCreateRequest>;
@@ -139,7 +142,7 @@ export const academicYearCreateBodySchema = z.object({
 export const academicYearUpdateBodySchema = z.object({
   endsAt: optionalDateString,
   isActive: z.boolean().optional(),
-  name: optionalNonEmptyString,
+  name: optionalNonEmptyUppercaseString,
   startsAt: optionalDateString,
 }).strict() satisfies z.ZodType<AcademicYearUpdateRequest>;
 
@@ -147,7 +150,7 @@ export const academicTermCreateBodySchema = z.object({
   academicYearId: requiredTrimmedString,
   endsAt: dateString,
   isActive: z.boolean().optional(),
-  name: requiredTrimmedString,
+  name: requiredUppercaseString,
   startsAt: dateString,
   tenantId: optionalNonEmptyString,
 }).strict() satisfies z.ZodType<AcademicTermCreateRequest>;
@@ -156,25 +159,25 @@ export const academicTermUpdateBodySchema = z.object({
   academicYearId: optionalNonEmptyString,
   endsAt: optionalDateString,
   isActive: z.boolean().optional(),
-  name: optionalNonEmptyString,
+  name: optionalNonEmptyUppercaseString,
   startsAt: optionalDateString,
 }).strict() satisfies z.ZodType<AcademicTermUpdateRequest>;
 
 export const teacherCreateBodySchema = z.object({
-  branch: optionalTrimmedString,
+  branch: optionalUppercaseString,
   email: optionalEmailString,
-  firstName: requiredTrimmedString,
-  lastName: requiredTrimmedString,
+  firstName: requiredUppercaseString,
+  lastName: requiredUppercaseString,
   nationalId: optionalTrimmedString,
   phone: optionalTrimmedString,
   tenantId: optionalNonEmptyString,
 }).strict() satisfies z.ZodType<TeacherCreateRequest>;
 
 export const teacherUpdateBodySchema = z.object({
-  branch: optionalTrimmedString,
+  branch: optionalUppercaseString,
   email: optionalEmailString,
-  firstName: optionalNonEmptyString,
-  lastName: optionalNonEmptyString,
+  firstName: optionalNonEmptyUppercaseString,
+  lastName: optionalNonEmptyUppercaseString,
   nationalId: optionalTrimmedString,
   phone: optionalTrimmedString,
 }).strict() satisfies z.ZodType<TeacherUpdateRequest>;
@@ -204,8 +207,8 @@ export const teacherImportBodySchema = z.object({
 
 export const guardianCreateBodySchema = z.object({
   email: optionalEmailString,
-  firstName: requiredTrimmedString,
-  lastName: requiredTrimmedString,
+  firstName: requiredUppercaseString,
+  lastName: requiredUppercaseString,
   nationalId: optionalTrimmedString,
   phone: optionalTrimmedString,
   tenantId: optionalNonEmptyString,
@@ -213,8 +216,8 @@ export const guardianCreateBodySchema = z.object({
 
 export const guardianUpdateBodySchema = z.object({
   email: optionalEmailString,
-  firstName: optionalNonEmptyString,
-  lastName: optionalNonEmptyString,
+  firstName: optionalNonEmptyUppercaseString,
+  lastName: optionalNonEmptyUppercaseString,
   nationalId: optionalTrimmedString,
   phone: optionalTrimmedString,
 }).strict() satisfies z.ZodType<GuardianUpdateRequest>;

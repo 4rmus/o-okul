@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { optionalIsoDateTime, optionalTrimmedString, requiredTrimmedString } from "../http/zod-validation.js";
+import { optionalIsoDateTime, optionalTrimmedString, optionalUppercaseString, requiredTrimmedString, requiredUppercaseString } from "../http/zod-validation.js";
 
 const tenantEmailSchema = requiredTrimmedString.refine((value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value), {
   message: "TENANT_EMAIL_INVALID",
@@ -20,7 +20,7 @@ const positiveIntegerSchema = z.number().int().positive();
 
 const tenantFirstAdminBodySchema = z.object({
   email: tenantEmailSchema,
-  name: requiredTrimmedString,
+  name: requiredUppercaseString,
   nationalId: requiredTrimmedString,
   phone: requiredTrimmedString,
 }).strict();
@@ -33,7 +33,7 @@ const tenantAdminWritableFields = {
   licenseEndsAt: optionalTenantLicenseEndsAtSchema,
   licenseStartsAt: optionalTenantLicenseStartsAtSchema,
   logoUrl: optionalTenantUrlSchema,
-  name: optionalTrimmedString,
+  name: optionalUppercaseString,
   plan: optionalTrimmedString,
   seatLimit: positiveIntegerSchema.optional(),
   slug: optionalTrimmedString,
@@ -46,7 +46,7 @@ const tenantAdminUpdateWritableFields = {
   licenseEndsAt: optionalTenantLicenseEndsAtSchema,
   licenseStartsAt: optionalTenantLicenseStartsAtSchema,
   logoUrl: optionalTenantUrlSchema,
-  name: optionalTrimmedString,
+  name: optionalUppercaseString,
   plan: optionalTrimmedString,
   seatLimit: positiveIntegerSchema.optional(),
   slug: optionalTrimmedString,
@@ -55,7 +55,7 @@ const tenantAdminUpdateWritableFields = {
 
 export const tenantCreateBodySchema = z.object({
   ...tenantAdminWritableFields,
-  name: requiredTrimmedString,
+  name: requiredUppercaseString,
   slug: requiredTrimmedString,
 }).strict();
 
@@ -65,7 +65,7 @@ export const tenantCurrentProfileBodySchema = z.object({
   contactEmail: optionalTenantEmailSchema,
   institutionType: optionalTrimmedString,
   logoUrl: optionalTenantUrlSchema,
-  name: optionalTrimmedString,
+  name: optionalUppercaseString,
 }).strict();
 
 export type TenantCreateBody = z.infer<typeof tenantCreateBodySchema>;

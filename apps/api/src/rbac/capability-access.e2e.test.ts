@@ -128,7 +128,7 @@ describe("Capability access matrix", () => {
       .send({ name: "Yardımcı Kurulum Güncellemesi" })
       .expect(200)
       .expect(({ body }) => {
-        expect(body).toMatchObject({ id: "tenant-a", name: "Yardımcı Kurulum Güncellemesi" });
+        expect(body).toMatchObject({ id: "tenant-a", name: "YARDIMCI KURULUM GÜNCELLEMESİ" });
       });
 
     await request(server)

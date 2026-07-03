@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Q
 import { getRequestContext } from "../context/request-context.js";
 import { z } from "zod";
 import { applyListQuery } from "../listing/list-query.js";
-import { optionalDateString, optionalTrimmedString, requiredTrimmedString, zodBody, zodQuery } from "../http/zod-validation.js";
+import { optionalDateString, optionalTrimmedString, optionalUppercaseString, requiredTrimmedString, requiredUppercaseString, zodBody, zodQuery } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
@@ -59,16 +59,16 @@ const studentGuardianProvisionBodySchema = z.object({
   canReceiveSms: z.boolean().optional(),
   canViewFinance: z.boolean().optional(),
   email: optionalTrimmedString,
-  firstName: optionalTrimmedString,
-  lastName: optionalTrimmedString,
+  firstName: optionalUppercaseString,
+  lastName: optionalUppercaseString,
   nationalId: optionalTrimmedString,
   phone: optionalTrimmedString,
 }).strict();
 const studentCreateBodySchema = z.object({
   classId: optionalTrimmedString,
-  firstName: requiredTrimmedString,
+  firstName: requiredUppercaseString,
   guardian: studentGuardianProvisionBodySchema.optional(),
-  lastName: requiredTrimmedString,
+  lastName: requiredUppercaseString,
   nationalId: optionalTrimmedString,
   phone: optionalTrimmedString,
   email: optionalTrimmedString,
@@ -79,8 +79,8 @@ const studentCreateBodySchema = z.object({
 }).strict();
 const studentUpdateBodySchema = z.object({
   classId: optionalTrimmedString,
-  firstName: requiredTrimmedString.optional(),
-  lastName: requiredTrimmedString.optional(),
+  firstName: requiredUppercaseString.optional(),
+  lastName: requiredUppercaseString.optional(),
   responsibleTeacherId: optionalTrimmedString,
   status: studentStatusSchema.optional(),
 }).strict() satisfies z.ZodType<StudentUpdateRequest>;

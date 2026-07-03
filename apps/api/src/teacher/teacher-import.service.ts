@@ -12,6 +12,7 @@ import ExcelJS from "exceljs";
 import { normalizeTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { toTurkishUpperCase } from "../http/zod-validation.js";
 import { maskTcIdentity, normalizeTcIdentity } from "../student/tc-identity.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import { type CourseStore, courseStoreToken } from "../school/course-store.js";
@@ -299,9 +300,9 @@ function readMatrixRows(matrix: Array<{ rowNumber: number; cells: string[] }>): 
   const courseIndex = findHeaderIndex(header, ["course", "courseName", "ders", "dersAdi", "dersAdı"]);
 
   for (const row of matrix.slice(headerRowIndex + 1)) {
-    const firstName = row.cells[firstNameIndex]?.trim() ?? "";
-    const lastName = row.cells[lastNameIndex]?.trim() ?? "";
-    const branch = branchIndex === undefined ? "" : row.cells[branchIndex]?.trim() ?? "";
+    const firstName = toTurkishUpperCase(row.cells[firstNameIndex]?.trim() ?? "");
+    const lastName = toTurkishUpperCase(row.cells[lastNameIndex]?.trim() ?? "");
+    const branch = branchIndex === undefined ? "" : toTurkishUpperCase(row.cells[branchIndex]?.trim() ?? "");
     const nationalId = nationalIdIndex === undefined ? "" : row.cells[nationalIdIndex]?.trim() ?? "";
     const phone = phoneIndex === undefined ? "" : row.cells[phoneIndex]?.trim() ?? "";
     const className = classIndex === undefined ? "" : row.cells[classIndex]?.trim() ?? "";

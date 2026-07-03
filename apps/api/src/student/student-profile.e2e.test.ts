@@ -91,7 +91,7 @@ describe("Student profile + TC API", () => {
       .send({ firstName: "Ada" })
       .expect(200)
       .expect(({ body }) => {
-        expect(body).toMatchObject({ id: "student-a", firstName: "Ada" });
+        expect(body).toMatchObject({ id: "student-a", firstName: "ADA" });
         expectStudentCoreResponseIsPublic(body);
       });
 

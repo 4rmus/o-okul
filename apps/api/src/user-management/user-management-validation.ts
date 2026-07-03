@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { tenantAssignableRoles } from "@o-okul/shared-types";
-import { requiredTrimmedString } from "../http/zod-validation.js";
+import { requiredTrimmedString, requiredUppercaseString } from "../http/zod-validation.js";
 
 const tenantUserRoleSchema = z.enum(tenantAssignableRoles);
 
 export const tenantUserCreateBodySchema = z.object({
   email: requiredTrimmedString.refine((value) => value.includes("@"), { message: "EMAIL_REQUIRED" }),
-  name: requiredTrimmedString,
+  name: requiredUppercaseString,
   nationalId: requiredTrimmedString,
   phone: requiredTrimmedString,
   roles: z.array(tenantUserRoleSchema).min(1),

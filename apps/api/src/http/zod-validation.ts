@@ -44,6 +44,14 @@ export const requiredTrimmedString = trimmedString.min(1);
 export const optionalTrimmedString = trimmedString.optional();
 export const nonEmptyStringArray = z.array(requiredTrimmedString).min(1);
 
+export function toTurkishUpperCase(value: string): string {
+  return value.toLocaleUpperCase("tr-TR");
+}
+
+export const requiredUppercaseString = requiredTrimmedString.transform(toTurkishUpperCase);
+export const optionalUppercaseString = trimmedString.transform(toTurkishUpperCase).optional();
+export const optionalNonEmptyUppercaseString = requiredUppercaseString.optional();
+
 export function requiredDateString(errorMessage = "Tarih geçersiz."): z.ZodString {
   return requiredTrimmedString
     .regex(/^\d{4}-\d{2}-\d{2}$/, { message: errorMessage })

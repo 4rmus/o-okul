@@ -5,6 +5,7 @@ import { AuditLogService } from "../audit-log/audit-log.service.js";
 import { normalizeTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { toTurkishUpperCase } from "../http/zod-validation.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
 import { StudentService, type StudentGuardianProvisionInput, type StudentRecord } from "./student.service.js";
 import { maskTcIdentity, normalizeTcIdentity } from "./tc-identity.js";
@@ -220,8 +221,8 @@ export class StudentImportService {
 
     for (const row of matrix.slice(headerRowIndex + 1)) {
       const studentNo = studentNoIndex === undefined ? "" : row.cells[studentNoIndex]?.trim() ?? "";
-      const firstName = row.cells[firstNameIndex]?.trim() ?? "";
-      const lastName = row.cells[lastNameIndex]?.trim() ?? "";
+      const firstName = toTurkishUpperCase(row.cells[firstNameIndex]?.trim() ?? "");
+      const lastName = toTurkishUpperCase(row.cells[lastNameIndex]?.trim() ?? "");
       const className = classIndex === undefined ? "" : row.cells[classIndex]?.trim() ?? "";
       const email = readOptionalCell(row.cells, emailIndex);
       const phone = readOptionalCell(row.cells, phoneIndex);
@@ -486,8 +487,8 @@ function maskedNationalIdValue(value: string): { value?: string } {
 }
 
 function readGuardian(cells: string[], indexes: GuardianColumnIndexes): StudentGuardianProvisionInput | undefined {
-  const firstName = readOptionalCell(cells, indexes.firstName);
-  const lastName = readOptionalCell(cells, indexes.lastName);
+  const firstName = toTurkishUpperCase(readOptionalCell(cells, indexes.firstName));
+  const lastName = toTurkishUpperCase(readOptionalCell(cells, indexes.lastName));
   const phone = readOptionalCell(cells, indexes.phone);
   const nationalId = readOptionalCell(cells, indexes.nationalId);
   if (!firstName && !lastName && !phone && !nationalId) return undefined;

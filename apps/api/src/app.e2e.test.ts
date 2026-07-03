@@ -754,7 +754,7 @@ describe("API auth + tenant isolation", () => {
       .expect(201);
 
     const studentId = (created.body as { id: string }).id;
-    expect(created.body).toMatchObject({ tenantId: "tenant-a", firstName: "Can", lastName: "Ogrenci" });
+    expect(created.body).toMatchObject({ tenantId: "tenant-a", firstName: "CAN", lastName: "OGRENCİ" });
 
     const updated = await request(server)
       .patch(`/students/${studentId}`)
@@ -762,7 +762,7 @@ describe("API auth + tenant isolation", () => {
       .send({ firstName: "Cem" })
       .expect(200);
 
-    expect(updated.body).toMatchObject({ id: studentId, tenantId: "tenant-a", firstName: "Cem", lastName: "Ogrenci" });
+    expect(updated.body).toMatchObject({ id: studentId, tenantId: "tenant-a", firstName: "CEM", lastName: "OGRENCİ" });
 
     await request(server).delete(`/students/${studentId}`).set("Authorization", `Bearer ${issued.accessToken}`).expect(204);
     await request(server).get(`/students/${studentId}`).set("Authorization", `Bearer ${issued.accessToken}`).expect(404);
@@ -806,7 +806,7 @@ describe("API auth + tenant isolation", () => {
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .expect(200)
       .expect(({ body: students }) => {
-        expect(students).toEqual([expect.objectContaining({ id: studentId, firstName: "Idempotent" })]);
+        expect(students).toEqual([expect.objectContaining({ id: studentId, firstName: "IDEMPOTENT" })]);
       });
 
     await request(server).delete(`/students/${studentId}`).set("Authorization", `Bearer ${issued.accessToken}`).expect(204);
@@ -848,7 +848,7 @@ describe("API auth + tenant isolation", () => {
     expect(response.body).toMatchObject({
       dryRun: true,
       totalRows: 1,
-      validRows: [{ row: 2, firstName: "Ece", lastName: "Import" }],
+      validRows: [{ row: 2, firstName: "ECE", lastName: "IMPORT" }],
       errors: [],
       wouldImport: true,
     });
@@ -867,7 +867,7 @@ describe("API auth + tenant isolation", () => {
     expect(response.body).toMatchObject({
       dryRun: true,
       totalRows: 1,
-      validRows: [{ row: 2, firstName: "Ece", lastName: "Import" }],
+      validRows: [{ row: 2, firstName: "ECE", lastName: "IMPORT" }],
       errors: [],
       quota: { limit: 2, current: 1, incoming: 1, wouldExceed: false },
       wouldImport: true,
@@ -901,7 +901,7 @@ describe("API auth + tenant isolation", () => {
     expect(response.body).toMatchObject({
       dryRun: true,
       totalRows: 1,
-      validRows: [{ row: 2, studentNo: "320", firstName: "Ece", lastName: "Csv", classId: "class-a" }],
+      validRows: [{ row: 2, studentNo: "320", firstName: "ECE", lastName: "CSV", classId: "class-a" }],
       errors: [],
       wouldImport: true,
     });
@@ -943,8 +943,8 @@ describe("API auth + tenant isolation", () => {
       validRows: [
         {
           row: 2,
-          firstName: "Ece",
-          lastName: "Hesap",
+          firstName: "ECE",
+          lastName: "HESAP",
           accountPreview: {
             usernameMasked: "*******1204",
             willCreate: true,
@@ -997,7 +997,7 @@ describe("API auth + tenant isolation", () => {
     expect(response.body).toMatchObject({
       dryRun: true,
       totalRows: 1,
-      validRows: [{ row: 3, studentNo: "320", firstName: "Ece", lastName: "Baslikli", classId: "class-a" }],
+      validRows: [{ row: 3, studentNo: "320", firstName: "ECE", lastName: "BASLİKLİ", classId: "class-a" }],
       errors: [],
       wouldImport: true,
     });
@@ -1063,7 +1063,7 @@ describe("API auth + tenant isolation", () => {
       studentId = imported.body.students[0].id;
       expect(imported.body).toMatchObject({
         importedRows: 1,
-        students: [{ tenantId: "tenant-a", studentNo: "321", firstName: "Ece", lastName: "Velili", classId: "class-a" }],
+        students: [{ tenantId: "tenant-a", studentNo: "321", firstName: "ECE", lastName: "VELİLİ", classId: "class-a" }],
       });
 
       await request(server)
@@ -1071,7 +1071,7 @@ describe("API auth + tenant isolation", () => {
         .set("Authorization", `Bearer ${issued.accessToken}`)
         .expect(200)
         .expect(({ body }) => {
-          expect(body).toEqual([expect.objectContaining({ firstName: "Fatma", lastName: "Velili", phone: "5553210000" })]);
+          expect(body).toEqual([expect.objectContaining({ firstName: "FATMA", lastName: "VELİLİ", phone: "5553210000" })]);
         });
 
       await request(server)
@@ -1216,8 +1216,8 @@ describe("API auth + tenant isolation", () => {
       dryRun: true,
       totalRows: 2,
       validRows: [
-        { row: 2, firstName: "Ece", lastName: "Import" },
-        { row: 3, firstName: "Deniz", lastName: "Import" },
+        { row: 2, firstName: "ECE", lastName: "IMPORT" },
+        { row: 3, firstName: "DENİZ", lastName: "IMPORT" },
       ],
       errors: [{ row: 0, field: "quota", code: "STUDENT_QUOTA_EXCEEDED" }],
       quota: { limit: 2, current: 1, incoming: 2, wouldExceed: true },
@@ -1307,7 +1307,7 @@ describe("API auth + tenant isolation", () => {
 
     expect(imported.body).toMatchObject({
       importedRows: 1,
-      students: [{ tenantId: "tenant-a", studentNo: "320", firstName: "Ece", lastName: "Import", classId: "class-a" }],
+      students: [{ tenantId: "tenant-a", studentNo: "320", firstName: "ECE", lastName: "IMPORT", classId: "class-a" }],
     });
     expectStudentCoreResponseIsPublic(imported.body.students);
 
@@ -1330,7 +1330,7 @@ describe("API auth + tenant isolation", () => {
     expect(students.body).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ firstName: "Ada", lastName: "A" }),
-        expect.objectContaining({ firstName: "Ece", lastName: "Import" }),
+        expect.objectContaining({ firstName: "ECE", lastName: "IMPORT" }),
       ]),
     );
   });

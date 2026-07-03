@@ -83,7 +83,7 @@ describe("Tenant user management", () => {
 
     expect(created.body).toMatchObject({
       email: "created-user-a@example.test",
-      name: "Created User A",
+      name: "CREATED USER A",
       tenantId: "tenant-a",
       roles: ["ASSISTANT_ADMIN"],
     });

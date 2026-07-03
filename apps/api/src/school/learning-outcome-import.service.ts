@@ -11,6 +11,7 @@ import type {
 import ExcelJS from "exceljs";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { toTurkishUpperCase } from "../http/zod-validation.js";
 import { SchoolService } from "./school.service.js";
 
 type ParsedLearningOutcomeImportRow = LearningOutcomeImportPreviewRow;
@@ -203,7 +204,7 @@ function readMatrixRows(matrix: Array<{ rowNumber: number; cells: string[] }>): 
 
   for (const row of matrix.slice(headerRowIndex + 1)) {
     const code = row.cells[codeIndex]?.trim() ?? "";
-    const branch = row.cells[branchIndex]?.trim() ?? "";
+    const branch = toTurkishUpperCase(row.cells[branchIndex]?.trim() ?? "");
     const title = row.cells[titleIndex]?.trim() ?? "";
     const level = levelIndex === undefined ? "" : row.cells[levelIndex]?.trim() ?? "";
     if (!code && !branch && !title && !level) continue;

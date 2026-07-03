@@ -368,7 +368,7 @@ describe("School management API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
-        expect(body).toEqual([expect.objectContaining({ id: teacherCreated.body.id, firstName: "Ziya" })]);
+        expect(body).toEqual([expect.objectContaining({ id: teacherCreated.body.id, firstName: "ZİYA" })]);
         expect(body[0]).not.toHaveProperty("userId");
       });
     await request(server)
@@ -377,7 +377,7 @@ describe("School management API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
-        expect(body).toEqual([expect.objectContaining({ id: guardianCreated.body.id, firstName: "Yasemin" })]);
+        expect(body).toEqual([expect.objectContaining({ id: guardianCreated.body.id, firstName: "YASEMİN" })]);
       });
     await request(server)
       .get("/students")
@@ -385,7 +385,7 @@ describe("School management API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
-        expect(body).toEqual([expect.objectContaining({ id: studentCreated.body.id, firstName: "Cem" })]);
+        expect(body).toEqual([expect.objectContaining({ id: studentCreated.body.id, firstName: "CEM" })]);
       });
 
     await request(server)
@@ -446,7 +446,7 @@ describe("School management API", () => {
       .send({ name: "9 Fen" })
       .expect(200)
       .expect(({ body }) => {
-        expect(body.name).toBe("9 Fen");
+        expect(body.name).toBe("9 FEN");
         expect(body.alanId).toBe(alanId);
         expect(body.campusId).toBe("campus-main");
         expect(body.gradeLevelId).toBe("grade-8");
@@ -501,7 +501,7 @@ describe("School management API", () => {
       .send({ name: "Batı Şube" })
       .expect(200)
       .expect(({ body }) => {
-        expect(body.name).toBe("Batı Şube");
+        expect(body.name).toBe("BATI ŞUBE");
         expect(body.code).toBe("BTI");
       });
 
@@ -511,7 +511,7 @@ describe("School management API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
-        expect(body).toEqual([expect.objectContaining({ id: campusId, name: "Batı Şube" })]);
+        expect(body).toEqual([expect.objectContaining({ id: campusId, name: "BATI ŞUBE" })]);
       });
 
     await request(server).delete(`/campuses/${campusId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
@@ -533,7 +533,7 @@ describe("School management API", () => {
       .send({ name: "Hazırlık" })
       .expect(200)
       .expect(({ body }) => {
-        expect(body.name).toBe("Hazırlık");
+        expect(body.name).toBe("HAZIRLIK");
         expect(body.code).toBe("9");
       });
 
@@ -543,7 +543,7 @@ describe("School management API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
-        expect(body).toEqual([expect.objectContaining({ id: gradeLevelId, name: "Hazırlık" })]);
+        expect(body).toEqual([expect.objectContaining({ id: gradeLevelId, name: "HAZIRLIK" })]);
       });
 
     await request(server).delete(`/grade-levels/${gradeLevelId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
@@ -565,7 +565,7 @@ describe("School management API", () => {
       .send({ name: "Fen" })
       .expect(200)
       .expect(({ body }) => {
-        expect(body.name).toBe("Fen");
+        expect(body.name).toBe("FEN");
         expect(body.code).toBe("FEN");
       });
 
@@ -636,7 +636,7 @@ describe("School management API", () => {
       .send({ name: "Guz Donemi" })
       .expect(200)
       .expect(({ body }) => {
-        expect(body.name).toBe("Guz Donemi");
+        expect(body.name).toBe("GUZ DONEMİ");
       });
 
     await request(server)
@@ -645,7 +645,7 @@ describe("School management API", () => {
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
       .expect(200)
       .expect(({ body }) => {
-        expect(body).toEqual([expect.objectContaining({ id: termId, name: "Guz Donemi" })]);
+        expect(body).toEqual([expect.objectContaining({ id: termId, name: "GUZ DONEMİ" })]);
       });
 
     await request(server).delete(`/academic-terms/${termId}`).set("Authorization", `Bearer ${tenantAAccessToken}`).expect(204);
@@ -788,7 +788,7 @@ describe("School management API", () => {
       .expect(({ body }) => {
         expect(body.firstName).toBe("Anonim");
         expect(body.lastName).toBe("Ogretmen");
-        expect(body.branch).toBe("Matematik");
+        expect(body.branch).toBe("MATEMATİK");
         expect(body.phone).toBeUndefined();
         expect(body).not.toHaveProperty("nationalIdEncrypted");
         expect(body).not.toHaveProperty("nationalIdHash");
@@ -1039,7 +1039,7 @@ describe("School management API", () => {
           totalRows: 1,
           validRows: [
             expect.objectContaining({
-              branch: "Matematik",
+              branch: "MATEMATİK",
               code: "MAT.8.TEST",
               level: "8",
               row: 2,
@@ -1437,13 +1437,13 @@ describe("School management API", () => {
           totalRows: 1,
           validRows: [
             expect.objectContaining({
-              branch: "Matematik",
+              branch: "MATEMATİK",
               classId: "class-a",
               className: "8-A",
               courseId: "course-math",
               courseName: "Matematik",
-              firstName: "Merve",
-              lastName: "Import",
+              firstName: "MERVE",
+              lastName: "IMPORT",
               accountPreview: {
                 usernameMasked: "*******1440",
                 willCreate: true,
@@ -1472,13 +1472,13 @@ describe("School management API", () => {
           totalRows: 1,
           validRows: [
             expect.objectContaining({
-              branch: "Matematik",
+              branch: "MATEMATİK",
               classId: "class-a",
               className: "8-A",
               courseId: "course-math",
-              courseName: "Matematik",
-              firstName: "Merve",
-              lastName: "Import",
+              courseName: "MATEMATİK",
+              firstName: "MERVE",
+              lastName: "IMPORT",
               row: 2,
             }),
           ],
@@ -1693,8 +1693,8 @@ describe("School management API", () => {
         .set("Authorization", `Bearer ${tenantAAccessToken}`)
         .expect(200)
         .expect(({ body }) => {
-          expect((body as Array<{ firstName: string; lastName: string }>).filter((teacher) => teacher.firstName === "Defne" && teacher.lastName === "Idempotent")).toHaveLength(1);
-          expect((body as Array<{ firstName: string; lastName: string }>).filter((teacher) => teacher.firstName === "Defne" && teacher.lastName === "Farkli")).toHaveLength(0);
+          expect((body as Array<{ firstName: string; lastName: string }>).filter((teacher) => teacher.firstName === "DEFNE" && teacher.lastName === "IDEMPOTENT")).toHaveLength(1);
+          expect((body as Array<{ firstName: string; lastName: string }>).filter((teacher) => teacher.firstName === "DEFNE" && teacher.lastName === "FARKLI")).toHaveLength(0);
         });
     } finally {
       for (const assignmentId of assignmentIds) {

@@ -1,7 +1,7 @@
 import { UnprocessableEntityException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { optionalIsoDateTime, requiredDateString, zodBody, zodQuery } from "./zod-validation.js";
+import { optionalIsoDateTime, optionalUppercaseString, requiredDateString, requiredUppercaseString, zodBody, zodQuery } from "./zod-validation.js";
 
 describe("ZodValidationPipe", () => {
   it("valid body'yi parse eder ve trim uygular", () => {
@@ -86,5 +86,16 @@ describe("ZodValidationPipe", () => {
     expect(pipe.transform({ startsAt: "2026-03-15" })).toEqual({ startsAt: "2026-03-15" });
     expect(() => pipe.transform({ startsAt: "2026-02-29T09:00" })).toThrow(UnprocessableEntityException);
     expect(() => pipe.transform({ startsAt: "15 Mart 2026" })).toThrow(UnprocessableEntityException);
+  });
+
+  it("metni tr-TR yerel ayarıyla büyük harfe çevirir (noktalı İ)", () => {
+    const pipe = zodBody(z.object({
+      firstName: requiredUppercaseString,
+      section: optionalUppercaseString,
+    }).strict());
+
+    // "izel" -> "İZEL" (noktasız i değil); "ığdır" -> "IĞDIR"
+    expect(pipe.transform({ firstName: " izel ", section: "ığdır" })).toEqual({ firstName: "İZEL", section: "IĞDIR" });
+    expect(() => pipe.transform({ firstName: "   " })).toThrow(UnprocessableEntityException);
   });
 });
