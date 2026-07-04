@@ -1,6 +1,7 @@
-import { existsSync, lstatSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, parse, resolve } from "node:path";
+import ts from "typescript";
 
 process.env.NODE_ENV ??= "test";
 process.env.PERSISTENCE_DRIVER ??= "memory";
@@ -14,6 +15,7 @@ const outputTempPathError = "OPENAPI_OUTPUT lokal temp path olmamalı.";
 const outputFileSymlinkError = "OPENAPI_OUTPUT symlink olmayan file artifact olmalı.";
 const outputParentSymlinkError = "OPENAPI_OUTPUT parent dizini symlink olmayan dizin olmalı.";
 const outputPath = validateOutputTarget(process.env.OPENAPI_OUTPUT || "artifacts/openapi.json");
+const sharedTypesDomainPath = resolve(process.env.OPENAPI_SHARED_TYPES_DOMAIN_PATH || "packages/shared-types/src/domain.ts");
 const announcementAudiences = ["GUARDIANS", "SCHOOL", "STUDENTS", "TEACHERS"];
 const announcementDeliveryChannels = ["EMAIL", "PUSH"];
 const announcementDeliveryStatuses = ["completed", "failed", "queued"];
@@ -252,6 +254,25 @@ const portalReportProgressPaths = [
   "/api/v1/me/student/reports/{examId}/progress",
   "/api/v1/me/teacher/reports/{examId}/students/{studentId}/progress",
   "/api/v1/me/guardian/students/{studentId}/reports/{examId}/progress",
+];
+const sharedTypeDriftContracts = [
+  { interfaceName: "LoginRequest", method: "post", path: "/api/v1/auth/login", schemaPath: ["requestBody"] },
+  { interfaceName: "MeProfileResponse", method: "get", path: "/api/v1/me/profile", schemaPath: ["responseData"] },
+  { interfaceName: "TenantRecord", method: "get", path: "/api/v1/tenants/{id}", schemaPath: ["responseData"] },
+  { interfaceName: "TenantCreateRequest", method: "post", path: "/api/v1/tenants", schemaPath: ["requestBody"] },
+  { interfaceName: "TenantUserRecord", method: "get", path: "/api/v1/tenant-users", schemaPath: ["responseDataItem"] },
+  { interfaceName: "StudentRecord", method: "get", path: "/api/v1/students/{id}", schemaPath: ["responseData"] },
+  { interfaceName: "StudentCreateRequest", method: "post", path: "/api/v1/students", schemaPath: ["requestBody"] },
+  { interfaceName: "StudentTenantUpdateRequest", method: "patch", path: "/api/v1/students/{id}/tenant", schemaPath: ["requestBody"] },
+  { interfaceName: "GuardianRecord", method: "get", path: "/api/v1/guardians/{id}", schemaPath: ["responseData"] },
+  { interfaceName: "GuardianStudentLinkRequest", method: "post", path: "/api/v1/guardians/{id}/students", schemaPath: ["requestBody"] },
+  { interfaceName: "GuardianStudentRecord", method: "get", path: "/api/v1/guardians/{id}/students", schemaPath: ["responseDataItem"] },
+  { interfaceName: "AnnouncementCreateRequest", method: "post", path: "/api/v1/announcements", schemaPath: ["requestBody"] },
+  { interfaceName: "AnnouncementRecord", method: "get", path: "/api/v1/announcements/{id}", schemaPath: ["responseData"] },
+  { interfaceName: "PaymentPlanCreateRequest", method: "post", path: "/api/v1/payment-plans", schemaPath: ["requestBody"] },
+  { interfaceName: "PaymentPlanWithInstallmentsRecord", method: "get", path: "/api/v1/payment-plans", schemaPath: ["responseDataItem"] },
+  { interfaceName: "HomeworkMaterialFileDownloadResult", method: "get", path: "/api/v1/homework/materials/{id}/files/{fileId}/download", schemaPath: ["responseData"] },
+  { interfaceName: "SupportTicketAttachmentDownloadResult", method: "get", path: "/api/v1/support-tickets/{id}/attachments/{attachmentId}/download", schemaPath: ["responseData"] },
 ];
 const portalReportOperationContracts = [
   ...portalReportSnapshotListPaths.map((path) => ({
@@ -3880,9 +3901,88 @@ function validateOpenApiDocument(document) {
     }
   }
 
+  validateSharedTypeDrift(document, failures);
+
   if (failures.length > 0) {
     throw new Error(failures.join("\n"));
   }
+}
+
+function validateSharedTypeDrift(document, failures) {
+  const interfaces = readSharedTypeInterfaces(sharedTypesDomainPath);
+
+  for (const contract of sharedTypeDriftContracts) {
+    const schema = resolveOperationSchema(document, contract);
+    if (!schema) {
+      failures.push(`OpenAPI/shared-types drift schema eksik: ${contract.interfaceName} ${contract.method.toUpperCase()} ${contract.path}`);
+      continue;
+    }
+
+    const required = new Set(Array.isArray(schema.required) ? schema.required : []);
+    for (const field of requiredFieldsForInterface(interfaces, contract.interfaceName)) {
+      if (!required.has(field)) {
+        failures.push(
+          `OpenAPI/shared-types drift: ${contract.interfaceName}.${field} ${contract.method.toUpperCase()} ${contract.path} required degil.`,
+        );
+      }
+    }
+  }
+}
+
+function resolveOperationSchema(document, contract) {
+  const operation = document.paths?.[contract.path]?.[contract.method];
+  if (!operation) return undefined;
+  const requestSchema = operation.requestBody?.content?.["application/json"]?.schema;
+  const successResponse = operation.responses?.["201"] ?? operation.responses?.["200"];
+  const responseDataSchema = successResponse?.content?.["application/json"]?.schema?.properties?.data;
+  return resolveContractSchema(contract.schemaPath, requestSchema, responseDataSchema);
+}
+
+function readSharedTypeInterfaces(filePath) {
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    readFileSync(filePath, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const interfaces = new Map();
+
+  sourceFile.forEachChild(function visit(node) {
+    if (ts.isInterfaceDeclaration(node)) {
+      interfaces.set(node.name.text, {
+        extendsNames: (node.heritageClauses ?? [])
+          .filter((clause) => clause.token === ts.SyntaxKind.ExtendsKeyword)
+          .flatMap((clause) => clause.types.map((typeNode) => typeNode.expression.getText(sourceFile))),
+        requiredFields: node.members
+          .filter(ts.isPropertySignature)
+          .filter((member) => !member.questionToken)
+          .map((member) => propertyName(member.name))
+          .filter(Boolean),
+      });
+    }
+    ts.forEachChild(node, visit);
+  });
+
+  return interfaces;
+}
+
+function requiredFieldsForInterface(interfaces, interfaceName, seen = new Set()) {
+  if (seen.has(interfaceName)) return [];
+  seen.add(interfaceName);
+  const entry = interfaces.get(interfaceName);
+  if (!entry) return [];
+  return [
+    ...new Set([
+      ...entry.extendsNames.flatMap((parent) => requiredFieldsForInterface(interfaces, parent, seen)),
+      ...entry.requiredFields,
+    ]),
+  ];
+}
+
+function propertyName(name) {
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text;
+  return undefined;
 }
 
 function requireSchemaFields(schema, fields, failures, label) {

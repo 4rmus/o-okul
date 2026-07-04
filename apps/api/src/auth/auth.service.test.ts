@@ -311,6 +311,41 @@ describe("AuthService", () => {
     await expect(auth.login(loginCredentials(nationalId))).rejects.toThrow("SUBJECT_CONTEXT_MISSING");
   });
 
+  it.each(["TEACHER", "GUARDIAN"] as const)(
+    "%s TC login yanlış kurum kodunda global fallback yapmaz",
+    async (role) => {
+      const nationalId = role === "TEACHER" ? "10000000450" : "10000000764";
+      const user: AuthUser = {
+        id: `${role.toLowerCase()}-wrong-tenant-login`,
+        name: `${role} Wrong Tenant Login`,
+        passwordHash: hashPassword("password", "test-salt"),
+        tenantId: "tenant-a",
+        nationalIdHash: hashTcIdentity(nationalId),
+        roles: [role],
+        membershipVersion: 1,
+      };
+      const users = createUserStoreMock({
+        findByTenantAndNationalIdHash: vi.fn(async (tenantId, nationalIdHash) => (
+          tenantId === user.tenantId && nationalIdHash === user.nationalIdHash ? user : undefined
+        )),
+        findById: vi.fn(async (id) => (id === user.id ? user : undefined)),
+      });
+      const auth = new AuthService(
+        users,
+        new InMemorySessionStore(),
+        new InMemoryPasswordResetStore(),
+        { resolve: vi.fn(async () => ({ subjectType: role, subjectId: `${role.toLowerCase()}-a` })) } as unknown as IdentityResolver,
+        undefined,
+        undefined,
+        new InMemoryTenantStore(),
+      );
+
+      await expect(auth.login(loginCredentials(nationalId, "password", "demo-kurum-b"))).rejects.toThrow("LOGIN_FAILED");
+      expect(users.findByTenantAndNationalIdHash).toHaveBeenCalledWith("tenant-b", user.nationalIdHash);
+      expect(users.findByNationalIdHash).not.toHaveBeenCalled();
+    },
+  );
+
   it("system hesabı system scope ve TC ile login olur", async () => {
     const nationalId = "10000000214";
     const user: AuthUser = {

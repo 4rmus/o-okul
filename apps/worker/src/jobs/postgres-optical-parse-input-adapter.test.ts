@@ -77,6 +77,15 @@ describe("PostgresOpticalParseInputAdapter", () => {
     await expect(adapter.load({ tenantId: "tenant-a", rawImportId: "raw-import-a" })).rejects.toThrow("OPTICAL_PARSE_INPUT_NOT_FOUND");
   });
 
+  it("RawImport parserConfigVersion eşleşmeyen ParserConfig'e düşmez", async () => {
+    const client = new FakeClient(() => []);
+    const adapter = new PostgresOpticalParseInputAdapter(new FakePool(client));
+
+    await expect(adapter.load({ tenantId: "tenant-a", rawImportId: "raw-import-a" })).rejects.toThrow("OPTICAL_PARSE_INPUT_NOT_FOUND");
+    const rawImportQuery = client.queries.find((query) => query.sql.includes('FROM "RawImport"'));
+    expect(rawImportQuery?.sql).toContain('pc."version" = ri."parserConfigVersion"');
+  });
+
   it("fixed ParserConfig içinde çok-segmentli cevap alanını kabul eder", async () => {
     const fieldMapping = {
       studentNo: { kind: "fixed", start: 11, length: 4 },

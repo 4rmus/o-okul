@@ -4,6 +4,7 @@ import { AuditLogService } from "../audit-log/audit-log.service.js";
 import { optionalTurkishMobilePhone } from "../auth/phone-normalize.js";
 import type { RequestContext } from "../context/request-context.js";
 import { isSystemAdmin } from "../rbac/roles.js";
+import { requiredText } from "../shared/required-text.js";
 import { encryptTcIdentity, hashTcIdentity, normalizeTcIdentity } from "../student/tc-identity.js";
 import {
   type TenantUserRecord,
@@ -274,14 +275,6 @@ function parseFirstAdmin(body: TenantFirstAdminBody | undefined):
     nationalId,
     phone,
   };
-}
-
-function requiredText(value: string | undefined, errorCode: string): string {
-  const text = optionalText(value);
-  if (!text) {
-    throw new BadRequestException(errorCode);
-  }
-  return text;
 }
 
 function optionalText(value: string | undefined): string | undefined {

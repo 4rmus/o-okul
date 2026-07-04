@@ -1,5 +1,7 @@
 # Faz B Uygulama Checklist'i
 
+> **Durum:** Tarihsel checklist; güncel durum bu dosyanın "Durum Denetimi" bölümünde ve kanıt satırlarında izlenir.
+
 Bu dosya `MASTER_PLAN.md` §10.6 Faz B kapsamını küçük, doğrulanabilir parçalara böler.
 
 ## Varsayımlar

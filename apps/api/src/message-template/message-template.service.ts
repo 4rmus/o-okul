@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { requiredText } from "../shared/required-text.js";
 import { assertTenantResourceAccess, filterTenantResources } from "../tenant/tenant-access.js";
 import { messageTemplateStoreToken, type MessageTemplateStore } from "./message-template-store.js";
 
@@ -121,14 +122,6 @@ export class MessageTemplateService {
       throw new ForbiddenException(message);
     }
   }
-}
-
-function requiredText(value: string | undefined, errorCode: string): string {
-  const trimmed = value?.trim();
-  if (!trimmed) {
-    throw new BadRequestException(errorCode);
-  }
-  return trimmed;
 }
 
 function resolveChannel(value: MessageTemplateChannel | undefined): MessageTemplateChannel {

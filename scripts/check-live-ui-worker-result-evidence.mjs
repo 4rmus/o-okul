@@ -5,6 +5,7 @@ import { validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
 
 const target = process.env.LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET ?? process.argv[2];
 const allowExampleEvidence = process.env.LIVE_UI_WORKER_RESULT_ALLOW_EXAMPLE_EVIDENCE === "1";
+const liveEvidenceMaxAgeMs = 24 * 60 * 60 * 1000;
 
 if (!target) {
   fail(["LIVE_UI_WORKER_RESULT_EVIDENCE_TARGET veya dosya argümanı boş bırakılamaz."]);
@@ -26,6 +27,7 @@ const failures = validateSmokeEvidencePayload(report, {
   label: "liveUiWorkerResultEvidence",
   allowExampleEvidence,
 });
+requireFreshGeneratedAt(report, failures);
 
 if (failures.length > 0) {
   fail(failures);
@@ -143,6 +145,15 @@ function parseJson(value) {
     return JSON.parse(value);
   } catch {
     fail(["Live UI-worker result kanıtı geçerli JSON olmalı."]);
+  }
+}
+
+function requireFreshGeneratedAt(report, failures) {
+  const timestamp = Date.parse(report?.generatedAt);
+  if (typeof report?.generatedAt !== "string" || Number.isNaN(timestamp) || allowExampleEvidence) return;
+
+  if (Date.now() - timestamp > liveEvidenceMaxAgeMs) {
+    failures.push("liveUiWorkerResultEvidence.generatedAt 24 saat sınırından eski; live kanıt yeniden üretilmeli.");
   }
 }
 

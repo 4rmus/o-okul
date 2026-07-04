@@ -3,6 +3,7 @@ import type { AttendanceRecord, AttendanceStatus, AttendanceSummaryRecord } from
 import { AnnouncementService } from "../announcement/announcement.service.js";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
+import { requiredText } from "../shared/required-text.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
 import { type CourseStore, courseStoreToken } from "../school/course-store.js";
 import { type GuardianStudentStore, guardianStudentStoreToken } from "../school/guardian-student-store.js";
@@ -349,14 +350,6 @@ function summarize(studentId: string, records: AttendanceRecord[]): AttendanceSu
 
 function countAbsences(records: AttendanceRecord[]): number {
   return records.filter((record) => !record.deletedAt && record.status === "ABSENT").length;
-}
-
-function requiredText(value: string | undefined, errorCode: string): string {
-  const trimmed = value?.trim();
-  if (!trimmed) {
-    throw new BadRequestException(errorCode);
-  }
-  return trimmed;
 }
 
 function requiredDate(value: string | undefined): string {

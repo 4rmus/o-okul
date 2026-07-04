@@ -1052,7 +1052,7 @@ pnpm live:onboarding:smoke
 
 `LIVE_ONBOARDING_EVIDENCE_PATH` JSON'u system admin ve ilk tenant admin credential'larını, tenant
 adı/slug/plan/koltuk limitini ve opsiyonel kurulum alanlarını exact shape ile taşır. Gerçek staging
-kanıtında `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder değerler kabul edilmez;
+kanıtında `generatedAt` 24 saatten eski olamaz; `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder değerler kabul edilmez;
 dosya lokal temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent zinciri altında olamaz.
 `pnpm live:onboarding:evidence-contract` bu negatifleri lokal CI'da tarayıcı açmadan korur.
 
@@ -1125,12 +1125,12 @@ olamaz; `NEXT_E2E_SKIP_WEB_SERVER=1` local Next dev server'in yanlışlıkla kan
 engeller. IP/self-signed staging hedeflerinde `NEXT_E2E_IGNORE_HTTPS_ERRORS=1` yalnız Playwright TLS
 toleransı için kullanılır.
 Gerçek staging kanıtında `example`, `.test`, `redacted`, `localhost`, `__SET` veya placeholder
-değerler kabul edilmez; dosya lokal temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent
+değerler kabul edilmez; `generatedAt` 24 saatten eski olamaz; dosya lokal temp path (`/tmp`, `/var/tmp`), symlink dosya veya symlink parent
 zinciri altında olamaz.
 `LIVE_UI_WORKER_RESULT_EVIDENCE_FILE` ise secret içermez; Excel/PDF indirme ve portal görüntüleme
 sonucunu kalıcı staging artifact'i olarak yazar. `pnpm live:ui-worker:result-check` bu JSON'un
 `reportStatus=READY`, `xlsx/pdf` indirme, öğrenci/veli portal görünümü, hashli sınav/öğrenci
-referansları, boş `gaps`, `artifacts/local/**` dışında kalıcı target ve temp/symlink olmayan target sözleşmesini doğrular; tam sınav döngüsü
+referansları, boş `gaps`, 24 saatten eski olmayan `generatedAt`, `artifacts/local/**` dışında kalıcı target ve temp/symlink olmayan target sözleşmesini doğrular; tam sınav döngüsü
 kanıtında referans verilebilir. `prod:evidence:check --summary-file` aynı artifact'i
 `reports.liveUiWorkerResult` alanına taşır; production summary ve go-live linked summary bu rapor
 eksikken PASS alamaz. Result artifact ham e-posta, parola veya öğrenci id'si taşımaz.

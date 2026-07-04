@@ -1584,7 +1584,7 @@ requireTokens("apps/web/app/(app)/_shared/navigation.ts", [
   '{ href: "/kurum/guvenlik-denetimi", icon: ShieldCheck, label: "Güvenlik Denetimi", requiredCapability: institutionOperationEvidenceCapability }',
   '{ href: "/kurum/canli-yayin", icon: Activity, label: "Release Kanıtı", requiredCapability: institutionOperationEvidenceCapability }',
   '{ href: "/kurum/raporlar", icon: BarChart3, label: "Sınav Raporları", requiredCapability: "academic:manage" }',
-  '"/kurum/raporlar": "Sınav Raporları"',
+  '"/kurum": "Kurum Özeti"',
 ]);
 
 requireTokens("apps/web/app/(app)/app-shell.tsx", [

@@ -1,5 +1,7 @@
 # O-Okul UI/UX Yeniden Tasarım Planı
 
+> **DURUM:** RELEASE READINESS BLOCKED — `artifacts/local/ui-ux-redesign-release-readiness-summary.json` eksik staging artifact'leri ve `GHCR_READ_TOKEN` / `STAGING_EVIDENCE_ENV_B64` secret eksiklerini gösteriyor; F7 arşivleme bu kanıtlar tamamlanana kadar ertelendi.
+
 ## Özet
 
 Bu planın çıktı hedefi `docs/ui-ux-redesign-plan.md` dosyasıdır.

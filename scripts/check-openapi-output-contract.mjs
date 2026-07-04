@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const failures = [];
@@ -35,6 +35,21 @@ try {
     "OPENAPI_OUTPUT parent dizini symlink olmayan dizin olmalı.",
     "OpenAPI output symlink parent negative",
   );
+
+  const driftDomain = join(root, "domain-drift.ts");
+  writeFileSync(
+    driftDomain,
+    readFileSync("packages/shared-types/src/domain.ts", "utf8").replace(
+      "export interface TenantRecord {\n  id: string;",
+      "export interface TenantRecord {\n  id: string;\n  driftRequiredField: string;",
+    ),
+  );
+  expectOpenApiOutputFailure(
+    join(root, "openapi-drift.json"),
+    "OpenAPI/shared-types drift: TenantRecord.driftRequiredField",
+    "OpenAPI shared-types drift negative",
+    { OPENAPI_SHARED_TYPES_DOMAIN_PATH: driftDomain },
+  );
 } finally {
   rmSync(root, { recursive: true, force: true });
 }
@@ -47,10 +62,11 @@ if (failures.length > 0) {
 
 console.log("OpenAPI output contract kontrolü geçti.");
 
-function expectOpenApiOutputFailure(target, expectedMessage, label) {
+function expectOpenApiOutputFailure(target, expectedMessage, label, env = {}) {
   const result = spawnSync(process.execPath, ["scripts/generate-openapi.mjs"], {
     env: {
       ...process.env,
+      ...env,
       OPENAPI_OUTPUT: target,
     },
     encoding: "utf8",

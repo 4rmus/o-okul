@@ -14,6 +14,7 @@ import type {
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { requiredText } from "../shared/required-text.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
 import { type CampusStore, campusStoreToken } from "../school/campus-store.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
@@ -485,14 +486,6 @@ function resolveInstallments(
       paidAt: optionalDateTime(installment.paidAt),
     };
   });
-}
-
-function requiredText(value: string | undefined, errorCode: string): string {
-  const trimmed = value?.trim();
-  if (!trimmed) {
-    throw new BadRequestException(errorCode);
-  }
-  return trimmed;
 }
 
 function optionalText(value: string | undefined): string | undefined {

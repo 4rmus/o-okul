@@ -912,7 +912,7 @@ pnpm backup:restore:smoke
   komut `NEXT_E2E_LIVE_ONBOARDING=1` ve `LIVE_ONBOARDING_EVIDENCE_PATH` kanıt JSON'u gerektirir.
   `pnpm live:onboarding:evidence-contract` bu preflight'ı tarayıcı açmadan doğrular; gerçek smoke
   başlamadan önce evidence JSON'unun exact system admin/first admin/tenant/onboarding shape'i,
-  placeholder/test değer taşımadığı, sistem admin ile ilk admin e-postalarının ayrık olduğu ve
+  `generatedAt` değerinin 24 saatten eski olmadığı, placeholder/test değer taşımadığı, sistem admin ile ilk admin e-postalarının ayrık olduğu ve
   dosyanın lokal temp path, symlink dosya veya symlink parent zinciri altında olmadığı kontrol edilir.
 - Tam sınav döngüsü staging/prod kanıtı `LIVE_EXAM_CYCLE_TARGET` ile `pnpm live:exam-cycle:check`
   üzerinden doğrulanır; iSEM cevap anahtarı, optik pipeline, raw import, report-generation ve
@@ -964,7 +964,8 @@ pnpm backup:restore:smoke
   değerinin `staging/production` olmasını ister. `pnpm live:ui-worker:evidence-contract` bu preflight
   ve result negatiflerini lokal CI'da doğrular. Evidence JSON'u exact rapor admin credential, `examId`, `firstStudentId` ve opsiyonel
   öğrenci/veli portal credential shape'i taşır; path zincirinde `private` segmenti, 0600 dosya izni,
-  placeholder/test olmayan değerler, lokal temp path dışı ve symlink olmayan dosya/parent zinciri zorunludur.
+  24 saatten eski olmayan `generatedAt`, placeholder/test olmayan değerler, lokal temp path dışı ve symlink olmayan dosya/parent zinciri zorunludur.
+  Result artifact `generatedAt` değeri de 24 saatten eskiyse canlı kanıt olarak reddedilir.
   Result artifact tam sınav döngüsündeki mock'suz
   UI-worker/portal kanıtı için referans verilebilir.
 - Rollback hedefi son başarılı image tag'i ve restore edilebilir backup olarak yazılır.

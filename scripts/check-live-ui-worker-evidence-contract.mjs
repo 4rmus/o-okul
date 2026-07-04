@@ -191,6 +191,19 @@ try {
     "liveUiWorkerEvidence.firstStudentId alanı zorunlu.",
   );
 
+  const stalePath = join(artifactRoot, "private", "stale.json");
+  const stale = createValidEvidence();
+  stale.generatedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+  writeJson(stalePath, stale);
+  runNegativeCheck(
+    "live UI-worker stale generatedAt negative",
+    {
+      NEXT_E2E_LIVE_UI_WORKER: "1",
+      LIVE_UI_WORKER_EVIDENCE_PATH: stalePath,
+    },
+    "generatedAt 24 saat sınırından eski",
+  );
+
   const placeholderPath = join(artifactRoot, "private", "placeholder.json");
   const placeholder = createValidEvidence();
   placeholder.email = "report-admin@example.com";
@@ -249,6 +262,16 @@ try {
     "live UI-worker result missing status negative",
     resultMissingStatusPath,
     "liveUiWorkerResultEvidence.reportStatus eksik.",
+  );
+
+  const resultStalePath = join(artifactRoot, "result-stale.json");
+  const resultStale = createValidResultEvidence();
+  resultStale.generatedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+  writeJson(resultStalePath, resultStale);
+  runResultNegativeCheck(
+    "live UI-worker result stale generatedAt negative",
+    resultStalePath,
+    "liveUiWorkerResultEvidence.generatedAt 24 saat sınırından eski",
   );
 
   const resultPlaceholderPath = join(artifactRoot, "result-placeholder.json");
@@ -374,6 +397,7 @@ function createValidEvidence() {
     email: "report.admin@staging.o-okul.com",
     examId: "exam-report-smoke-20260614",
     firstStudentId: "student-report-smoke-20260614-00001",
+    generatedAt: new Date(Date.now() - 60_000).toISOString(),
     guardianPortal: {
       email: "guardian.portal@staging.o-okul.com",
       password: "Str0ngGuardian!2026",

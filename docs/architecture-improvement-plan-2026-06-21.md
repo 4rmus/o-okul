@@ -1,5 +1,7 @@
 # Architecture Improvement Plan - 2026-06-21
 
+> **DURUM:** TARİHSEL — güncel kaynak `docs/production-v1-modernization-plan-2026-06-27.md`; `pnpm prod:plan:check` bu dosyayı okur, silmeyin/taşımayın.
+
 ## Kisa Verdict
 
 Repo, production-bound multi-tenant egitim SaaS beklentisine gore olgun bir iskelete sahip:
