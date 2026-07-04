@@ -1,5 +1,7 @@
 # Eğitim Yönetim Sistemi Değerlendirmesi ve Tamamlama Planı
 
+> **DURUM:** TARİHSEL BAĞLAM — güncel kapsam `docs/DECISIONS.md` ve `docs/product-journeys-v1.md` üzerinden izlenir.
+
 Tarih: 2026-06-01
 Son güncelleme: 2026-06-02
 

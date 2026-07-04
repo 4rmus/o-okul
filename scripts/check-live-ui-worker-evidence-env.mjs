@@ -8,6 +8,7 @@ const evidencePath = process.env.LIVE_UI_WORKER_EVIDENCE_PATH;
 const resultEvidencePath = process.env.LIVE_UI_WORKER_RESULT_EVIDENCE_FILE ?? process.env.LIVE_UI_WORKER_RESULT_EVIDENCE_PATH;
 const resultEvidenceEnvironment = process.env.STAGING_ENVIRONMENT ?? process.env.NODE_ENV;
 const allowExampleEvidence = process.env.LIVE_UI_WORKER_ALLOW_EXAMPLE_EVIDENCE === "1";
+const liveEvidenceMaxAgeMs = 24 * 60 * 60 * 1000;
 const failures = [];
 
 if (enabled !== "1") {
@@ -213,8 +214,10 @@ function validateEvidence(evidence, collectedFailures) {
     "email",
     "examId",
     "firstStudentId",
+    "generatedAt",
     "password",
   ], ["guardianPortal", "studentPortal"]);
+  requireFreshGeneratedAt(evidence, collectedFailures, "generatedAt");
   requireEmail(evidence, collectedFailures, "email", "email");
   requireSecret(evidence, collectedFailures, "password", "password");
   requireString(evidence, collectedFailures, "examId", "examId");
@@ -275,6 +278,24 @@ function requireSecret(scope, collectedFailures, label, key) {
 function requireString(scope, collectedFailures, label, key) {
   if (typeof scope[key] !== "string" || scope[key].trim() === "") {
     collectedFailures.push(`${label} boş olmayan metin olmalı.`);
+  }
+}
+
+function requireFreshGeneratedAt(scope, collectedFailures, label) {
+  const timestamp = Date.parse(scope?.generatedAt);
+  if (typeof scope?.generatedAt !== "string" || Number.isNaN(timestamp)) {
+    collectedFailures.push(`${label} geçerli tarih olmalı.`);
+    return;
+  }
+  if (allowExampleEvidence) return;
+
+  const clockSkewMs = 5 * 60 * 1000;
+  const now = Date.now();
+  if (timestamp > now + clockSkewMs) {
+    collectedFailures.push(`${label} gelecekte olamaz.`);
+  }
+  if (now - timestamp > liveEvidenceMaxAgeMs) {
+    collectedFailures.push(`${label} 24 saat sınırından eski; live kanıt yeniden üretilmeli.`);
   }
 }
 

@@ -27,6 +27,7 @@ import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
 import { NotificationDeviceService } from "../notification-device/notification-device.service.js";
 import type { ProducedJob, TenantQueueJobInput } from "../queue/job-producer.js";
+import { requiredText } from "../shared/required-text.js";
 import { assertTenantResourceAccess, filterTenantResources } from "../tenant/tenant-access.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
 import { type CampusStore, campusStoreToken } from "../school/campus-store.js";
@@ -630,14 +631,6 @@ export class AnnouncementService {
       throw new ForbiddenException(message);
     }
   }
-}
-
-function requiredText(value: string | undefined, errorCode: string): string {
-  const trimmed = value?.trim();
-  if (!trimmed) {
-    throw new BadRequestException(errorCode);
-  }
-  return trimmed;
 }
 
 function optionalText(value: string | undefined): string | undefined {

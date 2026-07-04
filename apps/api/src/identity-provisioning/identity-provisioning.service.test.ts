@@ -50,6 +50,31 @@ describe("IdentityProvisioningService", () => {
 
     expect(result).toEqual({ status: "INVITED", invitationId: "invite-teacher-a" });
   });
+
+  it("TC var ama telefon yoksa kullanıcı üretmez, e-posta davetine düşer", async () => {
+    const users = new InMemoryAuthUserStore();
+    const nationalId = "10000009999";
+    const invitations = {
+      create: async (context: RequestContext, body: unknown) => ({
+        context,
+        invitation: { id: "invite-teacher-without-phone" },
+        body,
+      }),
+    };
+    const service = new IdentityProvisioningService(users, invitations as never);
+
+    const result = await service.provisionOrInvite(adminContext, {
+      tenantId: "tenant-a",
+      subjectType: "TEACHER",
+      subjectId: "teacher-without-phone",
+      displayName: "Telefonsuz Ogretmen",
+      nationalId,
+      email: "teacher.without.phone@example.test",
+    });
+
+    expect(result).toEqual({ status: "INVITED", invitationId: "invite-teacher-without-phone" });
+    await expect(users.findByTenantAndNationalIdHash("tenant-a", hashTcIdentity(nationalId))).resolves.toBeUndefined();
+  });
 });
 
 const adminContext: RequestContext = {

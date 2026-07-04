@@ -1,5 +1,7 @@
 # Faz E Sertleştirme Checklist'i
 
+> **Durum:** Tarihsel checklist; güncel durum bu dosyanın "Durum Denetimi" bölümünde ve kanıt satırlarında izlenir.
+
 Bu dosya `MASTER_PLAN.md` §10.6 Faz E kapsamını güvenli sıraya koyar.
 
 ## Varsayımlar

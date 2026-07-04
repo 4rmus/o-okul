@@ -87,6 +87,7 @@ export function scoreExam(
   const questions: QuestionScore[] = [];
 
   for (const key of answerKey) {
+    validateAnswerKeyItem(key);
     const score = ensureBranchScore(branchScores, key.branch);
     const outcome = key.outcomeCode ? ensureOutcomeScore(outcomeScores, key.outcomeCode, key.branch) : undefined;
     const answer = answerMap.get(key.questionNo) ?? "";
@@ -142,6 +143,12 @@ export function scoreExam(
       computedAt: config.computedAt,
     },
   };
+}
+
+function validateAnswerKeyItem(key: AnswerKeyItem): void {
+  if (!key.branch.trim()) {
+    throw new Error("SCORING_ANSWER_KEY_BRANCH_REQUIRED");
+  }
 }
 
 function ensureBranchScore(scores: Map<string, BranchScore>, branch: string): BranchScore {

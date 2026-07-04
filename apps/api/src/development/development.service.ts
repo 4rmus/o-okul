@@ -3,6 +3,7 @@ import type { DevelopmentAssessmentVisibility, DevelopmentTrendItem } from "@o-o
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";
+import { requiredText } from "../shared/required-text.js";
 import {
   type GuardianStudentStore,
   guardianStudentStoreToken,
@@ -248,12 +249,6 @@ function requireTenantId(context: RequestContext): string {
     throw new ForbiddenException("TENANT_CONTEXT_MISSING");
   }
   return context.tenantId;
-}
-
-function requiredText(value: string | undefined, errorCode: string): string {
-  const text = optionalText(value);
-  if (!text) throw new BadRequestException(errorCode);
-  return text;
 }
 
 function optionalText(value: string | undefined): string | undefined {

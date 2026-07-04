@@ -4,6 +4,7 @@ import { dirname, parse, resolve } from "node:path";
 const enabled = process.env.NEXT_E2E_LIVE_ONBOARDING;
 const evidencePath = process.env.LIVE_ONBOARDING_EVIDENCE_PATH;
 const allowExampleEvidence = process.env.LIVE_ONBOARDING_ALLOW_EXAMPLE_EVIDENCE === "1";
+const liveEvidenceMaxAgeMs = 24 * 60 * 60 * 1000;
 
 const failures = [];
 
@@ -105,9 +106,12 @@ function validateEvidence(evidence, collectedFailures) {
 
   requireObjectKeySet(evidence, collectedFailures, "liveOnboardingEvidence", [
     "firstAdmin",
+    "generatedAt",
     "systemAdmin",
     "tenant",
   ], ["appendRunId", "onboarding"]);
+
+  requireFreshGeneratedAt(evidence, collectedFailures, "generatedAt");
 
   if (Object.hasOwn(evidence, "appendRunId") && typeof evidence.appendRunId !== "boolean") {
     collectedFailures.push("appendRunId boolean olmalı.");
@@ -222,6 +226,24 @@ function requireSecret(scope, collectedFailures, label, key) {
 function requireString(scope, collectedFailures, label, key) {
   if (typeof scope[key] !== "string" || scope[key].trim() === "") {
     collectedFailures.push(`${label} boş olmayan metin olmalı.`);
+  }
+}
+
+function requireFreshGeneratedAt(scope, collectedFailures, label) {
+  const timestamp = Date.parse(scope?.generatedAt);
+  if (typeof scope?.generatedAt !== "string" || Number.isNaN(timestamp)) {
+    collectedFailures.push(`${label} geçerli tarih olmalı.`);
+    return;
+  }
+  if (allowExampleEvidence) return;
+
+  const clockSkewMs = 5 * 60 * 1000;
+  const now = Date.now();
+  if (timestamp > now + clockSkewMs) {
+    collectedFailures.push(`${label} gelecekte olamaz.`);
+  }
+  if (now - timestamp > liveEvidenceMaxAgeMs) {
+    collectedFailures.push(`${label} 24 saat sınırından eski; live kanıt yeniden üretilmeli.`);
   }
 }
 

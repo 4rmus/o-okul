@@ -52,6 +52,7 @@ describe("API auth + tenant isolation", () => {
     };
   }
 
+  describe("auth session", () => {
   it("login, refresh rotation ve logout akışını HTTP üzerinden doğrular", async () => {
     const issued = await login("admin-a@example.test");
 
@@ -134,6 +135,9 @@ describe("API auth + tenant isolation", () => {
     });
   });
 
+  });
+
+  describe("tenant isolation and role-scoped me endpoints", () => {
   it("tenant A liste endpointinde tenant B öğrencisini göremez", async () => {
     const issued = await login("admin-a@example.test");
 
@@ -744,6 +748,9 @@ describe("API auth + tenant isolation", () => {
       .expect(403);
   });
 
+  });
+
+  describe("student write and import/export", () => {
   it("student CRUD akışını tenant içinde tamamlar", async () => {
     const issued = await login("admin-a@example.test");
 
@@ -1335,6 +1342,9 @@ describe("API auth + tenant isolation", () => {
     );
   });
 
+  });
+
+  describe("student boundary guards", () => {
   it("student create kotası tenant için 409 hard-block uygular", async () => {
     const issued = await login("admin-b@example.test");
 
@@ -1383,6 +1393,7 @@ describe("API auth + tenant isolation", () => {
       .post("/auth/login")
       .send(testLoginBody("admin-b@example.test"))
       .expect(429);
+  });
   });
 });
 

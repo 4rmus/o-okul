@@ -1,5 +1,7 @@
 # Faz D Rol Portalları Checklist'i
 
+> **Durum:** Tarihsel checklist; güncel durum bu dosyanın "Durum Denetimi" bölümünde ve kanıt satırlarında izlenir.
+
 Bu dosya `MASTER_PLAN.md` §10.6 Faz D kapsamını doğrulanabilir parçalara böler.
 
 ## Varsayımlar

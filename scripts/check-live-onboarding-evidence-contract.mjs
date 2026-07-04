@@ -79,6 +79,19 @@ try {
     "firstAdmin.password alanı zorunlu.",
   );
 
+  const stalePath = join(artifactRoot, "stale.json");
+  const stale = createValidEvidence();
+  stale.generatedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+  writeJson(stalePath, stale);
+  runNegativeCheck(
+    "live onboarding stale generatedAt negative",
+    {
+      NEXT_E2E_LIVE_ONBOARDING: "1",
+      LIVE_ONBOARDING_EVIDENCE_PATH: stalePath,
+    },
+    "generatedAt 24 saat sınırından eski",
+  );
+
   const placeholderPath = join(artifactRoot, "placeholder.json");
   const placeholder = createValidEvidence();
   placeholder.firstAdmin.email = "tenant-admin@example.com";
@@ -159,6 +172,7 @@ function createValidEvidence() {
       name: "Canli UAT Admin",
       password: "Str0ngAdmin!2026",
     },
+    generatedAt: new Date(Date.now() - 60_000).toISOString(),
     onboarding: {
       contactEmail: "kurulum@staging.o-okul.com",
       importOwner: "Canli UAT",

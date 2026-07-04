@@ -1,5 +1,6 @@
 # o-okul — Gerçek Veri & Ürün Tamamlama Planı
 
+> **DURUM:** TARİHSEL — güncel kaynak `docs/production-v1-modernization-plan-2026-06-27.md`; `pnpm prod:plan:check` bu dosyayı okur, silmeyin/taşımayın.
 > **Tarih:** 2026-06-03 · **Durum:** UYGULAMA SÜRÜYOR — Faz 3/4 karne-portal kapanış turu için ölçüm-hamle planı aktif
 > **Kaynak:** 4-ajan orkestrasyonu (`system-architect ∥ backend-architect ∥ frontend-architect` + iş paneli `Christensen/Drucker/Porter/Godin/Meadows/Taleb`) + kullanıcının sağladığı **gerçek örnek veri** (`ornek-veriler/`) üzerinden sentez.
 > **Kanonik durum belgesi:** `docs/education-system-assessment-2026-06-01.md`. Bu plan onun yerini almaz; onun **Faz 4 (Sınav/Optik/Rapor)** kısmını gerçek veriyle somutlaştıran, UI/UX ve yetki hedeflerini de kapsayan **uygulanabilir devam planıdır**.

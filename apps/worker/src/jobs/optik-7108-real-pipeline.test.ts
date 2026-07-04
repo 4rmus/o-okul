@@ -214,6 +214,33 @@ describeWithRealFixtures("OPTİK-7108 gerçek veri pipeline fixture", () => {
       });
     },
   );
+
+  it("gerçek OPTİK-7108 satırında bozuk cevap karakterini quarantine eder", () => {
+    const fixture = fixtures[0]!;
+    const row = readOptikRows(fixture.txtPath).find((candidate) => isValidOptik7108Line(candidate.line));
+    if (!row) throw new Error("OPTIK_7108_FIXTURE_ROW_MISSING");
+    const brokenLine = `${row.line.slice(0, 51)}X${row.line.slice(52)}`;
+
+    const parsed = new OpticalAnswerParser().parse({
+      tenantId: "tenant-a",
+      examId: fixture.id,
+      rawImportId: `${fixture.id}-raw-import`,
+      parserConfigVersion: "optik-7108-lgs-v1",
+      content: brokenLine,
+      parserConfig: getParserConfigPresetSuggestion("OPTIK_7108_LGS"),
+      participants: [{ participantId: "participant-a", participantNo: row.studentNo, bookletType: row.bookletType }],
+    });
+
+    expect(parsed.matched).toEqual([]);
+    expect(parsed.unmatched[0]).toMatchObject({
+      reason: "ANSWER_PARSE_INVALID",
+      rawRow: {
+        studentNo: row.studentNo,
+        bookletType: row.bookletType,
+        warnings: ["INVALID_ANSWER_CHOICE"],
+      },
+    });
+  });
 });
 
 function createScoringConfig() {

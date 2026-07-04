@@ -135,6 +135,16 @@ describe("ScoringEngine", () => {
     expect(result.branches).toEqual([{ branch: "Matematik", correct: 0, wrong: 2, blank: 0, net: -1 }]);
   });
 
+  it("cevap anahtarında branş boşsa sessiz boş kırılım üretmez", () => {
+    expect(() =>
+      scoreExam(
+        [{ questionNo: 1, answer: "A" }],
+        [{ questionNo: 1, correctAnswer: "A", branch: " " }],
+        config,
+      ),
+    ).toThrow("SCORING_ANSWER_KEY_BRANCH_REQUIRED");
+  });
+
   it("ham ve standart puanı konfigürasyondaki ölçekle hesaplar", () => {
     const result = scoreExam(
       [

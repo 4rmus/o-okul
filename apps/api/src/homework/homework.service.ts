@@ -11,6 +11,7 @@ import type {
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { requiredText } from "../shared/required-text.js";
 import { type ScheduleStore, scheduleStoreToken } from "../program/schedule-store.js";
 import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";
 import { SchoolService } from "../school/school.service.js";
@@ -648,14 +649,6 @@ function isIsoDateTimeString(value: string): boolean {
 function isCalendarDateString(value: string): boolean {
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
-
-function requiredText(value: string | undefined, errorCode: string): string {
-  const trimmed = value?.trim();
-  if (!trimmed) {
-    throw new BadRequestException(errorCode);
-  }
-  return trimmed;
 }
 
 function optionalText(value: string | undefined): string | undefined {

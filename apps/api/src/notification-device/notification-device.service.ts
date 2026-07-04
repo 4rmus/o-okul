@@ -1,6 +1,7 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { NotificationDeviceTokenRecord } from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
+import { requiredText } from "../shared/required-text.js";
 import {
   notificationDeviceTokenStoreToken,
   type NotificationDeviceTokenStore,
@@ -66,14 +67,6 @@ function resolveDeviceScope(context: RequestContext): {
     subjectType: context.subjectType,
     subjectId: context.subjectId,
   };
-}
-
-function requiredText(value: string | undefined, errorCode: string): string {
-  const trimmed = value?.trim();
-  if (!trimmed) {
-    throw new BadRequestException(errorCode);
-  }
-  return trimmed;
 }
 
 function optionalText(value: string | undefined): string | undefined {
