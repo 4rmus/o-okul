@@ -189,6 +189,10 @@ const demoUsers: AuthUser[] = [
 
 const inMemoryUsers = demoUsers.map((user) => ({ ...user, roles: [...user.roles] }));
 
+export function resetInMemoryAuthUsers(): void {
+  inMemoryUsers.splice(0, inMemoryUsers.length, ...demoUsers.map(cloneRequiredUser));
+}
+
 export function upsertInMemoryAuthUser(input: {
   id: string;
   email?: string;
@@ -311,7 +315,7 @@ export class InMemoryAuthUserStore implements AuthUserStore {
     lastUsedCounter?: string;
   }): Promise<AuthUser | undefined> {
     const user = this.users.find((candidate) => candidate.id === input.userId);
-    if (!user) return undefined;
+    if (!user || user.totpSecretEncrypted || user.totpEnabledAt) return undefined;
 
     user.totpSecretEncrypted = input.secretEncrypted;
     user.totpEnabledAt = input.enabledAt;
@@ -374,7 +378,7 @@ export class PostgresAuthUserStore implements AuthUserStore {
       `WHERE lower(u."email") = lower($1)
          AND t."status" = 'ACTIVE'
        GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
-                u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
+                u."membershipVersion", u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
                 u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
        ORDER BY min(m."createdAt") ASC
        LIMIT 1`,
@@ -390,7 +394,7 @@ export class PostgresAuthUserStore implements AuthUserStore {
          AND m."tenantId" = $1
          AND t."status" = 'ACTIVE'
        GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
-                u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
+                u."membershipVersion", u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
                 u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
        LIMIT 1`,
       [tenantId, nationalIdHash],
@@ -407,7 +411,7 @@ export class PostgresAuthUserStore implements AuthUserStore {
          AND t."status" = 'ACTIVE'
          AND (t."licenseEndsAt" IS NULL OR t."licenseEndsAt" >= now())
        GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
-                u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
+                u."membershipVersion", u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
                 u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
        ORDER BY min(t."createdAt") ASC
        LIMIT 20`,
@@ -420,7 +424,7 @@ export class PostgresAuthUserStore implements AuthUserStore {
       `WHERE u."id" = $1
          AND t."status" = 'ACTIVE'
        GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
-                u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
+                u."membershipVersion", u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
                 u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
        ORDER BY min(m."createdAt") ASC
        LIMIT 1`,
@@ -434,7 +438,7 @@ export class PostgresAuthUserStore implements AuthUserStore {
       `WHERE m."tenantId" = $1
          AND t."status" = 'ACTIVE'
        GROUP BY u."id", u."tenantId", u."email", u."nationalIdEncrypted", u."nationalIdHash", u."name", u."passwordHash",
-                u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
+                u."membershipVersion", u."mustChangePassword", u."passwordChangedAt", u."totpSecretEncrypted",
                 u."totpEnabledAt", u."totpRecoveryCodeHashes", u."totpLastUsedCounter", m."tenantId"
        ORDER BY lower(u."name") ASC, u."id" ASC`,
       [tenantId],
@@ -455,6 +459,7 @@ export class PostgresAuthUserStore implements AuthUserStore {
              "totpEnabledAt" = NULL,
              "totpRecoveryCodeHashes" = ARRAY[]::TEXT[],
              "totpLastUsedCounter" = NULL,
+             "membershipVersion" = "membershipVersion" + 1,
              "updatedAt" = now()
          WHERE "id" = $1
          RETURNING "id"`,
@@ -521,8 +526,11 @@ export class PostgresAuthUserStore implements AuthUserStore {
              "totpEnabledAt" = $3::timestamptz,
              "totpRecoveryCodeHashes" = $4::text[],
              "totpLastUsedCounter" = $5,
+             "membershipVersion" = "membershipVersion" + 1,
              "updatedAt" = now()
          WHERE "id" = $1
+           AND "totpSecretEncrypted" IS NULL
+           AND "totpEnabledAt" IS NULL
          RETURNING "id"`,
         [input.userId, input.secretEncrypted, input.enabledAt, input.recoveryCodeHashes, input.lastUsedCounter ?? null],
       );
@@ -539,6 +547,7 @@ export class PostgresAuthUserStore implements AuthUserStore {
              "totpEnabledAt" = NULL,
              "totpRecoveryCodeHashes" = ARRAY[]::TEXT[],
              "totpLastUsedCounter" = NULL,
+             "membershipVersion" = "membershipVersion" + 1,
              "updatedAt" = now()
          WHERE "id" = $1
          RETURNING "id"`,
@@ -586,6 +595,7 @@ export class PostgresAuthUserStore implements AuthUserStore {
          SET "passwordHash" = $2,
              "mustChangePassword" = COALESCE($3, "mustChangePassword"),
              "passwordChangedAt" = COALESCE($4::timestamptz, "passwordChangedAt"),
+             "membershipVersion" = "membershipVersion" + 1,
              "updatedAt" = now()
          WHERE "id" = $1
          RETURNING "id"`,
@@ -607,6 +617,7 @@ export class PostgresAuthUserStore implements AuthUserStore {
            u."nationalIdHash",
            u."name",
            u."passwordHash",
+           u."membershipVersion",
            u."mustChangePassword",
            u."passwordChangedAt",
            u."totpSecretEncrypted",
@@ -653,6 +664,7 @@ interface AuthUserRow {
   nationalIdHash: string | null;
   name: string;
   passwordHash: string;
+  membershipVersion: number;
   mustChangePassword: boolean;
   passwordChangedAt: Date | string | null;
   totpSecretEncrypted: string | null;
@@ -672,7 +684,7 @@ function toAuthUser(row: AuthUserRow): AuthUser {
     passwordHash: row.passwordHash,
     tenantId: row.tenantId ?? "system",
     roles: row.roles,
-    membershipVersion: 1,
+    membershipVersion: row.membershipVersion,
     mustChangePassword: row.mustChangePassword,
     passwordChangedAt: row.passwordChangedAt ? new Date(row.passwordChangedAt).toISOString() : undefined,
     totpSecretEncrypted: row.totpSecretEncrypted ?? undefined,

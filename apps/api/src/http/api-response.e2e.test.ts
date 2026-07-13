@@ -5,6 +5,7 @@ import request from "supertest";
 import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
+import { resetInMemoryAuthUsers } from "../auth/auth-user-store.js";
 import { apiPrefix, configureApiApp } from "./configure-api-app.js";
 
 describe("API success response envelope", () => {
@@ -13,6 +14,7 @@ describe("API success response envelope", () => {
   let accessToken: string;
 
   beforeAll(async () => {
+    resetInMemoryAuthUsers();
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();

@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 import type { ProducedJob } from "../queue/job-producer.js";
 import {
+  createReportGenerationContentHash,
   examResultSummaryReportType,
   reportGenerationQueueProducerToken,
   type ReportGenerationQueueProducer,
@@ -57,7 +58,6 @@ describe("ReportGenerationController", () => {
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .send({
         reportType: examResultSummaryReportType,
-        contentHash: "results-v1",
         campusId: "campus-main",
         gradeLevelId: "grade-8",
         classId: "class-a",
@@ -66,12 +66,22 @@ describe("ReportGenerationController", () => {
       })
       .expect(201);
 
+    const contentHash = createReportGenerationContentHash({
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      reportType: examResultSummaryReportType,
+      campusId: "campus-main",
+      gradeLevelId: "grade-8",
+      classId: "class-a",
+      courseId: "course-math",
+      termId: "term-2026-spring",
+    });
     expect(producer.inputs).toEqual([{
       queueName: "report-generation",
       tenantId: "tenant-a",
       userId: "user-tenant-a",
       entityId: "exam-a",
-      contentHash: "results-v1",
+      contentHash,
       reportType: examResultSummaryReportType,
       campusId: "campus-main",
       gradeLevelId: "grade-8",
@@ -84,7 +94,7 @@ describe("ReportGenerationController", () => {
       examId: "exam-a",
       reportType: examResultSummaryReportType,
       queueName: "report-generation",
-      jobId: "exam-a_results-v1",
+      jobId: `exam-a_${contentHash}`,
       status: "queued",
     });
   });
@@ -94,7 +104,6 @@ describe("ReportGenerationController", () => {
     const key = "report-generation-idempotency-a";
     const body = {
       reportType: examResultSummaryReportType,
-      contentHash: "results-idempotent-v1",
       campusId: "campus-main",
       gradeLevelId: "grade-8",
       classId: "class-a",
@@ -122,7 +131,7 @@ describe("ReportGenerationController", () => {
       queueName: "report-generation",
       tenantId: "tenant-a",
       entityId: "exam-a",
-      contentHash: "results-idempotent-v1",
+      contentHash: expect.any(String),
       reportType: examResultSummaryReportType,
     });
 
@@ -130,7 +139,7 @@ describe("ReportGenerationController", () => {
       .post("/exams/exam-a/reports/generation-jobs")
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .set("Idempotency-Key", key)
-      .send({ ...body, contentHash: "results-idempotent-v2" })
+      .send({ ...body, classId: "class-b" })
       .expect(409);
     expect(producer.inputs).toHaveLength(1);
   });
@@ -512,27 +521,26 @@ describe("ReportGenerationController", () => {
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .send({
         reportType: examResultSummaryReportType,
-        contentHash: "results-v1",
       })
       .expect(403);
 
     expect(producer.inputs).toHaveLength(0);
   });
 
-  it("contentHash eksikse queue'ya iş göndermez", async () => {
+  it("contentHash gönderilirse istemci kontrollü snapshot kimliğini reddeder", async () => {
     const issued = await login("admin-a@example.test");
     producer.inputs = [];
 
     const response = await request(server)
       .post("/exams/exam-a/reports/generation-jobs")
       .set("Authorization", `Bearer ${issued.accessToken}`)
-      .send({ reportType: examResultSummaryReportType })
+      .send({ reportType: examResultSummaryReportType, contentHash: "client-controlled" })
       .expect(422);
 
     expect(response.body.error).toMatchObject({
       code: "VALIDATION_FAILED",
       details: {
-        fields: [expect.objectContaining({ path: "contentHash" })],
+        fields: [expect.objectContaining({ path: "$" })],
       },
     });
     expect(producer.inputs).toHaveLength(0);

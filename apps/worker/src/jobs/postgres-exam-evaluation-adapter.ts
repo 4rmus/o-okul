@@ -73,7 +73,7 @@ export class PostgresExamEvaluationAdapter implements ExamEvaluationJobAdapter {
            "updatedAt"
          )
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, now())
-         ON CONFLICT ("tenantId", "resultKey")
+         ON CONFLICT ("tenantId", "participantId", "answerKeyVersion", "parserConfigVersion", "engineVersion")
          DO UPDATE SET
            "examId" = EXCLUDED."examId",
            "studentId" = EXCLUDED."studentId",
@@ -83,6 +83,7 @@ export class PostgresExamEvaluationAdapter implements ExamEvaluationJobAdapter {
            "answerKeyVersion" = EXCLUDED."answerKeyVersion",
            "parserConfigVersion" = EXCLUDED."parserConfigVersion",
            "engineVersion" = EXCLUDED."engineVersion",
+           "resultKey" = EXCLUDED."resultKey",
            "scoreData" = EXCLUDED."scoreData",
            "computedAt" = EXCLUDED."computedAt",
            "deletedAt" = NULL,

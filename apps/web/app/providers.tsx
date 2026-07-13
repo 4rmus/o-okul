@@ -11,6 +11,7 @@ import {
 import type { AuthResponse, LoginRequest, MePasswordChangeRequest } from "@o-okul/shared-types";
 import {
   changePassword as requestChangePassword,
+  confirmMfaEnrollment as requestConfirmMfaEnrollment,
   login as requestLogin,
   logout as requestLogout,
   queryClient,
@@ -26,6 +27,7 @@ interface AuthStore {
   login(credentials: LoginRequest): Promise<void>;
   selectTenant(selectionToken: string, tenantId: string): Promise<void>;
   changePassword(input: MePasswordChangeRequest): Promise<void>;
+  confirmMfaEnrollment(setupToken: string, totpCode: string): Promise<void>;
   verifyMfa(challengeToken: string, input: { totpCode?: string; recoveryCode?: string }): Promise<void>;
   logout(): Promise<void>;
 }
@@ -61,6 +63,9 @@ export function Providers({ children }: { children: ReactNode }) {
       },
       async verifyMfa(challengeToken, input) {
         setAuth(await requestVerifyMfa(challengeToken, input));
+      },
+      async confirmMfaEnrollment(setupToken, totpCode) {
+        setAuth(await requestConfirmMfaEnrollment(setupToken, totpCode));
       },
       async changePassword(input) {
         if (!auth) throw new Error("AUTH_REQUIRED");

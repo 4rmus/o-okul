@@ -1,6 +1,6 @@
 # Faz B Liste Query Sözleşmesi
 
-Bu not `MASTER_PLAN.md` §3.4 ve §10.6 içindeki liste/meta beklentisini Faz B için netleştirir.
+Bu not güncel liste/meta sözleşmesini netleştirir.
 
 ## Mevcut Durum
 

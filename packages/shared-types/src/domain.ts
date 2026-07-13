@@ -54,7 +54,11 @@ export interface MfaChallengeResponse {
   methods: Array<"totp" | "recovery_code">;
 }
 
-export type LoginResponse = AuthResponse | MfaChallengeResponse | TenantSelectionRequiredResponse;
+export interface MfaEnrollmentRequiredResponse extends TotpSetupResponse {
+  status: "MFA_ENROLLMENT_REQUIRED";
+}
+
+export type LoginResponse = AuthResponse | MfaChallengeResponse | MfaEnrollmentRequiredResponse | TenantSelectionRequiredResponse;
 
 export type AuthRefreshRequest = Record<string, never>;
 
@@ -102,6 +106,8 @@ export interface TotpSetupConfirmRequest {
   setupToken: string;
   totpCode: string;
 }
+
+export type TotpEnrollmentConfirmRequest = TotpSetupConfirmRequest;
 
 export interface TotpSetupConfirmResponse {
   enabledAt: string;
@@ -1715,7 +1721,6 @@ export interface ReportSnapshotRecord {
         successRate?: number;
       }>;
     }>;
-    commentary?: ReportSnapshotCommentary;
     students?: Array<{
       studentId: string;
       classId?: string;
@@ -1759,26 +1764,11 @@ export interface ReportSnapshotRecord {
         correctAnswer: string;
         status: "CORRECT" | "WRONG" | "BLANK";
       }>;
-      commentary?: ReportStudentCommentary;
     }>;
   };
   generatedAt?: string;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface ReportSnapshotCommentary {
-  provider: "template";
-  generatedAt: string;
-  parentSummary: string;
-  teacherActionDrafts: string[];
-  reviewStatus: "DRAFT";
-  disclaimer: string;
-  dataPolicy: {
-    piiIncluded: false;
-    fieldsUsed: string[];
-    fieldsExcluded: string[];
-  };
 }
 
 export interface ReportSnapshotExportResult {
@@ -1881,15 +1871,6 @@ export interface ReportStudentStatistics {
   branches: ReportStudentBranchStatistics[];
 }
 
-export interface ReportStudentCommentary {
-  provider: "template";
-  generatedAt: string;
-  parentSummary: string;
-  teacherActionDraft: string;
-  reviewStatus: "DRAFT";
-  disclaimer: string;
-}
-
 export interface ReportStudentSnapshot {
   tenantId: string;
   institutionName?: string;
@@ -1912,7 +1893,6 @@ export interface ReportStudentSnapshot {
   outcomes?: ReportStudentOutcomeSummary[];
   questions?: ReportStudentQuestionSummary[];
   statistics?: ReportStudentStatistics;
-  commentary?: ReportStudentCommentary;
   generatedAt?: string;
 }
 

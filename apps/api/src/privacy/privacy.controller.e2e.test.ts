@@ -23,6 +23,16 @@ describe("PrivacyController", () => {
 
     adminToken = await login("admin-a@example.test");
     teacherToken = await login("teacher-a@example.test");
+    await request(server)
+      .patch("/students/student-a/profile")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        nationalId: "10000002430",
+        phone: "5550000011",
+        email: "student-inventory@example.test",
+        photoKey: "students/student-a/inventory.jpg",
+      })
+      .expect(200);
   });
 
   afterAll(async () => {
@@ -45,7 +55,7 @@ describe("PrivacyController", () => {
         id: "student-a",
         kind: "student",
         displayRef: expect.any(String),
-        piiCategories: expect.arrayContaining(["Ad", "soyad"]),
+        piiCategories: expect.arrayContaining(["Ad", "soyad", "T.C. kimlik no", "telefon", "e-posta", "fotoğraf"]),
         purgeAvailable: true,
       }),
       expect.objectContaining({

@@ -1,5 +1,5 @@
 import { Controller, Get, HttpCode, Inject, Post, UseGuards } from "@nestjs/common";
-import type { GuardianRecord, KvkkInventoryKind, KvkkInventoryRecord, StudentRecord, TeacherRecord } from "@o-okul/shared-types";
+import type { GuardianRecord, KvkkInventoryKind, KvkkInventoryRecord } from "@o-okul/shared-types";
 import { authUserStoreToken, type AuthUser, type AuthUserStore } from "../auth/auth-user-store.js";
 import { AuthService, type SelfPurgeResult } from "../auth/auth.service.js";
 import { getRequestContext } from "../context/request-context.js";
@@ -7,8 +7,8 @@ import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { GuardianService } from "../guardian/guardian.service.js";
-import { StudentService } from "../student/student.service.js";
-import { TeacherService } from "../teacher/teacher.service.js";
+import { StudentService, type StudentPiiPresenceRecord } from "../student/student.service.js";
+import { TeacherService, type TeacherRecord } from "../teacher/teacher.service.js";
 
 @Controller("privacy")
 @UseGuards(RolesGuard)
@@ -27,7 +27,7 @@ export class PrivacyController {
   async inventory(): Promise<KvkkInventoryRecord[]> {
     const context = getRequestContext();
     const [students, teachers, guardians, users] = await Promise.all([
-      this.students.list(context),
+      this.students.listPiiPresence(context),
       this.teachers.listTeachers(context),
       this.guardians.listGuardians(context),
       this.users.listByTenant(context.tenantId ?? ""),
@@ -49,13 +49,19 @@ export class PrivacyController {
   }
 }
 
-function studentInventoryRecord(record: StudentRecord, index: number): KvkkInventoryRecord {
+function studentInventoryRecord(record: StudentPiiPresenceRecord, index: number): KvkkInventoryRecord {
   const categories = purgedName(record, "Ogrenci") ? [] : ["Ad", "soyad"];
+  if (record.hasNationalId) categories.push("T.C. kimlik no");
+  if (record.hasPhone) categories.push("telefon");
+  if (record.hasEmail) categories.push("e-posta");
+  if (record.hasPhoto) categories.push("fotoğraf");
   return inventoryRecord("student", record.id, index, categories);
 }
 
 function teacherInventoryRecord(record: TeacherRecord, index: number): KvkkInventoryRecord {
   const categories = purgedName(record, "Ogretmen") ? [] : ["Ad", "soyad"];
+  if (record.nationalIdEncrypted || record.nationalIdHash) categories.push("T.C. kimlik no");
+  if (record.phone) categories.push("telefon");
   return inventoryRecord("teacher", record.id, index, categories);
 }
 

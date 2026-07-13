@@ -16,8 +16,8 @@ Her karar şu alanları taşır: `Durum`, `Karar`, `Kaynak`, `Kanıt`, `Etkilene
 
 Durum: Onaylı
 Karar: Shared PostgreSQL + RLS + tenant-aware Prisma savunması.
-Kaynak: Kullanıcı görüşmesi / master plan §2.
-Kanıt: `MASTER_PLAN.md` §2, `docs/ADR-0001-multi-tenancy.md`.
+Kaynak: Kullanıcı görüşmesi.
+Kanıt: `docs/ADR-0001-multi-tenancy.md`, `pnpm db:rls:check`.
 Etkilenen ADR: ADR-0001
 Açık soru: Yok
 Son kontrol: 2026-05-29
@@ -26,8 +26,8 @@ Son kontrol: 2026-05-29
 
 Durum: Onaylı
 Karar: VPS/self-hosted Docker Compose; TR datacenter gereksinimi.
-Kaynak: Kullanıcı görüşmesi / master plan §2 ve §3.7.
-Kanıt: `MASTER_PLAN.md` §2/§3.7, `docs/ADR-0002-deployment.md`.
+Kaynak: Kullanıcı görüşmesi.
+Kanıt: `docs/ADR-0002-deployment.md`, `pnpm docker:check`.
 Etkilenen ADR: ADR-0002
 Açık soru: Yok. Traefik v3.7.5 imajına geçildi; v2->v3 geçiş rehberindeki kademeli Docker
 label/routing uyumluluğu ve ACME HTTP-01/entrypoint kullanımı resmi Traefik dokümantasyonu ile
@@ -38,8 +38,8 @@ Son kontrol: 2026-06-13
 
 Durum: Onaylı
 Karar: Ana agent kritik yolu yürütür; subagent'lar ayrık inceleme, uygulama ve doğrulama işlerini alır.
-Kaynak: Kullanıcı isteği / master plan §6.
-Kanıt: `MASTER_PLAN.md` §6, `docs/phase-0-checklist.md`.
+Kaynak: Kullanıcı isteği.
+Kanıt: `AGENTS.md`, `docs/codex-agent-architecture.md`, `pnpm agents:check`.
 Etkilenen ADR: Yok
 Açık soru: Yok
 Son kontrol: 2026-05-29
@@ -48,10 +48,9 @@ Son kontrol: 2026-05-29
 
 Durum: Onaylı
 Karar: TXT/DAT optik değerlendirme hedef kapsamda kalır. iSEM/3D/MUBA OPTİK-7108 gerçek TXT ve cevap
-anahtarı dosyaları repo fixture'ı olarak kabul edilmiştir; bu kabul online sınav, OMR/foto optik
-okuma veya yeni optik format ailesi kapsamı açmaz.
-Kaynak: Kullanıcı görüşmesi / master plan §2 ve §5.
-Kanıt: `MASTER_PLAN.md` §2/§5; `docs/phase-3-report.md` sentetik pilot fixture notu;
+anahtarı dosyaları repo fixture'ı olarak kabul edilmiştir; bu kabul yeni optik format ailesi açmaz.
+Kaynak: Kullanıcı görüşmesi.
+Kanıt: `docs/product-journeys-v1.md`;
 `apps/worker/src/jobs/optical-pilot-fixture.test.ts`;
 `apps/api/src/exam/answer-key-excel-import.service.test.ts`;
 `apps/worker/src/jobs/optik-7108-real-pipeline.test.ts`;
@@ -65,8 +64,8 @@ Son kontrol: 2026-06-24
 
 Durum: Onaylı
 Karar: Kota aşımında hard-block uygulanır; ödeme/fatura entegrasyonu v1 kapsamı dışıdır.
-Kaynak: Master plan §2.
-Kanıt: `MASTER_PLAN.md` §2.
+Kaynak: Kullanıcı görüşmesi.
+Kanıt: `apps/api/src/license/license.service.ts`, `docs/product-journeys-v1.md`.
 Etkilenen ADR: Yok
 Açık soru: Yok
 Son kontrol: 2026-05-29
@@ -75,8 +74,8 @@ Son kontrol: 2026-05-29
 
 Durum: Onaylı
 Karar: UI Türkçe; i18n'e hazır altyapı olabilir ama v1 tek dildir.
-Kaynak: Master plan §2.
-Kanıt: `MASTER_PLAN.md` §2.
+Kaynak: Kullanıcı görüşmesi.
+Kanıt: `apps/web`, `docs/product-journeys-v1.md`.
 Etkilenen ADR: Yok
 Açık soru: Yok
 Son kontrol: 2026-05-29
@@ -89,9 +88,9 @@ için `SUPPORT_ATTACHMENT_STORAGE=s3` ile MinIO/S3 uyumlu obje depolama kullanı
 veritabanı dosya içeriğini değil `storageKey` referansını taşır; `contentBase64` alanı eski inline
 kayıtlarla geriye uyum için kalır. Liste endpoint'i dosya içeriğini veya storage key'i döndürmez;
 indirme endpoint'i tenant/ticket eşleşmesini doğruladıktan sonra içeriği storage katmanından okur.
-Kaynak: Master plan §3.7 ve Faz 5 destek kapsamı.
+Kaynak: Ürün depolama ve destek kapsamı kararı.
 Kanıt: `apps/api/src/support-ticket/support-ticket-attachment-storage.ts`, `docker-compose.yml`,
-`GET /support-tickets/:id/attachments/:attachmentId/download`, `docs/phase-5-report.md`.
+`GET /support-tickets/:id/attachments/:attachmentId/download`, `pnpm upload-av:check`.
 Etkilenen ADR: ADR-0002
 Açık soru: Prod bucket adı ve credential değerleri deployment sırasında secret olarak verilecek.
 Son kontrol: 2026-05-30
@@ -107,7 +106,7 @@ canlı gönderim için `SMS_PROVIDER=netgsm`, `NETGSM_USERCODE`, `NETGSM_PASSWOR
 E-posta/push tarafında `NOTIFICATION_PROVIDER=noop` yalnız lokal/test kullanım içindir; production
 env kontrolü `NOTIFICATION_PROVIDER=http`, gerçek HTTPS endpoint, Bearer token ve
 `pnpm notification:smoke` sonucunu zorunlu tutar.
-Kaynak: Master plan Faz 5 SMS adapter kapsamı ve Netgsm resmi REST v2 SMS dokümanı.
+Kaynak: Ürün iletişim kapsamı ve Netgsm resmi REST v2 SMS dokümanı.
 Kanıt: `packages/sms-adapter/src/index.ts`, `apps/worker/src/jobs/sms-batch-processor.ts`,
 `packages/notification-adapter/src/index.ts`, `docker-compose.yml`, `.env.example`,
 `pnpm sms:smoke`, `pnpm notification:smoke`.
@@ -122,7 +121,7 @@ Son kontrol: 2026-05-30
 Durum: Onaylı
 Karar: Veli-öğrenci bağlantısını kurum yöneticisi kurar ve kaldırır; teacher rolü bağlantıları
 okuyabilir, yazamaz. Telefon doğrulama ve veli self-service eşleştirme v1 kapsamı dışındadır.
-Kaynak: Master plan §2 varsayılanı ve devam eden geliştirme hedefi.
+Kaynak: Veli portalı ürün kararı.
 Kanıt: `POST /guardians/:id/students`, `GET /guardians/:id/students`,
 `DELETE /guardians/:id/students/:studentId`, `GuardianStudent` Postgres store smoke kapsamı.
 Etkilenen ADR: ADR-0001
@@ -137,7 +136,7 @@ eşittir. Sınav bazlı `scoringConfig` içinde `rawScoreMultiplier`, `standardS
 `standardScoreMultiplier` verilirse standart puan deterministik olarak
 `standardScoreBase + rawScore * standardScoreMultiplier` formülüyle hesaplanır. T-skor, yüzdelik ve
 gerçek sıralama hesapları pilot veri olmadan v1 kapsamına alınmaz.
-Kaynak: Master plan §2 ve §5, Faz 3 puanlama riski.
+Kaynak: Rapor doğruluğu ürün kararı.
 Kanıt: `apps/worker/src/jobs/scoring-engine.ts`, `PostgresExamEvaluationAdapter`,
 `scoring-engine.test.ts`.
 Etkilenen ADR: Yok
@@ -150,7 +149,7 @@ Durum: Onaylı
 Karar: v1 raporlarında ayrı `successRate` alanı üretilmez; doğru/yanlış/boş/net alanları ayrı
 taşınır. İleride yüzde gösterimi gerekirse payda `correct + wrong + blank` toplam soru sayısıdır.
 Boş soru paydada yer alır, ancak net hesapta yanlış gibi ceza üretmez.
-Kaynak: Master plan §10.7 açık sorusu ve mevcut ScoringEngine davranışı.
+Kaynak: Mevcut ScoringEngine davranışı ve ürün kararı.
 Kanıt: `apps/worker/src/jobs/scoring-engine.ts`, `scoring-engine.test.ts`.
 Etkilenen ADR: Yok
 Açık soru: Yok
@@ -161,11 +160,9 @@ Son kontrol: 2026-05-31
 Durum: Onaylı
 Karar: V1 hedefi tek veya çok şubeli dershane/özel öğretim kurumunda TXT/DAT optik import,
 rapor/karne, kişi portalları, ödeme/taksit takibi, duyuru/SMS/destek ve operasyon kanıt zinciridir.
-Salon/oturma planı, online deneme oturumu, ödeme sağlayıcı/fatura/makbuz entegrasyonu ve OMR
-görüntü tarama v1 kapsamı dışıdır.
-Kaynak: `claudedocs/prod-plan-2026-06-12.md` Faz 1 ve Faz 7.
-Kanıt: `docs/product-journeys-v1.md`, `docs/MASTER_PLAN.md` sınav ve kota kararları,
-`docs/development-plan-2026-06-02.md` kapsam dışı notları.
+Ödeme sağlayıcı/fatura/makbuz entegrasyonu v1 kapsamı dışıdır.
+Kaynak: Kullanıcı kapsam kararı.
+Kanıt: `docs/product-journeys-v1.md`, `status.md`.
 Etkilenen ADR: Yok
 Açık soru: Pilot kurum farklı optik format veya fatura entegrasyonu isterse Faz 4/Faz 10 karar
 kapısında ayrı DEC açılır.
@@ -178,27 +175,13 @@ Karar: SYSTEM_ADMIN ve TENANT_ADMIN hesapları için ikinci faktör TOTP + tek k
 code olarak uygulanır. SMS OTP v1'de ikinci faktör olarak kullanılmaz; SIM-swap ve maliyet riski
 nedeniyle reddedilir. TOTP secret'ları AES-GCM ile şifreli saklanır, recovery code'lar HMAC hash
 olarak tutulur ve MFA enable/disable işlemleri mevcut refresh session'ları iptal eder.
-Kaynak: `claudedocs/prod-plan-2026-06-12.md` §6.10.
+Kaynak: Güvenlik ve ürün kararı.
 Kanıt: `apps/api/src/auth/totp-mfa.ts`, `apps/api/src/auth/auth.service.ts`,
 `docs/evidence-templates/admin-mfa.example.json`, `scripts/check-admin-mfa-evidence.mjs`.
 Etkilenen ADR: Yok
 Açık soru: Production'da `ADMIN_MFA_MODE=required` geçişi pilot kurum admin enrollment'ı tamamlandıktan
 sonra ayrı go-live kararıyla yapılır; repo sözleşmesi staging için `optional` POC'yi kabul eder.
 Son kontrol: 2026-06-13
-
-### DEC-20260613-03 — AI karne özeti kapsam dışı
-
-Durum: Ertelendi
-Karar: Bu release ve mevcut tek-node sunucu çalışması için karne/veli özeti tarafında AI veya
-AI olarak pazarlanacak template yorum üretimi açılmaz. Production/staging runtime'da
-`AI_REPORT_SUMMARY_PROVIDER=disabled` zorunludur; `template` ve dış sağlayıcı modları ürün sahibi
-tarafından ayrı release kararı verilene kadar go-live kapısından geçmez.
-Kaynak: `claudedocs/prod-plan-2026-06-12.md` 2026-06-14 tek-node/no-AI güncellemesi.
-Kanıt: `scripts/check-prod-env.mjs`, `docs/evidence-templates/ai-report-summary.example.json`.
-Etkilenen ADR: Yok
-Açık soru: İleride bu kapsam yeniden açılırsa öğretmen onayı, KVKK aktarım kararı ve veliye gösterim
-metni yeni bir DEC ile tanımlanacak.
-Son kontrol: 2026-06-14
 
 ### DEC-20260613-04 — V1 karne görsel kabul eşiği
 
@@ -210,8 +193,7 @@ kapısı iki katmanlıdır: `pnpm karne:visual-targets` 3 hedef PDF render/hash 
 kanıt screenshot'ları için üst sınırı uygular. Bu eşikler mevcut 16+ iterasyonluk kanıt serisindeki
 ham diff oranı bandını release regresyon kapısına çevirir; daha iyi görsel yakınsama hedeflenir ama
 v1'i bloklamaz.
-Kaynak: `claudedocs/prod-plan-2026-06-12.md` D4/Faz 2 ve `docs/development-plan-2026-06-02.md`
-ADIGÜZEL visual-diff denemeleri.
+Kaynak: ADIGÜZEL visual-diff denemeleri ve ürün kararı.
 Kanıt: `scripts/check-adiguzel-pdf-visual-targets.mjs`, `scripts/compare-karne-visual-evidence.mjs`,
 `scripts/check-karne-visual-contract.mjs`, `pnpm karne:visual-contract:check`.
 Etkilenen ADR: Yok
@@ -230,7 +212,7 @@ operasyonel alan olarak saklanır. Guardian.email is not a persisted Guardian co
 hesap e-postası User.email ile temsil edilir. Bu alanlar log, Sentry event'i, audit diff'i, smoke
 kanıtı veya production evidence artifact'ine ham değer olarak yazılamaz; `SENTRY_SEND_DEFAULT_PII=false`
 ve redaction testleri bu sınırı korur.
-Kaynak: `claudedocs/prod-plan-2026-06-12.md` A6 ve `docs/MASTER_PLAN.md` KVKK/PII notları.
+Kaynak: KVKK/PII güvenlik kararı.
 Kanıt: `apps/api/src/observability/logging.ts`, `apps/api/src/observability/sentry.ts`,
 `scripts/check-kvkk-inventory-evidence.mjs`, `scripts/check-pii-contact-policy.mjs`,
 `docs/evidence-templates/kvkk-inventory.example.json`, `pnpm pii:contact-policy:check`,
@@ -263,13 +245,12 @@ Son kontrol: 2026-06-23
 ### DEC-20260627-01 — Production v1 modernizasyon kapsam kilidi
 
 Durum: Onaylı
-Karar: `docs/production-v1-modernization-plan-2026-06-27.md` v1 modernizasyon dalının kaynak
-planıdır. Faz 0 karar/sözleşme hizalamasıdır; per-tenant `User`, TC/telefon ile giriş, zorunlu
+Karar: Per-tenant `User`, TC/telefon ile giriş, zorunlu
 şifre değişimi, akademik taksonomi (`Alan`, `GradeLevelCourse`, `Class.alanId`) ve PII kolon
 düşürmeleri ayrı migration dalgaları olarak uygulanır. Bu dilimde veli finans/duyuru/destek
 varsayılanları açık, SMS varsayılanı kapalıdır; SMS kodu ve Netgsm adapter kalır ama
 `SMS_ENABLED=false` v1 varsayılanıdır ve SMS sağlayıcı kanıtı v1 go-live blocker'ı değildir.
-Kaynak: `docs/production-v1-modernization-plan-2026-06-27.md`.
+Kaynak: Kullanıcı modernizasyon kararı.
 Kanıt: `apps/api/src/school/guardian-student-store.ts`, `apps/api/src/school/school.service.ts`,
 `apps/api/src/sms-batch/sms-batch.service.ts`, `apps/api/src/search/search.service.ts`, `.env.example`,
 `packages/db/prisma/migrations/20260627123000_guardian_student_sms_default_off/migration.sql`,

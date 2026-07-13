@@ -40,6 +40,7 @@ export interface AdminMfaTokenPayload {
   exp: number;
   secret?: string;
   recoveryCodeHashes?: string[];
+  membershipVersion?: number;
 }
 
 export function resolveAdminMfaMode(): AdminMfaMode {
@@ -66,7 +67,12 @@ export function createLoginMfaChallenge(userId: string, now = Date.now()): Login
   };
 }
 
-export function createTotpEnrollmentDraft(email: string, userId: string, now = Date.now()): TotpEnrollmentDraft {
+export function createTotpEnrollmentDraft(
+  email: string,
+  userId: string,
+  membershipVersion: number,
+  now = Date.now(),
+): TotpEnrollmentDraft {
   const secret = withAuthenticatorOptions({ step: tokenStepSeconds, window: tokenWindow }, () => authenticator.generateSecret());
   const recoveryCodes = Array.from({ length: 8 }, () => createRecoveryCode());
   const recoveryCodeHashes = recoveryCodes.map(hashRecoveryCode);
@@ -76,6 +82,7 @@ export function createTotpEnrollmentDraft(email: string, userId: string, now = D
     userId,
     secret,
     recoveryCodeHashes,
+    membershipVersion,
     exp: Math.floor(setupExpiresAtMs / 1000),
   });
 

@@ -56,7 +56,7 @@ Use the narrowest repo skill before spawning agents:
 
 | Agent | Mode | Use When | Owns / Inspects | Key Gates |
 |---|---:|---|---|---|
-| `product_scope_planner` | read-only | Turning a user goal into phases, UAT, DEC impacts, backlog slices | `docs/MASTER_PLAN.md`, `docs/product-journeys-v1.md`, `docs/DECISIONS.md` | Product/UAT acceptance criteria |
+| `product_scope_planner` | read-only | Turning a user goal into phases, UAT, DEC impacts, backlog slices | `status.md`, `docs/product-journeys-v1.md`, `docs/DECISIONS.md` | Product/UAT acceptance criteria |
 | `tenant_security_reviewer` | read-only | Any auth, RBAC, tenant isolation, PII, evidence safety, or production gate change | `packages/db`, `apps/api/src/auth`, `apps/api/src/rbac`, evidence scripts/docs | `pnpm db:rls:check`, `pnpm web:token-storage:check`, `pnpm prod:evidence:templates:check` |
 | `auth_session_engineer` | write-scoped | Refresh/session/MFA/CSRF/rate-limit implementation | `apps/api/src/auth`, `apps/api/src/security`, `apps/web/src/api-client.ts` | Auth vitest, `pnpm web:token-storage:check`, `pnpm admin-mfa:check`, `pnpm rate-limit:check` |
 | `backend_api_engineer` | write-scoped | Scoped API, DTO, OpenAPI, adapter, idempotency work | `apps/api/src`, `packages/shared-types`, adapters | API typecheck/tests, `pnpm openapi:generate` |
@@ -143,4 +143,3 @@ Return findings first with file references.
 - Add MCP servers only for trusted systems that remove manual copy/paste: GitHub issues/PRs, Sentry, Figma, and internal docs. Each MCP server needs a tight tool allowlist and secret policy.
 - Package the `.agents/skills` workflow into a Codex plugin only if this agent system needs to be shared across multiple repos.
 - Generate Claude or Cursor adapters from the Codex definitions only if those tools need active use in this repo.
-- Do not add an AI-report-summary product agent until `AI_REPORT_SUMMARY_PROVIDER=disabled` is changed by a new DEC and KVKK/provider review.

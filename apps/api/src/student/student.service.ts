@@ -69,6 +69,13 @@ export interface StudentProfileInput {
   photoKey?: string;
 }
 
+export interface StudentPiiPresenceRecord extends StudentRecord {
+  hasNationalId: boolean;
+  hasPhone: boolean;
+  hasEmail: boolean;
+  hasPhoto: boolean;
+}
+
 export type StudentEnrollmentActionInput = StudentEnrollmentActionRequest;
 export type StudentBulkEnrollmentInput = StudentBulkEnrollmentRequest;
 export type StudentBulkEnrollmentResult = SharedStudentBulkEnrollmentResult;
@@ -113,6 +120,20 @@ export class StudentService {
 
   async listForViewer(context: RequestContext): Promise<PublicStudentRecord[]> {
     return (await this.list(context)).map(toPublicStudentRecord);
+  }
+
+  async listPiiPresence(context: RequestContext): Promise<StudentPiiPresenceRecord[]> {
+    const students = await this.list(context);
+    return Promise.all(students.map(async (student) => {
+      const profile = await this.store.findProfileById(student.id);
+      return {
+        ...student,
+        hasNationalId: Boolean(profile?.nationalIdEncrypted || profile?.nationalIdHash),
+        hasPhone: Boolean(profile?.phone),
+        hasEmail: Boolean(profile?.email),
+        hasPhoto: Boolean(profile?.photoKey),
+      };
+    }));
   }
 
   async findByNationalIdForViewer(context: RequestContext, nationalId: string): Promise<PublicStudentRecord | undefined> {
@@ -666,8 +687,7 @@ export class StudentService {
 
   async purgePii(context: RequestContext, id: string): Promise<PublicStudentRecord> {
     const student = await this.findOne(context, id);
-    const hadFirstName = student.firstName.length > 0;
-    const hadLastName = student.lastName.length > 0;
+    const profile = await this.store.findProfileById(id);
     const purged = await this.store.purgePii(id);
     if (!purged) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
@@ -679,8 +699,15 @@ export class StudentService {
       entityId: purged.id,
       action: "kvkk.student_pii_purged",
       diff: {
-        fieldsPurged: ["firstName", "lastName"],
-        before: { firstNamePresent: hadFirstName, lastNamePresent: hadLastName },
+        fieldsPurged: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"],
+        before: {
+          firstNamePresent: student.firstName.length > 0,
+          lastNamePresent: student.lastName.length > 0,
+          nationalIdPresent: Boolean(profile?.nationalIdEncrypted || profile?.nationalIdHash),
+          phonePresent: Boolean(profile?.phone),
+          emailPresent: Boolean(profile?.email),
+          photoPresent: Boolean(profile?.photoKey),
+        },
       },
     });
     return toPublicStudentRecord(purged);

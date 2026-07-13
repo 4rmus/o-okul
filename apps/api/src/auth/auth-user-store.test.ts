@@ -51,6 +51,9 @@ describe("auth user store", () => {
         return {
           async query<T>(sql: string, values?: unknown[]) {
             queries.push({ sql, values });
+            if (sql.includes('UPDATE "User"')) {
+              return { rows: [{ id: "user-a" }] as T[] };
+            }
             if (sql.includes('FROM "User" u')) {
               return {
                 rows: [{
@@ -58,6 +61,7 @@ describe("auth user store", () => {
                   email: "admin@example.test",
                   name: "Admin",
                   passwordHash: hashPassword("password"),
+                  membershipVersion: 7,
                   tenantId: "tenant-a",
                   roles: ["TENANT_ADMIN"],
                 }] as T[],
@@ -75,13 +79,23 @@ describe("auth user store", () => {
       id: "user-a",
       tenantId: "tenant-a",
       roles: ["TENANT_ADMIN"],
+      membershipVersion: 7,
     });
+
+    await store.enableTotp({
+      userId: "user-a",
+      secretEncrypted: "encrypted-secret",
+      enabledAt: "2026-07-13T00:00:00.000Z",
+      recoveryCodeHashes: ["recovery-hash"],
+    });
+    await store.disableTotp("user-a");
 
     expect(queries[0]?.sql).toBe("BEGIN");
     expect(queries.some((query) => query.sql.includes("set_config('app.bypass_rls'"))).toBe(true);
     expect(queries.some((query) => query.sql.includes('JOIN "Tenant" t'))).toBe(true);
     expect(queries.some((query) => query.sql.includes(`t."status" = 'ACTIVE'`))).toBe(true);
     expect(queries.some((query) => query.sql.includes(`t."licenseEndsAt"`))).toBe(false);
+    expect(queries.filter((query) => query.sql.includes('"membershipVersion" = "membershipVersion" + 1'))).toHaveLength(2);
     expect(queries.some((query) => query.sql === "COMMIT")).toBe(true);
   });
 });

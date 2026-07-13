@@ -26,7 +26,6 @@ const requiredEvidenceCheckScripts = new Map([
   ["Observability UAT evidence", "scripts/check-observability-uat-evidence.mjs"],
   ["External monitoring evidence", "scripts/check-external-monitoring-evidence.mjs"],
   ["Admin MFA evidence", "scripts/check-admin-mfa-evidence.mjs"],
-  ["AI report summary evidence", "scripts/check-ai-report-summary-evidence.mjs"],
   ["Security audit evidence", "scripts/check-security-audit-evidence.mjs"],
   ["Live exam cycle evidence", "scripts/check-live-exam-cycle-evidence.mjs"],
   ["iSEM optical pipeline evidence", "scripts/check-isem-optical-pipeline-evidence.mjs"],
@@ -70,7 +69,6 @@ const goLiveDeploymentKeys = [
   "observabilityUatPassed",
   "externalMonitoringPassed",
   "adminMfaPassed",
-  "aiReportSummaryPassed",
   "rateLimitRedisPassed",
   "rlsLivePassed",
   "securityAuditPassed",
@@ -134,7 +132,6 @@ const summaryReportKeys = [
   "observabilityUat",
   "externalMonitoring",
   "adminMfa",
-  "aiReportSummary",
   "securityAudit",
   "liveExamCycle",
   "isemOpticalPipeline",
@@ -175,6 +172,7 @@ const expectedKvkkAuditDiffActions = [
   "support_ticket.created",
   "support_ticket_comment.created",
   "kvkk.student_pii_purged",
+  "kvkk.teacher_pii_purged",
   "kvkk.guardian_pii_purged",
   "kvkk.user_pii_purged",
 ];
@@ -229,17 +227,6 @@ const summaryRequiredReportKeys = {
   ],
   externalMonitoring: ["environment", "checkedAt", "provider", "monitoringNode", "monitorsVerified", "outageDrill", "evidenceReferences"],
   adminMfa: ["environment", "checkedAt", "policy", "enrollment", "loginVerification", "commandsPassed", "evidenceReferences"],
-  aiReportSummary: [
-    "environment",
-    "checkedAt",
-    "provider",
-    "kvkk",
-    "externalAiStopRule",
-    "generation",
-    "validation",
-    "commandsPassed",
-    "evidenceReferences",
-  ],
   securityAudit: ["environment", "checkedAt", "prodEnvCheckOk", "httpsOk", "rlsLiveCheckOk", "noCriticalFindings", "evidenceReferences"],
   liveExamCycle: [
     "environment",
@@ -1363,37 +1350,6 @@ function requireSummaryReports(summary, failures, goLiveReport) {
     );
   }
 
-  const aiReportSummary = requireNestedObject(
-    reports,
-    failures,
-    "productionEvidenceSummary.summary.reports.aiReportSummary",
-    "aiReportSummary",
-  );
-  if (aiReportSummary) {
-    requireObjectEqual(
-      aiReportSummary,
-      failures,
-      "productionEvidenceSummary.summary.reports.aiReportSummary.environment",
-      "environment",
-      "production",
-    );
-    requireSummaryReportDateNotAfter(
-      aiReportSummary,
-      failures,
-      "productionEvidenceSummary.summary.reports.aiReportSummary.checkedAt",
-      "checkedAt",
-      summary,
-      goLiveReport,
-    );
-    requireSummaryAiReportSummary(aiReportSummary, failures);
-    requireObjectEvidenceReferences(
-      aiReportSummary,
-      failures,
-      "productionEvidenceSummary.summary.reports.aiReportSummary.evidenceReferences",
-      "evidenceReferences",
-    );
-  }
-
   const securityAudit = requireNestedObject(reports, failures, "productionEvidenceSummary.summary.reports.securityAudit", "securityAudit");
   if (securityAudit) {
     requireObjectEqual(securityAudit, failures, "productionEvidenceSummary.summary.reports.securityAudit.environment", "environment", "production");
@@ -1650,7 +1606,7 @@ function requireSummaryReports(summary, failures, goLiveReport) {
       failures,
       "productionEvidenceSummary.summary.reports.uiUxRedesign.redesignPlanPath",
       "redesignPlanPath",
-      "docs/ui-ux-redesign-plan.md",
+      "docs/ui-ux-professionalization-contract.md",
     );
     requireMatchingString(
       uiUxRedesign,
@@ -2172,8 +2128,8 @@ function requireSummaryKvkkPurgeCoverage(report, failures) {
   if (!purgeCoverage) return;
 
   for (const [subject, fields] of Object.entries({
-    student: ["firstName", "lastName", "phone", "email"],
-    teacher: ["firstName", "lastName"],
+    student: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"],
+    teacher: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"],
     guardian: ["firstName", "lastName", "phone"],
     user: ["email", "name"],
   })) {
@@ -2575,174 +2531,6 @@ function requireSummaryAdminMfa(report, failures) {
   }
 
   requireObjectStringList(report, failures, "productionEvidenceSummary.summary.reports.adminMfa.commandsPassed", "commandsPassed", 2, false);
-}
-
-function requireSummaryAiReportSummary(report, failures) {
-  const provider = requireNestedObject(report, failures, "productionEvidenceSummary.summary.reports.aiReportSummary.provider", "provider");
-  if (provider) {
-    requireObjectOneOf(
-      provider,
-      failures,
-      "productionEvidenceSummary.summary.reports.aiReportSummary.provider.mode",
-      "mode",
-      ["disabled", "template"],
-    );
-    requireObjectEqual(
-      provider,
-      failures,
-      "productionEvidenceSummary.summary.reports.aiReportSummary.provider.featureFlagEnv",
-      "featureFlagEnv",
-      "AI_REPORT_SUMMARY_PROVIDER",
-    );
-    requireObjectEqual(
-      provider,
-      failures,
-      "productionEvidenceSummary.summary.reports.aiReportSummary.provider.evidenceTargetEnv",
-      "evidenceTargetEnv",
-      "AI_REPORT_SUMMARY_EVIDENCE_TARGET",
-    );
-    requireObjectEqual(
-      provider,
-      failures,
-      "productionEvidenceSummary.summary.reports.aiReportSummary.provider.externalProvider",
-      "externalProvider",
-      "disabled",
-    );
-    requireObjectEqual(
-      provider,
-      failures,
-      "productionEvidenceSummary.summary.reports.aiReportSummary.provider.productionExternalAiEnabled",
-      "productionExternalAiEnabled",
-      false,
-    );
-    requireObjectTrue(
-      provider,
-      failures,
-      "productionEvidenceSummary.summary.reports.aiReportSummary.provider.templateFallbackAvailable",
-      "templateFallbackAvailable",
-    );
-  }
-
-  const kvkk = requireNestedObject(report, failures, "productionEvidenceSummary.summary.reports.aiReportSummary.kvkk", "kvkk");
-  if (kvkk) {
-    requireObjectEqual(kvkk, failures, "productionEvidenceSummary.summary.reports.aiReportSummary.kvkk.piiSentToModel", "piiSentToModel", false);
-    requireObjectStringList(kvkk, failures, "productionEvidenceSummary.summary.reports.aiReportSummary.kvkk.fieldsSent", "fieldsSent", 1, false);
-    requireObjectStringList(kvkk, failures, "productionEvidenceSummary.summary.reports.aiReportSummary.kvkk.excludedFields", "excludedFields", 6, false);
-    for (const field of ["studentId", "studentName", "guardianName", "tcKimlikNo", "phone", "email"]) {
-      if (!kvkk.excludedFields?.includes(field)) {
-        failures.push(`productionEvidenceSummary.summary.reports.aiReportSummary.kvkk.excludedFields eksik: ${field}`);
-      }
-    }
-    for (const field of kvkk.fieldsSent ?? []) {
-      if (/(studentId|studentName|guardian|tcKimlik|phone|email|address|firstName|lastName)/i.test(field)) {
-        failures.push(`productionEvidenceSummary.summary.reports.aiReportSummary.kvkk.fieldsSent PII alanı içeremez: ${field}`);
-      }
-    }
-    requireObjectString(
-      kvkk,
-      failures,
-      "productionEvidenceSummary.summary.reports.aiReportSummary.kvkk.overseasTransferAssessment",
-      "overseasTransferAssessment",
-    );
-    requireNonPlaceholderString(
-      kvkk,
-      failures,
-      "productionEvidenceSummary.summary.reports.aiReportSummary.kvkk.overseasTransferAssessment",
-      "overseasTransferAssessment",
-    );
-  }
-
-  const stopRule = requireNestedObject(
-    report,
-    failures,
-    "productionEvidenceSummary.summary.reports.aiReportSummary.externalAiStopRule",
-    "externalAiStopRule",
-  );
-  if (stopRule) {
-    for (const key of ["kvkkAssessmentRequired", "productOwnerApprovalRequired", "teacherReviewRequired"]) {
-      requireObjectTrue(stopRule, failures, `productionEvidenceSummary.summary.reports.aiReportSummary.externalAiStopRule.${key}`, key);
-    }
-    requireObjectEqual(
-      stopRule,
-      failures,
-      "productionEvidenceSummary.summary.reports.aiReportSummary.externalAiStopRule.anthropicEnabledInProduction",
-      "anthropicEnabledInProduction",
-      false,
-    );
-    requireObjectString(
-      stopRule,
-      failures,
-      "productionEvidenceSummary.summary.reports.aiReportSummary.externalAiStopRule.decisionReference",
-      "decisionReference",
-    );
-    requireNonPlaceholderString(
-      stopRule,
-      failures,
-      "productionEvidenceSummary.summary.reports.aiReportSummary.externalAiStopRule.decisionReference",
-      "decisionReference",
-    );
-  }
-
-  const generation = requireNestedObject(report, failures, "productionEvidenceSummary.summary.reports.aiReportSummary.generation", "generation");
-  if (generation) {
-    requireObjectTrue(
-      generation,
-      failures,
-      "productionEvidenceSummary.summary.reports.aiReportSummary.generation.deterministicOutput",
-      "deterministicOutput",
-    );
-    if (provider?.mode === "disabled") {
-      requireObjectTrue(
-        generation,
-        failures,
-        "productionEvidenceSummary.summary.reports.aiReportSummary.generation.featureDisabled",
-        "featureDisabled",
-      );
-      for (const key of [
-        "templateSummaryGenerated",
-        "studentCommentaryGenerated",
-        "teacherActionDraftGenerated",
-        "outputStoredInSnapshot",
-      ]) {
-        requireObjectEqual(
-          generation,
-          failures,
-          `productionEvidenceSummary.summary.reports.aiReportSummary.generation.${key}`,
-          key,
-          false,
-        );
-      }
-    }
-    if (provider?.mode === "template") {
-      for (const key of [
-        "teacherReviewRequired",
-        "disclaimerIncluded",
-        "outputStoredInSnapshot",
-      ]) {
-        requireObjectTrue(generation, failures, `productionEvidenceSummary.summary.reports.aiReportSummary.generation.${key}`, key);
-      }
-      for (const key of ["templateSummaryGenerated", "studentCommentaryGenerated", "teacherActionDraftGenerated"]) {
-        requireObjectTrue(generation, failures, `productionEvidenceSummary.summary.reports.aiReportSummary.generation.${key}`, key);
-      }
-    }
-  }
-
-  const validation = requireNestedObject(report, failures, "productionEvidenceSummary.summary.reports.aiReportSummary.validation", "validation");
-  if (validation) {
-    for (const key of ["piiLeakageCheckPassed", "logsExcludePromptResponse", "externalProviderNotCalled"]) {
-      requireObjectTrue(validation, failures, `productionEvidenceSummary.summary.reports.aiReportSummary.validation.${key}`, key);
-    }
-    if (provider?.mode === "template") {
-      requireObjectTrue(
-        validation,
-        failures,
-        "productionEvidenceSummary.summary.reports.aiReportSummary.validation.templateRegressionPassed",
-        "templateRegressionPassed",
-      );
-    }
-  }
-
-  requireObjectStringList(report, failures, "productionEvidenceSummary.summary.reports.aiReportSummary.commandsPassed", "commandsPassed", 2, false);
 }
 
 function requireSummaryLiveExamCycle(report, failures) {
@@ -3606,7 +3394,6 @@ function requireDeployment(report, failures) {
     "observabilityUatPassed",
     "externalMonitoringPassed",
     "adminMfaPassed",
-    "aiReportSummaryPassed",
     "rateLimitRedisPassed",
     "rlsLivePassed",
     "securityAuditPassed",

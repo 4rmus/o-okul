@@ -97,11 +97,6 @@
       "status": "PASS"
     },
     {
-      "label": "AI report summary evidence",
-      "script": "scripts/check-ai-report-summary-evidence.mjs",
-      "status": "PASS"
-    },
-    {
       "label": "Security audit evidence",
       "script": "scripts/check-security-audit-evidence.mjs",
       "status": "PASS"
@@ -405,12 +400,18 @@
         "student": [
           "firstName",
           "lastName",
+          "nationalIdEncrypted",
+          "nationalIdHash",
           "phone",
-          "email"
+          "email",
+          "photoKey"
         ],
         "teacher": [
           "firstName",
-          "lastName"
+          "lastName",
+          "nationalIdEncrypted",
+          "nationalIdHash",
+          "phone"
         ],
         "guardian": [
           "firstName",
@@ -459,6 +460,7 @@
           "support_ticket.created",
           "support_ticket_comment.created",
           "kvkk.student_pii_purged",
+          "kvkk.teacher_pii_purged",
           "kvkk.guardian_pii_purged",
           "kvkk.user_pii_purged"
         ],
@@ -661,68 +663,6 @@
         "artifacts/example/admin-mfa/recovery-code-reuse-rejected.log"
       ]
     },
-    "aiReportSummary": {
-      "environment": "production",
-      "checkedAt": "2026-06-01",
-      "provider": {
-        "mode": "disabled",
-        "featureFlagEnv": "AI_REPORT_SUMMARY_PROVIDER",
-        "evidenceTargetEnv": "AI_REPORT_SUMMARY_EVIDENCE_TARGET",
-        "externalProvider": "disabled",
-        "productionExternalAiEnabled": false,
-        "templateFallbackAvailable": true
-      },
-      "kvkk": {
-        "piiSentToModel": false,
-        "fieldsSent": [
-          "total.net",
-          "total.standardScore",
-          "branches.branch",
-          "branches.net",
-          "classes.averages.net",
-          "statistics.rank"
-        ],
-        "excludedFields": [
-          "studentId",
-          "studentName",
-          "guardianName",
-          "tcKimlikNo",
-          "phone",
-          "email",
-          "address"
-        ],
-        "overseasTransferAssessment": "AI report summary is disabled for this release and no data is transferred to an external AI provider."
-      },
-      "externalAiStopRule": {
-        "kvkkAssessmentRequired": true,
-        "productOwnerApprovalRequired": true,
-        "teacherReviewRequired": true,
-        "anthropicEnabledInProduction": false,
-        "decisionReference": "DEC-20260613-03"
-      },
-      "generation": {
-        "featureDisabled": true,
-        "templateSummaryGenerated": false,
-        "studentCommentaryGenerated": false,
-        "teacherActionDraftGenerated": false,
-        "deterministicOutput": true,
-        "outputStoredInSnapshot": false
-      },
-      "validation": {
-        "piiLeakageCheckPassed": true,
-        "logsExcludePromptResponse": true,
-        "externalProviderNotCalled": true
-      },
-      "commandsPassed": [
-        "pnpm --filter @o-okul/worker exec vitest run src/jobs/report-generation-job.test.ts",
-        "pnpm --filter @o-okul/api exec vitest run src/report/report-generation.service.test.ts",
-        "pnpm ai-report-summary:check"
-      ],
-      "evidenceReferences": [
-        "artifacts/example/ai-report-summary/disabled-provider-check.log",
-        "artifacts/example/ai-report-summary/pii-leakage-check.log"
-      ]
-    },
     "securityAudit": {
       "environment": "production",
       "checkedAt": "2026-05-30",
@@ -884,7 +824,7 @@
       "environment": "production",
       "checkedAt": "2026-06-15T09:50:00.000Z",
       "releaseCandidate": "ghcr.io/example/o-okul/api:2026-06-15.1",
-      "redesignPlanPath": "docs/ui-ux-redesign-plan.md",
+      "redesignPlanPath": "docs/ui-ux-professionalization-contract.md",
       "localStaticEvidence": {
         "result": "PASS",
         "releaseBlocking": false,

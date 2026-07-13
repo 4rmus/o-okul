@@ -7,6 +7,7 @@ import type {
   AuthResponse,
   LoginRequest,
   LoginResponse,
+  MfaEnrollmentRequiredResponse,
   PasswordResetAcceptedResponse,
   PasswordResetConfirmRequest,
   PasswordResetConfirmResponse,
@@ -17,6 +18,7 @@ import type {
   TotpChallengeVerifyRequest,
   TotpDisableRequest,
   TotpDisableResponse,
+  TotpEnrollmentConfirmRequest,
   TotpSetupConfirmRequest,
   TotpSetupConfirmResponse,
   TotpSetupResponse,
@@ -58,6 +60,7 @@ const totpSetupConfirmBodySchema = z.object({
   setupToken: requiredTrimmedString,
   totpCode: requiredTrimmedString,
 }).strict() satisfies z.ZodType<TotpSetupConfirmRequest>;
+const totpEnrollmentConfirmBodySchema = totpSetupConfirmBodySchema satisfies z.ZodType<TotpEnrollmentConfirmRequest>;
 const totpDisableBodySchema = z.object({
   totpCode: optionalTrimmedString,
   recoveryCode: optionalTrimmedString,
@@ -95,7 +98,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<LoginResponse> {
     const result = await this.auth.login(body, resolveClientIp(request));
-    if (isLoginMfaChallenge(result) || isTenantSelectionRequired(result)) {
+    if (isLoginMfaChallenge(result) || isMfaEnrollmentRequired(result) || isTenantSelectionRequired(result)) {
       return result;
     }
 
@@ -111,7 +114,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<LoginResponse> {
     const result = await this.auth.selectTenant(body);
-    if (isLoginMfaChallenge(result)) {
+    if (isLoginMfaChallenge(result) || isMfaEnrollmentRequired(result)) {
       return result;
     }
 
@@ -130,6 +133,18 @@ export class AuthController {
       totpCode: body.totpCode,
       recoveryCode: body.recoveryCode,
     });
+    response.cookie(refreshCookieName, tokenPair.refreshToken, refreshCookieOptions);
+    response.cookie(csrfCookieName, createCsrfToken(), csrfCookieOptions);
+    return toAuthResponse(tokenPair);
+  }
+
+  @Post("totp/enrollment/confirm")
+  @HttpCode(200)
+  async confirmRequiredTotpEnrollment(
+    @Body(zodBody(totpEnrollmentConfirmBodySchema)) body: TotpEnrollmentConfirmRequest,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<AuthResponse> {
+    const tokenPair = await this.auth.confirmRequiredTotpEnrollment(body.setupToken, body.totpCode);
     response.cookie(refreshCookieName, tokenPair.refreshToken, refreshCookieOptions);
     response.cookie(csrfCookieName, createCsrfToken(), csrfCookieOptions);
     return toAuthResponse(tokenPair);
@@ -261,6 +276,10 @@ function toPublicSession(session: TokenPair["session"], mustChangePassword = fal
 
 function isLoginMfaChallenge(value: unknown): value is LoginMfaChallenge {
   return Boolean(value && typeof value === "object" && "status" in value && value.status === "MFA_REQUIRED");
+}
+
+function isMfaEnrollmentRequired(value: unknown): value is MfaEnrollmentRequiredResponse {
+  return Boolean(value && typeof value === "object" && "status" in value && value.status === "MFA_ENROLLMENT_REQUIRED");
 }
 
 function isTenantSelectionRequired(value: unknown): value is TenantSelectionRequiredResponse {

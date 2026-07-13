@@ -1,0 +1,2 @@
+ALTER TABLE "User"
+ADD COLUMN "membershipVersion" INTEGER NOT NULL DEFAULT 1;

@@ -19,8 +19,8 @@ const dataSubjectCountKeys = ["student", "teacher", "guardian", "user"];
 const purgeCoverageKeys = ["student", "teacher", "guardian", "user"];
 const auditDiffRedactionKeys = ["endpoint", "negativeControls", "actionsSampled", "command"];
 const expectedPurgeCoverage = {
-  student: ["firstName", "lastName", "phone", "email"],
-  teacher: ["firstName", "lastName"],
+  student: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"],
+  teacher: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"],
   guardian: ["firstName", "lastName", "phone"],
   user: ["email", "name"],
 };
@@ -59,6 +59,7 @@ const expectedAuditDiffActions = [
   "support_ticket.created",
   "support_ticket_comment.created",
   "kvkk.student_pii_purged",
+  "kvkk.teacher_pii_purged",
   "kvkk.guardian_pii_purged",
   "kvkk.user_pii_purged",
 ];

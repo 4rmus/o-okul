@@ -1,6 +1,6 @@
 # V1 Urun Yolculuklari ve UAT Matrisi
 
-Kaynak: `claudedocs/prod-plan-2026-06-12.md` Faz 1.
+Kaynak: `docs/DECISIONS.md` ve güncel kod/test sözleşmeleri.
 
 Bu dosya v1 icin hangi kurum tipi, hangi roller ve hangi gunluk islerin desteklendigini
 repo kanitiyla baglar. Staging/prod UAT raporu bu senaryo kimliklerini kullanir.
@@ -22,10 +22,7 @@ dongusudur.
 
 V1 kapsam disi maddeler:
 
-- Salon/oturma plani ve sinav salonu operasyonu: `V1_OUT`.
-- Online deneme oturumu ve canli sinav izleme: `V1_OUT`.
 - Odeme saglayici, fatura ve makbuz entegrasyonu: `V1_OUT`; finans modulu alacak/taksit takibidir.
-- OMR goruntu tarama veya fotograf uzerinden optik okuma: `V1_OUT`; TXT/DAT import korunur.
 
 Karar kaydi: `docs/DECISIONS.md` `DEC-20260613-01`.
 
@@ -37,8 +34,8 @@ yolculuk matrisi, UAT senaryo iskeleti ve ilgili evidence checker/template gunce
 | Modul | Sahip agent | UAT kapsami | Kabul kilidi | Kapsam disi |
 |---|---|---|---|---|
 | Sistem yonetimi ve release kaniti | `ops_release_engineer` | UAT-SYS-01, UAT-SYS-02, UAT-SYS-03, UAT-SYS-04 | Kurum acma, lisans/status, audit/observability ve release evidence akislari staging/prod kanitini local/static PASS'ten ayirir. | Otomatik faturalama, satis CRM'i |
-| Kurum operasyon paneli | `frontend_ux_engineer` + `backend_api_engineer` | UAT-KURUM-01, UAT-KURUM-02, UAT-KURUM-03, UAT-KURUM-04 | Kurulum, kisi/rol, donem/program/etut/devamsizlik isleri tenant/RBAC sozlesmesiyle calisir. | Salon/oturma plani |
-| Optik sinav ve rapor/karne | `exam_reporting_engineer` | UAT-KURUM-05, UAT-KURUM-06 | TXT/DAT import, cevap anahtari, karantina, scoring, rapor snapshot ve PDF/Excel uretimi tekrar uretilebilir kanit verir. | Online deneme, OMR/fotograf optik okuma |
+| Kurum operasyon paneli | `frontend_ux_engineer` + `backend_api_engineer` | UAT-KURUM-01, UAT-KURUM-02, UAT-KURUM-03, UAT-KURUM-04 | Kurulum, kisi/rol, donem/program/etut/devamsizlik isleri tenant/RBAC sozlesmesiyle calisir. | - |
+| Optik sinav ve rapor/karne | `exam_reporting_engineer` | UAT-KURUM-05, UAT-KURUM-06 | TXT/DAT import, cevap anahtari, karantina, scoring, rapor snapshot ve PDF/Excel uretimi tekrar uretilebilir kanit verir. | - |
 | Finans ve iletisim | `backend_api_engineer` + `messaging_integrations_engineer` | UAT-KURUM-07, UAT-KURUM-08 | Odeme/taksit takibi idempotenttir; duyuru, SMS disabled path, destek ve materyal akislari PII-safe evidence ile ayrilir. | Odeme saglayici, fatura, makbuz entegrasyonu |
 | Ogretmen portali | `frontend_ux_engineer` + `tenant_security_reviewer` | UAT-TEACHER-01, UAT-TEACHER-02, UAT-TEACHER-03 | Ogretmen yalniz kendi sinif/ogrenci kapsaminda okur/yazar; negatif erisim 403 ile kanitlanir. | Tenantlar arasi gorunum |
 | Ogrenci portali | `frontend_ux_engineer` + `tenant_security_reviewer` | UAT-STUDENT-01, UAT-STUDENT-02, UAT-STUDENT-03 | Ogrenci kendi profil, odev, devamsizlik, not, rapor, duyuru ve destek akisini kullanir; baska ogrenci verisi kapali kalir. | Ogrenci self-service kurum transferi |

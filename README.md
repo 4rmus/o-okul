@@ -188,8 +188,7 @@ pnpm prod:readiness:check
 
 Bu repo varsayılan compose değerlerini 4 vCPU / 8 GiB RAM sınıfı tek VPS için sınırlar. ClamAV,
 observability ve external monitoring varsayılan açılışa dahil değildir; ilgili kanıt veya staging
-doğrulaması sırasında profil/override ile çalıştırılır. AI karne özeti bu release'te kapalıdır:
-production/staging için `AI_REPORT_SUMMARY_PROVIDER=disabled` kullanılır.
+doğrulaması sırasında profil/override ile çalıştırılır.
 
 Gerçek domain için `docker-compose.traefik.yml`, `DOMAIN=o-okul.com` ve `ACME_EMAIL`
 ile Let's Encrypt modu kullanılır.
@@ -229,7 +228,9 @@ pnpm live:smoke
 
 ## Dokümantasyon
 
-- [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) — kapsamlı mimari ve yol haritası
+- [`status.md`](status.md) — güncel uygulama ve release durumu
+- [`docs/llm-wiki/README.md`](docs/llm-wiki/README.md) — kod ajanları için hızlı yön bulma
+- [`docs/product-journeys-v1.md`](docs/product-journeys-v1.md) — ürün kapsamı ve UAT matrisi
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — mimari karar kayıtları (ADR)
 - [`docs/ADR-0001-multi-tenancy.md`](docs/ADR-0001-multi-tenancy.md) — çok kiracılılık kararı
 - [`docs/ADR-0002-deployment.md`](docs/ADR-0002-deployment.md) — dağıtım stratejisi

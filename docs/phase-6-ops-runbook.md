@@ -307,37 +307,6 @@ Minimum kanıt içeriği:
   referansları verilmezse dosya yazmadan kırılır. Komut auth MFA testlerini ve API typecheck'i
   çalıştırır, ardından çıktıyı `pnpm admin-mfa:check` ile tekrar doğrular.
 
-## AI Report Summary Evidence
-
-Kanıt sözleşmesi: `docs/evidence-templates/ai-report-summary.example.json`.
-
-Komut:
-
-```sh
-AI_REPORT_SUMMARY_EVIDENCE_TARGET=file:///path/to/ai-report-summary.json pnpm ai-report-summary:check
-```
-
-Minimum kanıt içeriği:
-
-- `AI_REPORT_SUMMARY_PROVIDER=disabled` staging/prod env içinde ayarlanır; dış LLM provider veya
-  template yorum üretimi bu release için production env kontrolünden geçmez.
-- Disabled-mode kanıtı üretmek için staging hostta
-  `STAGING_ENVIRONMENT=staging AI_REPORT_SUMMARY_OUTPUT=artifacts/staging/reports/ai-report-summary.json pnpm ai-report-summary:generate`
-  çalıştırılır. Komut worker/API report testlerini koşar, `provider.mode=disabled`,
-  `piiSentToModel=false`, `externalProviderNotCalled=true` ve `DEC-20260613-03` stop-rule
-  referansını yazar; AI veya template yorum üretmez.
-- Disabled modda `ReportSnapshot.snapshotData.commentary` ve öğrenci `commentary` alanlarına yeni
-  taslak yazılmaz.
-- Kullanılan alanlar net/puan/branş/kazanım/sıralama gibi yapısal metriklerle sınırlıdır; öğrenci
-  adı, öğrenci id, veli adı, TC, telefon, e-posta ve adres yorum metnine girmez.
-- `validation.externalProviderNotCalled=true` olmalıdır; Claude/Anthropic veya template yorum
-  üretimi ayrıca KVKK değerlendirmesi, öğretmen onay akışı ve ürün sahibi onayı gerektirir.
-- Gerçek kanıtta `evidenceReferences` placeholder, `.test`, localhost veya redacted değer içeremez;
-  bu gevşetme yalnız template kontrolünde `AI_REPORT_SUMMARY_ALLOW_EXAMPLE_EVIDENCE=1` ile açılır.
-- Rapor top-level 11 alanı, `provider`/`kvkk`/`externalAiStopRule`/`generation`/`validation`
-  blok shape'leri, KVKK alan setleri, üç komutluk `commandsPassed` seti ve boş `gaps` listesi
-  template invalid/non-empty gaps negatifleriyle korunur.
-
 ## Identity Migration Evidence
 
 Kanıt sözleşmesi: `docs/evidence-templates/identity-migration.example.json`.
@@ -1268,7 +1237,6 @@ Minimum kanıt içeriği:
   security-audit top-level/header/auth/data shape fazlası,
   external-monitoring top-level/node/monitor/outage/gaps shape fazlası,
   admin-mfa top-level/policy/enrollment/login/gaps shape fazlası,
-  ai-report-summary top-level/provider/KVKK/generation/validation/command/gaps shape fazlası,
   upload-av top-level/scanner/surface/result/gaps shape fazlası,
   kvkk-inventory top-level/count/coverage/action/gaps shape fazlası,
   restore-drill top-level/tableCounts shape fazlası,

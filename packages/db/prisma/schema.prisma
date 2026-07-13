@@ -152,6 +152,7 @@ model User {
   nationalIdHash String?
   name        String
   passwordHash String
+  membershipVersion Int       @default(1)
   mustChangePassword Boolean     @default(false)
   passwordChangedAt DateTime?    @db.Timestamptz(6)
   totpSecretEncrypted String?

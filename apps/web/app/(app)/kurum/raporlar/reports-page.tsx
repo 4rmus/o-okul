@@ -106,7 +106,6 @@ export function ReportsPage() {
   const searchParamsKey = searchParams.toString();
   const [examId, setExamId] = useState("");
   const [loadedExamId, setLoadedExamId] = useState("");
-  const [contentHash, setContentHash] = useState("results-v1");
   const [filters, setFilters] = useState(emptyFilters);
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [error, setError] = useState("");
@@ -221,15 +220,9 @@ export function ReportsPage() {
       setError(firstFormError(parsedForm.error));
       return;
     }
-    const normalizedContentHash = contentHash.trim();
-    if (!normalizedContentHash) {
-      setError("Sonuç anahtarı zorunludur.");
-      return;
-    }
     try {
       await enqueueReportGenerationJob(auth.accessToken, parsedForm.data.examId, {
         ...filters,
-        contentHash: normalizedContentHash,
       });
       setQueueMessage("Rapor üretimi kuyruğa alındı.");
       selectReportTab("query");
@@ -335,7 +328,7 @@ export function ReportsPage() {
               as="form"
               aria-label="Rapor sorgusu ve üretim"
               className="next-report-query-panel"
-              description="Sınav, sonuç anahtarı ve kurum filtreleriyle mevcut snapshot veya yeni üretim işini yönet."
+              description="Sınav ve kurum filtreleriyle mevcut snapshot veya yeni üretim işini yönet."
               title="Rapor sorgusu ve üretim"
               onSubmit={(event) => void loadReports(event)}
             >
@@ -354,9 +347,6 @@ export function ReportsPage() {
                   <Input value={examId} onChange={(event) => setExamId(event.target.value)} />
                 </Field>
               </details>
-              <Field label="Sonuç anahtarı">
-                <Input required value={contentHash} onChange={(event) => setContentHash(event.target.value)} />
-              </Field>
               <div className="next-list-controls" aria-label="Rapor filtreleri">
                 <Field label="Kampüs">
                   <Select
@@ -671,7 +661,7 @@ function formatSelectedExamLabel(examId: string, exams: ExamRecord[]) {
 async function enqueueReportGenerationJob(
   accessToken: string,
   examId: string,
-  input: typeof emptyFilters & { contentHash: string },
+  input: typeof emptyFilters,
 ) {
   return apiRequest<{ jobId: string; status: string }>(
     accessToken,
@@ -679,7 +669,6 @@ async function enqueueReportGenerationJob(
     {
       body: JSON.stringify({
         reportType: "EXAM_RESULT_SUMMARY",
-        contentHash: input.contentHash,
         campusId: input.campusId || undefined,
         gradeLevelId: input.gradeLevelId || undefined,
         classId: input.classId || undefined,

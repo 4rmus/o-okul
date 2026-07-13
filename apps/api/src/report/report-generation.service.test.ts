@@ -10,6 +10,7 @@ import type { StudentStore } from "../student/student-store.js";
 import type { TenantStore } from "../tenant/tenant-store.js";
 import {
   createReportPdfRenderer,
+  createReportGenerationContentHash,
   examResultSummaryReportType,
   ReportGenerationService,
   type ReportGenerationQueueProducer,
@@ -49,7 +50,6 @@ describe("ReportGenerationService", () => {
       {
         examId: "exam-a",
         reportType: examResultSummaryReportType,
-        contentHash: "results-v1",
         campusId: "campus-main",
         gradeLevelId: "grade-8",
         classId: "class-a",
@@ -58,12 +58,22 @@ describe("ReportGenerationService", () => {
       },
     );
 
+    const contentHash = createReportGenerationContentHash({
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      reportType: examResultSummaryReportType,
+      campusId: "campus-main",
+      gradeLevelId: "grade-8",
+      classId: "class-a",
+      courseId: "course-math",
+      termId: "term-2026-spring",
+    });
     expect(producer.inputs).toEqual([{
       queueName: "report-generation",
       tenantId: "tenant-a",
       userId: "user-a",
       entityId: "exam-a",
-      contentHash: "results-v1",
+      contentHash,
       reportType: examResultSummaryReportType,
       campusId: "campus-main",
       gradeLevelId: "grade-8",
@@ -76,7 +86,7 @@ describe("ReportGenerationService", () => {
       examId: "exam-a",
       reportType: examResultSummaryReportType,
       queueName: "report-generation",
-      jobId: "exam-a_results-v1",
+      jobId: `exam-a_${contentHash}`,
       status: "queued",
     });
     expect(auditLogs.records).toEqual([{
@@ -87,8 +97,8 @@ describe("ReportGenerationService", () => {
       action: "report_generation.queued",
       diff: {
         reportType: examResultSummaryReportType,
-        contentHash: "results-v1",
-        jobId: "exam-a_results-v1",
+        contentHash,
+        jobId: `exam-a_${contentHash}`,
         campusId: "campus-main",
         gradeLevelId: "grade-8",
         classId: "class-a",
@@ -113,7 +123,6 @@ describe("ReportGenerationService", () => {
       {
         examId: "exam-a",
         reportType: examResultSummaryReportType,
-        contentHash: "results-v1",
       },
     )).rejects.toThrow(ForbiddenException);
     expect(producer.inputs).toHaveLength(0);
@@ -144,10 +153,23 @@ describe("ReportGenerationService", () => {
       {
         examId: "exam-a",
         reportType: "CLASS_SUCCESS",
-        contentHash: "results-v1",
       },
     )).rejects.toThrow(BadRequestException);
     expect(producer.inputs).toHaveLength(0);
+  });
+
+  it("aynı kapsamı tekrar kullanır, farklı sınavı farklı snapshot kimliğine bağlar", () => {
+    const common = {
+      tenantId: "tenant-a",
+      reportType: examResultSummaryReportType,
+      classId: "class-a",
+    } as const;
+    const first = createReportGenerationContentHash({ ...common, examId: "exam-a" });
+    const retry = createReportGenerationContentHash({ ...common, examId: "exam-a" });
+    const secondExam = createReportGenerationContentHash({ ...common, examId: "exam-b" });
+
+    expect(retry).toBe(first);
+    expect(secondExam).not.toBe(first);
   });
 
   it("tenant içindeki sınav snapshotlarını listeler", async () => {
@@ -578,57 +600,6 @@ describe("ReportGenerationService", () => {
         ],
       },
       generatedAt: "2026-06-06T09:00:00.000Z",
-    });
-  });
-
-  it("hazır snapshot içindeki template yorum taslağını öğrenci raporuna taşır", async () => {
-    const producer = new FakeProducer();
-    const snapshotData = fakeSnapshot.snapshotData as { students: Record<string, unknown>[] };
-    const student = snapshotData.students[0] ?? {};
-    const store = new FakeReportSnapshotStore([{
-      ...fakeSnapshot,
-      snapshotData: {
-        ...snapshotData,
-        students: [{
-          ...student,
-          commentary: {
-            provider: "template",
-            generatedAt: "2026-06-06T09:00:00.000Z",
-            parentSummary: "Bu sonuçta toplam 17.5 net görünüyor.",
-            teacherActionDraft: "Matematik için hedefli soru seti atanmalı.",
-            reviewStatus: "DRAFT",
-            disclaimer: "Bu yorum otomatik taslaktır; veliye yayınlanmadan önce öğretmen tarafından kontrol edilmelidir.",
-          },
-        }],
-      },
-    }]);
-    const service = new ReportGenerationService(
-      producer,
-      store,
-      undefined,
-      undefined,
-      new FakeStudentStore() as unknown as StudentStore,
-    );
-
-    const result = await service.getStudentReport(
-      {
-        tenantId: "tenant-a",
-        userId: "user-a",
-        roles: ["TENANT_ADMIN"],
-        bypassRls: false,
-      },
-      "exam-a",
-      "snapshot-a",
-      "student-a",
-    );
-
-    expect(result.commentary).toEqual({
-      provider: "template",
-      generatedAt: "2026-06-06T09:00:00.000Z",
-      parentSummary: "Bu sonuçta toplam 17.5 net görünüyor.",
-      teacherActionDraft: "Matematik için hedefli soru seti atanmalı.",
-      reviewStatus: "DRAFT",
-      disclaimer: "Bu yorum otomatik taslaktır; veliye yayınlanmadan önce öğretmen tarafından kontrol edilmelidir.",
     });
   });
 

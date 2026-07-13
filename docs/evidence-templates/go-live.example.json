@@ -28,7 +28,6 @@
       "Observability UAT evidence",
       "External monitoring evidence",
       "Admin MFA evidence",
-      "AI report summary evidence",
       "Security audit evidence",
       "Live exam cycle evidence",
       "iSEM optical pipeline evidence",
@@ -75,7 +74,6 @@
     "observabilityUatPassed": true,
     "externalMonitoringPassed": true,
     "adminMfaPassed": true,
-    "aiReportSummaryPassed": true,
     "rateLimitRedisPassed": true,
     "rlsLivePassed": true,
     "securityAuditPassed": true
@@ -164,7 +162,6 @@
     "artifacts/example/production/deployment-rollback.json",
     "artifacts/example/production/external-monitoring.json",
     "artifacts/example/production/admin-mfa.json",
-    "artifacts/example/production/ai-report-summary.json",
     "artifacts/example/production/live-exam-cycle.json",
     "artifacts/example/production/live-ui-worker-result.json",
     "artifacts/example/production/inline-upload-content-migration.json",

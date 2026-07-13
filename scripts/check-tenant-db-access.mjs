@@ -8,6 +8,29 @@ const ignoredFiles = new Set([
   "apps/api/src/health/health.service.ts",
 ]);
 const rlsBypassHeaderAllowedFiles = new Set(["apps/api/src/context/rls-bypass.guard.ts"]);
+const bypassRlsFunctionAllowlist = new Map([
+  ["apps/api/src/audit-log/audit-log-store.ts", new Set(["listForAdmin"])],
+  ["apps/api/src/auth/auth-user-store.ts", new Set([
+    "purgePii",
+    "createOrAttachTenantIdentity",
+    "enableTotp",
+    "disableTotp",
+    "markTotpCounterUsed",
+    "consumeTotpRecoveryCode",
+    "updatePassword",
+    "queryAuthUsers",
+  ])],
+  ["apps/api/src/tenant/tenant-store.ts", new Set([
+    "list",
+    "findById",
+    "findBySlug",
+    "findForAdmin",
+    "create",
+    "createWithFirstAdmin",
+    "update",
+    "delete",
+  ])],
+]);
 const tenantScopedTables = getTenantScopedTables();
 
 const failures = [];
@@ -21,11 +44,12 @@ for (const file of sourceRoots.flatMap(listTsFiles)) {
   if (contents.includes("x-rls-bypass-reason") && !rlsBypassHeaderAllowedFiles.has(file)) {
     failures.push(`${file}: x-rls-bypass-reason header yalnız RlsBypassGuard içinde okunmalı.`);
   }
+  const functions = parseFunctionRanges(contents);
+  requireAllowlistedBypassCalls(file, contents, functions, failures);
   if (!usesSql(contents)) {
     continue;
   }
 
-  const functions = parseFunctionRanges(contents);
   const localScopedWrappers = findLocalScopedWrappers(functions);
   const tenantWrappers = [
     "withTenantQuery",
@@ -46,6 +70,17 @@ for (const file of sourceRoots.flatMap(listTsFiles)) {
     failures.push(
       `${file}:${lineNumber(contents, query.index)}: "${touchedTable}" sorgusu tenant/bypass wrapper veya yalnız wrapper'dan çağrılan helper dışında çalışıyor.`,
     );
+  }
+}
+
+function requireAllowlistedBypassCalls(file, contents, functions, output) {
+  const allowedFunctions = bypassRlsFunctionAllowlist.get(file) ?? new Set();
+  for (const match of contents.matchAll(/withBypassRlsQuery\s*\(/g)) {
+    const index = match.index ?? 0;
+    const owner = functions.find((range) => index >= range.start && index <= range.end);
+    if (!owner || !allowedFunctions.has(owner.name)) {
+      output.push(`${file}:${lineNumber(contents, index)}: withBypassRlsQuery çağrısı izinli fonksiyon listesinde değil (${owner?.name ?? "module"}).`);
+    }
   }
 }
 

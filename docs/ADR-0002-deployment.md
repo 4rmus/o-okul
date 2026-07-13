@@ -18,7 +18,7 @@ datacenter seçimi bu yüzden dağıtım kararının parçasıdır.
 
 - Karar ID: DEC-20260529-02
 - Kaynak: `docs/DECISIONS.md`
-- Kanıt: `MASTER_PLAN.md` §2, §3.7
+- Kanıt: `docs/DECISIONS.md`, `pnpm docker:check`
 
 ## Sonuçlar
 

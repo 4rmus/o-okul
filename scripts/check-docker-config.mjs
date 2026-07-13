@@ -67,7 +67,6 @@ const expectations = {
     "ADMIN_MFA_RECOVERY_HASH_KEY: ${ADMIN_MFA_RECOVERY_HASH_KEY:-}",
     "ADMIN_MFA_CHALLENGE_SECRET: ${ADMIN_MFA_CHALLENGE_SECRET:-}",
     "ADMIN_MFA_ISSUER: ${ADMIN_MFA_ISSUER:-o-okul}",
-    "AI_REPORT_SUMMARY_PROVIDER: ${AI_REPORT_SUMMARY_PROVIDER:-disabled}",
     "SUPPORT_ATTACHMENT_STORAGE: ${SUPPORT_ATTACHMENT_STORAGE:-s3}",
     "HOMEWORK_MATERIAL_FILE_STORAGE: ${HOMEWORK_MATERIAL_FILE_STORAGE:-s3}",
     "SENTRY_DSN: ${SENTRY_DSN:-}",
@@ -376,11 +375,6 @@ if (logLevelOccurrences < 2) {
 const sentryDsnOccurrences = compose.match(/SENTRY_DSN: \${SENTRY_DSN:-}/g)?.length ?? 0;
 if (sentryDsnOccurrences < 2) {
   failures.push("docker-compose.yml eksik: SENTRY_DSN api ve worker içinde olmalı");
-}
-
-const aiReportSummaryProviderOccurrences = compose.match(/AI_REPORT_SUMMARY_PROVIDER: \${AI_REPORT_SUMMARY_PROVIDER:-disabled}/g)?.length ?? 0;
-if (aiReportSummaryProviderOccurrences < 2) {
-  failures.push("docker-compose.yml eksik: AI_REPORT_SUMMARY_PROVIDER api ve worker içinde olmalı");
 }
 
 if (failures.length > 0) {

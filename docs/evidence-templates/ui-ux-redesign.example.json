@@ -3,7 +3,7 @@
   "environment": "staging",
   "checkedAt": "2026-06-25T12:00:00.000Z",
   "releaseCandidate": "staging-ui-ux-2026-06-25",
-  "redesignPlanPath": "docs/ui-ux-redesign-plan.md",
+  "redesignPlanPath": "docs/ui-ux-professionalization-contract.md",
   "localStaticEvidence": {
     "result": "PASS",
     "releaseBlocking": false,
