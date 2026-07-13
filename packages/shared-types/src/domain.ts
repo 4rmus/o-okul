@@ -252,6 +252,7 @@ export interface RolePreviewSession {
 }
 
 export interface TeacherPortalLookupsResponse {
+  attendanceClassIds: string[];
   campuses: CampusRecord[];
   classes: ClassRecord[];
   courses: CourseRecord[];
@@ -1338,20 +1339,6 @@ export interface AttendanceRecord {
   date: string;
   status: AttendanceStatus;
   deletedAt?: string;
-}
-
-export interface AttendanceCreateRequest {
-  studentId: string;
-  date: string;
-  status: AttendanceStatus;
-  courseId?: string;
-  termId?: string;
-}
-
-export interface AttendanceUpdateRequest {
-  status: AttendanceStatus;
-  courseId?: string;
-  termId?: string;
 }
 
 export interface AttendanceDailyEntry {

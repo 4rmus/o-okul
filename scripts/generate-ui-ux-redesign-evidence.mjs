@@ -65,11 +65,12 @@ const viewportConfigs = [
   ["portal shell", "UI_UX_REDESIGN_PORTAL_SHELL_REFERENCES"],
 ];
 
-const env = { ...process.env, ...readEnvFile(readOption("--env-file")) };
+const env = { ...readEnvFile(readOption("--env-file")), ...process.env };
 const outputPath = readOption("--output") ?? env.UI_UX_REDESIGN_EVIDENCE_OUTPUT;
 const environment = readOption("--environment") ?? env.STAGING_ENVIRONMENT ?? env.NODE_ENV ?? "staging";
 const checkedAt = env.UI_UX_REDESIGN_CHECKED_AT?.trim() || new Date().toISOString();
 const releaseCandidate = env.UI_UX_REDESIGN_RELEASE_CANDIDATE?.trim();
+const sourceCommitSha = env.UI_UX_REDESIGN_SOURCE_COMMIT_SHA?.trim();
 const approvalRole = env.UI_UX_REDESIGN_APPROVAL_ROLE?.trim();
 const approvedAt = env.UI_UX_REDESIGN_APPROVED_AT?.trim();
 
@@ -77,6 +78,8 @@ const failures = [];
 requireValue(outputPath, "UI_UX_REDESIGN_EVIDENCE_OUTPUT veya --output", failures);
 requireOneOf(environment, "environment", ["staging", "production"], failures);
 requireEvidenceValue(releaseCandidate, "UI_UX_REDESIGN_RELEASE_CANDIDATE", failures);
+requireCommitSha(sourceCommitSha, "UI_UX_REDESIGN_SOURCE_COMMIT_SHA", failures);
+requireReleaseCandidateBinding(releaseCandidate, sourceCommitSha, failures);
 requireDate(checkedAt, "UI_UX_REDESIGN_CHECKED_AT", failures);
 requireEvidenceValue(approvalRole, "UI_UX_REDESIGN_APPROVAL_ROLE", failures);
 requireDate(approvedAt, "UI_UX_REDESIGN_APPROVED_AT", failures);
@@ -119,6 +122,7 @@ const report = {
   environment,
   checkedAt,
   releaseCandidate,
+  sourceCommitSha,
   redesignPlanPath: "docs/ui-ux-professionalization-contract.md",
   localStaticEvidence: {
     result: "PASS",
@@ -272,6 +276,20 @@ function requireValue(value, label, output) {
 function requireEvidenceValue(value, label, output) {
   requireValue(value, label, output);
   if (typeof value === "string" && hasPlaceholderToken(value)) output.push(`${label} placeholder/redacted/example değer içermemeli.`);
+}
+
+function requireCommitSha(value, label, output) {
+  if (typeof value !== "string" || !/^[a-f0-9]{40}$/i.test(value)) {
+    output.push(`${label} 40 karakter hex commit SHA olmalı.`);
+  }
+}
+
+function requireReleaseCandidateBinding(releaseCandidate, sourceCommitSha, output) {
+  if (typeof releaseCandidate !== "string" || typeof sourceCommitSha !== "string") return;
+  const tag = releaseCandidate.match(/:([a-f0-9]{40})$/i)?.[1];
+  if (!tag || tag.toLowerCase() !== sourceCommitSha.toLowerCase()) {
+    output.push("UI_UX_REDESIGN_RELEASE_CANDIDATE tag'i UI_UX_REDESIGN_SOURCE_COMMIT_SHA ile birebir eşleşmeli.");
+  }
 }
 
 function requireEqual(value, expected, label, output) {

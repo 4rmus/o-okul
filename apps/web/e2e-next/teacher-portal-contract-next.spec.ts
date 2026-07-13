@@ -153,12 +153,13 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       await expect(studentScope.getByRole("button", { name: "Ada Kaya / 8-A" })).toHaveAttribute("aria-pressed", "true");
       const dailyActions = page.getByRole("region", { name: "Öğretmen günlük işlemleri" });
       await expect(dailyActions).toBeVisible();
-      await expect(dailyActions.locator(".uh-field")).toHaveCount(16);
+      await expect(dailyActions.locator(".uh-field")).toHaveCount(14);
       await expect(dailyActions.locator(".uh-select")).toHaveCount(11);
+      await expect(dailyActions.getByLabel("Yoklama sınıfı").locator("option")).toHaveText(["Sınıf seçiniz", "8-A"]);
       await expect(dailyActions.locator(".uh-textarea")).toHaveCount(2);
       await expect(dailyActions.getByRole("textbox", { name: /^Not / })).toBeVisible();
       await expect(dailyActions.getByRole("textbox", { name: /^Atama notu / })).toBeVisible();
-      await expect(page.getByRole("button", { name: "Yoklama kaydet" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Yoklamayı kaydet" })).toBeVisible();
       await expect(page.getByRole("button", { name: "Not ekle" })).toBeVisible();
       await expect(page.getByRole("button", { name: "Materyal ata" })).toBeVisible();
       await expectTeacherHomeworkPanels(page, { readOnly: false });
@@ -262,16 +263,20 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     const attendanceRequest = page.waitForRequest(
       (request) => request.method() === "PUT" && new URL(request.url()).pathname === "/api/v1/attendance/daily",
     );
-    await page.getByRole("button", { name: "Yoklama kaydet" }).click();
+    await page.getByRole("button", { name: "Tümünü Var" }).click();
+    await page.getByRole("button", { name: "Yoklamayı kaydet" }).click();
     expect(JSON.parse((await attendanceRequest).postData() ?? "{}")).toEqual({
       classId: "class-8a",
       date: expect.any(String),
-      entries: [{ status: "PRESENT", studentId: "student-a" }],
+      entries: [
+        { status: "PRESENT", studentId: "student-a" },
+        { status: "PRESENT", studentId: "student-b" },
+      ],
     });
 
     const alert = page.getByRole("region", { name: "Öğretmen günlük işlemleri" }).getByRole("alert");
     await expect(alert).toContainText("İşlem kaydedilemedi");
-    await expect(alert).toContainText("Yoklama kaydı eklenemedi.");
+    await expect(alert).toContainText("Yoklama kaydedilemedi.");
     await expect.poll(() => mutationRequests).toEqual(expect.arrayContaining(["PUT /attendance/daily"]));
     expect(mutationRequests).not.toContain("POST /attendance");
   });
@@ -589,8 +594,9 @@ function createTerms() {
 
 function createTeacherLookups() {
   return {
+    attendanceClassIds: ["class-8a"],
     campuses: createCampuses(),
-    classes: createClasses(),
+    classes: [...createClasses(), { id: "class-visible", name: "8-B", tenantId: "tenant-teacher" }],
     courses: createCourses(),
     gradeLevels: createGradeLevels(),
     terms: createTerms(),

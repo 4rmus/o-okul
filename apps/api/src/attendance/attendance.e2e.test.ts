@@ -92,33 +92,23 @@ describe("Attendance API", () => {
       });
   });
 
-  it("öğretmen tenant içi devamsızlık kaydı oluşturur, günceller ve siler", async () => {
-    const created = await request(server)
+  it("eski tekil yazma rotalarını kapalı tutar", async () => {
+    await request(server)
       .post("/attendance")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .send({ studentId: "student-a", date: "2026-06-04", status: "LATE" })
-      .expect(201);
-
-    expect(created.body).toMatchObject({
-      tenantId: "tenant-a",
-      studentId: "student-a",
-      date: "2026-06-04",
-      status: "LATE",
-    });
+      .expect(404);
 
     await request(server)
-      .patch(`/attendance/${created.body.id}`)
+      .patch("/attendance/attendance-a")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .send({ status: "EXCUSED" })
-      .expect(200)
-      .expect(({ body }) => {
-        expect(body).toMatchObject({ id: created.body.id, status: "EXCUSED" });
-      });
+      .expect(404);
 
     await request(server)
-      .delete(`/attendance/${created.body.id}`)
+      .delete("/attendance/attendance-a")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
-      .expect(204);
+      .expect(404);
   });
 
   it("günlük sınıf yoklamasını atomik ve idempotent kaydeder", async () => {
@@ -207,32 +197,37 @@ describe("Attendance API", () => {
       .expect([]);
   });
 
-  it("devamsızlık gövdelerini Zod ile doğrular", async () => {
-    const invalidCreate = await request(server)
-      .post("/attendance")
+  it("günlük devamsızlık gövdesini Zod ile doğrular", async () => {
+    const invalidDaily = await request(server)
+      .put("/attendance/daily")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .send({
-        studentId: " ",
+        classId: " ",
         date: "06-04-2026",
-        status: "UNKNOWN",
+        entries: [{ studentId: " ", status: "UNKNOWN" }],
       })
       .expect(422);
 
-    expect(invalidCreate.body.error).toMatchObject({
+    expect(invalidDaily.body.error).toMatchObject({
       code: "VALIDATION_FAILED",
       details: {
         fields: expect.arrayContaining([
-          expect.objectContaining({ path: "studentId" }),
+          expect.objectContaining({ path: "classId" }),
           expect.objectContaining({ path: "date" }),
-          expect.objectContaining({ path: "status" }),
+          expect.objectContaining({ path: "entries.0.studentId" }),
+          expect.objectContaining({ path: "entries.0.status" }),
         ]),
       },
     });
 
     const invalidCalendarDate = await request(server)
-      .post("/attendance")
+      .put("/attendance/daily")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
-      .send({ studentId: "student-a", date: "2026-02-29", status: "PRESENT" })
+      .send({
+        classId: "class-a",
+        date: "2026-02-29",
+        entries: [{ studentId: "student-a", status: "PRESENT" }],
+      })
       .expect(422);
 
     expect(invalidCalendarDate.body.error).toMatchObject({
@@ -247,26 +242,17 @@ describe("Attendance API", () => {
       },
     });
 
-    const invalidUpdate = await request(server)
-      .patch("/attendance/attendance-a")
-      .set("Authorization", `Bearer ${teacherAAccessToken}`)
-      .send({ status: "UNKNOWN" })
-      .expect(422);
-
-    expect(invalidUpdate.body.error).toMatchObject({
-      code: "VALIDATION_FAILED",
-      details: {
-        fields: [expect.objectContaining({ path: "status" })],
-      },
-    });
-
   });
 
-  it("başka tenant öğrencisine devamsızlık yazmayı ve mükerrer tarihi reddeder", async () => {
+  it("başka tenant öğrencisine günlük devamsızlık yazmayı reddeder", async () => {
     await request(server)
-      .post("/attendance")
+      .put("/attendance/daily")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ studentId: "student-b", date: "2026-06-05", status: "ABSENT" })
+      .send({
+        classId: "class-a",
+        date: "2026-06-05",
+        entries: [{ studentId: "student-b", status: "ABSENT" }],
+      })
       .expect(403);
 
     const unscoped = await request(server)
@@ -276,10 +262,14 @@ describe("Attendance API", () => {
       .expect(201);
 
     await request(server)
-      .post("/attendance")
+      .put("/attendance/daily")
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
-      .send({ studentId: unscoped.body.id, date: "2026-06-05", status: "ABSENT" })
-      .expect(403);
+      .send({
+        classId: "class-a",
+        date: "2026-06-05",
+        entries: [{ studentId: unscoped.body.id, status: "ABSENT" }],
+      })
+      .expect(400);
 
     await request(server)
       .get("/attendance/summary")
@@ -287,24 +277,24 @@ describe("Attendance API", () => {
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .expect(403);
 
-    await request(server)
-      .post("/attendance")
-      .set("Authorization", `Bearer ${tenantAAccessToken}`)
-      .send({ studentId: "student-a", date: "2026-06-03", status: "PRESENT" })
-      .expect(409);
   });
 
-  it("öğrenci ve veli genel yazma endpointine erişemez", async () => {
+  it("öğrenci ve veli günlük yazma endpointine erişemez", async () => {
+    const body = {
+      classId: "class-a",
+      date: "2026-06-06",
+      entries: [{ studentId: "student-a", status: "ABSENT" }],
+    };
     await request(server)
-      .post("/attendance")
+      .put("/attendance/daily")
       .set("Authorization", `Bearer ${studentAAccessToken}`)
-      .send({ studentId: "student-a", date: "2026-06-06", status: "ABSENT" })
+      .send(body)
       .expect(403);
 
     await request(server)
-      .post("/attendance")
+      .put("/attendance/daily")
       .set("Authorization", `Bearer ${guardianAAccessToken}`)
-      .send({ studentId: "student-a", date: "2026-06-06", status: "ABSENT" })
+      .send(body)
       .expect(403);
   });
 });

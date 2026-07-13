@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
 import { InMemoryAcademicCalendarStore } from "../school/academic-calendar-store.js";
-import { InMemoryCourseStore } from "../school/course-store.js";
 import { InMemoryGuardianStudentStore } from "../school/guardian-student-store.js";
 import { InMemoryTeacherAssignmentStore } from "../school/teacher-assignment-store.js";
 import { InMemoryStudentStore } from "../student/student-store.js";
@@ -15,8 +14,7 @@ describe("AttendanceService", () => {
     const auditRecords: unknown[] = [];
     const service = new AttendanceService(
       new InMemoryAttendanceStore(),
-      {} as never,
-      {} as never,
+      new InMemoryAcademicCalendarStore(),
       new InMemoryStudentStore(),
       new InMemoryStudentEnrollmentStore(),
       new InMemoryGuardianStudentStore(),
@@ -34,10 +32,13 @@ describe("AttendanceService", () => {
       } as never,
     );
 
-    await service.create(adminContext, { studentId: "student-a", date: "2026-06-04", status: "ABSENT" });
-    await service.create(adminContext, { studentId: "student-a", date: "2026-06-05", status: "ABSENT" });
-    await service.create(adminContext, { studentId: "student-a", date: "2026-06-06", status: "ABSENT" });
-    await service.create(adminContext, { studentId: "student-a", date: "2026-06-07", status: "ABSENT" });
+    for (const date of ["2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07"]) {
+      await service.upsertDaily(adminContext, {
+        classId: "class-a",
+        date,
+        entries: [{ studentId: "student-a", status: "ABSENT" }],
+      });
+    }
 
     expect(announcements).toEqual([
       expect.objectContaining({
@@ -67,7 +68,6 @@ describe("AttendanceService", () => {
     const service = new AttendanceService(
       new InMemoryAttendanceStore(),
       {} as never,
-      {} as never,
       new InMemoryStudentStore(),
       new InMemoryStudentEnrollmentStore(),
       new InMemoryGuardianStudentStore(),
@@ -76,7 +76,11 @@ describe("AttendanceService", () => {
     );
 
     await expect(
-      service.create(adminContext, { studentId: "student-a", date: "2026-02-29", status: "ABSENT" }),
+      service.upsertDaily(adminContext, {
+        classId: "class-a",
+        date: "2026-02-29",
+        entries: [{ studentId: "student-a", status: "ABSENT" }],
+      }),
     ).rejects.toThrow("ATTENDANCE_DATE_INVALID");
   });
 
@@ -93,7 +97,7 @@ describe("AttendanceService", () => {
       startsAt: "2026-06-05",
     });
     await studentStore.update("student-a", { classId: "class-new" });
-    await attendanceStore.create({ tenantId: "tenant-a", studentId: "student-a", date: "2026-06-06", status: "PRESENT" });
+    await attendanceStore.upsertDaily([{ tenantId: "tenant-a", studentId: "student-a", date: "2026-06-06", status: "PRESENT" }]);
     const service = createService(attendanceStore, studentStore, enrollmentStore);
 
     await expect(service.list(adminContext, { classId: "class-a" })).resolves.toEqual([
@@ -130,6 +134,44 @@ describe("AttendanceService", () => {
 
     await expect(service.getDailyRoster(teacherContext, "class-a", "2026-06-03"))
       .rejects.toThrow("FORBIDDEN_TEACHER_ASSIGNMENT_SCOPE");
+  });
+
+  it("geçmiş tarihte mezun öğrenciyi roster ve güncelleme kapsamında tutar", async () => {
+    const studentStore = new InMemoryStudentStore();
+    const calendarStore = new InMemoryAcademicCalendarStore();
+    await studentStore.update("student-a", { status: "GRADUATED" });
+    await calendarStore.updateTerm("term-2026-spring", { isActive: false });
+    const service = createService(
+      new InMemoryAttendanceStore(),
+      studentStore,
+      new InMemoryStudentEnrollmentStore(),
+      new InMemoryTeacherAssignmentStore(),
+      calendarStore,
+    );
+
+    await expect(service.getDailyRoster(adminContext, "class-a", "2026-06-10")).resolves.toMatchObject({
+      students: [expect.objectContaining({ id: "student-a" })],
+    });
+    await expect(service.upsertDaily(adminContext, {
+      classId: "class-a",
+      date: "2026-06-10",
+      entries: [{ studentId: "student-a", status: "EXCUSED" }],
+    })).resolves.toMatchObject({
+      records: [expect.objectContaining({ studentId: "student-a", termId: "term-2026-spring", status: "EXCUSED" })],
+    });
+  });
+
+  it("bugün ve gelecek tarih rosterında yalnız aktif öğrenciyi tutar", async () => {
+    const studentStore = new InMemoryStudentStore();
+    await studentStore.update("student-a", { status: "PASSIVE" });
+    const service = createService(new InMemoryAttendanceStore(), studentStore);
+    const today = new Date().toISOString().slice(0, 10);
+
+    await expect(service.getDailyRoster(adminContext, "class-a", today)).resolves.toMatchObject({ students: [] });
+    await studentStore.update("student-a", { status: "ACTIVE" });
+    await expect(service.getDailyRoster(adminContext, "class-a", today)).resolves.toMatchObject({
+      students: [expect.objectContaining({ id: "student-a" })],
+    });
   });
 
   it("günlük sınıf listesini N+1 oluşturmadan getirir", async () => {
@@ -173,7 +215,33 @@ describe("AttendanceService", () => {
       classId: "class-new",
       date: "2026-06-10",
       entries: [{ studentId: "student-a", status: "PRESENT" }],
-    })).rejects.toThrow("ATTENDANCE_DAILY_STUDENT_NOT_ACTIVE_CLASS_MEMBER");
+    })).rejects.toThrow("ATTENDANCE_DAILY_FULL_ROSTER_REQUIRED");
+  });
+
+  it("günlük yoklamada sınıf listesinin tamamını zorunlu tutar", async () => {
+    const studentStore = new InMemoryStudentStore();
+    const enrollmentStore = new InMemoryStudentEnrollmentStore();
+    const secondStudent = await studentStore.create({
+      tenantId: "tenant-a",
+      firstName: "Ece",
+      lastName: "B",
+      classId: "class-a",
+      status: "ACTIVE",
+    });
+    await enrollmentStore.create({
+      tenantId: "tenant-a",
+      studentId: secondStudent.id,
+      classId: "class-a",
+      status: "ACTIVE",
+      startsAt: "2026-01-01",
+    });
+    const service = createService(new InMemoryAttendanceStore(), studentStore, enrollmentStore);
+
+    await expect(service.upsertDaily(adminContext, {
+      classId: "class-a",
+      date: "2026-06-10",
+      entries: [{ studentId: "student-a", status: "PRESENT" }],
+    })).rejects.toThrow("ATTENDANCE_DAILY_FULL_ROSTER_REQUIRED");
   });
 
   it("200 kisilik gunluk akis icin store okumalarini toplu tutar", async () => {
@@ -187,7 +255,6 @@ describe("AttendanceService", () => {
     const attendanceList = vi.spyOn(attendanceStore, "list");
     const attendanceUpsert = vi.spyOn(attendanceStore, "upsertDaily");
     const studentFind = vi.spyOn(studentStore, "findById");
-    const attendanceFind = vi.spyOn(attendanceStore, "findByStudentDate");
     const attendanceByStudent = vi.spyOn(attendanceStore, "listByStudent");
     const service = createService(attendanceStore, studentStore, enrollmentStore, assignmentStore);
 
@@ -204,7 +271,6 @@ describe("AttendanceService", () => {
       attendanceList: attendanceList.mock.calls.length,
       attendanceUpsert: attendanceUpsert.mock.calls.length,
       studentFind: studentFind.mock.calls.length,
-      attendanceFind: attendanceFind.mock.calls.length,
       attendanceByStudent: attendanceByStudent.mock.calls.length,
     }).toEqual({
       studentList: 1,
@@ -213,7 +279,6 @@ describe("AttendanceService", () => {
       attendanceList: 1,
       attendanceUpsert: 1,
       studentFind: 0,
-      attendanceFind: 0,
       attendanceByStudent: 0,
     });
   });
@@ -224,11 +289,11 @@ function createService(
   studentStore = new InMemoryStudentStore(),
   enrollmentStore = new InMemoryStudentEnrollmentStore(),
   assignmentStore = new InMemoryTeacherAssignmentStore(),
+  calendarStore = new InMemoryAcademicCalendarStore(),
 ): AttendanceService {
   return new AttendanceService(
     attendanceStore,
-    new InMemoryAcademicCalendarStore(),
-    new InMemoryCourseStore(),
+    calendarStore,
     studentStore,
     enrollmentStore,
     new InMemoryGuardianStudentStore(),

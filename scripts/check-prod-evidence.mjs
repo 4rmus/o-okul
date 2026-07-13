@@ -236,6 +236,7 @@ function writeSummary(file) {
     rlsLive: readJsonTarget(env.RLS_LIVE_EVIDENCE_TARGET),
     uat: readJsonTarget(env.UAT_EVIDENCE_TARGET),
   };
+  requireReleaseSourceBinding(reports);
 
   const summary = {
     result: "PASS",
@@ -396,6 +397,7 @@ function writeSummary(file) {
         environment: reports.uiUxRedesign.environment,
         checkedAt: reports.uiUxRedesign.checkedAt,
         releaseCandidate: reports.uiUxRedesign.releaseCandidate,
+        sourceCommitSha: reports.uiUxRedesign.sourceCommitSha,
         redesignPlanPath: reports.uiUxRedesign.redesignPlanPath,
         localStaticEvidence: reports.uiUxRedesign.localStaticEvidence,
         stagingProductionEvidence: reports.uiUxRedesign.stagingProductionEvidence,
@@ -466,6 +468,23 @@ function writeSummary(file) {
   writeFileSync(file, `${JSON.stringify(summary, null, 2)}\n`);
   assertExistingFileArtifact(file, "--summary-file");
   console.log(`Production evidence summary yazıldı: ${file}`);
+}
+
+function requireReleaseSourceBinding(reports) {
+  const releaseCandidateTag = reports.uiUxRedesign.releaseCandidate?.match(/:([a-f0-9]{40})$/i)?.[1];
+  const sourceCommitSha = reports.uiUxRedesign.sourceCommitSha;
+  const githubCommitSha = reports.githubCi.commitSha;
+  if (
+    !releaseCandidateTag ||
+    typeof sourceCommitSha !== "string" ||
+    !/^[a-f0-9]{40}$/i.test(sourceCommitSha) ||
+    typeof githubCommitSha !== "string" ||
+    !/^[a-f0-9]{40}$/i.test(githubCommitSha) ||
+    releaseCandidateTag.toLowerCase() !== sourceCommitSha.toLowerCase() ||
+    sourceCommitSha.toLowerCase() !== githubCommitSha.toLowerCase()
+  ) {
+    fail(["UI/UX releaseCandidate tag'i, sourceCommitSha ve GitHub CI commitSha aynı 40 karakter SHA olmalı."]);
+  }
 }
 
 function writeReportArtifacts(summaryFilePath, reports) {

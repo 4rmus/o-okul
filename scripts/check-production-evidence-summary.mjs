@@ -153,6 +153,7 @@ const requiredReports = {
     "environment",
     "checkedAt",
     "releaseCandidate",
+    "sourceCommitSha",
     "redesignPlanPath",
     "localStaticEvidence",
     "stagingProductionEvidence",
@@ -599,7 +600,7 @@ function requireReports(summary, failures) {
   requireRlsLiveReport(reports.rlsLive, failures);
   requireAuditNullTenantReport(reports.auditNullTenant, failures);
   requireLiveUiWorkerResultReport(reports.liveUiWorkerResult, failures);
-  requireUiUxRedesignReport(reports.uiUxRedesign, reports.deploymentRollback, failures);
+  requireUiUxRedesignReport(reports.uiUxRedesign, reports.deploymentRollback, reports.githubCi, failures);
   requireKvkkInventoryReport(reports.kvkkInventory, failures);
   requireUatJourneyScenarios(reports.uat, failures);
   requireObjectTrue(reports.uat, failures, "reports.uat.liveExamCyclePassed", "liveExamCyclePassed");
@@ -877,7 +878,7 @@ function requireLiveUiWorkerResultReport(scope, failures) {
   requireExactStringSet(scope?.commandsPassed, failures, "reports.liveUiWorkerResult.commandsPassed", ["pnpm live:ui-worker:smoke"]);
 }
 
-function requireUiUxRedesignReport(scope, deploymentRollback, failures) {
+function requireUiUxRedesignReport(scope, deploymentRollback, githubCi, failures) {
   requireObjectEqual(scope, failures, "reports.uiUxRedesign.result", "result", "PASS");
   requireObjectEqual(scope, failures, "reports.uiUxRedesign.redesignPlanPath", "redesignPlanPath", "docs/ui-ux-professionalization-contract.md");
   requireMatchingString(
@@ -889,6 +890,20 @@ function requireUiUxRedesignReport(scope, deploymentRollback, failures) {
     "reports.deploymentRollback.releaseCandidate",
     "releaseCandidate",
   );
+  const releaseCandidateTag = scope?.releaseCandidate?.match(/:([a-f0-9]{40})$/i)?.[1];
+  const sourceCommitSha = scope?.sourceCommitSha;
+  const githubCommitSha = githubCi?.commitSha;
+  if (
+    !releaseCandidateTag ||
+    typeof sourceCommitSha !== "string" ||
+    !/^[a-f0-9]{40}$/i.test(sourceCommitSha) ||
+    typeof githubCommitSha !== "string" ||
+    !/^[a-f0-9]{40}$/i.test(githubCommitSha) ||
+    releaseCandidateTag.toLowerCase() !== sourceCommitSha.toLowerCase() ||
+    sourceCommitSha.toLowerCase() !== githubCommitSha.toLowerCase()
+  ) {
+    failures.push("reports.uiUxRedesign releaseCandidate tag'i, sourceCommitSha ve reports.githubCi.commitSha aynı 40 karakter SHA olmalı.");
+  }
 
   const localStaticEvidence = requireObject(scope, failures, "reports.uiUxRedesign.localStaticEvidence", "localStaticEvidence");
   if (localStaticEvidence) {

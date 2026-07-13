@@ -30,7 +30,7 @@ import { examParticipantRepositoryToken, examRepositoryToken, type ExamParticipa
 import { type TeacherAssignmentStore, teacherAssignmentStoreToken } from "../school/teacher-assignment-store.js";
 import { type StudentStore, studentStoreToken } from "../student/student-store.js";
 import type { StudentRecord } from "../student/student.service.js";
-import { assertTenantResourceAccess, filterTenantResources, isTeacherSubjectContext } from "../tenant/tenant-access.js";
+import { filterTenantResources, isTeacherSubjectContext } from "../tenant/tenant-access.js";
 import { tenantStoreToken, type TenantStore } from "../tenant/tenant-store.js";
 import { reportSnapshotStoreToken, type ReportSnapshotStore } from "./report-snapshot-store.js";
 
@@ -283,7 +283,6 @@ export class ReportGenerationService implements OnModuleDestroy {
 
     const resolvedExamId = required(examId, "REPORT_EXAM_REQUIRED");
     const resolvedStudentId = required(studentId, "REPORT_STUDENT_REQUIRED");
-    await this.assertTeacherStudentReportScope(context, resolvedStudentId);
     const snapshots = await this.snapshots.listByExam(context.tenantId, resolvedExamId);
     const summaries: ReportSnapshotRecord[] = [];
 
@@ -296,6 +295,10 @@ export class ReportGenerationService implements OnModuleDestroy {
         .find((candidate) => readText(candidate.studentId) === resolvedStudentId);
       if (!student) continue;
       summaries.push(createStudentScopedSnapshotSummary(snapshot, student));
+    }
+
+    if (isTeacherSubjectContext(context) && summaries.length === 0) {
+      throw new ForbiddenException("FORBIDDEN_SUBJECT");
     }
 
     return summaries.sort((left, right) => toTime(right.generatedAt ?? right.createdAt) - toTime(left.generatedAt ?? left.createdAt));
@@ -362,7 +365,6 @@ export class ReportGenerationService implements OnModuleDestroy {
     const resolvedExamId = required(examId, "REPORT_EXAM_REQUIRED");
     const resolvedSnapshotId = required(snapshotId, "REPORT_SNAPSHOT_REQUIRED");
     const resolvedStudentId = required(studentId, "REPORT_STUDENT_REQUIRED");
-    await this.assertTeacherStudentReportScope(context, resolvedStudentId);
     const snapshot = await this.snapshots.findById(context.tenantId, resolvedExamId, resolvedSnapshotId);
     if (!snapshot) {
       throw new NotFoundException("REPORT_SNAPSHOT_NOT_FOUND");
@@ -434,7 +436,6 @@ export class ReportGenerationService implements OnModuleDestroy {
     const resolvedExamId = required(examId, "REPORT_EXAM_REQUIRED");
     const resolvedSnapshotId = required(snapshotId, "REPORT_SNAPSHOT_REQUIRED");
     const resolvedStudentId = required(studentId, "REPORT_STUDENT_REQUIRED");
-    await this.assertTeacherStudentReportScope(context, resolvedStudentId);
     const snapshot = await this.snapshots.findById(context.tenantId, resolvedExamId, resolvedSnapshotId);
     if (!snapshot) {
       throw new NotFoundException("REPORT_SNAPSHOT_NOT_FOUND");
@@ -486,11 +487,11 @@ export class ReportGenerationService implements OnModuleDestroy {
 
     const resolvedExamId = required(examId, "REPORT_EXAM_REQUIRED");
     const resolvedStudentId = required(studentId, "REPORT_STUDENT_REQUIRED");
-    await this.assertTeacherStudentReportScope(context, resolvedStudentId);
     const snapshots = options.scope === "all"
       ? await this.snapshots.listByTenant(context.tenantId)
       : await this.snapshots.listByExam(context.tenantId, resolvedExamId);
     const points: ReportStudentProgressPoint[] = [];
+    let teacherAuthorizedSnapshot = false;
 
     for (const snapshot of snapshots) {
       if (snapshot.status !== "READY" || !snapshot.snapshotData) continue;
@@ -501,6 +502,7 @@ export class ReportGenerationService implements OnModuleDestroy {
         if (isTeacherSubjectContext(context) && !(await this.canTeacherAccessStudentReport(context, resolvedStudentId, snapshot))) {
           continue;
         }
+        if (isTeacherSubjectContext(context)) teacherAuthorizedSnapshot = true;
         points.push({
           snapshotId: snapshot.id,
           ...(snapshot.courseId ? { courseId: snapshot.courseId } : {}),
@@ -510,6 +512,10 @@ export class ReportGenerationService implements OnModuleDestroy {
           branches: readRecords(student.branches).map((branch) => readBranchSummary(branch)),
         });
       }
+    }
+
+    if (isTeacherSubjectContext(context) && !teacherAuthorizedSnapshot) {
+      throw new ForbiddenException("FORBIDDEN_SUBJECT");
     }
 
     points.sort((a, b) => toTime(a.generatedAt) - toTime(b.generatedAt));
@@ -557,12 +563,12 @@ export class ReportGenerationService implements OnModuleDestroy {
   private async assertTeacherStudentReportScope(
     context: RequestContext,
     studentId: string,
-    reportContext?: Pick<ReportSnapshotRecord, "courseId" | "termId">,
+    snapshot: ReportSnapshotRecord,
   ): Promise<void> {
     if (!isTeacherSubjectContext(context)) {
       return;
     }
-    if (!(await this.canTeacherAccessStudentReport(context, studentId, reportContext))) {
+    if (!(await this.canTeacherAccessStudentReport(context, studentId, snapshot))) {
       throw new ForbiddenException("FORBIDDEN_SUBJECT");
     }
   }
@@ -634,26 +640,16 @@ export class ReportGenerationService implements OnModuleDestroy {
   private async canTeacherAccessStudentReport(
     context: RequestContext & { subjectType: "TEACHER"; subjectId: string },
     studentId: string,
-    reportContext?: Pick<ReportSnapshotRecord, "courseId" | "termId">,
+    snapshot: ReportSnapshotRecord,
   ): Promise<boolean> {
-    if (!this.studentStore || !this.teacherAssignmentStore) {
+    if (!this.teacherAssignmentStore) {
       throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
     }
-
-    const student = await this.studentStore.findById(studentId);
-    if (!student) {
-      return false;
-    }
-
-    try {
-      assertTenantResourceAccess(context, student);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "FORBIDDEN_TENANT";
-      throw new ForbiddenException(message);
-    }
-
+    const student = readRecords(snapshot.snapshotData?.students)
+      .find((candidate) => readText(candidate.studentId) === studentId);
+    if (!student) return false;
     const assignments = filterTenantResources(context, await this.teacherAssignmentStore.listByTeacher(context.subjectId));
-    return isTeacherScopedStudent(context.subjectId, student, assignments, reportContext);
+    return isTeacherScopedSnapshotStudent(context.subjectId, student, assignments, snapshot, snapshotReferenceDate(snapshot));
   }
 
   private async scopeSnapshotForTeacher(
@@ -687,21 +683,22 @@ export class ReportGenerationService implements OnModuleDestroy {
 
   private async resolveTeacherReportScope(
     context: RequestContext & { subjectType: "TEACHER"; subjectId: string },
-    reportContext: Pick<ReportSnapshotRecord, "courseId" | "termId">,
+    snapshot: ReportSnapshotRecord,
   ): Promise<{ studentIds: Set<string>; aggregateClassIds: Set<string> }> {
-    if (!this.studentStore || !this.teacherAssignmentStore) {
+    if (!this.teacherAssignmentStore) {
       throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
     }
 
     const assignments = filterTenantResources(context, await this.teacherAssignmentStore.listByTeacher(context.subjectId));
-    const scopedStudents = filterTenantResources(context, await this.studentStore.list())
-      .filter((student) => !student.deletedAt && isTeacherScopedStudent(context.subjectId, student, assignments, reportContext));
+    const referenceDate = snapshotReferenceDate(snapshot);
+    const scopedStudents = readRecords(snapshot.snapshotData?.students)
+      .filter((student) => isTeacherScopedSnapshotStudent(context.subjectId, student, assignments, snapshot, referenceDate));
 
     return {
-      studentIds: new Set(scopedStudents.map((student) => student.id)),
+      studentIds: new Set(scopedStudents.map((student) => readText(student.studentId)).filter(Boolean)),
       aggregateClassIds: new Set(assignments
         .filter((assignment) => assignment.classId && !assignment.studentId)
-        .filter((assignment) => isAssignmentActive(assignment) && matchesReportContext(assignment, reportContext))
+        .filter((assignment) => isAssignmentActiveAt(assignment, referenceDate) && matchesReportContext(assignment, snapshot))
         .map((assignment) => assignment.classId as string)),
     };
   }
@@ -810,6 +807,23 @@ export function isTeacherScopedStudent(
     );
 }
 
+export function isTeacherScopedSnapshotStudent(
+  teacherId: string,
+  student: Record<string, unknown>,
+  assignments: Array<{ teacherId: string; studentId?: string; classId?: string; courseId?: string; termId?: string; startsAt?: string; endsAt?: string }>,
+  reportContext: Pick<ReportSnapshotRecord, "courseId" | "termId">,
+  referenceDate: string,
+): boolean {
+  const studentId = readText(student.studentId);
+  const classId = readText(student.classId);
+  return Boolean(studentId) && assignments.some((assignment) =>
+    assignment.teacherId === teacherId &&
+    isAssignmentActiveAt(assignment, referenceDate) &&
+    matchesReportContext(assignment, reportContext) &&
+    (assignment.studentId === studentId || Boolean(classId && assignment.classId === classId)),
+  );
+}
+
 function matchesReportContext(
   assignment: { courseId?: string; termId?: string },
   reportContext: Pick<ReportSnapshotRecord, "courseId" | "termId"> | undefined,
@@ -822,7 +836,16 @@ function matchesReportContext(
 
 function isAssignmentActive(assignment: { startsAt?: string; endsAt?: string }): boolean {
   const today = new Date().toISOString().slice(0, 10);
-  return (!assignment.startsAt || assignment.startsAt <= today) && (!assignment.endsAt || assignment.endsAt >= today);
+  return isAssignmentActiveAt(assignment, today);
+}
+
+function isAssignmentActiveAt(assignment: { startsAt?: string; endsAt?: string }, referenceDate: string): boolean {
+  const date = referenceDate.slice(0, 10);
+  return (!assignment.startsAt || assignment.startsAt <= date) && (!assignment.endsAt || assignment.endsAt >= date);
+}
+
+function snapshotReferenceDate(snapshot: ReportSnapshotRecord): string {
+  return readText(snapshot.snapshotData?.generatedAt) || snapshot.generatedAt || snapshot.createdAt;
 }
 
 function parseReportType(value: string | undefined): typeof examResultSummaryReportType {

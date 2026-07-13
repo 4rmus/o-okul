@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Put, Query, UseGuards } from "@nestjs/common";
 import type {
   AttendanceAggregateRecord,
   AttendanceDailyRosterResponse,
@@ -14,12 +14,8 @@ import { RequireCapability } from "../rbac/capability.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import { AttendanceService } from "./attendance.service.js";
 import {
-  type AttendanceCreateBody,
   type AttendanceDailyUpsertBody,
-  type AttendanceUpdateBody,
-  attendanceCreateBodySchema,
   attendanceDailyUpsertBodySchema,
-  attendanceUpdateBodySchema,
 } from "./attendance-validation.js";
 
 interface AttendanceListQuery extends ListQuery {
@@ -75,12 +71,6 @@ export class AttendanceController {
     return this.attendance.getDailyRoster(getRequestContext(), classId, date);
   }
 
-  @Post()
-  @Roles("TEACHER")
-  create(@Body(zodBody(attendanceCreateBodySchema)) body: AttendanceCreateBody): Promise<AttendanceRecord> {
-    return this.attendance.create(getRequestContext(), body);
-  }
-
   @Put("daily")
   @RequireCapability("attendance:write-assigned")
   upsertDaily(
@@ -89,21 +79,6 @@ export class AttendanceController {
     return this.attendance.upsertDaily(getRequestContext(), body);
   }
 
-  @Patch(":id")
-  @Roles("TEACHER")
-  update(
-    @Param("id") id: string,
-    @Body(zodBody(attendanceUpdateBodySchema)) body: AttendanceUpdateBody,
-  ): Promise<AttendanceRecord> {
-    return this.attendance.update(getRequestContext(), id, body);
-  }
-
-  @Delete(":id")
-  @HttpCode(204)
-  @Roles("TEACHER")
-  async delete(@Param("id") id: string): Promise<void> {
-    await this.attendance.delete(getRequestContext(), id);
-  }
 }
 
 const attendanceListFields = [

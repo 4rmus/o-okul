@@ -2,10 +2,9 @@ import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
 import type { PortalReportIndexItem } from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
 import { examRepositoryToken, type ExamRepository } from "../exam/exam.service.js";
-import { isTeacherScopedStudent, type ReportSnapshotRecord } from "../report/report-generation.service.js";
+import { isTeacherScopedSnapshotStudent, type ReportSnapshotRecord } from "../report/report-generation.service.js";
 import { reportSnapshotStoreToken, type ReportSnapshotStore } from "../report/report-snapshot-store.js";
 import { teacherAssignmentStoreToken, type TeacherAssignmentStore } from "../school/teacher-assignment-store.js";
-import { studentStoreToken, type StudentStore } from "../student/student-store.js";
 import { filterTenantResources } from "../tenant/tenant-access.js";
 
 @Injectable()
@@ -13,7 +12,6 @@ export class MeReportIndexService {
   constructor(
     @Inject(examRepositoryToken) private readonly exams: ExamRepository,
     @Inject(reportSnapshotStoreToken) private readonly snapshots: ReportSnapshotStore,
-    @Inject(studentStoreToken) private readonly students: StudentStore,
     @Inject(teacherAssignmentStoreToken) private readonly teacherAssignments: TeacherAssignmentStore,
   ) {}
 
@@ -21,7 +19,7 @@ export class MeReportIndexService {
     const tenantId = requireTenant(context);
     const [exams, snapshots] = await Promise.all([
       this.exams.list(tenantId),
-      this.snapshots.listByTenant(tenantId),
+      this.listIndexSnapshots(tenantId),
     ]);
     return buildIndex(exams, snapshots.filter((snapshot) =>
       isReady(snapshot) && snapshotStudents(snapshot).some((student) => student.studentId === studentId),
@@ -34,24 +32,21 @@ export class MeReportIndexService {
       throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
     }
     const teacherId = context.subjectId;
-    const [exams, snapshots, students, assignments] = await Promise.all([
+    const [exams, snapshots, assignments] = await Promise.all([
       this.exams.list(tenantId),
-      this.snapshots.listByTenant(tenantId),
-      this.students.list(),
+      this.listIndexSnapshots(tenantId),
       this.teacherAssignments.listByTeacher(teacherId),
     ]);
-    const studentById = new Map(
-      filterTenantResources(context, students)
-        .filter((student) => !student.deletedAt)
-        .map((student) => [student.id, student]),
-    );
     const scopedAssignments = filterTenantResources(context, assignments);
     return buildIndex(exams, snapshots.filter((snapshot) =>
-      isReady(snapshot) && snapshotStudents(snapshot).some(({ studentId }) => {
-        const student = studentById.get(studentId);
-        return Boolean(student && isTeacherScopedStudent(teacherId, student, scopedAssignments, snapshot));
-      }),
+      isReady(snapshot) && snapshotStudentRecords(snapshot).some((student) =>
+        isTeacherScopedSnapshotStudent(teacherId, student, scopedAssignments, snapshot, generatedAt(snapshot)),
+      ),
     ));
+  }
+
+  private listIndexSnapshots(tenantId: string): Promise<ReportSnapshotRecord[]> {
+    return this.snapshots.listIndexByTenant?.(tenantId) ?? this.snapshots.listByTenant(tenantId);
   }
 }
 
@@ -86,13 +81,18 @@ function isReady(snapshot: ReportSnapshotRecord): boolean {
 }
 
 function snapshotStudents(snapshot: ReportSnapshotRecord): Array<{ studentId: string }> {
-  const students = snapshot.snapshotData?.students;
-  if (!Array.isArray(students)) return [];
-  return students.flatMap((student) => {
-    if (!student || typeof student !== "object" || Array.isArray(student)) return [];
-    const studentId = (student as Record<string, unknown>).studentId;
+  return snapshotStudentRecords(snapshot).flatMap((student) => {
+    const studentId = student.studentId;
     return typeof studentId === "string" && studentId ? [{ studentId }] : [];
   });
+}
+
+function snapshotStudentRecords(snapshot: ReportSnapshotRecord): Record<string, unknown>[] {
+  const students = snapshot.snapshotData?.students;
+  if (!Array.isArray(students)) return [];
+  return students.filter((student): student is Record<string, unknown> =>
+    Boolean(student) && typeof student === "object" && !Array.isArray(student),
+  );
 }
 
 function generatedAt(snapshot: ReportSnapshotRecord): string {

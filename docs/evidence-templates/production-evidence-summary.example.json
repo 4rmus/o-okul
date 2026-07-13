@@ -299,7 +299,7 @@
     "deploymentRollback": {
       "environment": "production",
       "checkedAt": "2026-05-30",
-      "releaseCandidate": "ghcr.io/example/o-okul/api:2026-06-15.1",
+      "releaseCandidate": "ghcr.io/example/o-okul/api:1111111111111111111111111111111111111111",
       "failedImageTag": "ghcr.io/example/o-okul/api:broken-20260530",
       "rollbackImageTag": "ghcr.io/example/o-okul/api:2026-06-14.2",
       "failureInjected": true,
@@ -346,7 +346,7 @@
       "environment": "github-actions",
       "checkedAt": "2026-05-31T12:00:00.000Z",
       "repository": "example/o-okul",
-      "commitSha": "0123456789abcdef0123456789abcdef01234567",
+      "commitSha": "1111111111111111111111111111111111111111",
       "branch": "main",
       "workflow": {
         "name": "CI",
@@ -681,7 +681,7 @@
       "environment": "production",
       "checkedAt": "2026-05-30",
       "tester": "qa-owner-redacted",
-      "releaseCandidate": "ghcr.io/example/o-okul/api:2026-06-15.1",
+      "releaseCandidate": "ghcr.io/example/o-okul/api:1111111111111111111111111111111111111111",
       "appUrl": "https://staging.example.test",
       "apiUrl": "https://staging-api.example.test",
       "commandsPassed": [
@@ -823,7 +823,8 @@
       "result": "PASS",
       "environment": "production",
       "checkedAt": "2026-06-15T09:50:00.000Z",
-      "releaseCandidate": "ghcr.io/example/o-okul/api:2026-06-15.1",
+      "releaseCandidate": "ghcr.io/example/o-okul/api:1111111111111111111111111111111111111111",
+      "sourceCommitSha": "1111111111111111111111111111111111111111",
       "redesignPlanPath": "docs/ui-ux-professionalization-contract.md",
       "localStaticEvidence": {
         "result": "PASS",
@@ -1387,7 +1388,7 @@
       "environment": "production",
       "checkedAt": "2026-05-30",
       "tester": "qa-owner-redacted",
-      "releaseCandidate": "ghcr.io/example/o-okul/api:2026-06-15.1",
+      "releaseCandidate": "ghcr.io/example/o-okul/api:1111111111111111111111111111111111111111",
       "rollbackImageTag": "ghcr.io/example/o-okul/api:2026-06-14.2",
       "restoreBackupReference": "s3://backup-bucket/base/2026-05-30.dump",
       "liveExamCyclePassed": true,

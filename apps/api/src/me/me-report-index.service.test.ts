@@ -13,14 +13,13 @@ describe("MeReportIndexService", () => {
         ],
       } as never,
       {
-        listByTenant: async () => [
+        listIndexByTenant: async () => [
           snapshot("snapshot-old", "exam-old", "READY", "2026-06-01T10:00:00.000Z", ["student-a"]),
           snapshot("snapshot-newer", "exam-old", "READY", "2026-06-02T10:00:00.000Z", ["student-a"]),
           snapshot("snapshot-other", "exam-new", "READY", "2026-06-03T10:00:00.000Z", ["student-b"]),
           snapshot("snapshot-failed", "exam-new", "FAILED", "2026-06-04T10:00:00.000Z", ["student-a"]),
         ],
       } as never,
-      {} as never,
       {} as never,
     );
 
@@ -38,7 +37,6 @@ describe("MeReportIndexService", () => {
   it("öğretmen için scope sonrası öğrencisi kalan READY raporları döndürür", async () => {
     let examListCalls = 0;
     let snapshotListCalls = 0;
-    let studentListCalls = 0;
     let assignmentListCalls = 0;
     const service = new MeReportIndexService(
       {
@@ -48,7 +46,7 @@ describe("MeReportIndexService", () => {
         },
       } as never,
       {
-        listByTenant: async () => {
+        listIndexByTenant: async () => {
           snapshotListCalls += 1;
           return [
             snapshot("snapshot-ready", "exam-a", "READY", "2026-06-05T10:00:00.000Z", ["student-a"], { courseId: "course-math", termId: "term-a" }),
@@ -58,15 +56,19 @@ describe("MeReportIndexService", () => {
         },
       } as never,
       {
-        list: async () => {
-          studentListCalls += 1;
-          return [{ id: "student-a", tenantId: "tenant-a", firstName: "Ada", lastName: "A", classId: "class-a", status: "ACTIVE" }];
-        },
-      } as never,
-      {
         listByTeacher: async () => {
           assignmentListCalls += 1;
-          return [{ id: "assignment-a", tenantId: "tenant-a", teacherId: "teacher-a", classId: "class-a", courseId: "course-math", termId: "term-a", role: "BRANCH_TEACHER" }];
+          return [{
+            id: "assignment-a",
+            tenantId: "tenant-a",
+            teacherId: "teacher-a",
+            classId: "class-a",
+            courseId: "course-math",
+            termId: "term-a",
+            role: "BRANCH_TEACHER",
+            startsAt: "2026-01-01",
+            endsAt: "2026-06-10",
+          }];
         },
       } as never,
     );
@@ -79,10 +81,9 @@ describe("MeReportIndexService", () => {
         latestGeneratedAt: "2026-06-05T10:00:00.000Z",
       },
     ]);
-    expect({ examListCalls, snapshotListCalls, studentListCalls, assignmentListCalls }).toEqual({
+    expect({ examListCalls, snapshotListCalls, assignmentListCalls }).toEqual({
       examListCalls: 1,
       snapshotListCalls: 1,
-      studentListCalls: 1,
       assignmentListCalls: 1,
     });
   });
@@ -110,7 +111,7 @@ function snapshot(
     inputRefs: {},
     snapshotData: {
       generatedAt,
-      students: studentIds.map((studentId) => ({ studentId, resultKey: `${id}:${studentId}` })),
+      students: studentIds.map((studentId) => ({ studentId, classId: "class-a", resultKey: `${id}:${studentId}` })),
     },
     generatedAt,
     createdAt: generatedAt,

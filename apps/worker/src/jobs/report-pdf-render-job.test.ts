@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   processReportPdfRenderJob,
+  SimpleReportPdfRenderer,
   type ReportPdfRenderInput,
   type ReportPdfRenderer,
 } from "./report-pdf-render-job.js";
@@ -112,6 +113,84 @@ describe("report PDF render job", () => {
     expect(renderer.inputs[0]?.html).toContain("<span>Net 0</span>");
     expect(renderer.inputs[0]?.html).toContain("<span>LGS puanı 0</span>");
     expect(renderer.inputs[0]?.html).toContain("<span>Standart puan 0</span>");
+  });
+
+  it("snapshot kayitlarini kirpmadan her ogrenci icin karne uretir", async () => {
+    const renderer = new FakeRenderer();
+    const branches = Array.from({ length: 10 }, (_, index) => ({
+      branch: `Brans ${index + 1}`,
+      net: index + 1,
+      questionCount: 10,
+      resultCount: 16,
+      successRate: 50,
+    }));
+    const classes = Array.from({ length: 10 }, (_, index) => ({
+      averages: { net: index + 1, questionCount: 10, successRate: 50 },
+      classId: `class-${index + 1}`,
+      className: `Sinif ${index + 1}`,
+      resultCount: 2,
+    }));
+    const students = Array.from({ length: 16 }, (_, index) => ({
+      branches: [{ branch: `Brans ${(index % 10) + 1}`, correct: 6, wrong: 2, blank: 2, net: 5.5 }],
+      classId: `class-${(index % 10) + 1}`,
+      className: `Sinif ${(index % 10) + 1}`,
+      displayName: `Ogrenci ${index + 1}`,
+      outcomes: [{ branch: `Brans ${(index % 10) + 1}`, outcomeCode: `K.${index + 1}`, correct: 1, wrong: 0, blank: 0, net: 1 }],
+      questions: [{ answer: "A", branch: `Brans ${(index % 10) + 1}`, correctAnswer: "A", outcomeCode: `K.${index + 1}`, questionNo: index + 1, status: "CORRECT" }],
+      statistics: { general: { rank: index + 1, outOf: 16, percentile: 50 } },
+      studentId: `student-${index + 1}`,
+      studentNo: String(1000 + index + 1),
+      total: { estimatedRawScore: 400, net: 5.5, questionCount: 10, standardScore: 100, successRate: 55 },
+    }));
+
+    await processReportPdfRenderJob({
+      id: "pdf-job-complete",
+      name: "report-pdf-render",
+      data: {
+        institution: { institutionName: "Butunluk Koleji" },
+        snapshot: {
+          id: "snapshot-complete",
+          tenantId: "tenant-a",
+          examId: "exam-complete",
+          reportType: "EXAM_RESULT_SUMMARY",
+          status: "READY",
+          generatedAt: "2026-07-14T09:00:00.000Z",
+          snapshotData: {
+            averages: { net: 5.5, questionCount: 10, successRate: 55 },
+            branches,
+            classes,
+            resultCount: students.length,
+            students,
+          },
+        },
+      },
+    }, renderer);
+
+    const html = renderer.inputs[0]?.html ?? "";
+    const fallback = renderer.inputs[0]?.fallbackLines.join("\n") ?? "";
+    expect(html).toContain("Brans 10");
+    expect(html).toContain("Sinif 10");
+    expect(html).toContain("Ogrenci 16");
+    expect(html.match(/<h2>Öğrenci Karnesi<\/h2>/g)).toHaveLength(16);
+    expect(html.match(/<h2>Detaylı Deneme Analizi<\/h2>/g)).toHaveLength(16);
+    expect(html).toContain("K.16");
+    expect(fallback).toContain("Brans 10");
+    expect(fallback).toContain("Sinif 10");
+    expect(fallback).toContain("Ogrenci 16");
+    expect(fallback).toContain("Ogrenci Karnesi: Ogrenci 16");
+    expect(fallback).toContain("K.16");
+  });
+
+  it("yedek PDF ureticisi uzun raporu birden fazla sayfaya boler", async () => {
+    const renderer = new SimpleReportPdfRenderer();
+    const pdf = await renderer.render({
+      fallbackLines: Array.from({ length: 85 }, (_, index) => `Satir ${index + 1}`),
+      html: "",
+    });
+    const source = pdf.toString("latin1");
+
+    expect(source.match(/\/Type\s*\/Page\b/g)).toHaveLength(3);
+    expect(source).toContain("Satir 85");
   });
 
   it("yanlis queue adini reddeder", async () => {

@@ -11,6 +11,7 @@ const topLevelKeys = [
   "environment",
   "checkedAt",
   "releaseCandidate",
+  "sourceCommitSha",
   "redesignPlanPath",
   "localStaticEvidence",
   "stagingProductionEvidence",
@@ -109,6 +110,8 @@ function validateReport(report) {
   notFuture(report.checkedAt, failures, "checkedAt");
   string(report.releaseCandidate, failures, "releaseCandidate");
   nonPlaceholder(report.releaseCandidate, failures, "releaseCandidate");
+  commitSha(report.sourceCommitSha, failures, "sourceCommitSha");
+  releaseCandidateBinding(report.releaseCandidate, report.sourceCommitSha, failures);
   eq(report.redesignPlanPath, "docs/ui-ux-professionalization-contract.md", failures, "redesignPlanPath");
 
   validateLocal(report.localStaticEvidence, failures);
@@ -322,6 +325,20 @@ function oneOf(actual, expected, failures, label) {
 
 function string(value, failures, label) {
   if (typeof value !== "string" || value.trim() === "") failures.push(`${label} boş olmayan metin olmalı.`);
+}
+
+function commitSha(value, failures, label) {
+  if (typeof value !== "string" || !/^[a-f0-9]{40}$/i.test(value)) {
+    failures.push(`${label} 40 karakter hex commit SHA olmalı.`);
+  }
+}
+
+function releaseCandidateBinding(releaseCandidate, sourceCommitSha, failures) {
+  if (typeof releaseCandidate !== "string" || typeof sourceCommitSha !== "string") return;
+  const tag = releaseCandidate.match(/:([a-f0-9]{40})$/i)?.[1];
+  if (!tag || tag.toLowerCase() !== sourceCommitSha.toLowerCase()) {
+    failures.push("releaseCandidate tag'i sourceCommitSha ile birebir eşleşmeli.");
+  }
 }
 
 function date(value, failures, label) {

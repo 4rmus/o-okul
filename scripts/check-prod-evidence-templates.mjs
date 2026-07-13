@@ -2133,6 +2133,15 @@ runProductionSummaryNegativeCheck({
   },
 });
 runProductionSummaryNegativeCheck({
+  label: "Production summary release SHA mismatch negative",
+  path: "docs/evidence-templates/production-evidence-summary.release-sha-mismatch.tmp.json",
+  expectedFailure:
+    "reports.uiUxRedesign releaseCandidate tag'i, sourceCommitSha ve reports.githubCi.commitSha aynı 40 karakter SHA olmalı.",
+  mutate: (fixture) => {
+    fixture.reports.githubCi.commitSha = "2".repeat(40);
+  },
+});
+runProductionSummaryNegativeCheck({
   label: "Production summary UAT rollback image mismatch negative",
   path: "docs/evidence-templates/production-evidence-summary.uat-rollback-image-mismatch.tmp.json",
   expectedFailure: "reports.uat.rollbackImageTag reports.deploymentRollback.rollbackImageTag ile eşleşmeli.",
@@ -2680,6 +2689,20 @@ runGoLiveNegativeCheck({
     const linkedSummary = structuredClone(productionSummaryFixture);
     linkedSummary.reports.deploymentRollback.unexpectedField = true;
     fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.extra-report-field-for-go-live.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live linked summary release SHA mismatch negative",
+  path: "docs/evidence-templates/go-live.linked-summary-release-sha-mismatch.tmp.json",
+  expectedFailure:
+    "productionEvidenceSummary.summary UI/UX releaseCandidate tag'i, sourceCommitSha ve GitHub CI commitSha aynı 40 karakter SHA olmalı.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.release-sha-mismatch-for-go-live.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.reports.githubCi.commitSha = "2".repeat(40);
+    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.release-sha-mismatch-for-go-live.tmp.json";
     writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
     cleanupPaths.push(linkedPath);
   },
@@ -5888,7 +5911,7 @@ function runStagingReleaseArtifactsBundleCheck() {
       if (monitor.name === "Traefik TLS certificate") monitor.url = `${summary.webUrl}/`;
     }
 
-    const releaseSummaryPath = `${root}/release-summary-2026-06-15.1.json`;
+    const releaseSummaryPath = `${root}/release-summary-${"1".repeat(40)}.json`;
     writeFileSync(releaseSummaryPath, `${JSON.stringify(summary, null, 2)}\n`);
     for (const [key, file] of Object.entries({
       restoreDrill: "restore-drill.example.json",
@@ -6018,6 +6041,43 @@ function runStagingReleaseArtifactsBundleCheck() {
       console.error(positive.stdout);
       console.error(positive.stderr);
       process.exit(positive.status ?? 1);
+    }
+
+    const originalSummary = readFileSync(releaseSummaryPath, "utf8");
+    const githubCiReportPath = `${reportsDir}/github-ci.json`;
+    const originalGithubCiReport = readFileSync(githubCiReportPath, "utf8");
+    try {
+      const mismatchedSummary = JSON.parse(originalSummary);
+      const mismatchedGithubCiReport = JSON.parse(originalGithubCiReport);
+      mismatchedSummary.reports.githubCi.commitSha = "2".repeat(40);
+      mismatchedGithubCiReport.commitSha = "2".repeat(40);
+      writeFileSync(releaseSummaryPath, `${JSON.stringify(mismatchedSummary, null, 2)}\n`);
+      writeFileSync(githubCiReportPath, `${JSON.stringify(mismatchedGithubCiReport, null, 2)}\n`);
+      const shaMismatchNegative = spawnSync(process.execPath, ["scripts/check-staging-release-artifacts.mjs"], {
+        env: {
+          ...process.env,
+          STAGING_RELEASE_ARTIFACTS_TARGET: root,
+          STAGING_RELEASE_ARTIFACTS_ALLOW_EXAMPLE_EVIDENCE: "1",
+        },
+        encoding: "utf8",
+      });
+      const shaMismatchOutput = `${shaMismatchNegative.stdout ?? ""}${shaMismatchNegative.stderr ?? ""}`;
+      if (shaMismatchNegative.status === 0) {
+        console.error("Production evidence template kontrolü başarısız: staging release SHA mismatch negative kırılmadı.");
+        process.exit(1);
+      }
+      if (
+        !shaMismatchOutput.includes(
+          "reports.uiUxRedesign releaseCandidate tag'i, sourceCommitSha ve reports.githubCi.commitSha aynı 40 karakter SHA olmalı.",
+        )
+      ) {
+        console.error("Production evidence template kontrolü başarısız: staging release SHA mismatch beklenen hata yok.");
+        console.error(shaMismatchOutput);
+        process.exit(1);
+      }
+    } finally {
+      writeFileSync(releaseSummaryPath, originalSummary);
+      writeFileSync(githubCiReportPath, originalGithubCiReport);
     }
 
     const gapReportPath = join(rootParent, "staging-release-gap-report-negative.json");

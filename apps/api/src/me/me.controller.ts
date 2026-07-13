@@ -494,51 +494,30 @@ export class MeController {
     const context = getRequestContext();
     assertTeacherContext(context);
 
-    const [schedule, students, attendance, homework, materials, teacherNotes, supportTickets] = await Promise.all([
-      this.schedules.listCurrentTeacherLessons(context),
-      this.students.list(context),
-      this.attendance.list(context),
-      this.homework.list(context),
-      this.homework.listMaterials(context),
-      this.teacherNotes.list(context),
-      this.supportTickets.listCurrentTeacher(context),
+    const today = new Date().toISOString().slice(0, 10);
+    const [teacherAssignments, visibleStudents] = await Promise.all([
+      this.teachers.listTeacherAssignments(context, context.subjectId),
+      this.students.listForViewer(context),
     ]);
-    const materialAssignments = (
-      await Promise.all(materials.map((material) => this.homework.listMaterialAssignments(context, material.id)))
-    ).flat();
+    const assignments = teacherAssignments.filter((assignment) =>
+      (!assignment.startsAt || assignment.startsAt <= today) &&
+      (!assignment.endsAt || assignment.endsAt >= today),
+    );
 
     const classIds = new Set<string>();
+    const attendanceClassIds = new Set<string>();
     const campusIds = new Set<string>();
     const courseIds = new Set<string>();
     const gradeLevelIds = new Set<string>();
     const termIds = new Set<string>();
 
-    for (const student of students) addOptionalId(classIds, student.classId);
-    for (const lesson of schedule) {
-      addOptionalId(classIds, lesson.classId);
-      addOptionalId(courseIds, lesson.courseId);
-      addOptionalId(termIds, lesson.termId);
+    for (const assignment of assignments) {
+      addOptionalId(classIds, assignment.classId);
+      addOptionalId(attendanceClassIds, assignment.classId);
+      addOptionalId(courseIds, assignment.courseId);
+      addOptionalId(termIds, assignment.termId);
     }
-    for (const record of attendance) {
-      addOptionalId(courseIds, record.courseId);
-      addOptionalId(termIds, record.termId);
-    }
-    for (const record of homework) addOptionalId(classIds, record.classId);
-    for (const record of materialAssignments) {
-      addOptionalId(courseIds, record.courseId);
-      addOptionalId(termIds, record.termId);
-    }
-    for (const record of teacherNotes) {
-      addOptionalId(courseIds, record.courseId);
-      addOptionalId(termIds, record.termId);
-    }
-    for (const record of supportTickets) {
-      addOptionalId(campusIds, record.campusId);
-      addOptionalId(classIds, record.classId);
-      addOptionalId(courseIds, record.courseId);
-      addOptionalId(gradeLevelIds, record.gradeLevelId);
-      addOptionalId(termIds, record.termId);
-    }
+    for (const student of visibleStudents) addOptionalId(classIds, student.classId);
 
     const classes = filterByIds(await this.school.listClasses(context), classIds);
     for (const record of classes) {
@@ -552,13 +531,18 @@ export class MeController {
       this.school.listGradeLevels(context),
       this.school.listAcademicTerms(context),
     ]);
+    const allCoursesAllowed = assignments.some((assignment) => assignment.classId && !assignment.courseId);
+    const allTermsAllowed = assignments.some((assignment) =>
+      (assignment.classId || assignment.studentId || assignment.courseId) && !assignment.termId,
+    );
 
     return {
+      attendanceClassIds: classes.filter((record) => attendanceClassIds.has(record.id)).map((record) => record.id),
       campuses: filterByIds(campuses, campusIds),
       classes,
-      courses: filterByIds(courses, courseIds),
+      courses: allCoursesAllowed ? courses : filterByIds(courses, courseIds),
       gradeLevels: filterByIds(gradeLevels, gradeLevelIds),
-      terms: filterByIds(terms, termIds),
+      terms: allTermsAllowed ? terms : filterByIds(terms, termIds),
     };
   }
 

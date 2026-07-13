@@ -8,8 +8,10 @@ import type {
   AcademicTermRecord,
   AnnouncementRecord,
   AttendanceDailyRosterResponse,
+  AttendanceDailyRosterStudent,
   AttendanceDailyUpsertResponse,
   AttendanceRecord,
+  AttendanceStatus,
   CampusRecord,
   ClassRecord,
   CourseRecord,
@@ -75,6 +77,7 @@ interface TeacherPortalData {
   homework: HomeworkRecord[];
   materials: HomeworkMaterialRecord[];
   materialAssignments: HomeworkMaterialAssignmentRecord[];
+  attendanceClassIds: string[];
   campuses: CampusRecord[];
   classes: ClassRecord[];
   courses: CourseRecord[];
@@ -125,8 +128,6 @@ interface ReportContext {
 interface TeacherAttendanceForm {
   classId: string;
   date: string;
-  status: AttendanceRecord["status"];
-  studentId: string;
 }
 
 export type TeacherPortalView = "announcements" | "homework" | "overview" | "reports" | "schedule" | "student" | "support";
@@ -151,10 +152,9 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
   const today = todayInputValue();
   const [attendanceForm, setAttendanceForm] = useState<TeacherAttendanceForm>({
     classId: "",
-    studentId: "",
     date: today,
-    status: "PRESENT",
   });
+  const [attendanceStatuses, setAttendanceStatuses] = useState<Record<string, AttendanceStatus | "">>({});
   const [noteForm, setNoteForm] = useState<TeacherNoteFormPayload>({
     studentId: "",
     teacherId: "",
@@ -180,14 +180,13 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
     const firstMaterialId = query.data.materials[0]?.id ?? "";
     const firstCourseId = query.data.schedule.find((lesson) => lesson.courseId)?.courseId ?? "";
     const firstTermId = query.data.schedule.find((lesson) => lesson.termId)?.termId ?? "";
-    const firstClassId = query.data.schedule.find((lesson) => lesson.classId)?.classId ?? query.data.classes[0]?.id ?? "";
+    const firstClassId = query.data.classes.find((record) => query.data.attendanceClassIds.includes(record.id))?.id ?? "";
     const visibleStudentIds = new Set(query.data.students.map((student) => student.id));
     const visibleCourseIds = new Set(query.data.schedule.map((lesson) => lesson.courseId).filter((courseId): courseId is string => Boolean(courseId)));
     const visibleTermIds = new Set(query.data.schedule.map((lesson) => lesson.termId).filter((termId): termId is string => Boolean(termId)));
     setAttendanceForm((current) => ({
       ...current,
       classId: current.classId || firstClassId,
-      studentId: resolveRequestedStudentId(requestedStudentId, current.studentId, firstStudentId, visibleStudentIds),
     }));
     setNoteForm((current) => ({
       ...current,
@@ -213,11 +212,39 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
     refetchOnWindowFocus: false,
   });
   const attendanceRoster = teacherDailyAttendanceQuery.data?.students ?? [];
-  const scheduleClassIds = useMemo(
-    () => new Set((data?.schedule ?? []).map((lesson) => lesson.classId).filter((classId): classId is string => Boolean(classId))),
-    [data?.schedule],
-  );
-  const attendanceClassOptions = (data?.classes ?? []).filter((record) => scheduleClassIds.has(record.id));
+  const attendanceClassIds = new Set(data?.attendanceClassIds ?? []);
+  const attendanceClassOptions = (data?.classes ?? []).filter((record) => attendanceClassIds.has(record.id));
+  const attendanceRosterComplete = attendanceRoster.length > 0 && attendanceRoster.every((student) => Boolean(attendanceStatuses[student.id]));
+  const attendanceColumns: Array<DataTableColumn<AttendanceDailyRosterStudent>> = [
+    {
+      key: "student",
+      header: "Öğrenci",
+      priority: "primary",
+      sticky: "left",
+      render: (student) => `${student.firstName} ${student.lastName}${student.studentNo ? ` / ${student.studentNo}` : ""}`,
+    },
+    {
+      key: "status",
+      header: "Durum",
+      priority: "primary",
+      render: (student) => (
+        <Select
+          aria-label={`${student.firstName} ${student.lastName} yoklama durumu`}
+          value={attendanceStatuses[student.id] ?? ""}
+          onChange={(event) => setAttendanceStatuses((current) => ({
+            ...current,
+            [student.id]: event.target.value as AttendanceStatus,
+          }))}
+        >
+          <option value="">Seçiniz</option>
+          <option value="PRESENT">Var</option>
+          <option value="ABSENT">Yok</option>
+          <option value="LATE">Geç</option>
+          <option value="EXCUSED">İzinli</option>
+        </Select>
+      ),
+    },
+  ];
   const scheduleCourseIds = useMemo(
     () => new Set((data?.schedule ?? []).map((lesson) => lesson.courseId).filter((courseId): courseId is string => Boolean(courseId))),
     [data?.schedule],
@@ -234,7 +261,7 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
   const courseNameById = useMemo(() => new Map((data?.courses ?? []).map((course) => [course.id, course.name])), [data?.courses]);
   const gradeLevelNameById = useMemo(() => new Map((data?.gradeLevels ?? []).map((gradeLevel) => [gradeLevel.id, gradeLevel.name])), [data?.gradeLevels]);
   const termNameById = useMemo(() => new Map((data?.terms ?? []).map((term) => [term.id, term.name])), [data?.terms]);
-  const selectedStudentId = noteForm.studentId || materialForm.studentId || attendanceForm.studentId || students[0]?.id;
+  const selectedStudentId = noteForm.studentId || materialForm.studentId || students[0]?.id;
   const selectedStudent = students.find((student) => student.id === selectedStudentId);
   const selectedClass = selectedStudent?.classId ? classById.get(selectedStudent.classId) : undefined;
   const todayLessons = useMemo(() => selectTodayLessons(data?.schedule ?? []), [data?.schedule]);
@@ -269,14 +296,16 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
   });
 
   useEffect(() => {
-    if (!teacherDailyAttendanceQuery.data) return;
-    setAttendanceForm((current) => {
-      const studentId = teacherDailyAttendanceQuery.data.students.some((student) => student.id === current.studentId)
-        ? current.studentId
-        : teacherDailyAttendanceQuery.data.students[0]?.id ?? "";
-      const existingRecord = teacherDailyAttendanceQuery.data.records.find((record) => record.studentId === studentId);
-      return { ...current, studentId, status: existingRecord?.status ?? "PRESENT" };
-    });
+    if (!teacherDailyAttendanceQuery.data) {
+      setAttendanceStatuses({});
+      return;
+    }
+    const statusByStudentId = new Map(
+      teacherDailyAttendanceQuery.data.records.map((record) => [record.studentId, record.status]),
+    );
+    setAttendanceStatuses(Object.fromEntries(
+      teacherDailyAttendanceQuery.data.students.map((student) => [student.id, statusByStudentId.get(student.id) ?? ""]),
+    ));
   }, [teacherDailyAttendanceQuery.data]);
 
   if (!canReadPortal) {
@@ -315,9 +344,12 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
   }
 
   function selectStudent(studentId: string) {
-    setAttendanceForm((current) => ({ ...current, studentId }));
     setNoteForm((current) => ({ ...current, studentId }));
     setMaterialForm((current) => ({ ...current, studentId }));
+  }
+
+  function markAttendanceRosterPresent() {
+    setAttendanceStatuses(Object.fromEntries(attendanceRoster.map((student) => [student.id, "PRESENT"] as const)));
   }
 
   async function submitAttendance(event: FormEvent<HTMLFormElement>) {
@@ -329,9 +361,8 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
     }
 
     setActionError("");
-    const student = attendanceRoster.find((candidate) => candidate.id === attendanceForm.studentId);
-    if (!student || !attendanceForm.classId || !attendanceForm.date) {
-      setActionError("Sınıfı bulunan bir öğrenci ve tarih seçilmelidir.");
+    if (!attendanceForm.classId || !attendanceForm.date || !attendanceRosterComplete) {
+      setActionError("Sınıf listesindeki tüm öğrencilerin durumu seçilmelidir.");
       return;
     }
 
@@ -339,7 +370,10 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
       const response = await saveDailyAttendance(auth.accessToken, {
         classId: attendanceForm.classId,
         date: attendanceForm.date,
-        entries: [{ studentId: student.id, status: attendanceForm.status }],
+        entries: attendanceRoster.map((student) => ({
+          studentId: student.id,
+          status: attendanceStatuses[student.id] as AttendanceStatus,
+        })),
       });
       queryClient.setQueryData<TeacherPortalData>(queryKey, (current) =>
         current
@@ -354,8 +388,11 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
             }
           : current,
       );
+      await queryClient.invalidateQueries({
+        queryKey: ["next-teacher-daily-attendance", auth.session.userId, attendanceForm.classId, attendanceForm.date],
+      });
     } catch {
-      setActionError("Yoklama kaydı eklenemedi.");
+      setActionError("Yoklama kaydedilemedi.");
     }
   }
 
@@ -731,7 +768,7 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
               as="form"
               aria-label="Yoklama kaydet"
               className="next-teacher-action-panel"
-              description="Seçili öğrencinin sınıfı ve tarih için günlük yoklama kaydı."
+              description="Atandığınız sınıfın tam öğrenci listesini tarih için tek işlemde kaydedin."
               id="portal-teacher-attendance"
               title="Yoklama"
               onSubmit={(event) => void submitAttendance(event)}
@@ -740,28 +777,10 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
                 <Select
                   required
                   value={attendanceForm.classId}
-                  onChange={(event) => setAttendanceForm((current) => ({ ...current, classId: event.target.value, studentId: "" }))}
+                  onChange={(event) => setAttendanceForm((current) => ({ ...current, classId: event.target.value }))}
                 >
                   <option value="">Sınıf seçiniz</option>
                   {attendanceClassOptions.map((record) => <option key={record.id} value={record.id}>{record.name}</option>)}
-                </Select>
-              </Field>
-              <Field label="Öğrenci">
-                <Select
-                  value={attendanceForm.studentId}
-                  onChange={(event) => {
-                    const studentId = event.target.value;
-                    const existingRecord = teacherDailyAttendanceQuery.data?.records.find((record) => record.studentId === studentId);
-                    setAttendanceForm((current) => ({ ...current, studentId, status: existingRecord?.status ?? "PRESENT" }));
-                  }}
-                  required
-                >
-                  {attendanceRoster.length === 0 ? <option value="">Seçili tarihte öğrenci yok</option> : null}
-                  {attendanceRoster.map((student) => (
-                    <option key={student.id} value={student.id}>
-                      {student.firstName} {student.lastName}{student.studentNo ? ` / ${student.studentNo}` : ""}
-                    </option>
-                  ))}
                 </Select>
               </Field>
               <Field label="Tarih">
@@ -772,25 +791,20 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
                   onChange={(event) => setAttendanceForm((current) => ({ ...current, date: event.target.value }))}
                 />
               </Field>
-              <Field label="Durum">
-                <Select
-                  aria-label="Yoklama durumu"
-                  value={attendanceForm.status}
-                  onChange={(event) =>
-                    setAttendanceForm((current) => ({
-                      ...current,
-                      status: event.target.value as AttendanceRecord["status"],
-                    }))
-                  }
-                >
-                  <option value="PRESENT">Var</option>
-                  <option value="ABSENT">Yok</option>
-                  <option value="LATE">Geç</option>
-                  <option value="EXCUSED">İzinli</option>
-                </Select>
-              </Field>
               {teacherDailyAttendanceQuery.isError ? <p className="next-form-error" role="alert">Tarihsel sınıf listesi alınamadı.</p> : null}
-              <Button disabled={!attendanceForm.studentId} type="submit">Yoklama kaydet</Button>
+              {attendanceRoster.length > 0 ? (
+                <Button type="button" variant="secondary" onClick={markAttendanceRosterPresent}>Tümünü Var</Button>
+              ) : null}
+              <DataTable
+                caption="Öğretmen günlük yoklama listesi"
+                columns={attendanceColumns}
+                density="compact"
+                emptyText="Seçili tarihte öğrenci yok"
+                getRowKey={(student) => student.id}
+                loading={teacherDailyAttendanceQuery.isPending}
+                rows={attendanceRoster}
+              />
+              <Button disabled={!attendanceRosterComplete} type="submit">Yoklamayı kaydet</Button>
             </Panel>
             <Panel
               as="form"
@@ -1072,7 +1086,7 @@ async function loadTeacherPortal(
       : Promise.resolve([]),
     showStudentWorkspace || showSchedule
       ? readOnlyRequest<TeacherPortalLookupsResponse>(accessToken, `${apiBaseUrl}/me/teacher/lookups`, rolePreviewToken)
-      : Promise.resolve({ campuses: [], classes: [], courses: [], gradeLevels: [], terms: [] }),
+      : Promise.resolve({ attendanceClassIds: [], campuses: [], classes: [], courses: [], gradeLevels: [], terms: [] }),
   ]);
   return {
     teacher,
@@ -1083,6 +1097,7 @@ async function loadTeacherPortal(
     homework,
     materials,
     materialAssignments,
+    attendanceClassIds: lookups.attendanceClassIds,
     campuses: lookups.campuses,
     classes: lookups.classes,
     courses: lookups.courses,
