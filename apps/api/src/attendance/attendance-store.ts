@@ -8,12 +8,7 @@ export interface AttendanceStore {
   list(): Promise<AttendanceRecord[]>;
   listByStudent(studentId: string): Promise<AttendanceRecord[]>;
   listByStudentsDate(studentIds: string[], date: string): Promise<AttendanceRecord[]>;
-  findById(id: string): Promise<AttendanceRecord | undefined>;
-  findByStudentDate(studentId: string, date: string): Promise<AttendanceRecord | undefined>;
-  create(input: Omit<AttendanceRecord, "id">): Promise<AttendanceRecord>;
   upsertDaily(inputs: Array<Omit<AttendanceRecord, "id">>): Promise<AttendanceRecord[]>;
-  update(id: string, input: Pick<AttendanceRecord, "status"> & Pick<Partial<AttendanceRecord>, "courseId" | "termId">): Promise<AttendanceRecord | undefined>;
-  softDelete(id: string, deletedAt: string): Promise<AttendanceRecord | undefined>;
 }
 
 export const attendanceStoreToken = Symbol("AttendanceStore");
@@ -39,23 +34,6 @@ export class InMemoryAttendanceStore implements AttendanceStore {
     return this.attendance.filter((record) => ids.has(record.studentId) && record.date === date && !record.deletedAt);
   }
 
-  async findById(id: string): Promise<AttendanceRecord | undefined> {
-    return this.attendance.find((record) => record.id === id && !record.deletedAt);
-  }
-
-  async findByStudentDate(studentId: string, date: string): Promise<AttendanceRecord | undefined> {
-    return this.attendance.find((record) => record.studentId === studentId && record.date === date && !record.deletedAt);
-  }
-
-  async create(input: Omit<AttendanceRecord, "id">): Promise<AttendanceRecord> {
-    const record = {
-      id: `attendance-${this.attendance.length + 1}`,
-      ...input,
-    };
-    this.attendance.push(record);
-    return record;
-  }
-
   async upsertDaily(inputs: Array<Omit<AttendanceRecord, "id">>): Promise<AttendanceRecord[]> {
     return inputs.map((input) => {
       const existing = this.attendance.find(
@@ -71,23 +49,6 @@ export class InMemoryAttendanceStore implements AttendanceStore {
     });
   }
 
-  async update(id: string, input: Pick<AttendanceRecord, "status"> & Pick<Partial<AttendanceRecord>, "courseId" | "termId">): Promise<AttendanceRecord | undefined> {
-    const record = await this.findById(id);
-    if (!record) return undefined;
-
-    record.status = input.status;
-    if (input.courseId !== undefined) record.courseId = input.courseId;
-    if (input.termId !== undefined) record.termId = input.termId;
-    return record;
-  }
-
-  async softDelete(id: string, deletedAt: string): Promise<AttendanceRecord | undefined> {
-    const record = await this.findById(id);
-    if (!record) return undefined;
-
-    record.deletedAt = deletedAt;
-    return record;
-  }
 }
 
 export class PostgresAttendanceStore implements AttendanceStore {
@@ -130,46 +91,6 @@ export class PostgresAttendanceStore implements AttendanceStore {
     });
   }
 
-  async findById(id: string): Promise<AttendanceRecord | undefined> {
-    return withTenantQuery(this.pool, async (client) => {
-      const result = await client.query<AttendanceRow>(
-        `SELECT * FROM "Attendance" WHERE "id" = $1 AND "deletedAt" IS NULL LIMIT 1`,
-        [id],
-      );
-      return result.rows[0] ? toAttendanceRecord(result.rows[0]) : undefined;
-    });
-  }
-
-  async findByStudentDate(studentId: string, date: string): Promise<AttendanceRecord | undefined> {
-    return withTenantQuery(this.pool, async (client) => {
-      const result = await client.query<AttendanceRow>(
-        `SELECT * FROM "Attendance"
-         WHERE "studentId" = $1
-           AND "date" = $2::date
-           AND "deletedAt" IS NULL
-         LIMIT 1`,
-        [studentId, date],
-      );
-      return result.rows[0] ? toAttendanceRecord(result.rows[0]) : undefined;
-    });
-  }
-
-  async create(input: Omit<AttendanceRecord, "id">): Promise<AttendanceRecord> {
-    return withTenantQuery(this.pool, async (client) => {
-      const result = await client.query<AttendanceRow>(
-        `INSERT INTO "Attendance" ("id", "tenantId", "studentId", "courseId", "termId", "date", "status", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6::date, $7, now())
-         RETURNING *`,
-        [randomUUID(), input.tenantId, input.studentId, input.courseId ?? null, input.termId ?? null, input.date, input.status],
-      );
-      const record = result.rows[0];
-      if (!record) {
-        throw new Error("ATTENDANCE_CREATE_FAILED");
-      }
-      return toAttendanceRecord(record);
-    });
-  }
-
   async upsertDaily(inputs: Array<Omit<AttendanceRecord, "id">>): Promise<AttendanceRecord[]> {
     return withTenantQuery(this.pool, async (client) => {
       const records: AttendanceRecord[] = [];
@@ -178,8 +99,7 @@ export class PostgresAttendanceStore implements AttendanceStore {
           `INSERT INTO "Attendance" ("id", "tenantId", "studentId", "courseId", "termId", "date", "status", "updatedAt")
            VALUES ($1, $2, $3, NULL, $4, $5::date, $6, now())
            ON CONFLICT ("tenantId", "studentId", "date")
-           DO UPDATE SET "courseId" = NULL,
-                         "termId" = EXCLUDED."termId",
+           DO UPDATE SET "termId" = EXCLUDED."termId",
                          "status" = EXCLUDED."status",
                          "deletedAt" = NULL,
                          "updatedAt" = now()
@@ -194,43 +114,6 @@ export class PostgresAttendanceStore implements AttendanceStore {
     });
   }
 
-  async update(id: string, input: Pick<AttendanceRecord, "status"> & Pick<Partial<AttendanceRecord>, "courseId" | "termId">): Promise<AttendanceRecord | undefined> {
-    const existing = await this.findById(id);
-    if (!existing) return undefined;
-
-    return withTenantQuery(this.pool, async (client) => {
-      const result = await client.query<AttendanceRow>(
-        `UPDATE "Attendance"
-         SET "status" = $2,
-             "courseId" = CASE WHEN $3 THEN $4 ELSE "courseId" END,
-             "termId" = CASE WHEN $5 THEN $6 ELSE "termId" END,
-             "updatedAt" = now()
-         WHERE "id" = $1
-           AND "deletedAt" IS NULL
-         RETURNING *`,
-        [id, input.status, input.courseId !== undefined, input.courseId ?? null, input.termId !== undefined, input.termId ?? null],
-      );
-      return result.rows[0] ? toAttendanceRecord(result.rows[0]) : undefined;
-    });
-  }
-
-  async softDelete(id: string, deletedAt: string): Promise<AttendanceRecord | undefined> {
-    const existing = await this.findById(id);
-    if (!existing) return undefined;
-
-    return withTenantQuery(this.pool, async (client) => {
-      const result = await client.query<AttendanceRow>(
-        `UPDATE "Attendance"
-         SET "deletedAt" = $2,
-             "updatedAt" = now()
-         WHERE "id" = $1
-           AND "deletedAt" IS NULL
-         RETURNING *`,
-        [id, deletedAt],
-      );
-      return result.rows[0] ? toAttendanceRecord(result.rows[0]) : undefined;
-    });
-  }
 }
 
 export function createAttendanceStore(): AttendanceStore {

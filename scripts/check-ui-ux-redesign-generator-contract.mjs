@@ -14,11 +14,24 @@ writeFileSync(envPath, buildValidEnvFile());
 
 try {
   expectGeneratePass();
+  expectCheckerFailure("invalid source commit", (report) => {
+    report.sourceCommitSha = "not-a-commit";
+  }, ["sourceCommitSha 40 karakter hex commit SHA olmalı."]);
+  expectCheckerFailure("mutable release candidate", (report) => {
+    report.releaseCandidate = "ghcr.io/4rmus/o-okul/api:staging-latest";
+  }, ["releaseCandidate tag'i sourceCommitSha ile birebir eşleşmeli."]);
+  expectProcessEnvOverride();
   expectFailure("missing phase references", removeLine("UI_UX_REDESIGN_PHASE_3_REFERENCES"), [
     "UI_UX_REDESIGN_PHASE_3_REFERENCES boş bırakılamaz.",
   ]);
   expectFailure("placeholder release candidate", replaceLine("UI_UX_REDESIGN_RELEASE_CANDIDATE", "ghcr.io/__SET_OWNER__/api:tag"), [
     "UI_UX_REDESIGN_RELEASE_CANDIDATE placeholder/redacted/example değer içermemeli.",
+  ]);
+  expectFailure("invalid source commit", replaceLine("UI_UX_REDESIGN_SOURCE_COMMIT_SHA", "not-a-commit"), [
+    "UI_UX_REDESIGN_SOURCE_COMMIT_SHA 40 karakter hex commit SHA olmalı.",
+  ]);
+  expectFailure("mismatched release candidate", replaceLine("UI_UX_REDESIGN_RELEASE_CANDIDATE", `ghcr.io/4rmus/o-okul/api:${"2".repeat(40)}`), [
+    "UI_UX_REDESIGN_RELEASE_CANDIDATE tag'i UI_UX_REDESIGN_SOURCE_COMMIT_SHA ile birebir eşleşmeli.",
   ]);
   expectFailure("secret bearing reference", secretBearingReferenceEnv(), [
     "UI_UX_REDESIGN_STAGING_EVIDENCE_REFERENCES userinfo, query veya fragment taşımamalı.",
@@ -64,6 +77,37 @@ function expectGeneratePass() {
   if (checkResult.status !== 0) failContract("üretilen kanıt checker'dan geçmeli.", checkResult);
 }
 
+function expectProcessEnvOverride() {
+  const overrideOutputPath = join(root, "reports", "ui-ux-redesign-process-override.json");
+  const sourceCommitSha = "2".repeat(40);
+  const releaseCandidate = `ghcr.io/4rmus/o-okul/api:${sourceCommitSha}`;
+  const result = runGenerator(envPath, overrideOutputPath, {
+    UI_UX_REDESIGN_RELEASE_CANDIDATE: releaseCandidate,
+    UI_UX_REDESIGN_SOURCE_COMMIT_SHA: sourceCommitSha,
+  });
+  if (result.status !== 0) failContract("process env release candidate env-file değerini ezebilmeli.", result);
+  const report = JSON.parse(readFileSync(overrideOutputPath, "utf8"));
+  if (report.releaseCandidate !== releaseCandidate) {
+    failContract("generator güncel workflow release candidate değerini kullanmalı.", result);
+  }
+  if (report.sourceCommitSha !== sourceCommitSha) {
+    failContract("generator güncel workflow source commit SHA değerini kullanmalı.", result);
+  }
+}
+
+function expectCheckerFailure(label, mutateReport, expectedMessages) {
+  const report = JSON.parse(readFileSync(outputPath, "utf8"));
+  mutateReport(report);
+  const failingOutputPath = join(root, "reports", `${label.replaceAll(" ", "-")}-checker.json`);
+  writeFileSync(failingOutputPath, `${JSON.stringify(report, null, 2)}\n`);
+  const result = spawnSync(process.execPath, ["scripts/check-ui-ux-redesign-evidence.mjs", pathToFileURL(failingOutputPath).href], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+  if (result.status === 0) failContract(`${label} checker senaryosu kırılmalı.`, result);
+  assertMessages(result, label, expectedMessages);
+}
+
 function expectFailure(label, envContents, expectedMessages) {
   const failingEnvPath = join(root, `${label.replaceAll(" ", "-")}.env`);
   const failingOutputPath = join(root, "reports", `${label.replaceAll(" ", "-")}.json`);
@@ -81,13 +125,14 @@ function expectOutputFailure(label, output, expectedMessages) {
   assertNoSecretLeak(result, label);
 }
 
-function runGenerator(inputEnvPath, output) {
+function runGenerator(inputEnvPath, output, env = {}) {
   return spawnSync(
     process.execPath,
     ["scripts/generate-ui-ux-redesign-evidence.mjs", "--env-file", inputEnvPath, "--output", output],
     {
       cwd: process.cwd(),
       encoding: "utf8",
+      env: { ...process.env, ...env },
     },
   );
 }
@@ -103,7 +148,8 @@ function buildValidEnvFile() {
   const lines = [
     "STAGING_ENVIRONMENT=staging",
     "UI_UX_REDESIGN_CHECKED_AT=2026-06-25T12:00:00.000Z",
-    "UI_UX_REDESIGN_RELEASE_CANDIDATE=ghcr.io/4rmus/o-okul/api:ui-ux-contract-20260625",
+    `UI_UX_REDESIGN_RELEASE_CANDIDATE=ghcr.io/4rmus/o-okul/api:${"1".repeat(40)}`,
+    `UI_UX_REDESIGN_SOURCE_COMMIT_SHA=${"1".repeat(40)}`,
     "UI_UX_REDESIGN_STAGING_EVIDENCE_REFERENCES=url:https://staging.o-okul.com/evidence/ui-ux-redesign/summary.json,run:https://github.com/4rmus/o-okul/actions/runs/987654321,url:https://staging.o-okul.com/evidence/ui-ux-redesign/uat.json",
     "UI_UX_REDESIGN_PHASE_0_REFERENCES=url:https://staging.o-okul.com/evidence/ui-ux-redesign/phase-0-a11y.json",
     "UI_UX_REDESIGN_PHASE_1_REFERENCES=url:https://staging.o-okul.com/evidence/ui-ux-redesign/phase-1-shell.json",

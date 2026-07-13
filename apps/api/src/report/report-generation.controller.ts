@@ -4,7 +4,6 @@ import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
 import { optionalTrimmedString, zodBody } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
-import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
 import {
   ReportGenerationService,
@@ -35,13 +34,13 @@ export class ReportGenerationController {
   constructor(private readonly reports: ReportGenerationService) {}
 
   @Get("snapshots")
-  @Roles("TENANT_ADMIN", "TEACHER")
+  @RequireCapability("academic:read")
   listSnapshots(@Param("examId") examId: string, @Query() query: ReportSnapshotListQuery): Promise<ReportSnapshotRecord[]> {
     return this.reports.listSnapshots(getRequestContext(), examId, query);
   }
 
   @Get("students/:studentId/snapshots")
-  @Roles("TENANT_ADMIN", "TEACHER")
+  @RequireCapability("academic:read")
   listStudentSnapshots(
     @Param("examId") examId: string,
     @Param("studentId") studentId: string,
@@ -50,7 +49,7 @@ export class ReportGenerationController {
   }
 
   @Get("snapshots/:snapshotId/export.xlsx")
-  @Roles("TENANT_ADMIN", "TEACHER")
+  @RequireCapability("academic:read")
   exportSnapshotExcel(
     @Param("examId") examId: string,
     @Param("snapshotId") snapshotId: string,
@@ -59,7 +58,7 @@ export class ReportGenerationController {
   }
 
   @Get("snapshots/:snapshotId/export.pdf")
-  @Roles("TENANT_ADMIN", "TEACHER")
+  @RequireCapability("academic:read")
   exportSnapshotPdf(
     @Param("examId") examId: string,
     @Param("snapshotId") snapshotId: string,
@@ -68,7 +67,7 @@ export class ReportGenerationController {
   }
 
   @Get("snapshots/:snapshotId/students/:studentId")
-  @Roles("TENANT_ADMIN", "TEACHER")
+  @RequireCapability("academic:read")
   getStudentReport(
     @Param("examId") examId: string,
     @Param("snapshotId") snapshotId: string,
@@ -78,7 +77,7 @@ export class ReportGenerationController {
   }
 
   @Get("snapshots/:snapshotId/students/:studentId/error-booklet")
-  @Roles("TENANT_ADMIN", "TEACHER")
+  @RequireCapability("academic:read")
   getStudentErrorBooklet(
     @Param("examId") examId: string,
     @Param("snapshotId") snapshotId: string,
@@ -88,7 +87,7 @@ export class ReportGenerationController {
   }
 
   @Get("students/:studentId/progress")
-  @Roles("TENANT_ADMIN", "TEACHER")
+  @RequireCapability("academic:read")
   getStudentProgress(
     @Param("examId") examId: string,
     @Param("studentId") studentId: string,

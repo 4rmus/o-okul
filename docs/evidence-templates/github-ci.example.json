@@ -3,7 +3,7 @@
   "environment": "github-actions",
   "checkedAt": "2026-05-31T12:00:00.000Z",
   "repository": "example/o-okul",
-  "commitSha": "0123456789abcdef0123456789abcdef01234567",
+  "commitSha": "1111111111111111111111111111111111111111",
   "branch": "main",
   "workflow": {
     "name": "CI",

@@ -102,6 +102,9 @@ migration/API dilimi ve kanit gate'leriyle kullanilir.
 
 ## Acceptance Gates
 
+- Izlenebilirlik: `pnpm ui-ux-professionalization:completion:check`; `PR-0`–`PR-6` uygulama,
+  yerel dogrulama ve canli kanit durumlari `docs/ui-ux-professionalization-completion.json` icinde
+  ayri alanlarda tutulur.
 - Foundation/UI: `pnpm --filter @o-okul/ui typecheck`, `pnpm --filter @o-okul/web typecheck`,
   `pnpm web:a11y:check`, `pnpm web:ux-baseline:check`.
 - Report/karne: `pnpm --filter @o-okul/worker test`, `pnpm raw-import:smoke`,

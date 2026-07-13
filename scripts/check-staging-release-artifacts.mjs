@@ -687,6 +687,7 @@ function validateArtifactBundle(summaryFile, githubCiFilePath, manifestFilePath)
   requireDateNotAfter(firstGatesManifest, output, "first-gates.generatedAt", "generatedAt", summary, "summary.generatedAt", "generatedAt");
   requireReleaseSummaryFileNameMatchesSummary(summaryFile, summary, output);
   requireGithubCiMatchesSummary(summary, githubCi, output);
+  requireReleaseSourceBinding(summary, output);
   requireReportFilesMatchSummary(summary, artifactsDir, output);
   requireSmokeFilesMatchSummary(summary, dirname(summaryFile), output);
   requireFirstGatesMatchSummary(summary, firstGatesManifest, manifestFilePath, output);
@@ -736,6 +737,23 @@ function requireGithubCiMatchesSummary(summary, githubCi, output) {
     if (stableStringify(embedded[key]) !== stableStringify(githubCi[key])) {
       output.push(`summary.reports.githubCi.${key} reports/github-ci.json ile eşleşmeli.`);
     }
+  }
+}
+
+function requireReleaseSourceBinding(summary, output) {
+  const releaseCandidateTag = summary?.reports?.uiUxRedesign?.releaseCandidate?.match(/:([a-f0-9]{40})$/i)?.[1];
+  const sourceCommitSha = summary?.reports?.uiUxRedesign?.sourceCommitSha;
+  const githubCommitSha = summary?.reports?.githubCi?.commitSha;
+  if (
+    !releaseCandidateTag ||
+    typeof sourceCommitSha !== "string" ||
+    !/^[a-f0-9]{40}$/i.test(sourceCommitSha) ||
+    typeof githubCommitSha !== "string" ||
+    !/^[a-f0-9]{40}$/i.test(githubCommitSha) ||
+    releaseCandidateTag.toLowerCase() !== sourceCommitSha.toLowerCase() ||
+    sourceCommitSha.toLowerCase() !== githubCommitSha.toLowerCase()
+  ) {
+    output.push("summary UI/UX releaseCandidate tag'i, sourceCommitSha ve GitHub CI commitSha aynı 40 karakter SHA olmalı.");
   }
 }
 

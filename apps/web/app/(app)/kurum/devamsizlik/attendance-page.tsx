@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
@@ -21,40 +21,22 @@ import {
   DataTable,
   EmptyState,
   Field,
-  FormModal,
   Input,
   Panel,
   Select,
   StatusBadge,
   type DataTableColumn,
-  useConfirmDialog,
 } from "@o-okul/ui";
-import { Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
-import {
-  attendanceFormSchema,
-  firstFormError,
-  type AttendanceFormPayload,
-  type AttendanceFormState,
-} from "../../../../src/form-validation.js";
 import { buildListUrl, ListControls, useUrlListState, type ListQueryState } from "../../../../src/list-controls.js";
 import { OperationSummary, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
-
-const emptyForm: AttendanceFormState = {
-  studentId: "",
-  courseId: "",
-  termId: "",
-  date: "",
-  status: "PRESENT",
-};
 
 export function AttendancePage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const { confirm, confirmationDialog } = useConfirmDialog();
   const [listQuery, setListQuery] = useUrlListState(searchParams, { sortOptions: attendanceSortOptions });
   const [classId, setClassId] = useState(() => searchParams.get("classId") ?? "");
   const [attendanceDate, setAttendanceDate] = useState(todayInputValue);
@@ -82,10 +64,6 @@ export function AttendancePage() {
   const [dailyStatuses, setDailyStatuses] = useState<Record<string, AttendanceStatus | "">>({});
   const [dailyError, setDailyError] = useState("");
   const [isDailySaving, setIsDailySaving] = useState(false);
-  const [editingAttendance, setEditingAttendance] = useState<AttendanceRecord | null>(null);
-  const [form, setForm] = useState<AttendanceFormState>(emptyForm);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [error, setError] = useState("");
   const rows = attendanceQuery.data?.data ?? [];
   const references = referencesQuery.data ?? emptyReferences;
   const studentNames = useMemo(
@@ -204,92 +182,12 @@ export function AttendancePage() {
       priority: "primary",
       render: (record) => <StatusBadge tone={attendanceStatusTone(record.status)}>{attendanceStatusLabel(record.status)}</StatusBadge>,
     },
-    {
-      key: "actions",
-      header: "İşlem",
-      priority: "primary",
-      render: (record) => (
-        <span className="next-row-actions">
-          <button type="button" onClick={() => openEditForm(record)} aria-label={`${studentLabel(record.studentId, studentNames)} devamsızlığını düzenle`}>
-            <Pencil size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => void handleDelete(record)} aria-label={`${studentLabel(record.studentId, studentNames)} devamsızlığını sil`}>
-            <Trash2 size={17} aria-hidden="true" />
-          </button>
-        </span>
-      ),
-      sticky: "right",
-    },
   ];
 
   function updateClassFilter(nextClassId: string) {
     setClassId(nextClassId);
     setListQuery({ ...listQuery, page: 1 });
     writeBrowserQueryParam("classId", nextClassId);
-  }
-
-  function openEditForm(record: AttendanceRecord) {
-    setEditingAttendance(record);
-    setForm({
-      studentId: record.studentId,
-      courseId: record.courseId ?? "",
-      termId: record.termId ?? "",
-      date: record.date,
-      status: record.status,
-    });
-    setError("");
-    setIsFormOpen(true);
-  }
-
-  function closeForm() {
-    setIsFormOpen(false);
-    setEditingAttendance(null);
-    setForm(emptyForm);
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!auth) return;
-
-    setError("");
-    const parsedForm = attendanceFormSchema.safeParse(form);
-    if (!parsedForm.success) {
-      setError(firstFormError(parsedForm.error));
-      return;
-    }
-
-    try {
-      if (!editingAttendance) return;
-      const savedAttendance = await updateAttendance(auth.accessToken, editingAttendance.id, {
-        courseId: parsedForm.data.courseId,
-        status: parsedForm.data.status,
-        termId: parsedForm.data.termId,
-      });
-      void savedAttendance;
-      void queryClient.invalidateQueries({ queryKey: listQueryKey });
-      closeForm();
-    } catch {
-      setError("Devamsızlık kaydedilemedi.");
-    }
-  }
-
-  async function handleDelete(record: AttendanceRecord) {
-    if (!auth) return;
-    const label = studentLabel(record.studentId, studentNames);
-    const confirmed = await confirm({
-      confirmLabel: "Sil",
-      message: `${label} devamsızlığı silinsin mi?`,
-      title: "Devamsızlığı sil",
-    });
-    if (!confirmed) return;
-
-    setError("");
-    try {
-      await deleteAttendance(auth.accessToken, record.id);
-      void queryClient.invalidateQueries({ queryKey: listQueryKey });
-    } catch {
-      setError("Devamsızlık silinemedi.");
-    }
   }
 
   function markAllPresent() {
@@ -392,12 +290,12 @@ export function AttendancePage() {
         emptyState={
           <EmptyState
             title="Devamsızlık kaydı yok"
-            description="İlk devamsızlık kaydını ekleyerek yoklama takibini başlat."
-            hint="Kayıtlar öğrenci, ders ve dönem bağlantısıyla izlenir."
+            description="Günlük sınıf yoklaması kaydedildiğinde geçmiş kayıtlar burada görünür."
+            hint="Yeni kayıtlar yalnız üstteki tam sınıf listesi üzerinden oluşturulur."
           />
         }
         emptyText="Devamsızlık kaydı yok"
-        error={error || (attendanceQuery.isError ? "Devamsızlık kayıtları alınamadı." : referencesQuery.isError ? "Seçim listeleri alınamadı." : undefined)}
+        error={attendanceQuery.isError ? "Devamsızlık kayıtları alınamadı." : referencesQuery.isError ? "Seçim listeleri alınamadı." : undefined}
         getRowKey={(record) => record.id}
         density="compact"
         loading={attendanceQuery.isPending || referencesQuery.isPending}
@@ -406,88 +304,7 @@ export function AttendancePage() {
         tableCaption="Devamsızlık operasyon listesi"
         tableDescription="Öğrenci, sınıf, ders, dönem ve durum kırılımıyla yoklama takibi."
       />
-      <AttendanceFormModal
-        form={form}
-        isEditing={Boolean(editingAttendance)}
-        onCancel={closeForm}
-        onChange={setForm}
-        onSubmit={(event) => void handleSubmit(event)}
-        open={isFormOpen}
-        references={references}
-      />
-      {confirmationDialog}
     </>
-  );
-}
-
-function AttendanceFormModal({
-  form,
-  isEditing,
-  onCancel,
-  onChange,
-  onSubmit,
-  open,
-  references,
-}: {
-  form: AttendanceFormState;
-  isEditing: boolean;
-  onCancel(): void;
-  onChange(update: (current: AttendanceFormState) => AttendanceFormState): void;
-  onSubmit(event: FormEvent<HTMLFormElement>): void;
-  open: boolean;
-  references: AttendanceReferences;
-}) {
-  return (
-    <FormModal
-      description="Öğrenci, tarih ve durum zorunludur."
-      onCancel={onCancel}
-      onSubmit={onSubmit}
-      open={open}
-      submitLabel={isEditing ? "Kaydet" : "Ekle"}
-      title={isEditing ? "Devamsızlık düzenle" : "Devamsızlık ekle"}
-    >
-      <Field label="Öğrenci">
-        <Select disabled={isEditing} value={form.studentId} onChange={(event) => onChange((current) => ({ ...current, studentId: event.target.value }))}>
-          <option value="">Seçiniz</option>
-          {references.students.map((record) => (
-            <option key={record.id} value={record.id}>
-              {record.firstName} {record.lastName}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <Field label="Ders">
-        <Select value={form.courseId ?? ""} onChange={(event) => onChange((current) => ({ ...current, courseId: event.target.value }))}>
-          <option value="">Seçiniz</option>
-          {references.courses.map((record) => (
-            <option key={record.id} value={record.id}>
-              {formatCourseName(record.name)}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <Field label="Dönem">
-        <Select value={form.termId ?? ""} onChange={(event) => onChange((current) => ({ ...current, termId: event.target.value }))}>
-          <option value="">Seçiniz</option>
-          {references.terms.map((record) => (
-            <option key={record.id} value={record.id}>
-              {record.name}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <Field label="Tarih">
-        <Input disabled={isEditing} required type="date" value={form.date} onChange={(event) => onChange((current) => ({ ...current, date: event.target.value }))} />
-      </Field>
-      <Field label="Durum">
-        <Select value={form.status} onChange={(event) => onChange((current) => ({ ...current, status: event.target.value as AttendanceRecord["status"] }))}>
-          <option value="PRESENT">Var</option>
-          <option value="ABSENT">Yok</option>
-          <option value="LATE">Geç</option>
-          <option value="EXCUSED">İzinli</option>
-        </Select>
-      </Field>
-    </FormModal>
   );
 }
 
@@ -557,28 +374,6 @@ async function loadReferences(accessToken: string): Promise<AttendanceReferences
     students: students.data,
     terms: terms.data,
   };
-}
-
-async function updateAttendance(
-  accessToken: string,
-  id: string,
-  input: Pick<AttendanceFormPayload, "status"> & Partial<Pick<AttendanceFormPayload, "courseId" | "termId">>,
-) {
-  return apiRequest<AttendanceRecord>(accessToken, `${apiBaseUrl}/attendance/${encodeURIComponent(id)}`, {
-    body: JSON.stringify(input),
-    headers: { "content-type": "application/json" },
-    method: "PATCH",
-  });
-}
-
-async function deleteAttendance(accessToken: string, id: string) {
-  const response = await authenticatedFetch(accessToken, `${apiBaseUrl}/attendance/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
-
-  if (!response.ok) {
-    throw new Error("ATTENDANCE_DELETE_FAILED");
-  }
 }
 
 function classLabel(studentId: string, students: StudentRecord[], classNames: Map<string, string>) {

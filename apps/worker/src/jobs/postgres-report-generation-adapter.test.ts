@@ -15,6 +15,8 @@ describe("postgres report generation adapter", () => {
           studentNo: "1001",
           classId: "class-a",
           className: "8-A",
+          courseName: "Matematik",
+          courseCode: "MAT",
           resultKey: "result-a",
           answerKeyVersion: "answer-key-v1",
           parserConfigVersion: "parser-v1",
@@ -70,12 +72,82 @@ describe("postgres report generation adapter", () => {
     expect(select?.sql).toContain('s."firstName"');
     expect(select?.sql).toContain('s."studentNo"');
     expect(select?.sql).toContain('LEFT JOIN "Class"');
+    expect(select?.sql).toContain('LEFT JOIN "Course" selected_course');
+    expect(select?.sql).toContain('INNER JOIN "Exam"');
     expect(select?.sql).toContain('AND er."deletedAt" IS NULL');
     expect(select?.sql).toContain('c."campusId" = $3');
     expect(select?.sql).toContain('c."gradeLevelId" = $4');
     expect(select?.sql).toContain('s."classId" = $5');
-    expect(select?.values).toEqual(["tenant-a", "exam-a", "campus-main", "grade-8", "class-a"]);
+    expect(select?.sql).toContain('selected_course."id" = $6');
+    expect(select?.sql).toContain('selected_course."id" IS NOT NULL');
+    expect(select?.sql).toContain("jsonb_array_elements(");
+    expect(select?.sql).toContain("branch.value->>'branch'");
+    expect(select?.sql).toContain('term."id" = $7');
+    expect(select?.sql).toContain('COALESCE(e."startsAt", er."computedAt")::date BETWEEN term."startsAt" AND term."endsAt"');
+    expect(select?.values).toEqual([
+      "tenant-a",
+      "exam-a",
+      "campus-main",
+      "grade-8",
+      "class-a",
+      "course-math",
+      "term-2026-spring",
+    ]);
     expect(client.queries.at(-1)?.sql).toBe("COMMIT");
+  });
+
+  it("ders filtresinde Türkçe etiketi ve LGS önekini kanonikleştirerek scoreData gövdesini daraltır", async () => {
+    const client = new FakeClient((sql) => {
+      if (!sql.includes('FROM "ExamResult"')) return [];
+      return [{
+        studentId: "student-a",
+        classId: "class-a",
+        className: "8-A",
+        courseName: "MATEMATİK",
+        courseCode: "MAT",
+        resultKey: "result-a",
+        answerKeyVersion: "answer-key-v1",
+        parserConfigVersion: "parser-v1",
+        engineVersion: "engine-v1",
+        scoreData: {
+          ...createScore(),
+          total: { correct: 2, wrong: 1, blank: 0, net: 1.75, rawScore: 10, estimatedRawScore: 50, standardScore: 100 },
+          branches: [
+            { branch: "LGS   Matematik", correct: 1, wrong: 0, blank: 0, net: 1 },
+            { branch: "Türkçe", correct: 1, wrong: 1, blank: 0, net: 0.75 },
+          ],
+          outcomes: [
+            { outcomeCode: "M.1", branch: "LGS   Matematik", correct: 1, wrong: 0, blank: 0, net: 1 },
+            { outcomeCode: "T.1", branch: "Türkçe", correct: 1, wrong: 1, blank: 0, net: 0.75 },
+          ],
+          questions: [
+            { questionNo: 1, branch: "LGS   Matematik", answer: "A", correctAnswer: "A", status: "CORRECT" },
+            { questionNo: 2, branch: "Türkçe", answer: "A", correctAnswer: "B", status: "WRONG" },
+          ],
+        },
+        computedAt: "2026-05-30T07:00:00.000Z",
+      }];
+    });
+    const adapter = new PostgresReportGenerationAdapter(new FakePool(client));
+
+    const [result] = await adapter.loadResults({
+      tenantId: "tenant-a",
+      userId: "user-a",
+      jobId: "exam-a_results-v1",
+      examId: "exam-a",
+      reportType: examResultSummaryReportType,
+      contentHash: "results-v1",
+      courseId: "course-math",
+    });
+
+    expect(result?.score.branches.map((branch) => branch.branch)).toEqual(["LGS   Matematik"]);
+    expect(result?.score.outcomes?.map((outcome) => outcome.outcomeCode)).toEqual(["M.1"]);
+    expect(result?.score.questions.map((question) => question.questionNo)).toEqual([1]);
+    expect(result?.score.total).toEqual({ correct: 1, wrong: 0, blank: 0, net: 1, rawScore: 1, standardScore: 1 });
+    expect(result?.score.total).not.toHaveProperty("estimatedRawScore");
+    const select = client.queries.find((query) => query.sql.includes('FROM "ExamResult"'));
+    expect(select?.sql).toContain('COLLATE "tr-x-icu"');
+    expect(select?.sql).toContain("'^LGS[- ]+'");
   });
 
   it("rapor kapsamı boşsa sonuç sorgusunu sınıf filtresi olmadan çalıştırır", async () => {
@@ -110,7 +182,7 @@ describe("postgres report generation adapter", () => {
     });
 
     const select = client.queries.find((query) => query.sql.includes('FROM "ExamResult"'));
-    expect(select?.values).toEqual(["tenant-a", "exam-a", null, null, null]);
+    expect(select?.values).toEqual(["tenant-a", "exam-a", null, null, null, null, null]);
   });
 
   it("ReportSnapshot kaydını READY status ve inputRefs ile yazar", async () => {

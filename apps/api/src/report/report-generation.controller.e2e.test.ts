@@ -217,6 +217,33 @@ describe("ReportGenerationController", () => {
     expect(serialized).not.toContain("\"statistics\"");
   });
 
+  it("ASSISTANT_ADMIN akademik yönetim yetkisiyle snapshot okur ve indirir", async () => {
+    const issued = await login("assistant-a@example.test");
+
+    await request(server)
+      .get("/exams/exam-a/reports/snapshots")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200);
+    await request(server)
+      .get("/exams/exam-a/reports/snapshots/snapshot-a/export.xlsx")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200);
+    await request(server)
+      .get("/exams/exam-a/reports/snapshots/snapshot-a/export.pdf")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200);
+  });
+
+  it("STUDENT ve GUARDIAN kurum rapor snapshotlarına erişemez", async () => {
+    for (const email of ["student-a@example.test", "guardian-a@example.test"]) {
+      const issued = await login(email);
+      await request(server)
+        .get("/exams/exam-a/reports/snapshots")
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .expect(403);
+    }
+  });
+
   it("TENANT_ADMIN rapor snapshotlarını akademik bağlam filtresiyle listeler", async () => {
     const issued = await login("admin-a@example.test");
 

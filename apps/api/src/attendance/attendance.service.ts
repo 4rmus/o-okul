@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type {
   AttendanceAggregateRecord,
   AttendanceDailyRosterResponse,
@@ -14,7 +14,6 @@ import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { requiredText } from "../shared/required-text.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
-import { type CourseStore, courseStoreToken } from "../school/course-store.js";
 import { type GuardianStudentStore, guardianStudentStoreToken } from "../school/guardian-student-store.js";
 import {
   assertTeacherAssigned,
@@ -38,9 +37,6 @@ import {
 } from "../tenant/tenant-access.js";
 import { type AttendanceStore, attendanceStoreToken } from "./attendance-store.js";
 
-export type AttendanceInput = Pick<AttendanceRecord, "studentId" | "date" | "status"> &
-  Pick<Partial<AttendanceRecord>, "courseId" | "termId">;
-
 export interface AttendanceListFilters {
   classId?: string;
   date?: string;
@@ -57,7 +53,6 @@ export class AttendanceService {
   constructor(
     @Inject(attendanceStoreToken) private readonly store: AttendanceStore,
     @Inject(academicCalendarStoreToken) private readonly academicCalendarStore: AcademicCalendarStore,
-    @Inject(courseStoreToken) private readonly courseStore: CourseStore,
     @Inject(studentStoreToken) private readonly studentStore: StudentStore,
     @Inject(studentEnrollmentStoreToken) private readonly studentEnrollmentStore: StudentEnrollmentStore,
     @Inject(guardianStudentStoreToken) private readonly guardianStudentStore: GuardianStudentStore,
@@ -123,7 +118,8 @@ export class AttendanceService {
       classId,
     }, date);
 
-    const tenantStudents = filterTenantResources(context, allStudents).filter((student) => !student.deletedAt);
+    const tenantStudents = filterTenantResources(context, allStudents)
+      .filter((student) => !student.deletedAt && isStudentEligibleForAttendanceDate(student.status, date));
     const enrollments = filterTenantResources(
       context,
       await this.studentEnrollmentStore.listByStudents(tenantStudents.map((student) => student.id)),
@@ -174,22 +170,39 @@ export class AttendanceService {
       throw new BadRequestException("ATTENDANCE_DAILY_STUDENT_DUPLICATE");
     }
 
-    const studentIds = [...uniqueStudentIds];
-    const [allStudents, allEnrollments, allTerms, allAttendance, teacherAssignments] = await Promise.all([
+    const [allStudents, allTerms, allAttendance, teacherAssignments] = await Promise.all([
       this.studentStore.list(),
-      this.studentEnrollmentStore.listByStudents(studentIds),
       this.academicCalendarStore.listTerms(),
       this.store.list(),
       isTeacherSubjectContext(context)
         ? this.teacherAssignmentStore.listByTeacher(context.subjectId)
         : Promise.resolve([]),
     ]);
-    const studentById = new Map(
-      filterTenantResources(context, allStudents)
-        .filter((student) => !student.deletedAt)
-        .map((student) => [student.id, student]),
+    const tenantStudents = filterTenantResources(context, allStudents).filter((student) => !student.deletedAt);
+    const studentById = new Map(tenantStudents.map((student) => [student.id, student]));
+    if ([...uniqueStudentIds].some((studentId) => !studentById.has(studentId))) {
+      throw new ForbiddenException("ATTENDANCE_DAILY_STUDENT_SCOPE_INVALID");
+    }
+    const enrollments = filterTenantResources(
+      context,
+      await this.studentEnrollmentStore.listByStudents(tenantStudents.map((student) => student.id)),
     );
-    const enrollments = filterTenantResources(context, allEnrollments);
+    const rosterStudentIds = new Set(
+      tenantStudents
+        .filter((student) => isStudentEligibleForAttendanceDate(student.status, date))
+        .filter((student) => enrollments.some((enrollment) =>
+          enrollment.studentId === student.id &&
+          enrollment.classId === classId &&
+          enrollmentContainsDate(enrollment, date),
+        ))
+        .map((student) => student.id),
+    );
+    if (
+      rosterStudentIds.size !== uniqueStudentIds.size ||
+      [...rosterStudentIds].some((studentId) => !uniqueStudentIds.has(studentId))
+    ) {
+      throw new BadRequestException("ATTENDANCE_DAILY_FULL_ROSTER_REQUIRED");
+    }
     const assignments = filterTenantResources(context, teacherAssignments);
     const students = input.entries.map((entry) => {
       const studentId = requiredText(entry.studentId, "ATTENDANCE_STUDENT_REQUIRED");
@@ -198,7 +211,7 @@ export class AttendanceService {
       const enrolledInClass = enrollments.some((enrollment) =>
         enrollment.studentId === student.id && enrollment.classId === classId && enrollmentContainsDate(enrollment, date),
       );
-      if (student.status !== "ACTIVE" || !enrolledInClass) {
+      if (!isStudentEligibleForAttendanceDate(student.status, date) || !enrolledInClass) {
         throw new BadRequestException("ATTENDANCE_DAILY_STUDENT_NOT_ACTIVE_CLASS_MEMBER");
       }
       assertTeacherAssignedFromRecords(context, assignments, {
@@ -210,7 +223,7 @@ export class AttendanceService {
     });
 
     const terms = filterTenantResources(context, allTerms).filter((term) => !term.deletedAt);
-    const term = terms.find((candidate) => candidate.isActive && candidate.startsAt <= date && candidate.endsAt >= date);
+    const term = terms.find((candidate) => candidate.startsAt <= date && candidate.endsAt >= date);
     if (!term) throw new BadRequestException("ATTENDANCE_ACTIVE_TERM_NOT_FOUND");
 
     const attendance = filterTenantResources(context, allAttendance)
@@ -294,106 +307,6 @@ export class AttendanceService {
     return summarize(studentId, await this.listCurrentGuardianStudent(context, studentId));
   }
 
-  async create(context: RequestContext, input: Partial<AttendanceInput>): Promise<AttendanceRecord> {
-    const date = requiredDate(input.date);
-    const student = await this.findStudentForTenant(context, requiredText(input.studentId, "ATTENDANCE_STUDENT_REQUIRED"));
-    const enrollment = findEnrollmentAtDate(
-      filterTenantResources(context, await this.studentEnrollmentStore.listByStudent(student.id)),
-      student.id,
-      date,
-    );
-    if (!enrollment?.classId) {
-      if (isTeacherSubjectContext(context)) throw new ForbiddenException("ATTENDANCE_STUDENT_ENROLLMENT_NOT_FOUND");
-      throw new BadRequestException("ATTENDANCE_STUDENT_ENROLLMENT_NOT_FOUND");
-    }
-    const contextInput = await this.resolveAcademicContext(context, student.tenantId, input);
-    await assertTeacherAssigned(context, this.teacherAssignmentStore, {
-      tenantId: student.tenantId,
-      studentId: student.id,
-      classId: enrollment.classId,
-      courseId: contextInput.courseId,
-      termId: contextInput.termId,
-    }, date);
-    const status = resolveStatus(input.status);
-    const existing = await this.store.findByStudentDate(student.id, date);
-    if (existing) {
-      throw new ConflictException("ATTENDANCE_ALREADY_EXISTS");
-    }
-    const previousAbsenceCount = countAbsences(await this.store.listByStudent(student.id));
-
-    const record = await this.store.create({
-      tenantId: student.tenantId,
-      studentId: student.id,
-      ...contextInput,
-      date,
-      status,
-    });
-    await this.auditLogs?.record({
-      tenantId: record.tenantId,
-      actorUserId: context.userId,
-      entityType: "Attendance",
-      entityId: record.id,
-      action: "attendance.created",
-      diff: { studentId: record.studentId, courseId: record.courseId, termId: record.termId, date: record.date, status: record.status },
-    });
-    await this.warnIfAbsenceThresholdCrossed(context, { ...student, classId: enrollment.classId }, previousAbsenceCount, countAbsences(await this.store.listByStudent(student.id)));
-    return record;
-  }
-
-  async update(context: RequestContext, id: string, input: Partial<Pick<AttendanceRecord, "status" | "courseId" | "termId">>): Promise<AttendanceRecord> {
-    const existing = await this.findOneForTenant(context, id);
-    const contextInput = await this.resolveAcademicContext(context, existing.tenantId, input);
-    const student = await this.findStudentForTenant(context, existing.studentId);
-    const enrollment = findEnrollmentAtDate(
-      filterTenantResources(context, await this.studentEnrollmentStore.listByStudent(student.id)),
-      student.id,
-      existing.date,
-    );
-    if (!enrollment?.classId) throw new ForbiddenException("ATTENDANCE_STUDENT_ENROLLMENT_NOT_FOUND");
-    await assertTeacherAssigned(context, this.teacherAssignmentStore, {
-      tenantId: existing.tenantId,
-      studentId: existing.studentId,
-      classId: enrollment.classId,
-      courseId: contextInput.courseId ?? existing.courseId,
-      termId: contextInput.termId ?? existing.termId,
-    }, existing.date);
-    const status = resolveStatus(input.status);
-    const previousAbsenceCount = countAbsences(await this.store.listByStudent(existing.studentId));
-    const record = await this.store.update(id, { status, ...contextInput });
-    if (!record) {
-      throw new NotFoundException("ATTENDANCE_NOT_FOUND");
-    }
-    await this.auditLogs?.record({
-      tenantId: record.tenantId,
-      actorUserId: context.userId,
-      entityType: "Attendance",
-      entityId: record.id,
-      action: "attendance.updated",
-      diff: {
-        before: { courseId: existing.courseId, termId: existing.termId, status: existing.status },
-        after: { courseId: record.courseId, termId: record.termId, status: record.status },
-      },
-    });
-    await this.warnIfAbsenceThresholdCrossed(context, { ...student, classId: enrollment.classId }, previousAbsenceCount, countAbsences(await this.store.listByStudent(existing.studentId)));
-    return record;
-  }
-
-  async delete(context: RequestContext, id: string): Promise<void> {
-    const existing = await this.findOneForTenant(context, id);
-    const record = await this.store.softDelete(id, new Date().toISOString());
-    if (!record) {
-      throw new NotFoundException("ATTENDANCE_NOT_FOUND");
-    }
-    await this.auditLogs?.record({
-      tenantId: record.tenantId,
-      actorUserId: context.userId,
-      entityType: "Attendance",
-      entityId: record.id,
-      action: "attendance.deleted",
-      diff: { studentId: existing.studentId, date: existing.date, deletedAt: record.deletedAt },
-    });
-  }
-
   private async listForSubjectStudent(context: RequestContext, studentId: string): Promise<AttendanceRecord[]> {
     const student = await this.studentStore.findById(studentId);
     if (!student) {
@@ -420,31 +333,6 @@ export class AttendanceService {
     return student;
   }
 
-  private async findOneForTenant(context: RequestContext, id: string): Promise<AttendanceRecord> {
-    const record = await this.store.findById(id);
-    if (!record) {
-      throw new NotFoundException("ATTENDANCE_NOT_FOUND");
-    }
-
-    this.assertTenantAccess(context, record);
-    if (isTeacherSubjectContext(context)) {
-      const enrollment = findEnrollmentAtDate(
-        filterTenantResources(context, await this.studentEnrollmentStore.listByStudent(record.studentId)),
-        record.studentId,
-        record.date,
-      );
-      if (!enrollment?.classId) throw new ForbiddenException("ATTENDANCE_STUDENT_ENROLLMENT_NOT_FOUND");
-      await assertTeacherAssigned(context, this.teacherAssignmentStore, {
-        tenantId: record.tenantId,
-        studentId: record.studentId,
-        classId: enrollment.classId,
-        courseId: record.courseId,
-        termId: record.termId,
-      }, record.date);
-    }
-    return record;
-  }
-
   private assertTenantAccess(context: RequestContext, resource: { tenantId: string }): void {
     try {
       assertTenantResourceAccess(context, resource);
@@ -452,35 +340,6 @@ export class AttendanceService {
       const message = error instanceof Error ? error.message : "FORBIDDEN_TENANT";
       throw new ForbiddenException(message);
     }
-  }
-
-  private async resolveAcademicContext(
-    context: RequestContext,
-    tenantId: string,
-    input: Partial<Pick<AttendanceRecord, "courseId" | "termId">>,
-  ): Promise<Pick<Partial<AttendanceRecord>, "courseId" | "termId">> {
-    const result: Pick<Partial<AttendanceRecord>, "courseId" | "termId"> = {};
-    if (input.courseId !== undefined) {
-      const courseId = optionalText(input.courseId);
-      if (courseId) {
-        const course = await this.courseStore.findById(courseId);
-        if (!course) throw new NotFoundException("COURSE_NOT_FOUND");
-        this.assertTenantAccess(context, course);
-        if (course.tenantId !== tenantId) throw new ForbiddenException("FORBIDDEN_TENANT");
-      }
-      result.courseId = courseId;
-    }
-    if (input.termId !== undefined) {
-      const termId = optionalText(input.termId);
-      if (termId) {
-        const term = await this.academicCalendarStore.findTermById(termId);
-        if (!term) throw new NotFoundException("ACADEMIC_TERM_NOT_FOUND");
-        this.assertTenantAccess(context, term);
-        if (term.tenantId !== tenantId) throw new ForbiddenException("FORBIDDEN_TENANT");
-      }
-      result.termId = termId;
-    }
-    return result;
   }
 
   private assertSubjectAccess(
@@ -614,6 +473,10 @@ function nextAbsenceCount(
 
 function enrollmentContainsDate(enrollment: StudentEnrollmentRecord, date: string): boolean {
   return enrollment.startsAt <= date && (!enrollment.endsAt || enrollment.endsAt >= date);
+}
+
+function isStudentEligibleForAttendanceDate(status: string, date: string): boolean {
+  return date < new Date().toISOString().slice(0, 10) || status === "ACTIVE";
 }
 
 function findEnrollmentAtDate(

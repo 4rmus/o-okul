@@ -277,6 +277,7 @@ const summaryRequiredReportKeys = {
     "environment",
     "checkedAt",
     "releaseCandidate",
+    "sourceCommitSha",
     "redesignPlanPath",
     "localStaticEvidence",
     "stagingProductionEvidence",
@@ -1617,6 +1618,7 @@ function requireSummaryReports(summary, failures, goLiveReport) {
       "releaseCandidate",
       "releaseCandidate",
     );
+    requireReleaseSourceBinding(uiUxRedesign, githubCi, failures);
 
     const localStaticEvidence = requireNestedObject(
       uiUxRedesign,
@@ -1948,6 +1950,25 @@ function requireSummaryRollbackServices(report, failures) {
       failures,
       `productionEvidenceSummary.summary.reports.deploymentRollback.servicesVerified.${service}.evidenceReference`,
       "evidenceReference",
+    );
+  }
+}
+
+function requireReleaseSourceBinding(uiUxRedesign, githubCi, failures) {
+  const releaseCandidateTag = uiUxRedesign.releaseCandidate?.match(/:([a-f0-9]{40})$/i)?.[1];
+  const sourceCommitSha = uiUxRedesign.sourceCommitSha;
+  const githubCommitSha = githubCi?.commitSha;
+  if (
+    !releaseCandidateTag ||
+    typeof sourceCommitSha !== "string" ||
+    !/^[a-f0-9]{40}$/i.test(sourceCommitSha) ||
+    typeof githubCommitSha !== "string" ||
+    !/^[a-f0-9]{40}$/i.test(githubCommitSha) ||
+    releaseCandidateTag.toLowerCase() !== sourceCommitSha.toLowerCase() ||
+    sourceCommitSha.toLowerCase() !== githubCommitSha.toLowerCase()
+  ) {
+    failures.push(
+      "productionEvidenceSummary.summary UI/UX releaseCandidate tag'i, sourceCommitSha ve GitHub CI commitSha aynı 40 karakter SHA olmalı.",
     );
   }
 }

@@ -856,7 +856,7 @@ function mockUiApiResponse(pathName: string, searchParams: URLSearchParams, auth
   if (pathName === "/me/teacher/homework/material-assignments") return { data: createPortalHomeworkAssignments() };
   if (pathName === "/me/teacher/teacher-notes") return { data: createPortalTeacherNotes() };
   if (pathName === "/me/teacher/lookups") {
-    return { data: { campuses: createCampuses(), classes: createClasses(), courses: createCourses(), gradeLevels: createGradeLevels(), terms: createAcademicTerms() } };
+    return { data: { attendanceClassIds: ["class-8a"], campuses: createCampuses(), classes: createClasses(), courses: createCourses(), gradeLevels: createGradeLevels(), terms: createAcademicTerms() } };
   }
   if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots") return { data: createReportSnapshots("exam-demo-isem-lgs-1") };
   if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-a/students/student-a") return { data: createStudentReport("exam-demo-isem-lgs-1") };

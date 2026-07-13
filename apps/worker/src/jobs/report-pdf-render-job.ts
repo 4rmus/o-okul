@@ -50,7 +50,7 @@ export async function processReportPdfRenderJob(
     fileName: `${job.data.snapshot.examId}-${job.data.snapshot.id}.pdf`,
     contentType: "application/pdf",
     fileBase64: pdf.toString("base64"),
-    pageCount: 1,
+    pageCount: countPdfPages(pdf),
   };
 }
 
@@ -85,7 +85,7 @@ class PuppeteerReportPdfRenderer implements ReportPdfRenderer {
   }
 }
 
-class SimpleReportPdfRenderer implements ReportPdfRenderer {
+export class SimpleReportPdfRenderer implements ReportPdfRenderer {
   async render(input: ReportPdfRenderInput): Promise<Buffer> {
     return buildSimplePdf(input.fallbackLines);
   }
@@ -103,6 +103,7 @@ function assertReportPdfRenderPayload(payload: ReportPdfRenderJobPayload): void 
 function createSnapshotPdfLines(snapshot: ReportPdfSnapshotRecord, institution: ReportPdfInstitution = {}): string[] {
   const snapshotData = snapshot.snapshotData ?? {};
   const averages = readRecord(snapshotData.averages);
+  const students = readRecords(snapshotData.students);
   return [
     `${institution.institutionName ?? "o-okul"} - Sinav Raporu`,
     `Sinav: ${snapshot.examId}`,
@@ -119,18 +120,18 @@ function createSnapshotPdfLines(snapshot: ReportPdfSnapshotRecord, institution: 
     `Standart puan: ${formatPdfNumber(averages.standardScore)}`,
     "",
     "Branslar",
-    ...readRecords(snapshotData.branches).slice(0, 8).map((branch) =>
+    ...readRecords(snapshotData.branches).map((branch) =>
       `${readText(branch.branch) || "-"}: ${formatPdfNumber(branch.resultCount)} sonuc, ${formatPdfPercent(scoreSuccessRate(branch))}, ${formatPdfValue(branchQuestionCount(branch))} soru, ${formatPdfNumber(branch.net)} net`
     ),
     "",
     "Siniflar",
-    ...readRecords(snapshotData.classes).slice(0, 8).map((classSummary) => {
+    ...readRecords(snapshotData.classes).map((classSummary) => {
       const classAverages = readRecord(classSummary.averages);
       return `${readText(classSummary.className) || "Sinifsiz"}: ${formatPdfNumber(classSummary.resultCount)} sonuc, ${formatPdfPercent(scoreSuccessRate(classAverages))}, ${formatPdfValue(branchQuestionCount(classAverages))} soru, ${formatPdfNumber(classAverages.net)} net`;
     }),
     "",
     "Ogrenciler",
-    ...readRecords(snapshotData.students).slice(0, 12).map((student) => {
+    ...students.map((student) => {
       const total = readRecord(student.total);
       const statistics = readStudentStatistics(student.statistics);
       const identity = readText(student.displayName) || readText(student.studentId) || "-";
@@ -138,11 +139,34 @@ function createSnapshotPdfLines(snapshot: ReportPdfSnapshotRecord, institution: 
       return `${identity}${studentNo ? ` (${studentNo})` : ""} ${readText(student.className) || ""}: ${formatPdfPercent(scoreSuccessRate(total))}, ${formatPdfValue(branchQuestionCount(total))} soru, ${formatPdfNumber(total.net)} net, ${formatPdfLgsScore(total)} LGS puani, genel ${formatPdfRank(statistics?.general)}, sinif ${formatPdfRank(statistics?.class)}`;
     }),
     "",
-    "Ogrenci Karnesi",
+    ...students.flatMap(createStudentPdfLines),
+  ];
+}
+
+function createStudentPdfLines(student: Record<string, unknown>): string[] {
+  const total = readRecord(student.total);
+  const statistics = readStudentStatistics(student.statistics);
+  const identity = readText(student.displayName) || readText(student.studentId) || "-";
+  const studentNo = readText(student.studentNo);
+  const className = readText(student.className) || readText(student.classId) || "-";
+  return [
+    "",
+    `Ogrenci Karnesi: ${identity}${studentNo ? ` (${studentNo})` : ""} - ${className}`,
+    `Basari: ${formatPdfPercent(scoreSuccessRate(total))}, soru: ${formatPdfValue(branchQuestionCount(total))}, net: ${formatPdfNumber(total.net)}, LGS puani: ${formatPdfLgsScore(total)}, genel: ${formatPdfRank(statistics?.general)}, sinif: ${formatPdfRank(statistics?.class)}`,
     "Bolum Analizi",
-    "Puan - Sira Analizi",
-    "Bolum Basari Yuzdeleri",
-    "Son Sinav Netleri",
+    ...readRecords(student.branches).map((branch) =>
+      `${readText(branch.branch) || "-"}: ${formatPdfPercent(scoreSuccessRate(branch))}, ${formatPdfValue(branchQuestionCount(branch))} soru, ${formatPdfNumber(branch.correct)} dogru, ${formatPdfNumber(branch.wrong)} yanlis, ${formatPdfNumber(branch.blank)} bos, ${formatPdfNumber(branch.net)} net`
+    ),
+    "Kazanim Detayi",
+    ...readRecords(student.outcomes).map((outcome) =>
+      `${readText(outcome.outcomeCode) || "-"} ${readText(outcome.branch) || "-"}: ${formatPdfPercent(scoreSuccessRate(outcome))}, ${formatPdfValue(branchQuestionCount(outcome))} soru, ${formatPdfNumber(outcome.net)} net`
+    ),
+    "Soru Cevap Analizi",
+    ...readRecords(student.questions)
+      .sort((left, right) => (readNumber(left.questionNo) || 0) - (readNumber(right.questionNo) || 0))
+      .map((question) =>
+        `${formatPdfValue(readNumber(question.questionNo))}. soru ${readText(question.branch) || "-"}: ${readText(question.answer) || "-"}/${readText(question.correctAnswer) || "-"} ${formatPdfQuestionStatus(question.status)}`
+      ),
   ];
 }
 
@@ -150,10 +174,18 @@ function createSnapshotPdfHtml(snapshot: ReportPdfSnapshotRecord, institution: R
   const snapshotData = snapshot.snapshotData ?? {};
   const averages = readRecord(snapshotData.averages);
   const averageLgsScore = readLgsScore(averages);
-  const branches = readRecords(snapshotData.branches).slice(0, 8);
-  const classes = readRecords(snapshotData.classes).slice(0, 8);
-  const students = readRecords(snapshotData.students).slice(0, 14);
+  const branches = readRecords(snapshotData.branches);
+  const classes = readRecords(snapshotData.classes);
+  const students = readRecords(snapshotData.students);
   const institutionName = institution.institutionName ?? "o-okul";
+  const studentKarnes = students.map((student) =>
+    renderPdfStudentKarne(
+      student,
+      createStudentBranchAverageLookup(snapshotData, readText(student.classId)),
+      institution,
+      snapshot,
+    )
+  ).join("");
 
   return `<!doctype html>
 <html lang="tr">
@@ -170,7 +202,7 @@ function createSnapshotPdfHtml(snapshot: ReportPdfSnapshotRecord, institution: R
     .card span { color: #66758a; display: block; font-size: 11px; margin-bottom: 7px; }
     .card strong { font-size: 18px; }
     .karne { border: 1px solid #d0d5dd; border-top: 6px solid #155eef; margin: 0 0 24px; padding: 14px; }
-    .karne-detail { page-break-before: always; }
+    .karne-student, .karne-detail { break-before: page; page-break-before: always; }
     .karne-header { display: grid; grid-template-columns: 1fr 160px; border: 1px solid #d0d5dd; }
     .karne-header div { padding: 10px 12px; }
     .karne-header h2 { margin: 0 0 6px; }
@@ -188,6 +220,8 @@ function createSnapshotPdfHtml(snapshot: ReportPdfSnapshotRecord, institution: R
     .karne-grid { display: grid; gap: 12px; grid-template-columns: 1.3fr .7fr; }
     h2 { color: #16324f; font-size: 16px; margin: 22px 0 10px; }
     table { border-collapse: collapse; font-size: 12px; width: 100%; }
+    thead { display: table-header-group; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
     th { background: #eef4ff; color: #1d2939; text-align: left; }
     th, td { border: 1px solid #e4e7ec; padding: 7px 8px; }
     .footer { color: #66758a; font-size: 11px; margin-top: 18px; }
@@ -212,7 +246,6 @@ function createSnapshotPdfHtml(snapshot: ReportPdfSnapshotRecord, institution: R
 	    ${renderPdfCard("Üretim", snapshot.generatedAt ?? "-")}
 	    ${renderPdfCard("Rapor tipi", snapshot.reportType)}
     </section>
-    ${renderPdfStudentKarne(students[0], createStudentBranchAverageLookup(snapshotData, readText(students[0]?.classId)), institution, snapshot)}
     ${renderPdfTable("Branş Başarı", ["Branş", "Sonuç", "Başarı %", "Soru", "Net"], branches, (branch) => [
       readText(branch.branch) || "-",
       formatPdfNumber(branch.resultCount),
@@ -247,6 +280,7 @@ function createSnapshotPdfHtml(snapshot: ReportPdfSnapshotRecord, institution: R
         formatPdfRank(statistics?.class),
       ];
     })}
+    ${studentKarnes}
     <p class="footer">Bu çıktı hazır ReportSnapshot verisinden üretilmiştir.</p>
   </main>
 </body>
@@ -273,7 +307,7 @@ function renderPdfStudentKarne(
     return leftNo - rightNo;
   });
 
-  return `<section class="karne">
+  return `<section class="karne karne-student">
       <div class="karne-header">
         <div>
           <h2>Öğrenci Karnesi</h2>
@@ -481,22 +515,24 @@ function scoreSuccessRate(score: Record<string, unknown>): string | number {
 }
 
 function buildSimplePdf(lines: string[]): Buffer {
-  const textStream = [
-    "BT",
-    "/F1 18 Tf",
-    "50 790 Td",
-    `(${escapePdfText(lines[0] ?? "")}) Tj`,
-    "/F1 11 Tf",
-    ...lines.slice(1).map((line) => `0 -18 Td (${escapePdfText(line)}) Tj`),
-    "ET",
-  ].join("\n");
+  const pages = paginatePdfLines(lines);
+  const fontObjectId = 3 + pages.length * 2;
+  const pageObjectIds = pages.map((_, index) => 3 + index * 2);
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    `<< /Length ${Buffer.byteLength(textStream, "utf8")} >>\nstream\n${textStream}\nendstream`,
+    `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`,
   ];
+
+  pages.forEach((pageLines, index) => {
+    const pageObjectId = pageObjectIds[index] ?? 3;
+    const contentObjectId = pageObjectId + 1;
+    const textStream = buildSimplePdfTextStream(pageLines, index === 0);
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontObjectId} 0 R >> >> /Contents ${contentObjectId} 0 R >>`,
+      `<< /Length ${Buffer.byteLength(textStream, "utf8")} >>\nstream\n${textStream}\nendstream`,
+    );
+  });
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
 
   let body = "%PDF-1.4\n";
   const offsets = [0];
@@ -514,6 +550,33 @@ function buildSimplePdf(lines: string[]): Buffer {
   body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
 
   return Buffer.from(body, "utf8");
+}
+
+function paginatePdfLines(lines: string[]): string[][] {
+  const pageSize = 40;
+  const source = lines.length > 0 ? lines : [""];
+  const pages: string[][] = [];
+  for (let index = 0; index < source.length; index += pageSize) {
+    pages.push(source.slice(index, index + pageSize));
+  }
+  return pages;
+}
+
+function buildSimplePdfTextStream(lines: string[], isFirstPage: boolean): string {
+  const [firstLine = "", ...remainingLines] = lines;
+  return [
+    "BT",
+    `/F1 ${isFirstPage ? 18 : 11} Tf`,
+    "50 790 Td",
+    `(${escapePdfText(firstLine)}) Tj`,
+    ...(isFirstPage ? ["/F1 11 Tf"] : []),
+    ...remainingLines.map((line) => `0 -18 Td (${escapePdfText(line)}) Tj`),
+    "ET",
+  ].join("\n");
+}
+
+function countPdfPages(pdf: Buffer): number {
+  return Math.max(1, pdf.toString("latin1").match(/\/Type\s*\/Page\b/g)?.length ?? 0);
 }
 
 function escapeHtml(value: string): string {

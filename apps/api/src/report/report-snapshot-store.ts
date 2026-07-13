@@ -6,6 +6,7 @@ import type { ReportSnapshotRecord } from "./report-generation.service.js";
 export interface ReportSnapshotStore {
   listByExam(tenantId: string, examId: string): Promise<ReportSnapshotRecord[]>;
   listByTenant(tenantId: string): Promise<ReportSnapshotRecord[]>;
+  listIndexByTenant?(tenantId: string): Promise<ReportSnapshotRecord[]>;
   findById(tenantId: string, examId: string, snapshotId: string): Promise<ReportSnapshotRecord | undefined>;
   markStaleByExam(tenantId: string, examId: string, reason: string): Promise<number>;
   purgeStudentIdentity?(tenantId: string, studentId: string): Promise<number>;
@@ -113,6 +114,10 @@ export class InMemoryReportSnapshotStore implements ReportSnapshotStore {
 
   async listByTenant(tenantId: string): Promise<ReportSnapshotRecord[]> {
     return this.snapshots.filter((snapshot) => snapshot.tenantId === tenantId && !snapshot.deletedAt);
+  }
+
+  async listIndexByTenant(tenantId: string): Promise<ReportSnapshotRecord[]> {
+    return (await this.listByTenant(tenantId)).map(toReportIndexRecord);
   }
 
   async findById(tenantId: string, examId: string, snapshotId: string): Promise<ReportSnapshotRecord | undefined> {
@@ -242,6 +247,55 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
          WHERE "tenantId" = $1
            AND "deletedAt" IS NULL
          ORDER BY "generatedAt" DESC NULLS LAST, "createdAt" DESC`,
+        [tenantId],
+      );
+      return result.rows.map(toReportSnapshotRecord);
+    });
+  }
+
+  async listIndexByTenant(tenantId: string): Promise<ReportSnapshotRecord[]> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<ReportSnapshotRow>(
+        `SELECT
+           snapshot."id",
+           snapshot."tenantId",
+           snapshot."examId",
+           snapshot."campusId",
+           snapshot."gradeLevelId",
+           snapshot."classId",
+           snapshot."courseId",
+           snapshot."termId",
+           snapshot."reportType",
+           snapshot."status",
+           '{}'::jsonb AS "inputRefs",
+           CASE
+             WHEN snapshot."snapshotData" IS NULL THEN NULL
+             ELSE jsonb_build_object(
+               'generatedAt', snapshot."snapshotData"->'generatedAt',
+               'students', COALESCE((
+                 SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+                   'studentId', student->>'studentId',
+                   'classId', student->>'classId'
+                 )))
+                 FROM jsonb_array_elements(
+                   CASE
+                     WHEN jsonb_typeof(snapshot."snapshotData"->'students') = 'array'
+                       THEN snapshot."snapshotData"->'students'
+                     ELSE '[]'::jsonb
+                   END
+                 ) AS entries(student)
+               ), '[]'::jsonb)
+             )
+           END AS "snapshotData",
+           snapshot."generatedAt",
+           snapshot."staleAt",
+           snapshot."deletedAt",
+           snapshot."createdAt",
+           snapshot."updatedAt"
+         FROM "ReportSnapshot" AS snapshot
+         WHERE snapshot."tenantId" = $1
+           AND snapshot."deletedAt" IS NULL
+         ORDER BY snapshot."generatedAt" DESC NULLS LAST, snapshot."createdAt" DESC`,
         [tenantId],
       );
       return result.rows.map(toReportSnapshotRecord);
@@ -380,6 +434,31 @@ function toReportSnapshotRecord(row: ReportSnapshotRow): ReportSnapshotRecord {
     deletedAt: toOptionalIsoString(row.deletedAt),
     createdAt: toIsoString(row.createdAt),
     updatedAt: toIsoString(row.updatedAt),
+  };
+}
+
+function toReportIndexRecord(snapshot: ReportSnapshotRecord): ReportSnapshotRecord {
+  const students = Array.isArray(snapshot.snapshotData?.students)
+    ? snapshot.snapshotData.students.flatMap((value) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+      const student = value as Record<string, unknown>;
+      return [{
+        ...(typeof student.studentId === "string" ? { studentId: student.studentId } : {}),
+        ...(typeof student.classId === "string" ? { classId: student.classId } : {}),
+      }];
+    })
+    : [];
+  return {
+    ...snapshot,
+    inputRefs: {},
+    snapshotData: snapshot.snapshotData
+      ? {
+        ...(typeof snapshot.snapshotData.generatedAt === "string"
+          ? { generatedAt: snapshot.snapshotData.generatedAt }
+          : {}),
+        students,
+      }
+      : undefined,
   };
 }
 

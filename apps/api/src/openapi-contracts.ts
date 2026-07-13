@@ -1382,20 +1382,6 @@ const attendanceRecordSchema = objectSchema({
   deletedAt: stringSchema({ format: "date-time" }),
 }, ["id", "tenantId", "studentId", "date", "status"]);
 
-const attendanceCreateRequestSchema = objectSchema({
-  courseId: stringSchema(),
-  date: stringSchema({ format: "date" }),
-  status: attendanceStatusSchema,
-  studentId: stringSchema(),
-  termId: stringSchema(),
-}, ["date", "status", "studentId"]);
-
-const attendanceUpdateRequestSchema = objectSchema({
-  courseId: stringSchema(),
-  status: attendanceStatusSchema,
-  termId: stringSchema(),
-}, ["status"]);
-
 const attendanceSummaryRecordSchema = objectSchema({
   studentId: stringSchema(),
   total: integerSchema({ minimum: 0 }),
@@ -3355,17 +3341,6 @@ const operationContracts: Record<string, OperationContract> = {
   "put /api/v1/attendance/daily": {
     requestBody: attendanceDailyUpsertRequestSchema,
     responseBody: attendanceDailyUpsertResponseSchema,
-  },
-  "post /api/v1/attendance": {
-    requestBody: attendanceCreateRequestSchema,
-    responseBody: attendanceRecordSchema,
-  },
-  "patch /api/v1/attendance/{id}": {
-    requestBody: attendanceUpdateRequestSchema,
-    responseBody: attendanceRecordSchema,
-  },
-  "delete /api/v1/attendance/{id}": {
-    noContent: true,
   },
   "post /api/v1/support-tickets": {
     requestBody: supportTicketCreateRequestSchema,

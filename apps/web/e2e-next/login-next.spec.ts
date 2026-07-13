@@ -6306,9 +6306,17 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(page.getByLabel("Öğretmen öğrenci kapsamı").getByRole("button", { name: "Ada A / 8-A" })).toBeVisible();
   await expect(page.getByLabel("Öğretmen yoklama kayıtları").getByRole("cell", { name: "Yok" })).toBeVisible();
   await page.getByLabel("Tarih").fill("2026-06-11");
-  await page.getByLabel("Yoklama durumu").selectOption("LATE");
-  await page.getByRole("button", { name: "Yoklama kaydet" }).click();
-  expect(lastPortalAttendanceBody).toEqual({ classId: "class-a", date: "2026-06-11", entries: [{ studentId: "student-a", status: "LATE" }] });
+  await page.getByRole("button", { name: "Tümünü Var" }).click();
+  await page.getByLabel("Ada A yoklama durumu").selectOption("LATE");
+  await page.getByRole("button", { name: "Yoklamayı kaydet" }).click();
+  expect(lastPortalAttendanceBody).toEqual({
+    classId: "class-a",
+    date: "2026-06-11",
+    entries: [
+      { studentId: "student-a", status: "LATE" },
+      { studentId: "student-b", status: "PRESENT" },
+    ],
+  });
   await expect(page.getByLabel("Öğretmen yoklama kayıtları")).toContainText("2026-06-11");
   await expect(page.getByLabel("Öğretmen yoklama kayıtları")).toContainText("Geç");
   await expect(page.getByLabel("Not branşı")).toHaveValue("course-math");
@@ -6517,6 +6525,7 @@ function readPortalFixture(path: string): unknown {
   if (path === "/me/teacher/teacher-notes") return [];
   if (path === "/me/teacher/lookups") {
     return {
+      attendanceClassIds: ["class-a"],
       campuses: readPortalFixture("/campuses"),
       classes: readPortalFixture("/classes"),
       courses: readPortalFixture("/courses"),

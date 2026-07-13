@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "contract": "docs/ui-ux-professionalization-contract.md",
+  "slices": [
+    {
+      "id": "PR-0",
+      "title": "Tasarım ve kabul sözleşmesi",
+      "requirements": ["Ortak UI dili", "Persona ve route matrisi", "Makine-okunur kabul kapıları"],
+      "implementationPaths": ["docs/ui-ux-professionalization-contract.md", "packages/ui/src", "scripts/check-web-ux-baseline.mjs"],
+      "verificationCommands": ["pnpm web:ux-baseline:check", "pnpm web:a11y:check"],
+      "localStatus": "PROVEN",
+      "liveStatus": "NOT_REQUIRED"
+    },
+    {
+      "id": "PR-1",
+      "title": "Günlük sınıf yoklaması",
+      "requirements": ["Sınıf ve tarih bazlı tek atomik yazma", "Tarihsel öğrenci üyeliği", "Atanmış öğretmen kapsamı"],
+      "implementationPaths": ["apps/api/src/attendance", "apps/web/app/(app)/kurum/devamsizlik", "apps/web/app/(app)/portals/teacher-portal-page.tsx"],
+      "verificationCommands": ["pnpm --filter @o-okul/api test", "pnpm --filter @o-okul/web typecheck"],
+      "localStatus": "PROVEN",
+      "liveStatus": "PENDING_EXTERNAL_EVIDENCE"
+    },
+    {
+      "id": "PR-2",
+      "title": "Portal veri akışı ve rapor keşfi",
+      "requirements": ["Görünüme göre koşullu istekler", "Minimal READY rapor indeksi", "Öğrenci ve veli subject kapsamı"],
+      "implementationPaths": ["apps/api/src/me", "apps/web/app/(app)/portals"],
+      "verificationCommands": ["pnpm --filter @o-okul/api test", "pnpm --filter @o-okul/web typecheck"],
+      "localStatus": "PROVEN",
+      "liveStatus": "PENDING_EXTERNAL_EVIDENCE"
+    },
+    {
+      "id": "PR-3",
+      "title": "Rapor üretim işi ve immutable snapshot",
+      "requirements": ["Queue işi ile snapshot durumunun ayrılması", "İdempotent üretim", "Tenant-kapsamlı erişim"],
+      "implementationPaths": ["apps/api/src/report", "apps/worker/src/jobs/report-generation-job.ts"],
+      "verificationCommands": ["pnpm --filter @o-okul/api test", "pnpm --filter @o-okul/worker test"],
+      "localStatus": "PROVEN",
+      "liveStatus": "PENDING_EXTERNAL_EVIDENCE"
+    },
+    {
+      "id": "PR-4",
+      "title": "Sınıf bütünlüğü ve toplu sorgular",
+      "requirements": ["Sınıf liste ve detay bütünlüğü", "Tembel rapor yükleme", "N+1 sorguların kaldırılması"],
+      "implementationPaths": ["apps/web/app/(app)/kurum/siniflar", "apps/api/src/me/me.controller.ts"],
+      "verificationCommands": ["pnpm --filter @o-okul/api test", "pnpm web:ux-contract:check"],
+      "localStatus": "PROVEN",
+      "liveStatus": "PENDING_EXTERNAL_EVIDENCE"
+    },
+    {
+      "id": "PR-5",
+      "title": "Karne ve rapor çıktıları",
+      "requirements": ["Başarı yüzdesi ana metriği", "Dondurulmuş öğrenci kimliği", "Eksiksiz PDF ve Excel çıktısı"],
+      "implementationPaths": ["apps/worker/src/jobs/report-pdf-render-job.ts", "apps/web/app/(app)/kurum/raporlar", "packages/shared-types/src/domain.ts"],
+      "verificationCommands": ["pnpm --filter @o-okul/worker test", "pnpm karne:visual-contract:check"],
+      "localStatus": "PROVEN",
+      "liveStatus": "PENDING_EXTERNAL_EVIDENCE"
+    },
+    {
+      "id": "PR-6",
+      "title": "Tam yüzey tutarlılığı ve release kanıtı",
+      "requirements": ["Mobil ve erişilebilirlik sözleşmesi", "RBAC ve PII güvenliği", "CI, staging ve çalışan image kanıtı"],
+      "implementationPaths": ["apps/web/e2e-next", "scripts/generate-ui-ux-redesign-evidence.mjs", ".github/workflows/staging-deploy.yml"],
+      "verificationCommands": ["pnpm web:a11y:check", "pnpm ui-ux-redesign:release-preflight"],
+      "localStatus": "PROVEN",
+      "liveStatus": "PENDING_EXTERNAL_EVIDENCE"
+    }
+  ]
+}

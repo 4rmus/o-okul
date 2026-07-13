@@ -24,6 +24,8 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
              s."studentNo",
              s."classId",
              c."name" AS "className",
+             selected_course."name" AS "courseName",
+             selected_course."code" AS "courseCode",
              er."resultKey",
              er."answerKeyVersion",
              er."parserConfigVersion",
@@ -31,6 +33,10 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
              er."scoreData",
              er."computedAt"
            FROM "ExamResult" er
+           INNER JOIN "Exam" e
+             ON e."tenantId" = er."tenantId"
+            AND e."id" = er."examId"
+            AND e."deletedAt" IS NULL
            LEFT JOIN "Student" s
              ON s."tenantId" = er."tenantId"
             AND s."id" = er."studentId"
@@ -39,12 +45,41 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
              ON c."tenantId" = er."tenantId"
             AND c."id" = s."classId"
             AND c."deletedAt" IS NULL
+           LEFT JOIN "Course" selected_course
+             ON selected_course."tenantId" = er."tenantId"
+            AND selected_course."id" = $6
+            AND selected_course."deletedAt" IS NULL
            WHERE er."tenantId" = $1
              AND er."examId" = $2
              AND er."deletedAt" IS NULL
              AND ($3::text IS NULL OR c."campusId" = $3)
              AND ($4::text IS NULL OR c."gradeLevelId" = $4)
              AND ($5::text IS NULL OR s."classId" = $5)
+             AND ($6::text IS NULL OR EXISTS (
+               SELECT 1
+               FROM jsonb_array_elements(
+                 CASE
+                   WHEN jsonb_typeof(er."scoreData"->'branches') = 'array' THEN er."scoreData"->'branches'
+                   ELSE '[]'::jsonb
+                 END
+               ) AS branch(value)
+               CROSS JOIN LATERAL (
+                 SELECT
+                   regexp_replace(regexp_replace(upper(trim(branch.value->>'branch') COLLATE "tr-x-icu"), '[[:space:]]+', ' ', 'g'), '^LGS[- ]+', '') AS branch_label,
+                   regexp_replace(regexp_replace(upper(trim(selected_course."name") COLLATE "tr-x-icu"), '[[:space:]]+', ' ', 'g'), '^LGS[- ]+', '') AS course_name,
+                   regexp_replace(regexp_replace(upper(trim(selected_course."code") COLLATE "tr-x-icu"), '[[:space:]]+', ' ', 'g'), '^LGS[- ]+', '') AS course_code
+               ) AS normalized_course
+               WHERE selected_course."id" IS NOT NULL
+                 AND normalized_course.branch_label IN (normalized_course.course_name, normalized_course.course_code)
+             ))
+             AND ($7::text IS NULL OR EXISTS (
+               SELECT 1
+               FROM "AcademicTerm" term
+               WHERE term."tenantId" = er."tenantId"
+                 AND term."id" = $7
+                 AND term."deletedAt" IS NULL
+                 AND COALESCE(e."startsAt", er."computedAt")::date BETWEEN term."startsAt" AND term."endsAt"
+             ))
            ORDER BY er."studentId" ASC, er."computedAt" DESC, er."updatedAt" DESC, er."resultKey" DESC
          )
          SELECT *
@@ -56,6 +91,8 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
           optionalText(input.campusId) ?? null,
           optionalText(input.gradeLevelId) ?? null,
           optionalText(input.classId) ?? null,
+          optionalText(input.courseId) ?? null,
+          optionalText(input.termId) ?? null,
         ],
       );
 
@@ -71,7 +108,7 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
           answerKeyVersion: row.answerKeyVersion,
           parserConfigVersion: row.parserConfigVersion,
           engineVersion: row.engineVersion,
-          score: parseScoringResult(row.scoreData),
+          score: filterScoreForCourse(parseScoringResult(row.scoreData), row.courseName, row.courseCode),
           computedAt: toIsoString(row.computedAt),
         };
       });
@@ -111,12 +148,45 @@ interface ExamResultReportRow {
   studentNo: string | null;
   classId: string | null;
   className: string | null;
+  courseName: string | null;
+  courseCode: string | null;
   resultKey: string;
   answerKeyVersion: string;
   parserConfigVersion: string;
   engineVersion: string;
   scoreData: unknown;
   computedAt: Date | string;
+}
+
+function filterScoreForCourse(score: ScoringResult, courseName: string | null, courseCode: string | null): ScoringResult {
+  const courseLabels = new Set([courseName, courseCode].flatMap((value) => value ? [normalizeCourseLabel(value)] : []));
+  if (courseLabels.size === 0) return score;
+
+  const matchesCourse = (branch: string) => courseLabels.has(normalizeCourseLabel(branch));
+  const branches = score.branches.filter((branch) => matchesCourse(branch.branch));
+  const outcomes = score.outcomes?.filter((outcome) => matchesCourse(outcome.branch));
+  const questions = score.questions.filter((question) => matchesCourse(question.branch));
+  const totals = branches.reduce(
+    (current, branch) => ({
+      correct: current.correct + branch.correct,
+      wrong: current.wrong + branch.wrong,
+      blank: current.blank + branch.blank,
+      net: current.net + branch.net,
+    }),
+    { correct: 0, wrong: 0, blank: 0, net: 0 },
+  );
+
+  return {
+    ...score,
+    total: { ...totals, rawScore: totals.net, standardScore: totals.net },
+    branches,
+    ...(outcomes ? { outcomes } : {}),
+    questions,
+  };
+}
+
+function normalizeCourseLabel(value: string): string {
+  return value.trim().toLocaleUpperCase("tr-TR").replace(/\s+/gu, " ").replace(/^LGS[- ]+/u, "");
 }
 
 interface ReportSnapshotRow {

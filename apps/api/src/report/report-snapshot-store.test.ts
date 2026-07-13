@@ -14,6 +14,19 @@ describe("ReportSnapshotStore", () => {
     await expect(store.findById("tenant-b", "exam-demo", "snapshot-demo")).resolves.toBeUndefined();
   });
 
+  it("in-memory portal indeksinde yalnız kimlik ve tarih alanlarını taşır", async () => {
+    const store = new InMemoryReportSnapshotStore();
+
+    const [snapshot] = await store.listIndexByTenant("tenant-a");
+
+    expect(snapshot?.snapshotData).toEqual({
+      generatedAt: "2026-06-06T09:00:00.000Z",
+      students: [{ studentId: "student-a", classId: "class-a" }],
+    });
+    expect(JSON.stringify(snapshot)).not.toContain("Ada A");
+    expect(JSON.stringify(snapshot)).not.toContain("1001");
+  });
+
   it("in-memory snapshotları sınav bazında STALE yapar", async () => {
     const store = new InMemoryReportSnapshotStore();
 
@@ -129,6 +142,29 @@ describe("ReportSnapshotStore", () => {
     expect(businessQueries[0]?.sql).toContain('"examId" = $2');
     expect(businessQueries[0]?.sql).toContain('"id" = $3');
     expect(businessQueries[0]?.values).toEqual(["tenant-a", "exam-a", "snapshot-a"]);
+  });
+
+  it("Postgres portal indeksinde tam snapshotData yerine öğrenci referansı projeksiyonu okur", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const pool = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        return { rows: [] as T[] };
+      },
+    };
+    const store = new PostgresReportSnapshotStore(pool);
+
+    await runWithRequestContext(
+      { userId: "student-user-a", tenantId: "tenant-a", roles: ["STUDENT"], bypassRls: false },
+      () => store.listIndexByTenant("tenant-a"),
+    );
+
+    const businessQuery = queries.find((query) => query.sql.includes('FROM "ReportSnapshot" AS snapshot'));
+    expect(businessQuery?.sql).toContain("jsonb_build_object(");
+    expect(businessQuery?.sql).toContain("'studentId', student->>'studentId'");
+    expect(businessQuery?.sql).toContain("'classId', student->>'classId'");
+    expect(businessQuery?.sql).not.toContain('snapshot."snapshotData",');
+    expect(businessQuery?.values).toEqual(["tenant-a"]);
   });
 
   it("Postgres snapshotları tenant ve sınav bazında STALE yapar", async () => {

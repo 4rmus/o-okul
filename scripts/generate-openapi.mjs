@@ -3739,39 +3739,6 @@ const requiredOperationContracts = [
       { path: ["responseData", "summary", "total"], minimum: 0 },
     ],
   },
-  {
-    method: "post",
-    path: "/api/v1/attendance",
-    requestBody: true,
-    responseEnvelope: true,
-    requestRequired: ["date", "status", "studentId"],
-    responseDataRequired: ["id", "tenantId", "studentId", "date", "status"],
-    fieldChecks: [
-      { path: ["requestBody", "date"], format: "date" },
-      { path: ["requestBody", "status"], enum: attendanceStatuses },
-      { path: ["responseData", "date"], format: "date" },
-      { path: ["responseData", "status"], enum: attendanceStatuses },
-    ],
-  },
-  {
-    method: "patch",
-    path: "/api/v1/attendance/{id}",
-    requestBody: true,
-    responseEnvelope: true,
-    requestRequired: ["status"],
-    requestProperties: ["courseId", "status", "termId"],
-    responseDataRequired: ["id", "tenantId", "studentId", "date", "status"],
-    fieldChecks: [
-      { path: ["requestBody", "status"], enum: attendanceStatuses },
-      { path: ["responseData", "status"], enum: attendanceStatuses },
-    ],
-  },
-  {
-    method: "delete",
-    path: "/api/v1/attendance/{id}",
-    responseStatus: "204",
-    noResponseBody: true,
-  },
 ];
 
 function schoolCrudContracts({ basePath, createRequired, responseRequired, dateFields = [] }) {

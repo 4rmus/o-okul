@@ -432,14 +432,16 @@ describe("ReportGenerationService", () => {
     expect(serialized).not.toContain("\"correctAnswer\"");
   });
 
-  it("sadece sorumlu veya öğrenci kapsamı olan öğretmene bütün sınıf özetini göstermez", async () => {
+  it("yalnız öğrenci ataması olan öğretmene bütün sınıf özetini göstermez", async () => {
     const service = new ReportGenerationService(
       new FakeProducer(),
       new FakeReportSnapshotStore([fakeSnapshot]),
       undefined,
       undefined,
       new FakeStudentStore() as unknown as StudentStore,
-      new FakeTeacherAssignmentStore([]) as unknown as TeacherAssignmentStore,
+      new FakeTeacherAssignmentStore([
+        { id: "assignment-student-a", tenantId: "tenant-a", teacherId: "teacher-a", studentId: "student-a", role: "MENTOR" },
+      ]) as unknown as TeacherAssignmentStore,
     );
 
     const [snapshot] = await service.listSnapshots(
@@ -469,7 +471,7 @@ describe("ReportGenerationService", () => {
       undefined,
       undefined,
       new FakeStudentStore([
-        { id: "student-a", tenantId: "tenant-a", firstName: "Ada", lastName: "A", classId: "class-a", status: "ACTIVE" },
+        { id: "student-a", tenantId: "tenant-a", firstName: "Ada", lastName: "A", classId: "class-z", status: "ACTIVE" },
       ]) as unknown as StudentStore,
       new FakeTeacherAssignmentStore([
         {
@@ -480,6 +482,8 @@ describe("ReportGenerationService", () => {
           courseId: "course-math",
           termId: "term-2026-spring",
           role: "BRANCH_TEACHER",
+          startsAt: "2026-01-01",
+          endsAt: "2026-06-10",
         },
       ]) as unknown as TeacherAssignmentStore,
     );
@@ -763,7 +767,11 @@ describe("ReportGenerationService", () => {
       "snapshot-a",
       "student-c",
     )).rejects.toThrow(ForbiddenException);
-    expect(store.findInputs).toEqual([]);
+    expect(store.findInputs).toEqual([{
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      snapshotId: "snapshot-a",
+    }]);
   });
 
   it("hazır snapshot içinden öğrenci hata kitapçığı döner", async () => {

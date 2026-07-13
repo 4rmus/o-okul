@@ -3,8 +3,16 @@ import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { testLoginBody } from "../test-auth.js";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../app.module.js";
+import { AttendanceService } from "../attendance/attendance.service.js";
+import { HomeworkService } from "../homework/homework.service.js";
+import { ScheduleService } from "../program/schedule.service.js";
+import { SchoolService } from "../school/school.service.js";
+import { StudentService } from "../student/student.service.js";
+import { SupportTicketService } from "../support-ticket/support-ticket.service.js";
+import { TeacherNoteService } from "../teacher-note/teacher-note.service.js";
+import { TeacherService } from "../teacher/teacher.service.js";
 
 describe("Me access matrix", () => {
   let app: INestApplication;
@@ -285,19 +293,71 @@ describe("Me access matrix", () => {
   });
 
   it("öğretmen lookup cevabı referans listeleriyle sınırlıdır", async () => {
+    const assignmentRead = vi.spyOn(app.get(TeacherService), "listTeacherAssignments").mockResolvedValueOnce([
+      {
+        id: "assignment-active",
+        tenantId: "tenant-a",
+        teacherId: "teacher-a",
+        classId: "class-a",
+        courseId: "course-math",
+        termId: "term-2026-spring",
+        role: "CLASS_TEACHER",
+        startsAt: "2000-01-01",
+        endsAt: "2999-12-31",
+      },
+      {
+        id: "assignment-expired",
+        tenantId: "tenant-a",
+        teacherId: "teacher-a",
+        classId: "class-visible",
+        role: "CLASS_TEACHER",
+        endsAt: "2000-01-01",
+      },
+    ]);
+    const studentViewerRead = vi.spyOn(app.get(StudentService), "listForViewer").mockResolvedValueOnce([
+      {
+        id: "student-visible",
+        tenantId: "tenant-a",
+        firstName: "Görünür",
+        lastName: "Öğrenci",
+        classId: "class-visible",
+        status: "ACTIVE",
+      },
+    ]);
+    const classRead = vi.spyOn(app.get(SchoolService), "listClasses").mockResolvedValueOnce([
+      { id: "class-a", tenantId: "tenant-a", name: "8-A" },
+      { id: "class-visible", tenantId: "tenant-a", name: "8-B" },
+    ]);
+    const duplicateReads = [
+      vi.spyOn(app.get(AttendanceService), "list"),
+      vi.spyOn(app.get(HomeworkService), "list"),
+      vi.spyOn(app.get(HomeworkService), "listMaterials"),
+      vi.spyOn(app.get(HomeworkService), "listMaterialAssignments"),
+      vi.spyOn(app.get(ScheduleService), "listCurrentTeacherLessons"),
+      vi.spyOn(app.get(StudentService), "list"),
+      vi.spyOn(app.get(SupportTicketService), "listCurrentTeacher"),
+      vi.spyOn(app.get(TeacherNoteService), "list"),
+    ];
     const response = await request(server)
       .get("/me/teacher/lookups")
       .set("Authorization", `Bearer ${teacherToken}`)
       .expect(200);
 
+    expect(assignmentRead).toHaveBeenCalledTimes(1);
+    expect(studentViewerRead).toHaveBeenCalledTimes(1);
+    expect(classRead).toHaveBeenCalledTimes(1);
+    for (const duplicateRead of duplicateReads) expect(duplicateRead).not.toHaveBeenCalled();
     expect(response.body).toMatchObject({
       campuses: expect.any(Array),
       classes: expect.any(Array),
       courses: expect.any(Array),
       gradeLevels: expect.any(Array),
       terms: expect.any(Array),
+      attendanceClassIds: ["class-a"],
     });
+    expect((response.body as { classes: Array<{ id: string }> }).classes.map((record) => record.id)).toEqual(["class-a", "class-visible"]);
     const serialized = JSON.stringify(response.body);
+    expect(serialized).not.toContain("class-b");
     for (const forbidden of [
       "userId",
       "email",
@@ -310,6 +370,10 @@ describe("Me access matrix", () => {
     ]) {
       expect(serialized).not.toContain(forbidden);
     }
+    assignmentRead.mockRestore();
+    studentViewerRead.mockRestore();
+    classRead.mockRestore();
+    for (const duplicateRead of duplicateReads) duplicateRead.mockRestore();
   });
 
   it("tenant admin role preview tokenı ile portal sorgularını salt-okuma açar", async () => {
@@ -454,7 +518,8 @@ describe("Me access matrix", () => {
     ];
 
     for (const endpoint of scopedIdorEndpoints) {
-      const scopedResponse = await request(server).get(endpoint).set("Authorization", `Bearer ${teacherToken}`).expect(403);
+      const scopedResponse = await request(server).get(endpoint).set("Authorization", `Bearer ${teacherToken}`);
+      expect(scopedResponse.status, endpoint).toBe(403);
       expect(JSON.stringify(scopedResponse.body)).not.toContain("student-b");
     }
   });
