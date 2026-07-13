@@ -6,8 +6,10 @@ import { SchoolModule } from "../school/school.module.js";
 import { TenantPersistenceModule } from "../tenant/tenant-persistence.module.js";
 import { ReportGenerationController } from "./report-generation.controller.js";
 import {
+  createReportGenerationJobStatusReader,
   createReportPdfRenderer,
   ReportGenerationService,
+  reportGenerationJobStatusReaderToken,
   reportGenerationQueueProducerToken,
   reportPdfRendererToken,
 } from "./report-generation.service.js";
@@ -25,6 +27,10 @@ import { createReportSnapshotStore, reportSnapshotStoreToken } from "./report-sn
     {
       provide: reportGenerationQueueProducerToken,
       useFactory: createBullTenantQueueProducer,
+    },
+    {
+      provide: reportGenerationJobStatusReaderToken,
+      useFactory: createReportGenerationJobStatusReader,
     },
     {
       provide: reportPdfRendererToken,

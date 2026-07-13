@@ -1354,6 +1354,50 @@ export interface AttendanceUpdateRequest {
   termId?: string;
 }
 
+export interface AttendanceDailyEntry {
+  studentId: string;
+  status: AttendanceStatus;
+}
+
+export interface AttendanceDailyUpsertRequest {
+  classId: string;
+  date: string;
+  entries: AttendanceDailyEntry[];
+}
+
+export interface AttendanceAggregateRecord {
+  total: number;
+  present: number;
+  absent: number;
+  late: number;
+  excused: number;
+}
+
+export interface AttendanceDailyUpsertResponse {
+  records: AttendanceRecord[];
+  summary: AttendanceAggregateRecord;
+}
+
+export interface AttendanceDailyRosterStudent {
+  id: string;
+  firstName: string;
+  lastName: string;
+  studentNo?: string;
+  classId: string;
+}
+
+export interface AttendanceDailyRosterSummary extends AttendanceAggregateRecord {
+  unmarked: number;
+}
+
+export interface AttendanceDailyRosterResponse {
+  classId: string;
+  date: string;
+  students: AttendanceDailyRosterStudent[];
+  records: AttendanceRecord[];
+  summary: AttendanceDailyRosterSummary;
+}
+
 export interface AttendanceSummaryRecord {
   studentId: string;
   total: number;
@@ -1723,6 +1767,8 @@ export interface ReportSnapshotRecord {
     }>;
     students?: Array<{
       studentId: string;
+      displayName?: string;
+      studentNo?: string;
       classId?: string;
       className?: string;
       resultKey: string;
@@ -1768,6 +1814,22 @@ export interface ReportSnapshotRecord {
   };
   generatedAt?: string;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface PortalReportIndexItem {
+  examId: string;
+  title: string;
+  startsAt?: string;
+  latestReadySnapshotId: string;
+  latestGeneratedAt: string;
+}
+
+export interface ReportGenerationJobStatus {
+  jobId: string;
+  status: "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED";
+  snapshotId?: string;
+  errorCode?: string;
   updatedAt: string;
 }
 

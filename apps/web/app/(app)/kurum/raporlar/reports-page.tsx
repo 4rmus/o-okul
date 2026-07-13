@@ -29,6 +29,7 @@ import type {
   ExamParticipantRecord,
   ExamRecord,
   GradeLevelRecord,
+  ReportGenerationJobStatus,
   ReportErrorBooklet,
   ReportSnapshotExportResult,
   ReportSnapshotRecord,
@@ -40,7 +41,7 @@ import type {
 import { Download, Eye, RefreshCw } from "lucide-react";
 import { KarneSheet } from "../../_shared/karne-sheet.js";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest } from "../../../../src/api-client.js";
+import { ApiRequestError, apiBaseUrl, apiErrorMessage, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import { firstFormError, reportQueryFormSchema } from "../../../../src/form-validation.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { formatCourseName, formatOutcomeCode, shortCourseName } from "../../_shared/academic-labels.js";
@@ -89,6 +90,7 @@ const emptyParticipants: ExamParticipantRecord[] = [];
 const emptyStudents: StudentRecord[] = [];
 
 type ReportWorkspaceTab = "query" | "analytics" | "students" | "karne" | "exports";
+type ReportJobState = "idle" | "queued" | "processing" | "completed" | "error";
 
 const reportWorkspaceTabs: Array<{ id: ReportWorkspaceTab; label: string }> = [
   { id: "query", label: "Sorgu / Üretim" },
@@ -104,12 +106,13 @@ export function ReportsPage() {
   const { auth } = useAuth();
   const searchParams = useSearchParams();
   const searchParamsKey = searchParams.toString();
-  const [examId, setExamId] = useState("");
+  const [examId, setExamId] = useState(() => searchParams.get("examId") ?? "");
   const [loadedExamId, setLoadedExamId] = useState("");
   const [filters, setFilters] = useState(emptyFilters);
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [error, setError] = useState("");
   const [queueMessage, setQueueMessage] = useState("");
+  const [reportJobState, setReportJobState] = useState<ReportJobState>("idle");
   const [activeTab, setActiveTab] = useState<ReportWorkspaceTab>(() => readReportWorkspaceTab(searchParams));
   const tenantId = auth?.session.tenantId ?? "anonymous";
   const referencesQuery = useQuery({
@@ -168,8 +171,23 @@ export function ReportsPage() {
   const hasSelectedExam = Boolean(examId.trim());
   const queryStatusLabel = loadedExamId ? "Sorgulandı" : hasSelectedExam ? "Sınav seçili" : "Sınav bekliyor";
   const queryStatusTone = loadedExamId ? "success" : hasSelectedExam ? "info" : "neutral";
-  const productionStatusLabel = queueMessage ? "Kuyruğa alındı" : latestSnapshot ? formatSnapshotStatus(latestSnapshot.status) : "Snapshot yok";
-  const productionStatusTone = queueMessage ? "warning" : snapshotStatusTone(latestSnapshot?.status);
+  const productionStatusLabel = reportJobState === "queued"
+    ? "Kuyruğa alındı"
+    : reportJobState === "processing"
+      ? "İşleniyor"
+      : reportJobState === "completed"
+        ? "Tamamlandı"
+        : reportJobState === "error"
+          ? "Hata"
+          : latestSnapshot ? formatSnapshotStatus(latestSnapshot.status) : "Snapshot yok";
+  const productionStatusTone = reportJobState === "completed"
+    ? "success"
+    : reportJobState === "error"
+      ? "danger"
+      : reportJobState === "queued" || reportJobState === "processing"
+        ? "warning"
+        : snapshotStatusTone(latestSnapshot?.status);
+  const isReportJobBusy = reportJobState === "queued" || reportJobState === "processing";
   const outputStatusTone = isSnapshotReady ? "success" : latestSnapshot ? "warning" : "neutral";
   const karneStatusLabel = studentReport ? "Karne açık" : latestSnapshot ? "Öğrenci seç" : "Rapor bekliyor";
   const karneStatusTone = studentReport ? "success" : latestSnapshot ? "info" : "neutral";
@@ -182,7 +200,9 @@ export function ReportsPage() {
 
   useEffect(() => {
     const nextTab = readReportWorkspaceTab(searchParams);
+    const nextExamId = searchParams.get("examId") ?? "";
     setActiveTab((current) => (current === nextTab ? current : nextTab));
+    if (nextExamId) setExamId((current) => (current === nextExamId ? current : nextExamId));
   }, [searchParams, searchParamsKey]);
 
   function selectReportTab(tab: ReportWorkspaceTab) {
@@ -215,19 +235,33 @@ export function ReportsPage() {
 
     setError("");
     setQueueMessage("");
+    setReportJobState("idle");
     const parsedForm = reportQueryFormSchema.safeParse({ examId });
     if (!parsedForm.success) {
       setError(firstFormError(parsedForm.error));
       return;
     }
     try {
-      await enqueueReportGenerationJob(auth.accessToken, parsedForm.data.examId, {
+      const job = await enqueueReportGenerationJob(auth.accessToken, parsedForm.data.examId, {
         ...filters,
       });
+      setReportJobState("queued");
       setQueueMessage("Rapor üretimi kuyruğa alındı.");
       selectReportTab("query");
+      setReportJobState("processing");
+      setQueueMessage("Rapor üretimi işleniyor.");
+      await waitForReportGenerationJob(auth.accessToken, parsedForm.data.examId, job.jobId);
+      setReportData(await loadReportData(auth.accessToken, parsedForm.data.examId, filters));
+      setLoadedExamId(parsedForm.data.examId);
+      setQueueMessage("Rapor üretimi tamamlandı.");
+      setReportJobState("completed");
+      selectReportTab("analytics");
     } catch (queueError) {
-      setError(apiErrorMessage(queueError, "Rapor üretimi kuyruğa alınamadı."));
+      setReportJobState("error");
+      setQueueMessage("");
+      setError(queueError instanceof ReportGenerationTimeoutError
+        ? queueError.message
+        : apiErrorMessage(queueError, "Rapor üretimi tamamlanamadı."));
     }
   }
 
@@ -411,9 +445,9 @@ export function ReportsPage() {
                   <RefreshCw size={17} aria-hidden="true" />
                   Raporu getir
                 </Button>
-                <Button type="button" variant="secondary" onClick={() => void enqueueReportGeneration()}>
+                <Button disabled={isReportJobBusy} type="button" variant="secondary" onClick={() => void enqueueReportGeneration()}>
                   <RefreshCw size={17} aria-hidden="true" />
-                  Rapor üret
+                  {isReportJobBusy ? "Rapor işleniyor" : "Rapor üret"}
                 </Button>
               </div>
             </Panel>
@@ -517,7 +551,7 @@ async function loadReportData(
       accessToken,
       snapshotsUrl.toString(),
     ),
-    loadExamParticipants(accessToken, examId).catch(() => []),
+    apiRequestOrEmpty(() => loadExamParticipants(accessToken, examId)),
   ]);
   const latestSnapshot = snapshots[0];
   const students = latestSnapshot
@@ -525,7 +559,7 @@ async function loadReportData(
         classId: filters.classId || latestSnapshot.classId || "",
         participants,
         snapshot: latestSnapshot,
-      }).catch(() => [])
+      })
     : [];
   return { errorBooklet: null, participants, selectedStudentId: "", snapshots, studentReport: null, studentProgress: null, students };
 }
@@ -537,18 +571,18 @@ async function loadStudentReportData(
   studentId: string,
 ): Promise<Pick<ReportData, "errorBooklet" | "studentProgress" | "studentReport">> {
   const [studentReport, studentProgress, errorBooklet] = await Promise.all([
-    apiRequest<ReportStudentSnapshot>(
+    apiRequestOrNull(() => apiRequest<ReportStudentSnapshot>(
       accessToken,
       `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots/${encodeURIComponent(snapshotId)}/students/${encodeURIComponent(studentId)}`,
-    ).catch(() => null),
-    apiRequest<ReportStudentProgress>(
+    )),
+    apiRequestOrNull(() => apiRequest<ReportStudentProgress>(
       accessToken,
       `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/students/${encodeURIComponent(studentId)}/progress?scope=all`,
-    ).catch(() => null),
-    apiRequest<ReportErrorBooklet>(
+    )),
+    apiRequestOrNull(() => apiRequest<ReportErrorBooklet>(
       accessToken,
       `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots/${encodeURIComponent(snapshotId)}/students/${encodeURIComponent(studentId)}/error-booklet`,
-    ).catch(() => null),
+    )),
   ]);
 
   return { studentReport, studentProgress, errorBooklet };
@@ -591,15 +625,32 @@ async function loadReportStudents(
 }
 
 async function loadStudentsByIds(accessToken: string, studentIds: string[]) {
-  const students = await Promise.all(
-    studentIds.map((studentId) =>
-      apiRequest<StudentRecord>(
-        accessToken,
-        `${apiBaseUrl}/students/${encodeURIComponent(studentId)}`,
-      ).catch(() => null),
-    ),
-  );
-  return students.filter((student): student is StudentRecord => Boolean(student));
+  const chunks = chunk(studentIds, 200);
+  const responses = await Promise.all(chunks.map(async (ids) => {
+    const url = new URL(`${apiBaseUrl}/students`);
+    url.searchParams.set("ids", ids.join(","));
+    return apiRequestOrEmpty(async () => (await apiListRequest<StudentRecord>(accessToken, url)).data);
+  }));
+  return responses.flat();
+}
+
+function chunk<T>(values: T[], size: number) {
+  const result: T[][] = [];
+  for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size));
+  return result;
+}
+
+async function apiRequestOrNull<T>(request: () => Promise<T>): Promise<T | null> {
+  try {
+    return await request();
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+async function apiRequestOrEmpty<T>(request: () => Promise<T[]>): Promise<T[]> {
+  return (await apiRequestOrNull(request)) ?? [];
 }
 
 function reportStudentIds(participants: ExamParticipantRecord[], snapshot: ReportSnapshotRecord) {
@@ -679,6 +730,31 @@ async function enqueueReportGenerationJob(
       method: "POST",
     },
   );
+}
+
+async function waitForReportGenerationJob(accessToken: string, examId: string, jobId: string) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    let status: ReportGenerationJobStatus | undefined;
+    try {
+      status = await apiRequest<ReportGenerationJobStatus>(
+        accessToken,
+        `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/generation-jobs/${encodeURIComponent(jobId)}`,
+      );
+    } catch (error) {
+      if (error instanceof ApiRequestError) throw error;
+      // Geçici ağ hatalarında gerçek worker işini iptal edilmiş saymadan yeniden dene.
+    }
+    if (status?.status === "COMPLETED") return status;
+    if (status?.status === "FAILED") throw new Error(status.errorCode ?? "REPORT_GENERATION_FAILED");
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  throw new ReportGenerationTimeoutError();
+}
+
+class ReportGenerationTimeoutError extends Error {
+  constructor() {
+    super("Rapor üretimi hâlâ işleniyor. Bir süre sonra sorguyu yenileyin.");
+  }
 }
 
 async function exportReportSnapshotExcel(accessToken: string, examId: string, snapshotId: string) {

@@ -13,7 +13,6 @@ import type {
   GuardianRecord,
   GuardianStudentRecord,
   HomeworkMaterialAssignmentRecord,
-  HomeworkMaterialRecord,
   PaymentPlanWithInstallmentsRecord,
   ReportErrorBooklet,
   ReportStudentQuestionSummary,
@@ -30,7 +29,7 @@ import type {
 import { ArrowLeft, BarChart3, ChevronRight, LayoutDashboard } from "lucide-react";
 import { ActionCard, DataTable, Field, InfoGrid, InfoItem, Panel, Select, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
+import { ApiRequestError, apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
@@ -39,7 +38,7 @@ import { ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../../_shar
 import { formatNetNumber, OutcomeNetTable } from "../../_shared/outcome-net-table.js";
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 import { formatPercentDelta, formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
-import { fallbackReportExamId, readReportExamId } from "../../_shared/report-exam-selection.js";
+import { readReportExamId } from "../../_shared/report-exam-selection.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 import { RevealablePhone } from "../_shared/revealable-phone.js";
 
@@ -1212,19 +1211,10 @@ async function loadStudentBaseDetail(
 
 async function loadExams(accessToken: string): Promise<ExamRecord[]> {
   const exams = await apiRequestOrNull<ExamRecord[]>(accessToken, `${apiBaseUrl}/exams`);
-  return exams && exams.length > 0
-    ? exams
-    : [{
-        id: fallbackReportExamId,
-        tenantId: "",
-        title: "Demo sınav",
-        status: "PUBLISHED",
-        createdAt: "",
-        updatedAt: "",
-      }];
+  return exams ?? [];
 }
 
-function preferredExamId(exams: ExamRecord[], requestedExamId = fallbackReportExamId) {
+function preferredExamId(exams: ExamRecord[], requestedExamId = "") {
   return exams.find((exam) => exam.id === requestedExamId)?.id
     ?? exams.find((exam) => exam.status === "PUBLISHED")?.id
     ?? exams[0]?.id
@@ -1269,23 +1259,18 @@ async function loadStudentReportData(
 }
 
 async function loadStudentHomeworkAssignments(accessToken: string, studentId: string) {
-  const materials = await apiRequest<HomeworkMaterialRecord[]>(accessToken, `${apiBaseUrl}/homework/materials`);
-  const assignmentLists = await Promise.all(
-    materials.map((material) =>
-      apiRequest<HomeworkMaterialAssignmentRecord[]>(
-        accessToken,
-        `${apiBaseUrl}/homework/materials/${encodeURIComponent(material.id)}/assignments`,
-      ),
-    ),
+  return apiRequest<HomeworkMaterialAssignmentRecord[]>(
+    accessToken,
+    `${apiBaseUrl}/homework/material-assignments?studentId=${encodeURIComponent(studentId)}`,
   );
-  return assignmentLists.flat().filter((assignment) => assignment.studentId === studentId);
 }
 
 async function apiRequestOrNull<T>(accessToken: string, input: RequestInfo | URL): Promise<T | null> {
   try {
     return await apiRequest<T>(accessToken, input);
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 404) return null;
+    throw error;
   }
 }
 

@@ -49,6 +49,14 @@ export class HomeworkController {
     return applyListQuery(await this.homework.listMaterials(getRequestContext()), query, homeworkMaterialListFields);
   }
 
+  @Get("material-assignments")
+  @Roles("TEACHER")
+  listMaterialAssignmentsByStudent(
+    @Query("studentId") studentId: string,
+  ): Promise<HomeworkMaterialAssignmentRecord[]> {
+    return this.homework.listMaterialAssignmentsByStudent(getRequestContext(), studentId);
+  }
+
   @Get("materials/:id")
   @Roles("TEACHER")
   findMaterial(@Param("id") id: string): Promise<HomeworkMaterialRecord> {

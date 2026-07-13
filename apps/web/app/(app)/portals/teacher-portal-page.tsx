@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, DataTable, Field, Input, Panel, SegmentedControl, Select, Textarea, type DataTableColumn } from "@o-okul/ui";
 import type {
   AcademicTermRecord,
   AnnouncementRecord,
+  AttendanceDailyRosterResponse,
+  AttendanceDailyUpsertResponse,
   AttendanceRecord,
   CampusRecord,
   ClassRecord,
@@ -15,6 +17,7 @@ import type {
   HomeworkMaterialAssignmentRecord,
   HomeworkMaterialRecord,
   HomeworkRecord,
+  PortalReportIndexItem,
   ReportErrorBooklet,
   ReportSnapshotRecord,
   ReportStudentProgress,
@@ -29,11 +32,9 @@ import type {
 } from "@o-okul/shared-types";
 import { apiBaseUrl, apiRequest, authenticatedFetch, readData } from "../../../src/api-client.js";
 import {
-  attendanceFormSchema,
   firstFormError,
   materialAssignmentFormSchema,
   teacherNoteFormSchema,
-  type AttendanceFormPayload,
   type MaterialAssignmentFormPayload,
   type SupportTicketFormPayload,
   type TeacherNoteFormPayload,
@@ -62,7 +63,7 @@ import {
   TeacherProfileSummaryPanel,
   TeacherTodaySchedulePanel,
 } from "./_shared/teacher-panels.js";
-import { fallbackReportExamId, readReportExamId } from "../_shared/report-exam-selection.js";
+import { readReportExamId } from "../_shared/report-exam-selection.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
 
 interface TeacherPortalData {
@@ -82,6 +83,9 @@ interface TeacherPortalData {
   classReports: TeacherClassReportSummary[];
   supportTickets: SupportTicketRecord[];
   teacherNotes: TeacherNoteRecord[];
+  reportIndex: PortalReportIndexItem[];
+  reportSnapshots: ReportSnapshotRecord[];
+  selectedReportExamId: string;
 }
 
 interface TeacherStudentReportData {
@@ -118,10 +122,18 @@ interface ReportContext {
   termId?: string;
 }
 
+interface TeacherAttendanceForm {
+  classId: string;
+  date: string;
+  status: AttendanceRecord["status"];
+  studentId: string;
+}
+
 export type TeacherPortalView = "announcements" | "homework" | "overview" | "reports" | "schedule" | "student" | "support";
 
 export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalView } = {}) {
   const { auth } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const rolePreviewToken = readRolePreviewToken(searchParams);
@@ -129,18 +141,17 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
   const requestedStudentId = readRequestedStudentId(searchParams);
   const isRolePreview = Boolean(rolePreviewToken);
   const canReadPortal = Boolean(auth && (auth.session.subjectType === "TEACHER" || isRolePreview));
-  const queryKey = ["next-teacher-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", reportExamId];
+  const queryKey = ["next-teacher-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", view, reportExamId];
   const query = useQuery({
     queryKey,
-    queryFn: () => loadTeacherPortal(auth?.accessToken ?? "", rolePreviewToken, reportExamId),
+    queryFn: () => loadTeacherPortal(auth?.accessToken ?? "", rolePreviewToken, reportExamId, view),
     enabled: canReadPortal,
     refetchOnWindowFocus: false,
   });
   const today = todayInputValue();
-  const [attendanceForm, setAttendanceForm] = useState<AttendanceFormPayload>({
+  const [attendanceForm, setAttendanceForm] = useState<TeacherAttendanceForm>({
+    classId: "",
     studentId: "",
-    courseId: "",
-    termId: "",
     date: today,
     status: "PRESENT",
   });
@@ -169,14 +180,14 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
     const firstMaterialId = query.data.materials[0]?.id ?? "";
     const firstCourseId = query.data.schedule.find((lesson) => lesson.courseId)?.courseId ?? "";
     const firstTermId = query.data.schedule.find((lesson) => lesson.termId)?.termId ?? "";
+    const firstClassId = query.data.schedule.find((lesson) => lesson.classId)?.classId ?? query.data.classes[0]?.id ?? "";
     const visibleStudentIds = new Set(query.data.students.map((student) => student.id));
     const visibleCourseIds = new Set(query.data.schedule.map((lesson) => lesson.courseId).filter((courseId): courseId is string => Boolean(courseId)));
     const visibleTermIds = new Set(query.data.schedule.map((lesson) => lesson.termId).filter((termId): termId is string => Boolean(termId)));
     setAttendanceForm((current) => ({
       ...current,
+      classId: current.classId || firstClassId,
       studentId: resolveRequestedStudentId(requestedStudentId, current.studentId, firstStudentId, visibleStudentIds),
-      courseId: current.courseId && visibleCourseIds.has(current.courseId) ? current.courseId : firstCourseId,
-      termId: current.termId && visibleTermIds.has(current.termId) ? current.termId : firstTermId,
     }));
     setNoteForm((current) => ({
       ...current,
@@ -195,6 +206,18 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
 
   const data = query.data;
   const students = data?.students ?? [];
+  const teacherDailyAttendanceQuery = useQuery({
+    queryKey: ["next-teacher-daily-attendance", auth?.session.userId ?? "anonymous", attendanceForm.classId, attendanceForm.date],
+    queryFn: () => loadTeacherDailyAttendance(auth?.accessToken ?? "", attendanceForm.classId, attendanceForm.date),
+    enabled: Boolean(canReadPortal && !isRolePreview && attendanceForm.classId && attendanceForm.date && (view === "overview" || view === "student")),
+    refetchOnWindowFocus: false,
+  });
+  const attendanceRoster = teacherDailyAttendanceQuery.data?.students ?? [];
+  const scheduleClassIds = useMemo(
+    () => new Set((data?.schedule ?? []).map((lesson) => lesson.classId).filter((classId): classId is string => Boolean(classId))),
+    [data?.schedule],
+  );
+  const attendanceClassOptions = (data?.classes ?? []).filter((record) => scheduleClassIds.has(record.id));
   const scheduleCourseIds = useMemo(
     () => new Set((data?.schedule ?? []).map((lesson) => lesson.courseId).filter((courseId): courseId is string => Boolean(courseId))),
     [data?.schedule],
@@ -211,21 +234,27 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
   const courseNameById = useMemo(() => new Map((data?.courses ?? []).map((course) => [course.id, course.name])), [data?.courses]);
   const gradeLevelNameById = useMemo(() => new Map((data?.gradeLevels ?? []).map((gradeLevel) => [gradeLevel.id, gradeLevel.name])), [data?.gradeLevels]);
   const termNameById = useMemo(() => new Map((data?.terms ?? []).map((term) => [term.id, term.name])), [data?.terms]);
-  const selectedStudentId = attendanceForm.studentId || noteForm.studentId || materialForm.studentId || students[0]?.id;
+  const selectedStudentId = noteForm.studentId || materialForm.studentId || attendanceForm.studentId || students[0]?.id;
   const selectedStudent = students.find((student) => student.id === selectedStudentId);
   const selectedClass = selectedStudent?.classId ? classById.get(selectedStudent.classId) : undefined;
   const todayLessons = useMemo(() => selectTodayLessons(data?.schedule ?? []), [data?.schedule]);
   const nextLesson = useMemo(() => selectNextLesson(data?.schedule ?? []), [data?.schedule]);
   const reportQuery = useQuery({
-    queryKey: ["next-teacher-student-report", auth?.session.userId ?? "anonymous", selectedStudentId ?? "none", rolePreviewToken || "session", reportExamId],
-    queryFn: () => loadTeacherStudentReport(auth?.accessToken ?? "", selectedStudentId ?? "", rolePreviewToken, reportExamId),
-    enabled: Boolean(canReadPortal && selectedStudentId),
+    queryKey: ["next-teacher-student-report", auth?.session.userId ?? "anonymous", selectedStudentId ?? "none", rolePreviewToken || "session", data?.selectedReportExamId ?? "none"],
+    queryFn: () => loadTeacherStudentReport(
+      auth?.accessToken ?? "",
+      selectedStudentId ?? "",
+      rolePreviewToken,
+      data?.selectedReportExamId ?? "",
+      data?.reportSnapshots ?? [],
+    ),
+    enabled: Boolean(canReadPortal && selectedStudentId && data?.selectedReportExamId && (view === "overview" || view === "reports")),
     refetchOnWindowFocus: false,
   });
   const selectedReportTotal = reportQuery.data?.report?.total;
   const selectedReportSuccess = reportSuccessRate(selectedReportTotal);
-  const selectedCourseId = noteForm.courseId || attendanceForm.courseId || materialForm.courseId || reportQuery.data?.reportContext?.courseId;
-  const selectedTermId = noteForm.termId || attendanceForm.termId || materialForm.termId || reportQuery.data?.reportContext?.termId;
+  const selectedCourseId = noteForm.courseId || materialForm.courseId || reportQuery.data?.reportContext?.courseId;
+  const selectedTermId = noteForm.termId || materialForm.termId || reportQuery.data?.reportContext?.termId;
   const selectedCourseName = selectedCourseId ? courseNameById.get(selectedCourseId) ?? selectedCourseId : undefined;
   const selectedTermName = selectedTermId ? termNameById.get(selectedTermId) ?? selectedTermId : undefined;
   const uncheckedHomework = (data?.homework ?? []).filter((homework) => !homework.checkedAt).length;
@@ -235,9 +264,20 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
   const historyQuery = useQuery({
     queryKey: ["next-teacher-student-history", auth?.session.userId ?? "anonymous", selectedStudentId ?? "none", rolePreviewToken || "session"],
     queryFn: () => loadTeacherStudentHistory(auth?.accessToken ?? "", selectedStudentId ?? "", rolePreviewToken),
-    enabled: Boolean(canReadPortal && selectedStudentId),
+    enabled: Boolean(canReadPortal && selectedStudentId && (view === "overview" || view === "student")),
     refetchOnWindowFocus: false,
   });
+
+  useEffect(() => {
+    if (!teacherDailyAttendanceQuery.data) return;
+    setAttendanceForm((current) => {
+      const studentId = teacherDailyAttendanceQuery.data.students.some((student) => student.id === current.studentId)
+        ? current.studentId
+        : teacherDailyAttendanceQuery.data.students[0]?.id ?? "";
+      const existingRecord = teacherDailyAttendanceQuery.data.records.find((record) => record.studentId === studentId);
+      return { ...current, studentId, status: existingRecord?.status ?? "PRESENT" };
+    });
+  }, [teacherDailyAttendanceQuery.data]);
 
   if (!canReadPortal) {
     return <AccessPanel title="Öğretmen Portalı" />;
@@ -267,6 +307,13 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
     );
   }
 
+  function selectReportExam(examId: string) {
+    const nextSearchParams = new URLSearchParams(searchParams.toString());
+    if (examId) nextSearchParams.set("examId", examId);
+    else nextSearchParams.delete("examId");
+    router.replace(`?${nextSearchParams.toString()}`);
+  }
+
   function selectStudent(studentId: string) {
     setAttendanceForm((current) => ({ ...current, studentId }));
     setNoteForm((current) => ({ ...current, studentId }));
@@ -282,16 +329,30 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
     }
 
     setActionError("");
-    const parsedForm = attendanceFormSchema.safeParse(attendanceForm);
-    if (!parsedForm.success) {
-      setActionError(firstFormError(parsedForm.error));
+    const student = attendanceRoster.find((candidate) => candidate.id === attendanceForm.studentId);
+    if (!student || !attendanceForm.classId || !attendanceForm.date) {
+      setActionError("Sınıfı bulunan bir öğrenci ve tarih seçilmelidir.");
       return;
     }
 
     try {
-      const record = await createAttendance(auth.accessToken, parsedForm.data);
+      const response = await saveDailyAttendance(auth.accessToken, {
+        classId: attendanceForm.classId,
+        date: attendanceForm.date,
+        entries: [{ studentId: student.id, status: attendanceForm.status }],
+      });
       queryClient.setQueryData<TeacherPortalData>(queryKey, (current) =>
-        current ? { ...current, attendance: [record, ...current.attendance] } : current,
+        current
+          ? {
+              ...current,
+              attendance: [
+                ...response.records,
+                ...current.attendance.filter(
+                  (record) => !response.records.some((saved) => saved.id === record.id),
+                ),
+              ],
+            }
+          : current,
       );
     } catch {
       setActionError("Yoklama kaydı eklenemedi.");
@@ -670,20 +731,35 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
               as="form"
               aria-label="Yoklama kaydet"
               className="next-teacher-action-panel"
-              description="Seçili öğrenci için tarih, branş ve dönem bağlamıyla yoklama kaydı."
+              description="Seçili öğrencinin sınıfı ve tarih için günlük yoklama kaydı."
               id="portal-teacher-attendance"
               title="Yoklama"
               onSubmit={(event) => void submitAttendance(event)}
             >
+              <Field label="Yoklama sınıfı">
+                <Select
+                  required
+                  value={attendanceForm.classId}
+                  onChange={(event) => setAttendanceForm((current) => ({ ...current, classId: event.target.value, studentId: "" }))}
+                >
+                  <option value="">Sınıf seçiniz</option>
+                  {attendanceClassOptions.map((record) => <option key={record.id} value={record.id}>{record.name}</option>)}
+                </Select>
+              </Field>
               <Field label="Öğrenci">
                 <Select
                   value={attendanceForm.studentId}
-                  onChange={(event) => selectStudent(event.target.value)}
+                  onChange={(event) => {
+                    const studentId = event.target.value;
+                    const existingRecord = teacherDailyAttendanceQuery.data?.records.find((record) => record.studentId === studentId);
+                    setAttendanceForm((current) => ({ ...current, studentId, status: existingRecord?.status ?? "PRESENT" }));
+                  }}
                   required
                 >
-                  {students.map((student) => (
+                  {attendanceRoster.length === 0 ? <option value="">Seçili tarihte öğrenci yok</option> : null}
+                  {attendanceRoster.map((student) => (
                     <option key={student.id} value={student.id}>
-                      {formatTeacherStudentLabel(student, classNameById)}
+                      {student.firstName} {student.lastName}{student.studentNo ? ` / ${student.studentNo}` : ""}
                     </option>
                   ))}
                 </Select>
@@ -695,32 +771,6 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
                   value={attendanceForm.date}
                   onChange={(event) => setAttendanceForm((current) => ({ ...current, date: event.target.value }))}
                 />
-              </Field>
-              <Field label="Yoklama branşı">
-                <Select
-                  value={attendanceForm.courseId ?? ""}
-                  onChange={(event) => setAttendanceForm((current) => ({ ...current, courseId: event.target.value }))}
-                >
-                  <option value="">Branş seçilmedi</option>
-                  {courseOptions.map((course) => (
-                    <option key={course.id} value={course.id}>
-                      {course.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Yoklama dönemi">
-                <Select
-                  value={attendanceForm.termId ?? ""}
-                  onChange={(event) => setAttendanceForm((current) => ({ ...current, termId: event.target.value }))}
-                >
-                  <option value="">Dönem seçilmedi</option>
-                  {termOptions.map((term) => (
-                    <option key={term.id} value={term.id}>
-                      {term.name}
-                    </option>
-                  ))}
-                </Select>
               </Field>
               <Field label="Durum">
                 <Select
@@ -739,6 +789,7 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
                   <option value="EXCUSED">İzinli</option>
                 </Select>
               </Field>
+              {teacherDailyAttendanceQuery.isError ? <p className="next-form-error" role="alert">Tarihsel sınıf listesi alınamadı.</p> : null}
               <Button disabled={!attendanceForm.studentId} type="submit">Yoklama kaydet</Button>
             </Panel>
             <Panel
@@ -910,9 +961,9 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
                     studentId: selectedStudent?.id ?? "",
                     campusId: selectedClass?.campusId ?? "",
                     classId: selectedClass?.id ?? "",
-                    courseId: noteForm.courseId || attendanceForm.courseId || materialForm.courseId,
+                    courseId: noteForm.courseId || materialForm.courseId,
                     gradeLevelId: selectedClass?.gradeLevelId ?? "",
-                    termId: noteForm.termId || attendanceForm.termId || materialForm.termId,
+                    termId: noteForm.termId || materialForm.termId,
                   }).then(() => query.refetch())
                 : undefined
             }
@@ -934,6 +985,13 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
         /> : null}
         {historyQuery.isError ? <p className="next-form-error">Öğrenci geçmişi alınamadı.</p> : null}
         {view === "overview" || view === "reports" ? <div id="portal-teacher-report">
+          {view === "reports" && (data?.reportIndex.length ?? 0) > 0 ? (
+            <Field label="Sınav raporu">
+              <Select value={data?.selectedReportExamId ?? ""} onChange={(event) => selectReportExam(event.target.value)}>
+                {(data?.reportIndex ?? []).map((exam) => <option key={exam.examId} value={exam.examId}>{exam.title}</option>)}
+              </Select>
+            </Field>
+          ) : null}
           <ReportPanel
             context={reportQuery.data?.reportContext}
             courseNames={courseNameById}
@@ -978,32 +1036,44 @@ async function apiRequestOrNull<T>(accessToken: string, input: RequestInfo | URL
   return readData<T>(response);
 }
 
-async function loadTeacherPortal(accessToken: string, rolePreviewToken = "", reportExamId = fallbackReportExamId): Promise<TeacherPortalData> {
-  const [teacher, announcements, schedule, students, attendance, homework, materials, teacherNotes, supportTickets, snapshots, lookups] = await Promise.all([
+async function loadTeacherPortal(
+  accessToken: string,
+  rolePreviewToken = "",
+  requestedReportExamId = "",
+  view: TeacherPortalView = "overview",
+): Promise<TeacherPortalData> {
+  const showOverview = view === "overview";
+  const showStudent = showOverview || view === "student";
+  const showReports = showOverview || view === "reports";
+  const showHomework = showOverview || view === "homework";
+  const showSchedule = showOverview || view === "schedule" || showStudent || showHomework;
+  const showAnnouncements = showOverview || view === "announcements";
+  const showSupport = showOverview || view === "support";
+  const showStudentWorkspace = showStudent || showReports || showHomework || showSupport;
+  const reportIndex = showReports
+    ? await apiRequestOrNull<PortalReportIndexItem[]>(accessToken, `${apiBaseUrl}/me/teacher/reports`, rolePreviewToken) ?? []
+    : [];
+  const selectedReportExamId = reportIndex.some((record) => record.examId === requestedReportExamId)
+    ? requestedReportExamId
+    : reportIndex[0]?.examId ?? "";
+  const [teacher, announcements, schedule, students, attendance, homework, materials, materialAssignments, teacherNotes, supportTickets, snapshots, lookups] = await Promise.all([
     readOnlyRequest<TeacherRecord>(accessToken, `${apiBaseUrl}/me/teacher`, rolePreviewToken),
-    readOnlyRequest<AnnouncementRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/announcements`, rolePreviewToken),
-    readOnlyRequest<ScheduleLessonRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/schedule`, rolePreviewToken),
-    readOnlyRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/students`, rolePreviewToken),
-    readOnlyRequest<AttendanceRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/attendance`, rolePreviewToken),
-    readOnlyRequest<HomeworkRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/homework`, rolePreviewToken),
-    readOnlyRequest<HomeworkMaterialRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/homework/materials`, rolePreviewToken),
-    readOnlyRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/teacher-notes`, rolePreviewToken),
-    readOnlyRequest<SupportTicketRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/support-tickets`, rolePreviewToken),
-    readOnlyRequest<ReportSnapshotRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/reports/${encodeURIComponent(reportExamId)}/snapshots`, rolePreviewToken),
-    readOnlyRequest<TeacherPortalLookupsResponse>(accessToken, `${apiBaseUrl}/me/teacher/lookups`, rolePreviewToken),
+    showAnnouncements ? readOnlyRequest<AnnouncementRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/announcements`, rolePreviewToken) : Promise.resolve([]),
+    showSchedule ? readOnlyRequest<ScheduleLessonRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/schedule`, rolePreviewToken) : Promise.resolve([]),
+    showStudentWorkspace ? readOnlyRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/students`, rolePreviewToken) : Promise.resolve([]),
+    showStudent ? readOnlyRequest<AttendanceRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/attendance`, rolePreviewToken) : Promise.resolve([]),
+    showHomework ? readOnlyRequest<HomeworkRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/homework`, rolePreviewToken) : Promise.resolve([]),
+    showHomework || showStudent ? readOnlyRequest<HomeworkMaterialRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/homework/materials`, rolePreviewToken) : Promise.resolve([]),
+    showHomework || showStudent ? readOnlyRequest<HomeworkMaterialAssignmentRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/homework/material-assignments`, rolePreviewToken) : Promise.resolve([]),
+    showStudent ? readOnlyRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/teacher-notes`, rolePreviewToken) : Promise.resolve([]),
+    showSupport ? readOnlyRequest<SupportTicketRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/support-tickets`, rolePreviewToken) : Promise.resolve([]),
+    selectedReportExamId
+      ? readOnlyRequest<ReportSnapshotRecord[]>(accessToken, `${apiBaseUrl}/me/teacher/reports/${encodeURIComponent(selectedReportExamId)}/snapshots`, rolePreviewToken)
+      : Promise.resolve([]),
+    showStudentWorkspace || showSchedule
+      ? readOnlyRequest<TeacherPortalLookupsResponse>(accessToken, `${apiBaseUrl}/me/teacher/lookups`, rolePreviewToken)
+      : Promise.resolve({ campuses: [], classes: [], courses: [], gradeLevels: [], terms: [] }),
   ]);
-  const materialAssignments = (
-    await Promise.all(
-      materials.map((material) =>
-        readOnlyRequest<HomeworkMaterialAssignmentRecord[]>(
-          accessToken,
-          `${apiBaseUrl}/me/teacher/homework/materials/${encodeURIComponent(material.id)}/assignments`,
-          rolePreviewToken,
-        ),
-      ),
-    )
-  ).flat();
-
   return {
     teacher,
     announcements,
@@ -1019,17 +1089,28 @@ async function loadTeacherPortal(accessToken: string, rolePreviewToken = "", rep
     gradeLevels: lookups.gradeLevels,
     terms: lookups.terms,
     classReports: selectTeacherClassReports(snapshots, students),
+    reportIndex,
+    reportSnapshots: snapshots,
+    selectedReportExamId,
     supportTickets,
     teacherNotes,
   };
 }
 
-async function createAttendance(accessToken: string, input: AttendanceFormPayload) {
-  return apiRequest<AttendanceRecord>(accessToken, `${apiBaseUrl}/attendance`, {
+async function saveDailyAttendance(
+  accessToken: string,
+  input: { classId: string; date: string; entries: Array<{ studentId: string; status: AttendanceRecord["status"] }> },
+) {
+  return apiRequest<AttendanceDailyUpsertResponse>(accessToken, `${apiBaseUrl}/attendance/daily`, {
     body: JSON.stringify(input),
     headers: { "content-type": "application/json" },
-    method: "POST",
+    method: "PUT",
   });
+}
+
+async function loadTeacherDailyAttendance(accessToken: string, classId: string, date: string) {
+  const query = new URLSearchParams({ classId, date });
+  return apiRequest<AttendanceDailyRosterResponse>(accessToken, `${apiBaseUrl}/attendance/daily?${query.toString()}`);
 }
 
 async function createTeacherNote(accessToken: string, input: TeacherNoteFormPayload) {
@@ -1085,13 +1166,10 @@ async function loadTeacherStudentReport(
   accessToken: string,
   studentId: string,
   rolePreviewToken = "",
-  reportExamId = fallbackReportExamId,
+  reportExamId = "",
+  snapshots: ReportSnapshotRecord[] = [],
 ): Promise<TeacherStudentReportData> {
-  const snapshots = await readOnlyRequest<ReportSnapshotRecord[]>(
-    accessToken,
-    `${apiBaseUrl}/me/teacher/reports/${encodeURIComponent(reportExamId)}/snapshots`,
-    rolePreviewToken,
-  );
+  if (!reportExamId) return { errorBooklet: null, progress: null, report: null };
   const snapshot = selectLatestReadySnapshot(snapshots);
   if (!snapshot) {
     return { errorBooklet: null, progress: null, report: null };

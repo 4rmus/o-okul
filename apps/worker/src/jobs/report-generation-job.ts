@@ -38,6 +38,8 @@ export interface ReportGenerationJobInput {
 
 export interface ExamResultForReport {
   studentId: string;
+  displayName?: string;
+  studentNo?: string;
   classId?: string;
   className?: string;
   resultKey: string;
@@ -64,6 +66,7 @@ export interface ReportSnapshotCandidate {
     answerKeyVersions: string[];
     parserConfigVersions: string[];
     engineVersions: string[];
+    generationContentHash?: string;
   };
   snapshotData: {
     reportType: ReportType;
@@ -79,8 +82,9 @@ export interface ReportSnapshotCandidate {
   generatedAt: string;
 }
 
-export interface ReportGenerationJobResult extends ReportSnapshotCandidate {
+export interface ReportGenerationJobResult extends Omit<ReportSnapshotCandidate, "status"> {
   id: string;
+  status: "READY" | "STALE";
 }
 
 export interface ReportGenerationJobAdapter {
@@ -158,6 +162,8 @@ type StudentOutcomeSummary = OutcomeScore & ScoreMetrics;
 
 interface StudentReportSummary {
   studentId: string;
+  displayName?: string;
+  studentNo?: string;
   classId?: string;
   className?: string;
   resultKey: string;
@@ -235,21 +241,25 @@ export function createExamResultSummarySnapshot(
   const classes = createClassAverages(results);
   const statistics = toCohortStatisticsSummary(cohortStatistics);
   const students = sortedResults.map((result) => createStudentSummary(result, statisticsByStudent));
-  const inputRefs = {
+  const sourceRefs = {
     resultKeys: uniqueSorted(results.map((result) => result.resultKey)),
     answerKeyVersions: uniqueSorted(results.map((result) => result.answerKeyVersion)),
     parserConfigVersions: uniqueSorted(results.map((result) => result.parserConfigVersion)),
     engineVersions: uniqueSorted(results.map((result) => result.engineVersion)),
   };
+  const identityFingerprint = createReportIdentityFingerprint(sortedResults);
 
   return {
     tenantId: input.tenantId,
     examId: input.examId,
-    contentHash: createReportSnapshotContentHash(input.contentHash, inputRefs),
+    contentHash: createReportSnapshotContentHash(input.contentHash, sourceRefs, identityFingerprint),
     ...resolveReportContext(input),
     reportType: input.reportType,
     status: "READY",
-    inputRefs,
+    inputRefs: {
+      ...sourceRefs,
+      generationContentHash: input.contentHash,
+    },
     snapshotData: {
       reportType: input.reportType,
       generatedAt,
@@ -267,11 +277,34 @@ export function createExamResultSummarySnapshot(
 
 export function createReportSnapshotContentHash(
   requestHash: string,
-  inputRefs: ReportSnapshotCandidate["inputRefs"],
+  inputRefs: Omit<ReportSnapshotCandidate["inputRefs"], "generationContentHash">,
+  identityFingerprint?: string,
 ): string {
   return createHash("sha256")
-    .update(JSON.stringify({ requestHash, inputRefs }))
+    .update(JSON.stringify({ requestHash, inputRefs, identityFingerprint: identityFingerprint ?? null }))
     .digest("hex");
+}
+
+export function createReportIdentityFingerprint(results: ExamResultForReport[]): string {
+  return createHash("sha256")
+    .update(JSON.stringify([...results]
+      .sort((left, right) => left.studentId.localeCompare(right.studentId))
+      .map((result) => ({
+        studentId: result.studentId,
+        displayName: normalizeDisplayName(result.displayName),
+        studentNo: normalizeStudentNo(result.studentNo),
+      }))))
+    .digest("hex");
+}
+
+function normalizeDisplayName(value: string | undefined): string | null {
+  const normalized = value?.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("tr-TR");
+  return normalized || null;
+}
+
+function normalizeStudentNo(value: string | undefined): string | null {
+  const normalized = value?.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleUpperCase("tr-TR");
+  return normalized || null;
 }
 
 function optionalText(value: string | undefined): string | undefined {
@@ -374,6 +407,8 @@ function createStudentSummary(
   }
   return {
     studentId: result.studentId,
+    ...(result.displayName ? { displayName: result.displayName } : {}),
+    ...(result.studentNo ? { studentNo: result.studentNo } : {}),
     classId: result.classId,
     className: result.className,
     resultKey: result.resultKey,

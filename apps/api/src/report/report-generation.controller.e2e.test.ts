@@ -10,7 +10,10 @@ import type { ProducedJob } from "../queue/job-producer.js";
 import {
   createReportGenerationContentHash,
   examResultSummaryReportType,
+  reportGenerationJobStatusReaderToken,
   reportGenerationQueueProducerToken,
+  type ReportGenerationJobStatusReader,
+  type ReportGenerationQueuedJobStatus,
   type ReportGenerationQueueProducer,
   type ReportPdfRenderer,
   reportPdfRendererToken,
@@ -23,11 +26,13 @@ describe("ReportGenerationController", () => {
   let server: Parameters<typeof request>[0];
   let producer: FakeProducer;
   let pdfRenderer: FakePdfRenderer;
+  let generationJobStatuses: FakeReportGenerationJobStatusReader;
   let snapshotStore: FakeReportSnapshotStore;
 
   beforeAll(async () => {
     producer = new FakeProducer();
     pdfRenderer = new FakePdfRenderer();
+    generationJobStatuses = new FakeReportGenerationJobStatusReader();
     snapshotStore = new FakeReportSnapshotStore();
 
     const moduleRef = await Test.createTestingModule({
@@ -35,6 +40,8 @@ describe("ReportGenerationController", () => {
     })
       .overrideProvider(reportGenerationQueueProducerToken)
       .useValue(producer)
+      .overrideProvider(reportGenerationJobStatusReaderToken)
+      .useValue(generationJobStatuses)
       .overrideProvider(reportSnapshotStoreToken)
       .useValue(snapshotStore)
       .overrideProvider(reportPdfRendererToken)
@@ -142,6 +149,34 @@ describe("ReportGenerationController", () => {
       .send({ ...body, classId: "class-b" })
       .expect(409);
     expect(producer.inputs).toHaveLength(1);
+  });
+
+  it("TENANT_ADMIN rapor üretim işinin queue durumunu jobId ile okur", async () => {
+    const issued = await login("admin-a@example.test");
+    const contentHash = createReportGenerationContentHash({
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      reportType: examResultSummaryReportType,
+    });
+    const jobId = `exam-a_${contentHash}`;
+    generationJobStatuses.result = {
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      jobId,
+      status: "RUNNING",
+      updatedAt: "2026-06-06T09:01:00.000Z",
+    };
+
+    const response = await request(server)
+      .get(`/exams/exam-a/reports/generation-jobs/${jobId}`)
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual({
+      jobId,
+      status: "RUNNING",
+      updatedAt: "2026-06-06T09:01:00.000Z",
+    });
   });
 
   it("TENANT_ADMIN hazır rapor snapshotlarını listeler", async () => {
@@ -258,11 +293,13 @@ describe("ReportGenerationController", () => {
     const bytes = Buffer.from(response.body.fileBase64 as string, "base64");
     const file = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
     await workbook.xlsx.load(file as Parameters<ExcelJS.Workbook["xlsx"]["load"]>[0]);
-    expect(workbook.getWorksheet("Students")?.getCell("A2").value).toBe("student-a");
-    expect(workbook.getWorksheet("Classes")?.getCell("B2").value).toBe("8-A");
-    expect(workbook.getWorksheet("Students")?.getCell("K2").value).toBe(3);
-    expect(workbook.getWorksheet("Students")?.getCell("M2").value).toBe(92.5);
-    expect(workbook.getWorksheet("BranchStatistics")?.getCell("D2").value).toBe(3);
+    expect(workbook.getWorksheet("Öğrenciler")?.getCell("A2").value).toBe("Ada A");
+    expect(workbook.getWorksheet("Öğrenciler")?.getCell("B2").value).toBe("1001");
+    expect(workbook.getWorksheet("Öğrenciler")?.getCell("C2").value).toBe("student-a");
+    expect(workbook.getWorksheet("Sınıflar")?.getCell("B2").value).toBe("8-A");
+    expect(workbook.getWorksheet("Öğrenciler")?.getCell("O2").value).toBe(3);
+    expect(workbook.getWorksheet("Öğrenciler")?.getCell("Q2").value).toBe(92.5);
+    expect(workbook.getWorksheet("Branş İstatistikleri")?.getCell("D2").value).toBe(3);
   });
 
   it("TEACHER hazır rapor snapshotını PDF olarak alabilir", async () => {
@@ -572,6 +609,14 @@ class FakeProducer implements ReportGenerationQueueProducer {
   }
 }
 
+class FakeReportGenerationJobStatusReader implements ReportGenerationJobStatusReader {
+  result?: ReportGenerationQueuedJobStatus;
+
+  async get(): Promise<ReportGenerationQueuedJobStatus | undefined> {
+    return this.result;
+  }
+}
+
 class FakePdfRenderer implements ReportPdfRenderer {
   readonly inputs: Parameters<ReportPdfRenderer["render"]>[0][] = [];
 
@@ -633,6 +678,8 @@ const fakeSnapshot: ReportSnapshotRecord = {
     students: [
       {
         studentId: "student-a",
+        displayName: "Ada A",
+        studentNo: "1001",
         classId: "class-a",
         className: "8-A",
         resultKey: "result-a",

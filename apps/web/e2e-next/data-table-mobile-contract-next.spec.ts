@@ -254,19 +254,52 @@ test.describe("DataTable mobil sözleşmesi", () => {
   });
 
   test("devamsızlık günlük operasyon tablosu mobilde özet ve URL state korur", async ({ page }) => {
+    const dailyReadRequests: string[] = [];
+    const legacyDailyReadRequests: string[] = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (request.method() !== "GET") return;
+      if (url.pathname === "/api/v1/attendance/daily") dailyReadRequests.push(request.url());
+      if (url.pathname === "/api/v1/attendance/aggregate" || (url.pathname === "/api/v1/attendance" && url.searchParams.has("date")) || (url.pathname === "/api/v1/students" && url.searchParams.has("classId"))) {
+        legacyDailyReadRequests.push(request.url());
+      }
+    });
     await openWithDataTableMocks(page, "/kurum/devamsizlik?page=2&limit=20&q=ada&sort=-date&classId=class-8a");
+
+    const dailyAttendanceRegion = page.getByRole("region", { name: "Günlük sınıf yoklaması" });
+    await expect(dailyAttendanceRegion.getByLabel("Yoklama sınıfı")).toHaveValue("class-8a");
+    await dailyAttendanceRegion.getByLabel("Yoklama tarihi").fill("2026-06-18");
+    const dailyAttendanceTable = dailyAttendanceRegion.getByRole("table", { name: "Günlük sınıf yoklama listesi" });
+    await expect(dailyAttendanceTable).toContainText("Ada Kaya");
+    await expect(dailyAttendanceRegion.getByRole("button", { name: "Tümünü Var" })).toBeVisible();
+    await dailyAttendanceRegion.getByRole("button", { name: "Tümünü Var" }).click();
+    await expect(dailyAttendanceRegion.getByLabel("Ada Kaya yoklama durumu")).toHaveValue("PRESENT");
+    const dailySaveRequest = page.waitForRequest(
+      (request) => request.method() === "PUT" && new URL(request.url()).pathname === "/api/v1/attendance/daily",
+    );
+    await dailyAttendanceRegion.getByRole("button", { name: "Yoklamayı kaydet" }).click();
+    const dailySavePayload = JSON.parse((await dailySaveRequest).postData() ?? "{}");
+    expect(dailySavePayload).toEqual({
+      classId: "class-8a",
+      date: "2026-06-18",
+      entries: [{ status: "PRESENT", studentId: "student-a" }],
+    });
+    expect(JSON.stringify(dailySavePayload)).not.toContain("courseId");
+    expect(JSON.stringify(dailySavePayload)).not.toContain("termId");
+    expect(dailyReadRequests.length).toBeGreaterThan(0);
+    expect(legacyDailyReadRequests).toEqual([]);
 
     const attendanceRegion = page.getByLabel("Devamsızlık yönetimi");
     const attendanceSummary = attendanceRegion.getByRole("region", { exact: true, name: "Devamsızlık operasyon özeti" });
     await expect(attendanceSummary).toContainText("Yoklama toplamı");
-    await expect(attendanceSummary).toContainText("Takip gerektiren");
+    await expect(attendanceSummary).toContainText("Bu sayfada takip");
     await expect(attendanceSummary).toContainText("Sınıf: 8-A");
     await expect(attendanceRegion.getByLabel("Ara")).toHaveValue("ada");
     await expect(attendanceRegion.getByLabel("Sırala")).toHaveValue("-date");
     await expect(attendanceRegion.getByLabel("Göster")).toHaveValue("20");
-    await expect(attendanceRegion.getByLabel("Sınıf")).toHaveValue("class-8a");
+    await expect(attendanceRegion.getByLabel("Geçmiş sınıf filtresi")).toHaveValue("class-8a");
     const attendanceControls = attendanceRegion.getByRole("group", { name: "Liste kontrolleri" });
-    await expect(attendanceControls.getByRole("button", { name: "Devamsızlık ekle" })).toBeVisible();
+    await expect(attendanceControls.getByRole("button", { name: /kayıt ekle/i })).toHaveCount(0);
 
     const attendanceTable = attendanceRegion.getByRole("table", { name: "Devamsızlık operasyon listesi" });
     await expect(attendanceTable.getByRole("columnheader", { name: "Öğrenci" })).toBeVisible();
@@ -279,7 +312,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(attendanceTable).toContainText("Yok");
     await expect(attendanceTable).toContainText("Öğrenci eşleşmedi");
     await expect(attendanceTable).toContainText("Ders bilgisi yok");
-    await attendanceRegion.getByLabel("Sınıf").selectOption("");
+    await attendanceRegion.getByLabel("Geçmiş sınıf filtresi").selectOption("");
     await expect.poll(() => new URL(page.url()).searchParams.get("classId")).toBeNull();
 
     await expectNoVisibleTextValues(page, "attendance-mobile", ["student-a", "student-b", "student-missing", "course-math", "course-missing", "term-2026", "term-missing"]);
@@ -517,9 +550,10 @@ test.describe("DataTable mobil sözleşmesi", () => {
     const detailSummary = detailRegion.getByRole("region", { exact: true, name: "Sınıf detay operasyon özeti" });
     await expect(detailSummary).toContainText("Öğrenci toplamı");
     await expect(detailSummary).toContainText("Başarı %");
-    await expect(detailSummary).toContainText("Rapor hazır");
     await expect(detailSummary.getByLabel("Sınıf detay operasyon özeti aksiyon kuyruğu")).toBeVisible();
 
+    await detailRegion.getByRole("tab", { name: "Raporlar" }).click();
+    await expect(detailSummary).toContainText("Rapor hazır");
     const reportContext = detailRegion.getByLabel("Sınıf rapor bağlamı");
     const classReportContext = reportContext.getByRole("region", { name: "Sınıf rapor bağlam özeti" });
     await expect(classReportContext).toHaveClass(/uh-info-grid/);
@@ -529,6 +563,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(reportContext).toContainText("%76,7");
     await expect(reportContext).toContainText("30");
 
+    await detailRegion.getByRole("tab", { name: "Öğrenciler" }).click();
     const studentsTable = detailRegion.getByRole("table", { name: "Sınıf öğrenci listesi" });
     await expect(studentsTable.getByRole("columnheader", { name: "Öğrenci" })).toBeVisible();
     await expect(studentsTable.getByRole("columnheader", { name: "Durum" })).toBeVisible();
@@ -540,6 +575,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
       { key: "status", label: "Durum", text: "Aktif" },
     ]);
 
+    await detailRegion.getByRole("tab", { name: "Raporlar" }).click();
     const resultsTable = detailRegion.getByRole("table", { name: "Sınıf sınav sonucu karşılaştırması" });
     await expect(resultsTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
     await expect(resultsTable.getByRole("columnheader", { name: "Net" })).toBeVisible();
@@ -549,12 +585,12 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(resultsTable.locator('th[data-column-key="student"]')).toHaveAttribute("data-mobile-priority", "primary");
     await expect(resultsTable.locator('th[data-column-key="lgsScore"]')).toHaveAttribute("data-mobile-priority", "hidden");
     await expectMobileDataCells(resultsTable, [
-      { key: "student", label: "Öğrenci", text: "Ada Kaya" },
+      { key: "student", label: "Öğrenci", text: "Arşiv Öğrencisi" },
       { key: "successRate", label: "Başarı %", text: "%81,7" },
       { key: "net", label: "Net", text: "24,5" },
       { key: "questionCount", label: "Soru", text: "30" },
     ]);
-    await expect(resultsTable).toContainText("Öğrenci eşleşmedi");
+    await expect(resultsTable).toContainText("Arşiv Öğrencisi");
 
     const outcomesTable = detailRegion.getByRole("table", { name: "Sınıf kazanım kırılımı" });
     await expect(outcomesTable.getByRole("columnheader", { name: "Kazanım" })).toBeVisible();
@@ -877,12 +913,12 @@ async function installDataTableApiMocks(page: Page) {
 
     const url = new URL(route.request().url());
     const pathName = url.pathname.replace(/^\/api\/v1/, "");
-    const response = mockApiResponse(pathName, route.request().method());
+    const response = mockApiResponse(pathName, route.request().method(), url);
     await fulfillData(route, response.data, response.meta);
   });
 }
 
-function mockApiResponse(pathName: string, method: string): { data: unknown; meta?: ListMeta } {
+function mockApiResponse(pathName: string, method: string, url: URL): { data: unknown; meta?: ListMeta } {
   if (pathName === "/auth/refresh") return { data: createAuthResponse() };
   if (pathName === "/me/tenant") return { data: createTenantResponse() };
   if (pathName === "/me/notification-devices") return { data: [] };
@@ -900,7 +936,10 @@ function mockApiResponse(pathName: string, method: string): { data: unknown; met
   if (pathName === "/courses") return { data: [{ id: "course-math", name: "Matematik", tenantId: "tenant-datatable" }] };
   if (pathName === "/grade-levels") return { data: [{ id: "grade-8", name: "8. Sınıf", tenantId: "tenant-datatable" }] };
   if (pathName === "/academic-terms") return { data: [{ id: "term-2026", name: "2026 Bahar", tenantId: "tenant-datatable" }] };
-  if (pathName === "/students") return listResponse(createStudents());
+  if (pathName === "/students") {
+    const classId = url.searchParams.get("classId");
+    return listResponse(classId ? createStudents().filter((student) => student.classId === classId) : createStudents());
+  }
   if (pathName === "/students/student-a/profile") return { data: createStudentProfile() };
   if (pathName === "/students/student-a/guardians") return { data: createStudentGuardians() };
   if (pathName === "/students/student-a/enrollments") return { data: createStudentEnrollments() };
@@ -908,6 +947,45 @@ function mockApiResponse(pathName: string, method: string): { data: unknown; met
   if (pathName === "/teachers/teacher-a/assignments" && method === "GET") return { data: createTeacherDetailAssignments() };
   if (pathName === "/teachers") return listResponse(createTeachers());
   if (pathName === "/attendance/summary") return { data: createStudentAttendanceSummary() };
+  if (pathName === "/attendance/daily" && method === "GET") {
+    const records = attendanceForDailyQuery(url);
+    const classId = url.searchParams.get("classId") ?? "";
+    const students = createStudents().filter((student) => student.classId === classId);
+    return {
+      data: {
+        classId,
+        date: url.searchParams.get("date") ?? "",
+        students,
+        records,
+        summary: {
+          absent: records.filter((record) => record.status === "ABSENT").length,
+          excused: records.filter((record) => record.status === "EXCUSED").length,
+          late: records.filter((record) => record.status === "LATE").length,
+          present: records.filter((record) => record.status === "PRESENT").length,
+          total: records.length,
+          unmarked: Math.max(0, students.length - records.length),
+        },
+      },
+    };
+  }
+  if (pathName === "/attendance/aggregate") {
+    const records = attendanceForDailyQuery(url);
+    return {
+      data: {
+        absent: records.filter((record) => record.status === "ABSENT").length,
+        excused: records.filter((record) => record.status === "EXCUSED").length,
+        late: records.filter((record) => record.status === "LATE").length,
+        present: records.filter((record) => record.status === "PRESENT").length,
+        total: records.length,
+      },
+    };
+  }
+  if (pathName === "/attendance/daily" && method === "PUT") {
+    return { data: { records: [], summary: { absent: 0, excused: 0, late: 0, present: 1, total: 1 } } };
+  }
+  if (pathName === "/attendance" && method === "GET" && url.searchParams.has("date")) {
+    return listResponse(attendanceForDailyQuery(url));
+  }
   if (pathName === "/attendance" && method === "GET") return listResponse(createAttendance());
   if (pathName === "/exams/exam-demo-isem-lgs-1/reports/students/student-a/progress") return { data: createStudentReportProgress() };
   if (pathName === "/teacher-notes" && method === "GET") return listResponse(createTeacherNotes());
@@ -934,6 +1012,7 @@ function mockApiResponse(pathName: string, method: string): { data: unknown; met
   }
   if (pathName === "/homework" && method === "GET") return listResponse(createHomework());
   if (pathName === "/homework/materials" && method === "GET") return listResponse(createHomeworkMaterials());
+  if (pathName === "/homework/material-assignments" && method === "GET") return { data: createHomeworkMaterialAssignments() };
   if (pathName.startsWith("/homework/materials/") && pathName.endsWith("/files")) {
     const materialId = pathName.replace("/homework/materials/", "").replace("/files", "");
     if (method === "POST") return { data: createHomeworkMaterialFile(materialId, "problem-panel.txt") };
@@ -1195,6 +1274,15 @@ function createAttendance() {
   ];
 }
 
+function attendanceForDailyQuery(url: URL) {
+  const classId = url.searchParams.get("classId");
+  const date = url.searchParams.get("date");
+  const studentClassById = new Map(createStudents().map((student) => [student.id, student.classId]));
+  return createAttendance().filter(
+    (record) => (!classId || studentClassById.get(record.studentId) === classId) && (!date || record.date === date),
+  );
+}
+
 function createTeacherNotes() {
   return [
     {
@@ -1368,6 +1456,8 @@ function createClassDetailSnapshots() {
           {
             classId: "class-8a",
             className: "8-A",
+            displayName: "Arşiv Öğrencisi",
+            studentNo: "999",
             outcomes: [
               { branch: "Matematik", correct: 9, net: 8.5, outcomeCode: "M.8.1", questionCount: 10, successRate: 92, wrong: 1 },
               { branch: "Turkce", correct: 8, net: 7.5, outcomeCode: "T.8.2", questionCount: 10, successRate: 75, wrong: 2 },

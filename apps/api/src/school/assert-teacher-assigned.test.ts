@@ -25,6 +25,19 @@ describe("assertTeacherAssigned", () => {
     await expect(assertTeacherAssigned(teacherContext, store, { tenantId: "tenant-a", classId: "class-b" })).rejects.toThrow(ForbiddenException);
   });
 
+  it("referans tarihinde sona ermis veya henuz baslamamis atamayi reddeder", async () => {
+    const assignments = [
+      { id: "expired", tenantId: "tenant-a", teacherId: "teacher-a", classId: "class-a", role: "CLASS_TEACHER", startsAt: "2026-01-01", endsAt: "2026-05-31" },
+      { id: "future", tenantId: "tenant-a", teacherId: "teacher-a", classId: "class-b", role: "CLASS_TEACHER", startsAt: "2026-07-01" },
+    ];
+    const store = { listByTeacher: async () => assignments } as never;
+
+    await expect(assertTeacherAssigned(teacherContext, store, { tenantId: "tenant-a", classId: "class-a" }, "2026-06-15")).rejects.toThrow(ForbiddenException);
+    await expect(assertTeacherAssigned(teacherContext, store, { tenantId: "tenant-a", classId: "class-b" }, "2026-06-15")).rejects.toThrow(ForbiddenException);
+    await expect(assertTeacherAssigned(teacherContext, store, { tenantId: "tenant-a", classId: "class-a" }, "2026-05-31")).resolves.toBeUndefined();
+    await expect(assertTeacherAssigned(teacherContext, store, { tenantId: "tenant-a", classId: "class-b" }, "2026-07-01")).resolves.toBeUndefined();
+  });
+
   it("ogretmen context'i yoksa reddeder", async () => {
     const store = new InMemoryTeacherAssignmentStore();
 

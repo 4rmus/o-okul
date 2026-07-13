@@ -940,15 +940,18 @@ describe("Audit log API", () => {
         entityId: studentId,
         action: "kvkk.student_pii_purged",
         diff: {
-          fieldsPurged: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"],
-          before: {
-            firstNamePresent: true,
-            lastNamePresent: true,
-            nationalIdPresent: false,
-            phonePresent: false,
-            emailPresent: false,
-            photoPresent: false,
-          },
+          fieldsPurged: [
+            "firstName",
+            "lastName",
+            "nationalIdEncrypted",
+            "nationalIdHash",
+            "phone",
+            "email",
+            "photoKey",
+            "ReportSnapshot.displayName",
+            "ReportSnapshot.studentNo",
+          ],
+          reportSnapshotPurgeCount: expect.any(Number),
         },
       }),
       expect.objectContaining({

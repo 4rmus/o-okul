@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, type OnModuleDestroy } from "@nestjs/common";
 import type {
+  ReportGenerationJobStatus,
   ReportPdfInstitution,
   ReportPdfRenderJobPayload,
   ReportPdfRenderJobResult,
@@ -34,11 +35,22 @@ import { tenantStoreToken, type TenantStore } from "../tenant/tenant-store.js";
 import { reportSnapshotStoreToken, type ReportSnapshotStore } from "./report-snapshot-store.js";
 
 export const reportGenerationQueueProducerToken = Symbol("reportGenerationQueueProducer");
+export const reportGenerationJobStatusReaderToken = Symbol("reportGenerationJobStatusReader");
 export const reportPdfRendererToken = Symbol("reportPdfRenderer");
 export const examResultSummaryReportType = "EXAM_RESULT_SUMMARY";
 
 export interface ReportGenerationQueueProducer {
   enqueue(input: TenantQueueJobInput): Promise<ProducedJob>;
+}
+
+export interface ReportGenerationQueuedJobStatus extends ReportGenerationJobStatus {
+  tenantId: string;
+  examId: string;
+}
+
+export interface ReportGenerationJobStatusReader {
+  get(jobId: string): Promise<ReportGenerationQueuedJobStatus | undefined>;
+  close?(): Promise<void>;
 }
 
 export interface EnqueueReportGenerationInput {
@@ -135,10 +147,16 @@ export class ReportGenerationService implements OnModuleDestroy {
     @Inject(tenantStoreToken)
     private readonly tenantStore?: TenantStore,
     @Optional() private readonly idempotency?: IdempotencyService,
+    @Optional()
+    @Inject(reportGenerationJobStatusReaderToken)
+    private readonly generationJobStatuses?: ReportGenerationJobStatusReader,
   ) {}
 
   async onModuleDestroy(): Promise<void> {
-    await this.pdfRenderer.close?.();
+    await Promise.all([
+      this.pdfRenderer.close?.(),
+      this.generationJobStatuses?.close?.(),
+    ]);
   }
 
   async enqueueGeneration(
@@ -200,6 +218,43 @@ export class ReportGenerationService implements OnModuleDestroy {
       queueName: "report-generation",
       jobId: job.options.jobId,
       status: "queued",
+    };
+  }
+
+  async getGenerationJobStatus(
+    context: RequestContext,
+    examId: string | undefined,
+    jobId: string | undefined,
+  ): Promise<ReportGenerationJobStatus> {
+    if (!context.tenantId) {
+      throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+    }
+
+    const resolvedExamId = required(examId, "REPORT_EXAM_REQUIRED");
+    const resolvedJobId = required(jobId, "REPORT_GENERATION_JOB_REQUIRED");
+    const generationContentHash = parseGenerationJobContentHash(resolvedExamId, resolvedJobId);
+    const queuedJob = await this.generationJobStatuses?.get(resolvedJobId);
+    if (queuedJob) {
+      if (queuedJob.tenantId !== context.tenantId || queuedJob.examId !== resolvedExamId) {
+        throw new NotFoundException("REPORT_GENERATION_JOB_NOT_FOUND");
+      }
+      const { tenantId: _tenantId, examId: _examId, ...status } = queuedJob;
+      return status;
+    }
+
+    const snapshots = await this.snapshots.listByExam(context.tenantId, resolvedExamId);
+    const completedSnapshot = snapshots
+      .filter((snapshot) => snapshot.status === "READY" && snapshot.inputRefs.generationContentHash === generationContentHash)
+      .sort((left, right) => toTime(right.updatedAt) - toTime(left.updatedAt))[0];
+    if (!completedSnapshot) {
+      throw new NotFoundException("REPORT_GENERATION_JOB_NOT_FOUND");
+    }
+
+    return {
+      jobId: resolvedJobId,
+      status: "COMPLETED",
+      snapshotId: completedSnapshot.id,
+      updatedAt: completedSnapshot.updatedAt,
     };
   }
 
@@ -332,7 +387,7 @@ export class ReportGenerationService implements OnModuleDestroy {
     const institution = await this.findInstitutionProfile(context);
     const examMeta = await this.findExamMeta(context, resolvedExamId);
     const participantMeta = await this.findParticipantMeta(context, resolvedExamId, resolvedStudentId);
-    const studentName = await this.findStudentDisplayName(context, resolvedStudentId);
+    const studentName = readText(student.displayName) || await this.findStudentDisplayName(context, resolvedStudentId);
     return {
       tenantId: context.tenantId,
       ...institution,
@@ -614,7 +669,7 @@ export class ReportGenerationService implements OnModuleDestroy {
     const scopedStudents = readRecords(snapshotData.students)
       .filter((student) => scope.studentIds.has(readText(student.studentId)));
     const scopedClasses = readRecords(snapshotData.classes)
-      .filter((classSummary) => scope.classIds.has(readText(classSummary.classId)));
+      .filter((classSummary) => scope.aggregateClassIds.has(readText(classSummary.classId)));
 
     return {
       ...snapshot,
@@ -624,7 +679,7 @@ export class ReportGenerationService implements OnModuleDestroy {
           ? { generatedAt: readText(snapshotData.generatedAt) || snapshot.generatedAt }
           : {}),
         resultCount: scopedStudents.length,
-        classes: scopedClasses,
+        ...(scopedClasses.length > 0 ? { classes: scopedClasses } : {}),
         students: scopedStudents,
       },
     };
@@ -633,7 +688,7 @@ export class ReportGenerationService implements OnModuleDestroy {
   private async resolveTeacherReportScope(
     context: RequestContext & { subjectType: "TEACHER"; subjectId: string },
     reportContext: Pick<ReportSnapshotRecord, "courseId" | "termId">,
-  ): Promise<{ studentIds: Set<string>; classIds: Set<string> }> {
+  ): Promise<{ studentIds: Set<string>; aggregateClassIds: Set<string> }> {
     if (!this.studentStore || !this.teacherAssignmentStore) {
       throw new ForbiddenException("SUBJECT_CONTEXT_MISSING");
     }
@@ -644,7 +699,10 @@ export class ReportGenerationService implements OnModuleDestroy {
 
     return {
       studentIds: new Set(scopedStudents.map((student) => student.id)),
-      classIds: new Set(scopedStudents.map((student) => student.classId).filter((classId): classId is string => Boolean(classId))),
+      aggregateClassIds: new Set(assignments
+        .filter((assignment) => assignment.classId && !assignment.studentId)
+        .filter((assignment) => isAssignmentActive(assignment) && matchesReportContext(assignment, reportContext))
+        .map((assignment) => assignment.classId as string)),
     };
   }
 }
@@ -674,7 +732,70 @@ export function createReportGenerationContentHash(input: {
     .digest("hex");
 }
 
-function isTeacherScopedStudent(
+export function createReportGenerationJobStatusReader(): ReportGenerationJobStatusReader {
+  return new BullReportGenerationJobStatusReader();
+}
+
+class BullReportGenerationJobStatusReader implements ReportGenerationJobStatusReader {
+  private queue?: Queue<Record<string, unknown>, Record<string, unknown>>;
+
+  async get(jobId: string): Promise<ReportGenerationQueuedJobStatus | undefined> {
+    const job = await this.getQueue().getJob(jobId);
+    if (!job) return undefined;
+
+    const data = readRecord(job.data);
+    const tenantId = readText(data.tenantId);
+    const examId = readText(data.entityId);
+    if (!tenantId || !examId) return undefined;
+
+    const status = mapReportGenerationJobState(await job.getState());
+    if (!status) return undefined;
+    const result = readRecord(job.returnvalue);
+    const snapshotId = readText(result.id);
+    const timestamp = job.finishedOn ?? job.processedOn ?? job.timestamp;
+
+    return {
+      tenantId,
+      examId,
+      jobId,
+      status,
+      ...(status === "COMPLETED" && snapshotId ? { snapshotId } : {}),
+      ...(status === "FAILED" ? { errorCode: "REPORT_GENERATION_FAILED" } : {}),
+      updatedAt: new Date(timestamp).toISOString(),
+    };
+  }
+
+  async close(): Promise<void> {
+    await this.queue?.close();
+  }
+
+  private getQueue(): Queue<Record<string, unknown>, Record<string, unknown>> {
+    this.queue ??= new Queue("report-generation", {
+      connection: parseRedisUrl(),
+      prefix: process.env.QUEUE_PREFIX,
+    });
+    return this.queue;
+  }
+}
+
+function mapReportGenerationJobState(state: string): ReportGenerationJobStatus["status"] | undefined {
+  if (state === "active") return "RUNNING";
+  if (state === "completed") return "COMPLETED";
+  if (state === "failed") return "FAILED";
+  if (["delayed", "paused", "waiting", "waiting-children"].includes(state)) return "QUEUED";
+  return undefined;
+}
+
+function parseGenerationJobContentHash(examId: string, jobId: string): string {
+  const prefix = `${examId}_`;
+  const contentHash = jobId.startsWith(prefix) ? jobId.slice(prefix.length) : "";
+  if (!/^[a-f0-9]{64}$/.test(contentHash)) {
+    throw new BadRequestException("REPORT_GENERATION_JOB_INVALID");
+  }
+  return contentHash;
+}
+
+export function isTeacherScopedStudent(
   teacherId: string,
   student: StudentRecord,
   assignments: Array<{ teacherId: string; studentId?: string; classId?: string; courseId?: string; termId?: string; startsAt?: string; endsAt?: string }>,
@@ -760,6 +881,8 @@ function createStudentScopedSnapshotSummary(
       students: [
         {
           studentId,
+          ...(readText(student.displayName) ? { displayName: readText(student.displayName) } : {}),
+          ...(readText(student.studentNo) ? { studentNo: readText(student.studentNo) } : {}),
           ...(readText(student.classId) ? { classId: readText(student.classId) } : {}),
           ...(readText(student.className) ? { className: readText(student.className) } : {}),
           resultKey: readText(student.resultKey) || `${snapshot.id}:${studentId}`,
@@ -809,6 +932,8 @@ function createSnapshotStudentListSummary(student: Record<string, unknown>): Rec
   const studentId = readText(student.studentId);
   return {
     studentId,
+    ...(readText(student.displayName) ? { displayName: readText(student.displayName) } : {}),
+    ...(readText(student.studentNo) ? { studentNo: readText(student.studentNo) } : {}),
     ...(readText(student.classId) ? { classId: readText(student.classId) } : {}),
     ...(readText(student.className) ? { className: readText(student.className) } : {}),
     resultKey: readText(student.resultKey) || studentId,
@@ -821,54 +946,54 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
   workbook.creator = "o-okul";
   workbook.created = new Date();
 
-  const summary = workbook.addWorksheet("Summary");
+  const summary = workbook.addWorksheet("Özet");
   const snapshotData = snapshot.snapshotData ?? {};
   const averages = readRecord(snapshotData.averages);
 
   summary.addRows([
-    ["examId", snapshot.examId],
-    ["snapshotId", snapshot.id],
-    ["reportType", snapshot.reportType],
-    ["status", snapshot.status],
-    ["generatedAt", snapshot.generatedAt ?? ""],
-    ["resultCount", readNumber(snapshotData.resultCount)],
-    ["averageNet", readNumber(averages.net)],
-    ["averageRawScore", readNumber(averages.rawScore)],
-    ["averageStandardScore", readNumber(averages.standardScore)],
-    ["averageEstimatedRawScore", readNumber(averages.estimatedRawScore)],
-    ["averageQuestionCount", readNumberOrFallback(averages.questionCount, scoreQuestionCount(averages))],
-    ["averageSuccessRate", readNumberOrFallback(averages.successRate, scoreSuccessRate(averages))],
+    ["Sınav kimliği", snapshot.examId],
+    ["Snapshot kimliği", snapshot.id],
+    ["Rapor türü", snapshot.reportType],
+    ["Durum", snapshot.status],
+    ["Üretim zamanı", snapshot.generatedAt ?? ""],
+    ["Sonuç sayısı", readNumber(snapshotData.resultCount)],
+    ["Ortalama başarı %", readNumberOrFallback(averages.successRate, scoreSuccessRate(averages))],
+    ["Ortalama soru sayısı", readNumberOrFallback(averages.questionCount, scoreQuestionCount(averages))],
+    ["Ortalama net", readNumber(averages.net)],
+    ["Ortalama ham puan", readNumber(averages.rawScore)],
+    ["Ortalama standart puan", readNumber(averages.standardScore)],
+    ["Ortalama tahmini ham puan", readNumber(averages.estimatedRawScore)],
   ]);
 
-  const branches = workbook.addWorksheet("Branches");
-  branches.addRow(["branch", "resultCount", "correct", "wrong", "blank", "net", "questionCount", "successRate"]);
+  const branches = workbook.addWorksheet("Branşlar");
+  branches.addRow(["Branş", "Sonuç sayısı", "Başarı %", "Soru sayısı", "Doğru", "Yanlış", "Boş", "Net"]);
   for (const branch of readRecords(snapshotData.branches)) {
     branches.addRow([
       readText(branch.branch),
       readNumber(branch.resultCount),
+      readNumberOrFallback(branch.successRate, scoreSuccessRate(branch)),
+      readNumberOrFallback(branch.questionCount, scoreQuestionCount(branch)),
       readNumber(branch.correct),
       readNumber(branch.wrong),
       readNumber(branch.blank),
       readNumber(branch.net),
-      readNumberOrFallback(branch.questionCount, scoreQuestionCount(branch)),
-      readNumberOrFallback(branch.successRate, scoreSuccessRate(branch)),
     ]);
   }
 
-  const classes = workbook.addWorksheet("Classes");
+  const classes = workbook.addWorksheet("Sınıflar");
   classes.addRow([
-    "classId",
-    "className",
-    "resultCount",
-    "correct",
-    "wrong",
-    "blank",
-    "net",
-    "rawScore",
-    "standardScore",
-    "estimatedRawScore",
-    "questionCount",
-    "successRate",
+    "Sınıf kimliği",
+    "Sınıf",
+    "Sonuç sayısı",
+    "Başarı %",
+    "Soru sayısı",
+    "Doğru",
+    "Yanlış",
+    "Boş",
+    "Net",
+    "Ham puan",
+    "Standart puan",
+    "Tahmini ham puan",
   ]);
   for (const classSummary of readRecords(snapshotData.classes)) {
     const averages = readRecord(classSummary.averages);
@@ -876,6 +1001,8 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
       readText(classSummary.classId),
       readText(classSummary.className),
       readNumber(classSummary.resultCount),
+      readNumberOrFallback(averages.successRate, scoreSuccessRate(averages)),
+      readNumberOrFallback(averages.questionCount, scoreQuestionCount(averages)),
       readNumber(averages.correct),
       readNumber(averages.wrong),
       readNumber(averages.blank),
@@ -883,41 +1010,45 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
       readNumber(averages.rawScore),
       readNumber(averages.standardScore),
       readNumber(averages.estimatedRawScore),
-      readNumberOrFallback(averages.questionCount, scoreQuestionCount(averages)),
-      readNumberOrFallback(averages.successRate, scoreSuccessRate(averages)),
     ]);
   }
 
-  const students = workbook.addWorksheet("Students");
+  const students = workbook.addWorksheet("Öğrenciler");
   students.addRow([
-    "studentId",
-    "classId",
-    "className",
-    "resultKey",
-    "correct",
-    "wrong",
-    "blank",
-    "net",
-    "rawScore",
-    "standardScore",
-    "generalRank",
-    "generalOutOf",
-    "generalPercentile",
-    "classRank",
-    "classOutOf",
-    "classPercentile",
-    "estimatedRawScore",
-    "questionCount",
-    "successRate",
+    "Öğrenci",
+    "Öğrenci no",
+    "Öğrenci kimliği",
+    "Sınıf kimliği",
+    "Sınıf",
+    "Sonuç anahtarı",
+    "Başarı %",
+    "Soru sayısı",
+    "Doğru",
+    "Yanlış",
+    "Boş",
+    "Net",
+    "Ham puan",
+    "Standart puan",
+    "Genel sıra",
+    "Genel katılımcı",
+    "Genel yüzdelik",
+    "Sınıf sırası",
+    "Sınıf katılımcı",
+    "Sınıf yüzdelik",
+    "Tahmini ham puan",
   ]);
   for (const student of readRecords(snapshotData.students)) {
     const total = readRecord(student.total);
     const statistics = readStudentStatistics(student.statistics);
     students.addRow([
+      readText(student.displayName),
+      readText(student.studentNo),
       readText(student.studentId),
       readText(student.classId),
       readText(student.className),
       readText(student.resultKey),
+      readNumberOrFallback(total.successRate, scoreSuccessRate(total)),
+      readNumberOrFallback(total.questionCount, scoreQuestionCount(total)),
       readNumber(total.correct),
       readNumber(total.wrong),
       readNumber(total.blank),
@@ -931,22 +1062,20 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
       statistics?.class?.outOf ?? "",
       statistics?.class?.percentile ?? "",
       readNumber(total.estimatedRawScore),
-      readNumberOrFallback(total.questionCount, scoreQuestionCount(total)),
-      readNumberOrFallback(total.successRate, scoreSuccessRate(total)),
     ]);
   }
 
-  const branchStatistics = workbook.addWorksheet("BranchStatistics");
+  const branchStatistics = workbook.addWorksheet("Branş İstatistikleri");
   branchStatistics.addRow([
-    "studentId",
-    "branch",
-    "standardScore",
-    "generalRank",
-    "generalOutOf",
-    "generalPercentile",
-    "classRank",
-    "classOutOf",
-    "classPercentile",
+    "Öğrenci kimliği",
+    "Branş",
+    "Standart puan",
+    "Genel sıra",
+    "Genel katılımcı",
+    "Genel yüzdelik",
+    "Sınıf sırası",
+    "Sınıf katılımcı",
+    "Sınıf yüzdelik",
   ]);
   for (const student of readRecords(snapshotData.students)) {
     const studentId = readText(student.studentId);
@@ -1060,8 +1189,8 @@ function createSnapshotPdfLines(
     "",
     "Genel Ozet",
     `Sonuc sayisi: ${readNumber(snapshotData.resultCount) || "-"}`,
-    `Ortalama net: ${readNumber(averages.net) || "-"}`,
     `Ortalama basari: ${formatPdfPercent(readNumberOrFallback(averages.successRate, scoreSuccessRate(averages)))}`,
+    `Ortalama net: ${readNumber(averages.net) || "-"}`,
     `Ortalama LGS puani: ${readLgsScore(averages) || "-"}`,
     `Standart puan: ${readNumber(averages.standardScore) || "-"}`,
     "",
@@ -1080,7 +1209,9 @@ function createSnapshotPdfLines(
     ...readRecords(snapshotData.students).slice(0, 12).map((student) => {
       const total = readRecord(student.total);
       const statistics = readStudentStatistics(student.statistics);
-      return `${readText(student.studentId) || "-"} ${readText(student.className) || ""}: ${readNumber(total.net) || "-"} net, ${formatPdfPercent(readNumberOrFallback(total.successRate, scoreSuccessRate(total)))}, ${readLgsScore(total) || "-"} LGS puani, genel ${formatPdfRank(statistics?.general)}, sinif ${formatPdfRank(statistics?.class)}`;
+      const identity = readText(student.displayName) || readText(student.studentId) || "-";
+      const studentNo = readText(student.studentNo);
+      return `${identity}${studentNo ? ` (${studentNo})` : ""} ${readText(student.className) || ""}: ${formatPdfPercent(readNumberOrFallback(total.successRate, scoreSuccessRate(total)))}, ${readNumber(total.net) || "-"} net, ${readLgsScore(total) || "-"} LGS puani, genel ${formatPdfRank(statistics?.general)}, sinif ${formatPdfRank(statistics?.class)}`;
     }),
     "",
     "Ogrenci Karnesi",

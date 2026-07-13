@@ -133,7 +133,9 @@ function createSnapshotPdfLines(snapshot: ReportPdfSnapshotRecord, institution: 
     ...readRecords(snapshotData.students).slice(0, 12).map((student) => {
       const total = readRecord(student.total);
       const statistics = readStudentStatistics(student.statistics);
-      return `${readText(student.studentId) || "-"} ${readText(student.className) || ""}: ${formatPdfPercent(scoreSuccessRate(total))}, ${formatPdfValue(branchQuestionCount(total))} soru, ${formatPdfNumber(total.net)} net, ${formatPdfLgsScore(total)} LGS puani, genel ${formatPdfRank(statistics?.general)}, sinif ${formatPdfRank(statistics?.class)}`;
+      const identity = readText(student.displayName) || readText(student.studentId) || "-";
+      const studentNo = readText(student.studentNo);
+      return `${identity}${studentNo ? ` (${studentNo})` : ""} ${readText(student.className) || ""}: ${formatPdfPercent(scoreSuccessRate(total))}, ${formatPdfValue(branchQuestionCount(total))} soru, ${formatPdfNumber(total.net)} net, ${formatPdfLgsScore(total)} LGS puani, genel ${formatPdfRank(statistics?.general)}, sinif ${formatPdfRank(statistics?.class)}`;
     }),
     "",
     "Ogrenci Karnesi",
@@ -234,7 +236,7 @@ function createSnapshotPdfHtml(snapshot: ReportPdfSnapshotRecord, institution: R
       const total = readRecord(student.total);
       const statistics = readStudentStatistics(student.statistics);
       return [
-        readText(student.studentId) || "-",
+        readText(student.displayName) || readText(student.studentId) || "-",
         readText(student.className) || "-",
         formatPdfPercent(scoreSuccessRate(total)),
         formatPdfValue(branchQuestionCount(total)),
@@ -275,8 +277,8 @@ function renderPdfStudentKarne(
       <div class="karne-header">
         <div>
           <h2>Öğrenci Karnesi</h2>
-          <strong>${escapeHtml(readText(student.studentId) || "-")}</strong>
-          <span>${escapeHtml(readText(student.className) || readText(student.classId) || "-")}</span>
+          <strong>${escapeHtml(readText(student.displayName) || readText(student.studentId) || "-")}</strong>
+          <span>${escapeHtml([readText(student.studentNo), readText(student.className) || readText(student.classId)].filter(Boolean).join(" · ") || "-")}</span>
         </div>
         <div class="karne-brand">${renderPdfInstitutionBrand(institution)}</div>
       </div>
@@ -330,7 +332,7 @@ function renderPdfStudentKarne(
       ${renderPdfTable("SON SINAV NETLERİ", ["Öğrenci", "Başarı %", "Net", "LGS puanı", "Standart puan"], [student], (row) => {
         const rowTotal = readRecord(row.total);
         return [
-          readText(row.studentId) || "-",
+          readText(row.displayName) || readText(row.studentId) || "-",
           formatPdfPercent(scoreSuccessRate(rowTotal)),
           formatPdfValue(readNumber(rowTotal.net)),
           formatPdfValue(readLgsScore(rowTotal)),
@@ -342,8 +344,8 @@ function renderPdfStudentKarne(
       <div class="karne-header">
         <div>
           <h2>Detaylı Deneme Analizi</h2>
-          <strong>${escapeHtml(readText(student.studentId) || "-")}</strong>
-          <span>${escapeHtml(readText(student.className) || readText(student.classId) || "-")}</span>
+          <strong>${escapeHtml(readText(student.displayName) || readText(student.studentId) || "-")}</strong>
+          <span>${escapeHtml([readText(student.studentNo), readText(student.className) || readText(student.classId)].filter(Boolean).join(" · ") || "-")}</span>
         </div>
         <div class="karne-brand">${renderPdfInstitutionBrand(institution)}</div>
       </div>

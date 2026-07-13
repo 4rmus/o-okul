@@ -31,6 +31,7 @@ import { type GuardianRecord, type GuardianStore, guardianStoreToken } from "../
 import { IdentityInvitationService } from "../identity-invitation/identity-invitation.service.js";
 import { IdentityProvisioningService } from "../identity-provisioning/identity-provisioning.service.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { type ReportSnapshotStore, reportSnapshotStoreToken } from "../report/report-snapshot-store.js";
 import { type AcademicCalendarStore, academicCalendarStoreToken } from "../school/academic-calendar-store.js";
 import { type CampusStore, campusStoreToken } from "../school/campus-store.js";
 import { type ClassRecord, type ClassStore, classStoreToken } from "../school/class-store.js";
@@ -103,6 +104,7 @@ export class StudentService {
     @Inject(gradeLevelStoreToken) private readonly gradeLevelStore: GradeLevelStore,
     @Inject(teacherStoreToken) private readonly teacherStore: TeacherStore,
     private readonly identityInvitations: IdentityInvitationService,
+    @Inject(reportSnapshotStoreToken) private readonly reportSnapshots: ReportSnapshotStore,
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly idempotency?: IdempotencyService,
     @Optional() private readonly identityProvisioning?: IdentityProvisioningService,
@@ -687,7 +689,10 @@ export class StudentService {
 
   async purgePii(context: RequestContext, id: string): Promise<PublicStudentRecord> {
     const student = await this.findOne(context, id);
-    const profile = await this.store.findProfileById(id);
+    if (!this.reportSnapshots.purgeStudentIdentity) {
+      throw new Error("REPORT_SNAPSHOT_PURGE_UNAVAILABLE");
+    }
+    const reportSnapshotsPurged = await this.reportSnapshots.purgeStudentIdentity(student.tenantId, student.id);
     const purged = await this.store.purgePii(id);
     if (!purged) {
       throw new NotFoundException("STUDENT_NOT_FOUND");
@@ -699,15 +704,18 @@ export class StudentService {
       entityId: purged.id,
       action: "kvkk.student_pii_purged",
       diff: {
-        fieldsPurged: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"],
-        before: {
-          firstNamePresent: student.firstName.length > 0,
-          lastNamePresent: student.lastName.length > 0,
-          nationalIdPresent: Boolean(profile?.nationalIdEncrypted || profile?.nationalIdHash),
-          phonePresent: Boolean(profile?.phone),
-          emailPresent: Boolean(profile?.email),
-          photoPresent: Boolean(profile?.photoKey),
-        },
+        fieldsPurged: [
+          "firstName",
+          "lastName",
+          "nationalIdEncrypted",
+          "nationalIdHash",
+          "phone",
+          "email",
+          "photoKey",
+          "ReportSnapshot.displayName",
+          "ReportSnapshot.studentNo",
+        ],
+        reportSnapshotPurgeCount: reportSnapshotsPurged,
       },
     });
     return toPublicStudentRecord(purged);

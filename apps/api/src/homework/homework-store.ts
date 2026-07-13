@@ -22,6 +22,7 @@ export interface HomeworkStore {
   findMaterialFileById(id: string): Promise<HomeworkMaterialFileRecord | undefined>;
   createMaterialFile(input: Omit<HomeworkMaterialFileRecord, "id">): Promise<HomeworkMaterialFileRecord>;
   listMaterialAssignments(materialId: string): Promise<HomeworkMaterialAssignmentRecord[]>;
+  listAllMaterialAssignments(): Promise<HomeworkMaterialAssignmentRecord[]>;
   createMaterialAssignment(
     input: Omit<HomeworkMaterialAssignmentRecord, "id">,
   ): Promise<HomeworkMaterialAssignmentRecord>;
@@ -182,6 +183,10 @@ export class InMemoryHomeworkStore implements HomeworkStore {
 
   async listMaterialAssignments(materialId: string): Promise<HomeworkMaterialAssignmentRecord[]> {
     return this.materialAssignments.filter((candidate) => candidate.materialId === materialId);
+  }
+
+  async listAllMaterialAssignments(): Promise<HomeworkMaterialAssignmentRecord[]> {
+    return this.materialAssignments;
   }
 
   async createMaterialAssignment(
@@ -372,6 +377,15 @@ export class PostgresHomeworkStore implements HomeworkStore {
          WHERE "materialId" = $1
          ORDER BY "createdAt" DESC`,
         [materialId],
+      );
+      return result.rows.map(toHomeworkMaterialAssignmentRecord);
+    });
+  }
+
+  async listAllMaterialAssignments(): Promise<HomeworkMaterialAssignmentRecord[]> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<HomeworkMaterialAssignmentRow>(
+        `SELECT * FROM "HomeworkMaterialAssignment" ORDER BY "createdAt" DESC`,
       );
       return result.rows.map(toHomeworkMaterialAssignmentRecord);
     });

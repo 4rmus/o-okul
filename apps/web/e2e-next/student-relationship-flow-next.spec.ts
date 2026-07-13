@@ -1,8 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
-const fallbackStudentReportExamId = "exam-demo-isem-lgs-1";
-
 const corsHeaders = {
   "access-control-allow-credentials": "true",
   "access-control-allow-headers": "authorization,content-type,x-csrf-token",
@@ -72,10 +70,10 @@ test.describe("Öğrenci ilişki haritası", () => {
     expect(auditLogRequests[0]?.pathname).toBe("/api/v1/audit-logs/student-summary");
     expect(auditLogRequests[0]?.searchParams.get("studentId")).toBe("student-a");
     expect(auditLogRequests[0]?.searchParams.get("limit")).toBe("5");
-    const scopedSnapshotsPath = `/exams/${fallbackStudentReportExamId}/reports/students/student-a/snapshots`;
-    const broadSnapshotsPath = `/exams/${fallbackStudentReportExamId}/reports/snapshots`;
-    await expect.poll(() => requestedPaths.includes(scopedSnapshotsPath)).toBe(true);
-    expect(requestedPaths).not.toContain(broadSnapshotsPath);
+    expect(requestedPaths.some((path) => path.includes("/reports/students/student-a/snapshots"))).toBe(false);
+    expect(requestedPaths.some((path) => path.includes("/reports/snapshots"))).toBe(false);
+    expect(requestedPaths.filter((path) => path === "/homework/material-assignments")).toHaveLength(1);
+    expect(requestedPaths.some((path) => /^\/homework\/materials\/[^/]+\/assignments$/.test(path))).toBe(false);
     await expect(page.getByLabel("İletişim ve veli").getByRole("table", { name: "İletişim ve veli kayıtları" })).toBeVisible();
     await expect(page.getByLabel("İletişim ve veli")).toContainText("••• ••• ••33");
     await expect(page.getByLabel("İletişim ve veli")).toContainText("ad••@•••.test");
@@ -176,24 +174,13 @@ function mockApiResponse(
   }
   if (pathName === "/audit-logs") return { data: [{ action: "unscoped.audit_call", createdAt: "2026-06-18T08:20:00.000Z", id: "audit-unscoped" }] };
   if (pathName === "/payment-plans") return { data: [] };
-  if (pathName === "/homework/materials") return { data: [] };
+  if (pathName === "/homework/material-assignments") return { data: [] };
   if (pathName === "/teachers") return { data: createTeachers() };
   if (pathName === "/teacher-notes") return { data: [] };
   if (pathName === "/classes") return { data: createClasses() };
   if (pathName === "/courses") return { data: createCourses() };
   if (pathName === "/academic-terms") return { data: createAcademicTerms() };
   if (pathName === "/exams") return { data: [] };
-  if (pathName === `/exams/${fallbackStudentReportExamId}/reports/students/student-a/snapshots`) return { data: [] };
-  if (pathName.endsWith("/reports/students/student-a/progress")) {
-    return {
-      data: {
-        examId: fallbackStudentReportExamId,
-        points: [],
-        studentId: "student-a",
-        tenantId: "tenant-flow",
-      },
-    };
-  }
   if (pathName.includes("/reports/")) return { data: [] };
 
   return { data: [] };

@@ -3,6 +3,7 @@ import { AnnouncementModule } from "../announcement/announcement.module.js";
 import { AttendanceModule } from "../attendance/attendance.module.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { DevelopmentModule } from "../development/development.module.js";
+import { ExamPersistenceModule } from "../exam/exam-persistence.module.js";
 import { GuardianModule } from "../guardian/guardian.module.js";
 import { HomeworkModule } from "../homework/homework.module.js";
 import { NotificationDeviceModule } from "../notification-device/notification-device.module.js";
@@ -16,6 +17,7 @@ import { TeacherModule } from "../teacher/teacher.module.js";
 import { TeacherNoteModule } from "../teacher-note/teacher-note.module.js";
 import { TenantModule } from "../tenant/tenant.module.js";
 import { MeController } from "./me.controller.js";
+import { MeReportIndexService } from "./me-report-index.service.js";
 
 @Module({
   imports: [
@@ -23,6 +25,7 @@ import { MeController } from "./me.controller.js";
     AttendanceModule,
     AuthModule,
     DevelopmentModule,
+    ExamPersistenceModule,
     GuardianModule,
     HomeworkModule,
     NotificationDeviceModule,
@@ -37,5 +40,6 @@ import { MeController } from "./me.controller.js";
     TenantModule,
   ],
   controllers: [MeController],
+  providers: [MeReportIndexService],
 })
 export class MeModule {}

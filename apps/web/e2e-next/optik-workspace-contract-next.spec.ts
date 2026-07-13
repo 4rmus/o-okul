@@ -12,7 +12,6 @@ const corsHeaders = {
 const rawImportId = "raw-import-optik-12345678901";
 const rawParseJobId = "parse-job-optik-admin-a@example.test";
 const rawEvaluationJobId = "evaluation-job-optik-admin-a@example.test";
-const reportGenerationJobId = "report-job-optik-admin-a@example.test";
 const rawImportHash = "abcdef1234567890fedcba0987654321";
 const rawImportFileName = "optik-12345678901-admin-a@example.test.txt";
 const quarantineRawNationalId = "12345678909";
@@ -23,7 +22,6 @@ const hostileOptikReferences = [
   rawImportId,
   rawParseJobId,
   rawEvaluationJobId,
-  reportGenerationJobId,
   rawImportHash,
   rawImportFileName,
   quarantineRawNationalId,
@@ -40,8 +38,8 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-optik");
     await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("upload");
 
-    await page.getByRole("tab", { name: "3. Eşleşmeyen satırlar ve rapor" }).click();
-    await expect(page.getByRole("tab", { name: "3. Eşleşmeyen satırlar ve rapor" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", { name: "3. Eşleşmeyen satırlar" }).click();
+    await expect(page.getByRole("tab", { name: "3. Eşleşmeyen satırlar" })).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-optik");
     await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("quarantine");
 
@@ -51,7 +49,7 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBeNull();
   });
 
-  test("mobilde rapor snapshot çıktıları READY durumuna göre kilitlenir", async ({ page }) => {
+  test("mobilde optik akışı rapor çalışma alanına güvenli geçiş verir", async ({ page }) => {
     const broadStudentRequests: string[] = [];
     const studentDetailRequests: string[] = [];
     const studentSearchRequests: string[] = [];
@@ -83,7 +81,7 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await expect(workflowStrip).toContainText("Analiz");
     await expect(workflowStrip).toContainText("Yükleme bekliyor");
     await expect(workflowStrip).toContainText("Çıktı");
-    await expect(workflowStrip).toContainText("Hazır rapor yok");
+    await expect(workflowStrip).toContainText("Analiz bekliyor");
     await expect(page.getByRole("tab", { name: "1. Format" })).toHaveAttribute("aria-selected", "true");
     const selectedFormSummary = page.getByLabel("Seçili form özeti");
     await expect(selectedFormSummary).toHaveClass(/uh-info-grid/);
@@ -127,15 +125,16 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     for (const value of hostileOptikReferences) {
       await expect(page.locator("body")).not.toContainText(value);
     }
+
     await uploadResult.getByRole("button", { name: "Analizi başlat" }).click();
-    await expect(page.getByRole("tab", { name: "3. Eşleşmeyen satırlar ve rapor" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "3. Eşleşmeyen satırlar" })).toHaveAttribute("aria-selected", "true");
     await page.getByRole("tab", { name: "2. Optik yükleme" }).click();
     await expect(uploadResult.getByRole("status").filter({ hasText: "1/1 analiz işi kuyruğa alındı." })).toBeVisible();
     await expect(uploadResult.getByRole("status").filter({ hasText: "1/1 analiz sonucu tamamlandı." })).toBeVisible();
     await expect(workflowStrip).toContainText("Tamamlandı");
 
-    await page.getByRole("tab", { name: "3. Eşleşmeyen satırlar ve rapor" }).click();
-    const optikReportPanel = page.getByRole("tabpanel", { name: "3. Eşleşmeyen satırlar ve rapor" });
+    await page.getByRole("tab", { name: "3. Eşleşmeyen satırlar" }).click();
+    const optikReportPanel = page.getByRole("tabpanel", { name: "3. Eşleşmeyen satırlar" });
     await optikReportPanel.getByRole("button", { name: "Eşleşmeyen satırları getir" }).click();
     const quarantineTable = page.getByRole("table", { name: "Eşleşmeyen satır listesi" });
     await expect(quarantineTable).toContainText("7");
@@ -154,52 +153,30 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     expect(studentSearchUrl.searchParams.get("limit")).toBe("10");
     expect(broadStudentRequests).toHaveLength(0);
     await expect(quarantineTable.locator('select[aria-label="7. satır öğrencisi"]')).toContainText("Ada Kaya");
-    await expect(optikReportPanel).toContainText("Rapor üretimi");
+    await expect(optikReportPanel).toContainText("Raporlara geçiş");
     const reportStatus = optikReportPanel.getByRole("region", { name: "Rapor üretim durumu" });
     await expect(reportStatus).toHaveClass(/uh-metric-grid/);
-    await expect(reportStatus.locator(".uh-metric-card")).toHaveCount(3);
+    await expect(reportStatus.locator(".uh-metric-card")).toHaveCount(2);
     await expect(reportStatus).toContainText("Analiz");
     await expect(optikReportPanel.locator(".next-report-status-grid")).toHaveCount(0);
-    await expect(optikReportPanel).toContainText("Hazır rapor yok");
-
-    await optikReportPanel.getByRole("button", { name: "Rapor üret" }).click();
-    await expect(optikReportPanel.getByRole("status").filter({ hasText: "Rapor işi kuyruğa alındı." })).toBeVisible();
-    expect(broadStudentRequests, "optik rapor üretimi geniş /students listesi yüklememeli").toHaveLength(0);
-    await optikReportPanel.getByText("Teknik rapor işi bilgisi").click();
-    await expect(optikReportPanel).toContainText("Rapor kuyruk ref: maskeli");
-    await optikReportPanel.getByRole("button", { name: "Raporları getir" }).click();
-    const readyReportsTable = page.getByRole("table", { name: "Hazır optik raporlar" });
-    await expect(readyReportsTable.getByRole("columnheader", { name: "Çıktı" })).toBeVisible();
-    await expect(readyReportsTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
-    await expect(readyReportsTable.getByRole("columnheader", { name: "Net" })).toBeVisible();
-    await expect(readyReportsTable.getByRole("columnheader", { name: "Soru" })).toBeVisible();
-    await expect(readyReportsTable).toContainText("Excel/PDF hazır");
-    await expect(readyReportsTable).toContainText("READY bekleniyor");
-    await expect(readyReportsTable).toContainText("%76,7");
-    await expect(readyReportsTable).toContainText("23");
-    await expect(readyReportsTable).toContainText("30");
-    await expect(readyReportsTable.getByRole("button", { name: "Hazır optik raporu Excel indir" })).toBeEnabled();
-    await expect(readyReportsTable.getByRole("button", { name: "Hazır optik raporu PDF indir" })).toBeEnabled();
-    await expect(readyReportsTable.getByRole("button", { name: "Eski optik raporu Excel indir" })).toBeDisabled();
-    await expect(readyReportsTable.getByRole("button", { name: "Eski optik raporu PDF indir" })).toBeDisabled();
-    await expect(workflowStrip).toContainText("Excel/PDF hazır");
+    await expect(optikReportPanel.getByRole("link", { name: "Rapor çalışma alanına geç" })).toHaveAttribute("href", "/kurum/raporlar?examId=exam-optik");
+    await expect(page.getByRole("table", { name: "Hazır optik raporlar" })).toHaveCount(0);
+    await expect(page.getByRole("table", { name: "Optik katılımcı sonuçları" })).toHaveCount(0);
+    await expect(workflowStrip).toContainText("Raporlara geç");
     for (const value of hostileOptikReferences) {
       await expect(workflowStrip).not.toContainText(value);
     }
 
-    const studentResultsTable = page.getByRole("table", { name: "Optik katılımcı sonuçları" });
-    await expect(studentResultsTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
-    await expect(studentResultsTable.getByRole("columnheader", { name: "Net" })).toBeVisible();
-    await expect(studentResultsTable.getByRole("columnheader", { name: "Soru" })).toBeVisible();
-    await expect(studentResultsTable).toContainText("Ada Kaya");
     expect(broadStudentRequests, "optik rapor yenileme geniş /students listesi yüklememeli").toHaveLength(0);
     expect(studentSearchRequests).toHaveLength(1);
-    expect(new Set(studentDetailRequests.map((requestUrl) => new URL(requestUrl).pathname))).toEqual(
-      new Set(["/api/v1/students/student-a"]),
-    );
+    expect(studentDetailRequests).toHaveLength(0);
     for (const value of hostileOptikReferences) {
       await expect(page.locator("body")).not.toContainText(value);
     }
+
+    await page.getByRole("combobox", { name: "Sınav seç" }).selectOption("exam-optik-second");
+    await expect(quarantineTable).not.toContainText("STUDENT_NOT_FOUND");
+    await expect(reportStatus).toContainText("Bekleniyor");
 
     await expectNoHorizontalOverflow(page, "optik-mobile");
     await expectNoUnlabeledControls(page, "optik-mobile");
@@ -256,10 +233,6 @@ async function installOptikApiMocks(page: Page) {
       await fulfillData(route, payload.dryRun ? createManualAnswerKeyDryRunResult(payload.version) : createManualAnswerKeyResult(payload.version));
       return;
     }
-    if (route.request().method() === "POST" && pathName === "/exams/exam-optik/reports/generation-jobs") {
-      await fulfillData(route, createReportGenerationJob());
-      return;
-    }
     const response = mockOptikApiResponse(pathName);
     await fulfillData(route, response.data, response.meta);
   });
@@ -274,7 +247,6 @@ function mockOptikApiResponse(pathName: string): { data: unknown; meta?: ListMet
   if (pathName === "/students/student-a") return { data: createStudents()[0] };
   if (pathName === "/students") return { data: createStudents() };
   if (pathName === "/exams/exam-optik/participants") return { data: createExamParticipants() };
-  if (pathName === "/exams/exam-optik/reports/snapshots") return { data: createReportSnapshots() };
   if (pathName === `/exams/exam-optik/raw-imports/${rawImportId}/summary`) return { data: createRawImportSummary() };
   if (pathName === `/exams/exam-optik/raw-imports/${rawImportId}/evaluation-status`) return { data: createRawImportEvaluationStatus() };
   if (pathName === `/exams/exam-optik/raw-imports/${rawImportId}/quarantines`) return { data: createImportQuarantines() };
@@ -323,6 +295,17 @@ function createExams() {
       tenantId: "tenant-optik",
       title: "Optik Rapor Denemesi",
       updatedAt: "2026-06-10T09:00:00.000Z",
+    },
+    {
+      courseId: "course-math",
+      answerKeySummary: { branchCount: 6, questionCount: 90, status: "PUBLISHED", updatedAt: "2026-06-11T09:00:00.000Z", version: "optik-answer-key-v1" },
+      createdAt: "2026-06-11T09:00:00.000Z",
+      id: "exam-optik-second",
+      startsAt: "2026-06-18T09:00:00.000Z",
+      status: "PUBLISHED",
+      tenantId: "tenant-optik",
+      title: "İkinci Optik Denemesi",
+      updatedAt: "2026-06-11T09:00:00.000Z",
     },
   ];
 }
@@ -539,108 +522,6 @@ function createRawImportEvaluationStatus() {
     rawImportId,
     status: "COMPLETED",
     tenantId: "tenant-optik",
-  };
-}
-
-function createReportGenerationJob() {
-  return {
-    examId: "exam-optik",
-    jobId: reportGenerationJobId,
-    queueName: "report-generation",
-    reportType: "EXAM_RESULT_SUMMARY",
-    status: "queued",
-    tenantId: "tenant-optik",
-  };
-}
-
-function createReportSnapshots() {
-  const readySnapshot = createSnapshot("snapshot-ready", "READY", 76.7, 23);
-  return [
-    readySnapshot,
-    {
-      ...createSnapshot("snapshot-stale", "STALE", 70, 21),
-      generatedAt: "2026-06-09T12:00:00.000Z",
-      snapshotData: {
-        ...readySnapshot.snapshotData,
-        averages: {
-          blank: 3,
-          correct: 22,
-          net: 21,
-          questionCount: 30,
-          standardScore: 410,
-          successRate: 70,
-          wrong: 5,
-        },
-        generatedAt: "2026-06-09T12:00:00.000Z",
-        resultCount: 1,
-        students: [],
-      },
-    },
-  ];
-}
-
-function createSnapshot(id: string, status: "READY" | "STALE", successRate: number, net: number) {
-  return {
-    classId: "class-8a",
-    courseId: "course-math",
-    createdAt: "2026-06-10T12:00:00.000Z",
-    examId: "exam-optik",
-    generatedAt: "2026-06-10T12:00:00.000Z",
-    gradeLevelId: "grade-8",
-    id,
-    inputRefs: { resultKeys: ["result-a"] },
-    reportType: "EXAM_RESULT_SUMMARY",
-    snapshotData: {
-      averages: {
-        blank: 2,
-        correct: 24,
-        net,
-        questionCount: 30,
-        standardScore: 430,
-        successRate,
-        wrong: 4,
-      },
-      branches: [
-        { blank: 1, branch: "Matematik", correct: 12, net: 11, questionCount: 15, resultCount: 1, successRate: 73.3, wrong: 2 },
-        { blank: 1, branch: "Türkçe", correct: 12, net: 12, questionCount: 15, resultCount: 1, successRate: 80, wrong: 2 },
-      ],
-      classes: [
-        {
-          averages: { blank: 2, correct: 24, net, questionCount: 30, standardScore: 430, successRate, wrong: 4 },
-          classId: "class-8a",
-          className: "8-A",
-          resultCount: 1,
-        },
-      ],
-      generatedAt: "2026-06-10T12:00:00.000Z",
-      outcomes: [],
-      resultCount: 1,
-      students: [
-        {
-          classId: "class-8a",
-          className: "8-A",
-          resultKey: "result-a",
-          statistics: {
-            class: { outOf: 1, percentile: 1, rank: 1 },
-            general: { outOf: 1, percentile: 1, rank: 1 },
-          },
-          studentId: "student-a",
-          total: {
-            blank: 2,
-            correct: 24,
-            net,
-            questionCount: 30,
-            standardScore: 430,
-            successRate,
-            wrong: 4,
-          },
-        },
-      ],
-    },
-    status,
-    tenantId: "tenant-optik",
-    termId: "term-2026",
-    updatedAt: "2026-06-10T12:00:00.000Z",
   };
 }
 

@@ -10,6 +10,9 @@ describe("postgres report generation adapter", () => {
       if (sql.includes('FROM "ExamResult"')) {
         return [{
           studentId: "student-a",
+          firstName: "Ada",
+          lastName: "Ak",
+          studentNo: "1001",
           classId: "class-a",
           className: "8-A",
           resultKey: "result-a",
@@ -40,6 +43,8 @@ describe("postgres report generation adapter", () => {
 
     expect(results).toEqual([{
       studentId: "student-a",
+      displayName: "Ada Ak",
+      studentNo: "1001",
       classId: "class-a",
       className: "8-A",
       resultKey: "result-a",
@@ -62,6 +67,8 @@ describe("postgres report generation adapter", () => {
     expect(select?.sql).toContain('DISTINCT ON (er."studentId")');
     expect(select?.sql).toContain('er."computedAt" DESC');
     expect(select?.sql).toContain('LEFT JOIN "Student"');
+    expect(select?.sql).toContain('s."firstName"');
+    expect(select?.sql).toContain('s."studentNo"');
     expect(select?.sql).toContain('LEFT JOIN "Class"');
     expect(select?.sql).toContain('AND er."deletedAt" IS NULL');
     expect(select?.sql).toContain('c."campusId" = $3');
@@ -114,8 +121,14 @@ describe("postgres report generation adapter", () => {
           id: "snapshot-a",
           tenantId: values?.[1],
           examId: values?.[2],
+          campusId: values?.[3],
+          gradeLevelId: values?.[4],
+          classId: values?.[5],
+          courseId: values?.[6],
+          termId: values?.[7],
           reportType: values?.[8],
           contentHash: values?.[9],
+          status: values?.[10],
           inputRefs: JSON.parse(values?.[11] as string),
           snapshotData: JSON.parse(values?.[12] as string),
           generatedAt: values?.[13],
@@ -139,7 +152,68 @@ describe("postgres report generation adapter", () => {
     expect(JSON.parse(insert?.values?.[11] as string)).toEqual(snapshot.inputRefs);
     expect(JSON.parse(insert?.values?.[12] as string)).toEqual(snapshot.snapshotData);
     expect(insert?.values?.[13]).toBe("2026-05-30T08:00:00.000Z");
-    expect(insert?.sql).toContain('ON CONFLICT ("tenantId", "contentHash") DO UPDATE');
+    expect(insert?.sql).toContain('ON CONFLICT ("tenantId", "contentHash") DO NOTHING');
+    expect(insert?.sql).not.toContain("DO UPDATE");
+  });
+
+  it("aynı contentHash tekrarlandığında mevcut snapshot gövdesini ve durumunu değiştirmez", async () => {
+    const original = createSnapshot();
+    const rerun: ReportSnapshotCandidate = {
+      ...original,
+      campusId: "campus-rerun",
+      classId: "class-rerun",
+      inputRefs: {
+        ...original.inputRefs,
+        resultKeys: ["result-rerun"],
+      },
+      snapshotData: {
+        ...original.snapshotData,
+        generatedAt: "2026-05-30T09:00:00.000Z",
+        resultCount: 99,
+      },
+      generatedAt: "2026-05-30T09:00:00.000Z",
+    };
+    const client = new FakeClient((sql) => {
+      if (sql.includes('INSERT INTO "ReportSnapshot"')) {
+        return [];
+      }
+      if (sql.includes('FROM "ReportSnapshot"')) {
+        return [{
+          id: "snapshot-existing",
+          tenantId: original.tenantId,
+          examId: original.examId,
+          campusId: original.campusId,
+          gradeLevelId: original.gradeLevelId,
+          classId: original.classId,
+          courseId: original.courseId,
+          termId: original.termId,
+          reportType: original.reportType,
+          contentHash: original.contentHash,
+          status: "STALE",
+          inputRefs: original.inputRefs,
+          snapshotData: original.snapshotData,
+          generatedAt: original.generatedAt,
+        }];
+      }
+      return [];
+    });
+    const adapter = new PostgresReportGenerationAdapter(new FakePool(client));
+
+    const saved = await adapter.saveSnapshot(rerun);
+
+    expect(saved).toEqual({
+      id: "snapshot-existing",
+      ...original,
+      status: "STALE",
+    });
+    expect(saved.snapshotData).not.toEqual(rerun.snapshotData);
+    expect(saved.generatedAt).toBe(original.generatedAt);
+    expect(saved.status).toBe("STALE");
+    const insert = client.queries.find((query) => query.sql.includes('INSERT INTO "ReportSnapshot"'));
+    expect(insert?.sql).toContain('ON CONFLICT ("tenantId", "contentHash") DO NOTHING');
+    expect(insert?.sql).not.toContain("DO UPDATE");
+    const select = client.queries.find((query) => query.sql.includes('FROM "ReportSnapshot"'));
+    expect(select?.values).toEqual([original.tenantId, original.contentHash]);
   });
 
   it("hatalı scoreData değerini reddeder", async () => {

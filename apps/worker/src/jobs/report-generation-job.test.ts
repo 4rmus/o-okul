@@ -4,6 +4,7 @@ import { getJobContext } from "../context/job-context.js";
 import { createJobId, type QueueJob } from "../queue/queues.js";
 import {
   createExamResultSummarySnapshot,
+  createReportIdentityFingerprint,
   createReportSnapshotContentHash,
   examResultSummaryReportType,
   type ExamResultForReport,
@@ -55,12 +56,16 @@ describe("report generation job", () => {
       id: "snapshot-a",
       tenantId: "tenant-a",
       examId: "exam-a",
-      contentHash: createReportSnapshotContentHash("results-v1", {
-        resultKeys: ["result-a", "result-b"],
-        answerKeyVersions: ["answer-key-v1"],
-        parserConfigVersions: ["parser-v1"],
-        engineVersions: ["engine-v1"],
-      }),
+      contentHash: createReportSnapshotContentHash(
+        "results-v1",
+        {
+          resultKeys: ["result-a", "result-b"],
+          answerKeyVersions: ["answer-key-v1"],
+          parserConfigVersions: ["parser-v1"],
+          engineVersions: ["engine-v1"],
+        },
+        createReportIdentityFingerprint([createResult("student-a", "result-a"), createResult("student-b", "result-b")]),
+      ),
       campusId: "campus-main",
       gradeLevelId: "grade-8",
       classId: "class-a",
@@ -73,6 +78,7 @@ describe("report generation job", () => {
         answerKeyVersions: ["answer-key-v1"],
         parserConfigVersions: ["parser-v1"],
         engineVersions: ["engine-v1"],
+        generationContentHash: "results-v1",
       },
       snapshotData: {
         reportType: examResultSummaryReportType,
@@ -208,6 +214,46 @@ describe("report generation job", () => {
     );
 
     expect(changed.contentHash).not.toBe(first.contentHash);
+  });
+
+  it("öğrencinin rapor anındaki görünen adı ve numarasını snapshot içinde dondurur", () => {
+    const snapshot = createExamResultSummarySnapshot(
+      { tenantId: "tenant-a", examId: "exam-a", reportType: examResultSummaryReportType, contentHash: "request-hash" },
+      [{ ...createResult("student-a", "result-a"), displayName: "Ada Ak", studentNo: "1001" }],
+      "2026-05-30T08:00:00.000Z",
+    );
+
+    expect(snapshot.snapshotData.students[0]).toMatchObject({
+      studentId: "student-a",
+      displayName: "Ada Ak",
+      studentNo: "1001",
+    });
+  });
+
+  it("kimlik değişikliğini snapshot hashine katar, normalize edilmiş eşdeğeri tekilleştirir", () => {
+    const input = { tenantId: "tenant-a", examId: "exam-a", reportType: examResultSummaryReportType, contentHash: "request-hash" } as const;
+    const base = createResult("student-a", "result-a");
+    const first = createExamResultSummarySnapshot(
+      input,
+      [{ ...base, displayName: "Ada Ak", studentNo: "ab 1001" }],
+      "2026-05-30T08:00:00.000Z",
+    );
+    const normalizedEquivalent = createExamResultSummarySnapshot(
+      input,
+      [{ ...base, displayName: "  ADA   AK ", studentNo: " AB 1001 " }],
+      "2026-05-30T08:01:00.000Z",
+    );
+    const changed = createExamResultSummarySnapshot(
+      input,
+      [{ ...base, displayName: "Ada Yeni", studentNo: "1002" }],
+      "2026-05-30T08:02:00.000Z",
+    );
+
+    expect(normalizedEquivalent.contentHash).toBe(first.contentHash);
+    expect(changed.contentHash).not.toBe(first.contentHash);
+    expect(first.inputRefs).not.toHaveProperty("identityFingerprint");
+    expect(first.inputRefs).not.toHaveProperty("displayName");
+    expect(first.inputRefs).not.toHaveProperty("studentNo");
   });
 
   it("kazanım kırılımını snapshot ve öğrenci satırına taşır", () => {

@@ -1,7 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Field, Select } from "@o-okul/ui";
 import type {
   AcademicTermRecord,
   AnnouncementRecord,
@@ -11,6 +12,7 @@ import type {
   GuardianRecord,
   GuardianStudentRecord,
   HomeworkMaterialAssignmentRecord,
+  PortalReportIndexItem,
   ReportErrorBooklet,
   ReportStudentProgress,
   ReportStudentSnapshot,
@@ -48,15 +50,16 @@ export type StudentPortalView = "announcements" | "attendance" | "homework" | "o
 
 export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalView } = {}) {
   const { auth } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const rolePreviewToken = readRolePreviewToken(searchParams);
   const reportExamId = readReportExamId(searchParams, "");
   const isRolePreview = Boolean(rolePreviewToken);
   const canReadPortal = Boolean(auth && (auth.session.subjectType === "STUDENT" || isRolePreview));
-  const queryKey = ["next-student-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", reportExamId];
+  const queryKey = ["next-student-portal", auth?.session.userId ?? "anonymous", rolePreviewToken || "session", view, reportExamId];
   const query = useQuery({
     queryKey,
-    queryFn: () => loadStudentPortal(auth?.accessToken ?? "", rolePreviewToken, reportExamId),
+    queryFn: () => loadStudentPortal(auth?.accessToken ?? "", rolePreviewToken, reportExamId, view),
     enabled: canReadPortal,
     refetchOnWindowFocus: false,
   });
@@ -102,6 +105,12 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
   const supportStatus = openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok";
   const profileSubtitle = data?.profile ? `${data.profile.firstName} ${data.profile.lastName}` : "Öğrenci özeti";
   const portalSubtitle = studentPortalSubtitle(view, profileSubtitle);
+  function selectReportExam(examId: string) {
+    const nextSearchParams = new URLSearchParams(searchParams.toString());
+    if (examId) nextSearchParams.set("examId", examId);
+    else nextSearchParams.delete("examId");
+    router.replace(`?${nextSearchParams.toString()}`);
+  }
   const studentActionItems: PortalActionItem[] = [
     {
       actionLabel: unreadAnnouncements > 0 ? "Oku" : "Hazır",
@@ -263,6 +272,13 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
         main={
           <>
             {view === "overview" || view === "reports" ? <div id="portal-report">
+              {view === "reports" && (data?.reportIndex.length ?? 0) > 0 ? (
+                <Field label="Sınav raporu">
+                  <Select value={data?.selectedReportExamId ?? ""} onChange={(event) => selectReportExam(event.target.value)}>
+                    {(data?.reportIndex ?? []).map((exam) => <option key={exam.examId} value={exam.examId}>{exam.title}</option>)}
+                  </Select>
+                </Field>
+              ) : null}
               <ReportPanel
                 context={data?.report ?? undefined}
                 courseNames={courseNameById}
@@ -319,45 +335,63 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
   );
 }
 
-async function loadStudentPortal(accessToken: string, rolePreviewToken = "", reportExamId = "") {
-  const reportRequest = reportExamId
-    ? apiRequestOrNull<ReportStudentSnapshot>(accessToken, `${apiBaseUrl}/me/student/reports/${encodeURIComponent(reportExamId)}/latest`, rolePreviewToken)
+async function loadStudentPortal(
+  accessToken: string,
+  rolePreviewToken = "",
+  requestedReportExamId = "",
+  view: StudentPortalView = "overview",
+) {
+  const showOverview = view === "overview";
+  const showProfile = showOverview || view === "profile";
+  const showReports = showOverview || view === "reports";
+  const showHomework = showOverview || view === "homework";
+  const showAnnouncements = showOverview || view === "announcements";
+  const showSupport = showOverview || view === "support";
+  const showAttendance = showOverview || view === "attendance";
+  const reportIndex = showReports
+    ? await apiRequestOrNull<PortalReportIndexItem[]>(accessToken, `${apiBaseUrl}/me/student/reports`, rolePreviewToken) ?? []
+    : [];
+  const selectedReportExamId = reportIndex.some((record) => record.examId === requestedReportExamId)
+    ? requestedReportExamId
+    : reportIndex[0]?.examId ?? "";
+  const reportRequest = selectedReportExamId
+    ? apiRequestOrNull<ReportStudentSnapshot>(accessToken, `${apiBaseUrl}/me/student/reports/${encodeURIComponent(selectedReportExamId)}/latest`, rolePreviewToken)
     : Promise.resolve(null);
-  const errorBookletRequest = reportExamId
+  const errorBookletRequest = selectedReportExamId
     ? apiRequestOrNull<ReportErrorBooklet>(
         accessToken,
-        `${apiBaseUrl}/me/student/reports/${encodeURIComponent(reportExamId)}/latest/error-booklet`,
+        `${apiBaseUrl}/me/student/reports/${encodeURIComponent(selectedReportExamId)}/latest/error-booklet`,
         rolePreviewToken,
       )
     : Promise.resolve(null);
-  const progressRequest = reportExamId
-    ? apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/me/student/reports/${encodeURIComponent(reportExamId)}/progress?scope=all`, rolePreviewToken)
+  const progressRequest = selectedReportExamId
+    ? apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/me/student/reports/${encodeURIComponent(selectedReportExamId)}/progress?scope=all`, rolePreviewToken)
     : Promise.resolve(null);
 
   const [profile, guardians, guardianLinks, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, report, errorBooklet, progress, courses, terms] = await Promise.all([
     readOnlyRequest<StudentProfileRecord>(accessToken, `${apiBaseUrl}/me/student/profile`, rolePreviewToken),
-    readOnlyRequest<GuardianRecord[]>(accessToken, `${apiBaseUrl}/me/student/guardians`, rolePreviewToken),
-    readOnlyRequest<GuardianStudentRecord[]>(accessToken, `${apiBaseUrl}/me/student/guardian-links`, rolePreviewToken),
-    readOnlyRequest<StudentEnrollmentRecord[]>(accessToken, `${apiBaseUrl}/me/student/enrollments`, rolePreviewToken),
-    readOnlyRequest<AnnouncementRecord[]>(accessToken, `${apiBaseUrl}/me/student/announcements`, rolePreviewToken),
-    readOnlyRequest<HomeworkMaterialAssignmentRecord[]>(
+    showProfile ? readOnlyRequest<GuardianRecord[]>(accessToken, `${apiBaseUrl}/me/student/guardians`, rolePreviewToken) : Promise.resolve([]),
+    showProfile ? readOnlyRequest<GuardianStudentRecord[]>(accessToken, `${apiBaseUrl}/me/student/guardian-links`, rolePreviewToken) : Promise.resolve([]),
+    showProfile ? readOnlyRequest<StudentEnrollmentRecord[]>(accessToken, `${apiBaseUrl}/me/student/enrollments`, rolePreviewToken) : Promise.resolve([]),
+    showAnnouncements ? readOnlyRequest<AnnouncementRecord[]>(accessToken, `${apiBaseUrl}/me/student/announcements`, rolePreviewToken) : Promise.resolve([]),
+    showHomework ? readOnlyRequest<HomeworkMaterialAssignmentRecord[]>(
       accessToken,
       `${apiBaseUrl}/me/student/homework/material-assignments`,
       rolePreviewToken,
-    ),
-    readOnlyRequest<SupportTicketRecord[]>(accessToken, `${apiBaseUrl}/me/student/support-tickets`, rolePreviewToken),
-    readOnlyRequest<AttendanceRecord[]>(accessToken, `${apiBaseUrl}/me/student/attendance`, rolePreviewToken),
-    readOnlyRequest<AttendanceSummaryRecord>(accessToken, `${apiBaseUrl}/me/student/attendance/summary`, rolePreviewToken),
-    readOnlyRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/me/student/teacher-notes`, rolePreviewToken),
-    readOnlyRequest<DevelopmentTrendItem[]>(accessToken, `${apiBaseUrl}/me/student/development-assessments`, rolePreviewToken),
+    ) : Promise.resolve([]),
+    showSupport ? readOnlyRequest<SupportTicketRecord[]>(accessToken, `${apiBaseUrl}/me/student/support-tickets`, rolePreviewToken) : Promise.resolve([]),
+    showAttendance ? readOnlyRequest<AttendanceRecord[]>(accessToken, `${apiBaseUrl}/me/student/attendance`, rolePreviewToken) : Promise.resolve([]),
+    showAttendance ? readOnlyRequest<AttendanceSummaryRecord>(accessToken, `${apiBaseUrl}/me/student/attendance/summary`, rolePreviewToken) : Promise.resolve({} as AttendanceSummaryRecord),
+    showProfile || showAttendance ? readOnlyRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/me/student/teacher-notes`, rolePreviewToken) : Promise.resolve([]),
+    showProfile ? readOnlyRequest<DevelopmentTrendItem[]>(accessToken, `${apiBaseUrl}/me/student/development-assessments`, rolePreviewToken) : Promise.resolve([]),
     reportRequest,
     errorBookletRequest,
     progressRequest,
-    readOnlyRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`, rolePreviewToken),
-    readOnlyRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`, rolePreviewToken),
+    showProfile || showReports || showHomework || showAttendance ? readOnlyRequest<CourseRecord[]>(accessToken, `${apiBaseUrl}/courses`, rolePreviewToken) : Promise.resolve([]),
+    showProfile || showReports || showHomework || showAttendance ? readOnlyRequest<AcademicTermRecord[]>(accessToken, `${apiBaseUrl}/academic-terms`, rolePreviewToken) : Promise.resolve([]),
   ]);
 
-  return { profile, guardians, guardianLinks, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, report, errorBooklet, progress, courses, terms };
+  return { profile, guardians, guardianLinks, enrollments, announcements, homeworkAssignments, supportTickets, attendance, attendanceSummary, teacherNotes, developmentAssessments, report, errorBooklet, progress, courses, terms, reportIndex, selectedReportExamId };
 }
 
 async function markAnnouncementRead(accessToken: string, path: string) {

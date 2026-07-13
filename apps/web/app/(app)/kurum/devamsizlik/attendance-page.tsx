@@ -1,22 +1,35 @@
 "use client";
 
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AcademicTermRecord, AttendanceRecord, ClassRecord, CourseRecord, StudentRecord } from "@o-okul/shared-types";
+import type {
+  AcademicTermRecord,
+  AttendanceDailyRosterResponse,
+  AttendanceDailyRosterStudent,
+  AttendanceDailyUpsertRequest,
+  AttendanceDailyUpsertResponse,
+  AttendanceRecord,
+  AttendanceStatus,
+  ClassRecord,
+  CourseRecord,
+  StudentRecord,
+} from "@o-okul/shared-types";
 import {
   Button,
   CrudPage,
+  DataTable,
   EmptyState,
   Field,
   FormModal,
   Input,
+  Panel,
   Select,
   StatusBadge,
   type DataTableColumn,
   useConfirmDialog,
 } from "@o-okul/ui";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import { formatCourseName } from "../../_shared/academic-labels.js";
@@ -44,6 +57,7 @@ export function AttendancePage() {
   const { confirm, confirmationDialog } = useConfirmDialog();
   const [listQuery, setListQuery] = useUrlListState(searchParams, { sortOptions: attendanceSortOptions });
   const [classId, setClassId] = useState(() => searchParams.get("classId") ?? "");
+  const [attendanceDate, setAttendanceDate] = useState(todayInputValue);
   const queryKey = ["next-attendance", auth?.session.tenantId ?? "anonymous", listQuery, classId];
   const listQueryKey = ["next-attendance", auth?.session.tenantId ?? "anonymous"];
   const attendanceQuery = useQuery({
@@ -58,6 +72,16 @@ export function AttendancePage() {
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
+  const dailyQueryKey = ["next-daily-attendance", auth?.session.tenantId ?? "anonymous", classId, attendanceDate];
+  const dailyQuery = useQuery({
+    queryKey: dailyQueryKey,
+    queryFn: () => loadDailyAttendance(auth?.accessToken ?? "", classId, attendanceDate),
+    enabled: Boolean(auth && classId && attendanceDate),
+    refetchOnWindowFocus: false,
+  });
+  const [dailyStatuses, setDailyStatuses] = useState<Record<string, AttendanceStatus | "">>({});
+  const [dailyError, setDailyError] = useState("");
+  const [isDailySaving, setIsDailySaving] = useState(false);
   const [editingAttendance, setEditingAttendance] = useState<AttendanceRecord | null>(null);
   const [form, setForm] = useState<AttendanceFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -85,16 +109,16 @@ export function AttendancePage() {
       value: formatCount(attendanceQuery.data?.meta?.total ?? rows.length),
     },
     {
-      description: "Yok ve geç kayıt",
+      description: "Açık sayfadaki yok ve geç kayıt",
       key: "attention",
-      label: "Takip gerektiren",
+      label: "Bu sayfada takip",
       tone: attentionCount > 0 ? "warning" : "success",
       value: formatCount(attentionCount),
     },
     {
-      description: "Var / izinli",
+      description: "Açık sayfadaki var / izinli",
       key: "present",
-      label: "Katılım durumu",
+      label: "Bu sayfada katılım",
       tone: presentCount > 0 ? "success" : "default",
       value: `${formatCount(presentCount)} / ${formatCount(excusedCount)}`,
     },
@@ -115,6 +139,56 @@ export function AttendancePage() {
       key: "sort",
       label: `Sıralama: ${formatAttendanceSort(listQuery.sort)}`,
       tone: "neutral",
+    },
+  ];
+  const dailyStudents = dailyQuery.data?.students ?? [];
+  const dailyRecords = dailyQuery.data?.records ?? [];
+  const dailyAggregate = dailyQuery.data?.aggregate;
+  const dailyRosterComplete = dailyStudents.length > 0 && dailyStudents.every((student) => Boolean(dailyStatuses[student.id]));
+
+  useEffect(() => {
+    if (!dailyQuery.data) {
+      setDailyStatuses({});
+      return;
+    }
+    const statusByStudentId = new Map(dailyQuery.data.records.map((record) => [record.studentId, record.status]));
+    setDailyStatuses(Object.fromEntries(dailyQuery.data.students.map((student) => [student.id, statusByStudentId.get(student.id) ?? ""])));
+  }, [dailyQuery.data]);
+
+  const dailyColumns: Array<DataTableColumn<AttendanceDailyRosterStudent>> = [
+    {
+      key: "student",
+      header: "Öğrenci",
+      mobilePriority: "primary",
+      priority: "primary",
+      sticky: "left",
+      render: (student) => `${student.firstName} ${student.lastName}`,
+    },
+    {
+      key: "studentNo",
+      header: "No",
+      mobilePriority: "secondary",
+      priority: "secondary",
+      render: (student) => student.studentNo ?? "-",
+    },
+    {
+      key: "status",
+      header: "Durum",
+      mobilePriority: "primary",
+      priority: "primary",
+      render: (student) => (
+        <Select
+          aria-label={`${student.firstName} ${student.lastName} yoklama durumu`}
+          value={dailyStatuses[student.id] ?? ""}
+          onChange={(event) => setDailyStatuses((current) => ({ ...current, [student.id]: event.target.value as AttendanceStatus }))}
+        >
+          <option value="">Seçiniz</option>
+          <option value="PRESENT">Var</option>
+          <option value="ABSENT">Yok</option>
+          <option value="LATE">Geç</option>
+          <option value="EXCUSED">İzinli</option>
+        </Select>
+      ),
     },
   ];
 
@@ -154,13 +228,6 @@ export function AttendancePage() {
     writeBrowserQueryParam("classId", nextClassId);
   }
 
-  function openCreateForm() {
-    setEditingAttendance(null);
-    setForm(emptyForm);
-    setError("");
-    setIsFormOpen(true);
-  }
-
   function openEditForm(record: AttendanceRecord) {
     setEditingAttendance(record);
     setForm({
@@ -192,9 +259,12 @@ export function AttendancePage() {
     }
 
     try {
-      const savedAttendance = editingAttendance
-        ? await updateAttendance(auth.accessToken, editingAttendance.id, parsedForm.data)
-        : await createAttendance(auth.accessToken, parsedForm.data);
+      if (!editingAttendance) return;
+      const savedAttendance = await updateAttendance(auth.accessToken, editingAttendance.id, {
+        courseId: parsedForm.data.courseId,
+        status: parsedForm.data.status,
+        termId: parsedForm.data.termId,
+      });
       void savedAttendance;
       void queryClient.invalidateQueries({ queryKey: listQueryKey });
       closeForm();
@@ -222,8 +292,75 @@ export function AttendancePage() {
     }
   }
 
+  function markAllPresent() {
+    setDailyStatuses(Object.fromEntries(dailyStudents.map((student) => [student.id, "PRESENT"] as const)));
+  }
+
+  async function saveDailyAttendance() {
+    if (!auth || !classId || !attendanceDate || !dailyRosterComplete) return;
+    setDailyError("");
+    setIsDailySaving(true);
+    try {
+      await upsertDailyAttendance(auth.accessToken, {
+        classId,
+        date: attendanceDate,
+        entries: dailyStudents.map((student) => ({ studentId: student.id, status: dailyStatuses[student.id] as AttendanceStatus })),
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: dailyQueryKey }),
+        queryClient.invalidateQueries({ queryKey: listQueryKey }),
+      ]);
+    } catch {
+      setDailyError("Günlük yoklama kaydedilemedi.");
+    } finally {
+      setIsDailySaving(false);
+    }
+  }
+
   return (
     <>
+      <Panel
+        aria-label="Günlük sınıf yoklaması"
+        description="Sınıf ve tarihi seç, öğrenci durumlarını tek işlemle atomik olarak kaydet."
+        title="Günlük sınıf yoklaması"
+      >
+        <div className="next-list-controls" aria-label="Günlük yoklama kontrolleri">
+          <Field label="Yoklama sınıfı">
+            <Select value={classId} onChange={(event) => updateClassFilter(event.target.value)}>
+              <option value="">Sınıf seçiniz</option>
+              {references.classes.map((record) => <option key={record.id} value={record.id}>{record.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Yoklama tarihi">
+            <Input type="date" value={attendanceDate} onChange={(event) => setAttendanceDate(event.target.value)} />
+          </Field>
+          {dailyRecords.length === 0 && dailyStudents.length > 0 ? (
+            <Button type="button" variant="secondary" onClick={markAllPresent}>Tümünü Var</Button>
+          ) : null}
+          <Button disabled={!dailyRosterComplete || isDailySaving} type="button" onClick={() => void saveDailyAttendance()}>
+            {isDailySaving ? "Kaydediliyor" : "Yoklamayı kaydet"}
+          </Button>
+        </div>
+        {dailyError ? <p className="uh-crud-page__error" role="alert">{dailyError}</p> : null}
+        {!classId ? (
+          <EmptyState title="Sınıf seçin" description="Günlük yoklama listesi seçtiğiniz sınıfa göre hazırlanır." />
+        ) : (
+          <>
+            <DailyAttendanceSummary aggregate={dailyAggregate} />
+            <DataTable
+              caption="Günlük sınıf yoklama listesi"
+              columns={dailyColumns}
+              density="compact"
+              description={`${attendanceDate} tarihli aktif sınıf öğrencileri ve yoklama durumları.`}
+              emptyText="Seçili tarihte bu sınıfa kayıtlı öğrenci yok"
+              error={dailyQuery.isError ? "Günlük yoklama listesi alınamadı." : undefined}
+              getRowKey={(student) => student.id}
+              loading={dailyQuery.isPending}
+              rows={dailyStudents}
+            />
+          </>
+        )}
+      </Panel>
       <CrudPage
         actions={
           <ListControls
@@ -232,7 +369,7 @@ export function AttendancePage() {
             sortOptions={attendanceSortOptions}
             state={listQuery}
           >
-            <Field className="next-filter-field" label="Sınıf">
+            <Field className="next-filter-field" label="Geçmiş sınıf filtresi">
               <Select
                 value={classId}
                 onChange={(event) => {
@@ -247,21 +384,16 @@ export function AttendancePage() {
                 ))}
               </Select>
             </Field>
-            <Button onClick={openCreateForm}>
-              <Plus size={17} aria-hidden="true" />
-              Devamsızlık ekle
-            </Button>
           </ListControls>
         }
         aria-label="Devamsızlık yönetimi"
         columns={columns}
-        description="Devamsızlığı öğrenci, sınıf, ders ve dönem bağlamıyla yönet."
+        description="Geçmiş ve ders bağlı kayıtları görüntüle; günlük yoklamayı üstteki sınıf listesiyle kaydet."
         emptyState={
           <EmptyState
             title="Devamsızlık kaydı yok"
             description="İlk devamsızlık kaydını ekleyerek yoklama takibini başlat."
             hint="Kayıtlar öğrenci, ders ve dönem bağlantısıyla izlenir."
-            primaryAction={{ label: "Devamsızlık ekle", onClick: openCreateForm }}
           />
         }
         emptyText="Devamsızlık kaydı yok"
@@ -273,7 +405,6 @@ export function AttendancePage() {
         summary={<OperationSummary ariaLabel="Devamsızlık operasyon özeti" badges={attendanceSummaryBadges} items={attendanceSummaryItems} />}
         tableCaption="Devamsızlık operasyon listesi"
         tableDescription="Öğrenci, sınıf, ders, dönem ve durum kırılımıyla yoklama takibi."
-        title="Devamsızlık"
       />
       <AttendanceFormModal
         form={form}
@@ -316,7 +447,7 @@ function AttendanceFormModal({
       title={isEditing ? "Devamsızlık düzenle" : "Devamsızlık ekle"}
     >
       <Field label="Öğrenci">
-        <Select value={form.studentId} onChange={(event) => onChange((current) => ({ ...current, studentId: event.target.value }))}>
+        <Select disabled={isEditing} value={form.studentId} onChange={(event) => onChange((current) => ({ ...current, studentId: event.target.value }))}>
           <option value="">Seçiniz</option>
           {references.students.map((record) => (
             <option key={record.id} value={record.id}>
@@ -346,7 +477,7 @@ function AttendanceFormModal({
         </Select>
       </Field>
       <Field label="Tarih">
-        <Input required type="date" value={form.date} onChange={(event) => onChange((current) => ({ ...current, date: event.target.value }))} />
+        <Input disabled={isEditing} required type="date" value={form.date} onChange={(event) => onChange((current) => ({ ...current, date: event.target.value }))} />
       </Field>
       <Field label="Durum">
         <Select value={form.status} onChange={(event) => onChange((current) => ({ ...current, status: event.target.value as AttendanceRecord["status"] }))}>
@@ -381,6 +512,32 @@ const emptyReferences: AttendanceReferences = {
   terms: [],
 };
 
+function DailyAttendanceSummary({ aggregate }: { aggregate?: AttendanceDailyRosterResponse["summary"] }) {
+  if (!aggregate) return null;
+  const items: OperationSummaryItem[] = [
+    { key: "total", label: "İşaretlenen", value: formatCount(aggregate.total), description: "Durumu kaydedilmiş öğrenci" },
+    { key: "present", label: "Var", value: formatCount(aggregate.present), tone: "success" },
+    { key: "attention", label: "Yok / Geç", value: `${formatCount(aggregate.absent)} / ${formatCount(aggregate.late)}`, tone: aggregate.absent + aggregate.late > 0 ? "warning" : "success" },
+    { key: "excused", label: "İzinli", value: formatCount(aggregate.excused) },
+    { key: "unmarked", label: "İşaretlenmeyen", value: formatCount(aggregate.unmarked), tone: aggregate.unmarked > 0 ? "warning" : "success" },
+  ];
+  return <OperationSummary ariaLabel="Günlük yoklama özeti" items={items} />;
+}
+
+async function loadDailyAttendance(accessToken: string, classId: string, date: string) {
+  const query = new URLSearchParams({ classId, date });
+  const response = await apiRequest<AttendanceDailyRosterResponse>(accessToken, `${apiBaseUrl}/attendance/daily?${query.toString()}`);
+  return { aggregate: response.summary, records: response.records, students: response.students };
+}
+
+async function upsertDailyAttendance(accessToken: string, input: AttendanceDailyUpsertRequest) {
+  return apiRequest<AttendanceDailyUpsertResponse>(accessToken, `${apiBaseUrl}/attendance/daily`, {
+    body: JSON.stringify(input),
+    headers: { "content-type": "application/json" },
+    method: "PUT",
+  });
+}
+
 async function loadAttendance(accessToken: string, listQuery: ListQueryState, classId: string) {
   const url = new URL(buildListUrl(`${apiBaseUrl}/attendance`, listQuery));
   if (classId) url.searchParams.set("classId", classId);
@@ -402,15 +559,11 @@ async function loadReferences(accessToken: string): Promise<AttendanceReferences
   };
 }
 
-async function createAttendance(accessToken: string, input: AttendanceFormPayload) {
-  return apiRequest<AttendanceRecord>(accessToken, `${apiBaseUrl}/attendance`, {
-    body: JSON.stringify(input),
-    headers: { "content-type": "application/json" },
-    method: "POST",
-  });
-}
-
-async function updateAttendance(accessToken: string, id: string, input: AttendanceFormPayload) {
+async function updateAttendance(
+  accessToken: string,
+  id: string,
+  input: Pick<AttendanceFormPayload, "status"> & Partial<Pick<AttendanceFormPayload, "courseId" | "termId">>,
+) {
   return apiRequest<AttendanceRecord>(accessToken, `${apiBaseUrl}/attendance/${encodeURIComponent(id)}`, {
     body: JSON.stringify(input),
     headers: { "content-type": "application/json" },
@@ -469,6 +622,12 @@ function formatAttendanceSort(sort: string) {
 
 function formatCount(value: number) {
   return new Intl.NumberFormat("tr-TR").format(value);
+}
+
+function todayInputValue() {
+  const today = new Date();
+  const offset = today.getTimezoneOffset() * 60_000;
+  return new Date(today.getTime() - offset).toISOString().slice(0, 10);
 }
 
 function writeBrowserQueryParam(name: string, value: string) {

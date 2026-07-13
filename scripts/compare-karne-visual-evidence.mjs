@@ -12,7 +12,7 @@ if (!options.ui) {
   throw new Error("UI_SCREENSHOT_REQUIRED: pass --ui <path>");
 }
 if (!existsSync(options.ui)) {
-  throw new Error(`UI_SCREENSHOT_NOT_FOUND:${options.ui}`);
+  throw new Error("UI_SCREENSHOT_NOT_FOUND");
 }
 
 const targetNeedle = options.target ?? "iSEM";
@@ -33,7 +33,7 @@ try {
   runSips(["-s", "format", "bmp", targetPng, "--out", targetBmp], `TARGET_BMP_FAILED:${targetNeedle}`);
   runSips(
     ["-z", String(expectedSize.height), String(expectedSize.width), "-s", "format", "bmp", options.ui, "--out", uiBmp],
-    `UI_BMP_FAILED:${options.ui}`,
+    "UI_BMP_FAILED",
   );
 
   const target = readBmp(targetBmp);
@@ -60,7 +60,7 @@ try {
   console.log(
     `karne-visual-diff target=${result.target} normalized=${result.normalizedSize} ` +
       `changed=${result.changedPixels}/${result.totalPixels} ratio=${result.diffRatio} ` +
-      `meanChannelDelta=${result.meanChannelDelta} ui=${result.uiScreenshot}`,
+      `meanChannelDelta=${result.meanChannelDelta} ui=provided`,
   );
 
   if (options.maxDiffRatio !== undefined && diff.diffRatio > options.maxDiffRatio) {
@@ -96,16 +96,16 @@ function parseArgs(args) {
 
 function runSips(args, errorCode) {
   const result = spawnSync("sips", args, { encoding: "utf8" });
-  if (result.error) throw result.error;
+  if (result.error) throw new Error(errorCode);
   if (result.status !== 0) {
-    throw new Error(`${errorCode}:${result.stderr || result.stdout}`);
+    throw new Error(errorCode);
   }
 }
 
 function readBmp(path) {
   const buffer = readFileSync(path);
   if (buffer.toString("ascii", 0, 2) !== "BM") {
-    throw new Error(`BMP_SIGNATURE_INVALID:${path}`);
+    throw new Error("BMP_SIGNATURE_INVALID");
   }
 
   const pixelOffset = buffer.readUInt32LE(10);

@@ -11,7 +11,6 @@ import type {
   GuardianRecord,
   GradeLevelRecord,
   HomeworkMaterialAssignmentRecord,
-  HomeworkMaterialRecord,
   PaymentPlanWithInstallmentsRecord,
   ReportErrorBooklet,
   ReportSnapshotRecord,
@@ -27,7 +26,7 @@ import type {
 } from "@o-okul/shared-types";
 import { Download, Eye, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
+import { ApiRequestError, apiBaseUrl, apiListRequest, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
 import {
   firstFormError,
@@ -818,7 +817,6 @@ export function StudentsPage() {
         }
         tableCaption="Öğrenci listesi"
         tableDescription="Filtreler, kolon görünürlüğü ve yoğunluk seçimi URL durumuyla korunur."
-        title="Öğrenciler"
       />
       <FormModal
         description="CSV veya XLSX dosyası seçildiğinde önce dry-run yapılır; hata yoksa aktarım tamamlanır."
@@ -1353,7 +1351,9 @@ async function loadStudentDetail(accessToken: string, id: string, reportExamId: 
     apiRequest<GuardianRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/guardians`),
     loadStudentHomeworkAssignments(accessToken, id),
     apiRequest<PaymentPlanWithInstallmentsRecord[]>(accessToken, `${apiBaseUrl}/payment-plans?studentId=${encodeURIComponent(id)}`),
-    apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/students/${encodeURIComponent(id)}/progress?scope=all`),
+    reportExamId
+      ? apiRequestOrNull<ReportStudentProgress>(accessToken, `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/students/${encodeURIComponent(id)}/progress?scope=all`)
+      : Promise.resolve(null),
     loadLatestStudentReport(accessToken, id, reportExamId),
     apiRequest<StudentEnrollmentRecord[]>(accessToken, `${apiBaseUrl}/students/${encodeURIComponent(id)}/enrollments`),
     apiRequest<TeacherNoteRecord[]>(accessToken, `${apiBaseUrl}/teacher-notes?studentId=${encodeURIComponent(id)}`),
@@ -1373,19 +1373,14 @@ async function loadStudentDetail(accessToken: string, id: string, reportExamId: 
 }
 
 async function loadStudentHomeworkAssignments(accessToken: string, studentId: string) {
-  const materials = await apiRequest<HomeworkMaterialRecord[]>(accessToken, `${apiBaseUrl}/homework/materials`);
-  const assignmentLists = await Promise.all(
-    materials.map((material) =>
-      apiRequest<HomeworkMaterialAssignmentRecord[]>(
-        accessToken,
-        `${apiBaseUrl}/homework/materials/${encodeURIComponent(material.id)}/assignments`,
-      ),
-    ),
+  return apiRequest<HomeworkMaterialAssignmentRecord[]>(
+    accessToken,
+    `${apiBaseUrl}/homework/material-assignments?studentId=${encodeURIComponent(studentId)}`,
   );
-  return assignmentLists.flat().filter((assignment) => assignment.studentId === studentId);
 }
 
 async function loadLatestStudentReport(accessToken: string, studentId: string, reportExamId: string): Promise<ReportStudentSnapshot | null> {
+  if (!reportExamId) return null;
   const snapshot = await loadLatestSnapshot(accessToken, studentId, reportExamId);
   if (!snapshot) return null;
   return apiRequestOrNull<ReportStudentSnapshot>(
@@ -1395,6 +1390,7 @@ async function loadLatestStudentReport(accessToken: string, studentId: string, r
 }
 
 async function loadLatestErrorBooklet(accessToken: string, studentId: string, reportExamId: string): Promise<ReportErrorBooklet | null> {
+  if (!reportExamId) return null;
   const snapshot = await loadLatestSnapshot(accessToken, studentId, reportExamId);
   if (!snapshot) return null;
   return apiRequestOrNull<ReportErrorBooklet>(
@@ -1404,6 +1400,7 @@ async function loadLatestErrorBooklet(accessToken: string, studentId: string, re
 }
 
 async function loadLatestSnapshot(accessToken: string, studentId: string, reportExamId: string): Promise<ReportSnapshotRecord | null> {
+  if (!reportExamId) return null;
   const snapshots = await apiRequest<ReportSnapshotRecord[]>(accessToken, `${apiBaseUrl}/exams/${encodeURIComponent(reportExamId)}/reports/snapshots`);
   return snapshots.find((snapshot) =>
     snapshot.status === "READY" && snapshot.snapshotData?.students?.some((student) => student.studentId === studentId),
@@ -1413,8 +1410,9 @@ async function loadLatestSnapshot(accessToken: string, studentId: string, report
 async function apiRequestOrNull<T>(accessToken: string, input: RequestInfo | URL): Promise<T | null> {
   try {
     return await apiRequest<T>(accessToken, input);
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 404) return null;
+    throw error;
   }
 }
 

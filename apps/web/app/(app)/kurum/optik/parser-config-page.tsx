@@ -1,24 +1,20 @@
 "use client";
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Button, DataTable, EmptyState, Field, InfoGrid, InfoItem, Input, MetricCard, MetricGrid, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn } from "@o-okul/ui";
 import type {
-  ExamParticipantRecord,
   ExamRecord,
   OpticalFormTemplateRecord,
   ParserConfigPreset,
   ParserConfigSuggestion,
-  ReportSnapshotExportResult,
-  ReportSnapshotRecord,
   StudentRecord,
 } from "@o-okul/shared-types";
-import { CheckCircle2, Download, FileText, Play, RefreshCw, Search, Upload, Wand2 } from "lucide-react";
+import { CheckCircle2, FileText, Play, RefreshCw, Search, Upload, Wand2 } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiErrorMessage, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
-import { buildReportAnalysisRows, type ReportAnalysisRow } from "../../_shared/report-analysis.js";
-import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import {
   firstFormError,
   parserConfigApprovalFormSchema,
@@ -127,19 +123,10 @@ interface ImportQuarantineResolveBulkResponse {
   }>;
 }
 
-interface ReportGenerationQueueResult {
-  tenantId: string;
-  examId: string;
-  reportType: "EXAM_RESULT_SUMMARY";
-  queueName: "report-generation";
-  jobId: string;
-  status: "queued";
-}
-
 const tabs: Array<{ id: OpticalTab; label: string }> = [
   { id: "format", label: "1. Format" },
   { id: "upload", label: "2. Optik yükleme" },
-  { id: "quarantine", label: "3. Eşleşmeyen satırlar ve rapor" },
+  { id: "quarantine", label: "3. Eşleşmeyen satırlar" },
 ];
 
 const defaultOpticalTab: OpticalTab = "format";
@@ -304,20 +291,12 @@ export function ParserConfigPage() {
   const [quarantineStudentOptions, setQuarantineStudentOptions] = useState<StudentRecord[]>([]);
   const [quarantineStudentQuery, setQuarantineStudentQuery] = useState("");
   const [isQuarantineStudentSearching, setIsQuarantineStudentSearching] = useState(false);
-  const [reportStudents, setReportStudents] = useState<StudentRecord[]>([]);
   const [selectedStudentByQuarantine, setSelectedStudentByQuarantine] = useState<Record<string, string>>({});
-  const [reportContentHash, setReportContentHash] = useState("");
-  const [reportJob, setReportJob] = useState<ReportGenerationQueueResult | null>(null);
-  const [reportParticipants, setReportParticipants] = useState<ExamParticipantRecord[]>([]);
-  const [reportSnapshots, setReportSnapshots] = useState<ReportSnapshotRecord[]>([]);
-  const [isReportSubmitting, setIsReportSubmitting] = useState(false);
   const [error, setError] = useState("");
   const selectedExam = exams.find((exam) => exam.id === examId);
   const selectedPresetForm = opticalFormPresets.find((form) => form.preset === selectedPreset) ?? opticalFormPresets[0]!;
   const selectedPresetVersion = createPresetParserVersion(selectedPresetForm);
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
-  const hasReadyReportSnapshot = reportSnapshots.some((snapshot) => snapshot.status === "READY");
-  const latestReportSnapshot = reportSnapshots[0] ?? null;
   const formatStatusLabel = savedConfig ? "Format hazır" : suggestion ? "Öneri hazır" : "Format bekliyor";
   const formatStatusTone = savedConfig ? "success" : suggestion ? "info" : "neutral";
   const uploadStatusLabel = rawImportSummary
@@ -336,14 +315,8 @@ export function ParserConfigPage() {
         ? "Analiz bekliyor"
         : "Yükleme bekliyor";
   const analysisStatusTone = evaluationStatus?.status === "COMPLETED" ? "success" : evaluationJobs || rawImportSummary ? "warning" : "neutral";
-  const outputStatusLabel = hasReadyReportSnapshot
-    ? "Excel/PDF hazır"
-    : reportJob
-      ? "Rapor kuyruğa alındı"
-      : latestReportSnapshot
-        ? "READY bekleniyor"
-        : "Hazır rapor yok";
-  const outputStatusTone = hasReadyReportSnapshot ? "success" : reportJob || latestReportSnapshot ? "warning" : "neutral";
+  const outputStatusLabel = evaluationStatus?.status === "COMPLETED" ? "Raporlara geç" : "Analiz bekliyor";
+  const outputStatusTone = evaluationStatus?.status === "COMPLETED" ? "info" : "neutral";
 
   useEffect(() => {
     if (!auth) return;
@@ -383,11 +356,26 @@ export function ParserConfigPage() {
 
   function selectOpticalExam(nextExamId: string) {
     setExamId(nextExamId);
-    setReportSnapshots([]);
-    setReportParticipants([]);
-    setReportJob(null);
     setSuggestion(null);
     setSavedConfig(null);
+    setFileName("");
+    setFileBase64("");
+    setRawImportFileName("");
+    setRawImportFileBase64("");
+    setRawImport(null);
+    setRawImportSummary(null);
+    setEvaluationJobs(null);
+    setEvaluationStatus(null);
+    setIsRawImportSubmitting(false);
+    setIsRawImportChecking(false);
+    setIsEvaluationSubmitting(false);
+    setQuarantineRawImportId("");
+    setQuarantines([]);
+    setQuarantineStudentOptions([]);
+    setQuarantineStudentQuery("");
+    setIsQuarantineStudentSearching(false);
+    setSelectedStudentByQuarantine({});
+    setError("");
     writeOpticalWorkspaceToUrl({ examId: nextExamId, tab: activeTab });
   }
 
@@ -583,11 +571,6 @@ export function ParserConfigPage() {
     setQuarantines([]);
     setQuarantineStudentOptions([]);
     setSelectedStudentByQuarantine({});
-    setReportStudents([]);
-    setReportContentHash("");
-    setReportJob(null);
-    setIsReportSubmitting(false);
-
     setIsRawImportChecking(true);
     try {
       setRawImportSummary(await waitForRawImportSummary(auth.accessToken, examId, result.rawImport.id));
@@ -639,10 +622,6 @@ export function ParserConfigPage() {
         rawImportId,
       });
       setEvaluationJobs(jobs);
-      const rawImportSha = jobs.rawImportSha256 ?? rawImport?.rawImport.sha256;
-      if (rawImportSha && jobs.answerKeyId) {
-        setReportContentHash(`${rawImportSha}-${jobs.answerKeyId}`);
-      }
       const status = await waitForRawImportEvaluationStatus(auth.accessToken, {
         examId,
         rawImportId,
@@ -715,9 +694,6 @@ export function ParserConfigPage() {
         resolvedStudentId: parsedForm.data.resolvedStudentId,
       });
       setQuarantines((current) => current.map((item) => (item.id === resolved.id ? resolved : item)));
-      if (resolved.rawImportSha256 && resolved.answerKeyId) {
-        setReportContentHash(`${resolved.rawImportSha256}-${resolved.answerKeyId}`);
-      }
     } catch (resolveError) {
       setError(apiErrorMessage(resolveError, "Karantina kaydı çözülemedi."));
     }
@@ -748,83 +724,12 @@ export function ParserConfigPage() {
       });
       const resolvedById = new Map(response.results.flatMap((result) => result.quarantine ? [[result.quarantineId, result.quarantine]] : []));
       setQuarantines((current) => current.map((item) => resolvedById.get(item.id) ?? item));
-      const resolved = response.results.find((result) => result.quarantine?.rawImportSha256 && result.quarantine.answerKeyId)?.quarantine;
-      if (resolved?.rawImportSha256 && resolved.answerKeyId) {
-        setReportContentHash(`${resolved.rawImportSha256}-${resolved.answerKeyId}`);
-      }
       const failedCount = response.results.filter((result) => result.status === "FAILED").length;
       if (failedCount > 0) {
         setError(`${failedCount} karantina satırı çözülemedi.`);
       }
     } catch (resolveError) {
       setError(apiErrorMessage(resolveError, "Karantina satırları bulk çözülemedi."));
-    }
-  }
-
-  async function submitReportGeneration(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!auth) return;
-
-    setError("");
-    const normalizedExamId = examId.trim();
-    const normalizedContentHash = reportContentHash.trim();
-    if (!normalizedExamId) {
-      setError("Sınav seçilmelidir.");
-      return;
-    }
-    if (!normalizedContentHash) {
-      setError("Rapor üretmeden önce eşleşen satırlar için analizi başlatın.");
-      return;
-    }
-    if (evaluationStatus?.status !== "COMPLETED" || evaluationStatus.evaluatedCount <= 0) {
-      setError("Rapor üretmeden önce analiz tamamlanmalıdır.");
-      return;
-    }
-    setIsReportSubmitting(true);
-    try {
-      const currentReadyCount = countReadyReportSnapshots(reportSnapshots);
-      setReportJob(await enqueueReportGeneration(auth.accessToken, normalizedExamId));
-      const snapshots = await waitForReportSnapshots(auth.accessToken, normalizedExamId, currentReadyCount);
-      const context = await loadReportTableContext(auth.accessToken, normalizedExamId, snapshots[0] ?? null);
-      setReportSnapshots(snapshots);
-      setReportParticipants(context.participants);
-      setReportStudents(context.students);
-    } catch (reportError) {
-      setError(apiErrorMessage(reportError, "Rapor üretimi kuyruğa alınamadı."));
-    } finally {
-      setIsReportSubmitting(false);
-    }
-  }
-
-  async function refreshReportSnapshots() {
-    if (!auth) return;
-
-    setError("");
-    const normalizedExamId = examId.trim();
-    if (!normalizedExamId) {
-      setError("Sınav seçilmelidir.");
-      return;
-    }
-    try {
-      const snapshots = await loadReportSnapshots(auth.accessToken, normalizedExamId);
-      const context = await loadReportTableContext(auth.accessToken, normalizedExamId, snapshots[0] ?? null);
-      setReportSnapshots(snapshots);
-      setReportParticipants(context.participants);
-      setReportStudents(context.students);
-    } catch (snapshotError) {
-      setError(apiErrorMessage(snapshotError, "Rapor listesi alınamadı."));
-    }
-  }
-
-  async function downloadReportSnapshot(snapshot: ReportSnapshotRecord, format: "xlsx" | "pdf") {
-    if (!auth) return;
-
-    setError("");
-    try {
-      const result = await exportReportSnapshot(auth.accessToken, snapshot.examId, snapshot.id, format);
-      downloadBase64File(result);
-    } catch (downloadError) {
-      setError(apiErrorMessage(downloadError, "Rapor indirilemedi."));
     }
   }
 
@@ -842,7 +747,7 @@ export function ParserConfigPage() {
       <Panel
         aria-label="Optik operasyon"
         className="next-optical-workspace"
-        description="Cevap anahtarı sınav oluşturulurken hazırlanır; bu ekran yalnız format, optik yükleme, eşleşmeyen satır çözümü ve rapor üretimini yürütür."
+        description="Cevap anahtarı sınav oluşturulurken hazırlanır; bu ekran format, optik yükleme ve eşleşmeyen satır çözümünü yürütür."
         title="Optik Operasyon Akışı"
       >
         <InfoGrid aria-label="Optik iş akışı" className="next-optical-workflow-strip" role="region">
@@ -862,7 +767,7 @@ export function ParserConfigPage() {
             value={<StatusBadge tone={analysisStatusTone}>{analysisStatusLabel}</StatusBadge>}
           />
           <InfoItem
-            description="READY snapshot çıktısı"
+            description="Üretim ve çıktılar Raporlar ekranında"
             label="Çıktı"
             value={<StatusBadge tone={outputStatusTone}>{outputStatusLabel}</StatusBadge>}
           />
@@ -943,7 +848,7 @@ export function ParserConfigPage() {
           />
         ) : null}
         {activeTab === "quarantine" ? (
-          <section className="next-optical-report-workspace" aria-label="Eşleşmeyen satırlar ve rapor">
+          <section className="next-optical-report-workspace" aria-label="Eşleşmeyen satırlar">
             <QuarantineResolutionPanel
               quarantineRawImportId={quarantineRawImportId}
               quarantines={quarantines}
@@ -961,15 +866,7 @@ export function ParserConfigPage() {
             />
             <OpticalReportPanel
               evaluationStatus={evaluationStatus}
-              isReportSubmitting={isReportSubmitting}
-              participants={reportParticipants}
-              reportContentHash={reportContentHash}
-              reportJob={reportJob}
-              reportSnapshots={reportSnapshots}
-              students={reportStudents}
-              onDownload={downloadReportSnapshot}
-              onRefreshSnapshots={refreshReportSnapshots}
-              onSubmit={submitReportGeneration}
+              examId={examId}
             />
           </section>
         ) : null}
@@ -1462,393 +1359,44 @@ function QuarantineResolutionPanel({
 
 interface OpticalReportPanelProps {
   evaluationStatus: RawImportEvaluationStatus | null;
-  isReportSubmitting: boolean;
-  participants: ExamParticipantRecord[];
-  reportContentHash: string;
-  reportJob: ReportGenerationQueueResult | null;
-  reportSnapshots: ReportSnapshotRecord[];
-  students: StudentRecord[];
-  onDownload: (snapshot: ReportSnapshotRecord, format: "xlsx" | "pdf") => void | Promise<void>;
-  onRefreshSnapshots: () => void | Promise<void>;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  examId: string;
 }
 
 function OpticalReportPanel({
   evaluationStatus,
-  isReportSubmitting,
-  participants,
-  reportContentHash,
-  reportJob,
-  reportSnapshots,
-  students,
-  onDownload,
-  onRefreshSnapshots,
-  onSubmit,
+  examId,
 }: OpticalReportPanelProps) {
-  const hasReportInput = Boolean(reportContentHash.trim());
-  const isAnalysisComplete = evaluationStatus?.status === "COMPLETED" && evaluationStatus.evaluatedCount > 0;
-  const canGenerateReport = hasReportInput && isAnalysisComplete && !isReportSubmitting;
-  const reportMessage = getReportReadinessMessage(evaluationStatus, hasReportInput, isReportSubmitting);
-  const latestSnapshot = reportSnapshots[0] ?? null;
-  const studentRows = useMemo(
-    () => buildReportAnalysisRows({ participants, snapshot: latestSnapshot, students }),
-    [latestSnapshot, participants, students],
-  );
-  const reportSnapshotColumns = useMemo<Array<DataTableColumn<ReportSnapshotRecord>>>(
-    () => [
-      {
-        header: "Durum",
-        key: "status",
-        mobilePriority: "primary",
-        priority: "primary",
-        render: (snapshot) => (
-          <StatusBadge tone={reportSnapshotStatusTone(snapshot.status)}>{formatReportStatus(snapshot.status)}</StatusBadge>
-        ),
-      },
-      {
-        header: "Çıktı",
-        key: "exportReadiness",
-        mobilePriority: "primary",
-        priority: "primary",
-        render: (snapshot) => (
-          <StatusBadge tone={isReportSnapshotReady(snapshot) ? "success" : "warning"}>
-            {isReportSnapshotReady(snapshot) ? "Excel/PDF hazır" : "READY bekleniyor"}
-          </StatusBadge>
-        ),
-      },
-      {
-        align: "right",
-        header: "Sonuç",
-        key: "resultCount",
-        mobilePriority: "secondary",
-        priority: "secondary",
-        render: (snapshot) => formatReportResultCount(snapshot),
-      },
-      {
-        align: "right",
-        header: "Başarı %",
-        key: "successRate",
-        mobilePriority: "primary",
-        priority: "primary",
-        render: (snapshot) => formatPercentNumber(reportSuccessRate(snapshot.snapshotData?.averages)),
-      },
-      {
-        align: "right",
-        header: "Net",
-        key: "net",
-        mobilePriority: "secondary",
-        priority: "primary",
-        render: (snapshot) => formatReportNumber(snapshot.snapshotData?.averages?.net),
-      },
-      {
-        align: "right",
-        header: "Soru",
-        key: "questionCount",
-        mobilePriority: "secondary",
-        priority: "primary",
-        render: (snapshot) => formatReportNumber(reportQuestionCount(snapshot.snapshotData?.averages)),
-      },
-      {
-        align: "right",
-        header: "Doğru",
-        key: "correct",
-        mobilePriority: "hidden",
-        priority: "optional",
-        render: (snapshot) => formatReportAverage(snapshot, "correct"),
-      },
-      {
-        align: "right",
-        header: "Yanlış",
-        key: "wrong",
-        mobilePriority: "hidden",
-        priority: "optional",
-        render: (snapshot) => formatReportAverage(snapshot, "wrong"),
-      },
-      {
-        align: "right",
-        header: "Boş",
-        key: "blank",
-        mobilePriority: "hidden",
-        priority: "optional",
-        render: (snapshot) => formatReportAverage(snapshot, "blank"),
-      },
-      {
-        align: "right",
-        header: "Sınıf",
-        key: "classCount",
-        mobilePriority: "hidden",
-        priority: "secondary",
-        render: (snapshot) => formatReportClassCount(snapshot),
-      },
-      {
-        header: "Oluşturulma",
-        key: "generatedAt",
-        mobilePriority: "hidden",
-        priority: "optional",
-        render: (snapshot) => formatReportGeneratedAt(snapshot),
-      },
-      {
-        header: "İndirme",
-        key: "download",
-        mobileLabel: "İndir",
-        mobilePriority: "primary",
-        priority: "primary",
-        render: (snapshot) => (
-          <div className="next-row-actions">
-            <button
-              type="button"
-              disabled={!isReportSnapshotReady(snapshot)}
-              onClick={() => void onDownload(snapshot, "xlsx")}
-              aria-label={`${formatReportStatus(snapshot.status)} optik raporu Excel indir`}
-              title={isReportSnapshotReady(snapshot) ? "Excel indir" : "READY snapshot gerekli"}
-            >
-              <Download size={17} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              disabled={!isReportSnapshotReady(snapshot)}
-              onClick={() => void onDownload(snapshot, "pdf")}
-              aria-label={`${formatReportStatus(snapshot.status)} optik raporu PDF indir`}
-              title={isReportSnapshotReady(snapshot) ? "PDF indir" : "READY snapshot gerekli"}
-            >
-              <FileText size={17} aria-hidden="true" />
-            </button>
-          </div>
-        ),
-      },
-    ],
-    [onDownload],
-  );
+  const reportMessage = getReportReadinessMessage(evaluationStatus);
 
-  return (
-    <>
-      <Panel
-        as="form"
-        aria-label="Optik rapor üretimi"
-        className="next-optical-report-panel next-optical-report-panel--wide"
-        description={reportMessage}
-        title="Rapor üretimi"
-        onSubmit={(event) => void onSubmit(event)}
-      >
-        <MetricGrid aria-label="Rapor üretim durumu" role="region">
-          <MetricCard
-            label="Analiz"
-            tone={evaluationStatus?.status === "COMPLETED" ? "success" : "warning"}
-            value={evaluationStatus?.status === "COMPLETED" ? "Tamamlandı" : "Bekleniyor"}
-          />
-          <MetricCard
-            label="Sonuç"
-            description="Değerlendirilen / eşleşen"
-            value={evaluationStatus ? `${evaluationStatus.evaluatedCount}/${evaluationStatus.matchedCount}` : "-"}
-          />
-          <MetricCard
-            label="Hazır rapor"
-            description="READY snapshot indirmeye açıktır"
-            tone={reportSnapshots.some((snapshot) => snapshot.status === "READY") ? "success" : "default"}
-            value={reportSnapshots.length}
-          />
-        </MetricGrid>
-        <div className="next-optical-step-actions">
-          <Button disabled={!canGenerateReport} type="submit">
-            <RefreshCw size={17} aria-hidden="true" />
-            {isReportSubmitting ? "Hazırlanıyor" : "Rapor üret"}
-          </Button>
-          <Button type="button" onClick={() => void onRefreshSnapshots()}>
-            <FileText size={17} aria-hidden="true" />
-            Raporları getir
-          </Button>
-        </div>
-        {reportJob ? (
-          <>
-            <p aria-live="polite" role="status">Rapor işi kuyruğa alındı.</p>
-            <details className="next-advanced-details">
-              <summary>Teknik rapor işi bilgisi</summary>
-              <p>{formatEvidenceSafeReference(reportJob.jobId, "Rapor kuyruk ref")}</p>
-              <p>Ham kuyruk id ekran görüntülerinde gösterilmez.</p>
-            </details>
-          </>
-        ) : null}
-      </Panel>
-      <Panel
-        aria-label="Rapor listesi"
-        className="next-optical-report-panel next-optical-report-panel--wide"
-        description="READY snapshot çıktıları, üretim tarihi ve indirme durumu tek listede izlenir."
-        title="Hazır raporlar"
-      >
-        {reportSnapshots.length > 0 ? (
-          <div className="next-grid-scroll">
-            <DataTable
-              caption="Hazır optik raporlar"
-              columns={reportSnapshotColumns}
-              description="Başarı % ana karşılaştırma metriğidir; Net ve Soru bağlam olarak gösterilir. Excel/PDF indirme yalnız READY snapshot için açıktır."
-              density="compact"
-              getRowKey={(snapshot) => snapshot.id}
-              rows={reportSnapshots}
-            />
-          </div>
-        ) : (
-          <EmptyState title="Hazır rapor yok" description="Rapor ürettiğinizde Excel ve PDF indirme seçenekleri burada görünür." />
-        )}
-      </Panel>
-      <OpticalStudentResultsTable rows={studentRows} />
-    </>
-  );
-}
-
-const opticalStudentResultColumns: Array<DataTableColumn<ReportAnalysisRow>> = [
-  {
-    header: "Öğrenci",
-    key: "student",
-    mobilePriority: "primary",
-    priority: "primary",
-    render: (row) => (
-      <>
-        <span className="next-report-student-name">{row.studentName}</span>
-        {row.studentNo ? <small>#{row.studentNo}</small> : null}
-      </>
-    ),
-    sticky: "left",
-  },
-  {
-    header: "Sınıf",
-    key: "class",
-    mobilePriority: "secondary",
-    priority: "primary",
-    render: (row) => row.className,
-  },
-  {
-    header: "Katılım",
-    key: "participation",
-    mobilePriority: "hidden",
-    priority: "optional",
-    render: (row) => formatParticipantMeta(row),
-  },
-  {
-    header: "Durum",
-    key: "status",
-    mobilePriority: "secondary",
-    priority: "primary",
-    render: (row) => <StatusBadge tone={resultStatusTone(row)}>{formatResultStatus(row)}</StatusBadge>,
-  },
-  {
-    align: "right",
-    header: "Başarı %",
-    key: "successRate",
-    mobilePriority: "primary",
-    priority: "primary",
-    render: (row) => formatPercentNumber(reportSuccessRate(row)),
-  },
-  {
-    align: "right",
-    header: "Net",
-    key: "net",
-    mobilePriority: "secondary",
-    priority: "primary",
-    render: (row) => formatReportNumber(row.net),
-  },
-  {
-    align: "right",
-    header: "Soru",
-    key: "questionCount",
-    mobilePriority: "secondary",
-    priority: "primary",
-    render: (row) => formatReportNumber(reportQuestionCount(row)),
-  },
-  {
-    align: "right",
-    header: "Doğru",
-    key: "correct",
-    mobilePriority: "hidden",
-    priority: "optional",
-    render: (row) => formatReportNumber(row.correct),
-  },
-  {
-    align: "right",
-    header: "Yanlış",
-    key: "wrong",
-    mobilePriority: "hidden",
-    priority: "optional",
-    render: (row) => formatReportNumber(row.wrong),
-  },
-  {
-    align: "right",
-    header: "Boş",
-    key: "blank",
-    mobilePriority: "hidden",
-    priority: "optional",
-    render: (row) => formatReportNumber(row.blank),
-  },
-  {
-    align: "right",
-    header: "Puan",
-    key: "score",
-    mobilePriority: "hidden",
-    priority: "secondary",
-    render: (row) => formatReportNumber(readRowScore(row)),
-  },
-  {
-    align: "right",
-    header: "Genel sıra",
-    key: "generalRank",
-    mobilePriority: "hidden",
-    priority: "optional",
-    render: (row) => formatRank(row.generalRank),
-  },
-  {
-    align: "right",
-    header: "Sınıf sıra",
-    key: "classRank",
-    mobilePriority: "hidden",
-    priority: "optional",
-    render: (row) => formatRank(row.classRank),
-  },
-  {
-    align: "right",
-    header: "Yüzdelik",
-    key: "percentile",
-    mobilePriority: "hidden",
-    priority: "optional",
-    render: (row) => formatPercentile(row.percentile),
-  },
-];
-
-function OpticalStudentResultsTable({ rows }: { rows: ReportAnalysisRow[] }) {
   return (
     <Panel
-      aria-label="Katılan öğrenciler"
+      aria-label="Raporlara geçiş"
       className="next-optical-report-panel next-optical-report-panel--wide"
-      description="Öğrenci bazlı başarı dağılımı, soru sayısı, puan ve sıralama bağlamıyla izlenir."
-      title="Katılan öğrenciler"
+      description={`${reportMessage} Analiz, öğrenci sonuçları ve çıktılar Raporlar çalışma alanında yönetilir.`}
+      title="Raporlara geçiş"
     >
-      {rows.length > 0 ? (
-        <div className="next-grid-scroll">
-          <DataTable
-            caption="Optik katılımcı sonuçları"
-            className="next-report-analysis-table"
-            columns={opticalStudentResultColumns}
-            description="Başarı % ana karşılaştırma metriğidir; Net, Soru, puan ve sıralama bağlam olarak gösterilir."
-            density="compact"
-            getRowKey={(row) => row.rowKey}
-            rows={rows}
-          />
-        </div>
-      ) : (
-        <EmptyState
-          title="Katılımcı sonucu yok"
-          description="Hazır rapor geldiğinde katılan öğrenci listesi burada görünür."
+      <MetricGrid aria-label="Rapor üretim durumu" role="region">
+        <MetricCard
+          label="Analiz"
+          tone={evaluationStatus?.status === "COMPLETED" ? "success" : "warning"}
+          value={evaluationStatus?.status === "COMPLETED" ? "Tamamlandı" : "Bekleniyor"}
         />
-      )}
+        <MetricCard
+          label="Sonuç"
+          description="Değerlendirilen / eşleşen"
+          value={evaluationStatus ? `${evaluationStatus.evaluatedCount}/${evaluationStatus.matchedCount}` : "-"}
+        />
+      </MetricGrid>
+      <div className="next-optical-step-actions">
+        <Link className="uh-button uh-button--secondary" href={`/kurum/raporlar?examId=${encodeURIComponent(examId)}`}>
+          Rapor çalışma alanına geç
+        </Link>
+      </div>
     </Panel>
   );
 }
 
-function getReportReadinessMessage(
-  evaluationStatus: RawImportEvaluationStatus | null,
-  hasReportInput: boolean,
-  isReportSubmitting: boolean,
-): string {
-  if (isReportSubmitting) return "Rapor hazırlanıyor.";
-  if (!hasReportInput) return "Rapor üretmek için önce optik analizini tamamlayın.";
+function getReportReadinessMessage(evaluationStatus: RawImportEvaluationStatus | null): string {
   if (evaluationStatus?.status !== "COMPLETED") return "Analiz tamamlanınca rapor üretilebilir.";
   if (evaluationStatus.evaluatedCount <= 0) return "Rapor için değerlendirilmiş öğrenci yok.";
   return `${evaluationStatus.evaluatedCount} öğrenci için rapor hazır.`;
@@ -1864,83 +1412,6 @@ function formatQuarantineStatus(status: string): string {
   if (status === "RESOLVED") return "Çözüldü";
   if (status === "OPEN" || status === "PENDING") return "Bekliyor";
   return status;
-}
-
-function reportSnapshotStatusTone(status: string): "danger" | "info" | "neutral" | "success" | "warning" {
-  if (status === "READY") return "success";
-  if (status === "STALE") return "warning";
-  if (status === "FAILED") return "danger";
-  return "neutral";
-}
-
-function isReportSnapshotReady(snapshot: ReportSnapshotRecord): boolean {
-  return snapshot.status === "READY";
-}
-
-function formatReportStatus(status: string): string {
-  if (status === "READY") return "Hazır";
-  if (status === "STALE") return "Eski";
-  if (status === "PENDING") return "Bekliyor";
-  if (status === "FAILED") return "Hatalı";
-  return status;
-}
-
-function formatReportResultCount(snapshot: ReportSnapshotRecord): string {
-  const resultCount = snapshot.snapshotData?.resultCount;
-  return typeof resultCount === "number" || typeof resultCount === "string" ? String(resultCount) : "-";
-}
-
-function formatReportAverage(
-  snapshot: ReportSnapshotRecord,
-  key: "blank" | "correct" | "net" | "wrong",
-): string {
-  return formatReportNumber(snapshot.snapshotData?.averages?.[key]);
-}
-
-function formatReportClassCount(snapshot: ReportSnapshotRecord): string {
-  return String(snapshot.snapshotData?.classes?.length ?? 0);
-}
-
-function formatReportGeneratedAt(snapshot: ReportSnapshotRecord): string {
-  const generatedAt = snapshot.generatedAt ?? snapshot.createdAt;
-  if (!generatedAt) return "-";
-  return new Date(generatedAt).toLocaleString("tr-TR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
-}
-
-function formatParticipantMeta(row: ReportAnalysisRow): string {
-  const parts = [row.participantNo, row.bookletType ? `${row.bookletType} kitapçık` : ""].filter(Boolean);
-  return parts.length > 0 ? parts.join(" / ") : "-";
-}
-
-function formatResultStatus(row: ReportAnalysisRow): string {
-  if (row.resultStatus === "READY") return "Sonuç var";
-  if (row.resultStatus === "ABSENT") return "Katılmadı";
-  return "Sonuç yok";
-}
-
-function resultStatusTone(row: ReportAnalysisRow): "danger" | "info" | "neutral" | "success" | "warning" {
-  if (row.resultStatus === "READY") return "success";
-  if (row.resultStatus === "ABSENT") return "warning";
-  return "neutral";
-}
-
-function readRowScore(row: ReportAnalysisRow): number | undefined {
-  return row.estimatedRawScore ?? row.standardScore ?? row.rawScore;
-}
-
-function formatRank(rank: ReportAnalysisRow["generalRank"]): string {
-  return rank ? `${rank.rank}/${rank.outOf}` : "-";
-}
-
-function formatPercentile(value: number | undefined): string {
-  return value === undefined ? "-" : `%${formatReportNumber(value)}`;
-}
-
-function formatReportNumber(value: number | undefined): string {
-  return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
 }
 
 async function suggestParserConfig(
@@ -2106,49 +1577,6 @@ async function loadStudents(accessToken: string, input: { classId?: string; limi
   return apiRequest<StudentRecord[]>(accessToken, `${apiBaseUrl}/students${queryString ? `?${queryString}` : ""}`);
 }
 
-async function loadExamParticipants(accessToken: string, examId: string) {
-  return apiRequest<ExamParticipantRecord[]>(
-    accessToken,
-    `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/participants`,
-  );
-}
-
-async function loadReportTableContext(accessToken: string, examId: string, snapshot: ReportSnapshotRecord | null) {
-  const participants = await loadExamParticipants(accessToken, examId).catch(() => []);
-  const studentRecords = await loadStudentsByIds(accessToken, reportStudentIds(participants, snapshot)).catch(() => []);
-  return { participants, students: studentRecords };
-}
-
-async function loadStudentsByIds(accessToken: string, studentIds: string[]) {
-  const students = await Promise.all(
-    studentIds.map((studentId) =>
-      apiRequest<StudentRecord>(
-        accessToken,
-        `${apiBaseUrl}/students/${encodeURIComponent(studentId)}`,
-      ).catch(() => null),
-    ),
-  );
-  return students.filter((student): student is StudentRecord => Boolean(student));
-}
-
-function reportStudentIds(participants: ExamParticipantRecord[], snapshot: ReportSnapshotRecord | null) {
-  return uniqueStrings([
-    ...participants.map((participant) => participant.studentId),
-    ...(snapshot?.snapshotData?.students ?? []).map((student) => student.studentId),
-  ]);
-}
-
-function uniqueStrings(values: string[]) {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const value of values) {
-    if (!value || seen.has(value)) continue;
-    seen.add(value);
-    result.push(value);
-  }
-  return result;
-}
-
 function createClientIdempotencyKey(prefix: string) {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
 }
@@ -2183,53 +1611,6 @@ async function resolveImportQuarantinesBulk(
       },
       method: "POST",
     },
-  );
-}
-
-async function enqueueReportGeneration(accessToken: string, examId: string) {
-  return apiRequest<ReportGenerationQueueResult>(
-    accessToken,
-    `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/generation-jobs`,
-    {
-      body: JSON.stringify({ reportType: "EXAM_RESULT_SUMMARY" }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    },
-  );
-}
-
-async function loadReportSnapshots(accessToken: string, examId: string) {
-  return apiRequest<ReportSnapshotRecord[]>(
-    accessToken,
-    `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots`,
-  );
-}
-
-async function waitForReportSnapshots(accessToken: string, examId: string, previousReadyCount: number) {
-  let latest: ReportSnapshotRecord[] | undefined;
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    try {
-      latest = await loadReportSnapshots(accessToken, examId);
-      if (countReadyReportSnapshots(latest) > previousReadyCount) {
-        return latest;
-      }
-    } catch (error) {
-      lastError = error;
-    }
-    await sleep(500);
-  }
-  throw lastError ?? new Error("Rapor belirlenen sürede hazır olmadı. Biraz sonra Raporları getir ile tekrar deneyin.");
-}
-
-function countReadyReportSnapshots(snapshots: ReportSnapshotRecord[]) {
-  return snapshots.filter((snapshot) => snapshot.status === "READY").length;
-}
-
-async function exportReportSnapshot(accessToken: string, examId: string, snapshotId: string, format: "xlsx" | "pdf") {
-  return apiRequest<ReportSnapshotExportResult>(
-    accessToken,
-    `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots/${encodeURIComponent(snapshotId)}/export.${format}`,
   );
 }
 
@@ -2270,17 +1651,6 @@ function formatQuarantineReasons(summary: RawImportParseSummary): string {
   return summary.quarantineReasons.length
     ? summary.quarantineReasons.map((item) => `${item.reason}: ${item.count}`).join(", ")
     : "-";
-}
-
-function downloadBase64File(file: ReportSnapshotExportResult) {
-  const bytes = Uint8Array.from(atob(file.fileBase64), (char) => char.charCodeAt(0));
-  const blob = new Blob([bytes], { type: file.contentType });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = file.fileName;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 function renderOpticalFormPreview(rows: OpticalFormPreviewRow[]) {
