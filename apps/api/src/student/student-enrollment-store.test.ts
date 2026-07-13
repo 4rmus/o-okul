@@ -3,6 +3,27 @@ import { runWithRequestContext } from "../context/request-context.js";
 import { PostgresStudentEnrollmentStore } from "./student-enrollment-store.js";
 
 describe("PostgresStudentEnrollmentStore", () => {
+  it("birden çok öğrencinin enrollment kayıtlarını tek sorguda okur", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const pool = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        return { rows: [] as T[] };
+      },
+    };
+
+    const store = new PostgresStudentEnrollmentStore(pool);
+
+    await runWithRequestContext(
+      { userId: "user-tenant-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      () => store.listByStudents(["student-a", "student-b"]),
+    );
+
+    const businessQuery = queries.find((query) => query.sql.includes('FROM "StudentEnrollment"'));
+    expect(businessQuery?.sql).toContain('ANY($1::text[])');
+    expect(businessQuery?.values).toEqual([["student-a", "student-b"]]);
+  });
+
   it("StudentEnrollment işlemleri için beklenen SQL parametrelerini kullanır", async () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const pool = {

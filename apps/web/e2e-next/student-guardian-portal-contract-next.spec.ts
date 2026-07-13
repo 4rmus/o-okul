@@ -144,6 +144,7 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       await expect(page.getByRole("heading", { level: 1, name: "Öğrenci Portalı" })).toBeVisible();
       await expect(page.getByRole("region", { exact: true, name: "Portal görev bağlamı" })).toContainText(routeCase.context);
       await expect(routeCase.panel()).toBeVisible();
+      if (routeCase.label === "Sınav Raporu") await expect(page.getByRole("combobox", { name: "Sınav raporu" })).toBeVisible();
       await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { exact: true, name: "Özet" })).not.toHaveAttribute("aria-current", "page");
     }
   });
@@ -284,6 +285,7 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       await expect(page.getByRole("heading", { level: 1, name: "Veli Portalı" })).toBeVisible();
       await expect(page.getByRole("region", { exact: true, name: "Portal görev bağlamı" })).toContainText(routeCase.context);
       await expect(routeCase.panel()).toBeVisible();
+      if (routeCase.label === "Sınav Raporu") await expect(page.getByRole("combobox", { name: "Sınav raporu" })).toBeVisible();
       await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { exact: true, name: "Özet" })).not.toHaveAttribute("aria-current", "page");
     }
   });
@@ -459,7 +461,7 @@ async function clickSidebarRoute(page: Page, groupName: string, linkName: string
 
 async function installStudentApiMocks(
   page: Page,
-  options: { mode?: "student" | "role-preview"; mutationRequests?: string[]; requestedPaths?: string[] },
+  options: { mode?: "student" | "role-preview"; mutationRequests?: string[]; requestedPaths?: string[]; withReport?: boolean },
 ) {
   await page.route("**/api/v1/**", async (route) => {
     if (route.request().method() === "OPTIONS") {
@@ -473,7 +475,7 @@ async function installStudentApiMocks(
     if (method !== "GET" && method !== "OPTIONS" && pathName !== "/auth/refresh") {
       options.mutationRequests?.push(`${method} ${pathName}`);
     }
-    await fulfillData(route, studentApiResponse(pathName, options.mode ?? "student"));
+    await fulfillData(route, studentApiResponse(pathName, options.mode ?? "student", options.withReport !== false));
   });
 }
 
@@ -485,6 +487,7 @@ async function installGuardianApiMocks(
     mutationRequests?: string[];
     paymentPlanRequests?: string[];
     requestedPaths?: string[];
+    withReport?: boolean;
   },
 ) {
   await page.route("**/api/v1/**", async (route) => {
@@ -506,7 +509,7 @@ async function installGuardianApiMocks(
   });
 }
 
-function studentApiResponse(pathName: string, mode: "student" | "role-preview"): unknown {
+function studentApiResponse(pathName: string, mode: "student" | "role-preview", withReport: boolean): unknown {
   if (pathName === "/auth/refresh") return createStudentAuthResponse(mode);
   if (pathName === "/me/tenant") return createTenantResponse();
   if (pathName === "/me/notification-devices") return [];
@@ -521,6 +524,7 @@ function studentApiResponse(pathName: string, mode: "student" | "role-preview"):
   if (pathName === "/me/student/attendance/summary") return createAttendanceSummary("student-a");
   if (pathName === "/me/student/teacher-notes") return createTeacherNotes("student-a");
   if (pathName === "/me/student/development-assessments") return createDevelopmentAssessments("student-a");
+  if (pathName === "/me/student/reports") return withReport ? createReportIndex() : [];
   if (pathName === "/me/student/reports/exam-demo-isem-lgs-1/latest") return createStudentReport("student-a");
   if (pathName === "/me/student/reports/exam-demo-isem-lgs-1/latest/error-booklet") return createErrorBooklet("student-a");
   if (pathName === "/me/student/reports/exam-demo-isem-lgs-1/progress") return createProgress("student-a");
@@ -531,7 +535,7 @@ function studentApiResponse(pathName: string, mode: "student" | "role-preview"):
 
 function guardianApiResponse(
   pathName: string,
-  options: { financeVisibility?: "false" | "true"; mode?: "guardian" | "role-preview" },
+  options: { financeVisibility?: "false" | "true"; mode?: "guardian" | "role-preview"; withReport?: boolean },
 ): unknown {
   if (pathName === "/auth/refresh") return createGuardianAuthResponse(options.mode ?? "guardian");
   if (pathName === "/me/tenant") return createTenantResponse();
@@ -551,6 +555,7 @@ function guardianApiResponse(
     if (pathName === `/me/guardian/students/${studentId}/teacher-notes`) return createTeacherNotes(studentId);
     if (pathName === `/me/guardian/students/${studentId}/development-assessments`) return createDevelopmentAssessments(studentId);
     if (pathName === `/me/guardian/students/${studentId}/payment-plans`) return createPaymentPlans();
+    if (pathName === `/me/guardian/students/${studentId}/reports`) return options.withReport === false ? [] : createReportIndex();
     if (pathName === `/me/guardian/students/${studentId}/reports/exam-demo-isem-lgs-1/latest`) return createStudentReport(studentId);
     if (pathName === `/me/guardian/students/${studentId}/reports/exam-demo-isem-lgs-1/latest/error-booklet`) return createErrorBooklet(studentId);
     if (pathName === `/me/guardian/students/${studentId}/reports/exam-demo-isem-lgs-1/progress`) return createProgress(studentId);
@@ -559,6 +564,16 @@ function guardianApiResponse(
   if (pathName === "/courses") return createCourses();
   if (pathName === "/academic-terms") return createTerms();
   return [];
+}
+
+function createReportIndex() {
+  return [{
+    examId: "exam-demo-isem-lgs-1",
+    latestGeneratedAt: "2026-06-17T10:00:00.000Z",
+    latestReadySnapshotId: "snapshot-ready",
+    startsAt: "2026-06-17T09:00:00.000Z",
+    title: "İSEM - LGS - 1",
+  }];
 }
 
 function createStudentAuthResponse(mode: "student" | "role-preview") {

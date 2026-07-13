@@ -25,6 +25,20 @@ describe("ReportSnapshotStore", () => {
     await expect(store.markStaleByExam("tenant-a", "exam-demo", "answer_key.created")).resolves.toBe(0);
   });
 
+  it("in-memory snapshot öğrenci kimliğini tenant kapsamında temizler", async () => {
+    const store = new InMemoryReportSnapshotStore();
+
+    await expect(store.purgeStudentIdentity("tenant-b", "student-a")).resolves.toBe(0);
+    await expect(store.purgeStudentIdentity("tenant-a", "student-a")).resolves.toBe(1);
+    const snapshot = await store.findById("tenant-a", "exam-demo", "snapshot-demo");
+    const students = snapshot?.snapshotData?.students as Array<Record<string, unknown>> | undefined;
+    const student = students?.[0];
+    expect(student).toMatchObject({ studentId: "student-a", className: "8-A" });
+    expect(student).not.toHaveProperty("displayName");
+    expect(student).not.toHaveProperty("studentNo");
+    await expect(store.purgeStudentIdentity("tenant-a", "student-a")).resolves.toBe(0);
+  });
+
   it("Postgres snapshot listesi için tenant-aware SQL kullanır", async () => {
     const queries: Array<{ sql: string; values?: unknown[] }> = [];
     const pool = {
@@ -144,5 +158,28 @@ describe("ReportSnapshotStore", () => {
       "exam-a",
       JSON.stringify({ staleReason: "parser_config.approved" }),
     ]);
+  });
+
+  it("Postgres snapshot öğrenci kimliğini JSONB içinde tenant kapsamında temizler", async () => {
+    const queries: Array<{ sql: string; values?: unknown[] }> = [];
+    const pool = {
+      async query<T>(sql: string, values?: unknown[]) {
+        queries.push({ sql, values });
+        return { rows: [] as T[], rowCount: sql.includes('UPDATE "ReportSnapshot"') ? 2 : 0 };
+      },
+    };
+    const store = new PostgresReportSnapshotStore(pool);
+
+    const changed = await runWithRequestContext(
+      { userId: "user-tenant-a", tenantId: "tenant-a", roles: ["TENANT_ADMIN"], bypassRls: false },
+      () => store.purgeStudentIdentity("tenant-a", "student-a"),
+    );
+
+    const businessQuery = queries.find((query) => query.sql.includes('UPDATE "ReportSnapshot"'));
+    expect(changed).toBe(2);
+    expect(businessQuery?.sql).toContain('snapshot."tenantId" = $1');
+    expect(businessQuery?.sql).toContain("student->>'studentId' = $2");
+    expect(businessQuery?.sql).toContain("student - 'displayName' - 'studentNo'");
+    expect(businessQuery?.values).toEqual(["tenant-a", "student-a"]);
   });
 });

@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import type { AuditLogService, CreateAuditLogInput } from "../audit-log/audit-log.service.js";
@@ -13,6 +13,8 @@ import {
   createReportGenerationContentHash,
   examResultSummaryReportType,
   ReportGenerationService,
+  type ReportGenerationJobStatusReader,
+  type ReportGenerationQueuedJobStatus,
   type ReportGenerationQueueProducer,
   type ReportPdfRenderer,
   type ReportSnapshotRecord,
@@ -170,6 +172,106 @@ describe("ReportGenerationService", () => {
 
     expect(retry).toBe(first);
     expect(secondExam).not.toBe(first);
+  });
+
+  it("rapor üretim işinin queue durumunu snapshot durumundan ayrı döndürür", async () => {
+    const contentHash = createReportGenerationContentHash({
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      reportType: examResultSummaryReportType,
+    });
+    const jobId = `exam-a_${contentHash}`;
+    const statuses = new FakeReportGenerationJobStatusReader({
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      jobId,
+      status: "RUNNING",
+      updatedAt: "2026-06-06T09:01:00.000Z",
+    });
+    const service = new ReportGenerationService(
+      new FakeProducer(),
+      new FakeReportSnapshotStore(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      statuses,
+    );
+
+    await expect(service.getGenerationJobStatus(adminContext(), "exam-a", jobId)).resolves.toEqual({
+      jobId,
+      status: "RUNNING",
+      updatedAt: "2026-06-06T09:01:00.000Z",
+    });
+  });
+
+  it("tamamlanan upsert işini snapshot sayısı artmasa da generation hash ile bulur", async () => {
+    const contentHash = createReportGenerationContentHash({
+      tenantId: "tenant-a",
+      examId: "exam-a",
+      reportType: examResultSummaryReportType,
+    });
+    const jobId = `exam-a_${contentHash}`;
+    const snapshot = {
+      ...fakeSnapshot,
+      inputRefs: { ...fakeSnapshot.inputRefs, generationContentHash: contentHash },
+      updatedAt: "2026-06-06T09:02:00.000Z",
+    };
+    const service = new ReportGenerationService(
+      new FakeProducer(),
+      new FakeReportSnapshotStore([snapshot]),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      new FakeReportGenerationJobStatusReader(),
+    );
+
+    await expect(service.getGenerationJobStatus(adminContext(), "exam-a", jobId)).resolves.toEqual({
+      jobId,
+      status: "COMPLETED",
+      snapshotId: "snapshot-a",
+      updatedAt: "2026-06-06T09:02:00.000Z",
+    });
+  });
+
+  it("başka tenantın queue işini jobId bilinse bile göstermez", async () => {
+    const contentHash = createReportGenerationContentHash({
+      tenantId: "tenant-b",
+      examId: "exam-a",
+      reportType: examResultSummaryReportType,
+    });
+    const jobId = `exam-a_${contentHash}`;
+    const service = new ReportGenerationService(
+      new FakeProducer(),
+      new FakeReportSnapshotStore(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      new FakeReportGenerationJobStatusReader({
+        tenantId: "tenant-b",
+        examId: "exam-a",
+        jobId,
+        status: "FAILED",
+        errorCode: "REPORT_GENERATION_FAILED",
+        updatedAt: "2026-06-06T09:03:00.000Z",
+      }),
+    );
+
+    await expect(service.getGenerationJobStatus(adminContext(), "exam-a", jobId)).rejects.toThrow(NotFoundException);
   });
 
   it("tenant içindeki sınav snapshotlarını listeler", async () => {
@@ -330,6 +432,34 @@ describe("ReportGenerationService", () => {
     expect(serialized).not.toContain("\"correctAnswer\"");
   });
 
+  it("sadece sorumlu veya öğrenci kapsamı olan öğretmene bütün sınıf özetini göstermez", async () => {
+    const service = new ReportGenerationService(
+      new FakeProducer(),
+      new FakeReportSnapshotStore([fakeSnapshot]),
+      undefined,
+      undefined,
+      new FakeStudentStore() as unknown as StudentStore,
+      new FakeTeacherAssignmentStore([]) as unknown as TeacherAssignmentStore,
+    );
+
+    const [snapshot] = await service.listSnapshots(
+      {
+        tenantId: "tenant-a",
+        userId: "teacher-tenant-a",
+        roles: ["TEACHER"],
+        subjectType: "TEACHER",
+        subjectId: "teacher-a",
+        bypassRls: false,
+      },
+      "exam-a",
+    );
+
+    expect(snapshot?.snapshotData?.students).toEqual([
+      expect.objectContaining({ studentId: "student-a" }),
+    ]);
+    expect(snapshot?.snapshotData).not.toHaveProperty("classes");
+  });
+
   it("teacher ders ve dönem sınırlı assignment ile başka bağlamdaki rapor öğrencisini okuyamaz", async () => {
     const producer = new FakeProducer();
     const store = new FakeReportSnapshotStore([fakeSnapshot, fakePreviousSnapshot]);
@@ -423,21 +553,26 @@ describe("ReportGenerationService", () => {
     const file = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
     await workbook.xlsx.load(file as Parameters<ExcelJS.Workbook["xlsx"]["load"]>[0]);
 
-    expect(workbook.getWorksheet("Summary")?.getCell("B1").value).toBe("exam-a");
-    expect(workbook.getWorksheet("Branches")?.getCell("A2").value).toBe("Matematik");
-    expect(workbook.getWorksheet("Classes")?.getCell("B2").value).toBe("8-A");
-    expect(workbook.getWorksheet("Students")?.getCell("A2").value).toBe("student-a");
-    expect(workbook.getWorksheet("Students")?.getCell("C2").value).toBe("8-A");
-    expect(workbook.getWorksheet("Students")?.getCell("K2").value).toBe(3);
-    expect(workbook.getWorksheet("Students")?.getCell("M2").value).toBe(92.5);
-    expect(workbook.getWorksheet("Students")?.getCell("N2").value).toBe(1);
-    expect(workbook.getWorksheet("Students")?.getCell("P2").value).toBe(97.5);
-    expect(workbook.getWorksheet("Students")?.getCell("Q2").value).toBe(123.4);
-    expect(workbook.getWorksheet("Classes")?.getCell("J2").value).toBe(96.7);
-    expect(workbook.getWorksheet("Summary")?.getCell("B10").value).toBe(101.5);
-    expect(workbook.getWorksheet("BranchStatistics")?.getCell("A2").value).toBe("student-a");
-    expect(workbook.getWorksheet("BranchStatistics")?.getCell("B2").value).toBe("Matematik");
-    expect(workbook.getWorksheet("BranchStatistics")?.getCell("D2").value).toBe(3);
+    expect(workbook.getWorksheet("Özet")?.getCell("B1").value).toBe("exam-a");
+    expect(workbook.getWorksheet("Branşlar")?.getCell("C1").value).toBe("Başarı %");
+    expect(workbook.getWorksheet("Branşlar")?.getCell("A2").value).toBe("Matematik");
+    expect(workbook.getWorksheet("Sınıflar")?.getCell("D1").value).toBe("Başarı %");
+    expect(workbook.getWorksheet("Sınıflar")?.getCell("B2").value).toBe("8-A");
+    expect(workbook.getWorksheet("Öğrenciler")?.getCell("G1").value).toBe("Başarı %");
+    expect(workbook.getWorksheet("Öğrenciler")?.getCell("A2").value).toBe("Ada A");
+    expect(workbook.getWorksheet("Öğrenciler")?.getCell("B2").value).toBe("1001");
+    expect(workbook.getWorksheet("Öğrenciler")?.getCell("C2").value).toBe("student-a");
+    expect(workbook.getWorksheet("Öğrenciler")?.getCell("E2").value).toBe("8-A");
+    expect(workbook.getWorksheet("Öğrenciler")?.getCell("O2").value).toBe(3);
+    expect(workbook.getWorksheet("Öğrenciler")?.getCell("Q2").value).toBe(92.5);
+    expect(workbook.getWorksheet("Öğrenciler")?.getCell("R2").value).toBe(1);
+    expect(workbook.getWorksheet("Öğrenciler")?.getCell("T2").value).toBe(97.5);
+    expect(workbook.getWorksheet("Öğrenciler")?.getCell("U2").value).toBe(123.4);
+    expect(workbook.getWorksheet("Sınıflar")?.getCell("L2").value).toBe(96.7);
+    expect(workbook.getWorksheet("Özet")?.getCell("B12").value).toBe(101.5);
+    expect(workbook.getWorksheet("Branş İstatistikleri")?.getCell("A2").value).toBe("student-a");
+    expect(workbook.getWorksheet("Branş İstatistikleri")?.getCell("B2").value).toBe("Matematik");
+    expect(workbook.getWorksheet("Branş İstatistikleri")?.getCell("D2").value).toBe(3);
   });
 
   it("hazır snapshotı PDF dosyasına dönüştürür", async () => {
@@ -813,6 +948,23 @@ describe("ReportGenerationService", () => {
   });
 });
 
+function adminContext(): RequestContext {
+  return {
+    tenantId: "tenant-a",
+    userId: "user-a",
+    roles: ["TENANT_ADMIN"],
+    bypassRls: false,
+  };
+}
+
+class FakeReportGenerationJobStatusReader implements ReportGenerationJobStatusReader {
+  constructor(private readonly result?: ReportGenerationQueuedJobStatus) {}
+
+  async get(): Promise<ReportGenerationQueuedJobStatus | undefined> {
+    return this.result;
+  }
+}
+
 class FakeProducer implements ReportGenerationQueueProducer {
   readonly inputs: Parameters<ReportGenerationQueueProducer["enqueue"]>[0][] = [];
 
@@ -1006,6 +1158,8 @@ const fakeSnapshot: ReportSnapshotRecord = {
     students: [
       {
         studentId: "student-a",
+        displayName: "Ada A",
+        studentNo: "1001",
         classId: "class-a",
         className: "8-A",
         resultKey: "result-a",

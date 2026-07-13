@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { getRequestContext } from "../context/request-context.js";
 import { z } from "zod";
 import { applyListQuery } from "../listing/list-query.js";
@@ -44,6 +44,7 @@ const optionalStudentEnrollmentStartsAtSchema = z.preprocess((value) => value ==
 const studentListQuerySchema = z.object({
   classId: optionalTrimmedString,
   guardianLinked: optionalGuardianLinkedQuerySchema,
+  ids: optionalTrimmedString,
   level: optionalTrimmedString,
   limit: optionalTrimmedString,
   page: optionalTrimmedString,
@@ -254,6 +255,13 @@ export class StudentController {
 
   private async filterStudents<TRecord extends PublicStudentRecord>(records: TRecord[], query: StudentListQuery): Promise<TRecord[]> {
     let filtered = records;
+    if (query.ids) {
+      const requestedIds = query.ids.split(",").map((id) => id.trim()).filter(Boolean);
+      if (requestedIds.length === 0 || requestedIds.length > 200) throw new BadRequestException("STUDENT_IDS_INVALID");
+      const ids = [...new Set(requestedIds)];
+      const idSet = new Set(ids);
+      filtered = filtered.filter((student) => idSet.has(student.id));
+    }
     if (query.classId) {
       filtered = filtered.filter((student) => student.classId === query.classId);
     }

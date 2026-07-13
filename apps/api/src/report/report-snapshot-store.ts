@@ -8,6 +8,7 @@ export interface ReportSnapshotStore {
   listByTenant(tenantId: string): Promise<ReportSnapshotRecord[]>;
   findById(tenantId: string, examId: string, snapshotId: string): Promise<ReportSnapshotRecord | undefined>;
   markStaleByExam(tenantId: string, examId: string, reason: string): Promise<number>;
+  purgeStudentIdentity?(tenantId: string, studentId: string): Promise<number>;
 }
 
 export const reportSnapshotStoreToken = Symbol("ReportSnapshotStore");
@@ -70,6 +71,8 @@ const demoSnapshots: ReportSnapshotRecord[] = [
       students: [
         {
           studentId: "student-a",
+          displayName: "Ada A",
+          studentNo: "1001",
           classId: "class-a",
           className: "8-A",
           resultKey: "participant-a_v1_parser-v1_engine-v1",
@@ -141,6 +144,34 @@ export class InMemoryReportSnapshotStore implements ReportSnapshotStore {
         ...snapshot.inputRefs,
         staleReason: reason,
       };
+      changed += 1;
+    }
+    return changed;
+  }
+
+  async purgeStudentIdentity(tenantId: string, studentId: string): Promise<number> {
+    const updatedAt = new Date().toISOString();
+    let changed = 0;
+    for (const snapshot of this.snapshots) {
+      if (snapshot.tenantId !== tenantId || !snapshot.snapshotData || !Array.isArray(snapshot.snapshotData.students)) {
+        continue;
+      }
+      let snapshotChanged = false;
+      const students = snapshot.snapshotData.students.map((value) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+        const student = value as Record<string, unknown>;
+        if (student.studentId !== studentId || (!Object.hasOwn(student, "displayName") && !Object.hasOwn(student, "studentNo"))) {
+          return student;
+        }
+        const purged = { ...student };
+        delete purged.displayName;
+        delete purged.studentNo;
+        snapshotChanged = true;
+        return purged;
+      });
+      if (!snapshotChanged) continue;
+      snapshot.snapshotData = { ...snapshot.snapshotData, students };
+      snapshot.updatedAt = updatedAt;
       changed += 1;
     }
     return changed;
@@ -263,6 +294,41 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
            AND "deletedAt" IS NULL
            AND "status" <> 'STALE'`,
         [tenantId, examId, JSON.stringify({ staleReason: reason })],
+      );
+      return result.rowCount ?? 0;
+    });
+  }
+
+  async purgeStudentIdentity(tenantId: string, studentId: string): Promise<number> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query(
+        `UPDATE "ReportSnapshot" AS snapshot
+         SET "snapshotData" = jsonb_set(
+               snapshot."snapshotData",
+               '{students}',
+               (
+                 SELECT jsonb_agg(
+                   CASE
+                     WHEN student->>'studentId' = $2 THEN student - 'displayName' - 'studentNo'
+                     ELSE student
+                   END
+                   ORDER BY ordinality
+                 )
+                 FROM jsonb_array_elements(snapshot."snapshotData"->'students')
+                   WITH ORDINALITY AS entries(student, ordinality)
+               ),
+               false
+             ),
+             "updatedAt" = now()
+         WHERE snapshot."tenantId" = $1
+           AND jsonb_typeof(snapshot."snapshotData"->'students') = 'array'
+           AND EXISTS (
+             SELECT 1
+             FROM jsonb_array_elements(snapshot."snapshotData"->'students') AS entries(student)
+             WHERE student->>'studentId' = $2
+               AND (student ? 'displayName' OR student ? 'studentNo')
+           )`,
+        [tenantId, studentId],
       );
       return result.rowCount ?? 0;
     });

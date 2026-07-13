@@ -121,6 +121,92 @@ describe("Attendance API", () => {
       .expect(204);
   });
 
+  it("günlük sınıf yoklamasını atomik ve idempotent kaydeder", async () => {
+    const body = {
+      classId: "class-a",
+      date: "2026-06-10",
+      entries: [{ studentId: "student-a", status: "PRESENT" }],
+    };
+
+    await request(server)
+      .put("/attendance/daily")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send(body)
+      .expect(200)
+      .expect(({ body: response }) => {
+        expect(response).toMatchObject({
+          records: [expect.objectContaining({ studentId: "student-a", date: body.date, status: "PRESENT", termId: "term-2026-spring" })],
+          summary: { total: 1, present: 1, absent: 0, late: 0, excused: 0 },
+        });
+      });
+
+    await request(server)
+      .put("/attendance/daily")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({ ...body, entries: [{ studentId: "student-a", status: "LATE" }] })
+      .expect(200);
+
+    await request(server)
+      .get("/attendance/daily")
+      .query({ classId: body.classId, date: body.date })
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(200)
+      .expect(({ body: response }) => {
+        expect(response).toEqual({
+          classId: body.classId,
+          date: body.date,
+          students: [expect.objectContaining({
+            id: "student-a",
+            firstName: "Ada",
+            lastName: "A",
+            studentNo: "100",
+            classId: body.classId,
+          })],
+          records: [expect.objectContaining({ studentId: "student-a", date: body.date, status: "LATE" })],
+          summary: { total: 1, present: 0, absent: 0, late: 1, excused: 0, unmarked: 0 },
+        });
+      });
+
+    await request(server)
+      .get("/attendance")
+      .query({ classId: "class-a", date: body.date })
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(200)
+      .expect(({ body: records }) => {
+        expect(records).toEqual([expect.objectContaining({ studentId: "student-a", date: body.date, status: "LATE" })]);
+      });
+
+    await request(server)
+      .get("/attendance/aggregate")
+      .query({ classId: "class-a", dateFrom: body.date, dateTo: body.date })
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(200)
+      .expect({ total: 1, present: 0, absent: 0, late: 1, excused: 0 });
+  });
+
+  it("günlük yoklamada tenant/sınıf kapsamı bozuksa hiçbir kaydı yazmaz", async () => {
+    const date = "2026-06-11";
+    await request(server)
+      .put("/attendance/daily")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .send({
+        classId: "class-a",
+        date,
+        entries: [
+          { studentId: "student-a", status: "PRESENT" },
+          { studentId: "student-b", status: "ABSENT" },
+        ],
+      })
+      .expect(403);
+
+    await request(server)
+      .get("/attendance")
+      .query({ date })
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(200)
+      .expect([]);
+  });
+
   it("devamsızlık gövdelerini Zod ile doğrular", async () => {
     const invalidCreate = await request(server)
       .post("/attendance")

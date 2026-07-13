@@ -86,8 +86,8 @@ export function buildReportAnalysisRows({
       return {
         rowKey: participant?.id ?? `${snapshot?.id ?? "snapshot"}-${studentId}`,
         studentId,
-        studentName: student ? `${student.firstName} ${student.lastName}`.trim() : studentId,
-        ...(student?.studentNo ? { studentNo: student.studentNo } : {}),
+        studentName: snapshotStudent?.displayName ?? (student ? `${student.firstName} ${student.lastName}`.trim() : "Öğrenci"),
+        ...(snapshotStudent?.studentNo ?? student?.studentNo ? { studentNo: snapshotStudent?.studentNo ?? student?.studentNo } : {}),
         ...(classId ? { classId } : {}),
         className,
         ...(participant?.participantNo ? { participantNo: participant.participantNo } : {}),

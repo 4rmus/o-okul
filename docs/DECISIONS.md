@@ -145,7 +145,7 @@ Son kontrol: 2026-05-31
 
 ### DEC-20260531-03 — Başarı oranı paydası
 
-Durum: Onaylı
+Durum: DEC-20260713-02 ile güncellendi
 Karar: v1 raporlarında ayrı `successRate` alanı üretilmez; doğru/yanlış/boş/net alanları ayrı
 taşınır. İleride yüzde gösterimi gerekirse payda `correct + wrong + blank` toplam soru sayısıdır.
 Boş soru paydada yer alır, ancak net hesapta yanlış gibi ceza üretmez.
@@ -224,7 +224,7 @@ Son kontrol: 2026-06-13
 
 ### DEC-20260623-01 — Karne soru detayı veri sınırı
 
-Durum: Onaylı
+Durum: DEC-20260713-03 ile minimal rapor kimliği istisnası eklendi
 Karar: V1 karne ekranı ve PDF/Excel raporları, yetkili kurum yöneticisi, kapsamı doğrulanmış öğretmen,
 öğrenci ve bağlı veli için soru bazlı `answer`, `correctAnswer` ve `status` alanlarını gösterebilir.
 Bu alanlar yalnız karne/soru analizi ve hata kitapçığı amacıyla response body'de bulunur; audit log,
@@ -261,6 +261,57 @@ Etkilenen ADR: Yok
 Açık soru: Per-tenant giriş yolu (`/k/{slug}/giris` veya kurum kodu alanı) ve akademik taksonomi
 ortak ders kapsamı sonraki migration dalında netleştirilecek.
 Son kontrol: 2026-06-27
+
+### DEC-20260713-01 — Günlük sınıf yoklaması
+
+Durum: Onaylı
+Karar: V1 devamsızlık akışı ders saati bazlı değil, öğrenci başına takvim gününde tek kayıt olan
+günlük sınıf yoklamasıdır. Kurum veya atanmış öğretmen sınıf+tarih seçer, aktif öğrenci listesini
+tek atomik ve idempotent işlemle kaydeder. Yeni günlük akışta `courseId` kullanıcıdan istenmez;
+eski kayıtların `courseId` değeri yalnız geriye uyumlu okuma için korunur. Dönem bağlamı sunucu
+tarafında doğrulanır. Öğrencinin sınıf üyeliği ve öğretmen ataması yoklama tarihine göre
+doğrulanır; transfer edilen öğrencinin eski yoklaması yeni sınıfa taşınmaz. Özetler sayfadaki
+satırlardan değil, bütün yetkili filtreli sonuçtan üretilir.
+Kaynak: Mevcut `Attendance` öğrenci+tarih tekillik kuralı ve UI/UX profesyonelleştirme kararı.
+Kanıt: `apps/api/src/attendance`, `apps/web/app/(app)/kurum/devamsizlik`,
+`GET /api/v1/attendance/daily`, `apps/api/src/attendance/attendance.e2e.test.ts`.
+Etkilenen ADR: ADR-0001
+Açık soru: Yok
+Son kontrol: 2026-07-13
+
+### DEC-20260713-02 — Başarı yüzdesi rapor ana metriğidir
+
+Durum: Onaylı
+Karar: `successRate` rapor snapshot, API, web, PDF ve Excel yüzeylerinde üretilir ve farklı soru
+sayılarına sahip sınavları karşılaştırmak için ana metriktir. Payda değişmez:
+`correct + wrong + blank`; boş soru paydada yer alır ve net hesabında yanlış cezası üretmez.
+`Net` ve `Soru` ikincil bağlam olarak görünür kalır. Bu karar DEC-20260531-03 içindeki
+"ayrı successRate üretilmez" bölümünün yerine geçer.
+Kaynak: Mevcut worker snapshot sözleşmesi ve rapor/karne UI kabul kuralı.
+Kanıt: `apps/worker/src/jobs/report-generation-job.ts`,
+`apps/web/app/(app)/_shared/karne-sheet.tsx`, `pnpm karne:visual-contract:check`.
+Etkilenen ADR: Yok
+Açık soru: Yok
+Son kontrol: 2026-07-13
+
+### DEC-20260713-03 — Tekrar üretilebilir raporda minimal öğrenci kimliği
+
+Durum: Onaylı
+Karar: Kullanıcıya sunulan karne, PDF ve Excel çıktısının daha sonra aynı kimlikle tekrar
+üretilebilmesi için rapor snapshot'ındaki öğrenci satırına yalnız üretim anındaki `displayName` ve
+`studentNo` dondurulur. Bu iki alan tenant-kapsamlı snapshot saklama süresine tabidir. TC kimlik,
+telefon, e-posta, adres, storage key ve ham import içeriği snapshot'a eklenmez; dondurulan alanlar
+log, audit diff, smoke veya production evidence artifact'ine yazılmaz. Normalize kimlik izi
+snapshot içerik hash'ine katılır ama `inputRefs` içinde saklanmaz; ad/numara değişikliği yeni
+immutable snapshot üretir. Öğrenci PII silme akışı tenant-kapsamlı snapshot'lardaki bu iki alanı
+da temizler ve bu adım başarısız olursa öğrenci temizliği fail-closed durur. Bu karar
+DEC-20260623-01'deki kimlik yasağını yalnız bu iki kullanıcıya dönük alan için daraltır.
+Kaynak: Rapor tekrar üretilebilirliği ve profesyonel PDF/Excel kimlik ihtiyacı.
+Kanıt: `apps/worker/src/jobs/postgres-report-generation-adapter.ts`,
+`apps/worker/src/jobs/report-generation-job.ts`, `apps/worker/src/jobs/report-pdf-render-job.ts`.
+Etkilenen ADR: ADR-0002
+Açık soru: Gerçek staging/prod KVKK envanteri ve pilot aydınlatma metni onayı ayrıca gereklidir.
+Son kontrol: 2026-07-13
 
 ## Faz Öncesi Onay Gerektirenler
 

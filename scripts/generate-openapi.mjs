@@ -234,6 +234,11 @@ const reportSnapshotListFieldChecks = [
 const portalReportSnapshotListPaths = [
   "/api/v1/me/teacher/reports/{examId}/snapshots",
 ];
+const portalReportIndexPaths = [
+  "/api/v1/me/student/reports",
+  "/api/v1/me/teacher/reports",
+  "/api/v1/me/guardian/students/{studentId}/reports",
+];
 const portalReportStudentSnapshotPaths = [
   "/api/v1/me/student/reports/{examId}/snapshots/{snapshotId}",
   "/api/v1/me/student/reports/{examId}/latest",
@@ -273,6 +278,16 @@ const sharedTypeDriftContracts = [
   { interfaceName: "SupportTicketAttachmentDownloadResult", method: "get", path: "/api/v1/support-tickets/{id}/attachments/{attachmentId}/download", schemaPath: ["responseData"] },
 ];
 const portalReportOperationContracts = [
+  ...portalReportIndexPaths.map((path) => ({
+    method: "get",
+    path,
+    responseListEnvelope: true,
+    responseDataItemsRequired: ["examId", "title", "latestReadySnapshotId", "latestGeneratedAt"],
+    fieldChecks: [
+      { path: ["responseDataItem", "startsAt"], format: "date-time" },
+      { path: ["responseDataItem", "latestGeneratedAt"], format: "date-time" },
+    ],
+  })),
   ...portalReportSnapshotListPaths.map((path) => ({
     method: "get",
     path,
@@ -2006,6 +2021,14 @@ const requiredOperationContracts = [
   },
   {
     method: "get",
+    path: "/api/v1/me/teacher/homework/material-assignments",
+    responseListEnvelope: true,
+    responseDataItemsRequired: portalHomeworkMaterialAssignmentRequired,
+    responseDataForbiddenDeep: portalHomeworkMaterialAssignmentForbiddenDeep,
+    fieldChecks: portalHomeworkMaterialAssignmentFieldChecks,
+  },
+  {
+    method: "get",
     path: "/api/v1/me/guardian/homework/material-assignments",
     responseListEnvelope: true,
     responseDataItemsRequired: portalHomeworkMaterialAssignmentRequired,
@@ -2349,6 +2372,16 @@ const requiredOperationContracts = [
   { method: "post", path: "/api/v1/exams/{examId}/reports/generation-jobs", requestBody: true, responseEnvelope: true, idempotencyHeader: true },
   {
     method: "get",
+    path: "/api/v1/exams/{examId}/reports/generation-jobs/{jobId}",
+    responseEnvelope: true,
+    responseDataRequired: ["jobId", "status", "updatedAt"],
+    fieldChecks: [
+      { path: ["responseData", "status"], enum: ["QUEUED", "RUNNING", "COMPLETED", "FAILED"] },
+      { path: ["responseData", "updatedAt"], format: "date-time" },
+    ],
+  },
+  {
+    method: "get",
     path: "/api/v1/exams/{examId}/reports/snapshots",
     responseListEnvelope: true,
     responseDataItemsRequired: reportSnapshotRecordRequired,
@@ -2437,6 +2470,9 @@ const requiredOperationContracts = [
   ...studentCorePaths.map((path) => ({
     method: "get",
     path,
+    queryParameters: path === "/api/v1/students"
+      ? [{ name: "ids", type: "string" }]
+      : undefined,
     responseListEnvelope: true,
     responseDataItemsRequired: studentCoreRequired,
     responseDataForbiddenDeep: studentCoreForbiddenDeep,
@@ -3336,6 +3372,17 @@ const requiredOperationContracts = [
   },
   {
     method: "get",
+    path: "/api/v1/homework/material-assignments",
+    queryParameters: [{ name: "studentId", type: "string", required: true }],
+    responseListEnvelope: true,
+    responseDataItemsRequired: ["id", "tenantId", "materialId", "materialTitle", "studentId", "createdAt"],
+    fieldChecks: [
+      { path: ["responseDataItem", "materialTitle"], type: "string" },
+      { path: ["responseDataItem", "createdAt"], format: "date-time" },
+    ],
+  },
+  {
+    method: "get",
     path: "/api/v1/homework",
     responseListEnvelope: true,
     responseDataItemsRequired: ["id", "tenantId", "classId", "title"],
@@ -3615,6 +3662,10 @@ const requiredOperationContracts = [
   {
     method: "get",
     path: "/api/v1/attendance",
+    queryParameters: ["classId", "studentId", "date", "dateFrom", "dateTo"].map((name) => ({
+      name,
+      type: "string",
+    })),
     responseEnvelope: true,
     responseListEnvelope: true,
     responseDataItemsRequired: ["id", "tenantId", "studentId", "date", "status"],
@@ -3631,6 +3682,61 @@ const requiredOperationContracts = [
     fieldChecks: [
       { path: ["responseData", "total"], minimum: 0 },
       { path: ["responseData", "absent"], minimum: 0 },
+    ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/attendance/aggregate",
+    responseEnvelope: true,
+    responseDataRequired: ["total", "present", "absent", "late", "excused"],
+    fieldChecks: [
+      { path: ["responseData", "total"], minimum: 0 },
+      { path: ["responseData", "present"], minimum: 0 },
+      { path: ["responseData", "absent"], minimum: 0 },
+      { path: ["responseData", "late"], minimum: 0 },
+      { path: ["responseData", "excused"], minimum: 0 },
+    ],
+  },
+  {
+    method: "get",
+    path: "/api/v1/attendance/daily",
+    queryParameters: ["classId", "date"].map((name) => ({
+      name,
+      type: "string",
+      required: true,
+    })),
+    responseEnvelope: true,
+    responseDataRequired: ["classId", "date", "students", "records", "summary"],
+    fieldChecks: [
+      { path: ["responseData", "date"], format: "date" },
+      { path: ["responseData", "students", "items", "id"], type: "string" },
+      { path: ["responseData", "students", "items", "firstName"], type: "string" },
+      { path: ["responseData", "students", "items", "lastName"], type: "string" },
+      { path: ["responseData", "students", "items", "classId"], type: "string" },
+      { path: ["responseData", "records", "items", "date"], format: "date" },
+      { path: ["responseData", "records", "items", "status"], enum: attendanceStatuses },
+      { path: ["responseData", "summary", "total"], minimum: 0 },
+      { path: ["responseData", "summary", "present"], minimum: 0 },
+      { path: ["responseData", "summary", "absent"], minimum: 0 },
+      { path: ["responseData", "summary", "late"], minimum: 0 },
+      { path: ["responseData", "summary", "excused"], minimum: 0 },
+      { path: ["responseData", "summary", "unmarked"], minimum: 0 },
+    ],
+  },
+  {
+    method: "put",
+    path: "/api/v1/attendance/daily",
+    requestBody: true,
+    responseEnvelope: true,
+    requestRequired: ["classId", "date", "entries"],
+    responseDataRequired: ["records", "summary"],
+    fieldChecks: [
+      { path: ["requestBody", "date"], format: "date" },
+      { path: ["requestBody", "entries"], maxItems: 200 },
+      { path: ["requestBody", "entries", "items", "status"], enum: attendanceStatuses },
+      { path: ["responseData", "records", "items", "date"], format: "date" },
+      { path: ["responseData", "records", "items", "status"], enum: attendanceStatuses },
+      { path: ["responseData", "summary", "total"], minimum: 0 },
     ],
   },
   {
@@ -3837,6 +3943,11 @@ function validateOpenApiDocument(document) {
     if (contract.requiredHeaders) {
       for (const header of contract.requiredHeaders) {
         requireHeader(operation, header, failures, `${contract.method.toUpperCase()} ${contract.path}`);
+      }
+    }
+    if (contract.queryParameters) {
+      for (const query of contract.queryParameters) {
+        requireQueryParameter(operation, query, failures, `${contract.method.toUpperCase()} ${contract.path}`);
       }
     }
 
@@ -4053,6 +4164,19 @@ function requireHeader(operation, header, failures, label) {
   }
 }
 
+function requireQueryParameter(operation, query, failures, label) {
+  const required = query.required ?? false;
+  const found = (operation.parameters ?? []).some((parameter) =>
+    parameter?.in === "query" &&
+    parameter.name === query.name &&
+    parameter.required === required &&
+    (!query.type || parameter.schema?.type === query.type),
+  );
+  if (!found) {
+    failures.push(`OpenAPI query parameter eksik: ${label} ${query.name}`);
+  }
+}
+
 function requireAnyOfRequired(schema, requiredGroups, failures, label) {
   const actualGroups = Array.isArray(schema?.anyOf)
     ? schema.anyOf.map((entry) => Array.isArray(entry?.required) ? [...entry.required].sort() : [])
@@ -4112,6 +4236,9 @@ function validateFieldCheck(schema, check, failures, label) {
   }
   if (check.minItems !== undefined && schema.minItems !== check.minItems) {
     failures.push(`OpenAPI minItems beklenmiyor: ${label}=${schema.minItems}`);
+  }
+  if (check.maxItems !== undefined && schema.maxItems !== check.maxItems) {
+    failures.push(`OpenAPI maxItems beklenmiyor: ${label}=${schema.maxItems}`);
   }
   if (check.minimum !== undefined && schema.minimum !== check.minimum) {
     failures.push(`OpenAPI minimum beklenmiyor: ${label}=${schema.minimum}`);

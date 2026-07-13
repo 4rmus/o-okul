@@ -24,6 +24,7 @@ import type {
   AttendanceSummaryRecord,
   TeacherNoteRecord,
   PaymentPlanWithInstallmentsRecord,
+  PortalReportIndexItem,
   AnnouncementRecord,
   SupportTicketRecord,
   GuardianStudentRecord,
@@ -68,6 +69,7 @@ import { TeacherNoteService } from "../teacher-note/teacher-note.service.js";
 import { TenantService } from "../tenant/tenant.service.js";
 import type { TenantRecord } from "../tenant/tenant-store.js";
 import { tenantCurrentProfileBodySchema, type TenantCurrentProfileBody } from "../tenant/tenant-validation.js";
+import { MeReportIndexService } from "./me-report-index.service.js";
 
 const mePasswordChangeBodySchema = z.object({
   currentPassword: z.string().min(1),
@@ -85,6 +87,7 @@ export class MeController {
     private readonly homework: HomeworkService,
     private readonly notificationDevices: NotificationDeviceService,
     private readonly payments: PaymentService,
+    private readonly reportIndex: MeReportIndexService,
     private readonly reports: ReportGenerationService,
     private readonly guardians: GuardianService,
     private readonly school: SchoolService,
@@ -238,6 +241,14 @@ export class MeController {
     @Body(zodBody(portalSupportTicketCreateBodySchema)) body: PortalSupportTicketCreateBody,
   ): Promise<PublicPortalSupportTicketRecord> {
     return toPublicPortalSupportTicketResponse(await this.supportTickets.createCurrentStudent(getRequestContext(), body));
+  }
+
+  @Get("student/reports")
+  @Roles("STUDENT")
+  async studentReportIndex(): Promise<PortalReportIndexItem[]> {
+    const context = getRequestContext();
+    const student = await this.students.findCurrentStudent(context);
+    return this.reportIndex.listForStudent(context, student.id);
   }
 
   @Get("student/reports/:examId/snapshots/:snapshotId")
@@ -461,6 +472,14 @@ export class MeController {
     return this.homework.listMaterialAssignments(context, id);
   }
 
+  @Get("teacher/homework/material-assignments")
+  @Roles("TEACHER")
+  teacherHomeworkAllMaterialAssignments(): Promise<HomeworkMaterialAssignmentRecord[]> {
+    const context = getRequestContext();
+    assertTeacherContext(context);
+    return this.homework.listCurrentTeacherMaterialAssignments(context);
+  }
+
   @Get("teacher/teacher-notes")
   @Roles("TEACHER")
   teacherTeacherNotes(): Promise<TeacherNoteRecord[]> {
@@ -554,6 +573,14 @@ export class MeController {
     return this.reports.listSnapshots(context, examId, query);
   }
 
+  @Get("teacher/reports")
+  @Roles("TEACHER")
+  teacherReportIndex(): Promise<PortalReportIndexItem[]> {
+    const context = getRequestContext();
+    assertTeacherContext(context);
+    return this.reportIndex.listForTeacher(context);
+  }
+
   @Get("teacher/reports/:examId/snapshots/:snapshotId/students/:studentId")
   @Roles("TEACHER")
   teacherStudentReport(
@@ -590,6 +617,15 @@ export class MeController {
     return this.reports.getStudentProgress(context, examId, studentId, {
       scope: scope === "all" ? "all" : "exam",
     });
+  }
+
+  @Get("guardian/students/:studentId/reports")
+  @Roles("GUARDIAN")
+  async guardianStudentReportIndex(@Param("studentId") studentId: string): Promise<PortalReportIndexItem[]> {
+    const context = getRequestContext();
+    assertGuardianContext(context);
+    const student = await this.students.findOneForViewer(context, studentId);
+    return this.reportIndex.listForStudent(context, student.id);
   }
 
   @Get("guardian/students/:studentId/reports/:examId/snapshots/:snapshotId")

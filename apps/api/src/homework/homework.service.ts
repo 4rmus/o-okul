@@ -301,6 +301,28 @@ export class HomeworkService {
     return this.filterMaterialAssignmentsForTeacherScope(context, assignments);
   }
 
+  async listMaterialAssignmentsByStudent(
+    context: RequestContext,
+    studentIdInput: string | undefined,
+  ): Promise<HomeworkMaterialAssignmentRecord[]> {
+    const studentId = requiredText(studentIdInput, "HOMEWORK_MATERIAL_ASSIGNMENT_STUDENT_REQUIRED");
+    const student = await this.students.findOneForViewer(context, studentId);
+    return this.listStudentMaterialAssignments(context, [student.id]);
+  }
+
+  async listCurrentTeacherMaterialAssignments(context: RequestContext): Promise<HomeworkMaterialAssignmentRecord[]> {
+    const assignments = filterTenantResources(context, await this.store.listAllMaterialAssignments()).filter(
+      (assignment) => !assignment.deletedAt,
+    );
+    const scoped = await this.filterMaterialAssignmentsForTeacherScope(context, assignments);
+    const materials = await this.listMaterials(context);
+    const titleById = new Map(materials.map((material) => [material.id, material.title]));
+    return scoped.map((assignment) => ({
+      ...assignment,
+      materialTitle: titleById.get(assignment.materialId),
+    }));
+  }
+
   async listCurrentStudentMaterialAssignments(context: RequestContext): Promise<HomeworkMaterialAssignmentRecord[]> {
     const student = await this.students.findCurrentStudent(context);
     return this.listStudentMaterialAssignments(context, [student.id]);
@@ -566,17 +588,22 @@ export class HomeworkService {
     studentIds: string[],
   ): Promise<HomeworkMaterialAssignmentRecord[]> {
     const studentIdSet = new Set(studentIds);
-    const materials = await this.listMaterials(context);
+    const [materials, allAssignments] = await Promise.all([
+      this.listMaterials(context),
+      this.store.listAllMaterialAssignments(),
+    ]);
     const materialTitleById = new Map(materials.map((material) => [material.id, material.title]));
-    const assignments = await Promise.all(
-      materials.map((material) => this.listMaterialAssignments(context, material.id)),
+    const assignments = await this.filterMaterialAssignmentsForTeacherScope(
+      context,
+      filterTenantResources(context, allAssignments).filter((assignment) => !assignment.deletedAt),
     );
     return assignments
-      .flat()
-      .filter((assignment) => studentIdSet.has(assignment.studentId))
+      .filter((assignment) =>
+        studentIdSet.has(assignment.studentId) && materialTitleById.has(assignment.materialId),
+      )
       .map((assignment) => ({
         ...assignment,
-        materialTitle: materialTitleById.get(assignment.materialId),
+        materialTitle: materialTitleById.get(assignment.materialId)!,
       }));
   }
 

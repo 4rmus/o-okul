@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 
 const files = {
   decisions: readFileSync("docs/DECISIONS.md", "utf8"),
@@ -24,6 +25,13 @@ const diffScriptTokens = [
   "KARNE_VISUAL_MEAN_DELTA_TOO_HIGH",
   "meanChannelDelta",
   "expectedSize = { height: 842, width: 595 }",
+  "meanChannelDelta=${result.meanChannelDelta} ui=provided",
+];
+const diffScriptForbiddenTokens = [
+  "UI_BMP_FAILED:${options.ui}",
+  "result.stderr || result.stdout",
+  "BMP_SIGNATURE_INVALID:${path}",
+  "ui=${basename(result.uiScreenshot)}",
 ];
 const targetScriptTokens = [
   "d3a54d78fb9850b2c99e0de478d98ee025526c41677632291c302313602dfe0a",
@@ -34,6 +42,7 @@ const targetScriptTokens = [
 
 requireTokens("docs/DECISIONS.md", files.decisions, decisionTokens, failures);
 requireTokens("scripts/compare-karne-visual-evidence.mjs", files.diffScript, diffScriptTokens, failures);
+forbidTokens("scripts/compare-karne-visual-evidence.mjs", files.diffScript, diffScriptForbiddenTokens, failures);
 requireTokens("scripts/check-adiguzel-pdf-visual-targets.mjs", files.targetScript, targetScriptTokens, failures);
 
 const scripts = files.packageJson.scripts ?? {};
@@ -50,12 +59,42 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
+const uiScreenshot = process.env.KARNE_VISUAL_UI_SCREENSHOT?.trim();
+if (uiScreenshot) {
+  const comparison = spawnSync(process.execPath, [
+    "scripts/compare-karne-visual-evidence.mjs",
+    "--target",
+    process.env.KARNE_VISUAL_TARGET?.trim() || "iSEM",
+    "--ui",
+    uiScreenshot,
+    "--max-diff-ratio",
+    "0.53",
+    "--max-mean-channel-delta",
+    "36",
+  ], { encoding: "utf8" });
+  if (comparison.status !== 0) {
+    console.error(comparison.stderr || comparison.stdout || "Karne render karşılaştırması başarısız.");
+    process.exit(1);
+  }
+  console.log(comparison.stdout.trim());
+} else {
+  console.log("Karne render kanıtı atlandı: KARNE_VISUAL_UI_SCREENSHOT verilmedi.");
+}
+
 console.log("Karne visual contract check passed.");
 
 function requireTokens(path, source, tokens, output) {
   for (const token of tokens) {
     if (!source.includes(token)) {
       output.push(`${path} missing expected token: ${token}`);
+    }
+  }
+}
+
+function forbidTokens(path, source, tokens, output) {
+  for (const token of tokens) {
+    if (source.includes(token)) {
+      output.push(`${path} contains forbidden sensitive output token: ${token}`);
     }
   }
 }

@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { DataTable, Field, InfoGrid, InfoItem, Panel, Select, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
+import { DataTable, Field, InfoGrid, InfoItem, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import type { CampusRecord, ClassRecord, ExamRecord, GradeLevelRecord, ReportSnapshotRecord, StudentRecord } from "@o-okul/shared-types";
 import { ArrowLeft } from "lucide-react";
 import { useAuth } from "../../../providers.js";
-import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
+import { ApiRequestError, apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { formatCourseName, formatOutcomeCode } from "../../_shared/academic-labels.js";
 import { formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
@@ -15,14 +15,16 @@ import { OperationSummary, type OperationSummaryAction, type OperationSummaryBad
 
 interface ClassDetailData {
   campusName?: string;
-  exams: ExamRecord[];
   gradeLevelName?: string;
   record: ClassRecord;
   students: StudentRecord[];
 }
 
+type ClassDetailSection = "overview" | "reports" | "students";
+
 export function ClassDetailPage({ classId }: { classId: string }) {
   const { auth } = useAuth();
+  const [activeSection, setActiveSection] = useState<ClassDetailSection>("overview");
   const [selectedExamId, setSelectedExamId] = useState("");
   const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
   const detailQuery = useQuery({
@@ -32,11 +34,17 @@ export function ClassDetailPage({ classId }: { classId: string }) {
     refetchOnWindowFocus: false,
   });
   const detail = detailQuery.data;
-  const exams = detail?.exams ?? [];
+  const examsQuery = useQuery({
+    queryKey: ["next-class-detail-exams", auth?.session.tenantId ?? "anonymous"],
+    queryFn: () => apiRequestOrNull<ExamRecord[]>(auth?.accessToken ?? "", `${apiBaseUrl}/exams`),
+    enabled: Boolean(auth && activeSection === "reports"),
+    refetchOnWindowFocus: false,
+  });
+  const exams = examsQuery.data ?? [];
   const reportQuery = useQuery({
     queryKey: ["next-class-detail-report", auth?.session.tenantId ?? "anonymous", classId, selectedExamId, selectedSnapshotId || "auto"],
     queryFn: () => loadClassReport(auth?.accessToken ?? "", classId, selectedExamId, selectedSnapshotId),
-    enabled: Boolean(auth && selectedExamId),
+    enabled: Boolean(auth && activeSection === "reports" && selectedExamId),
     refetchOnWindowFocus: false,
   });
   const selectedSnapshot = reportQuery.data?.selectedSnapshot ?? null;
@@ -89,7 +97,12 @@ export function ClassDetailPage({ classId }: { classId: string }) {
       mobilePriority: "primary",
       priority: "primary",
       sticky: "left",
-      render: (student) => studentNameLabel(student.studentId, studentNameById),
+      render: (student) => (
+        <span>
+          {student.displayName ?? studentNameLabel(student.studentId, studentNameById)}
+          {student.studentNo ? <small> #{student.studentNo}</small> : null}
+        </span>
+      ),
     },
     {
       key: "successRate",
@@ -196,7 +209,18 @@ export function ClassDetailPage({ classId }: { classId: string }) {
               badges={classDetailSummaryBadges}
               items={classDetailSummaryItems}
             />
-            <Panel
+            <Tabs label="Sınıf detay bölümleri">
+              <TabButton aria-controls="class-detail-panel-overview" id="class-detail-tab-overview" selected={activeSection === "overview"} onClick={() => setActiveSection("overview")}>Genel</TabButton>
+              <TabButton aria-controls="class-detail-panel-students" id="class-detail-tab-students" selected={activeSection === "students"} onClick={() => setActiveSection("students")}>Öğrenciler</TabButton>
+              <TabButton aria-controls="class-detail-panel-reports" id="class-detail-tab-reports" selected={activeSection === "reports"} onClick={() => setActiveSection("reports")}>Raporlar</TabButton>
+            </Tabs>
+            <div
+              aria-labelledby={`class-detail-tab-${activeSection}`}
+              id={`class-detail-panel-${activeSection}`}
+              role="tabpanel"
+              tabIndex={0}
+            >
+            {activeSection === "overview" ? <Panel
               aria-label="Sınıf profil kartı"
               description="Kampüs, seviye ve şube bağlamı ham kayıt anahtarı göstermeden okunur."
               title="Sınıf profili"
@@ -207,8 +231,8 @@ export function ClassDetailPage({ classId }: { classId: string }) {
                 <InfoItem label="Kampüs" value={campusLabel(detail)} />
                 <InfoItem label="Öğrenci kapsamı" value={`${formatCount(detail.students.length)} öğrenci`} />
               </InfoGrid>
-            </Panel>
-            <Panel
+            </Panel> : null}
+            {activeSection === "reports" ? <Panel
               actions={<StatusBadge tone={reportState.tone}>{reportState.label}</StatusBadge>}
               aria-label="Sınıf rapor bağlamı"
               description="Sınav ve hazır snapshot seçimi sınıf sonuçlarını, başarı yüzdesini ve kazanım kırılımını besler."
@@ -254,8 +278,8 @@ export function ClassDetailPage({ classId }: { classId: string }) {
                 <InfoItem label="Başarı %" value={formatPercentNumber(reportSuccessRate(classReport?.averages))} />
                 <InfoItem label="Soru" value={formatNumber(reportQuestionCount(classReport?.averages))} />
               </InfoGrid>
-            </Panel>
-            <Panel
+            </Panel> : null}
+            {activeSection === "students" ? <Panel
               aria-label="Sınıf öğrencileri"
               description="Öğrenci adı, okul numarası ve aktif kayıt durumu yoğun tablo düzeninde izlenir."
               title="Öğrenciler"
@@ -269,8 +293,8 @@ export function ClassDetailPage({ classId }: { classId: string }) {
                 getRowKey={(student) => student.id}
                 rows={detail.students}
               />
-            </Panel>
-            <Panel
+            </Panel> : null}
+            {activeSection === "reports" ? <Panel
               aria-label="Sınıf sınav sonuçları"
               description="Başarı yüzdesi ana karşılaştırma metriğidir; net, soru ve puanlar bağlam olarak gösterilir."
               title="Sınav sonuçları"
@@ -286,8 +310,8 @@ export function ClassDetailPage({ classId }: { classId: string }) {
                 loading={reportQuery.isPending}
                 rows={classStudentResults}
               />
-            </Panel>
-            <Panel
+            </Panel> : null}
+            {activeSection === "reports" ? <Panel
               aria-label="Sınıf kazanım kırılımı"
               description="Kazanımlar başarı yüzdesine göre sıralanır; net ve soru sayısı bağlam olarak kalır."
               title="Kazanım kırılımı"
@@ -303,7 +327,8 @@ export function ClassDetailPage({ classId }: { classId: string }) {
                 loading={reportQuery.isPending}
                 rows={classOutcomeRows}
               />
-            </Panel>
+            </Panel> : null}
+            </div>
           </>
         ) : null}
       </section>
@@ -312,28 +337,27 @@ export function ClassDetailPage({ classId }: { classId: string }) {
 }
 
 async function loadClassDetail(accessToken: string, classId: string) {
-  const [record, campuses, gradeLevels, students, exams] = await Promise.all([
-    apiRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes/${encodeURIComponent(classId)}`),
+  const record = await apiRequestOrNull<ClassRecord>(accessToken, `${apiBaseUrl}/classes/${encodeURIComponent(classId)}`);
+  if (!record) return null;
+  const [campuses, gradeLevels, students] = await Promise.all([
     apiListRequest<CampusRecord>(accessToken, `${apiBaseUrl}/campuses`),
     apiListRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels`),
-    apiListRequest<StudentRecord>(accessToken, `${apiBaseUrl}/students`),
-    apiRequestOrNull<ExamRecord[]>(accessToken, `${apiBaseUrl}/exams`),
+    apiListRequest<StudentRecord>(accessToken, `${apiBaseUrl}/students?classId=${encodeURIComponent(classId)}`),
   ]);
 
   return {
     campusName: campuses.data.find((campus) => campus.id === record.campusId)?.name,
     gradeLevelName: gradeLevels.data.find((gradeLevel) => gradeLevel.id === record.gradeLevelId)?.name,
     record,
-    students: students.data.filter((student) => student.classId === classId),
-    exams: exams ?? [],
+    students: students.data,
   };
 }
 
 async function loadClassReport(accessToken: string, classId: string, examId: string, selectedSnapshotId: string) {
-  const snapshots = await apiRequest<ReportSnapshotRecord[]>(
+  const snapshots = await apiRequestOrNull<ReportSnapshotRecord[]>(
     accessToken,
     `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots?classId=${encodeURIComponent(classId)}`,
-  );
+  ) ?? [];
   const readySnapshots = snapshots.filter((snapshot) => snapshot.status === "READY");
   return {
     snapshots: readySnapshots,
@@ -344,8 +368,9 @@ async function loadClassReport(accessToken: string, classId: string, examId: str
 async function apiRequestOrNull<T>(accessToken: string, input: RequestInfo | URL): Promise<T | null> {
   try {
     return await apiRequest<T>(accessToken, input);
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 404) return null;
+    throw error;
   }
 }
 
@@ -444,11 +469,13 @@ function buildClassSummaryActions(
 }
 
 interface ClassStudentResultRow {
+  displayName?: string;
   lgsScore?: number;
   net?: number;
   questionCount?: number;
   standardScore?: number;
   studentId: string;
+  studentNo?: string;
   successRate?: number;
 }
 
@@ -456,11 +483,13 @@ function toClassStudentResults(snapshot: ReportSnapshotRecord | null, classId: s
   return (snapshot?.snapshotData?.students ?? [])
     .filter((student) => student.classId === classId)
     .map((student) => ({
+      displayName: student.displayName,
       lgsScore: readLgsScore(student.total),
       net: student.total?.net,
       questionCount: reportQuestionCount(student.total),
       standardScore: student.total?.standardScore,
       studentId: student.studentId,
+      studentNo: student.studentNo,
       successRate: reportSuccessRate(student.total),
     })) satisfies ClassStudentResultRow[];
 }
@@ -578,7 +607,7 @@ function campusLabel(detail: ClassDetailData) {
 }
 
 function studentNameLabel(studentId: string, studentNameById: ReadonlyMap<string, string>) {
-  return studentNameById.get(studentId) ?? "Öğrenci eşleşmedi";
+  return studentNameById.get(studentId) ?? "Öğrenci";
 }
 
 function formatDateLabel(value: string | undefined) {

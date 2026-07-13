@@ -19,7 +19,7 @@ export interface CrudPageProps<TRow> extends Omit<HTMLAttributes<HTMLElement>, "
   summary?: ReactNode;
   tableCaption?: ReactNode;
   tableDescription?: ReactNode;
-  title: ReactNode;
+  title?: ReactNode;
 }
 
 export function CrudPage<TRow>({
@@ -45,13 +45,15 @@ export function CrudPage<TRow>({
 
   return (
     <section {...props} className={classNames("uh-crud-page", className)}>
-      <header className="uh-crud-page__header">
-        <div>
-          <h2>{title}</h2>
-          {description ? <p>{description}</p> : null}
-        </div>
-        {actions ? <div className="uh-crud-page__actions">{actions}</div> : null}
-      </header>
+      {title || description || actions ? (
+        <header className="uh-crud-page__header">
+          <div>
+            {title ? <h2>{title}</h2> : null}
+            {description ? <p>{description}</p> : null}
+          </div>
+          {actions ? <div className="uh-crud-page__actions">{actions}</div> : null}
+        </header>
+      ) : null}
       {summary ? <div className="uh-crud-page__summary">{summary}</div> : null}
       {error ? (
         <p className="uh-crud-page__error" role="alert">

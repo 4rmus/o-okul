@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from "@nestjs/common";
-import type { ReportErrorBooklet, ReportStudentProgress, ReportStudentSnapshot } from "@o-okul/shared-types";
+import type { ReportErrorBooklet, ReportGenerationJobStatus, ReportStudentProgress, ReportStudentSnapshot } from "@o-okul/shared-types";
 import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
 import { optionalTrimmedString, zodBody } from "../http/zod-validation.js";
@@ -115,5 +115,14 @@ export class ReportGenerationController {
       courseId: body.courseId,
       termId: body.termId,
     }, idempotencyKey);
+  }
+
+  @Get("generation-jobs/:jobId")
+  @RequireCapability("academic:manage")
+  getGenerationJobStatus(
+    @Param("examId") examId: string,
+    @Param("jobId") jobId: string,
+  ): Promise<ReportGenerationJobStatus> {
+    return this.reports.getGenerationJobStatus(getRequestContext(), examId, jobId);
   }
 }

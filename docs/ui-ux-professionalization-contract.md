@@ -54,6 +54,12 @@ Tokenlar CSS custom property olarak baslar ve `apps/web/app/globals.css` icinde 
   baglam, masked PII durumu ve RBAC-derived aksiyon etiketlerini gosterebilir.
 - Akademik yapi CRUD ekranlari (kampus, seviye, sinif, ders) ayni summary slotu, caption,
   tableDescription ve `Field`/`Select` form standardi ile ilerler.
+- Her route icin tek sayfa basligi `PageFrame` tarafindan uretilir; ic `CrudPage` basligi opsiyoneldir.
+- Devamsizlik, sinif+tarih secimi sonrasi o tarihteki enrollment kayitlarindan uretilen ogrenci
+  listesini tek API cevabi ve tek kaydetme islemiyle yoneten gunluk yoklama yuzeyidir. Genel
+  metrikler pagination satirlarindan hesaplanmaz; transfer gecmisi guncel sinifa tasinmaz.
+- Ogrenci detay ve 360 yuzeyleri materyal basina istek acmaz; ogrenci-kapsamli toplu atama
+  cevabini kullanir.
 
 Eski `Button`, `Input`, `CrudPage`, `DataTable` kullanimlari geriye uyumlu kalir.
 
@@ -69,6 +75,14 @@ migration/API dilimi ve kanit gate'leriyle kullanilir.
 - `Net`, `Soru`, standart puan, dogru/yanlis/bos ve siralama baglam olarak gorunur kalir.
 - `/kurum/raporlar` gorev odakli workspace olarak calisir: Sorgu/Uretim, Kurum Analitigi,
   Ogrenci Sonuclari, Karne Onizleme, Ciktilar.
+- `/kurum/optik` sablon, parser, yukleme, karantina ve degerlendirme adimlariyla sinirlidir; rapor
+  uretim ve cikti islemleri secili sinav baglamiyla `/kurum/raporlar` yuzeyine devredilir.
+- Ogrenci, veli ve ogretmen portallari yetkili `READY` rapor indeksinden gorunur sinav secimi yapar;
+  sabit demo sinav kimligi kullanilmaz.
+- Queue isi (`QUEUED`, `RUNNING`, `COMPLETED`, `FAILED`) ile immutable snapshot durumu ayri
+  sozlesmelerdir. UI uretimi `jobId` ile izler, tamamlaninca donen snapshot'i yeniler.
+- Karne ve rapor satirlarinda snapshot icindeki dondurulmus `displayName`/`studentNo` onceliklidir;
+  guncel ogrenci kaydi yalniz eski snapshot'lar icin geri uyumlu yedektir.
 - Export aksiyonlari yalniz `READY` snapshot icin etkin olur; `STALE`, `PENDING` ve `FAILED`
   durumlari acikca gosterilir.
 - Web karne ve worker PDF sablonlari ayni notr gorsel sozlesmeye yaklastirilir; hesaplama ve

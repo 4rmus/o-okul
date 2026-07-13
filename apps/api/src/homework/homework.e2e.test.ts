@@ -352,6 +352,29 @@ describe("Homework API", () => {
       },
     ]);
 
+    await request(server)
+      .get("/homework/material-assignments")
+      .query({ studentId: "student-a" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([
+          expect.objectContaining({
+            tenantId: "tenant-a",
+            materialId: "material-a",
+            materialTitle: "Kesirler Çalışma Kağıdı",
+            studentId: "student-a",
+          }),
+        ]);
+        expect(body).not.toEqual(expect.arrayContaining([expect.objectContaining({ tenantId: "tenant-b" })]));
+      });
+
+    await request(server)
+      .get("/homework/material-assignments")
+      .query({ studentId: "student-b" })
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(403);
+
     const created = await request(server)
       .post("/homework/materials/material-a/assignments")
       .set("Authorization", `Bearer ${tenantAAccessToken}`)
@@ -374,6 +397,24 @@ describe("Homework API", () => {
       note: "Ek tekrar",
       dueAt: "2026-06-10T12:00:00.000Z",
     });
+  });
+
+  it("öğretmen materyal atamalarını tek toplu endpointten kendi scope'unda alır", async () => {
+    await request(server)
+      .get("/me/teacher/homework/material-assignments")
+      .set("Authorization", `Bearer ${teacherAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(expect.arrayContaining([
+          expect.objectContaining({
+            tenantId: "tenant-a",
+            materialId: "material-a",
+            materialTitle: "Kesirler Çalışma Kağıdı",
+            studentId: "student-a",
+          }),
+        ]));
+        expect(body).not.toEqual(expect.arrayContaining([expect.objectContaining({ tenantId: "tenant-b" })]));
+      });
   });
 
   it("materyal atamasını Idempotency-Key ile tekilleştirir", async () => {

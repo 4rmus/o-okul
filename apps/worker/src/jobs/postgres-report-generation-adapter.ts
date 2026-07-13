@@ -19,6 +19,9 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
         `WITH latest_results AS (
            SELECT DISTINCT ON (er."studentId")
              er."studentId",
+             s."firstName",
+             s."lastName",
+             s."studentNo",
              s."classId",
              c."name" AS "className",
              er."resultKey",
@@ -56,17 +59,22 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
         ],
       );
 
-      return result.rows.map((row) => ({
-        studentId: row.studentId,
-        classId: row.classId ?? undefined,
-        className: row.className ?? undefined,
-        resultKey: row.resultKey,
-        answerKeyVersion: row.answerKeyVersion,
-        parserConfigVersion: row.parserConfigVersion,
-        engineVersion: row.engineVersion,
-        score: parseScoringResult(row.scoreData),
-        computedAt: toIsoString(row.computedAt),
-      }));
+      return result.rows.map((row) => {
+        const displayName = `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim();
+        return {
+          studentId: row.studentId,
+          ...(displayName ? { displayName } : {}),
+          ...(row.studentNo ? { studentNo: row.studentNo } : {}),
+          classId: row.classId ?? undefined,
+          className: row.className ?? undefined,
+          resultKey: row.resultKey,
+          answerKeyVersion: row.answerKeyVersion,
+          parserConfigVersion: row.parserConfigVersion,
+          engineVersion: row.engineVersion,
+          score: parseScoringResult(row.scoreData),
+          computedAt: toIsoString(row.computedAt),
+        };
+      });
     });
   }
 
@@ -80,14 +88,14 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
         id: row.id,
         tenantId: row.tenantId,
         examId: row.examId,
-        contentHash: snapshot.contentHash,
-        campusId: snapshot.campusId,
-        gradeLevelId: snapshot.gradeLevelId,
-        classId: snapshot.classId,
-        courseId: snapshot.courseId,
-        termId: snapshot.termId,
+        contentHash: row.contentHash,
+        campusId: row.campusId ?? undefined,
+        gradeLevelId: row.gradeLevelId ?? undefined,
+        classId: row.classId ?? undefined,
+        courseId: row.courseId ?? undefined,
+        termId: row.termId ?? undefined,
         reportType: parseReportType(row.reportType),
-        status: "READY",
+        status: parseReportSnapshotStatus(row.status),
         inputRefs: parseJsonObject(row.inputRefs) as ReportGenerationJobResult["inputRefs"],
         snapshotData: parseJsonObject(row.snapshotData) as ReportGenerationJobResult["snapshotData"],
         generatedAt: toIsoString(row.generatedAt),
@@ -98,6 +106,9 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
 
 interface ExamResultReportRow {
   studentId: string;
+  firstName: string | null;
+  lastName: string | null;
+  studentNo: string | null;
   classId: string | null;
   className: string | null;
   resultKey: string;
@@ -112,8 +123,14 @@ interface ReportSnapshotRow {
   id: string;
   tenantId: string;
   examId: string;
+  campusId: string | null;
+  gradeLevelId: string | null;
+  classId: string | null;
+  courseId: string | null;
+  termId: string | null;
   reportType: string;
   contentHash: string;
+  status: string;
   inputRefs: unknown;
   snapshotData: unknown;
   generatedAt: Date | string;
@@ -142,22 +159,9 @@ async function insertSnapshot(
        "updatedAt"
      )
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, now())
-     ON CONFLICT ("tenantId", "contentHash") DO UPDATE
-     SET "examId" = EXCLUDED."examId",
-         "campusId" = EXCLUDED."campusId",
-         "gradeLevelId" = EXCLUDED."gradeLevelId",
-         "classId" = EXCLUDED."classId",
-         "courseId" = EXCLUDED."courseId",
-         "termId" = EXCLUDED."termId",
-         "reportType" = EXCLUDED."reportType",
-         "status" = EXCLUDED."status",
-         "inputRefs" = EXCLUDED."inputRefs",
-         "snapshotData" = EXCLUDED."snapshotData",
-         "generatedAt" = EXCLUDED."generatedAt",
-         "staleAt" = NULL,
-         "deletedAt" = NULL,
-         "updatedAt" = now()
-     RETURNING "id", "tenantId", "examId", "reportType", "contentHash", "inputRefs", "snapshotData", "generatedAt"`,
+     ON CONFLICT ("tenantId", "contentHash") DO NOTHING
+     RETURNING "id", "tenantId", "examId", "campusId", "gradeLevelId", "classId", "courseId", "termId",
+       "reportType", "contentHash", "status", "inputRefs", "snapshotData", "generatedAt"`,
     [
       randomUUID(),
       snapshot.tenantId,
@@ -175,7 +179,18 @@ async function insertSnapshot(
       snapshot.generatedAt,
     ],
   );
-  return result.rows[0];
+  if (result.rows[0]) return result.rows[0];
+
+  const existing = await client.query<ReportSnapshotRow>(
+    `SELECT "id", "tenantId", "examId", "campusId", "gradeLevelId", "classId", "courseId", "termId",
+       "reportType", "contentHash", "status", "inputRefs", "snapshotData", "generatedAt"
+     FROM "ReportSnapshot"
+     WHERE "tenantId" = $1
+       AND "contentHash" = $2
+     LIMIT 1`,
+    [snapshot.tenantId, snapshot.contentHash],
+  );
+  return existing.rows[0];
 }
 
 function parseScoringResult(value: unknown): ScoringResult {
@@ -195,6 +210,13 @@ function optionalText(value: string | undefined): string | undefined {
 function parseReportType(value: string): ReportGenerationJobResult["reportType"] {
   if (value !== examResultSummaryReportType) {
     throw new Error("REPORT_TYPE_INVALID");
+  }
+  return value;
+}
+
+function parseReportSnapshotStatus(value: string): ReportGenerationJobResult["status"] {
+  if (value !== "READY" && value !== "STALE") {
+    throw new Error("REPORT_STATUS_INVALID");
   }
   return value;
 }

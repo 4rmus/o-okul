@@ -25,12 +25,14 @@ const expectedTeacherScopedReadPaths = [
   "/me/teacher/schedule",
   "/me/teacher/students",
   "/me/teacher/attendance",
+  "/attendance/daily",
   "/me/teacher/homework",
   "/me/teacher/homework/materials",
-  "/me/teacher/homework/materials/material-a/assignments",
+  "/me/teacher/homework/material-assignments",
   "/me/teacher/teacher-notes",
   "/me/teacher/support-tickets",
   "/me/teacher/lookups",
+  "/me/teacher/reports",
   "/me/teacher/students/student-a/enrollments",
   "/me/teacher/students/student-b/enrollments",
   "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots",
@@ -60,7 +62,7 @@ const rawInternalValues = [
 const corsHeaders = {
   "access-control-allow-credentials": "true",
   "access-control-allow-headers": "authorization,content-type,x-csrf-token,x-role-preview-token",
-  "access-control-allow-methods": "DELETE,GET,PATCH,POST,OPTIONS",
+  "access-control-allow-methods": "DELETE,GET,PATCH,POST,PUT,OPTIONS",
   "access-control-allow-origin": appOrigin,
 };
 
@@ -151,8 +153,8 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       await expect(studentScope.getByRole("button", { name: "Ada Kaya / 8-A" })).toHaveAttribute("aria-pressed", "true");
       const dailyActions = page.getByRole("region", { name: "Öğretmen günlük işlemleri" });
       await expect(dailyActions).toBeVisible();
-      await expect(dailyActions.locator(".uh-field")).toHaveCount(17);
-      await expect(dailyActions.locator(".uh-select")).toHaveCount(12);
+      await expect(dailyActions.locator(".uh-field")).toHaveCount(16);
+      await expect(dailyActions.locator(".uh-select")).toHaveCount(11);
       await expect(dailyActions.locator(".uh-textarea")).toHaveCount(2);
       await expect(dailyActions.getByRole("textbox", { name: /^Not / })).toBeVisible();
       await expect(dailyActions.getByRole("textbox", { name: /^Atama notu / })).toBeVisible();
@@ -190,6 +192,8 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       for (const path of expectedTeacherScopedReadPaths) {
         expect(requestedPaths).toContain(path);
       }
+      expect(requestedPaths.filter((path) => /^\/me\/teacher\/homework\/materials\/[^/]+\/assignments$/.test(path))).toEqual([]);
+      expect(requestedPaths.filter((path) => path === "/me/teacher/homework/material-assignments")).toHaveLength(1);
     });
   }
 
@@ -246,20 +250,30 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       await expect(page.getByRole("heading", { level: 1, name: "Öğretmen Portalı" })).toBeVisible();
       await expect(page.getByRole("region", { exact: true, name: "Portal görev bağlamı" })).toContainText(routeCase.context);
       await expect(routeCase.panel()).toBeVisible();
+      if (routeCase.label === "Sınav Raporu") await expect(page.getByRole("combobox", { name: "Sınav raporu" })).toBeVisible();
       await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { exact: true, name: "Özet" })).not.toHaveAttribute("aria-current", "page");
     }
   });
 
   test("öğretmen işlem hatasını alert olarak duyurur", async ({ page }) => {
     const mutationRequests: string[] = [];
-    await openTeacherPortal(page, { height: 844, width: 390 }, { failMutationPath: "/attendance", mutationRequests });
+    await openTeacherPortal(page, { height: 844, width: 390 }, { failMutationPath: "/attendance/daily", mutationRequests });
 
+    const attendanceRequest = page.waitForRequest(
+      (request) => request.method() === "PUT" && new URL(request.url()).pathname === "/api/v1/attendance/daily",
+    );
     await page.getByRole("button", { name: "Yoklama kaydet" }).click();
+    expect(JSON.parse((await attendanceRequest).postData() ?? "{}")).toEqual({
+      classId: "class-8a",
+      date: expect.any(String),
+      entries: [{ status: "PRESENT", studentId: "student-a" }],
+    });
 
     const alert = page.getByRole("region", { name: "Öğretmen günlük işlemleri" }).getByRole("alert");
     await expect(alert).toContainText("İşlem kaydedilemedi");
     await expect(alert).toContainText("Yoklama kaydı eklenemedi.");
-    await expect.poll(() => mutationRequests).toEqual(expect.arrayContaining(["POST /attendance"]));
+    await expect.poll(() => mutationRequests).toEqual(expect.arrayContaining(["PUT /attendance/daily"]));
+    expect(mutationRequests).not.toContain("POST /attendance");
   });
 });
 
@@ -479,6 +493,10 @@ async function installTeacherApiMocks(
       });
       return;
     }
+    if (method === "GET" && pathName === "/attendance/daily") {
+      await fulfillData(route, createDailyAttendance(url));
+      return;
+    }
 
     const response = teacherApiResponse(pathName, options.mode ?? "teacher");
     await fulfillData(route, response);
@@ -496,10 +514,12 @@ function teacherApiResponse(pathName: string, mode: "teacher" | "role-preview"):
   if (pathName === "/me/teacher/attendance") return createAttendance();
   if (pathName === "/me/teacher/homework") return createHomework();
   if (pathName === "/me/teacher/homework/materials") return createMaterials();
-  if (pathName === "/me/teacher/homework/materials/material-a/assignments") return createMaterialAssignments();
+  if (pathName === "/me/teacher/homework/material-assignments") return createMaterialAssignments();
+  if (pathName === "/attendance/daily") return { records: createAttendance().slice(0, 1), summary: { absent: 0, excused: 0, late: 0, present: 1, total: 1 } };
   if (pathName === "/me/teacher/teacher-notes") return createTeacherNotes();
   if (pathName === "/me/teacher/support-tickets") return createSupportTickets();
   if (pathName === "/me/teacher/lookups") return createTeacherLookups();
+  if (pathName === "/me/teacher/reports") return [{ examId: "exam-demo-isem-lgs-1", latestGeneratedAt: "2026-06-17T10:00:00.000Z", latestReadySnapshotId: "snapshot-ready", title: "İSEM - LGS - 1" }];
   if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots") return createReportSnapshots();
   if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-a") return createStudentReport("student-a");
   if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-ready/students/student-b") return createStudentReport("student-b");
@@ -602,6 +622,20 @@ function createAttendance() {
     { courseId: "course-math", date: "2026-06-17", id: "attendance-a", status: "PRESENT", studentId: "student-a", tenantId: "tenant-teacher", termId: "term-2026" },
     { courseId: "course-missing", date: "2026-06-17", id: "attendance-missing", status: "ABSENT", studentId: "student-missing", tenantId: "tenant-teacher", termId: "term-missing" },
   ];
+}
+
+function createDailyAttendance(url: URL) {
+  const classId = url.searchParams.get("classId") ?? "class-8a";
+  const date = url.searchParams.get("date") ?? "2026-06-17";
+  const students = createStudents().filter((student) => student.classId === classId);
+  const records = createAttendance().filter((record) => record.date === date && students.some((student) => student.id === record.studentId));
+  return {
+    classId,
+    date,
+    students,
+    records,
+    summary: { absent: 0, excused: 0, late: 0, present: records.length, total: records.length, unmarked: students.length - records.length },
+  };
 }
 
 function createHomework() {

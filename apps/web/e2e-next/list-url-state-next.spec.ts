@@ -584,7 +584,7 @@ test.describe("Liste URL state", () => {
       const captured = createCapturedRequests();
       const screens = [
         {
-          actionTexts: ["Referans eşleşmesi", "Kampüs dağılımı", "Şube düzeni"],
+          actionTexts: ["Referans eşleşmesi", "Kampüs dağılımı", "Bu sayfada şube"],
           deleteButtonName: "11-A sil",
           editButtonName: "11-A düzenle",
           path: "/kurum/siniflar?page=2&limit=20&q=8&sort=-name",
@@ -1040,6 +1040,10 @@ async function installListApiMocks(page: Page, captured: CapturedRequests) {
     if (pathName === "/homework/materials") {
       captured.homeworkMaterials.push(new URLSearchParams(url.search));
       await fulfillList(route, [createHomeworkMaterial()], url.searchParams);
+      return;
+    }
+    if (pathName === "/homework/material-assignments") {
+      await fulfillData(route, []);
       return;
     }
     if (pathName.startsWith("/homework/materials/") && (pathName.endsWith("/files") || pathName.endsWith("/assignments"))) {

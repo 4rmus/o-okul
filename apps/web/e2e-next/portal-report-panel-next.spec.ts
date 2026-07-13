@@ -150,6 +150,7 @@ function portalApiResponse(pathName: string): unknown {
   if (pathName === "/me/student/attendance/summary") return { absent: 0, excused: 0, late: 0, present: 30, studentId: "student-a", total: 30 };
   if (pathName === "/me/student/teacher-notes") return [];
   if (pathName === "/me/student/development-assessments") return [];
+  if (pathName === "/me/student/reports") return [{ examId: "exam-demo-isem-lgs-1", latestGeneratedAt: "2026-06-17T10:00:00.000Z", latestReadySnapshotId: "snapshot-ready", title: "İSEM - LGS - 1" }];
   if (pathName === "/me/student/reports/exam-demo-isem-lgs-1/latest") return createStudentReport();
   if (pathName === "/me/student/reports/exam-demo-isem-lgs-1/latest/error-booklet") return createErrorBooklet();
   if (pathName === "/me/student/reports/exam-demo-isem-lgs-1/progress") return createProgress();

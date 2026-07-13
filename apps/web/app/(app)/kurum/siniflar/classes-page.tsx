@@ -2,6 +2,7 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, CrudPage, EmptyState, Field, FormModal, Input, Select, type DataTableColumn, useConfirmDialog } from "@o-okul/ui";
 import type { AlanRecord, CampusRecord, ClassRecord, GradeLevelRecord } from "@o-okul/shared-types";
@@ -88,16 +89,16 @@ export function ClassesPage() {
       value: campusCoverageCount > 0 ? `${campusCoverageCount} kampüs` : "Bağsız",
     },
     {
-      description: "Seviye referansı",
+      description: "Bu sayfadaki seviye referansı",
       key: "grade",
-      label: "Seviye kapsamı",
+      label: "Bu sayfada seviye",
       tone: gradeLevelCoverageCount > 0 ? "success" : "warning",
       value: gradeLevelCoverageCount > 0 ? `${gradeLevelCoverageCount} seviye` : "Eksik",
     },
     {
-      description: "Şube alanı dolu sınıflar",
+      description: "Bu sayfada şube alanı dolu sınıflar",
       key: "section",
-      label: "Şube düzeni",
+      label: "Bu sayfada şube",
       value: `${sectionCoverageCount}/${rows.length}`,
     },
   ];
@@ -155,7 +156,7 @@ export function ClassesPage() {
       header: "Sınıf",
       mobilePriority: "primary",
       priority: "primary",
-      render: (record) => record.name,
+      render: (record) => <Link href={`/kurum/siniflar/${encodeURIComponent(record.id)}`}>{record.name}</Link>,
       sticky: "left",
     },
     {
@@ -314,7 +315,6 @@ export function ClassesPage() {
         }
         tableCaption="Sınıf eğitim yapısı"
         tableDescription="Sınıf, seviye, şube ve kampüs ilişkileri."
-        title="Sınıflar"
       />
       <FormModal
         description="Sınıf adı zorunludur."

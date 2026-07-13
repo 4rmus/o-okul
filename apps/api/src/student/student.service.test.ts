@@ -143,15 +143,55 @@ describe("StudentService", () => {
     ]);
     expect(setup.invitations).toEqual([]);
   });
+
+  it("öğrenci PII temizliğinde önce report snapshot kimliğini temizler ve yalnız sayım auditler", async () => {
+    const setup = createService();
+
+    await expect(setup.service.purgePii(adminContext, "student-a")).resolves.toMatchObject({
+      firstName: "Anonim",
+      lastName: "Ogrenci",
+    });
+
+    expect(setup.reportSnapshotPurgeCalls).toEqual([{ tenantId: "tenant-a", studentId: "student-a" }]);
+    expect(setup.auditRecords).toContainEqual(expect.objectContaining({
+      action: "kvkk.student_pii_purged",
+      diff: {
+        fieldsPurged: [
+          "firstName",
+          "lastName",
+          "nationalIdEncrypted",
+          "nationalIdHash",
+          "phone",
+          "email",
+          "photoKey",
+          "ReportSnapshot.displayName",
+          "ReportSnapshot.studentNo",
+        ],
+        reportSnapshotPurgeCount: 2,
+      },
+    }));
+  });
+
+  it("report snapshot kimliği temizlenemezse öğrenci PII temizliğini fail-closed durdurur", async () => {
+    const setup = createService({ failReportSnapshotPurge: true });
+
+    await expect(setup.service.purgePii(adminContext, "student-a")).rejects.toThrow("REPORT_SNAPSHOT_PURGE_FAILED");
+    await expect(setup.studentStore.findById("student-a")).resolves.toMatchObject({
+      firstName: "Ada",
+      lastName: "A",
+    });
+    expect(setup.auditRecords).toEqual([]);
+  });
 });
 
-function createService() {
+function createService(options: { failReportSnapshotPurge?: boolean } = {}) {
   const studentStore = new InMemoryStudentStore();
   const guardianStudentStore = new InMemoryGuardianStudentStore();
   const guardianStore = new InMemoryGuardianStore();
   const invitations: unknown[] = [];
   const auditRecords: unknown[] = [];
   const provisionedSubjects: unknown[] = [];
+  const reportSnapshotPurgeCalls: Array<{ tenantId: string; studentId: string }> = [];
   const identityInvitations = {
     create: async (_context: RequestContext, body: unknown) => {
       invitations.push(body);
@@ -180,6 +220,13 @@ function createService() {
       auditRecords.push(input);
     },
   };
+  const reportSnapshots = {
+    purgeStudentIdentity: async (tenantId: string, studentId: string) => {
+      reportSnapshotPurgeCalls.push({ tenantId, studentId });
+      if (options.failReportSnapshotPurge) throw new Error("REPORT_SNAPSHOT_PURGE_FAILED");
+      return 2;
+    },
+  };
 
   return {
     service: new StudentService(
@@ -194,6 +241,7 @@ function createService() {
       {} as never,
       {} as never,
       identityInvitations as never,
+      reportSnapshots as never,
       auditLogs as never,
       undefined,
       identityProvisioning as never,
@@ -203,6 +251,8 @@ function createService() {
     invitations,
     auditRecords,
     provisionedSubjects,
+    reportSnapshotPurgeCalls,
+    studentStore,
   };
 }
 

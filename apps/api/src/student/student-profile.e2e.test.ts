@@ -135,6 +135,23 @@ describe("Student profile + TC API", () => {
       .expect(409);
   });
 
+  it("öğrencileri en fazla 200 kimlikle viewer scope içinde toplu getirir", async () => {
+    await request(server)
+      .get("/students")
+      .query({ ids: "student-a,student-b" })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual([expect.objectContaining({ id: "student-a", tenantId: "tenant-a" })]);
+      });
+
+    await request(server)
+      .get("/students")
+      .query({ ids: Array.from({ length: 201 }, (_, index) => `student-${index}`).join(",") })
+      .set("Authorization", `Bearer ${tenantAAccessToken}`)
+      .expect(400);
+  });
+
   it("cross-tenant classId ve responsibleTeacherId iliskilerini yazamaz", async () => {
     const beforeStudents = await request(server)
       .get("/students")

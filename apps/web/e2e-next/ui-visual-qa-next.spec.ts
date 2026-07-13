@@ -336,8 +336,11 @@ test.describe("Faz 9 UI görsel smoke", () => {
     const classDetail = page.getByLabel("Sınıf detayı");
     const classSummary = classDetail.getByRole("region", { exact: true, name: "Sınıf detay operasyon özeti" });
     await expect(classSummary).toContainText("Öğrenci toplamı");
-    await expect(classSummary).toContainText("Rapor hazır");
     await expect(classSummary.getByLabel("Sınıf detay operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await classDetail.getByRole("tab", { name: "Raporlar" }).click();
+    await expect(classDetail.getByRole("tab", { name: "Raporlar" })).toHaveAttribute("aria-selected", "true");
+    await expect(classSummary).toContainText("Rapor hazır");
+    await expect(classDetail.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "class-detail-tab-reports");
     const reportContext = classDetail.getByLabel("Sınıf rapor bağlamı");
     const classReportContext = reportContext.getByRole("region", { name: "Sınıf rapor bağlam özeti" });
     await expect(classReportContext).toHaveClass(/uh-info-grid/);
@@ -345,13 +348,14 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(reportContext).toContainText("LGS Hazirlik Denemesi");
     await expect(reportContext).toContainText("10.06.2026");
     await expect(reportContext).toContainText("%76,7");
-    const studentsTable = classDetail.getByRole("table", { name: "Sınıf öğrenci listesi" });
-    await expect(studentsTable).toContainText("Ada Kaya");
-    await expect(studentsTable).toContainText("Aktif");
     const resultsTable = classDetail.getByRole("table", { name: "Sınıf sınav sonucu karşılaştırması" });
     await expect(resultsTable).toContainText("Başarı %");
     await expect(resultsTable).toContainText("%81,7");
-    await expect(resultsTable).toContainText("Öğrenci eşleşmedi");
+    await expect(resultsTable).toContainText("Sınav Anı Ada");
+    await expect(resultsTable).toContainText("Arşiv Öğrencisi");
+    await expect(resultsTable).toContainText("#998");
+    await expect(resultsTable).toContainText("Arşivden Silinmiş Öğrenci");
+    await expect(resultsTable).not.toContainText("student-orphan");
     const outcomesTable = classDetail.getByRole("table", { name: "Sınıf kazanım kırılımı" });
     await expect(outcomesTable).toContainText("Matematik / M.8.1");
     await expect(outcomesTable).toContainText("%80,7");
@@ -363,6 +367,9 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await page.goto("/kurum/siniflar/class-8a");
     await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
     await expect(page.getByRole("heading", { level: 1, name: "8-A" })).toBeVisible();
+    await page.getByRole("tab", { name: "Raporlar" }).click();
+    await expect(page.getByRole("tabpanel")).toHaveAttribute("id", "class-detail-panel-reports");
+    await expect(page.getByRole("table", { name: "Sınıf sınav sonucu karşılaştırması" })).toContainText("Arşiv Öğrencisi");
     await expect(page.getByRole("table", { name: "Sınıf sınav sonucu karşılaştırması" }).getByRole("columnheader", { name: "LGS" })).toHaveCount(0);
     await expect(page.getByRole("table", { name: "Sınıf sınav sonucu karşılaştırması" }).getByRole("columnheader", { name: "Standart" })).toHaveCount(0);
     await expectClassDetailNoRawIds(page, "class-detail-mobile");
@@ -756,17 +763,10 @@ test.describe("Faz 9 UI görsel smoke", () => {
       await expect(selectedFormSummary).toHaveClass(/uh-info-grid/);
       await expect(selectedFormSummary.locator(".uh-info-item")).toHaveCount(4);
       await expect(selectedFormSummary).toContainText("90 soru");
-      await page.getByRole("tab", { name: "3. Eşleşmeyen satırlar ve rapor" }).click();
-      await expect(page.getByRole("tabpanel", { name: "3. Eşleşmeyen satırlar ve rapor" })).toContainText("Rapor üretimi");
-      await expect(page.getByRole("tabpanel", { name: "3. Eşleşmeyen satırlar ve rapor" })).toContainText("Hazır rapor yok");
-      await page.getByRole("button", { name: "Raporları getir" }).click();
-      const readyReportsTable = page.getByRole("table", { name: "Hazır optik raporlar" });
-      await expect(readyReportsTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
-      await expect(readyReportsTable.getByRole("columnheader", { name: "Net" })).toBeVisible();
-      await expect(readyReportsTable.getByRole("columnheader", { name: "Soru" })).toBeVisible();
-      await expect(readyReportsTable).toContainText("%76,7");
-      await expect(readyReportsTable).toContainText("23");
-      await expect(readyReportsTable).toContainText("30");
+      await page.getByRole("tab", { name: "3. Eşleşmeyen satırlar" }).click();
+      const handoffPanel = page.getByRole("tabpanel", { name: "3. Eşleşmeyen satırlar" });
+      await expect(handoffPanel).toContainText("Raporlara geçiş");
+      await expect(handoffPanel.getByRole("link", { name: "Rapor çalışma alanına geç" })).toHaveAttribute("href", "/kurum/raporlar?examId=exam-demo");
       await expectUiStable(page, `faz9-optik-workflow-${viewport.width}`, consoleErrors);
       await saveScreenshot(page, `faz9-optik-workflow-${viewport.width}.png`);
     }
@@ -837,6 +837,7 @@ function mockUiApiResponse(pathName: string, searchParams: URLSearchParams, auth
   if (pathName === "/me/student/attendance/summary" || pathName === "/me/guardian/students/student-a/attendance/summary") return { data: { absent: 1, excused: 0, late: 1, present: 28, studentId: "student-a", total: 30 } };
   if (pathName === "/me/student/teacher-notes" || pathName === "/me/guardian/students/student-a/teacher-notes") return { data: createPortalTeacherNotes() };
   if (pathName === "/me/student/development-assessments" || pathName === "/me/guardian/students/student-a/development-assessments") return { data: createDevelopmentAssessments() };
+  if (pathName === "/me/student/reports" || pathName === "/me/guardian/students/student-a/reports" || pathName === "/me/teacher/reports") return { data: [{ examId: "exam-demo-isem-lgs-1", latestGeneratedAt: "2026-06-17T10:00:00.000Z", latestReadySnapshotId: "snapshot-a", title: "İSEM - LGS - 1" }] };
   if (pathName === "/me/student/reports/exam-demo-isem-lgs-1/latest" || pathName === "/me/guardian/students/student-a/reports/exam-demo-isem-lgs-1/latest") return { data: createStudentReport("exam-demo-isem-lgs-1") };
   if (pathName === "/me/student/reports/exam-demo-isem-lgs-1/latest/error-booklet" || pathName === "/me/guardian/students/student-a/reports/exam-demo-isem-lgs-1/latest/error-booklet") return { data: createErrorBooklet("exam-demo-isem-lgs-1") };
   if (pathName === "/me/student/reports/exam-demo-isem-lgs-1/progress" || pathName === "/me/guardian/students/student-a/reports/exam-demo-isem-lgs-1/progress") return { data: createProgress("exam-demo-isem-lgs-1") };
@@ -852,7 +853,7 @@ function mockUiApiResponse(pathName: string, searchParams: URLSearchParams, auth
   if (pathName === "/me/teacher/attendance") return { data: createAttendanceRecords() };
   if (pathName === "/me/teacher/homework") return { data: createHomeworkRecords() };
   if (pathName === "/me/teacher/homework/materials") return { data: createHomeworkMaterials() };
-  if (pathName === "/me/teacher/homework/materials/material-a/assignments") return { data: createPortalHomeworkAssignments() };
+  if (pathName === "/me/teacher/homework/material-assignments") return { data: createPortalHomeworkAssignments() };
   if (pathName === "/me/teacher/teacher-notes") return { data: createPortalTeacherNotes() };
   if (pathName === "/me/teacher/lookups") {
     return { data: { campuses: createCampuses(), classes: createClasses(), courses: createCourses(), gradeLevels: createGradeLevels(), terms: createAcademicTerms() } };
@@ -861,7 +862,14 @@ function mockUiApiResponse(pathName: string, searchParams: URLSearchParams, auth
   if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-a/students/student-a") return { data: createStudentReport("exam-demo-isem-lgs-1") };
   if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-a/students/student-a/error-booklet") return { data: createErrorBooklet("exam-demo-isem-lgs-1") };
   if (pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/students/student-a/progress") return { data: createProgress("exam-demo-isem-lgs-1") };
+  if (pathName === "/attendance/daily") {
+    const classId = searchParams.get("classId") ?? "class-8a";
+    const date = searchParams.get("date") ?? "2026-06-17";
+    const students = createStudents().filter((student) => student.classId === classId);
+    return { data: { classId, date, students, records: [], summary: { absent: 0, excused: 0, late: 0, present: 0, total: 0, unmarked: students.length } } };
+  }
   if (pathName === "/homework") return { data: createHomeworkRecords() };
+  if (pathName === "/homework/material-assignments") return { data: createPortalHomeworkAssignments() };
   if (pathName.startsWith("/homework/materials/") && pathName.endsWith("/assignments")) return { data: createPortalHomeworkAssignments() };
   if (pathName === "/classes/class-8a") return { data: createClasses()[0] };
   if (pathName === "/classes") return { data: createClasses() };
@@ -1405,6 +1413,7 @@ function createClassDetailReportSnapshots(examId: string) {
           {
             classId: "class-8a",
             className: "8-A",
+            displayName: "Sınav Anı Ada",
             outcomes: [
               { blank: 0, branch: "Matematik", correct: 9, net: 8.5, outcomeCode: "M.8.1", questionCount: 10, successRate: 92, wrong: 1 },
               { blank: 1, branch: "Turkce", correct: 8, net: 7.5, outcomeCode: "T.8.2", questionCount: 10, successRate: 75, wrong: 1 },
@@ -1416,6 +1425,8 @@ function createClassDetailReportSnapshots(examId: string) {
           {
             classId: "class-8a",
             className: "8-A",
+            displayName: "Arşiv Öğrencisi",
+            studentNo: "998",
             outcomes: [
               { blank: 0, branch: "Matematik", correct: 8, net: 7.5, outcomeCode: "M.8.1", questionCount: 10, successRate: 80, wrong: 2 },
               { blank: 1, branch: "Turkce", correct: 7, net: 6.5, outcomeCode: "T.8.2", questionCount: 10, successRate: 65, wrong: 2 },
@@ -1427,6 +1438,8 @@ function createClassDetailReportSnapshots(examId: string) {
           {
             classId: "class-8a",
             className: "8-A",
+            displayName: "Arşivden Silinmiş Öğrenci",
+            studentNo: "999",
             outcomes: [
               { blank: 0, branch: "Matematik", correct: 7, net: 6.5, outcomeCode: "M.8.1", questionCount: 10, successRate: 70, wrong: 3 },
               { blank: 1, branch: "Turkce", correct: 6, net: 5.5, outcomeCode: "T.8.2", questionCount: 10, successRate: 55, wrong: 3 },

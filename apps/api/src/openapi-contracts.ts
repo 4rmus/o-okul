@@ -14,6 +14,7 @@ interface OperationContract {
   idempotent?: boolean;
   idempotencyRequired?: boolean;
   requiredHeaders?: Array<{ name: string; description?: string; schema?: JsonSchema }>;
+  queryParameters?: Array<{ name: string; description?: string; required?: boolean; schema?: JsonSchema }>;
 }
 
 const jsonContentType = "application/json";
@@ -1011,6 +1012,11 @@ const homeworkMaterialAssignmentRecordSchema = objectSchema({
   createdAt: stringSchema({ format: "date-time" }),
 }, ["id", "tenantId", "materialId", "studentId", "createdAt"]);
 
+const homeworkMaterialAssignmentWithTitleRecordSchema = {
+  ...homeworkMaterialAssignmentRecordSchema,
+  required: ["id", "tenantId", "materialId", "materialTitle", "studentId", "createdAt"],
+};
+
 const scheduleLessonRecordSchema = objectSchema({
   id: stringSchema(),
   tenantId: stringSchema(),
@@ -1398,6 +1404,53 @@ const attendanceSummaryRecordSchema = objectSchema({
   late: integerSchema({ minimum: 0 }),
   excused: integerSchema({ minimum: 0 }),
 }, ["studentId", "total", "present", "absent", "late", "excused"]);
+
+const attendanceAggregateRecordSchema = objectSchema({
+  total: integerSchema({ minimum: 0 }),
+  present: integerSchema({ minimum: 0 }),
+  absent: integerSchema({ minimum: 0 }),
+  late: integerSchema({ minimum: 0 }),
+  excused: integerSchema({ minimum: 0 }),
+}, ["total", "present", "absent", "late", "excused"]);
+
+const attendanceDailyUpsertRequestSchema = objectSchema({
+  classId: stringSchema({ minLength: 1 }),
+  date: stringSchema({ format: "date" }),
+  entries: arraySchema(objectSchema({
+    studentId: stringSchema({ minLength: 1 }),
+    status: attendanceStatusSchema,
+  }, ["studentId", "status"]), { minItems: 1, maxItems: 200 }),
+}, ["classId", "date", "entries"]);
+
+const attendanceDailyUpsertResponseSchema = objectSchema({
+  records: arraySchema(attendanceRecordSchema),
+  summary: attendanceAggregateRecordSchema,
+}, ["records", "summary"]);
+
+const attendanceDailyRosterStudentSchema = objectSchema({
+  id: stringSchema(),
+  firstName: stringSchema(),
+  lastName: stringSchema(),
+  studentNo: stringSchema(),
+  classId: stringSchema(),
+}, ["id", "firstName", "lastName", "classId"]);
+
+const attendanceDailyRosterSummarySchema = objectSchema({
+  total: integerSchema({ minimum: 0 }),
+  present: integerSchema({ minimum: 0 }),
+  absent: integerSchema({ minimum: 0 }),
+  late: integerSchema({ minimum: 0 }),
+  excused: integerSchema({ minimum: 0 }),
+  unmarked: integerSchema({ minimum: 0 }),
+}, ["total", "present", "absent", "late", "excused", "unmarked"]);
+
+const attendanceDailyRosterResponseSchema = objectSchema({
+  classId: stringSchema(),
+  date: stringSchema({ format: "date" }),
+  students: arraySchema(attendanceDailyRosterStudentSchema),
+  records: arraySchema(attendanceRecordSchema),
+  summary: attendanceDailyRosterSummarySchema,
+}, ["classId", "date", "students", "records", "summary"]);
 
 const studentStatusSchema = {
   type: "string",
@@ -1894,6 +1947,8 @@ const reportStudentScopedSnapshotDataSchema = objectSchema({
   resultCount: integerSchema({ minimum: 0 }),
   students: arraySchema(objectSchema({
     studentId: stringSchema(),
+    displayName: stringSchema(),
+    studentNo: stringSchema(),
     classId: stringSchema(),
     className: stringSchema(),
     resultKey: stringSchema(),
@@ -1903,6 +1958,8 @@ const reportStudentScopedSnapshotDataSchema = objectSchema({
 
 const reportSnapshotListStudentSchema = objectSchema({
   studentId: stringSchema(),
+  displayName: stringSchema(),
+  studentNo: stringSchema(),
   classId: stringSchema(),
   className: stringSchema(),
   resultKey: stringSchema(),
@@ -2065,7 +2122,25 @@ const portalReportSnapshotListPaths = [
   "/api/v1/me/teacher/reports/{examId}/snapshots",
 ];
 
+const portalReportIndexItemSchema = objectSchema({
+  examId: stringSchema(),
+  title: stringSchema(),
+  startsAt: stringSchema({ format: "date-time" }),
+  latestReadySnapshotId: stringSchema(),
+  latestGeneratedAt: stringSchema({ format: "date-time" }),
+}, ["examId", "title", "latestReadySnapshotId", "latestGeneratedAt"]);
+
+const portalReportIndexPaths = [
+  "/api/v1/me/student/reports",
+  "/api/v1/me/teacher/reports",
+  "/api/v1/me/guardian/students/{studentId}/reports",
+];
+
 const portalReportOperationContracts: Record<string, OperationContract> = {
+  ...Object.fromEntries(portalReportIndexPaths.map((path) => [
+    `get ${path}`,
+    { responseBody: arraySchema(portalReportIndexItemSchema), listResponse: true },
+  ])),
   ...Object.fromEntries(portalReportSnapshotListPaths.map((path) => [
     `get ${path}`,
     { responseBody: arraySchema(reportSnapshotListRecordSchema), listResponse: true },
@@ -2574,6 +2649,10 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: arraySchema(homeworkMaterialAssignmentRecordSchema),
     listResponse: true,
   },
+  "get /api/v1/me/teacher/homework/material-assignments": {
+    responseBody: arraySchema(homeworkMaterialAssignmentRecordSchema),
+    listResponse: true,
+  },
   "get /api/v1/me/teacher/teacher-notes": {
     responseBody: arraySchema(teacherNoteRecordSchema),
     listResponse: true,
@@ -2765,6 +2844,15 @@ const operationContracts: Record<string, OperationContract> = {
       status: { type: "string", enum: ["queued"] },
     }, ["tenantId", "examId", "reportType", "queueName", "jobId", "status"]),
   },
+  "get /api/v1/exams/{examId}/reports/generation-jobs/{jobId}": {
+    responseBody: objectSchema({
+      jobId: stringSchema(),
+      status: { type: "string", enum: ["QUEUED", "RUNNING", "COMPLETED", "FAILED"] },
+      snapshotId: stringSchema(),
+      errorCode: stringSchema(),
+      updatedAt: stringSchema({ format: "date-time" }),
+    }, ["jobId", "status", "updatedAt"]),
+  },
   "get /api/v1/exams/{examId}/reports/snapshots": {
     responseBody: arraySchema(reportSnapshotListRecordSchema),
     listResponse: true,
@@ -2812,6 +2900,11 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/students": {
     responseBody: arraySchema(publicStudentRecordSchema),
     listResponse: true,
+    queryParameters: [{
+      name: "ids",
+      description: "Comma-separated student ids to return.",
+      schema: stringSchema(),
+    }],
   },
   "get /api/v1/students/{id}": {
     responseBody: publicStudentRecordSchema,
@@ -3240,9 +3333,28 @@ const operationContracts: Record<string, OperationContract> = {
   "get /api/v1/attendance": {
     responseBody: arraySchema(attendanceRecordSchema),
     listResponse: true,
+    queryParameters: ["classId", "studentId", "date", "dateFrom", "dateTo"].map((name) => ({
+      name,
+      schema: stringSchema(),
+    })),
   },
   "get /api/v1/attendance/summary": {
     responseBody: attendanceSummaryRecordSchema,
+  },
+  "get /api/v1/attendance/aggregate": {
+    responseBody: attendanceAggregateRecordSchema,
+  },
+  "get /api/v1/attendance/daily": {
+    queryParameters: ["classId", "date"].map((name) => ({
+      name,
+      required: true,
+      schema: stringSchema(),
+    })),
+    responseBody: attendanceDailyRosterResponseSchema,
+  },
+  "put /api/v1/attendance/daily": {
+    requestBody: attendanceDailyUpsertRequestSchema,
+    responseBody: attendanceDailyUpsertResponseSchema,
   },
   "post /api/v1/attendance": {
     requestBody: attendanceCreateRequestSchema,
@@ -3352,6 +3464,15 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/homework/materials/{id}/assignments": {
     responseBody: arraySchema(homeworkMaterialAssignmentRecordSchema),
+    listResponse: true,
+  },
+  "get /api/v1/homework/material-assignments": {
+    queryParameters: [{
+      name: "studentId",
+      required: true,
+      schema: stringSchema(),
+    }],
+    responseBody: arraySchema(homeworkMaterialAssignmentWithTitleRecordSchema),
     listResponse: true,
   },
   "get /api/v1/homework": {
@@ -3599,6 +3720,12 @@ export function applyOpenApiContracts(document: OpenAPIObject): OpenAPIObject {
       }
     }
 
+    if (contract.queryParameters) {
+      for (const query of contract.queryParameters) {
+        upsertQueryParameter(operation, query);
+      }
+    }
+
     if (contract.noContent) {
       operation.responses ??= {};
       operation.responses["204"] = {
@@ -3686,6 +3813,31 @@ function upsertHeaderParameter(
   }
 }
 
+function upsertQueryParameter(
+  operation: Record<string, any>,
+  query: { name: string; description?: string; required?: boolean; schema?: JsonSchema },
+): void {
+  operation.parameters ??= [];
+  const existing = operation.parameters.find((parameter: any) =>
+    typeof parameter === "object" &&
+    "in" in parameter &&
+    parameter.in === "query" &&
+    parameter.name === query.name,
+  );
+  const normalized = {
+    in: "query",
+    name: query.name,
+    required: query.required ?? false,
+    schema: query.schema ?? stringSchema(),
+    ...(query.description ? { description: query.description } : {}),
+  };
+  if (existing) {
+    Object.assign(existing, normalized);
+  } else {
+    operation.parameters.push(normalized);
+  }
+}
+
 function answerKeyExcelImportBodySchema(): JsonSchema {
   return objectSchema({
     fileBase64: stringSchema(),
@@ -3736,7 +3888,7 @@ function looseObjectSchema(): JsonSchema {
   };
 }
 
-function arraySchema(items: JsonSchema, options: { minItems?: number } = {}): JsonSchema {
+function arraySchema(items: JsonSchema, options: { minItems?: number; maxItems?: number } = {}): JsonSchema {
   return {
     type: "array",
     items,

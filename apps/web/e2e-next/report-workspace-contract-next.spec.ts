@@ -44,11 +44,25 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     expect(studentRequests).toHaveLength(1);
   });
 
-  test("sınıfsız raporda genel öğrenci listesi yerine katılımcı kayıtlarını yükler", async ({ page }) => {
-    const broadStudentRequests = trackApiRequests(page, (url, method) =>
-      method === "GET" && url.pathname === "/api/v1/students",
+  test("rapor üretimini job durumuyla izleyip tamamlanınca veriyi yeniler", async ({ page }) => {
+    const jobStatusRequests = trackApiRequests(page, (url, method) =>
+      method === "GET" && url.pathname.endsWith("/reports/generation-jobs/job-report-a"),
     );
-    const scopedStudentRequests = trackApiRequests(page, (url, method) =>
+    await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
+
+    await expect(page.getByRole("combobox", { name: "Sınav" })).toHaveValue("exam-report-ready");
+    await page.getByRole("button", { name: "Rapor üret" }).click();
+    await expect(page.getByRole("button", { name: "Rapor işleniyor" })).toBeDisabled();
+
+    await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
+    expect(jobStatusRequests).toHaveLength(2);
+  });
+
+  test("sınıfsız raporda genel öğrenci listesi yerine katılımcı kayıtlarını yükler", async ({ page }) => {
+    const bulkStudentRequests = trackApiRequests(page, (url, method) =>
+      method === "GET" && url.pathname === "/api/v1/students" && url.searchParams.has("ids"),
+    );
+    const oldStudentDetailRequests = trackApiRequests(page, (url, method) =>
       method === "GET" && /^\/api\/v1\/students\/student-[ab]$/.test(url.pathname),
     );
     const studentDetailRequests = trackApiRequests(page, (url, method) =>
@@ -61,16 +75,16 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await page.getByRole("button", { name: "Raporu getir" }).click();
 
     await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
-    expect(broadStudentRequests).toHaveLength(0);
-    await expect.poll(() => scopedStudentRequests.length).toBe(2);
+    await expect.poll(() => bulkStudentRequests.length).toBe(1);
+    expect(new URL(bulkStudentRequests[0]!).searchParams.get("ids")).toBe("student-a,student-b");
+    expect(oldStudentDetailRequests).toHaveLength(0);
     expect(studentDetailRequests).toHaveLength(0);
 
     await page.getByRole("tab", { name: "Öğrenci Sonuçları" }).click();
     const studentResultsTable = page.getByRole("table", { name: "Öğrenci sıralamaları" });
     await expect(studentResultsTable).toContainText("Ada Kaya");
     await expect(studentResultsTable).toContainText("Bora Yılmaz");
-    expect(scopedStudentRequests.filter((requestUrl) => requestUrl.endsWith("/students/student-a"))).toHaveLength(1);
-    expect(scopedStudentRequests.filter((requestUrl) => requestUrl.endsWith("/students/student-b"))).toHaveLength(1);
+    expect(bulkStudentRequests).toHaveLength(1);
   });
 
   test("rapor sekmeleri klavyede roving focus ve panel odağını korur", async ({ page }) => {
@@ -345,6 +359,7 @@ async function openWithReportMocks(page: Page, pathName: string, viewport: { hei
 }
 
 async function installReportApiMocks(page: Page) {
+  let reportJobStatusRequestCount = 0;
   await page.route("**/api/v1/**", async (route) => {
     if (route.request().method() === "OPTIONS") {
       await route.fulfill({ headers: corsHeadersFor(route), status: 204 });
@@ -353,6 +368,13 @@ async function installReportApiMocks(page: Page) {
 
     const url = new URL(route.request().url());
     const pathName = url.pathname.replace(/^\/api\/v1/, "");
+    if (route.request().method() === "GET" && /\/reports\/generation-jobs\/job-report-a$/.test(pathName)) {
+      reportJobStatusRequestCount += 1;
+      await fulfillData(route, reportJobStatusRequestCount === 1
+        ? { jobId: "job-report-a", status: "RUNNING", updatedAt: "2026-06-17T10:00:00.000Z" }
+        : { jobId: "job-report-a", snapshotId: "snapshot-a", status: "COMPLETED", updatedAt: "2026-06-17T10:00:01.000Z" });
+      return;
+    }
     const response = mockReportApiResponse(pathName, route.request().method());
     await fulfillData(route, response.data, response.meta);
   });
@@ -388,6 +410,7 @@ function mockReportApiResponse(pathName: string, method: string): { data: unknow
   if (/^\/exams\/[^/]+\/reports\/snapshots\/[^/]+\/students\/student-a\/error-booklet$/.test(pathName)) return { data: null };
   if (/^\/exams\/[^/]+\/reports\/students\/student-a\/progress$/.test(pathName)) return { data: null };
   if (method === "POST" && /^\/exams\/[^/]+\/reports\/generation-jobs$/.test(pathName)) return { data: { jobId: "job-report-a", status: "queued" } };
+  if (method === "GET" && /^\/exams\/[^/]+\/reports\/generation-jobs\/job-report-a$/.test(pathName)) return { data: { jobId: "job-report-a", snapshotId: "snapshot-a", status: "COMPLETED", updatedAt: "2026-06-17T10:00:00.000Z" } };
 
   return { data: [] };
 }

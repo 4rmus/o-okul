@@ -9,6 +9,7 @@ export type StudentEnrollmentInput = Pick<StudentEnrollmentRecord, "tenantId" | 
 
 export interface StudentEnrollmentStore {
   listByStudent(studentId: string): Promise<StudentEnrollmentRecord[]>;
+  listByStudents(studentIds: string[]): Promise<StudentEnrollmentRecord[]>;
   create(input: StudentEnrollmentInput): Promise<StudentEnrollmentRecord>;
   closeActiveForStudent(studentId: string, endsAt: string, status?: StudentStatus): Promise<StudentEnrollmentRecord[]>;
 }
@@ -35,6 +36,13 @@ export class InMemoryStudentEnrollmentStore implements StudentEnrollmentStore {
   async listByStudent(studentId: string): Promise<StudentEnrollmentRecord[]> {
     return this.enrollments
       .filter((record) => record.studentId === studentId)
+      .sort((left, right) => left.startsAt.localeCompare(right.startsAt));
+  }
+
+  async listByStudents(studentIds: string[]): Promise<StudentEnrollmentRecord[]> {
+    const ids = new Set(studentIds);
+    return this.enrollments
+      .filter((record) => ids.has(record.studentId))
       .sort((left, right) => left.startsAt.localeCompare(right.startsAt));
   }
 
@@ -72,6 +80,20 @@ export class PostgresStudentEnrollmentStore implements StudentEnrollmentStore {
          WHERE "studentId" = $1
          ORDER BY "startsAt" ASC, "id" ASC`,
         [studentId],
+      );
+      return result.rows.map(toStudentEnrollmentRecord);
+    });
+  }
+
+  async listByStudents(studentIds: string[]): Promise<StudentEnrollmentRecord[]> {
+    if (studentIds.length === 0) return [];
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<StudentEnrollmentRow>(
+        `SELECT *
+         FROM "StudentEnrollment"
+         WHERE "studentId" = ANY($1::text[])
+         ORDER BY "startsAt" ASC, "id" ASC`,
+        [studentIds],
       );
       return result.rows.map(toStudentEnrollmentRecord);
     });

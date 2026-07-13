@@ -3,6 +3,7 @@ import { AuditLogModule } from "../audit-log/audit-log.module.js";
 import { GuardianModule } from "../guardian/guardian.module.js";
 import { IdentityInvitationModule } from "../identity-invitation/identity-invitation.module.js";
 import { IdentityProvisioningModule } from "../identity-provisioning/identity-provisioning.module.js";
+import { ReportModule } from "../report/report.module.js";
 import { SchoolModule } from "../school/school.module.js";
 import { TeacherModule } from "../teacher/teacher.module.js";
 import { StudentController } from "./student.controller.js";
@@ -11,7 +12,7 @@ import { StudentImportService } from "./student-import.service.js";
 import { StudentService } from "./student.service.js";
 
 @Module({
-  imports: [AuditLogModule, GuardianModule, IdentityInvitationModule, IdentityProvisioningModule, SchoolModule, TeacherModule],
+  imports: [AuditLogModule, GuardianModule, IdentityInvitationModule, IdentityProvisioningModule, ReportModule, SchoolModule, TeacherModule],
   controllers: [StudentController],
   providers: [
     StudentImportService,
@@ -21,6 +22,6 @@ import { StudentService } from "./student.service.js";
     },
     StudentService,
   ],
-  exports: [StudentService],
+  exports: [StudentService, studentEnrollmentStoreToken],
 })
 export class StudentModule {}
