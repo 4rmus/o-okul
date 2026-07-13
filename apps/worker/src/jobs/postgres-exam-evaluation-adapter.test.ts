@@ -211,7 +211,8 @@ describe("postgres exam evaluation adapter", () => {
 
     expect(saved).toEqual(result);
     const insert = client.queries.find((query) => query.sql.includes('INSERT INTO "ExamResult"'));
-    expect(insert?.sql).toContain('ON CONFLICT ("tenantId", "resultKey")');
+    expect(insert?.sql).toContain('ON CONFLICT ("tenantId", "participantId", "answerKeyVersion", "parserConfigVersion", "engineVersion")');
+    expect(insert?.sql).toContain('"resultKey" = EXCLUDED."resultKey"');
     expect(insert?.sql).toContain('"scoreData" = EXCLUDED."scoreData"');
     expect(insert?.sql).toContain('"deletedAt" = NULL');
     expect(insert?.values?.slice(0, 11)).toEqual([

@@ -48,7 +48,7 @@ describe("exam evaluation job", () => {
       parserConfigVersion: "parser-v1",
       answerKeyVersion: "answer-key-v1",
       engineVersion: scoringEngineVersion,
-      resultKey: `participant-a_answer-key-v1_parser-v1_${scoringEngineVersion}`,
+      resultKey: expect.stringMatching(/^[a-f0-9]{64}$/),
       status: "completed",
       score: {
         total: {
@@ -87,6 +87,33 @@ describe("exam evaluation job", () => {
     const second = await processExamEvaluationJob(job, createAdapter());
 
     expect(first.resultKey).toBe(second.resultKey);
+  });
+
+  it("retry zaman damgası değişse de aynı resultKey değerini üretir", async () => {
+    const first = await processExamEvaluationJob(createJob(payload), createAdapter());
+    const second = await processExamEvaluationJob(createJob(payload), createAdapter({
+      scoringConfig: {
+        answerKeyVersion: "answer-key-v1",
+        computedAt: "2026-05-30T04:00:00.000Z",
+        engineVersion: scoringEngineVersion,
+        wrongPenalty: 0.25,
+      },
+    }));
+
+    expect(first.resultKey).toBe(second.resultKey);
+  });
+
+  it("puanlama içeriği değiştiğinde farklı resultKey üretir", async () => {
+    const first = await processExamEvaluationJob(createJob(payload), createAdapter());
+    const second = await processExamEvaluationJob(createJob(payload), createAdapter({
+      answers: [
+        { questionNo: 1, answer: "B" },
+        { questionNo: 2, answer: "C" },
+        { questionNo: 3, answer: "" },
+      ],
+    }));
+
+    expect(first.resultKey).not.toBe(second.resultKey);
   });
 
   it("B kitapçığı cevaplarını puanlamadan önce master sıraya hizalar", async () => {

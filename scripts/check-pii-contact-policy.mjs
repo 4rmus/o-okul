@@ -12,8 +12,6 @@ const paths = {
   apiLoggingTest: "apps/api/src/observability/logging.test.ts",
   apiSentryTest: "apps/api/src/observability/sentry.test.ts",
   readiness: "docs/phase-6-production-readiness.md",
-  phase0SecurityOps: "docs/phase-0-security-ops.md",
-  plan: "claudedocs/prod-plan-2026-06-12.md",
   packageJson: "package.json",
 };
 
@@ -45,7 +43,8 @@ requireTokens(paths.decisions, files.decisions, [
 
 requireTokens(paths.kvkkChecker, files.kvkkChecker, [
   "expectedPurgeCoverage",
-  'student: ["firstName", "lastName", "phone", "email"]',
+  'student: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"]',
+  'teacher: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"]',
   'guardian: ["firstName", "lastName", "phone"]',
   'user: ["email", "name"]',
   "requireExactStringSet(coverage[subject], failures, `purgeCoverage.${subject}`, expectedFields, \"alan\")",
@@ -55,7 +54,8 @@ requireTokens(paths.kvkkChecker, files.kvkkChecker, [
 ], failures);
 
 requireTokens(paths.goLiveChecker, files.goLiveChecker, [
-  'student: ["firstName", "lastName", "phone", "email"]',
+  'student: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"]',
+  'teacher: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"]',
   'guardian: ["firstName", "lastName", "phone"]',
   'user: ["email", "name"]',
 ], failures);
@@ -135,26 +135,6 @@ requireTokens(paths.readiness, files.readiness, [
   "pnpm privacy:inventory:check",
 ], failures);
 
-requireTokens(paths.phase0SecurityOps, files.phase0SecurityOps, [
-  "DEC-20260613-05",
-  "Student.phone",
-  "Student.email",
-  "Guardian.phone",
-  "User.email",
-  "pnpm pii:contact-policy:check",
-], failures);
-
-const policyRow = findTableRow(files.plan, "pnpm pii:contact-policy:check");
-if (!policyRow) {
-  failures.push(`${paths.plan} local evidence matrix missing pnpm pii:contact-policy:check row.`);
-} else if (!policyRow.includes("PASS") || !policyRow.includes("DEC-20260613-05")) {
-  failures.push(`${paths.plan} pii:contact-policy row must be PASS and mention DEC-20260613-05.`);
-}
-const a6Row = findIssueRow(files.plan, "A6");
-if (!a6Row?.includes("LOCAL_DECISION_PASS_WITH_REAL_INVENTORY_PENDING")) {
-  failures.push(`${paths.plan} A6 must be LOCAL_DECISION_PASS_WITH_REAL_INVENTORY_PENDING.`);
-}
-
 const scripts = packageJson.scripts ?? {};
 if (scripts["pii:contact-policy:check"] !== "node scripts/check-pii-contact-policy.mjs") {
   failures.push("package.json pii:contact-policy:check must run node scripts/check-pii-contact-policy.mjs.");
@@ -187,7 +167,8 @@ function requirePurgeCoverage(path, coverage, output) {
     output.push(`${path} purgeCoverage object is required.`);
     return;
   }
-  requireArrayIncludes(path, "purgeCoverage.student", coverage.student, ["firstName", "lastName", "phone", "email"], output);
+  requireArrayIncludes(path, "purgeCoverage.student", coverage.student, ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone", "email", "photoKey"], output);
+  requireArrayIncludes(path, "purgeCoverage.teacher", coverage.teacher, ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"], output);
   requireArrayIncludes(path, "purgeCoverage.guardian", coverage.guardian, ["firstName", "lastName", "phone"], output);
   requireArrayIncludes(path, "purgeCoverage.user", coverage.user, ["email", "name"], output);
 }
@@ -217,17 +198,4 @@ function requirePrismaField(path, modelName, modelSource, fieldName, pattern, ou
   if (!pattern.test(modelSource)) {
     output.push(`${path} ${modelName}.${fieldName} field contract missing.`);
   }
-}
-
-function findTableRow(markdown, token) {
-  return markdown
-    .split(/\r?\n/)
-    .find((line) => line.startsWith("|") && line.includes(token));
-}
-
-function findIssueRow(markdown, issueId) {
-  const prefix = `| ${issueId} `;
-  return markdown
-    .split(/\r?\n/)
-    .find((line) => line.startsWith(prefix));
 }

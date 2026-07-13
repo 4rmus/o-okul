@@ -30,7 +30,6 @@ const requiredChecks = new Map([
   ["Observability UAT evidence", "scripts/check-observability-uat-evidence.mjs"],
   ["External monitoring evidence", "scripts/check-external-monitoring-evidence.mjs"],
   ["Admin MFA evidence", "scripts/check-admin-mfa-evidence.mjs"],
-  ["AI report summary evidence", "scripts/check-ai-report-summary-evidence.mjs"],
   ["Security audit evidence", "scripts/check-security-audit-evidence.mjs"],
   ["Live exam cycle evidence", "scripts/check-live-exam-cycle-evidence.mjs"],
   ["iSEM optical pipeline evidence", "scripts/check-isem-optical-pipeline-evidence.mjs"],
@@ -104,17 +103,6 @@ const requiredReports = {
   ],
   externalMonitoring: ["environment", "checkedAt", "provider", "monitoringNode", "monitorsVerified", "outageDrill", "evidenceReferences"],
   adminMfa: ["environment", "checkedAt", "policy", "enrollment", "loginVerification", "commandsPassed", "evidenceReferences"],
-  aiReportSummary: [
-    "environment",
-    "checkedAt",
-    "provider",
-    "kvkk",
-    "externalAiStopRule",
-    "generation",
-    "validation",
-    "commandsPassed",
-    "evidenceReferences",
-  ],
   securityAudit: ["environment", "checkedAt", "prodEnvCheckOk", "httpsOk", "rlsLiveCheckOk", "noCriticalFindings", "evidenceReferences"],
   liveExamCycle: [
     "environment",
@@ -275,6 +263,7 @@ const expectedKvkkAuditDiffActions = [
   "support_ticket.created",
   "support_ticket_comment.created",
   "kvkk.student_pii_purged",
+  "kvkk.teacher_pii_purged",
   "kvkk.guardian_pii_purged",
   "kvkk.user_pii_purged",
 ];
@@ -890,7 +879,7 @@ function requireLiveUiWorkerResultReport(scope, failures) {
 
 function requireUiUxRedesignReport(scope, deploymentRollback, failures) {
   requireObjectEqual(scope, failures, "reports.uiUxRedesign.result", "result", "PASS");
-  requireObjectEqual(scope, failures, "reports.uiUxRedesign.redesignPlanPath", "redesignPlanPath", "docs/ui-ux-redesign-plan.md");
+  requireObjectEqual(scope, failures, "reports.uiUxRedesign.redesignPlanPath", "redesignPlanPath", "docs/ui-ux-professionalization-contract.md");
   requireMatchingString(
     scope,
     failures,

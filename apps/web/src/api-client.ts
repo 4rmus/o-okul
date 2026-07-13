@@ -6,6 +6,7 @@ import type {
   MePasswordChangeRequest,
   MePasswordChangeResponse,
   MfaChallengeResponse,
+  MfaEnrollmentRequiredResponse,
   TenantSelectionRequiredResponse,
 } from "@o-okul/shared-types";
 
@@ -41,6 +42,12 @@ export class ApiRequestError extends Error {
 export class MfaRequiredError extends Error {
   constructor(readonly challenge: MfaChallengeResponse) {
     super("MFA_REQUIRED");
+  }
+}
+
+export class MfaEnrollmentRequiredError extends Error {
+  constructor(readonly challenge: MfaEnrollmentRequiredResponse) {
+    super("MFA_ENROLLMENT_REQUIRED");
   }
 }
 
@@ -80,6 +87,9 @@ export async function login(body: LoginRequest): Promise<AuthResponse> {
   if (isMfaChallengeResponse(result)) {
     throw new MfaRequiredError(result);
   }
+  if (isMfaEnrollmentRequiredResponse(result)) {
+    throw new MfaEnrollmentRequiredError(result);
+  }
   if (isTenantSelectionRequiredResponse(result)) {
     throw new TenantSelectionRequiredError(result);
   }
@@ -114,6 +124,17 @@ export async function verifyMfa(challengeToken: string, input: { totpCode?: stri
   return rememberAuth(await readData<AuthResponse>(response));
 }
 
+export async function confirmMfaEnrollment(setupToken: string, totpCode: string): Promise<AuthResponse> {
+  const response = await fetch(`${apiBaseUrl}/auth/totp/enrollment/confirm`, {
+    body: JSON.stringify({ setupToken, totpCode }),
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  if (!response.ok) throw new Error("MFA_ENROLLMENT_FAILED");
+  return rememberAuth(await readData<AuthResponse>(response));
+}
+
 export async function selectTenant(selectionToken: string, tenantId: string): Promise<AuthResponse> {
   const response = await fetch(`${apiBaseUrl}/auth/login/select`, {
     body: JSON.stringify({ selectionToken, tenantId }),
@@ -129,6 +150,9 @@ export async function selectTenant(selectionToken: string, tenantId: string): Pr
   const result = await readData<LoginResponse>(response);
   if (isMfaChallengeResponse(result)) {
     throw new MfaRequiredError(result);
+  }
+  if (isMfaEnrollmentRequiredResponse(result)) {
+    throw new MfaEnrollmentRequiredError(result);
   }
   if (isTenantSelectionRequiredResponse(result)) {
     throw new Error("TENANT_SELECTION_FAILED");
@@ -248,6 +272,10 @@ function rememberAuth(auth: AuthResponse): AuthResponse {
 
 function isMfaChallengeResponse(value: LoginResponse): value is MfaChallengeResponse {
   return "status" in value && value.status === "MFA_REQUIRED";
+}
+
+function isMfaEnrollmentRequiredResponse(value: LoginResponse): value is MfaEnrollmentRequiredResponse {
+  return "status" in value && value.status === "MFA_ENROLLMENT_REQUIRED";
 }
 
 function isTenantSelectionRequiredResponse(value: LoginResponse): value is TenantSelectionRequiredResponse {

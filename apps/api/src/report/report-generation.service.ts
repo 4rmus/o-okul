@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, type OnModuleDestroy } from "@nestjs/common";
 import type {
   ReportPdfInstitution,
@@ -9,7 +9,6 @@ import type {
   ReportScopeRank,
   ReportStudentBranchStatistics,
   ReportStudentBranchSummary,
-  ReportStudentCommentary,
   ReportStudentOutcomeSummary,
   ReportStudentProgress,
   ReportStudentProgressPoint,
@@ -45,7 +44,6 @@ export interface ReportGenerationQueueProducer {
 export interface EnqueueReportGenerationInput {
   examId?: string;
   reportType?: string;
-  contentHash?: string;
   campusId?: string;
   gradeLevelId?: string;
   classId?: string;
@@ -169,8 +167,13 @@ export class ReportGenerationService implements OnModuleDestroy {
 
     const examId = required(input.examId, "REPORT_EXAM_REQUIRED");
     const reportType = parseReportType(input.reportType);
-    const contentHash = required(input.contentHash, "REPORT_CONTENT_HASH_REQUIRED");
     const reportContext = resolveReportContext(input);
+    const contentHash = createReportGenerationContentHash({
+      tenantId: context.tenantId,
+      examId,
+      reportType,
+      ...reportContext,
+    });
 
     const job = await this.producer.enqueue({
       queueName: "report-generation",
@@ -325,7 +328,6 @@ export class ReportGenerationService implements OnModuleDestroy {
     const outcomes = readRecords(student.outcomes).map(readOutcomeSummary);
     const questions = readRecords(student.questions).map(readQuestionSummary);
     const statistics = readStudentStatistics(student.statistics);
-    const commentary = readStudentCommentary(student.commentary);
     const branchAverages = createStudentBranchAverageLookup(snapshot.snapshotData, classId);
     const institution = await this.findInstitutionProfile(context);
     const examMeta = await this.findExamMeta(context, resolvedExamId);
@@ -350,7 +352,6 @@ export class ReportGenerationService implements OnModuleDestroy {
       ...(outcomes.length > 0 ? { outcomes } : {}),
       ...(questions.length > 0 ? { questions } : {}),
       ...(statistics ? { statistics } : {}),
-      ...(commentary ? { commentary } : {}),
       generatedAt: snapshot.generatedAt,
     };
   }
@@ -646,6 +647,31 @@ export class ReportGenerationService implements OnModuleDestroy {
       classIds: new Set(scopedStudents.map((student) => student.classId).filter((classId): classId is string => Boolean(classId))),
     };
   }
+}
+
+export function createReportGenerationContentHash(input: {
+  tenantId: string;
+  examId: string;
+  reportType: typeof examResultSummaryReportType;
+  campusId?: string;
+  gradeLevelId?: string;
+  classId?: string;
+  courseId?: string;
+  termId?: string;
+}): string {
+  return createHash("sha256")
+    .update(JSON.stringify([
+      "report-generation-v1",
+      input.tenantId,
+      input.examId,
+      input.reportType,
+      input.campusId ?? null,
+      input.gradeLevelId ?? null,
+      input.classId ?? null,
+      input.courseId ?? null,
+      input.termId ?? null,
+    ]))
+    .digest("hex");
 }
 
 function isTeacherScopedStudent(
@@ -1253,28 +1279,6 @@ function readStudentStatistics(value: unknown): ReportStudentStatistics | undefi
     branches: readRecords(record.branches)
       .map(readBranchStatistics)
       .filter((branch): branch is ReportStudentBranchStatistics => branch !== undefined),
-  };
-}
-
-function readStudentCommentary(value: unknown): ReportStudentCommentary | undefined {
-  const record = readRecord(value);
-  if (record.provider !== "template" || record.reviewStatus !== "DRAFT") {
-    return undefined;
-  }
-  const generatedAt = readText(record.generatedAt);
-  const parentSummary = readText(record.parentSummary);
-  const teacherActionDraft = readText(record.teacherActionDraft);
-  const disclaimer = readText(record.disclaimer);
-  if (!generatedAt || !parentSummary || !teacherActionDraft || !disclaimer) {
-    return undefined;
-  }
-  return {
-    provider: "template",
-    generatedAt,
-    parentSummary,
-    teacherActionDraft,
-    reviewStatus: "DRAFT",
-    disclaimer,
   };
 }
 

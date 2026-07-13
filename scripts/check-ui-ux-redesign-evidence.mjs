@@ -109,7 +109,7 @@ function validateReport(report) {
   notFuture(report.checkedAt, failures, "checkedAt");
   string(report.releaseCandidate, failures, "releaseCandidate");
   nonPlaceholder(report.releaseCandidate, failures, "releaseCandidate");
-  eq(report.redesignPlanPath, "docs/ui-ux-redesign-plan.md", failures, "redesignPlanPath");
+  eq(report.redesignPlanPath, "docs/ui-ux-professionalization-contract.md", failures, "redesignPlanPath");
 
   validateLocal(report.localStaticEvidence, failures);
   validateRelease(report.stagingProductionEvidence, failures);

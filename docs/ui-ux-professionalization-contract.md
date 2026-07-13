@@ -59,10 +59,9 @@ Eski `Button`, `Input`, `CrudPage`, `DataTable` kullanimlari geriye uyumlu kalir
 
 ## Modernization Exception
 
-`docs/ui-ux-redesign-plan.md` tek basina UI-only kalir. Ancak
-`docs/production-v1-modernization-plan-2026-06-27.md` ve `DEC-20260627-01` kapsaminda onaylanan
-modernizasyon dalgalari DB, API, OpenAPI ve `packages/shared-types` sozlesmelerini birlikte
-degistirebilir. Bu istisna yalnız ilgili migration/API dilimi ve kanit gate'leriyle kullanilir.
+`DEC-20260627-01` kapsaminda onaylanan modernizasyon dalgalari DB, API, OpenAPI ve
+`packages/shared-types` sozlesmelerini birlikte degistirebilir. Bu istisna yalnız ilgili
+migration/API dilimi ve kanit gate'leriyle kullanilir.
 
 ## Report And Karne Contract
 

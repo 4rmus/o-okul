@@ -168,8 +168,6 @@ export class TeacherService {
 
   async purgeTeacherPii(context: RequestContext, id: string): Promise<TeacherRecord> {
     const existing = await this.findTeacher(context, id);
-    const hadFirstName = existing.firstName.length > 0;
-    const hadLastName = existing.lastName.length > 0;
     const record = await this.teacherStore.purgePii(id);
     if (!record) {
       throw new NotFoundException("TEACHER_NOT_FOUND");
@@ -181,8 +179,13 @@ export class TeacherService {
       entityId: record.id,
       action: "kvkk.teacher_pii_purged",
       diff: {
-        fieldsPurged: ["firstName", "lastName"],
-        before: { firstNamePresent: hadFirstName, lastNamePresent: hadLastName },
+        fieldsPurged: ["firstName", "lastName", "nationalIdEncrypted", "nationalIdHash", "phone"],
+        before: {
+          firstNamePresent: existing.firstName.length > 0,
+          lastNamePresent: existing.lastName.length > 0,
+          nationalIdPresent: Boolean(existing.nationalIdEncrypted || existing.nationalIdHash),
+          phonePresent: Boolean(existing.phone),
+        },
       },
     });
     return record;

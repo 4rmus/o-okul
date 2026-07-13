@@ -87,8 +87,6 @@
     "alert:webhook:smoke": "node scripts/smoke-alert-webhook.mjs",
     "admin-mfa:check": "node scripts/check-admin-mfa-evidence.mjs",
     "admin-mfa:generate": "node scripts/generate-admin-mfa-evidence.mjs",
-    "ai-report-summary:check": "node scripts/check-ai-report-summary-evidence.mjs",
-    "ai-report-summary:generate": "node scripts/generate-ai-report-summary-evidence.mjs",
     "raw-import:smoke": "pnpm --filter @o-okul/api build && pnpm --filter @o-okul/worker build && node scripts/smoke-raw-import-upload-live.mjs",
     "rate-limit:check": "node scripts/check-rate-limit-evidence.mjs",
     "rate-limit:generate": "node scripts/generate-rate-limit-evidence.mjs",

@@ -571,7 +571,7 @@ describe("AuthService", () => {
     )).toThrow("JWT_ACCESS_SECRET_REQUIRED");
   });
 
-  it("admin MFA required iken TOTP kaydı olmayan admin'e token üretmez", async () => {
+  it("admin MFA required iken TOTP kaydı olmayan admini tek kullanımlık enrollment ile içeri alır", async () => {
     process.env.ADMIN_MFA_MODE = "required";
     const user: AuthUser = {
       id: "admin-mfa-required",
@@ -594,7 +594,31 @@ describe("AuthService", () => {
       new InMemoryTenantStore(),
     );
 
-    await expect(auth.login(loginCredentials("10000000146"))).rejects.toThrow("MFA_ENROLLMENT_REQUIRED");
+    const enrollment = await auth.login(loginCredentials("10000000146"));
+    expect(enrollment).toMatchObject({ status: "MFA_ENROLLMENT_REQUIRED", recoveryCodes: expect.any(Array) });
+    if (!("status" in enrollment) || enrollment.status !== "MFA_ENROLLMENT_REQUIRED") {
+      throw new Error("MFA enrollment bekleniyordu.");
+    }
+    const issued = await auth.confirmRequiredTotpEnrollment(
+      enrollment.setupToken,
+      createTotpCodeForTest(enrollment.secret),
+    );
+    expect(issued.session.roles).toContain("TENANT_ADMIN");
+    await expect(auth.confirmRequiredTotpEnrollment(
+      enrollment.setupToken,
+      createTotpCodeForTest(enrollment.secret),
+    )).rejects.toThrow("MFA_SETUP_TOKEN_INVALID");
+
+    await auth.disableTotp({
+      userId: user.id,
+      tenantId: user.tenantId,
+      roles: user.roles,
+      bypassRls: false,
+    }, { totpCode: createTotpCodeForTest(enrollment.secret, Date.now() + 30_000) });
+    await expect(auth.confirmRequiredTotpEnrollment(
+      enrollment.setupToken,
+      createTotpCodeForTest(enrollment.secret, Date.now() + 60_000),
+    )).rejects.toThrow("MFA_SETUP_TOKEN_INVALID");
   });
 
   it("admin TOTP etkinleştikten sonra login'i MFA challenge'a böler ve TOTP reuse'u reddeder", async () => {
@@ -740,6 +764,7 @@ function createMutableUserStore(user: AuthUser): AuthUserStore {
       return clone();
     }),
     enableTotp: vi.fn(async (input) => {
+      if (user.totpSecretEncrypted || user.totpEnabledAt) return undefined;
       user.totpSecretEncrypted = input.secretEncrypted;
       user.totpEnabledAt = input.enabledAt;
       user.totpRecoveryCodeHashes = [...input.recoveryCodeHashes];

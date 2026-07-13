@@ -73,13 +73,6 @@ const templateChecks = [
     { ADMIN_MFA_ALLOW_EXAMPLE_EVIDENCE: "1" },
   ],
   [
-    "AI report summary template",
-    "AI_REPORT_SUMMARY_EVIDENCE_TARGET",
-    "docs/evidence-templates/ai-report-summary.example.json",
-    "scripts/check-ai-report-summary-evidence.mjs",
-    { AI_REPORT_SUMMARY_ALLOW_EXAMPLE_EVIDENCE: "1" },
-  ],
-  [
     "Deployment region template",
     "DEPLOYMENT_REGION_TARGET",
     "docs/evidence-templates/deployment-region.example.json",
@@ -413,7 +406,6 @@ runStagingReleaseArtifactsBundleCheck();
 
 const generatedLiveStatusPath = "docs/evidence-templates/live-status.generated.tmp.json";
 const adminMfaFixturePath = "docs/evidence-templates/admin-mfa.example.json";
-const aiReportSummaryFixturePath = "docs/evidence-templates/ai-report-summary.example.json";
 const deploymentRegionFixturePath = "docs/evidence-templates/deployment-region.example.json";
 const deploymentRollbackFixturePath = "docs/evidence-templates/deployment-rollback.example.json";
 const externalMonitoringFixturePath = "docs/evidence-templates/external-monitoring.example.json";
@@ -485,7 +477,6 @@ const liveStatusFixture = JSON.parse(readFileSync(liveStatusFixturePath, "utf8")
 const deploymentRegionFixture = JSON.parse(readFileSync(deploymentRegionFixturePath, "utf8"));
 const deploymentRollbackFixture = JSON.parse(readFileSync(deploymentRollbackFixturePath, "utf8"));
 const adminMfaFixture = JSON.parse(readFileSync(adminMfaFixturePath, "utf8"));
-const aiReportSummaryFixture = JSON.parse(readFileSync(aiReportSummaryFixturePath, "utf8"));
 const externalMonitoringFixture = JSON.parse(readFileSync(externalMonitoringFixturePath, "utf8"));
 const financialRetentionFixture = JSON.parse(readFileSync(financialRetentionFixturePath, "utf8"));
 const githubCiFixture = JSON.parse(readFileSync(githubCiFixturePath, "utf8"));
@@ -544,12 +535,6 @@ const nonEmptyGapsNegativeChecks = [
     path: "docs/evidence-templates/admin-mfa.non-empty-gaps.tmp.json",
     expectedFailure: "gaps boş olmalı.",
     runner: runAdminMfaNegativeCheck,
-  },
-  {
-    label: "AI report summary non-empty gaps negative",
-    path: "docs/evidence-templates/ai-report-summary.non-empty-gaps.tmp.json",
-    expectedFailure: "gaps boş olmalı.",
-    runner: runAiReportSummaryNegativeCheck,
   },
   {
     label: "Upload AV non-empty gaps negative",
@@ -755,7 +740,7 @@ runKvkkInventoryNegativeCheck({
 runKvkkInventoryNegativeCheck({
   label: "KVKK inventory extra student field negative",
   path: "docs/evidence-templates/kvkk-inventory.extra-student-field.tmp.json",
-  expectedFailure: "purgeCoverage.student tam 4 alan içermeli.",
+  expectedFailure: "purgeCoverage.student tam 7 alan içermeli.",
   mutate: (fixture) => {
     fixture.purgeCoverage.student.push("unexpectedField");
   },
@@ -1007,63 +992,6 @@ runAdminMfaNegativeCheck({
   },
 });
 runAdminMfaSymlinkParentTargetNegativeCheck();
-runAiReportSummaryNegativeCheck({
-  label: "AI report summary extra top-level key negative",
-  path: "docs/evidence-templates/ai-report-summary.extra-top-level.tmp.json",
-  expectedFailure: "aiReportSummary tam 11 alan içermeli.",
-  mutate: (fixture) => {
-    fixture.unexpectedTopLevel = true;
-  },
-});
-runAiReportSummaryNegativeCheck({
-  label: "AI report summary extra provider field negative",
-  path: "docs/evidence-templates/ai-report-summary.extra-provider-field.tmp.json",
-  expectedFailure: "provider tam 6 alan içermeli.",
-  mutate: (fixture) => {
-    fixture.provider.unexpectedField = true;
-  },
-});
-runAiReportSummaryNegativeCheck({
-  label: "AI report summary extra field-sent negative",
-  path: "docs/evidence-templates/ai-report-summary.extra-field-sent.tmp.json",
-  expectedFailure: "kvkk.fieldsSent tam 6 alan içermeli.",
-  mutate: (fixture) => {
-    fixture.kvkk.fieldsSent.push("unexpected.metric");
-  },
-});
-runAiReportSummaryNegativeCheck({
-  label: "AI report summary extra generation field negative",
-  path: "docs/evidence-templates/ai-report-summary.extra-generation-field.tmp.json",
-  expectedFailure: "generation tam 6 alan içermeli.",
-  mutate: (fixture) => {
-    fixture.generation.unexpectedField = true;
-  },
-});
-runAiReportSummaryNegativeCheck({
-  label: "AI report summary extra validation field negative",
-  path: "docs/evidence-templates/ai-report-summary.extra-validation-field.tmp.json",
-  expectedFailure: "validation tam 3 alan içermeli.",
-  mutate: (fixture) => {
-    fixture.validation.unexpectedField = true;
-  },
-});
-runAiReportSummaryNegativeCheck({
-  label: "AI report summary extra command negative",
-  path: "docs/evidence-templates/ai-report-summary.extra-command.tmp.json",
-  expectedFailure: "commandsPassed tam 3 komut içermeli.",
-  mutate: (fixture) => {
-    fixture.commandsPassed.push("pnpm unexpected:ai-report-summary");
-  },
-});
-runAiReportSummaryNegativeCheck({
-  label: "AI report summary invalid gaps negative",
-  path: "docs/evidence-templates/ai-report-summary.invalid-gaps.tmp.json",
-  expectedFailure: "gaps listesi zorunlu.",
-  mutate: (fixture) => {
-    fixture.gaps = "none";
-  },
-});
-runAiReportSummarySymlinkParentTargetNegativeCheck();
 runUploadAvNegativeCheck({
   label: "Upload AV extra top-level key negative",
   path: "docs/evidence-templates/upload-av.extra-top-level.tmp.json",
@@ -1956,7 +1884,7 @@ runProductionSummarySymlinkParentTargetNegativeCheck();
 runProductionSummaryNegativeCheck({
   label: "Production summary extra check negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-check.tmp.json",
-  expectedFailure: "checks tam 29 madde içermeli.",
+  expectedFailure: "checks tam 28 madde içermeli.",
   mutate: (fixture) => {
     fixture.checks.push({
       label: "Beklenmeyen production check",
@@ -2074,7 +2002,7 @@ runProductionSummaryNegativeCheck({
 runProductionSummaryNegativeCheck({
   label: "Production summary extra report negative",
   path: "docs/evidence-templates/production-evidence-summary.extra-report.tmp.json",
-  expectedFailure: "reports tam 21 alan içermeli.",
+  expectedFailure: "reports tam 20 alan içermeli.",
   mutate: (fixture) => {
     fixture.reports.unexpectedReport = { ...fixture.reports.securityAudit };
   },
@@ -2450,7 +2378,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra deployment field negative",
   path: "docs/evidence-templates/go-live.extra-deployment-field.tmp.json",
-  expectedFailure: "deployment tam 13 alan icermeli.",
+  expectedFailure: "deployment tam 12 alan icermeli.",
   mutate: (fixture) => {
     fixture.deployment.unexpectedField = true;
   },
@@ -2479,7 +2407,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live extra checksPassed negative",
   path: "docs/evidence-templates/go-live.extra-checks-passed.tmp.json",
-  expectedFailure: "productionEvidenceSummary.checksPassed tam 29 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.checksPassed tam 28 madde icermeli.",
   mutate: (fixture) => {
     fixture.productionEvidenceSummary.checksPassed.push("Beklenmeyen production check");
   },
@@ -2545,7 +2473,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked duplicate summary check negative",
   path: "docs/evidence-templates/go-live.linked-duplicate-summary-check.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.checks tam 29 madde icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.checks tam 28 madde icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.duplicate-check-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -2733,7 +2661,7 @@ runGoLiveNegativeCheck({
 runGoLiveNegativeCheck({
   label: "Go-live linked extra summary report negative",
   path: "docs/evidence-templates/go-live.linked-extra-summary-report.tmp.json",
-  expectedFailure: "productionEvidenceSummary.summary.reports tam 21 alan icermeli.",
+  expectedFailure: "productionEvidenceSummary.summary.reports tam 20 alan icermeli.",
   mutate: (fixture, cleanupPaths) => {
     const linkedPath = "docs/evidence-templates/production-evidence-summary.extra-report-for-go-live.tmp.json";
     const linkedSummary = structuredClone(productionSummaryFixture);
@@ -3919,40 +3847,6 @@ function runAdminMfaNegativeCheck({ label, path, expectedFailure, mutate }) {
   }
 }
 
-function runAiReportSummaryNegativeCheck({ label, path, expectedFailure, mutate }) {
-  const fixture = structuredClone(aiReportSummaryFixture);
-  mutate(fixture);
-  writeFileSync(path, `${JSON.stringify(fixture, null, 2)}\n`);
-
-  try {
-    const result = spawnSync(process.execPath, ["scripts/check-ai-report-summary-evidence.mjs"], {
-      env: {
-        ...process.env,
-        AI_REPORT_SUMMARY_ALLOW_EXAMPLE_EVIDENCE: "1",
-        AI_REPORT_SUMMARY_EVIDENCE_TARGET: pathToFileURL(path).href,
-      },
-      encoding: "utf8",
-    });
-
-    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-    if (result.status === 0) {
-      console.error(`Production evidence template kontrolü başarısız: ${label} beklenen şekilde kırılmadı.`);
-      process.exit(1);
-    }
-    if (!output.includes(expectedFailure)) {
-      console.error(`Production evidence template kontrolü başarısız: ${label} beklenen hata yok.`);
-      console.error(output);
-      process.exit(1);
-    }
-  } finally {
-    try {
-      unlinkSync(path);
-    } catch {
-      // Ignore cleanup errors; the negative-check failure above is the actionable signal.
-    }
-  }
-}
-
 function runInlineUploadMigrationNegativeCheck({ label, path, expectedFailure, mutate }) {
   const fixture = structuredClone(inlineUploadMigrationFixture);
   mutate(fixture);
@@ -4283,19 +4177,6 @@ function runAdminMfaSymlinkParentTargetNegativeCheck() {
     fileName: "admin-mfa.json",
     directoryPrefix: "admin-mfa-parent-symlink-",
     expectedFailure: "ADMIN_MFA_EVIDENCE_TARGET parent dizini symlink olmayan dizin olmali.",
-  });
-}
-
-function runAiReportSummarySymlinkParentTargetNegativeCheck() {
-  runSymlinkParentTargetNegativeCheck({
-    label: "AI report summary symlink parent target negative",
-    fixture: aiReportSummaryFixture,
-    scriptPath: "scripts/check-ai-report-summary-evidence.mjs",
-    targetEnvName: "AI_REPORT_SUMMARY_EVIDENCE_TARGET",
-    allowEnvName: "AI_REPORT_SUMMARY_ALLOW_EXAMPLE_EVIDENCE",
-    fileName: "ai-report-summary.json",
-    directoryPrefix: "ai-report-summary-parent-symlink-",
-    expectedFailure: "AI_REPORT_SUMMARY_EVIDENCE_TARGET parent dizini symlink olmayan dizin olmali.",
   });
 }
 
@@ -6020,7 +5901,6 @@ function runStagingReleaseArtifactsBundleCheck() {
       observabilityUat: "observability-uat.example.json",
       externalMonitoring: "external-monitoring.example.json",
       adminMfa: "admin-mfa.example.json",
-      aiReportSummary: "ai-report-summary.example.json",
       securityAudit: "security-audit.example.json",
       liveExamCycle: "live-exam-cycle.example.json",
       isemOpticalPipeline: "isem-optical-pipeline.example.json",
@@ -7848,7 +7728,6 @@ function createValidProdEnvForNegativeCheck() {
     ADMIN_MFA_RECOVERY_HASH_KEY: "admin-mfa-recovery-hash-12345678901",
     ADMIN_MFA_CHALLENGE_SECRET: "admin-mfa-challenge-secret-123456789",
     ADMIN_MFA_ISSUER: "o-okul",
-    AI_REPORT_SUMMARY_PROVIDER: "disabled",
     COOKIE_DOMAIN: "o-okul.com",
     COOKIE_SECURE: "true",
     LOG_LEVEL: "info",
@@ -7933,7 +7812,6 @@ function createValidProdEnvForNegativeCheck() {
     "OBSERVABILITY_UAT_TARGET",
     "EXTERNAL_MONITORING_TARGET",
     "ADMIN_MFA_EVIDENCE_TARGET",
-    "AI_REPORT_SUMMARY_EVIDENCE_TARGET",
     "SECURITY_AUDIT_TARGET",
     "UAT_EVIDENCE_TARGET",
     "LIVE_EXAM_CYCLE_TARGET",

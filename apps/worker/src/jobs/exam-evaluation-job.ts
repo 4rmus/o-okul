@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { runWithJobContext } from "../context/job-context.js";
 import { assertTenantJobPayload, type QueueJob, type TenantJobPayload } from "../queue/queues.js";
 import { alignAnswersToMaster, type ExamBookletVariantInput } from "./booklet-alignment.js";
@@ -95,9 +96,11 @@ export async function processExamEvaluationJob(
         engineVersion: score._meta.engineVersion,
         resultKey: createExamResultKey({
           participantId: job.payload.participantId,
+          rawImportId: job.payload.rawImportId,
           answerKeyVersion: score._meta.answerKeyVersion,
           parserConfigVersion: scoringInput.parserConfigVersion,
           engineVersion: score._meta.engineVersion,
+          score,
         }),
         score,
         status: "completed",
@@ -115,14 +118,14 @@ function assertExamEvaluationPayload(payload: ExamEvaluationJobPayload): void {
 
 function createExamResultKey(input: {
   participantId: string;
+  rawImportId: string;
   answerKeyVersion: string;
   parserConfigVersion: string;
   engineVersion: string;
+  score: ScoringResult;
 }): string {
-  return [
-    input.participantId,
-    input.answerKeyVersion,
-    input.parserConfigVersion,
-    input.engineVersion,
-  ].join("_");
+  const { computedAt: _computedAt, ...stableMeta } = input.score._meta;
+  return createHash("sha256")
+    .update(JSON.stringify({ ...input, score: { ...input.score, _meta: stableMeta } }))
+    .digest("hex");
 }

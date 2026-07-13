@@ -783,7 +783,7 @@ export function ParserConfigPage() {
     setIsReportSubmitting(true);
     try {
       const currentReadyCount = countReadyReportSnapshots(reportSnapshots);
-      setReportJob(await enqueueReportGeneration(auth.accessToken, normalizedExamId, normalizedContentHash));
+      setReportJob(await enqueueReportGeneration(auth.accessToken, normalizedExamId));
       const snapshots = await waitForReportSnapshots(auth.accessToken, normalizedExamId, currentReadyCount);
       const context = await loadReportTableContext(auth.accessToken, normalizedExamId, snapshots[0] ?? null);
       setReportSnapshots(snapshots);
@@ -2186,12 +2186,12 @@ async function resolveImportQuarantinesBulk(
   );
 }
 
-async function enqueueReportGeneration(accessToken: string, examId: string, contentHash: string) {
+async function enqueueReportGeneration(accessToken: string, examId: string) {
   return apiRequest<ReportGenerationQueueResult>(
     accessToken,
     `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/generation-jobs`,
     {
-      body: JSON.stringify({ reportType: "EXAM_RESULT_SUMMARY", contentHash }),
+      body: JSON.stringify({ reportType: "EXAM_RESULT_SUMMARY" }),
       headers: { "content-type": "application/json" },
       method: "POST",
     },

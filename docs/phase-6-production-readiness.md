@@ -74,9 +74,6 @@ pnpm backup:restore:smoke
 - `STUDENT_PII_ENCRYPTION_KEY` ve `STUDENT_PII_HASH_KEY` farklı, en az 32 karakterlik gerçek secret değerlerdir.
 - `ADMIN_MFA_MODE=optional|required` ayarlanır; `ADMIN_MFA_SECRET_ENCRYPTION_KEY`,
   `ADMIN_MFA_RECOVERY_HASH_KEY` ve `ADMIN_MFA_CHALLENGE_SECRET` gerçek, farklı secret değerlerdir.
-- `AI_REPORT_SUMMARY_PROVIDER=disabled` ayarlanır; bu release'te dış LLM provider veya template
-  karne yorumu production env kontrolünden geçmez. Disabled provider kanıtı
-  `AI_REPORT_SUMMARY_EVIDENCE_TARGET` ile doğrulanır.
 - `pnpm prod:env:check` gerçek staging/prod env değerlerinde geçer.
 - Production kanıt zinciri `pnpm prod:evidence:check` ile tek komutta geçer.
 - Gerçek staging/prod env dosyalarında `*_ALLOW_EXAMPLE_EVIDENCE=1` bayrakları bulunmaz;
@@ -179,15 +176,6 @@ pnpm backup:restore:smoke
   `STAGING_ENVIRONMENT=staging ADMIN_MFA_OUTPUT=artifacts/staging/reports/admin-mfa.json DIRECT_DATABASE_URL=... ADMIN_MFA_MODE=required ADMIN_MFA_SECRET_ENCRYPTION_KEY=... ADMIN_MFA_RECOVERY_HASH_KEY=... ADMIN_MFA_CHALLENGE_SECRET=... ADMIN_MFA_RECOVERY_CODES_PER_ENROLLMENT=8 ADMIN_MFA_PASSWORD_ONLY_LOGIN_BLOCKED=true ADMIN_MFA_TOTP_LOGIN_SUCCEEDED=true ADMIN_MFA_INVALID_TOTP_REJECTED=true ADMIN_MFA_TOTP_REUSE_REJECTED=true ADMIN_MFA_RECOVERY_CODE_LOGIN_SUCCEEDED=true ADMIN_MFA_RECOVERY_CODE_REUSE_REJECTED=true ADMIN_MFA_SESSIONS_REVOKED_ON_ENABLE=true ADMIN_MFA_SESSIONS_REVOKED_ON_DISABLE=true ADMIN_MFA_PASSWORD_ONLY_EVIDENCE_REFERENCE=... ADMIN_MFA_TOTP_SUCCESS_EVIDENCE_REFERENCE=... ADMIN_MFA_INVALID_TOTP_EVIDENCE_REFERENCE=... ADMIN_MFA_TOTP_REUSE_EVIDENCE_REFERENCE=... ADMIN_MFA_RECOVERY_SUCCESS_EVIDENCE_REFERENCE=... ADMIN_MFA_RECOVERY_REUSE_EVIDENCE_REFERENCE=... ADMIN_MFA_SESSIONS_REVOKED_ENABLE_EVIDENCE_REFERENCE=... ADMIN_MFA_SESSIONS_REVOKED_DISABLE_EVIDENCE_REFERENCE=... pnpm admin-mfa:generate`
   kullanılır; generator gerçek secret, DB enrollment sayımı ve login/recovery/session kanıt
   referansları olmadan artifact yazmaz.
-- AI karne özeti raporu `AI_REPORT_SUMMARY_EVIDENCE_TARGET` ile doğrulanır; bu release'te
-  `provider.mode=disabled`, yorum üretimi kapalı ve dış provider çağrısı yapılmamış olmalıdır.
-  Disabled-mode artifact staging hostta
-  `STAGING_ENVIRONMENT=staging AI_REPORT_SUMMARY_OUTPUT=artifacts/staging/reports/ai-report-summary.json pnpm ai-report-summary:generate`
-  ile üretilir; generator worker/API report testlerini koşar ve `DEC-20260613-03` stop-rule
-  referansıyla `piiSentToModel=false` / `externalProviderNotCalled=true` kanıtını yazar.
-  Rapor top-level 11 alanı, `provider`/`kvkk`/`externalAiStopRule`/`generation`/`validation`
-  blok shape'leri, KVKK alan setleri, üç komutluk `commandsPassed` seti ve boş `gaps` listesi
-  `prod:evidence:templates:check` içindeki fazla alan/komut ve invalid/non-empty gaps negatifleriyle korunur.
 - Bozuk imajdan geri dönüş tatbikatı `DEPLOYMENT_ROLLBACK_TARGET` ve
   `pnpm deployment:rollback:check` ile ayrı kanıt raporu olarak doğrulanır; UAT içindeki
   `rollbackImageTag` yalnız release adayı referansıdır. Gerçek deployment rollback
@@ -709,8 +697,10 @@ pnpm backup:restore:smoke
 - Login, destek, duyuru, mesaj şablonu, sınıf, kişi, ödev ve KVKK purge audit kayıtları görünür.
 - KVKK veri envanteri staging/prod gerçek veri sayımlarıyla `pnpm privacy:inventory:check`
   üzerinden doğrulanır.
-- KVKK `purgeCoverage` içinde öğrenci için `firstName`, `lastName`, `phone`, `email`; veli için
-  `firstName`, `lastName`, `phone`; kullanıcı hesabı için `email`, `name` alanları doğrulanır.
+- KVKK `purgeCoverage` içinde öğrenci için `firstName`, `lastName`, `nationalIdEncrypted`,
+  `nationalIdHash`, `phone`, `email`, `photoKey`; öğretmen için `firstName`, `lastName`,
+  `nationalIdEncrypted`, `nationalIdHash`, `phone`; veli için `firstName`, `lastName`, `phone`;
+  kullanıcı hesabı için `email`, `name` alanları doğrulanır.
   Rapor top-level 9 alanı, dört `dataSubjectCounts` alanı, dört `purgeCoverage` subject'i,
   subject field setleri, dört audit action seti, `/audit-logs` audit diff redaction bloğu ve boş `gaps` listesi
   `prod:evidence:templates:check` içindeki fazla alan/madde ve invalid/non-empty gaps negatifleriyle korunur.
@@ -1013,7 +1003,6 @@ observability-uat top-level/dashboard/alert/gaps shape fazlası,
 security-audit top-level/header/auth/data shape fazlası,
 external-monitoring top-level/node/monitor/outage/gaps shape fazlası,
 admin-mfa top-level/policy/enrollment/login/gaps shape fazlası,
-ai-report-summary top-level/provider/KVKK/generation/validation/command/gaps shape fazlası,
 upload-av top-level/scanner/surface/result/gaps shape fazlası,
 kvkk-inventory top-level/count/coverage/action/gaps shape fazlası,
 restore-drill top-level/tableCounts shape fazlası,

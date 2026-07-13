@@ -483,7 +483,6 @@ type ReportSnapshotFixture = {
 };
 type ReportGenerationRequestFixture = {
   reportType?: string;
-  contentHash?: string;
   campusId?: string;
   gradeLevelId?: string;
   classId?: string;
@@ -3179,7 +3178,6 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
       const body = request.postDataJSON() as ReportGenerationRequestFixture;
       expect(body).toEqual({
         reportType: "EXAM_RESULT_SUMMARY",
-        contentHash: "abcdef1234567890",
       });
       reportGenerationRequests.push(body);
       await route.fulfill({
@@ -3441,7 +3439,7 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
           examId,
           reportType: body.reportType ?? "EXAM_RESULT_SUMMARY",
           queueName: "report-generation",
-          jobId: `${examId}_${body.contentHash ?? "results-v1"}`,
+          jobId: `${examId}_server-derived-hash`,
           status: "queued",
         })),
       });
@@ -4727,7 +4725,6 @@ test("Next login gerçek auth store ile kurum paneline geçer", async ({ page })
   await expect(page.getByText("Rapor üretimi kuyruğa alındı.")).toBeVisible();
   expect(reportGenerationRequests.at(-1)).toEqual({
     reportType: "EXAM_RESULT_SUMMARY",
-    contentHash: "results-v1",
     campusId: "campus-main",
     gradeLevelId: "grade-8",
     classId: "class-a",

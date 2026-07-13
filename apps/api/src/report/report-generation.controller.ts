@@ -2,7 +2,7 @@ import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from "@
 import type { ReportErrorBooklet, ReportStudentProgress, ReportStudentSnapshot } from "@o-okul/shared-types";
 import { z } from "zod";
 import { getRequestContext } from "../context/request-context.js";
-import { optionalTrimmedString, requiredTrimmedString, zodBody } from "../http/zod-validation.js";
+import { optionalTrimmedString, zodBody } from "../http/zod-validation.js";
 import { RequireCapability } from "../rbac/capability.decorator.js";
 import { Roles } from "../rbac/roles.decorator.js";
 import { RolesGuard } from "../rbac/roles.guard.js";
@@ -21,7 +21,6 @@ interface ReportSnapshotListQuery extends ReportSnapshotListFilters {}
 const reportGenerationEnqueueBodySchema = z.object({
   campusId: optionalTrimmedString,
   classId: optionalTrimmedString,
-  contentHash: requiredTrimmedString,
   courseId: optionalTrimmedString,
   gradeLevelId: optionalTrimmedString,
   reportType: z.literal(examResultSummaryReportType),
@@ -110,7 +109,6 @@ export class ReportGenerationController {
     return this.reports.enqueueGeneration(getRequestContext(), {
       examId,
       reportType: body.reportType,
-      contentHash: body.contentHash,
       campusId: body.campusId,
       gradeLevelId: body.gradeLevelId,
       classId: body.classId,

@@ -90,7 +90,7 @@ const files = {
   "apps/web/app/globals.css": readFileSync("apps/web/app/globals.css", "utf8"),
   "apps/web/app/page.tsx": readFileSync("apps/web/app/page.tsx", "utf8"),
   "apps/web/src/list-controls.tsx": readFileSync("apps/web/src/list-controls.tsx", "utf8"),
-  "claudedocs/prod-plan-2026-06-12.md": readFileSync("claudedocs/prod-plan-2026-06-12.md", "utf8"),
+  "docs/ui-ux-professionalization-contract.md": readFileSync("docs/ui-ux-professionalization-contract.md", "utf8"),
   ".github/workflows/ci.yml": readFileSync(".github/workflows/ci.yml", "utf8"),
   ".github/workflows/staging-deploy.yml": readFileSync(".github/workflows/staging-deploy.yml", "utf8"),
   "apps/worker/src/jobs/report-pdf-render-job.test.ts": readFileSync("apps/worker/src/jobs/report-pdf-render-job.test.ts", "utf8"),
@@ -3747,7 +3747,7 @@ requireTokens("apps/web/app/(app)/kurum/raporlar/reports-page.tsx", [
   'as="form"',
   'aria-label="Rapor sorgusu ve üretim"',
   'className="next-report-query-panel"',
-  "Sınav, sonuç anahtarı ve kurum filtreleriyle mevcut snapshot veya yeni üretim işini yönet.",
+  "Sınav ve kurum filtreleriyle mevcut snapshot veya yeni üretim işini yönet.",
   "formatSnapshotInputRefs",
   "formatSelectedExamLabel",
   "readReportWorkspaceTab",
@@ -3768,7 +3768,6 @@ requireTokens("apps/web/app/(app)/kurum/raporlar/reports-page.tsx", [
   '<Field label="Sınav">',
   'summary>Gelişmiş sınav referansı</summary>',
   '<Field label="Manuel sınav referansı">',
-  '<Field label="Sonuç anahtarı">',
   '<Field label="Kampüs">',
   '<Field label="Dönem">',
   "Sınav seçildi",
@@ -4888,11 +4887,10 @@ requireTokens("docs/product-journeys-v1.md", [
   "server/no-query",
 ]);
 
-requireTokens("claudedocs/prod-plan-2026-06-12.md", [
-  "Web UX baseline contract",
+requireTokens("docs/ui-ux-professionalization-contract.md", [
   "pnpm web:ux-baseline:check",
-  "LOCAL_BASELINE_PASS_WITH_FUTURE_UI_PENDING",
-  "tam liste sanallaştırma/dark mode kapsamı sonraki faz",
+  "Report And Karne Contract",
+  "DataTable",
 ]);
 
 if (failures.length > 0) {

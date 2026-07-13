@@ -11,10 +11,10 @@ Use this skill to produce a plan, not implementation.
 
 1. Read `AGENTS.md` and `docs/codex-agent-architecture.md`.
 2. Read only the task-relevant truth files:
-   - Product scope: `docs/product-journeys-v1.md`, `docs/DECISIONS.md`, `docs/MASTER_PLAN.md`.
+   - Product scope: `docs/product-journeys-v1.md`, `docs/DECISIONS.md`, `status.md`.
    - Production readiness: `docs/phase-6-production-readiness.md`, `docs/phase-6-ops-runbook.md`.
-   - UI/UX: `docs/ui-ux-professionalization-contract.md`, `docs/ui-ux-redesign-plan.md`.
-   - Modernization: `docs/production-v1-modernization-plan-2026-06-27.md`.
+   - UI/UX: `docs/ui-ux-professionalization-contract.md`.
+   - Architecture: `docs/llm-wiki/README.md`, `docs/codex-agent-architecture.md`.
 3. State assumptions, unknowns, and product decisions separately from implementation gaps.
 4. Map the request to modules, UAT IDs, DEC records, owner agents, validation commands, and acceptance criteria.
 5. Split large work into small, reversible slices. End with the smallest safe first PR.

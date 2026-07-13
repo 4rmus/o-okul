@@ -25,7 +25,7 @@ bu kriter için yeterli savunma değildir; DB katmanı da aynı kuralı zorlamal
 
 - Karar ID: DEC-20260529-01
 - Kaynak: `docs/DECISIONS.md`
-- Kanıt: `MASTER_PLAN.md` §2, §3.2
+- Kanıt: `docs/DECISIONS.md`, `pnpm db:rls:check`
 
 ## Sonuçlar
 

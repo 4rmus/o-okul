@@ -1,6 +1,6 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional, UnauthorizedException } from "@nestjs/common";
-import type { SelfPurgeResult, TenantSelectionOption, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
+import type { MfaEnrollmentRequiredResponse, SelfPurgeResult, TenantSelectionOption, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { tenantStoreToken, type TenantStore } from "../tenant/tenant-store.js";
@@ -104,8 +104,8 @@ export class AuthService {
     this.loginAttempts = loginAttempts ?? createLoginAttemptLimiter();
   }
 
-  async login(credentials: LoginCredentials, clientIp?: string): Promise<TokenPair | LoginMfaChallenge | TenantSelectionRequiredResponse>;
-  async login(credentials: LoginCredentials, clientIp = "unknown"): Promise<TokenPair | LoginMfaChallenge | TenantSelectionRequiredResponse> {
+  async login(credentials: LoginCredentials, clientIp?: string): Promise<TokenPair | LoginMfaChallenge | MfaEnrollmentRequiredResponse | TenantSelectionRequiredResponse>;
+  async login(credentials: LoginCredentials, clientIp = "unknown"): Promise<TokenPair | LoginMfaChallenge | MfaEnrollmentRequiredResponse | TenantSelectionRequiredResponse> {
     const resolved = await this.resolveLoginUser(credentials, clientIp);
     const attemptKey = resolved.attemptKey;
     await this.loginAttempts.assertAllowed(attemptKey);
@@ -126,7 +126,7 @@ export class AuthService {
     return this.issueLoginForUser(user);
   }
 
-  async selectTenant(input: TenantSelectionInput): Promise<TokenPair | LoginMfaChallenge> {
+  async selectTenant(input: TenantSelectionInput): Promise<TokenPair | LoginMfaChallenge | MfaEnrollmentRequiredResponse> {
     let payload: TenantSelectionTokenPayload;
     try {
       payload = verifyTenantSelectionToken(input.selectionToken);
@@ -169,9 +169,25 @@ export class AuthService {
     return { status: "TENANT_SELECTION_REQUIRED", selectionToken, expiresAt, tenants: options };
   }
 
-  private async issueLoginForUser(user: AuthUser): Promise<TokenPair | LoginMfaChallenge> {
+  private async issueLoginForUser(user: AuthUser): Promise<TokenPair | LoginMfaChallenge | MfaEnrollmentRequiredResponse> {
     if (this.shouldRequireTotpEnrollment(user)) {
-      throw new UnauthorizedException("MFA_ENROLLMENT_REQUIRED");
+      const draft = createTotpEnrollmentDraft(user.email ?? user.id, user.id, user.membershipVersion);
+      await this.auditLogs?.record({
+        tenantId: user.tenantId === "system" ? undefined : user.tenantId,
+        actorUserId: user.id,
+        entityType: "Auth",
+        entityId: user.id,
+        action: "auth.totp_enrollment_required",
+        diff: { recoveryCodesIssued: draft.recoveryCodes.length },
+      });
+      return {
+        status: "MFA_ENROLLMENT_REQUIRED",
+        secret: draft.secret,
+        keyUri: draft.keyUri,
+        setupToken: draft.setupToken,
+        setupExpiresAt: draft.setupExpiresAt,
+        recoveryCodes: draft.recoveryCodes,
+      };
     }
     if (this.shouldChallengeWithTotp(user)) {
       await this.auditLogs?.record({
@@ -227,7 +243,7 @@ export class AuthService {
       throw new BadRequestException("MFA_ALREADY_ENABLED");
     }
 
-    const draft = createTotpEnrollmentDraft(user.email ?? user.id, user.id);
+    const draft = createTotpEnrollmentDraft(user.email ?? user.id, user.id, user.membershipVersion);
     await this.auditLogs?.record({
       tenantId: user.tenantId === "system" ? undefined : user.tenantId,
       actorUserId: user.id,
@@ -254,6 +270,10 @@ export class AuthService {
       throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
     }
     if (payload.userId !== context.userId || !payload.secret || !payload.recoveryCodeHashes?.length) {
+      throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
+    }
+    const currentUser = await this.requireCurrentUser(context);
+    if (payload.membershipVersion !== currentUser.membershipVersion) {
       throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
     }
 
@@ -284,6 +304,57 @@ export class AuthService {
       enabledAt,
       recoveryCodesRemaining: user.totpRecoveryCodeHashes?.length ?? 0,
     };
+  }
+
+  async confirmRequiredTotpEnrollment(setupToken: string, totpCode: string): Promise<TokenPair> {
+    if (resolveAdminMfaMode() !== "required") {
+      throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
+    }
+    let payload;
+    try {
+      payload = verifyAdminMfaToken(setupToken, "admin-mfa-setup");
+    } catch {
+      throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
+    }
+    if (!payload.secret || !payload.recoveryCodeHashes?.length) {
+      throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
+    }
+    const currentUser = await this.users.findById(payload.userId);
+    if (
+      !currentUser ||
+      !isAdminMfaRole(currentUser.roles) ||
+      payload.membershipVersion !== currentUser.membershipVersion ||
+      currentUser.totpEnabledAt ||
+      currentUser.totpSecretEncrypted
+    ) {
+      throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
+    }
+    const counter = resolveTotpCounter(payload.secret, totpCode);
+    if (!counter) {
+      throw new UnauthorizedException("MFA_CODE_INVALID");
+    }
+    const enabledAt = new Date().toISOString();
+    const user = await this.users.enableTotp({
+      userId: payload.userId,
+      secretEncrypted: encryptAdminMfaSecret(payload.secret),
+      enabledAt,
+      recoveryCodeHashes: payload.recoveryCodeHashes,
+      lastUsedCounter: counter,
+    });
+    if (!user) throw new UnauthorizedException("MFA_SETUP_TOKEN_INVALID");
+    await this.sessions.revokeByUser(user.id);
+    await this.auditLogs?.record({
+      tenantId: user.tenantId === "system" ? undefined : user.tenantId,
+      actorUserId: user.id,
+      entityType: "Auth",
+      entityId: user.id,
+      action: "auth.totp_enrollment_completed",
+      diff: { recoveryCodesRemaining: user.totpRecoveryCodeHashes?.length ?? 0 },
+    });
+    return this.issueTokenPairForUser(user, "auth.login_mfa_enrolled", {
+      roles: user.roles,
+      mustChangePassword: Boolean(user.mustChangePassword),
+    });
   }
 
   async disableTotp(context: RequestContext, input: TotpVerificationInput): Promise<TotpDisableResult> {

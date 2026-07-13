@@ -121,15 +121,6 @@ const reportArtifacts = new Map([
     },
   ],
   [
-    "aiReportSummary",
-    {
-      file: "ai-report-summary.json",
-      script: "scripts/check-ai-report-summary-evidence.mjs",
-      targetEnv: "AI_REPORT_SUMMARY_EVIDENCE_TARGET",
-      allowEnv: "AI_REPORT_SUMMARY_ALLOW_EXAMPLE_EVIDENCE",
-    },
-  ],
-  [
     "securityAudit",
     {
       file: "security-audit.json",
@@ -334,15 +325,6 @@ const missingArtifactRemediation = new Map([
     },
   ],
   [
-    "reports/ai-report-summary.json",
-    {
-      command:
-        "AI_REPORT_SUMMARY_EVIDENCE_OUTPUT=artifacts/staging/reports/ai-report-summary.json corepack pnpm ai-report-summary:generate",
-      prerequisite: "AI summary mode decision, disabled-mode or provider proof, and report summary safety evidence.",
-      blocker: "AI report summary evidence must be generated for the release candidate.",
-    },
-  ],
-  [
     "reports/security-audit.json",
     {
       command: "SECURITY_AUDIT_OUTPUT=artifacts/staging/reports/security-audit.json corepack pnpm security:audit:generate",
@@ -533,15 +515,6 @@ const missingArtifactHandoff = new Map([
       ownerAgent: "auth_session_engineer",
       evidenceGate: "admin-mfa:check",
       nextActionKind: "admin_enrollment_and_login_negatives",
-    },
-  ],
-  [
-    "reports/ai-report-summary.json",
-    {
-      phase: "Faz 5 - AI karne özeti kararı",
-      ownerAgent: "ops_release_engineer",
-      evidenceGate: "ai-report-summary:check",
-      nextActionKind: "provider_mode_evidence",
     },
   ],
   [

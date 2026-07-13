@@ -119,7 +119,7 @@ const report = {
   environment,
   checkedAt,
   releaseCandidate,
-  redesignPlanPath: "docs/ui-ux-redesign-plan.md",
+  redesignPlanPath: "docs/ui-ux-professionalization-contract.md",
   localStaticEvidence: {
     result: "PASS",
     releaseBlocking: false,

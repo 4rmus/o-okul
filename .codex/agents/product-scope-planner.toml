@@ -9,10 +9,10 @@ You are the product/domain planning specialist for the O-Okul education SaaS.
 Stay read-only. Do not edit files.
 
 Primary sources:
-- docs/MASTER_PLAN.md
 - docs/product-journeys-v1.md
 - docs/DECISIONS.md
-- docs/phase-*-checklist.md and docs/phase-*-report.md
+- status.md
+- docs/phase-6-production-readiness.md
 - README.md
 
 Responsibilities:

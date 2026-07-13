@@ -15,7 +15,6 @@ const evidenceTargetKeys = [
   "OBSERVABILITY_UAT_TARGET",
   "EXTERNAL_MONITORING_TARGET",
   "ADMIN_MFA_EVIDENCE_TARGET",
-  "AI_REPORT_SUMMARY_EVIDENCE_TARGET",
   "SECURITY_AUDIT_TARGET",
   "UAT_EVIDENCE_TARGET",
   "LIVE_EXAM_CYCLE_TARGET",
@@ -60,7 +59,6 @@ function checkContract(file) {
     "ADMIN_MFA_RECOVERY_HASH_KEY",
     "ADMIN_MFA_CHALLENGE_SECRET",
     "ADMIN_MFA_ISSUER",
-    "AI_REPORT_SUMMARY_PROVIDER",
     "COOKIE_DOMAIN",
     "COOKIE_SECURE",
     "LOG_LEVEL",
@@ -126,7 +124,6 @@ function checkContract(file) {
     "OBSERVABILITY_UAT_TARGET",
     "EXTERNAL_MONITORING_TARGET",
     "ADMIN_MFA_EVIDENCE_TARGET",
-    "AI_REPORT_SUMMARY_EVIDENCE_TARGET",
     "SECURITY_AUDIT_TARGET",
     "UAT_EVIDENCE_TARGET",
     "LIVE_EXAM_CYCLE_TARGET",
@@ -177,7 +174,6 @@ function checkProductionEnv(env) {
   requireSecret(env, failures, "ADMIN_MFA_CHALLENGE_SECRET");
   requireSet(env, failures, "ADMIN_MFA_ISSUER");
   requireNoPlaceholderValue(env, failures, "ADMIN_MFA_ISSUER");
-  requireEqual(env, failures, "AI_REPORT_SUMMARY_PROVIDER", "disabled");
   if (env.STUDENT_PII_ENCRYPTION_KEY && env.STUDENT_PII_HASH_KEY && env.STUDENT_PII_ENCRYPTION_KEY === env.STUDENT_PII_HASH_KEY) {
     failures.push("STUDENT_PII_ENCRYPTION_KEY ve STUDENT_PII_HASH_KEY farklı olmalı.");
   }

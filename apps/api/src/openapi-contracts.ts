@@ -264,6 +264,15 @@ const totpSetupResponseSchema = objectSchema({
   recoveryCodes: arraySchema(stringSchema(), { minItems: 1 }),
 }, ["secret", "keyUri", "setupToken", "setupExpiresAt", "recoveryCodes"]);
 
+const mfaEnrollmentRequiredResponseSchema = objectSchema({
+  status: { type: "string", enum: ["MFA_ENROLLMENT_REQUIRED"] },
+  secret: stringSchema(),
+  keyUri: stringSchema(),
+  setupToken: stringSchema(),
+  setupExpiresAt: stringSchema({ format: "date-time" }),
+  recoveryCodes: arraySchema(stringSchema(), { minItems: 1 }),
+}, ["status", "secret", "keyUri", "setupToken", "setupExpiresAt", "recoveryCodes"]);
+
 const totpSetupConfirmResponseSchema = objectSchema({
   enabledAt: stringSchema({ format: "date-time" }),
   recoveryCodesRemaining: integerSchema({ minimum: 0 }),
@@ -1879,15 +1888,6 @@ const reportStudentStatisticsSchema = objectSchema({
   branches: arraySchema(reportStudentBranchStatisticsSchema),
 }, ["standardScore", "general", "branches"]);
 
-const reportStudentCommentarySchema = objectSchema({
-  provider: { type: "string", enum: ["template"] },
-  generatedAt: stringSchema({ format: "date-time" }),
-  parentSummary: stringSchema(),
-  teacherActionDraft: stringSchema(),
-  reviewStatus: { type: "string", enum: ["DRAFT"] },
-  disclaimer: stringSchema(),
-}, ["provider", "generatedAt", "parentSummary", "teacherActionDraft", "reviewStatus", "disclaimer"]);
-
 const reportStudentScopedSnapshotDataSchema = objectSchema({
   reportType: stringSchema(),
   generatedAt: stringSchema({ format: "date-time" }),
@@ -2027,7 +2027,6 @@ const reportStudentSnapshotSchema = objectSchema({
   outcomes: arraySchema(reportStudentOutcomeSummarySchema),
   questions: arraySchema(reportStudentQuestionSummarySchema),
   statistics: reportStudentStatisticsSchema,
-  commentary: reportStudentCommentarySchema,
   generatedAt: stringSchema({ format: "date-time" }),
 }, ["tenantId", "examId", "snapshotId", "studentId", "resultKey", "total", "branches"]);
 
@@ -2372,6 +2371,7 @@ const operationContracts: Record<string, OperationContract> = {
       oneOf: [
         authResponseSchema,
         mfaChallengeResponseSchema,
+        mfaEnrollmentRequiredResponseSchema,
         tenantSelectionRequiredResponseSchema,
       ],
     },
@@ -2382,11 +2382,16 @@ const operationContracts: Record<string, OperationContract> = {
       oneOf: [
         authResponseSchema,
         mfaChallengeResponseSchema,
+        mfaEnrollmentRequiredResponseSchema,
       ],
     },
   },
   "post /api/v1/auth/totp/verify": {
     requestBody: totpVerificationRequestSchema,
+    responseBody: authResponseSchema,
+  },
+  "post /api/v1/auth/totp/enrollment/confirm": {
+    requestBody: totpSetupConfirmRequestSchema,
     responseBody: authResponseSchema,
   },
   "post /api/v1/auth/refresh": {
@@ -2746,12 +2751,11 @@ const operationContracts: Record<string, OperationContract> = {
     requestBody: objectSchema({
       campusId: stringSchema(),
       classId: stringSchema(),
-      contentHash: stringSchema(),
       courseId: stringSchema(),
       gradeLevelId: stringSchema(),
       reportType: { type: "string", enum: ["EXAM_RESULT_SUMMARY"] },
       termId: stringSchema(),
-    }, ["contentHash", "reportType"]),
+    }, ["reportType"]),
     responseBody: objectSchema({
       tenantId: stringSchema(),
       examId: stringSchema(),
