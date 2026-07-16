@@ -7,7 +7,8 @@ export const metadata = {
   title: appBrandTitle,
   applicationName: appBrand.name,
   metadataBase: new URL(appBrand.siteUrl),
-  description: "Dershane, özel okul ve kurs merkezleri için öğrenci takip, veli iletişimi ve kurum yönetim platformu.",
+  description:
+    "Dershaneler ve özel öğretim kurumları için optik sınavdan karneye, öğrenci takibinden rol bazlı portallara uzanan eğitim operasyon platformu.",
   icons: {
     icon: "/icon.svg",
   },
