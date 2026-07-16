@@ -6,6 +6,7 @@ const useWebServer = process.env.NEXT_E2E_SKIP_WEB_SERVER !== "1" && !process.en
 
 export default defineConfig({
   testDir: "./e2e-next",
+  snapshotPathTemplate: `{testDir}/__screenshots__/{testFilePath}/{arg}-${process.platform}{ext}`,
   use: {
     baseURL,
     ignoreHTTPSErrors: process.env.NEXT_E2E_IGNORE_HTTPS_ERRORS === "1",

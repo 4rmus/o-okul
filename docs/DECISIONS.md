@@ -192,7 +192,9 @@ kapısı iki katmanlıdır: `pnpm karne:visual-targets` 3 hedef PDF render/hash 
 `pnpm karne:visual-diff -- --target iSEM --ui <png> --max-diff-ratio 0.53 --max-mean-channel-delta 36`
 kanıt screenshot'ları için üst sınırı uygular. Bu eşikler mevcut 16+ iterasyonluk kanıt serisindeki
 ham diff oranı bandını release regresyon kapısına çevirir; daha iyi görsel yakınsama hedeflenir ama
-v1'i bloklamaz.
+v1'i bloklamaz. Repo CI kapısı ayrıca `Karne Önizleme` yüzeyini takip edilen Playwright baseline'ı
+ile karşılaştırır; baseline eksikliği veya görsel sapma `pnpm karne:visual-contract:check` komutunu
+kırmızıya düşürür ve karşılaştırma sessizce atlanamaz.
 Kaynak: ADIGÜZEL visual-diff denemeleri ve ürün kararı.
 Kanıt: `scripts/check-adiguzel-pdf-visual-targets.mjs`, `scripts/compare-karne-visual-evidence.mjs`,
 `scripts/check-karne-visual-contract.mjs`, `pnpm karne:visual-contract:check`.

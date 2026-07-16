@@ -829,6 +829,9 @@ pnpm backup:restore:smoke
   referansları gerçek staging/prod artifact'lerine bağlanmalı, local/mock screenshot paketi tek başına
   release kanıtı sayılmaz. Workflow bu çıktıdan sonra `UI_UX_REDESIGN_EVIDENCE_TARGET=file://.../reports/ui-ux-redesign.json`
   değerini `.staging-evidence.env` dosyasına ekler ve production evidence zinciri aynı bundle artifact'ini okur.
+  Aynı workflow, UI/UX tamamlanma ledger'ındaki requirement-level dosya/komut bağlarını başarılı
+  GitHub CI artifact'i ve deploy edilen exact kaynak SHA ile `pnpm ui-ux-professionalization:completion:check`
+  üzerinden eşleştirir; PR CI'daki contract-only kontrol tek başına release kanıtı değildir.
   Lokal kabul kapısı `pnpm ui-ux-redesign:local-gates`, shared-types/UI build, web typecheck, a11y,
   UX contract, karne görsel kontratı, örnek fixture regresyonu, evidence generator kontratı ve görsel QA
   screenshot zincirini tek komutta koşturur; bu gate staging/prod artifact'in yerini almaz.

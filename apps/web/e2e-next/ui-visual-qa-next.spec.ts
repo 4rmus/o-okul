@@ -738,6 +738,19 @@ test.describe("Faz 9 UI görsel smoke", () => {
       await expect(karneBranchTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
       await expect(karneBranchTable.getByRole("columnheader", { exact: true, name: "Net" })).toBeVisible();
       await expect(karneBranchTable.getByRole("columnheader", { exact: true, name: "Soru sayısı" })).toBeVisible();
+      if (viewport.width === 1024) {
+        await page.locator(".next-desktop-topbar, .next-mobile-topbar").evaluateAll((elements) => {
+          for (const element of elements) element.remove();
+        });
+        await karneSheet.scrollIntoViewIfNeeded();
+        const karneBox = await karneSheet.boundingBox();
+        expect(karneBox?.width).toBe(595);
+        expect(karneBox?.height).toBeGreaterThanOrEqual(842);
+        await expect(karneSheet).toHaveScreenshot("student-report-card-1024.png", {
+          animations: "disabled",
+          maxDiffPixelRatio: 0.005,
+        });
+      }
 
       await page.getByRole("tab", { name: "Çıktılar" }).click();
       const exportsRegion = page.getByRole("region", { name: "Rapor çıktıları" });

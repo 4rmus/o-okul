@@ -660,6 +660,13 @@ jobs:
           UI_UX_REDESIGN_CHECKED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" \
             pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env
 
+      - name: Bind local UI/UX completion to verified source
+        shell: bash
+        env:
+          GITHUB_CI_EVIDENCE_TARGET: file://${{ github.workspace }}/artifacts/staging/reports/github-ci.json
+          UI_UX_PROFESSIONALIZATION_SOURCE_SHA: ${{ needs.build-images.outputs.deploy-sha }}
+        run: pnpm ui-ux-professionalization:completion:check -- --local-proof-only
+
       - name: Append release evidence metadata
         shell: bash
         env:
@@ -700,6 +707,16 @@ jobs:
         run: |
           STAGING_RELEASE_ARTIFACTS_TARGET="$PWD/artifacts/staging" \
             pnpm staging:release-artifacts:check
+
+      - name: Bind live UI/UX completion to full evidence
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}
+        shell: bash
+        env:
+          GITHUB_CI_EVIDENCE_TARGET: file://${{ github.workspace }}/artifacts/staging/reports/github-ci.json
+          UI_UX_REDESIGN_EVIDENCE_TARGET: file://${{ github.workspace }}/artifacts/staging/reports/ui-ux-redesign.json
+          UI_UX_PROFESSIONALIZATION_SOURCE_SHA: ${{ needs.build-images.outputs.deploy-sha }}
+          UI_UX_PROFESSIONALIZATION_FULL_EVIDENCE: "1"
+        run: pnpm ui-ux-professionalization:completion:check
 
       - name: Cleanup staging evidence env
         if: always()
