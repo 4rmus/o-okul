@@ -138,7 +138,7 @@
           "commands": ["pnpm test"]
         },
         "Eksiksiz PDF ve Excel çıktısı": {
-          "paths": ["apps/worker/src/jobs/report-pdf-render-job.test.ts", "apps/web/e2e-next/ui-visual-qa-next.spec.ts", "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts/student-report-card-1024-darwin.png"],
+          "paths": ["apps/worker/src/jobs/report-pdf-render-job.test.ts", "apps/web/e2e-next/ui-visual-qa-next.spec.ts", "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts/student-report-card-1024-darwin.png", "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts/student-report-card-1024-linux.png"],
           "commands": ["pnpm test", "pnpm karne:visual-contract:check"]
         }
       },
