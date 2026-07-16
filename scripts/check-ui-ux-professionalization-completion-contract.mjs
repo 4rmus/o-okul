@@ -103,7 +103,7 @@ function expectFailureRun(args, extraEnv, expected) {
 function run(args, extraEnv) {
   return spawnSync(process.execPath, ["scripts/check-ui-ux-professionalization-completion.mjs", ...args], {
     encoding: "utf8",
-    env: { ...process.env, ...extraEnv },
+    env: { ...process.env, GITHUB_ACTIONS: "false", ...extraEnv },
   });
 }
 
