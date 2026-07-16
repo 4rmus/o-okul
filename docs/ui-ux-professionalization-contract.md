@@ -102,13 +102,18 @@ migration/API dilimi ve kanit gate'leriyle kullanilir.
 
 ## Acceptance Gates
 
-- Izlenebilirlik: `pnpm ui-ux-professionalization:completion:check`; `PR-0`–`PR-6` uygulama,
-  yerel dogrulama ve canli kanit durumlari `docs/ui-ux-professionalization-completion.json` icinde
-  ayri alanlarda tutulur.
+- Izlenebilirlik: `PR-0`–`PR-6` gereksinimleri, test/checker dosyaları ve CI komutları
+  `docs/ui-ux-professionalization-completion.json` içinde birebir bağlanır.
+  `pnpm ui-ux-professionalization:completion:contract` bu statik bağı PR CI'da doğrular;
+  `pnpm ui-ux-professionalization:completion:check` ise başarılı `.github/workflows/ci.yml`
+  kanıtını değişmeyen, symlink olmayan `file://` artifact ve exact kaynak SHA ile eşleştirmeden
+  `PROVEN` sonucunu kabul etmez; örnek kanıt bypass bayrakları bu modda reddedilir. Yerel ve canlı
+  kanıt durumları ayrı kalır; canlı `PROVEN` için aynı SHA'ya bağlı UI/UX redesign artifact'i gerekir.
 - Foundation/UI: `pnpm --filter @o-okul/ui typecheck`, `pnpm --filter @o-okul/web typecheck`,
   `pnpm web:a11y:check`, `pnpm web:ux-baseline:check`.
 - Report/karne: `pnpm --filter @o-okul/worker test`, `pnpm raw-import:smoke`,
-  `pnpm report-generation:smoke`, `pnpm karne:visual-contract:check`.
+  `pnpm report-generation:smoke`, takip edilen Playwright karne baseline'ını zorunlu karşılaştıran
+  `pnpm karne:visual-contract:check`.
 - Security/privacy: `pnpm db:rls:check`, `pnpm tenant-db:check`, `pnpm web:token-storage:check`,
   `pnpm admin-mfa:check`, `pnpm rate-limit:check`, `pnpm security:audit:check`,
   `pnpm privacy:inventory:check`.

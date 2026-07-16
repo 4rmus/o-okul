@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
 
 const files = {
   decisions: readFileSync("docs/DECISIONS.md", "utf8"),
   diffScript: readFileSync("scripts/compare-karne-visual-evidence.mjs", "utf8"),
+  playwrightConfig: readFileSync("apps/web/playwright.next.config.ts", "utf8"),
   targetScript: readFileSync("scripts/check-adiguzel-pdf-visual-targets.mjs", "utf8"),
+  visualSpec: readFileSync("apps/web/e2e-next/ui-visual-qa-next.spec.ts", "utf8"),
   packageJson: JSON.parse(readFileSync("package.json", "utf8")),
 };
 
@@ -44,10 +45,23 @@ requireTokens("docs/DECISIONS.md", files.decisions, decisionTokens, failures);
 requireTokens("scripts/compare-karne-visual-evidence.mjs", files.diffScript, diffScriptTokens, failures);
 forbidTokens("scripts/compare-karne-visual-evidence.mjs", files.diffScript, diffScriptForbiddenTokens, failures);
 requireTokens("scripts/check-adiguzel-pdf-visual-targets.mjs", files.targetScript, targetScriptTokens, failures);
+requireTokens("apps/web/playwright.next.config.ts", files.playwrightConfig, [
+  'snapshotPathTemplate: `{testDir}/__screenshots__/{testFilePath}/{arg}-${process.platform}{ext}`',
+], failures);
+requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", files.visualSpec, [
+  'toHaveScreenshot("student-report-card-1024.png"',
+  'locator(".next-desktop-topbar, .next-mobile-topbar").evaluateAll',
+  'for (const element of elements) element.remove()',
+  'karneSheet.scrollIntoViewIfNeeded()',
+  'expect(karneBox?.width).toBe(595)',
+  'expect(karneBox?.height).toBeGreaterThanOrEqual(842)',
+  'maxDiffPixelRatio: 0.005',
+], failures);
 
 const scripts = files.packageJson.scripts ?? {};
-if (scripts["karne:visual-contract:check"] !== "node scripts/check-karne-visual-contract.mjs") {
-  failures.push("package.json karne:visual-contract:check must run node scripts/check-karne-visual-contract.mjs.");
+const expectedCommand = 'node scripts/check-karne-visual-contract.mjs && UI_VISUAL_ARTIFACT_DIR=artifacts/ui-ux-redesign/local pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts --workers=1 --update-snapshots=none e2e-next/ui-visual-qa-next.spec.ts --grep "rapor çalışma alanı 375/768/1024/1440 görünümde bağlam ve karne taşmadan kalır"';
+if (scripts["karne:visual-contract:check"] !== expectedCommand) {
+  failures.push("package.json karne:visual-contract:check must run the contract checker and tracked Playwright comparison.");
 }
 if (!scripts.ci?.includes("pnpm karne:visual-contract:check")) {
   failures.push("package.json ci script must run karne:visual-contract:check.");
@@ -59,29 +73,8 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-const uiScreenshot = process.env.KARNE_VISUAL_UI_SCREENSHOT?.trim();
-if (uiScreenshot) {
-  const comparison = spawnSync(process.execPath, [
-    "scripts/compare-karne-visual-evidence.mjs",
-    "--target",
-    process.env.KARNE_VISUAL_TARGET?.trim() || "iSEM",
-    "--ui",
-    uiScreenshot,
-    "--max-diff-ratio",
-    "0.53",
-    "--max-mean-channel-delta",
-    "36",
-  ], { encoding: "utf8" });
-  if (comparison.status !== 0) {
-    console.error(comparison.stderr || comparison.stdout || "Karne render karşılaştırması başarısız.");
-    process.exit(1);
-  }
-  console.log(comparison.stdout.trim());
-} else {
-  console.log("Karne render kanıtı atlandı: KARNE_VISUAL_UI_SCREENSHOT verilmedi.");
-}
-
-console.log("Karne visual contract check passed.");
+console.log("Karne visual contract wiring check passed.");
+console.log("Tracked Playwright comparison follows in the canonical package command.");
 
 function requireTokens(path, source, tokens, output) {
   for (const token of tokens) {
