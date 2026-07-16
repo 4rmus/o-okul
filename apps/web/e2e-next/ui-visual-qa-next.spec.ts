@@ -800,6 +800,9 @@ async function openWithUiMocks(
   });
   await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
   await page.goto(pathName);
+  if (await page.getByRole("heading", { level: 1, name: "404" }).isVisible()) {
+    await page.reload();
+  }
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 
