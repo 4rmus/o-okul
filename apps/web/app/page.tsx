@@ -23,8 +23,8 @@ import {
 import { appBrand, appBrandHomeAriaLabel, demoRequestHref } from "../src/brand.js";
 
 const proofPoints = [
-  "TXT / DAT optik işleme",
-  "Rapor ve karne üretimi",
+  "Optik okuma ve TXT / DAT işleme",
+  "Karne ve portal üretimi",
   "Rol bazlı kullanıcı portalları",
   "Tek ve çok şubeli kurum yapısı",
 ];
@@ -477,11 +477,12 @@ export default function HomePage() {
 
         <section className="next-marketing-cta" aria-labelledby="demo-title">
           <div>
-            <span className="next-marketing-kicker">Kurumunuza özel ürün turu</span>
+            <span className="next-marketing-kicker">Kapalı beta başvurusu</span>
             <h2 id="demo-title">Sınav, takip ve raporlama akışınızı birlikte değerlendirelim.</h2>
             <p>
               Demo görüşmesinde kurum yapınızı dinleyip kurulumdan optik sınava, rapordan rol bazlı
-              portallara kadar ilgili akışı kurum senaryonuz üzerinden gösterelim.
+              portallara kadar ilgili akışı kurum senaryonuz üzerinden gösterelim. Production readiness kapılarıyla
+              kontrollü ilerleyen yayın yaklaşımını da birlikte değerlendirelim.
             </p>
           </div>
           <div className="next-marketing-cta__actions">
