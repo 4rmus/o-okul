@@ -20,7 +20,8 @@ interface AxeViolationSummary {
 test.describe("Next erişilebilirlik smoke", () => {
   test("public landing ve login sayfalarında yüksek etkili axe ihlali yok", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "o-okul" })).toBeVisible();
+    await expectFirstFocusableElement(page, "İçeriğe geç");
+    await expect(page.getByRole("heading", { name: "Optikten karneye, eğitim operasyonunuz tek akışta." })).toBeVisible();
     await expectNoHighImpactA11yViolations(page, "landing");
 
     await page.goto("/login");
@@ -46,6 +47,14 @@ test.describe("Next erişilebilirlik smoke", () => {
     await expect(systemLoginForm.getByLabel("Kullanıcı Adı")).toBeVisible();
     await expect(systemLoginForm.getByLabel("Şifre", { exact: true })).toBeVisible();
     await expectNoHighImpactA11yViolations(page, "system-login");
+  });
+
+  test("public landing mobil viewport'ta taşmadan açılır", async ({ page }) => {
+    await page.setViewportSize({ height: 844, width: 390 });
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Optikten karneye, eğitim operasyonunuz tek akışta." })).toBeVisible();
+    await expectNoHorizontalOverflow(page, "landing-mobile");
+    await expectNoHighImpactA11yViolations(page, "landing-mobile");
   });
 
   test("kurum dashboard shell'inde yüksek etkili axe ihlali yok", async ({ page }) => {
