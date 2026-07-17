@@ -305,6 +305,8 @@ const expectations = {
     "Cleanup staging evidence env",
     "run: rm -f .staging-evidence.env",
     "actions/upload-artifact@v4",
+    "UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES: \"1\"",
+    "staging-activation-evidence-${{ needs.build-images.outputs.image-tag }}",
     "staging-production-evidence-${{ needs.build-images.outputs.image-tag }}",
   ],
   Dockerfile: [

@@ -74,7 +74,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
       const operationsTable = page.getByRole("table", { name: "Operasyon özeti" });
       await expect(operationsTable.getByRole("columnheader", { name: "Başlık" })).toBeVisible();
       await expect(operationsTable.getByRole("columnheader", { name: "Durum" })).toBeVisible();
-      await expect(operationsTable.locator(".next-dashboard-link-cell.uh-action-card")).toHaveCount(2);
+      await expect(operationsTable.locator(".next-dashboard-link-cell.uh-action-card")).toHaveCount(3);
       const decisionsRegion = page.getByRole("region", { exact: true, name: "Karar sinyalleri" });
       const decisionsTable = page.getByRole("table", { name: "Karar sinyalleri" });
       await expect(decisionsTable.locator(".next-dashboard-link-cell.uh-action-card")).toHaveCount(4);
@@ -221,7 +221,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
       );
 
       const studentsRegion = page.getByLabel("Öğrenci yönetimi");
-      await expect(studentsRegion.getByRole("heading", { name: "Öğrenciler" })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1, name: "Öğrenciler" })).toBeVisible();
       await expect(studentsRegion.getByLabel("Ara")).toHaveValue("ada");
       await expect(studentsRegion).toHaveClass(/next-students-page--compact/);
       await expectUiStable(page, `faz9-students-list-${viewport.width}`, consoleErrors);
@@ -259,19 +259,17 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(guardianProfile).toContainText("••• ••• ••01");
     const guardianProfileInfo = guardianProfile.getByRole("region", { name: "Veli profil özeti" });
     await expect(guardianProfileInfo).toHaveClass(/uh-info-grid/);
-    await expect(guardianProfileInfo.locator(".uh-info-item")).toHaveCount(6);
+    await expect(guardianProfileInfo.locator(".uh-info-item")).toHaveCount(5);
     const guardianTable = guardianDetail.getByRole("table", { name: "Veli öğrenci bağlantıları" });
     await expect(guardianTable.getByRole("columnheader", { name: "Öğrenci" })).toBeVisible();
-    await expect(guardianTable.getByRole("columnheader", { name: "İlişki" })).toBeVisible();
+    await expect(guardianTable.getByRole("columnheader", { name: "Durum" })).toBeVisible();
     await expect(guardianTable.getByRole("columnheader", { name: "İzinler" })).toBeVisible();
     await expect(guardianTable).toContainText("Ada Kaya");
-    await expect(guardianTable).toContainText("Anne");
+    await expect(guardianTable).toContainText("Aktif");
     await expect(guardianTable).toContainText("Finans açık");
-    await expect(guardianTable).toContainText("SMS açık");
-    await expect(guardianDetail.getByRole("link", { name: "Portal daveti gönder" })).toHaveAttribute(
-      "href",
-      "/kurum/kullanicilar?invite=guardian&subjectId=guardian-mother",
-    );
+    await expect(guardianTable).toContainText("Duyuru açık");
+    await expect(guardianTable).toContainText("Destek açık");
+    await expect(guardianDetail.getByRole("link", { name: "Portal daveti gönder" })).toHaveCount(0);
     await expectGuardianDetailNoRawIds(page, "guardian-detail-desktop");
     await expectUiStable(page, "faz9-guardian-detail-desktop", consoleErrors);
     await saveScreenshot(page, "faz9-guardian-detail-desktop.png");
@@ -310,10 +308,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(assignmentsTable).toContainText("Branş öğretmeni");
     await expect(assignmentsTable).toContainText("8-A / Ada Kaya");
     await expect(assignmentsTable).toContainText("Ders eşleşmedi");
-    await expect(teacherDetail.getByRole("link", { name: "Portal daveti gönder" })).toHaveAttribute(
-      "href",
-      "/kurum/kullanicilar?invite=teacher&subjectId=teacher-math",
-    );
+    await expect(teacherDetail.getByRole("link", { name: "Portal daveti gönder" })).toHaveCount(0);
     await expectTeacherDetailNoRawIds(page, "teacher-detail-desktop");
     await expectUiStable(page, "faz9-teacher-detail-desktop", consoleErrors);
     await saveScreenshot(page, "faz9-teacher-detail-desktop.png");
@@ -746,8 +741,11 @@ test.describe("Faz 9 UI görsel smoke", () => {
         const karneBox = await karneSheet.boundingBox();
         expect(karneBox?.width).toBe(595);
         expect(karneBox?.height).toBeGreaterThanOrEqual(842);
-        await expect(karneSheet).toHaveScreenshot("student-report-card-1024.png", {
+        if (!karneBox) throw new Error("KARNE_VISUAL_BOX_MISSING");
+        const karneClip = { height: 842, width: 595, x: Math.round(karneBox.x), y: Math.round(karneBox.y) };
+        await expect(page).toHaveScreenshot("student-report-card-1024.png", {
           animations: "disabled",
+          clip: karneClip,
           maxDiffPixelRatio: 0.005,
         });
       }

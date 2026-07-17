@@ -18,6 +18,12 @@ try {
   expectFailure("command outside slice", (ledger) => {
     ledger.slices[0].requirementEvidence[ledger.slices[0].requirements[0]].commands = ["pnpm test"];
   }, "komutu verificationCommands içinde değil");
+  expectFailure("visual spec without visual command", (ledger) => {
+    ledger.slices[6].requirementEvidence["Mobil ve erişilebilirlik sözleşmesi"].commands = [
+      "pnpm web:a11y:check",
+      "pnpm web:ux-contract:check",
+    ];
+  }, "tam görsel spec kanıtı pnpm ui-ux-redesign:visual-qa komutuna bağlanmalı");
   expectFailure("non proven local status", (ledger) => {
     ledger.slices[0].localStatus = "IN_PROGRESS";
   }, "localStatus tamamlanma ledger'ında PROVEN olmalı");
@@ -54,7 +60,7 @@ try {
     GITHUB_CI_EVIDENCE_TARGET: target,
     UI_UX_PROFESSIONALIZATION_SOURCE_SHA: "1111111111111111111111111111111111111111",
   };
-  expectSuccess(["--local-proof-only", ...liveArgs], proofEnv);
+  expectSuccess(["--local-proof-only", ...liveArgs], proofEnv, "UI/UX yalnız yerel tamamlanma kanıtı doğrulandı");
   expectFailureRun(liveArgs, proofEnv, "yalnız tam staging evidence zinciri sonrasında");
   expectFailureRun(liveArgs, {
     ...proofEnv,
@@ -87,9 +93,12 @@ function expectFailure(label, mutate, expected) {
   expectFailureRun(["--contract-only", "--ledger", path], {}, expected);
 }
 
-function expectSuccess(args, extraEnv) {
+function expectSuccess(args, extraEnv, expectedOutput) {
   const result = run(args, extraEnv);
   if (result.status !== 0) throw new Error(result.stderr || result.stdout || "Beklenen PASS alınamadı.");
+  if (expectedOutput && !result.stdout.includes(expectedOutput)) {
+    throw new Error(`Beklenen PASS çıktısı alınamadı: ${expectedOutput}\n${result.stdout}`);
+  }
 }
 
 function expectFailureRun(args, extraEnv, expected) {

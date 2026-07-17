@@ -172,7 +172,7 @@ export function AttendancePage() {
 
   const columns: Array<DataTableColumn<AttendanceRecord>> = [
     { key: "studentId", header: "Öğrenci", priority: "primary", render: (record) => studentLabel(record.studentId, studentNames), sticky: "left" },
-    { key: "classId", header: "Sınıf", priority: "secondary", render: (record) => classLabel(record.studentId, references.students, classNames) },
+    { key: "classId", header: "Sınıf", priority: "secondary", render: (record) => optionalLabel(record.classId, classNames, "Sınıf bilgisi yok") },
     { key: "courseId", header: "Ders", priority: "secondary", render: (record) => optionalLabel(record.courseId, courseNames, "Ders bilgisi yok") },
     { key: "termId", header: "Dönem", priority: "optional", render: (record) => optionalLabel(record.termId, termNames, "Dönem bilgisi yok") },
     { key: "date", header: "Tarih", priority: "secondary", render: (record) => record.date },
@@ -374,12 +374,6 @@ async function loadReferences(accessToken: string): Promise<AttendanceReferences
     students: students.data,
     terms: terms.data,
   };
-}
-
-function classLabel(studentId: string, students: StudentRecord[], classNames: Map<string, string>) {
-  const student = students.find((record) => record.id === studentId);
-  if (!student?.classId) return "-";
-  return classNames.get(student.classId) ?? "Sınıf bilgisi yok";
 }
 
 function studentLabel(studentId: string, studentNames: Map<string, string>) {

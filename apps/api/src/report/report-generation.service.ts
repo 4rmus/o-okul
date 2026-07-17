@@ -1088,6 +1088,78 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
     ]);
   }
 
+  const studentBranches = workbook.addWorksheet("Öğrenci Branşları");
+  studentBranches.addRow([
+    "Öğrenci kimliği", "Öğrenci", "Öğrenci no", "Sınıf", "Branş", "Başarı %", "Soru sayısı",
+    "Doğru", "Yanlış", "Boş", "Net", "Sınıf net ort", "Okul net ort", "Genel net ort",
+  ]);
+  for (const student of readRecords(snapshotData.students)) {
+    for (const branch of readRecords(student.branches)) {
+      studentBranches.addRow([
+        readText(student.studentId),
+        readText(student.displayName),
+        readText(student.studentNo),
+        readText(student.className),
+        readText(branch.branch),
+        readNumberOrFallback(branch.successRate, scoreSuccessRate(branch)),
+        readNumberOrFallback(branch.questionCount, scoreQuestionCount(branch)),
+        readNumber(branch.correct),
+        readNumber(branch.wrong),
+        readNumber(branch.blank),
+        readNumber(branch.net),
+        readNumber(branch.classNetAverage),
+        readNumber(branch.schoolNetAverage),
+        readNumber(branch.generalNetAverage),
+      ]);
+    }
+  }
+
+  const outcomes = workbook.addWorksheet("Kazanımlar");
+  outcomes.addRow([
+    "Öğrenci kimliği", "Öğrenci", "Öğrenci no", "Sınıf", "Kazanım", "Branş", "Başarı %",
+    "Soru sayısı", "Doğru", "Yanlış", "Boş", "Net",
+  ]);
+  for (const student of readRecords(snapshotData.students)) {
+    for (const outcome of readRecords(student.outcomes)) {
+      outcomes.addRow([
+        readText(student.studentId),
+        readText(student.displayName),
+        readText(student.studentNo),
+        readText(student.className),
+        readText(outcome.outcomeCode),
+        readText(outcome.branch),
+        readNumberOrFallback(outcome.successRate, scoreSuccessRate(outcome)),
+        readNumberOrFallback(outcome.questionCount, scoreQuestionCount(outcome)),
+        readNumber(outcome.correct),
+        readNumber(outcome.wrong),
+        readNumber(outcome.blank),
+        readNumber(outcome.net),
+      ]);
+    }
+  }
+
+  const questions = workbook.addWorksheet("Soru Cevapları");
+  questions.addRow([
+    "Öğrenci kimliği", "Öğrenci", "Öğrenci no", "Sınıf", "Soru", "Branş", "Kazanım",
+    "Öğrenci cevabı", "Doğru cevap", "Durum",
+  ]);
+  for (const student of readRecords(snapshotData.students)) {
+    for (const question of readRecords(student.questions)) {
+      questions.addRow([
+        readText(student.studentId),
+        readText(student.displayName),
+        readText(student.studentNo),
+        readText(student.className),
+        readNumber(question.questionNo),
+        readText(question.branch),
+        readText(question.outcomeCode),
+        readText(question.answer),
+        readText(question.correctAnswer),
+        readText(question.status),
+      ]);
+    }
+  }
+
   const branchStatistics = workbook.addWorksheet("Branş İstatistikleri");
   branchStatistics.addRow([
     "Öğrenci kimliği",

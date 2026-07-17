@@ -26,15 +26,12 @@ const tempDir = mkdtempSync(join(tmpdir(), "karne-visual-diff-"));
 try {
   const targetPng = join(tempDir, "target.png");
   const targetBmp = join(tempDir, "target.bmp");
-  const uiBmp = join(tempDir, "ui-normalized.bmp");
+  const uiBmp = join(tempDir, "ui.bmp");
   const pdfPath = join(fixtureDir, pdfName);
 
   runSips(["-s", "format", "png", pdfPath, "--out", targetPng], `PDF_RENDER_FAILED:${targetNeedle}`);
   runSips(["-s", "format", "bmp", targetPng, "--out", targetBmp], `TARGET_BMP_FAILED:${targetNeedle}`);
-  runSips(
-    ["-z", String(expectedSize.height), String(expectedSize.width), "-s", "format", "bmp", options.ui, "--out", uiBmp],
-    "UI_BMP_FAILED",
-  );
+  runSips(["-s", "format", "bmp", options.ui, "--out", uiBmp], "UI_BMP_FAILED");
 
   const target = readBmp(targetBmp);
   const ui = readBmp(uiBmp);
@@ -42,7 +39,7 @@ try {
     throw new Error(`TARGET_SIZE_CHANGED:${target.width}x${target.height}`);
   }
   if (ui.width !== expectedSize.width || ui.height !== expectedSize.height) {
-    throw new Error(`UI_NORMALIZED_SIZE_CHANGED:${ui.width}x${ui.height}`);
+    throw new Error(`UI_SIZE_CHANGED:${ui.width}x${ui.height}`);
   }
 
   const diff = compareBmp(target, ui);
@@ -50,7 +47,7 @@ try {
     target: targetNeedle,
     targetPdf: basename(pdfPath),
     uiScreenshot: options.ui,
-    normalizedSize: `${expectedSize.width}x${expectedSize.height}`,
+    size: `${expectedSize.width}x${expectedSize.height}`,
     changedPixels: diff.changedPixels,
     totalPixels: diff.totalPixels,
     diffRatio: Number(diff.diffRatio.toFixed(6)),
@@ -58,7 +55,7 @@ try {
   };
 
   console.log(
-    `karne-visual-diff target=${result.target} normalized=${result.normalizedSize} ` +
+    `karne-visual-diff target=${result.target} size=${result.size} ` +
       `changed=${result.changedPixels}/${result.totalPixels} ratio=${result.diffRatio} ` +
       `meanChannelDelta=${result.meanChannelDelta} ui=provided`,
   );

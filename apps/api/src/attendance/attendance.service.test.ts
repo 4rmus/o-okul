@@ -101,10 +101,10 @@ describe("AttendanceService", () => {
     const service = createService(attendanceStore, studentStore, enrollmentStore);
 
     await expect(service.list(adminContext, { classId: "class-a" })).resolves.toEqual([
-      expect.objectContaining({ id: "attendance-a", date: "2026-06-03" }),
+      expect.objectContaining({ id: "attendance-a", classId: "class-a", date: "2026-06-03" }),
     ]);
     await expect(service.list(adminContext, { classId: "class-new" })).resolves.toEqual([
-      expect.objectContaining({ date: "2026-06-06" }),
+      expect.objectContaining({ classId: "class-new", date: "2026-06-06" }),
     ]);
     await expect(service.getDailyRoster(adminContext, "class-a", "2026-06-03")).resolves.toEqual({
       classId: "class-a",

@@ -1334,6 +1334,7 @@ export interface AttendanceRecord {
   id: string;
   tenantId: string;
   studentId: string;
+  classId?: string;
   courseId?: string;
   termId?: string;
   date: string;

@@ -45,6 +45,7 @@ function printSummary(report, reportFile) {
   console.log(`- overallStatus: ${report.overallStatus}`);
   console.log(`- artifactsTarget: ${report.artifactsTarget ?? artifactsTarget}`);
   console.log(`- gapReportFile: ${formatPath(reportFile)}`);
+  console.log(`- requiredSummaryFilePattern: ${report.requiredSummaryFilePattern ?? "release-summary-*.json"}`);
   console.log(`- foundReleaseSummaryCount: ${report.foundReleaseSummaryCount}`);
   console.log(`- missingRequiredFiles: ${report.missingRequiredFiles?.length ?? 0}`);
   console.log(`- unexpectedFiles: ${report.unexpectedFiles?.length ?? 0}`);

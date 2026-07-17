@@ -153,6 +153,7 @@ requireScriptIncludes("ci", "pnpm web:performance:check");
 requireScriptIncludes("ci", "pnpm web:a11y:check");
 requireScriptIncludes("ci", "pnpm web:ux-baseline:check");
 requireScriptIncludes("ci", "pnpm web:ux-contract:check");
+requireScriptIncludes("ci", "pnpm ui-ux-redesign:visual-qa");
 
 if (webPackageJson.scripts?.a11y !== "playwright test -c playwright.next.config.ts e2e-next/a11y-next.spec.ts") {
   failures.push("apps/web/package.json a11y script must run e2e-next/a11y-next.spec.ts.");
@@ -4679,7 +4680,7 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   'dashboardSummaryMetrics).toHaveClass(/uh-metric-grid/)',
   'dashboardSummaryMetrics.locator(".uh-metric-card")).toHaveCount(4)',
   'getByRole("table", { name: "Operasyon özeti" })',
-  'operationsTable.locator(".next-dashboard-link-cell.uh-action-card")).toHaveCount(2)',
+  'operationsTable.locator(".next-dashboard-link-cell.uh-action-card")).toHaveCount(3)',
   'decisionsTable.locator(".next-dashboard-link-cell.uh-action-card")).toHaveCount(4)',
   'page.locator(".next-decision-card, .next-dashboard-summary-card")).toHaveCount(0)',
   'not.toContainText("tenant-faz9")',
@@ -4721,7 +4722,7 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   "sınıf detay desktop ve mobil rapor bağlamını güvenli gösterir",
   "expectStudentDetailNoRawIds",
   'guardianProfileInfo).toHaveClass(/uh-info-grid/)',
-  'guardianProfileInfo.locator(".uh-info-item")).toHaveCount(6)',
+  'guardianProfileInfo.locator(".uh-info-item")).toHaveCount(5)',
   'teacherProfileInfo).toHaveClass(/uh-info-grid/)',
   'teacherProfileInfo.locator(".uh-info-item")).toHaveCount(3)',
   'classReportContext).toHaveClass(/uh-info-grid/)',
