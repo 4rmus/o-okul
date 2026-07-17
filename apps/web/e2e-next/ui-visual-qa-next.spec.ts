@@ -746,8 +746,11 @@ test.describe("Faz 9 UI görsel smoke", () => {
         const karneBox = await karneSheet.boundingBox();
         expect(karneBox?.width).toBe(595);
         expect(karneBox?.height).toBeGreaterThanOrEqual(842);
-        await expect(karneSheet).toHaveScreenshot("student-report-card-1024.png", {
+        if (!karneBox) throw new Error("KARNE_VISUAL_BOX_MISSING");
+        const karneClip = { height: 842, width: 595, x: Math.round(karneBox.x), y: Math.round(karneBox.y) };
+        await expect(page).toHaveScreenshot("student-report-card-1024.png", {
           animations: "disabled",
+          clip: karneClip,
           maxDiffPixelRatio: 0.005,
         });
       }

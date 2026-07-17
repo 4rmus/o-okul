@@ -310,6 +310,8 @@ test.describe("DataTable mobil sözleşmesi", () => {
       { key: "status", label: "Durum", text: "Yok" },
     ]);
     await expect(attendanceTable).toContainText("Yok");
+    await expect(attendanceTable.getByRole("row", { name: /Bora Kaya/ })).toContainText("8-A");
+    await expect(attendanceTable.getByRole("row", { name: /Bora Kaya/ })).not.toContainText("9-B");
     await expect(attendanceTable).toContainText("Öğrenci eşleşmedi");
     await expect(attendanceTable).toContainText("Ders bilgisi yok");
     await attendanceRegion.getByLabel("Geçmiş sınıf filtresi").selectOption("");
@@ -543,6 +545,13 @@ test.describe("DataTable mobil sözleşmesi", () => {
   });
 
   test("sınıf detay paneli mobilde rapor bağlamını ve tabloları güvenli gösterir", async ({ page }) => {
+    const reportReadPaths: string[] = [];
+    page.on("request", (request) => {
+      const pathName = new URL(request.url()).pathname;
+      if (request.method() === "GET" && (pathName === "/api/v1/exams" || pathName === "/api/v1/exams/exam-lgs/reports/snapshots")) {
+        reportReadPaths.push(pathName);
+      }
+    });
     await openWithDataTableMocks(page, "/kurum/siniflar/class-8a");
 
     await expect(page.getByRole("heading", { level: 1, name: "8-A" })).toBeVisible();
@@ -551,8 +560,13 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(detailSummary).toContainText("Öğrenci toplamı");
     await expect(detailSummary).toContainText("Başarı %");
     await expect(detailSummary.getByLabel("Sınıf detay operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    expect(reportReadPaths).toEqual([]);
 
     await detailRegion.getByRole("tab", { name: "Raporlar" }).click();
+    await expect.poll(() => reportReadPaths).toEqual([
+      "/api/v1/exams",
+      "/api/v1/exams/exam-lgs/reports/snapshots",
+    ]);
     await expect(detailSummary).toContainText("Rapor hazır");
     const reportContext = detailRegion.getByLabel("Sınıf rapor bağlamı");
     const classReportContext = reportContext.getByRole("region", { name: "Sınıf rapor bağlam özeti" });
@@ -603,7 +617,6 @@ test.describe("DataTable mobil sözleşmesi", () => {
       { key: "net", label: "Net", text: "7,5" },
       { key: "questionCount", label: "Soru", text: "10" },
     ]);
-
     await expectNoVisibleTextValues(page, "class-detail-mobile", [
       "class-8a",
       "student-a",
@@ -1245,6 +1258,7 @@ function createTeachers() {
 function createAttendance() {
   return [
     {
+      classId: "class-8a",
       courseId: "course-math",
       date: "2026-06-17",
       id: "attendance-a",
@@ -1254,6 +1268,7 @@ function createAttendance() {
       termId: "term-2026",
     },
     {
+      classId: "class-8a",
       courseId: "course-math",
       date: "2026-06-17",
       id: "attendance-b",
@@ -1263,6 +1278,7 @@ function createAttendance() {
       termId: "term-2026",
     },
     {
+      classId: "class-missing",
       courseId: "course-missing",
       date: "2026-06-16",
       id: "attendance-missing",
@@ -1277,9 +1293,8 @@ function createAttendance() {
 function attendanceForDailyQuery(url: URL) {
   const classId = url.searchParams.get("classId");
   const date = url.searchParams.get("date");
-  const studentClassById = new Map(createStudents().map((student) => [student.id, student.classId]));
   return createAttendance().filter(
-    (record) => (!classId || studentClassById.get(record.studentId) === classId) && (!date || record.date === date),
+    (record) => (!classId || record.classId === classId) && (!date || record.date === date),
   );
 }
 

@@ -180,7 +180,9 @@ function checkWorkflowContract(output) {
     "path: artifacts/staging/reports/github-ci.json",
     "Check pre-deploy GitHub CI evidence",
     "Generate UI/UX redesign evidence",
+    "Generate UI/UX redesign evidence\n        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}",
     "UI_UX_REDESIGN_EVIDENCE_OUTPUT=\"artifacts/staging/reports/ui-ux-redesign.json\"",
+    "UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES: \"1\"",
     "pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env",
     "Bind local UI/UX completion to verified source",
     "UI_UX_PROFESSIONALIZATION_SOURCE_SHA: ${{ needs.build-images.outputs.deploy-sha }}",
@@ -197,6 +199,7 @@ function checkWorkflowContract(output) {
     "echo \"ROLLBACK_IMAGE_TAG=$ROLLBACK_IMAGE_TAG\"",
     "echo \"GITHUB_CI_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/github-ci.json\"",
     "echo \"PRODUCTION_EVIDENCE_SUMMARY_TARGET=file://$PWD/artifacts/staging/release-summary-${IMAGE_TAG}.json\"",
+    "Append full UI/UX release evidence metadata\n        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}",
     ".ghcr_read_token",
     "GHCR read token file is missing.",
     "if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}",
@@ -212,6 +215,7 @@ function checkWorkflowContract(output) {
     "Cleanup staging evidence env",
     "run: rm -f .staging-evidence.env",
     "actions/upload-artifact@v4",
+    "staging-activation-evidence-${{ needs.build-images.outputs.image-tag }}",
     "staging-production-evidence-${{ needs.build-images.outputs.image-tag }}",
     "path: artifacts/staging",
   ];
@@ -220,6 +224,10 @@ function checkWorkflowContract(output) {
     if (!workflow.includes(token)) {
       output.push(`${workflowPath} beklenen staging evidence token'ını içermiyor: ${token}`);
     }
+  }
+
+  if (workflow.split('UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES: "1"').length - 1 !== 3) {
+    output.push(`${workflowPath} remote UI/UX referans doğrulamasını generate, production chain ve live completion adımlarına bağlamalı.`);
   }
 
   if (workflow.includes("pnpm run ci")) {
@@ -259,6 +267,7 @@ function checkWorkflowContract(output) {
     "Bind local UI/UX completion to verified source",
     "pnpm ui-ux-professionalization:completion:check -- --local-proof-only",
     "Append release evidence metadata",
+    "Append full UI/UX release evidence metadata",
     "echo \"UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json\"",
     "Run first staging evidence gates",
     "Run production evidence chain",
@@ -270,6 +279,7 @@ function checkWorkflowContract(output) {
     "run: pnpm ui-ux-professionalization:completion:check",
     "Cleanup staging evidence env",
     "run: rm -f .staging-evidence.env",
+    "staging-activation-evidence-${{ needs.build-images.outputs.image-tag }}",
     "staging-production-evidence-${{ needs.build-images.outputs.image-tag }}",
     "path: artifacts/staging",
   ]);

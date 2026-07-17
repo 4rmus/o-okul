@@ -91,7 +91,11 @@ if (!localProofOnly && slices.some((slice) => slice.liveStatus === "PROVEN")) {
   }
 }
 
-console.log(`UI/UX tamamlanma kanıtı doğrulandı: ${slices.length} dilim, kaynak ${sourceSha}.`);
+console.log(
+  localProofOnly
+    ? `UI/UX yalnız yerel tamamlanma kanıtı doğrulandı: ${slices.length} dilim, kaynak ${sourceSha}.`
+    : `UI/UX tamamlanma kanıtı doğrulandı: ${slices.length} dilim, kaynak ${sourceSha}.`,
+);
 
 function requireExternalProof(value) {
   const expected = {
@@ -138,6 +142,14 @@ function requireRequirementEvidence(slice) {
       if (!slice.verificationCommands?.includes(command)) {
         failures.push(`${slice.id}.${requirement} komutu verificationCommands içinde değil: ${command}`);
       }
+    }
+    if (
+      slice.id === "PR-6" &&
+      requirement === "Mobil ve erişilebilirlik sözleşmesi" &&
+      item?.paths?.includes("apps/web/e2e-next/ui-visual-qa-next.spec.ts") &&
+      !item?.commands?.includes("pnpm ui-ux-redesign:visual-qa")
+    ) {
+      failures.push(`${slice.id}.${requirement} tam görsel spec kanıtı pnpm ui-ux-redesign:visual-qa komutuna bağlanmalı.`);
     }
   }
 }

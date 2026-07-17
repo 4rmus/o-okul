@@ -533,7 +533,36 @@ describe("ReportGenerationService", () => {
 
   it("hazır snapshotı Excel dosyasına dönüştürür", async () => {
     const producer = new FakeProducer();
-    const store = new FakeReportSnapshotStore();
+    const firstStudent = (fakeSnapshot.snapshotData?.students as Array<Record<string, unknown>> | undefined)?.[0];
+    const store = new FakeReportSnapshotStore([{
+      ...fakeSnapshot,
+      snapshotData: {
+        ...fakeSnapshot.snapshotData,
+        resultCount: 2,
+        students: [
+          firstStudent!,
+          {
+            ...firstStudent!,
+            studentId: "student-b",
+            displayName: "Bora B",
+            studentNo: "1002",
+            resultKey: "result-b",
+            branches: [
+              { branch: "Fen", correct: 8, wrong: 1, blank: 1, net: 7.75 },
+              { branch: "Türkçe", correct: 7, wrong: 2, blank: 1, net: 6.5 },
+            ],
+            outcomes: [
+              { outcomeCode: "FEN.8.1.1", branch: "Fen", correct: 4, wrong: 1, blank: 0, net: 3.75 },
+              { outcomeCode: "TUR.8.1.1", branch: "Türkçe", correct: 3, wrong: 1, blank: 1, net: 2.75 },
+            ],
+            questions: [
+              { questionNo: 1, branch: "Fen", outcomeCode: "FEN.8.1.1", answer: "A", correctAnswer: "A", status: "CORRECT" },
+              { questionNo: 2, branch: "Türkçe", outcomeCode: "TUR.8.1.1", answer: "B", correctAnswer: "C", status: "WRONG" },
+            ],
+          },
+        ],
+      },
+    }]);
     const service = new ReportGenerationService(producer, store);
 
     const result = await service.exportSnapshotExcel(
@@ -550,7 +579,7 @@ describe("ReportGenerationService", () => {
     expect(store.findInputs).toEqual([{ tenantId: "tenant-a", examId: "exam-a", snapshotId: "snapshot-a" }]);
     expect(result.fileName).toBe("exam-a-snapshot-a.xlsx");
     expect(result.contentType).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    expect(result.rowCount).toBe(1);
+    expect(result.rowCount).toBe(2);
 
     const workbook = new ExcelJS.Workbook();
     const bytes = Buffer.from(result.fileBase64, "base64");
@@ -577,6 +606,15 @@ describe("ReportGenerationService", () => {
     expect(workbook.getWorksheet("Branş İstatistikleri")?.getCell("A2").value).toBe("student-a");
     expect(workbook.getWorksheet("Branş İstatistikleri")?.getCell("B2").value).toBe("Matematik");
     expect(workbook.getWorksheet("Branş İstatistikleri")?.getCell("D2").value).toBe(3);
+    expect(workbook.getWorksheet("Öğrenci Branşları")?.actualRowCount).toBe(4);
+    expect(workbook.getWorksheet("Öğrenci Branşları")?.getCell("A4").value).toBe("student-b");
+    expect(workbook.getWorksheet("Öğrenci Branşları")?.getCell("E4").value).toBe("Türkçe");
+    expect(workbook.getWorksheet("Kazanımlar")?.actualRowCount).toBe(4);
+    expect(workbook.getWorksheet("Kazanımlar")?.getCell("E4").value).toBe("TUR.8.1.1");
+    expect(workbook.getWorksheet("Soru Cevapları")?.actualRowCount).toBe(6);
+    expect(workbook.getWorksheet("Soru Cevapları")?.getCell("A6").value).toBe("student-b");
+    expect(workbook.getWorksheet("Soru Cevapları")?.getCell("E6").value).toBe(2);
+    expect(workbook.getWorksheet("Soru Cevapları")?.getCell("J6").value).toBe("WRONG");
   });
 
   it("hazır snapshotı PDF dosyasına dönüştürür", async () => {

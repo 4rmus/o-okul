@@ -8,6 +8,11 @@ const files = {
   visualSpec: readFileSync("apps/web/e2e-next/ui-visual-qa-next.spec.ts", "utf8"),
   packageJson: JSON.parse(readFileSync("package.json", "utf8")),
 };
+const visualBaselines = [
+  "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts/student-report-card-1024-darwin.png",
+  "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts/student-report-card-1024-linux.png",
+];
+const expectedSize = { height: 842, width: 595 };
 
 const failures = [];
 const decisionTokens = [
@@ -26,9 +31,11 @@ const diffScriptTokens = [
   "KARNE_VISUAL_MEAN_DELTA_TOO_HIGH",
   "meanChannelDelta",
   "expectedSize = { height: 842, width: 595 }",
+  "UI_SIZE_CHANGED",
   "meanChannelDelta=${result.meanChannelDelta} ui=provided",
 ];
 const diffScriptForbiddenTokens = [
+  '["-z", String(expectedSize.height), String(expectedSize.width)',
   "UI_BMP_FAILED:${options.ui}",
   "result.stderr || result.stdout",
   "BMP_SIGNATURE_INVALID:${path}",
@@ -55,8 +62,17 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", files.visualSpec, [
   'karneSheet.scrollIntoViewIfNeeded()',
   'expect(karneBox?.width).toBe(595)',
   'expect(karneBox?.height).toBeGreaterThanOrEqual(842)',
+  'const karneClip = { height: 842, width: 595',
+  'expect(page).toHaveScreenshot("student-report-card-1024.png"',
+  'clip: karneClip',
   'maxDiffPixelRatio: 0.005',
 ], failures);
+for (const path of visualBaselines) {
+  const size = readPngSize(path);
+  if (size.width !== expectedSize.width || size.height !== expectedSize.height) {
+    failures.push(`${path} must be ${expectedSize.width}x${expectedSize.height}, received ${size.width}x${size.height}.`);
+  }
+}
 
 const scripts = files.packageJson.scripts ?? {};
 const expectedCommand = 'node scripts/check-karne-visual-contract.mjs && UI_VISUAL_ARTIFACT_DIR=artifacts/ui-ux-redesign/local pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts --workers=1 --update-snapshots=none e2e-next/ui-visual-qa-next.spec.ts --grep "rapor çalışma alanı 375/768/1024/1440 görünümde bağlam ve karne taşmadan kalır"';
@@ -90,4 +106,12 @@ function forbidTokens(path, source, tokens, output) {
       output.push(`${path} contains forbidden sensitive output token: ${token}`);
     }
   }
+}
+
+function readPngSize(path) {
+  const buffer = readFileSync(path);
+  if (buffer.toString("hex", 0, 8) !== "89504e470d0a1a0a") {
+    throw new Error(`PNG_SIGNATURE_INVALID:${path}`);
+  }
+  return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
 }

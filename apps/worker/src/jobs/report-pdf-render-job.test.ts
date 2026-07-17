@@ -135,8 +135,22 @@ describe("report PDF render job", () => {
       classId: `class-${(index % 10) + 1}`,
       className: `Sinif ${(index % 10) + 1}`,
       displayName: `Ogrenci ${index + 1}`,
-      outcomes: [{ branch: `Brans ${(index % 10) + 1}`, outcomeCode: `K.${index + 1}`, correct: 1, wrong: 0, blank: 0, net: 1 }],
-      questions: [{ answer: "A", branch: `Brans ${(index % 10) + 1}`, correctAnswer: "A", outcomeCode: `K.${index + 1}`, questionNo: index + 1, status: "CORRECT" }],
+      outcomes: Array.from({ length: 8 }, (_, outcomeIndex) => ({
+        branch: `Brans ${(index % 10) + 1}`,
+        outcomeCode: `K.${index + 1}.${outcomeIndex + 1}`,
+        correct: 1,
+        wrong: 0,
+        blank: 0,
+        net: 1,
+      })),
+      questions: Array.from({ length: 12 }, (_, questionIndex) => ({
+        answer: "A",
+        branch: `Brans ${(index % 10) + 1}`,
+        correctAnswer: "A",
+        outcomeCode: `K.${index + 1}.${(questionIndex % 8) + 1}`,
+        questionNo: questionIndex + 1,
+        status: "CORRECT" as const,
+      })),
       statistics: { general: { rank: index + 1, outOf: 16, percentile: 50 } },
       studentId: `student-${index + 1}`,
       studentNo: String(1000 + index + 1),
@@ -173,12 +187,14 @@ describe("report PDF render job", () => {
     expect(html).toContain("Ogrenci 16");
     expect(html.match(/<h2>Öğrenci Karnesi<\/h2>/g)).toHaveLength(16);
     expect(html.match(/<h2>Detaylı Deneme Analizi<\/h2>/g)).toHaveLength(16);
-    expect(html).toContain("K.16");
+    expect(html).toContain("K.16.8");
+    expect(html).toContain("<td>12</td><td>Brans 6</td><td>K.16.4</td>");
     expect(fallback).toContain("Brans 10");
     expect(fallback).toContain("Sinif 10");
     expect(fallback).toContain("Ogrenci 16");
     expect(fallback).toContain("Ogrenci Karnesi: Ogrenci 16");
-    expect(fallback).toContain("K.16");
+    expect(fallback).toContain("K.16.8");
+    expect(fallback).toContain("12. soru Brans 6: A/A Doğru");
   });
 
   it("yedek PDF ureticisi uzun raporu birden fazla sayfaya boler", async () => {
@@ -190,6 +206,7 @@ describe("report PDF render job", () => {
     const source = pdf.toString("latin1");
 
     expect(source.match(/\/Type\s*\/Page\b/g)).toHaveLength(3);
+    expect(source.match(/\/MediaBox \[0 0 595 842\]/g)).toHaveLength(3);
     expect(source).toContain("Satir 85");
   });
 

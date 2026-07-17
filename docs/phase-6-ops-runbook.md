@@ -785,7 +785,8 @@ Beklenen akış:
   smoke path'i kabul edilmez. Evidence job, artifact upload öncesinde `if: always()` cleanup
   adımıyla `.staging-evidence.env` secret dosyasını workspace'ten siler. Otomatik staging deploy
   bu full evidence adımını koşmaz; eksik go-live artifact'leri otomatik deploy sonucunu hatalı
-  biçimde failed yapmaz.
+  biçimde failed yapmaz ve yalnız `staging-activation-evidence-<tag>` artifact'ini yayımlar.
+  `staging-production-evidence-<tag>` adı yalnız manuel `full_evidence=true` zincirine ayrılmıştır.
 - Full evidence zinciri PASS olduktan sonra workflow aynı job içinde
   `STAGING_RELEASE_ARTIFACTS_TARGET=$PWD/artifacts/staging pnpm staging:release-artifacts:check`
   komutunu çalıştırır. Bu kontrol indirilecek `staging-production-evidence-<tag>` artifact setinde

@@ -1375,6 +1375,7 @@ const attendanceRecordSchema = objectSchema({
   id: stringSchema(),
   tenantId: stringSchema(),
   studentId: stringSchema(),
+  classId: stringSchema(),
   courseId: stringSchema(),
   termId: stringSchema(),
   date: stringSchema({ format: "date" }),

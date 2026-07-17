@@ -69,9 +69,7 @@ export class AttendanceService {
     const dateFrom = optionalDate(filters.dateFrom);
     const dateTo = optionalDate(filters.dateTo);
     if (dateFrom && dateTo && dateFrom > dateTo) throw new BadRequestException("ATTENDANCE_DATE_RANGE_INVALID");
-    const enrollments = filters.classId || isTeacherSubjectContext(context)
-      ? await this.listEnrollmentsForRecords(context, records)
-      : [];
+    const enrollments = await this.listEnrollmentsForRecords(context, records);
     const scopedRecords = await this.filterForTeacherScope(context, records, enrollments);
     if (filters.studentId && isTeacherSubjectContext(context) && scopedRecords.length === 0) {
       const today = new Date().toISOString().slice(0, 10);
@@ -88,7 +86,11 @@ export class AttendanceService {
     return classRecords
       .filter((record) => !date || record.date === date)
       .filter((record) => !dateFrom || record.date >= dateFrom)
-      .filter((record) => !dateTo || record.date <= dateTo);
+      .filter((record) => !dateTo || record.date <= dateTo)
+      .map((record) => {
+        const classId = findEnrollmentAtDate(enrollments, record.studentId, record.date)?.classId;
+        return classId ? { ...record, classId } : record;
+      });
   }
 
   async aggregate(context: RequestContext, filters: AttendanceListFilters = {}): Promise<AttendanceAggregateRecord> {

@@ -20,6 +20,7 @@ try {
   expectCheckerFailure("mutable release candidate", (report) => {
     report.releaseCandidate = "ghcr.io/4rmus/o-okul/api:staging-latest";
   }, ["releaseCandidate tag'i sourceCommitSha ile birebir eşleşmeli."]);
+  expectRemoteReferenceFailure();
   expectProcessEnvOverride();
   expectFailure("missing phase references", removeLine("UI_UX_REDESIGN_PHASE_3_REFERENCES"), [
     "UI_UX_REDESIGN_PHASE_3_REFERENCES boş bırakılamaz.",
@@ -106,6 +107,20 @@ function expectCheckerFailure(label, mutateReport, expectedMessages) {
   });
   if (result.status === 0) failContract(`${label} checker senaryosu kırılmalı.`, result);
   assertMessages(result, label, expectedMessages);
+}
+
+function expectRemoteReferenceFailure() {
+  const report = JSON.parse(readFileSync(outputPath, "utf8"));
+  report.stagingProductionEvidence.evidenceReferences[0] = "url:https://127.0.0.1:1/unreachable.json";
+  const failingOutputPath = join(root, "reports", "unreachable-remote-reference.json");
+  writeFileSync(failingOutputPath, `${JSON.stringify(report, null, 2)}\n`);
+  const result = spawnSync(process.execPath, ["scripts/check-ui-ux-redesign-evidence.mjs", pathToFileURL(failingOutputPath).href], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    env: { ...process.env, UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES: "1" },
+  });
+  if (result.status === 0) failContract("erişilemeyen uzak kanıt referansı checker senaryosunu kırmalı.", result);
+  assertMessages(result, "unreachable remote reference", ["Uzak kanıt referansı okunamadı: https://127.0.0.1:1/unreachable.json"]);
 }
 
 function expectFailure(label, envContents, expectedMessages) {

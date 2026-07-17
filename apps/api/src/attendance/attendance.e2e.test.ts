@@ -49,6 +49,7 @@ describe("Attendance API", () => {
             id: "attendance-a",
             tenantId: "tenant-a",
             studentId: "student-a",
+            classId: "class-a",
             courseId: "course-math",
             termId: "term-2026-spring",
             date: "2026-06-03",
@@ -163,7 +164,7 @@ describe("Attendance API", () => {
       .set("Authorization", `Bearer ${teacherAAccessToken}`)
       .expect(200)
       .expect(({ body: records }) => {
-        expect(records).toEqual([expect.objectContaining({ studentId: "student-a", date: body.date, status: "LATE" })]);
+        expect(records).toEqual([expect.objectContaining({ studentId: "student-a", classId: "class-a", date: body.date, status: "LATE" })]);
       });
 
     await request(server)

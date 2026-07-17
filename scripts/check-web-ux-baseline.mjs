@@ -153,6 +153,7 @@ requireScriptIncludes("ci", "pnpm web:performance:check");
 requireScriptIncludes("ci", "pnpm web:a11y:check");
 requireScriptIncludes("ci", "pnpm web:ux-baseline:check");
 requireScriptIncludes("ci", "pnpm web:ux-contract:check");
+requireScriptIncludes("ci", "pnpm ui-ux-redesign:visual-qa");
 
 if (webPackageJson.scripts?.a11y !== "playwright test -c playwright.next.config.ts e2e-next/a11y-next.spec.ts") {
   failures.push("apps/web/package.json a11y script must run e2e-next/a11y-next.spec.ts.");

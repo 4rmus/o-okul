@@ -47,7 +47,7 @@ Tokenlar CSS custom property olarak baslar ve `apps/web/app/globals.css` icinde 
 - `FilterBar`, `Toolbar`, `Pagination`
 - `Tabs`, `TabButton`, `SegmentedControl`
 - `Field`, `Select`, `Textarea`
-- `Alert`, `Skeleton`, `Drawer`, `Tooltip`
+- `Alert`, `Skeleton`, `Tooltip`
 - Genişletilmis `DataTable`: caption, description, density, loading/error/empty rows, align,
   priority ve sticky column metadata.
 - `CrudPage` kisi ve kurum operasyon listelerinde opsiyonel summary slotu ile tablo ustu sayisal

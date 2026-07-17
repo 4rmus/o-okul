@@ -644,11 +644,14 @@ jobs:
           GITHUB_CI_EVIDENCE_TARGET="file://$PWD/artifacts/staging/reports/github-ci.json" pnpm github-ci:check
 
       - name: Generate UI/UX redesign evidence
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}
         shell: bash
         env:
           IMAGE_PREFIX: ${{ needs.build-images.outputs.image-prefix }}
           IMAGE_TAG: ${{ needs.build-images.outputs.image-tag }}
           SOURCE_COMMIT_SHA: ${{ needs.build-images.outputs.deploy-sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+          UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES: "1"
         run: |
           if [ "$IMAGE_TAG" != "$SOURCE_COMMIT_SHA" ]; then
             echo "UI/UX release evidence requires the deployed image tag to equal the source commit SHA." >&2
@@ -677,9 +680,13 @@ jobs:
             echo "SENTRY_RELEASE=$IMAGE_TAG"
             echo "ROLLBACK_IMAGE_TAG=$ROLLBACK_IMAGE_TAG"
             echo "GITHUB_CI_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/github-ci.json"
-            echo "UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json"
             echo "PRODUCTION_EVIDENCE_SUMMARY_TARGET=file://$PWD/artifacts/staging/release-summary-${IMAGE_TAG}.json"
           } >> .staging-evidence.env
+
+      - name: Append full UI/UX release evidence metadata
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}
+        shell: bash
+        run: echo "UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json" >> .staging-evidence.env
 
       - name: Run first staging evidence gates
         shell: bash
@@ -695,6 +702,8 @@ jobs:
         shell: bash
         env:
           IMAGE_TAG: ${{ needs.build-images.outputs.image-tag }}
+          GITHUB_TOKEN: ${{ github.token }}
+          UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES: "1"
         run: |
           mkdir -p artifacts/staging
           pnpm prod:evidence:check -- \
@@ -713,9 +722,11 @@ jobs:
         shell: bash
         env:
           GITHUB_CI_EVIDENCE_TARGET: file://${{ github.workspace }}/artifacts/staging/reports/github-ci.json
+          GITHUB_TOKEN: ${{ github.token }}
           UI_UX_REDESIGN_EVIDENCE_TARGET: file://${{ github.workspace }}/artifacts/staging/reports/ui-ux-redesign.json
           UI_UX_PROFESSIONALIZATION_SOURCE_SHA: ${{ needs.build-images.outputs.deploy-sha }}
           UI_UX_PROFESSIONALIZATION_FULL_EVIDENCE: "1"
+          UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES: "1"
         run: pnpm ui-ux-professionalization:completion:check
 
       - name: Cleanup staging evidence env
@@ -724,7 +735,14 @@ jobs:
         run: rm -f .staging-evidence.env
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.full_evidence != true) }}
+        with:
+          name: staging-activation-evidence-${{ needs.build-images.outputs.image-tag }}
+          path: artifacts/staging
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}
         with:
           name: staging-production-evidence-${{ needs.build-images.outputs.image-tag }}
           path: artifacts/staging

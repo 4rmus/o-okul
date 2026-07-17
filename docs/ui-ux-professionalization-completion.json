@@ -35,15 +35,15 @@
       "title": "Günlük sınıf yoklaması",
       "requirements": ["Sınıf ve tarih bazlı tek atomik yazma", "Tarihsel öğrenci üyeliği", "Atanmış öğretmen kapsamı"],
       "implementationPaths": ["apps/api/src/attendance", "apps/web/app/(app)/kurum/devamsizlik", "apps/web/app/(app)/portals/teacher-portal-page.tsx"],
-      "verificationCommands": ["pnpm test", "pnpm typecheck"],
+      "verificationCommands": ["pnpm test", "pnpm typecheck", "pnpm web:ux-contract:check"],
       "requirementEvidence": {
         "Sınıf ve tarih bazlı tek atomik yazma": {
           "paths": ["apps/api/src/attendance/attendance.e2e.test.ts", "apps/api/src/attendance/attendance.service.test.ts"],
           "commands": ["pnpm test"]
         },
         "Tarihsel öğrenci üyeliği": {
-          "paths": ["apps/api/src/attendance/attendance.service.test.ts", "apps/api/src/attendance/attendance-store.test.ts"],
-          "commands": ["pnpm test"]
+          "paths": ["apps/api/src/attendance/attendance.service.test.ts", "apps/api/src/attendance/attendance-store.test.ts", "apps/web/e2e-next/data-table-mobile-contract-next.spec.ts"],
+          "commands": ["pnpm test", "pnpm web:ux-contract:check"]
         },
         "Atanmış öğretmen kapsamı": {
           "paths": ["apps/api/src/attendance/attendance.e2e.test.ts", "apps/api/src/school/assert-teacher-assigned.test.ts"],
@@ -111,7 +111,7 @@
           "commands": ["pnpm web:ux-contract:check"]
         },
         "Tembel rapor yükleme": {
-          "paths": ["apps/web/app/(app)/kurum/siniflar/class-detail-page.tsx", "apps/web/e2e-next/report-workspace-contract-next.spec.ts"],
+          "paths": ["apps/web/app/(app)/kurum/siniflar/class-detail-page.tsx", "apps/web/e2e-next/data-table-mobile-contract-next.spec.ts"],
           "commands": ["pnpm web:ux-contract:check"]
         },
         "N+1 sorguların kaldırılması": {
@@ -134,11 +134,11 @@
           "commands": ["pnpm test", "pnpm web:ux-contract:check"]
         },
         "Dondurulmuş öğrenci kimliği": {
-          "paths": ["apps/worker/src/jobs/postgres-report-generation-adapter.test.ts", "apps/worker/src/jobs/report-pdf-render-job.test.ts"],
+          "paths": ["apps/worker/src/jobs/postgres-report-generation-adapter.test.ts", "apps/worker/src/jobs/report-generation-job.test.ts"],
           "commands": ["pnpm test"]
         },
         "Eksiksiz PDF ve Excel çıktısı": {
-          "paths": ["apps/worker/src/jobs/report-pdf-render-job.test.ts", "apps/web/e2e-next/ui-visual-qa-next.spec.ts", "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts/student-report-card-1024-darwin.png", "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts/student-report-card-1024-linux.png"],
+          "paths": ["apps/api/src/report/report-generation.service.test.ts", "apps/worker/src/jobs/report-pdf-render-job.test.ts", "apps/web/e2e-next/ui-visual-qa-next.spec.ts", "scripts/check-karne-visual-contract.mjs", "scripts/compare-karne-visual-evidence.mjs", "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts/student-report-card-1024-darwin.png", "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts/student-report-card-1024-linux.png"],
           "commands": ["pnpm test", "pnpm karne:visual-contract:check"]
         }
       },
@@ -150,11 +150,11 @@
       "title": "Tam yüzey tutarlılığı ve release kanıtı",
       "requirements": ["Mobil ve erişilebilirlik sözleşmesi", "RBAC ve PII güvenliği", "CI, staging ve çalışan image kanıtı"],
       "implementationPaths": ["apps/web/e2e-next", "scripts/generate-ui-ux-redesign-evidence.mjs", ".github/workflows/staging-deploy.yml"],
-      "verificationCommands": ["pnpm test", "pnpm web:a11y:check", "pnpm web:ux-contract:check", "pnpm prod:evidence:templates:check"],
+      "verificationCommands": ["pnpm test", "pnpm web:a11y:check", "pnpm web:ux-contract:check", "pnpm ui-ux-redesign:visual-qa", "pnpm prod:evidence:templates:check"],
       "requirementEvidence": {
         "Mobil ve erişilebilirlik sözleşmesi": {
           "paths": ["apps/web/e2e-next/a11y-next.spec.ts", "apps/web/e2e-next/ui-visual-qa-next.spec.ts"],
-          "commands": ["pnpm web:a11y:check", "pnpm web:ux-contract:check"]
+          "commands": ["pnpm web:a11y:check", "pnpm web:ux-contract:check", "pnpm ui-ux-redesign:visual-qa"]
         },
         "RBAC ve PII güvenliği": {
           "paths": ["apps/api/src/me/me-access-matrix.e2e.test.ts", "apps/web/e2e-next/role-preview-contract-next.spec.ts", "apps/web/e2e-next/governance-evidence-contract-next.spec.ts"],

@@ -5483,7 +5483,14 @@ function runStagingEvidenceEnvNegativeCheck() {
         shell: bash
         run: rm -f .staging-evidence.env`;
     const uploadBlock = `      - uses: actions/upload-artifact@v4
-        if: always()
+        if: \${{ always() && (github.event_name != 'workflow_dispatch' || inputs.full_evidence != true) }}
+        with:
+          name: staging-activation-evidence-\${{ needs.build-images.outputs.image-tag }}
+          path: artifacts/staging
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        if: \${{ always() && github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}
         with:
           name: staging-production-evidence-\${{ needs.build-images.outputs.image-tag }}
           path: artifacts/staging

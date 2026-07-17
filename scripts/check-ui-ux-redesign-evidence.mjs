@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const target = process.env.UI_UX_REDESIGN_EVIDENCE_TARGET ?? process.argv[2];
 const allowExampleEvidence = process.env.UI_UX_REDESIGN_ALLOW_EXAMPLE_EVIDENCE === "1";
+const verifyRemoteReferences = process.env.UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES === "1";
 
 const topLevelKeys = [
   "result",
@@ -67,6 +68,9 @@ requireTargetUrl(targetUrl);
 
 const report = await readJsonTarget(targetUrl);
 const failures = validateReport(report);
+if (failures.length === 0 && verifyRemoteReferences) {
+  failures.push(...(await validateRemoteReferences(report)));
+}
 
 if (failures.length > 0) fail(failures);
 
@@ -124,6 +128,66 @@ function validateReport(report) {
   if (Array.isArray(report.openRisks) && report.openRisks.length > 0) failures.push("openRisks boş olmalı.");
   scanRawPii(report, failures);
   return failures;
+}
+
+async function validateRemoteReferences(report) {
+  const references = [
+    ...(report.stagingProductionEvidence?.evidenceReferences ?? []),
+    ...(report.phaseEvidence ?? []).flatMap((item) => item?.evidenceReferences ?? []),
+    ...(report.viewportCoverage ?? []).flatMap((item) => item?.evidenceReferences ?? []),
+  ];
+  const urls = [...new Set(references.map(remoteReferenceUrl).filter(Boolean))];
+  const failures = [];
+
+  await Promise.all(
+    urls.map(async (url) => {
+      try {
+        const request = remoteReferenceFetchRequest(url);
+        const response = await fetch(request.url, request.options);
+        if (!response.ok) failures.push(`Uzak kanıt referansı okunamadı: HTTP ${response.status} ${url}`);
+        await response.body?.cancel();
+      } catch {
+        failures.push(`Uzak kanıt referansı okunamadı: ${url}`);
+      }
+    }),
+  );
+
+  return failures;
+}
+
+function remoteReferenceFetchRequest(url) {
+  const token = process.env.GITHUB_TOKEN;
+  const githubRunApiUrl = token ? githubActionsRunApiUrl(url) : null;
+  const headers = githubRunApiUrl
+    ? {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      }
+    : undefined;
+  return { url: githubRunApiUrl ?? url, options: { redirect: "follow", signal: AbortSignal.timeout(10_000), headers } };
+}
+
+function githubActionsRunApiUrl(value) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (url.hostname !== "github.com") return null;
+  const match = url.pathname.match(/^\/([^/]+)\/([^/]+)\/actions\/runs\/(\d+)\/?$/);
+  if (!match) return null;
+  const [, owner, repo, runId] = match;
+  return `https://api.github.com/repos/${owner}/${repo}/actions/runs/${runId}`;
+}
+
+function remoteReferenceUrl(reference) {
+  if (typeof reference !== "string") return null;
+  const separator = reference.indexOf(":");
+  const prefix = reference.slice(0, separator + 1).toLowerCase();
+  const candidate = prefix === "url:" || prefix === "run:" ? reference.slice(separator + 1) : reference;
+  return candidate.startsWith("https://") ? candidate : null;
 }
 
 function validateLocal(value, failures) {
