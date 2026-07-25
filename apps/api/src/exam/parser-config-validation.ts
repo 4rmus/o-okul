@@ -59,7 +59,14 @@ export const parserConfigSuggestionSchema = z.object({
 
 export const parserConfigSuggestionBodySchema = z.object({
   fileBase64: optionalTrimmedString,
-  preset: z.enum(["OPTIK_7108_LGS"]).optional(),
+  preset: z.enum([
+    "OPTIK_7108_LGS",
+    "OPTIK_129_TYT",
+    "OPTIK_129_AYT",
+    "YANIT_TYT",
+    "YANIT_AYT",
+    "OPTIK_840_LGS",
+  ]).optional(),
   sampleSize: z.number().int().positive().optional(),
   sampleText: optionalTrimmedString,
 }).strict() satisfies z.ZodType<ParserConfigSuggestionRequest>;

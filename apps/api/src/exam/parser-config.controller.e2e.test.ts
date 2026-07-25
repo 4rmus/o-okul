@@ -116,6 +116,32 @@ describe("ParserConfigController", () => {
     expect(repository.inputs).toHaveLength(0);
   });
 
+  it.each([
+    ["OPTIK_129_TYT", 120],
+    ["OPTIK_129_AYT", 160],
+    ["YANIT_TYT", 120],
+    ["YANIT_AYT", 160],
+    ["OPTIK_840_LGS", 90],
+  ] as const)("öneri endpointi %s presetini örnek dosya istemeden kabul eder", async (preset, questionCount) => {
+    const issued = await login("admin-a@example.test");
+
+    const response = await request(server)
+      .post("/exams/exam-a/parser-configs/suggestions")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ preset })
+      .expect(201);
+
+    expect(response.body.suggestion).toMatchObject({
+      delimiter: "FIXED",
+      confidence: "medium",
+      warnings: ["REAL_TXT_DAT_FIXTURE_NOT_VERIFIED"],
+      fieldMapping: {
+        answers: { kind: "fixed", estimatedQuestionCount: questionCount },
+      },
+    });
+    expect(repository.inputs).toHaveLength(0);
+  });
+
   it("TEACHER öneri üretemez", async () => {
     const issued = await login("teacher-a@example.test");
 

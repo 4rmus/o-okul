@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { type Queryable, type TenantQueryable, withTenantDb } from "@o-okul/db";
+import type { ExamType } from "@o-okul/shared-types";
 import type { ParserConfigSuggestion, ParserDelimiter } from "./format-analyzer-service.js";
 import {
   type ExamEvaluationJobAdapter,
@@ -48,7 +49,7 @@ export class PostgresExamEvaluationAdapter implements ExamEvaluationJobAdapter {
         answers: parseStudentAnswers(row.answers),
         bookletVariants: variants.rows.map(toExamBookletVariant),
         answerKey: parseAnswerKey(row.keyData),
-        scoringConfig: parseScoringConfig(row.scoringConfig, row.answerKeyVersion, this.now()),
+        scoringConfig: parseScoringConfig(row.scoringConfig, parseExamType(row.examType), row.answerKeyVersion, this.now()),
       };
     });
   }
@@ -114,7 +115,8 @@ async function findEvaluationInput(
            pa."answers" AS "answers",
            ak."keyData" AS "keyData",
            ak."scoringConfig" AS "scoringConfig",
-           ak."version" AS "answerKeyVersion"
+           ak."version" AS "answerKeyVersion",
+           e."examType" AS "examType"
          FROM "ParsedAnswer" pa
          INNER JOIN "RawImport" ri
            ON ri."tenantId" = pa."tenantId"
@@ -128,6 +130,9 @@ async function findEvaluationInput(
          INNER JOIN "AnswerKey" ak
            ON ak."tenantId" = pa."tenantId"
           AND ak."examId" = pa."examId"
+         INNER JOIN "Exam" e
+           ON e."tenantId" = pa."tenantId"
+          AND e."id" = pa."examId"
          WHERE pa."tenantId" = $1
            AND pa."rawImportId" = $2
            AND pa."participantId" = $3
@@ -137,6 +142,7 @@ async function findEvaluationInput(
            AND ri."deletedAt" IS NULL
            AND ep."deletedAt" IS NULL
            AND ak."deletedAt" IS NULL
+           AND e."deletedAt" IS NULL
          LIMIT 1`,
     [input.tenantId, input.rawImportId, input.participantId, input.answerKeyId],
   );
@@ -263,6 +269,7 @@ interface ExamEvaluationInputRow {
   keyData: unknown;
   scoringConfig: unknown;
   answerKeyVersion: string;
+  examType: unknown;
 }
 
 interface ExamBookletVariantRow {
@@ -392,9 +399,15 @@ function toExamBookletVariant(row: ExamBookletVariantRow): ExamBookletVariantInp
   };
 }
 
-function parseScoringConfig(value: unknown, answerKeyVersion: string, computedAt: string): ScoringConfig {
+function parseScoringConfig(
+  value: unknown,
+  examType: ExamType | undefined,
+  answerKeyVersion: string,
+  computedAt: string,
+): ScoringConfig {
   const record = value === null || value === undefined ? {} : asRecord(value);
   return {
+    ...(examType ? { examType } : {}),
     wrongPenalty: typeof record.wrongPenalty === "number" ? record.wrongPenalty : defaultWrongPenalty,
     rawScoreMultiplier: optionalNumber(record.rawScoreMultiplier),
     standardScoreBase: optionalNumber(record.standardScoreBase),
@@ -403,6 +416,16 @@ function parseScoringConfig(value: unknown, answerKeyVersion: string, computedAt
     engineVersion: scoringEngineVersion,
     computedAt,
   };
+}
+
+function parseExamType(value: unknown): ExamType | undefined {
+  if (value === null || value === undefined || value === "") {
+    return undefined;
+  }
+  if (value === "SCHOOL" || value === "LGS" || value === "TYT" || value === "AYT" || value === "KPSS") {
+    return value;
+  }
+  throw new Error("EXAM_EVALUATION_INPUT_INVALID");
 }
 
 function parseScoringResult(value: unknown): ScoringResult {

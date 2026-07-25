@@ -305,6 +305,7 @@ function readOptikRowMeta(content: string): Map<number, { studentNo: string; boo
 
 function createScoringConfig() {
   return {
+    examType: "LGS" as const,
     answerKeyVersion: ANSWER_KEY_VERSION,
     computedAt: COMPUTED_AT,
     engineVersion: scoringEngineVersion,
@@ -457,9 +458,9 @@ async function seedExam(client: pg.PoolClient, exam: SeedExam): Promise<void> {
 
   await client.query(
     `
-      INSERT INTO "Exam" ("id","tenantId","title","status","updatedAt")
-      VALUES ($1,$2,$3,'PUBLISHED',now())
-      ON CONFLICT ("id") DO UPDATE SET "title"=EXCLUDED."title","status"=EXCLUDED."status","updatedAt"=now()
+      INSERT INTO "Exam" ("id","tenantId","title","examType","status","updatedAt")
+      VALUES ($1,$2,$3,'LGS','PUBLISHED',now())
+      ON CONFLICT ("id") DO UPDATE SET "title"=EXCLUDED."title","examType"=EXCLUDED."examType","status"=EXCLUDED."status","updatedAt"=now()
     `,
     [exam.id, TENANT_ID, exam.title],
   );

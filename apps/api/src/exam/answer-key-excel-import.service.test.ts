@@ -130,6 +130,74 @@ describe("AnswerKeyExcelImportService", () => {
     expect(repository.records).toHaveLength(0);
     expect(learningOutcomes.records).toEqual([]);
   });
+
+  it.each([
+    {
+      examType: "TYT",
+      questionCount: 120,
+      sections: [
+        { branch: "Türkçe", count: 40 },
+        { branch: "Sosyal Bilimler", count: 20 },
+        { branch: "Temel Matematik", count: 40 },
+        { branch: "Fen Bilimleri", count: 20 },
+      ],
+    },
+    {
+      examType: "AYT",
+      questionCount: 160,
+      sections: [
+        { branch: "TDE-Sosyal-1", count: 40 },
+        { branch: "Sosyal-2", count: 40 },
+        { branch: "Matematik", count: 40 },
+        { branch: "Fen Bilimleri", count: 40 },
+      ],
+    },
+  ])("$examType sentetik workbook için $questionCount soru dry-run ve import eder", async ({
+    examType,
+    questionCount,
+    sections,
+  }) => {
+    const repository = new FakeAnswerKeyRepository();
+    const service = new AnswerKeyExcelImportService(new AnswerKeyService(repository));
+    const fileBase64 = await createPlaceholderWorkbook(sections);
+    const input = {
+      examId: `exam-${examType.toLowerCase()}`,
+      version: "placeholder-v1",
+      fileBase64,
+    };
+
+    const dryRun = await service.dryRun(createContext(), input);
+    const imported = await service.import(createContext(), input);
+
+    expect(dryRun).toMatchObject({
+      questionCount,
+      bookletVariants: [{ code: "B", questionCount }],
+      wouldImport: true,
+    });
+    expect(dryRun.branches).toEqual(
+      [...sections]
+        .sort((left, right) => left.branch.localeCompare(right.branch))
+        .map(({ branch, count }) => ({ branch, questionCount: count })),
+    );
+    expect(imported.answerKey.questionCount).toBe(questionCount);
+    expect(repository.records[0]?.questions).toHaveLength(questionCount);
+    expect(repository.records[0]?.bookletVariants?.[0]?.permutation).toEqual(
+      sections.flatMap(({ count }, sectionIndex) => {
+        const offset = sections.slice(0, sectionIndex).reduce((sum, section) => sum + section.count, 0);
+        return Array.from({ length: count }, (_unused, index) => offset + count - index);
+      }),
+    );
+  });
+
+  it.each([0, 100])("%i soru içeren workbook'u reddeder", async (questionCount) => {
+    const service = new AnswerKeyExcelImportService(new AnswerKeyService(new FakeAnswerKeyRepository()));
+
+    await expect(service.dryRun(createContext(), {
+      examId: "exam-unsupported",
+      version: "v1",
+      fileBase64: await createPlaceholderWorkbook(questionCount ? [{ branch: "Lorem", count: questionCount }] : []),
+    })).rejects.toThrow("ANSWER_KEY_IMPORT_QUESTION_COUNT_INVALID");
+  });
 });
 
 function createContext(): RequestContext {
@@ -224,6 +292,29 @@ async function createWorkbookWithLessonHeader(): Promise<string> {
         localQuestionNo,
         localQuestionNo,
         lesson.answer,
+      ]);
+      globalQuestionNo += 1;
+    }
+  }
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer).toString("base64");
+}
+
+async function createPlaceholderWorkbook(sections: Array<{ branch: string; count: number }>): Promise<string> {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Lorem Ipsum");
+  worksheet.addRow(["Bölüm", "Branş", "Kazanım", "Konu", "Soru Numarası", "B Kitapçığı Karşılığı", "Cevap"]);
+  let globalQuestionNo = 1;
+  for (const section of sections) {
+    for (let localQuestionNo = 1; localQuestionNo <= section.count; localQuestionNo += 1) {
+      worksheet.addRow([
+        section.branch,
+        section.branch,
+        `LOREM-${globalQuestionNo}`,
+        "Lorem ipsum",
+        localQuestionNo,
+        section.count - localQuestionNo + 1,
+        ["A", "B", "C", "D", "E"][(globalQuestionNo - 1) % 5],
       ]);
       globalQuestionNo += 1;
     }

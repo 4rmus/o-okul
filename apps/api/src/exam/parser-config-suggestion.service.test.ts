@@ -2,6 +2,76 @@ import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../context/request-context.js";
 import { ParserConfigSuggestionService } from "./parser-config-suggestion.service.js";
 
+const newPresetCases = [
+  {
+    preset: "OPTIK_129_TYT",
+    nationalId: { kind: "fixed", start: 36, length: 11 },
+    studentNo: { kind: "fixed", start: 11, length: 5 },
+    bookletType: { kind: "fixed", start: 55, length: 1 },
+    estimatedQuestionCount: 120,
+    segments: [
+      { start: 56, length: 40 },
+      { start: 96, length: 20 },
+      { start: 142, length: 40 },
+      { start: 182, length: 20 },
+    ],
+  },
+  {
+    preset: "OPTIK_129_AYT",
+    nationalId: { kind: "fixed", start: 36, length: 11 },
+    studentNo: { kind: "fixed", start: 11, length: 5 },
+    bookletType: { kind: "fixed", start: 55, length: 1 },
+    estimatedQuestionCount: 160,
+    segments: [
+      { start: 56, length: 40 },
+      { start: 96, length: 40 },
+      { start: 142, length: 40 },
+      { start: 182, length: 40 },
+    ],
+  },
+  {
+    preset: "YANIT_TYT",
+    nationalId: { kind: "fixed", start: 12, length: 11 },
+    studentNo: { kind: "fixed", start: 6, length: 6 },
+    bookletType: { kind: "fixed", start: 48, length: 1 },
+    estimatedQuestionCount: 120,
+    segments: [
+      { start: 49, length: 40 },
+      { start: 95, length: 20 },
+      { start: 141, length: 40 },
+      { start: 187, length: 20 },
+    ],
+  },
+  {
+    preset: "YANIT_AYT",
+    nationalId: { kind: "fixed", start: 12, length: 11 },
+    studentNo: { kind: "fixed", start: 6, length: 6 },
+    bookletType: { kind: "fixed", start: 48, length: 1 },
+    estimatedQuestionCount: 160,
+    segments: [
+      { start: 49, length: 40 },
+      { start: 95, length: 40 },
+      { start: 141, length: 40 },
+      { start: 187, length: 40 },
+    ],
+  },
+  {
+    preset: "OPTIK_840_LGS",
+    nationalId: { kind: "fixed", start: 34, length: 11 },
+    studentNo: { kind: "fixed", start: 9, length: 5 },
+    bookletType: { kind: "fixed", start: 59, length: 1 },
+    estimatedQuestionCount: 90,
+    segments: [
+      { start: 160, length: 20 },
+      { start: 180, length: 10 },
+      { start: 200, length: 10 },
+      { start: 220, length: 10 },
+      { start: 240, length: 20 },
+      { start: 260, length: 20 },
+    ],
+  },
+] as const;
+
 describe("ParserConfigSuggestionService", () => {
   it("örnek metinden parser config önerisi üretir", () => {
     const service = new ParserConfigSuggestionService();
@@ -74,6 +144,37 @@ describe("ParserConfigSuggestionService", () => {
         },
       },
     });
+  });
+
+  it.each(newPresetCases)("$preset presetini referans kolonları ve fixture uyarısıyla döndürür", (testCase) => {
+    const service = new ParserConfigSuggestionService();
+
+    const result = service.suggest(createContext(), {
+      examId: "exam-a",
+      preset: testCase.preset,
+    });
+
+    expect(result).toMatchObject({
+      examId: "exam-a",
+      status: "suggested",
+      suggestion: {
+        delimiter: "FIXED",
+        confidence: "medium",
+        warnings: ["REAL_TXT_DAT_FIXTURE_NOT_VERIFIED"],
+        fieldMapping: {
+          nationalId: testCase.nationalId,
+          studentNo: testCase.studentNo,
+          bookletType: testCase.bookletType,
+          answers: {
+            kind: "fixed",
+            estimatedQuestionCount: testCase.estimatedQuestionCount,
+            segments: testCase.segments,
+          },
+        },
+      },
+    });
+    expect(testCase.segments.reduce((total, segment) => total + segment.length, 0))
+      .toBe(testCase.estimatedQuestionCount);
   });
 
   it("örnek yoksa analiz etmeden 400 döner", () => {

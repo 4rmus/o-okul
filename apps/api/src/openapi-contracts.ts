@@ -1680,7 +1680,10 @@ const parserConfigSuggestionLooseSchema = objectSchema({
 
 const parserConfigSuggestionRequestSchema = objectSchema({
   fileBase64: stringSchema(),
-  preset: { type: "string", enum: ["OPTIK_7108_LGS"] },
+  preset: {
+    type: "string",
+    enum: ["OPTIK_7108_LGS", "OPTIK_129_TYT", "OPTIK_129_AYT", "YANIT_TYT", "YANIT_AYT", "OPTIK_840_LGS"],
+  },
   sampleSize: integerSchema({ minimum: 1 }),
   sampleText: stringSchema(),
 }, [], {

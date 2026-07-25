@@ -29,6 +29,90 @@ const hostileOptikReferences = [
   quarantineRawAnswers,
   quarantineRawLine,
 ] as const;
+const newOpticalFormCases = [
+  {
+    preset: "OPTIK_129_TYT",
+    name: "OPTİK 129 — TYT",
+    rowLength: 223,
+    questionCount: 120,
+    rows: [
+      ["TC KİMLİK NO", "37", "47"],
+      ["OKUL NO", "12", "16"],
+      ["KİTAPÇIK TÜRÜ", "56", "56"],
+      ["AD SOYAD", "17", "36"],
+      ["TÜRKÇE / TÜRK DİLİ VE EDEBİYATI - SOSYAL BİLİMLER - 1", "57", "96"],
+      ["SOSYAL BİLİMLER / SOSYAL BİLİMLER - 2", "97", "142"],
+      ["MATEMATİK", "143", "182"],
+      ["FEN BİLİMLERİ", "183", "223"],
+    ],
+  },
+  {
+    preset: "OPTIK_129_AYT",
+    name: "OPTİK 129 — AYT",
+    rowLength: 223,
+    questionCount: 160,
+    rows: [
+      ["TC KİMLİK NO", "37", "47"],
+      ["OKUL NO", "12", "16"],
+      ["KİTAPÇIK TÜRÜ", "56", "56"],
+      ["AD SOYAD", "17", "36"],
+      ["TÜRKÇE / TÜRK DİLİ VE EDEBİYATI - SOSYAL BİLİMLER - 1", "57", "96"],
+      ["SOSYAL BİLİMLER / SOSYAL BİLİMLER - 2", "97", "142"],
+      ["MATEMATİK", "143", "182"],
+      ["FEN BİLİMLERİ", "183", "223"],
+    ],
+  },
+  {
+    preset: "YANIT_TYT",
+    name: "YANIT TYT",
+    rowLength: 233,
+    questionCount: 120,
+    rows: [
+      ["TC KİMLİK NO", "13", "23"],
+      ["OKUL NO", "7", "12"],
+      ["KİTAPÇIK TÜRÜ", "49", "49"],
+      ["AD SOYAD", "24", "43"],
+      ["TÜRKÇE / TÜRK DİLİ VE EDEBİYATI - SOSYAL BİLİMLER - 1", "50", "95"],
+      ["SOSYAL BİLİMLER / SOSYAL BİLİMLER - 2", "96", "141"],
+      ["MATEMATİK", "142", "187"],
+      ["FEN BİLİMLERİ", "188", "233"],
+    ],
+  },
+  {
+    preset: "YANIT_AYT",
+    name: "YANIT AYT",
+    rowLength: 233,
+    questionCount: 160,
+    rows: [
+      ["TC KİMLİK NO", "13", "23"],
+      ["OKUL NO", "7", "12"],
+      ["KİTAPÇIK TÜRÜ", "49", "49"],
+      ["AD SOYAD", "24", "43"],
+      ["TÜRKÇE / TÜRK DİLİ VE EDEBİYATI - SOSYAL BİLİMLER - 1", "50", "95"],
+      ["SOSYAL BİLİMLER / SOSYAL BİLİMLER - 2", "96", "141"],
+      ["MATEMATİK", "142", "187"],
+      ["FEN BİLİMLERİ", "188", "233"],
+    ],
+  },
+  {
+    preset: "OPTIK_840_LGS",
+    name: "OPTİK 840 — LGS",
+    rowLength: 280,
+    questionCount: 90,
+    rows: [
+      ["TC KİMLİK NO", "35", "45"],
+      ["OKUL NO", "10", "14"],
+      ["KİTAPÇIK TÜRÜ", "60", "60"],
+      ["AD SOYAD", "15", "34"],
+      ["TÜRKÇE", "161", "180"],
+      ["SOSYAL BİLGİLER / T.C. İNKILAP TARİHİ VE ATATÜRKÇÜLÜK", "181", "200"],
+      ["DİN KÜLTÜRÜ VE AHLAK BİLGİSİ", "201", "220"],
+      ["İNGİLİZCE", "221", "240"],
+      ["MATEMATİK", "241", "260"],
+      ["FEN BİLİMLERİ", "261", "280"],
+    ],
+  },
+] as const;
 
 test.describe("Optik çalışma alanı sözleşmesi", () => {
   test("aktif sınav ve adım URL state ile korunur", async ({ page }) => {
@@ -47,6 +131,58 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await expect(page.getByRole("tab", { name: "1. Format" })).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-optik");
     await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBeNull();
+  });
+
+  test("yeni TXT/DAT presetleri soru sayısı, satır uzunluğu ve kolon önizlemesini korur", async ({ page }) => {
+    const suggestionBodies: Array<Record<string, unknown>> = [];
+    const approvalBodies: Array<Record<string, unknown>> = [];
+    page.on("request", (request) => {
+      if (request.method() !== "POST") return;
+      const pathName = new URL(request.url()).pathname;
+      if (pathName.endsWith("/parser-configs/suggestions")) {
+        suggestionBodies.push(request.postDataJSON() as Record<string, unknown>);
+      }
+      if (pathName.endsWith("/parser-configs/approvals")) {
+        approvalBodies.push(request.postDataJSON() as Record<string, unknown>);
+      }
+    });
+
+    await openWithOptikMocks(page, "/kurum/optik");
+
+    const presetSelect = page.getByRole("combobox", { name: "Kayıtlı TXT/DAT formu" });
+    const selectedFormSummary = page.getByLabel("Seçili form özeti");
+    const formPreviewTable = page.getByRole("table", { name: "Optik form alan önizlemesi" });
+    const unverifiedPresetAlert = page.getByRole("status").filter({ hasText: "Gerçek TXT/DAT örneği bekleniyor" });
+
+    await expect(unverifiedPresetAlert).toHaveCount(0);
+
+    for (const testCase of newOpticalFormCases) {
+      await presetSelect.selectOption(testCase.preset);
+      await expect(presetSelect).toHaveValue(testCase.preset);
+      await expect(presetSelect.locator("option:checked")).toHaveText(testCase.name);
+      await expect(selectedFormSummary).toContainText(`${testCase.rowLength} karakter`);
+      await expect(selectedFormSummary).toContainText(`${testCase.questionCount} soru`);
+      await expect(unverifiedPresetAlert).toBeVisible();
+      await expect(unverifiedPresetAlert).toContainText("referans görsel kolonlarından türetildi");
+      await expect(unverifiedPresetAlert).toContainText("gerçek üretici TXT/DAT dosyasıyla henüz doğrulanmadı");
+      await expect(unverifiedPresetAlert).toContainText("Kullanıcı bunu bilerek seçiyor");
+      await expect(unverifiedPresetAlert).toContainText(
+        "Tablo fiziksel kolon kapasitesini, soru sayısı seçilen modda okunan mantıksal cevapları gösterir.",
+      );
+      await expect(formPreviewTable.locator("tbody tr")).toHaveCount(testCase.rows.length);
+
+      for (const [index, [section, start, end]] of testCase.rows.entries()) {
+        const row = formPreviewTable.locator("tbody tr").nth(index);
+        await expect(row.locator('[data-column-key="section"]')).toHaveText(section);
+        await expect(row.locator('[data-column-key="start"]')).toHaveText(start);
+        await expect(row.locator('[data-column-key="end"]')).toHaveText(end);
+      }
+    }
+
+    await page.getByRole("button", { name: "Seç ve ilerle" }).click();
+    await expect.poll(() => suggestionBodies).toEqual([{ preset: "OPTIK_840_LGS" }]);
+    await expect.poll(() => approvalBodies).toHaveLength(1);
+    expect(approvalBodies[0]).toMatchObject({ version: "optik-840-lgs-v1" });
   });
 
   test("mobilde optik akışı rapor çalışma alanına güvenli geçiş verir", async ({ page }) => {

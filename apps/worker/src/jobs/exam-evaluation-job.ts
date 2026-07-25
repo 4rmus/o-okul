@@ -78,6 +78,7 @@ export async function processExamEvaluationJob(
         contentHash: job.payload.contentHash,
       };
       const scoringInput = await adapter.loadInput(input);
+      assertQuestionCounts(scoringInput);
       const answers = alignAnswersToMaster(
         scoringInput.answers,
         scoringInput.bookletType,
@@ -113,6 +114,21 @@ export async function processExamEvaluationJob(
 function assertExamEvaluationPayload(payload: ExamEvaluationJobPayload): void {
   if (!payload.participantId || !payload.rawImportId || !payload.answerKeyId) {
     throw new Error("EXAM_EVALUATION_PAYLOAD_INVALID");
+  }
+}
+
+function assertQuestionCounts(input: ExamEvaluationScoringInput): void {
+  if (input.answers.length !== input.answerKey.length) {
+    throw new Error("EXAM_EVALUATION_QUESTION_COUNT_MISMATCH");
+  }
+
+  const expectedQuestionCount =
+    input.scoringConfig.examType === "LGS" ? 90 :
+    input.scoringConfig.examType === "TYT" ? 120 :
+    input.scoringConfig.examType === "AYT" ? 160 :
+    undefined;
+  if (expectedQuestionCount !== undefined && input.answerKey.length !== expectedQuestionCount) {
+    throw new Error("EXAM_EVALUATION_EXAM_TYPE_QUESTION_COUNT_MISMATCH");
   }
 }
 

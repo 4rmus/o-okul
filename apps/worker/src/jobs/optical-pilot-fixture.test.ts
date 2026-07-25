@@ -63,6 +63,7 @@ describe("optical pilot fixtures", () => {
 function scoreMatchedRows(rows: StudentAnswer[][]): ScoringResult[] {
   return rows.map((answers) =>
     scoreExam(answers, answerKey.questions, {
+      examType: "SCHOOL",
       answerKeyVersion: answerKey.version,
       computedAt: "2026-05-31T00:00:00.000Z",
       engineVersion: scoringEngineVersion,

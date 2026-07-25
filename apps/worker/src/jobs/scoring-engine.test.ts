@@ -9,6 +9,7 @@ describe("ScoringEngine", () => {
     { questionNo: 4, correctAnswer: "D", branch: "Türkçe" },
   ] as const;
   const config = {
+    examType: "SCHOOL" as const,
     answerKeyVersion: "answer-key-v3",
     computedAt: "2026-05-30T00:00:00.000Z",
     engineVersion: scoringEngineVersion,
@@ -196,7 +197,7 @@ describe("ScoringEngine", () => {
         { questionNo: 3, correctAnswer: "C", branch: "Fen Bilimleri" },
         { questionNo: 4, correctAnswer: "D", branch: "Din Kültürü" },
       ],
-      config,
+      { ...config, examType: "LGS" },
     );
 
     expect(result.total.rawScore).toBe(3);
@@ -217,10 +218,31 @@ describe("ScoringEngine", () => {
         { questionNo: 3, correctAnswer: "C", branch: "LGS FEN BİLİMLERİ" },
         { questionNo: 4, correctAnswer: "D", branch: "LGS İNGİLİZCE" },
       ],
-      config,
+      { ...config, examType: "LGS" },
     );
 
     expect(result.total.rawScore).toBe(4);
     expect(result.total.estimatedRawScore).toBe(14.124);
+  });
+
+  it.each(["TYT", "AYT"] as const)("%s sınavında LGS tahmini puan alanını üretmez", (examType) => {
+    const result = scoreExam(
+      [{ questionNo: 1, answer: "A" }],
+      [{ questionNo: 1, correctAnswer: "A", branch: "Matematik" }],
+      { ...config, examType },
+    );
+
+    expect(result.total).not.toHaveProperty("estimatedRawScore");
+  });
+
+  it("examType taşımayan legacy configte önceki LGS tahmin davranışını korur", () => {
+    const { examType: _examType, ...legacyConfig } = config;
+    const result = scoreExam(
+      [{ questionNo: 1, answer: "A" }],
+      [{ questionNo: 1, correctAnswer: "A", branch: "Matematik" }],
+      legacyConfig,
+    );
+
+    expect(result.total.estimatedRawScore).toBe(4.348);
   });
 });

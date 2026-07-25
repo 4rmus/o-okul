@@ -46,4 +46,14 @@ describe("alignAnswersToMaster", () => {
       alignAnswersToMaster([{ questionNo: 1, answer: "A" }], "B", [{ code: "B", permutation: [1, 2] }]),
     ).toThrow("EXAM_BOOKLET_VARIANT_INVALID");
   });
+
+  it("soru sayısını aşan permütasyon değerini reddeder", () => {
+    expect(() =>
+      alignAnswersToMaster(
+        [{ questionNo: 1, answer: "A" }, { questionNo: 2, answer: "B" }],
+        "B",
+        [{ code: "B", permutation: [1, 3] }],
+      ),
+    ).toThrow("EXAM_BOOKLET_VARIANT_INVALID");
+  });
 });

@@ -63,7 +63,7 @@ interface ParsedWorkbookRow {
   topic?: string;
 }
 
-const expectedQuestionCount = 90;
+const supportedQuestionCounts = new Set([90, 120, 160]);
 const answerChoices = new Set(["A", "B", "C", "D", "E"]);
 
 @Injectable()
@@ -208,10 +208,11 @@ export class AnswerKeyExcelImportService {
     }));
     const bPermutation = this.createGlobalBPermutation(rows);
 
-    if (questions.length !== expectedQuestionCount) {
+    const questionCount = questions.length;
+    if (!supportedQuestionCounts.has(questionCount)) {
       throw new BadRequestException("ANSWER_KEY_IMPORT_QUESTION_COUNT_INVALID");
     }
-    this.assertPermutation(bPermutation);
+    this.assertPermutation(bPermutation, questionCount);
 
     return {
       questions,
@@ -275,13 +276,13 @@ export class AnswerKeyExcelImportService {
     return parsed;
   }
 
-  private assertPermutation(permutation: number[]): void {
-    if (permutation.length !== expectedQuestionCount) {
+  private assertPermutation(permutation: number[], questionCount: number): void {
+    if (permutation.length !== questionCount) {
       throw new BadRequestException("ANSWER_KEY_IMPORT_B_PERMUTATION_INVALID");
     }
     const seen = new Set<number>();
     for (const questionNo of permutation) {
-      if (!Number.isInteger(questionNo) || questionNo <= 0 || questionNo > expectedQuestionCount || seen.has(questionNo)) {
+      if (!Number.isInteger(questionNo) || questionNo <= 0 || questionNo > questionCount || seen.has(questionNo)) {
         throw new BadRequestException("ANSWER_KEY_IMPORT_B_PERMUTATION_INVALID");
       }
       seen.add(questionNo);

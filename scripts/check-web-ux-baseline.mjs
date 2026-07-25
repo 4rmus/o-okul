@@ -1015,6 +1015,12 @@ requireNoTokens("apps/web/app/(app)/kurum/_shared/import-template-panel.tsx", [
 
 requireTokens("apps/web/e2e-next/optik-workspace-contract-next.spec.ts", [
   "aktif sınav ve adım URL state ile korunur",
+  "yeni TXT/DAT presetleri soru sayısı, satır uzunluğu ve kolon önizlemesini korur",
+  "OPTIK_129_TYT",
+  "OPTIK_129_AYT",
+  "YANIT_TYT",
+  "YANIT_AYT",
+  "OPTIK_840_LGS",
   'openWithOptikMocks(page, "/kurum/optik?examId=exam-optik&tab=upload")',
   'searchParams.get("examId")).toBe("exam-optik")',
   'searchParams.get("tab")).toBe("upload")',
@@ -1061,6 +1067,19 @@ requireTokens("apps/web/e2e-next/optik-workspace-contract-next.spec.ts", [
   'expectNoClippedVisibleText(page, "optik-mobile")',
   ".uh-info-item__label",
   ".uh-metric-card__label",
+]);
+
+requireTokens("apps/web/app/(app)/kurum/optik/parser-config-page.tsx", [
+  "OPTİK 129 — TYT",
+  "OPTİK 129 — AYT",
+  "YANIT TYT",
+  "YANIT AYT",
+  "OPTİK 840 — LGS",
+  "Gerçek TXT/DAT örneği bekleniyor",
+  "Bu preset referans görsel kolonlarından türetildi; gerçek üretici TXT/DAT dosyasıyla henüz doğrulanmadı.",
+  "Kullanıcı bunu bilerek seçiyor.",
+  "Tablo fiziksel kolon kapasitesini, soru sayısı seçilen modda okunan",
+  "mantıksal cevapları gösterir.",
 ]);
 
 requireNoTokens("apps/web/e2e-next/optik-workspace-contract-next.spec.ts", [

@@ -3,7 +3,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Button, DataTable, EmptyState, Field, InfoGrid, InfoItem, Input, MetricCard, MetricGrid, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn } from "@o-okul/ui";
+import { Alert, Button, DataTable, EmptyState, Field, InfoGrid, InfoItem, Input, MetricCard, MetricGrid, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn } from "@o-okul/ui";
 import type {
   ExamRecord,
   OpticalFormTemplateRecord,
@@ -189,6 +189,93 @@ const opticalFormPresets: Array<{
       { section: "İNGİLİZCE", start: "112", end: "121" },
       { section: "MATEMATİK", start: "132", end: "151" },
       { section: "FEN BİLİMLERİ", start: "152", end: "171" },
+    ],
+  },
+  {
+    preset: "OPTIK_129_TYT",
+    name: "OPTİK 129 — TYT",
+    sourceType: "TXT/DAT",
+    rowLength: 223,
+    questionCount: 120,
+    rows: [
+      { section: "TC KİMLİK NO", start: "37", end: "47" },
+      { section: "OKUL NO", start: "12", end: "16" },
+      { section: "KİTAPÇIK TÜRÜ", start: "56", end: "56" },
+      { section: "AD SOYAD", start: "17", end: "36" },
+      { section: "TÜRKÇE / TÜRK DİLİ VE EDEBİYATI - SOSYAL BİLİMLER - 1", start: "57", end: "96" },
+      { section: "SOSYAL BİLİMLER / SOSYAL BİLİMLER - 2", start: "97", end: "142" },
+      { section: "MATEMATİK", start: "143", end: "182" },
+      { section: "FEN BİLİMLERİ", start: "183", end: "223" },
+    ],
+  },
+  {
+    preset: "OPTIK_129_AYT",
+    name: "OPTİK 129 — AYT",
+    sourceType: "TXT/DAT",
+    rowLength: 223,
+    questionCount: 160,
+    rows: [
+      { section: "TC KİMLİK NO", start: "37", end: "47" },
+      { section: "OKUL NO", start: "12", end: "16" },
+      { section: "KİTAPÇIK TÜRÜ", start: "56", end: "56" },
+      { section: "AD SOYAD", start: "17", end: "36" },
+      { section: "TÜRKÇE / TÜRK DİLİ VE EDEBİYATI - SOSYAL BİLİMLER - 1", start: "57", end: "96" },
+      { section: "SOSYAL BİLİMLER / SOSYAL BİLİMLER - 2", start: "97", end: "142" },
+      { section: "MATEMATİK", start: "143", end: "182" },
+      { section: "FEN BİLİMLERİ", start: "183", end: "223" },
+    ],
+  },
+  {
+    preset: "YANIT_TYT",
+    name: "YANIT TYT",
+    sourceType: "TXT/DAT",
+    rowLength: 233,
+    questionCount: 120,
+    rows: [
+      { section: "TC KİMLİK NO", start: "13", end: "23" },
+      { section: "OKUL NO", start: "7", end: "12" },
+      { section: "KİTAPÇIK TÜRÜ", start: "49", end: "49" },
+      { section: "AD SOYAD", start: "24", end: "43" },
+      { section: "TÜRKÇE / TÜRK DİLİ VE EDEBİYATI - SOSYAL BİLİMLER - 1", start: "50", end: "95" },
+      { section: "SOSYAL BİLİMLER / SOSYAL BİLİMLER - 2", start: "96", end: "141" },
+      { section: "MATEMATİK", start: "142", end: "187" },
+      { section: "FEN BİLİMLERİ", start: "188", end: "233" },
+    ],
+  },
+  {
+    preset: "YANIT_AYT",
+    name: "YANIT AYT",
+    sourceType: "TXT/DAT",
+    rowLength: 233,
+    questionCount: 160,
+    rows: [
+      { section: "TC KİMLİK NO", start: "13", end: "23" },
+      { section: "OKUL NO", start: "7", end: "12" },
+      { section: "KİTAPÇIK TÜRÜ", start: "49", end: "49" },
+      { section: "AD SOYAD", start: "24", end: "43" },
+      { section: "TÜRKÇE / TÜRK DİLİ VE EDEBİYATI - SOSYAL BİLİMLER - 1", start: "50", end: "95" },
+      { section: "SOSYAL BİLİMLER / SOSYAL BİLİMLER - 2", start: "96", end: "141" },
+      { section: "MATEMATİK", start: "142", end: "187" },
+      { section: "FEN BİLİMLERİ", start: "188", end: "233" },
+    ],
+  },
+  {
+    preset: "OPTIK_840_LGS",
+    name: "OPTİK 840 — LGS",
+    sourceType: "TXT/DAT",
+    rowLength: 280,
+    questionCount: 90,
+    rows: [
+      { section: "TC KİMLİK NO", start: "35", end: "45" },
+      { section: "OKUL NO", start: "10", end: "14" },
+      { section: "KİTAPÇIK TÜRÜ", start: "60", end: "60" },
+      { section: "AD SOYAD", start: "15", end: "34" },
+      { section: "TÜRKÇE", start: "161", end: "180" },
+      { section: "SOSYAL BİLGİLER / T.C. İNKILAP TARİHİ VE ATATÜRKÇÜLÜK", start: "181", end: "200" },
+      { section: "DİN KÜLTÜRÜ VE AHLAK BİLGİSİ", start: "201", end: "220" },
+      { section: "İNGİLİZCE", start: "221", end: "240" },
+      { section: "MATEMATİK", start: "241", end: "260" },
+      { section: "FEN BİLİMLERİ", start: "261", end: "280" },
     ],
   },
 ];
@@ -997,6 +1084,13 @@ function OpticalFormatSetup({
           <InfoItem label="Soru" value={`${selectedPresetForm.questionCount} soru`} />
           <InfoItem label="Sürüm" value={selectedPresetVersion} />
         </InfoGrid>
+        {selectedPreset !== "OPTIK_7108_LGS" ? (
+          <Alert tone="warning" title="Gerçek TXT/DAT örneği bekleniyor">
+            Bu preset referans görsel kolonlarından türetildi; gerçek üretici TXT/DAT dosyasıyla henüz doğrulanmadı.
+            Kullanıcı bunu bilerek seçiyor. Tablo fiziksel kolon kapasitesini, soru sayısı seçilen modda okunan
+            mantıksal cevapları gösterir.
+          </Alert>
+        ) : null}
         {renderOpticalFormPreview(selectedPresetForm.rows)}
         <InfoGrid aria-live="polite" className="next-parser-summary" role="status">
           {suggestion ? (

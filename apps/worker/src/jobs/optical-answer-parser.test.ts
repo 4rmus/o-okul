@@ -3,11 +3,75 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { getParserConfigPresetSuggestion } from "./format-analyzer-service.js";
 import { OpticalAnswerParser } from "./optical-answer-parser.js";
-import type { ParserConfigSuggestion } from "./format-analyzer-service.js";
+import type { ParserConfigPreset, ParserConfigSuggestion } from "./format-analyzer-service.js";
 
 const isemTxtPath = "../../ornek-veriler/iSEM .txt";
 // ponytail: ornek-veriler is local-only; keep real fixture tests active only when present.
 const itWithIsemFixture = existsSync(isemTxtPath) ? it : it.skip;
+const referencePresetCases: Array<{
+  preset: Exclude<ParserConfigPreset, "OPTIK_7108_LGS">;
+  rowLength: number;
+  studentNo: string;
+  capacityBlocks: Array<{ start: number; length: number }>;
+}> = [
+  {
+    preset: "OPTIK_129_TYT",
+    rowLength: 223,
+    studentNo: "12001",
+    capacityBlocks: [
+      { start: 56, length: 40 },
+      { start: 96, length: 46 },
+      { start: 142, length: 40 },
+      { start: 182, length: 41 },
+    ],
+  },
+  {
+    preset: "OPTIK_129_AYT",
+    rowLength: 223,
+    studentNo: "12002",
+    capacityBlocks: [
+      { start: 56, length: 40 },
+      { start: 96, length: 46 },
+      { start: 142, length: 40 },
+      { start: 182, length: 41 },
+    ],
+  },
+  {
+    preset: "YANIT_TYT",
+    rowLength: 233,
+    studentNo: "130001",
+    capacityBlocks: [
+      { start: 49, length: 46 },
+      { start: 95, length: 46 },
+      { start: 141, length: 46 },
+      { start: 187, length: 46 },
+    ],
+  },
+  {
+    preset: "YANIT_AYT",
+    rowLength: 233,
+    studentNo: "130002",
+    capacityBlocks: [
+      { start: 49, length: 46 },
+      { start: 95, length: 46 },
+      { start: 141, length: 46 },
+      { start: 187, length: 46 },
+    ],
+  },
+  {
+    preset: "OPTIK_840_LGS",
+    rowLength: 280,
+    studentNo: "84001",
+    capacityBlocks: [
+      { start: 160, length: 20 },
+      { start: 180, length: 20 },
+      { start: 200, length: 20 },
+      { start: 220, length: 20 },
+      { start: 240, length: 20 },
+      { start: 260, length: 20 },
+    ],
+  },
+];
 
 describe("OpticalAnswerParser", () => {
   it("başlıklı TAB içeriğini MATCHED ParsedAnswer adayına çevirir", () => {
@@ -185,6 +249,58 @@ describe("OpticalAnswerParser", () => {
     });
     expect(result.matched[0]?.answers).toHaveLength(90);
     expect(result.matched[0]?.answers.slice(0, 20).map((item) => item.answer).join("")).toBe("CBCADDBABDBACAABDACA");
+  });
+
+  it.each(referencePresetCases)("$preset sentetik satırını mantıksal soru sırasıyla parse eder", (testCase) => {
+    const parser = new OpticalAnswerParser();
+    const preset = getParserConfigPresetSuggestion(testCase.preset);
+    const segments = preset.fieldMapping.answers.segments ?? [];
+    const row = Array.from({ length: testCase.rowLength }, () => " ");
+    const answerChars = ["A", "B", "C", "D", "E", "A"];
+    let expectedAnswers = "";
+
+    expect(segments.reduce((total, segment) => total + segment.length, 0))
+      .toBe(preset.fieldMapping.answers.estimatedQuestionCount);
+
+    for (const [index, capacityBlock] of testCase.capacityBlocks.entries()) {
+      const segment = segments[index]!;
+      expect(segment.start).toBe(capacityBlock.start);
+      writeFixedValue(row, segment.start, answerChars[index]!.repeat(segment.length));
+      writeFixedValue(
+        row,
+        segment.start + segment.length,
+        "X".repeat(capacityBlock.length - segment.length),
+      );
+      expectedAnswers += answerChars[index]!.repeat(segment.length);
+    }
+
+    const studentNo = preset.fieldMapping.studentNo;
+    const bookletType = preset.fieldMapping.bookletType;
+    if (studentNo.kind !== "fixed" || bookletType.kind !== "fixed") {
+      throw new Error("REFERENCE_PRESET_FIXED_MAPPING_REQUIRED");
+    }
+    writeFixedValue(row, studentNo.start, testCase.studentNo);
+    writeFixedValue(row, bookletType.start, "B");
+
+    const result = parser.parse({
+      ...createBaseInput(),
+      content: row.join(""),
+      parserConfig: preset,
+      participants: [{
+        participantId: `participant-${testCase.preset}`,
+        participantNo: testCase.studentNo,
+        bookletType: "B",
+      }],
+    });
+
+    expect(result.unmatched).toEqual([]);
+    expect(result.matched[0]).toMatchObject({
+      participantId: `participant-${testCase.preset}`,
+      bookletType: "B",
+      status: "MATCHED",
+    });
+    expect(result.matched[0]?.answers).toHaveLength(preset.fieldMapping.answers.estimatedQuestionCount);
+    expect(result.matched[0]?.answers.map((answer) => answer.answer).join("")).toBe(expectedAnswers);
   });
 
   it("öğrenci bulunamazsa ImportQuarantine adayı döndürür", () => {
@@ -477,6 +593,10 @@ function createDelimitedConfig(): Pick<ParserConfigSuggestion, "delimiter" | "sk
       answers: { kind: "delimited", column: 2, estimatedQuestionCount: 5 },
     },
   };
+}
+
+function writeFixedValue(row: string[], start: number, value: string) {
+  row.splice(start, value.length, ...value);
 }
 
 function readFirstValidIsemARow(): string {

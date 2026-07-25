@@ -35,7 +35,7 @@ function validatePermutation(permutation: number[], expectedLength: number): voi
 
   const seen = new Set<number>();
   for (const questionNo of permutation) {
-    if (!Number.isInteger(questionNo) || questionNo <= 0 || seen.has(questionNo)) {
+    if (!Number.isInteger(questionNo) || questionNo <= 0 || questionNo > expectedLength || seen.has(questionNo)) {
       throw new Error("EXAM_BOOKLET_VARIANT_INVALID");
     }
     seen.add(questionNo);

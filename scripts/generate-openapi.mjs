@@ -74,6 +74,14 @@ const paymentPlanPortalForbiddenDeep = [
 ];
 const parserConfigSuggestionRequestAlternatives = [["sampleText"], ["fileBase64"], ["preset"]];
 const parserDelimiters = ["COMMA", "FIXED", "PIPE", "TAB"];
+const parserConfigPresets = [
+  "OPTIK_7108_LGS",
+  "OPTIK_129_TYT",
+  "OPTIK_129_AYT",
+  "YANIT_TYT",
+  "YANIT_AYT",
+  "OPTIK_840_LGS",
+];
 const opticalFormTemplateRecordRequired = [
   "id",
   "tenantId",
@@ -2164,7 +2172,7 @@ const requiredOperationContracts = [
     responseDataRequired: ["examId", "suggestion", "status"],
     responseDataForbiddenDeep: ["fileBase64", "sampleText"],
     fieldChecks: [
-      { path: ["requestBody", "preset"], enum: ["OPTIK_7108_LGS"] },
+      { path: ["requestBody", "preset"], enum: parserConfigPresets },
       { path: ["requestBody", "sampleSize"], minimum: 1 },
       { path: ["responseData", "status"], enum: ["suggested"] },
       { path: ["responseData", "suggestion", "confidence"], enum: ["low", "medium", "high"] },

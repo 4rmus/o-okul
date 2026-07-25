@@ -27,6 +27,7 @@ describe("postgres exam evaluation adapter", () => {
             standardScoreMultiplier: 2,
           },
           answerKeyVersion: "answer-key-v1",
+          examType: "LGS",
         }];
       }
       return [];
@@ -47,6 +48,7 @@ describe("postgres exam evaluation adapter", () => {
         { questionNo: 2, correctAnswer: "B", branch: "Türkçe" },
       ],
       scoringConfig: {
+        examType: "LGS",
         wrongPenalty: 0.2,
         rawScoreMultiplier: 5,
         standardScoreBase: 50,
@@ -70,6 +72,9 @@ describe("postgres exam evaluation adapter", () => {
     expect(select?.sql).toContain('AND ep."examId" = pa."examId"');
     expect(select?.sql).toContain('INNER JOIN "AnswerKey" ak');
     expect(select?.sql).toContain('AND ak."examId" = pa."examId"');
+    expect(select?.sql).toContain('INNER JOIN "Exam" e');
+    expect(select?.sql).toContain('e."tenantId" = pa."tenantId"');
+    expect(select?.sql).toContain('e."id" = pa."examId"');
     expect(select?.values).toEqual(["tenant-a", "raw-import-a", "participant-a", "answer-key-a"]);
     expect(client.queries.find((query) => query.sql.includes('FROM "ExamBookletVariant"'))?.values).toEqual([
       "tenant-a",
@@ -90,6 +95,7 @@ describe("postgres exam evaluation adapter", () => {
           keyData: [{ questionNo: 1, correctAnswer: "A", branch: "Matematik" }],
           scoringConfig: null,
           answerKeyVersion: "answer-key-v1",
+          examType: "TYT",
         }];
       }
       if (sql.includes('FROM "ExamBookletVariant"')) {
@@ -103,6 +109,30 @@ describe("postgres exam evaluation adapter", () => {
 
     expect(input.bookletType).toBe("B");
     expect(input.bookletVariants).toEqual([{ code: "B", permutation: [2, 1] }]);
+  });
+
+  it("eski examType alanı boş sınavı geriye uyumlu yükler", async () => {
+    const client = new FakeClient((sql) => {
+      if (sql.includes('FROM "ParsedAnswer"')) {
+        return [{
+          examId: "exam-a",
+          studentId: "student-a",
+          bookletType: "A",
+          parserConfigVersion: "parser-v1",
+          answers: [{ questionNo: 1, answer: "A" }],
+          keyData: [{ questionNo: 1, correctAnswer: "A", branch: "Matematik" }],
+          scoringConfig: null,
+          answerKeyVersion: "answer-key-v1",
+          examType: null,
+        }];
+      }
+      return [];
+    });
+    const adapter = new PostgresExamEvaluationAdapter(new FakePool(client));
+
+    const input = await adapter.loadInput(createInput());
+
+    expect(input.scoringConfig).not.toHaveProperty("examType");
   });
 
   it("input kaydı yoksa net hata verir", async () => {
@@ -133,6 +163,7 @@ describe("postgres exam evaluation adapter", () => {
           },
           scoringConfig: null,
           answerKeyVersion: "answer-key-v1",
+          examType: "SCHOOL",
         }];
       }
       if (sql.includes('FROM "ImportQuarantine"')) {
@@ -190,6 +221,29 @@ describe("postgres exam evaluation adapter", () => {
           keyData: [{ questionNo: 1, correctAnswer: "A", branch: "Matematik" }],
           scoringConfig: null,
           answerKeyVersion: "answer-key-v1",
+          examType: "SCHOOL",
+        }];
+      }
+      return [];
+    });
+    const adapter = new PostgresExamEvaluationAdapter(new FakePool(client));
+
+    await expect(adapter.loadInput(createInput())).rejects.toThrow("EXAM_EVALUATION_INPUT_INVALID");
+  });
+
+  it("desteklenmeyen Exam.examType değerini scoring config'e taşımaz", async () => {
+    const client = new FakeClient((sql) => {
+      if (sql.includes('FROM "ParsedAnswer"')) {
+        return [{
+          examId: "exam-a",
+          studentId: "student-a",
+          bookletType: "A",
+          parserConfigVersion: "parser-v1",
+          answers: [{ questionNo: 1, answer: "A" }],
+          keyData: [{ questionNo: 1, correctAnswer: "A", branch: "Matematik" }],
+          scoringConfig: null,
+          answerKeyVersion: "answer-key-v1",
+          examType: "UNKNOWN",
         }];
       }
       return [];

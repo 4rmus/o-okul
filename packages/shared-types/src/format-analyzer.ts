@@ -1,6 +1,12 @@
 export type ParserEncoding = "UTF-8" | "ISO-8859-9" | "CP1254";
 export type ParserDelimiter = "TAB" | "COMMA" | "PIPE" | "FIXED";
-export type ParserConfigPreset = "OPTIK_7108_LGS";
+export type ParserConfigPreset =
+  | "OPTIK_7108_LGS"
+  | "OPTIK_129_TYT"
+  | "OPTIK_129_AYT"
+  | "YANIT_TYT"
+  | "YANIT_AYT"
+  | "OPTIK_840_LGS";
 
 export type FieldSpec =
   | { kind: "delimited"; column: number }
@@ -42,35 +48,118 @@ export interface FormatAnalyzerInput {
   sampleSize?: number;
 }
 
+const parserConfigPresetMappings = {
+  OPTIK_7108_LGS: {
+    nationalId: { kind: "fixed", start: 37, length: 11 },
+    studentNo: { kind: "fixed", start: 11, length: 4 },
+    bookletType: { kind: "fixed", start: 50, length: 1 },
+    answers: {
+      kind: "fixed",
+      estimatedQuestionCount: 90,
+      segments: [
+        { start: 51, length: 20 },
+        { start: 71, length: 10 },
+        { start: 91, length: 10 },
+        { start: 111, length: 10 },
+        { start: 131, length: 20 },
+        { start: 151, length: 20 },
+      ],
+    },
+  },
+  OPTIK_129_TYT: {
+    nationalId: { kind: "fixed", start: 36, length: 11 },
+    studentNo: { kind: "fixed", start: 11, length: 5 },
+    bookletType: { kind: "fixed", start: 55, length: 1 },
+    answers: {
+      kind: "fixed",
+      estimatedQuestionCount: 120,
+      segments: [
+        { start: 56, length: 40 },
+        { start: 96, length: 20 },
+        { start: 142, length: 40 },
+        { start: 182, length: 20 },
+      ],
+    },
+  },
+  OPTIK_129_AYT: {
+    nationalId: { kind: "fixed", start: 36, length: 11 },
+    studentNo: { kind: "fixed", start: 11, length: 5 },
+    bookletType: { kind: "fixed", start: 55, length: 1 },
+    answers: {
+      kind: "fixed",
+      estimatedQuestionCount: 160,
+      segments: [
+        { start: 56, length: 40 },
+        { start: 96, length: 40 },
+        { start: 142, length: 40 },
+        { start: 182, length: 40 },
+      ],
+    },
+  },
+  YANIT_TYT: {
+    nationalId: { kind: "fixed", start: 12, length: 11 },
+    studentNo: { kind: "fixed", start: 6, length: 6 },
+    bookletType: { kind: "fixed", start: 48, length: 1 },
+    answers: {
+      kind: "fixed",
+      estimatedQuestionCount: 120,
+      segments: [
+        { start: 49, length: 40 },
+        { start: 95, length: 20 },
+        { start: 141, length: 40 },
+        { start: 187, length: 20 },
+      ],
+    },
+  },
+  YANIT_AYT: {
+    nationalId: { kind: "fixed", start: 12, length: 11 },
+    studentNo: { kind: "fixed", start: 6, length: 6 },
+    bookletType: { kind: "fixed", start: 48, length: 1 },
+    answers: {
+      kind: "fixed",
+      estimatedQuestionCount: 160,
+      segments: [
+        { start: 49, length: 40 },
+        { start: 95, length: 40 },
+        { start: 141, length: 40 },
+        { start: 187, length: 40 },
+      ],
+    },
+  },
+  OPTIK_840_LGS: {
+    nationalId: { kind: "fixed", start: 34, length: 11 },
+    studentNo: { kind: "fixed", start: 9, length: 5 },
+    bookletType: { kind: "fixed", start: 59, length: 1 },
+    answers: {
+      kind: "fixed",
+      estimatedQuestionCount: 90,
+      segments: [
+        { start: 160, length: 20 },
+        { start: 180, length: 10 },
+        { start: 200, length: 10 },
+        { start: 220, length: 10 },
+        { start: 240, length: 20 },
+        { start: 260, length: 20 },
+      ],
+    },
+  },
+} satisfies Record<ParserConfigPreset, ParserConfigSuggestion["fieldMapping"]>;
+
 export function getParserConfigPresetSuggestion(preset: ParserConfigPreset): ParserConfigSuggestion {
-  if (preset !== "OPTIK_7108_LGS") {
+  const fieldMapping = parserConfigPresetMappings[preset];
+  if (!fieldMapping) {
     throw new Error("FORMAT_ANALYZER_PRESET_UNKNOWN");
   }
 
+  const isVerifiedFixture = preset === "OPTIK_7108_LGS";
   return {
     encoding: "UTF-8",
     delimiter: "FIXED",
     skipHeaderLines: 0,
-    fieldMapping: {
-      nationalId: { kind: "fixed", start: 37, length: 11 },
-      studentNo: { kind: "fixed", start: 11, length: 4 },
-      bookletType: { kind: "fixed", start: 50, length: 1 },
-      answers: {
-        kind: "fixed",
-        estimatedQuestionCount: 90,
-        segments: [
-          { start: 51, length: 20 },
-          { start: 71, length: 10 },
-          { start: 91, length: 10 },
-          { start: 111, length: 10 },
-          { start: 131, length: 20 },
-          { start: 151, length: 20 },
-        ],
-      },
-    },
+    fieldMapping,
     version: 1,
-    confidence: "high",
-    warnings: [],
+    confidence: isVerifiedFixture ? "high" : "medium",
+    warnings: isVerifiedFixture ? [] : ["REAL_TXT_DAT_FIXTURE_NOT_VERIFIED"],
   };
 }
 

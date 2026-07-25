@@ -17,6 +17,7 @@ describe("exam evaluation processor composition", () => {
           keyData: [{ questionNo: 1, correctAnswer: "A", branch: "Matematik" }],
           scoringConfig: null,
           answerKeyVersion: "answer-key-v1",
+          examType: "SCHOOL",
         }];
       }
       if (sql.includes('INSERT INTO "ExamResult"')) {

@@ -57,7 +57,6 @@ describe("exam evaluation job", () => {
           blank: 1,
           net: 0.75,
           rawScore: 0.75,
-          estimatedRawScore: 3.261,
           standardScore: 0.75,
         },
         branches: [
@@ -93,6 +92,7 @@ describe("exam evaluation job", () => {
     const first = await processExamEvaluationJob(createJob(payload), createAdapter());
     const second = await processExamEvaluationJob(createJob(payload), createAdapter({
       scoringConfig: {
+        examType: "SCHOOL",
         answerKeyVersion: "answer-key-v1",
         computedAt: "2026-05-30T04:00:00.000Z",
         engineVersion: scoringEngineVersion,
@@ -134,6 +134,43 @@ describe("exam evaluation job", () => {
       { questionNo: 2, branch: "Matematik", answer: "B", correctAnswer: "B", status: "CORRECT" },
       { questionNo: 3, branch: "Türkçe", answer: "C", correctAnswer: "C", status: "CORRECT" },
     ]);
+  });
+
+  it.each(["A", "B"])("%s kitapçığında parser ve cevap anahtarı soru sayısı farklıysa puanlamaz", async (bookletType) => {
+    const adapter = createAdapter({
+      bookletType,
+      answers: [
+        { questionNo: 1, answer: "A" },
+        { questionNo: 2, answer: "B" },
+      ],
+      bookletVariants: bookletType === "B" ? [{ code: "B", permutation: [2, 1] }] : [],
+    });
+
+    await expect(processExamEvaluationJob(createJob(payload), adapter)).rejects.toThrow(
+      "EXAM_EVALUATION_QUESTION_COUNT_MISMATCH",
+    );
+    expect(adapter.savedResults).toEqual([]);
+  });
+
+  it.each([
+    ["LGS", 90],
+    ["TYT", 120],
+    ["AYT", 160],
+  ] as const)("%s sınavını %i soru dışında puanlamaz", async (examType, _expectedQuestionCount) => {
+    const adapter = createAdapter({
+      scoringConfig: {
+        examType,
+        answerKeyVersion: "answer-key-v1",
+        computedAt: "2026-05-30T03:00:00.000Z",
+        engineVersion: scoringEngineVersion,
+        wrongPenalty: 0.25,
+      },
+    });
+
+    await expect(processExamEvaluationJob(createJob(payload), adapter)).rejects.toThrow(
+      "EXAM_EVALUATION_EXAM_TYPE_QUESTION_COUNT_MISMATCH",
+    );
+    expect(adapter.savedResults).toEqual([]);
   });
 
   it("adapter kayıt bulamazsa hatayı net şekilde yukarı taşır", async () => {
@@ -223,6 +260,7 @@ function createAdapter(overrides: Partial<Awaited<ReturnType<ExamEvaluationJobAd
           { questionNo: 3, correctAnswer: "C", branch: "Türkçe" },
         ],
         scoringConfig: {
+          examType: "SCHOOL",
           answerKeyVersion: "answer-key-v1",
           computedAt: "2026-05-30T03:00:00.000Z",
           engineVersion: scoringEngineVersion,

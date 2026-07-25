@@ -245,6 +245,7 @@ describeWithRealFixtures("OPTİK-7108 gerçek veri pipeline fixture", () => {
 
 function createScoringConfig() {
   return {
+    examType: "LGS" as const,
     answerKeyVersion: "isem-lgs-1-v1",
     computedAt: "2026-06-02T00:00:00.000Z",
     engineVersion: scoringEngineVersion,

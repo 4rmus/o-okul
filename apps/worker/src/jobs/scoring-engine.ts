@@ -1,4 +1,6 @@
-export const scoringEngineVersion = "2026.06.lgs-prefixed-scaled-net";
+import type { ExamType } from "@o-okul/shared-types";
+
+export const scoringEngineVersion = "2026.07.exam-type-scoped-estimated-score";
 
 export type Choice = "A" | "B" | "C" | "D" | "E" | "";
 
@@ -16,6 +18,7 @@ export interface AnswerKeyItem {
 }
 
 export interface ScoringConfig {
+  examType?: ExamType;
   wrongPenalty: number;
   rawScoreMultiplier?: number;
   standardScoreBase?: number;
@@ -125,13 +128,16 @@ export function scoreExam(
     { correct: 0, wrong: 0, blank: 0, net: 0 },
   );
   const rawScore = calculateRawScore(total.net, config);
-  const estimatedRawScore = calculateEstimatedRawScore(branches);
+  const estimatedRawScore =
+    config.examType === undefined || config.examType === "LGS"
+      ? calculateEstimatedRawScore(branches)
+      : undefined;
 
   return {
     total: {
       ...total,
       rawScore,
-      estimatedRawScore,
+      ...(estimatedRawScore !== undefined ? { estimatedRawScore } : {}),
       standardScore: calculateStandardScore(rawScore, config),
     },
     branches,

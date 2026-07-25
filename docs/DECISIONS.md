@@ -48,17 +48,26 @@ Son kontrol: 2026-05-29
 
 Durum: Onaylı
 Karar: TXT/DAT optik değerlendirme hedef kapsamda kalır. iSEM/3D/MUBA OPTİK-7108 gerçek TXT ve cevap
-anahtarı dosyaları repo fixture'ı olarak kabul edilmiştir; bu kabul yeni optik format ailesi açmaz.
-Kaynak: Kullanıcı görüşmesi.
+anahtarı dosyaları repo fixture'ı olarak kabul edilmiştir. Kullanıcının sağladığı referans kolon
+görselleriyle OPTİK 129 TYT/AYT, YANIT TYT/AYT ve OPTİK 840 LGS mantıksal presetleri de desteklenir.
+Kaynak: Kullanıcı görüşmesi ve referans kolon görselleri.
 Kanıt: `docs/product-journeys-v1.md`;
 `apps/worker/src/jobs/optical-pilot-fixture.test.ts`;
 `apps/api/src/exam/answer-key-excel-import.service.test.ts`;
 `apps/worker/src/jobs/optik-7108-real-pipeline.test.ts`;
+`apps/worker/src/jobs/tyt-ayt-placeholder-pipeline.test.ts`;
+`apps/worker/src/jobs/optical-answer-parser.test.ts`;
+`apps/api/src/exam/parser-config-suggestion.service.test.ts`;
+`apps/api/src/exam/parser-config.controller.e2e.test.ts`;
+`apps/web/e2e-next/optik-workspace-contract-next.spec.ts`;
 `scripts/smoke-isem-optical-pipeline-live.mjs`.
 Etkilenen ADR: Yok
-Açık soru: iSEM/3D/MUBA fixture tarafı kapandı; staging/prod tam sınav döngüsü, pilot kabulü ve farklı pilot
-format isteği ayrı evidence/DEC kapısıdır.
-Son kontrol: 2026-06-24
+Açık soru: OPTİK 129 ve YANIT presetleri 120 TYT / 160 AYT Lorem Ipsum workbook, iki sentetik
+fixed-width öğrenci satırı, A/B hizalama, puanlama ve READY snapshot zinciriyle in-memory job
+composition seviyesinde doğrulandı. Bu kanıt gerçek Postgres evaluation/report persistence,
+gerçek üretici TXT/DAT fixture'ı, resmî ÖSYM TYT/AYT puanı, PDF/portal görsel kabulü veya staging/prod
+tam sınav döngüsü değildir; bunlar pilot kabulünden önce ayrı kanıt kapılarıdır.
+Son kontrol: 2026-07-25
 
 ### DEC-20260529-05 — Kota davranışı
 
