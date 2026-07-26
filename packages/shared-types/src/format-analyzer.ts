@@ -2,10 +2,8 @@ export type ParserEncoding = "UTF-8" | "ISO-8859-9" | "CP1254";
 export type ParserDelimiter = "TAB" | "COMMA" | "PIPE" | "FIXED";
 export type ParserConfigPreset =
   | "OPTIK_7108_LGS"
-  | "OPTIK_129_TYT"
-  | "OPTIK_129_AYT"
-  | "YANIT_TYT"
-  | "YANIT_AYT"
+  | "OPTIK_129"
+  | "YANIT"
   | "OPTIK_840_LGS";
 
 export type FieldSpec =
@@ -66,22 +64,7 @@ const parserConfigPresetMappings = {
       ],
     },
   },
-  OPTIK_129_TYT: {
-    nationalId: { kind: "fixed", start: 36, length: 11 },
-    studentNo: { kind: "fixed", start: 11, length: 5 },
-    bookletType: { kind: "fixed", start: 55, length: 1 },
-    answers: {
-      kind: "fixed",
-      estimatedQuestionCount: 120,
-      segments: [
-        { start: 56, length: 40 },
-        { start: 96, length: 20 },
-        { start: 142, length: 40 },
-        { start: 182, length: 20 },
-      ],
-    },
-  },
-  OPTIK_129_AYT: {
+  OPTIK_129: {
     nationalId: { kind: "fixed", start: 36, length: 11 },
     studentNo: { kind: "fixed", start: 11, length: 5 },
     bookletType: { kind: "fixed", start: 55, length: 1 },
@@ -96,22 +79,7 @@ const parserConfigPresetMappings = {
       ],
     },
   },
-  YANIT_TYT: {
-    nationalId: { kind: "fixed", start: 12, length: 11 },
-    studentNo: { kind: "fixed", start: 6, length: 6 },
-    bookletType: { kind: "fixed", start: 48, length: 1 },
-    answers: {
-      kind: "fixed",
-      estimatedQuestionCount: 120,
-      segments: [
-        { start: 49, length: 40 },
-        { start: 95, length: 20 },
-        { start: 141, length: 40 },
-        { start: 187, length: 20 },
-      ],
-    },
-  },
-  YANIT_AYT: {
+  YANIT: {
     nationalId: { kind: "fixed", start: 12, length: 11 },
     studentNo: { kind: "fixed", start: 6, length: 6 },
     bookletType: { kind: "fixed", start: 48, length: 1 },
@@ -145,8 +113,14 @@ const parserConfigPresetMappings = {
   },
 } satisfies Record<ParserConfigPreset, ParserConfigSuggestion["fieldMapping"]>;
 
-export function getParserConfigPresetSuggestion(preset: ParserConfigPreset): ParserConfigSuggestion {
-  const fieldMapping = parserConfigPresetMappings[preset];
+export function getParserConfigPresetSuggestion(
+  preset: ParserConfigPreset,
+  examType?: string,
+): ParserConfigSuggestion {
+  const presetFieldMapping = parserConfigPresetMappings[preset];
+  const fieldMapping = preset === "OPTIK_129" || preset === "YANIT"
+    ? getTytAytFieldMapping(presetFieldMapping, examType)
+    : presetFieldMapping;
   if (!fieldMapping) {
     throw new Error("FORMAT_ANALYZER_PRESET_UNKNOWN");
   }
@@ -160,6 +134,31 @@ export function getParserConfigPresetSuggestion(preset: ParserConfigPreset): Par
     version: 1,
     confidence: isVerifiedFixture ? "high" : "medium",
     warnings: isVerifiedFixture ? [] : ["REAL_TXT_DAT_FIXTURE_NOT_VERIFIED"],
+  };
+}
+
+function getTytAytFieldMapping(
+  fieldMapping: ParserConfigSuggestion["fieldMapping"] | undefined,
+  examType: string | undefined,
+): ParserConfigSuggestion["fieldMapping"] {
+  if (!fieldMapping) {
+    throw new Error("FORMAT_ANALYZER_PRESET_UNKNOWN");
+  }
+  if (examType !== "TYT" && examType !== "AYT") {
+    throw new Error("FORMAT_ANALYZER_PRESET_TYT_AYT_EXAM_REQUIRED");
+  }
+
+  const segmentLengths = examType === "TYT" ? [40, 20, 40, 20] : [40, 40, 40, 40];
+  return {
+    ...fieldMapping,
+    answers: {
+      ...fieldMapping.answers,
+      estimatedQuestionCount: examType === "TYT" ? 120 : 160,
+      segments: fieldMapping.answers.segments?.map((segment, index) => ({
+        ...segment,
+        length: segmentLengths[index]!,
+      })),
+    },
   };
 }
 

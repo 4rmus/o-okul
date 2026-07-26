@@ -31,7 +31,7 @@ export class ParserConfigController {
   suggest(
     @Param("examId") examId: string,
     @Body(zodBody(parserConfigSuggestionBodySchema)) body: ParserConfigSuggestionBody,
-  ): ParserConfigSuggestionResult {
+  ): Promise<ParserConfigSuggestionResult> {
     return this.suggestions.suggest(getRequestContext(), {
       examId,
       sampleText: body.sampleText,

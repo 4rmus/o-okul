@@ -28,7 +28,7 @@ type PlaceholderCase = {
 
 const cases: PlaceholderCase[] = [
   {
-    preset: "OPTIK_129_TYT",
+    preset: "OPTIK_129",
     examType: "TYT",
     questionCount: 120,
     sections: [
@@ -40,7 +40,7 @@ const cases: PlaceholderCase[] = [
     studentNos: ["10001", "10002"],
   },
   {
-    preset: "OPTIK_129_AYT",
+    preset: "OPTIK_129",
     examType: "AYT",
     questionCount: 160,
     sections: [
@@ -52,7 +52,7 @@ const cases: PlaceholderCase[] = [
     studentNos: ["10001", "10002"],
   },
   {
-    preset: "YANIT_TYT",
+    preset: "YANIT",
     examType: "TYT",
     questionCount: 120,
     sections: [
@@ -64,7 +64,7 @@ const cases: PlaceholderCase[] = [
     studentNos: ["100001", "100002"],
   },
   {
-    preset: "YANIT_AYT",
+    preset: "YANIT",
     examType: "AYT",
     questionCount: 160,
     sections: [
@@ -81,14 +81,15 @@ describe("TYT/AYT sentetik job composition değerlendirme pipeline", () => {
   it.each(cases)(
     "$preset parser→evaluation→report zincirini $questionCount soruyla deterministik tamamlar",
     async ({ preset, examType, questionCount, sections, studentNos }) => {
-      const parserConfig = getParserConfigPresetSuggestion(preset);
+      const parserConfig = getParserConfigPresetSuggestion(preset, examType);
       const answerKey = createAnswerKey(sections);
       const bPermutation = createSectionReversePermutation(sections);
       const aMasterAnswers = createAMasterAnswers(sections, answerKey);
       const bBookletAnswers = createBBookletAnswers(answerKey, bPermutation);
-      const parserVersion = `${preset.toLowerCase()}-placeholder-v1`;
-      const examId = `${preset.toLowerCase()}-exam`;
-      const rawImportId = `${preset.toLowerCase()}-raw`;
+      const caseId = `${preset.toLowerCase()}-${examType.toLowerCase()}`;
+      const parserVersion = `${caseId}-placeholder-v1`;
+      const examId = `${caseId}-exam`;
+      const rawImportId = `${caseId}-raw`;
       const parsed = new OpticalAnswerParser().parse({
         tenantId: "tenant-a",
         examId,

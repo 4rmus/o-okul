@@ -169,7 +169,7 @@ const opticalFormPresets: Array<{
   name: string;
   sourceType: string;
   rowLength: number;
-  questionCount: number;
+  questionCount?: number;
   rows: OpticalFormPreviewRow[];
 }> = [
   {
@@ -192,11 +192,10 @@ const opticalFormPresets: Array<{
     ],
   },
   {
-    preset: "OPTIK_129_TYT",
-    name: "OPTİK 129 — TYT",
+    preset: "OPTIK_129",
+    name: "OPTİK FORM 129",
     sourceType: "TXT/DAT",
     rowLength: 223,
-    questionCount: 120,
     rows: [
       { section: "TC KİMLİK NO", start: "37", end: "47" },
       { section: "OKUL NO", start: "12", end: "16" },
@@ -209,45 +208,10 @@ const opticalFormPresets: Array<{
     ],
   },
   {
-    preset: "OPTIK_129_AYT",
-    name: "OPTİK 129 — AYT",
-    sourceType: "TXT/DAT",
-    rowLength: 223,
-    questionCount: 160,
-    rows: [
-      { section: "TC KİMLİK NO", start: "37", end: "47" },
-      { section: "OKUL NO", start: "12", end: "16" },
-      { section: "KİTAPÇIK TÜRÜ", start: "56", end: "56" },
-      { section: "AD SOYAD", start: "17", end: "36" },
-      { section: "TÜRKÇE / TÜRK DİLİ VE EDEBİYATI - SOSYAL BİLİMLER - 1", start: "57", end: "96" },
-      { section: "SOSYAL BİLİMLER / SOSYAL BİLİMLER - 2", start: "97", end: "142" },
-      { section: "MATEMATİK", start: "143", end: "182" },
-      { section: "FEN BİLİMLERİ", start: "183", end: "223" },
-    ],
-  },
-  {
-    preset: "YANIT_TYT",
-    name: "YANIT TYT",
+    preset: "YANIT",
+    name: "YANIT YAYINLARI",
     sourceType: "TXT/DAT",
     rowLength: 233,
-    questionCount: 120,
-    rows: [
-      { section: "TC KİMLİK NO", start: "13", end: "23" },
-      { section: "OKUL NO", start: "7", end: "12" },
-      { section: "KİTAPÇIK TÜRÜ", start: "49", end: "49" },
-      { section: "AD SOYAD", start: "24", end: "43" },
-      { section: "TÜRKÇE / TÜRK DİLİ VE EDEBİYATI - SOSYAL BİLİMLER - 1", start: "50", end: "95" },
-      { section: "SOSYAL BİLİMLER / SOSYAL BİLİMLER - 2", start: "96", end: "141" },
-      { section: "MATEMATİK", start: "142", end: "187" },
-      { section: "FEN BİLİMLERİ", start: "188", end: "233" },
-    ],
-  },
-  {
-    preset: "YANIT_AYT",
-    name: "YANIT AYT",
-    sourceType: "TXT/DAT",
-    rowLength: 233,
-    questionCount: 160,
     rows: [
       { section: "TC KİMLİK NO", start: "13", end: "23" },
       { section: "OKUL NO", start: "7", end: "12" },
@@ -286,6 +250,15 @@ const defaultParserConfigVersion = createPresetParserVersion(opticalFormPresets[
 function createPresetParserVersion(form: OpticalFormPreset) {
   const slug = slugifyVersionPart(form.name);
   return `${slug}-v1`;
+}
+
+function formatPresetQuestionCount(form: OpticalFormPreset, examType: string | undefined) {
+  if (form.preset === "OPTIK_129" || form.preset === "YANIT") {
+    if (examType === "TYT") return "120 soru";
+    if (examType === "AYT") return "160 soru";
+    return "TYT 120 / AYT 160";
+  }
+  return `${form.questionCount} soru`;
 }
 
 function slugifyVersionPart(value: string) {
@@ -883,6 +856,7 @@ export function ParserConfigPage() {
         {activeTab === "format" ? (
           <OpticalFormatSetup
             examId={examId}
+            examType={selectedExam?.examType}
             fileName={fileName}
             savedConfig={savedConfig}
             selectedPreset={selectedPreset}
@@ -1003,6 +977,7 @@ function OpticalExamSelector({
 
 interface OpticalFormatSetupProps {
   examId: string;
+  examType?: string;
   fileName: string;
   savedConfig: SavedParserConfig | null;
   selectedPreset: ParserConfigPreset;
@@ -1031,6 +1006,7 @@ interface OpticalFormatSetupProps {
 
 function OpticalFormatSetup({
   examId,
+  examType,
   fileName,
   savedConfig,
   selectedPreset,
@@ -1081,7 +1057,7 @@ function OpticalFormatSetup({
         <InfoGrid className="next-optical-form-meta" aria-label="Seçili form özeti">
           <InfoItem label="Kaynak" value={selectedPresetForm.sourceType} />
           <InfoItem label="Satır uzunluğu" value={`${selectedPresetForm.rowLength} karakter`} />
-          <InfoItem label="Soru" value={`${selectedPresetForm.questionCount} soru`} />
+          <InfoItem label="Soru" value={formatPresetQuestionCount(selectedPresetForm, examType)} />
           <InfoItem label="Sürüm" value={selectedPresetVersion} />
         </InfoGrid>
         {selectedPreset !== "OPTIK_7108_LGS" ? (

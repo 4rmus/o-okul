@@ -31,8 +31,8 @@ const hostileOptikReferences = [
 ] as const;
 const newOpticalFormCases = [
   {
-    preset: "OPTIK_129_TYT",
-    name: "OPTİK 129 — TYT",
+    preset: "OPTIK_129",
+    name: "OPTİK FORM 129",
     rowLength: 223,
     questionCount: 120,
     rows: [
@@ -47,42 +47,10 @@ const newOpticalFormCases = [
     ],
   },
   {
-    preset: "OPTIK_129_AYT",
-    name: "OPTİK 129 — AYT",
-    rowLength: 223,
-    questionCount: 160,
-    rows: [
-      ["TC KİMLİK NO", "37", "47"],
-      ["OKUL NO", "12", "16"],
-      ["KİTAPÇIK TÜRÜ", "56", "56"],
-      ["AD SOYAD", "17", "36"],
-      ["TÜRKÇE / TÜRK DİLİ VE EDEBİYATI - SOSYAL BİLİMLER - 1", "57", "96"],
-      ["SOSYAL BİLİMLER / SOSYAL BİLİMLER - 2", "97", "142"],
-      ["MATEMATİK", "143", "182"],
-      ["FEN BİLİMLERİ", "183", "223"],
-    ],
-  },
-  {
-    preset: "YANIT_TYT",
-    name: "YANIT TYT",
+    preset: "YANIT",
+    name: "YANIT YAYINLARI",
     rowLength: 233,
     questionCount: 120,
-    rows: [
-      ["TC KİMLİK NO", "13", "23"],
-      ["OKUL NO", "7", "12"],
-      ["KİTAPÇIK TÜRÜ", "49", "49"],
-      ["AD SOYAD", "24", "43"],
-      ["TÜRKÇE / TÜRK DİLİ VE EDEBİYATI - SOSYAL BİLİMLER - 1", "50", "95"],
-      ["SOSYAL BİLİMLER / SOSYAL BİLİMLER - 2", "96", "141"],
-      ["MATEMATİK", "142", "187"],
-      ["FEN BİLİMLERİ", "188", "233"],
-    ],
-  },
-  {
-    preset: "YANIT_AYT",
-    name: "YANIT AYT",
-    rowLength: 233,
-    questionCount: 160,
     rows: [
       ["TC KİMLİK NO", "13", "23"],
       ["OKUL NO", "7", "12"],
@@ -178,6 +146,13 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
         await expect(row.locator('[data-column-key="end"]')).toHaveText(end);
       }
     }
+
+    const examSelect = page.getByRole("combobox", { name: "Sınav seç" });
+    await examSelect.selectOption("exam-optik-second");
+    await presetSelect.selectOption("OPTIK_129");
+    await expect(selectedFormSummary).toContainText("160 soru");
+    await examSelect.selectOption("exam-optik");
+    await presetSelect.selectOption("OPTIK_840_LGS");
 
     await page.getByRole("button", { name: "Seç ve ilerle" }).click();
     await expect.poll(() => suggestionBodies).toEqual([{ preset: "OPTIK_840_LGS" }]);
@@ -426,6 +401,7 @@ function createExams() {
       },
       createdAt: "2026-06-10T09:00:00.000Z",
       id: "exam-optik",
+      examType: "TYT",
       startsAt: "2026-06-17T09:00:00.000Z",
       status: "PUBLISHED",
       tenantId: "tenant-optik",
@@ -437,6 +413,7 @@ function createExams() {
       answerKeySummary: { branchCount: 6, questionCount: 90, status: "PUBLISHED", updatedAt: "2026-06-11T09:00:00.000Z", version: "optik-answer-key-v1" },
       createdAt: "2026-06-11T09:00:00.000Z",
       id: "exam-optik-second",
+      examType: "AYT",
       startsAt: "2026-06-18T09:00:00.000Z",
       status: "PUBLISHED",
       tenantId: "tenant-optik",

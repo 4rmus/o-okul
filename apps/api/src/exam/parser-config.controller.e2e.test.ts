@@ -6,6 +6,7 @@ import { testLoginBody } from "../test-auth.js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module.js";
 import { reportSnapshotStoreToken, type ReportSnapshotStore } from "../report/report-snapshot-store.js";
+import { examRepositoryToken } from "./exam.service.js";
 import {
   parserConfigRepositoryToken,
   type ApprovedParserConfigInput,
@@ -24,6 +25,27 @@ describe("ParserConfigController", () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
+      .overrideProvider(examRepositoryToken)
+      .useValue({
+        async findById(tenantId: string, examId: string) {
+          const examType = examId === "exam-tyt"
+            ? "TYT"
+            : examId === "exam-ayt"
+              ? "AYT"
+              : examId === "exam-lgs"
+                ? "LGS"
+                : undefined;
+          return examType ? {
+            id: examId,
+            tenantId,
+            examType,
+            title: "Optik denemesi",
+            status: "DRAFT",
+            createdAt: "2026-07-26T00:00:00.000Z",
+            updatedAt: "2026-07-26T00:00:00.000Z",
+          } : undefined;
+        },
+      })
       .overrideProvider(parserConfigRepositoryToken)
       .useValue(repository)
       .overrideProvider(reportSnapshotStoreToken)
@@ -117,16 +139,16 @@ describe("ParserConfigController", () => {
   });
 
   it.each([
-    ["OPTIK_129_TYT", 120],
-    ["OPTIK_129_AYT", 160],
-    ["YANIT_TYT", 120],
-    ["YANIT_AYT", 160],
-    ["OPTIK_840_LGS", 90],
-  ] as const)("öneri endpointi %s presetini örnek dosya istemeden kabul eder", async (preset, questionCount) => {
+    ["exam-tyt", "OPTIK_129", 120],
+    ["exam-ayt", "OPTIK_129", 160],
+    ["exam-tyt", "YANIT", 120],
+    ["exam-ayt", "YANIT", 160],
+    ["exam-lgs", "OPTIK_840_LGS", 90],
+  ] as const)("öneri endpointi %s için %s presetini örnek dosya istemeden kabul eder", async (examId, preset, questionCount) => {
     const issued = await login("admin-a@example.test");
 
     const response = await request(server)
-      .post("/exams/exam-a/parser-configs/suggestions")
+      .post(`/exams/${examId}/parser-configs/suggestions`)
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .send({ preset })
       .expect(201);
@@ -140,6 +162,16 @@ describe("ParserConfigController", () => {
       },
     });
     expect(repository.inputs).toHaveLength(0);
+  });
+
+  it("birleşik TYT/AYT presetini LGS sınavında reddeder", async () => {
+    const issued = await login("admin-a@example.test");
+
+    await request(server)
+      .post("/exams/exam-lgs/parser-configs/suggestions")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({ preset: "YANIT" })
+      .expect(400);
   });
 
   it("TEACHER öneri üretemez", async () => {

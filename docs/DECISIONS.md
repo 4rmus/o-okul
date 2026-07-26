@@ -49,7 +49,8 @@ Son kontrol: 2026-05-29
 Durum: Onaylı
 Karar: TXT/DAT optik değerlendirme hedef kapsamda kalır. iSEM/3D/MUBA OPTİK-7108 gerçek TXT ve cevap
 anahtarı dosyaları repo fixture'ı olarak kabul edilmiştir. Kullanıcının sağladığı referans kolon
-görselleriyle OPTİK 129 TYT/AYT, YANIT TYT/AYT ve OPTİK 840 LGS mantıksal presetleri de desteklenir.
+görselleriyle tek OPTİK FORM 129, tek YANIT YAYINLARI ve OPTİK 840 LGS fiziksel presetleri desteklenir.
+Birleşik 129 ve Yanıt presetleri mantıksal 120/160 soru alanlarını seçili sınavın TYT/AYT türünden üretir.
 Kaynak: Kullanıcı görüşmesi ve referans kolon görselleri.
 Kanıt: `docs/product-journeys-v1.md`;
 `apps/worker/src/jobs/optical-pilot-fixture.test.ts`;

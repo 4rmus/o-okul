@@ -118,12 +118,12 @@ yolculuk matrisi, UAT senaryo iskeleti ve ilgili evidence checker/template gunce
   `apps/api/src/exam/answer-key-excel-import.service.test.ts` 90 soruluk cevap anahtarini ve
   B kitapcik permutasyonunu, `apps/worker/src/jobs/optik-7108-real-pipeline.test.ts`
   iSEM, 3D ve MUBA TXT parse, A/B kitapcik hizalama ve ornek skor zincirini dogrular.
-  Kullanici referans kolonlariyla eklenen OPTIK 129 TYT/AYT, YANIT TYT/AYT ve OPTIK 840 LGS
-  presetleri sentetik sabit satirlarla kolon, kitapcik ve mantiksal 120/160/90 soru sirasi
+  Kullanici referans kolonlariyla eklenen tek OPTIK FORM 129, tek YANIT YAYINLARI ve OPTIK 840 LGS
+  fiziksel presetleri sentetik sabit satirlarla kolon, kitapcik ve mantiksal 120/160/90 soru sirasi
   seviyesinde dogrulanir. `apps/api/src/exam/answer-key-excel-import.service.test.ts` sentetik
   Lorem Ipsum workbook'larla 120 TYT ve 160 AYT dry-run/import, bolum bazli soru dagilimi ve
   ters B kitapcik permutasyonunu; `apps/worker/src/jobs/tyt-ayt-placeholder-pipeline.test.ts`
-  dort preset icin iki fixed-width satir, iki katilimci, A/B hizalama, deterministik puanlama
+  iki fiziksel presetin TYT/AYT senaryolari icin iki fixed-width satir, iki katilimci, A/B hizalama, deterministik puanlama
   ve iki ogrencili READY snapshot zincirini dogrular. TYT/AYT sonucunda LGS'ye ozel
   `estimatedRawScore` uretilmez. Evaluation, parser cevap sayisi ile cevap anahtari sayisini
   esit ister ve LGS/TYT/AYT icin sirasiyla 90/120/160 soru kuralini fail-closed uygular.

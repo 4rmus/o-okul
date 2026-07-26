@@ -1016,10 +1016,8 @@ requireNoTokens("apps/web/app/(app)/kurum/_shared/import-template-panel.tsx", [
 requireTokens("apps/web/e2e-next/optik-workspace-contract-next.spec.ts", [
   "aktif sınav ve adım URL state ile korunur",
   "yeni TXT/DAT presetleri soru sayısı, satır uzunluğu ve kolon önizlemesini korur",
-  "OPTIK_129_TYT",
-  "OPTIK_129_AYT",
-  "YANIT_TYT",
-  "YANIT_AYT",
+  "OPTIK_129",
+  "YANIT",
   "OPTIK_840_LGS",
   'openWithOptikMocks(page, "/kurum/optik?examId=exam-optik&tab=upload")',
   'searchParams.get("examId")).toBe("exam-optik")',
@@ -1070,10 +1068,9 @@ requireTokens("apps/web/e2e-next/optik-workspace-contract-next.spec.ts", [
 ]);
 
 requireTokens("apps/web/app/(app)/kurum/optik/parser-config-page.tsx", [
-  "OPTİK 129 — TYT",
-  "OPTİK 129 — AYT",
-  "YANIT TYT",
-  "YANIT AYT",
+  "OPTİK FORM 129",
+  "YANIT YAYINLARI",
+  "TYT 120 / AYT 160",
   "OPTİK 840 — LGS",
   "Gerçek TXT/DAT örneği bekleniyor",
   "Bu preset referans görsel kolonlarından türetildi; gerçek üretici TXT/DAT dosyasıyla henüz doğrulanmadı.",
@@ -3622,7 +3619,7 @@ requireTokens("apps/web/app/(app)/kurum/optik/parser-config-page.tsx", [
   '<Field label="Kayıtlı TXT/DAT formu">',
   '<InfoGrid className="next-optical-form-meta" aria-label="Seçili form özeti">',
   '<InfoItem label="Kaynak" value={selectedPresetForm.sourceType} />',
-  "value={`${selectedPresetForm.questionCount} soru`}",
+  "formatPresetQuestionCount(selectedPresetForm, examType)",
   '<InfoItem label="Sürüm" value={selectedPresetVersion} />',
   '<Field label="Dosyadan format tanı">',
   '<Field label="Dosya format sürümü">',

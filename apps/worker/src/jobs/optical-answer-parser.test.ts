@@ -10,12 +10,14 @@ const isemTxtPath = "../../ornek-veriler/iSEM .txt";
 const itWithIsemFixture = existsSync(isemTxtPath) ? it : it.skip;
 const referencePresetCases: Array<{
   preset: Exclude<ParserConfigPreset, "OPTIK_7108_LGS">;
+  examType: "TYT" | "AYT" | "LGS";
   rowLength: number;
   studentNo: string;
   capacityBlocks: Array<{ start: number; length: number }>;
 }> = [
   {
-    preset: "OPTIK_129_TYT",
+    preset: "OPTIK_129",
+    examType: "TYT",
     rowLength: 223,
     studentNo: "12001",
     capacityBlocks: [
@@ -26,7 +28,8 @@ const referencePresetCases: Array<{
     ],
   },
   {
-    preset: "OPTIK_129_AYT",
+    preset: "OPTIK_129",
+    examType: "AYT",
     rowLength: 223,
     studentNo: "12002",
     capacityBlocks: [
@@ -37,7 +40,8 @@ const referencePresetCases: Array<{
     ],
   },
   {
-    preset: "YANIT_TYT",
+    preset: "YANIT",
+    examType: "TYT",
     rowLength: 233,
     studentNo: "130001",
     capacityBlocks: [
@@ -48,7 +52,8 @@ const referencePresetCases: Array<{
     ],
   },
   {
-    preset: "YANIT_AYT",
+    preset: "YANIT",
+    examType: "AYT",
     rowLength: 233,
     studentNo: "130002",
     capacityBlocks: [
@@ -60,6 +65,7 @@ const referencePresetCases: Array<{
   },
   {
     preset: "OPTIK_840_LGS",
+    examType: "LGS",
     rowLength: 280,
     studentNo: "84001",
     capacityBlocks: [
@@ -251,9 +257,9 @@ describe("OpticalAnswerParser", () => {
     expect(result.matched[0]?.answers.slice(0, 20).map((item) => item.answer).join("")).toBe("CBCADDBABDBACAABDACA");
   });
 
-  it.each(referencePresetCases)("$preset sentetik satırını mantıksal soru sırasıyla parse eder", (testCase) => {
+  it.each(referencePresetCases)("$preset sentetik $examType satırını mantıksal soru sırasıyla parse eder", (testCase) => {
     const parser = new OpticalAnswerParser();
-    const preset = getParserConfigPresetSuggestion(testCase.preset);
+    const preset = getParserConfigPresetSuggestion(testCase.preset, testCase.examType);
     const segments = preset.fieldMapping.answers.segments ?? [];
     const row = Array.from({ length: testCase.rowLength }, () => " ");
     const answerChars = ["A", "B", "C", "D", "E", "A"];

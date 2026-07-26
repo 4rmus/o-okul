@@ -76,10 +76,8 @@ const parserConfigSuggestionRequestAlternatives = [["sampleText"], ["fileBase64"
 const parserDelimiters = ["COMMA", "FIXED", "PIPE", "TAB"];
 const parserConfigPresets = [
   "OPTIK_7108_LGS",
-  "OPTIK_129_TYT",
-  "OPTIK_129_AYT",
-  "YANIT_TYT",
-  "YANIT_AYT",
+  "OPTIK_129",
+  "YANIT",
   "OPTIK_840_LGS",
 ];
 const opticalFormTemplateRecordRequired = [

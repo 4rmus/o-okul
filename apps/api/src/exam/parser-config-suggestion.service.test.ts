@@ -4,7 +4,8 @@ import { ParserConfigSuggestionService } from "./parser-config-suggestion.servic
 
 const newPresetCases = [
   {
-    preset: "OPTIK_129_TYT",
+    preset: "OPTIK_129",
+    examType: "TYT",
     nationalId: { kind: "fixed", start: 36, length: 11 },
     studentNo: { kind: "fixed", start: 11, length: 5 },
     bookletType: { kind: "fixed", start: 55, length: 1 },
@@ -17,7 +18,8 @@ const newPresetCases = [
     ],
   },
   {
-    preset: "OPTIK_129_AYT",
+    preset: "OPTIK_129",
+    examType: "AYT",
     nationalId: { kind: "fixed", start: 36, length: 11 },
     studentNo: { kind: "fixed", start: 11, length: 5 },
     bookletType: { kind: "fixed", start: 55, length: 1 },
@@ -30,7 +32,8 @@ const newPresetCases = [
     ],
   },
   {
-    preset: "YANIT_TYT",
+    preset: "YANIT",
+    examType: "TYT",
     nationalId: { kind: "fixed", start: 12, length: 11 },
     studentNo: { kind: "fixed", start: 6, length: 6 },
     bookletType: { kind: "fixed", start: 48, length: 1 },
@@ -43,7 +46,8 @@ const newPresetCases = [
     ],
   },
   {
-    preset: "YANIT_AYT",
+    preset: "YANIT",
+    examType: "AYT",
     nationalId: { kind: "fixed", start: 12, length: 11 },
     studentNo: { kind: "fixed", start: 6, length: 6 },
     bookletType: { kind: "fixed", start: 48, length: 1 },
@@ -57,6 +61,7 @@ const newPresetCases = [
   },
   {
     preset: "OPTIK_840_LGS",
+    examType: "LGS",
     nationalId: { kind: "fixed", start: 34, length: 11 },
     studentNo: { kind: "fixed", start: 9, length: 5 },
     bookletType: { kind: "fixed", start: 59, length: 1 },
@@ -73,10 +78,10 @@ const newPresetCases = [
 ] as const;
 
 describe("ParserConfigSuggestionService", () => {
-  it("örnek metinden parser config önerisi üretir", () => {
-    const service = new ParserConfigSuggestionService();
+  it("örnek metinden parser config önerisi üretir", async () => {
+    const service = createService();
 
-    const result = service.suggest(createContext(), {
+    const result = await service.suggest(createContext(), {
       examId: "exam-a",
       sampleText: "ogrenci_no\tkitapcik\tcevaplar\n12345\tA\tABCDE",
     });
@@ -98,10 +103,10 @@ describe("ParserConfigSuggestionService", () => {
     });
   });
 
-  it("base64 dosya içeriğini analiz eder", () => {
-    const service = new ParserConfigSuggestionService();
+  it("base64 dosya içeriğini analiz eder", async () => {
+    const service = createService();
 
-    const result = service.suggest(createContext(), {
+    const result = await service.suggest(createContext(), {
       examId: "exam-a",
       fileBase64: Buffer.from("12345|A|ABCDE\n67890|B|BBCDE").toString("base64"),
     });
@@ -110,10 +115,10 @@ describe("ParserConfigSuggestionService", () => {
     expect(result.suggestion.skipHeaderLines).toBe(0);
   });
 
-  it("OPTİK-7108 LGS presetini örnek dosya istemeden döndürür", () => {
-    const service = new ParserConfigSuggestionService();
+  it("OPTİK-7108 LGS presetini örnek dosya istemeden döndürür", async () => {
+    const service = createService();
 
-    const result = service.suggest(createContext(), {
+    const result = await service.suggest(createContext(), {
       examId: "exam-a",
       preset: "OPTIK_7108_LGS",
     });
@@ -146,10 +151,10 @@ describe("ParserConfigSuggestionService", () => {
     });
   });
 
-  it.each(newPresetCases)("$preset presetini referans kolonları ve fixture uyarısıyla döndürür", (testCase) => {
-    const service = new ParserConfigSuggestionService();
+  it.each(newPresetCases)("$preset presetini $examType sınavına göre ve fixture uyarısıyla döndürür", async (testCase) => {
+    const service = createService(testCase.examType);
 
-    const result = service.suggest(createContext(), {
+    const result = await service.suggest(createContext(), {
       examId: "exam-a",
       preset: testCase.preset,
     });
@@ -177,42 +182,46 @@ describe("ParserConfigSuggestionService", () => {
       .toBe(testCase.estimatedQuestionCount);
   });
 
-  it("örnek yoksa analiz etmeden 400 döner", () => {
-    const service = new ParserConfigSuggestionService();
+  it("birleşik TYT/AYT presetini başka sınav türünde reddeder", async () => {
+    const service = createService("LGS");
 
-    expect(() => service.suggest(createContext(), {
+    await expect(service.suggest(createContext(), {
       examId: "exam-a",
-    })).toThrow("PARSER_CONFIG_SAMPLE_REQUIRED");
+      preset: "OPTIK_129",
+    })).rejects.toThrow("FORMAT_ANALYZER_PRESET_TYT_AYT_EXAM_REQUIRED");
   });
 
-  it("geçersiz sampleSize değerini 400 ile reddeder", () => {
-    const service = new ParserConfigSuggestionService();
+  it("örnek yoksa analiz etmeden 400 döner", async () => {
+    const service = createService();
 
-    expect(() => service.suggest(createContext(), {
+    await expect(service.suggest(createContext(), {
+      examId: "exam-a",
+    })).rejects.toThrow("PARSER_CONFIG_SAMPLE_REQUIRED");
+  });
+
+  it("geçersiz sampleSize değerini 400 ile reddeder", async () => {
+    const service = createService();
+
+    await expect(service.suggest(createContext(), {
       examId: "exam-a",
       sampleText: "12345|A|ABCDE",
       sampleSize: 0,
-    })).toThrow("PARSER_CONFIG_SAMPLE_SIZE_INVALID");
+    })).rejects.toThrow("PARSER_CONFIG_SAMPLE_SIZE_INVALID");
   });
 
-  it("analyzer hatasını 400'e çevirir", () => {
-    const service = new ParserConfigSuggestionService();
+  it("analyzer hatasını 400'e çevirir", async () => {
+    const service = createService();
 
-    try {
-      service.suggest(createContext(), {
-        examId: "exam-a",
-        sampleText: "ogrenci_no\tkitapcik\tcevaplar",
-      });
-      throw new Error("EXPECTED_ERROR");
-    } catch (error) {
-      expect(error).toMatchObject({ status: 400 });
-    }
+    await expect(service.suggest(createContext(), {
+      examId: "exam-a",
+      sampleText: "ogrenci_no\tkitapcik\tcevaplar",
+    })).rejects.toMatchObject({ status: 400 });
   });
 
-  it("tenant context yoksa reddeder", () => {
-    const service = new ParserConfigSuggestionService();
+  it("tenant context yoksa reddeder", async () => {
+    const service = createService();
 
-    expect(() => service.suggest({
+    await expect(service.suggest({
       userId: "system",
       tenantId: null,
       roles: ["SYSTEM_ADMIN"],
@@ -220,9 +229,25 @@ describe("ParserConfigSuggestionService", () => {
     }, {
       examId: "exam-a",
       sampleText: "12345|A|ABCDE",
-    })).toThrow("TENANT_CONTEXT_MISSING");
+    })).rejects.toThrow("TENANT_CONTEXT_MISSING");
   });
 });
+
+function createService(examType = "TYT") {
+  return new ParserConfigSuggestionService({
+    async findById(tenantId, examId) {
+      return {
+        id: examId,
+        tenantId,
+        examType,
+        title: "Deneme",
+        status: "DRAFT",
+        createdAt: "2026-07-26T00:00:00.000Z",
+        updatedAt: "2026-07-26T00:00:00.000Z",
+      };
+    },
+  });
+}
 
 function createContext(): RequestContext {
   return {

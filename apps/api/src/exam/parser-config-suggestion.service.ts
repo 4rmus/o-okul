@@ -1,13 +1,18 @@
-import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import {
   FormatAnalyzerService,
   getParserConfigPresetSuggestion,
-  type ParserConfigPreset,
   type ParserConfigSuggestionRequest,
   type ParserConfigSuggestionResult as SharedParserConfigSuggestionResult,
-  type ParserConfigSuggestion,
 } from "@o-okul/shared-types";
 import type { RequestContext } from "../context/request-context.js";
+import { type ExamRepository, examRepositoryToken } from "./exam.service.js";
 
 export interface ParserConfigSuggestionInput extends ParserConfigSuggestionRequest {
   examId?: string;
@@ -19,10 +24,15 @@ export type ParserConfigSuggestionResult = SharedParserConfigSuggestionResult;
 export class ParserConfigSuggestionService {
   private readonly analyzer = new FormatAnalyzerService();
 
-  suggest(
+  constructor(
+    @Inject(examRepositoryToken)
+    private readonly exams: Pick<ExamRepository, "findById">,
+  ) {}
+
+  async suggest(
     context: RequestContext,
     input: ParserConfigSuggestionInput,
-  ): ParserConfigSuggestionResult {
+  ): Promise<ParserConfigSuggestionResult> {
     if (!context.tenantId) {
       throw new ForbiddenException("TENANT_CONTEXT_MISSING");
     }
@@ -30,9 +40,17 @@ export class ParserConfigSuggestionService {
     const examId = required(input.examId, "PARSER_CONFIG_EXAM_REQUIRED");
     if (input.preset) {
       try {
+        let examType: string | undefined;
+        if (input.preset === "OPTIK_129" || input.preset === "YANIT") {
+          const exam = await this.exams.findById(context.tenantId, examId);
+          if (!exam) {
+            throw new NotFoundException("PARSER_CONFIG_EXAM_NOT_FOUND");
+          }
+          examType = exam.examType;
+        }
         return {
           examId,
-          suggestion: getParserConfigPresetSuggestion(input.preset),
+          suggestion: getParserConfigPresetSuggestion(input.preset, examType),
           status: "suggested",
         };
       } catch (error) {
