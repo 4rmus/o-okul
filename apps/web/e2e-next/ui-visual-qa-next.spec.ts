@@ -731,7 +731,11 @@ test.describe("Faz 9 UI görsel smoke", () => {
       await page.getByRole("tab", { name: "Öğrenciler" }).click();
       const studentResultsTable = page.getByRole("table", { name: "Öğrenci sıralamaları" });
       await expect(studentResultsTable.getByRole("columnheader", { name: "Performans" })).toBeVisible();
-      await expect(studentResultsTable.getByRole("columnheader", { name: "Başarı sırası" })).toBeVisible();
+      if (viewport.width <= 760) {
+        await expect(studentResultsTable.locator(".uh-data-table__mobile-detail-item dt").filter({ hasText: "Başarı sırası" }).first()).toBeVisible();
+      } else {
+        await expect(studentResultsTable.getByRole("columnheader", { name: "Başarı sırası" })).toBeVisible();
+      }
       await expect(studentResultsTable).toContainText("%81,7");
 
       await studentResultsTable.getByRole("button", { name: "Ada Kaya karnesini aç" }).click();
