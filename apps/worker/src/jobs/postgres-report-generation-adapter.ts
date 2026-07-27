@@ -16,12 +16,24 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
   async loadResults(input: ReportGenerationJobInput): Promise<ExamResultForReport[]> {
     return withTenantDb(this.pool, { tenantId: input.tenantId }, async (client) => {
       const result = await client.query<ExamResultReportRow>(
-        `WITH latest_results AS (
+         `WITH report_exam AS (
+           SELECT "id", "title", "startsAt", "linkedTytExamId"
+           FROM "Exam"
+           WHERE "tenantId" = $1
+             AND "id" = $2
+             AND "deletedAt" IS NULL
+         ),
+         latest_results AS (
            SELECT DISTINCT ON (er."studentId")
+             er."examId",
+             requested_exam."title" AS "examTitle",
+             requested_exam."startsAt" AS "examStartsAt",
              er."studentId",
              s."firstName",
              s."lastName",
              s."studentNo",
+             ep."participantNo",
+             ep."bookletType",
              s."classId",
              c."name" AS "className",
              selected_course."name" AS "courseName",
@@ -31,16 +43,47 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
              er."parserConfigVersion",
              er."engineVersion",
              er."scoreData",
-             er."computedAt"
+             er."computedAt",
+             linked_tyt."examId" AS "linkedTytExamId",
+             linked_tyt."resultKey" AS "linkedTytResultKey",
+             linked_tyt."answerKeyVersion" AS "linkedTytAnswerKeyVersion",
+             linked_tyt."parserConfigVersion" AS "linkedTytParserConfigVersion",
+             linked_tyt."engineVersion" AS "linkedTytEngineVersion",
+             linked_tyt."scoreData" AS "linkedTytScoreData",
+             linked_tyt."computedAt" AS "linkedTytComputedAt"
            FROM "ExamResult" er
+           INNER JOIN report_exam requested_exam
+             ON er."examId" = requested_exam."id"
            INNER JOIN "Exam" e
              ON e."tenantId" = er."tenantId"
             AND e."id" = er."examId"
             AND e."deletedAt" IS NULL
+           LEFT JOIN LATERAL (
+             SELECT
+               linked_result."examId",
+               linked_result."resultKey",
+               linked_result."answerKeyVersion",
+               linked_result."parserConfigVersion",
+               linked_result."engineVersion",
+               linked_result."scoreData",
+               linked_result."computedAt"
+             FROM "ExamResult" linked_result
+             WHERE linked_result."tenantId" = er."tenantId"
+               AND linked_result."examId" = requested_exam."linkedTytExamId"
+               AND linked_result."studentId" = er."studentId"
+               AND linked_result."deletedAt" IS NULL
+             ORDER BY linked_result."computedAt" DESC, linked_result."updatedAt" DESC, linked_result."resultKey" DESC
+             LIMIT 1
+           ) linked_tyt ON TRUE
            LEFT JOIN "Student" s
              ON s."tenantId" = er."tenantId"
             AND s."id" = er."studentId"
             AND s."deletedAt" IS NULL
+           LEFT JOIN "ExamParticipant" ep
+             ON ep."tenantId" = er."tenantId"
+            AND ep."examId" = er."examId"
+            AND ep."studentId" = er."studentId"
+            AND ep."deletedAt" IS NULL
            LEFT JOIN "Class" c
              ON c."tenantId" = er."tenantId"
             AND c."id" = s."classId"
@@ -50,7 +93,6 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
             AND selected_course."id" = $6
             AND selected_course."deletedAt" IS NULL
            WHERE er."tenantId" = $1
-             AND er."examId" = $2
              AND er."deletedAt" IS NULL
              AND ($3::text IS NULL OR c."campusId" = $3)
              AND ($4::text IS NULL OR c."gradeLevelId" = $4)
@@ -99,9 +141,14 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
       return result.rows.map((row) => {
         const displayName = `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim();
         return {
+          examId: row.examId,
+          ...(row.examTitle ? { examTitle: row.examTitle } : {}),
+          ...(row.examStartsAt ? { examStartsAt: toIsoString(row.examStartsAt) } : {}),
           studentId: row.studentId,
           ...(displayName ? { displayName } : {}),
           ...(row.studentNo ? { studentNo: row.studentNo } : {}),
+          ...(row.participantNo ? { participantNo: row.participantNo } : {}),
+          ...(row.bookletType ? { bookletType: row.bookletType } : {}),
           classId: row.classId ?? undefined,
           className: row.className ?? undefined,
           resultKey: row.resultKey,
@@ -110,6 +157,17 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
           engineVersion: row.engineVersion,
           score: filterScoreForCourse(parseScoringResult(row.scoreData), row.courseName, row.courseCode),
           computedAt: toIsoString(row.computedAt),
+          ...(row.linkedTytExamId ? {
+            linkedTytResult: {
+              examId: row.linkedTytExamId,
+              resultKey: row.linkedTytResultKey!,
+              answerKeyVersion: row.linkedTytAnswerKeyVersion!,
+              parserConfigVersion: row.linkedTytParserConfigVersion!,
+              engineVersion: row.linkedTytEngineVersion!,
+              score: parseScoringResult(row.linkedTytScoreData),
+              computedAt: toIsoString(row.linkedTytComputedAt!),
+            },
+          } : {}),
         };
       });
     });
@@ -142,10 +200,15 @@ export class PostgresReportGenerationAdapter implements ReportGenerationJobAdapt
 }
 
 interface ExamResultReportRow {
+  examId: string;
+  examTitle: string | null;
+  examStartsAt: Date | string | null;
   studentId: string;
   firstName: string | null;
   lastName: string | null;
   studentNo: string | null;
+  participantNo: string | null;
+  bookletType: string | null;
   classId: string | null;
   className: string | null;
   courseName: string | null;
@@ -156,6 +219,13 @@ interface ExamResultReportRow {
   engineVersion: string;
   scoreData: unknown;
   computedAt: Date | string;
+  linkedTytExamId: string | null;
+  linkedTytResultKey: string | null;
+  linkedTytAnswerKeyVersion: string | null;
+  linkedTytParserConfigVersion: string | null;
+  linkedTytEngineVersion: string | null;
+  linkedTytScoreData: unknown | null;
+  linkedTytComputedAt: Date | string | null;
 }
 
 function filterScoreForCourse(score: ScoringResult, courseName: string | null, courseCode: string | null): ScoringResult {
@@ -178,7 +248,11 @@ function filterScoreForCourse(score: ScoringResult, courseName: string | null, c
 
   return {
     ...score,
-    total: { ...totals, rawScore: totals.net, standardScore: totals.net },
+    total: {
+      ...totals,
+      rawScore: totals.net,
+      ...(score.total.standardScore !== undefined ? { standardScore: totals.net } : {}),
+    },
     branches,
     ...(outcomes ? { outcomes } : {}),
     questions,

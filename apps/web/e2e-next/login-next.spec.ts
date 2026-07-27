@@ -6248,8 +6248,8 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(studentExamReport.getByText("1/2 (%100)").first()).toBeVisible();
   await expect(page.getByLabel("Portal kazanım radar grafiği").getByText("Portal kazanım radar tablosu")).toHaveCount(1);
   await expect(page.getByLabel("Portal kazanım radar grafiği").getByRole("row", { name: /Geometri Matematik 7 %82,1 6 1 0 5,8/ })).toBeVisible();
-  await expect(studentExamReport.getByRole("row", { name: /Matematik %100,0 20 20 0 0 20,0 19,9 9,5 9,4/ })).toBeVisible();
-  await expect(page.getByLabel("Son sınav branş netleri").getByRole("row", { name: /Matematik 18,7 20,0 17,3 18,7 18,7/ })).toBeVisible();
+  await expect(studentExamReport.getByRole("row", { name: /Matematik %100,0 20 20 0 0 20,00 19,9 9,5 9,4/ })).toBeVisible();
+  await expect(page.getByLabel("Son sınav branş netleri").getByRole("row", { name: /Matematik 18,7 20,00 17,3 18,7 18,7/ })).toBeVisible();
   await expect(studentExamReport.getByText("1 soru").first()).toBeVisible();
   await capturePortalKarneVisualEvidence(page, test.info(), "portal-ogrenci-sinav-raporu");
   await page.evaluate(() => {
@@ -6404,8 +6404,8 @@ test("Next rol portalları bağlı kişi verisini gösterir", async ({ page }) =
   await expect(guardianExamReport.getByText("1/2 (%100)").first()).toBeVisible();
   await expect(page.getByLabel("Portal kazanım radar grafiği").getByText("Portal kazanım radar tablosu")).toHaveCount(1);
   await expect(page.getByLabel("Portal kazanım radar grafiği").getByRole("row", { name: /Geometri Matematik 7 %82,1 6 1 0 5,8/ })).toBeVisible();
-  await expect(guardianExamReport.getByRole("row", { name: /Matematik %100,0 20 20 0 0 20,0 19,9 9,5 9,4/ })).toBeVisible();
-  await expect(page.getByLabel("Son sınav branş netleri").getByRole("row", { name: /Matematik 18,7 20,0 17,3 18,7 18,7/ })).toBeVisible();
+  await expect(guardianExamReport.getByRole("row", { name: /Matematik %100,0 20 20 0 0 20,00 19,9 9,5 9,4/ })).toBeVisible();
+  await expect(page.getByLabel("Son sınav branş netleri").getByRole("row", { name: /Matematik 18,7 20,00 17,3 18,7 18,7/ })).toBeVisible();
   await capturePortalKarneVisualEvidence(page, test.info(), "portal-veli-sinav-raporu");
   await page.evaluate(() => {
     window.history.pushState(null, "", "/veli?examId=exam-demo");

@@ -1,18 +1,4 @@
-export const psychometricsVersion = "2026.06.cohort-v1";
-
-/**
- * Standart puan ölçeği. Varsayılan T-skor: ortalama 50, standart sapma 10.
- * (ör. ÖSYM/MEB tarzı). Kurum isterse 100 taban / 15 ölçek gibi alternatifleri
- * `standardScore` ile geçer. z-skoru popülasyon standart sapmasıyla (÷N) hesaplanır.
- */
-export interface StandardScoreScale {
-  mean: number;
-  sd: number;
-}
-
-export interface PsychometricsConfig {
-  standardScore?: StandardScoreScale;
-}
+export const psychometricsVersion = "2026.07.competition-rank-v2";
 
 export interface CohortBranchInput {
   branch: string;
@@ -24,23 +10,18 @@ export interface CohortStudentInput {
   classId?: string | null;
   net: number;
   rawScore: number;
+  rankingScore?: number;
   branches: CohortBranchInput[];
 }
 
-/** Bir kapsam (genel ya da sınıf) içindeki konumlandırma. */
 export interface ScopeRank {
-  /** 1 tabanlı rekabet sıralaması: eşit puanlar aynı rank'i paylaşır, sonraki rank atlar. */
   rank: number;
-  /** Kapsamdaki öğrenci sayısı. */
   outOf: number;
-  /** Yüzdelik dilim: (altındaki + 0.5·eşit) / N × 100. */
-  percentile: number;
 }
 
 export interface BranchStatistics {
   branch: string;
   net: number;
-  standardScore: number;
   general: ScopeRank;
   class: ScopeRank | null;
 }
@@ -51,212 +32,113 @@ export interface StudentStatistics {
   total: {
     net: number;
     rawScore: number;
-    standardScore: number;
     general: ScopeRank;
     class: ScopeRank | null;
   };
   branches: BranchStatistics[];
 }
 
-export interface CohortBranchSummary {
-  branch: string;
-  count: number;
-  meanNet: number;
-  sdNet: number;
-}
-
 export interface CohortStatistics {
   count: number;
   total: {
     meanNet: number;
-    sdNet: number;
     meanRawScore: number;
-    sdRawScore: number;
   };
-  branches: CohortBranchSummary[];
+  branches: {
+    branch: string;
+    count: number;
+    meanNet: number;
+  }[];
   students: StudentStatistics[];
   _meta: {
     psychometricsVersion: string;
-    standardScore: StandardScoreScale;
   };
 }
 
-const defaultScale: StandardScoreScale = { mean: 50, sd: 10 };
-
-/**
- * Bir sınavın tüm sonuçlarından (kohort) standart puan, yüzdelik dilim ve
- * sıralama üretir. Saf ve deterministik: aynı girdi (sıradan bağımsız) → aynı çıktı.
- * Standart puan kohort geneline görelidir; sıralama/yüzdelik hem genel hem sınıf
- * kapsamında verilir. Dağılımlar bir kez ön-hesaplanıp ikili arama ile
- * sorgulanır (O(N log N)).
- */
-export function computeCohortStatistics(
-  students: CohortStudentInput[],
-  config: PsychometricsConfig = {},
-): CohortStatistics {
+export function computeCohortStatistics(students: CohortStudentInput[]): CohortStatistics {
   if (students.length === 0) {
     throw new Error("PSYCHOMETRICS_INPUT_EMPTY");
   }
-  const scale = config.standardScore ?? defaultScale;
 
-  const sorted = [...students].sort((a, b) => a.studentId.localeCompare(b.studentId));
-  const rawScores = sorted.map((student) => student.rawScore);
-  const nets = sorted.map((student) => student.net);
+  const sorted = [...students].sort((left, right) => left.studentId.localeCompare(right.studentId));
+  const rankingScores = sorted.map(studentRankingScore);
   const branchNames = uniqueSorted(sorted.flatMap((student) => student.branches.map((branch) => branch.branch)));
-
-  const totalDistribution = buildDistribution(rawScores);
-  const branchDistribution = new Map<string, Distribution>();
-  for (const branch of branchNames) {
-    branchDistribution.set(branch, buildDistribution(collectBranchNets(sorted, branch)));
-  }
-
-  const classRawValues = new Map<string, number[]>();
-  const classBranchValues = new Map<string, number[]>();
+  const generalRanks = createRankLookup(rankingScores);
+  const classScores = groupValues(sorted, (student) => student.classId ?? undefined, studentRankingScore);
+  const classRanks = new Map([...classScores].map(([key, values]) => [key, createRankLookup(values)]));
+  const branchScores = new Map(branchNames.map((branch) => [branch, collectBranchNets(sorted, branch)]));
+  const branchRanks = new Map([...branchScores].map(([branch, values]) => [branch, createRankLookup(values)]));
+  const classBranchScores = new Map<string, number[]>();
   for (const student of sorted) {
-    if (student.classId == null) continue;
-    pushTo(classRawValues, student.classId, student.rawScore);
+    if (!student.classId) continue;
     for (const branch of student.branches) {
-      pushTo(classBranchValues, classBranchKey(student.classId, branch.branch), branch.net);
+      pushTo(classBranchScores, classBranchKey(student.classId, branch.branch), branch.net);
     }
   }
-  const classTotalDistribution = buildDistributionMap(classRawValues);
-  const classBranchDistribution = buildDistributionMap(classBranchValues);
-
-  const context: CohortContext = {
-    scale,
-    totalDistribution,
-    branchDistribution,
-    classTotalDistribution,
-    classBranchDistribution,
-  };
+  const classBranchRanks = new Map([...classBranchScores].map(([key, values]) => [key, createRankLookup(values)]));
 
   return {
     count: sorted.length,
     total: {
-      meanNet: round4(mean(nets)),
-      sdNet: round4(populationSd(nets)),
-      meanRawScore: round4(totalDistribution.mean),
-      sdRawScore: round4(totalDistribution.sd),
+      meanNet: mean(sorted.map((student) => student.net)),
+      meanRawScore: mean(sorted.map((student) => student.rawScore)),
     },
     branches: branchNames.map((branch) => {
-      const distribution = branchDistribution.get(branch) ?? buildDistribution([]);
+      const values = branchScores.get(branch) ?? [];
+      return { branch, count: values.length, meanNet: mean(values) };
+    }),
+    students: sorted.map((student) => {
+      const classId = student.classId ?? null;
+      const score = studentRankingScore(student);
       return {
-        branch,
-        count: distribution.sortedAsc.length,
-        meanNet: round4(distribution.mean),
-        sdNet: round4(distribution.sd),
+        studentId: student.studentId,
+        classId,
+        total: {
+          net: round2(student.net),
+          rawScore: round2(student.rawScore),
+          general: generalRanks.get(score) ?? { rank: 1, outOf: sorted.length },
+          class: classId === null ? null : classRanks.get(classId)?.get(score) ?? null,
+        },
+        branches: [...student.branches]
+          .sort((left, right) => left.branch.localeCompare(right.branch))
+          .map((branch) => ({
+            branch: branch.branch,
+            net: round2(branch.net),
+            general: branchRanks.get(branch.branch)?.get(branch.net) ?? { rank: 1, outOf: 1 },
+            class: classId === null
+              ? null
+              : classBranchRanks.get(classBranchKey(classId, branch.branch))?.get(branch.net) ?? null,
+          })),
       };
     }),
-    students: sorted.map((student) => toStudentStatistics(student, context)),
-    _meta: {
-      psychometricsVersion,
-      standardScore: scale,
-    },
+    _meta: { psychometricsVersion },
   };
 }
 
-interface CohortContext {
-  scale: StandardScoreScale;
-  totalDistribution: Distribution;
-  branchDistribution: Map<string, Distribution>;
-  classTotalDistribution: Map<string, Distribution>;
-  classBranchDistribution: Map<string, Distribution>;
+function createRankLookup(values: number[]): Map<number, ScopeRank> {
+  const descending = [...values].sort((left, right) => right - left);
+  const ranks = new Map<number, ScopeRank>();
+  descending.forEach((value, index) => {
+    if (!ranks.has(value)) ranks.set(value, { rank: index + 1, outOf: descending.length });
+  });
+  return ranks;
 }
 
-function toStudentStatistics(student: CohortStudentInput, context: CohortContext): StudentStatistics {
-  const classId = student.classId ?? null;
-  const classTotal = classId == null ? null : context.classTotalDistribution.get(classId) ?? buildDistribution([student.rawScore]);
-  const branches = [...student.branches]
-    .sort((a, b) => a.branch.localeCompare(b.branch))
-    .map((branch) => toBranchStatistics(branch, classId, context));
-
-  return {
-    studentId: student.studentId,
-    classId,
-    total: {
-      net: round4(student.net),
-      rawScore: round4(student.rawScore),
-      standardScore: standardize(context.totalDistribution, student.rawScore, context.scale),
-      general: scopeRank(context.totalDistribution, student.rawScore),
-      class: classTotal == null ? null : scopeRank(classTotal, student.rawScore),
-    },
-    branches,
-  };
+function studentRankingScore(student: CohortStudentInput): number {
+  return student.rankingScore ?? student.rawScore;
 }
 
-function toBranchStatistics(branch: CohortBranchInput, classId: string | null, context: CohortContext): BranchStatistics {
-  const general = context.branchDistribution.get(branch.branch) ?? buildDistribution([branch.net]);
-  const inClass = classId == null ? null : context.classBranchDistribution.get(classBranchKey(classId, branch.branch)) ?? buildDistribution([branch.net]);
-
-  return {
-    branch: branch.branch,
-    net: round4(branch.net),
-    standardScore: standardize(general, branch.net, context.scale),
-    general: scopeRank(general, branch.net),
-    class: inClass == null ? null : scopeRank(inClass, branch.net),
-  };
-}
-
-/** Bir kapsamın puan dağılımı: artan sıralı değerler + ortalama + popülasyon std sapması. */
-interface Distribution {
-  sortedAsc: number[];
-  mean: number;
-  sd: number;
-}
-
-function buildDistribution(values: number[]): Distribution {
-  const sortedAsc = [...values].sort((a, b) => a - b);
-  const center = mean(values);
-  const variance = values.length === 0 ? 0 : values.reduce((sum, value) => sum + (value - center) ** 2, 0) / values.length;
-  return { sortedAsc, mean: center, sd: Math.sqrt(variance) };
-}
-
-function buildDistributionMap(valuesByKey: Map<string, number[]>): Map<string, Distribution> {
-  const distributions = new Map<string, Distribution>();
-  for (const [key, values] of valuesByKey) {
-    distributions.set(key, buildDistribution(values));
+function groupValues(
+  students: CohortStudentInput[],
+  keyOf: (student: CohortStudentInput) => string | undefined,
+  valueOf: (student: CohortStudentInput) => number,
+): Map<string, number[]> {
+  const grouped = new Map<string, number[]>();
+  for (const student of students) {
+    const key = keyOf(student);
+    if (key) pushTo(grouped, key, valueOf(student));
   }
-  return distributions;
-}
-
-function scopeRank(distribution: Distribution, value: number): ScopeRank {
-  const outOf = distribution.sortedAsc.length;
-  const below = lowerBound(distribution.sortedAsc, value);
-  const equal = upperBound(distribution.sortedAsc, value) - below;
-  return {
-    rank: outOf - below - equal + 1,
-    outOf,
-    percentile: round4(((below + 0.5 * equal) / outOf) * 100),
-  };
-}
-
-function standardize(distribution: Distribution, value: number, scale: StandardScoreScale): number {
-  const z = distribution.sd > 0 ? (value - distribution.mean) / distribution.sd : 0;
-  return round4(scale.mean + scale.sd * z);
-}
-
-/** İlk `value`'dan küçük olmayan (>=) elemanın indeksi = kesin küçük olanların sayısı. */
-function lowerBound(sortedAsc: number[], value: number): number {
-  let lo = 0;
-  let hi = sortedAsc.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1;
-    if (sortedAsc[mid]! < value) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo;
-}
-
-/** İlk `value`'dan büyük (>) elemanın indeksi. upperBound − lowerBound = eşit olanların sayısı. */
-function upperBound(sortedAsc: number[], value: number): number {
-  let lo = 0;
-  let hi = sortedAsc.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1;
-    if (sortedAsc[mid]! <= value) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo;
+  return grouped;
 }
 
 function collectBranchNets(students: CohortStudentInput[], branch: string): number[] {
@@ -272,25 +154,18 @@ function pushTo(map: Map<string, number[]>, key: string, value: number): void {
 }
 
 function classBranchKey(classId: string, branch: string): string {
-  return `${classId} ${branch}`;
+  return `${classId}\u0000${branch}`;
 }
 
 function mean(values: number[]): number {
   if (values.length === 0) return 0;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function populationSd(values: number[]): number {
-  if (values.length === 0) return 0;
-  const center = mean(values);
-  const variance = values.reduce((sum, value) => sum + (value - center) ** 2, 0) / values.length;
-  return Math.sqrt(variance);
+  return round2(values.reduce((sum, value) => sum + value, 0) / values.length);
 }
 
 function uniqueSorted(values: string[]): string[] {
-  return [...new Set(values)].sort((a, b) => a.localeCompare(b));
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
 }
 
-function round4(value: number): number {
-  return Number(value.toFixed(4));
+function round2(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 }

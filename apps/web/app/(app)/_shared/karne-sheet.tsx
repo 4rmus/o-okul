@@ -3,10 +3,16 @@
 import type { ReactNode } from "react";
 import { InfoGrid, InfoItem, MetricCard, MetricGrid, StatusBadge, type StatusBadgeProps } from "@o-okul/ui";
 import type {
+  ExamScoreType,
   ReportErrorBooklet,
   ReportScopeRank,
   ReportStudentProgress,
   ReportStudentSnapshot,
+} from "@o-okul/shared-types";
+import {
+  reportCourseMatchesScoreType,
+  reportCourseShortName,
+  reportCourseSortOrder,
 } from "@o-okul/shared-types";
 import { formatCourseName, formatOutcomeCode } from "./academic-labels.js";
 import { clampSuccessRate, formatPercentDelta, formatPercentNumber, reportQuestionCount, reportSuccessRate } from "./report-metrics.js";
@@ -26,10 +32,9 @@ interface KarneSheetProps {
   outcomeSectionClassName: string;
   outputStatusLabel: string;
   progress: ReportStudentProgress | null;
-  rankFormat: "simple" | "percentile";
   report: ReportStudentSnapshot | null;
   reportLabel: string;
-  scoreGeneralLabel: string;
+  scoreType?: "LGS" | "TYT" | "SAY" | "EA" | "SOZ";
   sheetClassName: string;
   showEmptyOutcomes?: boolean;
   showProgressHistory?: boolean;
@@ -50,10 +55,9 @@ export function KarneSheet({
   outcomeSectionClassName,
   outputStatusLabel,
   progress,
-  rankFormat,
   report,
   reportLabel,
-  scoreGeneralLabel,
+  scoreType,
   sheetClassName,
   showEmptyOutcomes = false,
   showProgressHistory = false,
@@ -82,9 +86,32 @@ export function KarneSheet({
   const scoreExtra = showProgressHistory ? "" : summaryExtra.replace(/^Gelişim\s+/u, "");
   const contextExtra = showProgressHistory ? formatKarneSummaryExtra(summaryExtra) : "";
   const institutionName = report.institutionName ?? reportLabel;
-  const lgsScore = report.total.estimatedRawScore ?? report.total.standardScore;
-  const totalQuestionCount = reportQuestionCount(report.total);
-  const totalSuccessRate = reportSuccessRate(report.total);
+  const scoreView = scoreType ? report.scoreViews?.find((view) => view.type === scoreType) : report.scoreViews?.[0];
+  const isModernReport = Boolean(report.scoringProfileId || report.scoreViews?.length);
+  const scoreRanking = report.scoreRankings?.find((ranking) => ranking.type === scoreView?.type);
+  const institutionRank = scoreView ? scoreRanking?.institution : report.statistics?.general;
+  const classRank = scoreView ? scoreRanking?.class : report.statistics?.class;
+  const score = scoreView?.practiceScore ?? (isModernReport ? undefined : report.total.estimatedRawScore ?? report.total.standardScore ?? report.total.rawScore);
+  const scoreMetrics = scoreView?.metrics ?? report.total;
+  const scoreRows = report.scoreViews?.length
+    ? report.scoreViews.map((view) => ({
+      type: view.type,
+      status: formatScoreViewStatus(view.status),
+      score: view.practiceScore,
+      courses: formatScoreCourseNets(report.branches, view.type),
+      institutionRank: report.scoreRankings?.find((ranking) => ranking.type === view.type)?.institution,
+      classRank: report.scoreRankings?.find((ranking) => ranking.type === view.type)?.class,
+    }))
+    : [{
+      type: isModernReport ? scoreType ?? "Puan" : "Eski hesaplama",
+      status: score === undefined ? "Hesaplanamadı" : "Hesaplandı",
+      score,
+      courses: "-",
+      institutionRank,
+      classRank,
+    }];
+  const totalQuestionCount = reportQuestionCount(scoreMetrics);
+  const totalSuccessRate = reportSuccessRate(scoreMetrics);
   const outcomeRows = (report.outcomes ?? []).filter((outcome) => outcome.outcomeCode || outcome.branch);
   const questionRows = [...(report.questions ?? [])].sort((left, right) => left.questionNo - right.questionNo);
   const contextItems = [
@@ -99,11 +126,10 @@ export function KarneSheet({
   const summaryItems = [
     { label: "Başarı %", value: formatPercentNumber(totalSuccessRate) },
     { label: "Soru", value: formatNumber(totalQuestionCount) },
-    { label: "Net", value: formatNetNumber(report.total.net) },
-    { label: "LGS puanı", value: formatNumber(lgsScore) },
-    { label: "Standart puan", value: formatNumber(report.total.standardScore) },
-    { label: "Genel sıra", value: formatRank(report.statistics?.general, rankFormat) },
-    { label: "Sınıf sıra", value: formatRank(report.statistics?.class, rankFormat) },
+    { label: "Net", value: formatNetNumber(scoreMetrics.net) },
+    { label: scoreView ? `${scoreView.type} deneme puanı` : isModernReport ? `${scoreType ?? "Puan"} hesaplanamadı` : "Eski hesaplama", value: formatNumber(score) },
+    { label: "Kurum başarı sırası", value: formatRank(institutionRank) },
+    { label: "Sınıf başarı sırası", value: formatRank(classRank) },
   ];
 
   return (
@@ -118,6 +144,11 @@ export function KarneSheet({
         />
         <KarneContextStrip items={contextItems} />
         <KarneSummaryStrip items={summaryItems} />
+        {isModernReport ? (
+          <p className="next-karne-score-warning">
+            Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.
+          </p>
+        ) : null}
         <div className="next-karne-grid">
           <KarneBlock className="next-karne-block next-karne-block--wide" title="BÖLÜM ANALİZİ">
             <table className="next-karne-table">
@@ -177,44 +208,32 @@ export function KarneSheet({
             <table className="next-karne-score-table">
               <thead>
                 <tr>
-                  <th colSpan={2}>PUAN TİPİ</th>
-                  <th>LGS</th>
+                  <th>PUAN TİPİ</th>
+                  <th>DURUM</th>
+                  <th>DENEME PUANI</th>
+                  <th>DERS NETLERİ</th>
+                  <th>KURUM BAŞARI SIRASI</th>
+                  <th>SINIF BAŞARI SIRASI</th>
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <th>LGS PUANI</th>
-                  <td colSpan={2}>{formatNumber(lgsScore)}</td>
-                </tr>
+                {scoreRows.map((row) => (
+                  <tr key={row.type}>
+                    <th>{formatScoreType(row.type)}</th>
+                    <td>{row.status}</td>
+                    <td>{formatNumber(row.score)}</td>
+                    <td className="next-karne-score-courses">{row.courses}</td>
+                    <td>{formatRank(row.institutionRank)}</td>
+                    <td>{formatRank(row.classRank)}</td>
+                  </tr>
+                ))}
                 <tr>
                   <th>BAŞARI %</th>
-                  <td colSpan={2}>{formatPercentNumber(totalSuccessRate)}</td>
+                  <td colSpan={5}>{formatPercentNumber(totalSuccessRate)}</td>
                 </tr>
                 <tr>
-                  <th className="next-karne-score-scope" rowSpan={2}>
-                    {scoreGeneralLabel === "SIRA" ? "GENEL" : scoreGeneralLabel}
-                  </th>
-                  <th>SIRA</th>
-                  <td>{formatRank(report.statistics?.general, rankFormat)}</td>
-                </tr>
-                <tr>
-                  <th>KATILIM</th>
-                  <td>{formatRankOutOf(report.statistics?.general)}</td>
-                </tr>
-                <tr>
-                  <th className="next-karne-score-scope" rowSpan={2}>
-                    SINIF
-                  </th>
-                  <th>SIRA</th>
-                  <td>{formatRank(report.statistics?.class, rankFormat)}</td>
-                </tr>
-                <tr>
-                  <th>KATILIM</th>
-                  <td>{formatRankOutOf(report.statistics?.class)}</td>
-                </tr>
-                <tr>
-                  <th colSpan={2}>GELİŞİM</th>
-                  <td>{showProgressHistory ? formatPercentDelta(progress?.successRateDelta) : scoreExtra}</td>
+                  <th>GELİŞİM</th>
+                  <td colSpan={5}>{showProgressHistory ? formatPercentDelta(progress?.successRateDelta) : scoreExtra}</td>
                 </tr>
               </tbody>
             </table>
@@ -533,7 +552,7 @@ function KarneReportHeader({
   return (
     <header className="next-karne-header">
       <div>
-        <KarneHeading level={titleLevel}>{report.examTitle ?? "İSEM - LGS - 1"}</KarneHeading>
+        <KarneHeading level={titleLevel}>{report.examTitle ?? "Sınav raporu"}</KarneHeading>
         <p>{isAnalysisPage ? "DETAYLI DENEME ANALİZİ" : report.studentName ?? report.studentId}</p>
         <span>{institutionName}</span>
         <span>{isAnalysisPage ? report.studentName ?? report.studentId : participantLine}</span>
@@ -572,7 +591,7 @@ function formatNumber(value: number | undefined) {
 }
 
 function formatNetNumber(value: number | undefined) {
-  return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+  return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 }
 
 function formatAnswer(value: string) {
@@ -582,29 +601,50 @@ function formatAnswer(value: string) {
 function formatQuestionStatus(status: NonNullable<ReportStudentSnapshot["questions"]>[number]["status"]) {
   if (status === "WRONG") return "Yanlış";
   if (status === "BLANK") return "Boş";
+  if (status === "CANCELLED") return "İptal";
   return "Doğru";
 }
 
 function questionStatusTone(status: NonNullable<ReportStudentSnapshot["questions"]>[number]["status"]): StatusBadgeProps["tone"] {
   if (status === "WRONG") return "danger";
-  if (status === "BLANK") return "neutral";
+  if (status === "BLANK" || status === "CANCELLED") return "neutral";
   return "success";
 }
 
 function questionStatusClassName(status: NonNullable<ReportStudentSnapshot["questions"]>[number]["status"]) {
   if (status === "WRONG") return "next-karne-status--wrong";
-  if (status === "BLANK") return "next-karne-status--blank";
+  if (status === "BLANK" || status === "CANCELLED") return "next-karne-status--blank";
   return "next-karne-status--correct";
 }
 
-function formatRank(rank: ReportScopeRank | undefined, rankFormat: "simple" | "percentile") {
+function formatRank(rank: ReportScopeRank | undefined) {
   if (!rank) return "-";
-  if (rankFormat === "simple") return `${formatNumber(rank.rank)}/${formatNumber(rank.outOf)}`;
-  return `${formatNumber(rank.rank)}/${formatNumber(rank.outOf)} (%${formatNumber(rank.percentile)})`;
+  return `${formatNumber(rank.rank)}/${formatNumber(rank.outOf)}`;
 }
 
-function formatRankOutOf(rank: ReportScopeRank | undefined) {
-  return rank ? formatNumber(rank.outOf) : "-";
+function formatScoreCourseNets(
+  branches: ReportStudentSnapshot["branches"],
+  type: ExamScoreType,
+): string {
+  const matching = branches
+    .filter((branch) => reportCourseMatchesScoreType(type, branch.branch))
+    .sort((left, right) => reportCourseSortOrder(type, left.branch) - reportCourseSortOrder(type, right.branch));
+
+  return matching.length
+    ? matching.map((branch) => `${reportCourseShortName(branch.branch)} ${formatNetNumber(branch.net)}`).join(" · ")
+    : "-";
+}
+
+function formatScoreType(type: string) {
+  if (type === "SAY") return "SAYISAL";
+  if (type === "SOZ") return "SÖZEL";
+  return type.toLocaleUpperCase("tr-TR");
+}
+
+function formatScoreViewStatus(status: "CALCULATED" | "NOT_ELIGIBLE" | "MISSING_TYT") {
+  if (status === "CALCULATED") return "Hesaplandı";
+  if (status === "MISSING_TYT") return "Bağlı TYT yok";
+  return "Hesaplanamadı";
 }
 
 function formatDelta(value: number | undefined) {
@@ -645,7 +685,7 @@ function formatKarneDateTime(value: string | undefined) {
 }
 
 function formatKarneSnapshotLabel(value: string | undefined) {
-  return value ? "Rapor kaydı hazır · READY snapshot" : "-";
+  return value ? "Rapor kaydı hazır · Rapor hazır" : "-";
 }
 
 function formatKarneSummaryExtra(value: string) {

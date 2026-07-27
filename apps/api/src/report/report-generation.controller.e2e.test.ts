@@ -323,10 +323,9 @@ describe("ReportGenerationController", () => {
     expect(workbook.getWorksheet("Öğrenciler")?.getCell("A2").value).toBe("Ada A");
     expect(workbook.getWorksheet("Öğrenciler")?.getCell("B2").value).toBe("1001");
     expect(workbook.getWorksheet("Öğrenciler")?.getCell("C2").value).toBe("student-a");
-    expect(workbook.getWorksheet("Sınıflar")?.getCell("B2").value).toBe("8-A");
-    expect(workbook.getWorksheet("Öğrenciler")?.getCell("O2").value).toBe(3);
-    expect(workbook.getWorksheet("Öğrenciler")?.getCell("Q2").value).toBe(92.5);
-    expect(workbook.getWorksheet("Branş İstatistikleri")?.getCell("D2").value).toBe(3);
+    expect(workbook.getWorksheet("Sınıf-Branş")?.getCell("F1").value).toBe("Başarı %");
+    expect(workbook.getWorksheet("Öğrenciler")?.getCell("N1").value).toBe("LGS Deneme puanı");
+    expect(workbook.getWorksheet("Özet")?.getCell("A13").value).toBe("Eski hesaplama");
   });
 
   it("TEACHER hazır rapor snapshotını PDF olarak alabilir", async () => {
@@ -342,7 +341,7 @@ describe("ReportGenerationController", () => {
       examId: "exam-a",
       snapshotId: "snapshot-a",
     });
-    expect(response.body.fileName).toBe("exam-a-snapshot-a.pdf");
+    expect(response.body.fileName).toBe("exam-a-snapshot-a-kurum-ozeti.pdf");
     expect(response.body.contentType).toBe("application/pdf");
     expect(response.body.pageCount).toBe(1);
     expect(Buffer.from(response.body.fileBase64 as string, "base64").toString("utf8")).toContain("%PDF-1.4");
@@ -350,6 +349,29 @@ describe("ReportGenerationController", () => {
     expect(pdfInput?.snapshot.id).toBe("snapshot-a");
     expect(pdfInput?.snapshot.snapshotData).toMatchObject({
       resultCount: 1,
+      pdfMode: "INSTITUTION_SUMMARY",
+      students: [expect.objectContaining({ studentId: "student-a" })],
+    });
+  });
+
+  it("TEACHER toplu ve tekli karne PDF projeksiyonlarını aynı READY snapshot'tan alabilir", async () => {
+    const issued = await login("teacher-a@example.test");
+
+    const packet = await request(server)
+      .get("/exams/exam-a/reports/snapshots/snapshot-a/export.karneler.pdf")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200);
+    expect(packet.body.fileName).toBe("exam-a-snapshot-a-toplu-karneler.pdf");
+    expect(pdfRenderer.inputs.at(-1)?.snapshot.snapshotData).toMatchObject({
+      students: [expect.objectContaining({ studentId: "student-a" })],
+    });
+
+    const single = await request(server)
+      .get("/exams/exam-a/reports/snapshots/snapshot-a/students/student-a/export.pdf")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(200);
+    expect(single.body.fileName).toBe("exam-a-snapshot-a-student-a-karne.pdf");
+    expect(pdfRenderer.inputs.at(-1)?.snapshot.snapshotData).toMatchObject({
       students: [expect.objectContaining({ studentId: "student-a" })],
     });
   });

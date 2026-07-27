@@ -140,12 +140,10 @@ Son kontrol: 2026-05-31
 
 ### DEC-20260531-02 — Standart puan formülü
 
-Durum: Onaylı
-Karar: v1 puanlama varsayılanı mevcut davranışı korur: ham puan ve standart puan toplam nete
-eşittir. Sınav bazlı `scoringConfig` içinde `rawScoreMultiplier`, `standardScoreBase` ve
-`standardScoreMultiplier` verilirse standart puan deterministik olarak
-`standardScoreBase + rawScore * standardScoreMultiplier` formülüyle hesaplanır. T-skor, yüzdelik ve
-gerçek sıralama hesapları pilot veri olmadan v1 kapsamına alınmaz.
+Durum: DEC-20260727-01 ile güncellendi
+Karar: Bu karar yalnız `LEGACY` rapor snapshot'larının nasıl üretildiğini açıklar. Yeni snapshot'lar
+`standardScore`, T-skor, yüzdelik veya `estimatedRawScore` üretmez. Mevcut immutable `READY`
+snapshot'lar yeniden hesaplanmaz ve kullanıcı yüzeyinde `Eski hesaplama` olarak ayrıştırılır.
 Kaynak: Rapor doğruluğu ürün kararı.
 Kanıt: `apps/worker/src/jobs/scoring-engine.ts`, `PostgresExamEvaluationAdapter`,
 `scoring-engine.test.ts`.
@@ -293,18 +291,50 @@ Son kontrol: 2026-07-13
 
 ### DEC-20260713-02 — Başarı yüzdesi rapor ana metriğidir
 
-Durum: Onaylı
+Durum: DEC-20260727-01 ile güncellendi
 Karar: `successRate` rapor snapshot, API, web, PDF ve Excel yüzeylerinde üretilir ve farklı soru
-sayılarına sahip sınavları karşılaştırmak için ana metriktir. Payda değişmez:
-`correct + wrong + blank`; boş soru paydada yer alır ve net hesabında yanlış cezası üretmez.
-`Net` ve `Soru` ikincil bağlam olarak görünür kalır. Bu karar DEC-20260531-03 içindeki
-"ayrı successRate üretilmez" bölümünün yerine geçer.
+sayılarına sahip sınavları karşılaştırmak için ana metriktir. Payda aktif soru sayısıdır; iptal
+edilmiş soru fiziksel soru sayısı doğrulamasında kalır ancak başarı ve puan paydasından çıkarılır.
+Boş soru aktif paydada yer alır ve net hesabında yanlış cezası üretmez. `Net / Soru` ikincil,
+`Deneme puanı` üçüncül bağlam olarak görünür kalır. Bu karar DEC-20260531-03 içindeki "ayrı
+successRate üretilmez" bölümünün yerine geçer.
 Kaynak: Mevcut worker snapshot sözleşmesi ve rapor/karne UI kabul kuralı.
 Kanıt: `apps/worker/src/jobs/report-generation-job.ts`,
 `apps/web/app/(app)/_shared/karne-sheet.tsx`, `pnpm karne:visual-contract:check`.
 Etkilenen ADR: Yok
 Açık soru: Yok
 Son kontrol: 2026-07-13
+
+### DEC-20260727-01 — Standart sapmasız LGS–YKS deneme puanı
+
+Durum: Onaylı
+Karar: Yeni LGS ve YKS sonuçları, ulusal ortalama veya standart sapma kullanılmadan, sürümlü
+`TR-LGS-2026-NOSD-V1` ve `TR-YKS-2026-NOSD-V1` profilleriyle `100–500` aralığında tekrar
+üretilebilir `O-Okul Deneme Puanı` üretir. Her aktif alt test için
+`net = doğru - yanlış × ceza`, `oran = clamp(net / aktif soru sayısı, 0, 1)` ve toplam puan
+`round(100 + 400 × ağırlıklı oran, 2)` olur. LGS cezası `1/3`, TYT/AYT cezası `1/4`'tür.
+LGS ağırlıkları Türkçe/Matematik/Fen için `4`, diğer üç alt test için `1`; TYT ağırlıkları
+Türkçe/Sosyal/Temel Matematik/Fen için `%33/%17/%33/%17`'dir. SAY, EA ve SÖZ puanları bağlı
+TYT'nin `%40` payı ile sürümlü AYT alt test ağırlıklarını birleştirir. TYT için Türkçe veya
+Matematik ham neti en az `0,5`; alan puanı için bağlı TYT ile ilgili AYT test çiftlerinden en az
+biri `0,5` olmalıdır. Uygun olmayan sonuç gerekçeli `NOT_ELIGIBLE`, bağlı TYT yokluğu
+`MISSING_TYT` olur.
+
+İptal soru aktif soru ve puan paydasından çıkarılır; cevap düzeltmesi yeni cevap anahtarı sürümüyle
+yeni append-only sonuç üretir. Resmî profilin ceza, soru bölümü veya sınav türü uyuşmazlığı
+fail-closed reddedilir. LGS muafiyetinde mevcut alt test ağırlıkları yeniden normalize edilir ve
+bu ürün varsayımı snapshot metadatasında taşınır. Her yeni skor görünümü
+`officialComparable:false` taşır ve puan gösterilen her yüzey şu uyarıyı verir:
+`Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.`
+Yalnız kurum ve sınıf içi rekabet sırası gösterilir; eşit puanlar aynı sırayı paylaşır. OBP,
+yerleştirme puanı, YDT ve ulusal başarı sırası kapsam dışıdır.
+Kaynak: 2026 MEB LGS ve 2026 ÖSYM YKS kılavuzlarındaki net, standartlaştırma ve test ağırlıkları;
+ürün sahibi tarafından kilitlenen standart sapmasız deneme puanı kararı.
+Kanıt: `apps/worker/src/jobs/scoring-engine.ts`,
+`apps/worker/src/jobs/report-generation-job.ts`, `packages/shared-types/src/domain.ts`.
+Etkilenen ADR: Yok
+Açık soru: OBP, YDT ve yerleştirme puanı ayrı bir gelecek kararıdır.
+Son kontrol: 2026-07-27
 
 ### DEC-20260713-03 — Tekrar üretilebilir raporda minimal öğrenci kimliği
 

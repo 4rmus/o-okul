@@ -50,24 +50,14 @@ describe("report PDF render job", () => {
     expect(Buffer.from(result.fileBase64, "base64").toString("utf8")).toContain("%PDF-1.4");
     expect(renderer.inputs[0]?.html).toContain("Sınav Raporu");
     expect(renderer.inputs[0]?.html).toContain("Öğrenci Karnesi");
-    expect(renderer.inputs[0]?.html).toContain("Rapor bağlamı");
-    expect(renderer.inputs[0]?.html).toContain("READY snapshot");
     expect(renderer.inputs[0]?.html).toContain("Branş Başarı");
     expect(renderer.inputs[0]?.html).toContain("Başarı %");
-    expect(renderer.inputs[0]?.html).toContain("<span>Başarı % %87.5</span>");
-    expect(renderer.inputs[0]?.html).toContain("Soru");
-    expect(renderer.inputs[0]?.html).toContain("<td>Matematik</td><td>1</td><td>%87.5</td><td>20</td><td>17.5</td>");
-    expect(renderer.inputs[0]?.html).toContain("<td>Ada Ak</td><td>8-A</td><td>%87.5</td><td>20</td><td>17.5</td>");
-    expect(renderer.inputs[0]?.html).toContain("PUAN - SIRA ANALİZİ");
-    expect(renderer.inputs[0]?.html).toContain("<th>No</th><th>Branş</th><th>Başarı %</th><th>Soru sayısı</th><th>Doğru</th><th>Yanlış</th><th>Boş</th><th>Net</th>");
-    expect(renderer.inputs[0]?.html).toContain("<td>1</td><td>Matematik</td><td>%87.5</td><td>20</td><td>18</td><td>2</td><td>0</td><td>17.5</td>");
-    expect(renderer.inputs[0]?.html).toContain("KAZANIM DETAYI");
     expect(renderer.inputs[0]?.html).toContain("Ada Ak");
-    expect(renderer.inputs[0]?.html).toContain("1001 · 8-A");
+    expect(renderer.inputs[0]?.html).toContain("Eski hesaplama");
+    expect(renderer.inputs[0]?.html).not.toMatch(/LGS puanı|Standart puan|percentile/u);
     expect(renderer.inputs[0]?.fallbackLines).toContain("DNA Egitim - Sinav Raporu");
     expect(renderer.inputs[0]?.fallbackLines).toContain("Ortalama basari: %87.5");
     expect(renderer.inputs[0]?.fallbackLines).toContain("Soru sayisi: 20");
-    expect(renderer.inputs[0]?.fallbackLines).toContain("Ortalama LGS puani: 456.7");
   });
 
   it("PDF ozetinde sifir degerleri bos deger gibi gostermez", async () => {
@@ -106,13 +96,195 @@ describe("report PDF render job", () => {
     expect(renderer.inputs[0]?.fallbackLines).toContain("Ortalama basari: %0");
     expect(renderer.inputs[0]?.fallbackLines).toContain("Soru sayisi: 0");
     expect(renderer.inputs[0]?.fallbackLines).toContain("Ortalama net: 0");
-    expect(renderer.inputs[0]?.fallbackLines).toContain("Ortalama LGS puani: 0");
-    expect(renderer.inputs[0]?.fallbackLines).toContain("Standart puan: 0");
-    expect(renderer.inputs[0]?.html).toContain("<span>Başarı % %0</span>");
-    expect(renderer.inputs[0]?.html).toContain("<span>Soru 0</span>");
-    expect(renderer.inputs[0]?.html).toContain("<span>Net 0</span>");
-    expect(renderer.inputs[0]?.html).toContain("<span>LGS puanı 0</span>");
-    expect(renderer.inputs[0]?.html).toContain("<span>Standart puan 0</span>");
+    expect(renderer.inputs[0]?.fallbackLines).toContain("Eski hesaplama");
+    expect(renderer.inputs[0]?.fallbackLines.join("\n")).not.toMatch(/LGS puani|Standart puan/u);
+  });
+
+  it("schema v2 scoreViews ve tür bazlı sıraları resmî değil uyarısıyla render eder", async () => {
+    const renderer = new FakeRenderer();
+    await processReportPdfRenderJob({
+      name: "report-pdf-render",
+      data: {
+        snapshot: {
+          id: "snapshot-v2",
+          tenantId: "tenant-a",
+          examId: "exam-ayt",
+          reportType: "EXAM_RESULT_SUMMARY",
+          status: "READY",
+          snapshotData: {
+            schemaVersion: 2,
+            pdfMode: "STUDENT_CARDS",
+            examType: "AYT",
+            examYear: 2026,
+            scoringProfileId: "TR-YKS-2026-NOSD-V1",
+            examTitle: "Örnek AYT 2026",
+            examStartsAt: "2026-06-21T07:15:00.000Z",
+            resultCount: 1,
+            averages: { net: 1, questionCount: 1, successRate: 100 },
+            scoreAverages: [{ type: "EA", calculatedCount: 1, practiceScore: 420 }],
+            students: [{
+              studentId: "sample-01",
+              participantNo: "ÖR-001",
+              bookletType: "A",
+              resultKey: "result-01",
+              total: { net: 1, questionCount: 1, successRate: 100 },
+              scoreViews: [
+                { type: "SAY", status: "NOT_ELIGIBLE", metrics: { correct: 0, wrong: 0, blank: 1, net: 0, questionCount: 1, successRate: 0 }, profileId: "TR-YKS-2026-NOSD-V1", officialComparable: false },
+                { type: "EA", status: "CALCULATED", metrics: { correct: 1, wrong: 0, blank: 0, net: 1, questionCount: 1, successRate: 100 }, practiceScore: 420, profileId: "TR-YKS-2026-NOSD-V1", officialComparable: false },
+              ],
+              scoreRankings: [{ type: "EA", institution: { rank: 1, outOf: 1 }, class: { rank: 1, outOf: 1 } }],
+              questions: [{ questionNo: 1, branch: "Edebiyat", answer: "", correctAnswer: "", status: "CANCELLED" }],
+            }],
+          },
+        },
+      },
+    }, renderer);
+
+    const html = renderer.inputs[0]?.html ?? "";
+    const lines = renderer.inputs[0]?.fallbackLines.join("\n") ?? "";
+    for (const output of [html, lines]) {
+      expect(output).toContain("Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.");
+      expect(output).toContain("EA");
+      expect(output).toContain("420");
+      expect(output).toContain("1/1");
+      expect(output).toContain("İptal");
+      expect(output).not.toMatch(/LGS puanı|Standart puan|percentile/u);
+    }
+    expect(html.match(/class="karne karne-(?:summary|detail)"/gu)).toHaveLength(2);
+    expect(html).toContain("Örnek AYT 2026");
+    expect(html).toContain("ÖR-001");
+    expect(html).not.toContain("Ortalama Deneme Puanları");
+  });
+
+  it("kurum özeti branş, sınıf ve öğrenci sıralamasını karne sayfaları olmadan render eder", async () => {
+    const renderer = new FakeRenderer();
+    await processReportPdfRenderJob({
+      name: "report-pdf-render",
+      data: {
+        snapshot: {
+          id: "snapshot-summary",
+          tenantId: "tenant-a",
+          examId: "exam-lgs",
+          reportType: "EXAM_RESULT_SUMMARY",
+          status: "READY",
+          snapshotData: {
+            schemaVersion: 2,
+            pdfMode: "INSTITUTION_SUMMARY",
+            examType: "LGS",
+            examYear: 2026,
+            scoringProfileId: "TR-LGS-2026-NOSD-V1",
+            resultCount: 1,
+            averages: { net: 80, questionCount: 90, successRate: 90 },
+            scoreAverages: [{ type: "LGS", calculatedCount: 1, practiceScore: 460 }],
+            branches: [{ branch: "Türkçe", net: 18, questionCount: 20, successRate: 90 }],
+            classes: [{ className: "8-A", resultCount: 1, averages: { net: 80, questionCount: 90, successRate: 90 } }],
+            students: [{
+              studentId: "sample-01",
+              displayName: "Örnek Öğrenci 01",
+              total: { net: 80, questionCount: 90, successRate: 90 },
+              branches: [{ branch: "Türkçe", net: 18, questionCount: 20, successRate: 90 }],
+              scoreViews: [{
+                type: "LGS",
+                status: "CALCULATED",
+                metrics: { correct: 82, wrong: 6, blank: 2, net: 80, questionCount: 90, successRate: 90 },
+                practiceScore: 460,
+                profileId: "TR-LGS-2026-NOSD-V1",
+                officialComparable: false,
+              }],
+              scoreRankings: [{ type: "LGS", institution: { rank: 1, outOf: 1 }, class: { rank: 1, outOf: 1 } }],
+            }],
+          },
+        },
+      },
+    }, renderer);
+
+    const html = renderer.inputs[0]?.html ?? "";
+    expect(html).toContain("Branş Karşılaştırması");
+    expect(html).toContain("Sınıf Karşılaştırması");
+    expect(html).toContain("Öğrenci Sıralaması");
+    expect(html).toContain("Ders Başarı Grafiği");
+    expect(html).toContain("Puan Türü Karşılaştırması");
+    expect(html).toContain("LGS puanı");
+    expect(html).toContain("Kurum başarı sırası");
+    expect(html).toContain("Sınıf başarı sırası");
+    expect(html).toContain("Tr 18");
+    expect(html).toContain("460");
+    expect(html).toContain("LGS 1/1");
+    expect(html).not.toContain("Öğrenci Karnesi");
+  });
+
+  it("AYT kurum özetinde SAY EA ve SÖZ puanlarını ayrı kolonlarda render eder", async () => {
+    const renderer = new FakeRenderer();
+    const scoreView = (type: "SAY" | "EA" | "SOZ", practiceScore: number) => ({
+      type,
+      status: "CALCULATED" as const,
+      metrics: { correct: 80, wrong: 20, blank: 60, net: 75, questionCount: 160, successRate: 46.9 },
+      practiceScore,
+      profileId: "TR-YKS-2026-NOSD-V1",
+      officialComparable: false as const,
+    });
+    await processReportPdfRenderJob({
+      name: "report-pdf-render",
+      data: {
+        snapshot: {
+          id: "snapshot-ayt-summary",
+          tenantId: "tenant-a",
+          examId: "exam-ayt",
+          reportType: "EXAM_RESULT_SUMMARY",
+          status: "READY",
+          snapshotData: {
+            schemaVersion: 2,
+            pdfMode: "INSTITUTION_SUMMARY",
+            examType: "AYT",
+            examYear: 2026,
+            scoringProfileId: "TR-YKS-2026-NOSD-V1",
+            resultCount: 1,
+            averages: { net: 75, questionCount: 160, successRate: 46.9 },
+            scoreAverages: [
+              { type: "SAY", calculatedCount: 1, practiceScore: 412 },
+              { type: "EA", calculatedCount: 1, practiceScore: 398 },
+              { type: "SOZ", calculatedCount: 1, practiceScore: 376 },
+            ],
+            branches: [
+              { branch: "AYT Matematik", net: 28, questionCount: 40, successRate: 72.5 },
+              { branch: "Edebiyat", net: 17.25, questionCount: 24, successRate: 71.9 },
+            ],
+            classes: [{ className: "12-A", resultCount: 1, averages: { net: 75, questionCount: 160, successRate: 46.9 } }],
+            students: [{
+              studentId: "sample-ayt-01",
+              displayName: "Örnek AYT Öğrencisi",
+              total: { net: 75, questionCount: 160, successRate: 46.9 },
+              branches: [
+                { branch: "AYT Matematik", net: 28, questionCount: 40, successRate: 72.5 },
+                { branch: "Edebiyat", net: 17.25, questionCount: 24, successRate: 71.9 },
+              ],
+              scoreViews: [
+                scoreView("SAY", 412),
+                scoreView("EA", 398),
+                scoreView("SOZ", 376),
+              ],
+              scoreRankings: [
+                { type: "SAY", institution: { rank: 1, outOf: 1 }, class: { rank: 1, outOf: 1 } },
+                { type: "EA", institution: { rank: 1, outOf: 1 }, class: { rank: 1, outOf: 1 } },
+                { type: "SOZ", institution: { rank: 1, outOf: 1 }, class: { rank: 1, outOf: 1 } },
+              ],
+            }],
+          },
+        },
+      },
+    }, renderer);
+
+    const html = renderer.inputs[0]?.html ?? "";
+    expect(html).toContain("Sayısal puanı");
+    expect(html).toContain("EA puanı");
+    expect(html).toContain("Sözel puanı");
+    expect(html).toContain("412");
+    expect(html).toContain("398");
+    expect(html).toContain("376");
+    expect(html).toContain("Mat 28");
+    expect(html).toContain("Edb 17.25");
+    expect(html).toContain("Kurum başarı sırası");
+    expect(html).toContain("Sınıf başarı sırası");
   });
 
   it("snapshot kayitlarini kirpmadan her ogrenci icin karne uretir", async () => {
@@ -183,18 +355,13 @@ describe("report PDF render job", () => {
     const html = renderer.inputs[0]?.html ?? "";
     const fallback = renderer.inputs[0]?.fallbackLines.join("\n") ?? "";
     expect(html).toContain("Brans 10");
-    expect(html).toContain("Sinif 10");
     expect(html).toContain("Ogrenci 16");
     expect(html.match(/<h2>Öğrenci Karnesi<\/h2>/g)).toHaveLength(16);
-    expect(html.match(/<h2>Detaylı Deneme Analizi<\/h2>/g)).toHaveLength(16);
-    expect(html).toContain("K.16.8");
-    expect(html).toContain("<td>12</td><td>Brans 6</td><td>K.16.4</td>");
+    expect(html).toContain("<td>12</td><td>Brans 6</td><td>Doğru</td>");
     expect(fallback).toContain("Brans 10");
-    expect(fallback).toContain("Sinif 10");
     expect(fallback).toContain("Ogrenci 16");
     expect(fallback).toContain("Ogrenci Karnesi: Ogrenci 16");
-    expect(fallback).toContain("K.16.8");
-    expect(fallback).toContain("12. soru Brans 6: A/A Doğru");
+    expect(fallback).toContain("12. soru Brans 6: Doğru");
   });
 
   it("yedek PDF ureticisi uzun raporu birden fazla sayfaya boler", async () => {

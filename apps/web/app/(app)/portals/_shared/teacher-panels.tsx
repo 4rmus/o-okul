@@ -207,20 +207,6 @@ export function TeacherClassReportsPanel({
       priority: "primary",
       render: (report) => formatNumber(reportQuestionCount(report.averages)),
     },
-    {
-      align: "right",
-      header: "LGS puanı",
-      key: "lgsScore",
-      priority: "optional",
-      render: (report) => formatNumber(readLgsScore(report.averages)),
-    },
-    {
-      align: "right",
-      header: "Standart puan",
-      key: "standardScore",
-      priority: "optional",
-      render: (report) => formatNumber(report.averages.standardScore),
-    },
   ];
 
   return (
@@ -305,10 +291,6 @@ export function TeacherFocusPanel({
 
 function formatCount(value: number, label: string) {
   return `${value.toLocaleString("tr-TR")} ${label}`;
-}
-
-function readLgsScore(total: { estimatedRawScore?: number; standardScore?: number } | undefined) {
-  return total?.estimatedRawScore ?? total?.standardScore;
 }
 
 function formatUniqueLabels(values: Array<string | undefined>) {

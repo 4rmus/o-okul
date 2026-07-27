@@ -9,6 +9,7 @@ import type {
 import { type Queryable, type TenantQueryable, withTenantQuery } from "../db/tenant-query.js";
 import {
   summarizeAnswerKeyQuestions,
+  type AnswerKeyExamScoringContext,
   type AnswerKeyRepository,
   type SaveAnswerKeyInput,
 } from "./answer-key.service.js";
@@ -65,6 +66,34 @@ export class PostgresAnswerKeyRepository implements AnswerKeyRepository {
       }
       await upsertBookletVariants(client, input);
       return toAnswerKeyRecord(row);
+    });
+  }
+
+  async findExamScoringContext(
+    tenantId: string,
+    examId: string,
+  ): Promise<AnswerKeyExamScoringContext | undefined> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<{
+        examType: string | null;
+        examYear: number | null;
+        scoringProfileId: string | null;
+      }>(
+        `SELECT "examType", "examYear", "scoringProfileId"
+         FROM "Exam"
+         WHERE "tenantId" = $1
+           AND "id" = $2
+           AND "deletedAt" IS NULL
+         LIMIT 1`,
+        [tenantId, examId],
+      );
+      const row = result.rows[0];
+      if (!row) return undefined;
+      return {
+        ...(row.examType ? { examType: row.examType } : {}),
+        ...(row.examYear !== null ? { examYear: row.examYear } : {}),
+        ...(row.scoringProfileId ? { scoringProfileId: row.scoringProfileId } : {}),
+      };
     });
   }
 

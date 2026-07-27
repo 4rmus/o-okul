@@ -9,6 +9,7 @@ const repoRoot = join(__dirname, "../../..");
 const allowedLegacyRelations = new Map([]);
 
 const requiredCompositeRelations = new Set([
+  "Exam.linkedTytExam",
   "AnnouncementReceipt.announcement",
   "AnnouncementDeliveryReport.announcement",
   "Homework.class",

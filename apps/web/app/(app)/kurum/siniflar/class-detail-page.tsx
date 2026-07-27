@@ -128,22 +128,6 @@ export function ClassDetailPage({ classId }: { classId: string }) {
       priority: "secondary",
       render: (student) => formatNumber(student.questionCount),
     },
-    {
-      key: "lgsScore",
-      header: "LGS",
-      align: "right",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (student) => formatNumber(student.lgsScore),
-    },
-    {
-      key: "standardScore",
-      header: "Standart",
-      align: "right",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (student) => formatNumber(student.standardScore),
-    },
   ];
 
   const outcomeColumns: Array<DataTableColumn<ClassOutcomeRow>> = [
@@ -470,10 +454,8 @@ function buildClassSummaryActions(
 
 interface ClassStudentResultRow {
   displayName?: string;
-  lgsScore?: number;
   net?: number;
   questionCount?: number;
-  standardScore?: number;
   studentId: string;
   studentNo?: string;
   successRate?: number;
@@ -484,10 +466,8 @@ function toClassStudentResults(snapshot: ReportSnapshotRecord | null, classId: s
     .filter((student) => student.classId === classId)
     .map((student) => ({
       displayName: student.displayName,
-      lgsScore: readLgsScore(student.total),
       net: student.total?.net,
       questionCount: reportQuestionCount(student.total),
-      standardScore: student.total?.standardScore,
       studentId: student.studentId,
       studentNo: student.studentNo,
       successRate: reportSuccessRate(student.total),
@@ -553,10 +533,6 @@ function formatNumber(value: number | undefined) {
 
 function formatCount(value: number) {
   return new Intl.NumberFormat("tr-TR").format(value);
-}
-
-function readLgsScore(total: { estimatedRawScore?: number; standardScore?: number } | undefined) {
-  return total?.estimatedRawScore ?? total?.standardScore;
 }
 
 function formatStudentStatus(status: StudentRecord["status"]) {

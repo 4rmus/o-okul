@@ -1,6 +1,6 @@
 "use client";
 
-import type { HTMLAttributes } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import {
   ArcElement,
   BarElement,
@@ -106,6 +106,24 @@ function EmptyTableRow({ colSpan, label }: { colSpan: number; label: string }) {
   );
 }
 
+export type ChartTableMode = "visible" | "details";
+
+function ChartDataTable({
+  children,
+  mode,
+}: {
+  children: ReactNode;
+  mode: ChartTableMode;
+}) {
+  const table = <table className="uh-chart-table">{children}</table>;
+  return mode === "details" ? (
+    <details className="uh-chart-details">
+      <summary>Ayrıntılı veriyi göster</summary>
+      {table}
+    </details>
+  ) : table;
+}
+
 export interface ExamResultDonutInput {
   blank?: number;
   correct?: number;
@@ -117,9 +135,10 @@ export interface ExamResultDonutInput {
 
 export interface ExamResultDonutProps extends HTMLAttributes<HTMLDivElement> {
   result: ExamResultDonutInput;
+  tableMode?: ChartTableMode;
 }
 
-export function ExamResultDonut({ className, result, ...props }: ExamResultDonutProps) {
+export function ExamResultDonut({ className, result, tableMode = "visible", ...props }: ExamResultDonutProps) {
   const correct = result.correct ?? 0;
   const wrong = result.wrong ?? 0;
   const blank = result.blank ?? 0;
@@ -178,7 +197,7 @@ export function ExamResultDonut({ className, result, ...props }: ExamResultDonut
       ) : (
         <ChartEmptyState label="Sonuç verisi yok" />
       )}
-      <table className="uh-chart-table">
+      <ChartDataTable mode={tableMode}>
         <caption>{total > 0 ? `Toplam ${formatQuestionCount(total)} soru / Başarı ${formatPercentNumber(successRate)}` : "Sonuç verisi yok"}</caption>
         <thead>
           <tr>
@@ -204,7 +223,7 @@ export function ExamResultDonut({ className, result, ...props }: ExamResultDonut
             <td>{formatPercentNumber(successRate)}</td>
           </tr>
         </tbody>
-      </table>
+      </ChartDataTable>
     </div>
   );
 }
@@ -224,6 +243,7 @@ export interface ClassCompareBarProps extends HTMLAttributes<HTMLDivElement> {
   classes: ClassCompareBarInput[];
   emptyLabel?: string;
   valueLabel?: string;
+  tableMode?: ChartTableMode;
 }
 
 export function ClassCompareBar({
@@ -231,6 +251,7 @@ export function ClassCompareBar({
   className,
   classes,
   emptyLabel = "Sınıf verisi yok",
+  tableMode = "visible",
   valueLabel = "Başarı %",
   ...props
 }: ClassCompareBarProps) {
@@ -269,7 +290,7 @@ export function ClassCompareBar({
           afterLabel: (item: TooltipItem<"bar">) => {
             const row = rows[item.dataIndex];
             return row
-              ? [`Net: ${formatNetNumber(row.net)}`, `Soru: ${formatQuestionCount(row.questionCount)}`, `Standart puan: ${formatChartNumber(row.standardScore)}`]
+              ? [`Net: ${formatNetNumber(row.net)}`, `Soru: ${formatQuestionCount(row.questionCount)}`]
               : [];
           },
         },
@@ -306,7 +327,7 @@ export function ClassCompareBar({
   return (
     <div {...props} className={classNames("uh-class-compare-bar", className)}>
       {rows.length > 0 ? <Bar data={data} options={options} /> : <ChartEmptyState label={emptyLabel} />}
-      <table className="uh-chart-table">
+      <ChartDataTable mode={tableMode}>
         <caption>{caption}</caption>
         <thead>
           <tr>
@@ -330,7 +351,89 @@ export function ClassCompareBar({
             <EmptyTableRow colSpan={4} label="Kayıt yok" />
           )}
         </tbody>
-      </table>
+      </ChartDataTable>
+    </div>
+  );
+}
+
+export interface PracticeScoreBarInput {
+  type: string;
+  calculatedCount?: number;
+  practiceScore: number;
+}
+
+export interface PracticeScoreBarProps extends HTMLAttributes<HTMLDivElement> {
+  caption?: string;
+  scores: PracticeScoreBarInput[];
+  tableMode?: ChartTableMode;
+}
+
+export function PracticeScoreBar({
+  caption = "Deneme puanı türleri",
+  className,
+  scores,
+  tableMode = "visible",
+  ...props
+}: PracticeScoreBarProps) {
+  const rows = scores.filter((score) => Number.isFinite(score.practiceScore));
+  const data: ChartData<"bar", number[], string> = {
+    labels: rows.map((score) => score.type === "SAY" ? "Sayısal" : score.type === "SOZ" ? "Sözel" : score.type),
+    datasets: [{
+      label: "Deneme puanı",
+      data: rows.map((score) => score.practiceScore),
+      backgroundColor: chartBlue,
+      borderRadius: 6,
+      maxBarThickness: 42,
+    }],
+  };
+  const options: ChartOptions<"bar"> = {
+    ...defaultChartOptions,
+    plugins: {
+      ...defaultChartOptions.plugins,
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (item: TooltipItem<"bar">) => `Deneme puanı: ${tooltipNumber(item.raw)}`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: { color: chartText },
+      },
+      y: {
+        min: 100,
+        max: 500,
+        grid: { color: chartGrid },
+        ticks: { color: chartText },
+        title: { display: true, text: "Deneme puanı (100-500)" },
+      },
+    },
+  };
+
+  return (
+    <div {...props} className={classNames("uh-practice-score-bar", className)}>
+      {rows.length > 0 ? <Bar data={data} options={options} /> : <ChartEmptyState label="Hesaplanmış puan yok" />}
+      <ChartDataTable mode={tableMode}>
+        <caption>{caption}</caption>
+        <thead>
+          <tr>
+            <th scope="col">Puan türü</th>
+            <th scope="col">Ortalama puan</th>
+            <th scope="col">Hesaplanan</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length > 0 ? rows.map((score) => (
+            <tr key={score.type}>
+              <th scope="row">{score.type === "SAY" ? "Sayısal" : score.type === "SOZ" ? "Sözel" : score.type}</th>
+              <td>{formatChartNumber(score.practiceScore)}</td>
+              <td>{formatChartNumber(score.calculatedCount)}</td>
+            </tr>
+          )) : <EmptyTableRow colSpan={3} label="Kayıt yok" />}
+        </tbody>
+      </ChartDataTable>
     </div>
   );
 }
@@ -353,6 +456,7 @@ export interface ProgressLineChartProps extends HTMLAttributes<HTMLDivElement> {
   caption?: string;
   emptyLabel?: string;
   points: ProgressLineChartPoint[];
+  tableMode?: ChartTableMode;
 }
 
 export function ProgressLineChart({
@@ -360,6 +464,7 @@ export function ProgressLineChart({
   className,
   emptyLabel = "Gelişim verisi yok",
   points,
+  tableMode = "visible",
   ...props
 }: ProgressLineChartProps) {
   const rows = points.map((point, index) => ({
@@ -399,7 +504,7 @@ export function ProgressLineChart({
           afterLabel: (item: TooltipItem<"line">) => {
             const row = rows[item.dataIndex];
             return row
-              ? [`Net: ${formatNetNumber(row.net)}`, `Soru: ${formatQuestionCount(row.questionCount)}`, `Standart puan: ${formatChartNumber(row.standardScore)}`]
+              ? [`Net: ${formatNetNumber(row.net)}`, `Soru: ${formatQuestionCount(row.questionCount)}`]
               : [];
           },
         },
@@ -436,7 +541,7 @@ export function ProgressLineChart({
   return (
     <div {...props} className={classNames("uh-progress-line-chart", className)}>
       {rows.length > 0 ? <Line data={data} options={options} /> : <ChartEmptyState label={emptyLabel} />}
-      <table className="uh-chart-table">
+      <ChartDataTable mode={tableMode}>
         <caption>{caption}</caption>
         <thead>
           <tr>
@@ -444,7 +549,6 @@ export function ProgressLineChart({
             <th scope="col">Başarı</th>
             <th scope="col">Net</th>
             <th scope="col">Soru</th>
-            <th scope="col">Standart puan</th>
           </tr>
         </thead>
         <tbody>
@@ -455,14 +559,13 @@ export function ProgressLineChart({
                 <td>{formatPercentNumber(point.successRate)}</td>
                 <td>{formatNetNumber(point.net)}</td>
                 <td>{formatQuestionCount(point.questionCount)}</td>
-                <td>{formatChartNumber(point.standardScore)}</td>
               </tr>
             ))
           ) : (
-            <EmptyTableRow colSpan={5} label="Kayıt yok" />
+            <EmptyTableRow colSpan={4} label="Kayıt yok" />
           )}
         </tbody>
-      </table>
+      </ChartDataTable>
     </div>
   );
 }
@@ -483,6 +586,7 @@ export interface TopicRadarChartProps extends HTMLAttributes<HTMLDivElement> {
   branches: TopicRadarChartInput[];
   caption?: string;
   emptyLabel?: string;
+  tableMode?: ChartTableMode;
 }
 
 export function TopicRadarChart({
@@ -490,6 +594,7 @@ export function TopicRadarChart({
   caption = "Branş başarı analizi",
   className,
   emptyLabel = "Branş verisi yok",
+  tableMode = "visible",
   ...props
 }: TopicRadarChartProps) {
   const rows = branches.map((branch) => ({
@@ -559,7 +664,7 @@ export function TopicRadarChart({
   return (
     <div {...props} className={classNames("uh-topic-radar-chart", className)}>
       {rows.length > 0 ? <Bar data={barData} options={barOptions} /> : <ChartEmptyState label={emptyLabel} />}
-      <table className="uh-chart-table">
+      <ChartDataTable mode={tableMode}>
         <caption>{caption}</caption>
         <thead>
           <tr>
@@ -585,7 +690,7 @@ export function TopicRadarChart({
             <EmptyTableRow colSpan={5} label="Kayıt yok" />
           )}
         </tbody>
-      </table>
+      </ChartDataTable>
     </div>
   );
 }

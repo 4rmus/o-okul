@@ -1,0 +1,46 @@
+{
+  "metadata": {
+    "marker": "ÖRNEK — RESMÎ PUAN DEĞİLDİR",
+    "pii": false,
+    "studentCount": 12,
+    "classes": ["sample-class-a", "sample-class-b"],
+    "examQuestionCounts": {
+      "LGS": 90,
+      "TYT": 120,
+      "AYT": 160
+    },
+    "coveredScenarios": [
+      "LGS_SNAPSHOT_RANK_PARITY",
+      "12_SYNTHETIC_TWO_CLASSES"
+    ]
+  },
+  "students": [
+    { "studentId": "sample-01", "classId": "sample-class-a", "lgsPracticeScore": 500 },
+    { "studentId": "sample-02", "classId": "sample-class-a", "lgsPracticeScore": 450 },
+    { "studentId": "sample-03", "classId": "sample-class-a", "lgsPracticeScore": 450 },
+    { "studentId": "sample-04", "classId": "sample-class-a", "lgsPracticeScore": 400 },
+    { "studentId": "sample-05", "classId": "sample-class-a", "lgsPracticeScore": 350 },
+    { "studentId": "sample-06", "classId": "sample-class-a", "lgsPracticeScore": 300 },
+    { "studentId": "sample-07", "classId": "sample-class-b", "lgsPracticeScore": 500 },
+    { "studentId": "sample-08", "classId": "sample-class-b", "lgsPracticeScore": 450 },
+    { "studentId": "sample-09", "classId": "sample-class-b", "lgsPracticeScore": 400 },
+    { "studentId": "sample-10", "classId": "sample-class-b", "lgsPracticeScore": 350 },
+    { "studentId": "sample-11", "classId": "sample-class-b", "lgsPracticeScore": 300 },
+    { "studentId": "sample-12", "classId": "sample-class-b", "lgsPracticeScore": 250 }
+  ],
+  "goldenSnapshot": {
+    "schemaVersion": 2,
+    "examType": "LGS",
+    "examYear": 2026,
+    "scoringProfileId": "TR-LGS-2026-NOSD-V1",
+    "resultCount": 12,
+    "scoreAverages": [
+      { "type": "LGS", "calculatedCount": 12, "practiceScore": 391.67 }
+    ],
+    "selectedRanks": {
+      "sample-01": { "institution": { "rank": 1, "outOf": 12 }, "class": { "rank": 1, "outOf": 6 } },
+      "sample-02": { "institution": { "rank": 3, "outOf": 12 }, "class": { "rank": 2, "outOf": 6 } },
+      "sample-12": { "institution": { "rank": 12, "outOf": 12 }, "class": { "rank": 6, "outOf": 6 } }
+    }
+  }
+}

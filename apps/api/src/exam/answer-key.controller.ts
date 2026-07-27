@@ -20,11 +20,19 @@ const answerChoiceSchema = z.preprocess(
   (value) => typeof value === "string" ? value.trim().toUpperCase() : value,
   z.enum(["A", "B", "C", "D", "E"]),
 );
+const answerKeyScoreSectionSchema = z.enum([
+  "LGS_TURKCE", "LGS_MATEMATIK", "LGS_FEN", "LGS_INKILAP", "LGS_DIN", "LGS_YABANCI_DIL",
+  "TYT_TURKCE", "TYT_SOSYAL", "TYT_MATEMATIK", "TYT_FEN",
+  "AYT_MATEMATIK", "AYT_FIZIK", "AYT_KIMYA", "AYT_BIYOLOJI", "AYT_EDEBIYAT",
+  "AYT_TARIH_1", "AYT_COGRAFYA_1", "AYT_TARIH_2", "AYT_COGRAFYA_2", "AYT_FELSEFE", "AYT_DIN",
+]);
 const answerKeyQuestionSchema = z.object({
   branch: requiredTrimmedString,
   correctAnswer: answerChoiceSchema,
+  evaluationStatus: z.enum(["ACTIVE", "CANCELLED"]).default("ACTIVE"),
   outcomeCode: optionalTrimmedString,
   questionNo: z.number().int().positive(),
+  scoreSection: answerKeyScoreSectionSchema.optional(),
   topic: optionalTrimmedString,
 }).strict();
 const answerKeyScoringConfigSchema = z.object({

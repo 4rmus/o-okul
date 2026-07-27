@@ -3,6 +3,7 @@ import { BadRequestException, Inject, Injectable, Optional } from "@nestjs/commo
 import ExcelJS from "exceljs";
 import type {
   AnswerKeyBranchSummary,
+  AnswerKeyScoreSection,
   AnswerKeyRecord,
   AnswerKeyScoringConfig,
 } from "@o-okul/shared-types";
@@ -202,16 +203,27 @@ export class AnswerKeyExcelImportService {
       });
     });
 
-    const questions = rows.map(({ bEquivalent: _bEquivalent, globalQuestionNo, localQuestionNo: _localQuestionNo, lesson: _lesson, section: _section, ...question }) => ({
-      ...question,
-      questionNo: globalQuestionNo,
-    }));
-    const bPermutation = this.createGlobalBPermutation(rows);
-
-    const questionCount = questions.length;
+    const questionCount = rows.length;
     if (!supportedQuestionCounts.has(questionCount)) {
       throw new BadRequestException("ANSWER_KEY_IMPORT_QUESTION_COUNT_INVALID");
     }
+    const questions = rows.map(({
+      bEquivalent: _bEquivalent,
+      globalQuestionNo,
+      localQuestionNo: _localQuestionNo,
+      lesson,
+      section,
+      ...question
+    }) => {
+      const scoreSection = inferScoreSection(questionCount, [lesson, section, question.branch]);
+      return {
+        ...question,
+        questionNo: globalQuestionNo,
+        ...(scoreSection ? { scoreSection } : {}),
+        evaluationStatus: "ACTIVE" as const,
+      };
+    });
+    const bPermutation = this.createGlobalBPermutation(rows);
     this.assertPermutation(bPermutation, questionCount);
 
     return {
@@ -351,6 +363,68 @@ export class AnswerKeyExcelImportService {
       }
     }
   }
+}
+
+function inferScoreSection(questionCount: number, labels: string[]): AnswerKeyScoreSection | undefined {
+  const normalized = labels.map(normalizeScoreSectionLabel);
+  const aliases = questionCount === 90
+    ? lgsScoreSectionAliases
+    : questionCount === 120
+      ? tytScoreSectionAliases
+      : aytScoreSectionAliases;
+  for (const label of normalized) {
+    const scoreSection = aliases[label];
+    if (scoreSection) return scoreSection;
+  }
+  return undefined;
+}
+
+const lgsScoreSectionAliases: Record<string, AnswerKeyScoreSection> = {
+  TURKCE: "LGS_TURKCE",
+  MATEMATIK: "LGS_MATEMATIK",
+  FEN: "LGS_FEN",
+  "FEN BILIMLERI": "LGS_FEN",
+  "INKILAP TARIHI": "LGS_INKILAP",
+  "T C INKILAP TARIHI VE ATATURKCULUK": "LGS_INKILAP",
+  "DIN KULTURU": "LGS_DIN",
+  "DIN KULTURU VE AHLAK BILGISI": "LGS_DIN",
+  INGILIZCE: "LGS_YABANCI_DIL",
+  "YABANCI DIL": "LGS_YABANCI_DIL",
+};
+
+const tytScoreSectionAliases: Record<string, AnswerKeyScoreSection> = {
+  TURKCE: "TYT_TURKCE",
+  "SOSYAL BILIMLER": "TYT_SOSYAL",
+  MATEMATIK: "TYT_MATEMATIK",
+  "TEMEL MATEMATIK": "TYT_MATEMATIK",
+  "FEN BILIMLERI": "TYT_FEN",
+};
+
+const aytScoreSectionAliases: Record<string, AnswerKeyScoreSection> = {
+  MATEMATIK: "AYT_MATEMATIK",
+  FIZIK: "AYT_FIZIK",
+  KIMYA: "AYT_KIMYA",
+  BIYOLOJI: "AYT_BIYOLOJI",
+  EDEBIYAT: "AYT_EDEBIYAT",
+  "TURK DILI VE EDEBIYATI": "AYT_EDEBIYAT",
+  "TARIH 1": "AYT_TARIH_1",
+  "COGRAFYA 1": "AYT_COGRAFYA_1",
+  "TARIH 2": "AYT_TARIH_2",
+  "COGRAFYA 2": "AYT_COGRAFYA_2",
+  FELSEFE: "AYT_FELSEFE",
+  DIN: "AYT_DIN",
+  "DIN KULTURU": "AYT_DIN",
+};
+
+function normalizeScoreSectionLabel(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^(LGS|TYT|AYT)\s+/u, "");
 }
 
 function requiredHeader(headers: Map<string, number>, name: string): number {

@@ -52,7 +52,7 @@ export function OutcomeNetTable({
 }
 
 export function formatNetNumber(value: number | undefined) {
-  return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+  return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 }
 
 export function formatPercentNumber(value: number | undefined) {

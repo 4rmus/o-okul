@@ -951,6 +951,9 @@ model Homework {
 model Exam {
   id        String    @id @default(uuid())
   tenantId  String
+  linkedTytExamId String?
+  examYear  Int?
+  scoringProfileId String?
   gradeLevelId String?
   alanId    String?
   examType  String?
@@ -961,6 +964,8 @@ model Exam {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  linkedTytExam Exam? @relation("ExamLinkedTyt", fields: [tenantId, linkedTytExamId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
+  linkedAytExams Exam[] @relation("ExamLinkedTyt")
   gradeLevel GradeLevel? @relation(fields: [tenantId, gradeLevelId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   alan      Alan?     @relation(fields: [tenantId, alanId], references: [tenantId, id], onDelete: Restrict, onUpdate: Cascade)
   parserConfigs ParserConfig[]
@@ -974,6 +979,7 @@ model Exam {
   reportSnapshots ReportSnapshot[]
 
   @@unique([tenantId, id])
+  @@index([tenantId, linkedTytExamId])
   @@index([tenantId, gradeLevelId])
   @@index([tenantId, alanId])
   @@index([tenantId, examType])
@@ -1182,8 +1188,7 @@ model ExamResult {
   rawImport           RawImport @relation(fields: [tenantId, rawImportId], references: [tenantId, id], onDelete: Cascade)
   answerKey           AnswerKey @relation(fields: [tenantId, answerKeyId], references: [tenantId, id], onDelete: Cascade)
 
-  @@unique([tenantId, resultKey])
-  @@unique([tenantId, participantId, answerKeyVersion, parserConfigVersion, engineVersion])
+  @@unique([tenantId, rawImportId, resultKey])
   @@index([tenantId, examId])
   @@index([tenantId, studentId])
   @@index([tenantId, deletedAt])

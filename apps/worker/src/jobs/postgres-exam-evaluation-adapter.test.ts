@@ -16,8 +16,8 @@ describe("postgres exam evaluation adapter", () => {
           answers: [{ questionNo: 1, answer: "A" }, { questionNo: 2, answer: "" }],
           keyData: {
             questions: [
-              { questionNo: 1, correctAnswer: "A", branch: "Matematik" },
-              { questionNo: 2, correctAnswer: "B", branch: "Türkçe" },
+              { questionNo: 1, correctAnswer: "A", branch: "Matematik", scoreSection: "LGS_MATEMATIK", evaluationStatus: "ACTIVE" },
+              { questionNo: 2, correctAnswer: "B", branch: "Türkçe", scoreSection: "LGS_TURKCE", evaluationStatus: "CANCELLED" },
             ],
           },
           scoringConfig: {
@@ -28,6 +28,8 @@ describe("postgres exam evaluation adapter", () => {
           },
           answerKeyVersion: "answer-key-v1",
           examType: "LGS",
+          examYear: 2026,
+          scoringProfileId: "TR-LGS-2026-NOSD-V1",
         }];
       }
       return [];
@@ -44,11 +46,13 @@ describe("postgres exam evaluation adapter", () => {
       answers: [{ questionNo: 1, answer: "A" }, { questionNo: 2, answer: "" }],
       bookletVariants: [],
       answerKey: [
-        { questionNo: 1, correctAnswer: "A", branch: "Matematik" },
-        { questionNo: 2, correctAnswer: "B", branch: "Türkçe" },
+        { questionNo: 1, correctAnswer: "A", branch: "Matematik", scoreSection: "LGS_MATEMATIK", evaluationStatus: "ACTIVE" },
+        { questionNo: 2, correctAnswer: "B", branch: "Türkçe", scoreSection: "LGS_TURKCE", evaluationStatus: "CANCELLED" },
       ],
       scoringConfig: {
         examType: "LGS",
+        examYear: 2026,
+        scoringProfileId: "TR-LGS-2026-NOSD-V1",
         wrongPenalty: 0.2,
         rawScoreMultiplier: 5,
         standardScoreBase: 50,
@@ -75,6 +79,8 @@ describe("postgres exam evaluation adapter", () => {
     expect(select?.sql).toContain('INNER JOIN "Exam" e');
     expect(select?.sql).toContain('e."tenantId" = pa."tenantId"');
     expect(select?.sql).toContain('e."id" = pa."examId"');
+    expect(select?.sql).toContain('e."examYear" AS "examYear"');
+    expect(select?.sql).toContain('e."scoringProfileId" AS "scoringProfileId"');
     expect(select?.values).toEqual(["tenant-a", "raw-import-a", "participant-a", "answer-key-a"]);
     expect(client.queries.find((query) => query.sql.includes('FROM "ExamBookletVariant"'))?.values).toEqual([
       "tenant-a",
@@ -133,6 +139,8 @@ describe("postgres exam evaluation adapter", () => {
     const input = await adapter.loadInput(createInput());
 
     expect(input.scoringConfig).not.toHaveProperty("examType");
+    expect(input.scoringConfig).not.toHaveProperty("examYear");
+    expect(input.scoringConfig).not.toHaveProperty("scoringProfileId");
   });
 
   it("input kaydı yoksa net hata verir", async () => {
@@ -253,7 +261,7 @@ describe("postgres exam evaluation adapter", () => {
     await expect(adapter.loadInput(createInput())).rejects.toThrow("EXAM_EVALUATION_INPUT_INVALID");
   });
 
-  it("ExamResult sonucunu idempotent resultKey ile yazar", async () => {
+  it("ExamResult sonucunu append-only rawImportId/resultKey ile yazar ve hazır raporları eski işaretler", async () => {
     const result = createResult();
     const client = new FakeClient((sql) => {
       if (sql.includes('INSERT INTO "ExamResult"')) return [createResultRow(result)];
@@ -265,10 +273,8 @@ describe("postgres exam evaluation adapter", () => {
 
     expect(saved).toEqual(result);
     const insert = client.queries.find((query) => query.sql.includes('INSERT INTO "ExamResult"'));
-    expect(insert?.sql).toContain('ON CONFLICT ("tenantId", "participantId", "answerKeyVersion", "parserConfigVersion", "engineVersion")');
-    expect(insert?.sql).toContain('"resultKey" = EXCLUDED."resultKey"');
-    expect(insert?.sql).toContain('"scoreData" = EXCLUDED."scoreData"');
-    expect(insert?.sql).toContain('"deletedAt" = NULL');
+    expect(insert?.sql).toContain('ON CONFLICT ("tenantId", "rawImportId", "resultKey")');
+    expect(insert?.sql).toContain("DO NOTHING");
     expect(insert?.values?.slice(0, 11)).toEqual([
       expect.any(String),
       "tenant-a",
@@ -284,6 +290,11 @@ describe("postgres exam evaluation adapter", () => {
     ]);
     expect(JSON.parse(insert?.values?.[11] as string)).toEqual(result.score);
     expect(insert?.values?.[12]).toBe("2026-05-30T03:00:00.000Z");
+    const staleUpdate = client.queries.find((query) => query.sql.includes('UPDATE "ReportSnapshot"'));
+    expect(staleUpdate?.sql).toContain('"status" = \'READY\'');
+    expect(staleUpdate?.sql).toContain('"status" = \'STALE\'');
+    expect(staleUpdate?.sql).toContain('linked_exam."linkedTytExamId" = $2');
+    expect(staleUpdate?.values).toEqual(["tenant-a", "exam-a"]);
   });
 
   it("insert conflict durumunda mevcut sonucu okuyup döner", async () => {
@@ -305,8 +316,13 @@ describe("postgres exam evaluation adapter", () => {
     await expect(adapter.saveResult(result)).resolves.toEqual(existingResult);
     expect(client.queries.find((query) => query.sql.includes('FROM "ExamResult"'))?.values).toEqual([
       "tenant-a",
+      "raw-import-a",
       `participant-a_answer-key-v1_parser-v1_${scoringEngineVersion}`,
     ]);
+    expect(client.queries.find((query) => query.sql.includes('FROM "ExamResult"'))?.sql).not.toContain(
+      '"deletedAt" IS NULL',
+    );
+    expect(client.queries.some((query) => query.sql.includes('UPDATE "ReportSnapshot"'))).toBe(false);
   });
 });
 

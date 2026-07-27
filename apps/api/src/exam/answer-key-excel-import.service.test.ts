@@ -60,6 +60,8 @@ describe("AnswerKeyExcelImportService", () => {
       questionNo: 1,
       correctAnswer: "D",
       branch: "Türkçe",
+      scoreSection: "LGS_TURKCE",
+      evaluationStatus: "ACTIVE",
       outcomeCode: "SÖZCÜKTE ANLAM",
       topic: "SÖZCÜKTE ANLAM",
     });
@@ -83,6 +85,8 @@ describe("AnswerKeyExcelImportService", () => {
       questionNo: 1,
       correctAnswer: "A",
       branch: "Türkçe",
+      scoreSection: "LGS_TURKCE",
+      evaluationStatus: "ACTIVE",
       outcomeCode: "K1",
       topic: "Sözcük",
     });
@@ -90,6 +94,8 @@ describe("AnswerKeyExcelImportService", () => {
       questionNo: 31,
       correctAnswer: "B",
       branch: "Matematik",
+      scoreSection: "LGS_MATEMATIK",
+      evaluationStatus: "ACTIVE",
       outcomeCode: "K31",
       topic: "Sayılar",
     });

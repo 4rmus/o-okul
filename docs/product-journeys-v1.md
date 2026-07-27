@@ -89,8 +89,8 @@ yolculuk matrisi, UAT senaryo iskeleti ve ilgili evidence checker/template gunce
 | UAT-KURUM-02 | Kisi kaydi ve iliski yonetimi calisir | `pnpm --filter @o-okul/api exec vitest run src/school/school.e2e.test.ts src/student/student-profile.e2e.test.ts` | PASS |
 | UAT-KURUM-03 | Kullanici ve davet akisi calisir | `pnpm --filter @o-okul/api exec vitest run src/user-management/user-management.e2e.test.ts src/identity-invitation/identity-invitation.e2e.test.ts` | PARTIAL |
 | UAT-KURUM-04 | Donem, program, etut ve idempotent gunluk sinif yoklamasi calisir | `pnpm --filter @o-okul/api exec vitest run src/program src/attendance` | PASS |
-| UAT-KURUM-05 | Sinav, cevap anahtari, optik import ve karantina operator akisi calisir | `pnpm isem-optical-pipeline:evidence-check`, `pnpm live:exam-cycle:check`, `pnpm live:ui-worker:smoke` | CONTRACT_READY_EXTERNAL_NOT_RUN |
-| UAT-KURUM-06 | Rapor, karne PDF/Excel ve portal gorunumu calisir | `pnpm report-generation:smoke`, `pnpm live:exam-cycle:check`, `pnpm live:ui-worker:smoke` | CONTRACT_READY_EXTERNAL_NOT_RUN |
+| UAT-KURUM-05 | LGS, TYT ve bagli AYT sinavi; surumlu cevap anahtari, iptal/duzeltme karari, optik import, karantina ve standart sapmasiz deneme puani akisi hedef SHA'da calisir | `pnpm isem-optical-pipeline:evidence-check`, `pnpm live:exam-cycle:check`, `pnpm live:ui-worker:smoke` | CONTRACT_READY_EXTERNAL_NOT_RUN |
+| UAT-KURUM-06 | Ayni immutable snapshot ogrenci satiri tekli/toplu web, kurum PDF'i, tekli/toplu karne PDF'i ve Excel'de ayni Basari %, Net/Soru ve Deneme puanini verir; resmi olmayan puan uyarisi gorunur | `pnpm report-generation:smoke`, `pnpm live:exam-cycle:check`, `pnpm live:ui-worker:smoke` | CONTRACT_READY_EXTERNAL_NOT_RUN |
 | UAT-KURUM-07 | Odeme plani/taksit, ogrenci import commit, ogretmen import commit, bireysel/toplu ogrenci kayit yenileme ve transfer, sinav create/publish/participant, parser config approval, optik template create/apply, cevap anahtari create/import/publish, raw import enqueue/quarantine resolve, rapor uretim enqueue, duyuru teslimi, destek ek/yorum, odev materyal dosyasi/atamasi, backup/restore job ve SMS batch yazimlari idempotent calisir | `pnpm --filter @o-okul/api exec vitest run src/payment src/http/idempotency.test.ts src/app.e2e.test.ts src/school/school.e2e.test.ts src/exam/exam.controller.e2e.test.ts src/exam/parser-config.controller.e2e.test.ts src/exam/optical-form-template.controller.e2e.test.ts src/exam/answer-key.controller.e2e.test.ts src/exam/raw-import.controller.e2e.test.ts src/report/report-generation.controller.e2e.test.ts src/announcement/announcement.e2e.test.ts src/support-ticket/support-ticket.e2e.test.ts src/homework/homework.e2e.test.ts src/operations/backup-restore.controller.e2e.test.ts src/sms-batch/sms-batch.e2e.test.ts`, `pnpm idempotency:inventory:check`, `scripts/check-idempotency-inventory.mjs` | PASS |
 | UAT-KURUM-08 | Duyuru, SMS kapalı yol, destek ve materyal isleri calisir | `pnpm notification:smoke` gerçek e-posta/push provider kanıtı ister; `pnpm sms:smoke` v1 kapsam dışı SMS kapalı yolunu `provider=disabled` olarak kanıtlar; `pnpm upload-av:check` | PARTIAL |
 | UAT-TEACHER-01 | Ogretmen kendi kapsaminda ogrenci ve rapor gorur | `pnpm --filter @o-okul/api exec vitest run src/me/me-access-matrix.e2e.test.ts src/report/report-generation.service.test.ts` | PASS |
@@ -124,12 +124,14 @@ yolculuk matrisi, UAT senaryo iskeleti ve ilgili evidence checker/template gunce
   Lorem Ipsum workbook'larla 120 TYT ve 160 AYT dry-run/import, bolum bazli soru dagilimi ve
   ters B kitapcik permutasyonunu; `apps/worker/src/jobs/tyt-ayt-placeholder-pipeline.test.ts`
   iki fiziksel presetin TYT/AYT senaryolari icin iki fixed-width satir, iki katilimci, A/B hizalama, deterministik puanlama
-  ve iki ogrencili READY snapshot zincirini dogrular. TYT/AYT sonucunda LGS'ye ozel
-  `estimatedRawScore` uretilmez. Evaluation, parser cevap sayisi ile cevap anahtari sayisini
+  ve iki ogrencili READY snapshot zincirini dogrular. Yeni LGS/TYT/AYT sonucunda legacy
+  `estimatedRawScore` ve `standardScore` uretilmez; `TR-LGS-2026-NOSD-V1` veya
+  `TR-YKS-2026-NOSD-V1` profiliyle `officialComparable:false` deneme puani uretilir. Evaluation,
+  parser cevap sayisi ile cevap anahtari aktif+iptal fiziksel soru sayisini
   esit ister ve LGS/TYT/AYT icin sirasiyla 90/120/160 soru kuralini fail-closed uygular.
   Bu sentetik in-memory job composition kaniti gercek Postgres
   evaluation/report persistence, gercek uretici TXT/DAT fixture'i,
-  resmi OSYM TYT/AYT puan formulu, PDF/portal gorsel kabulu veya staging/prod cycle kaniti degildir.
+  resmi MEB/OSYM puan kaniti, PDF/portal gorsel kabulu veya staging/prod cycle kaniti degildir.
   `UAT-KURUM-05` ve `UAT-KURUM-06` icin `scripts/check-live-exam-cycle-evidence.mjs`
   iSEM cevap anahtari, optik pipeline, raw import, report-generation ve mock'suz
   `apps/web/e2e-next/live-ui-worker-report-next.spec.ts` kanitlarini tek JSON'da baglar.

@@ -1,6 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, type OnModuleDestroy } from "@nestjs/common";
 import type {
+  ExamScoreAverage,
+  ExamScoreStatus,
+  ExamScoreType,
+  ExamScoreView,
+  ExamScoreRanking,
   ReportGenerationJobStatus,
   ReportPdfInstitution,
   ReportPdfRenderJobPayload,
@@ -17,6 +22,11 @@ import type {
   ReportStudentScoreSummary,
   ReportStudentSnapshot,
   ReportStudentStatistics,
+} from "@o-okul/shared-types";
+import {
+  reportCourseMatchesScoreType,
+  reportCourseShortName,
+  reportCourseSortOrder,
 } from "@o-okul/shared-types";
 import { Queue, QueueEvents } from "bullmq";
 import ExcelJS from "exceljs";
@@ -345,11 +355,67 @@ export class ReportGenerationService implements OnModuleDestroy {
       throw new BadRequestException("REPORT_SNAPSHOT_NOT_READY");
     }
 
-    return createSnapshotPdf(
-      await this.scopeSnapshotForTeacher(context, snapshot),
+    const scopedSnapshot = await this.scopeSnapshotForTeacher(context, snapshot);
+    const result = await createSnapshotPdf(
+      projectSnapshotStudents(
+        scopedSnapshot,
+        readRecords(scopedSnapshot.snapshotData?.students),
+        "INSTITUTION_SUMMARY",
+      ),
       this.pdfRenderer,
       await this.findInstitutionProfile(context),
     );
+    return { ...result, fileName: `${resolvedExamId}-${resolvedSnapshotId}-kurum-ozeti.pdf` };
+  }
+
+  async exportSnapshotKarnelerPdf(
+    context: RequestContext,
+    examId: string | undefined,
+    snapshotId: string | undefined,
+  ): Promise<ReportSnapshotPdfResult> {
+    const { resolvedExamId, resolvedSnapshotId, snapshot } = await this.requireReadySnapshot(
+      context,
+      examId,
+      snapshotId,
+    );
+    const scopedSnapshot = await this.scopeSnapshotForTeacher(context, snapshot);
+    const result = await createSnapshotPdf(
+      projectSnapshotStudents(
+        scopedSnapshot,
+        readRecords(scopedSnapshot.snapshotData?.students),
+        "STUDENT_CARDS",
+      ),
+      this.pdfRenderer,
+      await this.findInstitutionProfile(context),
+    );
+    return { ...result, fileName: `${resolvedExamId}-${resolvedSnapshotId}-toplu-karneler.pdf` };
+  }
+
+  async exportStudentPdf(
+    context: RequestContext,
+    examId: string | undefined,
+    snapshotId: string | undefined,
+    studentId: string | undefined,
+  ): Promise<ReportSnapshotPdfResult> {
+    const resolvedStudentId = required(studentId, "REPORT_STUDENT_REQUIRED");
+    const { resolvedExamId, resolvedSnapshotId, snapshot } = await this.requireReadySnapshot(
+      context,
+      examId,
+      snapshotId,
+    );
+    await this.assertTeacherStudentReportScope(context, resolvedStudentId, snapshot);
+    const scopedSnapshot = await this.scopeSnapshotForTeacher(context, snapshot);
+    const student = readRecords(scopedSnapshot.snapshotData?.students)
+      .find((candidate) => readText(candidate.studentId) === resolvedStudentId);
+    if (!student) {
+      throw new NotFoundException("REPORT_STUDENT_NOT_FOUND");
+    }
+    const result = await createSnapshotPdf(
+      projectSnapshotStudents(scopedSnapshot, [student], "STUDENT_CARDS"),
+      this.pdfRenderer,
+      await this.findInstitutionProfile(context),
+    );
+    return { ...result, fileName: `${resolvedExamId}-${resolvedSnapshotId}-${resolvedStudentId}-karne.pdf` };
   }
 
   async getStudentReport(
@@ -384,16 +450,35 @@ export class ReportGenerationService implements OnModuleDestroy {
     const className = readText(student.className);
     const outcomes = readRecords(student.outcomes).map(readOutcomeSummary);
     const questions = readRecords(student.questions).map(readQuestionSummary);
-    const statistics = readStudentStatistics(student.statistics);
+    const schemaVersion = readOptionalNumber(snapshot.snapshotData.schemaVersion);
+    const statistics = schemaVersion === 2 ? undefined : readStudentStatistics(student.statistics);
+    const scoreViews = readExamScoreViews(student.scoreViews);
+    const scoreRankings = schemaVersion === 2 ? readExamScoreRankings(student.scoreRankings) : [];
+    const examYear = readOptionalNumber(snapshot.snapshotData.examYear);
     const branchAverages = createStudentBranchAverageLookup(snapshot.snapshotData, classId);
     const institution = await this.findInstitutionProfile(context);
-    const examMeta = await this.findExamMeta(context, resolvedExamId);
-    const participantMeta = await this.findParticipantMeta(context, resolvedExamId, resolvedStudentId);
+    const examMeta = schemaVersion === 2
+      ? {
+          ...(readText(snapshot.snapshotData.examTitle) ? { examTitle: readText(snapshot.snapshotData.examTitle) } : {}),
+          ...(readText(snapshot.snapshotData.examStartsAt) ? { examStartsAt: readText(snapshot.snapshotData.examStartsAt) } : {}),
+        }
+      : await this.findExamMeta(context, resolvedExamId);
+    const participantMeta = schemaVersion === 2
+      ? {
+          ...(readText(student.participantNo) ? { participantNo: readText(student.participantNo) } : {}),
+          ...(readText(student.bookletType) ? { bookletType: readText(student.bookletType) } : {}),
+        }
+      : await this.findParticipantMeta(context, resolvedExamId, resolvedStudentId);
     const studentName = readText(student.displayName) || await this.findStudentDisplayName(context, resolvedStudentId);
     return {
       tenantId: context.tenantId,
       ...institution,
       examId: resolvedExamId,
+      ...(readText(snapshot.snapshotData.examType) ? { examType: readText(snapshot.snapshotData.examType) } : {}),
+      ...(examYear !== undefined ? { examYear } : {}),
+      ...(readText(snapshot.snapshotData.scoringProfileId)
+        ? { scoringProfileId: readText(snapshot.snapshotData.scoringProfileId) }
+        : {}),
       ...examMeta,
       snapshotId: resolvedSnapshotId,
       studentId: resolvedStudentId,
@@ -404,6 +489,8 @@ export class ReportGenerationService implements OnModuleDestroy {
       ...(snapshot.courseId ? { courseId: snapshot.courseId } : {}),
       resultKey: readText(student.resultKey),
       ...(snapshot.termId ? { termId: snapshot.termId } : {}),
+      ...(scoreViews.length > 0 ? { scoreViews } : {}),
+      ...(scoreRankings.length > 0 ? { scoreRankings } : {}),
       total: readScoreSummary(student.total),
       branches: readRecords(student.branches).map((branch) => readBranchSummary(branch, branchAverages)),
       ...(outcomes.length > 0 ? { outcomes } : {}),
@@ -411,6 +498,30 @@ export class ReportGenerationService implements OnModuleDestroy {
       ...(statistics ? { statistics } : {}),
       generatedAt: snapshot.generatedAt,
     };
+  }
+
+  private async requireReadySnapshot(
+    context: RequestContext,
+    examId: string | undefined,
+    snapshotId: string | undefined,
+  ): Promise<{
+    resolvedExamId: string;
+    resolvedSnapshotId: string;
+    snapshot: ReportSnapshotRecord;
+  }> {
+    if (!context.tenantId) {
+      throw new ForbiddenException("TENANT_CONTEXT_MISSING");
+    }
+    const resolvedExamId = required(examId, "REPORT_EXAM_REQUIRED");
+    const resolvedSnapshotId = required(snapshotId, "REPORT_SNAPSHOT_REQUIRED");
+    const snapshot = await this.snapshots.findById(context.tenantId, resolvedExamId, resolvedSnapshotId);
+    if (!snapshot) {
+      throw new NotFoundException("REPORT_SNAPSHOT_NOT_FOUND");
+    }
+    if (snapshot.status !== "READY" || !snapshot.snapshotData) {
+      throw new BadRequestException("REPORT_SNAPSHOT_NOT_READY");
+    }
+    return { resolvedExamId, resolvedSnapshotId, snapshot };
   }
 
   async getLatestStudentReport(
@@ -670,6 +781,7 @@ export class ReportGenerationService implements OnModuleDestroy {
     return {
       ...snapshot,
       snapshotData: {
+        ...readSnapshotHeader(snapshotData, false),
         reportType: readText(snapshotData.reportType) || snapshot.reportType,
         ...(readText(snapshotData.generatedAt) || snapshot.generatedAt
           ? { generatedAt: readText(snapshotData.generatedAt) || snapshot.generatedAt }
@@ -898,6 +1010,7 @@ function createStudentScopedSnapshotSummary(
   return {
     ...snapshot,
     snapshotData: {
+      ...readSnapshotHeader(snapshotData),
       reportType: readText(snapshotData.reportType) || snapshot.reportType,
       ...(generatedAt ? { generatedAt } : {}),
       resultCount: 1,
@@ -906,9 +1019,17 @@ function createStudentScopedSnapshotSummary(
           studentId,
           ...(readText(student.displayName) ? { displayName: readText(student.displayName) } : {}),
           ...(readText(student.studentNo) ? { studentNo: readText(student.studentNo) } : {}),
+          ...(readText(student.participantNo) ? { participantNo: readText(student.participantNo) } : {}),
+          ...(readText(student.bookletType) ? { bookletType: readText(student.bookletType) } : {}),
           ...(readText(student.classId) ? { classId: readText(student.classId) } : {}),
           ...(readText(student.className) ? { className: readText(student.className) } : {}),
           resultKey: readText(student.resultKey) || `${snapshot.id}:${studentId}`,
+          ...(readExamScoreViews(student.scoreViews).length > 0
+            ? { scoreViews: readExamScoreViews(student.scoreViews) }
+            : {}),
+          ...(readExamScoreRankings(student.scoreRankings).length > 0
+            ? { scoreRankings: readExamScoreRankings(student.scoreRankings) }
+            : {}),
           total: readScoreSummary(student.total),
         },
       ],
@@ -928,6 +1049,7 @@ function createSnapshotListSummary(snapshot: ReportSnapshotRecord): ReportSnapsh
   return {
     ...snapshot,
     snapshotData: {
+      ...readSnapshotHeader(snapshotData),
       reportType: readText(snapshotData.reportType) || snapshot.reportType,
       ...(generatedAt ? { generatedAt } : {}),
       resultCount,
@@ -957,84 +1079,132 @@ function createSnapshotStudentListSummary(student: Record<string, unknown>): Rec
     studentId,
     ...(readText(student.displayName) ? { displayName: readText(student.displayName) } : {}),
     ...(readText(student.studentNo) ? { studentNo: readText(student.studentNo) } : {}),
+    ...(readText(student.participantNo) ? { participantNo: readText(student.participantNo) } : {}),
+    ...(readText(student.bookletType) ? { bookletType: readText(student.bookletType) } : {}),
     ...(readText(student.classId) ? { classId: readText(student.classId) } : {}),
     ...(readText(student.className) ? { className: readText(student.className) } : {}),
     resultKey: readText(student.resultKey) || studentId,
+    ...(readExamScoreViews(student.scoreViews).length > 0
+      ? { scoreViews: readExamScoreViews(student.scoreViews) }
+      : {}),
+    ...(readExamScoreRankings(student.scoreRankings).length > 0
+      ? { scoreRankings: readExamScoreRankings(student.scoreRankings) }
+      : {}),
     total: readScoreSummary(student.total),
   };
 }
 
-async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<ReportSnapshotExportResult> {
+function readSnapshotHeader(
+  snapshotData: Record<string, unknown>,
+  includeScoreAverages = true,
+): Record<string, unknown> {
+  const schemaVersion = readOptionalNumber(snapshotData.schemaVersion);
+  const examType = readText(snapshotData.examType);
+  const examYear = readOptionalNumber(snapshotData.examYear);
+  const scoringProfileId = readText(snapshotData.scoringProfileId);
+  const examTitle = readText(snapshotData.examTitle);
+  const examStartsAt = readText(snapshotData.examStartsAt);
+  const scoreAverages = readExamScoreAverages(snapshotData.scoreAverages);
+  const scoringAssumptions = readRecord(snapshotData.scoringAssumptions);
+  const hasScoringAssumptions = scoringAssumptions.standardDeviationUsed === false
+    && scoringAssumptions.cancelledQuestionsExcludedFromScoringDenominator === true
+    && typeof scoringAssumptions.lgsAvailableSectionWeightsRenormalized === "boolean";
+  return {
+    ...(schemaVersion !== undefined ? { schemaVersion } : {}),
+    ...(examType ? { examType } : {}),
+    ...(examYear !== undefined ? { examYear } : {}),
+    ...(scoringProfileId ? { scoringProfileId } : {}),
+    ...(examTitle ? { examTitle } : {}),
+    ...(examStartsAt ? { examStartsAt } : {}),
+    ...(includeScoreAverages && scoreAverages.length > 0 ? { scoreAverages } : {}),
+    ...(snapshotData.officialComparable === false ? { officialComparable: false } : {}),
+    ...(hasScoringAssumptions
+      ? {
+          scoringAssumptions: {
+            standardDeviationUsed: false,
+            cancelledQuestionsExcludedFromScoringDenominator: true,
+            lgsAvailableSectionWeightsRenormalized: scoringAssumptions.lgsAvailableSectionWeightsRenormalized,
+          },
+        }
+      : {}),
+  };
+}
+
+function projectSnapshotStudents(
+  snapshot: ReportSnapshotRecord,
+  students: Record<string, unknown>[],
+  pdfMode: "INSTITUTION_SUMMARY" | "STUDENT_CARDS",
+): ReportSnapshotRecord {
+  if (!snapshot.snapshotData) {
+    return snapshot;
+  }
+  return {
+    ...snapshot,
+    snapshotData: {
+      ...snapshot.snapshotData,
+      students,
+      pdfMode,
+    },
+  };
+}
+
+export async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<ReportSnapshotExportResult> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "o-okul";
-  workbook.created = new Date();
+  const snapshotData = snapshot.snapshotData ?? {};
+  workbook.created = new Date(readText(snapshotData.generatedAt) || snapshot.generatedAt || snapshot.createdAt);
 
   const summary = workbook.addWorksheet("Özet");
-  const snapshotData = snapshot.snapshotData ?? {};
   const averages = readRecord(snapshotData.averages);
+  const scoreAverages = readExamScoreAverages(snapshotData.scoreAverages);
+  const scoreTypes = scoreTypesForSnapshot(snapshotData);
+  const branchNames = uniqueTextValues(readRecords(snapshotData.branches).map((branch) => readText(branch.branch)));
+  const isModernSnapshot = readOptionalNumber(snapshotData.schemaVersion) === 2;
+  const exampleMarker = readText((snapshotData as Record<string, unknown>).exampleMarker);
 
   summary.addRows([
     ["Sınav kimliği", snapshot.examId],
+    ["Sınav türü", readText(snapshotData.examType)],
+    ["Sınav yılı", readNumber(snapshotData.examYear)],
+    ["Puanlama profili", readText(snapshotData.scoringProfileId)],
     ["Snapshot kimliği", snapshot.id],
     ["Rapor türü", snapshot.reportType],
     ["Durum", snapshot.status],
     ["Üretim zamanı", snapshot.generatedAt ?? ""],
+    ...(exampleMarker ? [["Örnek", exampleMarker]] : []),
     ["Sonuç sayısı", readNumber(snapshotData.resultCount)],
     ["Ortalama başarı %", readNumberOrFallback(averages.successRate, scoreSuccessRate(averages))],
     ["Ortalama soru sayısı", readNumberOrFallback(averages.questionCount, scoreQuestionCount(averages))],
     ["Ortalama net", readNumber(averages.net)],
-    ["Ortalama ham puan", readNumber(averages.rawScore)],
-    ["Ortalama standart puan", readNumber(averages.standardScore)],
-    ["Ortalama tahmini ham puan", readNumber(averages.estimatedRawScore)],
+    ...scoreAverages.map((average) => [
+      `${scoreTypeLabel(average.type)} ortalama deneme puanı`,
+      average.practiceScore,
+    ]),
+    ...(isModernSnapshot
+      ? [["Uyarı", "Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir."]]
+      : [["Eski hesaplama", readLegacyScore(averages)]]),
+    ...(readText(snapshotData.examTitle) ? [["Sınav adı", readText(snapshotData.examTitle)]] : []),
+    ...(readText(snapshotData.examStartsAt) ? [["Sınav tarihi", readText(snapshotData.examStartsAt)]] : []),
+    ...(branchNames.length > 0
+      ? [
+        ["Ders başarı grafiği", "Başarı %"],
+        ...branchNames.map((branchName) => {
+          const branch = readRecords(snapshotData.branches).find((record) => readText(record.branch) === branchName);
+          const successRate = readNumberOrFallback(branch?.successRate, scoreSuccessRate(readRecord(branch)));
+          return [`Ders · ${branchName}`, formatTextBar(successRate, 0, 100)];
+        }),
+      ]
+      : []),
+    ...(scoreAverages.length > 0
+      ? [
+        ["Puan türü grafiği", "100-500 deneme puanı"],
+        ...scoreAverages.map((average) => [
+          `Puan · ${scoreTypeLabel(average.type)}`,
+          formatTextBar(average.practiceScore, 100, 500),
+        ]),
+      ]
+      : []),
   ]);
-
-  const branches = workbook.addWorksheet("Branşlar");
-  branches.addRow(["Branş", "Sonuç sayısı", "Başarı %", "Soru sayısı", "Doğru", "Yanlış", "Boş", "Net"]);
-  for (const branch of readRecords(snapshotData.branches)) {
-    branches.addRow([
-      readText(branch.branch),
-      readNumber(branch.resultCount),
-      readNumberOrFallback(branch.successRate, scoreSuccessRate(branch)),
-      readNumberOrFallback(branch.questionCount, scoreQuestionCount(branch)),
-      readNumber(branch.correct),
-      readNumber(branch.wrong),
-      readNumber(branch.blank),
-      readNumber(branch.net),
-    ]);
-  }
-
-  const classes = workbook.addWorksheet("Sınıflar");
-  classes.addRow([
-    "Sınıf kimliği",
-    "Sınıf",
-    "Sonuç sayısı",
-    "Başarı %",
-    "Soru sayısı",
-    "Doğru",
-    "Yanlış",
-    "Boş",
-    "Net",
-    "Ham puan",
-    "Standart puan",
-    "Tahmini ham puan",
-  ]);
-  for (const classSummary of readRecords(snapshotData.classes)) {
-    const averages = readRecord(classSummary.averages);
-    classes.addRow([
-      readText(classSummary.classId),
-      readText(classSummary.className),
-      readNumber(classSummary.resultCount),
-      readNumberOrFallback(averages.successRate, scoreSuccessRate(averages)),
-      readNumberOrFallback(averages.questionCount, scoreQuestionCount(averages)),
-      readNumber(averages.correct),
-      readNumber(averages.wrong),
-      readNumber(averages.blank),
-      readNumber(averages.net),
-      readNumber(averages.rawScore),
-      readNumber(averages.standardScore),
-      readNumber(averages.estimatedRawScore),
-    ]);
-  }
 
   const students = workbook.addWorksheet("Öğrenciler");
   students.addRow([
@@ -1050,19 +1220,21 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
     "Yanlış",
     "Boş",
     "Net",
-    "Ham puan",
-    "Standart puan",
-    "Genel sıra",
-    "Genel katılımcı",
-    "Genel yüzdelik",
-    "Sınıf sırası",
-    "Sınıf katılımcı",
-    "Sınıf yüzdelik",
-    "Tahmini ham puan",
+    ...scoreTypes.flatMap((type) => {
+      const scoreBranches = branchNamesForScoreType(type, branchNames);
+      return [
+        `${scoreTypeLabel(type)} Durum`,
+        `${scoreTypeLabel(type)} Deneme puanı`,
+        ...scoreBranches.map((branchName) => `${scoreTypeLabel(type)} · ${reportCourseShortName(branchName)} net`),
+        `${scoreTypeLabel(type)} Kurum başarı sırası`,
+        `${scoreTypeLabel(type)} Sınıf başarı sırası`,
+      ];
+    }),
+    "Katılımcı no",
+    "Kitapçık",
   ]);
   for (const student of readRecords(snapshotData.students)) {
     const total = readRecord(student.total);
-    const statistics = readStudentStatistics(student.statistics);
     students.addRow([
       readText(student.displayName),
       readText(student.studentNo),
@@ -1076,15 +1248,9 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
       readNumber(total.wrong),
       readNumber(total.blank),
       readNumber(total.net),
-      readNumber(total.rawScore),
-      readNumber(total.standardScore),
-      statistics?.general.rank ?? "",
-      statistics?.general.outOf ?? "",
-      statistics?.general.percentile ?? "",
-      statistics?.class?.rank ?? "",
-      statistics?.class?.outOf ?? "",
-      statistics?.class?.percentile ?? "",
-      readNumber(total.estimatedRawScore),
+      ...readScoreExportCells(student, scoreTypes, branchNames),
+      readText(student.participantNo),
+      readText(student.bookletType),
     ]);
   }
 
@@ -1114,6 +1280,30 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
     }
   }
 
+  const classBranches = workbook.addWorksheet("Sınıf-Branş");
+  classBranches.addRow([
+    "Kapsam", "Sınıf kimliği", "Sınıf", "Branş", "Sonuç sayısı", "Başarı %", "Soru sayısı",
+    "Doğru", "Yanlış", "Boş", "Net",
+  ]);
+  for (const branch of readRecords(snapshotData.branches)) {
+    classBranches.addRow([
+      "Kurum", "", "", readText(branch.branch), readNumber(branch.resultCount),
+      readNumberOrFallback(branch.successRate, scoreSuccessRate(branch)),
+      readNumberOrFallback(branch.questionCount, scoreQuestionCount(branch)),
+      readNumber(branch.correct), readNumber(branch.wrong), readNumber(branch.blank), readNumber(branch.net),
+    ]);
+  }
+  for (const classSummary of readRecords(snapshotData.classes)) {
+    for (const branch of readRecords(classSummary.branches)) {
+      classBranches.addRow([
+        "Sınıf", readText(classSummary.classId), readText(classSummary.className), readText(branch.branch),
+        readNumber(branch.resultCount), readNumberOrFallback(branch.successRate, scoreSuccessRate(branch)),
+        readNumberOrFallback(branch.questionCount, scoreQuestionCount(branch)),
+        readNumber(branch.correct), readNumber(branch.wrong), readNumber(branch.blank), readNumber(branch.net),
+      ]);
+    }
+  }
+
   const outcomes = workbook.addWorksheet("Kazanımlar");
   outcomes.addRow([
     "Öğrenci kimliği", "Öğrenci", "Öğrenci no", "Sınıf", "Kazanım", "Branş", "Başarı %",
@@ -1138,10 +1328,10 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
     }
   }
 
-  const questions = workbook.addWorksheet("Soru Cevapları");
+  const questions = workbook.addWorksheet("Soru Detayı");
   questions.addRow([
     "Öğrenci kimliği", "Öğrenci", "Öğrenci no", "Sınıf", "Soru", "Branş", "Kazanım",
-    "Öğrenci cevabı", "Doğru cevap", "Durum",
+    "Öğrenci cevabı", "Doğru cevap", "Durum", "Puan bölümü", "Değerlendirme", "Konu",
   ]);
   for (const student of readRecords(snapshotData.students)) {
     for (const question of readRecords(student.questions)) {
@@ -1156,44 +1346,15 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
         readText(question.answer),
         readText(question.correctAnswer),
         readText(question.status),
-      ]);
-    }
-  }
-
-  const branchStatistics = workbook.addWorksheet("Branş İstatistikleri");
-  branchStatistics.addRow([
-    "Öğrenci kimliği",
-    "Branş",
-    "Standart puan",
-    "Genel sıra",
-    "Genel katılımcı",
-    "Genel yüzdelik",
-    "Sınıf sırası",
-    "Sınıf katılımcı",
-    "Sınıf yüzdelik",
-  ]);
-  for (const student of readRecords(snapshotData.students)) {
-    const studentId = readText(student.studentId);
-    const statistics = readStudentStatistics(student.statistics);
-    for (const branch of statistics?.branches ?? []) {
-      branchStatistics.addRow([
-        studentId,
-        branch.branch,
-        branch.standardScore,
-        branch.general.rank,
-        branch.general.outOf,
-        branch.general.percentile,
-        branch.class?.rank ?? "",
-        branch.class?.outOf ?? "",
-        branch.class?.percentile ?? "",
+        readText(question.scoreSection),
+        readText(question.evaluationStatus),
+        readText(question.topic),
       ]);
     }
   }
 
   for (const worksheet of workbook.worksheets) {
-    worksheet.columns.forEach((column) => {
-      column.width = 18;
-    });
+    styleSnapshotWorksheet(worksheet);
   }
 
   const buffer = await workbook.xlsx.writeBuffer();
@@ -1203,6 +1364,60 @@ async function createSnapshotWorkbook(snapshot: ReportSnapshotRecord): Promise<R
     fileBase64: Buffer.from(buffer).toString("base64"),
     rowCount: readRecords(snapshotData.students).length,
   };
+}
+
+function styleSnapshotWorksheet(worksheet: ExcelJS.Worksheet): void {
+  worksheet.views = worksheet.name === "Özet"
+    ? [{ showGridLines: false }]
+    : [{ showGridLines: false, state: "frozen", ySplit: 1 }];
+  if (worksheet.name === "Özet") {
+    worksheet.getColumn(1).width = 28;
+    worksheet.getColumn(2).width = 42;
+    worksheet.getColumn(1).font = { name: "Arial", size: 11, bold: true, color: { argb: "FF344054" } };
+    worksheet.getColumn(2).font = { name: "Arial", size: 11 };
+    worksheet.getColumn(2).alignment = { vertical: "top", wrapText: true };
+    worksheet.eachRow((row) => {
+      const label = String(row.getCell(1).value ?? "");
+      if (/başarı|net|puan/iu.test(label)) row.getCell(2).numFmt = "0.00";
+      if (label === "Örnek" || label === "Uyarı") {
+        row.height = label === "Uyarı" ? 64 : 40;
+        row.eachCell((cell) => {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF4E5" } };
+          cell.font = { name: "Arial", size: 11, bold: true, color: { argb: "FF7A2E0E" } };
+        });
+      }
+      if (label === "Ders başarı grafiği" || label === "Puan türü grafiği") {
+        row.eachCell((cell) => {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF4FF" } };
+          cell.font = { name: "Arial", size: 11, bold: true, color: { argb: "FF1849A9" } };
+        });
+      }
+    });
+    return;
+  }
+
+  const header = worksheet.getRow(1);
+  header.height = 30;
+  header.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  header.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF101828" } };
+  header.alignment = { vertical: "middle", wrapText: true };
+  worksheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: 1, column: Math.max(1, worksheet.columnCount) },
+  };
+  worksheet.columns.forEach((column, index) => {
+    const label = String(header.getCell(index + 1).value ?? "");
+    column.width = Math.min(30, Math.max(14, label.length + 3));
+    if (/Başarı %|Net|Deneme puanı|net ort/iu.test(label)) column.numFmt = "0.00";
+    if (/Soru sayısı|Doğru|Yanlış|Boş|Sonuç sayısı/iu.test(label)) column.numFmt = "0";
+  });
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    row.eachCell((cell) => {
+      cell.font = { ...cell.font, name: "Arial", size: 10 };
+      cell.alignment = { ...cell.alignment, vertical: "top" };
+    });
+  });
 }
 
 export function createReportPdfRenderer(): ReportPdfRenderer {
@@ -1275,19 +1490,28 @@ function createSnapshotPdfLines(
 ): string[] {
   const snapshotData = snapshot.snapshotData ?? {};
   const averages = readRecord(snapshotData.averages);
-  return [
+  const scoreAverages = readExamScoreAverages(snapshotData.scoreAverages);
+  const isModernSnapshot = readOptionalNumber(snapshotData.schemaVersion) === 2;
+  const pdfMode = readText(snapshotData.pdfMode);
+  const header = [
     `${institution.institutionName ?? "o-okul"} - Sinav Raporu`,
-    `Sinav: ${snapshot.examId}`,
+    `Sinav: ${readText(snapshotData.examTitle) || snapshot.examId}`,
+    `Sinav tarihi: ${readText(snapshotData.examStartsAt) || "-"}`,
+    `Sinav turu: ${readText(snapshotData.examType) || "-"}`,
     `Snapshot: ${snapshot.id}`,
     `Durum: ${snapshot.status}`,
     `Uretim: ${snapshot.generatedAt ?? "-"}`,
     "",
+    ...(isModernSnapshot
+      ? ["Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir."]
+      : [`Eski hesaplama: ${readLegacyScore(averages) || "-"}`]),
+  ];
+  const institutionSummary = [
     "Genel Ozet",
     `Sonuc sayisi: ${readNumber(snapshotData.resultCount) || "-"}`,
     `Ortalama basari: ${formatPdfPercent(readNumberOrFallback(averages.successRate, scoreSuccessRate(averages)))}`,
     `Ortalama net: ${readNumber(averages.net) || "-"}`,
-    `Ortalama LGS puani: ${readLgsScore(averages) || "-"}`,
-    `Standart puan: ${readNumber(averages.standardScore) || "-"}`,
+    ...scoreAverages.map((average) => `${average.type} ortalama deneme puani: ${average.practiceScore}`),
     "",
     "Branslar",
     ...readRecords(snapshotData.branches).slice(0, 8).map((branch) =>
@@ -1301,25 +1525,48 @@ function createSnapshotPdfLines(
     }),
     "",
     "Ogrenciler",
-    ...readRecords(snapshotData.students).slice(0, 12).map((student) => {
+    ...readRecords(snapshotData.students).map((student) => {
       const total = readRecord(student.total);
-      const statistics = readStudentStatistics(student.statistics);
+      const statistics = readOptionalNumber(snapshotData.schemaVersion) === 2
+        ? undefined
+        : readStudentStatistics(student.statistics);
       const identity = readText(student.displayName) || readText(student.studentId) || "-";
       const studentNo = readText(student.studentNo);
-      return `${identity}${studentNo ? ` (${studentNo})` : ""} ${readText(student.className) || ""}: ${formatPdfPercent(readNumberOrFallback(total.successRate, scoreSuccessRate(total)))}, ${readNumber(total.net) || "-"} net, ${readLgsScore(total) || "-"} LGS puani, genel ${formatPdfRank(statistics?.general)}, sinif ${formatPdfRank(statistics?.class)}`;
+      const scoreLabel = formatPdfPracticeScores(student, readOptionalNumber(snapshotData.schemaVersion));
+      const scoreRankingLabel = formatPdfScoreRankings(student);
+      const legacyRankingLabel = statistics
+        ? `kurum ${formatPdfRank(statistics.general)}, sinif ${formatPdfRank(statistics.class)}`
+        : "";
+      return `${identity}${studentNo ? ` (${studentNo})` : ""} ${readText(student.className) || ""}: ${formatPdfPercent(readNumberOrFallback(total.successRate, scoreSuccessRate(total)))}, ${readNumber(total.net) || "-"} net${scoreLabel ? `, ${scoreLabel}` : ""}${scoreRankingLabel || legacyRankingLabel ? `, ${scoreRankingLabel || legacyRankingLabel}` : ""}`;
     }),
+  ];
+  const studentCards = [
     "",
     "Ogrenci Karnesi",
     "Bolum Analizi",
     "Puan - Sira Analizi",
     "Bolum Basari Yuzdeleri",
     "Son Sinav Netleri",
+    ...readRecords(snapshotData.students).flatMap((student) => {
+      const identity = readText(student.displayName) || readText(student.studentId) || "-";
+      return [
+        identity,
+        formatPdfPracticeScores(student, readOptionalNumber(snapshotData.schemaVersion)),
+        formatPdfScoreRankings(student),
+        ...readRecords(student.branches).map((branch) =>
+          `${readText(branch.branch) || "-"}: ${readNumber(branch.net) || "-"} net, ${formatPdfPercent(readNumberOrFallback(branch.successRate, scoreSuccessRate(branch)))}`
+        ),
+      ];
+    }),
   ];
+  if (pdfMode === "INSTITUTION_SUMMARY") return [...header, ...institutionSummary];
+  if (pdfMode === "STUDENT_CARDS") return [...header, ...studentCards];
+  return [...header, ...institutionSummary, ...studentCards];
 }
 
 function formatPdfRank(rank: ReportScopeRank | undefined): string {
   if (!rank) return "-";
-  return `${rank.rank}/${rank.outOf} (%${rank.percentile})`;
+  return `${rank.rank}/${rank.outOf}${rank.percentile === undefined ? "" : ` (%${rank.percentile})`}`;
 }
 
 function formatPdfPercent(value: number | ""): string {
@@ -1371,14 +1618,7 @@ function escapePdfText(value: string): string {
 }
 
 function normalizePdfText(value: string): string {
-  return value
-    .replace(/[Çç]/g, "c")
-    .replace(/[Ğğ]/g, "g")
-    .replace(/[İIı]/g, "i")
-    .replace(/[Öö]/g, "o")
-    .replace(/[Şş]/g, "s")
-    .replace(/[Üü]/g, "u")
-    .replace(/[^\x20-\x7E]/g, "?");
+  return value.replace(/[\u0000-\u001F\u007F]/gu, "?");
 }
 
 function readRecord(value: unknown): Record<string, unknown> {
@@ -1398,14 +1638,180 @@ function readNumberOrFallback(value: unknown, fallback: number | undefined): num
   return direct === "" ? fallback ?? "" : direct;
 }
 
-function readLgsScore(value: unknown): number | "" {
+function readLegacyScore(value: unknown): number | "" {
   const record = readRecord(value);
   const estimatedRawScore = readNumber(record.estimatedRawScore);
   return estimatedRawScore === "" ? readNumber(record.standardScore) : estimatedRawScore;
 }
 
+function readScoreExportCells(
+  student: Record<string, unknown>,
+  scoreTypes: ExamScoreType[],
+  branchNames: string[],
+): Array<number | string> {
+  const scoreViews = new Map(readExamScoreViews(student.scoreViews).map((view) => [view.type, view]));
+  const scoreRankings = new Map(readExamScoreRankings(student.scoreRankings).map((ranking) => [ranking.type, ranking]));
+  const branches = new Map(readRecords(student.branches).map((branch) => [readText(branch.branch), branch]));
+  return scoreTypes.flatMap((type) => {
+    const view = scoreViews.get(type);
+    const ranking = scoreRankings.get(type);
+    const practiceScore = view?.status === "CALCULATED" ? view.practiceScore ?? "" : "";
+    const scoreBranches = branchNamesForScoreType(type, branchNames);
+    return [
+      view ? formatScoreStatus(view.status) : "",
+      practiceScore,
+      ...scoreBranches.map((branchName) => readNumber(branches.get(branchName)?.net)),
+      formatRankCell(ranking?.institution),
+      formatRankCell(ranking?.class),
+    ];
+  });
+}
+
+function branchNamesForScoreType(type: ExamScoreType, branchNames: string[]): string[] {
+  return branchNames
+    .filter((branchName) => reportCourseMatchesScoreType(type, branchName))
+    .sort((left, right) => reportCourseSortOrder(type, left) - reportCourseSortOrder(type, right));
+}
+
+function formatScoreStatus(status: ExamScoreStatus): string {
+  if (status === "CALCULATED") return "Hesaplandı";
+  if (status === "NOT_ELIGIBLE") return "Hesaplanamadı";
+  return "Bağlı TYT deneme puanı yok";
+}
+
+function formatRankCell(rank: ExamScoreRanking["institution"] | undefined): string {
+  return rank ? `${rank.rank}/${rank.outOf}` : "";
+}
+
+function formatPdfPracticeScores(student: Record<string, unknown>, schemaVersion: number | undefined): string {
+  const scoreViews = readExamScoreViews(student.scoreViews)
+    .filter((view) => view.status === "CALCULATED" && view.practiceScore !== undefined);
+  if (scoreViews.length > 0) {
+    return scoreViews.map((view) => `${view.type} deneme puani ${view.practiceScore}`).join(", ");
+  }
+  const legacyScore = schemaVersion === 2 ? "" : readLegacyScore(student.total);
+  return legacyScore === "" ? "" : `Onceki hesaplama puani ${legacyScore}`;
+}
+
+function formatPdfScoreRankings(student: Record<string, unknown>): string {
+  return readExamScoreRankings(student.scoreRankings)
+    .map((ranking) =>
+      `${ranking.type} kurum ${formatPdfRank(ranking.institution)}, sinif ${formatPdfRank(ranking.class)}`
+    )
+    .join(", ");
+}
+
 function readOptionalNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+const examScoreTypes = new Set<ExamScoreType>(["LGS", "TYT", "SAY", "EA", "SOZ"]);
+const examScoreTypeOrder: ExamScoreType[] = ["LGS", "TYT", "SAY", "EA", "SOZ"];
+const examScoreStatuses = new Set<ExamScoreStatus>(["CALCULATED", "NOT_ELIGIBLE", "MISSING_TYT"]);
+
+function scoreTypesForSnapshot(snapshotData: Record<string, unknown>): ExamScoreType[] {
+  const examType = readText(snapshotData.examType);
+  if (examType === "LGS") return ["LGS"];
+  if (examType === "TYT") return ["TYT"];
+  if (examType === "AYT") return ["SAY", "EA", "SOZ"];
+  const available = new Set(readExamScoreAverages(snapshotData.scoreAverages).map((average) => average.type));
+  return available.size > 0
+    ? examScoreTypeOrder.filter((type) => available.has(type))
+    : examScoreTypeOrder;
+}
+
+function scoreTypeLabel(type: ExamScoreType): string {
+  if (type === "SAY") return "Sayısal";
+  if (type === "SOZ") return "Sözel";
+  return type;
+}
+
+function uniqueTextValues(values: string[]): string[] {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function formatTextBar(value: number | "", minimum: number, maximum: number): string {
+  if (value === "") return "-";
+  const ratio = Math.max(0, Math.min(1, (value - minimum) / (maximum - minimum)));
+  return `${"■".repeat(Math.round(ratio * 20)).padEnd(20, "·")} ${value.toFixed(2)}`;
+}
+
+function readExamScoreAverages(value: unknown): ExamScoreAverage[] {
+  return readRecords(value)
+    .map((record): ExamScoreAverage | undefined => {
+      const type = readText(record.type) as ExamScoreType;
+      const calculatedCount = readOptionalNumber(record.calculatedCount);
+      const practiceScore = readOptionalNumber(record.practiceScore);
+      if (!examScoreTypes.has(type) || calculatedCount === undefined || practiceScore === undefined) {
+        return undefined;
+      }
+      return { type, calculatedCount, practiceScore };
+    })
+    .filter((average): average is ExamScoreAverage => average !== undefined);
+}
+
+function readExamScoreViews(value: unknown): ExamScoreView[] {
+  return readRecords(value)
+    .map((record): ExamScoreView | undefined => {
+      const type = readText(record.type) as ExamScoreType;
+      const status = readText(record.status) as ExamScoreStatus;
+      const metrics = readRecord(record.metrics);
+      const correct = readOptionalNumber(metrics.correct);
+      const wrong = readOptionalNumber(metrics.wrong);
+      const blank = readOptionalNumber(metrics.blank);
+      const net = readOptionalNumber(metrics.net);
+      const questionCount = readOptionalNumber(metrics.questionCount);
+      const successRate = readOptionalNumber(metrics.successRate);
+      const profileId = readText(record.profileId);
+      if (
+        !examScoreTypes.has(type)
+        || !examScoreStatuses.has(status)
+        || correct === undefined
+        || wrong === undefined
+        || blank === undefined
+        || net === undefined
+        || questionCount === undefined
+        || successRate === undefined
+        || !profileId
+        || record.officialComparable !== false
+      ) {
+        return undefined;
+      }
+      const practiceScore = readOptionalNumber(record.practiceScore);
+      return {
+        type,
+        status,
+        metrics: { correct, wrong, blank, net, questionCount, successRate },
+        ...(practiceScore !== undefined ? { practiceScore } : {}),
+        profileId,
+        officialComparable: false,
+      };
+    })
+    .filter((view): view is ExamScoreView => view !== undefined);
+}
+
+function readExamScoreRankings(value: unknown): ExamScoreRanking[] {
+  return readRecords(value)
+    .map((record): ExamScoreRanking | undefined => {
+      const type = readText(record.type) as ExamScoreType;
+      const institution = readRank(record.institution);
+      if (!examScoreTypes.has(type) || !institution) return undefined;
+      const klass = readRank(record.class);
+      return {
+        type,
+        institution,
+        ...(klass ? { class: klass } : {}),
+      };
+    })
+    .filter((ranking): ranking is ExamScoreRanking => ranking !== undefined);
+}
+
+function readRank(value: unknown): ExamScoreRanking["institution"] | undefined {
+  const record = readRecord(value);
+  const rank = readOptionalNumber(record.rank);
+  const outOf = readOptionalNumber(record.outOf);
+  if (rank === undefined || outOf === undefined) return undefined;
+  return { rank, outOf };
 }
 
 function readScoreSummary(value: unknown): ReportStudentScoreSummary {
@@ -1580,6 +1986,13 @@ function readQuestionSummary(value: unknown): ReportStudentQuestionSummary {
     questionNo: readWholeNumber(record.questionNo),
     branch: readText(record.branch),
     ...(readText(record.outcomeCode) ? { outcomeCode: readText(record.outcomeCode) } : {}),
+    ...(readText(record.topic) ? { topic: readText(record.topic) } : {}),
+    ...(readText(record.scoreSection)
+      ? { scoreSection: readText(record.scoreSection) as ReportStudentQuestionSummary["scoreSection"] }
+      : {}),
+    ...(record.evaluationStatus === "ACTIVE" || record.evaluationStatus === "CANCELLED"
+      ? { evaluationStatus: record.evaluationStatus }
+      : {}),
     answer: readText(record.answer),
     correctAnswer: readText(record.correctAnswer),
     status: readQuestionStatus(record.status),
@@ -1587,7 +2000,7 @@ function readQuestionSummary(value: unknown): ReportStudentQuestionSummary {
 }
 
 function readQuestionStatus(value: unknown): ReportStudentQuestionSummary["status"] {
-  return value === "WRONG" || value === "BLANK" ? value : "CORRECT";
+  return value === "WRONG" || value === "BLANK" || value === "CANCELLED" ? value : "CORRECT";
 }
 
 function readWholeNumber(value: unknown): number {

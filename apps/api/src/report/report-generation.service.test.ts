@@ -385,7 +385,14 @@ describe("ReportGenerationService", () => {
 
   it("teacher snapshot listesini kendi sınıf ve öğrencileriyle sınırlar", async () => {
     const producer = new FakeProducer();
-    const store = new FakeReportSnapshotStore([fakeMixedSnapshot]);
+    const store = new FakeReportSnapshotStore([{
+      ...fakeMixedSnapshot,
+      snapshotData: {
+        ...fakeMixedSnapshot.snapshotData,
+        schemaVersion: 2,
+        scoreAverages: [{ type: "LGS", calculatedCount: 2, practiceScore: 420 }],
+      },
+    }]);
     const service = new ReportGenerationService(
       producer,
       store,
@@ -427,6 +434,7 @@ describe("ReportGenerationService", () => {
     expect(serialized).not.toContain("student-c");
     expect(serialized).not.toContain("class-c");
     expect(serialized).not.toContain("Genel Matematik");
+    expect(serialized).not.toContain("scoreAverages");
     expect(serialized).not.toContain("\"questions\"");
     expect(serialized).not.toContain("\"answer\"");
     expect(serialized).not.toContain("\"correctAnswer\"");
@@ -586,35 +594,176 @@ describe("ReportGenerationService", () => {
     const file = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
     await workbook.xlsx.load(file as Parameters<ExcelJS.Workbook["xlsx"]["load"]>[0]);
 
+    expect(workbook.worksheets.map((worksheet) => worksheet.name)).toEqual([
+      "Özet",
+      "Öğrenciler",
+      "Öğrenci Branşları",
+      "Sınıf-Branş",
+      "Kazanımlar",
+      "Soru Detayı",
+    ]);
     expect(workbook.getWorksheet("Özet")?.getCell("B1").value).toBe("exam-a");
-    expect(workbook.getWorksheet("Branşlar")?.getCell("C1").value).toBe("Başarı %");
-    expect(workbook.getWorksheet("Branşlar")?.getCell("A2").value).toBe("Matematik");
-    expect(workbook.getWorksheet("Sınıflar")?.getCell("D1").value).toBe("Başarı %");
-    expect(workbook.getWorksheet("Sınıflar")?.getCell("B2").value).toBe("8-A");
+    expect(workbook.getWorksheet("Sınıf-Branş")?.getCell("F1").value).toBe("Başarı %");
+    expect(workbook.getWorksheet("Sınıf-Branş")?.getCell("D2").value).toBe("Matematik");
     expect(workbook.getWorksheet("Öğrenciler")?.getCell("G1").value).toBe("Başarı %");
+    expect(workbook.getWorksheet("Öğrenciler")?.getCell("N1").value).toBe("LGS Deneme puanı");
     expect(workbook.getWorksheet("Öğrenciler")?.getCell("A2").value).toBe("Ada A");
     expect(workbook.getWorksheet("Öğrenciler")?.getCell("B2").value).toBe("1001");
     expect(workbook.getWorksheet("Öğrenciler")?.getCell("C2").value).toBe("student-a");
     expect(workbook.getWorksheet("Öğrenciler")?.getCell("E2").value).toBe("8-A");
-    expect(workbook.getWorksheet("Öğrenciler")?.getCell("O2").value).toBe(3);
-    expect(workbook.getWorksheet("Öğrenciler")?.getCell("Q2").value).toBe(92.5);
-    expect(workbook.getWorksheet("Öğrenciler")?.getCell("R2").value).toBe(1);
-    expect(workbook.getWorksheet("Öğrenciler")?.getCell("T2").value).toBe(97.5);
-    expect(workbook.getWorksheet("Öğrenciler")?.getCell("U2").value).toBe(123.4);
-    expect(workbook.getWorksheet("Sınıflar")?.getCell("L2").value).toBe(96.7);
-    expect(workbook.getWorksheet("Özet")?.getCell("B12").value).toBe(101.5);
-    expect(workbook.getWorksheet("Branş İstatistikleri")?.getCell("A2").value).toBe("student-a");
-    expect(workbook.getWorksheet("Branş İstatistikleri")?.getCell("B2").value).toBe("Matematik");
-    expect(workbook.getWorksheet("Branş İstatistikleri")?.getCell("D2").value).toBe(3);
+    expect(workbook.getWorksheet("Özet")?.getCell("A13").value).toBe("Eski hesaplama");
+    expect(workbook.getWorksheet("Özet")?.getCell("B13").value).toBe(101.5);
     expect(workbook.getWorksheet("Öğrenci Branşları")?.actualRowCount).toBe(4);
     expect(workbook.getWorksheet("Öğrenci Branşları")?.getCell("A4").value).toBe("student-b");
     expect(workbook.getWorksheet("Öğrenci Branşları")?.getCell("E4").value).toBe("Türkçe");
     expect(workbook.getWorksheet("Kazanımlar")?.actualRowCount).toBe(4);
     expect(workbook.getWorksheet("Kazanımlar")?.getCell("E4").value).toBe("TUR.8.1.1");
-    expect(workbook.getWorksheet("Soru Cevapları")?.actualRowCount).toBe(6);
-    expect(workbook.getWorksheet("Soru Cevapları")?.getCell("A6").value).toBe("student-b");
-    expect(workbook.getWorksheet("Soru Cevapları")?.getCell("E6").value).toBe(2);
-    expect(workbook.getWorksheet("Soru Cevapları")?.getCell("J6").value).toBe("WRONG");
+    expect(workbook.getWorksheet("Soru Detayı")?.actualRowCount).toBe(6);
+    expect(workbook.getWorksheet("Soru Detayı")?.getCell("A6").value).toBe("student-b");
+    expect(workbook.getWorksheet("Soru Detayı")?.getCell("E6").value).toBe(2);
+    expect(workbook.getWorksheet("Soru Detayı")?.getCell("J6").value).toBe("WRONG");
+  });
+
+  it("schemaVersion 2 puan görünümlerini öğrenci, Excel ve fallback PDF'de aynı snapshot değerleriyle taşır", async () => {
+    const v2Snapshot: ReportSnapshotRecord = {
+      ...fakeSnapshot,
+      id: "snapshot-v2",
+      snapshotData: {
+        schemaVersion: 2,
+        examType: "AYT",
+        examYear: 2026,
+        scoringProfileId: "TR-YKS-2026-NOSD-V1",
+        examTitle: "Örnek AYT 2026",
+        examStartsAt: "2026-06-21T07:15:00.000Z",
+        generatedAt: "2026-07-27T10:15:00.000Z",
+        resultCount: 1,
+        averages: { correct: 80, wrong: 20, blank: 60, net: 75, questionCount: 160, successRate: 46.875 },
+        scoreAverages: [
+          { type: "SAY", calculatedCount: 1, practiceScore: 410 },
+          { type: "EA", calculatedCount: 1, practiceScore: 390 },
+        ],
+        branches: [
+          { branch: "AYT Matematik", resultCount: 1, correct: 30, wrong: 8, blank: 2, net: 28, questionCount: 40, successRate: 70 },
+          { branch: "Edebiyat", resultCount: 1, correct: 18, wrong: 3, blank: 3, net: 17.25, questionCount: 24, successRate: 71.875 },
+        ],
+        students: [{
+          studentId: "student-a",
+          displayName: "Ada A",
+          participantNo: "ÖR-001",
+          bookletType: "A",
+          resultKey: "result-v2",
+          total: { correct: 80, wrong: 20, blank: 60, net: 75, questionCount: 160, successRate: 46.875 },
+          branches: [
+            { branch: "AYT Matematik", correct: 30, wrong: 8, blank: 2, net: 28, questionCount: 40, successRate: 70 },
+            { branch: "Edebiyat", correct: 18, wrong: 3, blank: 3, net: 17.25, questionCount: 24, successRate: 71.875 },
+          ],
+          scoreViews: [
+            {
+              type: "SAY",
+              status: "CALCULATED",
+              metrics: { correct: 50, wrong: 10, blank: 20, net: 47.5, questionCount: 80, successRate: 59.375 },
+              practiceScore: 410,
+              profileId: "TR-YKS-2026-NOSD-V1",
+              officialComparable: false,
+            },
+            {
+              type: "EA",
+              status: "CALCULATED",
+              metrics: { correct: 45, wrong: 15, blank: 20, net: 41.25, questionCount: 80, successRate: 51.5625 },
+              practiceScore: 390,
+              profileId: "TR-YKS-2026-NOSD-V1",
+              officialComparable: false,
+            },
+            {
+              type: "SOZ",
+              status: "MISSING_TYT",
+              metrics: { correct: 30, wrong: 10, blank: 40, net: 27.5, questionCount: 80, successRate: 34.375 },
+              profileId: "TR-YKS-2026-NOSD-V1",
+              officialComparable: false,
+            },
+          ],
+          scoreRankings: [
+            { type: "SAY", institution: { rank: 2, outOf: 30 }, class: { rank: 1, outOf: 15 } },
+            { type: "EA", institution: { rank: 4, outOf: 30 }, class: { rank: 2, outOf: 15 } },
+          ],
+          statistics: {
+            standardScore: 99,
+            general: { rank: 1, outOf: 1, percentile: 100 },
+            branches: [],
+          },
+        }],
+      },
+      generatedAt: "2026-07-27T10:15:00.000Z",
+    };
+    const service = new ReportGenerationService(new FakeProducer(), new FakeReportSnapshotStore([v2Snapshot]));
+    const context = {
+      tenantId: "tenant-a",
+      userId: "user-a",
+      roles: ["TENANT_ADMIN"],
+      bypassRls: false,
+    };
+
+    const student = await service.getStudentReport(context, "exam-a", "snapshot-v2", "student-a");
+    expect(student).toMatchObject({
+      examType: "AYT",
+      examYear: 2026,
+      scoringProfileId: "TR-YKS-2026-NOSD-V1",
+      examTitle: "Örnek AYT 2026",
+      examStartsAt: "2026-06-21T07:15:00.000Z",
+      participantNo: "ÖR-001",
+      bookletType: "A",
+      scoreViews: [
+        { type: "SAY", practiceScore: 410, officialComparable: false },
+        { type: "EA", practiceScore: 390, officialComparable: false },
+        { type: "SOZ", status: "MISSING_TYT", officialComparable: false },
+      ],
+      scoreRankings: [
+        { type: "SAY", institution: { rank: 2, outOf: 30 }, class: { rank: 1, outOf: 15 } },
+        { type: "EA", institution: { rank: 4, outOf: 30 }, class: { rank: 2, outOf: 15 } },
+      ],
+    });
+    expect(student.statistics).toBeUndefined();
+
+    const excel = await service.exportSnapshotExcel(context, "exam-a", "snapshot-v2");
+    const workbook = new ExcelJS.Workbook();
+    const excelBytes = Buffer.from(excel.fileBase64, "base64");
+    const excelFile = excelBytes.buffer.slice(excelBytes.byteOffset, excelBytes.byteOffset + excelBytes.byteLength);
+    await workbook.xlsx.load(excelFile as Parameters<ExcelJS.Workbook["xlsx"]["load"]>[0]);
+    expect(workbook.created?.toISOString()).toBe("2026-07-27T10:15:00.000Z");
+    const studentsSheet = workbook.getWorksheet("Öğrenciler")!;
+    const headerValues = studentsSheet.getRow(1).values as Array<unknown>;
+    const valueForHeader = (header: string) => studentsSheet.getRow(2).getCell(headerValues.indexOf(header)).value;
+    expect(valueForHeader("Sayısal Durum")).toBe("Hesaplandı");
+    expect(valueForHeader("Sayısal Deneme puanı")).toBe(410);
+    expect(valueForHeader("Sayısal · Mat net")).toBe(28);
+    expect(valueForHeader("Sayısal Kurum başarı sırası")).toBe("2/30");
+    expect(valueForHeader("Sayısal Sınıf başarı sırası")).toBe("1/15");
+    expect(valueForHeader("EA Durum")).toBe("Hesaplandı");
+    expect(valueForHeader("EA Deneme puanı")).toBe(390);
+    expect(valueForHeader("EA · Mat net")).toBe(28);
+    expect(valueForHeader("EA · Edb net")).toBe(17.25);
+    expect(valueForHeader("EA Kurum başarı sırası")).toBe("4/30");
+    expect(valueForHeader("Sözel Durum")).toBe("Bağlı TYT deneme puanı yok");
+    expect(valueForHeader("Sözel · Edb net")).toBe(17.25);
+    expect(workbook.getWorksheet("Özet")?.getCell("B13").value).toBe(410);
+    expect(workbook.getWorksheet("Özet")?.getCell("B14").value).toBe(390);
+    expect(workbook.getWorksheet("Özet")?.getCell("B15").value).toBe(
+      "Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.",
+    );
+    expect(workbook.getWorksheet("Özet")?.getColumn(1).values).toContain("Ders başarı grafiği");
+    expect(workbook.getWorksheet("Özet")?.getColumn(1).values).toContain("Puan türü grafiği");
+
+    const pdf = await service.exportSnapshotKarnelerPdf(context, "exam-a", "snapshot-v2");
+    const pdfText = Buffer.from(pdf.fileBase64, "base64").toString("utf8");
+    expect(pdfText).toContain("SAY deneme puani 410");
+    expect(pdfText).toContain("EA deneme puani 390");
+    expect(pdfText).toContain("SAY kurum 2/30");
+    expect(pdfText).toContain(
+      "Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.",
+    );
+    expect(pdfText).not.toContain("LGS puani");
+    expect(pdfText).not.toContain("Standart puan");
+    expect(pdfText).not.toContain("yüzdelik");
   });
 
   it("hazır snapshotı PDF dosyasına dönüştürür", async () => {
@@ -645,7 +794,7 @@ describe("ReportGenerationService", () => {
     );
 
     expect(store.findInputs).toEqual([{ tenantId: "tenant-a", examId: "exam-a", snapshotId: "snapshot-a" }]);
-    expect(result.fileName).toBe("exam-a-snapshot-a.pdf");
+    expect(result.fileName).toBe("exam-a-snapshot-a-kurum-ozeti.pdf");
     expect(result.contentType).toBe("application/pdf");
     expect(result.pageCount).toBe(1);
 
@@ -662,8 +811,42 @@ describe("ReportGenerationService", () => {
       examId: "exam-a",
       snapshotData: expect.objectContaining({
         resultCount: 1,
+        pdfMode: "INSTITUTION_SUMMARY",
         students: [expect.objectContaining({ studentId: "student-a" })],
       }),
+    });
+
+    const packet = await service.exportSnapshotKarnelerPdf(
+      {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        roles: ["TENANT_ADMIN"],
+        bypassRls: false,
+      },
+      "exam-a",
+      "snapshot-a",
+    );
+    expect(packet.fileName).toBe("exam-a-snapshot-a-toplu-karneler.pdf");
+    expect(pdfRenderer.inputs.at(-1)?.snapshot.snapshotData).toMatchObject({
+      pdfMode: "STUDENT_CARDS",
+      students: [expect.objectContaining({ studentId: "student-a" })],
+    });
+
+    const single = await service.exportStudentPdf(
+      {
+        tenantId: "tenant-a",
+        userId: "user-a",
+        roles: ["TENANT_ADMIN"],
+        bypassRls: false,
+      },
+      "exam-a",
+      "snapshot-a",
+      "student-a",
+    );
+    expect(single.fileName).toBe("exam-a-snapshot-a-student-a-karne.pdf");
+    expect(pdfRenderer.inputs.at(-1)?.snapshot.snapshotData).toMatchObject({
+      pdfMode: "STUDENT_CARDS",
+      students: [expect.objectContaining({ studentId: "student-a" })],
     });
   });
 

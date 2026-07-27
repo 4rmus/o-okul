@@ -66,6 +66,25 @@ export class ReportGenerationController {
     return this.reports.exportSnapshotPdf(getRequestContext(), examId, snapshotId);
   }
 
+  @Get("snapshots/:snapshotId/export.karneler.pdf")
+  @RequireCapability("academic:read")
+  exportSnapshotKarnelerPdf(
+    @Param("examId") examId: string,
+    @Param("snapshotId") snapshotId: string,
+  ): Promise<ReportSnapshotPdfResult> {
+    return this.reports.exportSnapshotKarnelerPdf(getRequestContext(), examId, snapshotId);
+  }
+
+  @Get("snapshots/:snapshotId/students/:studentId/export.pdf")
+  @RequireCapability("academic:read")
+  exportStudentPdf(
+    @Param("examId") examId: string,
+    @Param("snapshotId") snapshotId: string,
+    @Param("studentId") studentId: string,
+  ): Promise<ReportSnapshotPdfResult> {
+    return this.reports.exportStudentPdf(getRequestContext(), examId, snapshotId, studentId);
+  }
+
   @Get("snapshots/:snapshotId/students/:studentId")
   @RequireCapability("academic:read")
   getStudentReport(

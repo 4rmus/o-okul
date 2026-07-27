@@ -188,6 +188,8 @@ describe("ReportSnapshotStore", () => {
     expect(businessQueries[0]?.sql).toContain('"status" = \'STALE\'');
     expect(businessQueries[0]?.sql).toContain('"tenantId" = $1');
     expect(businessQueries[0]?.sql).toContain('"examId" = $2');
+    expect(businessQueries[0]?.sql).toContain('linked_exam."tenantId" = $1');
+    expect(businessQueries[0]?.sql).toContain('linked_exam."linkedTytExamId" = $2');
     expect(businessQueries[0]?.sql).toContain('"status" <> \'STALE\'');
     expect(businessQueries[0]?.values).toEqual([
       "tenant-a",

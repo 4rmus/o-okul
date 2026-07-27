@@ -1,13 +1,14 @@
 import type {
+  ExamScoreType,
   ReportPdfInstitution,
   ReportPdfRenderJobPayload,
   ReportPdfRenderJobResult,
   ReportPdfSnapshotRecord,
-  ReportScopeRank,
-  ReportStudentBranchStatistics,
-  ReportStudentBranchSummary,
-  ReportStudentQuestionSummary,
-  ReportStudentStatistics,
+} from "@o-okul/shared-types";
+import {
+  reportCourseMatchesScoreType,
+  reportCourseShortName,
+  reportCourseSortOrder,
 } from "@o-okul/shared-types";
 
 export type {
@@ -102,338 +103,256 @@ function assertReportPdfRenderPayload(payload: ReportPdfRenderJobPayload): void 
 
 function createSnapshotPdfLines(snapshot: ReportPdfSnapshotRecord, institution: ReportPdfInstitution = {}): string[] {
   const snapshotData = snapshot.snapshotData ?? {};
-  const averages = readRecord(snapshotData.averages);
-  const students = readRecords(snapshotData.students);
+  if (readNumber(snapshotData.schemaVersion) === 2) {
+    return createV2SnapshotPdfLines(snapshot, institution);
+  }
+  return createLegacySnapshotPdfLines(snapshot, institution);
+}
+
+function createLegacySnapshotPdfLines(snapshot: ReportPdfSnapshotRecord, institution: ReportPdfInstitution): string[] {
+  const data = readRecord(snapshot.snapshotData);
+  const averages = readRecord(data.averages);
   return [
     `${institution.institutionName ?? "o-okul"} - Sinav Raporu`,
+    "Eski hesaplama",
     `Sinav: ${snapshot.examId}`,
-    `Snapshot: ${snapshot.id}`,
-    `Durum: ${snapshot.status}`,
-    `Uretim: ${snapshot.generatedAt ?? "-"}`,
-    "",
-    "Genel Ozet",
-    `Sonuc sayisi: ${formatPdfNumber(snapshotData.resultCount)}`,
+    `Sonuc sayisi: ${formatPdfNumber(data.resultCount)}`,
     `Ortalama basari: ${formatPdfPercent(scoreSuccessRate(averages))}`,
     `Soru sayisi: ${formatPdfValue(branchQuestionCount(averages))}`,
     `Ortalama net: ${formatPdfNumber(averages.net)}`,
-    `Ortalama LGS puani: ${formatPdfLgsScore(averages)}`,
-    `Standart puan: ${formatPdfNumber(averages.standardScore)}`,
-    "",
-    "Branslar",
-    ...readRecords(snapshotData.branches).map((branch) =>
-      `${readText(branch.branch) || "-"}: ${formatPdfNumber(branch.resultCount)} sonuc, ${formatPdfPercent(scoreSuccessRate(branch))}, ${formatPdfValue(branchQuestionCount(branch))} soru, ${formatPdfNumber(branch.net)} net`
+    ...readRecords(data.branches).map((branch) =>
+      `${readText(branch.branch) || "-"}: ${formatPdfNumber(branch.resultCount)} sonuc, ${formatPdfPercent(scoreSuccessRate(branch))}, ${formatPdfNumber(branch.net)} net`
     ),
-    "",
-    "Siniflar",
-    ...readRecords(snapshotData.classes).map((classSummary) => {
-      const classAverages = readRecord(classSummary.averages);
-      return `${readText(classSummary.className) || "Sinifsiz"}: ${formatPdfNumber(classSummary.resultCount)} sonuc, ${formatPdfPercent(scoreSuccessRate(classAverages))}, ${formatPdfValue(branchQuestionCount(classAverages))} soru, ${formatPdfNumber(classAverages.net)} net`;
-    }),
-    "",
-    "Ogrenciler",
-    ...students.map((student) => {
-      const total = readRecord(student.total);
-      const statistics = readStudentStatistics(student.statistics);
-      const identity = readText(student.displayName) || readText(student.studentId) || "-";
-      const studentNo = readText(student.studentNo);
-      return `${identity}${studentNo ? ` (${studentNo})` : ""} ${readText(student.className) || ""}: ${formatPdfPercent(scoreSuccessRate(total))}, ${formatPdfValue(branchQuestionCount(total))} soru, ${formatPdfNumber(total.net)} net, ${formatPdfLgsScore(total)} LGS puani, genel ${formatPdfRank(statistics?.general)}, sinif ${formatPdfRank(statistics?.class)}`;
-    }),
-    "",
-    ...students.flatMap(createStudentPdfLines),
+    ...readRecords(data.classes).map((klass) =>
+      `${readText(klass.className) || "Sinifsiz"}: ${formatPdfNumber(klass.resultCount)} sonuc`
+    ),
+    ...readRecords(data.students).flatMap((student) => [
+      "",
+      `Ogrenci Karnesi: ${readText(student.displayName) || readText(student.studentId) || "-"}`,
+      ...readRecords(student.branches).map((branch) =>
+        `${readText(branch.branch) || "-"}: ${formatPdfNumber(branch.net)} net, ${formatPdfPercent(scoreSuccessRate(branch))}`
+      ),
+      ...readRecords(student.outcomes).map((outcome) =>
+        `${readText(outcome.outcomeCode) || "-"}: ${formatPdfNumber(outcome.net)} net`
+      ),
+      ...readRecords(student.questions).map((question) =>
+        `${formatPdfNumber(question.questionNo)}. soru ${readText(question.branch) || "-"}: ${formatPdfQuestionStatus(question.status)}`
+      ),
+    ]),
   ];
 }
 
-function createStudentPdfLines(student: Record<string, unknown>): string[] {
-  const total = readRecord(student.total);
-  const statistics = readStudentStatistics(student.statistics);
-  const identity = readText(student.displayName) || readText(student.studentId) || "-";
-  const studentNo = readText(student.studentNo);
-  const className = readText(student.className) || readText(student.classId) || "-";
-  return [
-    "",
-    `Ogrenci Karnesi: ${identity}${studentNo ? ` (${studentNo})` : ""} - ${className}`,
-    `Basari: ${formatPdfPercent(scoreSuccessRate(total))}, soru: ${formatPdfValue(branchQuestionCount(total))}, net: ${formatPdfNumber(total.net)}, LGS puani: ${formatPdfLgsScore(total)}, genel: ${formatPdfRank(statistics?.general)}, sinif: ${formatPdfRank(statistics?.class)}`,
-    "Bolum Analizi",
-    ...readRecords(student.branches).map((branch) =>
-      `${readText(branch.branch) || "-"}: ${formatPdfPercent(scoreSuccessRate(branch))}, ${formatPdfValue(branchQuestionCount(branch))} soru, ${formatPdfNumber(branch.correct)} dogru, ${formatPdfNumber(branch.wrong)} yanlis, ${formatPdfNumber(branch.blank)} bos, ${formatPdfNumber(branch.net)} net`
-    ),
-    "Kazanim Detayi",
-    ...readRecords(student.outcomes).map((outcome) =>
-      `${readText(outcome.outcomeCode) || "-"} ${readText(outcome.branch) || "-"}: ${formatPdfPercent(scoreSuccessRate(outcome))}, ${formatPdfValue(branchQuestionCount(outcome))} soru, ${formatPdfNumber(outcome.net)} net`
-    ),
-    "Soru Cevap Analizi",
-    ...readRecords(student.questions)
-      .sort((left, right) => (readNumber(left.questionNo) || 0) - (readNumber(right.questionNo) || 0))
-      .map((question) =>
-        `${formatPdfValue(readNumber(question.questionNo))}. soru ${readText(question.branch) || "-"}: ${readText(question.answer) || "-"}/${readText(question.correctAnswer) || "-"} ${formatPdfQuestionStatus(question.status)}`
-      ),
+function createLegacySnapshotPdfHtml(snapshot: ReportPdfSnapshotRecord, institution: ReportPdfInstitution): string {
+  const data = readRecord(snapshot.snapshotData);
+  const averages = readRecord(data.averages);
+  const students = readRecords(data.students);
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8" /><style>
+    body{font-family:Arial,sans-serif}.content{padding:24px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:6px}
+  </style></head><body><main class="content"><h1>Sınav Raporu</h1><p>Eski hesaplama</p>
+  <p>Rapor bağlamı · ${escapeHtml(snapshot.status)} snapshot</p>
+  <p>Başarı % ${escapeHtml(formatPdfPercent(scoreSuccessRate(averages)))} · Net ${escapeHtml(formatPdfNumber(averages.net))}</p>
+  ${renderPdfTable("Branş Başarı", ["Branş", "Sonuç", "Başarı %", "Net"], readRecords(data.branches), (branch) => [
+    readText(branch.branch) || "-", formatPdfNumber(branch.resultCount), formatPdfPercent(scoreSuccessRate(branch)), formatPdfNumber(branch.net),
+  ])}
+  ${renderPdfTable("Sınıf Başarı", ["Sınıf", "Sonuç"], readRecords(data.classes), (klass) => [
+    readText(klass.className) || "Sınıfsız", formatPdfNumber(klass.resultCount),
+  ])}
+  ${students.map((student) => `<section class="karne"><h2>Öğrenci Karnesi</h2><strong>${escapeHtml(readText(student.displayName) || readText(student.studentId) || "-")}</strong>
+    ${renderPdfTable("Bölüm Analizi", ["Branş", "Başarı %", "Soru", "Net"], readRecords(student.branches), (branch) => [
+      readText(branch.branch) || "-", formatPdfPercent(scoreSuccessRate(branch)), formatPdfValue(branchQuestionCount(branch)), formatPdfNumber(branch.net),
+    ])}
+    ${renderPdfTable("Kazanım Detayı", ["Kazanım", "Branş", "Başarı %", "Net"], readRecords(student.outcomes), (outcome) => [
+      readText(outcome.outcomeCode) || "-", readText(outcome.branch) || "-", formatPdfPercent(scoreSuccessRate(outcome)), formatPdfNumber(outcome.net),
+    ])}
+    ${renderPdfTable("Soru Cevap Analizi", ["Soru", "Ders", "Durum"], readRecords(student.questions), (question) => [
+      formatPdfNumber(question.questionNo), readText(question.branch) || "-", formatPdfQuestionStatus(question.status),
+    ])}</section>`).join("")}
+  </main></body></html>`;
+}
+
+function createV2SnapshotPdfLines(snapshot: ReportPdfSnapshotRecord, institution: ReportPdfInstitution): string[] {
+  const data = readRecord(snapshot.snapshotData);
+  const averages = readRecord(data.averages);
+  const students = readRecords(data.students);
+  const pdfMode = readText(data.pdfMode);
+  const header = [
+    `${institution.institutionName ?? "o-okul"} - Sinav Raporu`,
+    ...(readText(data.exampleMarker) ? [readText(data.exampleMarker)] : []),
+    "Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.",
+    `Sinav: ${readText(data.examTitle) || snapshot.examId}`,
+    `Sinav tarihi: ${readText(data.examStartsAt) || "-"}`,
+    `Sinav turu/yili: ${readText(data.examType) || "-"} / ${formatPdfValue(readNumber(data.examYear))}`,
+    `Puanlama profili: ${readText(data.scoringProfileId) || "-"}`,
   ];
+  const institutionSummary = [
+    `Sonuc sayisi: ${formatPdfNumber(data.resultCount)}`,
+    `Ortalama basari: ${formatPdfPercent(scoreSuccessRate(averages))}`,
+    ...readRecords(data.scoreAverages).map((score) =>
+      `${readText(score.type)} Deneme Puani: ${formatPdfNumber(score.practiceScore)} (${formatPdfNumber(score.calculatedCount)} hesaplanan)`
+    ),
+    ...readRecords(data.branches).map((branch) =>
+      `${readText(branch.branch) || "-"}: ${formatPdfPercent(scoreSuccessRate(branch))}, ${formatPdfNumber(branch.net)} net`
+    ),
+    ...readRecords(data.classes).map((klass) =>
+      `${readText(klass.className) || "Sinifsiz"}: ${formatPdfNumber(klass.resultCount)} sonuc, ${formatPdfPercent(scoreSuccessRate(readRecord(klass.averages)))}`
+    ),
+    ...students.map((student) =>
+      `${readText(student.displayName) || readText(student.studentId) || "-"}: ${formatPdfPercent(scoreSuccessRate(readRecord(student.total)))}, ${formatV2StudentScores(student)}`
+    ),
+  ];
+  const studentCards = students.flatMap((student) => {
+      const identity = readText(student.displayName) || readText(student.studentId) || "-";
+      const rankings = readRecords(student.scoreRankings);
+      return [
+        "",
+        `Ogrenci Karnesi: ${identity}`,
+        ...readRecords(student.scoreViews).map((view) => {
+          const metrics = readRecord(view.metrics);
+          const ranking = rankings.find((candidate) => readText(candidate.type) === readText(view.type));
+          const type = readExamScoreType(view.type);
+          return `${pdfScoreTypeLabel(readText(view.type))}: ${formatScoreStatus(view.status)}, Deneme Puani ${formatPdfNumber(view.practiceScore)}, Ders Netleri ${type ? formatPdfScoreCourseNets(student, type) : "-"}, D/Y/B ${formatPdfNumber(metrics.correct)}/${formatPdfNumber(metrics.wrong)}/${formatPdfNumber(metrics.blank)}, Net ${formatPdfNumber(metrics.net)}, Basari ${formatPdfPercent(scoreSuccessRate(metrics))}, Kurum Basari Sirasi ${formatV2Rank(readRecord(ranking?.institution))}, Sinif Basari Sirasi ${formatV2Rank(readRecord(ranking?.class))}`;
+        }),
+        ...readRecords(student.branches).map((branch) =>
+          `${readText(branch.branch) || "-"}: ${formatPdfNumber(branch.net)} net, ${formatPdfPercent(scoreSuccessRate(branch))}, ${formatPdfValue(branchQuestionCount(branch))} soru`
+        ),
+        ...readRecords(student.outcomes).map((outcome) =>
+          `${readText(outcome.outcomeCode) || "-"} ${readText(outcome.branch) || "-"}: ${formatPdfNumber(outcome.net)} net`
+        ),
+        ...readRecords(student.questions).map((question) =>
+          `${formatPdfNumber(question.questionNo)}. soru ${readText(question.branch) || "-"}: ${formatPdfQuestionStatus(question.status)}`
+        ),
+      ];
+    });
+  if (pdfMode === "INSTITUTION_SUMMARY") return [...header, ...institutionSummary];
+  if (pdfMode === "STUDENT_CARDS") return [...header, ...studentCards];
+  return [...header, ...institutionSummary, ...studentCards];
+}
+
+function createV2SnapshotPdfHtml(snapshot: ReportPdfSnapshotRecord, institution: ReportPdfInstitution): string {
+  const data = readRecord(snapshot.snapshotData);
+  const students = readRecords(data.students);
+  const scoreAverages = readRecords(data.scoreAverages);
+  const scoreTypes = pdfScoreTypes(data);
+  const pdfMode = readText(data.pdfMode);
+  const renderInstitutionSummary = pdfMode !== "STUDENT_CARDS";
+  const renderStudentCards = pdfMode !== "INSTITUTION_SUMMARY";
+  const exampleMarker = readText(data.exampleMarker);
+  const warning = "Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.";
+  const studentHtml = renderStudentCards ? students.map((student) => {
+    const rankings = readRecords(student.scoreRankings);
+    const identity = escapeHtml(readText(student.displayName) || readText(student.studentId) || "-");
+    const context = escapeHtml([
+      readText(student.participantNo),
+      readText(student.bookletType) ? `${readText(student.bookletType)} kitapçığı` : "",
+      readText(student.studentNo),
+      readText(student.className) || readText(student.classId),
+    ].filter(Boolean).join(" · ") || "-");
+    const studentNotice = pdfMode === "STUDENT_CARDS"
+      ? `${exampleMarker ? `<p class="warning">${escapeHtml(exampleMarker)}</p>` : ""}<p class="warning">${escapeHtml(warning)}</p>`
+      : "";
+    const examContext = escapeHtml([
+      readText(data.examTitle) || snapshot.examId,
+      readText(data.examStartsAt),
+    ].filter(Boolean).join(" · "));
+    return `<section class="karne karne-summary">${studentNotice}<p>${examContext}</p><h2>Öğrenci Karnesi</h2><strong>${identity}</strong><p>${context}</p>
+      ${renderPdfTable("Deneme Puanları", ["Tür", "Durum", "Deneme Puanı", "D", "Y", "B", "Net", "Soru", "Başarı %", "Kurum başarı sırası", "Sınıf başarı sırası"], readRecords(student.scoreViews), (view) => {
+        const metrics = readRecord(view.metrics);
+        const ranking = rankings.find((candidate) => readText(candidate.type) === readText(view.type));
+        const type = readExamScoreType(view.type);
+        return [
+          pdfScoreTypeLabel(readText(view.type)),
+          formatScoreStatus(view.status),
+          type ? `${formatPdfNumber(view.practiceScore)}\n${formatPdfScoreCourseNets(student, type)}` : formatPdfNumber(view.practiceScore),
+          formatPdfNumber(metrics.correct),
+          formatPdfNumber(metrics.wrong),
+          formatPdfNumber(metrics.blank),
+          formatPdfNumber(metrics.net),
+          formatPdfNumber(metrics.questionCount),
+          formatPdfPercent(scoreSuccessRate(metrics)),
+          formatV2Rank(readRecord(ranking?.institution)),
+          formatV2Rank(readRecord(ranking?.class)),
+        ];
+      })}
+      ${renderPdfTable("Bölüm Analizi", ["Branş", "Başarı %", "Soru", "Net"], readRecords(student.branches), (branch) => [
+        readText(branch.branch) || "-", formatPdfPercent(scoreSuccessRate(branch)), formatPdfValue(branchQuestionCount(branch)), formatPdfNumber(branch.net),
+      ])}
+    </section>
+    <section class="karne karne-detail"><p>${examContext}</p><h2>Kazanım ve Soru Analizi</h2><strong>${identity}</strong><p>${context}</p>
+      ${renderPdfTable("Öncelikli Kazanım Analizi", ["Kazanım", "Branş", "Başarı %", "Net"], selectPdfOutcomeRows(student.outcomes), (outcome) => [
+        readText(outcome.outcomeCode) || "-", readText(outcome.branch) || "-", formatPdfPercent(scoreSuccessRate(outcome)), formatPdfNumber(outcome.net),
+      ])}
+      ${renderPdfTable("Soru Cevap Analizi", ["Soru", "Ders", "Durum"], selectPdfQuestionRows(student.questions), (question) => [
+        formatPdfNumber(question.questionNo),
+        readText(question.branch) || "-",
+        formatPdfQuestionStatus(question.status),
+      ])}
+    </section>`;
+  }).join("") : "";
+  const institutionStudentTable = renderPdfTable(
+    "Öğrenci Sıralaması",
+    [
+      "Öğrenci",
+      "Sınıf",
+      "Başarı %",
+      ...scoreTypes.map((type) => `${pdfScoreTypeLabel(type)} puanı`),
+      "Kurum başarı sırası",
+      "Sınıf başarı sırası",
+    ],
+    students,
+    (student) => [
+      readText(student.displayName) || readText(student.studentId) || "-",
+      readText(student.className) || "-",
+      formatPdfPercent(scoreSuccessRate(readRecord(student.total))),
+      ...scoreTypes.map((type) => `${formatPdfScoreByType(student, type)}\n${formatPdfScoreCourseNets(student, type)}`),
+      formatPdfRankingsByScope(student, "institution"),
+      formatPdfRankingsByScope(student, "class"),
+    ],
+  );
+  const institutionHtml = renderInstitutionSummary
+    ? `<section class="hero"><p>${escapeHtml(institution.institutionName ?? "o-okul")}</p><h1>${escapeHtml(readText(data.examTitle) || "Sınav Raporu")}</h1></section>
+      <section class="institution-summary">${exampleMarker ? `<p class="warning">${escapeHtml(exampleMarker)}</p>` : ""}
+      <p class="warning">${escapeHtml(warning)}</p>
+      <p>${escapeHtml(`${readText(data.examType) || "-"} ${formatPdfValue(readNumber(data.examYear))} · ${readText(data.scoringProfileId) || "-"}`)}</p>
+      <p>${escapeHtml(readText(data.examStartsAt) || "")}</p>
+      ${renderPdfBarChart("Puan Türü Karşılaştırması", scoreAverages, (score) => pdfScoreTypeLabel(readText(score.type)), (score) => readOptionalNumber(score.practiceScore), 100, 500)}
+      ${renderPdfBarChart("Ders Başarı Grafiği", readRecords(data.branches), (branch) => readText(branch.branch) || "-", (branch) => readOptionalNumber(scoreSuccessRate(branch)), 0, 100, "%")}
+      ${renderPdfTable("Ortalama Deneme Puanları", ["Tür", "Hesaplanan", "Deneme Puanı"], scoreAverages, (score) => [
+        pdfScoreTypeLabel(readText(score.type)), formatPdfNumber(score.calculatedCount), formatPdfNumber(score.practiceScore),
+      ])}
+      ${renderPdfTable("Branş Karşılaştırması", ["Branş", "Başarı %", "Soru", "Net"], readRecords(data.branches), (branch) => [
+        readText(branch.branch) || "-", formatPdfPercent(scoreSuccessRate(branch)), formatPdfValue(branchQuestionCount(branch)), formatPdfNumber(branch.net),
+      ])}
+      ${renderPdfTable("Sınıf Karşılaştırması", ["Sınıf", "Sonuç", "Başarı %", "Net"], readRecords(data.classes), (klass) => {
+        const classAverages = readRecord(klass.averages);
+        return [
+          readText(klass.className) || "Sınıfsız",
+          formatPdfNumber(klass.resultCount),
+          formatPdfPercent(scoreSuccessRate(classAverages)),
+          formatPdfNumber(classAverages.net),
+        ];
+      })}
+      ${institutionStudentTable}</section>`
+    : "";
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8" /><style>
+    body{font-family:Arial,sans-serif;color:#101828}.hero{background:#101828;color:white;padding:24px}.content{padding:24px}
+    .warning{background:#fff4e5;border:1px solid #f79009;font-weight:700;padding:10px}.karne{break-before:page;margin-top:24px}
+    .student-cards>.karne:first-child{break-before:auto}
+    .student-cards{font-size:10px}.student-cards .karne{margin-top:0}.student-cards h2{font-size:18px;margin:9px 0}
+    .student-cards p{margin:5px 0}.student-cards .warning{padding:6px}.student-cards th,.student-cards td{font-size:9px;line-height:1.15;padding:3px}
+    .institution-summary>section{break-inside:avoid}thead{display:table-header-group}
+    table{border-collapse:collapse;width:100%}th,td{border:1px solid #d0d5dd;padding:5px;vertical-align:top}th{background:#eef4ff;text-align:left}
+    .bar-chart{break-inside:avoid;margin:14px 0}.bar-row{display:grid;grid-template-columns:120px 1fr 52px;align-items:center;gap:8px;margin:5px 0}
+    .bar-track{background:#eef2f6;border-radius:5px;height:11px;overflow:hidden}.bar-fill{background:#155eef;height:100%}.bar-value{text-align:right;font-size:11px}
+    .institution-summary table{font-size:9px}
+  </style></head><body><main class="content ${pdfMode === "STUDENT_CARDS" ? "student-cards" : ""}">${institutionHtml}${studentHtml}</main></body></html>`;
 }
 
 function createSnapshotPdfHtml(snapshot: ReportPdfSnapshotRecord, institution: ReportPdfInstitution = {}): string {
   const snapshotData = snapshot.snapshotData ?? {};
-  const averages = readRecord(snapshotData.averages);
-  const averageLgsScore = readLgsScore(averages);
-  const branches = readRecords(snapshotData.branches);
-  const classes = readRecords(snapshotData.classes);
-  const students = readRecords(snapshotData.students);
-  const institutionName = institution.institutionName ?? "o-okul";
-  const studentKarnes = students.map((student) =>
-    renderPdfStudentKarne(
-      student,
-      createStudentBranchAverageLookup(snapshotData, readText(student.classId)),
-      institution,
-      snapshot,
-    )
-  ).join("");
-
-  return `<!doctype html>
-<html lang="tr">
-<head>
-  <meta charset="utf-8" />
-  <style>
-    body { color: #101828; font-family: Arial, sans-serif; margin: 0; }
-    .hero { background: #101828; color: #fff; padding: 28px 30px; }
-    .hero p { margin: 0 0 8px; opacity: .78; }
-    .hero h1 { font-size: 26px; margin: 0; }
-    .content { padding: 24px 30px; }
-    .cards { display: grid; gap: 12px; grid-template-columns: repeat(4, 1fr); margin-bottom: 24px; }
-    .card { border: 1px solid #dce3ec; border-radius: 8px; padding: 12px; }
-    .card span { color: #66758a; display: block; font-size: 11px; margin-bottom: 7px; }
-    .card strong { font-size: 18px; }
-    .karne { border: 1px solid #d0d5dd; border-top: 6px solid #155eef; margin: 0 0 24px; padding: 14px; }
-    .karne-student, .karne-detail { break-before: page; page-break-before: always; }
-    .karne-header { display: grid; grid-template-columns: 1fr 160px; border: 1px solid #d0d5dd; }
-    .karne-header div { padding: 10px 12px; }
-    .karne-header h2 { margin: 0 0 6px; }
-    .karne-header strong { display: block; font-size: 20px; }
-    .karne-brand { align-items: center; background: #f8fafc; border-left: 1px solid #d0d5dd; color: #155eef; display: grid; font-weight: 800; justify-items: center; padding: 10px; text-align: center; }
-    .karne-brand img { display: block; max-height: 66px; max-width: 116px; object-fit: contain; }
-    .karne-context { background: #f8fafc; border: 1px solid #d0d5dd; margin: 10px 0; padding: 8px; }
-    .karne-context strong { display: block; font-size: 10px; margin-bottom: 6px; text-transform: uppercase; }
-    .karne-context dl { display: grid; gap: 6px; grid-template-columns: repeat(6, 1fr); margin: 0; }
-    .karne-context div { background: #fff; border: 1px solid #e4e7ec; padding: 5px; }
-    .karne-context dt { color: #66758a; font-size: 8px; font-weight: 800; margin: 0 0 2px; text-transform: uppercase; }
-    .karne-context dd { font-size: 10px; font-weight: 800; margin: 0; overflow-wrap: anywhere; }
-    .karne-summary { display: grid; grid-template-columns: repeat(6, 1fr); margin: 10px 0; }
-    .karne-summary span { background: #eef4ff; border: 1px solid #d0d5dd; font-size: 11px; font-weight: 700; padding: 7px; text-align: center; }
-    .karne-grid { display: grid; gap: 12px; grid-template-columns: 1.3fr .7fr; }
-    h2 { color: #16324f; font-size: 16px; margin: 22px 0 10px; }
-    table { border-collapse: collapse; font-size: 12px; width: 100%; }
-    thead { display: table-header-group; }
-    tr { break-inside: avoid; page-break-inside: avoid; }
-    th { background: #eef4ff; color: #1d2939; text-align: left; }
-    th, td { border: 1px solid #e4e7ec; padding: 7px 8px; }
-    .footer { color: #66758a; font-size: 11px; margin-top: 18px; }
-  </style>
-</head>
-<body>
-  <section class="hero">
-    <p>${escapeHtml(institutionName)}</p>
-    <h1>Sınav Raporu</h1>
-  </section>
-  <main class="content">
-    <section class="cards">
-      ${renderPdfCard("Sınav", snapshot.examId)}
-	    ${renderPdfCard("Snapshot", snapshot.id)}
-	    ${renderPdfCard("Sonuç", formatPdfNumber(snapshotData.resultCount))}
-	    ${renderPdfCard("Başarı %", formatPdfPercent(scoreSuccessRate(averages)))}
-	    ${renderPdfCard("Soru", formatPdfValue(branchQuestionCount(averages)))}
-	    ${renderPdfCard("Ortalama net", formatPdfNumber(averages.net))}
-	    ${renderPdfCard("Ortalama LGS puanı", formatPdfValue(averageLgsScore))}
-	    ${renderPdfCard("Standart puan", formatPdfNumber(averages.standardScore))}
-	    ${renderPdfCard("Durum", snapshot.status)}
-	    ${renderPdfCard("Üretim", snapshot.generatedAt ?? "-")}
-	    ${renderPdfCard("Rapor tipi", snapshot.reportType)}
-    </section>
-    ${renderPdfTable("Branş Başarı", ["Branş", "Sonuç", "Başarı %", "Soru", "Net"], branches, (branch) => [
-      readText(branch.branch) || "-",
-      formatPdfNumber(branch.resultCount),
-      formatPdfPercent(scoreSuccessRate(branch)),
-      formatPdfValue(branchQuestionCount(branch)),
-      formatPdfNumber(branch.net),
-    ])}
-    ${renderPdfTable("Sınıf Başarı", ["Sınıf", "Sonuç", "Başarı %", "Soru", "Net", "LGS puanı", "Standart puan"], classes, (classSummary) => {
-      const classAverages = readRecord(classSummary.averages);
-      return [
-        readText(classSummary.className) || "Sınıfsız",
-        formatPdfNumber(classSummary.resultCount),
-        formatPdfPercent(scoreSuccessRate(classAverages)),
-        formatPdfValue(branchQuestionCount(classAverages)),
-        formatPdfNumber(classAverages.net),
-        formatPdfLgsScore(classAverages),
-        formatPdfNumber(classAverages.standardScore),
-      ];
-    })}
-    ${renderPdfTable("Öğrenci Özeti", ["Öğrenci", "Sınıf", "Başarı %", "Soru", "Net", "LGS puanı", "Standart puan", "Genel sıra", "Sınıf sıra"], students, (student) => {
-      const total = readRecord(student.total);
-      const statistics = readStudentStatistics(student.statistics);
-      return [
-        readText(student.displayName) || readText(student.studentId) || "-",
-        readText(student.className) || "-",
-        formatPdfPercent(scoreSuccessRate(total)),
-        formatPdfValue(branchQuestionCount(total)),
-        formatPdfNumber(total.net),
-        formatPdfLgsScore(total),
-        formatPdfNumber(total.standardScore),
-        formatPdfRank(statistics?.general),
-        formatPdfRank(statistics?.class),
-      ];
-    })}
-    ${studentKarnes}
-    <p class="footer">Bu çıktı hazır ReportSnapshot verisinden üretilmiştir.</p>
-  </main>
-</body>
-</html>`;
-}
-
-function renderPdfStudentKarne(
-  student: Record<string, unknown> | undefined,
-  branchAverages = new Map<string, Pick<ReportStudentBranchSummary, "classNetAverage" | "generalNetAverage" | "schoolNetAverage">>(),
-  institution: ReportPdfInstitution = {},
-  snapshot: ReportPdfSnapshotRecord,
-): string {
-  if (!student) return "";
-
-  const total = readRecord(student.total);
-  const lgsScore = readLgsScore(total);
-  const statistics = readStudentStatistics(student.statistics);
-  const branches = readRecords(student.branches);
-  const outcomes = readRecords(student.outcomes);
-  const summaryOutcomes = outcomes.slice(0, 6);
-  const questions = readRecords(student.questions).sort((left, right) => {
-    const leftNo = readNumber(left.questionNo) || 0;
-    const rightNo = readNumber(right.questionNo) || 0;
-    return leftNo - rightNo;
-  });
-
-  return `<section class="karne karne-student">
-      <div class="karne-header">
-        <div>
-          <h2>Öğrenci Karnesi</h2>
-          <strong>${escapeHtml(readText(student.displayName) || readText(student.studentId) || "-")}</strong>
-          <span>${escapeHtml([readText(student.studentNo), readText(student.className) || readText(student.classId)].filter(Boolean).join(" · ") || "-")}</span>
-        </div>
-        <div class="karne-brand">${renderPdfInstitutionBrand(institution)}</div>
-      </div>
-      ${renderPdfKarneContext(snapshot, total, student)}
-      <div class="karne-summary">
-        <span>Başarı % ${escapeHtml(formatPdfPercent(scoreSuccessRate(total)))}</span>
-        <span>Soru ${escapeHtml(formatPdfValue(branchQuestionCount(total)))}</span>
-        <span>Net ${escapeHtml(formatPdfValue(readNumber(total.net)))}</span>
-        <span>LGS puanı ${escapeHtml(formatPdfValue(lgsScore))}</span>
-        <span>Standart puan ${escapeHtml(formatPdfValue(readNumber(total.standardScore)))}</span>
-        <span>Genel sıra ${escapeHtml(formatPdfRank(statistics?.general))}</span>
-        <span>Sınıf sıra ${escapeHtml(formatPdfRank(statistics?.class))}</span>
-      </div>
-      <div class="karne-grid">
-        ${renderPdfTable("BÖLÜM ANALİZİ", ["No", "Branş", "Başarı %", "Soru sayısı", "Doğru", "Yanlış", "Boş", "Net", "Sınıf net ort", "Okul net ort", "Genel net ort"], branches, (branch, index) => [
-          index + 1,
-          readText(branch.branch) || "-",
-          formatPdfPercent(scoreSuccessRate(branch)),
-          formatPdfValue(branchQuestionCount(branch)),
-          formatPdfValue(readNumber(branch.correct)),
-          formatPdfValue(readNumber(branch.wrong)),
-          formatPdfValue(readNumber(branch.blank)),
-          formatPdfValue(readNumber(branch.net)),
-          formatPdfValue(branchAverages.get(readText(branch.branch))?.classNetAverage ?? readNumber(branch.classNetAverage)),
-          formatPdfValue(branchAverages.get(readText(branch.branch))?.schoolNetAverage ?? readNumber(branch.schoolNetAverage)),
-          formatPdfValue(branchAverages.get(readText(branch.branch))?.generalNetAverage ?? readNumber(branch.generalNetAverage)),
-        ])}
-        <section>
-          <h2>PUAN - SIRA ANALİZİ</h2>
-          <table>
-            <tbody>
-        <tr><th>LGS puanı</th><td>${escapeHtml(formatPdfValue(lgsScore))}</td></tr>
-        <tr><th>Başarı %</th><td>${escapeHtml(formatPdfPercent(scoreSuccessRate(total)))}</td></tr>
-        <tr><th>Standart puan</th><td>${escapeHtml(formatPdfValue(readNumber(total.standardScore)))}</td></tr>
-        <tr><th>SIRA</th><td>${escapeHtml(formatPdfRank(statistics?.general))}</td></tr>
-        <tr><th>SINIF</th><td>${escapeHtml(formatPdfRank(statistics?.class))}</td></tr>
-      </tbody>
-    </table>
-        </section>
-      </div>
-      ${renderPdfTable("BÖLÜM BAŞARI YÜZDELERİ", ["Kazanım", "Branş", "Soru", "Başarı %", "Doğru", "Yanlış", "Boş", "Net"], summaryOutcomes, (outcome) => [
-        readText(outcome.outcomeCode) || "-",
-        readText(outcome.branch) || "-",
-        formatPdfValue(branchQuestionCount(outcome)),
-        formatPdfPercent(scoreSuccessRate(outcome)),
-        formatPdfValue(readNumber(outcome.correct)),
-        formatPdfValue(readNumber(outcome.wrong)),
-        formatPdfValue(readNumber(outcome.blank)),
-        formatPdfValue(readNumber(outcome.net)),
-      ])}
-      ${renderPdfTable("SON SINAV NETLERİ", ["Öğrenci", "Başarı %", "Net", "LGS puanı", "Standart puan"], [student], (row) => {
-        const rowTotal = readRecord(row.total);
-        return [
-          readText(row.displayName) || readText(row.studentId) || "-",
-          formatPdfPercent(scoreSuccessRate(rowTotal)),
-          formatPdfValue(readNumber(rowTotal.net)),
-          formatPdfValue(readLgsScore(rowTotal)),
-          formatPdfValue(readNumber(rowTotal.standardScore)),
-        ];
-      })}
-    </section>
-    <section class="karne karne-detail">
-      <div class="karne-header">
-        <div>
-          <h2>Detaylı Deneme Analizi</h2>
-          <strong>${escapeHtml(readText(student.displayName) || readText(student.studentId) || "-")}</strong>
-          <span>${escapeHtml([readText(student.studentNo), readText(student.className) || readText(student.classId)].filter(Boolean).join(" · ") || "-")}</span>
-        </div>
-        <div class="karne-brand">${renderPdfInstitutionBrand(institution)}</div>
-      </div>
-      ${renderPdfKarneContext(snapshot, total, student)}
-      ${renderPdfTable("KAZANIM DETAYI", ["Kazanım", "Ders", "Soru", "Başarı %", "Doğru", "Yanlış", "Boş", "Net"], outcomes, (outcome) => [
-        readText(outcome.outcomeCode) || "-",
-        readText(outcome.branch) || "-",
-        formatPdfValue(branchQuestionCount(outcome)),
-        formatPdfPercent(scoreSuccessRate(outcome)),
-        formatPdfValue(readNumber(outcome.correct)),
-        formatPdfValue(readNumber(outcome.wrong)),
-        formatPdfValue(readNumber(outcome.blank)),
-        formatPdfValue(readNumber(outcome.net)),
-      ])}
-      ${renderPdfTable("SORU CEVAP ANALİZİ", ["Soru", "Ders", "Kazanım", "Öğrenci cevabı", "Doğru cevap", "Durum"], questions, (question) => [
-        formatPdfValue(readNumber(question.questionNo)),
-        readText(question.branch) || "-",
-        readText(question.outcomeCode) || "-",
-        readText(question.answer) || "-",
-        readText(question.correctAnswer) || "-",
-        formatPdfQuestionStatus(question.status),
-      ])}
-    </section>`;
-}
-
-function renderPdfInstitutionBrand(institution: ReportPdfInstitution): string {
-  const name = institution.institutionName ?? "o-okul";
-  if (institution.institutionLogoUrl) {
-    return `<img src="${escapeHtml(institution.institutionLogoUrl)}" alt="${escapeHtml(name)} logosu" />`;
+  if (readNumber(snapshotData.schemaVersion) === 2) {
+    return createV2SnapshotPdfHtml(snapshot, institution);
   }
-  return escapeHtml(name);
-}
-
-function renderPdfKarneContext(
-  snapshot: ReportPdfSnapshotRecord,
-  total: Record<string, unknown>,
-  student: Record<string, unknown>,
-): string {
-  const items: Array<[string, string]> = [
-    ["Snapshot", snapshot.id],
-    ["Üretim", formatPdfDateTime(snapshot.generatedAt)],
-    ["Sınav", snapshot.examId],
-    ["Kitapçık", formatPdfBookletContext(readText(student.bookletType))],
-    ["Soru", formatPdfValue(branchQuestionCount(total))],
-    ["Çıktı", formatPdfSnapshotStatus(snapshot.status)],
-  ];
-
-  return `<section class="karne-context" aria-label="Karne rapor bağlamı"><strong>Rapor bağlamı</strong><dl>${items
-    .map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`)
-    .join("")}</dl></section>`;
-}
-
-function renderPdfCard(label: string, value: string | number): string {
-  return `<article class="card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></article>`;
+  return createLegacySnapshotPdfHtml(snapshot, institution);
 }
 
 function formatPdfValue(value: string | number): string {
@@ -444,36 +363,113 @@ function formatPdfNumber(value: unknown): string {
   return formatPdfValue(readNumber(value));
 }
 
-function formatPdfLgsScore(value: unknown): string {
-  return formatPdfValue(readLgsScore(value));
-}
-
 function formatPdfPercent(value: string | number): string {
   return value === "" ? "-" : `%${value}`;
 }
 
-function formatPdfRank(rank: ReportScopeRank | undefined): string {
-  if (!rank) return "-";
-  return `${rank.rank}/${rank.outOf} (%${rank.percentile})`;
+function formatV2Rank(rank: Record<string, unknown>): string {
+  const value = readOptionalNumber(rank.rank);
+  const outOf = readOptionalNumber(rank.outOf);
+  return value === undefined || outOf === undefined ? "-" : `${value}/${outOf}`;
 }
 
-function formatPdfDateTime(value: string | undefined): string {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" });
+function formatV2StudentScores(student: Record<string, unknown>): string {
+  const rankings = readRecords(student.scoreRankings);
+  const labels = readRecords(student.scoreViews).map((view) => {
+    const type = readText(view.type) || "-";
+    const label = pdfScoreTypeLabel(type);
+    if (view.status !== "CALCULATED") return `${label}: ${formatScoreStatus(view.status)}`;
+    const ranking = rankings.find((candidate) => readText(candidate.type) === type);
+    const scoreType = readExamScoreType(type);
+    const courseNets = scoreType ? formatPdfScoreCourseNets(student, scoreType) : "-";
+    return `${label}: ${formatPdfNumber(view.practiceScore)} · ${courseNets} · ${formatV2Rank(readRecord(ranking?.institution))}`;
+  });
+  return labels.join(" | ") || "-";
 }
 
-function formatPdfBookletContext(value: string): string {
-  return value ? `${value.toLocaleUpperCase("tr-TR")} kitapçık` : "-";
+function pdfScoreTypes(data: Record<string, unknown>): ExamScoreType[] {
+  const examType = readText(data.examType);
+  if (examType === "LGS") return ["LGS"];
+  if (examType === "TYT") return ["TYT"];
+  if (examType === "AYT") return ["SAY", "EA", "SOZ"];
+  return [...new Set(readRecords(data.scoreAverages).map((score) => readExamScoreType(score.type)).filter((type): type is ExamScoreType => Boolean(type)))];
 }
 
-function formatPdfSnapshotStatus(value: string): string {
-  return value === "READY" ? "READY snapshot" : `${value} snapshot`;
+function pdfScoreTypeLabel(type: string): string {
+  if (type === "SAY") return "Sayısal";
+  if (type === "SOZ") return "Sözel";
+  return type || "-";
+}
+
+function formatPdfScoreByType(student: Record<string, unknown>, type: ExamScoreType): string {
+  const view = readRecords(student.scoreViews).find((candidate) => readText(candidate.type) === type);
+  return view?.status === "CALCULATED" ? formatPdfNumber(view.practiceScore) : formatScoreStatus(view?.status);
+}
+
+function formatPdfScoreCourseNets(student: Record<string, unknown>, type: ExamScoreType): string {
+  return readRecords(student.branches)
+    .filter((branch) => reportCourseMatchesScoreType(type, readText(branch.branch)))
+    .sort((left, right) => reportCourseSortOrder(type, readText(left.branch)) - reportCourseSortOrder(type, readText(right.branch)))
+    .map((branch) => `${reportCourseShortName(readText(branch.branch))} ${formatPdfNumber(branch.net)}`)
+    .join(" · ") || "-";
+}
+
+function formatPdfRankingsByScope(student: Record<string, unknown>, scope: "institution" | "class"): string {
+  return readRecords(student.scoreRankings)
+    .map((ranking) => `${readText(ranking.type)} ${formatV2Rank(readRecord(ranking[scope]))}`)
+    .join(" · ") || "-";
+}
+
+function renderPdfBarChart(
+  title: string,
+  rows: Record<string, unknown>[],
+  label: (row: Record<string, unknown>) => string,
+  value: (row: Record<string, unknown>) => number | undefined,
+  minimum: number,
+  maximum: number,
+  suffix = "",
+): string {
+  const chartRows = rows.flatMap((row) => {
+    const numericValue = value(row);
+    if (numericValue === undefined) return [];
+    const ratio = Math.max(0, Math.min(1, (numericValue - minimum) / (maximum - minimum)));
+    return [`<div class="bar-row"><span>${escapeHtml(label(row))}</span><span class="bar-track"><span class="bar-fill" style="display:block;width:${(ratio * 100).toFixed(2)}%"></span></span><strong class="bar-value">${escapeHtml(formatPdfNumber(numericValue))}${escapeHtml(suffix)}</strong></div>`];
+  });
+  return chartRows.length > 0
+    ? `<section class="bar-chart"><h2>${escapeHtml(title)}</h2>${chartRows.join("")}</section>`
+    : "";
+}
+
+function selectPdfQuestionRows(value: unknown): Record<string, unknown>[] {
+  const questions = readRecords(value);
+  const actionable = questions.filter((question) => question.status !== "CORRECT");
+  return (actionable.length > 0 ? actionable : questions).slice(0, 10);
+}
+
+function selectPdfOutcomeRows(value: unknown): Record<string, unknown>[] {
+  return readRecords(value)
+    .sort((left, right) =>
+      numericSuccessRate(left) - numericSuccessRate(right)
+      || readText(left.outcomeCode).localeCompare(readText(right.outcomeCode), "tr")
+    )
+    .slice(0, 8);
+}
+
+function numericSuccessRate(score: Record<string, unknown>): number {
+  const rate = scoreSuccessRate(score);
+  return typeof rate === "number" ? rate : Number.POSITIVE_INFINITY;
+}
+
+function formatScoreStatus(value: unknown): string {
+  if (value === "CALCULATED") return "Hesaplandı";
+  if (value === "NOT_ELIGIBLE") return "Hesaplama koşulu sağlanmadı";
+  if (value === "MISSING_TYT") return "Bağlı TYT deneme puanı yok";
+  return "-";
 }
 
 function formatPdfQuestionStatus(value: unknown): string {
   const status = readQuestionStatus(value);
+  if (status === "CANCELLED") return "İptal";
   if (status === "WRONG") return "Yanlış";
   if (status === "BLANK") return "Boş";
   return "Doğru";
@@ -489,7 +485,7 @@ function renderPdfTable(
 
   const headerHtml = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("");
   const rowHtml = rows
-    .map((row, index) => `<tr>${mapRow(row, index).map((cell) => `<td>${escapeHtml(String(cell))}</td>`).join("")}</tr>`)
+    .map((row, index) => `<tr>${mapRow(row, index).map((cell) => `<td>${escapeHtml(String(cell)).replace(/\r?\n/gu, "<br>")}</td>`).join("")}</tr>`)
     .join("");
 
   return `<section><h2>${escapeHtml(title)}</h2><table><thead><tr>${headerHtml}</tr></thead><tbody>${rowHtml}</tbody></table></section>`;
@@ -619,101 +615,18 @@ function readNumber(value: unknown): number | "" {
   return typeof value === "number" && Number.isFinite(value) ? value : "";
 }
 
-function readLgsScore(value: unknown): number | "" {
-  const record = readRecord(value);
-  const estimatedRawScore = readNumber(record.estimatedRawScore);
-  return estimatedRawScore === "" ? readNumber(record.standardScore) : estimatedRawScore;
-}
-
 function readOptionalNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function createStudentBranchAverageLookup(
-  snapshotData: Record<string, unknown>,
-  classId: string,
-): Map<string, Pick<ReportStudentBranchSummary, "classNetAverage" | "generalNetAverage" | "schoolNetAverage">> {
-  const averages = new Map<string, Pick<ReportStudentBranchSummary, "classNetAverage" | "generalNetAverage" | "schoolNetAverage">>();
-  const schoolBranches = readRecords(snapshotData.branches);
-  const classBranches = readRecords(readRecords(snapshotData.classes).find((klass) => readText(klass.classId) === classId)?.branches);
-  const generalBranches = readRecords(readRecord(snapshotData.statistics).branches);
-  for (const branch of schoolBranches) {
-    const branchName = readText(branch.branch);
-    if (!branchName) continue;
-    const schoolNetAverage = readOptionalNumber(branch.net);
-    averages.set(branchName, {
-      ...(schoolNetAverage !== undefined ? { schoolNetAverage } : {}),
-    });
-  }
-  for (const branch of classBranches) {
-    const branchName = readText(branch.branch);
-    if (!branchName) continue;
-    const current = averages.get(branchName) ?? {};
-    const classNetAverage = readOptionalNumber(branch.net);
-    averages.set(branchName, {
-      ...current,
-      ...(classNetAverage !== undefined ? { classNetAverage } : {}),
-    });
-  }
-  for (const branch of generalBranches) {
-    const branchName = readText(branch.branch);
-    if (!branchName) continue;
-    const current = averages.get(branchName) ?? {};
-    const generalNetAverage = readOptionalNumber(branch.meanNet);
-    averages.set(branchName, {
-      ...current,
-      ...(generalNetAverage !== undefined ? { generalNetAverage } : {}),
-    });
-  }
-  return averages;
+function readQuestionStatus(value: unknown): "CORRECT" | "WRONG" | "BLANK" | "CANCELLED" {
+  return value === "WRONG" || value === "BLANK" || value === "CANCELLED" ? value : "CORRECT";
 }
 
-function readStudentStatistics(value: unknown): ReportStudentStatistics | undefined {
-  const record = readRecord(value);
-  const general = readScopeRank(record.general);
-  if (!general) {
-    return undefined;
-  }
-  const klass = readScopeRank(record.class);
-  return {
-    standardScore: readOptionalNumber(record.standardScore) ?? 0,
-    general,
-    ...(klass ? { class: klass } : {}),
-    branches: readRecords(record.branches)
-      .map(readBranchStatistics)
-      .filter((branch): branch is ReportStudentBranchStatistics => branch !== undefined),
-  };
-}
-
-function readBranchStatistics(value: unknown): ReportStudentBranchStatistics | undefined {
-  const record = readRecord(value);
-  const branch = readText(record.branch);
-  const general = readScopeRank(record.general);
-  if (!branch || !general) {
-    return undefined;
-  }
-  const klass = readScopeRank(record.class);
-  return {
-    branch,
-    standardScore: readOptionalNumber(record.standardScore) ?? 0,
-    general,
-    ...(klass ? { class: klass } : {}),
-  };
-}
-
-function readScopeRank(value: unknown): ReportScopeRank | undefined {
-  const record = readRecord(value);
-  const rank = readOptionalNumber(record.rank);
-  const outOf = readOptionalNumber(record.outOf);
-  const percentile = readOptionalNumber(record.percentile);
-  if (rank === undefined || outOf === undefined || percentile === undefined) {
-    return undefined;
-  }
-  return { rank, outOf, percentile };
-}
-
-function readQuestionStatus(value: unknown): ReportStudentQuestionSummary["status"] {
-  return value === "WRONG" || value === "BLANK" ? value : "CORRECT";
+function readExamScoreType(value: unknown): ExamScoreType | undefined {
+  return value === "LGS" || value === "TYT" || value === "SAY" || value === "EA" || value === "SOZ"
+    ? value
+    : undefined;
 }
 
 function readText(value: unknown): string {

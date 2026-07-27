@@ -2,9 +2,12 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import type {
   AnswerChoice,
   AnswerKeyBranchSummary,
+  AnswerKeyEvaluationStatus,
   AnswerKeyItemInput,
   AnswerKeyRecord,
+  AnswerKeyScoreSection,
   AnswerKeyScoringConfig,
+  ExamType,
 } from "@o-okul/shared-types";
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
@@ -14,6 +17,18 @@ import { reportSnapshotStoreToken, type ReportSnapshotStore } from "../report/re
 export const answerKeyRepositoryToken = Symbol("AnswerKeyRepository");
 
 const answerChoices = new Set<AnswerChoice>(["A", "B", "C", "D", "E"]);
+const answerKeyScoreSections = new Set<AnswerKeyScoreSection>([
+  "LGS_TURKCE", "LGS_MATEMATIK", "LGS_FEN", "LGS_INKILAP", "LGS_DIN", "LGS_YABANCI_DIL",
+  "TYT_TURKCE", "TYT_SOSYAL", "TYT_MATEMATIK", "TYT_FEN",
+  "AYT_MATEMATIK", "AYT_FIZIK", "AYT_KIMYA", "AYT_BIYOLOJI", "AYT_EDEBIYAT",
+  "AYT_TARIH_1", "AYT_COGRAFYA_1", "AYT_TARIH_2", "AYT_COGRAFYA_2", "AYT_FELSEFE", "AYT_DIN",
+]);
+
+export interface AnswerKeyExamScoringContext {
+  examType?: ExamType | string;
+  examYear?: number;
+  scoringProfileId?: string;
+}
 
 export interface SaveAnswerKeyInput {
   tenantId: string;
@@ -38,6 +53,7 @@ export interface AnswerKeyRepository {
   create(input: SaveAnswerKeyInput): Promise<AnswerKeyRecord>;
   list(tenantId: string, examId: string): Promise<AnswerKeyRecord[]>;
   publish(tenantId: string, examId: string, version: string): Promise<AnswerKeyRecord | undefined>;
+  findExamScoringContext?(tenantId: string, examId: string): Promise<AnswerKeyExamScoringContext | undefined>;
 }
 
 export interface CreateAnswerKeyInput {
@@ -97,6 +113,8 @@ export class AnswerKeyService {
     const version = requiredString(input.version, "ANSWER_KEY_VERSION_REQUIRED");
     const questions = parseQuestions(input.questions);
     const scoringConfig = parseScoringConfig(input.scoringConfig);
+    const examScoringContext = await this.repository.findExamScoringContext?.(tenantId, examId);
+    assertOfficialAnswerKeyProfile(examScoringContext, questions, scoringConfig);
     const bookletVariants = parseBookletVariants(input.bookletVariants, questions.length);
     const summary = summarizeAnswerKeyQuestions(questions);
 
@@ -230,16 +248,64 @@ function parseQuestions(value: unknown): AnswerKeyItemInput[] {
 
     const outcomeCode = typeof record.outcomeCode === "string" && record.outcomeCode.trim() ? record.outcomeCode.trim() : undefined;
     const topic = typeof record.topic === "string" && record.topic.trim() ? record.topic.trim() : undefined;
+    const scoreSection = typeof record.scoreSection === "string"
+      ? record.scoreSection.trim().toUpperCase() as AnswerKeyScoreSection
+      : undefined;
+    if (scoreSection && !answerKeyScoreSections.has(scoreSection)) {
+      throw new BadRequestException("ANSWER_KEY_SCORE_SECTION_INVALID");
+    }
+    const evaluationStatus = record.evaluationStatus === undefined
+      ? "ACTIVE"
+      : record.evaluationStatus as AnswerKeyEvaluationStatus;
+    if (evaluationStatus !== "ACTIVE" && evaluationStatus !== "CANCELLED") {
+      throw new BadRequestException("ANSWER_KEY_EVALUATION_STATUS_INVALID");
+    }
     return {
       questionNo,
       correctAnswer,
       branch,
+      ...(scoreSection ? { scoreSection } : {}),
+      evaluationStatus,
       ...(outcomeCode ? { outcomeCode } : {}),
       ...(topic ? { topic } : {}),
     };
   });
 
   return questions.sort((a, b) => a.questionNo - b.questionNo);
+}
+
+function assertOfficialAnswerKeyProfile(
+  context: AnswerKeyExamScoringContext | undefined,
+  questions: AnswerKeyItemInput[],
+  scoringConfig: AnswerKeyScoringConfig,
+): void {
+  if (!context?.scoringProfileId) return;
+
+  const expected = context.scoringProfileId === "TR-LGS-2026-NOSD-V1"
+    ? { examType: "LGS", examYear: 2026, wrongPenalty: 1 / 3, scoreSectionPrefix: "LGS_" }
+    : context.scoringProfileId === "TR-YKS-2026-NOSD-V1"
+      ? { examType: context.examType, examYear: 2026, wrongPenalty: 1 / 4, scoreSectionPrefix: context.examType === "AYT" ? "AYT_" : "TYT_" }
+      : undefined;
+  if (!expected) {
+    throw new BadRequestException("SCORING_PROFILE_UNSUPPORTED");
+  }
+  if (
+    context.examType !== expected.examType && context.scoringProfileId === "TR-LGS-2026-NOSD-V1"
+    || context.scoringProfileId === "TR-YKS-2026-NOSD-V1" && context.examType !== "TYT" && context.examType !== "AYT"
+  ) {
+    throw new BadRequestException("SCORING_PROFILE_EXAM_TYPE_MISMATCH");
+  }
+  if (context.examYear !== expected.examYear) {
+    throw new BadRequestException("SCORING_PROFILE_EXAM_YEAR_MISMATCH");
+  }
+  if (Math.abs(scoringConfig.wrongPenalty - expected.wrongPenalty) > 0.000001) {
+    throw new BadRequestException("SCORING_PROFILE_WRONG_PENALTY_MISMATCH");
+  }
+  if (questions.some((question) =>
+    question.evaluationStatus !== "CANCELLED" && !question.scoreSection?.startsWith(expected.scoreSectionPrefix)
+  )) {
+    throw new BadRequestException("SCORING_PROFILE_SCORE_SECTION_MISMATCH");
+  }
 }
 
 function parseBookletVariants(value: unknown, questionCount: number): SaveAnswerKeyBookletVariantInput[] {

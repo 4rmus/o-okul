@@ -417,7 +417,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(studentSummary).toContainText("Kayıt durumu");
     await expect(studentSummary).toContainText("Başarı %");
     await expect(studentSummary).toContainText("%81,7");
-    await expect(studentSummary).toContainText("Net 24,5 / Soru 30");
+    await expect(studentSummary).toContainText("Net 24,50 / Soru 30");
     await expect(studentSummary).toContainText("PII maskeli");
     await expect(studentSummary.getByLabel("Öğrenci detay operasyon özeti aksiyon kuyruğu")).toBeVisible();
     const studentProfile = studentDashboard.getByLabel("Öğrenci profil kartı");
@@ -441,15 +441,16 @@ test.describe("Faz 9 UI görsel smoke", () => {
     const studentExamSummary = studentExamDetails.getByRole("region", { exact: true, name: "Öğrenci sınav operasyon özeti" });
     await expect(studentExamSummary).toContainText("Başarı %");
     await expect(studentExamSummary).toContainText("%81,7");
-    await expect(studentExamSummary).toContainText("Net 24,5 / Soru 30");
+    await expect(studentExamSummary).toContainText("Net 24,50 / Soru 30");
     await expect(studentExamSummary.getByLabel("Öğrenci sınav operasyon özeti aksiyon kuyruğu")).toBeVisible();
     const examReportContext = studentExamDetails.getByLabel("Öğrenci sınav rapor bağlamı");
     await expect(examReportContext.locator(".uh-select")).toHaveCount(2);
     const studentReportContext = examReportContext.getByRole("region", { name: "Öğrenci rapor bağlam özeti" });
     await expect(studentReportContext).toHaveClass(/uh-info-grid/);
-    await expect(studentReportContext.locator(".uh-info-item")).toHaveCount(7);
-    await expect(examReportContext).toContainText("LGS puanı");
-    await expect(examReportContext).toContainText("Standart puan");
+    await expect(studentReportContext.locator(".uh-info-item")).toHaveCount(6);
+    await expect(examReportContext).toContainText("Eski hesaplama");
+    await expect(examReportContext).not.toContainText("LGS puanı");
+    await expect(examReportContext).not.toContainText("Standart puan");
     await expect(studentExamDetails.getByRole("region", { name: "Hata kitapçığı" })).toContainText("Yanıt");
     await expectStudentDetailNoRawIds(page, "student-exam-detail-desktop");
     await expectUiStable(page, "faz9-student-exam-detail-desktop", consoleErrors);
@@ -477,15 +478,16 @@ test.describe("Faz 9 UI görsel smoke", () => {
     const studentExamSummary = studentExamDetails.getByRole("region", { exact: true, name: "Öğrenci sınav operasyon özeti" });
     await expect(studentExamSummary).toContainText("Başarı %");
     await expect(studentExamSummary).toContainText("%81,7");
-    await expect(studentExamSummary).toContainText("Net 24,5 / Soru 30");
+    await expect(studentExamSummary).toContainText("Net 24,50 / Soru 30");
     await expect(studentExamSummary).toContainText("Rapor hazır");
     await expect(studentExamSummary).toContainText("2 soru");
     await expect(studentExamSummary.getByLabel("Öğrenci sınav operasyon özeti aksiyon kuyruğu")).toBeVisible();
     const reportContext = studentExamDetails.getByLabel("Öğrenci sınav rapor bağlamı");
     await expect(reportContext.locator(".uh-select")).toHaveCount(2);
     await expect(reportContext.getByRole("region", { name: "Öğrenci rapor bağlam özeti" })).toHaveClass(/uh-info-grid/);
-    await expect(reportContext).toContainText("LGS puanı");
-    await expect(reportContext).toContainText("Standart puan");
+    await expect(reportContext).toContainText("Eski hesaplama");
+    await expect(reportContext).not.toContainText("LGS puanı");
+    await expect(reportContext).not.toContainText("Standart puan");
     await expect(studentExamDetails.getByRole("region", { name: "Hata kitapçığı" })).toContainText("Yanıt");
     await expect(studentExamDetails.getByRole("region", { name: "Hata kitapçığı" })).toContainText("Boş");
     await expectStudentDetailNoRawIds(page, "student-exam-detail-direct");
@@ -672,22 +674,26 @@ test.describe("Faz 9 UI görsel smoke", () => {
 
     await expect(page.getByRole("heading", { level: 1, name: "Sınav Raporu" })).toBeVisible();
     await page.getByRole("button", { name: "Raporu getir" }).click();
-    await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
-    const analyticsPanel = page.getByRole("tabpanel", { name: "Kurum Analitiği" });
+    await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
+    const analyticsPanel = page.getByRole("tabpanel", { name: "Genel Bakış" });
     await expect(analyticsPanel.getByRole("region", { name: "Kurum analitiği" })).toContainText("Başarı %");
-    await expect(analyticsPanel).toContainText("Hazır");
-    await page.getByRole("tab", { name: "Öğrenci Sonuçları" }).click();
+    await expect(page.getByRole("region", { name: "Rapor iş akışı" })).toContainText("Hazır");
+    await expect(analyticsPanel.getByRole("heading", { name: "Ders performansı" })).toBeVisible();
+    await expect(analyticsPanel.locator(".uh-chart-loading")).toHaveCount(0);
+    await expect(analyticsPanel.locator("canvas")).toHaveCount(2);
+    await page.waitForTimeout(200);
+    await saveScreenshot(page, "faz9-reports-desktop.png");
+    await page.getByRole("tab", { name: "Öğrenciler" }).click();
     await expect(page.getByRole("heading", { name: "Öğrenci sıralamaları" })).toBeVisible();
-    const studentsPanel = page.getByRole("tabpanel", { name: "Öğrenci Sonuçları" });
+    const studentsPanel = page.getByRole("tabpanel", { name: "Öğrenciler" });
     const studentResultsTable = studentsPanel.getByRole("table", { name: "Öğrenci sıralamaları" });
     await expect(studentResultsTable.getByRole("columnheader", { name: "Öğrenci" })).toBeVisible();
-    await expect(studentResultsTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
-    await expect(studentResultsTable.getByRole("columnheader", { name: "Net" })).toBeVisible();
-    await expect(studentResultsTable.getByRole("columnheader", { name: "Soru" })).toBeVisible();
+    await expect(studentResultsTable.getByRole("columnheader", { name: "Performans" })).toBeVisible();
+    await expect(studentResultsTable.getByRole("columnheader", { name: "Başarı sırası" })).toBeVisible();
     await expect(studentResultsTable).toContainText("Ada Kaya");
     await expect(studentResultsTable).toContainText("%81,7");
     await studentResultsTable.getByRole("button", { name: "Ada Kaya karnesini aç" }).click();
-    await expect(page.getByRole("tab", { name: "Karne Önizleme" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "Karne" })).toHaveAttribute("aria-selected", "true");
     const reportErrorBooklet = page.getByRole("region", { name: "Hata kitapçığı" });
     await expect(reportErrorBooklet).toHaveClass(/next-report-output-panel/);
     await expect(reportErrorBooklet.getByRole("table", { name: "Seçili öğrenci hata kitapçığı" })).toBeVisible();
@@ -696,8 +702,6 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(exportsRegion.getByRole("button", { name: "Excel indir" })).toBeEnabled();
     await expect(exportsRegion.getByRole("button", { name: "PDF indir" })).toBeEnabled();
     await expectUiStable(page, "faz9-reports-desktop", consoleErrors);
-
-    await saveScreenshot(page, "faz9-reports-desktop.png");
   });
 
   test("rapor çalışma alanı 375/768/1024/1440 görünümde bağlam ve karne taşmadan kalır", async ({ page }) => {
@@ -707,23 +711,32 @@ test.describe("Faz 9 UI görsel smoke", () => {
     for (const viewport of redesignViewports) {
       await openWithUiMocks(page, "/kurum/raporlar", viewport);
       await page.getByRole("button", { name: "Raporu getir" }).click();
-      await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
-      const contextStrip = page.locator(".next-report-context-strip");
-      await expect(contextStrip).toContainText("Hazır");
-      await expect(contextStrip).toContainText("10.06.2026");
-      await expect(contextStrip).toContainText("Matematik");
-      await expect(contextStrip).toContainText("Excel/PDF hazır");
+      await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
+      const statusSurface = page.getByRole("region", { name: "Rapor iş akışı" });
+      await expect(statusSurface).toContainText("Hazır");
+      await expect(statusSurface).toContainText("Excel/PDF hazır");
+      const reportDetails = statusSurface.locator(".next-report-meta-details");
+      await reportDetails.getByText("Rapor ayrıntıları", { exact: true }).click();
+      await expect(reportDetails).toContainText("10.06.2026");
+      await expect(reportDetails).toContainText("Matematik");
+      await reportDetails.getByText("Rapor ayrıntıları", { exact: true }).click();
+      await expect(page.getByRole("region", { name: "Rapor özeti" })).toContainText("Başarı %");
+      await expect(page.getByRole("heading", { name: "Ders performansı" })).toBeVisible();
+      await expect(page.getByRole("tabpanel", { name: "Genel Bakış" }).locator(".uh-chart-loading")).toHaveCount(0);
+      await expect(page.getByRole("tabpanel", { name: "Genel Bakış" }).locator("canvas")).toHaveCount(2);
+      await page.waitForTimeout(200);
+      await expectUiStable(page, `faz9-report-overview-${viewport.width}`, consoleErrors);
+      await saveScreenshot(page, `faz9-report-workspace-${viewport.width}.png`);
 
-      await page.getByRole("tab", { name: "Öğrenci Sonuçları" }).click();
+      await page.getByRole("tab", { name: "Öğrenciler" }).click();
       const studentResultsTable = page.getByRole("table", { name: "Öğrenci sıralamaları" });
-      await expect(studentResultsTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
-      await expect(studentResultsTable.getByRole("columnheader", { name: "Net" })).toBeVisible();
-      await expect(studentResultsTable.getByRole("columnheader", { name: "Soru" })).toBeVisible();
+      await expect(studentResultsTable.getByRole("columnheader", { name: "Performans" })).toBeVisible();
+      await expect(studentResultsTable.getByRole("columnheader", { name: "Başarı sırası" })).toBeVisible();
       await expect(studentResultsTable).toContainText("%81,7");
 
       await studentResultsTable.getByRole("button", { name: "Ada Kaya karnesini aç" }).click();
-      await expect(page.getByRole("tab", { name: "Karne Önizleme" })).toHaveAttribute("aria-selected", "true");
-      const karnePanel = page.getByRole("tabpanel", { name: "Karne Önizleme" });
+      await expect(page.getByRole("tab", { name: "Karne" })).toHaveAttribute("aria-selected", "true");
+      const karnePanel = page.getByRole("tabpanel", { name: "Karne" });
       const karneSheet = karnePanel.getByRole("region", { name: "Öğrenci karne özeti özet sayfası" });
       const karneContext = karneSheet.getByRole("region", { exact: true, name: "Karne rapor bağlamı" });
       await expect(karneContext.getByRole("group", { name: "Karne rapor bağlam metrikleri" })).toHaveClass(/uh-info-grid/);
@@ -757,7 +770,6 @@ test.describe("Faz 9 UI görsel smoke", () => {
       await expect(exportsRegion.getByRole("button", { name: "PDF indir" })).toBeEnabled();
 
       await expectUiStable(page, `faz9-report-workspace-${viewport.width}`, consoleErrors);
-      await saveScreenshot(page, `faz9-report-workspace-${viewport.width}.png`);
     }
   });
 
@@ -1899,7 +1911,8 @@ async function expectNoClippedVisibleText(page: Page, label: string) {
         ".next-tenant-profile",
         ".next-portal-summary-card",
         ".next-portal-action-strip__item",
-        ".next-report-context-strip > .uh-info-item",
+        ".next-report-status-surface",
+        ".next-report-summary-hero",
         ".next-report-export-grid > div",
         ".next-karne-context-strip .uh-info-item",
         ".next-karne-summary-strip .uh-metric-card",

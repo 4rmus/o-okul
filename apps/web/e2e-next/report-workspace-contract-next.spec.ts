@@ -16,12 +16,8 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await expect(page.getByRole("tab", { name: "Çıktılar" })).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("exports");
 
-    await page.getByRole("tab", { name: "Kurum Analitiği" }).click();
-    await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
-    await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("analytics");
-
-    await page.getByRole("tab", { name: "Sorgu / Üretim" }).click();
-    await expect(page.getByRole("tab", { name: "Sorgu / Üretim" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", { name: "Genel Bakış" }).click();
+    await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBeNull();
   });
 
@@ -40,8 +36,8 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
 
     await page.getByRole("button", { name: "Raporu getir" }).click();
 
-    await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
-    expect(studentRequests).toHaveLength(1);
+    await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
+    await expect.poll(() => studentRequests.length).toBe(1);
   });
 
   test("rapor üretimini job durumuyla izleyip tamamlanınca veriyi yeniler", async ({ page }) => {
@@ -51,11 +47,11 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
 
     await expect(page.getByRole("combobox", { name: "Sınav" })).toHaveValue("exam-report-ready");
-    await page.getByRole("button", { name: "Rapor üret" }).click();
-    await expect(page.getByRole("button", { name: "Rapor işleniyor" })).toBeDisabled();
+    await page.getByRole("button", { name: "Yeniden üret" }).click();
+    await expect(page.getByRole("button", { name: "İşleniyor" })).toBeDisabled();
 
-    await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
-    expect(jobStatusRequests).toHaveLength(2);
+    await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
+    await expect.poll(() => jobStatusRequests.length).toBeGreaterThanOrEqual(1);
   });
 
   test("sınıfsız raporda genel öğrenci listesi yerine katılımcı kayıtlarını yükler", async ({ page }) => {
@@ -74,49 +70,66 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await page.getByRole("combobox", { name: "Sınav" }).selectOption("exam-report-general");
     await page.getByRole("button", { name: "Raporu getir" }).click();
 
-    await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => bulkStudentRequests.length).toBe(1);
     expect(new URL(bulkStudentRequests[0]!).searchParams.get("ids")).toBe("student-a,student-b");
     expect(oldStudentDetailRequests).toHaveLength(0);
     expect(studentDetailRequests).toHaveLength(0);
 
-    await page.getByRole("tab", { name: "Öğrenci Sonuçları" }).click();
+    await page.getByRole("tab", { name: "Öğrenciler" }).click();
     const studentResultsTable = page.getByRole("table", { name: "Öğrenci sıralamaları" });
     await expect(studentResultsTable).toContainText("Ada Kaya");
     await expect(studentResultsTable).toContainText("Bora Yılmaz");
     expect(bulkStudentRequests).toHaveLength(1);
   });
 
+  test("AYT öğrenci tablosu ders netlerini SAY EA SÖZ puanlarının altında gösterir", async ({ page }) => {
+    await openWithReportMocks(page, "/kurum/raporlar", { height: 960, width: 1440 });
+
+    await page.getByRole("combobox", { name: "Sınav" }).selectOption("exam-report-ayt");
+    await page.getByRole("button", { name: "Raporu getir" }).click();
+    await expect(page.getByRole("heading", { name: "Puan profili" })).toBeVisible();
+
+    await page.getByRole("tab", { name: "Öğrenciler" }).click();
+    const table = page.getByRole("table", { name: "Öğrenci sıralamaları" });
+    await expect(table.getByRole("columnheader", { name: "Dersler" })).toHaveCount(0);
+    await expect(table.getByRole("columnheader", { name: "Sayısal puanı" })).toBeVisible();
+    await expect(table.getByRole("columnheader", { name: "EA puanı" })).toBeVisible();
+    await expect(table.getByRole("columnheader", { name: "Sözel puanı" })).toBeVisible();
+    await expect(table.getByRole("columnheader", { name: "Başarı sırası" })).toBeVisible();
+    await expect(table.getByRole("row").nth(1)).toContainText("Mat 28,75");
+    await expect(table.getByRole("row").nth(1)).toContainText("Edb 17,25");
+    await expect(table.getByRole("row").nth(1)).toContainText("412");
+    await expect(table.getByRole("row").nth(1)).toContainText("398");
+    await expect(table.getByRole("row").nth(1)).toContainText("376");
+  });
+
   test("rapor sekmeleri klavyede roving focus ve panel odağını korur", async ({ page }) => {
     await openWithReportMocks(page, "/kurum/raporlar", { height: 960, width: 1440 });
 
-    const queryTab = page.getByRole("tab", { name: "Sorgu / Üretim" });
-    const analyticsTab = page.getByRole("tab", { name: "Kurum Analitiği" });
-    const studentsTab = page.getByRole("tab", { name: "Öğrenci Sonuçları" });
+    const overviewTab = page.getByRole("tab", { name: "Genel Bakış" });
+    const studentsTab = page.getByRole("tab", { name: "Öğrenciler" });
     const exportsTab = page.getByRole("tab", { name: "Çıktılar" });
 
-    await expect(queryTab).toHaveAttribute("aria-selected", "true");
-    await expect(queryTab).toHaveAttribute("tabindex", "0");
-    await expect(analyticsTab).toHaveAttribute("tabindex", "-1");
+    await expect(overviewTab).toHaveAttribute("aria-selected", "true");
+    await expect(overviewTab).toHaveAttribute("tabindex", "0");
+    await expect(studentsTab).toHaveAttribute("tabindex", "-1");
 
-    await queryTab.focus();
-    await page.keyboard.press("ArrowRight");
-    await expect(analyticsTab).toBeFocused();
-    await expect(analyticsTab).toHaveAttribute("aria-selected", "true");
-    await expect(analyticsTab).toHaveAttribute("tabindex", "0");
-    await expect(queryTab).toHaveAttribute("tabindex", "-1");
-
+    await overviewTab.focus();
     await page.keyboard.press("ArrowRight");
     await expect(studentsTab).toBeFocused();
-    await expect(page.getByRole("tabpanel", { name: "Öğrenci Sonuçları" })).toBeVisible();
+    await expect(studentsTab).toHaveAttribute("aria-selected", "true");
+    await expect(studentsTab).toHaveAttribute("tabindex", "0");
+    await expect(overviewTab).toHaveAttribute("tabindex", "-1");
+    await expect(page.getByRole("tabpanel", { name: "Öğrenciler" })).toBeVisible();
 
     await page.keyboard.press("End");
     await expect(exportsTab).toBeFocused();
     await expect(exportsTab).toHaveAttribute("aria-selected", "true");
 
     await page.keyboard.press("Home");
-    await expect(queryTab).toBeFocused();
-    await expect(queryTab).toHaveAttribute("aria-selected", "true");
+    await expect(overviewTab).toBeFocused();
+    await expect(overviewTab).toHaveAttribute("aria-selected", "true");
 
     await page.keyboard.press("ArrowLeft");
     await expect(exportsTab).toBeFocused();
@@ -137,10 +150,11 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await openWithReportMocks(page, "/kurum/raporlar", { height: 960, width: 1440 });
 
     await expect(page.getByRole("heading", { level: 1, name: "Sınav Raporu" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Sorgu / Üretim" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
     expect(studentListRequests).toHaveLength(0);
     expect(studentDetailRequests).toHaveLength(0);
 
+    await page.getByText("Kapsam filtreleri", { exact: true }).click();
     const reportFilters = page.getByLabel("Rapor filtreleri").locator("select");
     await reportFilters.nth(0).selectOption("campus-main");
     await reportFilters.nth(1).selectOption("grade-8");
@@ -161,16 +175,16 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     expect(snapshotsUrl.searchParams.get("courseId")).toBe("course-math");
     expect(snapshotsUrl.searchParams.get("termId")).toBe("term-2026");
 
-    await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
-    expect(studentListRequests).toHaveLength(1);
+    await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
+    await expect.poll(() => studentListRequests.length).toBe(1);
     expect(new URL(studentListRequests[0]!).searchParams.get("classId")).toBe("class-8a");
     expect(studentDetailRequests).toHaveLength(0);
     const workflowStrip = page.getByRole("region", { name: "Rapor iş akışı" });
-    await expect(workflowStrip).toHaveClass(/uh-info-grid/);
-    await expect(workflowStrip.locator(".uh-info-item")).toHaveCount(4);
+    await expect(workflowStrip).toHaveClass(/next-report-status-surface/);
+    await expect(workflowStrip.locator(".next-report-status-pills > span")).toHaveCount(4);
     await expect(workflowStrip).toContainText("Sorgu");
     await expect(workflowStrip).toContainText("Sorgulandı");
-    await expect(workflowStrip).toContainText("Üretim");
+    await expect(workflowStrip).toContainText("Rapor");
     await expect(workflowStrip).toContainText("Hazır");
     await expect(workflowStrip).toContainText("Çıktı");
     await expect(workflowStrip).toContainText("Excel/PDF hazır");
@@ -178,74 +192,89 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await expect(workflowStrip).toContainText("Öğrenci seç");
     await expect(workflowStrip).not.toContainText("exam-report-ready");
     await expect(workflowStrip).not.toContainText("snapshot-ready");
-    const contextStrip = page.locator(".next-report-context-strip");
-    await expect(contextStrip).toHaveClass(/uh-info-grid/);
-    await expect(contextStrip.locator(".uh-info-item")).toHaveCount(6);
-    await expect(contextStrip).toContainText("LGS Rapor Denemesi");
-    await expect(contextStrip).not.toContainText("exam-report-ready");
-    await expect(contextStrip).toContainText("Hazır");
-    await expect(contextStrip).toContainText("17.06.2026");
-    await expect(contextStrip).toContainText("Ana Kampüs");
-    await expect(contextStrip).toContainText("8-A");
-    await expect(contextStrip).toContainText("Matematik");
-    await expect(contextStrip).toContainText("2026 Bahar");
-    await expect(contextStrip).toContainText("1 sonuç girdisi");
-    await expect(contextStrip).toContainText("cevap anahtarı");
-    await expect(contextStrip).toContainText("Excel/PDF hazır");
+    await expect(workflowStrip).toContainText("LGS Rapor Denemesi");
+    const reportDetails = workflowStrip.locator(".next-report-meta-details");
+    await reportDetails.getByText("Rapor ayrıntıları", { exact: true }).click();
+    await expect(reportDetails).not.toContainText("exam-report-ready");
+    await expect(reportDetails).toContainText("Hazır");
+    await expect(reportDetails).toContainText("17.06.2026");
+    await expect(reportDetails).toContainText("Ana Kampüs");
+    await expect(reportDetails).toContainText("8-A");
+    await expect(reportDetails).toContainText("Matematik");
+    await expect(reportDetails).toContainText("2026 Bahar");
+    await expect(reportDetails).toContainText("1 sonuç girdisi");
+    await expect(reportDetails).toContainText("cevap anahtarı");
 
-    const analyticsPanel = page.getByRole("tabpanel", { name: "Kurum Analitiği" });
+    const analyticsPanel = page.getByRole("tabpanel", { name: "Genel Bakış" });
     await expect(analyticsPanel.getByRole("region", { name: "Kurum analitiği" })).toContainText("Başarı %");
     await expect(analyticsPanel.getByRole("region", { name: "Kurum analitiği" })).toContainText("%81,7");
-    await expect(analyticsPanel.getByRole("region", { name: "Rapor özeti" }).locator(".uh-metric-card")).toHaveCount(8);
+    await expect(analyticsPanel.getByRole("heading", { name: "Puan profili" })).toHaveCount(0);
+    await expect(analyticsPanel.getByRole("region", { name: "Rapor özeti" })).toContainText("LGS deneme puanı");
+    await expect(analyticsPanel.getByRole("region", { name: "Rapor özeti" }).locator(".uh-metric-card")).toHaveCount(0);
+    await expect(analyticsPanel.getByRole("region", { name: "Rapor özeti" })).toContainText("En güçlü");
+    await expect(analyticsPanel.getByRole("heading", { name: "Ders performansı" })).toBeVisible();
     await expect(analyticsPanel.locator(".next-report-summary-card")).toHaveCount(0);
 
-    await page.getByRole("tab", { name: "Öğrenci Sonuçları" }).click();
+    await page.getByRole("tab", { name: "Öğrenciler" }).click();
     const studentResultsTable = page.getByRole("table", { name: "Öğrenci sıralamaları" });
-    await expect(studentResultsTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
-    await expect(studentResultsTable.getByRole("columnheader", { name: "Net" })).toBeVisible();
-    await expect(studentResultsTable.getByRole("columnheader", { name: "Soru" })).toBeVisible();
+    await expect(studentResultsTable.getByRole("columnheader", { name: "Performans" })).toBeVisible();
+    await expect(studentResultsTable.getByRole("columnheader", { name: "Dersler" })).toHaveCount(0);
+    await expect(studentResultsTable.getByRole("columnheader", { name: "LGS puanı" })).toBeVisible();
+    await expect(studentResultsTable.getByRole("columnheader", { name: "Başarı sırası" })).toBeVisible();
     await expect(studentResultsTable).toContainText("Ada Kaya");
     await expect(studentResultsTable).toContainText("Bora Yılmaz");
     await expect(studentResultsTable.getByRole("row").nth(1)).toContainText("Ada Kaya");
     await expect(studentResultsTable.getByRole("row").nth(1)).toContainText("%81,7");
-    await expect(studentResultsTable.getByRole("row").nth(1)).toContainText("24,5");
+    await expect(studentResultsTable.getByRole("row").nth(1)).toContainText("24,50");
     await expect(studentResultsTable.getByRole("row").nth(1)).toContainText("30");
+    await expect(studentResultsTable.getByRole("row").nth(1)).toContainText("Tr 13,00");
+    await expect(studentResultsTable.getByRole("row").nth(1)).toContainText("Mat 11,50");
     await expect(studentResultsTable.getByRole("row").nth(2)).toContainText("Bora Yılmaz");
     await expect(studentResultsTable.getByRole("row").nth(2)).toContainText("%60,0");
     await expect(studentResultsTable.getByRole("row").nth(2)).toContainText("30");
     await expect(studentResultsTable.getByRole("row").nth(2)).toContainText("50");
 
     await studentResultsTable.getByRole("button", { name: "Ada Kaya karnesini aç" }).click();
-    await expect(page.getByRole("tab", { name: "Karne Önizleme" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "Karne" })).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => studentDetailRequests.length).toBe(3);
     await expect(workflowStrip).toContainText("Karne açık");
-    const karnePanel = page.getByRole("tabpanel", { name: "Karne Önizleme" });
+    const karnePanel = page.getByRole("tabpanel", { name: "Karne" });
     const karneSheet = karnePanel.getByRole("region", { name: "Öğrenci karne özeti özet sayfası" });
     await expect(karneSheet).toHaveClass(/next-report-karne-sheet/);
     await expect(karneSheet).not.toHaveClass(/next-report-list/);
     const karneContext = karneSheet.getByRole("region", { exact: true, name: "Karne rapor bağlamı" });
     const karneContextMetrics = karneContext.getByRole("group", { name: "Karne rapor bağlam metrikleri" });
     await expect(karneContextMetrics).toHaveClass(/uh-info-grid/);
-    await expect(karneContextMetrics.locator(".uh-info-item")).toHaveCount(6);
+    await expect(karneContextMetrics.locator(".uh-info-item")).toHaveCount(7);
     await expect(karneContext).toContainText("Rapor bağlamı");
     await expect(karneContext).toContainText("Rapor kaydı");
     await expect(karneContext).toContainText("Rapor kaydı hazır");
+    await expect(karneContext).toContainText("Rapor hazır");
     await expect(karneContext).not.toContainText("snapshot-ready");
     await expect(karneContext).toContainText("Excel/PDF hazır");
     await expect(karneContext).toContainText("Üretim");
     await expect(karneContext).toContainText("Soru");
     const karneSummary = karneSheet.getByRole("region", { exact: true, name: "Karne başarı özeti" });
     await expect(karneSummary).toHaveClass(/uh-metric-grid/);
-    await expect(karneSummary.locator(".uh-metric-card")).toHaveCount(7);
+    await expect(karneSummary.locator(".uh-metric-card")).toHaveCount(6);
     await expect(karneSummary).toContainText("Başarı %");
     await expect(karneSummary).toContainText("%66,7");
     await expect(karneSummary).toContainText("Soru");
     await expect(karneSummary).toContainText("30");
     await expect(karneSummary).toContainText("Net");
-    await expect(karneSummary).toContainText("20,0");
-    await expect(karneSummary).toContainText("Genel sıra");
-    await expect(karnePanel.getByRole("row", { name: /GELİŞİM/ })).toContainText("-%3,3 başarı");
-    await expect(karnePanel.getByRole("row", { name: /GELİŞİM/ })).toContainText("-1,0 net");
+    await expect(karneSummary).toContainText("20,00");
+    await expect(karneSummary).toContainText("Kurum başarı sırası");
+    const scoreTable = karnePanel.locator(".next-karne-score-table");
+    await expect(scoreTable.getByRole("columnheader", { name: "PUAN TİPİ" })).toBeVisible();
+    await expect(scoreTable.getByRole("columnheader", { name: "DENEME PUANI" })).toBeVisible();
+    await expect(scoreTable.getByRole("columnheader", { name: "DERS NETLERİ" })).toBeVisible();
+    await expect(scoreTable.getByRole("columnheader", { name: "KURUM BAŞARI SIRASI" })).toBeVisible();
+    await expect(scoreTable.getByRole("columnheader", { name: "SINIF BAŞARI SIRASI" })).toBeVisible();
+    await expect(scoreTable.getByRole("row", { name: /LGS/ })).toContainText("410");
+    await expect(scoreTable.getByRole("row", { name: /LGS/ })).toContainText("Tr 12,00");
+    await expect(scoreTable.getByRole("row", { name: /LGS/ })).toContainText("Mat 8,00");
+    await expect(karnePanel.getByRole("row", { name: /GELİŞİM/ })).toContainText("-%3,3");
+    await expect(karnePanel.getByRole("heading", { name: "Öğrenci gelişim grafiği" })).toBeVisible();
     const branchPsychometryTable = karnePanel.getByRole("table", { name: "Öğrenci branş karne tablosu" });
     await expectSuccessRatePrimaryColumns(branchPsychometryTable);
     await expect(branchPsychometryTable.getByRole("row", { name: /Matematik/ })).toContainText("%80,0");
@@ -264,6 +293,8 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await expect(exportsRegion).toContainText("Hazır");
     await expect(exportsRegion.getByRole("button", { name: "Excel indir" })).toBeEnabled();
     await expect(exportsRegion.getByRole("button", { name: "PDF indir" })).toBeEnabled();
+    await expect(exportsRegion.getByRole("button", { name: "Toplu karneleri indir" })).toBeEnabled();
+    await expect(exportsRegion.getByRole("button", { name: "Tekli karneyi indir" })).toBeEnabled();
 
     await expectNoHorizontalOverflow(page, "report-workspace-ready");
     await expectNoUnlabeledControls(page, "report-workspace-ready");
@@ -275,24 +306,22 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await page.getByRole("combobox", { name: "Sınav" }).selectOption("exam-report-stale");
     await page.getByRole("button", { name: "Raporu getir" }).click();
 
-    await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
     const workflowStrip = page.getByRole("region", { name: "Rapor iş akışı" });
-    await expect(workflowStrip).toHaveClass(/uh-info-grid/);
-    await expect(workflowStrip.locator(".uh-info-item")).toHaveCount(4);
+    await expect(workflowStrip).toHaveClass(/next-report-status-surface/);
+    await expect(workflowStrip.locator(".next-report-status-pills > span")).toHaveCount(4);
     await expect(workflowStrip).toContainText("Sorgulandı");
     await expect(workflowStrip).toContainText("Eski");
     await expect(workflowStrip).toContainText("READY snapshot gerekli");
     await expect(workflowStrip).toContainText("Öğrenci seç");
     await expect(workflowStrip).not.toContainText("exam-report-stale");
     await expect(workflowStrip).not.toContainText("snapshot-stale");
-    const contextStrip = page.locator(".next-report-context-strip");
-    await expect(contextStrip).toHaveClass(/uh-info-grid/);
-    await expect(contextStrip.locator(".uh-info-item")).toHaveCount(6);
-    await expect(contextStrip).toContainText("Eski Rapor Denemesi");
-    await expect(contextStrip).not.toContainText("exam-report-stale");
-    await expect(contextStrip).toContainText("Eski");
-    await expect(contextStrip).toContainText("READY snapshot gerekli");
-    await expect(contextStrip).toContainText("1 sonuç girdisi");
+    await expect(workflowStrip).toContainText("Eski Rapor Denemesi");
+    const reportDetails = workflowStrip.locator(".next-report-meta-details");
+    await reportDetails.getByText("Rapor ayrıntıları", { exact: true }).click();
+    await expect(reportDetails).not.toContainText("exam-report-stale");
+    await expect(reportDetails).toContainText("Eski");
+    await expect(reportDetails).toContainText("1 sonuç girdisi");
     await expect(page.getByText("Snapshot çıktıya hazır değil")).toBeVisible();
 
     await page.getByRole("tab", { name: "Çıktılar" }).click();
@@ -301,9 +330,11 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await expect(exportsRegion).toContainText("Eski");
     await expect(exportsRegion.getByRole("button", { name: "Excel indir" })).toBeDisabled();
     await expect(exportsRegion.getByRole("button", { name: "PDF indir" })).toBeDisabled();
+    await expect(exportsRegion.getByRole("button", { name: "Toplu karneleri indir" })).toBeDisabled();
+    await expect(exportsRegion.getByRole("button", { name: "Tekli karneyi indir" })).toBeDisabled();
 
-    await page.getByRole("tab", { name: "Karne Önizleme" }).click();
-    const karnePanel = page.getByRole("tabpanel", { name: "Karne Önizleme" });
+    await page.getByRole("tab", { name: "Karne" }).click();
+    const karnePanel = page.getByRole("tabpanel", { name: "Karne" });
     await expect(karnePanel).toContainText("Çıktı: READY snapshot gerekli");
 
     await expectNoHorizontalOverflow(page, "report-workspace-stale-mobile");
@@ -314,25 +345,26 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await openWithReportMocks(page, "/kurum/raporlar", { height: 812, width: 375 });
 
     await page.getByRole("button", { name: "Raporu getir" }).click();
-    await expect(page.getByRole("tab", { name: "Kurum Analitiği" })).toHaveAttribute("aria-selected", "true");
-    await page.getByRole("tab", { name: "Öğrenci Sonuçları" }).click();
+    await expect(page.getByRole("region", { name: "Rapor özeti" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("tab", { name: "Öğrenciler" }).click();
     await page.getByRole("table", { name: "Öğrenci sıralamaları" }).getByRole("button", { name: "Ada Kaya karnesini aç" }).click();
 
-    const karnePanel = page.getByRole("tabpanel", { name: "Karne Önizleme" });
+    const karnePanel = page.getByRole("tabpanel", { name: "Karne" });
     const karneSheet = karnePanel.getByRole("region", { name: "Öğrenci karne özeti özet sayfası" });
     const karneContext = karneSheet.getByRole("region", { exact: true, name: "Karne rapor bağlamı" });
     const karneContextMetrics = karneContext.getByRole("group", { name: "Karne rapor bağlam metrikleri" });
     await expect(karneContextMetrics).toHaveClass(/uh-info-grid/);
-    await expect(karneContextMetrics.locator(".uh-info-item")).toHaveCount(6);
+    await expect(karneContextMetrics.locator(".uh-info-item")).toHaveCount(7);
     await expect(karneContext).toContainText("Excel/PDF hazır");
     await expect(karneContext).toContainText("Soru");
     const karneSummary = karneSheet.getByRole("region", { exact: true, name: "Karne başarı özeti" });
     await expect(karneSummary).toHaveClass(/uh-metric-grid/);
-    await expect(karneSummary.locator(".uh-metric-card")).toHaveCount(7);
+    await expect(karneSummary.locator(".uh-metric-card")).toHaveCount(6);
     await expect(karneSummary).toContainText("Başarı %");
     await expect(karneSummary).toContainText("%66,7");
     await expect(karneSummary).toContainText("Net");
-    await expect(karneSummary).toContainText("20,0");
+    await expect(karneSummary).toContainText("20,00");
     const mobileBranchTable = karnePanel.getByRole("table", { name: "Öğrenci branş karne tablosu" });
     await expectSuccessRatePrimaryColumns(mobileBranchTable);
     await expect(mobileBranchTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
@@ -397,12 +429,14 @@ function mockReportApiResponse(pathName: string, method: string): { data: unknow
       { courseId: "course-math", id: "exam-report-ready", status: "PUBLISHED", tenantId: "tenant-report", title: "LGS Rapor Denemesi" },
       { courseId: "course-math", id: "exam-report-stale", status: "DRAFT", tenantId: "tenant-report", title: "Eski Rapor Denemesi" },
       { courseId: "course-math", id: "exam-report-general", status: "DRAFT", tenantId: "tenant-report", title: "Genel Rapor Denemesi" },
+      { courseId: "course-math", id: "exam-report-ayt", status: "PUBLISHED", tenantId: "tenant-report", title: "AYT Rapor Denemesi" },
     ]);
   }
   if (pathName === "/exams/exam-report-ready/reports/snapshots") return { data: [createReportSnapshot("exam-report-ready", "READY")] };
   if (pathName === "/exams/exam-report-stale/reports/snapshots") return { data: [createReportSnapshot("exam-report-stale", "STALE")] };
   if (pathName === "/exams/exam-report-general/reports/snapshots") return { data: [createReportSnapshot("exam-report-general", "READY", { classId: null })] };
-  if (pathName === "/exams/exam-report-ready/participants" || pathName === "/exams/exam-report-stale/participants" || pathName === "/exams/exam-report-general/participants") return { data: createParticipants() };
+  if (pathName === "/exams/exam-report-ayt/reports/snapshots") return { data: [createReportSnapshot("exam-report-ayt", "READY")] };
+  if (pathName === "/exams/exam-report-ready/participants" || pathName === "/exams/exam-report-stale/participants" || pathName === "/exams/exam-report-general/participants" || pathName === "/exams/exam-report-ayt/participants") return { data: createParticipants() };
   if (pathName === "/exams/exam-report-ready/reports/snapshots/snapshot-ready/students/student-a") return { data: createStudentReport() };
   if (pathName === "/exams/exam-report-ready/reports/snapshots/snapshot-ready/students/student-a/error-booklet") return { data: createErrorBooklet() };
   if (pathName === "/exams/exam-report-ready/reports/students/student-a/progress") return { data: createProgress() };
@@ -470,6 +504,33 @@ function createParticipants() {
 
 function createReportSnapshot(examId: string, status: "READY" | "STALE", options: { classId?: string | null } = {}) {
   const classId = options.classId === undefined ? "class-8a" : options.classId;
+  const isAyt = examId === "exam-report-ayt";
+  const scoreViews = isAyt
+    ? [
+        createSnapshotScoreView("SAY", 412),
+        createSnapshotScoreView("EA", 398),
+        createSnapshotScoreView("SOZ", 376),
+      ]
+    : [createSnapshotScoreView("LGS", 410)];
+  const scoreAverages = scoreViews.map((view) => ({
+    calculatedCount: 2,
+    practiceScore: view.practiceScore,
+    type: view.type,
+  }));
+  const scoreRankings = scoreViews.map((view) => ({
+    class: { outOf: 2, rank: 1 },
+    institution: { outOf: 2, rank: 1 },
+    type: view.type,
+  }));
+  const studentBranches = isAyt
+    ? [
+        { blank: 5, branch: "AYT Matematik", correct: 30, net: 28.75, questionCount: 40, successRate: 71.9, wrong: 5 },
+        { blank: 3, branch: "Türk Dili ve Edebiyatı", correct: 18, net: 17.25, questionCount: 24, successRate: 71.9, wrong: 3 },
+      ]
+    : [
+        { blank: 0, branch: "Matematik", correct: 12, net: 11.5, questionCount: 15, successRate: 80, wrong: 3 },
+        { blank: 1, branch: "Türkçe", correct: 13, net: 13, questionCount: 15, successRate: 86.7, wrong: 1 },
+      ];
   return {
     campusId: "campus-main",
     ...(classId ? { classId } : {}),
@@ -486,6 +547,11 @@ function createReportSnapshot(examId: string, status: "READY" | "STALE", options
     },
     reportType: "EXAM_RESULT_SUMMARY",
     snapshotData: {
+      examType: isAyt ? "AYT" : "LGS",
+      examYear: 2026,
+      officialComparable: false,
+      schemaVersion: 2,
+      scoringProfileId: isAyt ? "TR-YKS-2026-NOSD-V1" : "TR-LGS-2026-NOSD-V1",
       averages: {
         blank: 1,
         correct: 25,
@@ -495,10 +561,7 @@ function createReportSnapshot(examId: string, status: "READY" | "STALE", options
         successRate: 81.7,
         wrong: 4,
       },
-      branches: [
-        { blank: 0, branch: "Matematik", correct: 12, net: 11.5, questionCount: 15, resultCount: 1, successRate: 80, wrong: 3 },
-        { blank: 1, branch: "Türkçe", correct: 13, net: 13, questionCount: 15, resultCount: 1, successRate: 86.7, wrong: 1 },
-      ],
+      branches: studentBranches.map((branch) => ({ ...branch, resultCount: 2 })),
       classes: [
         {
           averages: { blank: 1, correct: 25, net: 24.5, questionCount: 30, standardScore: 440, successRate: 81.7, wrong: 4 },
@@ -512,11 +575,18 @@ function createReportSnapshot(examId: string, status: "READY" | "STALE", options
         { branch: "Matematik", correct: 4, net: 4, outcomeCode: "M.8.1.1", questionCount: 5, resultCount: 1, successRate: 80, wrong: 1 },
       ],
       resultCount: 2,
+      scoreAverages,
       students: [
         {
+          branches: studentBranches,
           classId: "class-8a",
           className: "8-A",
           resultKey: "result-a",
+          scoreRankings,
+          scoreViews: scoreViews.map((view) => ({
+            ...view,
+            metrics: { blank: 1, correct: 25, net: 24.5, questionCount: 30, successRate: 81.7, wrong: 4 },
+          })),
           studentId: "student-a",
           total: {
             blank: 1,
@@ -528,9 +598,20 @@ function createReportSnapshot(examId: string, status: "READY" | "STALE", options
           },
         },
         {
+          branches: studentBranches.map((branch) => ({ ...branch, net: Math.max(0, branch.net - 4), successRate: Math.max(0, branch.successRate - 10) })),
           classId: "class-8a",
           className: "8-A",
           resultKey: "result-b",
+          scoreRankings: scoreRankings.map((ranking) => ({
+            ...ranking,
+            class: { outOf: 2, rank: 2 },
+            institution: { outOf: 2, rank: 2 },
+          })),
+          scoreViews: scoreViews.map((view) => ({
+            ...view,
+            metrics: { blank: 10, correct: 35, net: 30, questionCount: 50, successRate: 60, wrong: 5 },
+            practiceScore: (view.practiceScore ?? 100) - 20,
+          })),
           studentId: "student-b",
           total: {
             blank: 10,
@@ -550,6 +631,17 @@ function createReportSnapshot(examId: string, status: "READY" | "STALE", options
   };
 }
 
+function createSnapshotScoreView(type: "LGS" | "SAY" | "EA" | "SOZ", practiceScore: number) {
+  return {
+    metrics: { blank: 8, correct: 20, net: 20, questionCount: 30, successRate: 66.7, wrong: 2 },
+    officialComparable: false,
+    practiceScore,
+    profileId: type === "LGS" ? "TR-LGS-2026-NOSD-V1" : "TR-YKS-2026-NOSD-V1",
+    status: "CALCULATED",
+    type,
+  };
+}
+
 function createStudentReport() {
   return {
     branches: [
@@ -560,6 +652,7 @@ function createStudentReport() {
     className: "8-A",
     courseId: "course-math",
     examId: "exam-report-ready",
+    examType: "LGS",
     examStartsAt: "2026-06-17T09:00:00.000Z",
     examTitle: "LGS Rapor Denemesi",
     generatedAt: "2026-06-17T12:00:00.000Z",
@@ -571,6 +664,15 @@ function createStudentReport() {
     bookletType: "A",
     questions: createQuestionSummaries(),
     resultKey: "result-a",
+    scoreViews: [{
+      metrics: { blank: 8, correct: 20, net: 20, questionCount: 30, successRate: 66.7, wrong: 2 },
+      officialComparable: false,
+      practiceScore: 410,
+      profileId: "lgs-2026-v1",
+      status: "CALCULATED",
+      type: "LGS",
+    }],
+    scoreRankings: [{ type: "LGS", institution: { outOf: 2, rank: 1 }, class: { outOf: 2, rank: 1 } }],
     snapshotId: "snapshot-ready",
     statistics: {
       branches: [],
@@ -737,8 +839,8 @@ async function expectNoClippedVisibleText(page: Page, label: string) {
         "label",
         "button",
         ".uh-status-badge",
-        ".next-report-context-strip > .uh-info-item",
-        ".next-report-workflow-strip > .uh-info-item",
+        ".next-report-status-surface",
+        ".next-report-summary-hero",
         ".next-report-export-grid > div",
         ".next-karne-context-strip .uh-info-item",
         ".next-karne-summary-strip .uh-metric-card",

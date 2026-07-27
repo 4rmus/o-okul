@@ -10,10 +10,16 @@ import {
 } from "./exam-evaluation-job.js";
 import type { ExamBookletVariantInput } from "./booklet-alignment.js";
 import { OpticalAnswerParser } from "./optical-answer-parser.js";
-import { scoringEngineVersion, type AnswerKeyItem, type Choice, type ScoringConfig, type ScoringResult, type StudentAnswer } from "./scoring-engine.js";
+import { scoringEngineVersion, type AnswerKeyItem, type Choice, type ScoreSection, type ScoringConfig, type ScoringResult, type StudentAnswer } from "./scoring-engine.js";
 
 const defaultWrongPenalty = 0.25;
 const choices = new Set<Choice>(["A", "B", "C", "D", "E", ""]);
+const scoreSections = new Set<ScoreSection>([
+  "LGS_TURKCE", "LGS_MATEMATIK", "LGS_FEN", "LGS_INKILAP", "LGS_DIN", "LGS_YABANCI_DIL",
+  "TYT_TURKCE", "TYT_SOSYAL", "TYT_MATEMATIK", "TYT_FEN",
+  "AYT_MATEMATIK", "AYT_FIZIK", "AYT_KIMYA", "AYT_BIYOLOJI", "AYT_EDEBIYAT", "AYT_TARIH_1",
+  "AYT_COGRAFYA_1", "AYT_TARIH_2", "AYT_COGRAFYA_2", "AYT_FELSEFE", "AYT_DIN",
+]);
 
 export class PostgresExamEvaluationAdapter implements ExamEvaluationJobAdapter {
   constructor(
@@ -49,7 +55,14 @@ export class PostgresExamEvaluationAdapter implements ExamEvaluationJobAdapter {
         answers: parseStudentAnswers(row.answers),
         bookletVariants: variants.rows.map(toExamBookletVariant),
         answerKey: parseAnswerKey(row.keyData),
-        scoringConfig: parseScoringConfig(row.scoringConfig, parseExamType(row.examType), row.answerKeyVersion, this.now()),
+        scoringConfig: parseScoringConfig(
+          row.scoringConfig,
+          parseExamType(row.examType),
+          optionalInteger(row.examYear),
+          optionalText(row.scoringProfileId),
+          row.answerKeyVersion,
+          this.now(),
+        ),
       };
     });
   }
@@ -74,30 +87,23 @@ export class PostgresExamEvaluationAdapter implements ExamEvaluationJobAdapter {
            "updatedAt"
          )
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, now())
-         ON CONFLICT ("tenantId", "participantId", "answerKeyVersion", "parserConfigVersion", "engineVersion")
-         DO UPDATE SET
-           "examId" = EXCLUDED."examId",
-           "studentId" = EXCLUDED."studentId",
-           "participantId" = EXCLUDED."participantId",
-           "rawImportId" = EXCLUDED."rawImportId",
-           "answerKeyId" = EXCLUDED."answerKeyId",
-           "answerKeyVersion" = EXCLUDED."answerKeyVersion",
-           "parserConfigVersion" = EXCLUDED."parserConfigVersion",
-           "engineVersion" = EXCLUDED."engineVersion",
-           "resultKey" = EXCLUDED."resultKey",
-           "scoreData" = EXCLUDED."scoreData",
-           "computedAt" = EXCLUDED."computedAt",
-           "deletedAt" = NULL,
-           "updatedAt" = now()
+         ON CONFLICT ("tenantId", "rawImportId", "resultKey")
+         DO NOTHING
          RETURNING *`,
         toInsertValues(result),
       );
 
-      const row = inserted.rows[0] ?? (await findExistingResult(client, result));
-      if (!row) {
+      const row = inserted.rows[0];
+      if (row) {
+        await markReadySnapshotsStale(client, result.tenantId, result.examId);
+        return toExamEvaluationJobResult(row);
+      }
+
+      const existing = await findExistingResult(client, result);
+      if (!existing) {
         throw new Error("EXAM_EVALUATION_RESULT_SAVE_FAILED");
       }
-      return toExamEvaluationJobResult(row);
+      return toExamEvaluationJobResult(existing);
     });
   }
 }
@@ -116,7 +122,9 @@ async function findEvaluationInput(
            ak."keyData" AS "keyData",
            ak."scoringConfig" AS "scoringConfig",
            ak."version" AS "answerKeyVersion",
-           e."examType" AS "examType"
+           e."examType" AS "examType",
+           e."examYear" AS "examYear",
+           e."scoringProfileId" AS "scoringProfileId"
          FROM "ParsedAnswer" pa
          INNER JOIN "RawImport" ri
            ON ri."tenantId" = pa."tenantId"
@@ -270,6 +278,8 @@ interface ExamEvaluationInputRow {
   scoringConfig: unknown;
   answerKeyVersion: string;
   examType: unknown;
+  examYear: unknown;
+  scoringProfileId: unknown;
 }
 
 interface ExamBookletVariantRow {
@@ -300,12 +310,37 @@ async function findExistingResult(
     `SELECT *
      FROM "ExamResult"
      WHERE "tenantId" = $1
-       AND "resultKey" = $2
-       AND "deletedAt" IS NULL
+       AND "rawImportId" = $2
+       AND "resultKey" = $3
      LIMIT 1`,
-    [result.tenantId, result.resultKey],
+    [result.tenantId, result.rawImportId, result.resultKey],
   );
   return existing.rows[0];
+}
+
+async function markReadySnapshotsStale(client: Queryable, tenantId: string, examId: string): Promise<void> {
+  await client.query(
+    `UPDATE "ReportSnapshot" AS snapshot
+     SET "status" = 'STALE',
+         "staleAt" = COALESCE("staleAt", now()),
+         "inputRefs" = COALESCE("inputRefs", '{}'::jsonb) || '{"staleReason":"exam_result_changed"}'::jsonb,
+         "updatedAt" = now()
+     WHERE snapshot."tenantId" = $1
+       AND snapshot."deletedAt" IS NULL
+       AND snapshot."status" = 'READY'
+       AND (
+         snapshot."examId" = $2
+         OR EXISTS (
+           SELECT 1
+           FROM "Exam" linked_exam
+           WHERE linked_exam."tenantId" = snapshot."tenantId"
+             AND linked_exam."id" = snapshot."examId"
+             AND linked_exam."linkedTytExamId" = $2
+             AND linked_exam."deletedAt" IS NULL
+         )
+       )`,
+    [tenantId, examId],
+  );
 }
 
 function toInsertValues(result: ExamEvaluationJobResult): unknown[] {
@@ -373,12 +408,20 @@ function parseAnswerKey(value: unknown): AnswerKeyItem[] {
     ) {
       throw new Error("EXAM_EVALUATION_INPUT_INVALID");
     }
+    if (record.scoreSection !== undefined && !scoreSections.has(record.scoreSection as ScoreSection)) {
+      throw new Error("EXAM_EVALUATION_INPUT_INVALID");
+    }
+    if (record.evaluationStatus !== undefined && record.evaluationStatus !== "ACTIVE" && record.evaluationStatus !== "CANCELLED") {
+      throw new Error("EXAM_EVALUATION_INPUT_INVALID");
+    }
     return {
       questionNo: record.questionNo,
       correctAnswer: record.correctAnswer,
       branch: record.branch,
       ...(typeof record.outcomeCode === "string" && record.outcomeCode.trim() ? { outcomeCode: record.outcomeCode } : {}),
       ...(typeof record.topic === "string" && record.topic.trim() ? { topic: record.topic } : {}),
+      ...(record.scoreSection ? { scoreSection: record.scoreSection as ScoreSection } : {}),
+      ...(record.evaluationStatus ? { evaluationStatus: record.evaluationStatus as "ACTIVE" | "CANCELLED" } : {}),
     };
   });
 }
@@ -402,12 +445,16 @@ function toExamBookletVariant(row: ExamBookletVariantRow): ExamBookletVariantInp
 function parseScoringConfig(
   value: unknown,
   examType: ExamType | undefined,
+  examYear: number | undefined,
+  scoringProfileId: string | undefined,
   answerKeyVersion: string,
   computedAt: string,
 ): ScoringConfig {
   const record = value === null || value === undefined ? {} : asRecord(value);
   return {
     ...(examType ? { examType } : {}),
+    ...(examYear !== undefined ? { examYear } : {}),
+    ...(scoringProfileId ? { scoringProfileId } : {}),
     wrongPenalty: typeof record.wrongPenalty === "number" ? record.wrongPenalty : defaultWrongPenalty,
     rawScoreMultiplier: optionalNumber(record.rawScoreMultiplier),
     standardScoreBase: optionalNumber(record.standardScoreBase),
@@ -481,4 +528,16 @@ function isQuestionNo(value: unknown): value is number {
 
 function optionalNumber(value: unknown): number | undefined {
   return typeof value === "number" ? value : undefined;
+}
+
+function optionalInteger(value: unknown): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (!Number.isInteger(value)) throw new Error("EXAM_EVALUATION_INPUT_INVALID");
+  return value as number;
+}
+
+function optionalText(value: unknown): string | undefined {
+  if (value === null || value === undefined || value === "") return undefined;
+  if (typeof value !== "string" || !value.trim()) throw new Error("EXAM_EVALUATION_INPUT_INVALID");
+  return value.trim();
 }

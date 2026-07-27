@@ -130,7 +130,7 @@ const rawImportResponseForbidden = [
   "token",
 ];
 const reportSnapshotStatuses = ["READY", "STALE"];
-const reportQuestionStatuses = ["BLANK", "CORRECT", "WRONG"];
+const reportQuestionStatuses = ["BLANK", "CANCELLED", "CORRECT", "WRONG"];
 const reportSnapshotRecordRequired = ["id", "tenantId", "examId", "reportType", "status", "inputRefs", "createdAt", "updatedAt"];
 const reportStudentSnapshotForbiddenDeep = [
   "answer",

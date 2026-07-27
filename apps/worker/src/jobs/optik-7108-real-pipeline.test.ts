@@ -208,6 +208,7 @@ describeWithRealFixtures("OPTİK-7108 gerçek veri pipeline fixture", () => {
         branch: fixture.expectedScores.B.firstQuestion.branch,
         outcomeCode: "SÖZCÜKTE ANLAM",
         topic: "SÖZCÜKTE ANLAM",
+        scoreSection: "LGS_TURKCE",
         answer: fixture.expectedScores.B.firstQuestion.answer,
         correctAnswer: fixture.expectedScores.B.firstQuestion.correctAnswer,
         status: fixture.expectedScores.B.firstQuestion.status,

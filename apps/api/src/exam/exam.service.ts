@@ -11,6 +11,7 @@ import type { AnswerKeyRecord, ExamParticipantRecord, ExamRecord, ExamType } fro
 import { AuditLogService } from "../audit-log/audit-log.service.js";
 import type { RequestContext } from "../context/request-context.js";
 import { IdempotencyService } from "../http/idempotency.js";
+import { reportSnapshotStoreToken, type ReportSnapshotStore } from "../report/report-snapshot-store.js";
 import { type AlanStore, alanStoreToken } from "../school/alan-store.js";
 import { assertTeacherAssigned } from "../school/assert-teacher-assigned.js";
 import { type ClassStore, classStoreToken } from "../school/class-store.js";
@@ -26,12 +27,19 @@ import { answerKeyRepositoryToken, type AnswerKeyRepository } from "./answer-key
 export const examRepositoryToken = Symbol("ExamRepository");
 export const examParticipantRepositoryToken = Symbol("ExamParticipantRepository");
 const examTypes: ExamType[] = ["SCHOOL", "LGS", "TYT", "AYT", "KPSS"];
+const officialScoringProfiles = {
+  "TR-LGS-2026-NOSD-V1": { examTypes: ["LGS"], examYear: 2026 },
+  "TR-YKS-2026-NOSD-V1": { examTypes: ["TYT", "AYT"], examYear: 2026 },
+} as const;
 
 export interface CreateExamRepositoryInput {
   tenantId: string;
   gradeLevelId?: string;
   alanId?: string;
   examType?: ExamType;
+  examYear?: number;
+  scoringProfileId?: string;
+  linkedTytExamId?: string;
   title: string;
   startsAt?: string;
 }
@@ -41,6 +49,9 @@ export interface UpdateExamRepositoryInput {
   gradeLevelId?: string;
   alanId?: string;
   examType?: ExamType;
+  examYear?: number;
+  scoringProfileId?: string;
+  linkedTytExamId?: string;
   startsAt?: string;
 }
 
@@ -51,6 +62,7 @@ export interface ExamRepository {
   update(tenantId: string, examId: string, input: UpdateExamRepositoryInput): Promise<ExamRecord | undefined>;
   publish(tenantId: string, examId: string): Promise<ExamRecord | undefined>;
   delete(tenantId: string, examId: string): Promise<ExamRecord | undefined>;
+  hasScoringArtifacts?(tenantId: string, examId: string): Promise<boolean>;
 }
 
 export interface CreateExamParticipantRepositoryInput {
@@ -77,6 +89,9 @@ export interface CreateExamInput {
   gradeLevelId?: string;
   alanId?: string;
   examType?: ExamType | string;
+  examYear?: number;
+  scoringProfileId?: string;
+  linkedTytExamId?: string;
   startsAt?: string;
   classId?: string;
   classIds?: string[];
@@ -88,6 +103,9 @@ export interface UpdateExamInput {
   gradeLevelId?: string;
   alanId?: string;
   examType?: ExamType | string;
+  examYear?: number;
+  scoringProfileId?: string;
+  linkedTytExamId?: string;
   startsAt?: string;
   classId?: string;
   classIds?: string[];
@@ -121,6 +139,9 @@ export class ExamService {
     private readonly answerKeyImports: AnswerKeyExcelImportService,
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() private readonly idempotency?: IdempotencyService,
+    @Optional()
+    @Inject(reportSnapshotStoreToken)
+    private readonly snapshots?: ReportSnapshotStore,
   ) {}
 
   async create(
@@ -158,7 +179,16 @@ export class ExamService {
       entityType: "Exam",
       entityId: exam.id,
       action: "exam.created",
-      diff: { title: exam.title, status: exam.status, gradeLevelId: exam.gradeLevelId, alanId: exam.alanId, examType: exam.examType },
+      diff: {
+        title: exam.title,
+        status: exam.status,
+        gradeLevelId: exam.gradeLevelId,
+        alanId: exam.alanId,
+        examType: exam.examType,
+        examYear: exam.examYear,
+        scoringProfileId: exam.scoringProfileId,
+        linkedTytExamId: exam.linkedTytExamId,
+      },
     });
     for (const classId of classIds) {
       await this.addClassParticipants(context, tenantId, exam.id, classId);
@@ -193,8 +223,36 @@ export class ExamService {
     const tenantId = requireTenant(context);
     const id = requiredString(examId, "EXAM_ID_REQUIRED");
     const title = requiredString(input.title, "EXAM_TITLE_REQUIRED");
-    await this.requireExam(tenantId, id);
-    const academicContext = await this.resolveAcademicContext(tenantId, input);
+    const existingExam = await this.requireExam(tenantId, id);
+    const scoringIdentityTouched = input.examType !== undefined
+      || input.examYear !== undefined
+      || input.scoringProfileId !== undefined
+      || input.linkedTytExamId !== undefined;
+    const scoringIdentityInput = {
+      ...input,
+      examType: input.examType ?? existingExam.examType,
+      examYear: input.examYear ?? existingExam.examYear,
+      scoringProfileId: input.scoringProfileId ?? existingExam.scoringProfileId,
+      linkedTytExamId: input.linkedTytExamId ?? existingExam.linkedTytExamId,
+    };
+    const academicContext = await this.resolveAcademicContext(
+      tenantId,
+      scoringIdentityInput,
+      id,
+      scoringIdentityTouched,
+    );
+    const scoringIdentityChanged = hasScoringIdentityChanged(existingExam, academicContext);
+    if (scoringIdentityChanged) {
+      const hasArtifacts = this.repository.hasScoringArtifacts
+        ? await this.repository.hasScoringArtifacts(tenantId, id)
+        : (await this.answerKeys.list(tenantId, id)).length > 0
+          || (await this.snapshots?.listByExam(tenantId, id) ?? []).length > 0;
+      const referencedByAyt = existingExam.examType === "TYT"
+        && (await this.repository.list(tenantId)).some((exam) => exam.linkedTytExamId === id);
+      if (hasArtifacts || referencedByAyt) {
+        throw new ConflictException("EXAM_SCORING_PROFILE_IMMUTABLE");
+      }
+    }
     const startsAt = optionalIso(input.startsAt, "EXAM_STARTS_AT_INVALID");
     const classIds = normalizeClassIds(input);
 
@@ -206,13 +264,25 @@ export class ExamService {
     if (!exam) {
       throw new NotFoundException("EXAM_NOT_FOUND");
     }
+    if (scoringIdentityChanged) {
+      await this.snapshots?.markStaleByExam(tenantId, id, "exam.scoring_identity.updated");
+    }
     await this.auditLogs?.record({
       tenantId,
       actorUserId: context.userId,
       entityType: "Exam",
       entityId: exam.id,
       action: "exam.updated",
-      diff: { title: exam.title, startsAt: exam.startsAt, gradeLevelId: exam.gradeLevelId, alanId: exam.alanId, examType: exam.examType },
+      diff: {
+        title: exam.title,
+        startsAt: exam.startsAt,
+        gradeLevelId: exam.gradeLevelId,
+        alanId: exam.alanId,
+        examType: exam.examType,
+        examYear: exam.examYear,
+        scoringProfileId: exam.scoringProfileId,
+        linkedTytExamId: exam.linkedTytExamId,
+      },
     });
     for (const classId of classIds) {
       await this.addClassParticipants(context, tenantId, exam.id, classId);
@@ -265,11 +335,16 @@ export class ExamService {
 
   private async resolveAcademicContext(
     tenantId: string,
-    input: Pick<CreateExamInput, "gradeLevelId" | "alanId" | "examType">,
-  ): Promise<Pick<CreateExamRepositoryInput, "gradeLevelId" | "alanId" | "examType">> {
+    input: Pick<CreateExamInput, "gradeLevelId" | "alanId" | "examType" | "examYear" | "scoringProfileId" | "linkedTytExamId">,
+    examId?: string,
+    validateScoringIdentity = true,
+  ): Promise<Pick<CreateExamRepositoryInput, "gradeLevelId" | "alanId" | "examType" | "examYear" | "scoringProfileId" | "linkedTytExamId">> {
     const gradeLevelId = optionalString(input.gradeLevelId);
     const alanId = optionalString(input.alanId);
     const examType = resolveExamType(input.examType);
+    const examYear = optionalExamYear(input.examYear);
+    const scoringProfileId = optionalString(input.scoringProfileId);
+    const linkedTytExamId = optionalString(input.linkedTytExamId);
 
     if (gradeLevelId) {
       const gradeLevel = await this.gradeLevels.findById(gradeLevelId);
@@ -286,11 +361,31 @@ export class ExamService {
         throw new BadRequestException("ALAN_GRADE_LEVEL_MISMATCH");
       }
     }
+    if (validateScoringIdentity) {
+      assertOfficialScoringProfile(examType, examYear, scoringProfileId);
+    }
+    if (validateScoringIdentity && linkedTytExamId) {
+      if (examType !== "AYT" || linkedTytExamId === examId) {
+        throw new BadRequestException("LINKED_TYT_EXAM_INVALID");
+      }
+      const linkedTytExam = await this.repository.findById(tenantId, linkedTytExamId);
+      if (
+        !linkedTytExam
+        || linkedTytExam.examType !== "TYT"
+        || linkedTytExam.examYear !== examYear
+        || linkedTytExam.scoringProfileId !== "TR-YKS-2026-NOSD-V1"
+      ) {
+        throw new BadRequestException("LINKED_TYT_EXAM_INVALID");
+      }
+    }
 
     return {
       ...(gradeLevelId ? { gradeLevelId } : {}),
       ...(alanId ? { alanId } : {}),
       ...(examType ? { examType } : {}),
+      ...(examYear !== undefined ? { examYear } : {}),
+      ...(scoringProfileId ? { scoringProfileId } : {}),
+      ...(linkedTytExamId ? { linkedTytExamId } : {}),
     };
   }
 
@@ -305,6 +400,13 @@ export class ExamService {
   async delete(context: RequestContext, examId: string | undefined): Promise<void> {
     const tenantId = requireTenant(context);
     const id = requiredString(examId, "EXAM_ID_REQUIRED");
+    const existing = await this.requireExam(tenantId, id);
+    if (
+      existing.examType === "TYT"
+      && (await this.repository.list(tenantId)).some((exam) => exam.linkedTytExamId === id)
+    ) {
+      throw new ConflictException("LINKED_TYT_EXAM_IN_USE");
+    }
     const exam = await this.repository.delete(tenantId, id);
     if (!exam) {
       throw new NotFoundException("EXAM_NOT_FOUND");
@@ -479,6 +581,53 @@ function isCalendarDateString(value: string): boolean {
 function optionalString(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
+}
+
+function optionalExamYear(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isInteger(value) || value < 2000 || value > 2100) {
+    throw new BadRequestException("EXAM_YEAR_INVALID");
+  }
+  return value;
+}
+
+function assertOfficialScoringProfile(
+  examType: ExamType | undefined,
+  examYear: number | undefined,
+  scoringProfileId: string | undefined,
+): void {
+  const requiredProfile = examType === "LGS"
+    ? "TR-LGS-2026-NOSD-V1"
+    : examType === "TYT" || examType === "AYT"
+      ? "TR-YKS-2026-NOSD-V1"
+      : undefined;
+  if (requiredProfile && !scoringProfileId) {
+    throw new BadRequestException("SCORING_PROFILE_REQUIRED");
+  }
+  if (requiredProfile && scoringProfileId !== requiredProfile) {
+    throw new BadRequestException("SCORING_PROFILE_EXAM_TYPE_MISMATCH");
+  }
+  if (!scoringProfileId) return;
+  const profile = officialScoringProfiles[scoringProfileId as keyof typeof officialScoringProfiles];
+  if (!profile) {
+    throw new BadRequestException("SCORING_PROFILE_UNSUPPORTED");
+  }
+  if (!examType || !(profile.examTypes as readonly ExamType[]).includes(examType)) {
+    throw new BadRequestException("SCORING_PROFILE_EXAM_TYPE_MISMATCH");
+  }
+  if (examYear !== profile.examYear) {
+    throw new BadRequestException("SCORING_PROFILE_EXAM_YEAR_MISMATCH");
+  }
+}
+
+function hasScoringIdentityChanged(
+  current: ExamRecord,
+  next: Pick<CreateExamRepositoryInput, "examType" | "examYear" | "scoringProfileId" | "linkedTytExamId">,
+): boolean {
+  return current.examType !== next.examType
+    || current.examYear !== next.examYear
+    || current.scoringProfileId !== next.scoringProfileId
+    || current.linkedTytExamId !== next.linkedTytExamId;
 }
 
 function resolveExamType(value: string | undefined): ExamType | undefined {

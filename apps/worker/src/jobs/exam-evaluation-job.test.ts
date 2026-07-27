@@ -72,6 +72,7 @@ describe("exam evaluation job", () => {
           answerKeyVersion: "answer-key-v1",
           engineVersion: scoringEngineVersion,
           computedAt: "2026-05-30T03:00:00.000Z",
+          examType: "SCHOOL",
         },
       },
     });

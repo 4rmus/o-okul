@@ -1680,6 +1680,33 @@ export interface StudentAuditSummaryRecord {
   createdAt: string;
 }
 
+export type ExamScoreType = "LGS" | "TYT" | "SAY" | "EA" | "SOZ";
+export type ExamScoreStatus = "CALCULATED" | "NOT_ELIGIBLE" | "MISSING_TYT";
+
+export interface ExamScoreMetrics {
+  correct: number;
+  wrong: number;
+  blank: number;
+  net: number;
+  questionCount: number;
+  successRate: number;
+}
+
+export interface ExamScoreView {
+  type: ExamScoreType;
+  status: ExamScoreStatus;
+  metrics: ExamScoreMetrics;
+  practiceScore?: number;
+  profileId: string;
+  officialComparable: false;
+}
+
+export interface ReportScoringAssumptions {
+  standardDeviationUsed: false;
+  cancelledQuestionsExcludedFromScoringDenominator: true;
+  lgsAvailableSectionWeightsRenormalized: boolean;
+}
+
 export interface ReportSnapshotRecord {
   id: string;
   tenantId: string;
@@ -1693,6 +1720,15 @@ export interface ReportSnapshotRecord {
   status: string;
   inputRefs: Record<string, unknown>;
   snapshotData?: {
+    schemaVersion?: number;
+    examType?: ExamType | string;
+    examYear?: number;
+    scoringProfileId?: string;
+    examTitle?: string;
+    examStartsAt?: string;
+    scoreAverages?: ExamScoreAverage[];
+    officialComparable?: false;
+    scoringAssumptions?: ReportScoringAssumptions;
     generatedAt?: string;
     resultCount?: number;
     averages?: {
@@ -1757,9 +1793,13 @@ export interface ReportSnapshotRecord {
       studentId: string;
       displayName?: string;
       studentNo?: string;
+      participantNo?: string;
+      bookletType?: string;
       classId?: string;
       className?: string;
       resultKey: string;
+      scoreViews?: ExamScoreView[];
+      scoreRankings?: ExamScoreRanking[];
       total?: {
         correct?: number;
         wrong?: number;
@@ -1796,7 +1836,7 @@ export interface ReportSnapshotRecord {
         outcomeCode?: string;
         answer: string;
         correctAnswer: string;
-        status: "CORRECT" | "WRONG" | "BLANK";
+        status: "CORRECT" | "WRONG" | "BLANK" | "CANCELLED";
       }>;
     }>;
   };
@@ -1896,29 +1936,53 @@ export interface ReportStudentQuestionSummary {
   questionNo: number;
   branch: string;
   outcomeCode?: string;
+  topic?: string;
+  scoreSection?: AnswerKeyScoreSection;
+  evaluationStatus?: "ACTIVE" | "CANCELLED";
   answer: string;
   correctAnswer: string;
-  status: "CORRECT" | "WRONG" | "BLANK";
+  status: "CORRECT" | "WRONG" | "BLANK" | "CANCELLED";
 }
 
 export interface ReportScopeRank {
   rank: number;
   outOf: number;
-  percentile: number;
+  percentile?: number;
+}
+
+export interface ReportRank {
+  rank: number;
+  outOf: number;
+}
+
+export interface ExamScoreRanking {
+  type: ExamScoreType;
+  institution: ReportRank;
+  class?: ReportRank;
+}
+
+export interface ExamScoreAverage {
+  type: ExamScoreType;
+  calculatedCount: number;
+  practiceScore: number;
 }
 
 export interface ReportStudentBranchStatistics {
   branch: string;
-  standardScore: number;
-  general: ReportScopeRank;
+  standardScore?: number;
+  general?: ReportScopeRank;
   class?: ReportScopeRank;
+  institutionRank?: ReportRank;
+  classRank?: ReportRank;
 }
 
 export interface ReportStudentStatistics {
-  standardScore: number;
-  general: ReportScopeRank;
+  standardScore?: number;
+  general?: ReportScopeRank;
   class?: ReportScopeRank;
-  branches: ReportStudentBranchStatistics[];
+  institutionRank?: ReportRank;
+  classRank?: ReportRank;
+  branches?: ReportStudentBranchStatistics[];
 }
 
 export interface ReportStudentSnapshot {
@@ -1926,6 +1990,9 @@ export interface ReportStudentSnapshot {
   institutionName?: string;
   institutionLogoUrl?: string;
   examId: string;
+  examType?: ExamType | string;
+  examYear?: number;
+  scoringProfileId?: string;
   examTitle?: string;
   examStartsAt?: string;
   snapshotId: string;
@@ -1938,6 +2005,8 @@ export interface ReportStudentSnapshot {
   courseId?: string;
   resultKey: string;
   termId?: string;
+  scoreViews?: ExamScoreView[];
+  scoreRankings?: ExamScoreRanking[];
   total: ReportStudentScoreSummary;
   branches: ReportStudentBranchSummary[];
   outcomes?: ReportStudentOutcomeSummary[];
@@ -2155,6 +2224,9 @@ export interface ExamRecord {
   gradeLevelId?: string;
   alanId?: string;
   examType?: ExamType | string;
+  examYear?: number;
+  scoringProfileId?: string;
+  linkedTytExamId?: string;
   title: string;
   status: string;
   answerKeySummary?: ExamAnswerKeySummary;
@@ -2203,11 +2275,36 @@ export interface OpticalFormTemplateApplyRequest {
 }
 
 export type AnswerChoice = "A" | "B" | "C" | "D" | "E";
+export type AnswerKeyEvaluationStatus = "ACTIVE" | "CANCELLED";
+export type AnswerKeyScoreSection =
+  | "LGS_TURKCE"
+  | "LGS_MATEMATIK"
+  | "LGS_FEN"
+  | "LGS_INKILAP"
+  | "LGS_DIN"
+  | "LGS_YABANCI_DIL"
+  | "TYT_TURKCE"
+  | "TYT_SOSYAL"
+  | "TYT_MATEMATIK"
+  | "TYT_FEN"
+  | "AYT_MATEMATIK"
+  | "AYT_FIZIK"
+  | "AYT_KIMYA"
+  | "AYT_BIYOLOJI"
+  | "AYT_EDEBIYAT"
+  | "AYT_TARIH_1"
+  | "AYT_COGRAFYA_1"
+  | "AYT_TARIH_2"
+  | "AYT_COGRAFYA_2"
+  | "AYT_FELSEFE"
+  | "AYT_DIN";
 
 export interface AnswerKeyItemInput {
   questionNo: number;
   correctAnswer: AnswerChoice;
   branch: string;
+  scoreSection?: AnswerKeyScoreSection;
+  evaluationStatus?: AnswerKeyEvaluationStatus;
   outcomeCode?: string;
   topic?: string;
 }

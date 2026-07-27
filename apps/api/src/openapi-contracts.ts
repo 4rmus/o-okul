@@ -350,13 +350,31 @@ const answerKeyStatusSchema = {
   enum: ["DRAFT", "PUBLISHED"],
 };
 
+const answerKeyEvaluationStatusSchema = {
+  type: "string",
+  enum: ["ACTIVE", "CANCELLED"],
+  default: "ACTIVE",
+};
+
+const answerKeyScoreSectionSchema = {
+  type: "string",
+  enum: [
+    "LGS_TURKCE", "LGS_MATEMATIK", "LGS_FEN", "LGS_INKILAP", "LGS_DIN", "LGS_YABANCI_DIL",
+    "TYT_TURKCE", "TYT_SOSYAL", "TYT_MATEMATIK", "TYT_FEN",
+    "AYT_MATEMATIK", "AYT_FIZIK", "AYT_KIMYA", "AYT_BIYOLOJI", "AYT_EDEBIYAT",
+    "AYT_TARIH_1", "AYT_COGRAFYA_1", "AYT_TARIH_2", "AYT_COGRAFYA_2", "AYT_FELSEFE", "AYT_DIN",
+  ],
+};
+
 const answerKeyQuestionSchema = objectSchema({
   branch: stringSchema(),
   correctAnswer: answerChoiceSchema,
+  evaluationStatus: answerKeyEvaluationStatusSchema,
   outcomeCode: stringSchema(),
   questionNo: integerSchema({ minimum: 1 }),
+  scoreSection: answerKeyScoreSectionSchema,
   topic: stringSchema(),
-}, ["branch", "correctAnswer", "questionNo"]);
+}, ["branch", "correctAnswer", "evaluationStatus", "questionNo"]);
 
 const answerKeyBookletVariantSchema = objectSchema({
   code: stringSchema(),
@@ -1621,6 +1639,9 @@ const examRecordSchema = objectSchema({
   gradeLevelId: stringSchema(),
   alanId: stringSchema(),
   examType: { type: "string", enum: ["SCHOOL", "LGS", "TYT", "AYT", "KPSS"] },
+  examYear: integerSchema({ minimum: 2000, maximum: 2100 }),
+  scoringProfileId: stringSchema(),
+  linkedTytExamId: stringSchema(),
   title: stringSchema(),
   status: { type: "string", enum: ["DRAFT", "PUBLISHED"] },
   answerKeySummary: objectSchema({
@@ -1645,6 +1666,9 @@ const examCreateRequestSchema = objectSchema({
   classId: stringSchema(),
   classIds: arraySchema(stringSchema()),
   examType: { type: "string", enum: ["SCHOOL", "LGS", "TYT", "AYT", "KPSS"] },
+  examYear: integerSchema({ minimum: 2000, maximum: 2100 }),
+  scoringProfileId: stringSchema(),
+  linkedTytExamId: stringSchema(),
   gradeLevelId: stringSchema(),
   startsAt: stringSchema({ format: "date-time" }),
   title: stringSchema(),
@@ -1863,8 +1887,58 @@ const reportSnapshotStatusSchema = {
 
 const reportQuestionStatusSchema = {
   type: "string",
-  enum: ["BLANK", "CORRECT", "WRONG"],
+  enum: ["BLANK", "CANCELLED", "CORRECT", "WRONG"],
 };
+
+const examScoreTypeSchema = {
+  type: "string",
+  enum: ["LGS", "TYT", "SAY", "EA", "SOZ"],
+};
+
+const examScoreMetricsSchema = objectSchema({
+  correct: numberSchema({ minimum: 0 }),
+  wrong: numberSchema({ minimum: 0 }),
+  blank: numberSchema({ minimum: 0 }),
+  net: numberSchema(),
+  questionCount: numberSchema({ minimum: 0 }),
+  successRate: numberSchema(),
+}, ["correct", "wrong", "blank", "net", "questionCount", "successRate"]);
+
+const examScoreViewSchema = objectSchema({
+  type: examScoreTypeSchema,
+  status: { type: "string", enum: ["CALCULATED", "NOT_ELIGIBLE", "MISSING_TYT"] },
+  metrics: examScoreMetricsSchema,
+  practiceScore: numberSchema(),
+  profileId: stringSchema(),
+  officialComparable: { type: "boolean", enum: [false] },
+}, ["type", "status", "metrics", "profileId", "officialComparable"]);
+
+const reportRankSchema = objectSchema({
+  rank: integerSchema({ minimum: 1 }),
+  outOf: integerSchema({ minimum: 1 }),
+}, ["rank", "outOf"]);
+
+const examScoreRankingSchema = objectSchema({
+  type: examScoreTypeSchema,
+  institution: reportRankSchema,
+  class: reportRankSchema,
+}, ["type", "institution"]);
+
+const examScoreAverageSchema = objectSchema({
+  type: examScoreTypeSchema,
+  calculatedCount: integerSchema({ minimum: 0 }),
+  practiceScore: numberSchema(),
+}, ["type", "calculatedCount", "practiceScore"]);
+
+const reportScoringAssumptionsSchema = objectSchema({
+  standardDeviationUsed: { type: "boolean", enum: [false] },
+  cancelledQuestionsExcludedFromScoringDenominator: { type: "boolean", enum: [true] },
+  lgsAvailableSectionWeightsRenormalized: { type: "boolean" },
+}, [
+  "standardDeviationUsed",
+  "cancelledQuestionsExcludedFromScoringDenominator",
+  "lgsAvailableSectionWeightsRenormalized",
+]);
 
 const reportScoreSummarySchema = objectSchema({
   correct: numberSchema({ minimum: 0 }),
@@ -1906,6 +1980,9 @@ const reportStudentQuestionSummarySchema = objectSchema({
   questionNo: integerSchema({ minimum: 1 }),
   branch: stringSchema(),
   outcomeCode: stringSchema(),
+  topic: stringSchema(),
+  scoreSection: answerKeyScoreSectionSchema,
+  evaluationStatus: answerKeyEvaluationStatusSchema,
   answer: stringSchema(),
   correctAnswer: stringSchema(),
   status: reportQuestionStatusSchema,
@@ -1915,23 +1992,32 @@ const reportScopeRankSchema = objectSchema({
   rank: integerSchema({ minimum: 1 }),
   outOf: integerSchema({ minimum: 1 }),
   percentile: numberSchema({ minimum: 0 }),
-}, ["rank", "outOf", "percentile"]);
+}, ["rank", "outOf"]);
 
 const reportStudentBranchStatisticsSchema = objectSchema({
   branch: stringSchema(),
   standardScore: numberSchema({ minimum: 0 }),
   general: reportScopeRankSchema,
   class: reportScopeRankSchema,
-}, ["branch", "standardScore", "general"]);
+}, ["branch"]);
 
 const reportStudentStatisticsSchema = objectSchema({
   standardScore: numberSchema({ minimum: 0 }),
   general: reportScopeRankSchema,
   class: reportScopeRankSchema,
   branches: arraySchema(reportStudentBranchStatisticsSchema),
-}, ["standardScore", "general", "branches"]);
+}, []);
 
 const reportStudentScopedSnapshotDataSchema = objectSchema({
+  schemaVersion: integerSchema({ minimum: 1 }),
+  examType: { type: "string", enum: ["SCHOOL", "LGS", "TYT", "AYT", "KPSS"] },
+  examYear: integerSchema({ minimum: 2000, maximum: 2100 }),
+  scoringProfileId: stringSchema(),
+  examTitle: stringSchema(),
+  examStartsAt: stringSchema({ format: "date-time" }),
+  scoreAverages: arraySchema(examScoreAverageSchema),
+  officialComparable: { type: "boolean", enum: [false] },
+  scoringAssumptions: reportScoringAssumptionsSchema,
   reportType: stringSchema(),
   generatedAt: stringSchema({ format: "date-time" }),
   resultCount: integerSchema({ minimum: 0 }),
@@ -1939,9 +2025,13 @@ const reportStudentScopedSnapshotDataSchema = objectSchema({
     studentId: stringSchema(),
     displayName: stringSchema(),
     studentNo: stringSchema(),
+    participantNo: stringSchema(),
+    bookletType: stringSchema(),
     classId: stringSchema(),
     className: stringSchema(),
     resultKey: stringSchema(),
+    scoreViews: arraySchema(examScoreViewSchema),
+    scoreRankings: arraySchema(examScoreRankingSchema),
     total: reportScoreSummarySchema,
   }, ["studentId", "resultKey", "total"]), { minItems: 1 }),
 }, ["reportType", "resultCount", "students"]);
@@ -1950,9 +2040,13 @@ const reportSnapshotListStudentSchema = objectSchema({
   studentId: stringSchema(),
   displayName: stringSchema(),
   studentNo: stringSchema(),
+  participantNo: stringSchema(),
+  bookletType: stringSchema(),
   classId: stringSchema(),
   className: stringSchema(),
   resultKey: stringSchema(),
+  scoreViews: arraySchema(examScoreViewSchema),
+  scoreRankings: arraySchema(examScoreRankingSchema),
   total: reportScoreSummarySchema,
 }, ["studentId", "resultKey", "total"]);
 
@@ -1965,6 +2059,15 @@ const reportSnapshotListClassSchema = objectSchema({
 }, ["classId", "resultCount"]);
 
 const reportSnapshotListDataSchema = objectSchema({
+  schemaVersion: integerSchema({ minimum: 1 }),
+  examType: { type: "string", enum: ["SCHOOL", "LGS", "TYT", "AYT", "KPSS"] },
+  examYear: integerSchema({ minimum: 2000, maximum: 2100 }),
+  scoringProfileId: stringSchema(),
+  examTitle: stringSchema(),
+  examStartsAt: stringSchema({ format: "date-time" }),
+  scoreAverages: arraySchema(examScoreAverageSchema),
+  officialComparable: { type: "boolean", enum: [false] },
+  scoringAssumptions: reportScoringAssumptionsSchema,
   reportType: stringSchema(),
   generatedAt: stringSchema({ format: "date-time" }),
   resultCount: integerSchema({ minimum: 0 }),
@@ -2057,6 +2160,9 @@ const reportStudentSnapshotSchema = objectSchema({
   institutionName: stringSchema(),
   institutionLogoUrl: stringSchema(),
   examId: stringSchema(),
+  examType: { type: "string", enum: ["SCHOOL", "LGS", "TYT", "AYT", "KPSS"] },
+  examYear: integerSchema({ minimum: 2000, maximum: 2100 }),
+  scoringProfileId: stringSchema(),
   examTitle: stringSchema(),
   examStartsAt: stringSchema({ format: "date-time" }),
   snapshotId: stringSchema(),
@@ -2069,6 +2175,8 @@ const reportStudentSnapshotSchema = objectSchema({
   courseId: stringSchema(),
   resultKey: stringSchema(),
   termId: stringSchema(),
+  scoreViews: arraySchema(examScoreViewSchema),
+  scoreRankings: arraySchema(examScoreRankingSchema),
   total: reportScoreSummarySchema,
   branches: arraySchema(reportStudentBranchSummarySchema),
   outcomes: arraySchema(reportStudentOutcomeSummarySchema),
@@ -2855,6 +2963,12 @@ const operationContracts: Record<string, OperationContract> = {
     responseBody: reportSnapshotExcelExportResultSchema,
   },
   "get /api/v1/exams/{examId}/reports/snapshots/{snapshotId}/export.pdf": {
+    responseBody: reportSnapshotPdfExportResultSchema,
+  },
+  "get /api/v1/exams/{examId}/reports/snapshots/{snapshotId}/export.karneler.pdf": {
+    responseBody: reportSnapshotPdfExportResultSchema,
+  },
+  "get /api/v1/exams/{examId}/reports/snapshots/{snapshotId}/students/{studentId}/export.pdf": {
     responseBody: reportSnapshotPdfExportResultSchema,
   },
   "get /api/v1/exams/{examId}/reports/students/{studentId}/progress": {

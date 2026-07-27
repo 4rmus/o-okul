@@ -9,10 +9,15 @@ describe("postgres report generation adapter", () => {
     const client = new FakeClient((sql) => {
       if (sql.includes('FROM "ExamResult"')) {
         return [{
+          examId: "exam-a",
+          examTitle: "Örnek LGS 2026",
+          examStartsAt: new Date("2026-06-14T06:30:00.000Z"),
           studentId: "student-a",
           firstName: "Ada",
           lastName: "Ak",
           studentNo: "1001",
+          participantNo: "ÖR-001",
+          bookletType: "A",
           classId: "class-a",
           className: "8-A",
           courseName: "Matematik",
@@ -44,9 +49,14 @@ describe("postgres report generation adapter", () => {
     });
 
     expect(results).toEqual([{
+      examId: "exam-a",
+      examTitle: "Örnek LGS 2026",
+      examStartsAt: "2026-06-14T06:30:00.000Z",
       studentId: "student-a",
       displayName: "Ada Ak",
       studentNo: "1001",
+      participantNo: "ÖR-001",
+      bookletType: "A",
       classId: "class-a",
       className: "8-A",
       resultKey: "result-a",
@@ -68,7 +78,12 @@ describe("postgres report generation adapter", () => {
     const select = client.queries.find((query) => query.sql.includes('FROM "ExamResult"'));
     expect(select?.sql).toContain('DISTINCT ON (er."studentId")');
     expect(select?.sql).toContain('er."computedAt" DESC');
+    expect(select?.sql).toContain('requested_exam."linkedTytExamId"');
+    expect(select?.sql).toContain('linked_result."studentId" = er."studentId"');
     expect(select?.sql).toContain('LEFT JOIN "Student"');
+    expect(select?.sql).toContain('LEFT JOIN "ExamParticipant"');
+    expect(select?.sql).toContain('ep."participantNo"');
+    expect(select?.sql).toContain('requested_exam."title" AS "examTitle"');
     expect(select?.sql).toContain('s."firstName"');
     expect(select?.sql).toContain('s."studentNo"');
     expect(select?.sql).toContain('LEFT JOIN "Class"');
@@ -94,6 +109,51 @@ describe("postgres report generation adapter", () => {
       "term-2026-spring",
     ]);
     expect(client.queries.at(-1)?.sql).toBe("COMMIT");
+  });
+
+  it("bağlı TYT sonucunu AYT satırında aynı öğrenciye ait nested provenance olarak yükler", async () => {
+    const client = new FakeClient((sql) => {
+      if (!sql.includes('FROM "ExamResult"')) return [];
+      return [{
+        examId: "exam-ayt",
+        studentId: "student-a",
+        resultKey: "result-ayt",
+        answerKeyVersion: "answer-key-ayt-v1",
+        parserConfigVersion: "parser-v1",
+        engineVersion: "engine-v1",
+        scoreData: createScore(),
+        computedAt: "2026-05-30T07:00:00.000Z",
+        linkedTytExamId: "exam-tyt",
+        linkedTytResultKey: "result-tyt",
+        linkedTytAnswerKeyVersion: "answer-key-tyt-v1",
+        linkedTytParserConfigVersion: "parser-v1",
+        linkedTytEngineVersion: "engine-v1",
+        linkedTytScoreData: createScore(),
+        linkedTytComputedAt: "2026-05-29T07:00:00.000Z",
+      }];
+    });
+    const adapter = new PostgresReportGenerationAdapter(new FakePool(client));
+
+    const results = await adapter.loadResults({
+      tenantId: "tenant-a",
+      userId: "user-a",
+      jobId: "exam-ayt_results-v1",
+      examId: "exam-ayt",
+      reportType: examResultSummaryReportType,
+      contentHash: "results-v1",
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      examId: "exam-ayt",
+      studentId: "student-a",
+      resultKey: "result-ayt",
+      linkedTytResult: {
+        examId: "exam-tyt",
+        resultKey: "result-tyt",
+        score: createScore(),
+      },
+    });
   });
 
   it("ders filtresinde Türkçe etiketi ve LGS önekini kanonikleştirerek scoreData gövdesini daraltır", async () => {
@@ -333,41 +393,31 @@ function createSnapshot(): ReportSnapshotCandidate {
       answerKeyVersions: ["answer-key-v1"],
       parserConfigVersions: ["parser-v1"],
       engineVersions: ["engine-v1"],
+      scoringProfileIds: [],
+      linkedTytExamIds: [],
     },
     snapshotData: {
+      schemaVersion: 2,
       reportType: examResultSummaryReportType,
       generatedAt: "2026-05-30T08:00:00.000Z",
       resultCount: 1,
-      averages: { correct: 1, wrong: 0, blank: 0, net: 1, questionCount: 1, rawScore: 1, standardScore: 1, successRate: 100 },
+      averages: { correct: 1, wrong: 0, blank: 0, net: 1, questionCount: 1, rawScore: 1, successRate: 100 },
       branches: [{ branch: "Matematik", resultCount: 1, correct: 1, wrong: 0, blank: 0, net: 1, questionCount: 1, successRate: 100 }],
       classes: [{
         classId: "class-a",
         className: "8-A",
         resultCount: 1,
-        averages: { correct: 1, wrong: 0, blank: 0, net: 1, questionCount: 1, rawScore: 1, standardScore: 1, successRate: 100 },
+        averages: { correct: 1, wrong: 0, blank: 0, net: 1, questionCount: 1, rawScore: 1, successRate: 100 },
         branches: [{ branch: "Matematik", resultCount: 1, correct: 1, wrong: 0, blank: 0, net: 1, questionCount: 1, successRate: 100 }],
       }],
-      statistics: {
-        count: 1,
-        total: { meanNet: 1, sdNet: 0, meanRawScore: 1, sdRawScore: 0 },
-        branches: [{ branch: "Matematik", count: 1, meanNet: 1, sdNet: 0 }],
-        standardScore: { mean: 50, sd: 10 },
-        version: "2026.06.cohort-v1",
-      },
       students: [{
         studentId: "student-a",
         classId: "class-a",
         className: "8-A",
         resultKey: "result-a",
-        total: { ...createScore().total, questionCount: 1, successRate: 100 },
+        total: { rawScore: 1, questionCount: 1, successRate: 100 },
         branches: createScore().branches.map((branch) => ({ ...branch, questionCount: 1, successRate: 100 })),
         questions: createScore().questions,
-        statistics: {
-          standardScore: 50,
-          general: { rank: 1, outOf: 1, percentile: 50 },
-          class: { rank: 1, outOf: 1, percentile: 50 },
-          branches: [{ branch: "Matematik", standardScore: 50, general: { rank: 1, outOf: 1, percentile: 50 }, class: { rank: 1, outOf: 1, percentile: 50 } }],
-        },
       }],
     },
     generatedAt: "2026-05-30T08:00:00.000Z",
@@ -376,7 +426,7 @@ function createSnapshot(): ReportSnapshotCandidate {
 
 function createScore(): ScoringResult {
   return {
-    total: { correct: 1, wrong: 0, blank: 0, net: 1, rawScore: 1, standardScore: 1 },
+    total: { correct: 1, wrong: 0, blank: 0, net: 1, rawScore: 1 },
     branches: [{ branch: "Matematik", correct: 1, wrong: 0, blank: 0, net: 1 }],
     questions: [{ questionNo: 1, branch: "Matematik", answer: "A", correctAnswer: "A", status: "CORRECT" }],
     _meta: {

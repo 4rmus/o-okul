@@ -72,9 +72,15 @@ migration/API dilimi ve kanit gate'leriyle kullanilir.
 ## Report And Karne Contract
 
 - Rapor karsilastirmalarinda ana metrik `Basari %` olur.
-- `Net`, `Soru`, standart puan, dogru/yanlis/bos ve siralama baglam olarak gorunur kalir.
-- `/kurum/raporlar` gorev odakli workspace olarak calisir: Sorgu/Uretim, Kurum Analitigi,
-  Ogrenci Sonuclari, Karne Onizleme, Ciktilar.
+- `Net / Soru` ikincil, `Deneme puani` ucuncul metriktir. Yeni raporlarda `Standart puan`,
+  belirsiz `Genel sira` ve yuzdelik gosterilmez; yalniz `Kurum ici sira` ve `Sinif ici sira`
+  kullanilir. Esit puanlar ayni sirayi paylasir.
+- Deneme puani gosterilen web, PDF ve Excel yuzeylerinde
+  `Standart sapma kullanilmadan hesaplanan deneme puanidir. Resmi MEB/OSYM sinav puani degildir.`
+  uyarisi gorunur olur. Eski immutable snapshot'lar `Eski hesaplama` etiketiyle okunur ve yeni
+  formulle tekrar hesaplanmaz.
+- `/kurum/raporlar` dort gorev alanina iner: Genel Bakis, Ogrenciler, Karne ve Ciktilar. Sinav,
+  kapsam ve AYT icin SAY/EA/SOZ secimi sayfa ustundeki kompakt kontrol alaninda tutulur.
 - `/kurum/optik` sablon, parser, yukleme, karantina ve degerlendirme adimlariyla sinirlidir; rapor
   uretim ve cikti islemleri secili sinav baglamiyla `/kurum/raporlar` yuzeyine devredilir.
 - Ogrenci, veli ve ogretmen portallari yetkili `READY` rapor indeksinden gorunur sinav secimi yapar;
@@ -84,9 +90,13 @@ migration/API dilimi ve kanit gate'leriyle kullanilir.
 - Karne ve rapor satirlarinda snapshot icindeki dondurulmus `displayName`/`studentNo` onceliklidir;
   guncel ogrenci kaydi yalniz eski snapshot'lar icin geri uyumlu yedektir.
 - Export aksiyonlari yalniz `READY` snapshot icin etkin olur; `STALE`, `PENDING` ve `FAILED`
-  durumlari acikca gosterilir.
-- Web karne ve worker PDF sablonlari ayni notr gorsel sozlesmeye yaklastirilir; hesaplama ve
-  `ReportSnapshot` semantigi degismez.
+  durumlari acikca gosterilir. Portal dili `READY` yerine `Rapor hazir` der.
+- Tekli karne hesaplama yapmaz; toplu immutable snapshot'taki ogrenci satirinin projeksiyonudur.
+  Web, kurum PDF'i, iki sayfalik tekli PDF, toplu karneler PDF'i ve Excel ayni snapshot alanlarini
+  okur. Sabit sinav adi bulunmadiginda notr `Sinav raporu` kullanilir.
+- Yukleniyor, veri yok, filtrede sonuc yok ve hata durumlari ayri geri bildirimlerdir.
+- Web karne ve worker PDF sablonlari ayni notr gorsel sozlesmeye yaklastirilir; yeni snapshot'lar
+  `examType`, `examYear`, `scoringProfileId` ve `officialComparable:false` provenance'ini dondurur.
 
 ## Security And Privacy Contract
 

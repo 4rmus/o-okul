@@ -1,5 +1,8 @@
 import type {
   ClassRecord,
+  ExamScoreRanking,
+  ExamScoreType,
+  ExamScoreView,
   ExamParticipantRecord,
   ReportScopeRank,
   ReportSnapshotRecord,
@@ -34,9 +37,12 @@ export interface ReportAnalysisRow {
   rawScore?: number;
   standardScore?: number;
   estimatedRawScore?: number;
+  practiceScore?: number;
+  scoreViews?: ExamScoreView[];
+  scoreRankings?: ExamScoreRanking[];
+  branches?: SnapshotStudent["branches"];
   generalRank?: ReportScopeRank;
   classRank?: ReportScopeRank;
-  percentile?: number;
   hasResult: boolean;
 }
 
@@ -44,6 +50,7 @@ export interface BuildReportAnalysisRowsInput {
   classes?: ClassRecord[];
   participants?: ExamParticipantRecord[];
   snapshot?: ReportSnapshotRecord | null;
+  scoreType?: ExamScoreType;
   students?: StudentRecord[];
 }
 
@@ -51,6 +58,7 @@ export function buildReportAnalysisRows({
   classes = [],
   participants = [],
   snapshot,
+  scoreType,
   students = [],
 }: BuildReportAnalysisRowsInput): ReportAnalysisRow[] {
   const classNameById = new Map(classes.map((klass) => [klass.id, klass.name]));
@@ -74,14 +82,18 @@ export function buildReportAnalysisRows({
       const participant = participantsByStudentId.get(studentId);
       const snapshotStudent = snapshotStudentsById.get(studentId);
       const total = snapshotStudent?.total ?? {};
+      const scoreView = snapshotStudent?.scoreViews?.find((view) => view.type === scoreType);
+      const scoreRanking = snapshotStudent?.scoreRankings?.find((ranking) => ranking.type === scoreType);
+      const isModernSnapshot = snapshot?.snapshotData?.schemaVersion === 2 || Boolean(snapshot?.snapshotData?.scoringProfileId);
+      const metrics = scoreView?.metrics ?? (isModernSnapshot ? {} : total);
       const classId = snapshotStudent?.classId ?? student?.classId;
       const className =
         snapshotStudent?.className ??
         (classId ? snapshotClassNameById.get(classId) ?? classNameById.get(classId) : undefined) ??
         "-";
       const resultStatus = resolveResultStatus(participant, snapshotStudent);
-      const generalRank = snapshotStudent?.statistics?.general;
-      const classRank = snapshotStudent?.statistics?.class;
+      const generalRank = scoreView ? scoreRanking?.institution : snapshotStudent?.statistics?.general;
+      const classRank = scoreView ? scoreRanking?.class : snapshotStudent?.statistics?.class;
 
       return {
         rowKey: participant?.id ?? `${snapshot?.id ?? "snapshot"}-${studentId}`,
@@ -94,18 +106,21 @@ export function buildReportAnalysisRows({
         ...(participant?.bookletType ? { bookletType: participant.bookletType } : {}),
         ...(participant?.status ? { participationStatus: participant.status } : {}),
         resultStatus,
-        correct: total.correct,
-        wrong: total.wrong,
-        blank: total.blank,
-        questionCount: total.questionCount,
-        successRate: total.successRate,
-        net: total.net,
-        rawScore: total.rawScore,
-        standardScore: total.standardScore,
-        estimatedRawScore: total.estimatedRawScore,
+        correct: metrics.correct,
+        wrong: metrics.wrong,
+        blank: metrics.blank,
+        questionCount: metrics.questionCount,
+        successRate: metrics.successRate,
+        net: metrics.net,
+        rawScore: isModernSnapshot ? undefined : total.rawScore,
+        standardScore: isModernSnapshot ? undefined : total.standardScore,
+        estimatedRawScore: isModernSnapshot ? undefined : total.estimatedRawScore,
+        practiceScore: scoreView?.practiceScore,
+        ...(snapshotStudent?.scoreViews?.length ? { scoreViews: snapshotStudent.scoreViews } : {}),
+        ...(snapshotStudent?.scoreRankings?.length ? { scoreRankings: snapshotStudent.scoreRankings } : {}),
+        ...(snapshotStudent?.branches?.length ? { branches: snapshotStudent.branches } : {}),
         ...(generalRank ? { generalRank } : {}),
         ...(classRank ? { classRank } : {}),
-        ...(generalRank ? { percentile: generalRank.percentile } : {}),
         hasResult: resultStatus === "READY",
       } satisfies ReportAnalysisRow;
     })
@@ -114,6 +129,7 @@ export function buildReportAnalysisRows({
 
 export function compareReportAnalysisRows(first: ReportAnalysisRow, second: ReportAnalysisRow): number {
   return compareNumber(reportSuccessRate(first), reportSuccessRate(second), "desc") ||
+    compareNumber(first.practiceScore, second.practiceScore, "desc") ||
     compareNumber(first.standardScore, second.standardScore, "desc") ||
     compareNumber(first.estimatedRawScore, second.estimatedRawScore, "desc") ||
     compareNumber(first.net, second.net, "desc") ||

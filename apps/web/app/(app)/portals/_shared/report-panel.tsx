@@ -84,7 +84,9 @@ export function ReportPanel({
 
   const totalSuccessRate = reportSuccessRate(report.total);
   const totalQuestionCount = reportQuestionCount(report.total);
-  const score = report.total.estimatedRawScore ?? report.total.standardScore;
+  const scoreView = preferredScoreView(report);
+  const isModernReport = Boolean(report.scoringProfileId || report.scoreViews?.length);
+  const score = scoreView?.practiceScore ?? (isModernReport ? undefined : report.total.estimatedRawScore ?? report.total.standardScore ?? report.total.rawScore);
 
   return (
     <>
@@ -95,7 +97,7 @@ export function ReportPanel({
         description={buildReportSummary(report, reportContext)}
         actions={
           <>
-            <StatusBadge tone="success">Hazır</StatusBadge>
+            <StatusBadge tone="success">Rapor hazır</StatusBadge>
             <Button
               aria-controls={isKarneDetailOpen ? "portal-karne-detail" : undefined}
               aria-expanded={isKarneDetailOpen}
@@ -112,8 +114,13 @@ export function ReportPanel({
           <MetricCard label="Başarı %" value={formatPercentNumber(totalSuccessRate)} description="Ana karşılaştırma metriği" tone={successTone(totalSuccessRate)} />
           <MetricCard label="Net" value={formatNetNumber(report.total.net)} description="Soru sayısı bağlamıyla okunur" />
           <MetricCard label="Soru" value={formatNumber(totalQuestionCount)} description="Sınav kapsamı" />
-          <MetricCard label="Standart puan" value={formatNumber(score)} description={formatGeneratedAt(report.generatedAt)} tone="info" />
+          <MetricCard label={scoreView ? scoreViewLabel(scoreView) : isModernReport ? "Puan hesaplanamadı" : "Eski hesaplama"} value={formatNumber(score)} description={formatGeneratedAt(report.generatedAt)} tone="info" />
         </MetricGrid>
+        {isModernReport ? (
+          <Alert tone="warning" title="Deneme puanı uyarısı">
+            Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.
+          </Alert>
+        ) : null}
         <DataTable
           caption="Portal branş başarıları"
           columns={branchColumns}
@@ -137,12 +144,11 @@ export function ReportPanel({
             outcomeCaption="Portal kazanım radar tablosu"
             outcomeHeadingLevel="h4"
             outcomeSectionClassName="next-karne-block"
-            outputStatusLabel="READY snapshot"
+            outputStatusLabel="Rapor hazır"
             progress={progress}
-            rankFormat="percentile"
             report={report}
             reportLabel="Sınav Raporu"
-            scoreGeneralLabel="GENEL"
+            scoreType={scoreView?.type}
             sheetClassName="next-portal-karne-sheet next-karne-sheet next-karne-sheet--portal"
             showProgressHistory
             summaryExtra={reportContext}
@@ -187,7 +193,7 @@ function formatNumber(value: number | undefined) {
 }
 
 function formatNetNumber(value: number | undefined) {
-  return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+  return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 }
 
 function successTone(value: number | undefined) {
@@ -195,4 +201,14 @@ function successTone(value: number | undefined) {
   if (value >= 75) return "success";
   if (value >= 50) return "info";
   return "warning";
+}
+
+function scoreViewLabel(view: NonNullable<ReportStudentSnapshot["scoreViews"]>[number]) {
+  if (view.status === "MISSING_TYT") return "Bağlı TYT deneme puanı yok";
+  if (view.status === "NOT_ELIGIBLE") return `${view.type} hesaplanamadı`;
+  return `${view.type} deneme puanı`;
+}
+
+function preferredScoreView(report: ReportStudentSnapshot) {
+  return report.scoreViews?.find((view) => view.status === "CALCULATED") ?? report.scoreViews?.[0];
 }

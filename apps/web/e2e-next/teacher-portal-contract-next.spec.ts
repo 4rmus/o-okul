@@ -322,8 +322,6 @@ async function expectTeacherDisplayPanels(page: Page) {
     "Başarı %",
     "Net",
     "Soru",
-    "LGS puanı",
-    "Standart puan",
   ]);
   await expect(reportsTable).toContainText("Başarı % ana karşılaştırma metriğidir");
 

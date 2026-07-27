@@ -136,7 +136,10 @@ export class InMemoryReportSnapshotStore implements ReportSnapshotStore {
     for (const snapshot of this.snapshots) {
       if (
         snapshot.tenantId !== tenantId ||
-        snapshot.examId !== examId ||
+        (
+          snapshot.examId !== examId
+          && !readStringArray(snapshot.inputRefs.linkedTytExamIds).includes(examId)
+        ) ||
         snapshot.deletedAt ||
         snapshot.status === "STALE"
       ) {
@@ -338,15 +341,25 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
   async markStaleByExam(tenantId: string, examId: string, reason: string): Promise<number> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query(
-        `UPDATE "ReportSnapshot"
+        `UPDATE "ReportSnapshot" AS snapshot
          SET "status" = 'STALE',
              "staleAt" = COALESCE("staleAt", now()),
              "inputRefs" = COALESCE("inputRefs", '{}'::jsonb) || $3::jsonb,
              "updatedAt" = now()
-         WHERE "tenantId" = $1
-           AND "examId" = $2
-           AND "deletedAt" IS NULL
-           AND "status" <> 'STALE'`,
+         WHERE snapshot."tenantId" = $1
+           AND (
+             snapshot."examId" = $2
+             OR EXISTS (
+               SELECT 1
+               FROM "Exam" AS linked_exam
+               WHERE linked_exam."tenantId" = $1
+                 AND linked_exam."id" = snapshot."examId"
+                 AND linked_exam."linkedTytExamId" = $2
+                 AND linked_exam."deletedAt" IS NULL
+             )
+           )
+           AND snapshot."deletedAt" IS NULL
+           AND snapshot."status" <> 'STALE'`,
         [tenantId, examId, JSON.stringify({ staleReason: reason })],
       );
       return result.rowCount ?? 0;
@@ -468,6 +481,10 @@ function parseJsonObject(value: unknown): Record<string, unknown> {
     throw new Error("REPORT_SNAPSHOT_JSON_INVALID");
   }
   return parsed as Record<string, unknown>;
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 function toOptionalIsoString(value: Date | string | null): string | undefined {

@@ -93,6 +93,7 @@
     "rate-limit:smoke": "node scripts/smoke-rate-limit-live.mjs",
     "report-generation:smoke": "pnpm --filter @o-okul/api build && pnpm --filter @o-okul/worker build && node scripts/smoke-report-generation-live.mjs",
     "report-generation:perf": "pnpm --filter @o-okul/api build && pnpm --filter @o-okul/worker build && REPORT_GENERATION_SMOKE_RESULT_COUNT=10000 node scripts/smoke-report-generation-live.mjs",
+    "reports:2026-nosd:examples": "pnpm --filter @o-okul/shared-types build && pnpm --filter @o-okul/api build && pnpm --filter @o-okul/worker build && node scripts/generate-2026-nosd-example-reports.mjs",
     "report-listing:k6": "k6 run scripts/k6-report-listing.js",
     "report-listing:k6:check": "node scripts/check-k6-report-listing.mjs",
     "rls:live:check": "node scripts/check-rls-live-evidence.mjs",

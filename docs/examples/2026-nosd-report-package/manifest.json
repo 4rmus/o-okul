@@ -1,0 +1,54 @@
+{
+  "marker": "ÖRNEK — RESMÎ PUAN DEĞİLDİR",
+  "generatedAt": "2026-07-27T09:00:00.000Z",
+  "officialComparable": false,
+  "containsRealPersonalData": false,
+  "studentCount": 12,
+  "classes": [
+    "8-A Örnek",
+    "8-B Örnek"
+  ],
+  "scenarios": [
+    "LGS 90 soru ve 1/3 yanlış cezası",
+    "TYT 120 soru ve 1/4 yanlış cezası",
+    "Bağlı TYT ile AYT SAY/EA/SÖZ",
+    "Eşit puanda aynı kurum ve sınıf sırası",
+    "TYT hesaplama koşulu sağlanmadı",
+    "AYT alan hesaplama koşulu sağlanmadı",
+    "Bağlı TYT sonucu eksik",
+    "2026 AYT Matematik 23 cevap düzeltmesi örneği",
+    "2026 AYT TDE-SB1 20 iptal örneği"
+  ],
+  "artifacts": [
+    "lgs-golden-snapshot.json",
+    "lgs-kurum-raporu.xlsx",
+    "lgs-kurum-ozeti.pdf",
+    "lgs-ornek-ogrenci-04-karne.pdf",
+    "tyt-golden-snapshot.json",
+    "tyt-kurum-raporu.xlsx",
+    "tyt-kurum-ozeti.pdf",
+    "tyt-ornek-ogrenci-04-karne.pdf",
+    "ayt-golden-snapshot.json",
+    "ayt-kurum-raporu.xlsx",
+    "ayt-kurum-ozeti.pdf",
+    "ayt-ornek-ogrenci-04-karne.pdf"
+  ],
+  "lgsSummary": {
+    "resultCount": 12,
+    "physicalQuestionCount": 90,
+    "institutionPdfPageCount": 2,
+    "studentPdfPageCount": 2
+  },
+  "tytSummary": {
+    "resultCount": 11,
+    "physicalQuestionCount": 120,
+    "institutionPdfPageCount": 2,
+    "studentPdfPageCount": 2
+  },
+  "aytSummary": {
+    "resultCount": 12,
+    "physicalQuestionCount": 160,
+    "institutionPdfPageCount": 3,
+    "studentPdfPageCount": 2
+  }
+}

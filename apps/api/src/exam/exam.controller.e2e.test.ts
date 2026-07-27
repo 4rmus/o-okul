@@ -138,7 +138,13 @@ describe("ExamController", () => {
       const created = await request(server)
         .post("/exams")
         .set("Authorization", `Bearer ${issued.accessToken}`)
-        .send(examCreateBody("LGS Bağlamlı Deneme", { gradeLevelId: "grade-8", alanId, examType: "LGS" }))
+        .send(examCreateBody("LGS Bağlamlı Deneme", {
+          gradeLevelId: "grade-8",
+          alanId,
+          examType: "LGS",
+          examYear: 2026,
+          scoringProfileId: "TR-LGS-2026-NOSD-V1",
+        }))
         .expect(201);
 
       expect(created.body).toMatchObject({
@@ -159,15 +165,26 @@ describe("ExamController", () => {
       const updated = await request(server)
         .patch(`/exams/${created.body.id}`)
         .set("Authorization", `Bearer ${issued.accessToken}`)
-        .send({ title: "Okul Bağlamlı Deneme", gradeLevelId: "grade-8", alanId, examType: "SCHOOL" })
-        .expect(200);
+        .send({
+          title: "TYT Bağlamlı Deneme",
+          gradeLevelId: "grade-8",
+          alanId,
+          examType: "TYT",
+          examYear: 2026,
+          scoringProfileId: "TR-YKS-2026-NOSD-V1",
+        })
+        .expect(409);
 
-      expect(updated.body).toMatchObject({
-        title: "Okul Bağlamlı Deneme",
-        gradeLevelId: "grade-8",
-        alanId,
-        examType: "SCHOOL",
+      expect(updated.body.error).toMatchObject({
+        code: "EXAM_SCORING_PROFILE_IMMUTABLE",
       });
+
+      const titleOnly = await request(server)
+        .patch(`/exams/${created.body.id}`)
+        .set("Authorization", `Bearer ${issued.accessToken}`)
+        .send({ title: "Yeni Başlık", gradeLevelId: "grade-8", alanId })
+        .expect(200);
+      expect(titleOnly.body).toMatchObject({ title: "Yeni Başlık", examType: "LGS" });
     } finally {
       if (alanId) {
         await request(server).delete(`/alanlar/${alanId}`).set("Authorization", `Bearer ${issued.accessToken}`);
@@ -176,6 +193,92 @@ describe("ExamController", () => {
         await request(server).delete(`/grade-levels/${otherGradeLevelId}`).set("Authorization", `Bearer ${issued.accessToken}`);
       }
     }
+  });
+
+  it("resmî profil ve bağlı TYT sınavını aynı tenant/tür/yıl kapsamında doğrular", async () => {
+    const issued = await login("admin-a@example.test");
+    await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send(examCreateBody("Eksik profilli LGS", { examType: "LGS" }))
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.error).toMatchObject({ code: "SCORING_PROFILE_REQUIRED" });
+      });
+
+    const tyt = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send(examCreateBody("TYT Denemesi", {
+        examType: "TYT",
+        examYear: 2026,
+        scoringProfileId: "TR-YKS-2026-NOSD-V1",
+      }))
+      .expect(201);
+
+    const ayt = await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send(examCreateBody("AYT Denemesi", {
+        examType: "AYT",
+        examYear: 2026,
+        scoringProfileId: "TR-YKS-2026-NOSD-V1",
+        linkedTytExamId: tyt.body.id,
+      }))
+      .expect(201);
+
+    expect(ayt.body).toMatchObject({
+      examType: "AYT",
+      examYear: 2026,
+      scoringProfileId: "TR-YKS-2026-NOSD-V1",
+      linkedTytExamId: tyt.body.id,
+    });
+    await request(server)
+      .delete(`/exams/${tyt.body.id}`)
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .expect(409)
+      .expect(({ body }) => {
+        expect(body.error).toMatchObject({ code: "LINKED_TYT_EXAM_IN_USE" });
+      });
+
+    await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send(examCreateBody("Uyumsuz LGS", {
+        examType: "LGS",
+        examYear: 2026,
+        scoringProfileId: "TR-YKS-2026-NOSD-V1",
+      }))
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.error).toMatchObject({ code: "SCORING_PROFILE_EXAM_TYPE_MISMATCH" });
+      });
+
+    const crossTenantTytId = "exam-cross-tenant-tyt";
+    repository.exams.set(crossTenantTytId, {
+      id: crossTenantTytId,
+      tenantId: "tenant-b",
+      title: "Başka tenant TYT",
+      status: "DRAFT",
+      examType: "TYT",
+      examYear: 2026,
+      scoringProfileId: "TR-YKS-2026-NOSD-V1",
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    });
+    await request(server)
+      .post("/exams")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send(examCreateBody("Cross tenant AYT", {
+        examType: "AYT",
+        examYear: 2026,
+        scoringProfileId: "TR-YKS-2026-NOSD-V1",
+        linkedTytExamId: crossTenantTytId,
+      }))
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.error).toMatchObject({ code: "LINKED_TYT_EXAM_INVALID" });
+      });
   });
 
   it("TENANT_ADMIN sınav oluşturmayı Idempotency-Key ile tekilleştirir", async () => {
@@ -602,6 +705,9 @@ class FakeExamRepository implements ExamRepository {
       ...(input.gradeLevelId ? { gradeLevelId: input.gradeLevelId } : {}),
       ...(input.alanId ? { alanId: input.alanId } : {}),
       ...(input.examType ? { examType: input.examType } : {}),
+      ...(input.examYear !== undefined ? { examYear: input.examYear } : {}),
+      ...(input.scoringProfileId ? { scoringProfileId: input.scoringProfileId } : {}),
+      ...(input.linkedTytExamId ? { linkedTytExamId: input.linkedTytExamId } : {}),
       title: input.title,
       status: "DRAFT",
       ...(input.startsAt ? { startsAt: input.startsAt } : {}),
@@ -642,6 +748,9 @@ class FakeExamRepository implements ExamRepository {
       ...(input.gradeLevelId ? { gradeLevelId: input.gradeLevelId } : { gradeLevelId: undefined }),
       ...(input.alanId ? { alanId: input.alanId } : { alanId: undefined }),
       ...(input.examType ? { examType: input.examType } : { examType: undefined }),
+      ...(input.examYear !== undefined ? { examYear: input.examYear } : { examYear: undefined }),
+      ...(input.scoringProfileId ? { scoringProfileId: input.scoringProfileId } : { scoringProfileId: undefined }),
+      ...(input.linkedTytExamId ? { linkedTytExamId: input.linkedTytExamId } : { linkedTytExamId: undefined }),
       ...(input.startsAt ? { startsAt: input.startsAt } : {}),
       updatedAt: "2026-03-01T00:00:00.000Z",
     };

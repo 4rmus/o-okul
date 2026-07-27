@@ -10,8 +10,11 @@ export class PostgresExamRepository implements ExamRepository {
   async create(input: CreateExamRepositoryInput): Promise<ExamRecord> {
     return withTenantQuery(this.pool, async (client) => {
       const inserted = await client.query<ExamRow>(
-        `INSERT INTO "Exam" ("id", "tenantId", "gradeLevelId", "alanId", "examType", "title", "status", "startsAt", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, 'DRAFT', $7, now())
+        `INSERT INTO "Exam" (
+           "id", "tenantId", "gradeLevelId", "alanId", "examType", "examYear",
+           "scoringProfileId", "linkedTytExamId", "title", "status", "startsAt", "updatedAt"
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'DRAFT', $10, now())
          RETURNING *`,
         [
           randomUUID(),
@@ -19,6 +22,9 @@ export class PostgresExamRepository implements ExamRepository {
           input.gradeLevelId ?? null,
           input.alanId ?? null,
           input.examType ?? null,
+          input.examYear ?? null,
+          input.scoringProfileId ?? null,
+          input.linkedTytExamId ?? null,
           input.title,
           input.startsAt ?? null,
         ],
@@ -52,6 +58,29 @@ export class PostgresExamRepository implements ExamRepository {
     });
   }
 
+  async hasScoringArtifacts(tenantId: string, examId: string): Promise<boolean> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<{ present: boolean }>(
+        `SELECT (
+           EXISTS (
+             SELECT 1 FROM "AnswerKey"
+             WHERE "tenantId" = $1 AND "examId" = $2 AND "deletedAt" IS NULL
+           )
+           OR EXISTS (
+             SELECT 1 FROM "ExamResult"
+             WHERE "tenantId" = $1 AND "examId" = $2
+           )
+           OR EXISTS (
+             SELECT 1 FROM "ReportSnapshot"
+             WHERE "tenantId" = $1 AND "examId" = $2 AND "deletedAt" IS NULL
+           )
+         ) AS "present"`,
+        [tenantId, examId],
+      );
+      return result.rows[0]?.present === true;
+    });
+  }
+
   async update(tenantId: string, examId: string, input: UpdateExamRepositoryInput): Promise<ExamRecord | undefined> {
     return withTenantQuery(this.pool, async (client) => {
       const result = await client.query<ExamRow>(
@@ -60,11 +89,25 @@ export class PostgresExamRepository implements ExamRepository {
              "gradeLevelId" = $4,
              "alanId" = $5,
              "examType" = $6,
-             "startsAt" = $7,
+             "examYear" = $7,
+             "scoringProfileId" = $8,
+             "linkedTytExamId" = $9,
+             "startsAt" = $10,
              "updatedAt" = now()
          WHERE "tenantId" = $1 AND "id" = $2 AND "deletedAt" IS NULL
          RETURNING *`,
-        [tenantId, examId, input.title, input.gradeLevelId ?? null, input.alanId ?? null, input.examType ?? null, input.startsAt ?? null],
+        [
+          tenantId,
+          examId,
+          input.title,
+          input.gradeLevelId ?? null,
+          input.alanId ?? null,
+          input.examType ?? null,
+          input.examYear ?? null,
+          input.scoringProfileId ?? null,
+          input.linkedTytExamId ?? null,
+          input.startsAt ?? null,
+        ],
       );
       const row = result.rows[0];
       return row ? toExamRecord(row) : undefined;
@@ -120,6 +163,9 @@ interface ExamRow {
   gradeLevelId: string | null;
   alanId: string | null;
   examType: string | null;
+  examYear: number | null;
+  scoringProfileId: string | null;
+  linkedTytExamId: string | null;
   title: string;
   status: string;
   startsAt: Date | string | null;
@@ -134,6 +180,9 @@ function toExamRecord(row: ExamRow): ExamRecord {
     ...(row.gradeLevelId ? { gradeLevelId: row.gradeLevelId } : {}),
     ...(row.alanId ? { alanId: row.alanId } : {}),
     ...(row.examType ? { examType: row.examType } : {}),
+    ...(row.examYear !== null ? { examYear: row.examYear } : {}),
+    ...(row.scoringProfileId ? { scoringProfileId: row.scoringProfileId } : {}),
+    ...(row.linkedTytExamId ? { linkedTytExamId: row.linkedTytExamId } : {}),
     title: row.title,
     status: row.status,
     ...(row.startsAt ? { startsAt: toIso(row.startsAt) } : {}),

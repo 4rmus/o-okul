@@ -140,7 +140,7 @@ describe("TYT/AYT sentetik job composition değerlendirme pipeline", () => {
       expect(snapshot.status).toBe("READY");
       expect(snapshot.snapshotData.averages).toMatchObject({
         questionCount,
-        successRate: questionCount === 120 ? 96.25 : 97.1875,
+        successRate: questionCount === 120 ? 96.25 : 97.19,
       });
       expect(snapshot.snapshotData.averages).not.toHaveProperty("estimatedRawScore");
       expect(snapshot.snapshotData.branches.map(({ branch, questionCount: count }) => ({ branch, questionCount: count })))
@@ -352,6 +352,7 @@ function createReportJob(examId: string): QueueJob<ReportGenerationJobPayload> {
 
 function createReportAdapter(results: ExamEvaluationJobResult[]): ReportGenerationJobAdapter {
   const reportResults: ExamResultForReport[] = results.map((result) => ({
+    examId: result.examId,
     studentId: result.studentId,
     displayName: result.studentId === "student-a" ? "Lorem Ipsum" : "Dolor Sit Amet",
     resultKey: result.resultKey,

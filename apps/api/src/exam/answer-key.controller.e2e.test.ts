@@ -10,6 +10,7 @@ import { AppModule } from "../app.module.js";
 import { reportSnapshotStoreToken, type ReportSnapshotStore } from "../report/report-snapshot-store.js";
 import {
   answerKeyRepositoryToken,
+  type AnswerKeyExamScoringContext,
   type AnswerKeyRepository,
   type SaveAnswerKeyInput,
 } from "./answer-key.service.js";
@@ -37,6 +38,7 @@ describe("AnswerKeyController", () => {
 
   beforeEach(() => {
     repository.records = [];
+    repository.examContexts.clear();
     snapshots.markStaleInputs = [];
   });
 
@@ -68,8 +70,14 @@ describe("AnswerKeyController", () => {
       scoringConfig: { wrongPenalty: 0.333333 },
     });
     expect(repository.records[0]?.questions).toEqual([
-      { questionNo: 1, correctAnswer: "A", branch: "Matematik" },
-      { questionNo: 2, correctAnswer: "B", branch: "Türkçe", outcomeCode: "SÖZCÜKTE ANLAM" },
+      { questionNo: 1, correctAnswer: "A", branch: "Matematik", evaluationStatus: "ACTIVE" },
+      {
+        questionNo: 2,
+        correctAnswer: "B",
+        branch: "Türkçe",
+        evaluationStatus: "ACTIVE",
+        outcomeCode: "SÖZCÜKTE ANLAM",
+      },
     ]);
     expect(snapshots.markStaleInputs).toEqual([{
       tenantId: "tenant-a",
@@ -116,6 +124,53 @@ describe("AnswerKeyController", () => {
     expect(snapshots.markStaleInputs).toEqual([
       { tenantId: "tenant-a", examId: "exam-a", reason: "answer_key.created" },
     ]);
+  });
+
+  it("resmî LGS profilinde yanlış cezası ve scoreSection uyumsuzluğunu reddeder", async () => {
+    const issued = await login("admin-a@example.test");
+    repository.examContexts.set("exam-a", {
+      examType: "LGS",
+      examYear: 2026,
+      scoringProfileId: "TR-LGS-2026-NOSD-V1",
+    });
+
+    await request(server)
+      .post("/exams/exam-a/answer-keys")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({
+        version: "v1",
+        questions: [{
+          questionNo: 1,
+          correctAnswer: "A",
+          branch: "Matematik",
+          scoreSection: "LGS_MATEMATIK",
+        }],
+        scoringConfig: { wrongPenalty: 0.25 },
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.error).toMatchObject({ code: "SCORING_PROFILE_WRONG_PENALTY_MISMATCH" });
+      });
+
+    await request(server)
+      .post("/exams/exam-a/answer-keys")
+      .set("Authorization", `Bearer ${issued.accessToken}`)
+      .send({
+        version: "v1",
+        questions: [{
+          questionNo: 1,
+          correctAnswer: "A",
+          branch: "Matematik",
+          scoreSection: "TYT_MATEMATIK",
+        }],
+        scoringConfig: { wrongPenalty: 0.333333 },
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.error).toMatchObject({ code: "SCORING_PROFILE_SCORE_SECTION_MISMATCH" });
+      });
+
+    expect(repository.records).toHaveLength(0);
   });
 
   it("TEACHER cevap anahtarı oluşturamaz ama listeleyebilir", async () => {
@@ -212,6 +267,8 @@ describe("AnswerKeyController", () => {
       questionNo: 1,
       correctAnswer: "A",
       branch: "LGS TÜRKÇE",
+      scoreSection: "LGS_TURKCE",
+      evaluationStatus: "ACTIVE",
       outcomeCode: "KAZANIM 1",
       topic: "KONU 1",
     });
@@ -382,6 +439,11 @@ async function createAnswerKeyWorkbookBase64(): Promise<string> {
 
 class FakeAnswerKeyRepository implements AnswerKeyRepository {
   records: SaveAnswerKeyInput[] = [];
+  examContexts = new Map<string, AnswerKeyExamScoringContext>();
+
+  async findExamScoringContext(_tenantId: string, examId: string): Promise<AnswerKeyExamScoringContext | undefined> {
+    return this.examContexts.get(examId);
+  }
 
   async create(input: SaveAnswerKeyInput): Promise<AnswerKeyRecord> {
     if (this.records.some((record) => record.tenantId === input.tenantId && record.examId === input.examId && record.version === input.version)) {

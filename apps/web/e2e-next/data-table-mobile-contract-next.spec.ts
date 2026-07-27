@@ -597,7 +597,6 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(resultsTable.getByRole("columnheader", { name: "LGS" })).toHaveCount(0);
     await expect(resultsTable.getByRole("columnheader", { name: "Standart" })).toHaveCount(0);
     await expect(resultsTable.locator('th[data-column-key="student"]')).toHaveAttribute("data-mobile-priority", "primary");
-    await expect(resultsTable.locator('th[data-column-key="lgsScore"]')).toHaveAttribute("data-mobile-priority", "hidden");
     await expectMobileDataCells(resultsTable, [
       { key: "student", label: "Öğrenci", text: "Arşiv Öğrencisi" },
       { key: "successRate", label: "Başarı %", text: "%81,7" },

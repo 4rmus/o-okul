@@ -1,6 +1,11 @@
 export type TenantId = string;
 export { FormatAnalyzerService, getParserConfigPresetSuggestion } from "./format-analyzer.js";
 export {
+  reportCourseMatchesScoreType,
+  reportCourseShortName,
+  reportCourseSortOrder,
+} from "./report-course-labels.js";
+export {
   capabilitiesForRoles,
   hasCapabilityForRoles,
   isPortalSubjectRoleName,
@@ -39,8 +44,10 @@ export type {
   ApiListResponse,
   AnswerChoice,
   AnswerKeyBranchSummary,
+  AnswerKeyEvaluationStatus,
   AnswerKeyItemInput,
   AnswerKeyRecord,
+  AnswerKeyScoreSection,
   AnswerKeyScoringConfig,
   AttendanceAggregateRecord,
   AttendanceDailyEntry,
@@ -79,6 +86,12 @@ export type {
   ExamParticipantRecord,
   ExamParticipantStatus,
   ExamRecord,
+  ExamScoreAverage,
+  ExamScoreRanking,
+  ExamScoreMetrics,
+  ExamScoreStatus,
+  ExamScoreType,
+  ExamScoreView,
   ExamStatus,
   ExamType,
   GradeLevelRecord,
@@ -191,6 +204,8 @@ export type {
   ReportGenerationJobStatus,
   StudentAuditSummaryRecord,
   ReportErrorBooklet,
+  ReportRank,
+  ReportScoringAssumptions,
   ReportScopeRank,
   ReportSnapshotExportResult,
   ReportSnapshotRecord,

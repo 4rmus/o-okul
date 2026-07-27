@@ -9,11 +9,6 @@ import {
   DataTable,
   EmptyState,
   Field,
-  InfoGrid,
-  InfoItem,
-  Input,
-  MetricCard,
-  MetricGrid,
   Panel,
   Select,
   StatusBadge,
@@ -38,6 +33,11 @@ import type {
   ReportStudentSnapshot,
   StudentRecord,
 } from "@o-okul/shared-types";
+import {
+  reportCourseMatchesScoreType,
+  reportCourseShortName,
+  reportCourseSortOrder,
+} from "@o-okul/shared-types";
 import { Download, Eye, RefreshCw } from "lucide-react";
 import { KarneSheet } from "../../_shared/karne-sheet.js";
 import { useAuth } from "../../../providers.js";
@@ -45,7 +45,7 @@ import { ApiRequestError, apiBaseUrl, apiErrorMessage, apiListRequest, apiReques
 import { firstFormError, reportQueryFormSchema } from "../../../../src/form-validation.js";
 import { PageFrame } from "../_shared/page-frame.js";
 import { formatCourseName, formatOutcomeCode, shortCourseName } from "../../_shared/academic-labels.js";
-import { ClassCompareBar, ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
+import { ClassCompareBar, PracticeScoreBar, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
 import { formatNetNumber, OutcomeNetTable } from "../../_shared/outcome-net-table.js";
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 import { buildReportAnalysisRows, type ReportAnalysisRow } from "../../_shared/report-analysis.js";
@@ -89,18 +89,18 @@ const emptyReferences: ReportReferences = {
 const emptyParticipants: ExamParticipantRecord[] = [];
 const emptyStudents: StudentRecord[] = [];
 
-type ReportWorkspaceTab = "query" | "analytics" | "students" | "karne" | "exports";
+type ReportWorkspaceTab = "overview" | "students" | "karne" | "exports";
 type ReportJobState = "idle" | "queued" | "processing" | "completed" | "error";
+type ReportScoreType = "LGS" | "TYT" | "SAY" | "EA" | "SOZ";
 
 const reportWorkspaceTabs: Array<{ id: ReportWorkspaceTab; label: string }> = [
-  { id: "query", label: "Sorgu / Üretim" },
-  { id: "analytics", label: "Kurum Analitiği" },
-  { id: "students", label: "Öğrenci Sonuçları" },
-  { id: "karne", label: "Karne Önizleme" },
+  { id: "overview", label: "Genel Bakış" },
+  { id: "students", label: "Öğrenciler" },
+  { id: "karne", label: "Karne" },
   { id: "exports", label: "Çıktılar" },
 ];
 
-const defaultReportWorkspaceTab: ReportWorkspaceTab = "query";
+const defaultReportWorkspaceTab: ReportWorkspaceTab = "overview";
 
 export function ReportsPage() {
   const { auth } = useAuth();
@@ -110,6 +110,8 @@ export function ReportsPage() {
   const [loadedExamId, setLoadedExamId] = useState("");
   const [filters, setFilters] = useState(emptyFilters);
   const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [isReportLoading, setIsReportLoading] = useState(false);
+  const [scoreType, setScoreType] = useState<ReportScoreType | "">("");
   const [error, setError] = useState("");
   const [queueMessage, setQueueMessage] = useState("");
   const [reportJobState, setReportJobState] = useState<ReportJobState>("idle");
@@ -137,14 +139,21 @@ export function ReportsPage() {
   const termNameById = useMemo(() => new Map(terms.map((term) => [term.id, term.name])), [terms]);
   const latestSnapshot = reportData?.snapshots[0] ?? null;
   const studentReport = reportData?.studentReport ?? null;
+  const selectedExam = exams.find((exam) => exam.id === (loadedExamId || examId));
+  const scoreTypeOptions = useMemo(
+    () => reportScoreTypeOptions(selectedExam, latestSnapshot, studentReport),
+    [latestSnapshot, selectedExam, studentReport],
+  );
+  const activeScoreType = scoreTypeOptions.includes(scoreType as ReportScoreType) ? scoreType as ReportScoreType : scoreTypeOptions[0];
   const studentRows = useMemo(
     () => buildReportAnalysisRows({
       classes,
       participants,
+      scoreType: activeScoreType,
       snapshot: latestSnapshot,
       students,
     }),
-    [classes, latestSnapshot, participants, students],
+    [activeScoreType, classes, latestSnapshot, participants, students],
   );
   const snapshotContext = useMemo(
     () => latestSnapshot
@@ -191,12 +200,21 @@ export function ReportsPage() {
   const outputStatusTone = isSnapshotReady ? "success" : latestSnapshot ? "warning" : "neutral";
   const karneStatusLabel = studentReport ? "Karne açık" : latestSnapshot ? "Öğrenci seç" : "Rapor bekliyor";
   const karneStatusTone = studentReport ? "success" : latestSnapshot ? "info" : "neutral";
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
   useEffect(() => {
     if (!examId && exams.length > 0) {
       setExamId(preferredExamId(exams));
     }
   }, [examId, exams]);
+
+  useEffect(() => {
+    if (!scoreTypeOptions.length) {
+      setScoreType("");
+      return;
+    }
+    if (!scoreTypeOptions.includes(scoreType as ReportScoreType)) setScoreType(scoreTypeOptions[0]!);
+  }, [scoreType, scoreTypeOptions]);
 
   useEffect(() => {
     const nextTab = readReportWorkspaceTab(searchParams);
@@ -221,12 +239,15 @@ export function ReportsPage() {
       return;
     }
     try {
+      setIsReportLoading(true);
       setReportData(await loadReportData(auth.accessToken, parsedForm.data.examId, filters));
       setLoadedExamId(parsedForm.data.examId);
-      selectReportTab("analytics");
+      selectReportTab("overview");
     } catch (loadError) {
       setReportData(null);
       setError(apiErrorMessage(loadError, "Rapor alınamadı."));
+    } finally {
+      setIsReportLoading(false);
     }
   }
 
@@ -247,7 +268,7 @@ export function ReportsPage() {
       });
       setReportJobState("queued");
       setQueueMessage("Rapor üretimi kuyruğa alındı.");
-      selectReportTab("query");
+      selectReportTab("overview");
       setReportJobState("processing");
       setQueueMessage("Rapor üretimi işleniyor.");
       await waitForReportGenerationJob(auth.accessToken, parsedForm.data.examId, job.jobId);
@@ -255,7 +276,7 @@ export function ReportsPage() {
       setLoadedExamId(parsedForm.data.examId);
       setQueueMessage("Rapor üretimi tamamlandı.");
       setReportJobState("completed");
-      selectReportTab("analytics");
+      selectReportTab("overview");
     } catch (queueError) {
       setReportJobState("error");
       setQueueMessage("");
@@ -284,14 +305,23 @@ export function ReportsPage() {
     }
   }
 
-  async function exportReport(kind: "xlsx" | "pdf") {
+  async function exportReport(kind: "xlsx" | "pdf-summary" | "pdf-packet" | "pdf-student") {
     if (!auth || !latestSnapshot) return;
 
     setError("");
     try {
       const result = kind === "xlsx"
         ? await exportReportSnapshotExcel(auth.accessToken, loadedExamId, latestSnapshot.id)
-        : await exportReportSnapshotPdf(auth.accessToken, loadedExamId, latestSnapshot.id);
+        : kind === "pdf-summary"
+          ? await exportReportSnapshotPdf(auth.accessToken, loadedExamId, latestSnapshot.id)
+          : kind === "pdf-packet"
+            ? await exportReportSnapshotKarnelerPdf(auth.accessToken, loadedExamId, latestSnapshot.id)
+            : await exportStudentReportPdf(
+                auth.accessToken,
+                loadedExamId,
+                latestSnapshot.id,
+                reportData?.selectedStudentId ?? "",
+              );
       downloadBase64File(result);
     } catch (exportError) {
       setError(apiErrorMessage(exportError, "Rapor çıktısı alınamadı."));
@@ -304,39 +334,105 @@ export function ReportsPage() {
       subtitle="Raporu sorgula, üret ve Excel/PDF olarak dışa aktar."
     >
       <section className="next-report-workspace" aria-label="Rapor çalışma alanı">
-        <InfoGrid aria-label="Rapor iş akışı" className="next-report-workflow-strip" role="region">
-          <InfoItem
-            description="Sınav ve filtre sorgusu"
-            label="Sorgu"
-            value={<StatusBadge tone={queryStatusTone}>{queryStatusLabel}</StatusBadge>}
-          />
-          <InfoItem
-            description="Snapshot üretim durumu"
-            label="Üretim"
-            value={<StatusBadge tone={productionStatusTone}>{productionStatusLabel}</StatusBadge>}
-          />
-          <InfoItem
-            description="Excel/PDF erişimi"
-            label="Çıktı"
-            value={<StatusBadge tone={outputStatusTone}>{snapshotExportReadiness}</StatusBadge>}
-          />
-          <InfoItem
-            description="Öğrenci karne önizleme"
-            label="Karne"
-            value={<StatusBadge tone={karneStatusTone}>{karneStatusLabel}</StatusBadge>}
-          />
-        </InfoGrid>
-        <InfoGrid aria-label="Rapor bağlam özeti" className="next-report-context-strip" role="region">
-          <InfoItem label="Seçili sınav" value={selectedExamLabel} />
-          <InfoItem
-            label="Snapshot"
-            value={<StatusBadge tone={snapshotStatusTone(latestSnapshot?.status)}>{formatSnapshotStatus(latestSnapshot?.status)}</StatusBadge>}
-          />
-          <InfoItem label="Üretim zamanı" value={snapshotGeneratedAt} />
-          <InfoItem label="Bağlam" value={snapshotContext} />
-          <InfoItem label="Girdi referansı" value={snapshotInputRefs} />
-          <InfoItem label="Çıktı hazırlığı" value={snapshotExportReadiness} />
-        </InfoGrid>
+        <Panel
+          as="form"
+          aria-label="Rapor kontrol alanı"
+          className="next-report-query-panel"
+          description="Önce sınavı seçin; kapsam filtreleri yalnız gerektiğinde açılır."
+          title="Raporu hazırla"
+          onSubmit={(event) => void loadReports(event)}
+        >
+          <div className="next-report-control-row" aria-label="Rapor üst kontrolleri">
+            <Field className="next-report-control-row__exam" label="Sınav">
+              <Select required value={examId} onChange={(event) => setExamId(event.target.value)}>
+                <option value="">Sınav seç</option>
+                {exams.map((exam) => (
+                  <option key={exam.id} value={exam.id}>{exam.title}</option>
+                ))}
+                {examId && !selectedExamExists ? <option value={examId}>Sınav seçildi</option> : null}
+              </Select>
+            </Field>
+            <Field label="Puan türü">
+              <Select disabled={!scoreTypeOptions.length} value={activeScoreType ?? ""} onChange={(event) => setScoreType(event.target.value as ReportScoreType)}>
+                {!scoreTypeOptions.length ? <option value="">Eski hesaplama</option> : null}
+                {scoreTypeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
+              </Select>
+            </Field>
+            <div className="next-report-actions">
+              <Button disabled={isReportLoading || referencesQuery.isPending} type="submit">
+                <RefreshCw size={17} aria-hidden="true" />
+                {isReportLoading ? "Yükleniyor" : "Raporu getir"}
+              </Button>
+              <Button disabled={isReportJobBusy || !examId} type="button" variant="secondary" onClick={() => void enqueueReportGeneration()}>
+                <RefreshCw size={17} aria-hidden="true" />
+                {isReportJobBusy ? "İşleniyor" : "Yeniden üret"}
+              </Button>
+            </div>
+          </div>
+          <details className="next-report-filter-details">
+            <summary>
+              <span>Kapsam filtreleri</span>
+              <small>{activeFilterCount ? `${activeFilterCount} filtre seçili` : "Tüm kurum"}</small>
+            </summary>
+            <div className="next-report-filter-grid" aria-label="Rapor filtreleri">
+              <Field label="Kampüs">
+                <Select value={filters.campusId} onChange={(event) => setFilters((current) => ({ ...current, campusId: event.target.value }))}>
+                  <option value="">Tümü</option>
+                  {campuses.map((campus) => <option key={campus.id} value={campus.id}>{campus.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Seviye">
+                <Select value={filters.gradeLevelId} onChange={(event) => setFilters((current) => ({ ...current, gradeLevelId: event.target.value }))}>
+                  <option value="">Tümü</option>
+                  {gradeLevels.map((level) => <option key={level.id} value={level.id}>{level.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Sınıf">
+                <Select value={filters.classId} onChange={(event) => setFilters((current) => ({ ...current, classId: event.target.value }))}>
+                  <option value="">Tümü</option>
+                  {classes.map((klass) => <option key={klass.id} value={klass.id}>{klass.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Ders">
+                <Select value={filters.courseId} onChange={(event) => setFilters((current) => ({ ...current, courseId: event.target.value }))}>
+                  <option value="">Tümü</option>
+                  {courses.map((course) => <option key={course.id} value={course.id}>{formatCourseName(course.name)}</option>)}
+                </Select>
+              </Field>
+              <Field label="Dönem">
+                <Select value={filters.termId} onChange={(event) => setFilters((current) => ({ ...current, termId: event.target.value }))}>
+                  <option value="">Tümü</option>
+                  {terms.map((term) => <option key={term.id} value={term.id}>{term.name}</option>)}
+                </Select>
+              </Field>
+            </div>
+          </details>
+          {referencesQuery.isError ? <p className="uh-crud-page__error" role="alert">Rapor referansları alınamadı.</p> : null}
+          {error ? <p className="uh-crud-page__error" role="alert">{error}</p> : null}
+          {queueMessage ? <p aria-live="polite" className="uh-crud-page__success" role="status">{queueMessage}</p> : null}
+        </Panel>
+        <section className="next-report-status-surface" aria-label="Rapor iş akışı">
+          <div className="next-report-status-main">
+            <span>Aktif rapor</span>
+            <strong>{selectedExamLabel}</strong>
+            <small>{snapshotContext}</small>
+          </div>
+          <div className="next-report-status-pills">
+            <span>Sorgu <StatusBadge tone={queryStatusTone}>{queryStatusLabel}</StatusBadge></span>
+            <span>Rapor <StatusBadge tone={productionStatusTone}>{productionStatusLabel}</StatusBadge></span>
+            <span>Çıktı <StatusBadge tone={outputStatusTone}>{snapshotExportReadiness}</StatusBadge></span>
+            <span>Karne <StatusBadge tone={karneStatusTone}>{karneStatusLabel}</StatusBadge></span>
+          </div>
+          <details className="next-report-meta-details">
+            <summary>Rapor ayrıntıları</summary>
+            <dl>
+              <div><dt>Snapshot</dt><dd>{formatSnapshotStatus(latestSnapshot?.status)}</dd></div>
+              <div><dt>Üretim zamanı</dt><dd>{snapshotGeneratedAt}</dd></div>
+              <div><dt>Bağlam</dt><dd>{snapshotContext}</dd></div>
+              <div><dt>Girdi</dt><dd>{snapshotInputRefs}</dd></div>
+            </dl>
+          </details>
+        </section>
         <Tabs label="Rapor çalışma alanı">
           {reportWorkspaceTabs.map((tab) => (
             <TabButton
@@ -357,117 +453,24 @@ export function ReportsPage() {
           role="tabpanel"
           tabIndex={0}
         >
-          {activeTab === "query" ? (
-            <Panel
-              as="form"
-              aria-label="Rapor sorgusu ve üretim"
-              className="next-report-query-panel"
-              description="Sınav ve kurum filtreleriyle mevcut snapshot veya yeni üretim işini yönet."
-              title="Rapor sorgusu ve üretim"
-              onSubmit={(event) => void loadReports(event)}
-            >
-              <Field label="Sınav">
-                <Select required value={examId} onChange={(event) => setExamId(event.target.value)}>
-                  <option value="">Sınav seç</option>
-                  {exams.map((exam) => (
-                    <option key={exam.id} value={exam.id}>{exam.title}</option>
-                  ))}
-                  {examId && !selectedExamExists ? <option value={examId}>Sınav seçildi</option> : null}
-                </Select>
-              </Field>
-              <details className="next-advanced-details">
-                <summary>Gelişmiş sınav referansı</summary>
-                <Field label="Manuel sınav referansı">
-                  <Input value={examId} onChange={(event) => setExamId(event.target.value)} />
-                </Field>
-              </details>
-              <div className="next-list-controls" aria-label="Rapor filtreleri">
-                <Field label="Kampüs">
-                  <Select
-                    value={filters.campusId}
-                    onChange={(event) => setFilters((current) => ({ ...current, campusId: event.target.value }))}
-                  >
-                    <option value="">Tümü</option>
-                    {campuses.map((campus) => (
-                      <option key={campus.id} value={campus.id}>{campus.name}</option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Seviye">
-                  <Select
-                    value={filters.gradeLevelId}
-                    onChange={(event) => setFilters((current) => ({ ...current, gradeLevelId: event.target.value }))}
-                  >
-                    <option value="">Tümü</option>
-                    {gradeLevels.map((level) => (
-                      <option key={level.id} value={level.id}>{level.name}</option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Sınıf">
-                  <Select
-                    value={filters.classId}
-                    onChange={(event) => setFilters((current) => ({ ...current, classId: event.target.value }))}
-                  >
-                    <option value="">Tümü</option>
-                    {classes.map((klass) => (
-                      <option key={klass.id} value={klass.id}>{klass.name}</option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Ders">
-                  <Select
-                    value={filters.courseId}
-                    onChange={(event) => setFilters((current) => ({ ...current, courseId: event.target.value }))}
-                  >
-                    <option value="">Tümü</option>
-                    {courses.map((course) => (
-                      <option key={course.id} value={course.id}>{formatCourseName(course.name)}</option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Dönem">
-                  <Select
-                    value={filters.termId}
-                    onChange={(event) => setFilters((current) => ({ ...current, termId: event.target.value }))}
-                  >
-                    <option value="">Tümü</option>
-                    {terms.map((term) => (
-                      <option key={term.id} value={term.id}>{term.name}</option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-              {error ? <p className="uh-crud-page__error" role="alert">{error}</p> : null}
-              {queueMessage ? <p aria-live="polite" className="uh-crud-page__success" role="status">{queueMessage}</p> : null}
-              <div className="next-report-actions">
-                <Button type="submit">
-                  <RefreshCw size={17} aria-hidden="true" />
-                  Raporu getir
-                </Button>
-                <Button disabled={isReportJobBusy} type="button" variant="secondary" onClick={() => void enqueueReportGeneration()}>
-                  <RefreshCw size={17} aria-hidden="true" />
-                  {isReportJobBusy ? "Rapor işleniyor" : "Rapor üret"}
-                </Button>
-              </div>
-            </Panel>
-          ) : null}
-          {activeTab !== "query" && !latestSnapshot ? (
+          {!latestSnapshot && !isReportLoading ? (
             <EmptyState
               title="Hazır rapor yok"
-              description="Sorgu / Üretim sekmesinden sınav seçimiyle raporları getir veya rapor üretimini kuyruğa al."
+              description="Üstteki kontrol alanından sınavı ve kapsamı seçerek raporu getir veya üret."
             />
           ) : null}
-          {activeTab === "analytics" && latestSnapshot ? (
+          {activeTab === "overview" && latestSnapshot ? (
             <ReportAnalyticsPanel
+              activeScoreType={activeScoreType}
               isSnapshotReady={isSnapshotReady}
               latestSnapshot={latestSnapshot}
               snapshotContext={snapshotContext}
-              studentProgress={reportData?.studentProgress ?? null}
             />
           ) : null}
           {activeTab === "students" && latestSnapshot ? (
             <StudentResultsTable
+              error={error}
+              loading={isReportLoading}
               rows={studentRows}
               selectedStudentId={reportData?.selectedStudentId ?? ""}
               onSelect={(studentId) => void selectStudentReport(studentId)}
@@ -480,6 +483,7 @@ export function ReportsPage() {
                 progress={reportData?.studentProgress ?? null}
                 errorBooklet={reportData?.errorBooklet ?? null}
                 outputStatusLabel={snapshotExportReadiness}
+                scoreType={activeScoreType}
               />
               {reportData?.errorBooklet ? (
                 <Panel
@@ -521,9 +525,28 @@ export function ReportsPage() {
                 <div>
                   <strong>Kurum PDF özeti</strong>
                   <span>Nötr rapor şablonu ve seçili snapshot verisi.</span>
-                  <Button disabled={!isSnapshotReady} onClick={() => void exportReport("pdf")}>
+                  <Button disabled={!isSnapshotReady} onClick={() => void exportReport("pdf-summary")}>
                     <Download size={17} aria-hidden="true" />
                     PDF indir
+                  </Button>
+                </div>
+                <div>
+                  <strong>Toplu Karneler</strong>
+                  <span>Snapshot içindeki tüm öğrencilerin iki sayfalık karneleri.</span>
+                  <Button disabled={!isSnapshotReady} onClick={() => void exportReport("pdf-packet")}>
+                    <Download size={17} aria-hidden="true" />
+                    Toplu karneleri indir
+                  </Button>
+                </div>
+                <div>
+                  <strong>Tekli Karne PDF</strong>
+                  <span>Karne alanında seçili öğrencinin iki sayfalık çıktısı.</span>
+                  <Button
+                    disabled={!isSnapshotReady || !reportData?.selectedStudentId}
+                    onClick={() => void exportReport("pdf-student")}
+                  >
+                    <Download size={17} aria-hidden="true" />
+                    Tekli karneyi indir
                   </Button>
                 </div>
               </div>
@@ -771,6 +794,21 @@ async function exportReportSnapshotPdf(accessToken: string, examId: string, snap
   );
 }
 
+async function exportReportSnapshotKarnelerPdf(accessToken: string, examId: string, snapshotId: string) {
+  return apiRequest<ReportSnapshotExportResult>(
+    accessToken,
+    `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots/${encodeURIComponent(snapshotId)}/export.karneler.pdf`,
+  );
+}
+
+async function exportStudentReportPdf(accessToken: string, examId: string, snapshotId: string, studentId: string) {
+  if (!studentId) throw new Error("REPORT_STUDENT_REQUIRED");
+  return apiRequest<ReportSnapshotExportResult>(
+    accessToken,
+    `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots/${encodeURIComponent(snapshotId)}/students/${encodeURIComponent(studentId)}/export.pdf`,
+  );
+}
+
 function formatNumber(value: number | undefined) {
   return value === undefined ? "-" : new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }).format(value);
 }
@@ -790,13 +828,6 @@ function snapshotStatusTone(status: string | undefined) {
   return "neutral";
 }
 
-function metricStatusTone(status: string | undefined) {
-  if (status === "READY") return "success";
-  if (status === "FAILED") return "danger";
-  if (status === "STALE" || status === "PENDING") return "warning";
-  return "default";
-}
-
 function formatSnapshotGeneratedAt(snapshot: ReportSnapshotRecord | null) {
   const generatedAt = snapshot?.snapshotData?.generatedAt;
   if (!generatedAt) return "-";
@@ -806,10 +837,6 @@ function formatSnapshotGeneratedAt(snapshot: ReportSnapshotRecord | null) {
     dateStyle: "short",
     timeStyle: "short",
   }).format(parsedDate);
-}
-
-function readLgsScore(total: { estimatedRawScore?: number; standardScore?: number } | undefined) {
-  return total?.estimatedRawScore ?? total?.standardScore;
 }
 
 function formatTrend(progress: ReportStudentProgress | null | undefined) {
@@ -915,99 +942,138 @@ function toExamResult(snapshot: ReportSnapshotRecord | null) {
   };
 }
 
-function toProgressPoints(progress: ReportStudentProgress | null) {
-  return progress?.points ?? [];
-}
-
 function ReportAnalyticsPanel({
+  activeScoreType,
   isSnapshotReady,
   latestSnapshot,
   snapshotContext,
-  studentProgress,
 }: {
+  activeScoreType: ReportScoreType | undefined;
   isSnapshotReady: boolean;
   latestSnapshot: ReportSnapshotRecord;
   snapshotContext: string;
-  studentProgress: ReportStudentProgress | null;
 }) {
   const branchRadar = useMemo(() => toBranchRadar(latestSnapshot), [latestSnapshot]);
   const outcomeRows = useMemo(() => toOutcomeRows(latestSnapshot), [latestSnapshot]);
   const classBars = useMemo(() => toClassBars(latestSnapshot), [latestSnapshot]);
   const examResult = useMemo(() => toExamResult(latestSnapshot), [latestSnapshot]);
-  const progressPoints = useMemo(() => toProgressPoints(studentProgress), [studentProgress]);
+  const scoreAverages = (latestSnapshot.snapshotData as typeof latestSnapshot.snapshotData & {
+    scoreAverages?: Array<{ type: ReportScoreType; calculatedCount: number; practiceScore: number }>;
+  } | undefined)?.scoreAverages ?? [];
+  const scoreAverage = scoreAverages.find((average) => average.type === activeScoreType);
+  const isModernSnapshot = latestSnapshot.snapshotData?.schemaVersion === 2 || Boolean(latestSnapshot.snapshotData?.scoringProfileId);
+  const score = scoreAverage?.practiceScore ?? (isModernSnapshot ? undefined : legacyScore(latestSnapshot.snapshotData?.averages));
+  const successRate = reportSuccessRate(latestSnapshot.snapshotData?.averages);
+  const questionCount = reportQuestionCount(latestSnapshot.snapshotData?.averages);
+  const comparableBranches = [...branchRadar]
+    .filter((branch) => (branch.questionCount ?? 0) > 0 && branch.successRate !== undefined)
+    .sort((first, second) => (second.successRate ?? 0) - (first.successRate ?? 0));
+  const strongestBranch = comparableBranches[0];
+  const focusBranch = comparableBranches.length > 1 ? comparableBranches.at(-1) : undefined;
+  const showClassComparison = classBars.length > 1;
+  const showScoreComparison = scoreAverages.length > 1;
 
   return (
     <section className="next-report-analytics-section" aria-label="Kurum analitiği">
-      <h2>Kurum analitiği</h2>
+      <div className="next-report-section-heading">
+        <div>
+          <span>Kurum performansı</span>
+          <h2>Genel görünüm</h2>
+          <p>{snapshotContext}</p>
+        </div>
+      </div>
       {!isSnapshotReady ? (
         <Alert tone="warning" title="Snapshot çıktıya hazır değil">
           Bu snapshot {formatSnapshotStatus(latestSnapshot.status)} durumunda. Analiz görüntülenebilir, Excel/PDF çıktı hazır olduğunda açılır.
         </Alert>
       ) : null}
-      <MetricGrid aria-label="Rapor özeti" role="region">
-        <MetricCard
-          description={isSnapshotReady ? "READY snapshot" : "Çıktı için READY snapshot gerekli"}
-          label="Durum"
-          tone={metricStatusTone(latestSnapshot.status)}
-          value={formatSnapshotStatus(latestSnapshot.status)}
-        />
-        <MetricCard
-          description="Öğrenci sonuç sayısı"
-          label="Sonuç"
-          value={latestSnapshot.snapshotData?.resultCount ?? "-"}
-        />
-        <MetricCard
-          description="Sınav kapsamı"
-          label="Soru"
-          tone="info"
-          value={formatNumber(reportQuestionCount(latestSnapshot.snapshotData?.averages))}
-        />
-        <MetricCard
-          description="Ana karşılaştırma metriği"
-          label="Başarı %"
-          tone="success"
-          value={formatPercentNumber(reportSuccessRate(latestSnapshot.snapshotData?.averages))}
-        />
-        <MetricCard
-          description="Net, soru kapsamıyla okunur"
-          label="Ortalama net"
-          tone="info"
-          value={formatNetNumber(latestSnapshot.snapshotData?.averages?.net)}
-        />
-        <MetricCard
-          description="LGS bağlam metriği"
-          label="LGS puanı"
-          value={formatNumber(readLgsScore(latestSnapshot.snapshotData?.averages))}
-        />
-        <MetricCard
-          description="Psikometrik bağlam"
-          label="Standart puan"
-          value={formatNumber(latestSnapshot.snapshotData?.averages?.standardScore)}
-        />
-        <MetricCard
-          description="Filtre ve sınav bağlamı"
-          label="Bağlam"
-          span="wide"
-          value={snapshotContext}
-        />
-      </MetricGrid>
-      <div className="next-report-visual-grid">
-        <ReportChartPanel description="Soru sayısına göre başarı ve doğruluk dağılımı" title="Sınav Sonuç Dağılımı">
-          <ExamResultDonut result={examResult} />
+      <section className="next-report-summary-hero" aria-label="Rapor özeti">
+        <div className="next-report-summary-primary">
+          <span>Başarı %</span>
+          <strong>{formatPercentNumber(successRate)}</strong>
+          <div className="next-report-summary-meter" aria-hidden="true">
+            <span style={{ width: `${Math.min(100, Math.max(0, successRate ?? 0))}%` }} />
+          </div>
+          <small>{formatNetNumber(latestSnapshot.snapshotData?.averages?.net)} net / {formatNumber(questionCount)} soru</small>
+        </div>
+        <dl className="next-report-summary-metrics">
+          <div>
+            <dt>Katılımcı</dt>
+            <dd>{formatNumber(latestSnapshot.snapshotData?.resultCount)}</dd>
+          </div>
+          <div>
+            <dt>Doğru · Yanlış · Boş</dt>
+            <dd>{formatNumber(examResult.correct)} · {formatNumber(examResult.wrong)} · {formatNumber(examResult.blank)}</dd>
+          </div>
+          <div>
+            <dt>{scoreAverage ? `${scoreAverage.type} deneme puanı` : isModernSnapshot ? `${activeScoreType ?? "Puan"} puanı` : "Eski hesaplama"}</dt>
+            <dd>{formatNumber(score)}</dd>
+            <small>
+              {scoreAverage
+                ? `${scoreAverage.calculatedCount} sonuç hesaplandı`
+                : isModernSnapshot
+                  ? "Bu puan türü hesaplanamadı"
+                  : "Yeni puan görünümü yok"}
+            </small>
+          </div>
+        </dl>
+        <div className="next-report-insights" aria-label="Öne çıkan dersler">
+          <span>Ders içgörüsü</span>
+          {strongestBranch ? (
+            <div>
+              <small>En güçlü</small>
+              <strong>{strongestBranch.branch}</strong>
+              <b>{formatPercentNumber(strongestBranch.successRate)}</b>
+            </div>
+          ) : <p>Ders karşılaştırması için veri yok.</p>}
+          {focusBranch ? (
+            <div>
+              <small>Gelişim alanı</small>
+              <strong>{focusBranch.branch}</strong>
+              <b>{formatPercentNumber(focusBranch.successRate)}</b>
+            </div>
+          ) : null}
+        </div>
+      </section>
+      {isModernSnapshot ? <PracticeScoreWarning /> : null}
+      <div className="next-report-dashboard-grid">
+        <ReportChartPanel
+          className="next-report-chart-panel--primary"
+          description="Derslerin soru kapsamına göre başarı yüzdesi"
+          title="Ders performansı"
+        >
+          <TopicRadarChart branches={branchRadar} caption="Rapor ders başarıları" tableMode="details" />
         </ReportChartPanel>
-        <ReportChartPanel description="Branş soru sayılarına göre başarı yüzdesi" title="Branş Başarıları">
-          <TopicRadarChart branches={branchRadar} caption="Rapor branş başarıları" />
-        </ReportChartPanel>
-        <ReportChartPanel description="Kazanım bazlı başarı ve net karşılaştırması" title="Kazanım Başarıları">
-          <OutcomeNetTable caption="Rapor kazanım başarıları" rows={outcomeRows} />
-        </ReportChartPanel>
-        <ReportChartPanel description="Sınıf ortalamalarının soru sayısına göre başarı yüzdesi" title="Sınıf Karşılaştırması">
-          <ClassCompareBar caption="Sınıf ortalama başarıları" classes={classBars} />
-        </ReportChartPanel>
-        <ReportChartPanel description="Başarı yüzdesi, net ve standart puan gelişimi" title="Öğrenci Gelişim Eğrisi">
-          <ProgressLineChart caption="Öğrenci başarı gelişimi" points={progressPoints} />
-        </ReportChartPanel>
+        {showClassComparison || showScoreComparison ? (
+          <div className="next-report-chart-stack">
+            {showClassComparison ? (
+              <ReportChartPanel
+                className="next-report-chart-panel--compact"
+                description="Sınıfların başarı yüzdesi"
+                title="Sınıf karşılaştırması"
+              >
+                <ClassCompareBar caption="Sınıf ortalama başarıları" classes={classBars} tableMode="details" />
+              </ReportChartPanel>
+            ) : null}
+            {showScoreComparison ? (
+              <ReportChartPanel
+                className="next-report-chart-panel--compact"
+                description="Hesaplanan puan türlerinin kurum ortalaması"
+                title="Puan profili"
+              >
+                <PracticeScoreBar caption="Kurum deneme puanı ortalamaları" scores={scoreAverages} tableMode="details" />
+              </ReportChartPanel>
+            ) : null}
+          </div>
+        ) : null}
       </div>
+      <details className="next-report-outcome-details">
+        <summary>
+          <span>Kazanım ayrıntıları</span>
+          <small>{outcomeRows.length} kazanım · başarı ve net karşılaştırması</small>
+        </summary>
+        <OutcomeNetTable caption="Rapor kazanım başarıları" rows={outcomeRows} />
+      </details>
     </section>
   );
 }
@@ -1035,8 +1101,8 @@ function ErrorBookletTable({
         </tr>
       </thead>
       <tbody>
-        {items.length > 0 ? (
-          items.map((item) => (
+        {items.some((item) => item.status !== "CANCELLED") ? (
+          items.filter((item) => item.status !== "CANCELLED").map((item) => (
             <tr key={`${item.questionNo}-${item.branch}-${item.status}`}>
               <th scope="row">{item.questionNo}</th>
               <td>{formatCourseName(item.branch)}</td>
@@ -1059,6 +1125,7 @@ function ErrorBookletTable({
 function formatQuestionStatus(status: ReportStudentQuestionSummary["status"]) {
   const labels: Record<ReportStudentQuestionSummary["status"], string> = {
     BLANK: "Boş",
+    CANCELLED: "İptal",
     CORRECT: "Doğru",
     WRONG: "Yanlış",
   };
@@ -1066,137 +1133,82 @@ function formatQuestionStatus(status: ReportStudentQuestionSummary["status"]) {
 }
 
 function StudentResultsTable({
+  error,
+  loading,
   rows,
   selectedStudentId,
   onSelect,
 }: {
+  error?: string;
+  loading: boolean;
   rows: ReportAnalysisRow[];
   selectedStudentId: string;
   onSelect: (studentId: string) => void;
 }) {
-  const tableRows = rows.map((row, index) => ({ ...row, displayIndex: index + 1 }));
-  const columns: Array<DataTableColumn<StudentResultTableRow>> = [
-    {
+  const tableRows = rows;
+  const scoreTypes = reportScoreColumns(rows);
+  const scoreColumns: Array<DataTableColumn<ReportAnalysisRow>> = scoreTypes.length > 0
+    ? scoreTypes.map((type) => ({
       align: "right",
-      header: "#",
-      key: "index",
+      header: `${scoreTypeLabel(type)} puanı`,
+      key: `${type.toLocaleLowerCase("tr-TR")}Score`,
       mobilePriority: "hidden",
-      priority: "primary",
-      render: (row) => row.displayIndex,
-    },
+      priority: "secondary",
+      render: (row) => (
+        <span className="next-report-score-detail">
+          <strong>{formatNumber(row.scoreViews?.find((view) => view.type === type)?.practiceScore)}</strong>
+          <small>{formatScoreCourseSummary(row, type)}</small>
+        </span>
+      ),
+    }))
+    : [{
+      align: "right",
+      header: "Deneme puanı",
+      key: "score",
+      mobilePriority: "hidden",
+      priority: "secondary",
+      render: (row) => formatNumber(readRowScore(row)),
+    }];
+  const columns: Array<DataTableColumn<ReportAnalysisRow>> = [
     {
       header: "Öğrenci",
       key: "student",
       mobilePriority: "primary",
       priority: "primary",
       render: (row) => (
-        <>
-          <span className="next-report-student-name">{row.studentName}</span>
-          {row.studentNo ? <small>#{row.studentNo}</small> : null}
-        </>
+        <span className="next-report-student-cell">
+          <strong>{row.studentName}</strong>
+          <span>{[row.studentNo ? `#${row.studentNo}` : "", row.className].filter(Boolean).join(" · ")}</span>
+          <small>{formatParticipantMeta(row)} · {formatResultStatus(row)}</small>
+        </span>
       ),
       sticky: "left",
     },
     {
-      header: "Sınıf",
-      key: "class",
-      mobilePriority: "secondary",
-      priority: "primary",
-      render: (row) => row.className,
-    },
-    {
-      header: "Katılım",
-      key: "participation",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (row) => formatParticipantMeta(row),
-    },
-    {
-      header: "Durum",
-      key: "status",
-      mobilePriority: "secondary",
-      priority: "primary",
-      render: (row) => formatResultStatus(row),
-    },
-    {
-      align: "right",
-      header: "Başarı %",
-      key: "successRate",
+      header: "Performans",
+      key: "performance",
       mobilePriority: "primary",
       priority: "primary",
-      render: (row) => formatPercentNumber(reportSuccessRate(row)),
+      render: (row) => (
+        <span className="next-report-performance-cell">
+          <strong>{formatPercentNumber(reportSuccessRate(row))}</strong>
+          <span>{formatNetNumber(row.net)} net / {formatNumber(reportQuestionCount(row))} soru</span>
+          <small>{formatNumber(row.correct)} D · {formatNumber(row.wrong)} Y · {formatNumber(row.blank)} B</small>
+        </span>
+      ),
     },
+    ...scoreColumns,
     {
-      align: "right",
-      header: "Net",
-      key: "net",
-      mobilePriority: "secondary",
-      priority: "primary",
-      render: (row) => formatNetNumber(row.net),
-    },
-    {
-      align: "right",
-      header: "Soru",
-      key: "questionCount",
-      mobilePriority: "secondary",
-      priority: "primary",
-      render: (row) => formatNumber(reportQuestionCount(row)),
-    },
-    {
-      align: "right",
-      header: "Doğru",
-      key: "correct",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (row) => formatNumber(row.correct),
-    },
-    {
-      align: "right",
-      header: "Yanlış",
-      key: "wrong",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (row) => formatNumber(row.wrong),
-    },
-    {
-      align: "right",
-      header: "Boş",
-      key: "blank",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (row) => formatNumber(row.blank),
-    },
-    {
-      align: "right",
-      header: "Puan",
-      key: "score",
-      mobilePriority: "hidden",
-      priority: "secondary",
-      render: (row) => formatNumber(readRowScore(row)),
-    },
-    {
-      align: "right",
-      header: "Genel sıra",
-      key: "generalRank",
+      header: "Başarı sırası",
+      key: "rank",
       mobilePriority: "hidden",
       priority: "primary",
-      render: (row) => formatRank(row.generalRank),
-    },
-    {
-      align: "right",
-      header: "Sınıf sıra",
-      key: "classRank",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (row) => formatRank(row.classRank),
-    },
-    {
-      align: "right",
-      header: "Yüzdelik",
-      key: "percentile",
-      mobilePriority: "hidden",
-      priority: "optional",
-      render: (row) => formatPercentile(row.percentile),
+      render: (row) => (
+        <dl className="next-report-rank-cell">
+          <div><dt>Kurum</dt><dd>{formatRank(row.generalRank)}</dd></div>
+          <div><dt>Sınıf</dt><dd>{formatRank(row.classRank)}</dd></div>
+        </dl>
+      ),
     },
     {
       align: "center",
@@ -1231,12 +1243,13 @@ function StudentResultsTable({
         </div>
       </div>
       <div className="next-grid-scroll">
-        <DataTable<StudentResultTableRow>
+        <DataTable<ReportAnalysisRow>
           caption="Öğrenci sıralamaları"
           className="next-report-analysis-table"
           columns={columns}
           density="compact"
-          description="Başarı % ana karşılaştırma metriğidir; net, soru, puan ve sıralama bağlam olarak gösterilir."
+          description="Başarı yüzdesi, net-soru özeti, puan türleri ve kurum-sınıf başarı sırası birlikte gösterilir."
+          error={error}
           emptyText={
             <EmptyState
               title="Öğrenci sonucu yok"
@@ -1244,6 +1257,7 @@ function StudentResultsTable({
             />
           }
           getRowKey={(row) => row.rowKey}
+          loading={loading}
           rowClassName={(row) => (row.studentId === selectedStudentId ? "next-report-row--selected" : undefined)}
           rows={tableRows}
         />
@@ -1252,18 +1266,18 @@ function StudentResultsTable({
   );
 }
 
-type StudentResultTableRow = ReportAnalysisRow & { displayIndex: number };
-
 function StudentReportCard({
   report,
   progress,
   errorBooklet,
   outputStatusLabel,
+  scoreType,
 }: {
   report: ReportStudentSnapshot | null;
   progress: ReportStudentProgress | null;
   errorBooklet: ReportErrorBooklet | null;
   outputStatusLabel: string;
+  scoreType: ReportScoreType | undefined;
 }) {
   return (
     <KarneSheet
@@ -1279,12 +1293,12 @@ function StudentReportCard({
       outcomeSectionClassName="next-karne-block next-karne-block--wide next-karne-outcome-block"
       outputStatusLabel={outputStatusLabel}
       progress={progress}
-      rankFormat="simple"
       report={report}
       reportLabel="Öğrenci Karne Özeti"
-      scoreGeneralLabel="SIRA"
+      scoreType={scoreType}
       sheetClassName="next-report-karne-sheet next-karne-sheet next-karne-sheet--workspace"
       showEmptyOutcomes
+      showProgressHistory
       summaryExtra={`Gelişim ${formatTrend(progress)}`}
       titleLevel="h3"
     />
@@ -1302,16 +1316,62 @@ function formatResultStatus(row: ReportAnalysisRow): string {
   return "Sonuç yok";
 }
 
+function reportScoreTypeOptions(
+  exam: ExamRecord | undefined,
+  snapshot: ReportSnapshotRecord | null,
+  report: ReportStudentSnapshot | null,
+): ReportScoreType[] {
+  const examType = snapshot?.snapshotData?.examType ?? report?.examType ?? exam?.examType;
+  const expected: ReportScoreType[] = examType === "LGS"
+    ? ["LGS"]
+    : examType === "TYT"
+      ? ["TYT"]
+      : examType === "AYT"
+        ? ["SAY", "EA", "SOZ"]
+        : [];
+  const available = report?.scoreViews?.map((view) => view.type) ?? [];
+  return [...new Set([...expected, ...available])];
+}
+
+function legacyScore(total: { estimatedRawScore?: number; standardScore?: number; rawScore?: number } | undefined) {
+  return total?.estimatedRawScore ?? total?.standardScore ?? total?.rawScore;
+}
+
+function PracticeScoreWarning() {
+  return (
+    <Alert tone="warning" title="Deneme puanı uyarısı">
+      Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.
+    </Alert>
+  );
+}
+
 function readRowScore(row: ReportAnalysisRow): number | undefined {
-  return row.estimatedRawScore ?? row.standardScore ?? row.rawScore;
+  return row.practiceScore ?? row.estimatedRawScore ?? row.standardScore ?? row.rawScore;
+}
+
+function reportScoreColumns(rows: ReportAnalysisRow[]): ReportScoreType[] {
+  const available = new Set(rows.flatMap((row) => row.scoreViews?.map((view) => view.type) ?? []));
+  return (["LGS", "TYT", "SAY", "EA", "SOZ"] as const).filter((type) => available.has(type));
+}
+
+function scoreTypeLabel(type: ReportScoreType): string {
+  if (type === "SAY") return "Sayısal";
+  if (type === "SOZ") return "Sözel";
+  return type;
+}
+
+function formatScoreCourseSummary(row: ReportAnalysisRow, type: ReportScoreType): string {
+  const branches = row.branches
+    ?.filter((branch) => reportCourseMatchesScoreType(type, branch.branch))
+    .sort((left, right) => reportCourseSortOrder(type, left.branch) - reportCourseSortOrder(type, right.branch));
+
+  return branches?.length
+    ? branches.map((branch) => `${reportCourseShortName(branch.branch)} ${formatNetNumber(branch.net)}`).join(" · ")
+    : "Net: -";
 }
 
 function formatRank(rank: ReportAnalysisRow["generalRank"]): string {
   return rank ? `${rank.rank}/${rank.outOf}` : "-";
-}
-
-function formatPercentile(value: number | undefined): string {
-  return value === undefined ? "-" : `%${formatNumber(value)}`;
 }
 
 function downloadBase64File(file: ReportSnapshotExportResult): void {

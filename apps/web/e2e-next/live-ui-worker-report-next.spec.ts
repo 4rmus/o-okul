@@ -36,9 +36,9 @@ test("worker tarafından üretilen canlı rapor kurum UI içinde açılır", asy
   await page.getByRole("button", { name: "Raporu getir" }).click();
 
   await expect(page.getByLabel("Rapor özeti").getByText("READY")).toBeVisible();
-  await page.getByRole("tab", { name: "Öğrenci Sonuçları" }).click();
+  await page.getByRole("tab", { name: "Öğrenciler" }).click();
   await page.getByRole("button", { name: /karnesini aç/ }).first().click();
-  await page.getByRole("tab", { name: "Karne Önizleme" }).click();
+  await page.getByRole("tab", { name: "Karne" }).click();
   await expect(page.getByLabel("Öğrenci karne özeti").getByText("BÖLÜM ANALİZİ")).toBeVisible();
   await openExportsTab(page);
   await expectReportDownload(page, "Excel indir", /\.xlsx$/);

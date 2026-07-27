@@ -586,7 +586,7 @@ async function seedExam(client: pg.PoolClient, exam: SeedExam): Promise<void> {
       `
         INSERT INTO "ExamResult" ("id","tenantId","examId","studentId","participantId","rawImportId","answerKeyId","answerKeyVersion","parserConfigVersion","engineVersion","resultKey","scoreData","computedAt","updatedAt")
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::timestamptz,now())
-        ON CONFLICT ("tenantId","resultKey") DO UPDATE SET "scoreData"=EXCLUDED."scoreData","computedAt"=EXCLUDED."computedAt","updatedAt"=now()
+        ON CONFLICT ("tenantId","rawImportId","resultKey") DO NOTHING
       `,
       [
         resultId(entry.participantId),

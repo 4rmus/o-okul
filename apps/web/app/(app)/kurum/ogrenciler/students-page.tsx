@@ -1081,6 +1081,9 @@ function StudentDetailPanel({
   detail?: StudentDetail;
   loading: boolean;
 }) {
+  const scoreView = detail?.report ? preferredScoreView(detail.report) : undefined;
+  const isModernReport = Boolean(detail?.report?.scoringProfileId || detail?.report?.scoreViews?.length);
+  const score = scoreView?.practiceScore ?? (isModernReport ? undefined : legacyReportScore(detail?.report));
   const enrollmentColumns: Array<DataTableColumn<StudentEnrollmentRecord>> = [
     {
       key: "reason",
@@ -1140,11 +1143,12 @@ function StudentDetailPanel({
         <InfoItem label="Bekleyen ödeme" value={formatPendingPayment(detail?.paymentPlans ?? [])} />
         <InfoItem label="Başarı" value={formatPercentNumber(reportSuccessRate(detail?.report?.total))} />
         <InfoItem label="Soru" value={formatNumber(reportQuestionCount(detail?.report?.total))} />
-        <InfoItem label="LGS puanı" value={formatNumber(readLgsScore(detail?.report?.total))} />
+        <InfoItem label={scoreView ? scoreViewLabel(scoreView) : isModernReport ? "Puan hesaplanamadı" : "Eski hesaplama"} value={formatNumber(score)} />
         <InfoItem label="Son net" value={formatNumber(detail?.report?.total?.net)} />
         <InfoItem label="Hata kitapçığı" value={detail?.errorBooklet?.items ? `${detail.errorBooklet.items.length} soru` : "-"} />
         <InfoItem label="Başarı gelişimi" value={formatPercentDelta(detail?.progress?.successRateDelta)} />
       </InfoGrid>
+      {isModernReport ? <p className="next-karne-score-warning">Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.</p> : null}
       {detail && detail.teacherNotes.length > 0 ? (
         <div className="next-form-guardians">
           <span className="next-field-hint">Son öğretmen notu</span>
@@ -1524,8 +1528,18 @@ function formatNumber(value: number | undefined) {
   return value === undefined ? "-" : value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
 }
 
-function readLgsScore(total: { estimatedRawScore?: number; standardScore?: number } | undefined) {
-  return total?.estimatedRawScore ?? total?.standardScore;
+function legacyReportScore(report: ReportStudentSnapshot | null | undefined) {
+  return report?.total.estimatedRawScore ?? report?.total.standardScore ?? report?.total.rawScore;
+}
+
+function scoreViewLabel(view: NonNullable<ReportStudentSnapshot["scoreViews"]>[number]) {
+  if (view.status === "MISSING_TYT") return "Bağlı TYT deneme puanı yok";
+  if (view.status === "NOT_ELIGIBLE") return `${view.type} hesaplanamadı`;
+  return `${view.type} deneme puanı`;
+}
+
+function preferredScoreView(report: ReportStudentSnapshot) {
+  return report.scoreViews?.find((view) => view.status === "CALCULATED") ?? report.scoreViews?.[0];
 }
 
 function formatCount(value: number) {
