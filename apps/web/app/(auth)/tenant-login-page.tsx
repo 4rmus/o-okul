@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { AuthResponse, MfaChallengeResponse, MfaEnrollmentRequiredResponse, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
 import { Button, Field, Input, SegmentedControl, Select } from "@o-okul/ui";
@@ -122,6 +123,14 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
             required
           />
         </Field>
+        {!pendingMfa && !pendingEnrollment && !pendingTenantSelection ? (
+          <Link
+            className="next-auth-link"
+            href={lockedTenantSlug ? `/parolami-unuttum?tenant=${encodeURIComponent(lockedTenantSlug)}` : "/parolami-unuttum"}
+          >
+            Parolamı unuttum
+          </Link>
+        ) : null}
         {pendingTenantSelection ? (
           <div className="next-form-section">
             <Field label="Okul">

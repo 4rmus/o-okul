@@ -449,6 +449,7 @@ describe("AuthService", () => {
       }),
     });
     const auditLogs = { record: vi.fn(async () => undefined) };
+    const delivery = { send: vi.fn(async () => true) };
     const auth = new AuthService(
       users,
       new InMemorySessionStore(),
@@ -457,18 +458,33 @@ describe("AuthService", () => {
       auditLogs as never,
       undefined,
       new InMemoryTenantStore(),
+      delivery,
     );
 
-    const issued = await auth.requestPasswordReset("db-a@example.test");
+    const issued = await auth.requestPasswordReset({ tenantSlug: "system", nationalId });
     expect(issued.status).toBe("ISSUED");
     expect(issued.resetToken).toBeTruthy();
+    expect(delivery.send).toHaveBeenCalledWith(expect.objectContaining({
+      email: user.email,
+      resetUrl: expect.stringContaining("/parola-sifirla?token="),
+    }));
     expect(auditLogs.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "auth.password_reset_requested",
-      diff: { emailProvided: true },
+      diff: { deliveryChannel: "EMAIL" },
     }));
     expect(JSON.stringify(auditLogs.record.mock.calls)).not.toContain("db-a@example.test");
 
-    await auth.confirmPasswordReset(issued.resetToken ?? "", "new-password");
+    await expect(auth.requestPasswordReset({ tenantSlug: "system", nationalId })).resolves.toEqual({
+      status: "IGNORED",
+    });
+    expect(delivery.send).toHaveBeenCalledTimes(1);
+
+    const concurrentConfirms = await Promise.allSettled([
+      auth.confirmPasswordReset(issued.resetToken ?? "", "new-password"),
+      auth.confirmPasswordReset(issued.resetToken ?? "", "new-password"),
+    ]);
+    expect(concurrentConfirms.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(concurrentConfirms.filter((result) => result.status === "rejected")).toHaveLength(1);
 
     await expect(auth.login(loginCredentials(nationalId, "password", "system"))).rejects.toThrow("LOGIN_FAILED");
     await expect(auth.confirmPasswordReset(issued.resetToken ?? "", "another-pass")).rejects.toThrow(
@@ -479,42 +495,57 @@ describe("AuthService", () => {
     });
   });
 
-  it("tenant kullanıcısı için self-servis şifre reset tokenı üretmez ve eski tokenı kabul etmez", async () => {
+  it("tenant kullanıcısının telefon kanalından tek kullanımlık şifre resetini tamamlar", async () => {
+    const nationalId = "10000000146";
     const user = {
       id: "tenant-reset-user",
-      email: "tenant-reset@example.test",
+      phone: "5551234567",
       name: "Tenant Reset",
       passwordHash: hashPassword("password", "test-salt"),
       tenantId: "tenant-a",
+      nationalIdHash: hashTcIdentity(nationalId),
       roles: ["TENANT_ADMIN"],
       membershipVersion: 1,
     };
     const users = createUserStoreMock({
-      findByEmail: vi.fn(async (email) => (email === user.email ? { ...user, roles: [...user.roles] } : undefined)),
+      findByTenantAndNationalIdHash: vi.fn(async (tenantId, nationalIdHash) => (
+        tenantId === user.tenantId && nationalIdHash === user.nationalIdHash ? { ...user, roles: [...user.roles] } : undefined
+      )),
       findById: vi.fn(async () => ({ ...user, roles: [...user.roles] })),
-      updatePassword: vi.fn(),
+      updatePassword: vi.fn(async (_id, passwordHash) => {
+        user.passwordHash = passwordHash;
+        user.membershipVersion += 1;
+        return { ...user, roles: [...user.roles] };
+      }),
     });
     const passwordResets = new InMemoryPasswordResetStore();
+    const delivery = { send: vi.fn(async () => true) };
     const auth = new AuthService(
       users,
       new InMemorySessionStore(),
       passwordResets,
       { resolve: vi.fn(async () => undefined) } as unknown as IdentityResolver,
+      undefined,
+      undefined,
+      new InMemoryTenantStore(),
+      delivery,
     );
 
-    const ignored = await auth.requestPasswordReset(user.email);
-    expect(ignored).toEqual({ status: "IGNORED" });
-
-    await passwordResets.create({
-      userId: user.id,
-      tokenHash: hashResetToken("tenant-reset-token"),
-      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    const issued = await auth.requestPasswordReset({ tenantSlug: "dna-egitim", nationalId });
+    expect(issued.status).toBe("ISSUED");
+    expect(delivery.send).toHaveBeenCalledWith(expect.objectContaining({
+      phone: user.phone,
+      resetUrl: expect.stringContaining("/parola-sifirla?token="),
+    }));
+    await auth.confirmPasswordReset(issued.resetToken ?? "", "new-password");
+    await expect(auth.login({
+      tenantSlug: "dna-egitim",
+      nationalId,
+      password: "new-password",
+    })).resolves.toMatchObject({
+      session: { userId: user.id },
     });
-    await expect(auth.confirmPasswordReset("tenant-reset-token", "new-password")).rejects.toThrow(
-      "TENANT_PASSWORD_RESET_FORBIDDEN",
-    );
-    expect(users.updatePassword).not.toHaveBeenCalled();
-    await expect(auth.confirmPasswordReset("tenant-reset-token", "another-pass")).rejects.toThrow(
+    await expect(auth.confirmPasswordReset(issued.resetToken ?? "", "another-pass")).rejects.toThrow(
       "PASSWORD_RESET_NOT_PENDING",
     );
   });

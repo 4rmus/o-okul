@@ -124,15 +124,17 @@ describe("API auth + tenant isolation", () => {
     await login("system@example.test");
     const resetRequest = await request(server)
       .post("/auth/password-reset/request")
-      .send({ email: "system@example.test" })
+      .send({ tenantSlug: "system", nationalId: "10000000214" })
       .expect(200);
 
     expect(resetRequest.body).toEqual({ status: "ACCEPTED" });
     expect(JSON.stringify(resetRequest.body)).not.toContain("resetToken");
     expect(JSON.stringify(resetRequest.body)).not.toContain("expiresAt");
-    await request(server).post("/auth/password-reset/request").send({ email: "missing@example.test" }).expect(200).expect({
-      status: "ACCEPTED",
-    });
+    await request(server)
+      .post("/auth/password-reset/request")
+      .send({ tenantSlug: "missing", nationalId: "10000000214" })
+      .expect(200)
+      .expect({ status: "ACCEPTED" });
   });
 
   });

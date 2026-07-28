@@ -53,6 +53,9 @@ importers:
       '@o-okul/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
+      '@o-okul/sms-adapter':
+        specifier: workspace:*
+        version: link:../../packages/sms-adapter
       '@sentry/node':
         specifier: 10.57.0
         version: 10.57.0

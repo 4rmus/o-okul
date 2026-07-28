@@ -63,7 +63,8 @@ export type LoginResponse = AuthResponse | MfaChallengeResponse | MfaEnrollmentR
 export type AuthRefreshRequest = Record<string, never>;
 
 export interface PasswordResetRequest {
-  email: string;
+  tenantSlug: string;
+  nationalId: string;
 }
 
 export interface PasswordResetAcceptedResponse {

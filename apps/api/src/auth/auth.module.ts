@@ -6,11 +6,19 @@ import { AuthController } from "./auth.controller.js";
 import { AuthPersistenceModule } from "./auth-persistence.module.js";
 import { AuthService } from "./auth.service.js";
 import { IdentityResolver } from "./identity-resolver.js";
+import { createPasswordResetDelivery, passwordResetDeliveryToken } from "./password-reset-delivery.js";
 
 @Module({
   imports: [AuditLogModule, AuthPersistenceModule, SchoolModule, TenantPersistenceModule],
   controllers: [AuthController],
-  providers: [AuthService, IdentityResolver],
+  providers: [
+    AuthService,
+    IdentityResolver,
+    {
+      provide: passwordResetDeliveryToken,
+      useFactory: () => createPasswordResetDelivery(process.env),
+    },
+  ],
   exports: [AuthService],
 })
 export class AuthModule {}

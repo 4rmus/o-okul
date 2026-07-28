@@ -16,6 +16,10 @@ import {
   type PasswordResetStore,
   passwordResetStoreToken,
 } from "./password-reset-store.js";
+import {
+  type PasswordResetDelivery,
+  passwordResetDeliveryToken,
+} from "./password-reset-delivery.js";
 import { authSessionStoreToken, type SessionStore } from "./session-store.js";
 import { missingBoundSubjectRole } from "./subject-binding.js";
 import { TokenService, type AccessTokenPayload, type TokenPair } from "./token-service.js";
@@ -40,6 +44,11 @@ export interface PasswordResetRequestResult {
   status: "ISSUED" | "IGNORED";
   resetToken?: string;
   expiresAt?: string;
+}
+
+export interface PasswordResetRequestInput {
+  tenantSlug: string;
+  nationalId: string;
 }
 
 export interface PasswordResetConfirmResult {
@@ -99,6 +108,7 @@ export class AuthService {
     @Optional() private readonly auditLogs?: AuditLogService,
     @Optional() @Inject(loginAttemptLimiterToken) loginAttempts?: LoginAttemptLimiterStore,
     @Optional() @Inject(tenantStoreToken) private readonly tenants?: TenantStore,
+    @Optional() @Inject(passwordResetDeliveryToken) private readonly passwordResetDelivery?: PasswordResetDelivery,
   ) {
     this.tokens = new TokenService(this.sessions, getAccessSecret());
     this.loginAttempts = loginAttempts ?? createLoginAttemptLimiter();
@@ -428,17 +438,14 @@ export class AuthService {
     }
   }
 
-  async requestPasswordReset(email: string): Promise<PasswordResetRequestResult> {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail || !normalizedEmail.includes("@")) {
-      throw new BadRequestException("EMAIL_REQUIRED");
-    }
-
-    const user = await this.users.findByEmail(normalizedEmail);
-    if (!user) {
-      return { status: "IGNORED" };
-    }
-    if (user.tenantId !== "system") {
+  async requestPasswordReset(input: PasswordResetRequestInput): Promise<PasswordResetRequestResult> {
+    const tenantSlug = input.tenantSlug.trim().toLowerCase();
+    const nationalIdHash = hashTcIdentity(normalizeTcIdentity(input.nationalId, "PASSWORD_RESET_NATIONAL_ID_INVALID"));
+    const tenant = tenantSlug === "system" ? { id: "system" } : await this.tenants?.findBySlug(tenantSlug);
+    const user = tenant ? await this.users.findByTenantAndNationalIdHash(tenant.id, nationalIdHash) : undefined;
+    if (!user || (!user.email && !user.phone) || !this.passwordResetDelivery) return { status: "IGNORED" };
+    const pending = await this.passwordResets.findPendingForUser(user.id);
+    if (pending && Date.parse(pending.createdAt) > Date.now() - passwordResetResendDelayMs) {
       return { status: "IGNORED" };
     }
 
@@ -450,13 +457,27 @@ export class AuthService {
       tokenHash: hashResetToken(resetToken),
       expiresAt,
     });
+    let delivered = false;
+    try {
+      delivered = await this.passwordResetDelivery.send({
+        email: user.email,
+        phone: user.phone,
+        resetUrl: createPasswordResetUrl(resetToken),
+      });
+    } catch {
+      delivered = false;
+    }
+    if (!delivered) {
+      await this.passwordResets.revokePendingForUser(user.id);
+      return { status: "IGNORED" };
+    }
     await this.auditLogs?.record({
       tenantId: user.tenantId === "system" ? undefined : user.tenantId,
       actorUserId: user.id,
       entityType: "Auth",
       entityId: user.id,
       action: "auth.password_reset_requested",
-      diff: { emailProvided: true },
+      diff: { deliveryChannel: user.email ? "EMAIL" : "SMS" },
     });
     return { status: "ISSUED", resetToken, expiresAt };
   }
@@ -471,21 +492,18 @@ export class AuthService {
     if (reset.status !== "PENDING") throw new BadRequestException("PASSWORD_RESET_NOT_PENDING");
     if (Date.parse(reset.expiresAt) <= Date.now()) throw new BadRequestException("PASSWORD_RESET_EXPIRED");
 
+    const resetAt = new Date().toISOString();
+    const consumedReset = await this.passwordResets.markUsed(reset.id, resetAt);
+    if (!consumedReset) throw new BadRequestException("PASSWORD_RESET_NOT_PENDING");
+
     const existingUser = await this.users.findById(reset.userId);
     if (!existingUser) throw new NotFoundException("USER_NOT_FOUND");
-    if (existingUser.tenantId !== "system") {
-      await this.passwordResets.markUsed(reset.id, new Date().toISOString());
-      throw new BadRequestException("TENANT_PASSWORD_RESET_FORBIDDEN");
-    }
-
     const user = await this.users.updatePassword(reset.userId, hashPassword(password, `reset-${reset.id}`), {
       mustChangePassword: false,
-      passwordChangedAt: new Date().toISOString(),
+      passwordChangedAt: resetAt,
     });
     if (!user) throw new NotFoundException("USER_NOT_FOUND");
 
-    const resetAt = new Date().toISOString();
-    await this.passwordResets.markUsed(reset.id, resetAt);
     await this.sessions.revokeByUser(user.id);
     await this.auditLogs?.record({
       tenantId: user.tenantId === "system" ? undefined : user.tenantId,
@@ -710,6 +728,12 @@ function nextResetExpiry(): string {
   return expiresAt.toISOString();
 }
 
+function createPasswordResetUrl(token: string): string {
+  const url = new URL("/parola-sifirla", process.env.WEB_URL ?? "http://localhost:3000");
+  url.searchParams.set("token", token);
+  return url.toString();
+}
+
 function compactUser(user: AuthUser | undefined): AuthUser[] {
   return user ? [user] : [];
 }
@@ -735,6 +759,7 @@ interface TenantSelectionTokenPayload {
 }
 
 const tenantSelectionTtlMs = 5 * 60 * 1000;
+const passwordResetResendDelayMs = 5 * 60 * 1000;
 
 function createTenantSelectionToken(candidates: TenantSelectionTokenPayload["candidates"]): { selectionToken: string; expiresAt: string } {
   const expiresAt = Date.now() + tenantSelectionTtlMs;

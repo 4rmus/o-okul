@@ -1811,11 +1811,10 @@ const requiredOperationContracts = [
     path: "/api/v1/auth/password-reset/request",
     requestBody: true,
     responseEnvelope: true,
-    requestRequired: ["email"],
+    requestRequired: ["nationalId", "tenantSlug"],
     responseDataRequired: ["status"],
     responseDataForbidden: ["resetToken", "expiresAt"],
     fieldChecks: [
-      { path: ["requestBody", "email"], format: "email" },
       { path: ["responseData", "status"], enum: ["ACCEPTED"] },
     ],
   },
