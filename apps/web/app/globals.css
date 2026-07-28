@@ -1573,6 +1573,13 @@ a {
   min-height: 42px;
 }
 
+.next-auth-link {
+  justify-self: end;
+  color: var(--color-brand);
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .next-form textarea {
   min-height: 112px;
   padding: 10px 12px;

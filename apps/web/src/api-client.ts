@@ -7,6 +7,10 @@ import type {
   MePasswordChangeResponse,
   MfaChallengeResponse,
   MfaEnrollmentRequiredResponse,
+  PasswordResetAcceptedResponse,
+  PasswordResetConfirmRequest,
+  PasswordResetConfirmResponse,
+  PasswordResetRequest,
   TenantSelectionRequiredResponse,
 } from "@o-okul/shared-types";
 
@@ -103,6 +107,26 @@ export async function changePassword(accessToken: string, input: MePasswordChang
     headers: { "content-type": "application/json" },
     method: "POST",
   });
+}
+
+export async function requestPasswordReset(input: PasswordResetRequest): Promise<PasswordResetAcceptedResponse> {
+  const response = await fetch(`${apiBaseUrl}/auth/password-reset/request`, {
+    body: JSON.stringify(input),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  if (!response.ok) throw new Error("PASSWORD_RESET_REQUEST_FAILED");
+  return readData<PasswordResetAcceptedResponse>(response);
+}
+
+export async function confirmPasswordReset(input: PasswordResetConfirmRequest): Promise<PasswordResetConfirmResponse> {
+  const response = await fetch(`${apiBaseUrl}/auth/password-reset/confirm`, {
+    body: JSON.stringify(input),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+  if (!response.ok) throw new Error("PASSWORD_RESET_CONFIRM_FAILED");
+  return readData<PasswordResetConfirmResponse>(response);
 }
 
 export async function verifyMfa(challengeToken: string, input: { totpCode?: string; recoveryCode?: string }): Promise<AuthResponse> {

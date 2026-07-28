@@ -2581,8 +2581,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "post /api/v1/auth/password-reset/request": {
     requestBody: objectSchema({
-      email: stringSchema({ format: "email" }),
-    }, ["email"]),
+      nationalId: stringSchema(),
+      tenantSlug: stringSchema(),
+    }, ["nationalId", "tenantSlug"]),
     responseBody: passwordResetAcceptedResponseSchema,
   },
   "post /api/v1/auth/password-reset/confirm": {

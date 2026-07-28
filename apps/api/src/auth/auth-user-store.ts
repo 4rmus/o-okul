@@ -8,6 +8,7 @@ export interface AuthUser {
   id: string;
   tenantId: string;
   email?: string;
+  phone?: string;
   nationalIdEncrypted?: string;
   nationalIdHash?: string;
   name: string;
@@ -613,6 +614,7 @@ export class PostgresAuthUserStore implements AuthUserStore {
            u."id",
            u."tenantId",
            u."email",
+           COALESCE(max(te.phone), max(st.phone), max(gu.phone)) AS phone,
            u."nationalIdEncrypted",
            u."nationalIdHash",
            u."name",
@@ -629,6 +631,9 @@ export class PostgresAuthUserStore implements AuthUserStore {
          FROM "User" u
          JOIN "TenantMembership" m ON m."userId" = u."id"
          JOIN "Tenant" t ON t."id" = m."tenantId"
+         LEFT JOIN "Teacher" te ON te."tenantId" = u."tenantId" AND te."userId" = u."id" AND te."deletedAt" IS NULL
+         LEFT JOIN "Student" st ON st."tenantId" = u."tenantId" AND st."userId" = u."id" AND st."deletedAt" IS NULL
+         LEFT JOIN "Guardian" gu ON gu."tenantId" = u."tenantId" AND gu."userId" = u."id" AND gu."deletedAt" IS NULL
          ${whereSql}`,
         values,
       );
@@ -660,6 +665,7 @@ interface AuthUserRow {
   id: string;
   tenantId: string | null;
   email: string | null;
+  phone: string | null;
   nationalIdEncrypted: string | null;
   nationalIdHash: string | null;
   name: string;
@@ -678,6 +684,7 @@ function toAuthUser(row: AuthUserRow): AuthUser {
   return {
     id: row.id,
     email: row.email ?? undefined,
+    phone: row.phone ?? undefined,
     nationalIdEncrypted: row.nationalIdEncrypted ?? undefined,
     nationalIdHash: row.nationalIdHash ?? undefined,
     name: row.name,

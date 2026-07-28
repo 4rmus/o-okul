@@ -18,6 +18,7 @@ export interface PasswordResetRecord {
 export interface PasswordResetStore {
   create(input: { userId: string; tokenHash: string; expiresAt: string }): Promise<PasswordResetRecord>;
   findByTokenHash(tokenHash: string): Promise<PasswordResetRecord | undefined>;
+  findPendingForUser(userId: string): Promise<PasswordResetRecord | undefined>;
   markUsed(id: string, usedAt: string): Promise<PasswordResetRecord | undefined>;
   revokePendingForUser(userId: string): Promise<void>;
 }
@@ -46,9 +47,13 @@ export class InMemoryPasswordResetStore implements PasswordResetStore {
     return clone(this.records.find((record) => record.tokenHash === tokenHash));
   }
 
+  async findPendingForUser(userId: string): Promise<PasswordResetRecord | undefined> {
+    return clone(this.records.find((record) => record.userId === userId && record.status === "PENDING"));
+  }
+
   async markUsed(id: string, usedAt: string): Promise<PasswordResetRecord | undefined> {
     const record = this.records.find((candidate) => candidate.id === id);
-    if (!record) return undefined;
+    if (!record || record.status !== "PENDING") return undefined;
 
     record.status = "USED";
     record.usedAt = usedAt;
@@ -97,6 +102,20 @@ export class PostgresPasswordResetStore implements PasswordResetStore {
     });
   }
 
+  async findPendingForUser(userId: string): Promise<PasswordResetRecord | undefined> {
+    return this.withClient(async (client) => {
+      const result = await client.query<PasswordResetRow>(
+        `${passwordResetSelect('"PasswordResetToken"')}
+         WHERE "userId" = $1
+           AND "status" = 'PENDING'
+         ORDER BY "createdAt" DESC
+         LIMIT 1`,
+        [userId],
+      );
+      return result.rows[0] ? toPasswordResetRecord(result.rows[0]) : undefined;
+    });
+  }
+
   async markUsed(id: string, usedAt: string): Promise<PasswordResetRecord | undefined> {
     return this.withClient(async (client) => {
       const result = await client.query<PasswordResetRow>(
@@ -106,6 +125,7 @@ export class PostgresPasswordResetStore implements PasswordResetStore {
                "usedAt" = $2,
                "updatedAt" = now()
            WHERE "id" = $1
+             AND "status" = 'PENDING'
            RETURNING *
          )
          ${passwordResetSelect("updated")}`,

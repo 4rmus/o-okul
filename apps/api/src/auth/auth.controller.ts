@@ -42,7 +42,8 @@ const tenantSelectionBodySchema = z.object({
 }).strict() satisfies z.ZodType<TenantSelectionRequest>;
 const refreshBodySchema = z.preprocess((value) => value ?? {}, z.object({}).strict()) satisfies z.ZodType<AuthRefreshRequest>;
 const passwordResetRequestBodySchema = z.object({
-  email: z.string().trim().email(),
+  tenantSlug: requiredTrimmedString,
+  nationalId: requiredTrimmedString,
 }).strict() satisfies z.ZodType<PasswordResetRequest>;
 const passwordResetConfirmBodySchema = z.object({
   password: z.string().min(8),
@@ -184,7 +185,7 @@ export class AuthController {
   async requestPasswordReset(
     @Body(zodBody(passwordResetRequestBodySchema)) body: PasswordResetRequest,
   ): Promise<PasswordResetAcceptedResponse> {
-    await this.auth.requestPasswordReset(body.email);
+    await this.auth.requestPasswordReset(body);
     return { status: "ACCEPTED" };
   }
 
