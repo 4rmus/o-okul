@@ -367,7 +367,7 @@ jobs:
           STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
           STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
           STAGING_DEPLOY_DIR: ${{ vars.STAGING_DEPLOY_DIR }}
-          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+          GHCR_READ_TOKEN: ${{ github.token }}
           IMAGE_PREFIX: ${{ needs.build-images.outputs.image-prefix }}
           IMAGE_TAG: ${{ needs.build-images.outputs.image-tag }}
           ROLLBACK_IMAGE_TAG: ${{ inputs.rollback_image_tag }}

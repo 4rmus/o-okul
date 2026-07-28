@@ -698,7 +698,8 @@ Beklenen akış:
   `QUEUE_BOARD_IMAGE`, `SENTRY_RELEASE` ve `ROLLBACK_IMAGE_TAG` alanlarıyla yazılır. Otomatik
   deploy'da rollback tag'i sunucudaki mevcut `.env.release` içindeki `SENTRY_RELEASE` değerinden
   alınır. `up -d` başarılı olunca `.env.release.next`, `.env.release` olarak taşınır.
-- `GHCR_READ_TOKEN` uzak shell komut satırına gömülmez; SSH stdin ile `0600` benzeri izinli
+- Otomatik deploy, aynı repoya bağlı GHCR imajlarını job-scope `GITHUB_TOKEN` ile çeker; bu değer
+  uzak shell komut satırına gömülmez, `GHCR_READ_TOKEN` env adıyla SSH stdin üzerinden `0600` benzeri izinli
   `.ghcr_read_token` dosyasına aktarılır, `docker login --password-stdin` sonrası trap ile silinir.
 - Pull öncesinde workflow, aktif release ve rollback tag'i dışındaki eski `ghcr.io/4rmus/o-okul/*`
   imajlarını temizler, en az 2048MB boş disk alanı ister ve image pull adımını 20 dakika ile sınırlar.

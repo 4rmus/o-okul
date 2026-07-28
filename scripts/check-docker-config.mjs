@@ -267,6 +267,7 @@ const expectations = {
     "docker/postgres/init",
     "scp -i ~/.ssh/staging_deploy_key",
     "GHCR_READ_TOKEN",
+    "GHCR_READ_TOKEN: ${{ github.token }}",
     "docker-compose.release.yml",
     "QUEUE_BOARD_IMAGE",
     ".env.release.next",
