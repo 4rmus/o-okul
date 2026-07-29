@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   ArrowRight,
   BarChart3,
-  BellRing,
   BookOpenCheck,
   Building2,
   Check,
@@ -16,7 +15,6 @@ import {
   MessageSquareText,
   ScanLine,
   ShieldCheck,
-  Sparkles,
   UserRoundCheck,
   Users,
 } from "lucide-react";
@@ -198,13 +196,7 @@ export default function HomePage() {
             <span className="next-brand-mark">{appBrand.mark}</span>
             <span>{appBrand.name}</span>
           </Link>
-          <div className="next-marketing-nav__links">
-            <a href="#platform">Platform</a>
-            <a href="#raporlama">Sınav ve rapor</a>
-            <a href="#roller">Portallar</a>
-            <a href="#guven">Güven</a>
-            <a href="#sss">SSS</a>
-          </div>
+          <p className="next-marketing-nav__statement">Optik, rapor ve portal aynı kurum bağlamında.</p>
           <div className="next-marketing-nav__actions">
             <Link className="next-marketing-login" href="/login">
               Giriş
@@ -219,10 +211,6 @@ export default function HomePage() {
       <div id="main-content" tabIndex={-1}>
         <section className="next-marketing-hero" aria-labelledby="home-title">
           <div className="next-marketing-hero__copy">
-            <p className="next-marketing-eyebrow">
-              <Sparkles size={15} aria-hidden="true" />
-              Tek ve çok şubeli dershaneler için
-            </p>
             <h1 id="home-title">
               Optikten karneye, <span>eğitim operasyonunuz tek akışta.</span>
             </h1>
@@ -246,42 +234,49 @@ export default function HomePage() {
             </p>
           </div>
 
-          <figure className="next-marketing-product">
-            <div className="next-marketing-product__chrome" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-              <strong>Kurum operasyon merkezi</strong>
-            </div>
-            <picture>
-              <source srcSet="/images/landing-hero-education-ops.webp" type="image/webp" />
-              <img
-                className="next-marketing-product__image"
-                src="/images/landing-hero-education-ops.png"
-                width={1440}
-                height={810}
-                alt="Örnek kurum panelinde öğrenci, sınav ve operasyon göstergeleri"
-                decoding="async"
-                fetchPriority="high"
-                loading="eager"
-              />
-            </picture>
-            <figcaption>Örnek ürün görünümü</figcaption>
-            <div className="next-marketing-product__signal next-marketing-product__signal--top" aria-hidden="true">
-              <ScanLine size={18} />
-              <span>
-                <small>Sınav akışı</small>
-                Optikten rapora bağlı süreç
-              </span>
-            </div>
-            <div className="next-marketing-product__signal next-marketing-product__signal--bottom" aria-hidden="true">
-              <BellRing size={18} />
-              <span>
-                <small>Ortak veri</small>
-                Kurumdan portallara kontrollü paylaşım
-              </span>
-            </div>
-          </figure>
+          <section className="next-marketing-workflow" aria-label="Optikten portala ürün akışı">
+            <header>
+              <span>Aktif iş akışı</span>
+              <strong>Sınavdan paylaşıma</strong>
+            </header>
+            <ol>
+              <li>
+                <span>01</span>
+                <div>
+                  <strong>Sınavı seçin</strong>
+                  <small>Cevap anahtarı ve sınav bağlamı</small>
+                </div>
+                <CheckCircle2 size={18} aria-hidden="true" />
+              </li>
+              <li data-current="true">
+                <span>02</span>
+                <div>
+                  <strong>Optik veriyi işleyin</strong>
+                  <small>TXT / DAT aktarımı ve veri kontrolü</small>
+                </div>
+                <ScanLine size={18} aria-hidden="true" />
+              </li>
+              <li>
+                <span>03</span>
+                <div>
+                  <strong>Raporu doğrulayın</strong>
+                  <small>Başarı %, net ve soru bağlamı</small>
+                </div>
+                <FileChartColumnIncreasing size={18} aria-hidden="true" />
+              </li>
+              <li>
+                <span>04</span>
+                <div>
+                  <strong>Yetkili portallara açın</strong>
+                  <small>Öğretmen, öğrenci ve veli görünümü</small>
+                </div>
+                <ShieldCheck size={18} aria-hidden="true" />
+              </li>
+            </ol>
+            <p>
+              Her adım aynı kurum ve sınav bağlamında ilerler.
+            </p>
+          </section>
         </section>
 
         <section className="next-marketing-proof" aria-label="Platform kapsamı">
@@ -296,7 +291,6 @@ export default function HomePage() {
         <section id="platform" className="next-marketing-section" aria-labelledby="outcomes-title">
           <div className="next-marketing-section__header next-marketing-section__header--split">
             <div>
-              <span className="next-marketing-kicker">Tek operasyon kaynağı</span>
               <h2 id="outcomes-title">Dağınık süreçleri ortak ve izlenebilir bir akışa taşıyın.</h2>
             </div>
             <p>
@@ -332,7 +326,6 @@ export default function HomePage() {
         <section className="next-marketing-showcase" aria-labelledby="capabilities-title">
           <div className="next-marketing-section next-marketing-section--flush">
             <div className="next-marketing-section__header">
-              <span className="next-marketing-kicker">Birbiriyle çalışan modüller</span>
               <h2 id="capabilities-title">Kurumun günlük işi ile eğitim sonucunu aynı yerde buluşturun.</h2>
               <p>
                 Her modül ayrı bir veri adası oluşturmaz; öğrenci ve kurum bağlamı süreç boyunca korunur.
@@ -388,7 +381,6 @@ export default function HomePage() {
             </div>
           </div>
           <div className="next-marketing-reporting__copy">
-            <span className="next-marketing-kicker">Sınav ve raporlama</span>
             <h2 id="reporting-title">Farklı sınavları ortak bir başarı metriğiyle karşılaştırın.</h2>
             <p>
               Başarı yüzdesini ana gösterge olarak izleyin; net ve soru sayısını bağlam olarak koruyun.
@@ -412,8 +404,7 @@ export default function HomePage() {
         </section>
 
         <section id="roller" className="next-marketing-section" aria-labelledby="roles-title">
-          <div className="next-marketing-section__header next-marketing-section__header--center">
-            <span className="next-marketing-kicker">Rol bazlı deneyim</span>
+          <div className="next-marketing-section__header">
             <h2 id="roles-title">Kurum için tek merkez, her kullanıcı için doğru görünüm.</h2>
             <p>Ortak veri, role göre sadeleşen çalışma alanlarıyla doğru kişiye doğru kapsamda ulaşır.</p>
           </div>
@@ -436,7 +427,6 @@ export default function HomePage() {
 
         <section id="guven" className="next-marketing-trust" aria-labelledby="trust-title">
           <div className="next-marketing-trust__intro">
-            <span className="next-marketing-kicker">Güven tasarımın parçası</span>
             <h2 id="trust-title">Erişimi rol ve kurum kapsamıyla sınırlandıran yapı.</h2>
             <p>
               Eğitim verisi tek yerde toplanırken herkesin her şeyi görmesi gerekmez. Yetki sınırları ve
@@ -461,7 +451,6 @@ export default function HomePage() {
 
         <section className="next-marketing-section" aria-labelledby="steps-title">
           <div className="next-marketing-section__header">
-            <span className="next-marketing-kicker">Nasıl çalışır?</span>
             <h2 id="steps-title">Kurulumdan rapora dört net adım.</h2>
           </div>
           <div className="next-marketing-steps">
@@ -477,7 +466,6 @@ export default function HomePage() {
 
         <section className="next-marketing-cta" aria-labelledby="demo-title">
           <div>
-            <span className="next-marketing-kicker">Kapalı beta başvurusu</span>
             <h2 id="demo-title">Sınav, takip ve raporlama akışınızı birlikte değerlendirelim.</h2>
             <p>
               Demo görüşmesinde kurum yapınızı dinleyip kurulumdan optik sınava, rapordan rol bazlı
@@ -498,7 +486,6 @@ export default function HomePage() {
 
         <section id="sss" className="next-marketing-section next-marketing-faq" aria-labelledby="faq-title">
           <div className="next-marketing-section__header">
-            <span className="next-marketing-kicker">Sık sorulan sorular</span>
             <h2 id="faq-title">Demo öncesinde merak edilenler.</h2>
           </div>
           <div className="next-marketing-faq__list">

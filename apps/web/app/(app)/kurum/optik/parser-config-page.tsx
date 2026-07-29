@@ -925,12 +925,12 @@ export function ParserConfigPage() {
               onStudentSearchQueryChange={setQuarantineStudentQuery}
               onStudentSearchSubmit={submitQuarantineStudentSearch}
             />
-            <OpticalReportPanel
-              evaluationStatus={evaluationStatus}
-              examId={examId}
-            />
           </section>
         ) : null}
+        <OpticalReportPanel
+          evaluationStatus={evaluationStatus}
+          examId={examId}
+        />
         </div>
       </Panel>
     </PageFrame>
@@ -1437,6 +1437,7 @@ function OpticalReportPanel({
   examId,
 }: OpticalReportPanelProps) {
   const reportMessage = getReportReadinessMessage(evaluationStatus);
+  const isReportReady = evaluationStatus?.status === "COMPLETED" && evaluationStatus.evaluatedCount > 0;
 
   return (
     <Panel
@@ -1457,11 +1458,21 @@ function OpticalReportPanel({
           value={evaluationStatus ? `${evaluationStatus.evaluatedCount}/${evaluationStatus.matchedCount}` : "-"}
         />
       </MetricGrid>
-      <div className="next-optical-step-actions">
-        <Link className="uh-button uh-button--secondary" href={`/kurum/raporlar?examId=${encodeURIComponent(examId)}`}>
-          Rapor çalışma alanına geç
-        </Link>
-      </div>
+      <section className="next-optical-next-step" aria-label="Optik sonraki adımı">
+        <div>
+          <strong>Sonraki adım: raporu doğrulayın</strong>
+          <span>{reportMessage}</span>
+        </div>
+        {isReportReady ? (
+          <Link className="uh-button uh-button--primary uh-button--md" href={`/kurum/raporlar?examId=${encodeURIComponent(examId)}`}>
+            Rapor çalışma alanına geç
+          </Link>
+        ) : (
+          <Button disabled type="button" variant="secondary">
+            Analiz tamamlanınca açılır
+          </Button>
+        )}
+      </section>
     </Panel>
   );
 }

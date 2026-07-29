@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -116,6 +116,9 @@ export function ReportsPage() {
   const [queueMessage, setQueueMessage] = useState("");
   const [reportJobState, setReportJobState] = useState<ReportJobState>("idle");
   const [activeTab, setActiveTab] = useState<ReportWorkspaceTab>(() => readReportWorkspaceTab(searchParams));
+  const examIdRef = useRef(examId);
+  const studentReportRequestVersion = useRef(0);
+  examIdRef.current = examId;
   const tenantId = auth?.session.tenantId ?? "anonymous";
   const referencesQuery = useQuery({
     queryKey: ["next-report-refs", tenantId],
@@ -204,7 +207,10 @@ export function ReportsPage() {
 
   useEffect(() => {
     if (!examId && exams.length > 0) {
-      setExamId(preferredExamId(exams));
+      const nextExamId = preferredExamId(exams);
+      studentReportRequestVersion.current += 1;
+      examIdRef.current = nextExamId;
+      setExamId(nextExamId);
     }
   }, [examId, exams]);
 
@@ -217,15 +223,42 @@ export function ReportsPage() {
   }, [scoreType, scoreTypeOptions]);
 
   useEffect(() => {
-    const nextTab = readReportWorkspaceTab(searchParams);
-    const nextExamId = searchParams.get("examId") ?? "";
+    const nextSearchParams = new URLSearchParams(window.location.search);
+    const nextTab = readReportWorkspaceTab(nextSearchParams);
+    const nextExamId = nextSearchParams.get("examId") ?? "";
     setActiveTab((current) => (current === nextTab ? current : nextTab));
-    if (nextExamId) setExamId((current) => (current === nextExamId ? current : nextExamId));
-  }, [searchParams, searchParamsKey]);
+    if (nextExamId && nextExamId !== examIdRef.current) {
+      studentReportRequestVersion.current += 1;
+      examIdRef.current = nextExamId;
+      setExamId(nextExamId);
+      setLoadedExamId("");
+      setReportData(null);
+      setScoreType("");
+      setError("");
+      setQueueMessage("");
+      setReportJobState("idle");
+    }
+  }, [searchParamsKey]);
 
   function selectReportTab(tab: ReportWorkspaceTab) {
     setActiveTab(tab);
-    writeWorkspaceTabToUrl(tab, defaultReportWorkspaceTab);
+    writeWorkspaceTabToUrl(tab, defaultReportWorkspaceTab, examId);
+  }
+
+  function selectReportExam(nextExamId: string) {
+    if (nextExamId === examId) return;
+
+    studentReportRequestVersion.current += 1;
+    examIdRef.current = nextExamId;
+    setExamId(nextExamId);
+    setLoadedExamId("");
+    setReportData(null);
+    setScoreType("");
+    setError("");
+    setQueueMessage("");
+    setReportJobState("idle");
+    setActiveTab(defaultReportWorkspaceTab);
+    writeWorkspaceTabToUrl(defaultReportWorkspaceTab, defaultReportWorkspaceTab, nextExamId);
   }
 
   async function loadReports(event: FormEvent<HTMLFormElement>) {
@@ -238,12 +271,14 @@ export function ReportsPage() {
       setError(firstFormError(parsedForm.error));
       return;
     }
+    studentReportRequestVersion.current += 1;
     try {
       setIsReportLoading(true);
       setReportData(await loadReportData(auth.accessToken, parsedForm.data.examId, filters));
       setLoadedExamId(parsedForm.data.examId);
       selectReportTab("overview");
     } catch (loadError) {
+      setLoadedExamId("");
       setReportData(null);
       setError(apiErrorMessage(loadError, "Rapor alınamadı."));
     } finally {
@@ -255,18 +290,20 @@ export function ReportsPage() {
     if (!auth) return;
 
     setError("");
-    setQueueMessage("");
-    setReportJobState("idle");
+    setQueueMessage("Rapor üretimi kuyruğa alınıyor.");
+    setReportJobState("queued");
     const parsedForm = reportQueryFormSchema.safeParse({ examId });
     if (!parsedForm.success) {
+      setQueueMessage("");
+      setReportJobState("idle");
       setError(firstFormError(parsedForm.error));
       return;
     }
+    studentReportRequestVersion.current += 1;
     try {
       const job = await enqueueReportGenerationJob(auth.accessToken, parsedForm.data.examId, {
         ...filters,
       });
-      setReportJobState("queued");
       setQueueMessage("Rapor üretimi kuyruğa alındı.");
       selectReportTab("overview");
       setReportJobState("processing");
@@ -289,9 +326,19 @@ export function ReportsPage() {
   async function selectStudentReport(studentId: string) {
     if (!auth || !latestSnapshot || !loadedExamId) return;
 
+    const requestVersion = studentReportRequestVersion.current + 1;
+    studentReportRequestVersion.current = requestVersion;
+    const requestExamId = loadedExamId;
+    const requestSnapshotId = latestSnapshot.id;
     setError("");
     try {
-      const selectedReport = await loadStudentReportData(auth.accessToken, loadedExamId, latestSnapshot.id, studentId);
+      const selectedReport = await loadStudentReportData(
+        auth.accessToken,
+        requestExamId,
+        requestSnapshotId,
+        studentId,
+      );
+      if (studentReportRequestVersion.current !== requestVersion) return;
       setReportData((current) => current
         ? {
             ...current,
@@ -301,6 +348,7 @@ export function ReportsPage() {
         : current);
       selectReportTab("karne");
     } catch (selectError) {
+      if (studentReportRequestVersion.current !== requestVersion) return;
       setError(apiErrorMessage(selectError, "Öğrenci raporu alınamadı."));
     }
   }
@@ -344,7 +392,12 @@ export function ReportsPage() {
         >
           <div className="next-report-control-row" aria-label="Rapor üst kontrolleri">
             <Field className="next-report-control-row__exam" label="Sınav">
-              <Select required value={examId} onChange={(event) => setExamId(event.target.value)}>
+              <Select
+                disabled={isReportLoading || isReportJobBusy}
+                required
+                value={examId}
+                onChange={(event) => selectReportExam(event.target.value)}
+              >
                 <option value="">Sınav seç</option>
                 {exams.map((exam) => (
                   <option key={exam.id} value={exam.id}>{exam.title}</option>
@@ -359,14 +412,28 @@ export function ReportsPage() {
               </Select>
             </Field>
             <div className="next-report-actions">
-              <Button disabled={isReportLoading || referencesQuery.isPending} type="submit">
+              <Button
+                disabled={referencesQuery.isPending}
+                loading={isReportLoading}
+                loadingLabel="Yükleniyor"
+                type="submit"
+              >
                 <RefreshCw size={17} aria-hidden="true" />
-                {isReportLoading ? "Yükleniyor" : "Raporu getir"}
+                Raporu getir
               </Button>
-              <Button disabled={isReportJobBusy || !examId} type="button" variant="secondary" onClick={() => void enqueueReportGeneration()}>
-                <RefreshCw size={17} aria-hidden="true" />
-                {isReportJobBusy ? "İşleniyor" : "Yeniden üret"}
-              </Button>
+              {latestSnapshot || isReportJobBusy ? (
+                <Button
+                  disabled={!examId}
+                  loading={isReportJobBusy}
+                  loadingLabel="İşleniyor"
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void enqueueReportGeneration()}
+                >
+                  <RefreshCw size={17} aria-hidden="true" />
+                  {latestSnapshot ? "Yeniden üret" : "Rapor üret"}
+                </Button>
+              ) : null}
             </div>
           </div>
           <details className="next-report-filter-details">
@@ -457,6 +524,9 @@ export function ReportsPage() {
             <EmptyState
               title="Hazır rapor yok"
               description="Üstteki kontrol alanından sınavı ve kapsamı seçerek raporu getir veya üret."
+              primaryAction={examId && !isReportJobBusy
+                ? { label: "Rapor üret", onClick: () => void enqueueReportGeneration() }
+                : undefined}
             />
           ) : null}
           {activeTab === "overview" && latestSnapshot ? (
@@ -710,10 +780,15 @@ function readReportWorkspaceTab(searchParams: Pick<URLSearchParams, "get">): Rep
   return reportWorkspaceTabs.some((candidate) => candidate.id === tab) ? tab as ReportWorkspaceTab : defaultReportWorkspaceTab;
 }
 
-function writeWorkspaceTabToUrl(tab: string, defaultTab: string) {
+function writeWorkspaceTabToUrl(tab: string, defaultTab: string, examId: string) {
   if (typeof window === "undefined") return;
 
   const url = new URL(window.location.href);
+  if (examId) {
+    url.searchParams.set("examId", examId);
+  } else {
+    url.searchParams.delete("examId");
+  }
   if (tab === defaultTab) {
     url.searchParams.delete("tab");
   } else {

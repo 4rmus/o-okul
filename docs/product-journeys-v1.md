@@ -106,11 +106,13 @@ yolculuk matrisi, UAT senaryo iskeleti ve ilgili evidence checker/template gunce
 ## Backlog Baglantisi
 
 - Faz 2: Yoğun listelerde performans, tablet/a11y ve karne gorsel kabul esigi. Repo ici ilk a11y kapisi:
-  `pnpm web:a11y:check` landing, login, kurum dashboard shell'i ve 768x1024 tablet viewport'ta
-  kritik axe ihlallerini ve yatay tasmayi tarar.
-  Landing performans kapisi `pnpm web:performance:check` ile WebP hero asset butcesini ve server/no-query
+  `pnpm web:a11y:check` landing, login ve kurum dashboard shell'ini
+  320/375/414/768/1024/1440 viewport matrisi içinde tarar; kritik axe ihlallerini ve yatay
+  tasmayi engeller. Landing ilk ekran hiyerarşisi ayrıca 1280x800 landing fold viewport ile
+  korunur.
+  Landing performans kapisi `pnpm web:performance:check` ile Optik → Rapor → Portal yüzeyini ve server/no-query
   marketing route sozlesmesini dogrular.
-  `pnpm web:ux-baseline:check` bu a11y, tablet overflow, landing performans ve asset sozlesmelerini
+  `pnpm web:ux-baseline:check` bu a11y, responsive overflow, landing performans ve iş akışı sozlesmelerini
   tek repo contract olarak kilitler.
 - Faz 4: `UAT-KURUM-05` icin `scripts/check-isem-optical-pipeline-evidence.mjs` iSEM cevap
   anahtari, optik TXT, raw import arsivi, evaluation ve report snapshot ara kanitini tutar.
@@ -136,8 +138,10 @@ yolculuk matrisi, UAT senaryo iskeleti ve ilgili evidence checker/template gunce
   iSEM cevap anahtari, optik pipeline, raw import, report-generation ve mock'suz
   `apps/web/e2e-next/live-ui-worker-report-next.spec.ts` kanitlarini tek JSON'da baglar.
   Gercek staging kanit kosusu hala bekliyor.
-- Faz 7: Landing repo yuzeyi `apps/web/app/page.tsx` ve `apps/web/public/images/landing-hero-education-ops.png`
-  ile hazir. `UAT-SYS-02` ve `UAT-KURUM-01` icin `apps/web/e2e-next/live-onboarding-next.spec.ts`
+- Faz 7: Landing repo yuzeyi `apps/web/app/page.tsx` içindeki PII içermeyen
+  Optik → Rapor → Portal iş akışıyla hazır. Sentetik hero asset render dışı tutulur; dosyalar
+  açık silme onayı olmadan geri dönüş olanağı için korunur.
+  `UAT-SYS-02` ve `UAT-KURUM-01` icin `apps/web/e2e-next/live-onboarding-next.spec.ts`
   ve `pnpm live:onboarding:smoke` hazir; staging kanit kosusu bekliyor.
 - Faz 9: `UAT-SYS-04`, saglayici smoke'lari, Traefik HTTPS, observability ve evidence zinciri.
 - Faz 10: Bu matristen tureyen rol bazli staging/prod UAT raporu, `pnpm pilot:check`

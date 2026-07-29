@@ -1,0 +1,71 @@
+/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 */
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: design.md · designed-as-app · contrast: pass (40–41) · nav: N9 · footer: Ft2 · slop: pass (42–45) · honest: pass (46) · chrome: pass (47) · tokens: pass (48) · responsive: pass (49) · icons: pass (30) · mobile: pass (34, 49, 50–57) */
+:root {
+  --color-paper: oklch(95.5% 0.012 70);
+  --color-paper-raised: oklch(99% 0.004 70);
+  --color-paper-muted: oklch(92.5% 0.014 70);
+  --color-ink: oklch(21% 0.018 260);
+  --color-ink-secondary: oklch(32% 0.02 260);
+  --color-ink-chart-soft: oklch(32% 0.02 260 / 14%);
+  --color-ink-muted: oklch(43% 0.02 260);
+  --color-rule: oklch(84% 0.015 70);
+  --color-rule-strong: oklch(73% 0.018 70);
+  --color-rule-faint: oklch(90% 0.012 70);
+  --color-accent: oklch(56% 0.17 35);
+  --color-accent-hover: oklch(50% 0.17 35);
+  --color-accent-strong: oklch(40% 0.16 35);
+  --color-accent-soft: oklch(94% 0.035 35);
+  --color-accent-chart-soft: oklch(56% 0.17 35 / 16%);
+  --color-accent-ink: oklch(99% 0.004 70);
+  --color-focus: oklch(56% 0.17 35);
+  --color-success-token: oklch(43% 0.11 160);
+  --color-success-soft-token: oklch(94% 0.035 160);
+  --color-warning-token: oklch(48% 0.11 75);
+  --color-warning-soft-token: oklch(95% 0.04 75);
+  --color-danger-token: oklch(47% 0.17 20);
+  --color-danger-soft-token: oklch(94% 0.035 20);
+  --color-overlay-token: oklch(18% 0.02 260 / 46%);
+  --color-shadow-soft: oklch(21% 0.018 260 / 6%);
+  --color-shadow-medium: oklch(21% 0.018 260 / 12%);
+  --color-shadow-strong: oklch(21% 0.018 260 / 22%);
+  --color-chart-grid: oklch(21% 0.018 260 / 8%);
+
+  --chart-accent: var(--color-accent);
+  --chart-primary: var(--color-ink-secondary);
+  --chart-primary-soft: var(--color-ink-chart-soft);
+  --chart-success: var(--color-success-token);
+  --chart-danger: var(--color-danger-token);
+  --chart-neutral: var(--color-ink-muted);
+  --chart-grid: var(--color-chart-grid);
+  --chart-text: var(--color-ink-muted);
+  --chart-surface: var(--color-paper-raised);
+
+  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
+
+  --space-3xs: 0.25rem;
+  --space-2xs: 0.5rem;
+  --space-xs: 0.75rem;
+  --space-sm: 1rem;
+  --space-md: 1.5rem;
+  --space-lg: 2rem;
+  --space-xl: 3rem;
+  --space-2xl: 4rem;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.75rem;
+  --text-display: clamp(2.25rem, 4vw, 3rem);
+
+  --radius-control: 6px;
+  --radius-panel: 10px;
+  --radius-dialog: 14px;
+  --dur-instant: 120ms;
+  --dur-short: 220ms;
+  --dur-long: 420ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}

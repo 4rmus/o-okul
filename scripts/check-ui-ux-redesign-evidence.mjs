@@ -36,13 +36,16 @@ const privacyKeys = [
 const approvalKeys = ["role", "decision", "approvedAt"];
 
 const requiredPhases = ["Faz 0", "Faz 1", "Faz 2", "Faz 3", "Faz 4", "Faz 5"];
-const requiredWidths = [375, 768, 1024, 1440];
+const requiredWidths = [320, 375, 414, 768, 1024, 1440];
 const requiredSurfaces = ["kurum dashboard", "optik workspace", "rapor workspace", "portal shell"];
 const localCommands = [
   "pnpm --filter @o-okul/web typecheck",
+  "pnpm web:design-tokens:check",
   "pnpm web:a11y:check",
+  "pnpm web:auth-contract:check",
   "pnpm web:ux-baseline:check",
   "pnpm web:ux-contract:check",
+  "pnpm web:ux-rc:check",
   "pnpm karne:visual-contract:check",
 ];
 const releaseCommands = [

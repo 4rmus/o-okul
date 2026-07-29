@@ -831,9 +831,12 @@
         "releaseBlocking": false,
         "commandsPassed": [
           "pnpm --filter @o-okul/web typecheck",
+          "pnpm web:design-tokens:check",
           "pnpm web:a11y:check",
+          "pnpm web:auth-contract:check",
           "pnpm web:ux-baseline:check",
           "pnpm web:ux-contract:check",
+          "pnpm web:ux-rc:check",
           "pnpm karne:visual-contract:check"
         ],
         "note": "Local/static PASS staging veya production kabul kanıtı değildir."
@@ -863,7 +866,9 @@
           "scope": "staging-production",
           "commandsPassed": [
             "pnpm --filter @o-okul/web typecheck",
-            "pnpm web:a11y:check"
+            "pnpm web:design-tokens:check",
+            "pnpm web:a11y:check",
+            "pnpm web:auth-contract:check"
           ],
           "evidenceReferences": [
             "artifact:artifacts/ui-ux-redesign/phase-0/a11y-production-summary.json"
@@ -932,13 +937,17 @@
         {
           "surface": "kurum dashboard",
           "widths": [
+            320,
             375,
+            414,
             768,
             1024,
             1440
           ],
           "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-320.png",
             "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-375.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-414.png",
             "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-768.png",
             "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-1024.png",
             "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-1440.png"
@@ -947,13 +956,17 @@
         {
           "surface": "optik workspace",
           "widths": [
+            320,
             375,
+            414,
             768,
             1024,
             1440
           ],
           "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-3/optik-320.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/optik-375.png",
+            "artifact:artifacts/ui-ux-redesign/phase-3/optik-414.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/optik-768.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/optik-1024.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/optik-1440.png"
@@ -962,13 +975,17 @@
         {
           "surface": "rapor workspace",
           "widths": [
+            320,
             375,
+            414,
             768,
             1024,
             1440
           ],
           "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-3/rapor-320.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/rapor-375.png",
+            "artifact:artifacts/ui-ux-redesign/phase-3/rapor-414.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/rapor-768.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/rapor-1024.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/rapor-1440.png"
@@ -977,13 +994,17 @@
         {
           "surface": "portal shell",
           "widths": [
+            320,
             375,
+            414,
             768,
             1024,
             1440
           ],
           "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-4/portal-320.png",
             "artifact:artifacts/ui-ux-redesign/phase-4/portal-375.png",
+            "artifact:artifacts/ui-ux-redesign/phase-4/portal-414.png",
             "artifact:artifacts/ui-ux-redesign/phase-4/portal-768.png",
             "artifact:artifacts/ui-ux-redesign/phase-4/portal-1024.png",
             "artifact:artifacts/ui-ux-redesign/phase-4/portal-1440.png"

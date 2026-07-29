@@ -1,6 +1,6 @@
 "use client";
 
-import type { HTMLAttributes, ReactNode } from "react";
+import { useEffect, useState, type HTMLAttributes, type ReactNode } from "react";
 import {
   ArcElement,
   BarElement,
@@ -39,18 +39,70 @@ const defaultChartOptions = {
       enabled: true,
     },
   },
-  animation: {
-    duration: 150,
-  },
+  animation: false,
 } as const;
 
-const chartBlue = "#155eef";
-const chartBlueSoft = "rgba(21, 94, 239, 0.16)";
-const chartGreen = "#15803d";
-const chartRed = "#b42318";
-const chartGray = "#667085";
-const chartGrid = "rgba(16, 24, 40, 0.08)";
-const chartText = "#475467";
+interface ChartColors {
+  accent: string;
+  danger: string;
+  grid: string;
+  neutral: string;
+  primary: string;
+  primarySoft: string;
+  success: string;
+  surface: string;
+  text: string;
+}
+
+const defaultChartColors: ChartColors = {
+  accent: "currentColor",
+  danger: "currentColor",
+  grid: "currentColor",
+  neutral: "currentColor",
+  primary: "currentColor",
+  primarySoft: "currentColor",
+  success: "currentColor",
+  surface: "currentColor",
+  text: "currentColor",
+};
+
+function useChartColors() {
+  const [colors, setColors] = useState(defaultChartColors);
+
+  useEffect(() => {
+    setColors({
+      accent: chartToken("--chart-accent"),
+      danger: chartToken("--chart-danger"),
+      grid: chartToken("--chart-grid"),
+      neutral: chartToken("--chart-neutral"),
+      primary: chartToken("--chart-primary"),
+      primarySoft: chartToken("--chart-primary-soft"),
+      success: chartToken("--chart-success"),
+      surface: chartToken("--chart-surface"),
+      text: chartToken("--chart-text"),
+    });
+  }, []);
+
+  return colors;
+}
+
+function chartToken(name: string) {
+  if (typeof document === "undefined") return "currentColor";
+  const token = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  if (!token) return "currentColor";
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return token;
+
+  context.clearRect(0, 0, 1, 1);
+  context.fillStyle = token;
+  context.fillRect(0, 0, 1, 1);
+  const channels = Array.from(context.getImageData(0, 0, 1, 1).data);
+  return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+}
 
 function formatChartNumber(value: number | undefined) {
   return value === undefined ? "-" : new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }).format(value);
@@ -139,6 +191,7 @@ export interface ExamResultDonutProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 export function ExamResultDonut({ className, result, tableMode = "visible", ...props }: ExamResultDonutProps) {
+  const colors = useChartColors();
   const correct = result.correct ?? 0;
   const wrong = result.wrong ?? 0;
   const blank = result.blank ?? 0;
@@ -156,8 +209,8 @@ export function ExamResultDonut({ className, result, tableMode = "visible", ...p
     datasets: [
       {
         data: [correct, wrong, blank],
-        backgroundColor: [chartGreen, chartRed, chartGray],
-        borderColor: "#ffffff",
+        backgroundColor: [colors.success, colors.danger, colors.neutral],
+        borderColor: colors.surface,
         borderWidth: 2,
         hoverOffset: 3,
       },
@@ -172,7 +225,7 @@ export function ExamResultDonut({ className, result, tableMode = "visible", ...p
         position: "bottom",
         labels: {
           boxWidth: 10,
-          color: chartText,
+          color: colors.text,
           usePointStyle: true,
         },
       },
@@ -255,6 +308,7 @@ export function ClassCompareBar({
   valueLabel = "Başarı %",
   ...props
 }: ClassCompareBarProps) {
+  const colors = useChartColors();
   const rows = classes.map((record) => ({
     chartLabel: record.chartLabel ?? record.className ?? "Sınıfsız",
     id: record.classId ?? record.className ?? "no-class",
@@ -270,7 +324,7 @@ export function ClassCompareBar({
       {
         label: valueLabel,
         data: rows.map((record) => clampPercent(record.successRate)),
-        backgroundColor: chartBlue,
+        backgroundColor: colors.primary,
         borderRadius: 6,
         maxBarThickness: 42,
       },
@@ -302,7 +356,7 @@ export function ClassCompareBar({
           display: false,
         },
         ticks: {
-          color: chartText,
+          color: colors.text,
           maxRotation: 0,
         },
       },
@@ -310,10 +364,10 @@ export function ClassCompareBar({
         beginAtZero: true,
         max: 100,
         grid: {
-          color: chartGrid,
+          color: colors.grid,
         },
         ticks: {
-          color: chartText,
+          color: colors.text,
           callback: (value) => formatPercentNumber(Number(value)),
         },
         title: {
@@ -375,13 +429,14 @@ export function PracticeScoreBar({
   tableMode = "visible",
   ...props
 }: PracticeScoreBarProps) {
+  const colors = useChartColors();
   const rows = scores.filter((score) => Number.isFinite(score.practiceScore));
   const data: ChartData<"bar", number[], string> = {
     labels: rows.map((score) => score.type === "SAY" ? "Sayısal" : score.type === "SOZ" ? "Sözel" : score.type),
     datasets: [{
       label: "Deneme puanı",
       data: rows.map((score) => score.practiceScore),
-      backgroundColor: chartBlue,
+      backgroundColor: colors.primary,
       borderRadius: 6,
       maxBarThickness: 42,
     }],
@@ -400,13 +455,13 @@ export function PracticeScoreBar({
     scales: {
       x: {
         grid: { display: false },
-        ticks: { color: chartText },
+        ticks: { color: colors.text },
       },
       y: {
         min: 100,
         max: 500,
-        grid: { color: chartGrid },
-        ticks: { color: chartText },
+        grid: { color: colors.grid },
+        ticks: { color: colors.text },
         title: { display: true, text: "Deneme puanı (100-500)" },
       },
     },
@@ -467,6 +522,7 @@ export function ProgressLineChart({
   tableMode = "visible",
   ...props
 }: ProgressLineChartProps) {
+  const colors = useChartColors();
   const rows = points.map((point, index) => ({
     id: point.snapshotId ?? point.generatedAt ?? String(index),
     label: point.generatedAt ? new Date(point.generatedAt).toLocaleDateString("tr-TR") : `Ölçüm ${index + 1}`,
@@ -481,10 +537,10 @@ export function ProgressLineChart({
       {
         label: "Başarı %",
         data: rows.map((point) => clampPercent(point.successRate)),
-        borderColor: chartBlue,
-        backgroundColor: chartBlueSoft,
-        pointBackgroundColor: chartBlue,
-        pointBorderColor: "#ffffff",
+        borderColor: colors.primary,
+        backgroundColor: colors.primarySoft,
+        pointBackgroundColor: colors.primary,
+        pointBorderColor: colors.surface,
         pointBorderWidth: 2,
         pointRadius: 4,
         tension: 0.3,
@@ -516,7 +572,7 @@ export function ProgressLineChart({
           display: false,
         },
         ticks: {
-          color: chartText,
+          color: colors.text,
           maxRotation: 0,
         },
       },
@@ -524,10 +580,10 @@ export function ProgressLineChart({
         beginAtZero: true,
         max: 100,
         grid: {
-          color: chartGrid,
+          color: colors.grid,
         },
         ticks: {
-          color: chartText,
+          color: colors.text,
           callback: (value) => formatPercentNumber(Number(value)),
         },
         title: {
@@ -597,6 +653,7 @@ export function TopicRadarChart({
   tableMode = "visible",
   ...props
 }: TopicRadarChartProps) {
+  const colors = useChartColors();
   const rows = branches.map((branch) => ({
     chartLabel: branch.chartLabel ?? branch.branch,
     name: branch.branch,
@@ -611,7 +668,7 @@ export function TopicRadarChart({
       {
         label: "Başarı %",
         data: rows.map((branch) => clampPercent(branch.successRate)),
-        backgroundColor: chartBlue,
+        backgroundColor: colors.primary,
         borderRadius: 6,
         maxBarThickness: 34,
       },
@@ -643,10 +700,10 @@ export function TopicRadarChart({
         beginAtZero: true,
         max: 100,
         grid: {
-          color: chartGrid,
+          color: colors.grid,
         },
         ticks: {
-          color: chartText,
+          color: colors.text,
           callback: (value) => formatPercentNumber(Number(value)),
         },
       },
@@ -655,7 +712,7 @@ export function TopicRadarChart({
           display: false,
         },
         ticks: {
-          color: chartText,
+          color: colors.text,
         },
       },
     },

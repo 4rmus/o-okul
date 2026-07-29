@@ -665,7 +665,13 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
               },
             ]}
           />
-          <PortalActionStrip ariaLabel="Öğretmen günlük aksiyonları" items={teacherActionItems} />
+          <PortalActionStrip
+            ariaLabel="Öğretmen günlük aksiyonları"
+            items={teacherActionItems}
+            priorityKeys={isRolePreview
+              ? ["preview", "attendance", "report"]
+              : ["attendance", "note", "report"]}
+          />
           <MetricGrid
             items={[
               { label: "Ders", value: data?.schedule.length ?? 0 },

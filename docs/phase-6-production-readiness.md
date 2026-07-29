@@ -675,21 +675,31 @@ pnpm backup:restore:smoke
 ## Web UX ve A11y
 
 - Landing sayfası değer önerisi, optik-analiz akışı, üretim kanıt sinyalleri, demo/kapalı beta
-  CTA'ları ve gerçek bitmap hero görseliyle yayınlanır.
-- Landing hero görseli WebP öncelikli, PNG fallback'li ve sabit boyutlu yayınlanır; repo performans
-  bütçesi `pnpm web:performance:check` ile WebP dosyasının 250 KB altında, PNG fallback'in 2 MB
-  altında ve marketing route'unun server/no-query kalmasını doğrular.
+  CTA'ları ve PII içermeyen gerçek ürün yüzeyiyle yayınlanır; sentetik tarayıcı chrome'u çizilmez.
+- Landing artık PII içermeyen Optik → Rapor → Portal workbench'ini render eder; eski sentetik hero asset render dışında
+  tutulur ve açık silme onayı olmadan korunur. Repo performans bütçesi `pnpm web:performance:check`
+  ile marketing route'unun server/no-query kalmasını, korunmuş WebP dosyasının 250 KB ve PNG geri
+  dönüş dosyasının 2 MB sınırını aşmamasını doğrular.
 - Opsiyonel `WEB_PERFORMANCE_PROFILE_OUT` profili lokal temp path (`/tmp`, `/var/tmp`) altında,
   symlink file üzerinde veya symlink parent zinciri altında yazılamaz; `pnpm web:performance:check`
   bu output negatiflerini de çalıştırır.
-- Landing, login, auth sonrası kurum dashboard shell'i ve kurum dashboard tablet viewport'u axe tabanlı smoke ile taranır.
+- Landing ve auth sonrası kurum dashboard 320/375/414/768/1024/1440 görsel matrisiyle taranır;
+  landing için 320/375/414/768 axe + yatay taşma ve 1280x800 fold sözleşmesi ayrıca korunur.
+- Genel login 320/375/414/768/1024/1440 axe + yatay taşma matrisinden geçer; kurum ve sistem
+  giriş rotalarının alan/tenant bağlamı auth kontratında ayrıca doğrulanır.
+- Login paneli, kurum rail'i, öğrenci öncelikli aksiyon şeridi ve rapor durum bölgesi hedefli Darwin/Linux
+  golden'larıyla korunur; genel ekran seti ve mevcut karne golden'ları topluca güncellenmez.
 - Kritik WCAG 2 A/AA axe ihlali 0 olmalıdır; repo kapısı `pnpm web:a11y:check` ile doğrulanır.
 - Yedek/restore paneli, serbest string backup hedefi ve `s3://` restore kanıt dosyasını API çağrısı yapılmadan reddeder; bu hedefli panel sözleşmesi `pnpm web:backup-restore-panel:check` ile doğrulanır.
 - GitHub CI ve staging image build job'ları `pnpm run ci` öncesi
   `pnpm --filter @o-okul/web exec playwright install --with-deps chromium` çalıştırır; bu
   şart `pnpm docker:check`, `pnpm ops:check` ve `pnpm prod:readiness:check` statik kapılarıyla korunur.
-- Web UX baseline contract `pnpm web:ux-baseline:check` ile a11y spec kapsamını, 768x1024 tablet
-  yatay taşma kontrolünü, landing server/no-query performans bütçesini ve hero asset sözleşmesini sabitler.
+- GitHub CI içindeki ayrı `ui-ux-rc` işi pull request, `main` push ve manuel koşularda Chromium ile
+  WebKit matrisini aynı commit üzerinde çalıştırır; UI/UX kanıtı `pnpm web:ux-rc:check` kaydı olmadan
+  yerel sözleşme PASS sayılmaz.
+- Web UX baseline contract `pnpm web:ux-baseline:check` ile a11y spec kapsamını,
+  320/375/414/768 responsive tabanını, 1024/1440 masaüstü kapsamını, landing server/no-query
+  performans bütçesini ve Optik → Rapor → Portal iş akışı sözleşmesini sabitler.
 - A11y smoke gerçek staging kanıtının yerine geçmez; tablet operatör UAT'i Faz 10 rol bazlı UAT içinde ayrıca yapılır.
 
 ## KVKK ve Audit
@@ -825,7 +835,8 @@ pnpm backup:restore:smoke
   erken gate kanıtı aynı release summary'ye terfi edemez.
 - UI/UX redesign release kanıtı staging bundle'a
   `UI_UX_REDESIGN_EVIDENCE_OUTPUT=artifacts/staging/reports/ui-ux-redesign.json pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env`
-  ile üretilir; env dosyasındaki faz, viewport, PII review, UAT, live onboarding ve live UI-worker
+  ile üretilir; env dosyasındaki faz, 320/375/414/768/1024/1440 viewport, PII review, UAT,
+  live onboarding ve live UI-worker
   referansları gerçek staging/prod artifact'lerine bağlanmalı, local/mock screenshot paketi tek başına
   release kanıtı sayılmaz. Workflow bu çıktıdan sonra `UI_UX_REDESIGN_EVIDENCE_TARGET=file://.../reports/ui-ux-redesign.json`
   değerini `.staging-evidence.env` dosyasına ekler ve production evidence zinciri aynı bundle artifact'ini okur.

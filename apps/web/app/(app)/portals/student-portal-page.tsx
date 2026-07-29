@@ -233,7 +233,13 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
               },
             ]}
           />
-          <PortalActionStrip ariaLabel="Öğrenci günlük aksiyonları" items={studentActionItems} />
+          <PortalActionStrip
+            ariaLabel="Öğrenci günlük aksiyonları"
+            items={studentActionItems}
+            priorityKeys={isRolePreview
+              ? ["preview", "announcement", "report"]
+              : ["announcement", "homework", "report"]}
+          />
           <MetricGrid
             items={[
               { label: "Toplam devamsızlık", value: data?.attendanceSummary.total ?? 0 },

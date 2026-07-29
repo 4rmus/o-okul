@@ -148,6 +148,33 @@ export function KurumDashboard() {
     >
       {dashboardQuery.isPending ? <LoadingState label="Kurum özeti yükleniyor…" /> : null}
       {tenantProfile ? <TenantProfileSummary tenant={tenantProfile} /> : null}
+      <Panel
+        aria-label="Bugün dikkat gerektirenler"
+        className="next-attention-panel"
+        description="Destek, ödeme, devamsızlık ve optik sinyallerinin kısa listesi."
+        title="Bugün dikkat gerektirenler"
+        tone={visibleAttentionItems.length > 0 ? "warning" : "default"}
+      >
+        {visibleAttentionItems.length > 0 ? (
+          <div className="next-attention-list">
+            {visibleAttentionItems.map((item) => (
+              <ActionCard
+                as="a"
+                aria-label={`${item.title} ${item.value}: ${item.description}`}
+                className="next-attention-item"
+                detail={item.description}
+                href={item.href}
+                key={item.href}
+                label={item.title}
+                tone={attentionCardTone(item)}
+                value={item.value}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="next-attention-empty">Açık kritik iş görünmüyor.</p>
+        )}
+      </Panel>
       <MetricGrid aria-label="Kurum özeti" className="next-dashboard-overview-grid" role="region">
         {overviewMetrics.map((metric) => (
           <MetricCard
@@ -185,33 +212,6 @@ export function KurumDashboard() {
           tone="muted"
         />
       ) : null}
-      <Panel
-        aria-label="Bugün dikkat gerektirenler"
-        className="next-attention-panel"
-        description="Destek, ödeme, devamsızlık ve optik sinyallerinin kısa listesi."
-        title="Bugün dikkat gerektirenler"
-        tone={visibleAttentionItems.length > 0 ? "warning" : "default"}
-      >
-        {visibleAttentionItems.length > 0 ? (
-          <div className="next-attention-list">
-            {visibleAttentionItems.map((item) => (
-              <ActionCard
-                as="a"
-                aria-label={`${item.title} ${item.value}: ${item.description}`}
-                className="next-attention-item"
-                detail={item.description}
-                href={item.href}
-                key={item.href}
-                label={item.title}
-                tone={attentionCardTone(item)}
-                value={item.value}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="next-attention-empty">Açık kritik iş görünmüyor.</p>
-        )}
-      </Panel>
       {visibleSummaryCards.length > 0 ? (
         <Panel
           aria-label="Operasyon özeti"

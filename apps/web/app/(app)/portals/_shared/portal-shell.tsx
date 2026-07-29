@@ -216,22 +216,38 @@ export function PortalActionStrip({
   ariaLabel,
   eyebrow = "Günlük iş kuyruğu",
   items,
+  priorityKeys,
   title = "Öncelikli aksiyonlar",
 }: {
   ariaLabel: string;
   eyebrow?: string;
   items: PortalActionItem[];
+  priorityKeys?: readonly string[];
   title?: string;
 }) {
-  const attentionCount = items.filter((item) => item.tone === "warning" || item.tone === "danger").length;
+  const preferredItems = priorityKeys
+    ? priorityKeys
+        .map((key) => items.find((item) => item.key === key))
+        .filter((item): item is PortalActionItem => Boolean(item))
+    : items;
+  const preferredKeys = new Set(preferredItems.map((item) => item.key));
+  const candidates = [
+    ...preferredItems,
+    ...items.filter((item) => !preferredKeys.has(item.key)),
+  ];
+  const visibleItems = [
+    ...candidates.filter((item) => item.tone === "warning" || item.tone === "danger"),
+    ...candidates.filter((item) => item.tone !== "warning" && item.tone !== "danger"),
+  ].slice(0, 3);
+  const attentionCount = visibleItems.filter((item) => item.tone === "warning" || item.tone === "danger").length;
   return (
     <Panel
       actions={
         <div
           className="next-portal-action-strip__summary"
-          aria-label={`${items.length} aksiyon, ${attentionCount} öncelikli`}
+          aria-label={`${visibleItems.length} aksiyon, ${attentionCount} öncelikli`}
         >
-          <span>{items.length} aksiyon</span>
+          <span>{visibleItems.length} aksiyon</span>
           <strong>{attentionCount > 0 ? `${attentionCount} öncelikli` : "Rutin akış"}</strong>
         </div>
       }
@@ -241,7 +257,7 @@ export function PortalActionStrip({
       title={title}
     >
       <div className="next-portal-action-strip__grid">
-        {items.map((item) => (
+        {visibleItems.map((item) => (
           <ActionCard
             as="a"
             aria-label={portalActionAriaLabel(item)}

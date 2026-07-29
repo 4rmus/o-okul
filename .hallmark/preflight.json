@@ -1,0 +1,10 @@
+{
+  "scannedAt": "2026-07-29",
+  "framework": "Next.js app router",
+  "fontStackBefore": "Inter declaration without a loaded font",
+  "paletteBefore": "hex custom properties in apps/web/app/globals.css",
+  "motion": "motion-cut; no motion library",
+  "spacingBefore": "mixed 4/6/8/10/12/16/20/24/32 pixel scale",
+  "designSystem": "design.md and tokens.css",
+  "scope": "app"
+}

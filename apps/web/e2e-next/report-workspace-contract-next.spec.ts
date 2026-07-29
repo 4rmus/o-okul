@@ -14,11 +14,13 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await openWithReportMocks(page, "/kurum/raporlar?tab=exports", { height: 960, width: 1440 });
 
     await expect(page.getByRole("tab", { name: "Çıktılar" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("combobox", { name: "Sınav" })).toHaveValue("exam-report-ready");
     await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("exports");
 
     await page.getByRole("tab", { name: "Genel Bakış" }).click();
     await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBeNull();
+    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-ready");
   });
 
   test("öğrenci listesini yalnız rapor sorgusunda yükler", async ({ page }) => {
@@ -47,11 +49,113 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
 
     await expect(page.getByRole("combobox", { name: "Sınav" })).toHaveValue("exam-report-ready");
-    await page.getByRole("button", { name: "Yeniden üret" }).click();
+    await page.getByRole("button", { name: "Rapor üret" }).click();
     await expect(page.getByRole("button", { name: "İşleniyor" })).toBeDisabled();
+    await expect(page.getByRole("combobox", { name: "Sınav" })).toBeDisabled();
 
     await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => jobStatusRequests.length).toBeGreaterThanOrEqual(1);
+    await expect(page.getByText("Rapor üretimi tamamlandı.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Sınav" })).toBeEnabled();
+  });
+
+  test("rapor yüklenirken sınav seçimini kilitleyip yanıt bağlamını korur", async ({ page }) => {
+    await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
+
+    let releaseSnapshotRequest = () => {};
+    const snapshotRequestGate = new Promise<void>((resolve) => {
+      releaseSnapshotRequest = resolve;
+    });
+    await page.route("**/api/v1/exams/exam-report-ready/reports/snapshots*", async (route) => {
+      await snapshotRequestGate;
+      await route.fallback();
+    });
+
+    await page.getByRole("button", { name: "Raporu getir" }).click();
+    const examSelect = page.getByRole("combobox", { name: "Sınav" });
+    await expect(examSelect).toBeDisabled();
+    await expect(examSelect).toHaveValue("exam-report-ready");
+
+    releaseSnapshotRequest();
+    await expect(page.getByRole("region", { name: "Rapor iş akışı" })).toContainText("Excel/PDF hazır");
+    await expect(examSelect).toBeEnabled();
+    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-ready");
+  });
+
+  test("sınav değişince eski snapshot bağlamını temizler ve yeni sınavı URL state içinde korur", async ({ page }) => {
+    const snapshotRequests = trackApiRequests(page, (url, method) =>
+      method === "GET" && url.pathname.endsWith("/reports/snapshots"),
+    );
+    await openWithReportMocks(page, "/kurum/raporlar", { height: 960, width: 1440 });
+
+    await page.getByRole("button", { name: "Raporu getir" }).click();
+    await expect(page.getByRole("region", { name: "Rapor iş akışı" })).toContainText("Excel/PDF hazır");
+    expect(snapshotRequests).toHaveLength(1);
+
+    await page.getByRole("combobox", { name: "Sınav" }).selectOption("exam-report-general");
+
+    await expect(page.getByRole("heading", { name: "Hazır rapor yok" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Rapor iş akışı" })).not.toContainText("Excel/PDF hazır");
+    await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
+    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-general");
+    expect(snapshotRequests).toHaveLength(1);
+  });
+
+  test("geç gelen öğrenci raporu yeni sınavın snapshot bağlamına yazılmaz", async ({ page }) => {
+    await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
+    await page.getByRole("button", { name: "Raporu getir" }).click();
+    await expect(page.getByRole("region", { name: "Rapor iş akışı" })).toContainText("LGS Rapor Denemesi");
+    await expect(page.getByRole("button", { name: "Raporu getir" })).toBeEnabled();
+    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-ready");
+
+    let releaseStudentReportRequest = () => {};
+    let markStudentReportRequestStarted = () => {};
+    const studentReportRequestGate = new Promise<void>((resolve) => {
+      releaseStudentReportRequest = resolve;
+    });
+    const studentReportRequestStarted = new Promise<void>((resolve) => {
+      markStudentReportRequestStarted = resolve;
+    });
+    const delayedStudentReportPath =
+      "/api/v1/exams/exam-report-ready/reports/snapshots/snapshot-ready/students/student-a";
+    await page.route(`**${delayedStudentReportPath}`, async (route) => {
+      markStudentReportRequestStarted();
+      await studentReportRequestGate;
+      await route.fallback();
+    });
+
+    const studentsTab = page.getByRole("tab", { name: "Öğrenciler" });
+    await studentsTab.click();
+    await expect(studentsTab).toHaveAttribute("aria-selected", "true");
+    await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("students");
+    const studentResultsTable = page.getByRole("table", { name: "Öğrenci sıralamaları" });
+    await expect(studentResultsTable).toBeVisible();
+    await studentResultsTable.getByRole("button", { name: "Ada Kaya karnesini aç" }).click();
+    await studentReportRequestStarted;
+
+    const examSelect = page.getByRole("combobox", { name: "Sınav" });
+    await examSelect.selectOption("exam-report-general");
+    await expect(examSelect).toHaveValue("exam-report-general");
+    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-general");
+    await expect(page.getByRole("heading", { name: "Hazır rapor yok" })).toBeVisible();
+    await page.getByRole("button", { name: "Raporu getir" }).click();
+    const workflowStrip = page.getByRole("region", { name: "Rapor iş akışı" });
+    await expect(workflowStrip).toContainText("Genel Rapor Denemesi");
+    await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
+
+    const delayedStudentReportResponse = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === delayedStudentReportPath,
+    );
+    releaseStudentReportRequest();
+    await delayedStudentReportResponse;
+    await page.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    );
+
+    await expect(workflowStrip).toContainText("Genel Rapor Denemesi");
+    await expect(workflowStrip).not.toContainText("Karne açık");
+    await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "Karne" })).toHaveAttribute("aria-selected", "false");
   });
 
   test("sınıfsız raporda genel öğrenci listesi yerine katılımcı kayıtlarını yükler", async ({ page }) => {

@@ -115,12 +115,12 @@ function validateBudgets() {
   }
 
   const landingTokens = [
-    "landing-hero-education-ops.webp",
-    "<picture>",
-    "fetchPriority=\"high\"",
-    "loading=\"eager\"",
-    "width={1440}",
-    "height={810}",
+    "next-marketing-workflow",
+    'aria-label="Optikten portala ürün akışı"',
+    "Sınavı seçin",
+    "Optik veriyi işleyin",
+    "Raporu doğrulayın",
+    "Yetkili portallara açın",
   ];
   for (const token of landingTokens) {
     if (!landingPageSource.includes(token)) {

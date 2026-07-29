@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
+import { expectNoHorizontalOverflow } from "./helpers/horizontal-overflow.js";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const smsEnabled = process.env.NEXT_PUBLIC_SMS_ENABLED === "true";
@@ -14,7 +15,9 @@ const corsHeaders = {
 
 test.describe("Öğrenci veli portalı sözleşmesi", () => {
   for (const viewport of [
-    { height: 844, width: 390 },
+    { height: 812, width: 320 },
+    { height: 812, width: 375 },
+    { height: 896, width: 414 },
     { height: 1024, width: 768 },
   ]) {
     test(`öğrenci portalı ${viewport.width}px görünümde kapsamı ve PII güvenliğini korur`, async ({ page }) => {
@@ -49,17 +52,12 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       const studentActions = page.getByRole("region", { name: "Öğrenci günlük aksiyonları" });
       await expect(studentActions).toContainText("Günlük iş kuyruğu");
       await expect(studentActions).toContainText("Öncelikli aksiyonlar");
-      await expect(studentActions).toContainText("6 aksiyon");
+      await expect(studentActions).toContainText("3 aksiyon");
+      await expect(studentActions).toContainText("2 öncelikli");
       await expect(studentActions.getByRole("link", { name: /Duyuruları oku: 1 okunmamış/ })).toHaveAttribute("href", "/ogrenci/duyurular");
-      await expect(studentActions.getByRole("link", { name: /Ödevi aç: 1 atama/ })).toHaveAttribute("href", "/ogrenci/odevler");
-      await expect(studentActions.getByRole("link", { name: /Devamsızlığı kontrol et: 30 kayıt/ })).toHaveAttribute("href", "/ogrenci/devamsizlik");
       await expect(studentActions.getByRole("link", { name: /Destek talebini takip et: 1 açık/ })).toHaveAttribute("href", "/ogrenci/destek");
-      await expect(
-        studentActions.getByRole("link", { name: /Son sınavı incele: %81,7.*Rapor.*İncele.*Başarı %.*24,5 net \/ 30 soru/ }),
-      ).toHaveAttribute("href", "/ogrenci/raporlar");
-      await expect(studentActions.getByRole("link", { name: /Son sınavı incele: %81,7/ })).toContainText("24,5 net / 30 soru");
-      await expect(studentActions.getByRole("link", { name: /Önizleme durumu: Canlı hesap/ })).toHaveAttribute("href", "/ogrenci/profil");
-      await expect(studentActions.getByRole("link")).toHaveCount(6);
+      await expect(studentActions.getByRole("link", { name: /Ödevi aç: 1 atama/ })).toHaveAttribute("href", "/ogrenci/odevler");
+      await expect(studentActions.getByRole("link")).toHaveCount(3);
       await expectNoPortalActionPiiLeak(studentActions, rawPiiValues);
       await expectAnchorsAttached(page, [
         "#portal-announcements",
@@ -150,7 +148,9 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
   });
 
   for (const viewport of [
-    { height: 844, width: 390 },
+    { height: 812, width: 320 },
+    { height: 812, width: 375 },
+    { height: 896, width: 414 },
     { height: 1024, width: 768 },
   ]) {
     test(`veli portalı ${viewport.width}px görünümde öğrenci kapsamı ve finans iznini korur`, async ({ page }) => {
@@ -184,19 +184,15 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
       const guardianActions = page.getByRole("region", { name: "Veli günlük aksiyonları" });
       await expect(guardianActions).toContainText("Günlük iş kuyruğu");
       await expect(guardianActions).toContainText("Öncelikli aksiyonlar");
-      await expect(guardianActions).toContainText("7 aksiyon");
+      await expect(guardianActions).toContainText("3 aksiyon");
+      await expect(guardianActions).toContainText("1 öncelikli");
+      await expect(guardianActions.getByRole("link", { name: /Duyuruları oku: 1 okunmamış/ })).toHaveAttribute("href", "/veli/duyurular");
       await expect(guardianActions.getByRole("link", { name: /Öğrenci seç: Ada Kaya/ })).toHaveAttribute("href", "/veli/ogrenci");
-      await expect(guardianActions.getByRole("link", { name: /Ödevi kontrol et: 1 atama/ })).toHaveAttribute("href", "/veli/odevler");
       await expect(
         guardianActions.getByRole("link", { name: /Ödeme durumunu gör: Ödeme izni kapalı.*Finans.*Kapalı.*Finans görünürlüğü kapalı/ }),
       ).toHaveAttribute("href", "/veli/odemeler");
       await expect(guardianActions).toContainText("Finans görünürlüğü kapalı");
-      await expect(
-        guardianActions.getByRole("link", { name: /Son sınavı incele: %81,7.*Rapor.*İncele.*Başarı %.*24,5 net \/ 30 soru/ }),
-      ).toHaveAttribute("href", "/veli/raporlar");
-      await expect(guardianActions.getByRole("link", { name: /Son sınavı incele: %81,7/ })).toContainText("24,5 net / 30 soru");
-      await expect(guardianActions.getByRole("link", { name: /Önizleme durumu: Canlı hesap/ })).toHaveAttribute("href", "/veli/bildirimler");
-      await expect(guardianActions.getByRole("link")).toHaveCount(7);
+      await expect(guardianActions.getByRole("link")).toHaveCount(3);
       await expectNoPortalActionPiiLeak(guardianActions, rawPiiValues);
       await expect(guardianActions).not.toContainText("500,00 TRY");
       await expectAnchorsAttached(page, [
@@ -248,7 +244,8 @@ test.describe("Öğrenci veli portalı sözleşmesi", () => {
     await expect(guardianPreviewActions).toContainText("Önizleme durumu");
     await expect(guardianPreviewActions).toContainText("Salt-okuma");
     await expect(guardianPreviewActions.getByRole("link", { name: /Önizleme durumu: Salt-okuma/ })).toHaveAttribute("href", "/veli?rolePreview=1");
-    await expect(guardianPreviewActions.getByRole("link", { name: /Destek talebini takip et: .*Salt-okuma.*Destek talebi açma kapalı/ })).toHaveAttribute("href", "/veli/destek?rolePreview=1");
+    await expect(guardianPreviewActions.getByRole("link", { name: /Duyuruları oku/ })).toHaveAttribute("href", "/veli/duyurular?rolePreview=1");
+    await expect(guardianPreviewActions.getByRole("link", { name: /Ödeme durumunu gör/ })).toHaveAttribute("href", "/veli/odemeler?rolePreview=1");
     const preferenceCheckboxes = page.getByLabel("Bildirim tercihleri").locator('input[type="checkbox"]');
     const preferenceCheckboxCount = smsEnabled ? 3 : 2;
     await expect(preferenceCheckboxes).toHaveCount(preferenceCheckboxCount);
@@ -814,14 +811,6 @@ function createPaymentPlans() {
       totalAmount: 50_000,
     },
   ];
-}
-
-async function expectNoHorizontalOverflow(page: Page, label: string) {
-  const overflow = await page.evaluate(() => {
-    const documentElement = document.documentElement;
-    return documentElement.scrollWidth - documentElement.clientWidth;
-  });
-  expect(overflow, `${label}: horizontal overflow`).toBeLessThanOrEqual(2);
 }
 
 async function expectAnchorsAttached(page: Page, hrefs: string[]) {

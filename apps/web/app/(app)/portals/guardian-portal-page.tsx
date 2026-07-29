@@ -319,7 +319,13 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
               },
             ]}
           />
-          <PortalActionStrip ariaLabel="Veli günlük aksiyonları" items={guardianActionItems} />
+          <PortalActionStrip
+            ariaLabel="Veli günlük aksiyonları"
+            items={guardianActionItems}
+            priorityKeys={isRolePreview
+              ? ["preview", "support", "student"]
+              : ["student", "finance", "report"]}
+          />
           <MetricGrid
             items={[
               { label: "Devamsızlık", value: data?.attendanceSummary.total ?? 0 },

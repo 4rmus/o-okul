@@ -196,6 +196,10 @@ const files = {
   "apps/web/src/sentry.ts": readFileSync("apps/web/src/sentry.ts", "utf8"),
   "apps/web/tsconfig.json": readFileSync("apps/web/tsconfig.json", "utf8"),
   "apps/web/e2e-next/a11y-next.spec.ts": readFileSync("apps/web/e2e-next/a11y-next.spec.ts", "utf8"),
+  "apps/web/e2e-next/helpers/horizontal-overflow.ts": readFileSync(
+    "apps/web/e2e-next/helpers/horizontal-overflow.ts",
+    "utf8",
+  ),
   "apps/web/e2e-next/backup-restore-next.spec.ts": readFileSync("apps/web/e2e-next/backup-restore-next.spec.ts", "utf8"),
   "apps/web/e2e-next/login-next.spec.ts": readFileSync("apps/web/e2e-next/login-next.spec.ts", "utf8"),
   "apps/web/e2e-next/live-onboarding-next.spec.ts": readFileSync("apps/web/e2e-next/live-onboarding-next.spec.ts", "utf8"),
@@ -514,8 +518,9 @@ const expectations = {
     "pnpm live:exam-cycle:check",
     "pnpm web:performance:check",
     "pnpm web:ux-baseline:check",
-    "768x1024 tablet viewport",
-    "WebP hero asset butcesi",
+    "320/375/414/768/1024/1440 viewport matrisi",
+    "1280x800 landing fold viewport",
+    "Sentetik hero asset render dışı",
   ],
   "docs/ADR-0002-deployment.md": ["Traefik TLS", "ACME HTTP-01", "canlı HTTPS kanıtı staging domain"],
   "docs/evidence-templates/deployment-region.example.json": ["datacenterCountryCode", "TR", "servicesVerified"],
@@ -976,7 +981,10 @@ const expectations = {
     "UAT-SYS-*",
     "UAT-KURUM-*",
     "Kritik WCAG 2 A/AA axe ihlali 0",
-    "kurum dashboard tablet viewport",
+    "auth sonrası kurum dashboard 320/375/414/768/1024/1440 görsel matrisi",
+    "1280x800 fold sözleşmesi",
+    "Genel login 320/375/414/768/1024/1440 axe + yatay taşma",
+    "eski sentetik hero asset render dışında",
     "docker compose -f docker-compose.yml -f docker-compose.traefik.yml config",
     "NEXT_E2E_LIVE_ONBOARDING=1",
     "LIVE_ONBOARDING_EVIDENCE_PATH",
@@ -1817,18 +1825,13 @@ const expectations = {
     "18 kapı",
   ],
   "apps/web/app/page.tsx": [
-    "landing-hero-education-ops.png",
-    "landing-hero-education-ops.webp",
-    "<picture>",
-    "fetchPriority=\"high\"",
-    "loading=\"eager\"",
-    "width={1440}",
-    "height={810}",
-    "Optik okuma",
-    "Kazanım analizi",
-    "Karne ve portal",
-    "Demo iste",
-    "Kapalı beta başvurusu",
+    "next-marketing-workflow",
+    "Optikten karneye",
+    "Sınavı seçin",
+    "Optik veriyi işleyin",
+    "Raporu doğrulayın",
+    "Yetkili portallara açın",
+    "Kurumunuza özel demo isteyin",
     "Production readiness kapıları",
   ],
   "apps/web/package.json": [
@@ -1881,7 +1884,13 @@ const expectations = {
     "/auth/refresh",
     "setViewportSize({ height: 1024, width: 768 })",
     "expectNoHorizontalOverflow",
-    "scrollWidth",
+    "yatay taşma ölçümü kök clip altında viewport dışı öğeyi yakalar",
+  ],
+  "apps/web/e2e-next/helpers/horizontal-overflow.ts": [
+    "documentElement.scrollWidth - viewportWidth",
+    "getBoundingClientRect()",
+    "result.offenders",
+    "toEqual([])",
   ],
   "apps/web/e2e-next/backup-restore-next.spec.ts": [
     "yedek restore paneli hedef sözleşmesini API çağrısından önce doğrular",
@@ -4742,6 +4751,15 @@ for (const [file, tokens] of Object.entries(expectations)) {
     if (!files[file].includes(token)) {
       failures.push(`${file} eksik: ${token}`);
     }
+  }
+}
+
+for (const retiredLandingAsset of [
+  "landing-hero-education-ops.png",
+  "landing-hero-education-ops.webp",
+]) {
+  if (files["apps/web/app/page.tsx"].includes(retiredLandingAsset)) {
+    failures.push(`apps/web/app/page.tsx eski sentetik hero asset'ini render etmemeli: ${retiredLandingAsset}`);
   }
 }
 

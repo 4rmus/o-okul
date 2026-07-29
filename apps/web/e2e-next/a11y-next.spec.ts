@@ -1,5 +1,6 @@
 import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { expectNoHorizontalOverflow, inspectHorizontalOverflow } from "./helpers/horizontal-overflow.js";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 
@@ -9,6 +10,18 @@ const corsHeaders = {
   "access-control-allow-methods": "DELETE,GET,PATCH,POST,OPTIONS",
   "access-control-allow-origin": appOrigin,
 };
+
+const hallmarkResponsiveViewports = [
+  { height: 812, width: 320 },
+  { height: 812, width: 375 },
+  { height: 896, width: 414 },
+  { height: 1024, width: 768 },
+] as const;
+const hallmarkFullViewports = [
+  ...hallmarkResponsiveViewports,
+  { height: 900, width: 1024 },
+  { height: 960, width: 1440 },
+] as const;
 
 interface AxeViolationSummary {
   help: string;
@@ -49,12 +62,43 @@ test.describe("Next erişilebilirlik smoke", () => {
     await expectNoHighImpactA11yViolations(page, "system-login");
   });
 
-  test("public landing mobil viewport'ta taşmadan açılır", async ({ page }) => {
-    await page.setViewportSize({ height: 844, width: 390 });
-    await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Optikten karneye, eğitim operasyonunuz tek akışta." })).toBeVisible();
-    await expectNoHorizontalOverflow(page, "landing-mobile");
-    await expectNoHighImpactA11yViolations(page, "landing-mobile");
+  test("public landing 320/375/414/768 görünümde taşmadan açılır", async ({ page }) => {
+    test.setTimeout(60_000);
+
+    for (const viewport of hallmarkResponsiveViewports) {
+      await page.setViewportSize(viewport);
+      await page.goto("/");
+      await expect(page.getByRole("heading", { name: "Optikten karneye, eğitim operasyonunuz tek akışta." })).toBeVisible();
+      await expectNoHorizontalOverflow(page, `landing-${viewport.width}`);
+      await expectNoHighImpactA11yViolations(page, `landing-${viewport.width}`);
+    }
+  });
+
+  test("genel login 320/375/414/768/1024/1440 görünümde taşmadan ve erişilebilir açılır", async ({ page }) => {
+    test.setTimeout(60_000);
+
+    for (const viewport of hallmarkFullViewports) {
+      await page.setViewportSize(viewport);
+      await page.goto("/login");
+      await expect(page.getByRole("form", { name: "Giriş formu" })).toBeVisible();
+      await expectNoHorizontalOverflow(page, `login-${viewport.width}`);
+      await expectNoHighImpactA11yViolations(page, `login-${viewport.width}`);
+    }
+  });
+
+  test("yatay taşma ölçümü kök clip altında viewport dışı öğeyi yakalar", async ({ page }) => {
+    await page.setViewportSize({ height: 640, width: 320 });
+    await page.setContent(`
+      <style>
+        html, body { margin: 0; max-width: 100%; overflow-x: clip; }
+        [data-overflow-probe] { width: 500px; height: 44px; }
+      </style>
+      <div data-overflow-probe>Taşma ölçüm probu</div>
+    `);
+
+    const measurement = await inspectHorizontalOverflow(page);
+    expect(measurement.rootOverflow).toBe(0);
+    expect(measurement.offenders[0]?.overflow).toBeGreaterThanOrEqual(180);
   });
 
   test("kurum dashboard shell'inde yüksek etkili axe ihlali yok", async ({ page }) => {
@@ -70,13 +114,14 @@ test.describe("Next erişilebilirlik smoke", () => {
 
   test("kurum dashboard shell'i tablet viewport'ta taşmadan açılır", async ({ page }) => {
     await page.setViewportSize({ height: 1024, width: 768 });
-    await openInstitutionDashboard(page);
+    await openInstitutionDashboard(page, { expectNavigationVisible: false });
+    await expect(page.getByRole("button", { name: "Ana menüyü aç" })).toBeVisible();
     await expectNoHorizontalOverflow(page, "kurum-dashboard-tablet");
     await expectNoHighImpactA11yViolations(page, "kurum-dashboard-tablet");
   });
 
   test("kurum dashboard gövdesi mobil viewport'ta taşmadan açılır", async ({ page }) => {
-    await page.setViewportSize({ height: 844, width: 390 });
+    await page.setViewportSize({ height: 812, width: 320 });
     await openInstitutionDashboard(page, { expectNavigationVisible: false });
     const overviewRegion = page.getByRole("region", { exact: true, name: "Kurum özeti" });
     await expect(overviewRegion).toBeVisible();
@@ -91,6 +136,15 @@ test.describe("Next erişilebilirlik smoke", () => {
     await expect(page.getByRole("region", { exact: true, name: "Karar sinyalleri" })).toBeVisible();
     await expectNoHorizontalOverflow(page, "kurum-dashboard-mobile-body");
     await expectNoHighImpactA11yViolations(page, "kurum-dashboard-mobile-body");
+  });
+
+  test("kurum dashboard 375 ve 414 ara mobil genişliklerde taşmadan açılır", async ({ page }) => {
+    for (const viewport of hallmarkResponsiveViewports.filter(({ width }) => width === 375 || width === 414)) {
+      await page.setViewportSize(viewport);
+      await openInstitutionDashboard(page, { expectNavigationVisible: false });
+      await expectNoHorizontalOverflow(page, `kurum-dashboard-${viewport.width}`);
+      await expectNoHighImpactA11yViolations(page, `kurum-dashboard-${viewport.width}`);
+    }
   });
 
   test("shell komut paleti yüksek etkili axe ihlali olmadan klavye akışını korur", async ({ page }) => {
@@ -113,6 +167,9 @@ test.describe("Next erişilebilirlik smoke", () => {
     await expect(page.getByRole("navigation", { name: "Ana menü" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Ana menüyü kapat" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Menü arka planını kapat" })).toBeVisible();
+    await expect.poll(
+      () => page.locator("#next-sidebar").evaluate((element) => Math.round(element.getBoundingClientRect().left)),
+    ).toBe(0);
     await expectNoHorizontalOverflow(page, "kurum-mobile-menu");
     await expectNoHighImpactA11yViolations(page, "kurum-mobile-menu");
     await page.getByRole("button", { name: "Ana menüyü kapat" }).click();
@@ -138,16 +195,6 @@ function formatViolations(label: string, violations: AxeViolationSummary[]) {
     `${label}: ${violations.length} yüksek etkili axe ihlali bulundu`,
     ...violations.map((violation) => `- ${violation.id}: ${violation.help} (${violation.nodes.map((node) => node.target.join(" ")).join(", ")})`),
   ].join("\n");
-}
-
-async function expectNoHorizontalOverflow(page: Page, label: string) {
-  const overflow = await page.evaluate(() => {
-    const documentElement = document.documentElement;
-    const body = document.body;
-    return Math.max(documentElement.scrollWidth - documentElement.clientWidth, body.scrollWidth - body.clientWidth);
-  });
-
-  expect(overflow, `${label}: yatay taşma ${overflow}px`).toBeLessThanOrEqual(1);
 }
 
 async function expectFirstFocusableElement(page: Page, expectedText: string) {

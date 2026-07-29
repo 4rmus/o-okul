@@ -66,6 +66,10 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", files.visualSpec, [
   'expect(page).toHaveScreenshot("student-report-card-1024.png"',
   'clip: karneClip',
   'maxDiffPixelRatio: 0.005',
+  'page.emulateMedia({ media: "print" })',
+  'expect(printKarneBox?.width).toBe(595)',
+  'expect(printKarneBox?.height).toBeGreaterThanOrEqual(842)',
+  'page.emulateMedia({ media: "screen" })',
 ], failures);
 for (const path of visualBaselines) {
   const size = readPngSize(path);
@@ -75,7 +79,7 @@ for (const path of visualBaselines) {
 }
 
 const scripts = files.packageJson.scripts ?? {};
-const expectedCommand = 'node scripts/check-karne-visual-contract.mjs && UI_VISUAL_ARTIFACT_DIR=artifacts/ui-ux-redesign/local pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts --workers=1 --update-snapshots=none e2e-next/ui-visual-qa-next.spec.ts --grep "rapor çalışma alanı 375/768/1024/1440 görünümde bağlam ve karne taşmadan kalır"';
+const expectedCommand = 'node scripts/check-karne-visual-contract.mjs && UI_VISUAL_ARTIFACT_DIR=artifacts/ui-ux-redesign/local pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts --workers=1 --update-snapshots=none e2e-next/ui-visual-qa-next.spec.ts --grep "rapor çalışma alanı 320/375/414/768/1024/1440 görünümde bağlam ve karne taşmadan kalır"';
 if (scripts["karne:visual-contract:check"] !== expectedCommand) {
   failures.push("package.json karne:visual-contract:check must run the contract checker and tracked Playwright comparison.");
 }

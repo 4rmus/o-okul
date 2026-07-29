@@ -5,9 +5,12 @@ import { pathToFileURL } from "node:url";
 
 const localCommands = [
   "pnpm --filter @o-okul/web typecheck",
+  "pnpm web:design-tokens:check",
   "pnpm web:a11y:check",
+  "pnpm web:auth-contract:check",
   "pnpm web:ux-baseline:check",
   "pnpm web:ux-contract:check",
+  "pnpm web:ux-rc:check",
   "pnpm karne:visual-contract:check",
 ];
 const releaseCommands = [
@@ -19,10 +22,15 @@ const releaseCommands = [
 ];
 const forbiddenRawFields = ["email", "phone", "nationalId", "rawAnswer", "rawLine", "rawRow"];
 const evidenceReferencePrefixes = ["artifact:", "file://", "https://", "log:", "run:", "s3://", "url:"];
-const requiredWidths = [375, 768, 1024, 1440];
+const requiredWidths = [320, 375, 414, 768, 1024, 1440];
 const phaseConfigs = [
   {
-    commandsPassed: ["pnpm --filter @o-okul/web typecheck", "pnpm web:a11y:check"],
+    commandsPassed: [
+      "pnpm --filter @o-okul/web typecheck",
+      "pnpm web:design-tokens:check",
+      "pnpm web:a11y:check",
+      "pnpm web:auth-contract:check",
+    ],
     envKey: "UI_UX_REDESIGN_PHASE_0_REFERENCES",
     phase: "Faz 0",
     scope: "staging-production",

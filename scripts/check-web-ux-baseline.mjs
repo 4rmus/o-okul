@@ -1,8 +1,12 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const files = {
   "apps/web/e2e-next/a11y-next.spec.ts": readFileSync("apps/web/e2e-next/a11y-next.spec.ts", "utf8"),
+  "apps/web/e2e-next/helpers/horizontal-overflow.ts": readFileSync(
+    "apps/web/e2e-next/helpers/horizontal-overflow.ts",
+    "utf8",
+  ),
   "apps/web/e2e-next/list-url-state-next.spec.ts": readFileSync("apps/web/e2e-next/list-url-state-next.spec.ts", "utf8"),
   "apps/web/e2e-next/data-table-mobile-contract-next.spec.ts": readFileSync("apps/web/e2e-next/data-table-mobile-contract-next.spec.ts", "utf8"),
   "apps/web/e2e-next/governance-evidence-contract-next.spec.ts": readFileSync("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", "utf8"),
@@ -118,6 +122,22 @@ const webPackageJson = JSON.parse(files["apps/web/package.json"]);
 const uiPackageJson = JSON.parse(files["packages/ui/package.json"]);
 const failures = [];
 const appSourcePaths = collectSourceFiles("apps/web/app/(app)", [".ts", ".tsx"]);
+const visualSnapshotDirectory = "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts";
+const targetedVisualGoldens = [
+  "institution-shell-rail-1440",
+  "login-panel-414",
+  "report-status-1440",
+  "student-portal-actions-414",
+];
+
+for (const golden of targetedVisualGoldens) {
+  for (const platform of ["darwin", "linux"]) {
+    const path = join(visualSnapshotDirectory, `${golden}-${platform}.png`);
+    if (!existsSync(path)) {
+      failures.push(`Targeted visual golden is missing: ${path}`);
+    }
+  }
+}
 
 requireNoTokensInFiles("apps/web/app/(app)", appSourcePaths, [
   "next-list-panel",
@@ -138,7 +158,7 @@ requireScript(
 );
 requireScript(
   "ui-ux-redesign:local-gates",
-  "pnpm --filter @o-okul/shared-types build && pnpm --filter @o-okul/ui build && pnpm --filter @o-okul/web typecheck && pnpm web:a11y:check && pnpm web:ux-baseline:check && pnpm web:ux-contract:check && pnpm karne:visual-contract:check && pnpm ui-ux-redesign:example-fixtures && pnpm ui-ux-redesign:fixture-regression && pnpm ui-ux-redesign:evidence-generate:contract && pnpm ui-ux-redesign:visual-qa",
+  "pnpm --filter @o-okul/shared-types build && pnpm --filter @o-okul/ui build && pnpm --filter @o-okul/web typecheck && pnpm web:design-tokens:check && pnpm web:a11y:check && pnpm web:auth-contract:check && pnpm web:ux-baseline:check && pnpm web:ux-contract:check && pnpm karne:visual-contract:check && pnpm ui-ux-redesign:example-fixtures && pnpm ui-ux-redesign:fixture-regression && pnpm ui-ux-redesign:evidence-generate:contract && pnpm ui-ux-redesign:visual-qa",
 );
 requireScript("ui-ux-redesign:evidence-generate", "node scripts/generate-ui-ux-redesign-evidence.mjs");
 
@@ -150,7 +170,9 @@ if (uiPackageJson.scripts?.typecheck !== "tsc -p tsconfig.contract.json --noEmit
   failures.push("packages/ui/package.json typecheck script must run the primitive contract tsconfig.");
 }
 requireScriptIncludes("ci", "pnpm web:performance:check");
+requireScriptIncludes("ci", "pnpm web:design-tokens:check");
 requireScriptIncludes("ci", "pnpm web:a11y:check");
+requireScriptIncludes("ci", "pnpm web:auth-contract:check");
 requireScriptIncludes("ci", "pnpm web:ux-baseline:check");
 requireScriptIncludes("ci", "pnpm web:ux-contract:check");
 requireScriptIncludes("ci", "pnpm ui-ux-redesign:visual-qa");
@@ -165,6 +187,8 @@ if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.n
 
 requireTokens("apps/web/e2e-next/a11y-next.spec.ts", [
   "AxeBuilder",
+  "hallmarkFullViewports",
+  "genel login 320/375/414/768/1024/1440 görünümde taşmadan ve erişilebilir açılır",
   'withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])',
   'const blockedA11yImpacts = new Set(["critical", "serious"])',
   "blockedA11yImpacts.has(violation.impact)",
@@ -203,8 +227,14 @@ requireTokens("apps/web/e2e-next/a11y-next.spec.ts", [
   "Menü arka planını kapat",
   'toHaveAttribute("aria-expanded", "false")',
   "expectNoHorizontalOverflow",
-  "scrollWidth -",
-  "clientWidth",
+  "yatay taşma ölçümü kök clip altında viewport dışı öğeyi yakalar",
+]);
+
+requireTokens("apps/web/e2e-next/helpers/horizontal-overflow.ts", [
+  "documentElement.scrollWidth - viewportWidth",
+  "getBoundingClientRect()",
+  "result.offenders",
+  "toEqual([])",
 ]);
 
 requireTokens("apps/web/app/(auth)/login/page.tsx", [
@@ -1054,10 +1084,10 @@ requireTokens("apps/web/e2e-next/optik-workspace-contract-next.spec.ts", [
   'getByRole("region", { name: "Rapor üretim durumu" })',
   'reportStatus).toHaveClass(/uh-metric-grid/)',
   'reportStatus.locator(".uh-metric-card")).toHaveCount(2)',
-  'optikReportPanel.locator(".next-report-status-grid")).toHaveCount(0)',
-  'toContainText("Raporlara geçiş")',
+  'getByRole("region", { name: "Raporlara geçiş" })',
+  'reportHandoff.locator(".next-report-status-grid")).toHaveCount(0)',
   'getByRole("link", { name: "Rapor çalışma alanına geç" })',
-  'toHaveAttribute("href", "/kurum/raporlar?examId=exam-optik")',
+  '"/kurum/raporlar?examId=exam-optik"',
   'getByRole("table", { name: "Hazır optik raporlar" })).toHaveCount(0)',
   'getByRole("table", { name: "Optik katılımcı sonuçları" })).toHaveCount(0)',
   "expectNoHorizontalOverflow",
@@ -1166,11 +1196,11 @@ requireTokens("apps/web/e2e-next/teacher-portal-contract-next.spec.ts", [
   'focusMetrics).toHaveClass(/uh-info-grid/)',
   'focusMetrics.locator(".uh-info-item")).toHaveCount(8)',
   "Günlük iş kuyruğu",
-  "8 aksiyon",
+  "3 aksiyon",
   'getByRole("link", { name: /Yoklama kaydet: 2 kayıt.*Yoklama.*Kaydet.*Bugün.*2026-06-17 için yoklama/ })',
-  'getByRole("link", { name: /Not ekle: 2 not/ })',
-  'getByRole("link", { name: /Raporu incele: %81,7.*Rapor.*İncele.*Başarı %.*24,5 net \\/ 30 soru/ })',
-  'getByRole("link")).toHaveCount(8)',
+  'getByRole("link", { name: /Ödev kontrol et: 1 bekliyor/ })',
+  'getByRole("link", { name: /Destek talebini takip et: 1 açık/ })',
+  'getByRole("link")).toHaveCount(3)',
   "clickAllPortalActionLinks",
   "expect.poll(() => mutationRequests).toEqual([])",
   "expectPortalActionFocus",
@@ -1290,16 +1320,11 @@ requireTokens("apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts",
   'getByLabel("Rol önizleme modu")',
   "Duyuruları oku: 1 okunmamış",
   "Günlük iş kuyruğu",
-  "6 aksiyon",
-  "7 aksiyon",
+  "3 aksiyon",
   "Ödevi aç: 1 atama",
-  "Devamsızlığı kontrol et: 30 kayıt",
   "Destek talebini takip et: 1 açık",
-  "Son sınavı incele: %81,7",
-  "24,5 net / 30 soru",
   "successRateDelta: 11.7",
   "Öğrenci seç: Ada Kaya",
-  "Ödevi kontrol et: 1 atama",
   "Ödeme durumunu gör: Ödeme izni kapalı",
   "Finans görünürlüğü kapalı",
   "500,00 TRY",
@@ -1324,8 +1349,7 @@ requireTokens("apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts",
   "expectNoPortalActionPiiLeak",
   "clickAllPortalActionLinks",
   "expect.poll(() => mutationRequests).toEqual([])",
-  'getByRole("link")).toHaveCount(6)',
-  'getByRole("link")).toHaveCount(7)',
+  'getByRole("link")).toHaveCount(3)',
   '"#portal-report"',
   '"#portal-student-picker"',
   "action.click()",
@@ -1346,7 +1370,8 @@ requireTokens("apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts",
   "Soru sayısı bağlamıyla okunur",
   "next-portal-focus-target",
   "expectNoClippedVisibleText",
-  'getByRole("link", { name: /Son sınavı incele: %81,7.*Rapor.*İncele.*Başarı %.*24,5 net \\/ 30 soru/ })',
+  'getByRole("link", { name: /Duyuruları oku: 1 okunmamış/ })',
+  'getByRole("link", { name: /Destek talebini takip et: 1 açık/ })',
   'getByRole("link", { name: /Ödeme durumunu gör: Ödeme izni kapalı.*Finans.*Kapalı.*Finans görünürlüğü kapalı/ })',
   "paymentPlanRequests",
   "mutationRequests",
@@ -4081,6 +4106,8 @@ requireTokens("apps/web/app/(app)/portals/_shared/portal-shell.tsx", [
   "PortalDailyBrief",
   "PortalActionStrip",
   "PortalActionItem",
+  "priorityKeys?: readonly string[]",
+  ".map((key) => items.find",
   "AccessPanel",
   'aria-label="Portal erişimi"',
   'title="Portal erişimi"',
@@ -4714,13 +4741,25 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   "artifacts/ui-ux-redesign/local",
   "RolePortalActionStripCase",
   "const redesignViewports",
+  "const landingViewports",
+  "genel giriş kartı 414px deterministik görsel sözleşmesini korur",
+  'toHaveScreenshot("login-panel-414.png"',
+  'toHaveScreenshot("institution-shell-rail-1440.png"',
+  'toHaveScreenshot("student-portal-actions-414.png"',
+  'toHaveScreenshot("report-status-1440.png"',
+  "hideNextDevIndicator",
+  "landing 320/375/414/768/1024/1280/1440 görünümde gerçek ürün akışını taşmadan gösterir",
+  'getByRole("region", { name: "Optikten portala ürün akışı" })',
+  'page.locator(".next-marketing-product")).toHaveCount(0)',
+  "grafit-mercan-landing-${viewport.width}",
+  "`grafit-mercan-landing-${viewport.width}.png`",
   "expectPortalDailyBrief",
   'getByRole("region", { name: "Günlük durum" })',
   'getByRole("region", { name: "Günlük ders akışı" })',
   'brief.getByRole("group", { name: /metrikleri/ })',
   'metrics).toHaveClass(/uh-metric-grid/)',
   'metrics.locator(".next-portal-brief__item.uh-metric-card")).toHaveCount(expectedCount)',
-  "kurum dashboard 375/768/1024/1440 görünümde özet, karar ve rapor sözleşmesini korur",
+  "kurum dashboard 320/375/414/768/1024/1440 görünümde özet, karar ve rapor sözleşmesini korur",
   'getByRole("region", { exact: true, name: "Kurum özeti" })',
   "overviewRegion).toHaveClass(/uh-metric-grid/)",
   'overviewRegion.locator(".uh-metric-card")).toHaveCount(4)',
@@ -4764,12 +4803,12 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   "Başarı %",
   "READY rapor",
   "Tenant scope doğrulandı",
-  "öğrenci listesi 375/768/1024/1440 görünümde URL state ile taşmadan kalır",
+  "öğrenci listesi 320/375/414/768/1024/1440 görünümde URL state ile taşmadan kalır",
   "faz9-students-list-${viewport.width}",
   "`faz9-students-list-${viewport.width}.png`",
-  "rol portal aksiyon şeritleri 375/768/1024/1440 görünümde taşmadan kalır",
-  "rapor çalışma alanı 375/768/1024/1440 görünümde bağlam ve karne taşmadan kalır",
-  "optik workflow 375/768/1024/1440 görünümde tab semantiği ve yoğun form düzenini korur",
+  "rol portal aksiyon şeritleri 320/375/414/768/1024/1440 görünümde taşmadan kalır",
+  "rapor çalışma alanı 320/375/414/768/1024/1440 görünümde bağlam ve karne taşmadan kalır",
+  "optik workflow 320/375/414/768/1024/1440 görünümde tab semantiği ve yoğun form düzenini korur",
   "faz9-optik-workflow-${viewport.width}",
   "`faz9-optik-workflow-${viewport.width}.png`",
   "öğretmen detay desktop ve mobil görev ilişkilerini güvenli gösterir",
@@ -4802,7 +4841,9 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   'pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots"',
   'pathName === "/me/teacher/reports/exam-demo-isem-lgs-1/snapshots/snapshot-a/students/student-a"',
   "test.setTimeout(90_000)",
+  "{ height: 812, width: 320 }",
   "{ height: 812, width: 375 }",
+  "{ height: 896, width: 414 }",
   "{ height: 1024, width: 768 }",
   "{ height: 900, width: 1024 }",
   "{ height: 960, width: 1440 }",
@@ -4875,32 +4916,41 @@ requireTokens("scripts/profile-web-performance.mjs", [
   "250_000",
   "Landing route server component",
   "Landing route useQuery",
-  "landing-hero-education-ops.webp",
-  "fetchPriority",
-  "loading",
+  "next-marketing-workflow",
+  "Optikten portala ürün akışı",
+  "Yetkili portallara açın",
 ]);
 
 requireTokens("apps/web/app/page.tsx", [
-  "landing-hero-education-ops.webp",
-  "landing-hero-education-ops.png",
-  "<picture>",
-  "fetchPriority=\"high\"",
-  "loading=\"eager\"",
-  "width={1440}",
-  "height={810}",
+  "next-marketing-workflow",
+  'aria-label="Optikten portala ürün akışı"',
+  "Sınavı seçin",
+  "Optik veriyi işleyin",
+  "Raporu doğrulayın",
+  "Yetkili portallara açın",
 ]);
 
 requireTokens("apps/web/playwright.next.config.ts", [
   "pnpm --filter @o-okul/ui build && pnpm --filter @o-okul/web next:dev",
 ]);
 
-requireTokens(".github/workflows/ci.yml", ["pnpm --filter @o-okul/web exec playwright install --with-deps chromium"]);
+requireTokens(".github/workflows/ci.yml", [
+  "pnpm --filter @o-okul/web exec playwright install --with-deps chromium",
+  "ui-ux-rc:",
+  "pnpm --filter @o-okul/web exec playwright install --with-deps chromium webkit",
+  "pnpm web:ux-rc:check",
+]);
+requireNoTokens(".github/workflows/ci.yml", [
+  "ui-ux-rc:\n    if: github.event_name == 'workflow_dispatch'",
+]);
 
 requireTokens("docs/phase-6-production-readiness.md", [
   "pnpm web:ux-baseline:check",
   "Web UX ve A11y",
-  "Landing, login, auth sonrası kurum dashboard shell'i",
-  "768x1024",
+  "Landing ve auth sonrası kurum dashboard",
+  "Genel login 320/375/414/768/1024/1440",
+  "320/375/414/768",
+  "1024/1440",
   "Kritik WCAG 2 A/AA axe ihlali 0",
   "Web UX baseline",
 ]);

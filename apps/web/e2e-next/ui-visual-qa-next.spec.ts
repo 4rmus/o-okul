@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
+import { expectNoHorizontalOverflow } from "./helpers/horizontal-overflow.js";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -31,14 +32,90 @@ interface RolePortalActionStripCase {
 }
 
 const redesignViewports = [
+  { height: 812, width: 320 },
   { height: 812, width: 375 },
+  { height: 896, width: 414 },
   { height: 1024, width: 768 },
   { height: 900, width: 1024 },
   { height: 960, width: 1440 },
 ];
+const landingViewports = [...redesignViewports, { height: 800, width: 1280 }];
+
+const rolePortalActionStripCases: RolePortalActionStripCase[] = [
+  {
+    authProfile: "student",
+    count: 3,
+    hrefs: [
+      { href: "/ogrenci/duyurular", name: /Duyuruları oku: 1 okunmamış/ },
+      { href: "/ogrenci/devamsizlik", name: /Devamsızlığı kontrol et: 30 kayıt/ },
+      { href: "/ogrenci/destek", name: /Destek talebini takip et: 1 açık/ },
+    ],
+    key: "student",
+    path: "/ogrenci?examId=exam-demo-isem-lgs-1",
+    regionName: "Öğrenci günlük aksiyonları",
+  },
+  {
+    authProfile: "guardian",
+    count: 3,
+    hrefs: [
+      { href: "/veli/odemeler", name: /Ödeme durumunu gör: 1\.200,00 TRY/ },
+      { href: "/veli/duyurular", name: /Duyuruları oku: 1 okunmamış/ },
+      { href: "/veli/destek", name: /Destek talebini takip et: 1 açık/ },
+    ],
+    key: "guardian",
+    path: "/veli",
+    regionName: "Veli günlük aksiyonları",
+  },
+  {
+    authProfile: "teacher",
+    count: 3,
+    hrefs: [
+      { href: "/ogretmen/odevler", name: /Ödev kontrol et: 1 bekliyor/ },
+      { href: "/ogretmen/destek", name: /Destek talebini takip et: 1 açık/ },
+      { href: "/ogretmen/ogrenci-takibi", name: /Yoklama kaydet: 2 kayıt/ },
+    ],
+    key: "teacher",
+    path: "/ogretmen",
+    regionName: "Öğretmen günlük aksiyonları",
+  },
+];
+const rolePortalViewportContractName =
+  "rol portal aksiyon şeritleri 320/375/414/768/1024/1440 görünümde taşmadan kalır";
 
 test.describe("Faz 9 UI görsel smoke", () => {
-  test("kurum dashboard 375/768/1024/1440 görünümde özet, karar ve rapor sözleşmesini korur", async ({ page }) => {
+  test("landing 320/375/414/768/1024/1280/1440 görünümde gerçek ürün akışını taşmadan gösterir", async ({ page }) => {
+    test.setTimeout(90_000);
+    const consoleErrors = collectConsoleErrors(page);
+
+    for (const viewport of landingViewports) {
+      await page.setViewportSize(viewport);
+      await page.goto("/");
+      await expect(page.getByRole("heading", { level: 1, name: /Optikten karneye/ })).toBeVisible();
+      await expect(page.getByRole("region", { name: "Optikten portala ürün akışı" })).toBeVisible();
+      await expect(page.locator(".next-marketing-product")).toHaveCount(0);
+      await expectUiStable(page, `grafit-mercan-landing-${viewport.width}`, consoleErrors);
+      if (viewport.width === 1280) {
+        await expect(page.getByRole("heading", { level: 1, name: /Optikten karneye/ })).toBeInViewport();
+        await expect(page.getByRole("link", { name: /Kurumunuza özel demo isteyin/ })).toBeInViewport();
+        await expect(page.getByRole("region", { name: "Optikten portala ürün akışı" })).toBeInViewport();
+      }
+      await saveScreenshot(page, `grafit-mercan-landing-${viewport.width}.png`);
+    }
+  });
+
+  test("genel giriş kartı 414px deterministik görsel sözleşmesini korur", async ({ page }) => {
+    await page.setViewportSize({ height: 896, width: 414 });
+    await page.goto("/login");
+    const loginPanel = page.getByRole("region", { name: "Giriş" });
+    await expect(loginPanel).toBeVisible();
+    await hideNextDevIndicator(page);
+    await expect(loginPanel).toHaveScreenshot("login-panel-414.png", {
+      animations: "disabled",
+      maxDiffPixelRatio: 0.005,
+    });
+  });
+
+  test("kurum dashboard 320/375/414/768/1024/1440 görünümde özet, karar ve rapor sözleşmesini korur", async ({ page }) => {
     test.setTimeout(90_000);
     const consoleErrors = collectConsoleErrors(page);
 
@@ -87,6 +164,13 @@ test.describe("Faz 9 UI görsel smoke", () => {
       await expect(page.locator("body")).not.toContainText("tenant-faz9");
       await expect(page.locator("body")).not.toContainText("user-faz9-admin");
       await expectUiStable(page, `faz9-dashboard-${viewport.width}`, consoleErrors);
+      if (viewport.width === 1440) {
+        await hideNextDevIndicator(page);
+        await expect(page.locator(".next-sidebar")).toHaveScreenshot("institution-shell-rail-1440.png", {
+          animations: "disabled",
+          maxDiffPixelRatio: 0.005,
+        });
+      }
       await saveScreenshot(page, `faz9-dashboard-${viewport.width}.png`);
     }
   });
@@ -209,7 +293,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     expect(studentPortalRequestCount).toBe(0);
   });
 
-  test("öğrenci listesi 375/768/1024/1440 görünümde URL state ile taşmadan kalır", async ({ page }) => {
+  test("öğrenci listesi 320/375/414/768/1024/1440 görünümde URL state ile taşmadan kalır", async ({ page }) => {
     test.setTimeout(90_000);
     const consoleErrors = collectConsoleErrors(page);
 
@@ -507,10 +591,10 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(studentFocusMetrics.locator(".uh-info-item")).toHaveCount(8);
     await expectPortalDailyBrief(page.getByRole("region", { name: "Günlük durum" }), 6);
     const studentActionStrip = page.getByRole("region", { name: "Öğrenci günlük aksiyonları" });
-    await expectRolePortalActionStrip(studentActionStrip, 6, [
+    await expectRolePortalActionStrip(studentActionStrip, 3, [
       { href: "/ogrenci/duyurular", name: /Duyuruları oku: 1 okunmamış/ },
       { href: "/ogrenci/devamsizlik", name: /Devamsızlığı kontrol et: 30 kayıt/ },
-      { href: "/ogrenci/raporlar", name: /Son sınavı incele: %81,7/ },
+      { href: "/ogrenci/destek", name: /Destek talebini takip et: 1 açık/ },
     ]);
     const homeworkTable = page.getByRole("table", { name: "Ödev ve materyal atamaları" });
     await expect(homeworkTable.getByRole("columnheader", { name: "Materyal" })).toBeVisible();
@@ -539,8 +623,9 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await page.goto("/ogrenci?examId=exam-demo-isem-lgs-1");
     await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
     await expect(page.getByRole("heading", { level: 1, name: "Öğrenci Portalı" })).toBeVisible();
-    await expectRolePortalActionStrip(page.getByRole("region", { name: "Öğrenci günlük aksiyonları" }), 6, [
-      { href: "/ogrenci/odevler", name: /Ödevi aç: 1 atama/ },
+    await expectRolePortalActionStrip(page.getByRole("region", { name: "Öğrenci günlük aksiyonları" }), 3, [
+      { href: "/ogrenci/duyurular", name: /Duyuruları oku: 1 okunmamış/ },
+      { href: "/ogrenci/devamsizlik", name: /Devamsızlığı kontrol et: 30 kayıt/ },
       { href: "/ogrenci/destek", name: /Destek talebini takip et: 1 açık/ },
     ]);
     const mobileStudentReportSummary = page.getByRole("region", { name: "Portal rapor özeti" });
@@ -569,10 +654,10 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(guardianFocusMetrics).toHaveClass(/uh-info-grid/);
     await expect(guardianFocusMetrics.locator(".uh-info-item")).toHaveCount(9);
     await expectPortalDailyBrief(page.getByRole("region", { name: "Günlük durum" }), 6);
-    await expectRolePortalActionStrip(page.getByRole("region", { name: "Veli günlük aksiyonları" }), 7, [
-      { href: "/veli/ogrenci", name: /Öğrenci seç: Ada Kaya/ },
+    await expectRolePortalActionStrip(page.getByRole("region", { name: "Veli günlük aksiyonları" }), 3, [
       { href: "/veli/odemeler", name: /Ödeme durumunu gör: 1\.200,00 TRY/ },
-      { href: "/veli/raporlar", name: /Son sınavı incele: %81,7/ },
+      { href: "/veli/duyurular", name: /Duyuruları oku: 1 okunmamış/ },
+      { href: "/veli/destek", name: /Destek talebini takip et: 1 açık/ },
     ]);
     const paymentTable = page.getByRole("table", { name: "Ödeme planları" });
     await expect(paymentTable.getByRole("columnheader", { name: "Bekleyen" })).toBeVisible();
@@ -598,10 +683,10 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(teacherFocusMetrics).toHaveClass(/uh-info-grid/);
     await expect(teacherFocusMetrics.locator(".uh-info-item")).toHaveCount(8);
     await expectPortalDailyBrief(page.getByRole("region", { name: "Günlük ders akışı" }), 6);
-    await expectRolePortalActionStrip(page.getByRole("region", { name: "Öğretmen günlük aksiyonları" }), 8, [
+    await expectRolePortalActionStrip(page.getByRole("region", { name: "Öğretmen günlük aksiyonları" }), 3, [
+      { href: "/ogretmen/odevler", name: /Ödev kontrol et: 1 bekliyor/ },
+      { href: "/ogretmen/destek", name: /Destek talebini takip et: 1 açık/ },
       { href: "/ogretmen/ogrenci-takibi", name: /Yoklama kaydet: 2 kayıt/ },
-      { href: "/ogretmen/ogrenci-takibi", name: /Materyal ata: 1 materyal/ },
-      { href: "/ogretmen/raporlar", name: /Raporu incele: %81,7/ },
     ]);
     const classReportsTable = page.getByRole("table", { name: "Öğretmen sınıf raporları" });
     await expect(classReportsTable.getByRole("columnheader", { name: "Başarı %" })).toBeVisible();
@@ -617,56 +702,27 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await saveScreenshot(page, "faz9-teacher-portal-desktop.png");
   });
 
-  test("rol portal aksiyon şeritleri 375/768/1024/1440 görünümde taşmadan kalır", async ({ page }) => {
-    test.setTimeout(90_000);
-    const consoleErrors = collectConsoleErrors(page);
-    const cases: RolePortalActionStripCase[] = [
-      {
-        authProfile: "student",
-        count: 6,
-        hrefs: [
-          { href: "/ogrenci/duyurular", name: /Duyuruları oku: 1 okunmamış/ },
-          { href: "/ogrenci/raporlar", name: /Son sınavı incele: %81,7/ },
-        ],
-        key: "student",
-        path: "/ogrenci?examId=exam-demo-isem-lgs-1",
-        regionName: "Öğrenci günlük aksiyonları",
-      },
-      {
-        authProfile: "guardian",
-        count: 7,
-        hrefs: [
-          { href: "/veli/ogrenci", name: /Öğrenci seç: Ada Kaya/ },
-          { href: "/veli/odemeler", name: /Ödeme durumunu gör: 1\.200,00 TRY/ },
-        ],
-        key: "guardian",
-        path: "/veli",
-        regionName: "Veli günlük aksiyonları",
-      },
-      {
-        authProfile: "teacher",
-        count: 8,
-        hrefs: [
-          { href: "/ogretmen/ogrenci-takibi", name: /Yoklama kaydet: 2 kayıt/ },
-          { href: "/ogretmen/raporlar", name: /Raporu incele: %81,7/ },
-        ],
-        key: "teacher",
-        path: "/ogretmen",
-        regionName: "Öğretmen günlük aksiyonları",
-      },
-    ];
+  for (const viewport of redesignViewports) {
+    test(`${rolePortalViewportContractName} · ${viewport.width}px`, async ({ page }) => {
+      const consoleErrors = collectConsoleErrors(page);
 
-    for (const viewport of redesignViewports) {
-      for (const portalCase of cases) {
+      for (const portalCase of rolePortalActionStripCases) {
         await openWithUiMocks(page, portalCase.path, viewport, { authProfile: portalCase.authProfile });
         const actionStrip = page.getByRole("region", { name: portalCase.regionName });
         await expectRolePortalActionStrip(actionStrip, portalCase.count, portalCase.hrefs);
         await expect(actionStrip.getByRole("heading", { name: "Öncelikli aksiyonlar" })).toBeVisible();
         await expectUiStable(page, `faz9-${portalCase.key}-action-strip-${viewport.width}`, consoleErrors);
+        if (portalCase.key === "student" && viewport.width === 414) {
+          await hideNextDevIndicator(page);
+          await expect(actionStrip).toHaveScreenshot("student-portal-actions-414.png", {
+            animations: "disabled",
+            maxDiffPixelRatio: 0.005,
+          });
+        }
         await saveScreenshot(page, `faz9-${portalCase.key}-action-strip-${viewport.width}.png`);
       }
-    }
-  });
+    });
+  }
 
   test("rapor desktop kanıtı dolu metrik ve hata kitapçığı ile temizdir", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
@@ -682,6 +738,11 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expect(analyticsPanel.locator(".uh-chart-loading")).toHaveCount(0);
     await expect(analyticsPanel.locator("canvas")).toHaveCount(2);
     await page.waitForTimeout(200);
+    await hideNextDevIndicator(page);
+    await expect(page.getByRole("region", { name: "Rapor iş akışı" })).toHaveScreenshot("report-status-1440.png", {
+      animations: "disabled",
+      maxDiffPixelRatio: 0.005,
+    });
     await saveScreenshot(page, "faz9-reports-desktop.png");
     await page.getByRole("tab", { name: "Öğrenciler" }).click();
     await expect(page.getByRole("heading", { name: "Öğrenci sıralamaları" })).toBeVisible();
@@ -704,7 +765,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     await expectUiStable(page, "faz9-reports-desktop", consoleErrors);
   });
 
-  test("rapor çalışma alanı 375/768/1024/1440 görünümde bağlam ve karne taşmadan kalır", async ({ page }) => {
+  test("rapor çalışma alanı 320/375/414/768/1024/1440 görünümde bağlam ve karne taşmadan kalır", async ({ page }) => {
     test.setTimeout(90_000);
     const consoleErrors = collectConsoleErrors(page);
 
@@ -765,6 +826,11 @@ test.describe("Faz 9 UI görsel smoke", () => {
           clip: karneClip,
           maxDiffPixelRatio: 0.005,
         });
+        await page.emulateMedia({ media: "print" });
+        const printKarneBox = await karneSheet.boundingBox();
+        expect(printKarneBox?.width).toBe(595);
+        expect(printKarneBox?.height).toBeGreaterThanOrEqual(842);
+        await page.emulateMedia({ media: "screen" });
       }
 
       await page.getByRole("tab", { name: "Çıktılar" }).click();
@@ -777,7 +843,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
     }
   });
 
-  test("optik workflow 375/768/1024/1440 görünümde tab semantiği ve yoğun form düzenini korur", async ({ page }) => {
+  test("optik workflow 320/375/414/768/1024/1440 görünümde tab semantiği ve yoğun form düzenini korur", async ({ page }) => {
     test.setTimeout(90_000);
     const consoleErrors = collectConsoleErrors(page);
 
@@ -792,8 +858,11 @@ test.describe("Faz 9 UI görsel smoke", () => {
       await expect(selectedFormSummary).toContainText("90 soru");
       await page.getByRole("tab", { name: "3. Eşleşmeyen satırlar" }).click();
       const handoffPanel = page.getByRole("tabpanel", { name: "3. Eşleşmeyen satırlar" });
-      await expect(handoffPanel).toContainText("Raporlara geçiş");
-      await expect(handoffPanel.getByRole("link", { name: "Rapor çalışma alanına geç" })).toHaveAttribute("href", "/kurum/raporlar?examId=exam-demo");
+      await expect(handoffPanel).toBeVisible();
+      const reportHandoff = page.getByRole("region", { name: "Raporlara geçiş" });
+      await expect(reportHandoff).toBeVisible();
+      await expect(reportHandoff.getByRole("link", { name: "Rapor çalışma alanına geç" })).toHaveCount(0);
+      await expect(reportHandoff.getByRole("button", { name: "Analiz tamamlanınca açılır" })).toBeDisabled();
       await expectUiStable(page, `faz9-optik-workflow-${viewport.width}`, consoleErrors);
       await saveScreenshot(page, `faz9-optik-workflow-${viewport.width}.png`);
     }
@@ -1688,6 +1757,10 @@ function collectConsoleErrors(page: Page) {
   return errors;
 }
 
+async function hideNextDevIndicator(page: Page) {
+  await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
+}
+
 async function expectUiStable(page: Page, label: string, consoleErrors: string[]) {
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
   await expect(page.locator(".uh-chart-loading")).toHaveCount(0);
@@ -1807,53 +1880,6 @@ async function expectPortalDailyBrief(brief: Locator, expectedCount: number) {
   const metrics = brief.getByRole("group", { name: /metrikleri/ });
   await expect(metrics).toHaveClass(/uh-metric-grid/);
   await expect(metrics.locator(".next-portal-brief__item.uh-metric-card")).toHaveCount(expectedCount);
-}
-
-async function expectNoHorizontalOverflow(page: Page, label: string) {
-  const overflowResult = await page.evaluate(() => {
-    const documentElement = document.documentElement;
-    const body = document.body;
-    const viewportWidth = documentElement.clientWidth;
-    const overflow = Math.max(documentElement.scrollWidth - viewportWidth, body.scrollWidth - body.clientWidth);
-    const offenders = Array.from(document.querySelectorAll("body *"))
-      .map((element) => {
-        const htmlElement = element as HTMLElement;
-        const rect = htmlElement.getBoundingClientRect();
-        const style = window.getComputedStyle(htmlElement);
-        const visible =
-          rect.width > 0 &&
-          rect.height > 0 &&
-          style.display !== "none" &&
-          style.visibility !== "hidden" &&
-          style.position !== "fixed";
-        const elementOverflow = Math.max(
-          Math.ceil(htmlElement.scrollWidth - htmlElement.clientWidth),
-          Math.ceil(rect.right - viewportWidth),
-          Math.ceil(0 - rect.left),
-        );
-        const className =
-          typeof htmlElement.className === "string" ? htmlElement.className.trim().replace(/\s+/g, ".") : "";
-        return {
-          selector: `${htmlElement.tagName.toLowerCase()}${htmlElement.id ? `#${htmlElement.id}` : ""}${
-            className ? `.${className}` : ""
-          }`,
-          overflow: elementOverflow,
-          visible,
-        };
-      })
-      .filter((item) => item.visible && item.overflow > 1)
-      .sort((left, right) => right.overflow - left.overflow)
-      .slice(0, 5);
-    return { offenders, overflow };
-  });
-  const offenderText = overflowResult.offenders
-    .map((item) => `${item.selector} +${item.overflow}px`)
-    .join(", ");
-
-  expect(
-    overflowResult.overflow,
-    `${label}: yatay taşma ${overflowResult.overflow}px${offenderText ? `; adaylar: ${offenderText}` : ""}`,
-  ).toBeLessThanOrEqual(1);
 }
 
 async function expectNoBlankCanvas(page: Page, label: string) {

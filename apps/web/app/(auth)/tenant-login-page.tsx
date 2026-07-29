@@ -3,6 +3,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { CheckCircle2, LockKeyhole, ScanLine } from "lucide-react";
 import type { AuthResponse, MfaChallengeResponse, MfaEnrollmentRequiredResponse, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
 import { Button, Field, Input, SegmentedControl, Select } from "@o-okul/ui";
 import { useAuth } from "../providers.js";
@@ -201,10 +202,29 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
           </div>
         ) : null}
         {error ? <p className="next-form-error" role="alert">{error}</p> : null}
-        <Button type="submit" disabled={isSubmitDisabled}>
-          {isSubmitting ? "Giriş yapılıyor" : pendingEnrollment ? "Etkinleştir ve giriş yap" : pendingMfa ? "Doğrula" : pendingTenantSelection ? "Devam et" : "Giriş yap"}
+        <Button type="submit" disabled={isSubmitDisabled} loading={isSubmitting} loadingLabel="Giriş yapılıyor">
+          {pendingEnrollment ? "Etkinleştir ve giriş yap" : pendingMfa ? "Doğrula" : pendingTenantSelection ? "Devam et" : "Giriş yap"}
         </Button>
       </form>
+      <aside className="next-auth-context" aria-label="Güvenli giriş bilgisi">
+        <p className="next-section-eyebrow">{lockedTenantSlug ? "Kurum girişi" : "Güvenli oturum"}</p>
+        <h2>Görevinize ait çalışma alanına ilerleyin.</h2>
+        <p>Kurum ve rol kapsamınız girişten sonra doğrulanır; yalnız yetkili olduğunuz kayıtlar gösterilir.</p>
+        <ul>
+          <li>
+            <LockKeyhole size={17} aria-hidden="true" />
+            Kurum bazlı veri ayrımı
+          </li>
+          <li>
+            <CheckCircle2 size={17} aria-hidden="true" />
+            Rol ve ilişki kapsamı
+          </li>
+          <li>
+            <ScanLine size={17} aria-hidden="true" />
+            Optikten rapora bağlı süreç
+          </li>
+        </ul>
+      </aside>
     </section>
   );
 }
