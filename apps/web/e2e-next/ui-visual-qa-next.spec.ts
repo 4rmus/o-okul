@@ -588,8 +588,10 @@ test.describe("Faz 9 UI görsel smoke", () => {
 
     await studentDashboard.getByRole("tab", { name: "İlişkiler ve kayıtlar" }).click();
     await expect(studentDashboard.getByRole("tabpanel", { name: "İlişkiler ve kayıtlar" })).toBeVisible();
-    await studentDashboard.getByRole("link", { name: "Sınav detayları" }).click();
-    await expect(page).toHaveURL(/\/kurum\/ogrenciler\/student-a\/sinavlar$/);
+    await Promise.all([
+      page.waitForURL(/\/kurum\/ogrenciler\/student-a\/sinavlar$/),
+      studentDashboard.getByRole("link", { name: "Sınav detayları" }).click(),
+    ]);
     const studentExamDetails = page.getByLabel("Öğrenci sınav detayları");
     const studentExamSummary = studentExamDetails.getByRole("region", { exact: true, name: "Öğrenci sınav operasyon özeti" });
     await expect(studentExamSummary).toContainText("Başarı %");
