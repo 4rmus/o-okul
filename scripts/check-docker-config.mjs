@@ -311,7 +311,6 @@ const expectations = {
     "staging-production-evidence-${{ needs.build-images.outputs.image-tag }}",
   ],
   Dockerfile: [
-    "COPY tokens.css ./tokens.css",
     "FROM node:24-alpine AS api",
     "FROM node:24-alpine AS worker",
     "FROM node:24-alpine AS queue-board",
@@ -351,6 +350,24 @@ for (const [file, tokens] of Object.entries(expectations)) {
       failures.push(`${file} eksik: ${token}`);
     }
   }
+}
+
+const dockerfileLines = dockerfile.split(/\r?\n/).map((line) => line.trim());
+const buildWebStageIndex = dockerfileLines.indexOf("FROM deps AS build-web");
+const buildApiStageIndex = dockerfileLines.indexOf("FROM deps AS build-api");
+const webBuildIndex = dockerfileLines.indexOf("RUN pnpm turbo run build --filter=@o-okul/web...");
+const tokenCopyIndexes = dockerfileLines.flatMap((line, index) =>
+  line === "COPY tokens.css ./tokens.css" ? [index] : [],
+);
+if (
+  tokenCopyIndexes.length !== 1 ||
+  !(
+    buildWebStageIndex < tokenCopyIndexes[0] &&
+    tokenCopyIndexes[0] < webBuildIndex &&
+    webBuildIndex < buildApiStageIndex
+  )
+) {
+  failures.push("Dockerfile: tokens.css yalnız build-web aşamasında ve web build komutundan önce kopyalanmalı");
 }
 
 const queuePrefixOccurrences = compose.match(/QUEUE_PREFIX: \${QUEUE_PREFIX}/g)?.length ?? 0;
