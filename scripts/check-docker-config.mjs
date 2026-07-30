@@ -352,6 +352,24 @@ for (const [file, tokens] of Object.entries(expectations)) {
   }
 }
 
+const dockerfileLines = dockerfile.split(/\r?\n/).map((line) => line.trim());
+const buildWebStageIndex = dockerfileLines.indexOf("FROM deps AS build-web");
+const buildApiStageIndex = dockerfileLines.indexOf("FROM deps AS build-api");
+const webBuildIndex = dockerfileLines.indexOf("RUN pnpm turbo run build --filter=@o-okul/web...");
+const tokenCopyIndexes = dockerfileLines.flatMap((line, index) =>
+  line === "COPY tokens.css ./tokens.css" ? [index] : [],
+);
+if (
+  tokenCopyIndexes.length !== 1 ||
+  !(
+    buildWebStageIndex < tokenCopyIndexes[0] &&
+    tokenCopyIndexes[0] < webBuildIndex &&
+    webBuildIndex < buildApiStageIndex
+  )
+) {
+  failures.push("Dockerfile: tokens.css yalnız build-web aşamasında ve web build komutundan önce kopyalanmalı");
+}
+
 const queuePrefixOccurrences = compose.match(/QUEUE_PREFIX: \${QUEUE_PREFIX}/g)?.length ?? 0;
 if (queuePrefixOccurrences < 2) {
   failures.push("docker-compose.yml eksik: api ve worker aynı QUEUE_PREFIX değerini almalı");
