@@ -14,14 +14,14 @@ export default defineConfig({
   ...(useWebServer
     ? {
         webServer: {
-          command: "pnpm --filter @o-okul/shared-types build && pnpm --filter @o-okul/ui build && pnpm --filter @o-okul/web next:dev",
+          command: "rm -rf apps/web/.next && pnpm --filter @o-okul/shared-types build && pnpm --filter @o-okul/ui build && pnpm --filter @o-okul/web next:dev",
           env: {
             ...process.env,
             NEXT_E2E_PORT: port,
           },
           reuseExistingServer: !process.env.CI && !process.env.NEXT_E2E_PORT,
           timeout: 120_000,
-          url: baseURL,
+          url: `${baseURL}/login`,
         },
       }
     : {}),
