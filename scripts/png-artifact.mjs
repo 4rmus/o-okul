@@ -9,11 +9,8 @@ const colorChannels = new Map([
   [6, 4],
 ]);
 const allowedBitDepths = new Map([
-  [0, new Set([1, 2, 4, 8, 16])],
-  [2, new Set([8, 16])],
-  [3, new Set([1, 2, 4, 8])],
-  [4, new Set([8, 16])],
-  [6, new Set([8, 16])],
+  [2, new Set([8])],
+  [6, new Set([8])],
 ]);
 const maxDecodedBytes = 256 * 1024 * 1024;
 
@@ -68,11 +65,60 @@ export function inspectPng(bytes) {
     throw new Error("PNG IDAT decode edilemedi.");
   }
   if (decoded.byteLength !== expectedDecodedBytes) throw new Error("PNG decode boyutu IHDR ile eşleşmiyor.");
-  for (let row = 0; row < ihdr.height; row += 1) {
-    if (decoded[row * (rowBytes + 1)] > 4) throw new Error("PNG satır filtresi geçersiz.");
-  }
+  const pixels = unfilter(decoded, rowBytes, ihdr.height, Math.max(1, Math.ceil((channels * ihdr.bitDepth) / 8)));
+  const hasVisibleContent = hasPixelVariation(pixels, ihdr, channels);
+  return { width: ihdr.width, height: ihdr.height, hasVisibleContent };
+}
 
-  return { width: ihdr.width, height: ihdr.height };
+function unfilter(decoded, rowBytes, height, bytesPerPixel) {
+  const pixels = Buffer.alloc(rowBytes * height);
+  for (let row = 0; row < height; row += 1) {
+    const sourceOffset = row * (rowBytes + 1);
+    const filter = decoded[sourceOffset];
+    if (filter > 4) throw new Error("PNG satır filtresi geçersiz.");
+    const targetOffset = row * rowBytes;
+    for (let column = 0; column < rowBytes; column += 1) {
+      const raw = decoded[sourceOffset + column + 1];
+      const left = column >= bytesPerPixel ? pixels[targetOffset + column - bytesPerPixel] : 0;
+      const up = row > 0 ? pixels[targetOffset - rowBytes + column] : 0;
+      const upperLeft = row > 0 && column >= bytesPerPixel
+        ? pixels[targetOffset - rowBytes + column - bytesPerPixel]
+        : 0;
+      const predictor = filter === 1
+        ? left
+        : filter === 2
+          ? up
+          : filter === 3
+            ? Math.floor((left + up) / 2)
+            : filter === 4
+              ? paeth(left, up, upperLeft)
+              : 0;
+      pixels[targetOffset + column] = (raw + predictor) & 0xff;
+    }
+  }
+  return pixels;
+}
+
+function hasPixelVariation(pixels, ihdr, channels) {
+  const pixelBytes = channels;
+  let firstVisiblePixel;
+  for (let offset = 0; offset < pixels.byteLength; offset += pixelBytes) {
+    const alpha = ihdr.colorType === 4 || ihdr.colorType === 6 ? pixels[offset + pixelBytes - 1] : 255;
+    if (alpha === 0) continue;
+    const pixel = pixels.subarray(offset, offset + pixelBytes).toString("hex");
+    if (firstVisiblePixel === undefined) firstVisiblePixel = pixel;
+    else if (pixel !== firstVisiblePixel) return true;
+  }
+  return false;
+}
+
+function paeth(left, up, upperLeft) {
+  const estimate = left + up - upperLeft;
+  const leftDistance = Math.abs(estimate - left);
+  const upDistance = Math.abs(estimate - up);
+  const upperLeftDistance = Math.abs(estimate - upperLeft);
+  if (leftDistance <= upDistance && leftDistance <= upperLeftDistance) return left;
+  return upDistance <= upperLeftDistance ? up : upperLeft;
 }
 
 function readIhdr(data) {

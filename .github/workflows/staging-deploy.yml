@@ -662,7 +662,7 @@ jobs:
           UI_UX_REDESIGN_RELEASE_CANDIDATE="${IMAGE_PREFIX}/api:${IMAGE_TAG}" \
           UI_UX_REDESIGN_SOURCE_COMMIT_SHA="$SOURCE_COMMIT_SHA" \
           UI_UX_REDESIGN_CHECKED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" \
-            pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env
+            pnpm ui-ux-redesign:evidence-generate -- --env-file .staging-evidence.env --environment staging
 
       - name: Bind local UI/UX completion to verified source
         shell: bash
@@ -698,13 +698,14 @@ jobs:
           STAGING_FIRST_GATES_TARGET="file://$PWD/artifacts/staging/first-gates/first-gates-manifest.json" \
             pnpm staging:first-gates:check
 
-      - name: Run production evidence chain
+      - name: Run staging-scoped evidence chain
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_evidence == true }}
         shell: bash
         env:
           IMAGE_TAG: ${{ needs.build-images.outputs.image-tag }}
           GITHUB_TOKEN: ${{ github.token }}
           UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES: "1"
+          PRODUCTION_EVIDENCE_ALLOW_STAGING_UI_UX: "1"
         run: |
           mkdir -p artifacts/staging
           pnpm prod:evidence:check -- \

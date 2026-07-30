@@ -82,13 +82,15 @@ const viewportConfigs = [
 
 const env = { ...readEnvFile(readOption("--env-file")), ...process.env };
 const outputPath = readOption("--output") ?? env.UI_UX_REDESIGN_EVIDENCE_OUTPUT;
-const environment = readOption("--environment") ?? env.STAGING_ENVIRONMENT ?? env.NODE_ENV ?? "staging";
+const environment = readOption("--environment") ?? env.STAGING_ENVIRONMENT ?? "staging";
 const checkedAt = env.UI_UX_REDESIGN_CHECKED_AT?.trim() || new Date().toISOString();
 const releaseCandidate = env.UI_UX_REDESIGN_RELEASE_CANDIDATE?.trim();
 const sourceCommitSha = env.UI_UX_REDESIGN_SOURCE_COMMIT_SHA?.trim();
 const githubCiEvidenceTarget = env.GITHUB_CI_EVIDENCE_TARGET?.trim();
 const approvalRole = env.UI_UX_REDESIGN_APPROVAL_ROLE?.trim();
+const approvedBy = env.UI_UX_REDESIGN_APPROVED_BY?.trim();
 const approvedAt = env.UI_UX_REDESIGN_APPROVED_AT?.trim();
+const privacyReviewReference = env.UI_UX_REDESIGN_PRIVACY_REVIEW_REFERENCE?.trim();
 const allowedEvidenceHosts = (env.UI_UX_REDESIGN_ALLOWED_EVIDENCE_HOSTS ?? "")
   .split(",")
   .map((host) => host.trim().toLowerCase())
@@ -102,8 +104,11 @@ requireCommitSha(sourceCommitSha, "UI_UX_REDESIGN_SOURCE_COMMIT_SHA", failures);
 requireValue(githubCiEvidenceTarget, "GITHUB_CI_EVIDENCE_TARGET", failures);
 requireReleaseCandidateBinding(releaseCandidate, sourceCommitSha, failures);
 requireDate(checkedAt, "UI_UX_REDESIGN_CHECKED_AT", failures);
-requireEvidenceValue(approvalRole, "UI_UX_REDESIGN_APPROVAL_ROLE", failures);
+requireOneOf(approvalRole, "UI_UX_REDESIGN_APPROVAL_ROLE", ["release-owner"], failures);
+requireEvidenceValue(approvedBy, "UI_UX_REDESIGN_APPROVED_BY", failures);
 requireDate(approvedAt, "UI_UX_REDESIGN_APPROVED_AT", failures);
+requireDateOrder(approvedAt, checkedAt, "UI_UX_REDESIGN_APPROVED_AT", failures);
+requireEvidenceValue(privacyReviewReference, "UI_UX_REDESIGN_PRIVACY_REVIEW_REFERENCE", failures);
 requireEqual(env.UI_UX_REDESIGN_PII_REVIEW, "PASS", "UI_UX_REDESIGN_PII_REVIEW", failures);
 requireEqual(env.UI_UX_REDESIGN_RAW_PII_IN_ARTIFACTS, "false", "UI_UX_REDESIGN_RAW_PII_IN_ARTIFACTS", failures);
 requireEqual(
@@ -128,6 +133,16 @@ if (new Set(allowedEvidenceHosts).size !== allowedEvidenceHosts.length) {
 }
 
 const stagingEvidenceReferences = readReferenceList("UI_UX_REDESIGN_STAGING_EVIDENCE_REFERENCES", 3, failures);
+if (
+  stagingEvidenceReferences.length !== 4 ||
+  !stagingEvidenceReferences[1]?.startsWith("run:") ||
+  stagingEvidenceReferences[3] !== privacyReviewReference
+) {
+  failures.push("UI_UX_REDESIGN_STAGING_EVIDENCE_REFERENCES sırası summary, GitHub run, UAT, privacy review olmalı.");
+}
+if (privacyReviewReference && !stagingEvidenceReferences.includes(privacyReviewReference)) {
+  failures.push("UI_UX_REDESIGN_PRIVACY_REVIEW_REFERENCE staging evidence referansları içinde olmalı.");
+}
 const phaseEvidence = phaseConfigs.map((config) => ({
   phase: config.phase,
   status: "PASS",
@@ -135,19 +150,33 @@ const phaseEvidence = phaseConfigs.map((config) => ({
   commandsPassed: config.commandsPassed,
   evidenceReferences: readReferenceList(config.envKey, 1, failures),
 }));
+for (const phase of phaseEvidence) {
+  if (phase.evidenceReferences.some((reference) => reference.startsWith("run:"))) {
+    failures.push(`${phase.phase} evidence referansları okunabilir JSON artifact/url olmalı; run: kullanılamaz.`);
+  }
+}
 const viewportCoverage = viewportConfigs.map(([surface, envKey]) => ({
   surface,
   widths: requiredWidths,
   evidenceReferences: readReferenceList(envKey, requiredWidths.length, failures),
 }));
+for (const coverage of viewportCoverage) {
+  if (coverage.evidenceReferences.some((reference) => reference.startsWith("run:"))) {
+    failures.push(`${coverage.surface} viewport referansları okunabilir PNG artifact/url olmalı; run: kullanılamaz.`);
+  }
+}
 
 if (failures.length > 0) fail(failures);
 const githubCi = readGithubCiEvidence(githubCiEvidenceTarget, sourceCommitSha, stagingEvidenceReferences);
+const artifactContracts = buildArtifactContracts(stagingEvidenceReferences, phaseEvidence, privacyReviewReference);
 const artifacts = await buildArtifactManifest({
   stagingEvidenceReferences,
   phaseEvidence,
   viewportCoverage,
+  artifactContracts,
+  githubCi,
 });
+await validatePrivacyReview(privacyReviewReference, artifacts, sourceCommitSha, environment, checkedAt, githubCi);
 
 const outputFile = resolve(outputPath);
 validateOutputTarget(outputFile);
@@ -179,6 +208,7 @@ const report = {
   artifacts,
   privacy: {
     piiReview: "PASS",
+    reviewReference: privacyReviewReference,
     rawPiiInArtifacts: false,
     smsRecipientPreviewExported: false,
     guardianFinanceLeakageChecked: true,
@@ -187,8 +217,11 @@ const report = {
   approvals: [
     {
       role: approvalRole,
+      approvedBy,
       decision: "PASS",
       approvedAt,
+      sourceCommitSha,
+      runUrl: githubCi.runUrl,
     },
   ],
   openRisks: [],
@@ -250,12 +283,43 @@ function readGithubCiEvidence(target, sourceCommitSha, stagingEvidenceReferences
     workflowPath: report.workflow.path,
     runId: report.workflow.runId,
     runUrl: report.workflow.runUrl,
+    completedAt: report.workflow.completedAt,
     conclusion: report.workflow.conclusion,
     successfulJobs,
   };
 }
 
-async function buildArtifactManifest({ stagingEvidenceReferences, phaseEvidence, viewportCoverage }) {
+function buildArtifactContracts(stagingEvidenceReferences, phaseEvidence, privacyReviewReference) {
+  const contracts = new Map();
+  addArtifactContract(contracts, stagingEvidenceReferences[0], {
+    evidenceType: "ui-ux-redesign-summary",
+    commandsPassed: releaseCommands,
+  });
+  addArtifactContract(contracts, stagingEvidenceReferences[2], {
+    evidenceType: "ui-ux-redesign-uat",
+    commandsPassed: ["pnpm uat:check"],
+  });
+  addArtifactContract(contracts, privacyReviewReference, {
+    evidenceType: "ui-ux-redesign-privacy-review",
+  });
+  for (const phase of phaseEvidence) {
+    for (const reference of phase.evidenceReferences) {
+      addArtifactContract(contracts, reference, {
+        evidenceType: `ui-ux-redesign-phase-${phase.phase.slice(-1)}`,
+        commandsPassed: phase.commandsPassed,
+      });
+    }
+  }
+  return contracts;
+}
+
+function addArtifactContract(contracts, reference, contract) {
+  if (!reference || reference.startsWith("run:")) return;
+  if (contracts.has(reference)) fail([`Kanıt referansı birden fazla evidence rolünde kullanılamaz: ${reference}`]);
+  contracts.set(reference, contract);
+}
+
+async function buildArtifactManifest({ stagingEvidenceReferences, phaseEvidence, viewportCoverage, artifactContracts, githubCi }) {
   const references = [
     ...stagingEvidenceReferences,
     ...phaseEvidence.flatMap((item) => item.evidenceReferences),
@@ -284,13 +348,28 @@ async function buildArtifactManifest({ stagingEvidenceReferences, phaseEvidence,
     }
     const detected = detectArtifact(bytes);
     const binding = bindings.get(reference);
+    const contract = artifactContracts.get(reference);
+    if (contract && detected.mediaType !== "application/json") {
+      fail([`Evidence rolü JSON artifact olmalı: ${reference}`]);
+    }
     if (binding && detected.mediaType !== "image/png") {
       fail([`Viewport kanıtı PNG olmalı: ${reference}`]);
     }
     if (binding && detected.imageWidth !== binding.width) {
       fail([`Viewport kanıtı gerçek genişlikle eşleşmeli: ${reference}; beklenen=${binding.width}, gerçek=${detected.imageWidth}`]);
     }
-    scanArtifactPii(detected, bytes, reference);
+    scanArtifactPii(
+      detected,
+      bytes,
+      reference,
+      sourceCommitSha,
+      environment,
+      checkedAt,
+      githubCi.completedAt,
+      githubCi.runUrl,
+      approvedAt,
+      contract,
+    );
     manifest.push({
       reference,
       mediaType: detected.mediaType,
@@ -334,6 +413,7 @@ function detectArtifact(bytes) {
     fail([`PNG kanıtı geçersiz: ${safeErrorMessage(error)}`]);
   }
   if (png) {
+    if (!png.hasVisibleContent) fail(["PNG kanıtı boş/şeffaf pixel verisi içeremez."]);
     return {
       mediaType: "image/png",
       imageWidth: png.width,
@@ -352,7 +432,18 @@ function detectArtifact(bytes) {
   return { mediaType: "text/plain", imageWidth: null, imageHeight: null };
 }
 
-function scanArtifactPii(detected, bytes, reference) {
+function scanArtifactPii(
+  detected,
+  bytes,
+  reference,
+  sourceCommitSha,
+  environment,
+  checkedAt,
+  minimumCheckedAt,
+  runUrl,
+  maximumCheckedAt,
+  contract,
+) {
   if (detected.mediaType === "image/png") return;
   const contents = bytes.toString("utf8");
   if (detected.mediaType === "text/plain") {
@@ -362,7 +453,62 @@ function scanArtifactPii(detected, bytes, reference) {
   const parsed = JSON.parse(contents);
   const failures = [];
   scanJsonPii(parsed, failures);
+  if (parsed?.result !== "PASS") failures.push("result PASS olmalı");
+  if (parsed?.sourceCommitSha?.toLowerCase() !== sourceCommitSha.toLowerCase()) failures.push("sourceCommitSha eşleşmeli");
+  if (parsed?.environment !== environment) failures.push("environment eşleşmeli");
+  if (
+    typeof parsed?.checkedAt !== "string" ||
+    Number.isNaN(Date.parse(parsed.checkedAt)) ||
+    Date.parse(parsed.checkedAt) < Date.parse(minimumCheckedAt) ||
+    Date.parse(parsed.checkedAt) > Date.parse(maximumCheckedAt) ||
+    Date.parse(parsed.checkedAt) > Date.parse(checkedAt)
+  ) {
+    failures.push("checkedAt GitHub CI tamamlanma zamanı ile release onayı arasında olmalı");
+  }
+  if (contract) {
+    if (parsed?.evidenceType !== contract.evidenceType) failures.push(`evidenceType ${contract.evidenceType} olmalı`);
+    if (parsed?.runUrl !== runUrl) failures.push("runUrl GitHub CI run URL ile eşleşmeli");
+    if (contract.commandsPassed && !sameStringSet(parsed?.commandsPassed, contract.commandsPassed)) {
+      failures.push("commandsPassed evidence rolünün exact komut setiyle eşleşmeli");
+    }
+  }
   if (failures.length > 0) fail([`Kanıt artifact'i PII-safe değil: ${reference}; ${failures[0]}`]);
+}
+
+async function validatePrivacyReview(reference, artifacts, sourceCommitSha, environment, checkedAt, githubCi) {
+  const reviewArtifact = artifacts.find((artifact) => artifact.reference === reference);
+  if (!reviewArtifact || reviewArtifact.mediaType !== "application/json") {
+    fail(["UI_UX_REDESIGN_PRIVACY_REVIEW_REFERENCE JSON artifact manifestine bağlanmalı."]);
+  }
+  const bytes = await readEvidenceBytes(reference);
+  const review = JSON.parse(bytes.toString("utf8"));
+  const expectedHashes = artifacts.filter((artifact) => artifact.mediaType === "image/png").map((artifact) => artifact.sha256).sort();
+  const reviewedHashes = Array.isArray(review.reviewedPngSha256) ? [...review.reviewedPngSha256].sort() : [];
+  if (
+    review.result !== "PASS" ||
+    review.evidenceType !== "ui-ux-redesign-privacy-review" ||
+    review.environment !== environment ||
+    review.sourceCommitSha?.toLowerCase() !== sourceCommitSha.toLowerCase() ||
+    review.runUrl !== githubCi.runUrl ||
+    review.syntheticDataOnly !== true ||
+    review.reviewer?.role !== "privacy-owner" ||
+    typeof review.reviewer?.id !== "string" ||
+    review.reviewer.id.trim() === "" ||
+    hasPlaceholderToken(review.reviewer.id) ||
+    JSON.stringify(reviewedHashes) !== JSON.stringify(expectedHashes) ||
+    Date.parse(review.checkedAt) < Date.parse(githubCi.completedAt) ||
+    Date.parse(review.checkedAt) > Date.parse(approvedAt) ||
+    Date.parse(review.checkedAt) > Date.parse(checkedAt)
+  ) {
+    fail(["PNG gizlilik incelemesi exact SHA, ortam, sentetik veri ve privacy-owner onayına bağlanmalı."]);
+  }
+}
+
+function sameStringSet(actual, expected) {
+  return Array.isArray(actual) &&
+    actual.length === expected.length &&
+    new Set(actual).size === actual.length &&
+    expected.every((value) => actual.includes(value));
 }
 
 function scanJsonPii(value, output, path = "artifact") {
@@ -574,6 +720,12 @@ function requireDate(value, label, output) {
     return;
   }
   if (Date.parse(value) > Date.now() + 5 * 60 * 1000) output.push(`${label} gelecekte olamaz.`);
+}
+
+function requireDateOrder(earlier, later, label, output) {
+  if (!Number.isNaN(Date.parse(earlier)) && !Number.isNaN(Date.parse(later)) && Date.parse(later) < Date.parse(earlier)) {
+    output.push(`${label} UI_UX_REDESIGN_CHECKED_AT zamanından sonra olamaz.`);
+  }
 }
 
 function hasPlaceholderToken(value) {

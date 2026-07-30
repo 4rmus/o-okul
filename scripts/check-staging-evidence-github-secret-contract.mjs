@@ -254,6 +254,7 @@ function buildValidEnvFile() {
     ["__SET_GITHUB_REPOSITORY__", "o-okul-contract/uzman-hocam"],
     ["__SET_IMAGE_TAG__", "ui-ux-contract-20260625"],
     ["__SET_RUN_ID__", "987654321"],
+    ["__SET_UI_UX_RELEASE_OWNER__", "release-owner-github"],
     ["__SET_UI_UX_APPROVED_AT_ISO__", "2026-06-25T12:00:00.000Z"],
     ["https://__SET_SENTRY_DSN__", "https://contractpublickey@sentry.staging.o-okul.com/123"],
     ["s3://__SET_WAL_ARCHIVE_BUCKET__/staging", "s3://o-okul-wal/staging"],

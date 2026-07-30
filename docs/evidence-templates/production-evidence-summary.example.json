@@ -832,6 +832,7 @@
         "workflowPath": ".github/workflows/ci.yml",
         "runId": "1234567890",
         "runUrl": "https://github.com/example/o-okul/actions/runs/1234567890",
+        "completedAt": "2026-05-31T11:45:00.000Z",
         "conclusion": "success",
         "successfulJobs": ["ci"]
       },
@@ -863,11 +864,10 @@
           "pnpm uat:check"
         ],
         "evidenceReferences": [
-          "artifact:artifacts/ui-ux-redesign/phase-0/a11y-production-summary.json",
-          "artifact:artifacts/ui-ux-redesign/phase-2/data-table-375.png",
-          "artifact:artifacts/ui-ux-redesign/phase-3/report-workspace-1024.png",
-          "artifact:artifacts/ui-ux-redesign/phase-4/guardian-portal-1440.png",
-          "run:https://github.com/example/o-okul/actions/runs/1234567890"
+          "artifact:artifacts/ui-ux-redesign/summary.json",
+          "run:https://github.com/example/o-okul/actions/runs/1234567890",
+          "artifact:artifacts/ui-ux-redesign/uat.json",
+          "artifact:artifacts/ui-ux-redesign/privacy-review.json"
         ]
       },
       "phaseEvidence": [
@@ -940,7 +940,7 @@
             "pnpm uat:check"
           ],
           "evidenceReferences": [
-            "run:https://github.com/example/o-okul/actions/runs/1234567890"
+            "artifact:artifacts/ui-ux-redesign/phase-5/release.json"
           ]
         }
       ],
@@ -1037,6 +1037,7 @@
       ],
       "privacy": {
         "piiReview": "PASS",
+        "reviewReference": "artifact:artifacts/ui-ux-redesign/privacy-review.json",
         "rawPiiInArtifacts": false,
         "smsRecipientPreviewExported": false,
         "guardianFinanceLeakageChecked": true,
@@ -1052,8 +1053,11 @@
       "approvals": [
         {
           "role": "release-owner",
+          "approvedBy": "release-owner-github",
           "decision": "PASS",
-          "approvedAt": "2026-06-15T09:55:00.000Z"
+          "approvedAt": "2026-06-15T09:45:00.000Z",
+          "sourceCommitSha": "1111111111111111111111111111111111111111",
+          "runUrl": "https://github.com/example/o-okul/actions/runs/1234567890"
         }
       ],
       "openRisks": []

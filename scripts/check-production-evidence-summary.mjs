@@ -7,6 +7,7 @@ import { validateUiUxRedesignBindings } from "./ui-ux-redesign-evidence-bindings
 
 const target = process.env.PRODUCTION_EVIDENCE_SUMMARY_TARGET ?? process.argv[2];
 const allowExampleEvidence = process.env.PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE === "1";
+const allowStagingUiUx = process.env.PRODUCTION_EVIDENCE_ALLOW_STAGING_UI_UX === "1";
 const trustedUiUxEvidenceHosts = (process.env.UI_UX_REDESIGN_ALLOWED_EVIDENCE_HOSTS ?? "")
   .split(",")
   .map((host) => host.trim())
@@ -588,8 +589,14 @@ function requireReports(summary, failures) {
 
     requireExpectedObjectKeys(report, requiredKeys, failures, `reports.${key}`);
 
-    const expectedEnvironment = key === "githubCi" ? "github-actions" : "production";
-    requireObjectEqual(report, failures, `reports.${key}.environment`, "environment", expectedEnvironment);
+    if (key === "uiUxRedesign" && (allowExampleEvidence || allowStagingUiUx)) {
+      if (!["staging", "production"].includes(report.environment)) {
+        failures.push("reports.uiUxRedesign.environment staging veya production olmalı.");
+      }
+    } else {
+      const expectedEnvironment = key === "githubCi" ? "github-actions" : "production";
+      requireObjectEqual(report, failures, `reports.${key}.environment`, "environment", expectedEnvironment);
+    }
 
     const dateKey = key === "restoreDrill" ? "drillDate" : "checkedAt";
     if (dateKey in report) {

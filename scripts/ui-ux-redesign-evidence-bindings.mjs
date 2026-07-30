@@ -1,4 +1,4 @@
-const githubCiKeys = ["repository", "commitSha", "workflowPath", "runId", "runUrl", "conclusion", "successfulJobs"];
+const githubCiKeys = ["repository", "commitSha", "workflowPath", "runId", "runUrl", "completedAt", "conclusion", "successfulJobs"];
 const artifactKeys = [
   "reference",
   "mediaType",
@@ -24,6 +24,20 @@ export function validateUiUxRedesignBindings(report, {
 
   validateTrustedHosts(report.allowedEvidenceHosts, trustedEvidenceHosts, failures, label);
   validateGithubCi(report, expectedGithubCi, failures, label);
+  const releaseReferences = report.stagingProductionEvidence?.evidenceReferences;
+  if (
+    !Array.isArray(releaseReferences) ||
+    releaseReferences.length !== 4 ||
+    releaseReferences[1] !== `run:${report.githubCi?.runUrl}` ||
+    releaseReferences[3] !== report.privacy?.reviewReference
+  ) {
+    failures.push(`${label}.stagingProductionEvidence summary, GitHub run, UAT, privacy review sırasını korumalı.`);
+  }
+  for (const phase of report.phaseEvidence ?? []) {
+    if (phase.evidenceReferences?.some((reference) => reference.startsWith("run:"))) {
+      failures.push(`${label}.${phase.phase} okunabilir JSON artifact/url referansı kullanmalı.`);
+    }
+  }
   const viewportBindings = validateViewportCoverage(report.viewportCoverage, failures, label);
   validateArtifacts(report, viewportBindings, failures, label, allowExampleEvidence);
   return failures;
@@ -61,6 +75,7 @@ function validateGithubCi(report, expected, failures, label) {
     value.runId !== expectedRunId ||
     value.runUrl !== expected?.workflow?.runUrl ||
     value.runUrl !== `https://github.com/${value.repository}/actions/runs/${value.runId}` ||
+    value.completedAt !== expected?.workflow?.completedAt ||
     value.conclusion !== "success" ||
     value.conclusion !== expected?.workflow?.conclusion ||
     actualJobs.length === 0 ||
@@ -96,7 +111,7 @@ function validateViewportCoverage(value, failures, label) {
       continue;
     }
     item.evidenceReferences.forEach((reference, index) => {
-      if (typeof reference !== "string" || bindings.has(reference)) {
+      if (typeof reference !== "string" || reference.startsWith("run:") || bindings.has(reference)) {
         failures.push(`${label}.viewportCoverage referansları benzersiz metin olmalı.`);
         return;
       }

@@ -30,7 +30,7 @@ const topLevelKeys = [
   "approvals",
   "openRisks",
 ];
-const githubCiKeys = ["repository", "commitSha", "workflowPath", "runId", "runUrl", "conclusion", "successfulJobs"];
+const githubCiKeys = ["repository", "commitSha", "workflowPath", "runId", "runUrl", "completedAt", "conclusion", "successfulJobs"];
 const artifactKeys = [
   "reference",
   "mediaType",
@@ -48,12 +48,13 @@ const phaseKeys = ["phase", "status", "scope", "commandsPassed", "evidenceRefere
 const viewportKeys = ["surface", "widths", "evidenceReferences"];
 const privacyKeys = [
   "piiReview",
+  "reviewReference",
   "rawPiiInArtifacts",
   "smsRecipientPreviewExported",
   "guardianFinanceLeakageChecked",
   "forbiddenRawFields",
 ];
-const approvalKeys = ["role", "decision", "approvedAt"];
+const approvalKeys = ["role", "approvedBy", "decision", "approvedAt", "sourceCommitSha", "runUrl"];
 
 const requiredPhases = ["Faz 0", "Faz 1", "Faz 2", "Faz 3", "Faz 4", "Faz 5"];
 const requiredWidths = [320, 375, 414, 768, 1024, 1440];
@@ -151,7 +152,7 @@ function validateReport(report) {
   nonPlaceholder(report.releaseCandidate, failures, "releaseCandidate");
   commitSha(report.sourceCommitSha, failures, "sourceCommitSha");
   releaseCandidateBinding(report.releaseCandidate, report.sourceCommitSha, failures);
-  validateGithubCi(report.githubCi, report.sourceCommitSha, report.stagingProductionEvidence, failures);
+  validateGithubCi(report.githubCi, report.sourceCommitSha, report.checkedAt, report.stagingProductionEvidence, failures);
   validateAllowedEvidenceHosts(report.allowedEvidenceHosts, failures);
   eq(report.redesignPlanPath, "docs/ui-ux-professionalization-contract.md", failures, "redesignPlanPath");
 
@@ -160,8 +161,8 @@ function validateReport(report) {
   validatePhases(report.phaseEvidence, failures);
   validateViewports(report.viewportCoverage, failures);
   validateArtifacts(report, failures);
-  validatePrivacy(report.privacy, failures);
-  validateApprovals(report.approvals, failures);
+  validatePrivacy(report, failures);
+  validateApprovals(report, failures);
 
   if (Array.isArray(report.openRisks) && report.openRisks.length > 0) failures.push("openRisks boş olmalı.");
   scanRawPii(report, failures);
@@ -260,7 +261,7 @@ function remoteReferenceUrl(reference) {
   return candidate.startsWith("https://") ? candidate : null;
 }
 
-function validateGithubCi(value, sourceCommitSha, stagingEvidence, failures) {
+function validateGithubCi(value, sourceCommitSha, checkedAt, stagingEvidence, failures) {
   if (!keys(value, githubCiKeys, failures, "githubCi")) return;
   string(value.repository, failures, "githubCi.repository");
   commitSha(value.commitSha, failures, "githubCi.commitSha");
@@ -269,6 +270,14 @@ function validateGithubCi(value, sourceCommitSha, stagingEvidence, failures) {
   }
   eq(value.workflowPath, ".github/workflows/ci.yml", failures, "githubCi.workflowPath");
   if (typeof value.runId !== "string" || !/^\d+$/.test(value.runId)) failures.push("githubCi.runId sayısal metin olmalı.");
+  date(value.completedAt, failures, "githubCi.completedAt");
+  notFuture(value.completedAt, failures, "githubCi.completedAt");
+  if (!Number.isNaN(Date.parse(value.completedAt)) && Date.parse(value.completedAt) > Date.parse(checkedAt)) {
+    failures.push("githubCi.completedAt checkedAt zamanından sonra olamaz.");
+  }
+  if (!allowExampleEvidence && !Number.isNaN(Date.parse(value.completedAt)) && Date.parse(checkedAt) - Date.parse(value.completedAt) > 24 * 60 * 60 * 1000) {
+    failures.push("githubCi.completedAt rapor zamanından en fazla 24 saat önce olabilir.");
+  }
   eq(value.conclusion, "success", failures, "githubCi.conclusion");
   list(value.successfulJobs, failures, "githubCi.successfulJobs", 1);
   const expectedRunUrl = `https://github.com/${value.repository}/actions/runs/${value.runId}`;
@@ -315,6 +324,12 @@ function validateRelease(value, failures) {
   eq(value.requiredForRelease, true, failures, "stagingProductionEvidence.requiredForRelease");
   includes(value.commandsPassed, releaseCommands, failures, "stagingProductionEvidence.commandsPassed");
   refs(value.evidenceReferences, failures, "stagingProductionEvidence.evidenceReferences", 3);
+  if (
+    value.evidenceReferences?.length !== 4 ||
+    !value.evidenceReferences[1]?.startsWith("run:")
+  ) {
+    failures.push("stagingProductionEvidence.evidenceReferences sırası summary, GitHub run, UAT, privacy review olmalı.");
+  }
 }
 
 function validatePhases(value, failures) {
@@ -334,6 +349,9 @@ function validatePhases(value, failures) {
     oneOf(item.scope, ["local-static", "staging-production"], failures, `${item.phase}.scope`);
     list(item.commandsPassed, failures, `${item.phase}.commandsPassed`, 1);
     refs(item.evidenceReferences, failures, `${item.phase}.evidenceReferences`, 1);
+    if (item.evidenceReferences?.some((reference) => typeof reference === "string" && reference.startsWith("run:"))) {
+      failures.push(`${item.phase}.evidenceReferences okunabilir JSON artifact/url olmalı; run: kullanılamaz.`);
+    }
   }
 
   for (const phase of requiredPhases) {
@@ -361,6 +379,9 @@ function validateViewports(value, failures) {
     if (!requiredSurfaces.includes(item.surface)) failures.push(`viewportCoverage beklenmeyen yüzey içeriyor: ${item.surface}`);
     widths(item.widths, failures, `viewportCoverage.${item.surface}.widths`);
     refs(item.evidenceReferences, failures, `viewportCoverage.${item.surface}.evidenceReferences`, requiredWidths.length);
+    if (item.evidenceReferences?.some((reference) => typeof reference === "string" && reference.startsWith("run:"))) {
+      failures.push(`viewportCoverage.${item.surface}.evidenceReferences okunabilir PNG artifact/url olmalı; run: kullanılamaz.`);
+    }
     if (Array.isArray(item.evidenceReferences) && item.evidenceReferences.length !== requiredWidths.length) {
       failures.push(`viewportCoverage.${item.surface}.evidenceReferences tam ${requiredWidths.length} referans içermeli.`);
     }
@@ -378,6 +399,15 @@ function validateArtifacts(report, failures) {
   }
 
   const expectedReferences = artifactEvidenceReferences(report);
+  const roleReferences = [
+    report.stagingProductionEvidence?.evidenceReferences?.[0],
+    report.stagingProductionEvidence?.evidenceReferences?.[2],
+    report.privacy?.reviewReference,
+    ...(report.phaseEvidence ?? []).flatMap((phase) => phase.evidenceReferences ?? []),
+  ].filter((reference) => typeof reference === "string" && !reference.startsWith("run:"));
+  if (new Set(roleReferences).size !== roleReferences.length) {
+    failures.push("Kanıt referansı birden fazla evidence rolünde kullanılamaz.");
+  }
   const seen = new Map();
   for (const [index, item] of report.artifacts.entries()) {
     const label = `artifacts.${index}`;
@@ -386,6 +416,9 @@ function validateArtifacts(report, failures) {
     seen.set(item.reference, item);
     if (!expectedReferences.has(item.reference)) failures.push(`${label}.reference kanıt yüzeylerinde kullanılmıyor.`);
     oneOf(item.mediaType, ["application/json", "image/png", "text/plain"], failures, `${label}.mediaType`);
+    if (artifactContract(report, item.reference) && item.mediaType !== "application/json") {
+      failures.push(`${label}.mediaType evidence rolü için application/json olmalı.`);
+    }
     if (!Number.isInteger(item.byteSize) || item.byteSize <= 0) failures.push(`${label}.byteSize pozitif tam sayı olmalı.`);
     if (typeof item.sha256 !== "string" || !/^[a-f0-9]{64}$/i.test(item.sha256)) failures.push(`${label}.sha256 64 karakter hex olmalı.`);
     eq(item.piiReview, "PASS", failures, `${label}.piiReview`);
@@ -426,7 +459,7 @@ async function validateArtifactBytes(report) {
       const bytes = remoteUrl
         ? await readRemoteArtifactBytes(remoteUrl)
         : await readArtifactBytes(item.reference);
-      validateArtifactContent(item, bytes, failures);
+      validateArtifactContent(item, bytes, report, failures);
     } catch (error) {
       failures.push(`Artifact okunamadı: ${item.reference} (${safeErrorMessage(error)})`);
     }
@@ -434,7 +467,7 @@ async function validateArtifactBytes(report) {
   return failures;
 }
 
-function validateArtifactContent(item, bytes, failures) {
+function validateArtifactContent(item, bytes, report, failures) {
   if (bytes.byteLength !== item.byteSize) failures.push(`Artifact byteSize uyuşmuyor: ${item.reference}`);
   if (createHash("sha256").update(bytes).digest("hex") !== item.sha256) failures.push(`Artifact sha256 uyuşmuyor: ${item.reference}`);
 
@@ -457,21 +490,89 @@ function validateArtifactContent(item, bytes, failures) {
       return;
     }
     scanArtifactPii(parsed, item.reference, failures);
+    if (parsed?.result !== "PASS") failures.push(`Artifact result PASS olmalı: ${item.reference}`);
+    if (parsed?.sourceCommitSha?.toLowerCase() !== report.sourceCommitSha.toLowerCase()) {
+      failures.push(`Artifact sourceCommitSha raporla eşleşmeli: ${item.reference}`);
+    }
+    if (parsed?.environment !== report.environment) failures.push(`Artifact environment raporla eşleşmeli: ${item.reference}`);
+    if (typeof parsed?.checkedAt !== "string" || Number.isNaN(Date.parse(parsed.checkedAt)) || Date.parse(parsed.checkedAt) > Date.parse(report.checkedAt)) {
+      failures.push(`Artifact checkedAt rapor zamanından geç olmamalı: ${item.reference}`);
+    }
+    if (!Number.isNaN(Date.parse(parsed?.checkedAt)) && Date.parse(parsed.checkedAt) < Date.parse(report.githubCi?.completedAt)) {
+      failures.push(`Artifact checkedAt GitHub CI tamamlanma zamanından önce olmamalı: ${item.reference}`);
+    }
+    const approvalTime = Math.min(...(report.approvals ?? []).map((approval) => Date.parse(approval.approvedAt)).filter(Number.isFinite));
+    if (Number.isFinite(approvalTime) && !Number.isNaN(Date.parse(parsed?.checkedAt)) && Date.parse(parsed.checkedAt) > approvalTime) {
+      failures.push(`Artifact checkedAt release onayından sonra olmamalı: ${item.reference}`);
+    }
+    const contract = artifactContract(report, item.reference);
+    if (contract) {
+      if (parsed?.evidenceType !== contract.evidenceType) {
+        failures.push(`Artifact evidenceType ${contract.evidenceType} olmalı: ${item.reference}`);
+      }
+      if (parsed?.runUrl !== report.githubCi?.runUrl) {
+        failures.push(`Artifact runUrl GitHub CI run URL ile eşleşmeli: ${item.reference}`);
+      }
+      if (contract.commandsPassed && !sameStringSet(parsed?.commandsPassed, contract.commandsPassed)) {
+        failures.push(`Artifact commandsPassed evidence rolünün exact komut setiyle eşleşmeli: ${item.reference}`);
+      }
+    }
+    if (item.reference === report.privacy?.reviewReference) {
+      validatePrivacyReviewContent(parsed, report, failures);
+    }
   } else if (rawPiiPatterns.some((pattern) => pattern.test(contents))) {
     failures.push(`Artifact ham PII benzeri değer içermemeli: ${item.reference}`);
   }
 }
 
-function validatePrivacy(value, failures) {
+function artifactContract(report, reference) {
+  const stagingReferences = report.stagingProductionEvidence?.evidenceReferences ?? [];
+  if (reference === stagingReferences[0]) {
+    return { evidenceType: "ui-ux-redesign-summary", commandsPassed: releaseCommands };
+  }
+  if (reference === stagingReferences[2]) {
+    return { evidenceType: "ui-ux-redesign-uat", commandsPassed: ["pnpm uat:check"] };
+  }
+  if (reference === report.privacy?.reviewReference) {
+    return { evidenceType: "ui-ux-redesign-privacy-review" };
+  }
+  for (const phase of report.phaseEvidence ?? []) {
+    if (phase.evidenceReferences?.includes(reference)) {
+      return {
+        evidenceType: `ui-ux-redesign-phase-${phase.phase.slice(-1)}`,
+        commandsPassed: phase.commandsPassed,
+      };
+    }
+  }
+  return null;
+}
+
+function sameStringSet(actual, expected) {
+  return Array.isArray(actual) &&
+    actual.length === expected.length &&
+    new Set(actual).size === actual.length &&
+    expected.every((value) => actual.includes(value));
+}
+
+function validatePrivacy(report, failures) {
+  const value = report.privacy;
   if (!keys(value, privacyKeys, failures, "privacy")) return;
   eq(value.piiReview, "PASS", failures, "privacy.piiReview");
+  string(value.reviewReference, failures, "privacy.reviewReference");
+  if (!report.stagingProductionEvidence?.evidenceReferences?.includes(value.reviewReference)) {
+    failures.push("privacy.reviewReference stagingProductionEvidence referanslarına bağlanmalı.");
+  }
+  if (report.stagingProductionEvidence?.evidenceReferences?.[3] !== value.reviewReference) {
+    failures.push("privacy.reviewReference stagingProductionEvidence dördüncü referansı olmalı.");
+  }
   eq(value.rawPiiInArtifacts, false, failures, "privacy.rawPiiInArtifacts");
   eq(value.smsRecipientPreviewExported, false, failures, "privacy.smsRecipientPreviewExported");
   eq(value.guardianFinanceLeakageChecked, true, failures, "privacy.guardianFinanceLeakageChecked");
   includes(value.forbiddenRawFields, ["email", "phone", "nationalId", "rawLine", "rawRow"], failures, "privacy.forbiddenRawFields");
 }
 
-function validateApprovals(value, failures) {
+function validateApprovals(report, failures) {
+  const value = report.approvals;
   if (!Array.isArray(value) || value.length === 0) {
     failures.push("approvals boş olmayan liste olmalı.");
     return;
@@ -479,10 +580,38 @@ function validateApprovals(value, failures) {
 
   for (const [index, approval] of value.entries()) {
     if (!keys(approval, approvalKeys, failures, `approvals.${index}`)) continue;
-    string(approval.role, failures, `approvals.${index}.role`);
+    eq(approval.role, "release-owner", failures, `approvals.${index}.role`);
+    string(approval.approvedBy, failures, `approvals.${index}.approvedBy`);
+    nonPlaceholder(approval.approvedBy, failures, `approvals.${index}.approvedBy`);
     eq(approval.decision, "PASS", failures, `approvals.${index}.decision`);
     date(approval.approvedAt, failures, `approvals.${index}.approvedAt`);
     notFuture(approval.approvedAt, failures, `approvals.${index}.approvedAt`);
+    if (!Number.isNaN(Date.parse(approval.approvedAt)) && Date.parse(approval.approvedAt) > Date.parse(report.checkedAt)) {
+      failures.push(`approvals.${index}.approvedAt checkedAt zamanından sonra olamaz.`);
+    }
+    if (!Number.isNaN(Date.parse(approval.approvedAt)) && Date.parse(approval.approvedAt) < Date.parse(report.githubCi?.completedAt)) {
+      failures.push(`approvals.${index}.approvedAt GitHub CI tamamlanma zamanından önce olamaz.`);
+    }
+    eq(approval.sourceCommitSha, report.sourceCommitSha, failures, `approvals.${index}.sourceCommitSha`);
+    eq(approval.runUrl, report.githubCi?.runUrl, failures, `approvals.${index}.runUrl`);
+  }
+}
+
+function validatePrivacyReviewContent(review, report, failures) {
+  const expectedHashes = (report.artifacts ?? [])
+    .filter((artifact) => artifact.mediaType === "image/png")
+    .map((artifact) => artifact.sha256)
+    .sort();
+  const reviewedHashes = Array.isArray(review.reviewedPngSha256) ? [...review.reviewedPngSha256].sort() : [];
+  if (
+    review.syntheticDataOnly !== true ||
+    review.reviewer?.role !== "privacy-owner" ||
+    typeof review.reviewer?.id !== "string" ||
+    review.reviewer.id.trim() === "" ||
+    placeholder(review.reviewer?.id ?? "") ||
+    JSON.stringify(reviewedHashes) !== JSON.stringify(expectedHashes)
+  ) {
+    failures.push("PNG gizlilik incelemesi exact hash, sentetik veri ve privacy-owner onayına bağlanmalı.");
   }
 }
 
@@ -636,6 +765,7 @@ async function readRemoteArtifactBytes(url) {
 function detectArtifact(bytes) {
   const png = inspectPng(bytes);
   if (png) {
+    if (!png.hasVisibleContent) throw new Error("PNG kanıtı boş/şeffaf pixel verisi içeremez.");
     return {
       mediaType: "image/png",
       imageWidth: png.width,
@@ -801,7 +931,11 @@ function publicEvidenceUrlFailure(value) {
     return "URL çözümlenemedi";
   }
   if (url.protocol !== "https:") return "yalnız HTTPS desteklenir";
-  if (url.username || url.password || url.search || url.hash) return "userinfo, query veya fragment taşınamaz";
+  const allowedGithubJobsQuery =
+    url.hostname === "api.github.com" &&
+    /^\/repos\/[^/]+\/[^/]+\/actions\/runs\/\d+\/jobs$/.test(url.pathname) &&
+    url.search === "?per_page=100";
+  if (url.username || url.password || (!allowedGithubJobsQuery && url.search) || url.hash) return "userinfo, query veya fragment taşınamaz";
   const hostname = url.hostname.toLowerCase();
   if (placeholderHost(hostname)) return `placeholder/local host reddedildi: ${hostname}`;
   if (privateIp(hostname)) return `private veya link-local IP reddedildi: ${hostname}`;

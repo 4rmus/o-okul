@@ -11,6 +11,7 @@
     "workflowPath": ".github/workflows/ci.yml",
     "runId": "123456789",
     "runUrl": "https://github.com/4rmus/o-okul/actions/runs/123456789",
+    "completedAt": "2026-06-25T11:50:00.000Z",
     "conclusion": "success",
     "successfulJobs": ["ci"]
   },
@@ -42,11 +43,10 @@
       "pnpm uat:check"
     ],
     "evidenceReferences": [
-      "artifact:artifacts/ui-ux-redesign/phase-0/a11y-staging-summary.json",
-      "artifact:artifacts/ui-ux-redesign/phase-2/data-table-375.png",
-      "artifact:artifacts/ui-ux-redesign/phase-3/report-workspace-1024.png",
-      "artifact:artifacts/ui-ux-redesign/phase-4/guardian-portal-390.png",
-      "run:https://github.com/4rmus/o-okul/actions/runs/123456789"
+      "artifact:artifacts/ui-ux-redesign/summary.json",
+      "run:https://github.com/4rmus/o-okul/actions/runs/123456789",
+      "artifact:artifacts/ui-ux-redesign/uat.json",
+      "artifact:artifacts/ui-ux-redesign/privacy-review.json"
     ]
   },
   "phaseEvidence": [
@@ -95,7 +95,7 @@
       "status": "PASS",
       "scope": "staging-production",
       "commandsPassed": ["pnpm prod:evidence:templates:check", "pnpm uat:check"],
-      "evidenceReferences": ["run:https://github.com/4rmus/o-okul/actions/runs/123456789"]
+      "evidenceReferences": ["artifact:artifacts/ui-ux-redesign/phase-5/release.json"]
     }
   ],
   "viewportCoverage": [
@@ -163,6 +163,7 @@
   ],
   "privacy": {
     "piiReview": "PASS",
+    "reviewReference": "artifact:artifacts/ui-ux-redesign/privacy-review.json",
     "rawPiiInArtifacts": false,
     "smsRecipientPreviewExported": false,
     "guardianFinanceLeakageChecked": true,
@@ -171,8 +172,11 @@
   "approvals": [
     {
       "role": "release-owner",
+      "approvedBy": "release-owner-github",
       "decision": "PASS",
-      "approvedAt": "2026-06-25T12:30:00.000Z"
+      "approvedAt": "2026-06-25T11:55:00.000Z",
+      "sourceCommitSha": "1111111111111111111111111111111111111111",
+      "runUrl": "https://github.com/4rmus/o-okul/actions/runs/123456789"
     }
   ],
   "openRisks": []

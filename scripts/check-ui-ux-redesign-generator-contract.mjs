@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -23,6 +24,11 @@ try {
   expectPinnedLookupContract();
   expectGeneratePass();
   expectMalformedPngFailure();
+  expectBlankPngFailure();
+  expectTransparentPngFailure();
+  expectSolidPngFailure();
+  expectUnsupportedPngFailure();
+  expectRoleArtifactTypeFailure();
   expectCheckerFailure("invalid source commit", (report) => {
     report.sourceCommitSha = "not-a-commit";
   }, ["sourceCommitSha 40 karakter hex commit SHA olmalı."]);
@@ -42,9 +48,24 @@ try {
     const viewportArtifact = report.artifacts.find((artifact) => artifact.viewportWidth === 320);
     viewportArtifact.imageWidth = 375;
   }, ["imageWidth 320 olmalı."]);
+  expectCheckerFailure("duplicate evidence role", (report) => {
+    report.phaseEvidence[0].evidenceReferences = [report.stagingProductionEvidence.evidenceReferences[0]];
+  }, ["Kanıt referansı birden fazla evidence rolünde kullanılamaz."]);
+  expectCheckerFailure("stale github run", (report) => {
+    report.githubCi.completedAt = "2026-06-23T12:00:00.000Z";
+  }, ["githubCi.completedAt rapor zamanından en fazla 24 saat önce olabilir."]);
+  expectCheckerFailure("approval before github completion", (report) => {
+    report.approvals[0].approvedAt = "2026-06-25T11:59:00.000Z";
+  }, ["approvedAt GitHub CI tamamlanma zamanından önce olamaz."]);
   expectArtifactPiiFailure();
   expectRemoteReferenceFailure();
-  expectProcessEnvOverride();
+  expectStaleArtifactFailure();
+  expectFailure("missing approval identity", removeLine("UI_UX_REDESIGN_APPROVED_BY"), [
+    "UI_UX_REDESIGN_APPROVED_BY boş bırakılamaz.",
+  ]);
+  expectFailure("approval after report", replaceLine("UI_UX_REDESIGN_APPROVED_AT", "2026-06-25T12:31:00.000Z"), [
+    "UI_UX_REDESIGN_APPROVED_AT UI_UX_REDESIGN_CHECKED_AT zamanından sonra olamaz.",
+  ]);
   expectFailure("missing phase references", removeLine("UI_UX_REDESIGN_PHASE_3_REFERENCES"), [
     "UI_UX_REDESIGN_PHASE_3_REFERENCES boş bırakılamaz.",
   ]);
@@ -132,7 +153,67 @@ function expectMalformedPngFailure() {
   }
 }
 
-function expectProcessEnvOverride() {
+function expectBlankPngFailure() {
+  const artifactPath = join(artifactRoot, "dashboard-320.png");
+  const original = readFileSync(artifactPath);
+  try {
+    writeFileSync(artifactPath, minimalPng(320, 900, true));
+    const result = runGenerator(envPath, join(root, "reports", "blank-png.json"));
+    if (result.status === 0) failContract("boş PNG artifact generator senaryosunu kırmalı.", result);
+    assertMessages(result, "blank PNG", ["PNG kanıtı boş/şeffaf pixel verisi içeremez"]);
+  } finally {
+    writeFileSync(artifactPath, original);
+  }
+}
+
+function expectTransparentPngFailure() {
+  expectPngFailure("transparent-png", minimalPng(320, 900, "transparent"), "tamamen şeffaf PNG artifact generator senaryosunu kırmalı.");
+}
+
+function expectSolidPngFailure() {
+  expectPngFailure("solid-png", minimalPng(320, 900, "solid"), "tek renk PNG artifact generator senaryosunu kırmalı.");
+}
+
+function expectUnsupportedPngFailure() {
+  const artifactPath = join(artifactRoot, "dashboard-320.png");
+  const original = readFileSync(artifactPath);
+  try {
+    writeFileSync(artifactPath, unsupported16BitPng(320, 900));
+    const result = runGenerator(envPath, join(root, "reports", "unsupported-png.json"));
+    if (result.status === 0) failContract("16-bit PNG artifact generator senaryosunu kırmalı.", result);
+    assertMessages(result, "unsupported PNG", ["PNG renk tipi veya bit derinliği geçersiz"]);
+  } finally {
+    writeFileSync(artifactPath, original);
+  }
+}
+
+function expectRoleArtifactTypeFailure() {
+  const artifactPath = join(artifactRoot, "summary.json");
+  const original = readFileSync(artifactPath);
+  try {
+    writeFileSync(artifactPath, "PASS\n");
+    const result = runGenerator(envPath, join(root, "reports", "role-artifact-type.json"));
+    if (result.status === 0) failContract("summary rolü text artifact ile geçmemeli.", result);
+    assertMessages(result, "role artifact type", ["Evidence rolü JSON artifact olmalı"]);
+  } finally {
+    writeFileSync(artifactPath, original);
+  }
+}
+
+function expectPngFailure(name, png, message) {
+  const artifactPath = join(artifactRoot, "dashboard-320.png");
+  const original = readFileSync(artifactPath);
+  try {
+    writeFileSync(artifactPath, png);
+    const result = runGenerator(envPath, join(root, "reports", `${name}.json`));
+    if (result.status === 0) failContract(message, result);
+    assertMessages(result, name, ["PNG kanıtı boş/şeffaf pixel verisi içeremez"]);
+  } finally {
+    writeFileSync(artifactPath, original);
+  }
+}
+
+function expectStaleArtifactFailure() {
   const overrideOutputPath = join(root, "reports", "ui-ux-redesign-process-override.json");
   const sourceCommitSha = "2".repeat(40);
   const releaseCandidate = `ghcr.io/4rmus/o-okul/api:${sourceCommitSha}`;
@@ -143,14 +224,8 @@ function expectProcessEnvOverride() {
     UI_UX_REDESIGN_RELEASE_CANDIDATE: releaseCandidate,
     UI_UX_REDESIGN_SOURCE_COMMIT_SHA: sourceCommitSha,
   });
-  if (result.status !== 0) failContract("process env release candidate env-file değerini ezebilmeli.", result);
-  const report = JSON.parse(readFileSync(overrideOutputPath, "utf8"));
-  if (report.releaseCandidate !== releaseCandidate) {
-    failContract("generator güncel workflow release candidate değerini kullanmalı.", result);
-  }
-  if (report.sourceCommitSha !== sourceCommitSha) {
-    failContract("generator güncel workflow source commit SHA değerini kullanmalı.", result);
-  }
+  if (result.status === 0) failContract("eski commit artifact'leri güncel release için reddedilmeli.", result);
+  assertMessages(result, "stale artifact", ["sourceCommitSha eşleşmeli"]);
 }
 
 function expectCheckerFailure(label, mutateReport, expectedMessages) {
@@ -239,11 +314,11 @@ function buildValidEnvFile() {
     .join(",");
   const lines = [
     "STAGING_ENVIRONMENT=staging",
-    "UI_UX_REDESIGN_CHECKED_AT=2026-06-25T12:00:00.000Z",
+    "UI_UX_REDESIGN_CHECKED_AT=2026-06-25T12:30:00.000Z",
     `UI_UX_REDESIGN_RELEASE_CANDIDATE=ghcr.io/4rmus/o-okul/api:${"1".repeat(40)}`,
     `UI_UX_REDESIGN_SOURCE_COMMIT_SHA=${"1".repeat(40)}`,
     `GITHUB_CI_EVIDENCE_TARGET=${pathToFileURL(githubCiPath).href}`,
-    `UI_UX_REDESIGN_STAGING_EVIDENCE_REFERENCES=${artifact("summary.json")},run:https://github.com/4rmus/o-okul/actions/runs/987654321,${artifact("uat.json")}`,
+    `UI_UX_REDESIGN_STAGING_EVIDENCE_REFERENCES=${artifact("summary.json")},run:https://github.com/4rmus/o-okul/actions/runs/987654321,${artifact("uat.json")},${artifact("privacy-review.json")}`,
     `UI_UX_REDESIGN_PHASE_0_REFERENCES=${artifact("phase-0.json")}`,
     `UI_UX_REDESIGN_PHASE_1_REFERENCES=${artifact("phase-1.json")}`,
     `UI_UX_REDESIGN_PHASE_2_REFERENCES=${artifact("phase-2.json")}`,
@@ -255,21 +330,52 @@ function buildValidEnvFile() {
     `UI_UX_REDESIGN_RAPOR_WORKSPACE_REFERENCES=${viewportReferences("rapor")}`,
     `UI_UX_REDESIGN_PORTAL_SHELL_REFERENCES=${viewportReferences("portal")}`,
     "UI_UX_REDESIGN_PII_REVIEW=PASS",
+    `UI_UX_REDESIGN_PRIVACY_REVIEW_REFERENCE=${artifact("privacy-review.json")}`,
     "UI_UX_REDESIGN_RAW_PII_IN_ARTIFACTS=false",
     "UI_UX_REDESIGN_SMS_RECIPIENT_PREVIEW_EXPORTED=false",
     "UI_UX_REDESIGN_GUARDIAN_FINANCE_LEAKAGE_CHECKED=true",
     "UI_UX_REDESIGN_APPROVAL_ROLE=release-owner",
-    "UI_UX_REDESIGN_APPROVED_AT=2026-06-25T12:30:00.000Z",
+    "UI_UX_REDESIGN_APPROVED_BY=release-owner-github",
+    "UI_UX_REDESIGN_APPROVED_AT=2026-06-25T12:15:00.000Z",
   ];
   return `${lines.join("\n")}\n`;
 }
 
 function createEvidenceArtifacts() {
   mkdirSync(artifactRoot, { recursive: true });
-  for (const name of ["summary", "uat", "phase-0", "phase-1", "phase-2", "phase-3", "phase-4", "phase-5"]) {
+  const contracts = new Map([
+    ["summary", ["ui-ux-redesign-summary", [
+      "pnpm prod:evidence:templates:check",
+      "pnpm prod:plan:check",
+      "pnpm live:onboarding:smoke",
+      "pnpm live:ui-worker:smoke",
+      "pnpm uat:check",
+    ]]],
+    ["uat", ["ui-ux-redesign-uat", ["pnpm uat:check"]]],
+    ["phase-0", ["ui-ux-redesign-phase-0", [
+      "pnpm --filter @o-okul/web typecheck",
+      "pnpm web:design-tokens:check",
+      "pnpm web:a11y:check",
+      "pnpm web:auth-contract:check",
+    ]]],
+    ["phase-1", ["ui-ux-redesign-phase-1", ["pnpm web:ux-contract:check"]]],
+    ["phase-2", ["ui-ux-redesign-phase-2", ["pnpm --filter @o-okul/ui build", "pnpm web:ux-contract:check"]]],
+    ["phase-3", ["ui-ux-redesign-phase-3", ["pnpm karne:visual-contract:check", "pnpm live:ui-worker:smoke"]]],
+    ["phase-4", ["ui-ux-redesign-phase-4", ["pnpm web:ux-contract:check"]]],
+    ["phase-5", ["ui-ux-redesign-phase-5", ["pnpm prod:evidence:templates:check", "pnpm uat:check"]]],
+  ]);
+  for (const [name, [evidenceType, commandsPassed]] of contracts) {
     writeFileSync(
       join(artifactRoot, `${name}.json`),
-      `${JSON.stringify({ result: "PASS", sourceCommitSha: "1".repeat(40), checkedAt: "2026-06-25T12:00:00.000Z" })}\n`,
+      `${JSON.stringify({
+        result: "PASS",
+        evidenceType,
+        environment: "staging",
+        sourceCommitSha: "1".repeat(40),
+        checkedAt: "2026-06-25T12:00:00.000Z",
+        runUrl: "https://github.com/4rmus/o-okul/actions/runs/987654321",
+        commandsPassed,
+      })}\n`,
     );
   }
   for (const surface of ["dashboard", "optik", "rapor", "portal"]) {
@@ -277,15 +383,65 @@ function createEvidenceArtifacts() {
       writeFileSync(join(artifactRoot, `${surface}-${width}.png`), minimalPng(width, 900));
     }
   }
+  const reviewedPngSha256 = ["dashboard", "optik", "rapor", "portal"].flatMap((surface) =>
+    [320, 375, 414, 768, 1024, 1440].map((width) =>
+      createHash("sha256").update(readFileSync(join(artifactRoot, `${surface}-${width}.png`))).digest("hex"),
+    ),
+  );
+  writeFileSync(
+    join(artifactRoot, "privacy-review.json"),
+    `${JSON.stringify({
+      result: "PASS",
+      evidenceType: "ui-ux-redesign-privacy-review",
+      environment: "staging",
+      checkedAt: "2026-06-25T12:00:00.000Z",
+      sourceCommitSha: "1".repeat(40),
+      runUrl: "https://github.com/4rmus/o-okul/actions/runs/987654321",
+      syntheticDataOnly: true,
+      reviewer: { id: "privacy-owner-github", role: "privacy-owner" },
+      reviewedPngSha256,
+    })}\n`,
+  );
 }
 
-function minimalPng(width, height) {
+function minimalPng(width, height, mode = "visible") {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
   ihdr[8] = 8;
   ihdr[9] = 6;
   const scanline = Buffer.alloc(width * 4 + 1);
+  const pixels = Buffer.alloc(scanline.byteLength * height);
+  if (mode === true || mode === "blank") {
+    // Tamamen sıfır pixel.
+  } else if (mode === "transparent") {
+    scanline[1] = 255;
+  } else {
+    for (let pixel = 0; pixel < width; pixel += 1) {
+      scanline[1 + pixel * 4] = 40;
+      scanline[2 + pixel * 4] = 80;
+      scanline[3 + pixel * 4] = 120;
+      scanline[4 + pixel * 4] = 255;
+    }
+    if (mode !== "solid") scanline[1] = 200;
+  }
+  for (let row = 0; row < height; row += 1) scanline.copy(pixels, row * scanline.byteLength);
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk("IHDR", ihdr),
+    pngChunk("IDAT", deflateSync(pixels)),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+function unsupported16BitPng(width, height) {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 16;
+  ihdr[9] = 6;
+  const scanline = Buffer.alloc(width * 8 + 1, 1);
+  scanline[0] = 0;
   const pixels = Buffer.alloc(scanline.byteLength * height);
   for (let row = 0; row < height; row += 1) scanline.copy(pixels, row * scanline.byteLength);
   return Buffer.concat([
