@@ -15,7 +15,7 @@ export default defineConfig({
   ...(useWebServer
     ? {
         webServer: {
-          command: "rm -rf .next && pnpm --filter @o-okul/shared-types build && pnpm --filter @o-okul/ui build && exec node node_modules/next/dist/bin/next dev --hostname 0.0.0.0 --port ${NEXT_E2E_PORT:-3001}",
+          command: "pnpm --filter @o-okul/shared-types build && pnpm --filter @o-okul/ui build && if [ ! -f .next/BUILD_ID ]; then pnpm next:build; fi && exec node node_modules/next/dist/bin/next start --hostname 0.0.0.0 --port ${NEXT_E2E_PORT:-3001}",
           env: {
             ...process.env,
             NEXT_E2E_PORT: port,

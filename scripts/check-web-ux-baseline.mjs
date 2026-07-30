@@ -5100,8 +5100,8 @@ requireTokens("apps/web/app/page.tsx", [
 
 requireTokens("apps/web/playwright.next.config.ts", [
   "retries: process.env.CI ? 1 : 0",
-  "rm -rf .next",
-  "exec node node_modules/next/dist/bin/next dev",
+  "if [ ! -f .next/BUILD_ID ]; then pnpm next:build; fi",
+  "exec node node_modules/next/dist/bin/next start",
   "url: `${baseURL}/login`",
 ]);
 
