@@ -311,6 +311,7 @@ const expectations = {
     "staging-production-evidence-${{ needs.build-images.outputs.image-tag }}",
   ],
   Dockerfile: [
+    "COPY tokens.css ./tokens.css",
     "FROM node:24-alpine AS api",
     "FROM node:24-alpine AS worker",
     "FROM node:24-alpine AS queue-board",
