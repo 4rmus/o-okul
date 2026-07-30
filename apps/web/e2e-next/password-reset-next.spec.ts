@@ -13,14 +13,17 @@ test("parola yenileme isteği kurum kodunu korur ve nötr sonuç gösterir", asy
   });
 
   await page.goto("/k/dna-egitim/giris");
-  await page.getByRole("link", { name: "Parolamı unuttum" }).click();
+  await page.getByRole("link", { name: "Şifremi unuttum" }).click();
 
   await expect(page).toHaveURL(/\/parolami-unuttum\?tenant=dna-egitim$/);
   await expect(page.getByLabel("Kurum kodu")).toHaveValue("dna-egitim");
+  await expect(page.getByRole("link", { name: "Girişe dön" })).toHaveAttribute("href", "/k/dna-egitim/giris");
+  await expect(page.getByLabel("Şifre yenileme güven bilgisi")).toContainText("mesaj teslimatının durumu burada açıklanmaz");
   await page.getByLabel("Kullanıcı Adı").fill("10000000146");
   await page.getByRole("button", { name: "Yenileme bağlantısı gönder" }).click();
 
-  await expect(page.getByRole("status")).toContainText("Bilgiler eşleşiyor");
+  await expect(page.getByRole("status")).toContainText("İsteğiniz alındı");
+  await expect(page.getByRole("status")).not.toContainText("gönderildi");
   expect(requestBody).toEqual({
     tenantSlug: "dna-egitim",
     nationalId: "10000000146",
@@ -39,11 +42,14 @@ test("tek kullanımlık bağlantı yeni parolayı onaylar", async ({ page }) => 
     });
   });
 
-  await page.goto("/parola-sifirla?token=reset-token");
-  await page.getByRole("textbox", { name: "Yeni parola", exact: true }).fill("new-password");
-  await page.getByRole("textbox", { name: "Yeni parola tekrar" }).fill("new-password");
-  await page.getByRole("button", { name: "Parolayı yenile" }).click();
+  await page.goto("/parola-sifirla?token=reset-token&tenant=dna-egitim");
+  await expect(page).toHaveURL(/\/parola-sifirla\?tenant=dna-egitim$/);
+  expect(page.url()).not.toContain("reset-token");
+  await page.getByRole("textbox", { name: "Yeni şifre", exact: true }).fill("new-password");
+  await page.getByRole("textbox", { name: "Yeni şifre tekrar" }).fill("new-password");
+  await page.getByRole("button", { name: "Şifreyi yenile" }).click();
 
-  await expect(page.getByRole("status")).toContainText("Parolanız yenilendi");
+  await expect(page.getByRole("status")).toContainText("Şifreniz yenilendi");
+  await expect(page.getByRole("link", { name: "Giriş yap" })).toHaveAttribute("href", "/k/dna-egitim/giris");
   expect(confirmBody).toEqual({ token: "reset-token", password: "new-password" });
 });

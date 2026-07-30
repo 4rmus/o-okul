@@ -78,7 +78,7 @@ export function TenantsPage() {
   const overSeatLimitCount = rows.filter((tenant) => isSeatLimitExceeded(tenant)).length;
   const tenantSummaryItems: OperationSummaryItem[] = [
     {
-      description: "Filtrelenmiş platform kurumu",
+      description: "Filtreye uyan kurumlar",
       key: "total",
       label: "Kurum toplamı",
       value: formatCount(tenantsQuery.data?.meta?.total ?? rows.length),
@@ -91,16 +91,16 @@ export function TenantsPage() {
       value: `${formatCount(activeTenantCount)} / ${formatCount(trialTenantCount)} / ${formatCount(suspendedTenantCount)}`,
     },
     {
-      description: "30 gün içinde biten lisans",
+      description: "Lisansı 30 gün içinde biten kurumlar",
       key: "license",
-      label: "Lisans riski",
+      label: "Yaklaşan lisans bitişi",
       tone: expiringTenantCount > 0 ? "warning" : "success",
       value: formatCount(expiringTenantCount),
     },
     {
-      description: "Koltuk limiti aşımı",
+      description: "Kullanıcı sınırını aşan kurumlar",
       key: "seats",
-      label: "Koltuk riski",
+      label: "Kullanıcı sınırı",
       tone: overSeatLimitCount > 0 ? "danger" : "success",
       value: formatCount(overSeatLimitCount),
     },
@@ -108,7 +108,7 @@ export function TenantsPage() {
   const tenantSummaryBadges: OperationSummaryBadge[] = [
     {
       key: "scope",
-      label: "SYSTEM_ADMIN kapsamı",
+      label: "Sistem yöneticisi görünümü",
       tone: "info",
     },
     {
@@ -120,7 +120,7 @@ export function TenantsPage() {
 
   const columns: Array<DataTableColumn<TenantRecord>> = [
     { key: "name", header: "Kurum", priority: "primary", render: (tenant) => tenant.name, sticky: "left" },
-    { key: "slug", header: "Slug", priority: "secondary", render: (tenant) => tenant.slug },
+    { key: "slug", header: "Kurum kodu", priority: "secondary", render: (tenant) => tenant.slug },
     {
       key: "plan",
       header: "Plan",
@@ -128,7 +128,7 @@ export function TenantsPage() {
       render: (tenant) => <StatusBadge tone={planTone(tenant.plan)}>{planLabel(tenant.plan)}</StatusBadge>,
     },
     { key: "licenseEndsAt", header: "Lisans bitişi", priority: "optional", render: (tenant) => formatDate(tenant.licenseEndsAt) },
-    { key: "seatLimit", header: "Koltuk", priority: "secondary", render: (tenant) => formatSeatUsage(tenant) },
+    { key: "seatLimit", header: "Kullanıcı", priority: "secondary", render: (tenant) => formatSeatUsage(tenant) },
     {
       key: "status",
       header: "Durum",
@@ -144,9 +144,9 @@ export function TenantsPage() {
           <Link href={`/sistem/kurumlar/${encodeURIComponent(tenant.id)}`} aria-label={`${tenant.name} detay`}>
             Detay
           </Link>
-          <button type="button" disabled={deletingTenantId === tenant.id} onClick={() => void handleDeleteTenant(tenant)} aria-label={`${tenant.name} sil`}>
+          <Button variant="ghost" type="button" disabled={deletingTenantId === tenant.id} onClick={() => void handleDeleteTenant(tenant)} aria-label={`${tenant.name} sil`}>
             Sil
-          </button>
+          </Button>
         </div>
       ),
       sticky: "right",
@@ -217,7 +217,7 @@ export function TenantsPage() {
   }
 
   return (
-    <PageFrame title="Kurumlar" subtitle="Platformdaki kurumları listele ve yeni kurum aç.">
+    <PageFrame title="Kurumlar" subtitle="Kurumları görüntüleyin ve yeni kurum kaydı oluşturun.">
       <CrudPage
         actions={
           <>
@@ -230,11 +230,11 @@ export function TenantsPage() {
         }
         aria-label="Kurum yönetimi"
         columns={columns}
-        description="SYSTEM_ADMIN kurum kayıtlarını buradan yönetir."
+        description="Sistem yöneticileri kurum kayıtlarını bu ekrandan yönetir."
         emptyState={
           <EmptyState
             title="Henüz kurum yok"
-            description="İlk kurumunu oluşturarak sıfır-veri kurulum zincirini başlat."
+            description="İlk kurum kaydını oluşturarak başlayın."
             primaryAction={{ label: "Kurum oluştur", onClick: openCreateForm }}
           />
         }
@@ -244,10 +244,10 @@ export function TenantsPage() {
         loading={tenantsQuery.isPending}
         rows={rows}
         summary={
-          <OperationSummary ariaLabel="Sistem kurum operasyon özeti" badges={tenantSummaryBadges} items={tenantSummaryItems} />
+          <OperationSummary ariaLabel="Kurum listesi özeti" badges={tenantSummaryBadges} items={tenantSummaryItems} />
         }
-        tableCaption="Kurum operasyon listesi"
-        tableDescription="Platform kurumlarının plan, lisans, koltuk ve erişim durumu."
+        tableCaption="Kurum listesi"
+        tableDescription="Kurumların plan, lisans, kullanıcı sınırı ve erişim durumu."
         title="Kurumlar"
       />
       <TenantFormModal
@@ -300,7 +300,7 @@ function TenantFormModal({
       <Field label="Kurum adı">
         <Input required value={form.name} onChange={(event) => onNameChange(event.target.value)} />
       </Field>
-      <Field label="Slug" description="Kurumun teknik kısa adı. Örn: yeni-kurum. URL ve sistem kimliği için kullanılır.">
+      <Field label="Kurum kodu" description="Giriş bağlantısında kullanılacak kısa ad. Örnek: yeni-kurum.">
         <Input required value={form.slug} onChange={(event) => onChange({ ...form, slug: event.target.value })} />
       </Field>
       <Field label="Plan">
@@ -316,7 +316,7 @@ function TenantFormModal({
       <Field label="Lisans bitiş">
         <Input type="date" value={form.licenseEndsAt ?? ""} onChange={(event) => onChange({ ...form, licenseEndsAt: event.target.value })} />
       </Field>
-      <Field label="Koltuk limiti" description="Bu kuruma tanımlanabilecek aktif kullanıcı sayısı. Boş bırakırsan sınırsız olur.">
+      <Field label="Kullanıcı sınırı" description="Bu kurumda açılabilecek aktif kullanıcı sayısı. Boş bırakırsanız sınır uygulanmaz.">
         <Input
           inputMode="numeric"
           min={1}
@@ -332,14 +332,14 @@ function TenantFormModal({
           <option value="TRIAL">Deneme</option>
         </Select>
       </Field>
-      <Field label="Admin ad soyad">
+      <Field label="İlk yönetici ad soyad">
         <Input
           required
           value={form.firstAdmin.name}
           onChange={(event) => onChange({ ...form, firstAdmin: { ...form.firstAdmin, name: event.target.value } })}
         />
       </Field>
-      <Field label="Admin e-posta">
+      <Field label="İlk yönetici e-posta">
         <Input
           required
           type="email"
@@ -347,7 +347,7 @@ function TenantFormModal({
           onChange={(event) => onChange({ ...form, firstAdmin: { ...form.firstAdmin, email: event.target.value } })}
         />
       </Field>
-      <Field label="Admin TC kimlik no">
+      <Field label="İlk yönetici TC kimlik no">
         <Input
           inputMode="numeric"
           maxLength={11}
@@ -356,7 +356,7 @@ function TenantFormModal({
           onChange={(event) => onChange({ ...form, firstAdmin: { ...form.firstAdmin, nationalId: event.target.value } })}
         />
       </Field>
-      <Field label="Admin telefon">
+      <Field label="İlk yönetici telefon">
         <Input
           inputMode="tel"
           placeholder="+90 5xx xxx xx xx"
@@ -435,7 +435,7 @@ function planTone(plan: string): StatusBadgeProps["tone"] {
 
 function tenantCreateErrorMessage(error: unknown) {
   if (error instanceof ApiRequestError && error.code === "TENANT_SLUG_ALREADY_EXISTS") {
-    return "Bu slug zaten kullanımda. Farklı bir slug gir.";
+    return "Bu kurum kodu zaten kullanımda. Farklı bir kurum kodu girin.";
   }
   if (error instanceof ApiRequestError && error.code === "TENANT_FIRST_ADMIN_EMAIL_ALREADY_EXISTS") {
     return "Bu admin e-postası zaten kullanımda. Farklı bir e-posta gir.";
@@ -451,6 +451,6 @@ function formatTenantSort(sort: string) {
 const tenantSortOptions = [
   { label: "Kurum A-Z", value: "name" },
   { label: "Kurum Z-A", value: "-name" },
-  { label: "Slug A-Z", value: "slug" },
-  { label: "Slug Z-A", value: "-slug" },
+  { label: "Kurum kodu A-Z", value: "slug" },
+  { label: "Kurum kodu Z-A", value: "-slug" },
 ];

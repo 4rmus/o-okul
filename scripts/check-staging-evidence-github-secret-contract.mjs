@@ -226,6 +226,7 @@ function buildValidEnvFile() {
   const replacements = new Map([
     ["https://__SET_STAGING_WEB_HOST__", "https://staging.o-okul.com"],
     ["https://__SET_STAGING_API_HOST__", "https://api.staging.o-okul.com"],
+    ["__SET_STAGING_WEB_HOST__", "staging.o-okul.com"],
     ["__SET_APP_DB_PASSWORD__", "contractAppDbPasswordValue001"],
     ["__SET_MIGRATION_DB_PASSWORD__", "contractMigrationDbPasswordValue001"],
     ["__SET_STAGING_DB_HOST__", "db.staging.o-okul.internal"],
@@ -253,6 +254,7 @@ function buildValidEnvFile() {
     ["__SET_GITHUB_REPOSITORY__", "o-okul-contract/uzman-hocam"],
     ["__SET_IMAGE_TAG__", "ui-ux-contract-20260625"],
     ["__SET_RUN_ID__", "987654321"],
+    ["__SET_UI_UX_RELEASE_OWNER__", "release-owner-github"],
     ["__SET_UI_UX_APPROVED_AT_ISO__", "2026-06-25T12:00:00.000Z"],
     ["https://__SET_SENTRY_DSN__", "https://contractpublickey@sentry.staging.o-okul.com/123"],
     ["s3://__SET_WAL_ARCHIVE_BUCKET__/staging", "s3://o-okul-wal/staging"],

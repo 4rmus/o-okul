@@ -297,7 +297,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(attendanceRegion.getByLabel("Ara")).toHaveValue("ada");
     await expect(attendanceRegion.getByLabel("Sırala")).toHaveValue("-date");
     await expect(attendanceRegion.getByLabel("Göster")).toHaveValue("20");
-    await expect(attendanceRegion.getByLabel("Geçmiş sınıf filtresi")).toHaveValue("class-8a");
+    await expect(attendanceRegion.getByLabel("Geçmiş sınıf filtresi")).toHaveCount(0);
     const attendanceControls = attendanceRegion.getByRole("group", { name: "Liste kontrolleri" });
     await expect(attendanceControls.getByRole("button", { name: /kayıt ekle/i })).toHaveCount(0);
 
@@ -314,7 +314,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
     await expect(attendanceTable.getByRole("row", { name: /Bora Kaya/ })).not.toContainText("9-B");
     await expect(attendanceTable).toContainText("Öğrenci eşleşmedi");
     await expect(attendanceTable).toContainText("Ders bilgisi yok");
-    await attendanceRegion.getByLabel("Geçmiş sınıf filtresi").selectOption("");
+    await dailyAttendanceRegion.getByLabel("Yoklama sınıfı").selectOption("");
     await expect.poll(() => new URL(page.url()).searchParams.get("classId")).toBeNull();
 
     await expectNoVisibleTextValues(page, "attendance-mobile", ["student-a", "student-b", "student-missing", "course-math", "course-missing", "term-2026", "term-missing"]);
@@ -504,7 +504,7 @@ test.describe("DataTable mobil sözleşmesi", () => {
 
     await page.getByRole("button", { name: "Deniz düzenle" }).click();
     const dialog = page.getByRole("dialog", { name: "Öğretmen düzenle" });
-    const assignmentRegion = dialog.getByLabel("Öğretmen atamaları");
+    const assignmentRegion = dialog.getByLabel("Öğretmen atamaları", { exact: true });
     const assignmentTable = assignmentRegion.getByRole("table", { name: "Öğretmen atamaları" });
 
     await expect(assignmentRegion).toContainText("2 atama");

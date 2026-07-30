@@ -7,55 +7,55 @@ import { OperationSummary, type OperationSummaryAction, type OperationSummaryBad
 
 const releaseGates = [
   {
-    title: "Toplu kanıt zinciri",
+    title: "Tüm doğrulamaları çalıştır",
     command: "pnpm prod:evidence:check -- --summary-file ./release-evidence/summary.json",
-    status: "Staging/prod kanıtı gerekir",
-    detail: "Production env, TLS, SMS, e-posta/push, Sentry, backup, KVKK, güvenlik ve UAT kapıları tek sırada çalışır.",
+    status: "Deneme ve canlı ortam sonuçları gerekir",
+    detail: "Canlı ortam, güvenli bağlantı, bildirim, hata izleme, yedekleme, KVKK, güvenlik ve kullanıcı kabul kontrolleri birlikte çalışır.",
   },
   {
-    title: "Repo ve readiness",
+    title: "Yayın adayı kontrolleri",
     command: "pnpm run ci && pnpm prod:readiness:check && pnpm prod:evidence:templates:check",
-    status: "Release adayı gerekir",
-    detail: "Kod, readiness ve kanıt şablonları aynı release adayı üzerinde doğrulanır.",
+    status: "Yayın adayı gerekir",
+    detail: "Kod, yayın hazırlığı ve doğrulama şablonları aynı sürüm üzerinde kontrol edilir.",
   },
   {
-    title: "Canlı servis smoke",
+    title: "Canlı servis kontrolleri",
     command: "pnpm db:rls:check:live && pnpm postgres-stores:smoke && pnpm backup:restore:smoke",
-    status: "Canlı DB gerekir",
-    detail: "RLS, Postgres store yolları ve lokal restore davranışı canlı bağlantıyla kontrol edilir.",
+    status: "Canlı veritabanı gerekir",
+    detail: "Kurum verisi ayrımı, veritabanı kayıtları ve yedekten geri yükleme davranışı canlı bağlantıyla kontrol edilir.",
   },
   {
-    title: "Pilot kapanış",
+    title: "Pilot değerlendirmesi",
     command: "PILOT_EVIDENCE_TARGET=file:///path/to/pilot.json pnpm pilot:check",
-    status: "Production pilot kanıtı gerekir",
-    detail: "14+ gün pilot, gerçek optik-karne-veli döngüsü, k6/RLS eşikleri, olay tatbikatı ve kritik hata 0 onaylanır.",
+    status: "Canlı pilot sonuçları gerekir",
+    detail: "En az 14 günlük pilotta gerçek optik, karne ve veli akışı; performans, veri ayrımı, olay tatbikatı ve kritik hata durumu doğrulanır.",
   },
   {
-    title: "Go-live karar paketi",
+    title: "Canlıya geçiş kararı",
     command: "GO_LIVE_EVIDENCE_TARGET=file:///path/to/go-live.json pnpm go-live:check",
-    status: "İmzalı final karar gerekir",
-    detail: "Production evidence summary, UAT, pilot, KVKK/DPA, rollback, operasyon sahipliği, cutover ve onaylar tek pakette kapanır.",
+    status: "İmzalı karar gerekir",
+    detail: "Canlı ortam doğrulamaları, kullanıcı kabulü, pilot, KVKK, önceki sürüme dönüş, sorumlular ve onaylar birlikte tamamlanır.",
   },
 ] as const;
 
 const productionEvidenceSteps = [
-  "Production env",
-  "Traefik HTTPS",
-  "SMS disabled path",
-  "Notification provider",
-  "Sentry test event",
-  "Alert webhook",
-  "Off-host backup target",
-  "WAL archive target",
-  "Deployment rollback evidence",
-  "Restore drill evidence",
-  "KVKK inventory evidence",
-  "Identity migration evidence",
-  "Financial retention evidence",
-  "Upload AV evidence",
-  "Observability UAT evidence",
-  "Security audit evidence",
-  "UAT evidence",
+  "Canlı ortam ayarları",
+  "Güvenli HTTPS bağlantısı",
+  "SMS kapalıyken davranış",
+  "Bildirim hizmeti",
+  "Hata izleme test olayı",
+  "Uyarı kanalı",
+  "Harici yedek hedefi",
+  "Veritabanı değişiklik arşivi",
+  "Önceki sürüme dönüş denemesi",
+  "Yedekten geri yükleme denemesi",
+  "KVKK veri envanteri",
+  "Kimlik bilgisi geçişi",
+  "Mali kayıt saklama",
+  "Yüklenen dosya virüs taraması",
+  "İzleme ve uyarı kullanıcı kabulü",
+  "Güvenlik denetimi",
+  "Kullanıcı kabul testi",
 ] as const;
 
 const summaryFields = [
@@ -84,15 +84,15 @@ const finalDecisionFields = [
 ] as const;
 
 const openExternalEvidence = [
-  "Staging/prod domain",
-  "SMS disabled path credential",
-  "Notification provider credential",
-  "Sentry DSN ve alert webhook",
-  "Off-host backup ve WAL hedefi",
-  "Deployment rollback tatbikatı",
-  "Staging/prod UAT raporu",
-  "Pilot kapanış kanıtı",
-  "Go-live karar paketi",
+  "Deneme veya canlı ortam adresi",
+  "SMS kapalı senaryo erişim bilgisi",
+  "Bildirim hizmeti erişim bilgisi",
+  "Hata izleme ve uyarı kanalı",
+  "Harici yedek ve veritabanı arşivi",
+  "Önceki sürüme dönüş tatbikatı",
+  "Kullanıcı kabul raporu",
+  "Pilot değerlendirme sonuçları",
+  "Canlıya geçiş karar paketi",
 ] as const;
 
 interface LiveReleaseRow {
@@ -122,10 +122,10 @@ export function LiveReleasePage() {
     label: step,
     scope: productionEvidenceScope(step),
     tone: productionEvidenceTone(step),
-    value: "Evidence gerekir",
+    value: "Doğrulama gerekir",
   }));
   const summaryFieldRows = buildLiveReleaseRows(summaryFields, (field) => ({
-    detail: "Production evidence summary dosyasında PASS kararını destekleyen alan.",
+    detail: "Canlı ortam doğrulama özetinde başarılı sonucu destekleyen alan.",
     key: field,
     label: field,
     scope: field.includes("reports.") ? "Rapor referansı" : "Özet alanı",
@@ -136,71 +136,71 @@ export function LiveReleasePage() {
     detail: finalDecisionDetail(field),
     key: field,
     label: field,
-    scope: field.includes("approvals") || field.includes("goLiveDecision") ? "İmzalı karar" : "Go-live packet",
+    scope: field.includes("approvals") || field.includes("goLiveDecision") ? "İmzalı karar" : "Canlıya geçiş paketi",
     tone: "danger",
     value: "Zorunlu",
   }));
   const externalEvidenceRows = buildLiveReleaseRows(openExternalEvidence, (item) => ({
-    detail: "Repo/static PASS sayılmaz; staging/prod veya provider kanıtıyla kapanır.",
+    detail: "Yerel kod kontrolü yeterli değildir; deneme, canlı ortam veya hizmet sağlayıcı sonucu gerekir.",
     key: item,
     label: item,
     scope: externalEvidenceScope(item),
     tone: "warning",
-    value: "Açık kanıt",
+    value: "Doğrulama bekliyor",
   }));
 
   return (
     <PageFrame
       actions={<ReferenceBadge />}
-      title="Release Kanıtı"
-      subtitle="Release öncesi production kanıt zincirini, özet dosyasını ve dış ortam gereksinimlerini izle."
+      title="Yayın Hazırlığı"
+      subtitle="Canlıya geçmeden önce kod, dış sistem, pilot ve onay kontrollerini izleyin."
     >
       <OperationSummary
         actions={summaryActions}
-        ariaLabel="Release kanıt operasyon özeti"
+        ariaLabel="Yayın hazırlığı özeti"
         badges={summaryBadges}
         items={summaryItems}
       />
       <EvidenceTrustPanel
-        ariaLabel="Release kanıt güven durumu"
-        title="Release Kanıt Gücü"
-        description="Bu ekran release kararını özetler; production evidence summary, pilot kapanışı ve go-live onayları tamamlanmadan yayın aksiyonu gösterilmez."
+        ariaLabel="Canlıya geçiş doğrulama durumu"
+        title="Canlıya Geçiş Durumu"
+        description="Bu ekran yayın hazırlığını özetler. Canlı ortam doğrulamaları, pilot ve imzalı onaylar tamamlanmadan yayın işlemi açılamaz."
         items={[
           {
-            label: "Repo kapıları",
-            value: "CI + şablon",
+            label: "Kod ve şablon kontrolleri",
+            value: "Ön kontrol",
             tone: "info",
             scope: "local-static",
-            detail: "Kod ve evidence şablonları release adayı üzerinde doğrulanır.",
+            detail: "Kod ve doğrulama şablonları yayın adayı üzerinde kontrol edilir.",
           },
           {
-            label: "Production evidence",
-            value: "PASS gerekir",
+            label: "Canlı ortam doğrulamaları",
+            value: "Başarılı olmalı",
             tone: "warning",
             scope: "staging-prod",
-            detail: "TLS, provider, backup, KVKK, güvenlik ve UAT kanıtları tek zincirde kapanır.",
+            detail: "Güvenli bağlantı, dış hizmetler, yedekleme, KVKK, güvenlik ve kullanıcı kabulü birlikte tamamlanır.",
           },
           {
-            label: "Go-live kararı",
+            label: "Canlıya geçiş kararı",
             value: "İmzalı onay",
             tone: "danger",
             scope: "live-required",
-            detail: "Pilot, operasyon sahipliği, cutover ve veri koruma onayları olmadan canlı aksiyon yoktur.",
+            detail: "Pilot, sorumlular, geçiş planı ve veri koruma onayları olmadan canlıya geçilemez.",
           },
         ]}
       />
       <OperationDecisionNotice
-        decision="Karar: panel şu an CLI-only release rehberidir."
-        reason="Release aksiyonu üretim ortamını etkiler; prod evidence zinciri geçmeden panelde tek tık yayın aksiyonu gösterilmez."
-        nextStep="Panel aksiyonu ancak C1/D1 kapıları, audit log ve çift onay modeli tamamlanınca değerlendirilir."
+        decision="Bu ekran yayın işlemi yapmaz; hazırlık durumunu gösterir."
+        reason="Canlıya geçiş üretim ortamını etkiler. Tüm doğrulamalar ve onaylar tamamlanmadan tek tıkla yayın işlemi sunulmaz."
+        nextStep="Aşağıdaki kontrolleri tamamlayın, pilot sonuçlarını ekleyin ve imzalı canlıya geçiş kararını alın."
       />
       <Panel
-        aria-label="Release kanıt kapıları"
-        description="Release adayı, production evidence, pilot ve go-live karar kapıları tek operasyonal tabloda izlenir."
-        title="Kanıt Kapıları"
+        aria-label="Yayın öncesi kontroller"
+        description="Yayın adayı, canlı ortam doğrulamaları, pilot ve canlıya geçiş kararı tek tabloda izlenir."
+        title="Yayın Öncesi Kontroller"
       >
         <DataTable
-          caption="Release kanıt kapıları"
+          caption="Yayın öncesi kontroller"
           columns={liveReleaseColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -208,12 +208,12 @@ export function LiveReleasePage() {
         />
       </Panel>
       <Panel
-        aria-label="Production evidence adımları"
-        description="Provider, güvenlik, KVKK, backup, observability ve UAT kanıt zinciri."
-        title="Production Evidence Adımları"
+        aria-label="Canlı ortam doğrulamaları"
+        description="Dış hizmetler, güvenlik, KVKK, yedekleme, izleme ve kullanıcı kabulü birlikte kontrol edilir."
+        title="Canlı Ortam Doğrulamaları"
       >
         <DataTable
-          caption="Production evidence adımları"
+          caption="Canlı ortam doğrulamaları"
           columns={liveReleaseColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -221,12 +221,12 @@ export function LiveReleasePage() {
         />
       </Panel>
       <Panel
-        aria-label="Release özeti alanları"
-        description="Production evidence summary içinde PASS kararını destekleyen zorunlu alanlar."
-        title="Release Özeti Alanları"
+        aria-label="Doğrulama özeti alanları"
+        description="Canlı ortam doğrulama özetinde başarılı sonucu destekleyen zorunlu alanlar."
+        title="Doğrulama Özeti Alanları"
       >
         <DataTable
-          caption="Release özeti alanları"
+          caption="Doğrulama özeti alanları"
           columns={liveReleaseColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -234,12 +234,12 @@ export function LiveReleasePage() {
         />
       </Panel>
       <Panel
-        aria-label="Go-live karar alanları"
-        description="Pilot kapanışı, legal onaylar, operasyon sahipliği ve cutover karar alanları."
-        title="Go-live Karar Alanları"
+        aria-label="Canlıya geçiş kararları"
+        description="Pilot sonuçları, yasal onaylar, sorumlular ve geçiş planı kararları."
+        title="Canlıya Geçiş Kararları"
       >
         <DataTable
-          caption="Go-live karar alanları"
+          caption="Canlıya geçiş kararları"
           columns={liveReleaseColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -247,12 +247,12 @@ export function LiveReleasePage() {
         />
       </Panel>
       <Panel
-        aria-label="Dış ortam kanıtları"
-        description="Yerel/static sonuçla kapanmayan staging/prod, provider ve canlı ortam kanıtları."
-        title="Dış Ortam Kanıtları"
+        aria-label="Dış sistem doğrulamaları"
+        description="Yerel kod kontrolüyle tamamlanmayan deneme, canlı ortam ve dış hizmet doğrulamaları."
+        title="Dış Sistem Doğrulamaları"
       >
         <DataTable
-          caption="Dış ortam kanıtları"
+          caption="Dış sistem doğrulamaları"
           columns={liveReleaseColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -266,7 +266,7 @@ export function LiveReleasePage() {
 const liveReleaseColumns: Array<DataTableColumn<LiveReleaseRow>> = [
   {
     key: "item",
-    header: "Kanıt",
+    header: "Kontrol",
     mobilePriority: "primary",
     priority: "primary",
     render: (row) => row.label,
@@ -281,14 +281,14 @@ const liveReleaseColumns: Array<DataTableColumn<LiveReleaseRow>> = [
   },
   {
     key: "scope",
-    header: "Kapsam",
+    header: "Kaynak",
     mobilePriority: "secondary",
     priority: "secondary",
     render: (row) => row.scope,
   },
   {
     key: "detail",
-    header: "Bağlam",
+    header: "Açıklama",
     mobilePriority: "secondary",
     priority: "secondary",
     render: (row) => row.detail,
@@ -298,39 +298,39 @@ const liveReleaseColumns: Array<DataTableColumn<LiveReleaseRow>> = [
 function buildLiveReleaseSummaryItems(): OperationSummaryItem[] {
   return [
     {
-      description: "Production evidence zinciri",
+      description: "Canlı ortam doğrulama adımları",
       key: "evidence-chain",
-      label: "Kanıt zinciri",
+      label: "Doğrulamalar",
       tone: "warning",
-      value: `${productionEvidenceSteps.length} kapı`,
+      value: `${productionEvidenceSteps.length} kontrol`,
     },
     {
-      description: "Production evidence summary",
+      description: "Canlı ortam doğrulama özeti",
       key: "summary",
-      label: "Release özeti",
+      label: "Doğrulama özeti",
       tone: "warning",
-      value: "PASS gerekir",
+      value: "Başarılı olmalı",
     },
     {
-      description: "Pilot ve go-live onay paketi",
+      description: "Pilot ve canlıya geçiş onayları",
       key: "pilot",
-      label: "Pilot kapanış",
+      label: "Pilot değerlendirmesi",
       tone: "danger",
       value: "14+ gün",
     },
     {
-      description: "Tek tık release aksiyonu",
+      description: "Bu ekrandan doğrudan yayın yapılmaz",
       key: "panel-action",
-      label: "Panel aksiyonu",
+      label: "Yayın işlemi",
       tone: "info",
-      value: "CLI-only",
+      value: "Kapalı",
     },
     {
-      description: "Provider ve staging/prod doğrulamaları",
+      description: "Dış hizmet ve canlı ortam doğrulamaları",
       key: "external-evidence",
-      label: "Dış ortam",
+      label: "Dış sistemler",
       tone: "warning",
-      value: "Kanıt bekler",
+      value: "Sonuç bekliyor",
     },
   ];
 }
@@ -339,22 +339,22 @@ function buildLiveReleaseSummaryBadges(): OperationSummaryBadge[] {
   return [
     {
       key: "cli-only",
-      label: "CLI-only",
+      label: "Bu ekran yalnız bilgi verir",
       tone: "info",
     },
     {
       key: "local-static",
-      label: "Yerel/static karar vermez",
+      label: "Yerel kontrol yeterli değildir",
       tone: "warning",
     },
     {
       key: "staging-prod",
-      label: "Staging/prod evidence",
+      label: "Deneme ve canlı ortam sonucu gerekir",
       tone: "warning",
     },
     {
       key: "live-required",
-      label: "Canlı kanıt gerekir",
+      label: "Canlı doğrulama gerekir",
       tone: "danger",
     },
   ];
@@ -363,36 +363,36 @@ function buildLiveReleaseSummaryBadges(): OperationSummaryBadge[] {
 function buildLiveReleaseSummaryActions(): OperationSummaryAction[] {
   return [
     {
-      detail: "prod:evidence summary PASS üretmeden release kararı yok",
+      detail: "Canlı ortam doğrulama özeti başarılı olmadan yayın kararı alınmaz",
       key: "prod-evidence",
-      label: "Production evidence",
-      status: "PASS gerekir",
+      label: "Canlı ortam doğrulamaları",
+      status: "Başarılı olmalı",
       tone: "warning",
-      value: "18 kapı",
+      value: `${productionEvidenceSteps.length} kontrol`,
     },
     {
-      detail: "14+ gün pilot, kritik hata 0 ve gerçek operasyon döngüsü",
+      detail: "En az 14 gün pilot, açık kritik hata olmaması ve gerçek kurum akışı",
       key: "pilot",
-      label: "Pilot kapanış",
-      status: "Kanıt gerekir",
+      label: "Pilot değerlendirmesi",
+      status: "Sonuç gerekir",
       tone: "danger",
-      value: "Go-live öncesi",
+      value: "Canlıya geçmeden önce",
     },
     {
       detail: "İmzalı ürün, teknik, operasyon ve veri koruma onayı",
       key: "decision",
-      label: "Go-live karar paketi",
+      label: "Canlıya geçiş kararı",
       status: "İmzalı onay",
       tone: "danger",
-      value: "Ayrı kapı",
+      value: "Ayrı onay",
     },
     {
-      detail: "Provider, backup, rollback, alert ve bölge kanıtları dış ortamdan gelir",
+      detail: "Dış hizmet, yedekleme, önceki sürüme dönüş ve uyarı sonuçları ilgili sistemlerden gelir",
       key: "external",
-      label: "Dış ortam kanıtı",
-      status: "Açık kanıt",
+      label: "Dış sistem doğrulaması",
+      status: "Sonuç bekliyor",
       tone: "warning",
-      value: "Staging/prod",
+      value: "Deneme/canlı",
     },
   ];
 }
@@ -405,43 +405,43 @@ function buildLiveReleaseRows<TItem>(
 }
 
 function releaseGateTone(status: string): StatusBadgeProps["tone"] {
-  if (status.includes("İmzalı") || status.includes("Production pilot")) return "danger";
+  if (status.includes("İmzalı") || status.includes("Canlı pilot")) return "danger";
   return "warning";
 }
 
 function productionEvidenceScope(step: string) {
-  if (step.includes("provider") || step.includes("Sentry") || step.includes("Alert")) return "Provider";
-  if (step.includes("backup") || step.includes("WAL") || step.includes("Restore") || step.includes("rollback")) return "DR / rollback";
-  if (step.includes("KVKK") || step.includes("Identity") || step.includes("Financial") || step.includes("Upload")) return "Governance";
-  if (step.includes("UAT") || step.includes("Security") || step.includes("Observability")) return "Release QA";
-  return "Production env";
+  if (step.includes("hizmeti") || step.includes("Hata izleme") || step.includes("Uyarı")) return "Hizmet sağlayıcı";
+  if (step.includes("yedek") || step.includes("arşivi") || step.includes("geri yükleme") || step.includes("sürüme dönüş")) return "Yedekleme / geri dönüş";
+  if (step.includes("KVKK") || step.includes("Kimlik") || step.includes("Mali") || step.includes("virüs")) return "Veri yönetimi";
+  if (step.includes("kabul") || step.includes("Güvenlik") || step.includes("İzleme")) return "Yayın kontrolü";
+  return "Canlı ortam";
 }
 
 function productionEvidenceTone(step: string): StatusBadgeProps["tone"] {
-  if (step.includes("Deployment") || step.includes("Off-host") || step.includes("WAL")) return "danger";
+  if (step.includes("sürüme dönüş") || step.includes("Harici yedek") || step.includes("arşivi")) return "danger";
   return "warning";
 }
 
 function productionEvidenceDetail(step: string) {
-  if (step.includes("Traefik")) return "Public HTTPS smoke staging/prod ortamında kanıtlanır.";
-  if (step.includes("provider") || step.includes("Sentry") || step.includes("Alert")) return "Gerçek provider credential ve PII içermeyen smoke gerekir.";
-  if (step.includes("backup") || step.includes("WAL") || step.includes("Restore")) return "Restore edilebilir off-host/PITR evidence release dosyasında tutulur.";
-  if (step.includes("UAT")) return "Staging/prod UAT raporu defects boş olacak şekilde bağlanır.";
-  return "Production evidence summary içinde PASS olarak raporlanır.";
+  if (step.includes("HTTPS")) return "Güvenli bağlantı deneme ve canlı ortamda doğrulanır.";
+  if (step.includes("hizmeti") || step.includes("Hata izleme") || step.includes("Uyarı")) return "Gerçek hizmet erişimiyle, kişisel veri içermeyen bir deneme yapılır.";
+  if (step.includes("yedek") || step.includes("arşivi") || step.includes("geri yükleme")) return "Yedeğin geri yüklenebildiği ve kurum dışında güvenle saklandığı doğrulanır.";
+  if (step.includes("kabul")) return "Deneme veya canlı ortam kullanıcı kabul raporunda açık hata bırakılmamalıdır.";
+  return "Canlı ortam doğrulama özetinde başarılı olarak raporlanır.";
 }
 
 function finalDecisionDetail(field: string) {
-  if (field.includes("pilot")) return "Pilot kapanışı gerçek kullanım, süre ve kritik defect ölçütleriyle doğrulanır.";
-  if (field.includes("legal")) return "KVKK/DPA onayı go-live paketinde imzalı kanıt olarak yer alır.";
-  if (field.includes("operations")) return "Alert ve operasyon sahipliği canlı izleme penceresiyle tamamlanır.";
+  if (field.includes("pilot")) return "Pilot gerçek kullanım, süre ve açık kritik hata ölçütleriyle değerlendirilir.";
+  if (field.includes("legal")) return "KVKK ve veri işleme onayı canlıya geçiş paketinde imzalı olarak yer alır.";
+  if (field.includes("operations")) return "Uyarı kanalı ve sorumlular canlı izleme süresiyle birlikte belirlenir.";
   if (field.includes("approvals")) return "Ürün, teknik, operasyon ve veri koruma onayları birlikte gerekir.";
-  return "Go-live karar paketi içinde zorunlu alan olarak tutulur.";
+  return "Canlıya geçiş karar paketinde zorunlu alan olarak tutulur.";
 }
 
 function externalEvidenceScope(item: string) {
-  if (item.includes("provider") || item.includes("Sentry")) return "Provider";
-  if (item.includes("backup") || item.includes("WAL") || item.includes("rollback")) return "DR / rollback";
-  if (item.includes("datacenter")) return "Bölge kanıtı";
-  if (item.includes("UAT") || item.includes("Pilot") || item.includes("Go-live")) return "Release karar";
-  return "Staging/prod";
+  if (item.includes("hizmeti") || item.includes("Hata izleme")) return "Hizmet sağlayıcı";
+  if (item.includes("yedek") || item.includes("arşivi") || item.includes("sürüme dönüş")) return "Yedekleme / geri dönüş";
+  if (item.includes("bölge")) return "Bölge doğrulaması";
+  if (item.includes("kabul") || item.includes("Pilot") || item.includes("Canlıya")) return "Yayın kararı";
+  return "Deneme/canlı";
 }

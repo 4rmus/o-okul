@@ -34,12 +34,12 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     await openWithSystemTenantMocks(page, captured, "/sistem/kurumlar?page=2&limit=20&q=faz&sort=-name");
 
     const tenantsRegion = page.getByLabel("Kurum yönetimi");
-    const summary = tenantsRegion.getByRole("region", { exact: true, name: "Sistem kurum operasyon özeti" });
+    const summary = tenantsRegion.getByRole("region", { exact: true, name: "Kurum listesi özeti" });
     await expect(summary).toContainText("Kurum toplamı");
     await expect(summary).toContainText("Durum dağılımı");
-    await expect(summary).toContainText("Lisans riski");
-    await expect(summary).toContainText("Koltuk riski");
-    await expect(summary).toContainText("SYSTEM_ADMIN kapsamı");
+    await expect(summary).toContainText("Yaklaşan lisans bitişi");
+    await expect(summary).toContainText("Kullanıcı sınırı");
+    await expect(summary).toContainText("Sistem yöneticisi görünümü");
     await expect(tenantsRegion.getByLabel("Ara")).toHaveValue("faz");
     await expect(tenantsRegion.getByLabel("Sırala")).toHaveValue("-name");
     await expect(tenantsRegion.getByLabel("Göster")).toHaveValue("20");
@@ -59,13 +59,13 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     await page.getByRole("button", { name: "Kurum oluştur" }).click();
     const createDialog = page.getByRole("dialog", { name: "Kurum oluştur" });
     await createDialog.getByLabel("Kurum adı").fill("Telefonlu Kurum");
-    await createDialog.getByLabel("Slug").fill("telefonlu-kurum");
+    await createDialog.getByLabel("Kurum kodu").fill("telefonlu-kurum");
     await createDialog.getByLabel("Plan").selectOption("PRO");
-    await createDialog.getByLabel("Admin ad soyad").fill("Telefonlu Yönetici");
-    await createDialog.getByLabel("Admin e-posta").fill("phone.admin@example.test");
-    await createDialog.getByLabel("Admin TC kimlik no").fill("10000001372");
-    await createDialog.getByLabel("Admin telefon").fill("5551234567");
-    await expect(createDialog.getByLabel("Admin telefon")).toHaveValue("+90 555 123 45 67");
+    await createDialog.getByLabel("İlk yönetici ad soyad").fill("Telefonlu Yönetici");
+    await createDialog.getByLabel("İlk yönetici e-posta").fill("phone.admin@example.test");
+    await createDialog.getByLabel("İlk yönetici TC kimlik no").fill("10000001372");
+    await createDialog.getByLabel("İlk yönetici telefon").fill("5551234567");
+    await expect(createDialog.getByLabel("İlk yönetici telefon")).toHaveValue("+90 555 123 45 67");
     await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
 
     await expect.poll(() => captured.tenantCreates).toHaveLength(1);
@@ -103,11 +103,11 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     await page.getByRole("button", { name: "Kurum oluştur" }).click();
     const createDialog = page.getByRole("dialog", { name: "Kurum oluştur" });
     await createDialog.getByLabel("Kurum adı").fill("Demo Kurum");
-    await createDialog.getByLabel("Slug").fill("demo");
-    await createDialog.getByLabel("Admin ad soyad").fill("Demo Yönetici");
-    await createDialog.getByLabel("Admin e-posta").fill("used.admin@example.test");
-    await createDialog.getByLabel("Admin TC kimlik no").fill("10000001372");
-    await createDialog.getByLabel("Admin telefon").fill("5551234567");
+    await createDialog.getByLabel("Kurum kodu").fill("demo");
+    await createDialog.getByLabel("İlk yönetici ad soyad").fill("Demo Yönetici");
+    await createDialog.getByLabel("İlk yönetici e-posta").fill("used.admin@example.test");
+    await createDialog.getByLabel("İlk yönetici TC kimlik no").fill("10000001372");
+    await createDialog.getByLabel("İlk yönetici telefon").fill("5551234567");
     await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
 
     await expect(createDialog.getByText("Bu admin e-postası zaten kullanımda. Farklı bir e-posta gir.")).toBeVisible();
@@ -122,17 +122,17 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     await page.getByRole("button", { name: "Kurum oluştur" }).click();
     const createDialog = page.getByRole("dialog", { name: "Kurum oluştur" });
     await createDialog.getByLabel("Kurum adı").fill("Geçersiz Admin Kurumu");
-    await createDialog.getByLabel("Slug").fill("gecersiz-admin-kurumu");
-    await createDialog.getByLabel("Admin ad soyad").fill("Geçersiz Yönetici");
-    await createDialog.getByLabel("Admin e-posta").fill("invalid-admin@example.test");
-    await createDialog.getByLabel("Admin TC kimlik no").fill("1111111111");
-    await createDialog.getByLabel("Admin telefon").fill("2121234567");
+    await createDialog.getByLabel("Kurum kodu").fill("gecersiz-admin-kurumu");
+    await createDialog.getByLabel("İlk yönetici ad soyad").fill("Geçersiz Yönetici");
+    await createDialog.getByLabel("İlk yönetici e-posta").fill("invalid-admin@example.test");
+    await createDialog.getByLabel("İlk yönetici TC kimlik no").fill("1111111111");
+    await createDialog.getByLabel("İlk yönetici telefon").fill("2121234567");
     await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
 
     await expect(createDialog.getByText("TC Kimlik No 11 rakam olmalıdır.")).toBeVisible();
     await expect.poll(() => captured.tenantCreates).toHaveLength(0);
 
-    await createDialog.getByLabel("Admin TC kimlik no").fill("11111111111");
+    await createDialog.getByLabel("İlk yönetici TC kimlik no").fill("11111111111");
     await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
 
     await expect(createDialog.getByText("Telefon geçerli bir Türkiye cep telefonu olmalıdır.")).toBeVisible();
@@ -146,14 +146,14 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
 
     for (const referencePage of [
       {
-        items: ["API health", "Readiness", "Queue", "Postgres", "Redis"],
+        items: ["Uygulama", "Bağlantı durumu", "Arka plan işleri", "Veritabanı", "Hızlı erişim hizmeti"],
         path: "/sistem/sistem-sagligi",
         title: "Sistem Sağlığı",
       },
       {
-        items: ["Prometheus scrape", "Grafana dashboard", "Loki log panel", "Alert webhook"],
+        items: ["Sistem ölçümleri", "İzleme panosu", "Uygulama kayıtları", "Uyarı bildirimleri"],
         path: "/sistem/gozlemlenebilirlik",
-        title: "Gözlemlenebilirlik",
+        title: "Sistem İzleme",
       },
       {
         items: ["tenant.created", "tenant.updated", "user.membership_created", "user.roles_updated"],
@@ -163,15 +163,15 @@ test.describe("Sistem tenant yönetimi sözleşmesi", () => {
     ]) {
       await page.goto(referencePage.path);
       await expect(page.getByRole("heading", { level: 1, name: referencePage.title })).toBeVisible();
-      await expect(page.getByLabel(`${referencePage.title} güven durumu`)).toContainText("Sistem Referans Kanıtı");
+      await expect(page.getByLabel(`${referencePage.title} güven durumu`)).toContainText("Sistem Kontrol Listesi");
       const referenceList = page.getByLabel(`${referencePage.title} referans kontrol listesi`);
-      await expect(referenceList).toContainText("Operasyon referansı");
-      await expect(referenceList).toContainText(`${referencePage.items.length} salt-okuma kontrol başlığı`);
+      await expect(referenceList).toContainText("Kontrol Başlıkları");
+      await expect(referenceList).toContainText(`${referencePage.items.length} kontrol başlığı`);
       await expect(referenceList.locator("li")).toHaveCount(referencePage.items.length);
       for (const item of referencePage.items) {
         await expect(referenceList.getByText(item)).toBeVisible();
       }
-      await expect(referenceList.getByText("Statik kanıt")).toHaveCount(referencePage.items.length);
+      await expect(referenceList.getByText("Ön kontrol")).toHaveCount(referencePage.items.length);
     }
 
     expect(captured.forbiddenTenantScopedPaths).toEqual([]);

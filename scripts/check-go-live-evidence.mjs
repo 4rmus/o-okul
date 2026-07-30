@@ -2,9 +2,14 @@ import { lstat, readFile } from "node:fs/promises";
 import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getTenantScopedTables } from "../packages/db/scripts/tenant-models.mjs";
+import { validateUiUxRedesignBindings } from "./ui-ux-redesign-evidence-bindings.mjs";
 
 const target = process.env.GO_LIVE_EVIDENCE_TARGET;
 const allowExampleEvidence = process.env.GO_LIVE_ALLOW_EXAMPLE_EVIDENCE === "1";
+const trustedUiUxEvidenceHosts = (process.env.UI_UX_REDESIGN_ALLOWED_EVIDENCE_HOSTS ?? "")
+  .split(",")
+  .map((host) => host.trim())
+  .filter(Boolean);
 const inlineUploadSubjects = ["homework_material_files", "support_ticket_attachments"];
 
 const requiredEvidenceCheckScripts = new Map([
@@ -273,16 +278,20 @@ const summaryRequiredReportKeys = {
     "gaps",
   ],
   uiUxRedesign: [
+    "schemaVersion",
     "result",
     "environment",
     "checkedAt",
     "releaseCandidate",
     "sourceCommitSha",
+    "githubCi",
+    "allowedEvidenceHosts",
     "redesignPlanPath",
     "localStaticEvidence",
     "stagingProductionEvidence",
     "phaseEvidence",
     "viewportCoverage",
+    "artifacts",
     "privacy",
     "approvals",
     "openRisks",
@@ -1586,6 +1595,12 @@ function requireSummaryReports(summary, failures, goLiveReport) {
     "uiUxRedesign",
   );
   if (uiUxRedesign) {
+    failures.push(...validateUiUxRedesignBindings(uiUxRedesign, {
+      allowExampleEvidence,
+      expectedGithubCi: githubCi,
+      label: "productionEvidenceSummary.summary.reports.uiUxRedesign",
+      trustedEvidenceHosts: trustedUiUxEvidenceHosts,
+    }));
     requireObjectEqual(uiUxRedesign, failures, "productionEvidenceSummary.summary.reports.uiUxRedesign.result", "result", "PASS");
     requireObjectEqual(
       uiUxRedesign,
@@ -1601,6 +1616,13 @@ function requireSummaryReports(summary, failures, goLiveReport) {
       "checkedAt",
       summary,
       goLiveReport,
+    );
+    requireObjectEqual(
+      uiUxRedesign,
+      failures,
+      "productionEvidenceSummary.summary.reports.uiUxRedesign.schemaVersion",
+      "schemaVersion",
+      2,
     );
     requireObjectEqual(
       uiUxRedesign,

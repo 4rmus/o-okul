@@ -49,6 +49,7 @@ test.describe("Veli gizlilik ve izin UX'i", () => {
     await expect(relationshipRegion).toContainText("Duyuru kapalı");
     await expect(relationshipRegion).toContainText("Destek kapalı");
 
+    await page.getByRole("tab", { name: "Öğrenci bağla", exact: true }).click();
     const linkRegion = page.getByLabel("Veli öğrenci bağı ekle");
     await expect(linkRegion.getByRole("checkbox", { name: /Finans görünürlüğü/ })).not.toBeChecked();
     await expect(linkRegion.getByRole("checkbox", { name: /SMS alabilir/ })).toHaveCount(smsEnabled ? 1 : 0);

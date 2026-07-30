@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AlanRecord, ClassRecord, ExamParticipantRecord, ExamRecord, GradeLevelRecord, StudentRecord } from "@o-okul/shared-types";
 import {
@@ -20,7 +21,7 @@ import {
   type StatusBadgeProps,
   useConfirmDialog,
 } from "@o-okul/ui";
-import { CheckCircle2, Pencil, Plus, Search, Trash2, Users, X } from "lucide-react";
+import { ArrowRight, CheckCircle2, Pencil, Plus, ScanLine, Search, Trash2, Users, X } from "lucide-react";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiErrorMessage, apiRequest, authenticatedFetch } from "../../../../src/api-client.js";
 import {
@@ -108,6 +109,10 @@ export function ExamsPage() {
   const selectedAbsentCount = participants.filter((participant) => participant.status === "ABSENT").length;
   const selectedRegisteredCount = participants.filter((participant) => participant.status === "REGISTERED").length;
   const selectedBookletSummary = formatBookletSummary(participants);
+  const selectedExamAnswerKeyReady = answerKeyReady(selectedExam);
+  const selectedExamCanOpenOptical = selectedExam?.status === "PUBLISHED"
+    && selectedExamAnswerKeyReady
+    && participants.length > 0;
   const examSummaryItems: OperationSummaryItem[] = [
     {
       description: "Bu kurum kapsamındaki deneme sınavı",
@@ -226,11 +231,11 @@ export function ExamsPage() {
           >
             <Users size={17} aria-hidden="true" />
           </button>
-          <button type="button" onClick={() => void openEditForm(exam)} aria-label={`${exam.title} düzenle`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void openEditForm(exam)} aria-label={`${exam.title} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
-          </button>
+          </Button>
           {exam.status === "DRAFT" ? (
-            <button
+            <Button size="icon" variant="ghost"
               type="button"
               disabled={!answerKeyReady(exam)}
               onClick={() => void handlePublish(exam)}
@@ -238,11 +243,11 @@ export function ExamsPage() {
               title={answerKeyReady(exam) ? "Yayınla" : "Cevap anahtarı olmadan yayınlanamaz"}
             >
               <CheckCircle2 size={17} aria-hidden="true" />
-            </button>
+            </Button>
           ) : null}
-          <button type="button" onClick={() => void handleDelete(exam)} aria-label={`${exam.title} sil`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(exam)} aria-label={`${exam.title} sil`}>
             <Trash2 size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </div>
       ),
       sticky: "right",
@@ -497,6 +502,43 @@ export function ExamsPage() {
               <span>{formatCount(selectedAbsentCount)} gelmeyen katılımcı</span>
               <span>{formatCount(selectedParticipantClassCount)} sınıf kapsamı</span>
             </section>
+            <section className="next-exam-next-step" aria-label="Sınav sonraki adımı">
+              <div>
+                <strong>
+                  {selectedExam.status === "DRAFT" ? "Sonraki adım: sınavı yayınlayın" : "Sonraki adım: optik işlemleri"}
+                </strong>
+                <span>
+                  {selectedExam.status === "DRAFT"
+                    ? selectedExamAnswerKeyReady
+                      ? "Cevap anahtarı hazır. Sınavı yayınlayarak optik akışını açın."
+                      : "Sınavı yayınlamadan önce cevap anahtarını tamamlayın."
+                    : selectedExamCanOpenOptical
+                      ? "Seçili sınav bağlamını koruyarak format ve TXT / DAT yükleme akışına geçin."
+                      : "Optik işlemleri için cevap anahtarı ve en az bir katılımcı gerekir."}
+                </span>
+              </div>
+              {selectedExamCanOpenOptical ? (
+                <Link
+                  className="uh-button uh-button--primary uh-button--md"
+                  href={`/kurum/optik?examId=${encodeURIComponent(selectedExam.id)}`}
+                >
+                  <span className="uh-button__content">
+                    <ScanLine size={17} aria-hidden="true" />
+                    Optik işlemlerine geç
+                    <ArrowRight size={17} aria-hidden="true" />
+                  </span>
+                </Link>
+              ) : selectedExam.status === "DRAFT" && selectedExamAnswerKeyReady ? (
+                <Button type="button" onClick={() => void handlePublish(selectedExam)}>
+                  <CheckCircle2 size={17} aria-hidden="true" />
+                  Sınavı yayınla
+                </Button>
+              ) : (
+                <Button disabled type="button" variant="secondary">
+                  {!selectedExamAnswerKeyReady ? "Cevap anahtarı bekleniyor" : "Katılımcı bekleniyor"}
+                </Button>
+              )}
+            </section>
             <DataTable
               caption={`${selectedExam.title} katılımcıları`}
               columns={participantColumns}
@@ -597,7 +639,7 @@ export function ExamsPage() {
                 {selectedClassCount} sınıf / {selectedStudentCount} öğrenci
               </span>
               {selectedClassCount > 0 ? (
-                <button
+                <Button variant="ghost"
                   aria-label="Seçili sınıfları temizle"
                   className="next-class-picker-clear"
                   onClick={() => setForm((current) => ({ ...current, classIds: [] }))}
@@ -605,7 +647,7 @@ export function ExamsPage() {
                 >
                   <X size={14} aria-hidden="true" />
                   Temizle
-                </button>
+                </Button>
               ) : null}
             </div>
           </div>
@@ -619,14 +661,14 @@ export function ExamsPage() {
               onChange={(event) => setClassSearch(event.target.value)}
             />
             {classSearch ? (
-              <button
+              <Button size="icon" variant="ghost"
                 aria-label="Sınıf aramasını temizle"
                 className="next-class-search__clear"
                 onClick={() => setClassSearch("")}
                 type="button"
               >
                 <X size={15} aria-hidden="true" />
-              </button>
+              </Button>
             ) : null}
           </div>
           <div className="next-checkbox-list" role="group" aria-label="Sınıflar">

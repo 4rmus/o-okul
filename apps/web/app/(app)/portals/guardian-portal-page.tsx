@@ -220,13 +220,13 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
       value: canViewFinance ? financeStatus : "Ödeme izni kapalı",
     },
     {
-      actionLabel: supportReadOnly ? (isRolePreview ? "Salt-okuma" : "Kapalı") : openSupportTickets > 0 ? "Takip et" : "Talep aç",
+      actionLabel: supportReadOnly ? (isRolePreview ? "Yalnızca görüntüleme" : "Kapalı") : openSupportTickets > 0 ? "Takip et" : "Talep aç",
       contextLabel: "Destek",
       detail: supportReadOnly ? (isRolePreview ? "Destek talebi açma kapalı" : "Destek talebi izni kapalı") : "Veli destek kapsamı",
       href: guardianPortalHref("/veli/destek", isRolePreview),
       key: "support",
       label: "Destek talebini takip et",
-      statusLabel: supportReadOnly ? (isRolePreview ? "Salt-okuma" : "Kapalı") : openSupportTickets > 0 ? "Açık" : "Hazır",
+      statusLabel: supportReadOnly ? (isRolePreview ? "Yalnızca görüntüleme" : "Kapalı") : openSupportTickets > 0 ? "Açık" : "Hazır",
       tone: !supportReadOnly && openSupportTickets > 0 ? "warning" : "neutral",
       value: supportStatus,
     },
@@ -242,15 +242,15 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
       value: formatPercentNumber(reportSuccess),
     },
     {
-      actionLabel: isRolePreview ? "Salt-okuma" : "Canlı",
+      actionLabel: isRolePreview ? "Yalnızca görüntüleme" : "Canlı",
       contextLabel: "Erişim",
       detail: isRolePreview ? "Yazma işlemleri kapalı" : "İzinli veli işlemleri açık",
       href: guardianPortalHref(isRolePreview ? "/veli" : "/veli/bildirimler", isRolePreview),
       key: "preview",
       label: "Önizleme durumu",
-      statusLabel: isRolePreview ? "Salt-okuma" : "Canlı",
+      statusLabel: isRolePreview ? "Yalnızca görüntüleme" : "Canlı",
       tone: isRolePreview ? "neutral" : "info",
-      value: isRolePreview ? "Salt-okuma" : "Canlı hesap",
+      value: isRolePreview ? "Yalnızca görüntüleme" : "Canlı hesap",
     },
   ];
   return (
@@ -319,7 +319,13 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
               },
             ]}
           />
-          <PortalActionStrip ariaLabel="Veli günlük aksiyonları" items={guardianActionItems} />
+          <PortalActionStrip
+            ariaLabel="Veli günlük aksiyonları"
+            items={guardianActionItems}
+            priorityKeys={isRolePreview
+              ? ["preview", "support", "student"]
+              : ["student", "finance", "report"]}
+          />
           <MetricGrid
             items={[
               { label: "Devamsızlık", value: data?.attendanceSummary.total ?? 0 },
@@ -349,7 +355,7 @@ export function GuardianPortalPage({ view = "overview" }: { view?: GuardianPorta
           net={formatNetNumber(reportTotal?.net)}
           profile={data?.profile}
           questionCount={formatNetNumber(reportQuestionCount(reportTotal))}
-          scopeLabel="Veli kapsamı"
+          scopeLabel="Veli görünümü"
           successRate={formatPercentNumber(reportSuccess)}
           supportStatus={supportStatus}
         />
@@ -704,6 +710,6 @@ function guardianPortalContext(
   return {
     detail: detailByView[view],
     label,
-    meta: isRolePreview ? "Salt-okuma" : "Canlı veli hesabı",
+    meta: isRolePreview ? "Yalnızca görüntüleme" : "Canlı veli hesabı",
   };
 }

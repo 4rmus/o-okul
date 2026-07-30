@@ -243,10 +243,16 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     await expect(uploadResult.getByRole("status").filter({ hasText: "1/1 analiz işi kuyruğa alındı." })).toBeVisible();
     await expect(uploadResult.getByRole("status").filter({ hasText: "1/1 analiz sonucu tamamlandı." })).toBeVisible();
     await expect(workflowStrip).toContainText("Tamamlandı");
+    const reportHandoff = page.getByRole("region", { name: "Raporlara geçiş" });
+    await expect(reportHandoff).toBeVisible();
+    await expect(reportHandoff.getByRole("link", { name: "Rapor çalışma alanına geç" })).toHaveAttribute(
+      "href",
+      "/kurum/raporlar?examId=exam-optik",
+    );
 
     await page.getByRole("tab", { name: "3. Eşleşmeyen satırlar" }).click();
-    const optikReportPanel = page.getByRole("tabpanel", { name: "3. Eşleşmeyen satırlar" });
-    await optikReportPanel.getByRole("button", { name: "Eşleşmeyen satırları getir" }).click();
+    const quarantinePanel = page.getByRole("tabpanel", { name: "3. Eşleşmeyen satırlar" });
+    await quarantinePanel.getByRole("button", { name: "Eşleşmeyen satırları getir" }).click();
     const quarantineTable = page.getByRole("table", { name: "Eşleşmeyen satır listesi" });
     await expect(quarantineTable).toContainText("7");
     await expect(quarantineTable).toContainText("STUDENT_NOT_FOUND");
@@ -256,21 +262,19 @@ test.describe("Optik çalışma alanı sözleşmesi", () => {
     }
     expect(broadStudentRequests).toHaveLength(0);
     expect(studentSearchRequests).toHaveLength(0);
-    await optikReportPanel.getByLabel("Öğrenci adı/no ara").fill("Ada");
-    await optikReportPanel.getByRole("button", { name: "Öğrencileri ara" }).click();
+    await quarantinePanel.getByLabel("Öğrenci adı/no ara").fill("Ada");
+    await quarantinePanel.getByRole("button", { name: "Öğrencileri ara" }).click();
     await expect.poll(() => studentSearchRequests.length).toBe(1);
     const studentSearchUrl = new URL(studentSearchRequests[0]!);
     expect(studentSearchUrl.searchParams.get("q")).toBe("Ada");
     expect(studentSearchUrl.searchParams.get("limit")).toBe("10");
     expect(broadStudentRequests).toHaveLength(0);
     await expect(quarantineTable.locator('select[aria-label="7. satır öğrencisi"]')).toContainText("Ada Kaya");
-    await expect(optikReportPanel).toContainText("Raporlara geçiş");
-    const reportStatus = optikReportPanel.getByRole("region", { name: "Rapor üretim durumu" });
+    const reportStatus = reportHandoff.getByRole("region", { name: "Rapor üretim durumu" });
     await expect(reportStatus).toHaveClass(/uh-metric-grid/);
     await expect(reportStatus.locator(".uh-metric-card")).toHaveCount(2);
     await expect(reportStatus).toContainText("Analiz");
-    await expect(optikReportPanel.locator(".next-report-status-grid")).toHaveCount(0);
-    await expect(optikReportPanel.getByRole("link", { name: "Rapor çalışma alanına geç" })).toHaveAttribute("href", "/kurum/raporlar?examId=exam-optik");
+    await expect(reportHandoff.locator(".next-report-status-grid")).toHaveCount(0);
     await expect(page.getByRole("table", { name: "Hazır optik raporlar" })).toHaveCount(0);
     await expect(page.getByRole("table", { name: "Optik katılımcı sonuçları" })).toHaveCount(0);
     await expect(workflowStrip).toContainText("Raporlara geç");

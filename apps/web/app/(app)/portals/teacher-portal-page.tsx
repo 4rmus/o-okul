@@ -356,7 +356,7 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
     event.preventDefault();
     if (!auth) return;
     if (isRolePreview) {
-      setActionError("Rol önizleme salt-okuma modundadır.");
+      setActionError("Bu önizlemede işlem yapılamaz.");
       return;
     }
 
@@ -400,7 +400,7 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
     event.preventDefault();
     if (!auth) return;
     if (isRolePreview) {
-      setActionError("Rol önizleme salt-okuma modundadır.");
+      setActionError("Bu önizlemede işlem yapılamaz.");
       return;
     }
 
@@ -425,7 +425,7 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
   async function toggleHomeworkCheck(homework: HomeworkRecord) {
     if (!auth) return;
     if (isRolePreview) {
-      setActionError("Rol önizleme salt-okuma modundadır.");
+      setActionError("Bu önizlemede işlem yapılamaz.");
       return;
     }
 
@@ -449,7 +449,7 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
     event.preventDefault();
     if (!auth) return;
     if (isRolePreview) {
-      setActionError("Rol önizleme salt-okuma modundadır.");
+      setActionError("Bu önizlemede işlem yapılamaz.");
       return;
     }
 
@@ -528,37 +528,37 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
       value: selectedStudentLabel,
     },
     {
-      actionLabel: isRolePreview ? "Salt-okuma" : "Kaydet",
+      actionLabel: isRolePreview ? "Yalnızca görüntüleme" : "Kaydet",
       contextLabel: "Yoklama",
       detail: isRolePreview ? "Yoklama formu kapalı" : `${attendanceForm.date} için yoklama`,
       href: teacherPortalHref(isRolePreview ? "/ogretmen" : "/ogretmen/ogrenci-takibi", isRolePreview),
       key: "attendance",
       label: "Yoklama kaydet",
-      statusLabel: isRolePreview ? "Salt-okuma" : "Bugün",
+      statusLabel: isRolePreview ? "Yalnızca görüntüleme" : "Bugün",
       tone: isRolePreview ? "neutral" : "info",
-      value: isRolePreview ? "Salt-okuma" : `${data?.attendance.length ?? 0} kayıt`,
+      value: isRolePreview ? "Yalnızca görüntüleme" : `${data?.attendance.length ?? 0} kayıt`,
     },
     {
-      actionLabel: isRolePreview ? "Salt-okuma" : "Ekle",
+      actionLabel: isRolePreview ? "Yalnızca görüntüleme" : "Ekle",
       contextLabel: "Not",
       detail: isRolePreview ? "Not formu kapalı" : selectedStudentLabel,
       href: teacherPortalHref(isRolePreview ? "/ogretmen" : "/ogretmen/ogrenci-takibi", isRolePreview),
       key: "note",
       label: "Not ekle",
-      statusLabel: isRolePreview ? "Salt-okuma" : "Günlük takip",
+      statusLabel: isRolePreview ? "Yalnızca görüntüleme" : "Günlük takip",
       tone: isRolePreview ? "neutral" : "info",
-      value: isRolePreview ? "Salt-okuma" : `${data?.teacherNotes.length ?? 0} not`,
+      value: isRolePreview ? "Yalnızca görüntüleme" : `${data?.teacherNotes.length ?? 0} not`,
     },
     {
-      actionLabel: isRolePreview ? "Salt-okuma" : "Ata",
+      actionLabel: isRolePreview ? "Yalnızca görüntüleme" : "Ata",
       contextLabel: "Materyal",
       detail: isRolePreview ? "Materyal atama kapalı" : selectedMaterial?.title ?? "Materyal seçimi",
       href: teacherPortalHref(isRolePreview ? "/ogretmen" : "/ogretmen/ogrenci-takibi", isRolePreview),
       key: "material",
       label: "Materyal ata",
-      statusLabel: isRolePreview ? "Salt-okuma" : "Atama",
+      statusLabel: isRolePreview ? "Yalnızca görüntüleme" : "Atama",
       tone: isRolePreview ? "neutral" : "info",
-      value: isRolePreview ? "Salt-okuma" : `${data?.materials.length ?? 0} materyal`,
+      value: isRolePreview ? "Yalnızca görüntüleme" : `${data?.materials.length ?? 0} materyal`,
     },
     {
       actionLabel: uncheckedHomework > 0 ? "Kontrol" : "Tamam",
@@ -594,15 +594,15 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
       value: openSupportTickets > 0 ? `${openSupportTickets} açık` : "Açık talep yok",
     },
     {
-      actionLabel: isRolePreview ? "Salt-okuma" : "Canlı",
+      actionLabel: isRolePreview ? "Yalnızca görüntüleme" : "Canlı",
       contextLabel: "Erişim",
       detail: isRolePreview ? "Yoklama, not ve materyal kapalı" : "Yoklama, not ve materyal açık",
       href: teacherPortalHref(isRolePreview ? "/ogretmen" : "/ogretmen/ogrenci-takibi", isRolePreview),
       key: "preview",
       label: "Önizleme durumu",
-      statusLabel: isRolePreview ? "Salt-okuma" : "Canlı",
+      statusLabel: isRolePreview ? "Yalnızca görüntüleme" : "Canlı",
       tone: isRolePreview ? "neutral" : "info",
-      value: isRolePreview ? "Salt-okuma" : "İşlem açık",
+      value: isRolePreview ? "Yalnızca görüntüleme" : "İşlem yapılabilir",
     },
   ];
   const showOverview = view === "overview";
@@ -659,13 +659,19 @@ export function TeacherPortalPage({ view = "overview" }: { view?: TeacherPortalV
               },
               {
                 label: "Önizleme",
-                value: isRolePreview ? "Salt-okuma" : "İşlem açık",
+                value: isRolePreview ? "Yalnızca görüntüleme" : "İşlem yapılabilir",
                 detail: isRolePreview ? "Yoklama, not ve materyal kapalı" : "Yoklama, not ve materyal formları aktif",
                 tone: isRolePreview ? "neutral" : "info",
               },
             ]}
           />
-          <PortalActionStrip ariaLabel="Öğretmen günlük aksiyonları" items={teacherActionItems} />
+          <PortalActionStrip
+            ariaLabel="Öğretmen günlük aksiyonları"
+            items={teacherActionItems}
+            priorityKeys={isRolePreview
+              ? ["preview", "attendance", "report"]
+              : ["attendance", "note", "report"]}
+          />
           <MetricGrid
             items={[
               { label: "Ders", value: data?.schedule.length ?? 0 },
@@ -1355,7 +1361,7 @@ function teacherPortalContext(view: TeacherPortalView, label: string, selectedSt
   return {
     detail: detailByView[view],
     label,
-    meta: isRolePreview ? "Salt-okuma" : "Canlı öğretmen hesabı",
+    meta: isRolePreview ? "Yalnızca görüntüleme" : "Canlı öğretmen hesabı",
   };
 }
 

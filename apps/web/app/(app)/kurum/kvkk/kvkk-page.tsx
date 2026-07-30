@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CrudPage, EmptyState, StatusBadge, type DataTableColumn, useConfirmDialog } from "@o-okul/ui";
+import { Button, CrudPage, EmptyState, StatusBadge, type DataTableColumn, useConfirmDialog } from "@o-okul/ui";
 import type { KvkkInventoryKind, KvkkInventoryRecord } from "@o-okul/shared-types";
 import { ShieldCheck } from "lucide-react";
 import { useState } from "react";
@@ -59,14 +59,14 @@ export function KvkkPage() {
       priority: "secondary",
       render: (item) => (
         <span className="next-row-actions">
-          <button
+          <Button size="icon" variant="ghost"
             type="button"
             onClick={() => void handlePurge(item)}
             aria-label={`${item.displayRef} PII temizle`}
             disabled={!item.purgeAvailable}
           >
             <ShieldCheck size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </span>
       ),
     },

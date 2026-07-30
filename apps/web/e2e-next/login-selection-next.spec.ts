@@ -83,8 +83,8 @@ test("genel login birden cok okulda secim adimina gecer", async ({ page }) => {
   await page.getByLabel("Şifre", { exact: true }).fill("password");
   await page.getByRole("button", { name: "Giriş yap" }).click();
 
-  await expect(page.getByLabel("Okul")).toBeVisible();
-  await page.getByLabel("Okul").selectOption("tenant-b");
+  await expect(page.getByLabel("Kurum")).toBeVisible();
+  await page.getByLabel("Kurum").selectOption("tenant-b");
   await page.getByRole("button", { name: "Devam et" }).click();
 
   await expect(page).toHaveURL(/\/kurum$/, { timeout: 15_000 });

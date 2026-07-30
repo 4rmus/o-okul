@@ -3,9 +3,9 @@ import { ReferenceSystemPage } from "../system-reference-page.js";
 export default function SistemGozlemlenebilirlikPage() {
   return (
     <ReferenceSystemPage
-      title="Gözlemlenebilirlik"
-      subtitle="Global metrik, log ve alert görünümü için başlangıç referansı."
-      items={["Prometheus scrape", "Grafana dashboard", "Loki log panel", "Alert webhook"]}
+      title="Sistem İzleme"
+      subtitle="Tüm kurumları etkileyen çalışma durumu, kayıtlar ve uyarılar için kontrol listesi."
+      items={["Sistem ölçümleri", "İzleme panosu", "Uygulama kayıtları", "Uyarı bildirimleri"]}
     />
   );
 }

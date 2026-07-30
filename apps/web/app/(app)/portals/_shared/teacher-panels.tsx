@@ -212,13 +212,13 @@ export function TeacherClassReportsPanel({
   return (
     <Panel
       aria-label="Öğretmen sınıf raporları"
-      description="Başarı % ana karşılaştırma metriğidir; Net ve Soru bağlam olarak korunur."
+      description="Soru sayıları farklı raporları Başarı % ile karşılaştırın; Net ve Soru sonucu açıklar."
       title="Sınıf Raporları"
     >
       <DataTable
         caption="Öğretmen sınıf raporları"
         columns={columns}
-        description="Başarı % ana karşılaştırma metriğidir; Net ve Soru bağlam olarak korunur."
+        description="Soru sayıları farklı raporları Başarı % ile karşılaştırın; Net ve Soru sonucu açıklar."
         density="compact"
         emptyText="Hazır sınıf raporu yok."
         getRowKey={(report) => `${report.snapshotId}-${report.classId ?? "no-class"}`}
@@ -257,16 +257,16 @@ export function TeacherFocusPanel({
   const className = selectedClass?.name ?? selectedStudent?.classId ?? "-";
   const campusName = selectedClass?.campusId ? campusNames.get(selectedClass.campusId) ?? selectedClass.campusId : "-";
   const gradeLevelName = selectedClass?.gradeLevelId ? gradeLevelNames.get(selectedClass.gradeLevelId) ?? selectedClass.gradeLevelId : "-";
-  const modeLabel = mode === "read-only" ? "Salt-okuma" : "İşlem açık";
+  const modeLabel = mode === "read-only" ? "Yalnızca görüntüleme" : "İşlem yapılabilir";
   const supportTicketStatus = openSupportTicketCount > 0 ? `${openSupportTicketCount} açık` : "Açık talep yok";
 
   return (
     <Panel
       actions={<StatusBadge tone={mode === "read-only" ? "neutral" : "info"}>{modeLabel}</StatusBadge>}
-      aria-label="Öğretmen operasyon bağlamı"
+      aria-label="Seçili sınıf ve öğrenci özeti"
       className="next-teacher-focus"
-      description="Seçili çalışma bağlamı"
-      title="Öğrenci Odağı"
+      description="Seçili sınıfın, öğrencinin ve günün özeti"
+      title="Seçili Öğrenci"
     >
       <div className="next-teacher-focus__body">
         <div className="next-teacher-focus__identity">
@@ -274,7 +274,7 @@ export function TeacherFocusPanel({
           <strong>{studentName}</strong>
           <small>{className}</small>
         </div>
-        <InfoGrid className="next-teacher-focus__grid" aria-label="Öğretmen operasyon bağlam metrikleri" role="region">
+        <InfoGrid className="next-teacher-focus__grid" aria-label="Seçili sınıf ve öğrenci bilgileri" role="region">
           <InfoItem label="Kampüs" value={campusName} />
           <InfoItem label="Seviye" value={gradeLevelName} />
           <InfoItem label="Branş" value={courseName ?? "-"} />

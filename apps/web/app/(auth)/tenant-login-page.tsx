@@ -3,6 +3,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { CheckCircle2, LockKeyhole, ScanLine } from "lucide-react";
 import type { AuthResponse, MfaChallengeResponse, MfaEnrollmentRequiredResponse, TenantSelectionRequiredResponse } from "@o-okul/shared-types";
 import { Button, Field, Input, SegmentedControl, Select } from "@o-okul/ui";
 import { useAuth } from "../providers.js";
@@ -128,12 +129,12 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
             className="next-auth-link"
             href={lockedTenantSlug ? `/parolami-unuttum?tenant=${encodeURIComponent(lockedTenantSlug)}` : "/parolami-unuttum"}
           >
-            Parolamı unuttum
+            Şifremi unuttum
           </Link>
         ) : null}
         {pendingTenantSelection ? (
           <div className="next-form-section">
-            <Field label="Okul">
+            <Field label="Kurum">
               <Select value={selectedTenantId} onChange={(event) => setSelectedTenantId(event.target.value)} required>
                 {pendingTenantSelection.tenants.map((tenant) => (
                   <option key={tenant.tenantId} value={tenant.tenantId}>
@@ -155,14 +156,14 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
                 aria-pressed={mfaMethod === "totp"}
                 onClick={() => setMfaMethod("totp")}
               >
-                TOTP
+                Doğrulama uygulaması
               </button>
               <button
                 type="button"
                 aria-pressed={mfaMethod === "recovery_code"}
                 onClick={() => setMfaMethod("recovery_code")}
               >
-                Kurtarma
+                Kurtarma kodu
               </button>
             </SegmentedControl>
             <Field label={mfaMethod === "totp" ? "Doğrulama kodu" : "Kurtarma kodu"}>
@@ -201,10 +202,29 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
           </div>
         ) : null}
         {error ? <p className="next-form-error" role="alert">{error}</p> : null}
-        <Button type="submit" disabled={isSubmitDisabled}>
-          {isSubmitting ? "Giriş yapılıyor" : pendingEnrollment ? "Etkinleştir ve giriş yap" : pendingMfa ? "Doğrula" : pendingTenantSelection ? "Devam et" : "Giriş yap"}
+        <Button type="submit" disabled={isSubmitDisabled} loading={isSubmitting} loadingLabel="Giriş yapılıyor">
+          {pendingEnrollment ? "Etkinleştir ve giriş yap" : pendingMfa ? "Doğrula" : pendingTenantSelection ? "Devam et" : "Giriş yap"}
         </Button>
       </form>
+      <aside className="next-auth-context" aria-label="Güvenli giriş bilgisi">
+        <p className="next-section-eyebrow">{lockedTenantSlug ? "Kurum girişi" : "Güvenli oturum"}</p>
+        <h2>Görevinize ait çalışma alanına ilerleyin.</h2>
+        <p>Kurumunuz ve kullanıcı göreviniz girişten sonra doğrulanır; yalnız görmeye yetkili olduğunuz bilgiler gösterilir.</p>
+        <ul>
+          <li>
+            <LockKeyhole size={17} aria-hidden="true" />
+            Her kurumun verisi ayrı tutulur
+          </li>
+          <li>
+            <CheckCircle2 size={17} aria-hidden="true" />
+            Her kullanıcı yalnız yetkili olduğu bilgileri görür
+          </li>
+          <li>
+            <ScanLine size={17} aria-hidden="true" />
+            Sınav sonuçları ilgili öğrenci ve velilere açılır
+          </li>
+        </ul>
+      </aside>
     </section>
   );
 }

@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
+import { expectNoHorizontalOverflow } from "./helpers/horizontal-overflow.js";
 
 const appOrigin = `http://localhost:${process.env.NEXT_E2E_PORT ?? "3001"}`;
 const forbiddenTeacherPortalReadPaths = [
@@ -68,7 +69,9 @@ const corsHeaders = {
 
 test.describe("Öğretmen portalı sözleşmesi", () => {
   for (const viewport of [
-    { height: 844, width: 390 },
+    { height: 812, width: 320 },
+    { height: 812, width: 375 },
+    { height: 896, width: 414 },
     { height: 1024, width: 768 },
   ]) {
     test(`öğretmen çalışma alanı ${viewport.width}px görünümde taşmaz`, async ({ page }) => {
@@ -88,9 +91,9 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       await expect(workspace).toContainText("Öğrenci Takibi");
       await expect(workspace).toContainText("Ada Kaya / 8-A");
 
-      const focus = workspace.getByRole("region", { exact: true, name: "Öğretmen operasyon bağlamı" });
-      await expect(focus).toContainText("Öğrenci Odağı");
-      await expect(focus).toContainText("İşlem açık");
+      const focus = workspace.getByRole("region", { exact: true, name: "Seçili sınıf ve öğrenci özeti" });
+      await expect(focus).toContainText("Seçili Öğrenci");
+      await expect(focus).toContainText("İşlem yapılabilir");
       await expect(focus).toContainText("Ana Kampüs");
       await expect(focus).toContainText("Matematik");
       await expect(focus).toContainText("2026 Bahar");
@@ -106,7 +109,7 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       await expectTeacherActivityPanels(page);
 
       const dailyBrief = page.getByRole("region", { exact: true, name: "Günlük ders akışı" });
-      const dailyScope = dailyBrief.getByLabel("Günlük ders akışı görev kapsamı");
+      const dailyScope = dailyBrief.getByLabel("Günlük ders akışı için seçilen kişi veya sınıf");
       await expect(dailyScope).toContainText("Seçili öğrenci");
       await expect(dailyScope).toContainText("Ada Kaya / 8-A");
       await expect(dailyScope).toContainText("Matematik / 2026 Bahar");
@@ -116,38 +119,32 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
 
       const actionStrip = page.getByRole("region", { name: "Öğretmen günlük aksiyonları" });
       await expect(actionStrip).toBeVisible();
-      await expect(actionStrip).toContainText("Günlük iş kuyruğu");
-      await expect(actionStrip.getByRole("heading", { name: "Öncelikli aksiyonlar" })).toBeVisible();
-      await expect(actionStrip).toContainText("8 aksiyon");
-      await expect(actionStrip.getByRole("link", { name: /Öğrenci seç: Ada Kaya \/ 8-A/ })).toHaveAttribute(
+      await expect(actionStrip).toContainText("Bugün yapılacaklar");
+      await expect(actionStrip.getByRole("heading", { name: "Öncelikli işler" })).toBeVisible();
+      await expect(actionStrip).toContainText("8 iş");
+      await expect(actionStrip).toContainText("2 öncelikli");
+      await expect(actionStrip.getByRole("link", { name: /Ödev kontrol et: 1 bekliyor/ })).toHaveAttribute(
         "href",
-        "/ogretmen/ogrenci-takibi",
+        "/ogretmen/odevler",
+      );
+      await expect(actionStrip.getByRole("link", { name: /Destek talebini takip et: 1 açık/ })).toHaveAttribute(
+        "href",
+        "/ogretmen/destek",
       );
       await expect(actionStrip.getByRole("link", { name: /Yoklama kaydet: 2 kayıt.*Yoklama.*Kaydet.*Bugün.*2026-06-17 için yoklama/ })).toHaveAttribute(
         "href",
         "/ogretmen/ogrenci-takibi",
       );
-      await expect(actionStrip.getByRole("link", { name: /Not ekle: 2 not/ })).toHaveAttribute("href", "/ogretmen/ogrenci-takibi");
-      await expect(actionStrip.getByRole("link", { name: /Materyal ata: 1 materyal/ })).toHaveAttribute(
-        "href",
+      await expectPortalActionHrefs(actionStrip, [
         "/ogretmen/ogrenci-takibi",
-      );
-      await expect(actionStrip.getByRole("link", { name: /Ödev kontrol et: 1 bekliyor/ })).toHaveAttribute(
-        "href",
+        "/ogretmen/ogrenci-takibi",
+        "/ogretmen/raporlar",
+        "/ogretmen/ogrenci-takibi",
+        "/ogretmen/ogrenci-takibi",
         "/ogretmen/odevler",
-      );
-      await expect(
-        actionStrip.getByRole("link", { name: /Raporu incele: %81,7.*Rapor.*İncele.*Başarı %.*24,5 net \/ 30 soru/ }),
-      ).toHaveAttribute("href", "/ogretmen/raporlar");
-      await expect(actionStrip.getByRole("link", { name: /Destek talebini takip et: 1 açık/ })).toHaveAttribute(
-        "href",
         "/ogretmen/destek",
-      );
-      await expect(actionStrip.getByRole("link", { name: /Önizleme durumu: İşlem açık/ })).toHaveAttribute(
-        "href",
         "/ogretmen/ogrenci-takibi",
-      );
-      await expect(actionStrip.getByRole("link")).toHaveCount(8);
+      ]);
       const studentScope = page.getByRole("region", { exact: true, name: "Öğretmen öğrenci kapsamı" });
       await expect(studentScope.getByRole("heading", { name: "Öğrenciler" })).toBeVisible();
       await expect(studentScope.getByRole("button", { name: "Ada Kaya / 8-A" })).toHaveAttribute("aria-pressed", "true");
@@ -183,7 +180,6 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       await workspace.getByRole("button", { name: "Bora Yilmaz / 8-A" }).click();
       await expect(focus).toContainText("Bora Yilmaz");
       await expect(focus).toContainText("%63,3");
-      await expect(page.getByRole("region", { name: "Öğretmen günlük aksiyonları" })).toContainText("Bora Yilmaz / 8-A");
       await expect(dailyScope).toContainText("Bora Yilmaz / 8-A");
 
       await expectNoHorizontalOverflow(page, `teacher-portal-${viewport.width}`);
@@ -198,33 +194,36 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
     });
   }
 
-  test("öğretmen rol önizlemesi salt-okuma kalır", async ({ page }) => {
+  test("öğretmen rol önizlemesinde işlem yapılamaz", async ({ page }) => {
     const mutationRequests: string[] = [];
     await openTeacherPortal(page, { height: 844, width: 390 }, { mode: "role-preview", mutationRequests });
 
     await expect(page).toHaveURL(/\/ogretmen\?rolePreview=1$/);
     expect(page.url()).not.toContain("preview-token");
-    await expect(page.getByLabel("Rol önizleme modu")).toContainText("Salt-okuma Önizleme");
+    await expect(page.getByLabel("Rol önizleme bilgisi")).toContainText("Yalnızca Görüntüleme");
     const previewActions = page.getByRole("region", { name: "Öğretmen günlük aksiyonları" });
     await expect(previewActions).toBeVisible();
-    await expect(previewActions).toContainText("Salt-okuma");
+    await expect(previewActions).toContainText("Yalnızca görüntüleme");
     await expect(previewActions).toContainText("Yoklama, not ve materyal kapalı");
-    await expect(previewActions.getByRole("link", { name: /Yoklama kaydet: Salt-okuma/ })).toHaveAttribute(
-      "href",
+    await expect(previewActions.getByRole("link", { name: /Ödev kontrol et: 1 bekliyor/ })).toHaveAttribute("href", "/ogretmen/odevler?rolePreview=1");
+    await expect(previewActions.getByRole("link", { name: /Destek talebini takip et: 1 açık/ })).toHaveAttribute("href", "/ogretmen/destek?rolePreview=1");
+    await expect(previewActions.getByRole("link", { name: /Önizleme durumu: Yalnızca görüntüleme/ })).toHaveAttribute("href", "/ogretmen?rolePreview=1");
+    await expectPortalActionHrefs(previewActions, [
       "/ogretmen?rolePreview=1",
-    );
-    await expect(previewActions.getByRole("link", { name: /Not ekle: Salt-okuma/ })).toHaveAttribute("href", "/ogretmen?rolePreview=1");
-    await expect(previewActions.getByRole("link", { name: /Materyal ata: Salt-okuma/ })).toHaveAttribute(
-      "href",
       "/ogretmen?rolePreview=1",
-    );
-    await expect(previewActions.getByRole("link", { name: /Raporu incele/ })).toHaveAttribute("href", "/ogretmen/raporlar?rolePreview=1");
+      "/ogretmen/raporlar?rolePreview=1",
+      "/ogretmen/ogrenci-takibi?rolePreview=1",
+      "/ogretmen?rolePreview=1",
+      "/ogretmen?rolePreview=1",
+      "/ogretmen/odevler?rolePreview=1",
+      "/ogretmen/destek?rolePreview=1",
+    ]);
     await expect(page.getByRole("region", { name: "Öğretmen günlük işlemleri" })).toHaveCount(0);
-    await expect(page.getByRole("region", { exact: true, name: "Öğretmen operasyon bağlamı" })).toContainText("Salt-okuma");
+    await expect(page.getByRole("region", { exact: true, name: "Seçili sınıf ve öğrenci özeti" })).toContainText("Yalnızca görüntüleme");
     await expectTeacherDisplayPanels(page);
     await expectTeacherActivityPanels(page);
     await expectPortalAnnouncementsTable(page, { readOnly: true });
-    await expect(page.getByLabel("Destek talepleri")).toContainText("Salt-okuma önizlemede destek talebi açılamaz.");
+    await expect(page.getByLabel("Destek talepleri", { exact: true })).toContainText("Yalnızca görüntüleme sırasında destek talebi açılamaz.");
     await expectPortalSupportPanel(page, { formVisible: false });
     await expectTeacherHomeworkPanels(page, { readOnly: true });
     await expectNoHorizontalOverflow(page, "teacher-portal-role-preview");
@@ -242,14 +241,14 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
       { context: "Ödev kontrolü", label: "Ödev Kontrolü", path: "/ogretmen/odevler", panel: () => page.getByRole("region", { exact: true, name: "Öğretmen ödev kontrolü" }) },
       { context: "Sınav raporu", label: "Sınav Raporu", path: "/ogretmen/raporlar", panel: () => page.getByRole("region", { name: "Portal rapor özeti" }) },
       { context: "Duyurular", label: "Duyurular", path: "/ogretmen/duyurular", panel: () => page.getByRole("region", { exact: true, name: "Duyurular" }) },
-      { context: "Destek talepleri", label: "Destek", path: "/ogretmen/destek", panel: () => page.getByRole("region", { name: "Destek talepleri" }) },
+      { context: "Destek talepleri", label: "Destek", path: "/ogretmen/destek", panel: () => page.getByRole("region", { exact: true, name: "Destek talepleri" }) },
     ];
 
     for (const routeCase of routeCases) {
       await clickSidebarRoute(page, "Öğretmen Paneli", routeCase.label, routeCase.path);
       await expect(page).toHaveURL(new RegExp(`${routeCase.path}$`));
       await expect(page.getByRole("heading", { level: 1, name: "Öğretmen Portalı" })).toBeVisible();
-      await expect(page.getByRole("region", { exact: true, name: "Portal görev bağlamı" })).toContainText(routeCase.context);
+      await expect(page.getByRole("region", { exact: true, name: "Portal görünümü" })).toContainText(routeCase.context);
       await expect(routeCase.panel()).toBeVisible();
       if (routeCase.label === "Sınav Raporu") await expect(page.getByRole("combobox", { name: "Sınav raporu" })).toBeVisible();
       await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { exact: true, name: "Özet" })).not.toHaveAttribute("aria-current", "page");
@@ -283,7 +282,7 @@ test.describe("Öğretmen portalı sözleşmesi", () => {
 });
 
 async function expectTeacherFocusMetrics(focus: Locator) {
-  const focusMetrics = focus.getByRole("region", { name: "Öğretmen operasyon bağlam metrikleri" });
+  const focusMetrics = focus.getByRole("region", { name: "Seçili sınıf ve öğrenci bilgileri" });
   await expect(focusMetrics).toHaveClass(/uh-info-grid/);
   await expect(focusMetrics.locator(".uh-info-item")).toHaveCount(8);
 }
@@ -323,7 +322,7 @@ async function expectTeacherDisplayPanels(page: Page) {
     "Net",
     "Soru",
   ]);
-  await expect(reportsTable).toContainText("Başarı % ana karşılaştırma metriğidir");
+  await expect(reportsTable).toContainText("Soru sayıları farklı raporları Başarı % ile karşılaştırın");
 
   for (const panel of [today, profile, reports]) {
     for (const value of rawInternalValues) {
@@ -370,7 +369,7 @@ async function expectTeacherHomeworkPanels(page: Page, options: { readOnly: bool
   await expect(homeworkTable.locator("thead th")).toHaveText(["Ödev", "Materyal", "Teslim", "Durum", "İşlem"]);
   if (options.readOnly) {
     await expect(homework.getByRole("button", { name: "Kontrol et" })).toHaveCount(0);
-    await expect(homework).toContainText("Salt-okuma");
+    await expect(homework).toContainText("Yalnızca görüntüleme");
   } else {
     await expect(homework.getByRole("button", { name: "Kontrol et" })).toBeVisible();
   }
@@ -392,7 +391,7 @@ async function expectTeacherHomeworkPanels(page: Page, options: { readOnly: bool
 }
 
 async function expectPortalAnnouncementsTable(page: Page, options: { readOnly: boolean }) {
-  const announcements = page.getByRole("region", { name: "Duyurular" });
+  const announcements = page.getByRole("region", { exact: true, name: "Duyurular" });
   const table = page.getByRole("table", { name: "Portal duyuruları" });
   await expect(table).toBeVisible();
   await expect(table.getByRole("columnheader", { name: "Başlık" })).toBeVisible();
@@ -400,14 +399,14 @@ async function expectPortalAnnouncementsTable(page: Page, options: { readOnly: b
   await expect(table.getByRole("columnheader", { name: "Okunma" })).toBeVisible();
   if (options.readOnly) {
     await expect(announcements.getByRole("button", { name: "Okundu işaretle" })).toHaveCount(0);
-    await expect(announcements).toContainText("Salt-okuma");
+    await expect(announcements).toContainText("Yalnızca görüntüleme");
   } else {
     await expect(announcements.getByRole("button", { name: "Okundu işaretle" })).toBeVisible();
   }
 }
 
 async function expectPortalSupportPanel(page: Page, options: { formVisible: boolean }) {
-  const support = page.getByRole("region", { name: "Destek talepleri" });
+  const support = page.getByRole("region", { exact: true, name: "Destek talepleri" });
   const table = page.getByRole("table", { name: "Destek talepleri" });
   await expect(table).toBeVisible();
   await expect(table.getByRole("columnheader", { name: "Konu" })).toBeVisible();
@@ -770,14 +769,6 @@ function createEnrollments() {
   return [{ classId: "class-8a", className: "8-A", id: "enrollment-a", startsAt: "2026-09-01T00:00:00.000Z", status: "ACTIVE", studentId: "student-a", tenantId: "tenant-teacher", termId: "term-2026" }];
 }
 
-async function expectNoHorizontalOverflow(page: Page, label: string) {
-  const overflow = await page.evaluate(() => {
-    const documentElement = document.documentElement;
-    return documentElement.scrollWidth - documentElement.clientWidth;
-  });
-  expect(overflow, `${label}: horizontal overflow`).toBeLessThanOrEqual(2);
-}
-
 async function expectPortalActionFocus(page: Page, actionStrip: Locator, linkName: RegExp, target: Locator, href: string) {
   const action = actionStrip.getByRole("link", { name: linkName });
   await action.click();
@@ -860,6 +851,17 @@ async function expectNoClippedVisibleText(page: Page, label: string) {
   });
 
   expect(clippedTexts, `${label}: kırpılmış görünen metin`).toEqual([]);
+}
+
+async function expectPortalActionHrefs(actionStrip: Locator, expectedHrefs: readonly string[]) {
+  const links = actionStrip.getByRole("link");
+  await expect(links).toHaveCount(expectedHrefs.length);
+  await expect.poll(() => links.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("href"))))
+    .toEqual(expectedHrefs);
+  for (const link of await links.all()) {
+    await expect(link).toBeVisible();
+    await expect(link).not.toHaveAccessibleName("");
+  }
 }
 
 async function fulfillData(route: Route, data: unknown) {

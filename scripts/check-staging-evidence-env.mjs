@@ -30,6 +30,7 @@ const workflowInjectedKeys = new Set([
 ]);
 const uiUxRedesignGeneratorKeys = [
   "UI_UX_REDESIGN_RELEASE_CANDIDATE",
+  "UI_UX_REDESIGN_ALLOWED_EVIDENCE_HOSTS",
   "UI_UX_REDESIGN_STAGING_EVIDENCE_REFERENCES",
   "UI_UX_REDESIGN_PHASE_0_REFERENCES",
   "UI_UX_REDESIGN_PHASE_1_REFERENCES",
@@ -42,10 +43,12 @@ const uiUxRedesignGeneratorKeys = [
   "UI_UX_REDESIGN_RAPOR_WORKSPACE_REFERENCES",
   "UI_UX_REDESIGN_PORTAL_SHELL_REFERENCES",
   "UI_UX_REDESIGN_PII_REVIEW",
+  "UI_UX_REDESIGN_PRIVACY_REVIEW_REFERENCE",
   "UI_UX_REDESIGN_RAW_PII_IN_ARTIFACTS",
   "UI_UX_REDESIGN_SMS_RECIPIENT_PREVIEW_EXPORTED",
   "UI_UX_REDESIGN_GUARDIAN_FINANCE_LEAKAGE_CHECKED",
   "UI_UX_REDESIGN_APPROVAL_ROLE",
+  "UI_UX_REDESIGN_APPROVED_BY",
   "UI_UX_REDESIGN_APPROVED_AT",
 ];
 const smsProviderRuntimeKeys = ["NETGSM_USERCODE", "NETGSM_PASSWORD", "NETGSM_MSG_HEADER"];
@@ -270,7 +273,8 @@ function checkWorkflowContract(output) {
     "Append full UI/UX release evidence metadata",
     "echo \"UI_UX_REDESIGN_EVIDENCE_TARGET=file://$PWD/artifacts/staging/reports/ui-ux-redesign.json\"",
     "Run first staging evidence gates",
-    "Run production evidence chain",
+    "Run staging-scoped evidence chain",
+    "PRODUCTION_EVIDENCE_ALLOW_STAGING_UI_UX: \"1\"",
     "Check staging release artifact bundle",
     "STAGING_RELEASE_ARTIFACTS_TARGET=\"$PWD/artifacts/staging\"",
     "pnpm staging:release-artifacts:check",

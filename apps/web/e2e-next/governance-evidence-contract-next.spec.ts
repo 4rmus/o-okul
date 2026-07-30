@@ -115,12 +115,12 @@ test.describe("Governance evidence sözleşmesi", () => {
     await expect(trustPanel.getByLabel("Kanıt kapsamı: Yerel/statik")).toHaveCount(1);
     await expect(trustPanel.getByLabel("Kanıt kapsamı: Staging/prod")).toHaveCount(1);
     await expect(trustPanel).toContainText("Release kararına yetmez");
-    await expect(page.getByText("Staging/prod kanıt bekliyor")).toBeVisible();
+    await expect(page.getByText("Canlı ortam kontrolü bekliyor")).toBeVisible();
 
-    const securitySummary = page.getByRole("region", { exact: true, name: "Güvenlik denetimi operasyon özeti" });
-    await expect(securitySummary).toContainText("Safe-list audit");
-    await expect(securitySummary).toContainText("PII ham gösterilmez");
-    await expect(securitySummary.getByLabel("Güvenlik denetimi operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    const securitySummary = page.getByRole("region", { exact: true, name: "Güvenlik durumu özeti" });
+    await expect(securitySummary).toContainText("Kişisel veriler gizli");
+    await expect(securitySummary).toContainText("Değişiklik ayrıntıları gizli");
+    await expect(securitySummary.getByLabel("Güvenlik durumu özeti aksiyon kuyruğu")).toBeVisible();
     const securityEvents = page.getByRole("region", { name: "Son güvenlik olayları" });
     const securityEventsTable = securityEvents.getByRole("table", { name: "Güvenlik olayları" });
     await expect(securityEventsTable.getByRole("columnheader", { name: "Olay" })).toBeVisible();
@@ -128,7 +128,7 @@ test.describe("Governance evidence sözleşmesi", () => {
     await expect(securityEventsTable.getByRole("columnheader", { name: "Kayıt" })).toBeVisible();
     await expect(securityEvents).toContainText("Kimlik olayı");
     await expect(securityEvents).toContainText("Kullanıcı kaydı");
-    const securityGateTable = page.getByRole("region", { name: "Güvenlik denetimi kapıları" }).getByRole("table", { name: "Güvenlik denetimi kanıt kapıları" });
+    const securityGateTable = page.getByRole("region", { name: "Canlıya geçiş güvenlik kontrolleri" }).getByRole("table", { name: "Canlıya geçiş güvenlik kontrolleri" });
     await expect(securityGateTable).toContainText("SECURITY_AUDIT_TARGET=file://$PWD/docs/evidence-templates/security-audit.example.json pnpm security:audit:check");
     await expect(securityGateTable).toContainText("Yerel/statik");
     await expect(securityGateTable).toContainText("Release kararına yetmez");
@@ -136,25 +136,26 @@ test.describe("Governance evidence sözleşmesi", () => {
     await expect(securityGateTable).toContainText("pnpm db:rls:check:live");
     await expect(securityGateTable).toContainText("pnpm traefik:https:smoke");
     await expect(securityGateTable).toContainText("Canlı kanıt");
-    const securityHeaderTable = page.getByRole("region", { name: "Header kontrolleri" }).getByRole("table", { name: "Güvenlik header kontrolleri" });
+    const securityHeaderTable = page.getByRole("region", { name: "Bağlantı güvenliği kontrolleri" }).getByRole("table", { name: "Bağlantı güvenliği kontrolleri" });
     await expect(securityHeaderTable).toContainText("Strict-Transport-Security");
     await expect(securityHeaderTable).toContainText("Content-Security-Policy");
     await expect(securityHeaderTable).toContainText("Staging/prod");
-    const securityAuthTable = page.getByRole("region", { name: "Auth kontrolleri" }).getByRole("table", { name: "Güvenlik auth kontrolleri" });
+    const securityAuthTable = page.getByRole("region", { name: "Oturum güvenliği kontrolleri" }).getByRole("table", { name: "Oturum güvenliği kontrolleri" });
     await expect(securityAuthTable).toContainText("COOKIE_SECURE=true");
-    await expect(securityAuthTable).toContainText("refresh session revocation");
-    await expect(securityAuthTable).toContainText("Auth/session");
-    const securityDataTable = page.getByRole("region", { name: "Veri kontrolleri" }).getByRole("table", { name: "Güvenlik veri kontrolleri" });
-    await expect(securityDataTable).toContainText("RLS live check");
-    await expect(securityDataTable).toContainText("RLS canlı");
-    await expect(securityDataTable).toContainText("audit PII redaction");
-    await expect(securityDataTable).toContainText("Sunucu/audit");
-    await expect(securityDataTable).toContainText("SENTRY_SEND_DEFAULT_PII=false");
+    await expect(securityAuthTable).toContainText("Oturum yenileme ve iptal");
+    await expect(securityAuthTable).toContainText("Giriş güvenliği");
+    const securityDataTable = page.getByRole("region", { name: "Kurum ve kişisel veri güvenliği kontrolleri" }).getByRole("table", { name: "Kurum ve kişisel veri güvenliği kontrolleri" });
+    await expect(securityDataTable).toContainText("Canlı veritabanı erişim kontrolü");
+    await expect(securityDataTable).toContainText("Kurum verisi ayrımı");
+    await expect(securityDataTable).toContainText("İşlem kayıtlarında kişisel veri gizleme");
+    await expect(securityDataTable).toContainText("Sunucu kayıtları");
+    await expect(securityDataTable).toContainText("Hata izleme kişisel veri ayarı");
+    await expect(securityDataTable).toContainText("Kişisel veri kapalı");
     for (const table of [securityGateTable, securityHeaderTable, securityAuthTable, securityDataTable]) {
       await expect(table.getByRole("columnheader", { name: "Kontrol" })).toBeVisible();
       await expect(table.getByRole("columnheader", { name: "Durum" })).toBeVisible();
-      await expect(table.getByRole("columnheader", { name: "Kapsam" })).toBeVisible();
-      await expect(table.getByRole("columnheader", { name: "Bağlam" })).toBeVisible();
+      await expect(table.getByRole("columnheader", { name: "Ortam" })).toBeVisible();
+      await expect(table.getByRole("columnheader", { name: "Açıklama" })).toBeVisible();
     }
     for (const value of [...hostileEvidenceValues, ...hostileAuditValues]) {
       await expect(page.locator("body")).not.toContainText(value);
@@ -318,87 +319,87 @@ test.describe("Governance evidence sözleşmesi", () => {
     await openWithGovernanceMocks(page, "/kurum/canli-yayin", { height: 900, width: 390 }, {
       roles: ["TENANT_ADMIN"],
     });
-    await expectEvidenceScopes(page.getByLabel("Release kanıt güven durumu"), {
+    await expectEvidenceScopes(page.getByLabel("Canlıya geçiş doğrulama durumu"), {
       "Kanıt kapsamı: Yerel/statik": 1,
       "Kanıt kapsamı: Staging/prod": 1,
       "Kanıt kapsamı: Canlı kanıt": 1,
     });
-    await expectEvidenceTiers(page.getByLabel("Release kanıt güven durumu"), {
+    await expectEvidenceTiers(page.getByLabel("Canlıya geçiş doğrulama durumu"), {
       evidence: 1,
       live: 1,
       reference: 1,
     });
-    await expect(page.getByLabel("Release kanıt güven durumu")).toContainText("Release kararına yetmez");
-    await expect(page.getByLabel("Release kanıt güven durumu")).toContainText("Canlı kanıt gerekir");
-    const liveSummary = page.getByRole("region", { exact: true, name: "Release kanıt operasyon özeti" });
-    await expect(liveSummary).toContainText("Kanıt zinciri");
-    await expect(liveSummary).toContainText("PASS gerekir");
-    await expect(liveSummary).toContainText("CLI-only");
-    await expect(liveSummary).toContainText("Yerel/static karar vermez");
-    await expect(liveSummary).toContainText("Staging/prod evidence");
-    await expect(liveSummary).toContainText("Pilot kapanış");
-    await expect(liveSummary).toContainText("Panel aksiyonu");
-    await expect(liveSummary.getByLabel("Release kanıt operasyon özeti aksiyon kuyruğu")).toBeVisible();
+    await expect(page.getByLabel("Canlıya geçiş doğrulama durumu")).toContainText("Release kararına yetmez");
+    await expect(page.getByLabel("Canlıya geçiş doğrulama durumu")).toContainText("Canlı kanıt gerekir");
+    const liveSummary = page.getByRole("region", { exact: true, name: "Yayın hazırlığı özeti" });
+    await expect(liveSummary).toContainText("Doğrulamalar");
+    await expect(liveSummary).toContainText("Başarılı olmalı");
+    await expect(liveSummary).toContainText("Bu ekran yalnız bilgi verir");
+    await expect(liveSummary).toContainText("Yerel kontrol yeterli değildir");
+    await expect(liveSummary).toContainText("Deneme ve canlı ortam sonucu gerekir");
+    await expect(liveSummary).toContainText("Pilot değerlendirmesi");
+    await expect(liveSummary).toContainText("Yayın işlemi");
+    await expect(liveSummary.getByLabel("Yayın hazırlığı özeti aksiyon kuyruğu")).toBeVisible();
     await expect(page.getByRole("button", { name: /Canlı yayına al|Yayınla|Go-live başlat|Release başlat/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /Canlı yayına al|Yayınla|Go-live başlat|Release başlat/i })).toHaveCount(0);
-    const liveGateTable = page.getByRole("table", { name: "Release kanıt kapıları" });
-    await expect(liveGateTable).toContainText("Toplu kanıt zinciri");
+    const liveGateTable = page.getByRole("table", { name: "Yayın öncesi kontroller" });
+    await expect(liveGateTable).toContainText("Tüm doğrulamaları çalıştır");
     await expect(liveGateTable).toContainText("pnpm prod:evidence:check");
     await expect(liveGateTable).toContainText("pnpm pilot:check");
     await expect(liveGateTable).toContainText("GO_LIVE_EVIDENCE_TARGET=file:///path/to/go-live.json pnpm go-live:check");
     await expect(liveGateTable).toContainText("pnpm go-live:check");
-    const productionEvidenceTable = page.getByRole("table", { name: "Production evidence adımları" });
-    await expect(productionEvidenceTable).toContainText("Traefik HTTPS");
-    await expect(productionEvidenceTable).toContainText("Sentry test event");
-    await expect(productionEvidenceTable).toContainText("WAL archive target");
-    await expect(productionEvidenceTable).toContainText("Off-host backup target");
-    await expect(productionEvidenceTable).toContainText("Observability UAT evidence");
-    await expect(productionEvidenceTable).toContainText("UAT evidence");
-    const releaseSummaryTable = page.getByRole("table", { name: "Release özeti alanları" });
+    const productionEvidenceTable = page.getByRole("table", { name: "Canlı ortam doğrulamaları" });
+    await expect(productionEvidenceTable).toContainText("Güvenli HTTPS bağlantısı");
+    await expect(productionEvidenceTable).toContainText("Hata izleme test olayı");
+    await expect(productionEvidenceTable).toContainText("Veritabanı değişiklik arşivi");
+    await expect(productionEvidenceTable).toContainText("Harici yedek hedefi");
+    await expect(productionEvidenceTable).toContainText("İzleme ve uyarı kullanıcı kabulü");
+    await expect(productionEvidenceTable).toContainText("Kullanıcı kabul testi");
+    const releaseSummaryTable = page.getByRole("table", { name: "Doğrulama özeti alanları" });
     await expect(releaseSummaryTable).toContainText("result = PASS");
     await expect(releaseSummaryTable).toContainText("reports.uat.rollbackImageTag");
     await expect(releaseSummaryTable).toContainText("reports.deploymentRollback.rollbackImageTag");
-    const goLiveDecisionTable = page.getByRole("table", { name: "Go-live karar alanları" });
+    const goLiveDecisionTable = page.getByRole("table", { name: "Canlıya geçiş kararları" });
     await expect(goLiveDecisionTable).toContainText("productionEvidenceSummary.summaryTarget");
     await expect(goLiveDecisionTable).toContainText("pilot.pilotDurationDays >= 14");
     await expect(goLiveDecisionTable).toContainText("pilot.criticalDefectsOpen = 0");
     await expect(goLiveDecisionTable).toContainText("operations.alertChannelReady = true");
     await expect(goLiveDecisionTable).toContainText("goLiveDecision = APPROVED");
     await expect(goLiveDecisionTable).toContainText("approvals: product / technical / operations / dataProtection");
-    const externalEvidenceTable = page.getByRole("table", { name: "Dış ortam kanıtları" });
-    await expect(externalEvidenceTable).toContainText("Staging/prod domain");
-    await expect(externalEvidenceTable).toContainText("Sentry DSN ve alert webhook");
-    await expect(externalEvidenceTable).toContainText("Off-host backup ve WAL hedefi");
-    await expect(externalEvidenceTable).toContainText("Pilot kapanış kanıtı");
-    await expect(externalEvidenceTable).toContainText("Go-live karar paketi");
+    const externalEvidenceTable = page.getByRole("table", { name: "Dış sistem doğrulamaları" });
+    await expect(externalEvidenceTable).toContainText("Deneme veya canlı ortam adresi");
+    await expect(externalEvidenceTable).toContainText("Hata izleme ve uyarı kanalı");
+    await expect(externalEvidenceTable).toContainText("Harici yedek ve veritabanı arşivi");
+    await expect(externalEvidenceTable).toContainText("Pilot değerlendirme sonuçları");
+    await expect(externalEvidenceTable).toContainText("Canlıya geçiş karar paketi");
     await expectNoHorizontalOverflow(page, "live-release-governance-mobile");
     await expectNoUnlabeledControls(page, "live-release-governance-mobile");
 
     await openWithGovernanceMocks(page, "/kurum/canli-yayin", { height: 900, width: 390 }, { roles: ["ASSISTANT_ADMIN"] });
     await expect(page).toHaveURL(/\/kurum$/);
-    await expect(page.getByRole("region", { exact: true, name: "Release kanıt operasyon özeti" })).toHaveCount(0);
-    await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Release Kanıtı" })).toHaveCount(0);
+    await expect(page.getByRole("region", { exact: true, name: "Yayın hazırlığı özeti" })).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Yayın Hazırlığı" })).toHaveCount(0);
 
     await openWithGovernanceMocks(page, "/kurum/uat-rollback", { height: 900, width: 768 }, {
       roles: ["TENANT_ADMIN", "SYSTEM_ADMIN"],
     });
-    await expectEvidenceScopes(page.getByLabel("UAT rollback güven durumu"), {
+    await expectEvidenceScopes(page.getByLabel("Kullanıcı kabulü ve geri dönüş durumu"), {
       "Kanıt kapsamı: Staging/prod": 1,
       "Kanıt kapsamı: Canlı kanıt": 1,
       "Kanıt kapsamı: Sunucu/audit": 1,
     });
-    await expect(page.getByLabel("UAT rollback güven durumu")).toContainText("Canlı kanıt gerekir");
-    const uatSummary = page.getByRole("region", { exact: true, name: "UAT rollback operasyon özeti" });
-    await expect(uatSummary).toContainText("CLI-only");
-    await expect(uatSummary).toContainText("Release kanıtı ayrı");
-    await expect(uatSummary.getByLabel("UAT rollback operasyon özeti aksiyon kuyruğu")).toBeVisible();
-    const uatScenarioTable = page.getByRole("table", { name: "UAT persona senaryoları" });
+    await expect(page.getByLabel("Kullanıcı kabulü ve geri dönüş durumu")).toContainText("Canlı kanıt gerekir");
+    const uatSummary = page.getByRole("region", { exact: true, name: "Kullanıcı kabulü ve geri dönüş özeti" });
+    await expect(uatSummary).toContainText("Yalnızca kontrol");
+    await expect(uatSummary).toContainText("Yayın raporu ayrı");
+    await expect(uatSummary.getByLabel("Kullanıcı kabulü ve geri dönüş özeti aksiyon kuyruğu")).toBeVisible();
+    const uatScenarioTable = page.getByRole("table", { name: "Kullanıcı yolculuğu senaryoları" });
     await expect(uatScenarioTable).toContainText("UAT-KURUM-01");
     await expect(uatScenarioTable).toContainText("UAT-GUARDIAN-03");
-    const uatCommandTable = page.getByRole("table", { name: "UAT zorunlu komutları" });
+    const uatCommandTable = page.getByRole("table", { name: "Yayın öncesi zorunlu komutlar" });
     await expect(uatCommandTable).toContainText("pnpm db:rls:check:live");
     await expect(uatCommandTable).toContainText("pnpm traefik:https:smoke");
-    const rollbackFieldTable = page.getByRole("table", { name: "Rollback zorunlu alanları" });
+    const rollbackFieldTable = page.getByRole("table", { name: "Geri dönüş için zorunlu bilgiler" });
     await expect(rollbackFieldTable).toContainText("rollbackImageTag");
     await expect(rollbackFieldTable).toContainText("restoreBackupReference");
     await expect(rollbackFieldTable).toContainText("defects boş");
@@ -445,22 +446,22 @@ test.describe("Governance evidence sözleşmesi", () => {
       roles: ["TENANT_ADMIN", "SYSTEM_ADMIN"],
       systemEndpoints: "partial-metrics-failure",
     });
-    const healthTrustPanel = page.getByLabel("Sistem sağlık güven durumu");
+    const healthTrustPanel = page.getByLabel("Sistem sağlığı doğrulama durumu");
     await expectEvidenceScopes(healthTrustPanel, {
       "Kanıt kapsamı: Yerel/statik": 1,
       "Kanıt kapsamı: Yapılandırılmış API": 1,
       "Kanıt kapsamı: Staging/prod": 1,
     });
-    const healthSummary = page.getByRole("region", { exact: true, name: "Sistem sağlık operasyon özeti" });
-    await expect(healthSummary).toContainText("Endpoint kapsamı");
-    await expect(healthSummary).toContainText("Bağımlılık hazırlığı");
-    await expect(healthSummary.getByLabel("Sistem sağlık operasyon özeti aksiyon kuyruğu")).toBeVisible();
-    const dependencyTable = page.getByRole("table", { name: "Sistem bağımlılık durumu" });
+    const healthSummary = page.getByRole("region", { exact: true, name: "Sistem sağlığı özeti" });
+    await expect(healthSummary).toContainText("Kontrol kapsamı");
+    await expect(healthSummary).toContainText("Bağlantı durumu");
+    await expect(healthSummary.getByLabel("Sistem sağlığı özeti aksiyon kuyruğu")).toBeVisible();
+    const dependencyTable = page.getByRole("table", { name: "Sistem bağlantıları ve kullanım durumu" });
     await expect(dependencyTable).toContainText("Postgres");
     await expect(dependencyTable).toContainText("Redis");
     await expect(dependencyTable).toContainText("HTTP istek sayacı");
-    const healthDetails = page.getByRole("region", { name: "Sistem sağlık detayları" });
-    const healthEndpointTable = healthDetails.getByRole("table", { name: "Sistem sağlık endpointleri" });
+    const healthDetails = page.getByRole("region", { name: "Teknik sistem kontrolleri" });
+    const healthEndpointTable = healthDetails.getByRole("table", { name: "Teknik sistem kontrol adresleri" });
     await expect(healthEndpointTable).toBeVisible();
     await expect(healthEndpointTable).toContainText("/health");
     await expect(healthEndpointTable).toContainText("/health/ready");
@@ -474,35 +475,35 @@ test.describe("Governance evidence sözleşmesi", () => {
       roles: ["TENANT_ADMIN", "SYSTEM_ADMIN"],
       systemEndpoints: "partial-metrics-failure",
     });
-    const observabilityTrustPanel = page.getByLabel("Gözlemlenebilirlik güven durumu");
+    const observabilityTrustPanel = page.getByLabel("Sistem izleme doğrulama durumu");
     await expectEvidenceScopes(observabilityTrustPanel, {
       "Kanıt kapsamı: Yerel/statik": 1,
       "Kanıt kapsamı: Yapılandırılmış API": 1,
       "Kanıt kapsamı: Canlı kanıt": 1,
       "Kanıt kapsamı: Staging/prod": 1,
     });
-    const observabilitySummary = page.getByRole("region", { exact: true, name: "Gözlemlenebilirlik operasyon özeti" });
-    await expect(observabilitySummary).toContainText("Endpoint kapsamı");
-    await expect(observabilitySummary).toContainText("Alert kanalı");
-    await expect(observabilitySummary).toContainText("Dashboard kanıtı");
-    await expect(observabilitySummary).toContainText("Endpoint kısmi");
-    await expect(observabilitySummary.getByLabel("Gözlemlenebilirlik operasyon özeti aksiyon kuyruğu")).toBeVisible();
-    const observabilityDetails = page.getByRole("region", { name: "Gözlemlenebilirlik detayları" });
-    const observabilityEndpointTable = observabilityDetails.getByRole("table", { name: "Gözlemlenebilirlik endpointleri" });
-    await expect(observabilityEndpointTable.getByRole("columnheader", { name: "Sinyal" })).toBeVisible();
+    const observabilitySummary = page.getByRole("region", { exact: true, name: "Sistem izleme özeti" });
+    await expect(observabilitySummary).toContainText("Kontrol kapsamı");
+    await expect(observabilitySummary).toContainText("Uyarı kanalı");
+    await expect(observabilitySummary).toContainText("İzleme panoları");
+    await expect(observabilitySummary).toContainText("Anlık durum kısmi");
+    await expect(observabilitySummary.getByLabel("Sistem izleme özeti aksiyon kuyruğu")).toBeVisible();
+    const observabilityDetails = page.getByRole("region", { name: "Anlık sistem durumu" });
+    const observabilityEndpointTable = observabilityDetails.getByRole("table", { name: "Anlık sistem kontrol adresleri" });
+    await expect(observabilityEndpointTable.getByRole("columnheader", { name: "Kontrol" })).toBeVisible();
     await expect(observabilityEndpointTable.getByRole("columnheader", { name: "Durum" })).toBeVisible();
-    await expect(observabilityEndpointTable.getByRole("columnheader", { name: "Bağlam" })).toBeVisible();
+    await expect(observabilityEndpointTable.getByRole("columnheader", { name: "Açıklama" })).toBeVisible();
     await expect(observabilityEndpointTable).toContainText("/health");
     await expect(observabilityEndpointTable).toContainText("/health/ready");
     await expect(observabilityEndpointTable).toContainText("/metrics");
     await expect(observabilityEndpointTable).toContainText("200 tamam");
     await expect(observabilityEndpointTable).toContainText("Endpoint yanıt vermedi.");
-    await expect(page.getByLabel("Alert kuralları")).toContainText("Webhook ve Sentry");
-    await expect(page.getByLabel("Dashboard panelleri")).toContainText("Grafana ve Loki");
-    await expect(page.getByLabel("Gözlemlenebilirlik kapıları")).toContainText("observability:uat:check");
-    await expect(page.getByLabel("Gözlemlenebilirlik kapıları")).toContainText("alert:webhook:smoke");
-    await expect(page.getByLabel("Gözlemlenebilirlik kapıları")).toContainText("sentry:smoke");
-    await expect(page.getByText("Gözlemlenebilirlik bilgisi alınamadı.")).toHaveCount(0);
+    await expect(page.getByLabel("Uyarı kuralları", { exact: true })).toContainText("Uyarı ve hata izleme");
+    await expect(page.getByLabel("İzleme panoları", { exact: true })).toContainText("Grafana ve Loki");
+    await expect(page.getByLabel("Sistem izleme kontrolleri", { exact: true })).toContainText("observability:uat:check");
+    await expect(page.getByLabel("Sistem izleme kontrolleri", { exact: true })).toContainText("alert:webhook:smoke");
+    await expect(page.getByLabel("Sistem izleme kontrolleri", { exact: true })).toContainText("sentry:smoke");
+    await expect(page.getByText("Sistem izleme bilgisi alınamadı.")).toHaveCount(0);
     await expectNoHorizontalOverflow(page, "observability-partial-tablet");
   });
 });

@@ -154,12 +154,12 @@ export function GuardiansPage() {
           <Link href={`/kurum/veliler/${encodeURIComponent(guardian.id)}`} aria-label={`${guardian.firstName} detay`}>
             <Eye size={17} aria-hidden="true" />
           </Link>
-          <button type="button" onClick={() => openEditForm(guardian)} aria-label={`${guardian.firstName} düzenle`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(guardian)} aria-label={`${guardian.firstName} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => void handleDelete(guardian)} aria-label={`${guardian.firstName} sil`}>
+          </Button>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(guardian)} aria-label={`${guardian.firstName} sil`}>
             <Trash2 size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </span>
       ),
     },

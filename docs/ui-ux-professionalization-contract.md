@@ -29,15 +29,14 @@ template, shadcn/Tremor/Recharts/TanStack Table eklenmez.
 
 ## Token Contract
 
-Tokenlar CSS custom property olarak baslar ve `apps/web/app/globals.css` icinde uygulanir.
+Tasarim kararlari icin kanonik kaynak kokteki `design.md`, uretim CSS
+degiskenleri icin birebir kaynak `tokens.css` dosyasidir.
+`apps/web/app/globals.css` bu tokenlari tuketir; bu sozlesme renk, tipografi,
+aralik, radius, focus veya hareket degerlerini tekrar etmez.
 
-- Color: text, muted text, border, surface, background, primary, success, warning, danger, info.
-- Type: body, compact label, panel heading, page heading; viewport genisligine gore font scale yok.
-- Spacing: 4/6/8/10/12/16/20/24/32 px tabanli araliklar.
-- Radius: default 7px, panel 8px; kartlar 8px ustune cikmaz.
-- Focus: en az 2px gorunur outline, buton/input/select/table action kapsaminda tutarli.
 - Density: comfortable ve compact table/list modlari.
 - Chart: success-rate-first palette; `Basari %`, `Net`, `Soru` birlikte gosterilir.
+- Print/PDF ve dondurulmus karne geometrisi `design.md` icindeki istisnayi korur.
 
 ## Component Contract
 

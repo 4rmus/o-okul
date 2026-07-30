@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const source = JSON.parse(readFileSync("docs/ui-ux-professionalization-completion.json", "utf8"));
@@ -70,14 +71,42 @@ try {
   const liveReport = JSON.parse(readFileSync("docs/evidence-templates/ui-ux-redesign.example.json", "utf8"));
   liveReport.sourceCommitSha = "2222222222222222222222222222222222222222";
   liveReport.releaseCandidate = "ghcr.io/4rmus/o-okul/api:2222222222222222222222222222222222222222";
+  liveReport.githubCi.commitSha = "2222222222222222222222222222222222222222";
+  liveReport.approvals[0].sourceCommitSha = "2222222222222222222222222222222222222222";
+  const privacyReviewPath = join(artifactDir, "privacy-review.json");
+  const privacyReviewBytes = Buffer.from(`${JSON.stringify({
+    result: "PASS",
+    evidenceType: "ui-ux-redesign-privacy-review",
+    environment: liveReport.environment,
+    checkedAt: liveReport.checkedAt,
+    sourceCommitSha: liveReport.sourceCommitSha,
+    runUrl: liveReport.githubCi.runUrl,
+    syntheticDataOnly: true,
+    reviewer: { id: "privacy-owner-github", role: "privacy-owner" },
+    reviewedPngSha256: [],
+  })}\n`);
+  writeFileSync(privacyReviewPath, privacyReviewBytes);
+  liveReport.privacy.reviewReference = `artifact:${relative(process.cwd(), privacyReviewPath).replaceAll("\\", "/")}`;
+  liveReport.artifacts = [{
+    reference: liveReport.privacy.reviewReference,
+    mediaType: "application/json",
+    byteSize: privacyReviewBytes.byteLength,
+    sha256: createHash("sha256").update(privacyReviewBytes).digest("hex"),
+    surface: null,
+    viewportWidth: null,
+    imageWidth: null,
+    imageHeight: null,
+    piiReview: "PASS",
+  }];
   replaceArtifactReferences(liveReport);
+  liveReport.stagingProductionEvidence.evidenceReferences.push(liveReport.privacy.reviewReference);
   const liveArtifactPath = join(artifactDir, "ui-ux-redesign.json");
   writeFileSync(liveArtifactPath, `${JSON.stringify(liveReport, null, 2)}\n`);
   expectFailureRun(liveArgs, {
     ...proofEnv,
     UI_UX_PROFESSIONALIZATION_FULL_EVIDENCE: "1",
     UI_UX_REDESIGN_EVIDENCE_TARGET: pathToFileURL(liveArtifactPath).href,
-  }, "sourceCommitSha ile beklenen kaynak SHA eşleşmeli");
+  }, "viewportCoverage.kurum dashboard.evidenceReferences okunabilir PNG artifact/url olmalı");
 } finally {
   rmSync(tempDir, { force: true, recursive: true });
   rmSync(artifactDir, { force: true, recursive: true });

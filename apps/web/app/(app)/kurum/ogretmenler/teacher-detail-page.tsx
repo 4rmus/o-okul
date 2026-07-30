@@ -1,10 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import type { AcademicTermRecord, ClassRecord, CourseRecord, StudentRecord, TeacherAssignmentRecord, TeacherRecord } from "@o-okul/shared-types";
 import { ArrowLeft, BookOpen, ClipboardList, FileText, NotebookTabs } from "lucide-react";
-import { DataTable, InfoGrid, InfoItem, Panel, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
+import { DataTable, InfoGrid, InfoItem, Panel, StatusBadge, TabButton, Tabs, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { apiBaseUrl, apiListRequest, apiRequest } from "../../../../src/api-client.js";
 import { PageFrame } from "../_shared/page-frame.js";
@@ -22,6 +23,7 @@ interface TeacherDetailData {
 
 export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
   const { auth } = useAuth();
+  const [activeSection, setActiveSection] = useState<"assignments" | "workspaces">("assignments");
   const detailQuery = useQuery({
     queryKey: ["next-teacher-detail", auth?.session.tenantId ?? "anonymous", teacherId],
     queryFn: () => loadTeacherDetail(auth?.accessToken ?? "", teacherId),
@@ -69,26 +71,33 @@ export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
                 <InfoItem label="Görev kapsamı" value={`${formatCount(detail.assignments.length)} atama`} />
               </InfoGrid>
             </Panel>
-            <Panel
-              aria-label="Öğretmen atama ilişkileri"
-              description="Sınıf, öğrenci, ders ve dönem ilişkileri yoğun tablo düzeninde izlenir."
-              title="Atama ilişkileri"
-            >
-              <DataTable
-                caption="Öğretmen atama ilişkileri"
-                columns={assignmentColumns}
-                density="compact"
-                description="Öğretmen rolü, kapsamı, ders/dönem ve tarih aralığı."
-                emptyText="Atama yok"
-                getRowKey={(assignment) => assignment.id}
-                rows={detail.assignments}
-              />
-            </Panel>
-            <Panel
-              aria-label="Öğretmen çalışma alanları"
-              description="Bu öğretmenin günlük operasyonlarının bağlı olduğu kurum ekranları."
-              title="Çalışma alanları"
-            >
+            <Tabs label="Öğretmen detay bölümleri">
+              <TabButton aria-controls="teacher-detail-panel-assignments" id="teacher-detail-tab-assignments" selected={activeSection === "assignments"} onClick={() => setActiveSection("assignments")}>Atama ilişkileri</TabButton>
+              <TabButton aria-controls="teacher-detail-panel-workspaces" id="teacher-detail-tab-workspaces" selected={activeSection === "workspaces"} onClick={() => setActiveSection("workspaces")}>Çalışma alanları</TabButton>
+            </Tabs>
+            {activeSection === "assignments" ? <div aria-labelledby="teacher-detail-tab-assignments" id="teacher-detail-panel-assignments" role="tabpanel" tabIndex={0}>
+              <Panel
+                aria-label="Öğretmen atama ilişkileri"
+                description="Sınıf, öğrenci, ders ve dönem ilişkileri yoğun tablo düzeninde izlenir."
+                title="Atama ilişkileri"
+              >
+                <DataTable
+                  caption="Öğretmen atama ilişkileri"
+                  columns={assignmentColumns}
+                  density="compact"
+                  description="Öğretmen rolü, kapsamı, ders/dönem ve tarih aralığı."
+                  emptyText="Atama yok"
+                  getRowKey={(assignment) => assignment.id}
+                  rows={detail.assignments}
+                />
+              </Panel>
+            </div> : null}
+            {activeSection === "workspaces" ? <div aria-labelledby="teacher-detail-tab-workspaces" id="teacher-detail-panel-workspaces" role="tabpanel" tabIndex={0}>
+              <Panel
+                aria-label="Öğretmen çalışma alanları"
+                description="Bu öğretmenin günlük operasyonlarının bağlı olduğu kurum ekranları."
+                title="Çalışma alanları"
+              >
               <div className="next-action-link-grid">
                 <Link className="next-action-link" href="/kurum/notlar">
                   <NotebookTabs size={17} aria-hidden="true" />
@@ -107,7 +116,8 @@ export function TeacherDetailPage({ teacherId }: { teacherId: string }) {
                   Raporlar
                 </Link>
               </div>
-            </Panel>
+              </Panel>
+            </div> : null}
           </>
         ) : null}
       </section>

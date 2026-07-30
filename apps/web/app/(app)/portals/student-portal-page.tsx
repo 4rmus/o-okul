@@ -146,13 +146,13 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
       value: attendanceStatus,
     },
     {
-      actionLabel: openSupportTickets > 0 ? "Takip et" : isRolePreview ? "Salt-okuma" : "Talep aç",
+      actionLabel: openSupportTickets > 0 ? "Takip et" : isRolePreview ? "Yalnızca görüntüleme" : "Talep aç",
       contextLabel: "Destek",
       detail: isRolePreview ? "Destek talebi açma kapalı" : "Öğrenci destek takibi",
       href: studentPortalHref("/ogrenci/destek", isRolePreview),
       key: "support",
       label: "Destek talebini takip et",
-      statusLabel: openSupportTickets > 0 ? "Açık" : isRolePreview ? "Salt-okuma" : "Hazır",
+      statusLabel: openSupportTickets > 0 ? "Açık" : isRolePreview ? "Yalnızca görüntüleme" : "Hazır",
       tone: openSupportTickets > 0 ? "warning" : "neutral",
       value: supportStatus,
     },
@@ -168,15 +168,15 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
       value: formatPercentNumber(reportSuccess),
     },
     {
-      actionLabel: isRolePreview ? "Salt-okuma" : "Canlı",
+      actionLabel: isRolePreview ? "Yalnızca görüntüleme" : "Canlı",
       contextLabel: "Erişim",
       detail: isRolePreview ? "Yazma işlemleri kapalı" : "Okuma ve destek işlemleri açık",
       href: studentPortalHref(isRolePreview ? "/ogrenci" : "/ogrenci/profil", isRolePreview),
       key: "preview",
       label: "Önizleme durumu",
-      statusLabel: isRolePreview ? "Salt-okuma" : "Canlı",
+      statusLabel: isRolePreview ? "Yalnızca görüntüleme" : "Canlı",
       tone: isRolePreview ? "neutral" : "info",
-      value: isRolePreview ? "Salt-okuma" : "Canlı hesap",
+      value: isRolePreview ? "Yalnızca görüntüleme" : "Canlı hesap",
     },
   ];
   return (
@@ -190,7 +190,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
           <PortalDailyBrief
             summary="Devamsızlık, ödev, duyuru ve son sınav durumu tek bakışta; öğrencinin bugün öncelik vermesi gereken işler burada toplanır."
             scope={{
-              detail: isRolePreview ? "Salt-okuma önizleme" : "Canlı öğrenci hesabı",
+              detail: isRolePreview ? "Yalnızca görüntüleme" : "Öğrenci hesabı",
               label: "Öğrenci",
               value: profileSubtitle,
             }}
@@ -227,13 +227,19 @@ export function StudentPortalPage({ view = "overview" }: { view?: StudentPortalV
               },
               {
                 label: "Önizleme",
-                value: isRolePreview ? "Salt-okuma" : "Canlı hesap",
+                value: isRolePreview ? "Yalnızca görüntüleme" : "Canlı hesap",
                 detail: isRolePreview ? "İşlem düğmeleri kapalıdır" : "Okuma ve destek işlemleri açık",
                 tone: isRolePreview ? "neutral" : "info",
               },
             ]}
           />
-          <PortalActionStrip ariaLabel="Öğrenci günlük aksiyonları" items={studentActionItems} />
+          <PortalActionStrip
+            ariaLabel="Öğrenci günlük aksiyonları"
+            items={studentActionItems}
+            priorityKeys={isRolePreview
+              ? ["preview", "announcement", "report"]
+              : ["announcement", "homework", "report"]}
+          />
           <MetricGrid
             items={[
               { label: "Toplam devamsızlık", value: data?.attendanceSummary.total ?? 0 },
@@ -478,6 +484,6 @@ function studentPortalContext(view: StudentPortalView, label: string, isRolePrev
   return {
     detail: detailByView[view],
     label,
-    meta: isRolePreview ? "Salt-okuma" : "Canlı öğrenci hesabı",
+    meta: isRolePreview ? "Yalnızca görüntüleme" : "Öğrenci hesabı",
   };
 }

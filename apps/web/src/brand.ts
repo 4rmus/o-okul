@@ -6,9 +6,19 @@ export const appBrand = {
   demoEmail: "demo@o-okul.com",
 } as const;
 
-export const appBrandTitle = `${appBrand.name} | Eğitim Kurumu Yönetim Platformu`;
+export const appBrandTitle = `${appBrand.name} | Dershane ve Özel Öğretim Kurumu Yönetimi`;
 export const appBrandHomeAriaLabel = `${appBrand.name} ana sayfa`;
 
 export const demoRequestHref = `mailto:${appBrand.demoEmail}?subject=${encodeURIComponent(
-  `Demo iste - ${appBrand.name}`,
-)}&body=${encodeURIComponent(`Merhaba, ${appBrand.name} için demo talep ediyoruz.`)}`;
+  `Demo talebi - ${appBrand.name}`,
+)}&body=${encodeURIComponent(`Merhaba,
+
+${appBrand.name} için demo talep ediyoruz.
+
+Kurum türü:
+Şube sayısı:
+Yaklaşık öğrenci sayısı:
+Kullandığımız optik format:
+Öncelikli ihtiyacımız:
+
+Not: İlk talepte öğrenci bilgisi veya dosya göndermeyin.`)}`;

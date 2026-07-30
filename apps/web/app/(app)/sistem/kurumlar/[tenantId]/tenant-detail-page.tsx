@@ -17,6 +17,8 @@ import {
   Panel,
   Select,
   StatusBadge,
+  TabButton,
+  Tabs,
   type StatusBadgeProps,
   useConfirmDialog,
 } from "@o-okul/ui";
@@ -57,6 +59,7 @@ export function TenantDetailPage() {
   const [form, setForm] = useState<TenantFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [error, setError] = useState("");
+  const [activeSection, setActiveSection] = useState<"license" | "management">("license");
 
   useEffect(() => {
     if (tenant) setForm(toTenantForm(tenant));
@@ -119,15 +122,7 @@ export function TenantDetailPage() {
   return (
     <PageFrame
       title={tenant?.name ?? "Kurum Detayı"}
-      subtitle="Kurum lisans, plan ve durum bilgisini yönet."
-      actions={
-        tenant ? (
-          <>
-            <Button onClick={openEditForm}>Düzenle</Button>
-            <Button onClick={() => void handleDelete()} variant="danger">Sil</Button>
-          </>
-        ) : null
-      }
+      subtitle="Kurum kodunu, lisansını, kullanıcı sınırını ve kullanım durumunu yönetin."
     >
       {tenantQuery.isPending ? <LoadingState label="Kurum detayı yükleniyor…" /> : null}
       {tenantQuery.isError ? (
@@ -139,8 +134,8 @@ export function TenantDetailPage() {
         <MetricGrid className="next-system-summary-grid" aria-label="Kurum detayı" role="region">
           <MetricCard
             className="next-system-summary-card"
-            description="Sistem teknik kısa adı"
-            label="Slug"
+            description="Giriş bağlantılarında kullanılan kısa ad"
+            label="Kurum kodu"
             value={tenant.slug}
           />
           <MetricCard
@@ -152,15 +147,15 @@ export function TenantDetailPage() {
           />
           <MetricCard
             className="next-system-summary-card"
-            description="Kurum operasyon durumu"
+            description="Kurumun kullanıma açık olup olmadığı"
             label="Durum"
             tone={metricStatusTone(tenant.status)}
             value={<StatusBadge tone={statusTone(tenant.status)}>{statusLabel(tenant.status)}</StatusBadge>}
           />
           <MetricCard
             className="next-system-summary-card"
-            description="Aktif koltuk / limit"
-            label="Koltuk"
+            description="Aktif kullanıcı / sınır"
+            label="Kullanıcı"
             tone={isSeatLimitExceeded(tenant) ? "warning" : "default"}
             value={formatSeatUsage(tenant)}
           />
@@ -174,30 +169,54 @@ export function TenantDetailPage() {
         </MetricGrid>
       ) : null}
       {tenant ? (
-        <Panel
-          aria-label="Lisans ve kapasite"
-          description="Sistem admin için lisans penceresi, koltuk kullanımı ve operasyon aksiyonu."
-          title="Lisans ve kapasite"
-          tone={tenantCapacityTone(tenant)}
-        >
-          <InfoGrid className="next-tenant-capacity-grid">
-            <InfoItem label="Lisans penceresi" value={formatLicenseWindow(tenant)} />
-            <InfoItem label="Kalan gün" value={formatLicenseDays(licenseDays)} />
-            <InfoItem
-              label="Koltuk kullanımı"
-              value={
-                <>
-                  {formatSeatUsage(tenant)}
-                  {seatPercent === null ? "" : ` · %${seatPercent}`}
-                </>
-              }
-            />
-            <InfoItem
-              label="Önerilen aksiyon"
-              value={<StatusBadge tone={tenantCapacityTone(tenant)}>{tenantRecommendedAction(tenant)}</StatusBadge>}
-            />
-          </InfoGrid>
-        </Panel>
+        <Tabs label="Kurum detay bölümleri">
+          <TabButton aria-controls="tenant-detail-panel-license" id="tenant-detail-tab-license" selected={activeSection === "license"} onClick={() => setActiveSection("license")}>Lisans ve kapasite</TabButton>
+          <TabButton aria-controls="tenant-detail-panel-management" id="tenant-detail-tab-management" selected={activeSection === "management"} onClick={() => setActiveSection("management")}>Kurum yönetimi</TabButton>
+        </Tabs>
+      ) : null}
+      {tenant && activeSection === "license" ? (
+        <div aria-labelledby="tenant-detail-tab-license" id="tenant-detail-panel-license" role="tabpanel" tabIndex={0}>
+          <Panel
+            aria-label="Lisans ve kapasite"
+            description="Lisans süresi, aktif kullanıcı sayısı ve önerilen işlem."
+            title="Lisans ve kapasite"
+            tone={tenantCapacityTone(tenant)}
+          >
+            <InfoGrid className="next-tenant-capacity-grid">
+              <InfoItem label="Lisans penceresi" value={formatLicenseWindow(tenant)} />
+              <InfoItem label="Kalan gün" value={formatLicenseDays(licenseDays)} />
+              <InfoItem
+                label="Kullanıcı sayısı"
+                value={
+                  <>
+                    {formatSeatUsage(tenant)}
+                    {seatPercent === null ? "" : ` · %${seatPercent}`}
+                  </>
+                }
+              />
+              <InfoItem
+                label="Önerilen işlem"
+                value={<StatusBadge tone={tenantCapacityTone(tenant)}>{tenantRecommendedAction(tenant)}</StatusBadge>}
+              />
+            </InfoGrid>
+          </Panel>
+        </div>
+      ) : null}
+      {tenant && activeSection === "management" ? (
+        <div aria-labelledby="tenant-detail-tab-management" id="tenant-detail-panel-management" role="tabpanel" tabIndex={0}>
+          <Panel
+            actions={
+              <>
+                <Button onClick={openEditForm}>Düzenle</Button>
+                <Button onClick={() => void handleDelete()} variant="danger">Sil</Button>
+              </>
+            }
+            aria-label="Kurum yönetimi"
+            description="Kurum kimliği, lisans ve durum bilgisi yalnız sistem yöneticisi tarafından değiştirilir."
+            title="Kurum yönetimi"
+            tone="muted"
+          />
+        </div>
       ) : null}
       {error ? (
         <Alert tone="danger" title="İşlem tamamlanamadı">
@@ -247,7 +266,7 @@ function TenantEditModal({
       <Field label="Kurum adı">
         <Input required value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
       </Field>
-      <Field label="Slug" description="Kurumun teknik kısa adı. Örn: yeni-kurum. URL ve sistem kimliği için kullanılır.">
+      <Field label="Kurum kodu" description="Giriş bağlantısında kullanılacak kısa ad. Örnek: yeni-kurum.">
         <Input required value={form.slug} onChange={(event) => onChange({ ...form, slug: event.target.value })} />
       </Field>
       <Field label="Plan">
@@ -268,7 +287,7 @@ function TenantEditModal({
           Lisans bitişi başlangıç tarihinden önce olamaz.
         </Alert>
       ) : null}
-      <Field label="Koltuk limiti" description="Bu kuruma tanımlanabilecek aktif kullanıcı sayısı. Boş bırakırsan sınırsız olur.">
+      <Field label="Kullanıcı sınırı" description="Bu kurumda etkin olabilecek en fazla kullanıcı sayısı. Boş bırakırsanız sınırsız olur.">
         <Input
           inputMode="numeric"
           min={1}
@@ -278,8 +297,8 @@ function TenantEditModal({
         />
       </Field>
       {hasSeatLimitBelowActiveCount ? (
-        <Alert tone="warning" title="Koltuk limiti kontrolü">
-          Bu kurumda {activeSeatCount} aktif kullanıcı var; limit aktif kullanıcının altına inemez.
+        <Alert tone="warning" title="Kullanıcı sınırı kontrolü">
+          Bu kurumda {activeSeatCount} aktif kullanıcı var; sınır aktif kullanıcı sayısının altına inemez.
         </Alert>
       ) : null}
       <Field label="Durum">
@@ -352,7 +371,7 @@ function tenantCapacityTone(tenant: TenantRecord): "danger" | "success" | "warni
 
 function tenantRecommendedAction(tenant: TenantRecord) {
   if (tenant.status === "SUSPENDED") return "Askı durumunu incele";
-  if (isSeatLimitExceeded(tenant)) return "Koltuk limitini yükselt";
+  if (isSeatLimitExceeded(tenant)) return "Kullanıcı sınırını yükselt";
   const days = licenseDaysRemaining(tenant.licenseEndsAt);
   if (days !== null && days < 0) return "Lisansı yenile";
   if (days !== null && days <= 30) return "Yenileme planla";

@@ -151,12 +151,12 @@ export function StudySessionsPage() {
       priority: "primary",
       render: (record) => (
         <span className="next-row-actions">
-          <button type="button" onClick={() => openEditForm(record)} aria-label={`${record.title} düzenle`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(record)} aria-label={`${record.title} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => void handleDelete(record)} aria-label={`${record.title} sil`}>
+          </Button>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(record)} aria-label={`${record.title} sil`}>
             <Trash2 size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </span>
       ),
       sticky: "right",

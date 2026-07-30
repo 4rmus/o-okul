@@ -73,7 +73,7 @@ const institutionOperationEvidenceCapability = "operation:manage";
 
 export const institutionNavGroups: readonly InstitutionNavGroup[] = [
   {
-    label: "Başlangıç",
+    label: "Bugün",
     items: [
       { href: "/kurum", icon: LayoutDashboard, label: "Özet" },
       { href: "/kurum/kurulum", icon: Settings, label: "Kurulum", requiredCapability: "setup:manage" },
@@ -88,7 +88,7 @@ export const institutionNavGroups: readonly InstitutionNavGroup[] = [
     ],
   },
   {
-    label: "Eğitim",
+    label: "Akademik",
     items: [
       { href: "/kurum/siniflar", icon: School, label: "Sınıflar", requiredCapability: "class:manage" },
       { href: "/kurum/seviyeler", icon: ClipboardList, label: "Seviyeler", requiredCapability: "class:manage" },
@@ -98,10 +98,12 @@ export const institutionNavGroups: readonly InstitutionNavGroup[] = [
       { href: "/kurum/etutler", icon: NotebookTabs, label: "Etütler", requiredCapability: "academic:manage" },
       { href: "/kurum/devamsizlik", icon: ClipboardCheck, label: "Devamsızlık", requiredCapability: "attendance:manage" },
       { href: "/kurum/akademik-takvim", icon: CalendarDays, label: "Takvim", requiredCapability: "academic:manage" },
+      { href: "/kurum/materyaller", icon: Library, label: "Materyaller", requiredCapability: "academic:manage" },
+      { href: "/kurum/notlar", icon: NotebookTabs, label: "Notlar", requiredCapability: "note:manage" },
     ],
   },
   {
-    label: "Sınav ve Analiz",
+    label: "Sınav ve Rapor",
     items: [
       { href: "/kurum/sinavlar", icon: FileText, label: "Sınavlar", requiredCapability: "academic:manage" },
       { href: "/kurum/kazanimlar", icon: ClipboardList, label: "Kazanımlar", requiredCapability: "academic:manage" },
@@ -110,19 +112,17 @@ export const institutionNavGroups: readonly InstitutionNavGroup[] = [
     ],
   },
   {
-    label: "İçerik",
+    label: "İletişim",
     items: [
-      { href: "/kurum/materyaller", icon: Library, label: "Materyaller", requiredCapability: "academic:manage" },
-      { href: "/kurum/notlar", icon: NotebookTabs, label: "Notlar", requiredCapability: "note:manage" },
       { href: "/kurum/duyurular", icon: Megaphone, label: "Duyurular", requiredCapability: "announcement:manage" },
       ...(isSmsEnabled ? [{ href: "/kurum/sablonlar", icon: MessageSquareText, label: "Mesaj Şablonları", requiredCapability: "announcement:manage" }] : []),
+      { href: "/kurum/destek", icon: LifeBuoy, label: "Destek", requiredCapability: "support:manage" },
     ],
   },
   {
-    label: "Finans ve Destek",
+    label: "Finans",
     items: [
       { href: "/kurum/finans", icon: CreditCard, label: "Ödemeler", requiredCapability: "finance:manage" },
-      { href: "/kurum/destek", icon: LifeBuoy, label: "Destek", requiredCapability: "support:manage" },
     ],
   },
   {
@@ -134,10 +134,10 @@ export const institutionNavGroups: readonly InstitutionNavGroup[] = [
       { href: "/kurum/kvkk", icon: ShieldCheck, label: "KVKK", requiredCapability: "privacy:manage" },
       { href: "/kurum/denetim", icon: ClipboardList, label: "Denetim", requiredCapability: "audit:read" },
       { href: "/kurum/sistem-sagligi", icon: Activity, label: "Sistem Sağlığı", requiredCapability: institutionOperationEvidenceCapability },
-      { href: "/kurum/gozlemlenebilirlik", icon: BarChart3, label: "Gözlemlenebilirlik", requiredCapability: institutionOperationEvidenceCapability },
-      { href: "/kurum/uat-rollback", icon: ClipboardCheck, label: "UAT / Rollback", requiredCapability: institutionOperationEvidenceCapability },
+      { href: "/kurum/gozlemlenebilirlik", icon: BarChart3, label: "Sistem İzleme", requiredCapability: institutionOperationEvidenceCapability },
+      { href: "/kurum/uat-rollback", icon: ClipboardCheck, label: "Kabul ve Geri Dönüş", requiredCapability: institutionOperationEvidenceCapability },
       { href: "/kurum/guvenlik-denetimi", icon: ShieldCheck, label: "Güvenlik Denetimi", requiredCapability: institutionOperationEvidenceCapability },
-      { href: "/kurum/canli-yayin", icon: Activity, label: "Release Kanıtı", requiredCapability: institutionOperationEvidenceCapability },
+      { href: "/kurum/canli-yayin", icon: Activity, label: "Yayın Hazırlığı", requiredCapability: institutionOperationEvidenceCapability },
     ],
   },
 ];

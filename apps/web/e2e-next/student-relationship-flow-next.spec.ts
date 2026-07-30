@@ -74,9 +74,10 @@ test.describe("Öğrenci ilişki haritası", () => {
     expect(requestedPaths.some((path) => path.includes("/reports/snapshots"))).toBe(false);
     expect(requestedPaths.filter((path) => path === "/homework/material-assignments")).toHaveLength(1);
     expect(requestedPaths.some((path) => /^\/homework\/materials\/[^/]+\/assignments$/.test(path))).toBe(false);
-    await expect(page.getByLabel("İletişim ve veli").getByRole("table", { name: "İletişim ve veli kayıtları" })).toBeVisible();
-    await expect(page.getByLabel("İletişim ve veli")).toContainText("••• ••• ••33");
-    await expect(page.getByLabel("İletişim ve veli")).toContainText("ad••@•••.test");
+    const relationships = page.getByLabel("İletişim ve veli", { exact: true });
+    await expect(relationships.getByRole("table", { name: "İletişim ve veli kayıtları" })).toBeVisible();
+    await expect(relationships).toContainText("••• ••• ••33");
+    await expect(relationships).toContainText("ad••@•••.test");
     await expectNoVisibleTextValues(page, "student-detail-pii-desktop", rawStudentDetailPiiValues);
     await expectNoHorizontalOverflow(page, "student-relationship-desktop");
     await expectNoUnlabeledControls(page, "student-relationship-desktop");

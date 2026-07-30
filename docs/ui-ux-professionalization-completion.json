@@ -11,15 +11,15 @@
       "id": "PR-0",
       "title": "Tasarım ve kabul sözleşmesi",
       "requirements": ["Ortak UI dili", "Persona ve route matrisi", "Makine-okunur kabul kapıları"],
-      "implementationPaths": ["docs/ui-ux-professionalization-contract.md", "packages/ui/src", "scripts/check-web-ux-baseline.mjs"],
-      "verificationCommands": ["pnpm web:ux-baseline:check", "pnpm web:a11y:check", "pnpm web:ux-contract:check", "pnpm ui-ux-professionalization:completion:contract"],
+      "implementationPaths": ["docs/ui-ux-professionalization-contract.md", "design.md", "tokens.css", "packages/ui/src", "scripts/check-web-design-tokens.mjs", "scripts/check-web-ux-baseline.mjs"],
+      "verificationCommands": ["pnpm web:design-tokens:check", "pnpm web:ux-baseline:check", "pnpm web:a11y:check", "pnpm web:ux-contract:check", "pnpm ui-ux-professionalization:completion:contract"],
       "requirementEvidence": {
         "Ortak UI dili": {
-          "paths": ["scripts/check-web-ux-baseline.mjs", "apps/web/e2e-next/ui-visual-qa-next.spec.ts"],
-          "commands": ["pnpm web:ux-baseline:check"]
+          "paths": ["design.md", "tokens.css", "scripts/check-web-design-tokens.mjs", "scripts/check-web-ux-baseline.mjs", "apps/web/e2e-next/ui-primitives-state-next.spec.ts", "apps/web/e2e-next/ui-visual-qa-next.spec.ts"],
+          "commands": ["pnpm web:design-tokens:check", "pnpm web:ux-baseline:check", "pnpm web:ux-contract:check"]
         },
         "Persona ve route matrisi": {
-          "paths": ["docs/ui-ux-professionalization-contract.md", "apps/web/e2e-next/role-preview-contract-next.spec.ts", "apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts"],
+          "paths": ["docs/ui-ux-professionalization-contract.md", "apps/web/e2e-next/ui-route-family-smoke-next.spec.ts", "apps/web/e2e-next/role-preview-contract-next.spec.ts", "apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts"],
           "commands": ["pnpm web:ux-contract:check"]
         },
         "Makine-okunur kabul kapıları": {
@@ -149,12 +149,12 @@
       "id": "PR-6",
       "title": "Tam yüzey tutarlılığı ve release kanıtı",
       "requirements": ["Mobil ve erişilebilirlik sözleşmesi", "RBAC ve PII güvenliği", "CI, staging ve çalışan image kanıtı"],
-      "implementationPaths": ["apps/web/e2e-next", "scripts/generate-ui-ux-redesign-evidence.mjs", ".github/workflows/staging-deploy.yml"],
-      "verificationCommands": ["pnpm test", "pnpm web:a11y:check", "pnpm web:ux-contract:check", "pnpm ui-ux-redesign:visual-qa", "pnpm prod:evidence:templates:check"],
+      "implementationPaths": ["apps/web/e2e-next", "scripts/check-web-design-tokens.mjs", "scripts/check-web-ux-baseline.mjs", "scripts/generate-ui-ux-redesign-evidence.mjs", ".github/workflows/staging-deploy.yml"],
+      "verificationCommands": ["pnpm test", "pnpm web:design-tokens:check", "pnpm web:a11y:check", "pnpm web:ux-baseline:check", "pnpm web:ux-contract:check", "pnpm ui-ux-redesign:visual-qa", "pnpm prod:evidence:templates:check"],
       "requirementEvidence": {
         "Mobil ve erişilebilirlik sözleşmesi": {
-          "paths": ["apps/web/e2e-next/a11y-next.spec.ts", "apps/web/e2e-next/ui-visual-qa-next.spec.ts"],
-          "commands": ["pnpm web:a11y:check", "pnpm web:ux-contract:check", "pnpm ui-ux-redesign:visual-qa"]
+          "paths": ["apps/web/e2e-next/a11y-next.spec.ts", "apps/web/e2e-next/ui-primitives-state-next.spec.ts", "apps/web/e2e-next/ui-route-family-smoke-next.spec.ts", "apps/web/e2e-next/ui-visual-qa-next.spec.ts", "scripts/check-web-design-tokens.mjs", "scripts/check-web-ux-baseline.mjs"],
+          "commands": ["pnpm web:design-tokens:check", "pnpm web:a11y:check", "pnpm web:ux-baseline:check", "pnpm web:ux-contract:check", "pnpm ui-ux-redesign:visual-qa"]
         },
         "RBAC ve PII güvenliği": {
           "paths": ["apps/api/src/me/me-access-matrix.e2e.test.ts", "apps/web/e2e-next/role-preview-contract-next.spec.ts", "apps/web/e2e-next/governance-evidence-contract-next.spec.ts"],

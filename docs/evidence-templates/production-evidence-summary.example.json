@@ -820,20 +820,35 @@
       "gaps": []
     },
     "uiUxRedesign": {
+      "schemaVersion": 2,
       "result": "PASS",
       "environment": "production",
       "checkedAt": "2026-06-15T09:50:00.000Z",
       "releaseCandidate": "ghcr.io/example/o-okul/api:1111111111111111111111111111111111111111",
       "sourceCommitSha": "1111111111111111111111111111111111111111",
+      "githubCi": {
+        "repository": "example/o-okul",
+        "commitSha": "1111111111111111111111111111111111111111",
+        "workflowPath": ".github/workflows/ci.yml",
+        "runId": "1234567890",
+        "runUrl": "https://github.com/example/o-okul/actions/runs/1234567890",
+        "completedAt": "2026-05-31T11:45:00.000Z",
+        "conclusion": "success",
+        "successfulJobs": ["ci"]
+      },
+      "allowedEvidenceHosts": [],
       "redesignPlanPath": "docs/ui-ux-professionalization-contract.md",
       "localStaticEvidence": {
         "result": "PASS",
         "releaseBlocking": false,
         "commandsPassed": [
           "pnpm --filter @o-okul/web typecheck",
+          "pnpm web:design-tokens:check",
           "pnpm web:a11y:check",
+          "pnpm web:auth-contract:check",
           "pnpm web:ux-baseline:check",
           "pnpm web:ux-contract:check",
+          "pnpm web:ux-rc:check",
           "pnpm karne:visual-contract:check"
         ],
         "note": "Local/static PASS staging veya production kabul kanıtı değildir."
@@ -849,11 +864,10 @@
           "pnpm uat:check"
         ],
         "evidenceReferences": [
-          "artifact:artifacts/ui-ux-redesign/phase-0/a11y-production-summary.json",
-          "artifact:artifacts/ui-ux-redesign/phase-2/data-table-375.png",
-          "artifact:artifacts/ui-ux-redesign/phase-3/report-workspace-1024.png",
-          "artifact:artifacts/ui-ux-redesign/phase-4/guardian-portal-1440.png",
-          "run:https://github.com/example/o-okul/actions/runs/1234567890"
+          "artifact:artifacts/ui-ux-redesign/summary.json",
+          "run:https://github.com/example/o-okul/actions/runs/1234567890",
+          "artifact:artifacts/ui-ux-redesign/uat.json",
+          "artifact:artifacts/ui-ux-redesign/privacy-review.json"
         ]
       },
       "phaseEvidence": [
@@ -863,7 +877,9 @@
           "scope": "staging-production",
           "commandsPassed": [
             "pnpm --filter @o-okul/web typecheck",
-            "pnpm web:a11y:check"
+            "pnpm web:design-tokens:check",
+            "pnpm web:a11y:check",
+            "pnpm web:auth-contract:check"
           ],
           "evidenceReferences": [
             "artifact:artifacts/ui-ux-redesign/phase-0/a11y-production-summary.json"
@@ -924,7 +940,7 @@
             "pnpm uat:check"
           ],
           "evidenceReferences": [
-            "run:https://github.com/example/o-okul/actions/runs/1234567890"
+            "artifact:artifacts/ui-ux-redesign/phase-5/release.json"
           ]
         }
       ],
@@ -932,13 +948,17 @@
         {
           "surface": "kurum dashboard",
           "widths": [
+            320,
             375,
+            414,
             768,
             1024,
             1440
           ],
           "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-320.png",
             "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-375.png",
+            "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-414.png",
             "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-768.png",
             "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-1024.png",
             "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-1440.png"
@@ -947,13 +967,17 @@
         {
           "surface": "optik workspace",
           "widths": [
+            320,
             375,
+            414,
             768,
             1024,
             1440
           ],
           "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-3/optik-320.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/optik-375.png",
+            "artifact:artifacts/ui-ux-redesign/phase-3/optik-414.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/optik-768.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/optik-1024.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/optik-1440.png"
@@ -962,13 +986,17 @@
         {
           "surface": "rapor workspace",
           "widths": [
+            320,
             375,
+            414,
             768,
             1024,
             1440
           ],
           "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-3/rapor-320.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/rapor-375.png",
+            "artifact:artifacts/ui-ux-redesign/phase-3/rapor-414.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/rapor-768.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/rapor-1024.png",
             "artifact:artifacts/ui-ux-redesign/phase-3/rapor-1440.png"
@@ -977,21 +1005,39 @@
         {
           "surface": "portal shell",
           "widths": [
+            320,
             375,
+            414,
             768,
             1024,
             1440
           ],
           "evidenceReferences": [
+            "artifact:artifacts/ui-ux-redesign/phase-4/portal-320.png",
             "artifact:artifacts/ui-ux-redesign/phase-4/portal-375.png",
+            "artifact:artifacts/ui-ux-redesign/phase-4/portal-414.png",
             "artifact:artifacts/ui-ux-redesign/phase-4/portal-768.png",
             "artifact:artifacts/ui-ux-redesign/phase-4/portal-1024.png",
             "artifact:artifacts/ui-ux-redesign/phase-4/portal-1440.png"
           ]
         }
       ],
+      "artifacts": [
+        {
+          "reference": "artifact:artifacts/ui-ux-redesign/phase-2/kurum-dashboard-320.png",
+          "mediaType": "image/png",
+          "byteSize": 24576,
+          "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+          "surface": "kurum dashboard",
+          "viewportWidth": 320,
+          "imageWidth": 320,
+          "imageHeight": 900,
+          "piiReview": "PASS"
+        }
+      ],
       "privacy": {
         "piiReview": "PASS",
+        "reviewReference": "artifact:artifacts/ui-ux-redesign/privacy-review.json",
         "rawPiiInArtifacts": false,
         "smsRecipientPreviewExported": false,
         "guardianFinanceLeakageChecked": true,
@@ -1007,8 +1053,11 @@
       "approvals": [
         {
           "role": "release-owner",
+          "approvedBy": "release-owner-github",
           "decision": "PASS",
-          "approvedAt": "2026-06-15T09:55:00.000Z"
+          "approvedAt": "2026-06-15T09:45:00.000Z",
+          "sourceCommitSha": "1111111111111111111111111111111111111111",
+          "runUrl": "https://github.com/example/o-okul/actions/runs/1234567890"
         }
       ],
       "openRisks": []

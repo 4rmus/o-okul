@@ -198,6 +198,10 @@ const files = {
   "apps/web/src/sentry.ts": readFileSync("apps/web/src/sentry.ts", "utf8"),
   "apps/web/tsconfig.json": readFileSync("apps/web/tsconfig.json", "utf8"),
   "apps/web/e2e-next/a11y-next.spec.ts": readFileSync("apps/web/e2e-next/a11y-next.spec.ts", "utf8"),
+  "apps/web/e2e-next/helpers/horizontal-overflow.ts": readFileSync(
+    "apps/web/e2e-next/helpers/horizontal-overflow.ts",
+    "utf8",
+  ),
   "apps/web/e2e-next/backup-restore-next.spec.ts": readFileSync("apps/web/e2e-next/backup-restore-next.spec.ts", "utf8"),
   "apps/web/e2e-next/login-next.spec.ts": readFileSync("apps/web/e2e-next/login-next.spec.ts", "utf8"),
   "apps/web/e2e-next/live-onboarding-next.spec.ts": readFileSync("apps/web/e2e-next/live-onboarding-next.spec.ts", "utf8"),
@@ -522,7 +526,10 @@ const expectations = {
     "WAL_ARCHIVE_SMOKE_EVIDENCE_FILE",
     "Prometheus `/metrics`",
     "Kritik WCAG 2 A/AA axe ihlali 0",
-    "kurum dashboard tablet viewport",
+    "auth sonrası kurum dashboard 320/375/414/768/1024/1440 görsel matrisi",
+    "1280x800 fold sözleşmesi",
+    "Genel login 320/375/414/768/1024/1440 axe + yatay taşma",
+    "eski sentetik hero asset render dışında",
     "pnpm web:a11y:check",
     "WebP",
     "250 KB",
@@ -582,8 +589,9 @@ const expectations = {
     "pnpm go-live:check",
     "pnpm web:performance:check",
     "pnpm web:ux-baseline:check",
-    "768x1024 tablet viewport",
-    "WebP hero asset butcesi",
+    "320/375/414/768/1024/1440 viewport matrisi",
+    "1280x800 landing fold viewport",
+    "Sentetik hero asset render dışı",
   ],
   "docs/evidence-templates/deployment-region.example.json": ["datacenterCountryCode", "TR", "servicesVerified"],
   "docs/evidence-templates/financial-retention.example.json": [
@@ -1608,33 +1616,28 @@ const expectations = {
   ],
   "apps/web/app/(app)/kurum/canli-yayin/live-release-page.tsx": [
     "pnpm prod:evidence:check -- --summary-file",
-    "Deployment rollback evidence",
+    "Önceki sürüme dönüş denemesi",
     "PILOT_EVIDENCE_TARGET=file:///path/to/pilot.json pnpm pilot:check",
     "GO_LIVE_EVIDENCE_TARGET=file:///path/to/go-live.json pnpm go-live:check",
-    "Go-live Karar Alanları",
+    "Canlıya Geçiş Kararları",
     "productionEvidenceSummary.summaryTarget",
     "productionEvidenceSummary.result = PASS",
     "pilot.pilotDurationDays >= 14",
     "approvals: product / technical / operations / dataProtection",
-    "Deployment rollback tatbikatı",
-    "Pilot kapanış kanıtı",
-    "Go-live karar paketi",
-    "18 kapı",
+    "Önceki sürüme dönüş tatbikatı",
+    "Pilot değerlendirme sonuçları",
+    "Canlıya geçiş karar paketi",
+    "productionEvidenceSteps.length} kontrol",
   ],
   "apps/web/app/page.tsx": [
-    "landing-hero-education-ops.png",
-    "landing-hero-education-ops.webp",
-    "<picture>",
-    "fetchPriority=\"high\"",
-    "loading=\"eager\"",
-    "width={1440}",
-    "height={810}",
-    "Optik okuma",
-    "Kazanım analizi",
-    "Karne ve portal",
-    "Demo iste",
-    "Kapalı beta başvurusu",
-    "Production readiness kapıları",
+    "next-marketing-workflow",
+    "Sınavdan karneye",
+    "Sınavı hazırlayın",
+    "Optik dosyayı aktarın",
+    "Sonuçları kontrol edin",
+    "Karne ve raporları paylaşın",
+    "E-posta ile demo isteyin",
+    "İlk e-postada öğrenci bilgisi veya dosya göndermeniz gerekmez",
   ],
   "apps/web/package.json": [
     "@axe-core/playwright",
@@ -1686,7 +1689,13 @@ const expectations = {
     "/auth/refresh",
     "setViewportSize({ height: 1024, width: 768 })",
     "expectNoHorizontalOverflow",
-    "scrollWidth",
+    "yatay taşma ölçümü kök clip altında viewport dışı öğeyi yakalar",
+  ],
+  "apps/web/e2e-next/helpers/horizontal-overflow.ts": [
+    "documentElement.scrollWidth - viewportWidth",
+    "getBoundingClientRect()",
+    "result.offenders",
+    "toEqual([])",
   ],
   "apps/web/e2e-next/backup-restore-next.spec.ts": [
     "yedek restore paneli hedef sözleşmesini API çağrısından önce doğrular",
@@ -4653,6 +4662,15 @@ for (const [file, tokens] of Object.entries(expectations)) {
     if (!files[file].includes(token)) {
       failures.push(`${file} eksik: ${token}`);
     }
+  }
+}
+
+for (const retiredLandingAsset of [
+  "landing-hero-education-ops.png",
+  "landing-hero-education-ops.webp",
+]) {
+  if (files["apps/web/app/page.tsx"].includes(retiredLandingAsset)) {
+    failures.push(`apps/web/app/page.tsx eski sentetik hero asset'ini render etmemeli: ${retiredLandingAsset}`);
   }
 }
 

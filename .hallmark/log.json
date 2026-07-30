@@ -1,0 +1,20 @@
+[
+  {
+    "date": "2026-07-29",
+    "scope": "app",
+    "macrostructure": "Narrative Workflow",
+    "theme": "custom",
+    "enrichment": "none",
+    "brief": "O-Okul operasyonel SaaS arayüzünü Grafit + Mercan sistemiyle tamamlama",
+    "theme_axes": "light / grotesk-sans / warm"
+  },
+  {
+    "date": "2026-07-29",
+    "scope": "app",
+    "macrostructure": "Workbench",
+    "theme": "custom",
+    "enrichment": "none",
+    "brief": "Önceki O-Okul modern-minimal tasarım çalışması; landing sınıflandırması daha sonra Narrative Workflow olarak düzeltildi",
+    "theme_axes": "light / grotesk-sans / cool"
+  }
+]
