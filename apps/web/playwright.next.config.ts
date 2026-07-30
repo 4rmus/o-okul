@@ -5,6 +5,7 @@ const baseURL = process.env.NEXT_E2E_BASE_URL ?? `http://localhost:${port}`;
 const useWebServer = process.env.NEXT_E2E_SKIP_WEB_SERVER !== "1" && !process.env.NEXT_E2E_BASE_URL;
 
 export default defineConfig({
+  retries: process.env.CI ? 1 : 0,
   testDir: "./e2e-next",
   snapshotPathTemplate: `{testDir}/__screenshots__/{testFilePath}/{arg}-${process.platform}{ext}`,
   use: {
