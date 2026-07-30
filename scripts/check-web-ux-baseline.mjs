@@ -9,6 +9,7 @@ const files = {
   ),
   "apps/web/e2e-next/list-url-state-next.spec.ts": readFileSync("apps/web/e2e-next/list-url-state-next.spec.ts", "utf8"),
   "apps/web/e2e-next/data-table-mobile-contract-next.spec.ts": readFileSync("apps/web/e2e-next/data-table-mobile-contract-next.spec.ts", "utf8"),
+  "apps/web/e2e-next/ui-primitives-state-next.spec.ts": readFileSync("apps/web/e2e-next/ui-primitives-state-next.spec.ts", "utf8"),
   "apps/web/e2e-next/governance-evidence-contract-next.spec.ts": readFileSync("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", "utf8"),
   "apps/web/e2e-next/guardian-privacy-next.spec.ts": readFileSync("apps/web/e2e-next/guardian-privacy-next.spec.ts", "utf8"),
   "apps/web/e2e-next/kvkk-privacy-next.spec.ts": readFileSync("apps/web/e2e-next/kvkk-privacy-next.spec.ts", "utf8"),
@@ -22,6 +23,7 @@ const files = {
   "apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts": readFileSync("apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts", "utf8"),
   "apps/web/e2e-next/system-tenant-contract-next.spec.ts": readFileSync("apps/web/e2e-next/system-tenant-contract-next.spec.ts", "utf8"),
   "apps/web/e2e-next/teacher-portal-contract-next.spec.ts": readFileSync("apps/web/e2e-next/teacher-portal-contract-next.spec.ts", "utf8"),
+  "apps/web/e2e-next/ui-route-family-smoke-next.spec.ts": readFileSync("apps/web/e2e-next/ui-route-family-smoke-next.spec.ts", "utf8"),
   "apps/web/e2e-next/ui-visual-qa-next.spec.ts": readFileSync("apps/web/e2e-next/ui-visual-qa-next.spec.ts", "utf8"),
   "apps/web/package.json": readFileSync("apps/web/package.json", "utf8"),
   "apps/web/app/(app)/_shared/access.ts": readFileSync("apps/web/app/(app)/_shared/access.ts", "utf8"),
@@ -31,6 +33,7 @@ const files = {
   "apps/web/app/(app)/kurum/_shared/evidence-panels.tsx": readFileSync("apps/web/app/(app)/kurum/_shared/evidence-panels.tsx", "utf8"),
   "apps/web/app/(app)/kurum/_shared/import-template-panel.tsx": readFileSync("apps/web/app/(app)/kurum/_shared/import-template-panel.tsx", "utf8"),
   "apps/web/app/(app)/kurum/_shared/operation-summary.tsx": readFileSync("apps/web/app/(app)/kurum/_shared/operation-summary.tsx", "utf8"),
+  "apps/web/app/(app)/kurum/_shared/revealable-phone.tsx": readFileSync("apps/web/app/(app)/kurum/_shared/revealable-phone.tsx", "utf8"),
   "apps/web/app/(app)/kurum/_shared/sms-delivery-report-panel.tsx": readFileSync("apps/web/app/(app)/kurum/_shared/sms-delivery-report-panel.tsx", "utf8"),
   "apps/web/app/(app)/kurum/akademik-takvim/academic-calendar-page.tsx": readFileSync("apps/web/app/(app)/kurum/akademik-takvim/academic-calendar-page.tsx", "utf8"),
   "apps/web/app/(app)/kurum/dersler/courses-page.tsx": readFileSync("apps/web/app/(app)/kurum/dersler/courses-page.tsx", "utf8"),
@@ -122,6 +125,31 @@ const webPackageJson = JSON.parse(files["apps/web/package.json"]);
 const uiPackageJson = JSON.parse(files["packages/ui/package.json"]);
 const failures = [];
 const appSourcePaths = collectSourceFiles("apps/web/app/(app)", [".ts", ".tsx"]);
+const rawButtonSourcePaths = collectSourceFiles("apps/web/app", [".ts", ".tsx"]);
+const rawButtonAllowlist = new Map([
+  ["apps/web/app/(app)/app-shell.tsx", 6],
+  ["apps/web/app/(app)/kurum/_shared/revealable-phone.tsx", 1],
+  ["apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx", 5],
+  ["apps/web/app/(app)/kurum/sinavlar/exams-page.tsx", 1],
+  ["apps/web/app/(app)/portals/guardian-portal-page.tsx", 1],
+  ["apps/web/app/(app)/portals/teacher-portal-page.tsx", 1],
+  ["apps/web/app/(auth)/tenant-login-page.tsx", 2],
+]);
+let rawButtonTotal = 0;
+
+for (const path of rawButtonSourcePaths) {
+  const count = (readFileSync(path, "utf8").match(/<button\b/g) ?? []).length;
+  const expected = rawButtonAllowlist.get(path) ?? 0;
+  rawButtonTotal += count;
+  if (count !== expected) {
+    failures.push(`${path} must contain exactly ${expected} semantic raw button(s); found ${count}.`);
+  }
+}
+
+if (rawButtonTotal !== 17) {
+  failures.push(`apps/web/app must contain exactly 17 semantic raw buttons; found ${rawButtonTotal}.`);
+}
+
 const visualSnapshotDirectory = "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts";
 const targetedVisualGoldens = [
   "institution-shell-rail-1440",
@@ -146,11 +174,56 @@ requireNoTokensInFiles("apps/web/app/(app)", appSourcePaths, [
   "next-definition-list",
 ]);
 
+requireTokens("apps/web/app/(app)/app-shell.tsx", [
+  'className="next-mobile-nav-toggle"',
+  'className="next-command-open"',
+  'className="next-sidebar-close"',
+  'className="next-sidebar-backdrop"',
+  'className="next-sidebar-group-toggle"',
+  'aria-expanded={expanded}',
+]);
+requireOccurrenceCount("apps/web/app/(app)/app-shell.tsx", 'className="next-command-open"', 2);
+
+requireTokens("apps/web/app/(app)/kurum/_shared/revealable-phone.tsx", [
+  'aria-label={revealed ? "Telefonu kapat" : "Telefonu aç"}',
+  "setRevealed((current) => !current)",
+]);
+
+requireTokens("apps/web/app/(app)/kurum/sinavlar/exams-page.tsx", [
+  "aria-pressed={activeExamId === exam.id}",
+  'data-active={activeExamId === exam.id ? "true" : undefined}',
+]);
+
+requireTokens("apps/web/app/(app)/kurum/kurulum/setup-wizard.tsx", [
+  'className="next-onboarding-course-grid"',
+  "aria-pressed={draft.courses.selectedCourseIds.includes(course.id)}",
+  'aria-pressed={draft.people.teacherModel === "manual"}',
+  'aria-pressed={draft.people.teacherModel === "excel"}',
+  'aria-pressed={draft.people.studentModel === "manual"}',
+  'aria-pressed={draft.people.studentModel === "excel"}',
+]);
+
+requireTokens("apps/web/app/(app)/portals/guardian-portal-page.tsx", [
+  'label="Öğrenci seçimi"',
+  "aria-pressed={student.id === resolvedStudentId}",
+]);
+
+requireTokens("apps/web/app/(app)/portals/teacher-portal-page.tsx", [
+  'label="Öğrenci seçimi"',
+  "aria-pressed={student.id === selectedStudentId}",
+]);
+
+requireTokens("apps/web/app/(auth)/tenant-login-page.tsx", [
+  'label="Doğrulama yöntemi"',
+  'aria-pressed={mfaMethod === "totp"}',
+  'aria-pressed={mfaMethod === "recovery_code"}',
+]);
+
 requireScript("web:ux-baseline:check", "node scripts/check-web-ux-baseline.mjs");
 requireScript("web:ux-contract:check", "pnpm --filter @o-okul/web ux-contract");
 requireScript(
   "ui-ux-redesign:visual-qa",
-  "UI_VISUAL_ARTIFACT_DIR=artifacts/ui-ux-redesign/local pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts --workers=1 e2e-next/ui-visual-qa-next.spec.ts",
+  "UI_VISUAL_ARTIFACT_DIR=artifacts/ui-ux-redesign/local pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts --workers=1 --update-snapshots=none e2e-next/ui-visual-qa-next.spec.ts",
 );
 requireScript(
   "ui-ux-redesign:fixture-regression",
@@ -181,9 +254,28 @@ if (webPackageJson.scripts?.a11y !== "playwright test -c playwright.next.config.
   failures.push("apps/web/package.json a11y script must run e2e-next/a11y-next.spec.ts.");
 }
 
-if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=1 e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts") {
-  failures.push("apps/web/package.json ux-contract script must run the no-artifact DataTable, portal report, and report workspace specs.");
+if (webPackageJson.scripts?.["ux-contract"] !== "playwright test -c playwright.next.config.ts --workers=1 e2e-next/ui-primitives-state-next.spec.ts e2e-next/list-url-state-next.spec.ts e2e-next/data-table-mobile-contract-next.spec.ts e2e-next/role-preview-contract-next.spec.ts e2e-next/kvkk-privacy-next.spec.ts e2e-next/setup-wizard-contract-next.spec.ts e2e-next/student-relationship-flow-next.spec.ts e2e-next/portal-report-panel-next.spec.ts e2e-next/teacher-portal-contract-next.spec.ts e2e-next/student-guardian-portal-contract-next.spec.ts e2e-next/report-workspace-contract-next.spec.ts e2e-next/optik-workspace-contract-next.spec.ts e2e-next/governance-evidence-contract-next.spec.ts e2e-next/system-tenant-contract-next.spec.ts && pnpm ux-route-family-smoke") {
+  failures.push("apps/web/package.json ux-contract script must run the primitive state, no-artifact DataTable, portal report, and report workspace specs.");
 }
+if (webPackageJson.scripts?.["ux-route-family-smoke"] !== "playwright test -c playwright.next.config.ts --workers=4 --update-snapshots=none e2e-next/ui-route-family-smoke-next.spec.ts") {
+  failures.push("apps/web/package.json ux-route-family-smoke script must run the 73-route smoke with four workers and snapshot updates disabled.");
+}
+
+validateRouteFamilySmokeContract();
+
+requireTokens("apps/web/e2e-next/ui-primitives-state-next.spec.ts", [
+  'page.goto("/kurum/kazanimlar")',
+  'page.goto("/kurum/siniflar/class-8a")',
+  'page.goto("/kurum/materyaller")',
+  'getByRole("button", { name: "İşleniyor" })',
+  'page.keyboard.press("Escape")',
+  "expect(createRequestCount).toBe(1)",
+  'getByRole("table", { name: "Sınıf öğrenci listesi" })',
+  'generalTab.press("ArrowRight")',
+  'toHaveAttribute("aria-describedby", tooltipId!)',
+  "page.waitForTimeout(800)",
+  'trigger.focus()',
+]);
 
 requireTokens("apps/web/e2e-next/a11y-next.spec.ts", [
   "AxeBuilder",
@@ -204,15 +296,12 @@ requireTokens("apps/web/e2e-next/a11y-next.spec.ts", [
   'getByRole("navigation", { name: "Ana men',
   "setViewportSize({ height: 1024, width: 768 })",
   "kurum dashboard gövdesi mobil viewport'ta taşmadan açılır",
-  'getByRole("region", { exact: true, name: "Kurum özeti" })',
-  "overviewRegion).toHaveClass(/uh-metric-grid/)",
-  'overviewRegion.locator(".uh-metric-card")).toHaveCount(4)',
-  'getByRole("region", { exact: true, name: "Kurum dashboard operasyon özeti" })',
-  'getByRole("group", { name: "Kurum dashboard operasyon özeti metrikleri" })',
+  'getByRole("region", { exact: true, name: "Kurum günlük durum özeti" })',
+  'getByRole("group", { name: "Kurum günlük durum özeti metrikleri" })',
   'dashboardSummaryMetrics).toHaveClass(/uh-metric-grid/)',
   'dashboardSummaryMetrics.locator(".uh-metric-card")).toHaveCount(4)',
-  'getByRole("region", { exact: true, name: "Operasyon özeti" })',
-  'getByRole("region", { exact: true, name: "Karar sinyalleri" })',
+  'getByRole("region", { exact: true, name: "Günlük özet" })',
+  'getByRole("region", { exact: true, name: "İlgilenilecek işler" })',
   "shell komut paleti yüksek etkili axe ihlali olmadan klavye akışını korur",
   "mobil ana menü yüksek etkili axe ihlali olmadan açılıp kapanır",
   'getByRole("dialog", { name: "Komut paleti" })',
@@ -247,7 +336,7 @@ requireTokens("apps/web/app/(auth)/tenant-login-page.tsx", [
   'aria-label="Giriş formu"',
   '<Field label="Kullanıcı Adı">',
   '<Field label="Şifre">',
-  '<Field label="Okul">',
+  '<Field label="Kurum">',
   '<Select value={selectedTenantId}',
   "TenantSelectionRequiredError",
   '<SegmentedControl className="next-segmented" label="Doğrulama yöntemi">',
@@ -260,7 +349,7 @@ requireTokens("apps/web/e2e-next/login-selection-next.spec.ts", [
   'page.getByLabel("Kullanıcı Adı")',
   'page.getByLabel("Şifre", { exact: true })',
   'status: "TENANT_SELECTION_REQUIRED"',
-  'page.getByLabel("Okul")',
+  'page.getByLabel("Kurum")',
   'expect(loginBody).not.toHaveProperty("tenantSlug")',
   'expect(selectionBody).toEqual({ selectionToken: "selection-token", tenantId: "tenant-b" })',
 ]);
@@ -300,20 +389,17 @@ requireNoTokens("apps/web/src/list-controls.tsx", [
 requireTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
   "ActionCard,",
   "DataTable,",
-  "MetricCard,",
-  "MetricGrid,",
   "Panel,",
   "StatusBadge,",
   "OperationSummary",
   "OperationSummaryAction",
   "OperationSummaryBadge",
   "OperationSummaryItem",
-  'aria-label="Kurum özeti"',
-  'ariaLabel="Kurum dashboard operasyon özeti"',
-  'caption="Operasyon özeti"',
-  'caption="Karar sinyalleri"',
+  'ariaLabel="Kurum günlük durum özeti"',
+  'caption="Günlük özet"',
+  'caption="İlgilenilecek işler"',
   'className="next-dashboard-onboarding"',
-  'title="Kurumunu kurmaya başla"',
+  'title="Kurumunuzu kurmaya başlayın"',
   "Kuruluma git",
   'className="next-attention-panel"',
   'title="Bugün dikkat gerektirenler"',
@@ -326,7 +412,7 @@ requireTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
   "detail={item.description}",
   "tone={attentionCardTone(item)}",
   'className="next-session-panel"',
-  "<StatusBadge tone=\"success\">Kurum kapsamı doğrulandı</StatusBadge>",
+  "<StatusBadge tone=\"success\">Kurum erişimi doğrulandı</StatusBadge>",
   'className="next-tenant-profile"',
   "dashboardSummaryColumns",
   "dashboardDecisionColumns",
@@ -342,20 +428,22 @@ requireTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
   "buildDashboardSummaryBadges",
   "buildDashboardSummaryActions",
   "Başarı % ana metrik",
-  "Tenant scope doğrulandı",
-  "Kurum kapsamı doğrulandı",
+  "Kurum erişimi doğrulandı",
   "Kullanıcı oturumu aktif",
   "formatRoleSummary",
   "reportSuccessRate",
   "reportQuestionCount",
   "successRate",
   "questionCount",
-  '<MetricGrid aria-label="Kurum özeti" className="next-dashboard-overview-grid" role="region">',
-  "next-dashboard-overview-card",
 ]);
 
 requireNoTokens("apps/web/app/(app)/kurum/kurum-dashboard.tsx", [
+  "MetricCard,",
   "MetricPanelGrid",
+  "MetricGrid,",
+  'aria-label="Kurum özeti"',
+  "next-dashboard-overview-card",
+  "next-dashboard-overview-grid",
   "next-report-list",
   "next-dashboard-grid",
   "next-metric",
@@ -537,7 +625,7 @@ requireTokens("apps/web/e2e-next/system-tenant-contract-next.spec.ts", [
   "Sistem tenant yönetimi sözleşmesi",
   "kurum operasyon özeti URL state ve tenant kapsamını korur",
   "sistem referans ekranları statik kanıtı kontrol listesi olarak gösterir",
-  'getByRole("region", { exact: true, name: "Sistem kurum operasyon özeti" })',
+  'getByRole("region", { exact: true, name: "Kurum listesi özeti" })',
   "referans kontrol listesi",
   "forbiddenTenantScopedPaths",
   "/me/tenant",
@@ -739,48 +827,48 @@ requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
   "KVKK route erişimi privacy capability ile hizalıdır",
   'await expect(page).toHaveURL(/\\/kurum\\/kvkk$/)',
   'getByLabel("Güvenlik güven durumu")',
-  'getByLabel("Release kanıt güven durumu")',
-  'getByLabel("UAT rollback güven durumu")',
+  'getByLabel("Canlıya geçiş doğrulama durumu")',
+  'getByLabel("Kullanıcı kabulü ve geri dönüş durumu")',
   'getByLabel("Yedek restore güven durumu")',
-  'getByLabel("Sistem sağlık güven durumu")',
-  'getByLabel("Gözlemlenebilirlik güven durumu")',
+  'getByLabel("Sistem sağlığı doğrulama durumu")',
+  'getByLabel("Sistem izleme doğrulama durumu")',
   'getByRole("region", { exact: true, name: "Denetim operasyon özeti" })',
   'getByRole("table", { name: "Denetim kayıtları" })',
-  'getByRole("region", { exact: true, name: "Release kanıt operasyon özeti" })',
-  "Release kanıt operasyon özeti aksiyon kuyruğu",
-  'getByRole("table", { name: "Release kanıt kapıları" })',
-  'getByRole("table", { name: "Production evidence adımları" })',
-  'getByRole("table", { name: "Release özeti alanları" })',
-  'getByRole("table", { name: "Go-live karar alanları" })',
-  'getByRole("table", { name: "Dış ortam kanıtları" })',
-  "Yerel/static karar vermez",
-  "Staging/prod evidence",
+  'getByRole("region", { exact: true, name: "Yayın hazırlığı özeti" })',
+  "Yayın hazırlığı özeti aksiyon kuyruğu",
+  'getByRole("table", { name: "Yayın öncesi kontroller" })',
+  'getByRole("table", { name: "Canlı ortam doğrulamaları" })',
+  'getByRole("table", { name: "Doğrulama özeti alanları" })',
+  'getByRole("table", { name: "Canlıya geçiş kararları" })',
+  'getByRole("table", { name: "Dış sistem doğrulamaları" })',
+  "Yerel kontrol yeterli değildir",
+  "Deneme ve canlı ortam sonucu gerekir",
   "pnpm prod:evidence:check",
   "pnpm pilot:check",
   "GO_LIVE_EVIDENCE_TARGET=file:///path/to/go-live.json pnpm go-live:check",
   "pnpm go-live:check",
-  "Toplu kanıt zinciri",
-  "Sentry test event",
-  "WAL archive target",
-  "UAT evidence",
+  "Tüm doğrulamaları çalıştır",
+  "Hata izleme test olayı",
+  "Veritabanı değişiklik arşivi",
+  "Kullanıcı kabul testi",
   "result = PASS",
   "pilot.pilotDurationDays >= 14",
   "pilot.criticalDefectsOpen = 0",
   "productionEvidenceSummary.summaryTarget",
   "operations.alertChannelReady = true",
   "goLiveDecision = APPROVED",
-  "Staging/prod domain",
-  "Sentry DSN ve alert webhook",
-  "Off-host backup ve WAL hedefi",
-  "Pilot kapanış kanıtı",
+  "Deneme veya canlı ortam adresi",
+  "Hata izleme ve uyarı kanalı",
+  "Harici yedek ve veritabanı arşivi",
+  "Pilot değerlendirme sonuçları",
   'expectNoUnlabeledControls(page, "live-release-governance-mobile")',
   'getByRole("button", { name: /Canlı yayına al|Yayınla|Go-live başlat|Release başlat/i })',
-  'getByRole("region", { exact: true, name: "UAT rollback operasyon özeti" })',
-  "UAT rollback operasyon özeti aksiyon kuyruğu",
-  'getByRole("table", { name: "UAT persona senaryoları" })',
-  'getByRole("table", { name: "UAT zorunlu komutları" })',
-  'getByRole("table", { name: "Rollback zorunlu alanları" })',
-  "CLI-only",
+  'getByRole("region", { exact: true, name: "Kullanıcı kabulü ve geri dönüş özeti" })',
+  "Kullanıcı kabulü ve geri dönüş özeti aksiyon kuyruğu",
+  'getByRole("table", { name: "Kullanıcı yolculuğu senaryoları" })',
+  'getByRole("table", { name: "Yayın öncesi zorunlu komutlar" })',
+  'getByRole("table", { name: "Geri dönüş için zorunlu bilgiler" })',
+  "Yalnızca kontrol",
   "pnpm db:rls:check:live",
   "pnpm traefik:https:smoke",
   "rollbackImageTag",
@@ -826,7 +914,7 @@ requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
   'Kanıt kapsamı: UI güvenli',
   'Kanıt kapsamı: Yapılandırılmış API',
   "Release kararına yetmez",
-  "Staging/prod kanıt bekliyor",
+  "Canlı ortam kontrolü bekliyor",
   "PII maskeli",
   "Ad, soyad, TC, e-posta",
   "Ad, soyad, telefon",
@@ -873,12 +961,12 @@ requireTokens("apps/web/e2e-next/role-preview-contract-next.spec.ts", [
   'getByRole("region", { name: "Rol önizleme özeti" })',
   'rolePreviewMetrics.locator(".uh-metric-card")).toHaveCount(3)',
   'page.locator(".next-role-preview-metrics")).toHaveCount(0)',
-  'getByRole("region", { exact: true, name: "Rol önizleme operasyon özeti" })',
-  "Rol önizleme operasyon özeti aksiyon kuyruğu",
-  'getByRole("table", { name: "Rol görünüm kapsamı" })',
-  'getByRole("table", { name: "Öğretmen Portalı kapsam özeti" })',
-  'getByRole("table", { name: "Öğrenci Portalı kapsam özeti" })',
-  'getByRole("table", { name: "Veli Portalı kapsam özeti" })',
+  'getByRole("region", { exact: true, name: "Önizleme güvenlik özeti" })',
+  "Önizleme güvenlik özeti aksiyon kuyruğu",
+  'getByRole("table", { name: "Rolün görebileceği alanlar" })',
+  'getByRole("table", { name: "Öğretmen Portalı görülebilen bilgiler" })',
+  'getByRole("table", { name: "Öğrenci Portalı görülebilen bilgiler" })',
+  'getByRole("table", { name: "Veli Portalı görülebilen bilgiler" })',
   '"x-role-preview-token"',
   "preview-token-teacher",
   "preview-token-student",
@@ -897,7 +985,7 @@ requireTokens("apps/web/e2e-next/role-preview-contract-next.spec.ts", [
   "guardian-preview-main",
   "5554443322",
   "Önizleme kişisi",
-  "Maskeli subject ref",
+  "Kimliği gizlenmiş kayıt",
   "Öğretmen kaydı doğrulandı",
   "Öğrenci kaydı doğrulandı",
   "Veli kaydı doğrulandı",
@@ -1188,19 +1276,19 @@ requireTokens("apps/web/e2e-next/teacher-portal-contract-next.spec.ts", [
   'getByRole("heading", { level: 1, name: "Öğretmen Portalı" })',
   'getByRole("region", { exact: true, name: "Portal özeti" })',
   'getByRole("region", { name: "Öğrenci çalışma alanı" })',
-  'getByRole("region", { exact: true, name: "Öğretmen operasyon bağlamı" })',
+  'getByRole("region", { exact: true, name: "Seçili sınıf ve öğrenci özeti" })',
   'getByRole("region", { name: "Öğretmen günlük aksiyonları" })',
   "expectTeacherFocusMetrics",
   "successRateDelta: 11.7",
-  'getByRole("region", { name: "Öğretmen operasyon bağlam metrikleri" })',
+  'getByRole("region", { name: "Seçili sınıf ve öğrenci bilgileri" })',
   'focusMetrics).toHaveClass(/uh-info-grid/)',
   'focusMetrics.locator(".uh-info-item")).toHaveCount(8)',
-  "Günlük iş kuyruğu",
-  "3 aksiyon",
+  "Bugün yapılacaklar",
+  "8 iş",
   'getByRole("link", { name: /Yoklama kaydet: 2 kayıt.*Yoklama.*Kaydet.*Bugün.*2026-06-17 için yoklama/ })',
   'getByRole("link", { name: /Ödev kontrol et: 1 bekliyor/ })',
   'getByRole("link", { name: /Destek talebini takip et: 1 açık/ })',
-  'getByRole("link")).toHaveCount(3)',
+  "expectPortalActionHrefs(actionStrip",
   "clickAllPortalActionLinks",
   "expect.poll(() => mutationRequests).toEqual([])",
   "expectPortalActionFocus",
@@ -1282,8 +1370,8 @@ requireTokens("apps/web/e2e-next/teacher-portal-contract-next.spec.ts", [
   "snapshot-ready",
   'getByRole("region", { name: "Portal rapor özeti" })',
   'getByRole("button", { name: "Karne detayını göster" })',
-  'getByLabel("Rol önizleme modu")',
-  "Salt-okuma Önizleme",
+  'getByLabel("Rol önizleme bilgisi")',
+  "Yalnızca Görüntüleme",
   "expectNoHorizontalOverflow",
   "expectNoUnlabeledControls",
   "expectNoClippedVisibleText",
@@ -1310,17 +1398,18 @@ requireTokens("apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts",
   'getByRole("region", { exact: true, name: "Portal özeti" })',
   'getByRole("region", { name: "Öğrenci günlük aksiyonları" })',
   'getByRole("region", { name: "Veli günlük aksiyonları" })',
-  'getByRole("region", { exact: true, name: "Öğrenci operasyon bağlamı" })',
+  'getByRole("region", { exact: true, name: "Seçili öğrenci özeti" })',
   "expectStudentFocusMetrics",
   "expectStudentFocusMetrics(focus, 8)",
   "expectStudentFocusMetrics(focus, 9)",
-  'getByRole("region", { name: "Öğrenci operasyon bağlam metrikleri" })',
+  'getByRole("region", { name: "Seçili öğrenci bilgileri" })',
   'focusMetrics).toHaveClass(/uh-info-grid/)',
   'focusMetrics.locator(".uh-info-item")).toHaveCount(itemCount)',
-  'getByLabel("Rol önizleme modu")',
+  'getByLabel("Rol önizleme bilgisi")',
   "Duyuruları oku: 1 okunmamış",
-  "Günlük iş kuyruğu",
-  "3 aksiyon",
+  "Bugün yapılacaklar",
+  "6 iş",
+  "7 iş",
   "Ödevi aç: 1 atama",
   "Destek talebini takip et: 1 açık",
   "successRateDelta: 11.7",
@@ -1328,7 +1417,7 @@ requireTokens("apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts",
   "Ödeme durumunu gör: Ödeme izni kapalı",
   "Finans görünürlüğü kapalı",
   "500,00 TRY",
-  "Salt-okuma Önizleme",
+  "Yalnızca Görüntüleme",
   "expectAnchorsAttached",
   "expectPortalActionFocus",
   "expectStudentProfileAndHistoryPanels",
@@ -1349,7 +1438,8 @@ requireTokens("apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts",
   "expectNoPortalActionPiiLeak",
   "clickAllPortalActionLinks",
   "expect.poll(() => mutationRequests).toEqual([])",
-  'getByRole("link")).toHaveCount(3)',
+  "expectPortalActionHrefs(studentActions",
+  "expectPortalActionHrefs(guardianActions",
   '"#portal-report"',
   '"#portal-student-picker"',
   "action.click()",
@@ -1413,7 +1503,7 @@ requireNoTokens("apps/web/e2e-next/student-guardian-portal-contract-next.spec.ts
   "page.screenshot",
   "saveScreenshot",
   "toHaveScreenshot",
-  'getByLabel("Öğrenci operasyon bağlamı")',
+  'getByLabel("Seçili öğrenci özeti")',
   'locator(".next-portal-action-strip__item")).toHaveCount',
 ]);
 
@@ -1537,6 +1627,10 @@ requireTokens("apps/web/app/(app)/_shared/report-analysis.ts", [
 
 requireTokens("packages/ui/src/components/data-table.tsx", [
   "aria-busy",
+  "aria-label={scrollRegionLabel}",
+  'className="uh-data-table-scroll"',
+  'role="region"',
+  "tabIndex={0}",
   "uh-data-table--compact",
   "mobileLabel?: string",
   'mobilePriority?: "hidden" | "primary" | "secondary"',
@@ -1551,6 +1645,7 @@ requireTokens("packages/ui/src/components/data-table.tsx", [
   "uh-data-table__state",
   "colSpan={emptyColSpan}",
   "resolveCellLabel",
+  "resolveScrollRegionLabel",
 ]);
 
 requireTokens("packages/ui/src/components/crud-page.tsx", [
@@ -1612,7 +1707,7 @@ requireTokens("apps/web/app/(app)/_shared/navigation.ts", [
   '{ href: "/kurum/denetim", icon: ClipboardList, label: "Denetim", requiredCapability: "audit:read" }',
   '{ href: "/kurum/kvkk", icon: ShieldCheck, label: "KVKK", requiredCapability: "privacy:manage" }',
   '{ href: "/kurum/guvenlik-denetimi", icon: ShieldCheck, label: "Güvenlik Denetimi", requiredCapability: institutionOperationEvidenceCapability }',
-  '{ href: "/kurum/canli-yayin", icon: Activity, label: "Release Kanıtı", requiredCapability: institutionOperationEvidenceCapability }',
+  '{ href: "/kurum/canli-yayin", icon: Activity, label: "Yayın Hazırlığı", requiredCapability: institutionOperationEvidenceCapability }',
   '{ href: "/kurum/raporlar", icon: BarChart3, label: "Sınav Raporları", requiredCapability: "academic:manage" }',
   '"/kurum": "Kurum Özeti"',
 ]);
@@ -2711,15 +2806,15 @@ requireTokens("apps/web/app/(app)/kurum/rol-onizleme/role-preview-page.tsx", [
   "rolePreviewScopeColumns",
   "rolePreviewMetaColumns",
   "rolePreviewListColumns",
-  'ariaLabel="Rol önizleme operasyon özeti"',
+  'ariaLabel="Önizleme güvenlik özeti"',
   'aria-label="Aktif rol önizleme kaydı"',
   'aria-label="Aktif önizleme güven durumu"',
   'aria-label="Rol portal kartları"',
   'aria-busy={Boolean(pendingRole)}',
   '<MetricGrid aria-label="Rol önizleme özeti" role="region">',
   'aria-label="Rol görünüm önizleme"',
-  'caption="Rol görünüm kapsamı"',
-  'caption={`${role.title} kapsam özeti`}',
+  'caption="Rolün görebileceği alanlar"',
+  'caption={`${role.title} görülebilen bilgiler`}',
   "buildRolePreviewScopeRows",
   "buildRolePreviewMetaRows",
   "formatRolePreviewScopeValue",
@@ -2730,14 +2825,14 @@ requireTokens("apps/web/app/(app)/kurum/rol-onizleme/role-preview-page.tsx", [
   "Önizleme kişisi",
   "Önizleme için uygun kişi kaydı bulunamadı.",
   "pendingRole",
-  "URL'de yok",
-  "Demo PII gizli",
-  "Salt-okuma",
-  "Süreli oturum",
+  "Güvenlik",
+  "Kişisel veriler gizli",
+  "Yalnızca görüntüleme",
+  "Süreli",
   "subjectPrivacyLabel",
-  "Maskeli subject ref",
-  "Kapsam doğrulandı",
-  "Kendi profil kapsamı doğrulandı",
+  "Kimliği gizlenmiş kayıt",
+  "Erişim doğrulandı",
+  "Kendi bilgilerine erişim doğrulandı",
   "Önizleme hazırlanıyor",
   "storeRolePreviewToken(session.previewToken)",
 ]);
@@ -2758,11 +2853,11 @@ requireTokens("apps/web/app/(app)/sistem/kurumlar/tenants-page.tsx", [
   "OperationSummary",
   "tenantSummaryItems",
   "tenantSummaryBadges",
-  'ariaLabel="Sistem kurum operasyon özeti"',
-  "SYSTEM_ADMIN kapsamı",
+  'ariaLabel="Kurum listesi özeti"',
+  "Sistem yöneticisi görünümü",
   "useUrlListState",
-  "Lisans riski",
-  "Koltuk riski",
+  "Yaklaşan lisans bitişi",
+  "Kullanıcı sınırı",
 ]);
 
 requireTokens("apps/web/app/(app)/sistem/system-dashboard.tsx", [
@@ -2772,8 +2867,8 @@ requireTokens("apps/web/app/(app)/sistem/system-dashboard.tsx", [
   '<MetricGrid className="next-system-summary-grid" aria-label="Sistem özeti" role="region">',
   "next-system-summary-card",
   "Platformdaki toplam kurum",
-  "Operasyon erişimi açık",
-  "Pilot veya deneme kapsamı",
+  "Kullanıma açık kurum",
+  "Deneme planındaki kurum",
 ]);
 
 requireNoTokens("apps/web/app/(app)/sistem/system-dashboard.tsx", [
@@ -2791,21 +2886,21 @@ requireTokens("apps/web/app/(app)/sistem/kurumlar/[tenantId]/tenant-detail-page.
   "next-system-summary-card",
   "metricPlanTone",
   "metricStatusTone",
-  "Aktif koltuk / limit",
+  "Aktif kullanıcı / sınır",
   'aria-label="Lisans ve kapasite"',
   '<InfoGrid className="next-tenant-capacity-grid">',
   '<InfoItem label="Lisans penceresi" value={formatLicenseWindow(tenant)} />',
   '<InfoItem label="Kalan gün" value={formatLicenseDays(licenseDays)} />',
-  'label="Koltuk kullanımı"',
-  'label="Önerilen aksiyon"',
+  'label="Kullanıcı sayısı"',
+  'label="Önerilen işlem"',
   "Lisans penceresi",
   "Kalan gün",
-  "Koltuk kullanımı",
-  "Önerilen aksiyon",
+  "Kullanıcı sayısı",
+  "Önerilen işlem",
   "tenantRecommendedAction",
   "seatUsagePercent",
   "Lisans tarihi kontrolü",
-  "Koltuk limiti kontrolü",
+  "Kullanıcı sınırı kontrolü",
 ]);
 
 requireNoTokens("apps/web/app/(app)/sistem/kurumlar/[tenantId]/tenant-detail-page.tsx", [
@@ -2821,10 +2916,10 @@ requireTokens("apps/web/app/(app)/sistem/system-reference-page.tsx", [
   'className="next-system-reference"',
   "next-system-reference",
   "referans kontrol listesi",
-  "Operasyon referansı",
-  "salt-okuma kontrol başlığı",
+  "Kontrol Başlıkları",
+  "kontrol başlığı",
   "next-system-reference__list",
-  "Statik kanıt",
+  "Ön kontrol",
 ]);
 
 requireNoTokens("apps/web/app/(app)/sistem/system-reference-page.tsx", [
@@ -3000,12 +3095,12 @@ requireTokens("apps/web/app/(app)/kurum/guvenlik-denetimi/security-audit-page.ts
   "StatusBadge",
   "SecurityControlRow",
   "SecurityControlDefinition",
-  'ariaLabel="Güvenlik denetimi operasyon özeti"',
+  'ariaLabel="Güvenlik durumu özeti"',
   'caption="Güvenlik olayları"',
-  'caption="Güvenlik denetimi kanıt kapıları"',
-  'caption="Güvenlik header kontrolleri"',
-  'caption="Güvenlik auth kontrolleri"',
-  'caption="Güvenlik veri kontrolleri"',
+  'caption="Canlıya geçiş güvenlik kontrolleri"',
+  'caption="Bağlantı güvenliği kontrolleri"',
+  'caption="Oturum güvenliği kontrolleri"',
+  'caption="Kurum ve kişisel veri güvenliği kontrolleri"',
   'density="compact"',
   'mobilePriority: "primary"',
   'mobilePriority: "secondary"',
@@ -3029,19 +3124,19 @@ requireTokens("apps/web/app/(app)/kurum/guvenlik-denetimi/security-audit-page.ts
   "securityEventCategoryTone",
   "formatSecurityEventAction",
   "formatSecurityEntityType",
-  'value: "Staging/prod kanıt bekliyor"',
-  "Safe-list audit",
-  "PII ham gösterilmez",
-  "Release kanıtı ayrı",
+  'value: "Canlı ortam kontrolü bekliyor"',
+  "Kişisel veriler gizli",
+  "Değişiklik ayrıntıları gizli",
+  "Canlı ortam kontrolü ayrı",
   'scope: "server-audit"',
   'scope: "local-static"',
   'scope: "staging-prod"',
   'evidenceState: "Release kararına yetmez"',
   'scope: "Yerel/statik"',
   "Canlı kanıt",
-  "RLS canlı",
-  "Sunucu/audit",
-  "Production config",
+  "Canlı veritabanı",
+  "Sunucu kayıtları",
+  "Canlı ortam ayarları",
   "Güvenlik olayları alınamadı.",
   "SECURITY_AUDIT_TARGET=file://$PWD/docs/evidence-templates/security-audit.example.json pnpm security:audit:check",
   "pnpm prod:env:check",
@@ -3050,10 +3145,10 @@ requireTokens("apps/web/app/(app)/kurum/guvenlik-denetimi/security-audit-page.ts
   "Strict-Transport-Security",
   "Content-Security-Policy",
   "COOKIE_SECURE=true",
-  "refresh session revocation",
-  "RLS live check",
-  "audit PII redaction",
-  "SENTRY_SEND_DEFAULT_PII=false",
+  "Oturum yenileme ve iptal",
+  "Canlı veritabanı erişim kontrolü",
+  "İşlem kayıtlarında kişisel veri gizleme",
+  "Hata izleme kişisel veri ayarı",
   'return "Kimlik olayı"',
   "return event.entityLabel",
 ]);
@@ -3080,17 +3175,17 @@ requireNoTokens("apps/web/app/(app)/kurum/guvenlik-denetimi/security-audit-page.
 ]);
 
 requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
-  'getByRole("region", { exact: true, name: "Güvenlik denetimi operasyon özeti" })',
-  "Güvenlik denetimi operasyon özeti aksiyon kuyruğu",
+  'getByRole("region", { exact: true, name: "Güvenlik durumu özeti" })',
+  "Güvenlik durumu özeti aksiyon kuyruğu",
   'getByRole("table", { name: "Güvenlik olayları" })',
-  'getByRole("region", { name: "Güvenlik denetimi kapıları" })',
-  'getByRole("region", { name: "Header kontrolleri" })',
-  'getByRole("region", { name: "Auth kontrolleri" })',
-  'getByRole("region", { name: "Veri kontrolleri" })',
-  'getByRole("table", { name: "Güvenlik denetimi kanıt kapıları" })',
-  'getByRole("table", { name: "Güvenlik header kontrolleri" })',
-  'getByRole("table", { name: "Güvenlik auth kontrolleri" })',
-  'getByRole("table", { name: "Güvenlik veri kontrolleri" })',
+  'getByRole("region", { name: "Canlıya geçiş güvenlik kontrolleri" })',
+  'getByRole("region", { name: "Bağlantı güvenliği kontrolleri" })',
+  'getByRole("region", { name: "Oturum güvenliği kontrolleri" })',
+  'getByRole("region", { name: "Kurum ve kişisel veri güvenliği kontrolleri" })',
+  'getByRole("table", { name: "Canlıya geçiş güvenlik kontrolleri" })',
+  'getByRole("table", { name: "Bağlantı güvenliği kontrolleri" })',
+  'getByRole("table", { name: "Oturum güvenliği kontrolleri" })',
+  'getByRole("table", { name: "Kurum ve kişisel veri güvenliği kontrolleri" })',
   'getByRole("columnheader", { name: "Olay" })',
   'getByRole("columnheader", { name: "Kategori" })',
   'getByRole("columnheader", { name: "Kayıt" })',
@@ -3101,10 +3196,10 @@ requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
   "Strict-Transport-Security",
   "Content-Security-Policy",
   "COOKIE_SECURE=true",
-  "refresh session revocation",
-  "RLS live check",
-  "audit PII redaction",
-  "SENTRY_SEND_DEFAULT_PII=false",
+  "Oturum yenileme ve iptal",
+  "Canlı veritabanı erişim kontrolü",
+  "İşlem kayıtlarında kişisel veri gizleme",
+  "Hata izleme kişisel veri ayarı",
   "searchParams.get(\"sort\")).toBe(\"-createdAt\")",
   "searchParams.get(\"limit\")).toBe(\"20\")",
   "auditSafeListFailure",
@@ -3154,9 +3249,9 @@ requireTokens("apps/web/app/(app)/kurum/sistem-sagligi/system-health-page.tsx", 
   "DataTable",
   "Panel",
   "StatusBadge",
-  'ariaLabel="Sistem sağlık operasyon özeti"',
-  'caption="Sistem bağımlılık durumu"',
-  'caption="Sistem sağlık endpointleri"',
+  'ariaLabel="Sistem sağlığı özeti"',
+  'caption="Sistem bağlantıları ve kullanım durumu"',
+  'caption="Teknik sistem kontrol adresleri"',
   'density="compact"',
   'mobilePriority: "primary"',
   'mobilePriority: "secondary"',
@@ -3168,7 +3263,7 @@ requireTokens("apps/web/app/(app)/kurum/sistem-sagligi/system-health-page.tsx", 
   "buildSystemHealthSummaryActions",
   "buildDependencyRows",
   "buildEndpointRows",
-  'ariaLabel="Sistem sağlık güven durumu"',
+  'ariaLabel="Sistem sağlığı doğrulama durumu"',
   'scope: sourceLabel(apiUrl) === "Lokal/dev" ? "local-static" : "configured-api"',
   'scope: "configured-api"',
   'scope: "staging-prod"',
@@ -3180,14 +3275,14 @@ requireNoTokens("apps/web/app/(app)/kurum/sistem-sagligi/system-health-page.tsx"
 ]);
 
 requireTokens("apps/web/e2e-next/governance-evidence-contract-next.spec.ts", [
-  'getByRole("region", { exact: true, name: "Sistem sağlık operasyon özeti" })',
-  'getByRole("table", { name: "Sistem bağımlılık durumu" })',
-  'getByRole("table", { name: "Sistem sağlık endpointleri" })',
-  "Sistem sağlık operasyon özeti aksiyon kuyruğu",
-  'getByRole("region", { exact: true, name: "Gözlemlenebilirlik operasyon özeti" })',
-  'getByRole("table", { name: "Gözlemlenebilirlik endpointleri" })',
-  "Gözlemlenebilirlik operasyon özeti aksiyon kuyruğu",
-  "Endpoint kısmi",
+  'getByRole("region", { exact: true, name: "Sistem sağlığı özeti" })',
+  'getByRole("table", { name: "Sistem bağlantıları ve kullanım durumu" })',
+  'getByRole("table", { name: "Teknik sistem kontrol adresleri" })',
+  "Sistem sağlığı özeti aksiyon kuyruğu",
+  'getByRole("region", { exact: true, name: "Sistem izleme özeti" })',
+  'getByRole("table", { name: "Anlık sistem kontrol adresleri" })',
+  "Sistem izleme özeti aksiyon kuyruğu",
+  "Anlık durum kısmi",
   "observability:uat:check",
   "alert:webhook:smoke",
   "sentry:smoke",
@@ -3201,11 +3296,11 @@ requireTokens("apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.ts
   "DataTable",
   "Panel",
   "StatusBadge",
-  'ariaLabel="Gözlemlenebilirlik operasyon özeti"',
-  'caption="Gözlemlenebilirlik endpointleri"',
-  'caption="Gözlemlenebilirlik dashboard panelleri"',
-  'caption="Gözlemlenebilirlik alert kuralları"',
-  'caption="Gözlemlenebilirlik telemetri kontrolleri"',
+  'ariaLabel="Sistem izleme özeti"',
+  'caption="Anlık sistem kontrol adresleri"',
+  'caption="Sistem izleme panoları"',
+  'caption="Sistem uyarı kuralları"',
+  'caption="Teknik sistem izleme kontrolleri"',
   'density="compact"',
   'mobilePriority: "primary"',
   'mobilePriority: "secondary"',
@@ -3219,9 +3314,9 @@ requireTokens("apps/web/app/(app)/kurum/gozlemlenebilirlik/observability-page.ts
   "buildChecklistRows",
   "observabilityEndpointState",
   "observabilityEndpointTone",
-  "Alert kanalı",
-  "Dashboard kanıtı",
-  'ariaLabel="Gözlemlenebilirlik güven durumu"',
+  "Uyarı kanalı",
+  "İzleme panoları",
+  'ariaLabel="Sistem izleme doğrulama durumu"',
   'scope: sourceLabel(apiUrl) === "Lokal/dev" ? "local-static" : "configured-api"',
   'scope: "configured-api"',
   'scope: "live-required"',
@@ -3241,12 +3336,12 @@ requireTokens("apps/web/app/(app)/kurum/canli-yayin/live-release-page.tsx", [
   "DataTable",
   "Panel",
   "StatusBadge",
-  'ariaLabel="Release kanıt operasyon özeti"',
-  'caption="Release kanıt kapıları"',
-  'caption="Production evidence adımları"',
-  'caption="Release özeti alanları"',
-  'caption="Go-live karar alanları"',
-  'caption="Dış ortam kanıtları"',
+  'ariaLabel="Yayın hazırlığı özeti"',
+  'caption="Yayın öncesi kontroller"',
+  'caption="Canlı ortam doğrulamaları"',
+  'caption="Doğrulama özeti alanları"',
+  'caption="Canlıya geçiş kararları"',
+  'caption="Dış sistem doğrulamaları"',
   'density="compact"',
   'mobilePriority: "primary"',
   'mobilePriority: "secondary"',
@@ -3263,12 +3358,12 @@ requireTokens("apps/web/app/(app)/kurum/canli-yayin/live-release-page.tsx", [
   "productionEvidenceDetail",
   "finalDecisionDetail",
   "externalEvidenceScope",
-  "CLI-only",
-  "Yerel/static karar vermez",
-  "Staging/prod evidence",
-  "Canlı kanıt gerekir",
-  "Panel aksiyonu",
-  "Pilot kapanış",
+  "Bu ekran yalnız bilgi verir",
+  "Yerel kontrol yeterli değildir",
+  "Deneme ve canlı ortam sonucu gerekir",
+  "Canlı doğrulama gerekir",
+  "Yayın işlemi",
+  "Pilot değerlendirmesi",
   "pnpm prod:evidence:check",
   "pnpm pilot:check",
   "pnpm go-live:check",
@@ -3279,14 +3374,14 @@ requireTokens("apps/web/app/(app)/kurum/canli-yayin/live-release-page.tsx", [
   "operations.alertChannelReady = true",
   "reports.uat.rollbackImageTag",
   "reports.deploymentRollback.rollbackImageTag",
-  "Sentry test event",
-  "WAL archive target",
-  "UAT evidence",
-  "Staging/prod domain",
-  "Sentry DSN ve alert webhook",
-  "Off-host backup ve WAL hedefi",
-  "Pilot kapanış kanıtı",
-  "Go-live karar paketi",
+  "Hata izleme test olayı",
+  "Veritabanı değişiklik arşivi",
+  "Kullanıcı kabul testi",
+  "Deneme veya canlı ortam adresi",
+  "Hata izleme ve uyarı kanalı",
+  "Harici yedek ve veritabanı arşivi",
+  "Pilot değerlendirme sonuçları",
+  "Canlıya geçiş karar paketi",
 ]);
 
 requireNoTokens("apps/web/app/(app)/kurum/canli-yayin/live-release-page.tsx", [
@@ -3304,12 +3399,12 @@ requireTokens("apps/web/app/(app)/kurum/uat-rollback/uat-rollback-page.tsx", [
   "DataTable",
   "Panel",
   "StatusBadge",
-  'ariaLabel="UAT rollback operasyon özeti"',
-  'caption="UAT rollback kanıt kapıları"',
-  'caption="UAT akışları"',
-  'caption="UAT persona senaryoları"',
-  'caption="UAT zorunlu komutları"',
-  'caption="Rollback zorunlu alanları"',
+  'ariaLabel="Kullanıcı kabulü ve geri dönüş özeti"',
+  'caption="Yayın öncesi kabul ve geri dönüş kontrolleri"',
+  'caption="Kullanıcı kabul akışları"',
+  'caption="Kullanıcı yolculuğu senaryoları"',
+  'caption="Yayın öncesi zorunlu komutlar"',
+  'caption="Geri dönüş için zorunlu bilgiler"',
   'density="compact"',
   'mobilePriority: "primary"',
   'mobilePriority: "secondary"',
@@ -3323,10 +3418,10 @@ requireTokens("apps/web/app/(app)/kurum/uat-rollback/uat-rollback-page.tsx", [
   "personaScope",
   "commandScope",
   "rollbackFieldDetail",
-  "CLI-only",
-  "Release kanıtı ayrı",
+  "Yalnızca kontrol",
+  "Yayın raporu ayrı",
   "Canlı kanıt gerekir",
-  "Server/audit zorunlu",
+  "Onay ve işlem kaydı zorunlu",
   "pnpm db:rls:check:live",
   "pnpm traefik:https:smoke",
   "rollbackImageTag",
@@ -4038,7 +4133,7 @@ requireTokens("apps/web/app/(app)/portals/guardian-portal-page.tsx", [
   "/me/guardian/students/${encodeURIComponent(studentId)}/homework/material-assignments",
   "homeworkAssignments,",
   "supportReadOnly",
-  'actionLabel: supportReadOnly ? (isRolePreview ? "Salt-okuma" : "Kapalı")',
+  'actionLabel: supportReadOnly ? (isRolePreview ? "Yalnızca görüntüleme" : "Kapalı")',
   'detail: supportReadOnly ? (isRolePreview ? "Destek talebi açma kapalı" : "Destek talebi izni kapalı")',
   "Veli destek talebi izni kapalı.",
   "auth && resolvedStudentId && !isRolePreview",
@@ -4110,24 +4205,24 @@ requireTokens("apps/web/app/(app)/portals/_shared/portal-shell.tsx", [
   ".map((key) => items.find",
   "AccessPanel",
   'aria-label="Portal erişimi"',
-  'title="Portal erişimi"',
-  "Portalı görmek için ilgili kişi hesabıyla giriş yapın.",
+  'title="Kişisel ekran erişimi"',
+  "Bu ekranı görmek için öğretmen, öğrenci veya veli hesabıyla giriş yapın.",
   "PortalStatePanel",
   'className="next-portal-state"',
   "RolePreviewNotice",
-  'aria-label="Rol önizleme modu"',
-  'title="Salt-okuma Önizleme"',
+  'aria-label="Rol önizleme bilgisi"',
+  'title="Yalnızca Görüntüleme"',
   "contextLabel?: string",
   "statusLabel?: string",
   'actions={<p className="next-portal-brief__summary">{summary}</p>}',
   'description={<span className="next-section-eyebrow">Bugünün odağı</span>}',
-  '<UiMetricGrid aria-label={`${title} metrikleri`} className="next-portal-brief__grid" role="group">',
+  '<UiMetricGrid aria-label={`${title} özeti`} className="next-portal-brief__grid" role="group">',
   '<MetricCard',
   'className="next-portal-brief__item"',
   "tone={portalDailyBriefMetricTone(item.tone)}",
   "function portalDailyBriefMetricTone",
   'if (tone === "critical" || tone === "warning") return "warning";',
-  'eyebrow = "Günlük iş kuyruğu"',
+  'eyebrow = "Bugün yapılacaklar"',
   'description={<span className="next-section-eyebrow">{eyebrow}</span>}',
   "portalActionAriaLabel",
   'item.contextLabel',
@@ -4192,11 +4287,11 @@ requireTokens("apps/web/app/(app)/portals/_shared/student-panels.tsx", [
   "Panel,",
   "StudentFocusPanel",
   "StatusBadge",
-  'aria-label="Öğrenci operasyon bağlamı"',
-  'title="Öğrenci Odağı"',
-  '<InfoGrid className="next-portal-focus__grid" aria-label="Öğrenci operasyon bağlam metrikleri" role="region">',
+  'aria-label="Seçili öğrenci özeti"',
+  'title="Seçili Öğrenci"',
+  '<InfoGrid className="next-portal-focus__grid" aria-label="Seçili öğrenci bilgileri" role="region">',
   '<InfoItem key={item.label} label={item.label} value={item.value} />',
-  "Öğrenci Odağı",
+  "Seçili Öğrenci",
   "Başarı %",
   "Soru",
   "Net",
@@ -4250,7 +4345,7 @@ requireTokens("apps/web/app/(app)/portals/_shared/support-tickets-panel.tsx", [
   'mobilePriority: "primary"',
   'mobilePriority: "secondary"',
   "readOnlyMessage",
-  "Salt-okuma önizlemede destek talebi açılamaz.",
+  "Yalnızca görüntüleme sırasında destek talebi açılamaz.",
   "Kapandı",
   "supportPriorityTone",
   "supportStatusTone",
@@ -4335,7 +4430,7 @@ requireTokens("apps/web/app/(app)/portals/_shared/homework-panels.tsx", [
   'aria-label="Öğretmen materyal atamaları"',
   'title="Materyal Atamaları"',
   'caption="Öğretmen materyal atamaları"',
-  "Salt-okuma",
+  "Yalnızca görüntüleme",
   "Bilinmeyen materyal",
   "Bilinmeyen öğrenci",
   "Ders bilgisi yok",
@@ -4409,7 +4504,7 @@ requireTokens("apps/web/app/(app)/portals/teacher-portal-page.tsx", [
   'aria-label="Öğrenci çalışma alanı"',
   'aria-label="Öğretmen günlük işlemleri"',
   "readOnly={isRolePreview}",
-  "Rol önizleme salt-okuma modundadır.",
+  "Bu önizlemede işlem yapılamaz.",
   '<Alert tone="danger" title="İşlem kaydedilemedi">',
   "Yoklama kaydet",
   "Not ekle",
@@ -4439,18 +4534,18 @@ requireTokens("apps/web/app/(app)/portals/_shared/teacher-panels.tsx", [
   "InfoItem,",
   "Panel,",
   "TeacherFocusPanel",
-  'aria-label="Öğretmen operasyon bağlamı"',
+  'aria-label="Seçili sınıf ve öğrenci özeti"',
   'className="next-teacher-focus"',
-  'title="Öğrenci Odağı"',
-  'description="Seçili çalışma bağlamı"',
-  '<InfoGrid className="next-teacher-focus__grid" aria-label="Öğretmen operasyon bağlam metrikleri" role="region">',
+  'title="Seçili Öğrenci"',
+  'description="Seçili sınıfın, öğrencinin ve günün özeti"',
+  '<InfoGrid className="next-teacher-focus__grid" aria-label="Seçili sınıf ve öğrenci bilgileri" role="region">',
   '<InfoItem label="Başarı %" value={formatPercentNumber(successRate)} />',
   '<InfoItem label="Soru" value={formatNumber(questionCount)} />',
   '<InfoItem label="Net" value={formatNumber(net)} />',
   'const supportTicketStatus = openSupportTicketCount > 0 ? `${openSupportTicketCount} açık` : "Açık talep yok";',
   '<InfoItem label="Destek" value={supportTicketStatus} />',
   "StatusBadge",
-  "Öğrenci Odağı",
+  "Seçili Öğrenci",
   "Başarı %",
   "Net",
   "Soru",
@@ -4468,7 +4563,7 @@ requireTokens("apps/web/app/(app)/portals/_shared/teacher-panels.tsx", [
   'header: "Başarı %"',
   'header: "Net"',
   'header: "Soru"',
-  "Başarı % ana karşılaştırma metriğidir",
+  "Soru sayıları farklı raporları Başarı % ile karşılaştırın",
 ]);
 
 requireTokens("packages/ui/src/components/metric-card.tsx", [
@@ -4513,7 +4608,12 @@ requireTokens("packages/ui/tsconfig.contract.json", [
 ]);
 
 requireTokens("packages/ui/test/primitives.contract.tsx", [
-  'import { ActionCard, InfoGrid, InfoItem, MetricCard, MetricGrid, Panel } from "../src/index.js";',
+  'from "../src/index.js";',
+  "export const fieldStateContract",
+  "export const modalStateContract",
+  "export const interactionContract",
+  'submitError="Kayıt tamamlanamadı."',
+  "<Tooltip",
   '<MetricGrid role="region" aria-label="Rapor metrikleri"',
   "<MetricCard",
   'description="Ana karşılaştırma metriği"',
@@ -4567,6 +4667,8 @@ requireTokens("apps/web/app/globals.css", [
   ".uh-action-card__value",
   ".uh-action-card__detail",
   ".uh-action-card__state",
+  ".uh-data-table-scroll",
+  ".uh-data-table-scroll:focus-visible",
   ".next-chart-panel > .uh-panel__header",
   ".next-chart-panel > .uh-panel__body",
   ".next-chart-panel > .uh-panel__body > :first-child",
@@ -4749,30 +4851,28 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   'toHaveScreenshot("report-status-1440.png"',
   "hideNextDevIndicator",
   "landing 320/375/414/768/1024/1280/1440 görünümde gerçek ürün akışını taşmadan gösterir",
-  'getByRole("region", { name: "Optikten portala ürün akışı" })',
+  'getByRole("region", { name: "Örnek sınav akışı" })',
   'page.locator(".next-marketing-product")).toHaveCount(0)',
   "grafit-mercan-landing-${viewport.width}",
   "`grafit-mercan-landing-${viewport.width}.png`",
   "expectPortalDailyBrief",
   'getByRole("region", { name: "Günlük durum" })',
   'getByRole("region", { name: "Günlük ders akışı" })',
-  'brief.getByRole("group", { name: /metrikleri/ })',
+  'brief.getByRole("group", { name: /özeti/ })',
   'metrics).toHaveClass(/uh-metric-grid/)',
   'metrics.locator(".next-portal-brief__item.uh-metric-card")).toHaveCount(expectedCount)',
   "kurum dashboard 320/375/414/768/1024/1440 görünümde özet, karar ve rapor sözleşmesini korur",
-  'getByRole("region", { exact: true, name: "Kurum özeti" })',
-  "overviewRegion).toHaveClass(/uh-metric-grid/)",
-  'overviewRegion.locator(".uh-metric-card")).toHaveCount(4)',
+  'getByRole("region", { exact: true, name: "Kurum özeti" })).toHaveCount(0)',
   'getByRole("region", { exact: true, name: "Bugün dikkat gerektirenler" })',
   'attentionRegion.locator(".next-attention-item.uh-action-card")).toHaveCount(4)',
   'attentionRegion.locator(".next-attention-item:not(.uh-action-card)")).toHaveCount(0)',
-  'getByRole("region", { exact: true, name: "Operasyon özeti" })',
-  'getByRole("region", { exact: true, name: "Karar sinyalleri" })',
-  'getByRole("region", { exact: true, name: "Kurum dashboard operasyon özeti" })',
-  'getByRole("group", { name: "Kurum dashboard operasyon özeti metrikleri" })',
+  'getByRole("region", { exact: true, name: "Günlük özet" })',
+  'getByRole("region", { exact: true, name: "İlgilenilecek işler" })',
+  'getByRole("region", { exact: true, name: "Kurum günlük durum özeti" })',
+  'getByRole("group", { name: "Kurum günlük durum özeti metrikleri" })',
   'dashboardSummaryMetrics).toHaveClass(/uh-metric-grid/)',
   'dashboardSummaryMetrics.locator(".uh-metric-card")).toHaveCount(4)',
-  'getByRole("table", { name: "Operasyon özeti" })',
+  'getByRole("table", { name: "Günlük özet" })',
   'operationsTable.locator(".next-dashboard-link-cell.uh-action-card")).toHaveCount(3)',
   'decisionsTable.locator(".next-dashboard-link-cell.uh-action-card")).toHaveCount(4)',
   'page.locator(".next-decision-card, .next-dashboard-summary-card")).toHaveCount(0)',
@@ -4801,8 +4901,8 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   'selectedFormSummary.locator(".uh-info-item")).toHaveCount(4)',
   ".next-portal-summary-card",
   "Başarı %",
-  "READY rapor",
-  "Tenant scope doğrulandı",
+  "Rapor hazır",
+  "Kurum erişimi doğrulandı",
   "öğrenci listesi 320/375/414/768/1024/1440 görünümde URL state ile taşmadan kalır",
   "faz9-students-list-${viewport.width}",
   "`faz9-students-list-${viewport.width}.png`",
@@ -4845,7 +4945,7 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   "{ height: 812, width: 375 }",
   "{ height: 896, width: 414 }",
   "{ height: 1024, width: 768 }",
-  "{ height: 900, width: 1024 }",
+  "{ height: 960, width: 1024 }",
   "{ height: 960, width: 1440 }",
   "page.clock.setFixedTime",
   "createHomeworkMaterials",
@@ -4879,14 +4979,14 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   'getByRole("region", { name: "Veli günlük aksiyonları" })',
   'getByRole("region", { name: "Öğretmen günlük aksiyonları" })',
   "studentFocusMetrics",
-  'getByRole("region", { name: "Öğrenci operasyon bağlam metrikleri" })',
+  'getByRole("region", { name: "Seçili öğrenci bilgileri" })',
   'studentFocusMetrics).toHaveClass(/uh-info-grid/)',
   'studentFocusMetrics.locator(".uh-info-item")).toHaveCount(8)',
   "guardianFocusMetrics",
   'guardianFocusMetrics).toHaveClass(/uh-info-grid/)',
   'guardianFocusMetrics.locator(".uh-info-item")).toHaveCount(9)',
   "teacherFocusMetrics",
-  'getByRole("region", { name: "Öğretmen operasyon bağlam metrikleri" })',
+  'getByRole("region", { name: "Seçili sınıf ve öğrenci bilgileri" })',
   'teacherFocusMetrics).toHaveClass(/uh-info-grid/)',
   'teacherFocusMetrics.locator(".uh-info-item")).toHaveCount(8)',
   "`faz9-${portalCase.key}-action-strip-${viewport.width}.png`",
@@ -4908,6 +5008,74 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
   'getByRole("columnheader", { name: "Soru" })',
 ]);
 
+requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
+  "expectRouteFamilyGolden",
+  "await document.fonts.ready",
+  'document.fonts.status)).toBe("loaded")',
+  "await karneSheet.scrollIntoViewIfNeeded()",
+  'page.locator("nextjs-portal")).toBeHidden()',
+  "fullPage: false",
+  '"route-family-landing-1280.png"',
+  '"route-family-auth-forgot-414.png"',
+  '"route-family-dashboard-1440.png"',
+  '"route-family-students-list-414.png"',
+  '"route-family-attendance-414.png"',
+  '"route-family-student-detail-768.png"',
+  '"route-family-student-portal-414.png"',
+  '"route-family-report-1440.png"',
+  '"route-family-evidence-1440.png"',
+  'toHaveScreenshot("institution-shell-rail-1440.png"',
+]);
+requireNoTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
+  "alignFrozenReportRasterPhase",
+  "alignFrozenKarneRasterPhase",
+  'element.style.transform = "translateY(-1px)"',
+  "const legacyOffset = 0.265625",
+  'page.locator(".next-workspace").evaluate',
+  'element.style.removeProperty("transform")',
+  "for (const element of elements) element.remove()",
+]);
+requireTokens("apps/web/app/globals.css", ["scroll-margin-block-start: 4.5rem;"]);
+requireRegexCount(
+  "apps/web/e2e-next/ui-visual-qa-next.spec.ts",
+  /await expectRouteFamilyGolden\(/g,
+  9,
+  "route family golden invocation",
+);
+requireTokensInOrder("apps/web/e2e-next/ui-visual-qa-next.spec.ts", [
+  '"route-family-landing-1280.png"',
+  '"route-family-auth-forgot-414.png"',
+  '"route-family-dashboard-1440.png"',
+  '"route-family-students-list-414.png"',
+  '"route-family-attendance-414.png"',
+  '"route-family-student-detail-768.png"',
+  '"route-family-student-portal-414.png"',
+  '"route-family-report-1440.png"',
+  '"route-family-evidence-1440.png"',
+]);
+const routeFamilyGoldenNames = [
+  "route-family-landing-1280",
+  "route-family-auth-forgot-414",
+  "route-family-dashboard-1440",
+  "route-family-students-list-414",
+  "route-family-attendance-414",
+  "route-family-student-detail-768",
+  "route-family-student-portal-414",
+  "route-family-report-1440",
+  "route-family-evidence-1440",
+];
+for (const platform of ["darwin", "linux"]) {
+  for (const goldenName of routeFamilyGoldenNames) {
+    const goldenPath = join(
+      "apps/web/e2e-next/__screenshots__/ui-visual-qa-next.spec.ts",
+      `${goldenName}-${platform}.png`,
+    );
+    if (!existsSync(goldenPath)) {
+      failures.push(`route family golden eksik: ${goldenPath}`);
+    }
+  }
+}
+
 requireTokens("scripts/profile-web-performance.mjs", [
   "WEB_PERFORMANCE_BUDGET",
   "landingHeroFallbackPng",
@@ -4917,17 +5085,17 @@ requireTokens("scripts/profile-web-performance.mjs", [
   "Landing route server component",
   "Landing route useQuery",
   "next-marketing-workflow",
-  "Optikten portala ürün akışı",
-  "Yetkili portallara açın",
+  "Örnek sınav akışı",
+  "Karne ve raporları paylaşın",
 ]);
 
 requireTokens("apps/web/app/page.tsx", [
   "next-marketing-workflow",
-  'aria-label="Optikten portala ürün akışı"',
-  "Sınavı seçin",
-  "Optik veriyi işleyin",
-  "Raporu doğrulayın",
-  "Yetkili portallara açın",
+  'aria-label="Örnek sınav akışı"',
+  "Sınavı hazırlayın",
+  "Optik dosyayı aktarın",
+  "Sonuçları kontrol edin",
+  "Karne ve raporları paylaşın",
 ]);
 
 requireTokens("apps/web/playwright.next.config.ts", [
@@ -5007,6 +5175,19 @@ function requireNoTokens(path, tokens) {
   }
 }
 
+function requireTokensInOrder(path, tokens) {
+  const source = files[path];
+  let previousIndex = -1;
+  for (const token of tokens) {
+    const index = source.indexOf(token, previousIndex + 1);
+    if (index < 0) {
+      failures.push(`${path} missing ordered token after index ${previousIndex}: ${token}`);
+      return;
+    }
+    previousIndex = index;
+  }
+}
+
 function requireOccurrenceCount(path, token, expectedCount) {
   const source = files[path];
   const count = source.split(token).length - 1;
@@ -5032,6 +5213,97 @@ function requireNoTokensInFiles(label, paths, tokens) {
       }
     }
   }
+}
+
+function validateRouteFamilySmokeContract() {
+  const path = "apps/web/e2e-next/ui-route-family-smoke-next.spec.ts";
+  const source = files[path];
+  const manifestStart = source.indexOf("const routeCases = [");
+  const manifestEnd = source.indexOf("] satisfies RouteCase[];", manifestStart);
+  if (manifestStart < 0 || manifestEnd < 0) {
+    failures.push(`${path} must declare routeCases with the checked RouteCase shape.`);
+    return;
+  }
+
+  const manifestSource = source.slice(manifestStart, manifestEnd);
+  const manifestRoutes = [...manifestSource.matchAll(/^\s*route\("([^"]+)"/gm)].map((match) => match[1]);
+  const duplicateRoutes = manifestRoutes.filter((route, index) => manifestRoutes.indexOf(route) !== index);
+  const fileSystemRoutes = collectRoutePageTemplates("apps/web/app").sort();
+  if (manifestRoutes.length !== 73) {
+    failures.push(`${path} route manifest must contain exactly 73 route tests; found ${manifestRoutes.length}.`);
+  }
+  if (duplicateRoutes.length > 0) {
+    failures.push(`${path} route manifest contains duplicate routes: ${[...new Set(duplicateRoutes)].join(", ")}.`);
+  }
+  if (JSON.stringify([...manifestRoutes].sort()) !== JSON.stringify(fileSystemRoutes)) {
+    failures.push(`${path} route manifest must exactly match the apps/web/app page.tsx inventory.`);
+  }
+
+  const primaryTaskCount = manifestSource.match(/\{ role: "(?:button|form|link|region)", name: "[^"]+" \}/g)?.length ?? 0;
+  if (primaryTaskCount !== 73) {
+    failures.push(`${path} must give all 73 routes an explicit accessible primary task; found ${primaryTaskCount}.`);
+  }
+
+  const viewportStart = source.indexOf("const routeViewports = [");
+  const viewportEnd = source.indexOf("] as const;", viewportStart);
+  const viewportSource = viewportStart >= 0 && viewportEnd >= 0 ? source.slice(viewportStart, viewportEnd) : "";
+  const viewports = [...viewportSource.matchAll(/\{ height: (\d+), width: (\d+) \}/g)]
+    .map((match) => ({ height: Number(match[1]), width: Number(match[2]) }));
+  const requiredViewports = [
+    { height: 812, width: 320 },
+    { height: 812, width: 375 },
+    { height: 896, width: 414 },
+    { height: 1024, width: 768 },
+  ];
+  if (JSON.stringify(viewports) !== JSON.stringify(requiredViewports)) {
+    failures.push(`${path} must test exactly the 320, 375, 414 and 768 pixel viewport contracts.`);
+  }
+
+  requireTokens(path, [
+    'test.describe.configure({ mode: "parallel" });',
+    "test.setTimeout(120_000);",
+    'waitUntil: "domcontentloaded"',
+    'page.locator("main:visible")',
+    'main.locator("h1:visible")',
+    'contractLabel(routeCase, viewport, "document title")',
+    "toHaveTitle(/\\S/)",
+    "expectNoHorizontalOverflow",
+    "expectNoClippedVisibleText",
+    '"a, button, div, span, label, h1, h2, h3, p, li, dt, dd, th, td, [role=\'status\'], [role=\'alert\']"',
+    "leafOnlyTag",
+    "isNamedKeyboardScrollRegion",
+    "expectNoUnlabeledControls",
+    "expectClickableTextOnOneLine",
+    "document.createTreeWalker",
+    "NodeFilter.SHOW_TEXT",
+    "document.createRange",
+    "range.getClientRects()",
+    "AxeBuilder",
+    'new Set(["critical", "serious"])',
+    "unknownApiRequests.push",
+    "UNHANDLED_ROUTE_SMOKE_API",
+    "501",
+    'request.method() !== "GET"',
+    'query: "tenant=dna-egitim"',
+    'query: "token=reset-token"',
+    'query: "examId=exam-demo-isem-lgs-1&studentId=student-a"',
+    'routeCase.feature === "sms" && process.env.NEXT_PUBLIC_SMS_ENABLED !== "true"',
+  ]);
+  requireNoTokens(path, ["networkidle", ".screenshot(", "test.skip"]);
+}
+
+function collectRoutePageTemplates(directory, segments = []) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      const nextSegments = entry.name.startsWith("(") && entry.name.endsWith(")") ? segments : [...segments, entry.name];
+      return collectRoutePageTemplates(path, nextSegments);
+    }
+    if (entry.isFile() && entry.name === "page.tsx") {
+      return [segments.length === 0 ? "/" : `/${segments.join("/")}`];
+    }
+    return [];
+  });
 }
 
 function collectSourceFiles(directory, extensions) {

@@ -11,6 +11,7 @@ export default function ForgotPasswordPage() {
   const [nationalId, setNationalId] = useState("");
   const [status, setStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const loginHref = tenantSlug ? `/k/${encodeURIComponent(tenantSlug)}/giris` : "/login";
 
   useEffect(() => {
     setTenantSlug(new URLSearchParams(window.location.search).get("tenant")?.trim() ?? "");
@@ -22,7 +23,7 @@ export default function ForgotPasswordPage() {
     setIsSubmitting(true);
     try {
       await requestPasswordReset({ tenantSlug: tenantSlug.trim(), nationalId: nationalId.trim() });
-      setStatus("Bilgiler eşleşiyor ve kayıtlı iletişim kanalı aktifse parola yenileme bağlantısı gönderildi. Mesaj gelmezse kurum yöneticinizden parolanızı sıfırlamasını isteyin.");
+      setStatus("İsteğiniz alındı. Bilgiler eşleşiyor ve kayıtlı iletişim kanalı aktifse şifre yenileme adımları paylaşılır. Mesaj gelmezse kurum yöneticinizden şifrenizi sıfırlamasını isteyin.");
     } catch {
       setStatus("İstek şu anda tamamlanamadı. Lütfen biraz sonra tekrar deneyin.");
     } finally {
@@ -37,7 +38,7 @@ export default function ForgotPasswordPage() {
         <span>{appBrand.name}</span>
       </div>
       <form className="next-form" onSubmit={(event) => void handleSubmit(event)}>
-        <h1 id="forgot-password-title">Parolamı unuttum</h1>
+        <h1 id="forgot-password-title">Şifremi unuttum</h1>
         <p className="next-status-note">Kurum kodunuzu ve kullanıcı adınız olan TC kimlik numaranızı girin.</p>
         <Field label="Kurum kodu">
           <Input
@@ -59,11 +60,16 @@ export default function ForgotPasswordPage() {
           />
         </Field>
         {status ? <p className="next-status-note" role="status">{status}</p> : null}
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Gönderiliyor" : "Yenileme bağlantısı gönder"}
+        <Button type="submit" disabled={isSubmitting} loading={isSubmitting} loadingLabel="Gönderiliyor">
+          Yenileme bağlantısı gönder
         </Button>
-        <Link className="next-auth-link" href="/login">Girişe dön</Link>
+        <Link className="next-auth-link" href={loginHref}>Girişe dön</Link>
       </form>
+      <aside className="next-auth-context" aria-label="Şifre yenileme güven bilgisi">
+        <p className="next-section-eyebrow">{tenantSlug ? "Kurum hesabı" : "Güvenli şifre yenileme"}</p>
+        <h2>Bu ekran hesabın bulunup bulunmadığını göstermez.</h2>
+        <p>Kurum kodu sizi doğru hesaba yönlendirir. Güvenliğiniz için hesabın ve mesaj teslimatının durumu burada açıklanmaz.</p>
+      </aside>
     </section>
   );
 }

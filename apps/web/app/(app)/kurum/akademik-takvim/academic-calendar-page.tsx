@@ -247,12 +247,12 @@ export function AcademicCalendarPage() {
       sticky: "right",
       render: (record) => (
         <span className="next-row-actions">
-          <button type="button" onClick={() => openYearEditForm(record)} aria-label={`${record.name} yılını düzenle`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => openYearEditForm(record)} aria-label={`${record.name} yılını düzenle`}>
             <Pencil size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => void handleYearDelete(record)} aria-label={`${record.name} yılını sil`}>
+          </Button>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void handleYearDelete(record)} aria-label={`${record.name} yılını sil`}>
             <Trash2 size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </span>
       ),
     },
@@ -282,12 +282,12 @@ export function AcademicCalendarPage() {
       sticky: "right",
       render: (record) => (
         <span className="next-row-actions">
-          <button type="button" onClick={() => openTermEditForm(record)} aria-label={`${record.name} dönemini düzenle`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => openTermEditForm(record)} aria-label={`${record.name} dönemini düzenle`}>
             <Pencil size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => void handleTermDelete(record)} aria-label={`${record.name} dönemini sil`}>
+          </Button>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void handleTermDelete(record)} aria-label={`${record.name} dönemini sil`}>
             <Trash2 size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </span>
       ),
     },

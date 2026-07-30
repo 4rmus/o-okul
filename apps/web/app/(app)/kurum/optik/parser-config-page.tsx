@@ -1355,9 +1355,9 @@ function QuarantineResolutionPanel({
           record.status === "RESOLVED" ? (
             record.evaluationJob ? formatEvidenceSafeReference(record.evaluationJob.jobId, "Kuyruk ref") : "Çözüldü"
           ) : (
-            <button type="button" onClick={() => void onResolve(record)} aria-label={`${record.rowNumber}. satırı çöz`}>
+            <Button size="icon" variant="ghost" type="button" onClick={() => void onResolve(record)} aria-label={`${record.rowNumber}. satırı çöz`}>
               <CheckCircle2 size={17} aria-hidden="true" />
-            </button>
+            </Button>
           ),
       },
     ],

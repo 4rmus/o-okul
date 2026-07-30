@@ -266,23 +266,7 @@ export function AttendancePage() {
             onChange={setListQuery}
             sortOptions={attendanceSortOptions}
             state={listQuery}
-          >
-            <Field className="next-filter-field" label="Geçmiş sınıf filtresi">
-              <Select
-                value={classId}
-                onChange={(event) => {
-                  updateClassFilter(event.target.value);
-                }}
-              >
-                <option value="">Tümü</option>
-                {references.classes.map((record) => (
-                  <option key={record.id} value={record.id}>
-                    {record.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </ListControls>
+          />
         }
         aria-label="Devamsızlık yönetimi"
         columns={columns}

@@ -70,7 +70,7 @@ export function SystemHealthPage() {
   return (
     <PageFrame
       title="Sistem Sağlığı"
-      subtitle="API yaşam, hazırlık ve temel metrik sinyallerini izle."
+      subtitle="Uygulamanın, veritabanının ve arka plan hizmetlerinin çalışır durumda olup olmadığını izleyin."
       actions={
         <Button onClick={() => void healthQuery.refetch()}>
           <RefreshCw size={17} aria-hidden="true" />
@@ -80,64 +80,64 @@ export function SystemHealthPage() {
     >
       <OperationSummary
         actions={summaryActions}
-        ariaLabel="Sistem sağlık operasyon özeti"
+        ariaLabel="Sistem sağlığı özeti"
         badges={summaryBadges}
         items={summaryItems}
       />
       <EvidenceTrustPanel
-        ariaLabel="Sistem sağlık güven durumu"
-        title="Sağlık Sinyali Kanıt Gücü"
-        description="Bu ekran yapılandırılmış API kaynağını okur; staging/prod release kanıtı olarak yorumlanması için ayrı ortam evidence gerekir."
+        ariaLabel="Sistem sağlığı doğrulama durumu"
+        title="Sistem Durumu Nasıl Okunmalı?"
+        description="Bu ekran seçili sistemin anlık durumunu gösterir. Canlıya geçiş kararı için ayrıca yayın öncesi kontroller tamamlanmalıdır."
         items={[
           {
-            label: "API kaynağı",
+            label: "Kontrol edilen sistem",
             value: sourceLabel(apiUrl),
             tone: sourceLabel(apiUrl) === "Lokal/dev" ? "warning" : "info",
             scope: sourceLabel(apiUrl) === "Lokal/dev" ? "local-static" : "configured-api",
-            detail: "Health, readiness ve metrics endpointleri aynı kaynaktan okunur.",
+            detail: "Uygulama, bağlantılar ve temel kullanım bilgileri aynı sistemden okunur.",
           },
           {
-            label: "Anlık durum",
+            label: "Bağlantı durumu",
             value: health?.ready.ok ? "Hazır" : "Bekleniyor",
             tone: health?.ready.ok ? "success" : "warning",
             scope: "configured-api",
-            detail: "Postgres ve Redis readiness sonucu operasyon panelinde görünür.",
+            detail: "Veritabanı ve hızlı erişim hizmetinin bağlantı durumu gösterilir.",
           },
           {
-            label: "Release evidence",
-            value: "Ayrı kapı",
+            label: "Yayın onayı",
+            value: "Ayrı kontrol",
             tone: "warning",
             scope: "staging-prod",
-            detail: "Prod env, HTTPS ve canlı smoke sonuçları evidence dosyalarıyla kanıtlanır.",
+            detail: "Canlı ortam ayarları, güvenli bağlantı ve temel işlemler ayrıca doğrulanır.",
           },
         ]}
       />
       <Panel
-        aria-label="Bağımlılık durumu"
-        description="Postgres, Redis ve metrik sayacı aynı yapılandırılmış API kaynağından okunur."
-        title="Bağımlılıklar"
+        aria-label="Sistem bağlantıları ve kullanım durumu"
+        description="Veritabanı, hızlı erişim hizmeti ve toplam istek sayısı."
+        title="Bağlantılar ve Kullanım"
       >
         <DataTable
-          caption="Sistem bağımlılık durumu"
+          caption="Sistem bağlantıları ve kullanım durumu"
           columns={dependencyColumns}
           density="compact"
-          description="Hazırlık endpointi ve metrics kaynağından gelen anlık durum."
+          description="Seçili sistemden alınan anlık bağlantı ve kullanım bilgileri."
           getRowKey={(row) => row.key}
           rows={dependencyRows}
         />
       </Panel>
       <Panel
-        aria-label="Sistem sağlık detayları"
-        description="Endpoint sonuçları operasyon ekranında görünür; release evidence ayrı kanıt dosyalarıyla doğrulanır."
-        title="Endpoint detayları"
+        aria-label="Teknik sistem kontrolleri"
+        description="Teknik bağlantı adreslerinin anlık yanıtları. Yayın onayı ayrıca verilir."
+        title="Teknik Kontroller"
       >
         {healthQuery.isPending ? <p>Durum alınıyor</p> : null}
         {healthQuery.isError ? <p>Sağlık bilgisi alınamadı.</p> : null}
         <DataTable
-          caption="Sistem sağlık endpointleri"
+          caption="Teknik sistem kontrol adresleri"
           columns={endpointColumns}
           density="compact"
-          description="Health, readiness ve metrics endpointlerinin HTTP sonucu."
+          description="Uygulama, bağlantı ve kullanım adreslerinin yanıtı."
           getRowKey={(row) => row.key}
           loading={healthQuery.isPending}
           rows={endpointRows}
@@ -150,7 +150,7 @@ export function SystemHealthPage() {
 const dependencyColumns: Array<DataTableColumn<DependencyStatusRow>> = [
   {
     key: "dependency",
-    header: "Bağımlılık",
+    header: "Hizmet",
     mobilePriority: "primary",
     priority: "primary",
     render: (row) => row.label,
@@ -165,7 +165,7 @@ const dependencyColumns: Array<DataTableColumn<DependencyStatusRow>> = [
   },
   {
     key: "detail",
-    header: "Bağlam",
+    header: "Açıklama",
     mobilePriority: "secondary",
     priority: "secondary",
     render: (row) => row.detail,
@@ -175,7 +175,7 @@ const dependencyColumns: Array<DataTableColumn<DependencyStatusRow>> = [
 const endpointColumns: Array<DataTableColumn<EndpointStatusRow>> = [
   {
     key: "endpoint",
-    header: "Endpoint",
+    header: "Kontrol adresi",
     mobilePriority: "primary",
     priority: "primary",
     render: (row) => row.label,
@@ -190,7 +190,7 @@ const endpointColumns: Array<DataTableColumn<EndpointStatusRow>> = [
   },
   {
     key: "detail",
-    header: "Bağlam",
+    header: "Açıklama",
     mobilePriority: "secondary",
     priority: "secondary",
     render: (row) => row.detail,
@@ -203,28 +203,28 @@ function buildSystemHealthSummaryItems(health: SystemHealth | undefined): Operat
   const requestCount = health?.metrics.data?.requestCount;
   return [
     {
-      description: "API yaşam endpointi",
+      description: "Uygulamanın yanıt verme durumu",
       key: "api",
       label: "API",
       tone: endpointSummaryTone(health?.health),
       value: healthState,
     },
     {
-      description: "Postgres ve Redis hazırlığı",
+      description: "Veritabanı ve hızlı erişim bağlantıları",
       key: "ready",
       label: "Hazırlık",
       tone: endpointSummaryTone(health?.ready),
       value: readyState,
     },
     {
-      description: "Prometheus process uptime",
+      description: "Uygulamanın kesintisiz çalışma süresi",
       key: "uptime",
-      label: "Uptime",
+      label: "Çalışma süresi",
       tone: health?.metrics.ok ? "info" : health ? "warning" : "default",
       value: formatUptime(health?.metrics.data?.uptimeSeconds),
     },
     {
-      description: "Metrics endpointinden okunan sayaç",
+      description: "Sistemin işlediği toplam web isteği",
       key: "request-count",
       label: "HTTP istek",
       tone: requestCount === null || requestCount === undefined ? "default" : "info",
@@ -242,12 +242,12 @@ function buildSystemHealthSummaryBadges(health: SystemHealth | undefined): Opera
     },
     {
       key: "readiness",
-      label: health?.ready.ok ? "Readiness hazır" : health ? "Readiness sorunlu" : "Readiness bekleniyor",
+      label: health?.ready.ok ? "Bağlantılar hazır" : health ? "Bağlantılarda sorun var" : "Bağlantılar bekleniyor",
       tone: health?.ready.ok ? "success" : health ? "danger" : "neutral",
     },
     {
       key: "metrics",
-      label: health?.metrics.ok ? "Metrics okunuyor" : health ? "Metrics bekleniyor" : "Metrics yok",
+      label: health?.metrics.ok ? "Kullanım bilgisi alındı" : health ? "Kullanım bilgisi bekleniyor" : "Kullanım bilgisi yok",
       tone: health?.metrics.ok ? "success" : health ? "warning" : "neutral",
     },
   ];
@@ -256,28 +256,28 @@ function buildSystemHealthSummaryBadges(health: SystemHealth | undefined): Opera
 function buildSystemHealthSummaryActions(health: SystemHealth | undefined): OperationSummaryAction[] {
   return [
     {
-      detail: "Health, readiness ve metrics endpointleri",
+      detail: "Uygulama, bağlantı ve kullanım kontrolleri",
       key: "endpoint-coverage",
-      label: "Endpoint kapsamı",
+      label: "Kontrol kapsamı",
       status: health ? "Okundu" : "Bekleniyor",
       tone: health ? "info" : "neutral",
       value: "3 sinyal",
     },
     {
-      detail: "Postgres ve Redis hazırlık sinyali",
+      detail: "Veritabanı ve hızlı erişim bağlantıları",
       key: "dependency-readiness",
-      label: "Bağımlılık hazırlığı",
+      label: "Bağlantı durumu",
       status: health?.ready.ok ? "Hazır" : health ? "Kontrol" : "Bekleniyor",
       tone: health?.ready.ok ? "success" : health ? "warning" : "neutral",
       value: `${dependencyReadyCount(health)}/2 hazır`,
     },
     {
-      detail: "Prod env, HTTPS ve canlı smoke kanıtı ayrı gate olarak kalır",
+      detail: "Canlı ortam ayarları, güvenli bağlantı ve temel işlemler ayrıca kontrol edilir",
       key: "release-evidence",
-      label: "Release evidence",
-      status: "Ayrı kapı",
+      label: "Yayın onayı",
+      status: "Ayrı kontrol",
       tone: "warning",
-      value: "Staging/prod",
+      value: "Deneme/canlı ortam",
     },
   ];
 }
@@ -287,21 +287,21 @@ function buildDependencyRows(health: SystemHealth | undefined): DependencyStatus
   const redis = dependencyLabel(health?.ready.data?.dependencies.redis, health?.ready.ok);
   return [
     {
-      detail: "Readiness endpointinden gelen Postgres bağlantısı",
+      detail: "Ana veritabanı bağlantısı",
       key: "postgres",
       label: "Postgres",
       tone: dependencyTone(postgres),
       value: postgres,
     },
     {
-      detail: "Readiness endpointinden gelen Redis bağlantısı",
+      detail: "Hızlı erişim ve kuyruk bağlantısı",
       key: "redis",
       label: "Redis",
       tone: dependencyTone(redis),
       value: redis,
     },
     {
-      detail: "Metrics endpointinden toplanan HTTP istek sayacı",
+      detail: "Sistemin işlediği toplam web isteği",
       key: "request-count",
       label: "HTTP istek sayacı",
       tone: health?.metrics.ok ? "info" : health ? "warning" : "neutral",
@@ -313,21 +313,21 @@ function buildDependencyRows(health: SystemHealth | undefined): DependencyStatus
 function buildEndpointRows(health: SystemHealth | undefined): EndpointStatusRow[] {
   return [
     {
-      detail: "API yaşam endpointi",
+      detail: "Uygulamanın yanıt verdiğini kontrol eder",
       key: "health",
       label: "/health",
       tone: endpointTone(health?.health),
       value: health ? endpointLabel(health.health) : "Bekleniyor",
     },
     {
-      detail: "Readiness ve bağımlılık endpointi",
+      detail: "Veritabanı ve hızlı erişim bağlantılarını kontrol eder",
       key: "ready",
       label: "/health/ready",
       tone: endpointTone(health?.ready),
       value: health ? endpointLabel(health.ready) : "Bekleniyor",
     },
     {
-      detail: "Prometheus metrics endpointi",
+      detail: "Çalışma süresi ve istek sayısını verir",
       key: "metrics",
       label: "/metrics",
       tone: endpointTone(health?.metrics),

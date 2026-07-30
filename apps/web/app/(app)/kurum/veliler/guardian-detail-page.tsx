@@ -13,6 +13,8 @@ import {
   Panel,
   Select,
   StatusBadge,
+  TabButton,
+  Tabs,
   type DataTableColumn,
   type StatusBadgeProps,
 } from "@o-okul/ui";
@@ -39,10 +41,10 @@ interface GuardianDetailData {
 }
 
 const emptyLinkForm = {
-  canOpenSupportTickets: true,
-  canReceiveAnnouncements: true,
-  canReceiveSms: true,
-  canViewFinance: true,
+  canOpenSupportTickets: false,
+  canReceiveAnnouncements: false,
+  canReceiveSms: false,
+  canViewFinance: false,
   studentId: "",
 };
 
@@ -58,6 +60,7 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
   });
   const [linkForm, setLinkForm] = useState(emptyLinkForm);
   const [linkError, setLinkError] = useState("");
+  const [activeSection, setActiveSection] = useState<"links" | "new-link">("links");
   const detail = detailQuery.data;
   const guardianName = detail ? `${detail.guardian.firstName} ${detail.guardian.lastName}` : "Veli detayı";
   const availableStudents = detail?.availableStudents ?? [];
@@ -118,26 +121,33 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
                 <InfoItem label="Destek izni" value={formatPermissionCount(detail.links, "canOpenSupportTickets")} />
               </InfoGrid>
             </Panel>
-            <Panel
-              aria-label="Öğrenci bağlantıları"
-              description="İzinler öğrenci bazında açık/kapalı gösterilir; ödeme tutarı ve ham iletişim bilgisi bu özetlerde yer almaz."
-              title="Öğrenci bağlantıları"
-            >
-              <DataTable
-                caption="Veli öğrenci bağlantıları"
-                columns={guardianStudentColumns}
-                density="compact"
-                description="Öğrenci, sınıf, portal ve izin kapsamı. Ödeme tutarı ve ham iletişim bilgisi gösterilmez."
-                emptyText="Öğrenci bağlantısı yok"
-                getRowKey={(link) => link.id}
-                rows={detail.links}
-              />
-            </Panel>
-            <Panel
-              aria-label="Veli öğrenci bağı ekle"
-              description="Hassas izinler varsayılan kapalıdır; yalnız açıkça seçilen yetkiler veli portalına açılır."
-              title="Öğrenci bağla"
-            >
+            <Tabs label="Veli detay bölümleri">
+              <TabButton aria-controls="guardian-detail-panel-links" id="guardian-detail-tab-links" selected={activeSection === "links"} onClick={() => setActiveSection("links")}>Öğrenci bağlantıları</TabButton>
+              <TabButton aria-controls="guardian-detail-panel-new-link" id="guardian-detail-tab-new-link" selected={activeSection === "new-link"} onClick={() => setActiveSection("new-link")}>Öğrenci bağla</TabButton>
+            </Tabs>
+            {activeSection === "links" ? <div aria-labelledby="guardian-detail-tab-links" id="guardian-detail-panel-links" role="tabpanel" tabIndex={0}>
+              <Panel
+                aria-label="Öğrenci bağlantıları"
+                description="İzinler öğrenci bazında açık/kapalı gösterilir; ödeme tutarı ve ham iletişim bilgisi bu özetlerde yer almaz."
+                title="Öğrenci bağlantıları"
+              >
+                <DataTable
+                  caption="Veli öğrenci bağlantıları"
+                  columns={guardianStudentColumns}
+                  density="compact"
+                  description="Öğrenci, sınıf, portal ve izin kapsamı. Ödeme tutarı ve ham iletişim bilgisi gösterilmez."
+                  emptyText="Öğrenci bağlantısı yok"
+                  getRowKey={(link) => link.id}
+                  rows={detail.links}
+                />
+              </Panel>
+            </div> : null}
+            {activeSection === "new-link" ? <div aria-labelledby="guardian-detail-tab-new-link" id="guardian-detail-panel-new-link" role="tabpanel" tabIndex={0}>
+              <Panel
+                aria-label="Veli öğrenci bağı ekle"
+                description="Hassas izinler varsayılan kapalıdır; yalnız açıkça seçilen yetkiler veli portalına açılır."
+                title="Öğrenci bağla"
+              >
               <form className="next-guardian-link-form" onSubmit={(event) => void handleLinkSubmit(event)}>
                 <div className="next-guardian-link-form__grid">
                   <Field label="Öğrenci">
@@ -181,7 +191,8 @@ export function GuardianDetailPage({ guardianId }: { guardianId: string }) {
                   Bağla
                 </Button>
               </form>
-            </Panel>
+              </Panel>
+            </div> : null}
           </>
         ) : null}
       </section>

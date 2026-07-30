@@ -51,6 +51,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await expect(page.getByRole("combobox", { name: "Sınav" })).toHaveValue("exam-report-ready");
     await page.getByRole("button", { name: "Rapor üret" }).click();
     await expect(page.getByRole("button", { name: "İşleniyor" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Raporu getir" })).toBeDisabled();
     await expect(page.getByRole("combobox", { name: "Sınav" })).toBeDisabled();
 
     await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
@@ -82,6 +83,26 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-ready");
   });
 
+  test("genel rapor GET sürerken yeniden üret aksiyonunu kilitler", async ({ page }) => {
+    await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
+    await page.getByRole("button", { name: "Raporu getir" }).click();
+    await expect(page.getByRole("button", { name: "Yeniden üret" })).toBeEnabled();
+
+    let releaseSnapshotRequest = () => {};
+    const snapshotRequestGate = new Promise<void>((resolve) => {
+      releaseSnapshotRequest = resolve;
+    });
+    await page.route("**/api/v1/exams/exam-report-ready/reports/snapshots*", async (route) => {
+      await snapshotRequestGate;
+      await route.fallback();
+    });
+
+    await page.getByRole("button", { name: "Raporu getir" }).click();
+    await expect(page.getByRole("button", { name: "Yeniden üret" })).toBeDisabled();
+    releaseSnapshotRequest();
+    await expect(page.getByRole("button", { name: "Yeniden üret" })).toBeEnabled();
+  });
+
   test("sınav değişince eski snapshot bağlamını temizler ve yeni sınavı URL state içinde korur", async ({ page }) => {
     const snapshotRequests = trackApiRequests(page, (url, method) =>
       method === "GET" && url.pathname.endsWith("/reports/snapshots"),
@@ -99,6 +120,46 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-general");
     expect(snapshotRequests).toHaveLength(1);
+  });
+
+  test("popstate ile sınav değişince bekleyen genel rapor GET sonucu eski bağlamı geri getirmez", async ({ page }) => {
+    await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
+    await page.evaluate(() => {
+      window.history.pushState(window.history.state, "", "/kurum/raporlar?examId=exam-report-general");
+      window.history.back();
+    });
+    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-ready");
+
+    let releaseSnapshotRequest = () => {};
+    let markSnapshotRequestStarted = () => {};
+    const snapshotRequestGate = new Promise<void>((resolve) => {
+      releaseSnapshotRequest = resolve;
+    });
+    const snapshotRequestStarted = new Promise<void>((resolve) => {
+      markSnapshotRequestStarted = resolve;
+    });
+    await page.route("**/api/v1/exams/exam-report-ready/reports/snapshots*", async (route) => {
+      markSnapshotRequestStarted();
+      await snapshotRequestGate;
+      await route.fallback().catch(() => undefined);
+    });
+
+    await page.getByRole("button", { name: "Raporu getir" }).click();
+    await snapshotRequestStarted;
+    await page.evaluate(() => window.history.forward());
+    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-general");
+    await expect(page.getByRole("combobox", { name: "Sınav" })).toHaveValue("exam-report-general");
+    await expect(page.getByRole("heading", { name: "Hazır rapor yok" })).toBeVisible();
+
+    releaseSnapshotRequest();
+    await page.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    );
+
+    const workflowStrip = page.getByRole("region", { name: "Rapor iş akışı" });
+    await expect(workflowStrip).toContainText("Genel Rapor Denemesi");
+    await expect(workflowStrip).not.toContainText("Excel/PDF hazır");
+    await expect(page.getByRole("button", { name: "Raporu getir" })).toBeEnabled();
   });
 
   test("geç gelen öğrenci raporu yeni sınavın snapshot bağlamına yazılmaz", async ({ page }) => {
@@ -121,7 +182,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await page.route(`**${delayedStudentReportPath}`, async (route) => {
       markStudentReportRequestStarted();
       await studentReportRequestGate;
-      await route.fallback();
+      await route.fallback().catch(() => undefined);
     });
 
     const studentsTab = page.getByRole("tab", { name: "Öğrenciler" });
@@ -143,11 +204,7 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await expect(workflowStrip).toContainText("Genel Rapor Denemesi");
     await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
 
-    const delayedStudentReportResponse = page.waitForResponse(
-      (response) => new URL(response.url()).pathname === delayedStudentReportPath,
-    );
     releaseStudentReportRequest();
-    await delayedStudentReportResponse;
     await page.evaluate(
       () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
     );
@@ -156,6 +213,199 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
     await expect(workflowStrip).not.toContainText("Karne açık");
     await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("tab", { name: "Karne" })).toHaveAttribute("aria-selected", "false");
+  });
+
+  test("popstate ile sınav değişince bekleyen öğrenci raporu eski bağlama yazılmaz", async ({ page }) => {
+    await openWithReportMocks(
+      page,
+      "/kurum/raporlar?examId=exam-report-ready",
+      { height: 960, width: 1440 },
+    );
+    const examSelect = page.getByRole("combobox", { name: "Sınav" });
+    await expect(examSelect).toHaveValue("exam-report-ready");
+    await page.evaluate(() => {
+      // Gerçek geri geçişten önce Next'e ikinci bir URL-state güncellemesi göndermeden history fixture'ını kur.
+      History.prototype.replaceState.call(
+        window.history,
+        window.history.state,
+        "",
+        "/kurum/raporlar?examId=exam-report-general",
+      );
+      History.prototype.pushState.call(
+        window.history,
+        window.history.state,
+        "",
+        "/kurum/raporlar?examId=exam-report-ready",
+      );
+    });
+    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-ready");
+    await expect(examSelect).toHaveValue("exam-report-ready");
+
+    await page.getByRole("button", { name: "Raporu getir" }).click();
+    const workflowStrip = page.getByRole("region", { name: "Rapor iş akışı" });
+    await expect(workflowStrip).toContainText("Excel/PDF hazır");
+    await expect(page.getByRole("button", { name: "Raporu getir" })).toBeEnabled();
+
+    let releaseStudentReportRequest = () => {};
+    let markStudentReportRequestStarted = () => {};
+    const studentReportRequestGate = new Promise<void>((resolve) => {
+      releaseStudentReportRequest = resolve;
+    });
+    const studentReportRequestStarted = new Promise<void>((resolve) => {
+      markStudentReportRequestStarted = resolve;
+    });
+    await page.route(
+      "**/api/v1/exams/exam-report-ready/reports/snapshots/snapshot-ready/students/student-a",
+      async (route) => {
+        markStudentReportRequestStarted();
+        await studentReportRequestGate;
+        await route.fallback().catch(() => undefined);
+      },
+    );
+
+    const studentsTab = page.getByRole("tab", { name: "Öğrenciler" });
+    await studentsTab.click();
+    await expect(studentsTab).toHaveAttribute("aria-selected", "true");
+    await expect.poll(() => new URL(page.url()).searchParams.get("tab")).toBe("students");
+    const studentResultsTable = page.getByRole("table", { name: "Öğrenci sıralamaları" });
+    await expect(studentResultsTable).toBeVisible();
+    await expect(studentResultsTable).toContainText("Ada Kaya");
+    await studentResultsTable.getByRole("button", { name: "Ada Kaya karnesini aç" }).click();
+    await studentReportRequestStarted;
+
+    await page.evaluate(() => window.history.back());
+    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-general");
+    await expect(page.getByRole("combobox", { name: "Sınav" })).toHaveValue("exam-report-general");
+    await expect(page.getByRole("heading", { name: "Hazır rapor yok" })).toBeVisible();
+
+    releaseStudentReportRequest();
+    await page.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    );
+
+    await expect(workflowStrip).toContainText("Genel Rapor Denemesi");
+    await expect(workflowStrip).not.toContainText("Karne açık");
+    await expect(page.getByRole("tab", { name: "Genel Bakış" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "Karne" })).toHaveAttribute("aria-selected", "false");
+  });
+
+  test("popstate sonrası tamamlanan job POST yanıtı eski sınav polling sonucunu başlatmaz", async ({ page }) => {
+    const jobStatusRequests = trackApiRequests(page, (url, method) =>
+      method === "GET" && url.pathname.endsWith("/reports/generation-jobs/job-report-a"),
+    );
+    await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
+    await page.evaluate(() => {
+      window.history.pushState(window.history.state, "", "/kurum/raporlar?examId=exam-report-general");
+      window.history.back();
+    });
+    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-ready");
+
+    let releaseJobRequest = () => {};
+    let markJobRequestStarted = () => {};
+    const jobRequestGate = new Promise<void>((resolve) => {
+      releaseJobRequest = resolve;
+    });
+    const jobRequestStarted = new Promise<void>((resolve) => {
+      markJobRequestStarted = resolve;
+    });
+    await page.route("**/api/v1/exams/exam-report-ready/reports/generation-jobs", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      markJobRequestStarted();
+      await jobRequestGate;
+      await route.fallback();
+    });
+
+    await page.getByRole("button", { name: "Rapor üret" }).click();
+    await jobRequestStarted;
+    await page.evaluate(() => window.history.forward());
+    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-general");
+    await expect(page.getByRole("combobox", { name: "Sınav" })).toHaveValue("exam-report-general");
+    await expect(page.getByRole("heading", { name: "Hazır rapor yok" })).toBeVisible();
+
+    const jobResponse = page.waitForResponse((response) =>
+      response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/v1/exams/exam-report-ready/reports/generation-jobs",
+    );
+    releaseJobRequest();
+    await jobResponse;
+    await page.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    );
+
+    expect(jobStatusRequests).toHaveLength(0);
+    const workflowStrip = page.getByRole("region", { name: "Rapor iş akışı" });
+    await expect(workflowStrip).toContainText("Genel Rapor Denemesi");
+    await expect(workflowStrip).not.toContainText("Rapor üretimi tamamlandı.");
+  });
+
+  test("polling başladıktan sonraki popstate geç job sonucunu yeni seçime uygulamaz", async ({ page }) => {
+    const readySnapshotRequests = trackApiRequests(page, (url, method) =>
+      method === "GET" && url.pathname === "/api/v1/exams/exam-report-ready/reports/snapshots",
+    );
+    await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-ready", { height: 960, width: 1440 });
+    await page.evaluate(() => {
+      History.prototype.replaceState.call(
+        window.history,
+        window.history.state,
+        "",
+        "/kurum/raporlar?examId=exam-report-general",
+      );
+      History.prototype.pushState.call(
+        window.history,
+        window.history.state,
+        "",
+        "/kurum/raporlar?examId=exam-report-ready",
+      );
+    });
+
+    let releasePollingRequest = () => {};
+    let markPollingRequestStarted = () => {};
+    const pollingRequestGate = new Promise<void>((resolve) => {
+      releasePollingRequest = resolve;
+    });
+    const pollingRequestStarted = new Promise<void>((resolve) => {
+      markPollingRequestStarted = resolve;
+    });
+    await page.route(
+      "**/api/v1/exams/exam-report-ready/reports/generation-jobs/job-report-a",
+      async (route) => {
+        markPollingRequestStarted();
+        await pollingRequestGate;
+        await fulfillData(route, {
+          jobId: "job-report-a",
+          snapshotId: "snapshot-ready",
+          status: "COMPLETED",
+          updatedAt: "2026-06-17T10:00:01.000Z",
+        }).catch(() => undefined);
+      },
+    );
+
+    const jobPostResponse = page.waitForResponse((response) =>
+      response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/v1/exams/exam-report-ready/reports/generation-jobs",
+    );
+    await page.getByRole("button", { name: "Rapor üret" }).click();
+    expect((await jobPostResponse).status()).toBe(200);
+    await pollingRequestStarted;
+
+    await page.evaluate(() => window.history.back());
+    await expect.poll(() => new URL(page.url()).searchParams.get("examId")).toBe("exam-report-general");
+    await expect(page.getByRole("combobox", { name: "Sınav" })).toHaveValue("exam-report-general");
+    await expect(page.getByRole("heading", { name: "Hazır rapor yok" })).toBeVisible();
+
+    releasePollingRequest();
+    await page.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    );
+
+    expect(readySnapshotRequests).toHaveLength(0);
+    const workflowStrip = page.getByRole("region", { name: "Rapor iş akışı" });
+    await expect(workflowStrip).toContainText("Genel Rapor Denemesi");
+    await expect(workflowStrip).not.toContainText("Rapor üretimi tamamlandı.");
+    await expect(workflowStrip).not.toContainText("Excel/PDF hazır");
   });
 
   test("sınıfsız raporda genel öğrenci listesi yerine katılımcı kayıtlarını yükler", async ({ page }) => {
@@ -402,6 +652,41 @@ test.describe("Rapor çalışma alanı sözleşmesi", () => {
 
     await expectNoHorizontalOverflow(page, "report-workspace-ready");
     await expectNoUnlabeledControls(page, "report-workspace-ready");
+  });
+
+  test("PENDING ve FAILED snapshot rozetlerini gösterip çıktıları kilitler", async ({ page }) => {
+    let snapshotStatus: "PENDING" | "FAILED" = "PENDING";
+    await openWithReportMocks(page, "/kurum/raporlar?examId=exam-report-stale", { height: 960, width: 1440 });
+    await page.route("**/api/v1/exams/exam-report-stale/reports/snapshots*", async (route) => {
+      await fulfillData(route, [{
+        ...createReportSnapshot("exam-report-stale", "STALE"),
+        status: snapshotStatus,
+      }]);
+    });
+
+    const workflowStrip = page.getByRole("region", { name: "Rapor iş akışı" });
+    const exportButtons = ["Excel indir", "PDF indir", "Toplu karneleri indir", "Tekli karneyi indir"];
+    for (const status of [
+      { label: "Bekliyor", tone: "warning" },
+      { label: "Hatalı", tone: "danger" },
+    ] as const) {
+      await page.getByRole("button", { name: "Raporu getir" }).click();
+      const reportStatusBadge = workflowStrip
+        .locator(".next-report-status-pills > span")
+        .nth(1)
+        .locator(".uh-status-badge");
+      await expect(reportStatusBadge).toHaveText(status.label);
+      await expect(reportStatusBadge).toHaveClass(new RegExp(`uh-status-badge--${status.tone}`));
+      await expect(workflowStrip).toContainText("READY snapshot gerekli");
+
+      await page.getByRole("tab", { name: "Çıktılar" }).click();
+      const exportsRegion = page.getByRole("region", { name: "Rapor çıktıları" });
+      await expect(exportsRegion.locator(".uh-status-badge")).toHaveText(status.label);
+      for (const buttonName of exportButtons) {
+        await expect(exportsRegion.getByRole("button", { name: buttonName })).toBeDisabled();
+      }
+      snapshotStatus = "FAILED";
+    }
   });
 
   test("STALE snapshot analizi açık bırakır ama çıktıları kilitler", async ({ page }) => {

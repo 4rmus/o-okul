@@ -17,34 +17,34 @@ const securityGates = [
     evidenceState: "Release kararına yetmez",
     scope: "Yerel/statik",
     tone: "warning",
-    detail: "Staging veya production güvenlik raporu PASS dönmeli ve kritik bulgu içermemeli.",
+    detail: "Deneme veya canlı ortam güvenlik raporu başarılı olmalı ve kritik bulgu içermemelidir.",
   },
   {
-    title: "Üretim env kontrolü",
+    title: "Canlı ortam ayarları",
     command: "pnpm prod:env:check",
-    status: "Canlı env gerekir",
-    evidenceState: "Staging/prod",
-    scope: "Staging/prod",
+    status: "Canlı ortam gerekir",
+    evidenceState: "Deneme/canlı",
+    scope: "Deneme/canlı",
     tone: "danger",
-    detail: "Cookie, JWT, CORS, provider ve güvenli production ayarları doğrulanır.",
+    detail: "Oturum, bağlantı, hizmet sağlayıcı ve diğer güvenlik ayarları doğrulanır.",
   },
   {
-    title: "Canlı RLS kontrolü",
+    title: "Canlı veritabanı erişimi",
     command: "pnpm db:rls:check:live",
     status: "Canlı DB gerekir",
     evidenceState: "Canlı kanıt",
-    scope: "RLS canlı",
+    scope: "Canlı veritabanı",
     tone: "danger",
-    detail: "Tenant tablolarında RLS ve app rol erişimi canlı veritabanında kontrol edilir.",
+    detail: "Her kurumun yalnız kendi verisine erişebildiği canlı veritabanında kontrol edilir.",
   },
   {
-    title: "HTTPS smoke",
+    title: "Güvenli bağlantı",
     command: "pnpm traefik:https:smoke",
-    status: "Staging/prod domain gerekir",
-    evidenceState: "Staging/prod",
-    scope: "Staging/prod",
+    status: "Deneme veya canlı adres gerekir",
+    evidenceState: "Deneme/canlı",
+    scope: "Deneme/canlı",
     tone: "danger",
-    detail: "HTTPS health ve HSTS gibi güvenlik header'ları uçtan uca doğrulanır.",
+    detail: "Güvenli bağlantı ve tarayıcı güvenlik ayarları uçtan uca doğrulanır.",
   },
 ] as const;
 
@@ -58,17 +58,17 @@ const securityHeaders = [
 ] as const;
 
 const authControls = [
-  buildSecurityControl("COOKIE_SECURE=true", "Prod env", "Production config", "Secure cookie ayarı prod env kapısında doğrulanır.", "warning"),
-  buildSecurityControl("login lockout", "Auth kapısı", "Auth/session", "Brute force lockout davranışı auth güvenlik testlerinde doğrulanır.", "warning"),
-  buildSecurityControl("strong JWT secrets", "Prod env", "Production config", "JWT secret gücü ve rotasyonu prod env kontrolünde kanıtlanır.", "warning"),
-  buildSecurityControl("refresh session revocation", "Auth kapısı", "Auth/session", "Refresh session iptal akışı auth/session testlerinde doğrulanır.", "warning"),
+  buildSecurityControl("Güvenli çerez ayarı (COOKIE_SECURE=true)", "Canlı ortam", "Oturum ayarları", "Güvenli çerez ayarı canlı ortamda doğrulanır.", "warning"),
+  buildSecurityControl("Hatalı giriş sınırı", "Oturum kontrolü", "Giriş güvenliği", "Arka arkaya hatalı girişlerde hesabın geçici olarak korunmaya alındığı doğrulanır.", "warning"),
+  buildSecurityControl("Güçlü oturum anahtarları", "Canlı ortam", "Oturum ayarları", "Oturum anahtarlarının gücü ve yenilenmesi canlı ortamda doğrulanır.", "warning"),
+  buildSecurityControl("Oturum yenileme ve iptal", "Oturum kontrolü", "Giriş güvenliği", "Yenilenen oturumların gerektiğinde iptal edilebildiği doğrulanır.", "warning"),
 ] as const;
 
 const dataControls = [
-  buildSecurityControl("RLS live check", "Canlı kanıt", "RLS canlı", "Tenant tablolarında RLS canlı veritabanında doğrulanır.", "danger"),
-  buildSecurityControl("tenant isolation", "Tenant/PII", "Tenant/PII", "Server/RLS tenant izolasyonu client filtresine güvenmeden kanıtlanır.", "warning"),
-  buildSecurityControl("audit PII redaction", "PII ham gösterilmez", "Sunucu/audit", "Safe-list audit yanıtı ham aktör, değişiklik içeriği ve PII değerlerini basmaz.", "success"),
-  buildSecurityControl("SENTRY_SEND_DEFAULT_PII=false", "PII kapalı", "Production config", "Sentry varsayılan PII gönderimi production config kanıtında kapalı tutulur.", "warning"),
+  buildSecurityControl("Canlı veritabanı erişim kontrolü", "Canlı doğrulama", "Canlı veritabanı", "Her kurumun yalnız kendi verisine erişebildiği canlı veritabanında doğrulanır.", "danger"),
+  buildSecurityControl("Kurum verisi ayrımı", "Kurum / kişisel veri", "Sunucu ve veritabanı", "Kurum verilerinin yalnız arayüz filtresiyle değil, sunucu ve veritabanı kurallarıyla ayrıldığı doğrulanır.", "warning"),
+  buildSecurityControl("İşlem kayıtlarında kişisel veri gizleme", "Kişisel veriler gizli", "Sunucu kayıtları", "Kullanıcı anahtarları, değişiklik ayrıntıları ve kişisel veriler işlem kayıtlarında gösterilmez.", "success"),
+  buildSecurityControl("Hata izleme kişisel veri ayarı", "Kişisel veri kapalı", "Canlı ortam ayarları", "Hata izleme hizmetine varsayılan kişisel veri gönderimi kapalı tutulur.", "warning"),
 ] as const;
 
 interface SecurityControlRow {
@@ -109,50 +109,50 @@ export function SecurityAuditPage() {
     <PageFrame
       actions={<ReferenceBadge />}
       title="Güvenlik Denetimi"
-      subtitle="Canlıya çıkış öncesi güvenlik kanıt kapılarını ve zorunlu kontrolleri izle."
+      subtitle="Canlıya geçmeden önce bağlantı, oturum ve veri güvenliği kontrollerini izleyin."
     >
       <OperationSummary
         actions={securitySummaryActions}
-        ariaLabel="Güvenlik denetimi operasyon özeti"
+        ariaLabel="Güvenlik durumu özeti"
         badges={securitySummaryBadges}
         items={securitySummaryItems}
       />
       <EvidenceTrustPanel
         ariaLabel="Güvenlik güven durumu"
-        title="Güvenlik Kanıt Gücü"
-        description="Panel canlı audit olaylarını okur; release kararını yalnız staging/prod güvenlik, env ve RLS kanıtları tamamlar."
+        title="Güvenlik Doğrulama Durumu"
+        description="Bu ekran son güvenlik olaylarını gösterir. Canlıya geçiş için deneme ve canlı ortam kontrolleri ayrıca tamamlanmalıdır."
         items={[
           {
-            label: "Panel verisi",
-            value: "Salt-okuma",
+            label: "Bu ekrandaki bilgiler",
+            value: "Yalnızca görüntüleme",
             tone: "info",
             scope: "server-audit",
-            detail: "Audit log özetidir; gizli bulgu veya ham PII göstermez.",
+            detail: "İşlem kayıtlarının özetidir; gizli bulgular ve kişisel veriler gösterilmez.",
           },
           {
-            label: "Repo kontrolü",
-            value: "Statik kapı",
+            label: "Kod kontrolleri",
+            value: "Ön kontrol",
             tone: "warning",
             scope: "local-static",
-            detail: "security:audit:check dosya hedefiyle çalışır, canlı kanıt yerine geçmez.",
+            detail: "Kod ve örnek rapor kontrolleri canlı ortam doğrulamasının yerine geçmez.",
           },
           {
-            label: "Canlı kanıt",
-            value: "Staging/prod",
+            label: "Canlı ortam doğrulaması",
+            value: "Gerekli",
             tone: "danger",
             scope: "staging-prod",
-            detail: "HTTPS, prod env ve RLS canlı smoke sonuçları ayrı evidence olarak gerekir.",
+            detail: "Güvenli bağlantı, canlı ortam ayarları ve kurum verisi ayrımı ayrıca doğrulanır.",
           },
         ]}
       />
       <OperationDecisionNotice
-        decision="Karar: son güvenlik olayları canlı okunur."
-        reason="Panel audit log üzerinden auth, kullanıcı, KVKK ve tenant olaylarını salt-okunur gösterir; gizli production denetimi hâlâ CLI kanıt kapısıdır."
-        nextStep="C3'ün sonraki adımı güvenlik denetim raporundaki uyarıları ayrı, PII içermeyen bir kaynakla bağlamaktır."
+        decision="Son güvenlik olayları bu ekranda yalnızca görüntülenir."
+        reason="Kullanıcı, KVKK ve kurum olayları kişisel veriler gizlenerek listelenir; ayrıntılı güvenlik raporu ayrı tutulur."
+        nextStep="Canlıya geçmeden önce aşağıdaki bağlantı, oturum ve veri kontrollerini tamamlayın."
       />
       <Panel
         aria-label="Son güvenlik olayları"
-        description="Safe-list audit kaynağından gelen kategori, kayıt ve tarih bilgisi ham aktör anahtarı veya değişiklik içeriği göstermeden listelenir."
+        description="Olay türü, ilgili kayıt ve tarih gösterilir; kullanıcı anahtarları, değişiklik ayrıntıları ve kişisel veriler gizlenir."
         title="Son Güvenlik Olayları"
       >
         {securityEventsQuery.isPending ? <p>Olaylar alınıyor</p> : null}
@@ -161,7 +161,7 @@ export function SecurityAuditPage() {
           caption="Güvenlik olayları"
           columns={securityEventColumns}
           density="compact"
-          description="Kimlik, KVKK, kurum ve kullanıcı olayları PII-safe etiketlerle listelenir."
+          description="Kimlik, KVKK, kurum ve kullanıcı olayları kişisel veriler gizlenerek listelenir."
           emptyText="Güvenlik olayı yok"
           error={securityEventsQuery.isError ? "Güvenlik olayları alınamadı." : undefined}
           getRowKey={(event) => event.id}
@@ -170,12 +170,12 @@ export function SecurityAuditPage() {
         />
       </Panel>
       <Panel
-        aria-label="Güvenlik denetimi kapıları"
-        description="Security audit, prod env, canlı RLS ve HTTPS smoke release evidence olarak ayrı doğrulanır."
-        title="Kanıt Kapıları"
+        aria-label="Canlıya geçiş güvenlik kontrolleri"
+        description="Güvenlik raporu, canlı ortam ayarları, kurum verisi ayrımı ve güvenli bağlantı ayrı ayrı doğrulanır."
+        title="Canlıya Geçiş Kontrolleri"
       >
         <DataTable
-          caption="Güvenlik denetimi kanıt kapıları"
+          caption="Canlıya geçiş güvenlik kontrolleri"
           columns={securityControlColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -183,12 +183,12 @@ export function SecurityAuditPage() {
         />
       </Panel>
       <Panel
-        aria-label="Header kontrolleri"
-        description="Response header güvenliği staging/prod domain üzerinde doğrulanır; local/static sonuç release kararı değildir."
-        title="Header Kontrolleri"
+        aria-label="Bağlantı güvenliği kontrolleri"
+        description="Tarayıcı ve sunucu arasındaki güvenlik ayarları deneme ve canlı ortam adreslerinde doğrulanır."
+        title="Bağlantı Güvenliği"
       >
         <DataTable
-          caption="Güvenlik header kontrolleri"
+          caption="Bağlantı güvenliği kontrolleri"
           columns={securityControlColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -196,12 +196,12 @@ export function SecurityAuditPage() {
         />
       </Panel>
       <Panel
-        aria-label="Auth kontrolleri"
-        description="Cookie, lockout, JWT ve refresh session davranışı production env kapısında kanıtlanır."
-        title="Auth Kontrolleri"
+        aria-label="Oturum güvenliği kontrolleri"
+        description="Güvenli çerez, hatalı giriş sınırı ve oturum yenileme davranışı canlı ortam ayarlarıyla doğrulanır."
+        title="Oturum Güvenliği"
       >
         <DataTable
-          caption="Güvenlik auth kontrolleri"
+          caption="Oturum güvenliği kontrolleri"
           columns={securityControlColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -209,12 +209,12 @@ export function SecurityAuditPage() {
         />
       </Panel>
       <Panel
-        aria-label="Veri kontrolleri"
-        description="Tenant isolation, RLS ve PII redaction UI güvenli görünümün ötesinde server/RLS evidence ister."
-        title="Veri Kontrolleri"
+        aria-label="Kurum ve kişisel veri güvenliği kontrolleri"
+        description="Kurum verilerinin ayrılması ve kişisel verilerin gizlenmesi, sunucu ve veritabanı kontrolleriyle doğrulanır."
+        title="Kurum ve Kişisel Veri Güvenliği"
       >
         <DataTable
-          caption="Güvenlik veri kontrolleri"
+          caption="Kurum ve kişisel veri güvenliği kontrolleri"
           columns={securityControlColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -280,14 +280,14 @@ const securityControlColumns: Array<DataTableColumn<SecurityControlRow>> = [
   },
   {
     key: "scope",
-    header: "Kapsam",
+    header: "Ortam",
     mobilePriority: "secondary",
     priority: "secondary",
     render: (row) => row.scope,
   },
   {
     key: "detail",
-    header: "Bağlam",
+    header: "Açıklama",
     mobilePriority: "secondary",
     priority: "secondary",
     render: (row) => row.detail,
@@ -335,29 +335,29 @@ function buildSecurityControl(
 function buildSecuritySummaryItems(securityEvents: AuditLogListItemRecord[]): OperationSummaryItem[] {
   return [
     {
-      description: "Safe-list audit kaynağından son güvenlik kategorisi",
+      description: "İşlem kayıtlarındaki son güvenlik olayı",
       key: "latest-event",
       label: "Son olay",
       tone: securityEvents[0] ? "info" : "default",
       value: securityEvents[0] ? formatSecurityEventAction(securityEvents[0]) : "Yok",
     },
     {
-      description: "HTTPS ve HSTS canlı smoke ile kanıtlanır",
+      description: "Güvenli bağlantı deneme ve canlı ortamda doğrulanır",
       key: "https",
       label: "HTTPS",
       tone: "warning",
-      value: "Staging/prod kanıt bekliyor",
+      value: "Canlı ortam kontrolü bekliyor",
     },
     {
-      description: "PII-safe listeye düşen güvenlik olayı",
+      description: "Kişisel veriler gizlenerek listelenen olaylar",
       key: "event-count",
       label: "Okunan olay",
       value: formatCount(securityEvents.length),
     },
     {
-      description: "Ham audit değişiklik içeriği ve aktör anahtarları gösterilmez",
+      description: "Değişiklik ayrıntıları ve kullanıcı anahtarları gösterilmez",
       key: "pii",
-      label: "PII",
+      label: "Kişisel veri",
       tone: "success",
       value: "Maskeli",
     },
@@ -368,17 +368,17 @@ function buildSecuritySummaryBadges(securityEvents: AuditLogListItemRecord[]): O
   return [
     {
       key: "source",
-      label: "Safe-list audit",
+      label: "Kişisel veriler gizli",
       tone: "success",
     },
     {
       key: "pii",
-      label: "PII ham gösterilmez",
+      label: "Değişiklik ayrıntıları gizli",
       tone: "success",
     },
     {
       key: "release",
-      label: "Release kanıtı ayrı",
+      label: "Canlı ortam kontrolü ayrı",
       tone: "warning",
     },
     {
@@ -393,25 +393,25 @@ function buildSecuritySummaryActions(securityEvents: AuditLogListItemRecord[]): 
   const latestCategory = securityEvents[0] ? formatSecurityCategory(securityEvents[0].category) : "Yok";
   return [
     {
-      detail: "Ham audit endpointi yerine PII-safe liste kullanılır",
+      detail: "Güvenlik olayları kişisel veri içermeyen listeden okunur",
       key: "audit-source",
-      label: "Audit kaynağı",
-      status: "Safe-list",
+      label: "Olay kaynağı",
+      status: "Kişisel veriler gizli",
       tone: "success",
-      value: "/audit-logs/safe-list",
+      value: "Sunucu kaydı",
     },
     {
-      detail: "Staging/prod güvenlik raporu ve prod env kapıları ayrı kalır",
+      detail: "Deneme ve canlı ortam güvenlik raporları ayrıca doğrulanır",
       key: "evidence",
-      label: "Kanıt kapsamı",
-      status: "Ayrı kapı",
+      label: "Canlı ortam kontrolü",
+      status: "Ayrı doğrulama",
       tone: "warning",
-      value: "Staging/prod",
+      value: "Gerekli",
     },
     {
-      detail: "Son olay kategorisi release kararı değil, görünür operasyon sinyalidir",
+      detail: "Son olay türü bilgi verir; tek başına canlıya geçiş kararı oluşturmaz",
       key: "latest-category",
-      label: "Son kategori",
+      label: "Son olay türü",
       status: securityEvents[0] ? "Okundu" : "Bekleniyor",
       tone: securityEvents[0] ? "info" : "neutral",
       value: latestCategory,

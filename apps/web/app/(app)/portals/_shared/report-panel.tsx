@@ -125,7 +125,7 @@ export function ReportPanel({
           caption="Portal branş başarıları"
           columns={branchColumns}
           density="compact"
-          description="Başarı % ana metrik olarak gösterilir; Net ve Soru bağlam olarak korunur."
+          description="Soru sayıları farklı raporlar Başarı % ile karşılaştırılır; Net ve Soru sonucu açıklar."
           emptyText="Branş kırılımı yok"
           getRowKey={(branch) => branch.branch}
           rows={report.branches}

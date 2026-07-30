@@ -166,12 +166,12 @@ export function MessageTemplatesPage() {
       priority: "primary",
       render: (template) => (
         <span className="next-row-actions">
-          <button type="button" onClick={() => openEditForm(template)} aria-label={`${template.name} düzenle`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(template)} aria-label={`${template.name} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => void handleDelete(template)} aria-label={`${template.name} sil`}>
+          </Button>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(template)} aria-label={`${template.name} sil`}>
             <Trash2 size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </span>
       ),
       sticky: "right",

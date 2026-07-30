@@ -2,12 +2,19 @@
   {
     "date": "2026-07-29",
     "scope": "app",
-    "genre": "modern-minimal",
-    "theme": "Grafit + Mercan",
-    "marketingMacrostructure": "Workbench",
-    "appMacrostructure": "Workbench",
-    "contentMacrostructure": "Index-first",
-    "designSystem": "design.md",
-    "stamp": "P5 H5 E5 S5 R5 V5"
+    "macrostructure": "Narrative Workflow",
+    "theme": "custom",
+    "enrichment": "none",
+    "brief": "O-Okul operasyonel SaaS arayüzünü Grafit + Mercan sistemiyle tamamlama",
+    "theme_axes": "light / grotesk-sans / warm"
+  },
+  {
+    "date": "2026-07-29",
+    "scope": "app",
+    "macrostructure": "Workbench",
+    "theme": "custom",
+    "enrichment": "none",
+    "brief": "Önceki O-Okul modern-minimal tasarım çalışması; landing sınıflandırması daha sonra Narrative Workflow olarak düzeltildi",
+    "theme_axes": "light / grotesk-sans / cool"
   }
 ]

@@ -2142,6 +2142,30 @@ runProductionSummaryNegativeCheck({
   },
 });
 runProductionSummaryNegativeCheck({
+  label: "Production summary UI/UX empty artifact manifest negative",
+  path: "docs/evidence-templates/production-evidence-summary.ui-ux-empty-artifacts.tmp.json",
+  expectedFailure: "reports.uiUxRedesign.artifacts boş olmayan schema v2 manifesti olmalı.",
+  mutate: (fixture) => {
+    fixture.reports.uiUxRedesign.artifacts = [];
+  },
+});
+runProductionSummaryNegativeCheck({
+  label: "Production summary UI/UX nested GitHub CI drift negative",
+  path: "docs/evidence-templates/production-evidence-summary.ui-ux-github-drift.tmp.json",
+  expectedFailure: "reports.uiUxRedesign.githubCi standalone GitHub CI kanıtıyla exact SHA/run/job bağı kurmalı.",
+  mutate: (fixture) => {
+    fixture.reports.uiUxRedesign.githubCi.runId = "9999999999";
+  },
+});
+runProductionSummaryNegativeCheck({
+  label: "Production summary UI/UX self-expanded allowlist negative",
+  path: "docs/evidence-templates/production-evidence-summary.ui-ux-allowlist-drift.tmp.json",
+  expectedFailure: "reports.uiUxRedesign.allowedEvidenceHosts güvenilir UI_UX_REDESIGN_ALLOWED_EVIDENCE_HOSTS ile birebir eşleşmeli.",
+  mutate: (fixture) => {
+    fixture.reports.uiUxRedesign.allowedEvidenceHosts = ["attacker-controlled.example.net"];
+  },
+});
+runProductionSummaryNegativeCheck({
   label: "Production summary UAT rollback image mismatch negative",
   path: "docs/evidence-templates/production-evidence-summary.uat-rollback-image-mismatch.tmp.json",
   expectedFailure: "reports.uat.rollbackImageTag reports.deploymentRollback.rollbackImageTag ile eşleşmeli.",
@@ -2703,6 +2727,45 @@ runGoLiveNegativeCheck({
     const linkedSummary = structuredClone(productionSummaryFixture);
     linkedSummary.reports.githubCi.commitSha = "2".repeat(40);
     fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.release-sha-mismatch-for-go-live.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live linked summary UI/UX empty artifact manifest negative",
+  path: "docs/evidence-templates/go-live.linked-summary-ui-ux-empty-artifacts.tmp.json",
+  expectedFailure: "productionEvidenceSummary.summary.reports.uiUxRedesign.artifacts boş olmayan schema v2 manifesti olmalı.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.ui-ux-empty-artifacts-for-go-live.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.reports.uiUxRedesign.artifacts = [];
+    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.ui-ux-empty-artifacts-for-go-live.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live linked summary UI/UX nested GitHub CI drift negative",
+  path: "docs/evidence-templates/go-live.linked-summary-ui-ux-github-drift.tmp.json",
+  expectedFailure: "productionEvidenceSummary.summary.reports.uiUxRedesign.githubCi standalone GitHub CI kanıtıyla exact SHA/run/job bağı kurmalı.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.ui-ux-github-drift-for-go-live.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.reports.uiUxRedesign.githubCi.runId = "9999999999";
+    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.ui-ux-github-drift-for-go-live.tmp.json";
+    writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
+    cleanupPaths.push(linkedPath);
+  },
+});
+runGoLiveNegativeCheck({
+  label: "Go-live linked summary UI/UX self-expanded allowlist negative",
+  path: "docs/evidence-templates/go-live.linked-summary-ui-ux-allowlist-drift.tmp.json",
+  expectedFailure: "productionEvidenceSummary.summary.reports.uiUxRedesign.allowedEvidenceHosts güvenilir UI_UX_REDESIGN_ALLOWED_EVIDENCE_HOSTS ile birebir eşleşmeli.",
+  mutate: (fixture, cleanupPaths) => {
+    const linkedPath = "docs/evidence-templates/production-evidence-summary.ui-ux-allowlist-drift-for-go-live.tmp.json";
+    const linkedSummary = structuredClone(productionSummaryFixture);
+    linkedSummary.reports.uiUxRedesign.allowedEvidenceHosts = ["attacker-controlled.example.net"];
+    fixture.productionEvidenceSummary.summaryTarget = "production-evidence-summary.ui-ux-allowlist-drift-for-go-live.tmp.json";
     writeFileSync(linkedPath, `${JSON.stringify(linkedSummary, null, 2)}\n`);
     cleanupPaths.push(linkedPath);
   },

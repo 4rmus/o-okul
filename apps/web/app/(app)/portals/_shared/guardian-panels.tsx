@@ -29,7 +29,7 @@ export function NotificationPreferencesPanel({
 
   return (
     <Panel aria-label="Bildirim tercihleri" title="Bildirim Tercihleri">
-      {readOnly ? <p>Salt-okuma önizlemede bildirim tercihleri değiştirilemez.</p> : null}
+      {readOnly ? <p>Yalnızca görüntüleme sırasında bildirim tercihleri değiştirilemez.</p> : null}
       {isSmsEnabled ? (
         <Checkbox
           checked={preferences?.canReceiveSms ?? false}
@@ -126,7 +126,7 @@ export function PaymentPlansPanel({
   );
   const transactionColumns: Array<DataTableColumn<{ plan: PaymentPlanWithInstallmentsRecord; transaction: PaymentTransactionRecord }>> = [
     {
-      header: "Makbuz",
+      header: "Kayıt no",
       key: "receipt",
       priority: "primary",
       render: ({ transaction }) => transaction.receiptNo,
@@ -170,10 +170,10 @@ export function PaymentPlansPanel({
         rows={plans}
       />
       <DataTable
-        caption="Makbuzlar"
+        caption="Tahsilat kayıtları"
         columns={transactionColumns}
-        description="Veli finans izni açık olan öğrencinin tahsilat makbuzları."
-        emptyText="Makbuz yok."
+        description="Veli finans izni açık olan öğrencinin tahsilat kayıtları."
+        emptyText="Tahsilat kaydı yok."
         getRowKey={({ transaction }) => transaction.id}
         rows={transactions}
       />

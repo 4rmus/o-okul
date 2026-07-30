@@ -117,12 +117,15 @@ export function ReportsPage() {
   const [reportJobState, setReportJobState] = useState<ReportJobState>("idle");
   const [activeTab, setActiveTab] = useState<ReportWorkspaceTab>(() => readReportWorkspaceTab(searchParams));
   const examIdRef = useRef(examId);
-  const studentReportRequestVersion = useRef(0);
+  const selectionGeneration = useRef(0);
+  const reportDataAbortController = useRef<AbortController | null>(null);
+  const studentReportAbortController = useRef<AbortController | null>(null);
+  const reportJobAbortController = useRef<AbortController | null>(null);
   examIdRef.current = examId;
   const tenantId = auth?.session.tenantId ?? "anonymous";
   const referencesQuery = useQuery({
     queryKey: ["next-report-refs", tenantId],
-    queryFn: () => loadReportReferences(auth?.accessToken ?? ""),
+    queryFn: ({ signal }) => loadReportReferences(auth?.accessToken ?? "", signal),
     enabled: Boolean(auth),
     refetchOnWindowFocus: false,
   });
@@ -208,11 +211,18 @@ export function ReportsPage() {
   useEffect(() => {
     if (!examId && exams.length > 0) {
       const nextExamId = preferredExamId(exams);
-      studentReportRequestVersion.current += 1;
+      advanceSelectionGeneration();
       examIdRef.current = nextExamId;
       setExamId(nextExamId);
     }
   }, [examId, exams]);
+
+  useEffect(() => () => {
+    selectionGeneration.current += 1;
+    reportDataAbortController.current?.abort();
+    studentReportAbortController.current?.abort();
+    reportJobAbortController.current?.abort();
+  }, []);
 
   useEffect(() => {
     if (!scoreTypeOptions.length) {
@@ -227,12 +237,13 @@ export function ReportsPage() {
     const nextTab = readReportWorkspaceTab(nextSearchParams);
     const nextExamId = nextSearchParams.get("examId") ?? "";
     setActiveTab((current) => (current === nextTab ? current : nextTab));
-    if (nextExamId && nextExamId !== examIdRef.current) {
-      studentReportRequestVersion.current += 1;
+    if (nextExamId !== examIdRef.current) {
+      advanceSelectionGeneration();
       examIdRef.current = nextExamId;
       setExamId(nextExamId);
       setLoadedExamId("");
       setReportData(null);
+      setIsReportLoading(false);
       setScoreType("");
       setError("");
       setQueueMessage("");
@@ -248,11 +259,12 @@ export function ReportsPage() {
   function selectReportExam(nextExamId: string) {
     if (nextExamId === examId) return;
 
-    studentReportRequestVersion.current += 1;
+    advanceSelectionGeneration();
     examIdRef.current = nextExamId;
     setExamId(nextExamId);
     setLoadedExamId("");
     setReportData(null);
+    setIsReportLoading(false);
     setScoreType("");
     setError("");
     setQueueMessage("");
@@ -261,9 +273,20 @@ export function ReportsPage() {
     writeWorkspaceTabToUrl(defaultReportWorkspaceTab, defaultReportWorkspaceTab, nextExamId);
   }
 
+  function advanceSelectionGeneration() {
+    selectionGeneration.current += 1;
+    reportDataAbortController.current?.abort();
+    studentReportAbortController.current?.abort();
+    reportJobAbortController.current?.abort();
+    reportDataAbortController.current = null;
+    studentReportAbortController.current = null;
+    reportJobAbortController.current = null;
+    return selectionGeneration.current;
+  }
+
   async function loadReports(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isReportJobBusy) return;
 
     setError("");
     const parsedForm = reportQueryFormSchema.safeParse({ examId });
@@ -271,23 +294,30 @@ export function ReportsPage() {
       setError(firstFormError(parsedForm.error));
       return;
     }
-    studentReportRequestVersion.current += 1;
+    const requestGeneration = advanceSelectionGeneration();
+    const requestExamId = parsedForm.data.examId;
+    const controller = new AbortController();
+    reportDataAbortController.current = controller;
     try {
       setIsReportLoading(true);
-      setReportData(await loadReportData(auth.accessToken, parsedForm.data.examId, filters));
-      setLoadedExamId(parsedForm.data.examId);
+      const data = await loadReportData(auth.accessToken, requestExamId, filters, controller.signal);
+      if (controller.signal.aborted || selectionGeneration.current !== requestGeneration || examIdRef.current !== requestExamId) return;
+      setReportData(data);
+      setLoadedExamId(requestExamId);
       selectReportTab("overview");
     } catch (loadError) {
+      if (controller.signal.aborted || selectionGeneration.current !== requestGeneration) return;
       setLoadedExamId("");
       setReportData(null);
       setError(apiErrorMessage(loadError, "Rapor alınamadı."));
     } finally {
-      setIsReportLoading(false);
+      if (reportDataAbortController.current === controller) reportDataAbortController.current = null;
+      if (selectionGeneration.current === requestGeneration) setIsReportLoading(false);
     }
   }
 
   async function enqueueReportGeneration() {
-    if (!auth) return;
+    if (!auth || isReportLoading || isReportJobBusy) return;
 
     setError("");
     setQueueMessage("Rapor üretimi kuyruğa alınıyor.");
@@ -299,37 +329,50 @@ export function ReportsPage() {
       setError(firstFormError(parsedForm.error));
       return;
     }
-    studentReportRequestVersion.current += 1;
+    const requestGeneration = advanceSelectionGeneration();
+    const requestExamId = parsedForm.data.examId;
+    let controller: AbortController | null = null;
     try {
-      const job = await enqueueReportGenerationJob(auth.accessToken, parsedForm.data.examId, {
+      const job = await enqueueReportGenerationJob(auth.accessToken, requestExamId, {
         ...filters,
       });
+      if (selectionGeneration.current !== requestGeneration || examIdRef.current !== requestExamId) return;
       setQueueMessage("Rapor üretimi kuyruğa alındı.");
       selectReportTab("overview");
       setReportJobState("processing");
       setQueueMessage("Rapor üretimi işleniyor.");
-      await waitForReportGenerationJob(auth.accessToken, parsedForm.data.examId, job.jobId);
-      setReportData(await loadReportData(auth.accessToken, parsedForm.data.examId, filters));
-      setLoadedExamId(parsedForm.data.examId);
+      controller = new AbortController();
+      reportJobAbortController.current = controller;
+      await waitForReportGenerationJob(auth.accessToken, requestExamId, job.jobId, controller.signal);
+      if (controller.signal.aborted || selectionGeneration.current !== requestGeneration || examIdRef.current !== requestExamId) return;
+      const data = await loadReportData(auth.accessToken, requestExamId, filters, controller.signal);
+      if (controller.signal.aborted || selectionGeneration.current !== requestGeneration || examIdRef.current !== requestExamId) return;
+      setReportData(data);
+      setLoadedExamId(requestExamId);
       setQueueMessage("Rapor üretimi tamamlandı.");
       setReportJobState("completed");
       selectReportTab("overview");
     } catch (queueError) {
+      if (controller?.signal.aborted || selectionGeneration.current !== requestGeneration || isAbortError(queueError)) return;
       setReportJobState("error");
       setQueueMessage("");
       setError(queueError instanceof ReportGenerationTimeoutError
         ? queueError.message
         : apiErrorMessage(queueError, "Rapor üretimi tamamlanamadı."));
+    } finally {
+      if (controller && reportJobAbortController.current === controller) reportJobAbortController.current = null;
     }
   }
 
   async function selectStudentReport(studentId: string) {
     if (!auth || !latestSnapshot || !loadedExamId) return;
 
-    const requestVersion = studentReportRequestVersion.current + 1;
-    studentReportRequestVersion.current = requestVersion;
+    const requestGeneration = selectionGeneration.current;
     const requestExamId = loadedExamId;
     const requestSnapshotId = latestSnapshot.id;
+    studentReportAbortController.current?.abort();
+    const controller = new AbortController();
+    studentReportAbortController.current = controller;
     setError("");
     try {
       const selectedReport = await loadStudentReportData(
@@ -337,8 +380,9 @@ export function ReportsPage() {
         requestExamId,
         requestSnapshotId,
         studentId,
+        controller.signal,
       );
-      if (studentReportRequestVersion.current !== requestVersion) return;
+      if (controller.signal.aborted || selectionGeneration.current !== requestGeneration || examIdRef.current !== requestExamId) return;
       setReportData((current) => current
         ? {
             ...current,
@@ -348,8 +392,10 @@ export function ReportsPage() {
         : current);
       selectReportTab("karne");
     } catch (selectError) {
-      if (studentReportRequestVersion.current !== requestVersion) return;
+      if (controller.signal.aborted || selectionGeneration.current !== requestGeneration) return;
       setError(apiErrorMessage(selectError, "Öğrenci raporu alınamadı."));
+    } finally {
+      if (studentReportAbortController.current === controller) studentReportAbortController.current = null;
     }
   }
 
@@ -413,7 +459,7 @@ export function ReportsPage() {
             </Field>
             <div className="next-report-actions">
               <Button
-                disabled={referencesQuery.isPending}
+                disabled={referencesQuery.isPending || isReportJobBusy}
                 loading={isReportLoading}
                 loadingLabel="Yükleniyor"
                 type="submit"
@@ -423,7 +469,7 @@ export function ReportsPage() {
               </Button>
               {latestSnapshot || isReportJobBusy ? (
                 <Button
-                  disabled={!examId}
+                  disabled={!examId || isReportLoading}
                   loading={isReportJobBusy}
                   loadingLabel="İşleniyor"
                   type="button"
@@ -632,6 +678,7 @@ async function loadReportData(
   accessToken: string,
   examId: string,
   filters: typeof emptyFilters,
+  signal: AbortSignal,
 ): Promise<ReportData> {
   const snapshotsUrl = new URL(`${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots`);
   if (filters.campusId) snapshotsUrl.searchParams.set("campusId", filters.campusId);
@@ -643,8 +690,9 @@ async function loadReportData(
     apiRequest<ReportSnapshotRecord[]>(
       accessToken,
       snapshotsUrl.toString(),
+      { signal },
     ),
-    apiRequestOrEmpty(() => loadExamParticipants(accessToken, examId)),
+    apiRequestOrEmpty(() => loadExamParticipants(accessToken, examId, signal)),
   ]);
   const latestSnapshot = snapshots[0];
   const students = latestSnapshot
@@ -652,7 +700,7 @@ async function loadReportData(
         classId: filters.classId || latestSnapshot.classId || "",
         participants,
         snapshot: latestSnapshot,
-      })
+      }, signal)
     : [];
   return { errorBooklet: null, participants, selectedStudentId: "", snapshots, studentReport: null, studentProgress: null, students };
 }
@@ -662,33 +710,37 @@ async function loadStudentReportData(
   examId: string,
   snapshotId: string,
   studentId: string,
+  signal: AbortSignal,
 ): Promise<Pick<ReportData, "errorBooklet" | "studentProgress" | "studentReport">> {
   const [studentReport, studentProgress, errorBooklet] = await Promise.all([
     apiRequestOrNull(() => apiRequest<ReportStudentSnapshot>(
       accessToken,
       `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots/${encodeURIComponent(snapshotId)}/students/${encodeURIComponent(studentId)}`,
+      { signal },
     )),
     apiRequestOrNull(() => apiRequest<ReportStudentProgress>(
       accessToken,
       `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/students/${encodeURIComponent(studentId)}/progress?scope=all`,
+      { signal },
     )),
     apiRequestOrNull(() => apiRequest<ReportErrorBooklet>(
       accessToken,
       `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/snapshots/${encodeURIComponent(snapshotId)}/students/${encodeURIComponent(studentId)}/error-booklet`,
+      { signal },
     )),
   ]);
 
   return { studentReport, studentProgress, errorBooklet };
 }
 
-async function loadReportReferences(accessToken: string): Promise<ReportReferences> {
+async function loadReportReferences(accessToken: string, signal: AbortSignal): Promise<ReportReferences> {
   const [campuses, classes, courses, exams, gradeLevels, terms] = await Promise.all([
-    apiListRequest<CampusRecord>(accessToken, `${apiBaseUrl}/campuses`),
-    apiListRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes`),
-    apiListRequest<CourseRecord>(accessToken, `${apiBaseUrl}/courses`),
-    apiListRequest<ExamRecord>(accessToken, `${apiBaseUrl}/exams`),
-    apiListRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels`),
-    apiListRequest<AcademicTermRecord>(accessToken, `${apiBaseUrl}/academic-terms`),
+    apiListRequest<CampusRecord>(accessToken, `${apiBaseUrl}/campuses`, { signal }),
+    apiListRequest<ClassRecord>(accessToken, `${apiBaseUrl}/classes`, { signal }),
+    apiListRequest<CourseRecord>(accessToken, `${apiBaseUrl}/courses`, { signal }),
+    apiListRequest<ExamRecord>(accessToken, `${apiBaseUrl}/exams`, { signal }),
+    apiListRequest<GradeLevelRecord>(accessToken, `${apiBaseUrl}/grade-levels`, { signal }),
+    apiListRequest<AcademicTermRecord>(accessToken, `${apiBaseUrl}/academic-terms`, { signal }),
   ]);
   return {
     campuses: campuses.data,
@@ -706,23 +758,24 @@ async function loadReportStudents(
     participants: ExamParticipantRecord[];
     snapshot: ReportSnapshotRecord;
   },
+  signal: AbortSignal,
 ) {
   if (!input.classId) {
-    return loadStudentsByIds(accessToken, reportStudentIds(input.participants, input.snapshot));
+    return loadStudentsByIds(accessToken, reportStudentIds(input.participants, input.snapshot), signal);
   }
 
   const studentsUrl = new URL(`${apiBaseUrl}/students`);
   studentsUrl.searchParams.set("classId", input.classId);
-  const students = await apiListRequest<StudentRecord>(accessToken, studentsUrl.toString());
+  const students = await apiListRequest<StudentRecord>(accessToken, studentsUrl.toString(), { signal });
   return students.data;
 }
 
-async function loadStudentsByIds(accessToken: string, studentIds: string[]) {
+async function loadStudentsByIds(accessToken: string, studentIds: string[], signal: AbortSignal) {
   const chunks = chunk(studentIds, 200);
   const responses = await Promise.all(chunks.map(async (ids) => {
     const url = new URL(`${apiBaseUrl}/students`);
     url.searchParams.set("ids", ids.join(","));
-    return apiRequestOrEmpty(async () => (await apiListRequest<StudentRecord>(accessToken, url)).data);
+    return apiRequestOrEmpty(async () => (await apiListRequest<StudentRecord>(accessToken, url, { signal })).data);
   }));
   return responses.flat();
 }
@@ -764,10 +817,11 @@ function uniqueStrings(values: string[]) {
   return result;
 }
 
-async function loadExamParticipants(accessToken: string, examId: string) {
+async function loadExamParticipants(accessToken: string, examId: string, signal: AbortSignal) {
   return apiRequest<ExamParticipantRecord[]>(
     accessToken,
     `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/participants`,
+    { signal },
   );
 }
 
@@ -830,23 +884,47 @@ async function enqueueReportGenerationJob(
   );
 }
 
-async function waitForReportGenerationJob(accessToken: string, examId: string, jobId: string) {
+async function waitForReportGenerationJob(accessToken: string, examId: string, jobId: string, signal: AbortSignal) {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     let status: ReportGenerationJobStatus | undefined;
     try {
       status = await apiRequest<ReportGenerationJobStatus>(
         accessToken,
         `${apiBaseUrl}/exams/${encodeURIComponent(examId)}/reports/generation-jobs/${encodeURIComponent(jobId)}`,
+        { signal },
       );
     } catch (error) {
+      if (signal.aborted) throw error;
       if (error instanceof ApiRequestError) throw error;
       // Geçici ağ hatalarında gerçek worker işini iptal edilmiş saymadan yeniden dene.
     }
     if (status?.status === "COMPLETED") return status;
     if (status?.status === "FAILED") throw new Error(status.errorCode ?? "REPORT_GENERATION_FAILED");
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await abortableDelay(1_000, signal);
   }
   throw new ReportGenerationTimeoutError();
+}
+
+function abortableDelay(duration: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const onAbort = () => {
+      window.clearTimeout(timeout);
+      reject(signal.reason);
+    };
+    const timeout = window.setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, duration);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
 }
 
 class ReportGenerationTimeoutError extends Error {
@@ -1294,7 +1372,7 @@ function StudentResultsTable({
       priority: "primary",
       render: (row) => (
         <div className="next-row-actions">
-          <button
+          <Button size="icon" variant="ghost"
             aria-label={`${row.studentName} karnesini aç`}
             disabled={!row.hasResult}
             onClick={() => onSelect(row.studentId)}
@@ -1302,7 +1380,7 @@ function StudentResultsTable({
             type="button"
           >
             <Eye size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </div>
       ),
       sticky: "right",

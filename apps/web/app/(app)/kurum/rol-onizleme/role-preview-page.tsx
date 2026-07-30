@@ -27,41 +27,41 @@ const roleCards = [
   {
     title: "Öğretmen Portalı",
     route: "/ogretmen",
-    account: "TEACHER + subjectType TEACHER",
-    scope: "Ders programı, kapsamındaki öğrenciler, yoklama, not, ödev kontrolü ve raporlar",
+    account: "Öğretmen hesabı",
+    scope: "Ders programı, atandığı öğrenciler, yoklama, not, ödev kontrolü ve raporlar",
     subjectScope: "Öğretmen kişi kaydı",
-    dataScope: "/me/teacher ve öğretmen kapsamlı öğrenci verisi",
-    writePolicy: "Yazma aksiyonları kapalı",
+    dataScope: "Yalnızca öğretmene atanmış öğrenci ve ders bilgileri",
+    writePolicy: "Değişiklik yapılamaz",
     targetRole: "TEACHER",
   },
   {
     title: "Öğrenci Portalı",
     route: "/ogrenci",
-    account: "STUDENT + subjectType STUDENT",
+    account: "Öğrenci hesabı",
     scope: "Profil, devamsızlık, duyuru, ödev, destek talebi, sınav raporu ve hata kitapçığı",
     subjectScope: "Öğrenci kişi kaydı",
-    dataScope: "/me/student ve kendi öğrenci kapsamı",
-    writePolicy: "Destek ve profil yazma aksiyonları kapalı",
+    dataScope: "Yalnızca öğrencinin kendi bilgileri",
+    writePolicy: "Destek ve profil bilgileri değiştirilemez",
     targetRole: "STUDENT",
   },
   {
     title: "Veli Portalı",
     route: "/veli",
-    account: "GUARDIAN + subjectType GUARDIAN",
+    account: "Veli hesabı",
     scope: "Bağlı öğrenci, ödeme görünümü, bildirim tercihleri, duyuru, destek ve raporlar",
     subjectScope: "Veli kişi kaydı",
-    dataScope: "/me/guardian bağlı öğrenci kapsamı",
-    writePolicy: "Finans izni ve yazma aksiyonları salt-okuma",
+    dataScope: "Yalnızca veliye bağlı öğrencilerin bilgileri",
+    writePolicy: "Ödeme ve diğer bilgiler değiştirilemez",
     targetRole: "GUARDIAN",
   },
 ] as const;
 
 const accessRules = [
-  "Kurum admin portalları normal sol menü rotası olarak görmez.",
-  "Portal route'u kişi hesabı ve doğru subjectType ister.",
+  "Kurum yöneticileri kişisel ekranları normal menüde görmez.",
+  "Kişisel ekranı açmak için ilgili öğretmen, öğrenci veya veli hesabı gerekir.",
   "Veli yalnız bağlı öğrencinin verisini görür.",
-  "Öğretmen yalnız sorumlu öğrenci veya ders programı kapsamını görür.",
-  "Öğrenci yalnız kendi /me/student verisini görür.",
+  "Öğretmen yalnız sorumlu olduğu öğrencileri ve ders programını görür.",
+  "Öğrenci yalnız kendi bilgilerini görür.",
 ] as const;
 
 const evidenceChecks = [
@@ -74,8 +74,8 @@ const previewRoles = tenantAssignableRoles.map((role) => ({ label: tenantRoleLab
 
 const rolePreviewMetrics = [
   { description: "Öğretmen, öğrenci ve veli portalı", key: "portal", label: "Portal", tone: "info", value: "3 rol" },
-  { description: "Kişi hesabı ve subjectType zorunlu", key: "access", label: "Erişim", tone: "success", value: "Kişi hesabı" },
-  { description: "Portal sorguları /me kapsamından ilerler", key: "scope", label: "Kapsam", tone: "default", value: "/me bağlı" },
+  { description: "İlgili öğretmen, öğrenci veya veli kaydı seçilir", key: "access", label: "Erişim", tone: "success", value: "Kişiye bağlı" },
+  { description: "Her kullanıcı yalnız yetkili olduğu bilgileri görür", key: "scope", label: "Görülebilenler", tone: "default", value: "Sınırlı" },
 ] as const;
 
 interface RolePreviewSession {
@@ -127,7 +127,7 @@ interface RolePreviewListRow {
 const rolePreviewScopeColumns: Array<DataTableColumn<RolePreviewScopeRow>> = [
   {
     key: "group",
-    header: "Kapsam",
+    header: "Menü grubu",
     mobilePriority: "secondary",
     priority: "secondary",
     render: (row) => row.group,
@@ -151,7 +151,7 @@ const rolePreviewMetaColumns: Array<DataTableColumn<RolePreviewMetaRow>> = [
   },
   {
     key: "value",
-    header: "Kapsam",
+    header: "Görülebilenler",
     mobilePriority: "primary",
     priority: "primary",
     render: (row) => row.value,
@@ -198,63 +198,63 @@ export function RolePreviewPage() {
   const previewScopeRows = buildRolePreviewScopeRows(previewSections);
   const rolePreviewSummaryItems: OperationSummaryItem[] = [
     {
-      description: "Öğretmen, öğrenci ve veli portal kapsamı",
+      description: "Öğretmen, öğrenci ve veli ekranları",
       key: "portal-scope",
-      label: "Portal kapsamı",
+      label: "Kişisel ekranlar",
       tone: "info",
       value: `${roleCards.length} rol`,
     },
     {
-      description: "Önizleme oturumu yazma işlemlerini kapatır",
+      description: "Önizleme sırasında hiçbir kayıt değiştirilemez",
       key: "mode",
-      label: "Mod",
+      label: "Erişim",
       tone: "success",
-      value: "READ_ONLY",
+      value: "Yalnızca görüntüleme",
     },
     {
-      description: "Preview token route query veya ekranda gösterilmez",
+      description: "Güvenli erişim bilgisi ekranda ve bağlantıda gösterilmez",
       key: "token",
-      label: "Token",
+      label: "Güvenlik",
       tone: "success",
-      value: "URL'de yok",
+      value: "Gizli",
     },
     {
-      description: "Backend audit kaydı süreli preview context üretir",
+      description: "Her önizleme sınırlı süreyle açılır ve işlem kaydı tutulur",
       key: "audit",
-      label: "Audit",
+      label: "İşlem kaydı",
       tone: "info",
       value: "Süreli kayıt",
     },
   ];
   const rolePreviewSummaryBadges: OperationSummaryBadge[] = [
-    { key: "readonly", label: "Yazma kapalı", tone: "success" },
-    { key: "scope", label: "/me bağlı veri", tone: "info" },
-    { key: "pii", label: "Demo PII gizli", tone: "neutral" },
+    { key: "readonly", label: "Değişiklik yapılamaz", tone: "success" },
+    { key: "scope", label: "Kişiye bağlı bilgiler", tone: "info" },
+    { key: "pii", label: "Kişisel veriler gizli", tone: "neutral" },
   ];
   const rolePreviewSummaryActions: OperationSummaryAction[] = [
     {
-      detail: "POST /role-previews yalnız seçili kişi kaydıyla çağrılır",
+      detail: "Önizleme yalnız seçtiğiniz kişi için başlatılır",
       key: "preview-start",
-      label: "Preview başlat",
-      status: "Auditli",
+      label: "Önizlemeyi başlat",
+      status: "Kayıt tutulur",
       tone: "info",
-      value: "Server kayıt",
+      value: "Seçili kişi",
     },
     {
-      detail: "Preview token ekranda, URL'de veya breadcrumb metninde gösterilmez",
+      detail: "Güvenli erişim bilgisi ekranda veya bağlantıda gösterilmez",
       key: "token-safe",
-      label: "Token taşıma",
-      status: "SessionStorage",
+      label: "Güvenli geçiş",
+      status: "Bağlantıda gösterilmez",
       tone: "success",
       value: "Gizli",
     },
     {
-      detail: "Portal context /me probe ile doğrulanır",
+      detail: "Seçilen kişinin görebileceği bilgiler açılmadan önce doğrulanır",
       key: "portal-probe",
-      label: "Portal probe",
-      status: "READ_ONLY",
+      label: "Erişim kontrolü",
+      status: "Yalnızca görüntüleme",
       tone: "success",
-      value: "/me",
+      value: "Doğrulandı",
     },
   ];
 
@@ -296,7 +296,7 @@ export function RolePreviewPage() {
     <PageFrame
       actions={<ReferenceBadge />}
       title="Rol Önizleme"
-      subtitle="Kurum admin için öğretmen, öğrenci ve veli portal kapsamlarını güvenli şekilde izle."
+      subtitle="Öğretmen, öğrenci ve veli ekranlarını seçtiğiniz kişi adına güvenli biçimde görüntüleyin."
     >
       <MetricGrid aria-label="Rol önizleme özeti" role="region">
         {rolePreviewMetrics.map((metric) => (
@@ -311,14 +311,14 @@ export function RolePreviewPage() {
       </MetricGrid>
       <OperationSummary
         actions={rolePreviewSummaryActions}
-        ariaLabel="Rol önizleme operasyon özeti"
+        ariaLabel="Önizleme güvenlik özeti"
         badges={rolePreviewSummaryBadges}
         items={rolePreviewSummaryItems}
       />
       <OperationDecisionNotice
-        decision="Karar: panel audit'li ve süreli rol önizleme kaydı başlatır."
-        reason="Gerçek kullanıcı kapsamına geçiş salt-okunur ve denetlenebilir önizleme kaydı olmadan açılmaz."
-        nextStep="Preview tokenı /me portal sorgularında salt-okuma context olarak kullanılır."
+        decision="Rol önizlemesi yalnızca görüntüleme için açılır."
+        reason="Yönetici seçtiği öğretmen, öğrenci veya veli ekranını sınırlı süreyle görür; hiçbir kaydı değiştiremez."
+        nextStep="Kişiyi seçin, önizlemeyi başlatın ve ilgili ekrana geçin."
       />
       {error ? <p className="next-form-error">{error}</p> : null}
       {previewSubjectsQuery.isError ? <p className="next-form-error">Önizleme kişileri yüklenemedi.</p> : null}
@@ -326,27 +326,27 @@ export function RolePreviewPage() {
         <Panel
           aria-label="Aktif rol önizleme kaydı"
           className="next-role-preview-active"
-          description="Preview token ekranda veya URL'de gösterilmez; portal linki salt-okuma context'i oturum saklama alanı üzerinden taşır."
+          description="Güvenli erişim bilgisi ekranda veya bağlantıda gösterilmez. Önizleme sınırlı süreyle ve yalnızca görüntüleme için açılır."
           title="Aktif Önizleme"
         >
           <div className="next-role-preview-badges" aria-label="Aktif önizleme güven durumu">
-            <StatusBadge tone="success">Salt-okuma</StatusBadge>
+            <StatusBadge tone="success">Yalnızca görüntüleme</StatusBadge>
             <StatusBadge tone={profile ? "success" : "warning"}>
-              {profile ? "Portal context doğrulandı" : "Portal context bekleniyor"}
+              {profile ? "Kişi erişimi doğrulandı" : "Kişi erişimi bekleniyor"}
             </StatusBadge>
-            <StatusBadge tone="info">Süreli oturum</StatusBadge>
+            <StatusBadge tone="info">Süreli</StatusBadge>
           </div>
           <div className="next-role-preview-session-grid">
-            <p>Hedef rol: {session.targetRole}</p>
+            <p>Seçili rol: {session.targetRole}</p>
             <p>Kişi kaydı: {subjectPrivacyLabel(session.targetRole)}</p>
-            <p>Mod: {session.mode}</p>
+            <p>Erişim: Yalnızca görüntüleme</p>
             <p>Bitiş: {new Date(session.expiresAt).toLocaleString("tr-TR")}</p>
             {profile ? (
               <>
-                <p>Portal context doğrulandı</p>
-                <p>Context rol: {profile.roles.join(", ")}</p>
-                <p>Context kişi tipi: {profile.subjectType}</p>
-                <p>Context kişi kaydı: {profile.subjectId ? "Maskeli subject ref" : "Bekleniyor"}</p>
+                <p>Kişi erişimi doğrulandı</p>
+                <p>Kullanıcı görevi: {profile.roles.join(", ")}</p>
+                <p>Kişi türü: {profile.subjectType}</p>
+                <p>Kişi kaydı: {profile.subjectId ? "Kimliği gizlenmiş kayıt" : "Bekleniyor"}</p>
               </>
             ) : null}
             {portalProbe ? (
@@ -363,10 +363,10 @@ export function RolePreviewPage() {
       <Panel
         aria-label="Rol görünüm önizleme"
         className="next-role-preview-scope-panel"
-        description="Seçili rolün görebileceği kurum menüsü veya portal rotası."
+        description="Seçtiğiniz kullanıcı görevinin görebileceği menü ve kişisel ekranlar."
         title="Görünüm Önizleme"
       >
-        <Field label="Rol" description="Seçili rol için kurum menüsü veya portal rotası kapsamını gösterir.">
+        <Field label="Rol" description="Seçilen kullanıcı görevinin görebileceği menü ve ekranları gösterir.">
           <Select value={previewRole} onChange={(event) => setPreviewRole(event.target.value as PreviewRole)}>
             {previewRoles.map((role) => (
               <option key={role.value} value={role.value}>
@@ -376,19 +376,19 @@ export function RolePreviewPage() {
           </Select>
         </Field>
         <DataTable
-          caption="Rol görünüm kapsamı"
+          caption="Rolün görebileceği alanlar"
           columns={rolePreviewScopeColumns}
           density="compact"
-          description="Kurum rolleri menü öğelerini, portal rolleri yalnız ilgili portal rotasını gösterir."
-          emptyText="Rol kapsamı yok"
+          description="Kurum yönetimi görevleri menüleri, öğretmen, öğrenci ve veli görevleri kendi ekranlarını gösterir."
+          emptyText="Bu rol için görülebilecek alan yok"
           getRowKey={(row) => row.id}
           rows={previewScopeRows}
         />
       </Panel>
       <section className="next-role-preview-portal-grid" aria-label="Rol portal kartları" aria-busy={Boolean(pendingRole)}>
         <header className="next-role-preview-section-header">
-          <h2>Portal Kapsamları</h2>
-          <p>Portal önizlemeleri auditli ve salt-okuma context ile başlatılır.</p>
+          <h2>Kişisel Ekran Önizlemeleri</h2>
+          <p>Önizlemeler sınırlı süreyle açılır, işlem kaydı tutulur ve hiçbir bilgi değiştirilemez.</p>
         </header>
         <div className="next-role-preview-card-grid">
           {roleCards.map((role) => {
@@ -405,12 +405,12 @@ export function RolePreviewPage() {
               <Panel
                 actions={
                   <div className="next-role-preview-badges" aria-label={`${role.title} güven durumu`}>
-                    <StatusBadge tone="success">Salt-okuma</StatusBadge>
-                    <StatusBadge tone="info">Auditli</StatusBadge>
-                    <StatusBadge tone="neutral">Kişi kapsamı</StatusBadge>
+                    <StatusBadge tone="success">Yalnızca görüntüleme</StatusBadge>
+                    <StatusBadge tone="info">İşlem kaydı tutulur</StatusBadge>
+                    <StatusBadge tone="neutral">Seçili kişi</StatusBadge>
                   </div>
                 }
-                aria-label={`${role.title} kapsam kartı`}
+                aria-label={`${role.title} önizleme kartı`}
                 as="article"
                 className="next-role-preview-card"
                 description={role.scope}
@@ -421,13 +421,13 @@ export function RolePreviewPage() {
                   <p>{role.account}</p>
                   <code className="next-role-preview-route">{role.route}</code>
                   <DataTable
-                    caption={`${role.title} kapsam özeti`}
+                    caption={`${role.title} görülebilen bilgiler`}
                     columns={rolePreviewMetaColumns}
                     density="compact"
                     getRowKey={(row) => row.id}
                     rows={buildRolePreviewMetaRows(role)}
                   />
-                  <p>Demo hesap bilgisi görünüm kanıtlarında gösterilmez.</p>
+                  <p>Kişisel giriş bilgileri önizlemede gösterilmez.</p>
                   <Field label="Önizleme kişisi" description={subjectSelectDescription}>
                     <Select
                       value={selectedSubjectId}
@@ -455,7 +455,7 @@ export function RolePreviewPage() {
                   >
                     {pendingRole === role.targetRole
                       ? "Önizleme hazırlanıyor"
-                      : `Auditli ${role.title.replace(" Portalı", "").toLocaleLowerCase("tr-TR")} önizleme başlat`}
+                      : `${role.title.replace(" Portalı", "")} ekranını önizle`}
                   </Button>
                 </div>
               </Panel>
@@ -502,9 +502,9 @@ function previewSubjectLabel(role: RolePreviewSession["targetRole"]): string {
 
 function previewSubjectDescription(role: RolePreviewSession["targetRole"]): string {
   const descriptions: Record<RolePreviewSession["targetRole"], string> = {
-    GUARDIAN: "Maskeli veli referansı",
-    STUDENT: "Maskeli öğrenci referansı",
-    TEACHER: "Maskeli öğretmen referansı",
+    GUARDIAN: "Kimliği gizlenmiş veli kaydı",
+    STUDENT: "Kimliği gizlenmiş öğrenci kaydı",
+    TEACHER: "Kimliği gizlenmiş öğretmen kaydı",
   };
   return descriptions[role];
 }
@@ -518,15 +518,15 @@ async function loadPortalProbe(accessToken: string, session: RolePreviewSession)
   const init = { headers: { "x-role-preview-token": session.previewToken } };
   if (session.targetRole === "TEACHER") {
     await apiRequest<{ id: string }>(accessToken, `${apiBaseUrl}/me/teacher`, init);
-    return { label: "Öğretmen portal verisi", value: "Kapsam doğrulandı" };
+    return { label: "Öğretmen ekranı", value: "Erişim doğrulandı" };
   }
   if (session.targetRole === "STUDENT") {
     await apiRequest<{ id: string }>(accessToken, `${apiBaseUrl}/me/student/profile`, init);
-    return { label: "Öğrenci portal verisi", value: "Kendi profil kapsamı doğrulandı" };
+    return { label: "Öğrenci ekranı", value: "Kendi bilgilerine erişim doğrulandı" };
   }
 
   const students = await apiRequest<Array<{ id: string }>>(accessToken, `${apiBaseUrl}/me/guardian/students`, init);
-  return { label: "Veli portal verisi", value: `${students.length} bağlı öğrenci` };
+  return { label: "Veli ekranı", value: `${students.length} bağlı öğrenci` };
 }
 
 function subjectPrivacyLabel(role: RolePreviewSession["targetRole"]): string {
@@ -569,9 +569,9 @@ function buildRolePreviewScopeRows(sections: Array<{ title: string; items: strin
 
 function buildRolePreviewMetaRows(role: (typeof roleCards)[number]): RolePreviewMetaRow[] {
   return [
-    { id: "subject", label: "Subject", value: role.subjectScope },
-    { id: "data", label: "Veri", value: role.dataScope },
-    { id: "action", label: "Aksiyon", value: role.writePolicy },
+    { id: "subject", label: "Kişi", value: role.subjectScope },
+    { id: "data", label: "Görülebilen bilgiler", value: role.dataScope },
+    { id: "action", label: "İşlem", value: role.writePolicy },
   ];
 }
 
@@ -586,9 +586,9 @@ function buildPortalPreviewHref(session: RolePreviewSession): string {
 
 function portalPreviewLabel(role: RolePreviewSession["targetRole"]): string {
   const labels: Record<RolePreviewSession["targetRole"], string> = {
-    GUARDIAN: "Veli portalını önizle",
-    STUDENT: "Öğrenci portalını önizle",
-    TEACHER: "Öğretmen portalını önizle",
+    GUARDIAN: "Veli ekranına geç",
+    STUDENT: "Öğrenci ekranına geç",
+    TEACHER: "Öğretmen ekranına geç",
   };
   return labels[role];
 }

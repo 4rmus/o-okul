@@ -52,13 +52,13 @@ test("sistem admin kurum açar, ilk admin girer ve kurulum sihirbazını tamamla
   await page.getByRole("button", { name: "Kurum oluştur" }).click();
   const createDialog = page.getByRole("dialog", { name: "Kurum oluştur" });
   await createDialog.getByLabel("Kurum adı").fill(tenantName);
-  await createDialog.getByLabel("Slug").fill(tenantSlug);
+  await createDialog.getByLabel("Kurum kodu").fill(tenantSlug);
   await createDialog.getByLabel("Plan").selectOption(evidence.tenant.plan ?? "TRIAL");
-  await createDialog.getByLabel("Koltuk limiti").fill(String(evidence.tenant.seatLimit ?? 25));
-  await createDialog.getByLabel("Admin ad soyad").fill(evidence.firstAdmin.name);
-  await createDialog.getByLabel("Admin e-posta").fill(firstAdminEmail);
-  await createDialog.getByLabel("Admin TC kimlik no").fill(evidence.firstAdmin.nationalId);
-  await createDialog.getByLabel("Admin telefon").fill(evidence.firstAdmin.phone);
+  await createDialog.getByLabel("Kullanıcı sınırı").fill(String(evidence.tenant.seatLimit ?? 25));
+  await createDialog.getByLabel("İlk yönetici ad soyad").fill(evidence.firstAdmin.name);
+  await createDialog.getByLabel("İlk yönetici e-posta").fill(firstAdminEmail);
+  await createDialog.getByLabel("İlk yönetici TC kimlik no").fill(evidence.firstAdmin.nationalId);
+  await createDialog.getByLabel("İlk yönetici telefon").fill(evidence.firstAdmin.phone);
   await createDialog.getByRole("button", { name: "Oluştur", exact: true }).click();
 
   await expect(page.getByRole("row", { name: new RegExp(escapeRegExp(tenantName)) })).toBeVisible();

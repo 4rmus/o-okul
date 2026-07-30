@@ -13,7 +13,7 @@ export function Pagination({ className, onNext, onPrevious, page, totalPages, ..
   const normalizedTotalPages = Math.max(totalPages, 1);
 
   return (
-    <div {...props} className={classNames("uh-pagination", className)}>
+    <div {...props} aria-label={props["aria-label"] ?? "Sayfalama"} className={classNames("uh-pagination", className)} role={props.role ?? "navigation"}>
       <Button aria-label="Önceki sayfa" disabled={page <= 1} onClick={onPrevious} size="sm" variant="secondary">
         Önceki
       </Button>

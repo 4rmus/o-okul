@@ -350,9 +350,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                 />
               ))
             : null}
-          <button className="next-sidebar-logout" type="button" onClick={() => void handleLogout()}>
+          <Button variant="ghost" className="next-sidebar-logout" type="button" onClick={() => void handleLogout()}>
             Çıkış
-          </button>
+          </Button>
         </nav>
         {canUsePushDevices && !isRolePreviewRoute ? <PushDevicePanel accessToken={auth.accessToken} /> : null}
       </aside>
@@ -416,7 +416,7 @@ function DesktopTopBar({
       <div className="next-desktop-topbar__search">
         {canUseShellSearch ? <ShellSearchBar onSearch={onSearch} /> : <span className="next-desktop-topbar__brand">{appBrand.name}</span>}
       </div>
-      <div className="next-desktop-topbar__context" aria-label="Çalışma bağlamı">
+      <div className="next-desktop-topbar__context" aria-label="Seçili kurum veya çalışma alanı">
         <Building2 size={16} aria-hidden="true" />
         <span>{contextLabel}</span>
       </div>

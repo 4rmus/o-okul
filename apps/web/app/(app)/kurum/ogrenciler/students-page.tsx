@@ -264,12 +264,12 @@ export function StudentsPage() {
           <Link href={`/kurum/ogrenciler/${encodeURIComponent(student.id)}`} aria-label={`${student.firstName} öğrenci dashboard`}>
             <Eye size={17} aria-hidden="true" />
           </Link>
-          <button type="button" onClick={() => openEditForm(student)} aria-label={`${student.firstName} düzenle`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(student)} aria-label={`${student.firstName} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => void handleDelete(student)} aria-label={`${student.firstName} sil`}>
+          </Button>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(student)} aria-label={`${student.firstName} sil`}>
             <Trash2 size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </span>
       ),
     },

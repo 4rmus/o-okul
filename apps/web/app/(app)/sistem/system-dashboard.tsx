@@ -20,7 +20,7 @@ export function SystemDashboard() {
   const trialCount = tenants.filter((tenant) => tenant.plan === "TRIAL" || tenant.status === "TRIAL").length;
 
   return (
-    <PageFrame title="Sistem Paneli" subtitle="Platform kurumlarını ve sistem yönetimi başlangıcını izle.">
+    <PageFrame title="Sistem Paneli" subtitle="Kurumların kullanım durumunu ve lisanslarını tek yerden izleyin.">
       {tenantsQuery.isPending ? <LoadingState label="Sistem özeti yükleniyor…" /> : null}
       <MetricGrid className="next-system-summary-grid" aria-label="Sistem özeti" role="region">
         <MetricCard
@@ -31,14 +31,14 @@ export function SystemDashboard() {
         />
         <MetricCard
           className="next-system-summary-card"
-          description="Operasyon erişimi açık"
+          description="Kullanıma açık kurum"
           label="Aktif"
           tone="success"
           value={activeCount}
         />
         <MetricCard
           className="next-system-summary-card"
-          description="Pilot veya deneme kapsamı"
+          description="Deneme planındaki kurum"
           label="Deneme"
           tone="warning"
           value={trialCount}
@@ -49,7 +49,7 @@ export function SystemDashboard() {
         <section aria-label="Sistem başlangıcı">
           <EmptyState
             title="Henüz kurum yok"
-            description="İlk kurumunu oluşturarak sıfır-veri kurulum zincirini başlat."
+            description="İlk kurumu oluşturarak kullanıma hazırlamaya başlayın."
             primaryAction={{ label: "Kurum oluştur", href: "/sistem/kurumlar" }}
           />
         </section>

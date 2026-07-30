@@ -45,6 +45,7 @@ export function LearningOutcomesPage() {
   const [editingOutcome, setEditingOutcome] = useState<LearningOutcomeRecord | null>(null);
   const [form, setForm] = useState<LearningOutcomeFormState>(emptyForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isImportChecking, setIsImportChecking] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -161,12 +162,12 @@ export function LearningOutcomesPage() {
       priority: "primary",
       render: (record) => (
         <span className="next-row-actions">
-          <button type="button" onClick={() => openEditForm(record)} aria-label={`${formatOutcomeCode(record.code)} düzenle`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(record)} aria-label={`${formatOutcomeCode(record.code)} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => void handleDelete(record)} aria-label={`${formatOutcomeCode(record.code)} sil`}>
+          </Button>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(record)} aria-label={`${formatOutcomeCode(record.code)} sil`}>
             <Trash2 size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </span>
       ),
       sticky: "right",
@@ -194,6 +195,7 @@ export function LearningOutcomesPage() {
 
   function closeForm() {
     setIsFormOpen(false);
+    setIsSubmitting(false);
     setEditingOutcome(null);
     setForm(emptyForm);
   }
@@ -279,7 +281,7 @@ export function LearningOutcomesPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!auth) return;
+    if (!auth || isSubmitting) return;
 
     setError("");
     const parsedForm = learningOutcomeFormSchema.safeParse(form);
@@ -288,6 +290,7 @@ export function LearningOutcomesPage() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const savedOutcome = editingOutcome
         ? await updateLearningOutcome(auth.accessToken, editingOutcome.id, parsedForm.data)
@@ -298,6 +301,8 @@ export function LearningOutcomesPage() {
       closeForm();
     } catch {
       setError("Kazanım kaydedilemedi.");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -421,7 +426,9 @@ export function LearningOutcomesPage() {
         onCancel={closeForm}
         onSubmit={(event) => void handleSubmit(event)}
         open={isFormOpen}
+        submitError={error || undefined}
         submitLabel={editingOutcome ? "Kaydet" : "Ekle"}
+        submitting={isSubmitting}
         title={editingOutcome ? "Kazanım düzenle" : "Kazanım ekle"}
       >
         <Field label="Kazanım kodu">

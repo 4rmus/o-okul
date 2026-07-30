@@ -37,12 +37,12 @@ export function StudentFocusPanel({
   const studentName = profile ? `${profile.firstName} ${profile.lastName}` : "-";
   const className = profile?.className ?? "Sınıf bilgisi yok";
   const details = [
-    { label: "Kapsam", value: scopeLabel },
+    { label: "Görünüm", value: scopeLabel },
     { label: "Duyuru", value: announcementStatus },
     { label: "Ödev", value: homeworkStatus },
     { label: "Devamsızlık", value: attendanceStatus },
     { label: "Destek", value: supportStatus },
-    ...(financeStatus ? [{ label: "Finans", value: financeStatus }] : []),
+    ...(financeStatus ? [{ label: "Ödemeler", value: financeStatus }] : []),
     { label: "Başarı %", value: successRate },
     { label: "Soru", value: questionCount },
     { label: "Net", value: net },
@@ -51,10 +51,10 @@ export function StudentFocusPanel({
   return (
     <Panel
       actions={<StatusBadge tone={mode === "read-only" ? "neutral" : "info"}>{studentFocusModeLabel(mode)}</StatusBadge>}
-      aria-label="Öğrenci operasyon bağlamı"
+      aria-label="Seçili öğrenci özeti"
       className="next-portal-focus"
-      description="Seçili öğrenci bağlamı"
-      title="Öğrenci Odağı"
+      description="Seçili öğrencinin sınıf ve sonuç özeti"
+      title="Seçili Öğrenci"
     >
       <div className="next-portal-focus__body">
         <div className="next-portal-focus__identity">
@@ -62,7 +62,7 @@ export function StudentFocusPanel({
           <strong>{studentName}</strong>
           <small>{className}</small>
         </div>
-        <InfoGrid className="next-portal-focus__grid" aria-label="Öğrenci operasyon bağlam metrikleri" role="region">
+        <InfoGrid className="next-portal-focus__grid" aria-label="Seçili öğrenci bilgileri" role="region">
           {details.map((item) => (
             <InfoItem key={item.label} label={item.label} value={item.value} />
           ))}
@@ -210,14 +210,14 @@ export function StudentHistoryPanel({
 }
 
 function studentFocusModeLabel(mode: "guardian" | "read-only" | "student") {
-  if (mode === "read-only") return "Salt-okuma";
-  if (mode === "guardian") return "Veli kapsamı";
-  return "Canlı öğrenci";
+  if (mode === "read-only") return "Yalnızca görüntüleme";
+  if (mode === "guardian") return "Veli görünümü";
+  return "Öğrenci hesabı";
 }
 
 function formatGuardianPermissions(link: GuardianStudentRecord) {
   const permissions = [
-    link.canViewFinance ? "Finans" : undefined,
+    link.canViewFinance ? "Ödemeler" : undefined,
     isSmsEnabled && link.canReceiveSms ? "SMS" : undefined,
     link.canReceiveAnnouncements ? "Duyuru" : undefined,
     link.canOpenSupportTickets ? "Destek" : undefined,

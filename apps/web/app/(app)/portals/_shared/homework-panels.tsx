@@ -104,7 +104,7 @@ export function TeacherHomeworkPanel({
       priority: "primary",
       render: (record) =>
         readOnly ? (
-          "Salt-okuma"
+          "Yalnızca görüntüleme"
         ) : (
           <Button onClick={() => onToggle(record)} variant="secondary">
             {record.checkedAt ? "Bekliyor yap" : "Kontrol et"}

@@ -42,7 +42,7 @@ export function PortalFrame({ actions, children, context, subtitle, title }: Por
 
 function PortalContextStrip({ context }: { context: PortalFrameContext }) {
   return (
-    <section className="next-portal-context-strip" aria-label="Portal görev bağlamı">
+    <section className="next-portal-context-strip" aria-label="Portal görünümü">
       <p className="next-section-eyebrow">Aktif görünüm</p>
       <div>
         <strong>{context.label}</strong>
@@ -55,11 +55,11 @@ function PortalContextStrip({ context }: { context: PortalFrameContext }) {
 
 export function AccessPanel({ title }: { title: string }) {
   return (
-    <PortalFrame title={title} subtitle="Bu portal kişiye özeldir; kurum hesabıyla içerik görünmez.">
+    <PortalFrame title={title} subtitle="Bu ekran kişiye özeldir; kurum yönetimi hesabıyla görüntülenemez.">
       <Panel
         aria-label="Portal erişimi"
-        description="Portalı görmek için ilgili kişi hesabıyla giriş yapın."
-        title="Portal erişimi"
+        description="Bu ekranı görmek için öğretmen, öğrenci veya veli hesabıyla giriş yapın."
+        title="Kişisel ekran erişimi"
       />
     </PortalFrame>
   );
@@ -86,7 +86,7 @@ export function PortalWorkspace({ ariaLabel, main, side }: PortalWorkspaceProps)
   return (
     <section className="next-portal-workspace" aria-label={ariaLabel}>
       <div className="next-portal-workspace__main">{main}</div>
-      <aside className="next-portal-workspace__side" aria-label={`${ariaLabel} yan bağlam`}>
+      <aside className="next-portal-workspace__side" aria-label={`${ariaLabel} ayrıntıları`}>
         {side}
       </aside>
     </section>
@@ -128,10 +128,10 @@ export function PortalStatePanel({
 export function RolePreviewNotice() {
   return (
     <Panel
-      aria-label="Rol önizleme modu"
+      aria-label="Rol önizleme bilgisi"
       className="next-portal-preview-notice"
-      description="Bu ekran kurum yöneticisi için geçici rol önizleme modunda açıldı. Yazma işlemleri ve kişi aksiyonları kapalıdır."
-      title="Salt-okuma Önizleme"
+      description="Kurum yöneticisi bu ekranı yalnızca görüntüleyebilir. Bilgi ekleme, değiştirme ve kişi adına işlem yapma kapalıdır."
+      title="Yalnızca Görüntüleme"
     >
       <p className="next-section-eyebrow">Önizleme</p>
     </Panel>
@@ -183,13 +183,13 @@ export function PortalDailyBrief({
       title={title}
     >
       {scope ? (
-        <div className="next-portal-brief__scope" aria-label={`${title} görev kapsamı`}>
+        <div className="next-portal-brief__scope" aria-label={`${title} için seçilen kişi veya sınıf`}>
           <span>{scope.label}</span>
           <strong>{scope.value}</strong>
           {scope.detail ? <small>{scope.detail}</small> : null}
         </div>
       ) : null}
-      <UiMetricGrid aria-label={`${title} metrikleri`} className="next-portal-brief__grid" role="group">
+      <UiMetricGrid aria-label={`${title} özeti`} className="next-portal-brief__grid" role="group">
         {items.map((item) => (
           <MetricCard
             className="next-portal-brief__item"
@@ -214,10 +214,10 @@ function portalDailyBriefMetricTone(tone: PortalDailyBriefItem["tone"]): MetricC
 
 export function PortalActionStrip({
   ariaLabel,
-  eyebrow = "Günlük iş kuyruğu",
+  eyebrow = "Bugün yapılacaklar",
   items,
   priorityKeys,
-  title = "Öncelikli aksiyonlar",
+  title = "Öncelikli işler",
 }: {
   ariaLabel: string;
   eyebrow?: string;
@@ -235,20 +235,17 @@ export function PortalActionStrip({
     ...preferredItems,
     ...items.filter((item) => !preferredKeys.has(item.key)),
   ];
-  const visibleItems = [
-    ...candidates.filter((item) => item.tone === "warning" || item.tone === "danger"),
-    ...candidates.filter((item) => item.tone !== "warning" && item.tone !== "danger"),
-  ].slice(0, 3);
+  const visibleItems = candidates;
   const attentionCount = visibleItems.filter((item) => item.tone === "warning" || item.tone === "danger").length;
   return (
     <Panel
       actions={
         <div
           className="next-portal-action-strip__summary"
-          aria-label={`${visibleItems.length} aksiyon, ${attentionCount} öncelikli`}
+          aria-label={`${visibleItems.length} iş, ${attentionCount} öncelikli`}
         >
-          <span>{visibleItems.length} aksiyon</span>
-          <strong>{attentionCount > 0 ? `${attentionCount} öncelikli` : "Rutin akış"}</strong>
+          <span>{visibleItems.length} iş</span>
+          <strong>{attentionCount > 0 ? `${attentionCount} öncelikli` : "Planlı işler"}</strong>
         </div>
       }
       aria-label={ariaLabel}

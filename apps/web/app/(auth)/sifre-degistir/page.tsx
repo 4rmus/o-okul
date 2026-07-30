@@ -78,13 +78,18 @@ export default function ChangePasswordPage() {
           />
         </Field>
         {error ? <p className="next-form-error">{error}</p> : null}
-        <Button type="submit" disabled={isSubmitting || isBootstrapping}>
-          {isSubmitting ? "Kaydediliyor" : "Kaydet"}
+        <Button type="submit" disabled={isSubmitting || isBootstrapping} loading={isSubmitting} loadingLabel="Kaydediliyor">
+          Kaydet
         </Button>
         <Button type="button" variant="secondary" onClick={() => void logout()} disabled={isSubmitting}>
           Çıkış yap
         </Button>
       </form>
+      <aside className="next-auth-context" aria-label="Zorunlu şifre değişikliği güven bilgisi">
+        <p className="next-section-eyebrow">Doğrulanmış oturum</p>
+        <h2>Devam etmeden önce geçici şifrenizi değiştirin.</h2>
+        <p>Kurum ve rol kapsamınız mevcut oturumdan korunur; yeni şifre kaydedilene kadar çalışma alanına geçilmez.</p>
+      </aside>
     </section>
   );
 }

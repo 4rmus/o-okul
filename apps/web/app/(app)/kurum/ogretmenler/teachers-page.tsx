@@ -216,12 +216,12 @@ export function TeachersPage() {
           <Link href={`/kurum/ogretmenler/${encodeURIComponent(teacher.id)}`} aria-label={`${teacher.firstName} detay`}>
             <Eye size={17} aria-hidden="true" />
           </Link>
-          <button type="button" onClick={() => openEditForm(teacher)} aria-label={`${teacher.firstName} düzenle`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(teacher)} aria-label={`${teacher.firstName} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => void handleDelete(teacher)} aria-label={`${teacher.firstName} sil`}>
+          </Button>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(teacher)} aria-label={`${teacher.firstName} sil`}>
             <Trash2 size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </span>
       ),
     },
@@ -359,13 +359,13 @@ export function TeachersPage() {
       mobilePriority: "primary",
       priority: "primary",
       render: (assignment) => (
-        <button
+        <Button size="icon" variant="ghost"
           type="button"
           onClick={() => void handleAssignmentDelete(assignment)}
           aria-label={`${formatTeacherAssignmentRole(assignment.role)} atamasını sil`}
         >
           <Trash2 size={16} aria-hidden="true" />
-        </button>
+        </Button>
       ),
       sticky: "right",
     },

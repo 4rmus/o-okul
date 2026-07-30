@@ -231,11 +231,11 @@ export function ExamsPage() {
           >
             <Users size={17} aria-hidden="true" />
           </button>
-          <button type="button" onClick={() => void openEditForm(exam)} aria-label={`${exam.title} düzenle`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void openEditForm(exam)} aria-label={`${exam.title} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
-          </button>
+          </Button>
           {exam.status === "DRAFT" ? (
-            <button
+            <Button size="icon" variant="ghost"
               type="button"
               disabled={!answerKeyReady(exam)}
               onClick={() => void handlePublish(exam)}
@@ -243,11 +243,11 @@ export function ExamsPage() {
               title={answerKeyReady(exam) ? "Yayınla" : "Cevap anahtarı olmadan yayınlanamaz"}
             >
               <CheckCircle2 size={17} aria-hidden="true" />
-            </button>
+            </Button>
           ) : null}
-          <button type="button" onClick={() => void handleDelete(exam)} aria-label={`${exam.title} sil`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(exam)} aria-label={`${exam.title} sil`}>
             <Trash2 size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </div>
       ),
       sticky: "right",
@@ -639,7 +639,7 @@ export function ExamsPage() {
                 {selectedClassCount} sınıf / {selectedStudentCount} öğrenci
               </span>
               {selectedClassCount > 0 ? (
-                <button
+                <Button variant="ghost"
                   aria-label="Seçili sınıfları temizle"
                   className="next-class-picker-clear"
                   onClick={() => setForm((current) => ({ ...current, classIds: [] }))}
@@ -647,7 +647,7 @@ export function ExamsPage() {
                 >
                   <X size={14} aria-hidden="true" />
                   Temizle
-                </button>
+                </Button>
               ) : null}
             </div>
           </div>
@@ -661,14 +661,14 @@ export function ExamsPage() {
               onChange={(event) => setClassSearch(event.target.value)}
             />
             {classSearch ? (
-              <button
+              <Button size="icon" variant="ghost"
                 aria-label="Sınıf aramasını temizle"
                 className="next-class-search__clear"
                 onClick={() => setClassSearch("")}
                 type="button"
               >
                 <X size={15} aria-hidden="true" />
-              </button>
+              </Button>
             ) : null}
           </div>
           <div className="next-checkbox-list" role="group" aria-label="Sınıflar">

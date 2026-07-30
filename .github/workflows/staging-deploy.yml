@@ -651,6 +651,7 @@ jobs:
           IMAGE_TAG: ${{ needs.build-images.outputs.image-tag }}
           SOURCE_COMMIT_SHA: ${{ needs.build-images.outputs.deploy-sha }}
           GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_CI_EVIDENCE_TARGET: file://${{ github.workspace }}/artifacts/staging/reports/github-ci.json
           UI_UX_REDESIGN_VERIFY_REMOTE_REFERENCES: "1"
         run: |
           if [ "$IMAGE_TAG" != "$SOURCE_COMMIT_SHA" ]; then

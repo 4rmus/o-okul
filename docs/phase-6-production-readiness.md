@@ -838,7 +838,14 @@ pnpm backup:restore:smoke
   ile üretilir; env dosyasındaki faz, 320/375/414/768/1024/1440 viewport, PII review, UAT,
   live onboarding ve live UI-worker
   referansları gerçek staging/prod artifact'lerine bağlanmalı, local/mock screenshot paketi tek başına
-  release kanıtı sayılmaz. Workflow bu çıktıdan sonra `UI_UX_REDESIGN_EVIDENCE_TARGET=file://.../reports/ui-ux-redesign.json`
+  release kanıtı sayılmaz. Schema v2 her JSON/PNG referansını byte boyutu ve SHA-256 özetiyle
+  manifestte sabitler; PNG viewport kanıtında IHDR genişliği bildirilen 320/375/414/768/1024/1440
+  değeriyle eşleşir. JSON/text artifact'leri yasak PII alanları ve ham TCKN/e-posta/telefon için
+  taranır; raster kanıtı aynı digest'e bağlı `piiReview=PASS` onayını taşır. Uzak referanslar yalnız
+  `UI_UX_REDESIGN_ALLOWED_EVIDENCE_HOSTS` allowlist'indeki public HTTPS hostlarından, redirect
+  izlenmeden okunur. GitHub run; doğrulanmış `github-ci.json`, exact kaynak SHA,
+  `.github/workflows/ci.yml`, repository, run id ve başarılı job listesiyle eşleşmeden PASS olamaz.
+  Workflow bu çıktıdan sonra `UI_UX_REDESIGN_EVIDENCE_TARGET=file://.../reports/ui-ux-redesign.json`
   değerini `.staging-evidence.env` dosyasına ekler ve production evidence zinciri aynı bundle artifact'ini okur.
   Aynı workflow, UI/UX tamamlanma ledger'ındaki requirement-level dosya/komut bağlarını başarılı
   GitHub CI artifact'i ve deploy edilen exact kaynak SHA ile `pnpm ui-ux-professionalization:completion:check`

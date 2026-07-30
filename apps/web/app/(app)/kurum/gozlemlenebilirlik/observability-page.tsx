@@ -10,31 +10,31 @@ import { OperationSummary, type OperationSummaryAction, type OperationSummaryBad
 
 const observabilityGates = [
   {
-    title: "Observability UAT",
+    title: "Sistem izleme kabulü",
     command: "OBSERVABILITY_UAT_TARGET=file://$PWD/docs/evidence-templates/observability-uat.example.json pnpm observability:uat:check",
     status: "Kanıt raporu gerekir",
-    detail: "Prometheus, Grafana, Loki ve alert kanalları staging veya production raporuyla doğrulanır.",
+    detail: "Sistem ölçümleri, izleme panoları, kayıtlar ve uyarılar deneme veya canlı ortam raporuyla doğrulanır.",
   },
   {
-    title: "Alert webhook smoke",
+    title: "Uyarı bildirim denemesi",
     command: "ALERT_WEBHOOK_URL=https://alerts.example.test pnpm alert:webhook:smoke",
     status: "Webhook gerekir",
-    detail: "Alert bildirim kanalına test olayı gönderilir ve 2xx yanıt beklenir.",
+    detail: "Uyarı kanalına kişisel veri içermeyen bir test bildirimi gönderilir ve başarılı yanıt beklenir.",
   },
   {
-    title: "Sentry smoke",
+    title: "Hata izleme denemesi",
     command: "SENTRY_SMOKE_CONFIRM=send pnpm sentry:smoke",
     status: "Sentry DSN gerekir",
-    detail: "Sentry'ye PII içermeyen test olayı gönderilir.",
+    detail: "Hata izleme hizmetine kişisel veri içermeyen bir test olayı gönderilir.",
   },
 ] as const;
 
 const dashboardPanels = [
-  "API up",
-  "Request rate",
-  "Average duration",
-  "Readiness failures",
-  "Docker logs",
+  "Uygulama çalışma durumu",
+  "İstek yoğunluğu",
+  "Ortalama yanıt süresi",
+  "Bağlantı sorunları",
+  "Uygulama kayıtları",
 ];
 
 const alertRules = [
@@ -108,9 +108,9 @@ export function ObservabilityPage() {
   const summaryBadges = buildObservabilitySummaryBadges(status);
   const summaryActions = buildObservabilitySummaryActions(status);
   const signalRows = buildObservabilitySignalRows(status);
-  const dashboardRows = buildChecklistRows(dashboardPanels, "Staging/prod kanıtı", "Grafana/Loki panel kanıtı release evidence dosyasında tamamlanır.", "warning");
-  const alertRows = buildChecklistRows(alertRules, "Smoke gerekir", "Webhook ve Sentry kanalları PII içermeyen canlı smoke ile doğrulanır.", "warning");
-  const telemetryRows = buildChecklistRows(telemetryChecks, "Evidence gerekir", "Telemetri kontrolü staging veya production kanıtında tamamlanır.", "info");
+  const dashboardRows = buildChecklistRows(dashboardPanels, "Ortam doğrulaması gerekir", "İzleme panosu ve uygulama kayıtları deneme veya canlı ortam raporuyla doğrulanır.", "warning");
+  const alertRows = buildChecklistRows(alertRules, "Deneme gerekir", "Uyarı ve hata izleme kanalları kişisel veri içermeyen bir test olayıyla doğrulanır.", "warning");
+  const telemetryRows = buildChecklistRows(telemetryChecks, "Doğrulama gerekir", "Bu teknik kontrol deneme veya canlı ortam raporunda tamamlanır.", "info");
 
   return (
     <PageFrame
@@ -123,80 +123,80 @@ export function ObservabilityPage() {
           </Button>
         </>
       }
-      title="Gözlemlenebilirlik"
-      subtitle="Canlıya çıkış öncesi metrik, log ve alert kanıt kapılarını izle."
+      title="Sistem İzleme"
+      subtitle="Uygulamanın çalışma durumunu, kayıtlarını ve uyarı kanallarını tek yerden izleyin."
     >
       <OperationSummary
         actions={summaryActions}
-        ariaLabel="Gözlemlenebilirlik operasyon özeti"
+        ariaLabel="Sistem izleme özeti"
         badges={summaryBadges}
         items={summaryItems}
       />
       <EvidenceTrustPanel
-        ariaLabel="Gözlemlenebilirlik güven durumu"
-        title="Telemetri Kanıt Gücü"
-        description="Yapılandırılmış API health/metrics sinyali bu ekrandadır; Grafana, Loki, Sentry ve alert doğrulamaları ayrı evidence kapısıdır."
+        ariaLabel="Sistem izleme doğrulama durumu"
+        title="İzleme Bilgileri Nasıl Doğrulanır?"
+        description="Uygulama ve bağlantı durumu bu ekrandan okunur. İzleme panoları, kayıtlar ve uyarı kanalları ayrıca deneme ortamında doğrulanır."
         items={[
           {
-            label: "API kaynağı",
+            label: "Kontrol edilen sistem",
             value: sourceLabel(apiUrl),
             tone: sourceLabel(apiUrl) === "Lokal/dev" ? "warning" : "info",
             scope: sourceLabel(apiUrl) === "Lokal/dev" ? "local-static" : "configured-api",
-            detail: "Health, readiness ve metrics endpointleri aynı kaynaktan okunur.",
+            detail: "Uygulama, bağlantılar ve temel kullanım bilgileri aynı sistemden okunur.",
           },
           {
-            label: "Anlık endpoint",
+            label: "Anlık durum",
             value: observabilityEndpointState(status),
             tone: observabilityEndpointTone(status),
             scope: "configured-api",
-            detail: "Sonuçlar ortam kanıtı değil, yapılandırılmış endpoint yanıtıdır.",
+            detail: "Bu sonuçlar anlık durumu gösterir; yayın onayının yerini tutmaz.",
           },
           {
-            label: "Alert kanalı",
-            value: "Smoke gerekir",
+            label: "Uyarı kanalı",
+            value: "Deneme gerekir",
             tone: "warning",
             scope: "live-required",
-            detail: "Webhook ve Sentry test olayları PII içermeyen ayrı smoke ile kanıtlanır.",
+            detail: "Uyarı ve hata izleme kanalları kişisel veri içermeyen bir test olayıyla doğrulanır.",
           },
           {
-            label: "Dashboard",
-            value: "Staging/prod",
+            label: "İzleme panoları",
+            value: "Deneme/canlı ortam",
             tone: "danger",
             scope: "staging-prod",
-            detail: "Grafana ve Loki panel kanıtları release evidence dosyasında tamamlanır.",
+            detail: "İzleme panosu ve uygulama kayıtları ortam raporuyla doğrulanır.",
           },
         ]}
       />
       <OperationDecisionNotice
-        decision="Karar: temel health ve metrics yapılandırılmış API kaynağından okunur."
-        reason="API yaşam, hazırlık ve Prometheus metrik endpointleri bu ekrandan okunur; Grafana/Loki ve alert doğrulaması hâlâ kanıt kapısıdır."
-        nextStep="C2'nin sonraki adımı gerçek alert/webhook ve log panel durumunu ayrı kaynaklardan okumaktır."
+        decision="Anlık uygulama ve bağlantı durumu bu ekrandan izlenebilir."
+        reason="İzleme panoları, uygulama kayıtları ve uyarı kanalları ayrı sistemlerde tutulduğu için ayrıca doğrulanır."
+        nextStep="Uyarı ve kayıt panolarının gerçek durumu bu ekrana bağlandığında tek yerden izlenebilir."
       />
       <Panel
-        aria-label="Gözlemlenebilirlik detayları"
-        description="Health, readiness, metrics ve bağımlılık sinyalleri yapılandırılmış API kaynağından okunur."
+        aria-label="Anlık sistem durumu"
+        description="Uygulama, bağlantılar, çalışma süresi ve kullanım bilgileri seçili sistemden okunur."
         title="Anlık Durum"
       >
         {observabilityQuery.isPending ? <p>Durum alınıyor</p> : null}
-        {observabilityQuery.isError ? <p>Gözlemlenebilirlik bilgisi alınamadı.</p> : null}
+        {observabilityQuery.isError ? <p>Sistem izleme bilgisi alınamadı.</p> : null}
         <DataTable
-          caption="Gözlemlenebilirlik endpointleri"
+          caption="Anlık sistem kontrol adresleri"
           columns={signalColumns}
           density="compact"
-          description="Health, readiness, metrics, uptime ve bağımlılık sinyalleri."
+          description="Uygulama, bağlantı, çalışma süresi ve kullanım bilgileri."
           getRowKey={(row) => row.key}
           loading={observabilityQuery.isPending}
           rows={signalRows}
         />
       </Panel>
-      <EvidenceGateSection title="Kanıt Kapıları" ariaLabel="Gözlemlenebilirlik kapıları" gates={observabilityGates} />
+      <EvidenceGateSection title="Yayın Öncesi Kontroller" ariaLabel="Sistem izleme kontrolleri" gates={observabilityGates} />
       <Panel
-        aria-label="Dashboard panelleri"
-        description="Grafana ve Loki tarafında beklenen izleme yüzeyleri; release kanıtı ayrı evidence dosyasındadır."
-        title="Dashboard Panelleri"
+        aria-label="İzleme panoları"
+        description="Grafana ve Loki üzerinde izlenmesi gereken temel sistem göstergeleri."
+        title="İzleme Panoları"
       >
         <DataTable
-          caption="Gözlemlenebilirlik dashboard panelleri"
+          caption="Sistem izleme panoları"
           columns={checklistColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -204,12 +204,12 @@ export function ObservabilityPage() {
         />
       </Panel>
       <Panel
-        aria-label="Alert kuralları"
-        description="Alert kuralları canlı webhook/Sentry smoke ile doğrulanmadan release kanıtı sayılmaz."
-        title="Alert Kuralları"
+        aria-label="Uyarı kuralları"
+        description="Uyarı kuralları, bildirim ve hata izleme kanallarında denenmeden yayın onayı verilmez."
+        title="Uyarı Kuralları"
       >
         <DataTable
-          caption="Gözlemlenebilirlik alert kuralları"
+          caption="Sistem uyarı kuralları"
           columns={checklistColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -217,12 +217,12 @@ export function ObservabilityPage() {
         />
       </Panel>
       <Panel
-        aria-label="Telemetri kontrolleri"
-        description="Prometheus, Grafana, Loki ve alert kanal kontrolleri staging/prod evidence ile tamamlanır."
-        title="Telemetri Kontrolleri"
+        aria-label="Teknik izleme kontrolleri"
+        description="Sistem ölçümleri, izleme panoları, kayıtlar ve uyarı kanalları ortam raporuyla doğrulanır."
+        title="Teknik İzleme Kontrolleri"
       >
         <DataTable
-          caption="Gözlemlenebilirlik telemetri kontrolleri"
+          caption="Teknik sistem izleme kontrolleri"
           columns={checklistColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -236,7 +236,7 @@ export function ObservabilityPage() {
 const signalColumns: Array<DataTableColumn<ObservabilitySignalRow>> = [
   {
     key: "signal",
-    header: "Sinyal",
+    header: "Kontrol",
     mobilePriority: "primary",
     priority: "primary",
     render: (row) => row.label,
@@ -251,7 +251,7 @@ const signalColumns: Array<DataTableColumn<ObservabilitySignalRow>> = [
   },
   {
     key: "detail",
-    header: "Bağlam",
+    header: "Açıklama",
     mobilePriority: "secondary",
     priority: "secondary",
     render: (row) => row.detail,
@@ -276,7 +276,7 @@ const checklistColumns: Array<DataTableColumn<ObservabilityChecklistRow>> = [
   },
   {
     key: "detail",
-    header: "Kanıt bağlamı",
+    header: "Açıklama",
     mobilePriority: "secondary",
     priority: "secondary",
     render: (row) => row.detail,
@@ -286,30 +286,30 @@ const checklistColumns: Array<DataTableColumn<ObservabilityChecklistRow>> = [
 function buildObservabilitySummaryItems(status: ObservabilityStatus | undefined): OperationSummaryItem[] {
   return [
     {
-      description: "API yaşam endpointi",
+      description: "Uygulamanın yanıt verme durumu",
       key: "api",
       label: "API",
       tone: endpointSummaryTone(status?.health),
       value: endpointStatusText(status?.health, "Çalışıyor"),
     },
     {
-      description: "Postgres ve Redis hazırlığı",
+      description: "Veritabanı ve hızlı erişim bağlantıları",
       key: "ready",
       label: "Hazırlık",
       tone: endpointSummaryTone(status?.ready),
       value: endpointStatusText(status?.ready, "Hazır"),
     },
     {
-      description: "Prometheus HTTP request sayacı",
+      description: "Sistemin işlediği toplam web isteği",
       key: "request-count",
       label: "HTTP istek",
       tone: status?.metrics.ok ? "info" : status ? "warning" : "default",
       value: formatCount(status?.metrics.data?.requestCount),
     },
     {
-      description: "Process uptime metriği",
+      description: "Uygulamanın kesintisiz çalışma süresi",
       key: "uptime",
-      label: "Uptime",
+      label: "Çalışma süresi",
       tone: status?.metrics.ok ? "info" : status ? "warning" : "default",
       value: formatUptime(status?.metrics.data?.uptimeSeconds),
     },
@@ -325,17 +325,17 @@ function buildObservabilitySummaryBadges(status: ObservabilityStatus | undefined
     },
     {
       key: "endpoint",
-      label: `Endpoint ${observabilityEndpointState(status).toLocaleLowerCase("tr-TR")}`,
+      label: `Anlık durum ${observabilityEndpointState(status).toLocaleLowerCase("tr-TR")}`,
       tone: observabilityEndpointTone(status),
     },
     {
       key: "alert",
-      label: "Alert smoke gerekir",
+      label: "Uyarı denemesi gerekir",
       tone: "warning",
     },
     {
       key: "dashboard",
-      label: "Dashboard kanıtı ayrı",
+      label: "İzleme panosu doğrulaması ayrı",
       tone: "warning",
     },
   ];
@@ -344,28 +344,28 @@ function buildObservabilitySummaryBadges(status: ObservabilityStatus | undefined
 function buildObservabilitySummaryActions(status: ObservabilityStatus | undefined): OperationSummaryAction[] {
   return [
     {
-      detail: "Health, readiness ve metrics endpointleri",
+      detail: "Uygulama, bağlantı ve kullanım kontrolleri",
       key: "endpoint-coverage",
-      label: "Endpoint kapsamı",
+      label: "Kontrol kapsamı",
       status: status ? "Okundu" : "Bekleniyor",
       tone: status ? "info" : "neutral",
       value: "3 sinyal",
     },
     {
-      detail: "Webhook ve Sentry test olayları canlı kanıt ister",
+      detail: "Uyarı ve hata izleme kanalları test olayıyla doğrulanır",
       key: "alert-channel",
-      label: "Alert kanalı",
-      status: "Smoke gerekir",
+      label: "Uyarı kanalı",
+      status: "Deneme gerekir",
       tone: "warning",
       value: "Canlı kanıt",
     },
     {
-      detail: "Grafana ve Loki panel ekran görüntüleri release evidence ile tamamlanır",
+      detail: "İzleme panosu ve uygulama kayıtları ortam raporuyla doğrulanır",
       key: "dashboard",
-      label: "Dashboard kanıtı",
-      status: "Ayrı kapı",
+      label: "İzleme panoları",
+      status: "Ayrı kontrol",
       tone: "warning",
-      value: "Staging/prod",
+      value: "Deneme/canlı ortam",
     },
   ];
 }
@@ -373,42 +373,42 @@ function buildObservabilitySummaryActions(status: ObservabilityStatus | undefine
 function buildObservabilitySignalRows(status: ObservabilityStatus | undefined): ObservabilitySignalRow[] {
   return [
     {
-      detail: "API yaşam endpointi",
+      detail: "Uygulamanın yanıt verdiğini kontrol eder",
       key: "health",
       label: "/health",
       tone: endpointTone(status?.health),
       value: status ? endpointLabel(status.health) : "Bekleniyor",
     },
     {
-      detail: "Readiness ve bağımlılık endpointi",
+      detail: "Veritabanı ve hızlı erişim bağlantılarını kontrol eder",
       key: "ready",
       label: "/health/ready",
       tone: endpointTone(status?.ready),
       value: status ? endpointLabel(status.ready) : "Bekleniyor",
     },
     {
-      detail: "Prometheus metrics endpointi",
+      detail: "Çalışma süresi ve istek sayısını verir",
       key: "metrics",
       label: "/metrics",
       tone: endpointTone(status?.metrics),
       value: status ? endpointLabel(status.metrics) : "Bekleniyor",
     },
     {
-      detail: "Metrics endpointinden okunan process uptime",
+      detail: "Uygulamanın kesintisiz çalışma süresi",
       key: "uptime",
-      label: "Uptime",
+      label: "Çalışma süresi",
       tone: status?.metrics.ok ? "info" : status ? "warning" : "neutral",
       value: formatUptime(status?.metrics.data?.uptimeSeconds),
     },
     {
-      detail: "Readiness endpointinden gelen Postgres bağlantısı",
+      detail: "Ana veritabanı bağlantısı",
       key: "postgres",
       label: "Postgres",
       tone: dependencyTone(dependencyLabel(status?.ready.data?.dependencies.postgres, status?.ready.ok)),
       value: dependencyLabel(status?.ready.data?.dependencies.postgres, status?.ready.ok),
     },
     {
-      detail: "Readiness endpointinden gelen Redis bağlantısı",
+      detail: "Hızlı erişim ve kuyruk bağlantısı",
       key: "redis",
       label: "Redis",
       tone: dependencyTone(dependencyLabel(status?.ready.data?.dependencies.redis, status?.ready.ok)),

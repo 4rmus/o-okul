@@ -38,6 +38,7 @@ export function Dialog({ children, className, description, footer, onClose, open
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        event.preventDefault();
         onCloseRef.current?.();
         return;
       }
@@ -52,7 +53,10 @@ export function Dialog({ children, className, description, footer, onClose, open
       const last = items[items.length - 1];
       if (!first || !last) return;
 
-      if (event.shiftKey && document.activeElement === first) {
+      if (!panel.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
+      } else if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
       } else if (!event.shiftKey && document.activeElement === last) {

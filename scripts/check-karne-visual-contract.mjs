@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 const files = {
   decisions: readFileSync("docs/DECISIONS.md", "utf8"),
   diffScript: readFileSync("scripts/compare-karne-visual-evidence.mjs", "utf8"),
+  globals: readFileSync("apps/web/app/globals.css", "utf8"),
   playwrightConfig: readFileSync("apps/web/playwright.next.config.ts", "utf8"),
   targetScript: readFileSync("scripts/check-adiguzel-pdf-visual-targets.mjs", "utf8"),
   visualSpec: readFileSync("apps/web/e2e-next/ui-visual-qa-next.spec.ts", "utf8"),
@@ -57,8 +58,6 @@ requireTokens("apps/web/playwright.next.config.ts", files.playwrightConfig, [
 ], failures);
 requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", files.visualSpec, [
   'toHaveScreenshot("student-report-card-1024.png"',
-  'locator(".next-desktop-topbar, .next-mobile-topbar").evaluateAll',
-  'for (const element of elements) element.remove()',
   'karneSheet.scrollIntoViewIfNeeded()',
   'expect(karneBox?.width).toBe(595)',
   'expect(karneBox?.height).toBeGreaterThanOrEqual(842)',
@@ -70,6 +69,16 @@ requireTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", files.visualSpec, [
   'expect(printKarneBox?.width).toBe(595)',
   'expect(printKarneBox?.height).toBeGreaterThanOrEqual(842)',
   'page.emulateMedia({ media: "screen" })',
+], failures);
+forbidTokens("apps/web/e2e-next/ui-visual-qa-next.spec.ts", files.visualSpec, [
+  'locator(".next-desktop-topbar, .next-mobile-topbar").evaluateAll',
+  "for (const element of elements) element.remove()",
+  'element.style.setProperty("transform"',
+  'element.style.removeProperty("transform")',
+], failures);
+requireTokens("apps/web/app/globals.css", files.globals, [
+  ".next-karne-sheet {",
+  "scroll-margin-block-start: 4.5rem;",
 ], failures);
 for (const path of visualBaselines) {
   const size = readPngSize(path);

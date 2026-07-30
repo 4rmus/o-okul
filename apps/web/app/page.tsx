@@ -1,18 +1,13 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  BarChart3,
   BookOpenCheck,
   Building2,
   Check,
   CheckCircle2,
-  ClipboardCheck,
   FileChartColumnIncreasing,
   GraduationCap,
-  Landmark,
-  Layers3,
   LockKeyhole,
-  MessageSquareText,
   ScanLine,
   ShieldCheck,
   UserRoundCheck,
@@ -21,69 +16,44 @@ import {
 import { appBrand, appBrandHomeAriaLabel, demoRequestHref } from "../src/brand.js";
 
 const proofPoints = [
-  "Optik okuma ve TXT / DAT işleme",
-  "Karne ve portal üretimi",
-  "Rol bazlı kullanıcı portalları",
-  "Tek ve çok şubeli kurum yapısı",
+  "Tek ve çok şubeli kurum yönetimi",
+  "Günlük sınıf yoklaması",
+  "Optik sınav ve karne",
+  "Öğretmen, öğrenci ve veli ekranları",
 ];
 
 const outcomes = [
   {
     icon: Building2,
-    eyebrow: "Kurum operasyonu",
-    title: "Dağınık veriyi tek kurum kaydında birleştirin.",
+    eyebrow: "Günlük kurum işleri",
+    title: "Öğrenci ve sınıf bilgilerini tek yerde güncel tutun.",
     description:
-      "Öğrenci, veli, öğretmen, sınıf, kampüs ve program bilgisi aynı yapı içinde güncel kalsın.",
-    items: ["Kişi ve rol yönetimi", "Sınıf, seviye ve kampüs", "Program, etüt ve günlük yoklama"],
+      "Kayıt, sınıf, program, yoklama ve ödeme planı aynı öğrenci üzerinden ilerlesin.",
+    items: [
+      "Kişi, sınıf ve kampüs kayıtları",
+      "Ders programı, etüt ve günlük yoklama",
+      "Ödeme planı ve taksit durumu",
+    ],
   },
   {
     icon: ScanLine,
     eyebrow: "Sınav ve raporlama",
-    title: "Optik veriyi izlenebilir bir rapor akışına dönüştürün.",
+    title: "Optik sınavı kontrollü biçimde rapora dönüştürün.",
     description:
-      "Cevap anahtarı, optik dosya, değerlendirme ve karne aynı sınav bağlamında ilerlesin.",
-    items: ["TXT / DAT optik aktarımı", "Karantina ve veri kontrolü", "Başarı, net ve kazanım görünümü"],
+      "Cevap anahtarını ve desteklenen TXT / DAT dosyasını aynı sınav için işleyin; eşleşmeyen kayıtları sonuçtan önce inceleyin.",
+    items: [
+      "Desteklenen TXT / DAT formatları",
+      "Eşleşmeyen kayıtları inceleme",
+      "Başarı %, net ve kazanım görünümü",
+    ],
   },
   {
     icon: Users,
-    eyebrow: "Portallar",
-    title: "Her kullanıcıya ihtiyacı olan görünümü sunun.",
+    eyebrow: "Kullanıcı ekranları",
+    title: "Sonuçları doğru kişilere açın.",
     description:
-      "Kurum ekibi, öğretmen, öğrenci ve veli aynı verinin kendi yetki kapsamındaki bölümünü kullansın.",
-    items: ["Öğretmen çalışma alanı", "Öğrenci gelişim görünümü", "Veli takip ve ödeme görünümü"],
-  },
-];
-
-const capabilities = [
-  {
-    icon: Layers3,
-    title: "Kurum yönetimi",
-    description: "Kurulumdan kampüs ve sınıf yapısına kadar kurumun operasyon temelini tek yerde yönetin.",
-  },
-  {
-    icon: ClipboardCheck,
-    title: "Günlük eğitim akışı",
-    description: "Ders programı, etüt, ödev ve devamsızlık süreçlerini aynı öğrenci kaydıyla ilişkilendirin.",
-  },
-  {
-    icon: FileChartColumnIncreasing,
-    title: "Sınav ve karne",
-    description: "Optik veriden başarı yüzdesine, öğrenci raporundan karneye kadar bağlı bir akış kurun.",
-  },
-  {
-    icon: MessageSquareText,
-    title: "Duyuru ve destek",
-    description: "Duyuruları doğru role ulaştırın; destek taleplerini kurum bağlamında takip edin.",
-  },
-  {
-    icon: Landmark,
-    title: "Ödeme planı takibi",
-    description: "Taksit planlarını ve ödeme durumunu öğrenci ve veli ilişkisi içinde düzenli izleyin.",
-  },
-  {
-    icon: BarChart3,
-    title: "Karar görünümü",
-    description: "Sınıf, sınav ve öğrenci gelişimini ortak göstergelerle karşılaştırın.",
+      "Kurum yöneticisi bütünü yönetsin; öğretmen, öğrenci ve veli yalnızca kendilerine açık bilgileri görsün.",
+    items: ["Öğretmen sınıf görünümü", "Öğrenci sonuç ekranı", "Veli takip ve ödeme görünümü"],
   },
 ];
 
@@ -91,14 +61,14 @@ const roleExperiences = [
   {
     icon: Building2,
     label: "Kurum yöneticisi",
-    title: "Operasyonun tamamını görür.",
-    description: "Kişilerden sınavlara, devamsızlıktan ödeme planlarına kadar kurum işleyişini yönetir.",
+    title: "Kurumun tamamını yönetir.",
+    description: "Kişileri, sınıfları, sınavları, yoklamayı ve ödeme planlarını tek yerden takip eder.",
   },
   {
     icon: UserRoundCheck,
     label: "Öğretmen",
     title: "Sınıfına odaklanır.",
-    description: "Ders akışı, ödev, sınav ve öğrenci takibini kendi görev kapsamından yürütür.",
+    description: "Derslerini, ödevlerini ve görmesine izin verilen öğrenci sonuçlarını takip eder.",
   },
   {
     icon: GraduationCap,
@@ -109,49 +79,26 @@ const roleExperiences = [
   {
     icon: Users,
     label: "Veli",
-    title: "Bağlı öğrenciyi izler.",
-    description: "İzinli rapor, devamsızlık, duyuru ve ödeme planı bilgilerini düzenli görür.",
+    title: "Bağlı olduğu öğrenciyi takip eder.",
+    description: "Görmesine izin verilen rapor, duyuru ve ödeme planı bilgilerine ulaşır.",
   },
 ];
 
 const securityPoints = [
   {
     icon: LockKeyhole,
-    title: "Kurum bazlı veri ayrımı",
-    description: "Her kurumun verisi kendi kurum bağlamında işlenir ve erişim sınırlarıyla korunur.",
+    title: "Kurumlara göre ayrılan kayıtlar",
+    description: "Her kurum yalnızca kendi öğrenci, çalışan ve sınav kayıtlarıyla çalışır.",
   },
   {
     icon: ShieldCheck,
-    title: "Rol ve yetki kapsamı",
-    description: "Kullanıcılar yalnız görevleri ve ilişkileri için izin verilen ekran ve kayıtlara ulaşır.",
+    title: "Göreve göre belirlenen yetkiler",
+    description: "Kullanıcılar yalnızca görevleri ve öğrenci ilişkileri için izin verilen bilgilere ulaşır.",
   },
   {
     icon: BookOpenCheck,
-    title: "Denetim izi",
-    description: "Kritik işlemler izlenebilir kayıtlarla desteklenir.",
-  },
-];
-
-const steps = [
-  {
-    number: "01",
-    title: "Kurum yapısını oluşturun",
-    description: "Kampüs, sınıf, dönem, kişi ve rol yapılarını mevcut işleyişinize göre tanımlayın.",
-  },
-  {
-    number: "02",
-    title: "Günlük akışı yürütün",
-    description: "Program, ödev, yoklama, duyuru ve ödeme planlarını aynı kurum bağlamında yönetin.",
-  },
-  {
-    number: "03",
-    title: "Sınav verisini işleyin",
-    description: "Optik dosyaları kontrol ederek içeri alın, cevap anahtarını uygulayın ve sonuçları üretin.",
-  },
-  {
-    number: "04",
-    title: "Raporları paylaşın",
-    description: "Karne ve gelişim sonuçlarını yetkili kurum, öğretmen, öğrenci ve veli görünümlerine taşıyın.",
+    title: "Kayıt altında tutulan işlemler",
+    description: "Önemli kullanıcı ve kurum işlemleri daha sonra incelenebilmesi için kaydedilir.",
   },
 ];
 
@@ -159,7 +106,7 @@ const faqs = [
   {
     question: "o-okul hangi kurumlar için uygundur?",
     answer:
-      "Tek veya çok şubeli dershaneler ve özel öğretim kurumları için tasarlanmıştır. Kurum, öğretmen, öğrenci ve veli süreçlerini aynı operasyon yapısında birleştirir.",
+      "Tek veya çok şubeli dershaneler ve özel öğretim kurumları için tasarlanmıştır. Öğrenci, sınıf, sınav, yoklama, ödeme planı ve kullanıcı ekranlarını bir araya getirir.",
   },
   {
     question: "Demo görüşmesinde hangi akışlar gösterilir?",
@@ -169,17 +116,22 @@ const faqs = [
   {
     question: "Hangi optik dosya akışları desteklenir?",
     answer:
-      "TXT ve DAT tabanlı optik veriler cevap anahtarı, veri kontrolü, değerlendirme ve rapor üretimi adımlarıyla işlenir. Kurumunuzun örnek dosyası demo sürecinde ayrıca değerlendirilir.",
+      "Desteklenen TXT ve DAT formatları cevap anahtarı, veri kontrolü, değerlendirme ve rapor adımlarıyla işlenir. Kurumunuzun kullandığı örnek format demo sürecinde ayrıca değerlendirilir.",
   },
   {
     question: "Öğretmen, öğrenci ve veli aynı bilgileri mi görür?",
     answer:
-      "Hayır. Her kullanıcı kendi rolü, kurum kapsamı ve öğrenci ilişkisine göre izin verilen görünümle çalışır.",
+      "Hayır. Her kullanıcı görevine, kurumuna ve bağlı olduğu öğrenciye göre izin verilen bilgilerle çalışır.",
   },
   {
     question: "Ödeme modülü online tahsilat yapar mı?",
     answer:
       "Mevcut kapsam ödeme planı ve taksit durumunun takibidir. Online tahsilat, fatura ve makbuz entegrasyonu demo kapsamına dahil değildir.",
+  },
+  {
+    question: "Demo istemek için hangi bilgiler gerekir?",
+    answer:
+      "Kurum türü, şube sayısı, yaklaşık öğrenci sayısı, kullandığınız optik format ve öncelikli ihtiyacınız yeterlidir. İlk e-postada öğrenci bilgisi veya dosya göndermeniz gerekmez.",
   },
 ];
 
@@ -196,13 +148,13 @@ export default function HomePage() {
             <span className="next-brand-mark">{appBrand.mark}</span>
             <span>{appBrand.name}</span>
           </Link>
-          <p className="next-marketing-nav__statement">Optik, rapor ve portal aynı kurum bağlamında.</p>
+          <p className="next-marketing-nav__statement">Öğrenci takibi, sınav ve karne tek yerde.</p>
           <div className="next-marketing-nav__actions">
             <Link className="next-marketing-login" href="/login">
               Giriş
             </Link>
-            <a className="uh-button uh-button--primary uh-button--md" href={demoRequestHref} title="Demo iste">
-              Demo iste
+            <a className="uh-button uh-button--primary uh-button--md" href={demoRequestHref} title="E-posta ile demo iste">
+              E-posta ile demo iste
             </a>
           </div>
         </nav>
@@ -212,69 +164,70 @@ export default function HomePage() {
         <section className="next-marketing-hero" aria-labelledby="home-title">
           <div className="next-marketing-hero__copy">
             <h1 id="home-title">
-              Optikten karneye, <span>eğitim operasyonunuz tek akışta.</span>
+              Sınavdan karneye, <span>kurumunuzun günlük işlerini tek yerden yönetin.</span>
             </h1>
             <p className="next-marketing-hero__lead">
-              Öğrenci, sınıf, günlük yoklama, sınav, rapor, ödeme ve duyuru süreçlerini aynı kurum
-              bağlamında yönetin. Her kullanıcı yalnız yetkili olduğu bilgiyle çalışsın.
+              Dershane ve özel öğretim kurumlarında öğrenci kayıtlarını, yoklamayı, sınav sonuçlarını,
+              raporları ve ödeme planlarını bir arada yönetin. Öğretmen, öğrenci ve veli yalnızca
+              kendilerine açık bilgileri görsün.
             </p>
             <div className="next-marketing-actions">
-              <a className="uh-button uh-button--primary uh-button--lg" href={demoRequestHref} title="Demo iste">
-                <span>Kurumunuza özel demo isteyin</span>
+              <a className="uh-button uh-button--primary uh-button--lg" href={demoRequestHref} title="E-posta ile demo iste">
+                <span>E-posta ile demo isteyin</span>
                 <ArrowRight size={18} aria-hidden="true" />
               </a>
               <a className="next-marketing-text-link" href="#platform">
-                Ürün akışını inceleyin
+                Sınav akışını görün
                 <ArrowRight size={17} aria-hidden="true" />
               </a>
             </div>
             <p className="next-marketing-hero__note">
               <CheckCircle2 size={17} aria-hidden="true" />
-              Demo, kurumunuzun gerçek işleyişi üzerinden planlanır.
+              Demo, kurumunuzun işleyişine göre planlanır.
             </p>
           </div>
 
-          <section className="next-marketing-workflow" aria-label="Optikten portala ürün akışı">
+          <section className="next-marketing-workflow" aria-label="Örnek sınav akışı">
             <header>
-              <span>Aktif iş akışı</span>
+              <span>Örnek ürün akışı</span>
               <strong>Sınavdan paylaşıma</strong>
             </header>
             <ol>
               <li>
                 <span>01</span>
                 <div>
-                  <strong>Sınavı seçin</strong>
-                  <small>Cevap anahtarı ve sınav bağlamı</small>
+                  <strong>Sınavı hazırlayın</strong>
+                  <small>Cevap anahtarı ve katılımcılar</small>
                 </div>
                 <CheckCircle2 size={18} aria-hidden="true" />
               </li>
               <li data-current="true">
                 <span>02</span>
                 <div>
-                  <strong>Optik veriyi işleyin</strong>
-                  <small>TXT / DAT aktarımı ve veri kontrolü</small>
+                  <strong>Optik dosyayı aktarın</strong>
+                  <small>Desteklenen TXT / DAT formatları</small>
                 </div>
                 <ScanLine size={18} aria-hidden="true" />
               </li>
               <li>
                 <span>03</span>
                 <div>
-                  <strong>Raporu doğrulayın</strong>
-                  <small>Başarı %, net ve soru bağlamı</small>
+                  <strong>Sonuçları kontrol edin</strong>
+                  <small>Başarı %, net ve soru sayısı</small>
                 </div>
                 <FileChartColumnIncreasing size={18} aria-hidden="true" />
               </li>
               <li>
                 <span>04</span>
                 <div>
-                  <strong>Yetkili portallara açın</strong>
-                  <small>Öğretmen, öğrenci ve veli görünümü</small>
+                  <strong>Karne ve raporları paylaşın</strong>
+                  <small>Öğretmen, öğrenci ve veli ekranları</small>
                 </div>
                 <ShieldCheck size={18} aria-hidden="true" />
               </li>
             </ol>
             <p>
-              Her adım aynı kurum ve sınav bağlamında ilerler.
+              Tüm adımlar aynı sınav kaydı üzerinden ilerler.
             </p>
           </section>
         </section>
@@ -291,11 +244,11 @@ export default function HomePage() {
         <section id="platform" className="next-marketing-section" aria-labelledby="outcomes-title">
           <div className="next-marketing-section__header next-marketing-section__header--split">
             <div>
-              <h2 id="outcomes-title">Dağınık süreçleri ortak ve izlenebilir bir akışa taşıyın.</h2>
+              <h2 id="outcomes-title">Kurumun günlük işlerini dağınık dosyalardan kurtarın.</h2>
             </div>
             <p>
-              E-tablolar, optik dosyalar, mesajlar ve ayrı paneller arasında kaybolan bilgiyi aynı kurum
-              modeli içinde bir araya getirin.
+              Öğrenci kayıtlarını, optik dosyaları, raporları ve ödeme planlarını aynı öğrenci üzerinden
+              takip edin.
             </p>
           </div>
           <div className="next-marketing-outcome-grid">
@@ -323,31 +276,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="next-marketing-showcase" aria-labelledby="capabilities-title">
-          <div className="next-marketing-section next-marketing-section--flush">
-            <div className="next-marketing-section__header">
-              <h2 id="capabilities-title">Kurumun günlük işi ile eğitim sonucunu aynı yerde buluşturun.</h2>
-              <p>
-                Her modül ayrı bir veri adası oluşturmaz; öğrenci ve kurum bağlamı süreç boyunca korunur.
-              </p>
-            </div>
-            <div className="next-marketing-capability-grid">
-              {capabilities.map((capability) => {
-                const Icon = capability.icon;
-                return (
-                  <article key={capability.title}>
-                    <Icon size={21} aria-hidden="true" />
-                    <div>
-                      <h3>{capability.title}</h3>
-                      <p>{capability.description}</p>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
         <section id="raporlama" className="next-marketing-section next-marketing-reporting" aria-labelledby="reporting-title">
           <div className="next-marketing-reporting__visual">
             <div className="next-marketing-reporting__header">
@@ -371,7 +299,7 @@ export default function HomePage() {
                 <strong>Başarı yüzdesi</strong>
               </div>
               <div>
-                <small>Bağlam</small>
+                <small>Ek bilgi</small>
                 <strong>Net / soru</strong>
               </div>
               <div>
@@ -381,10 +309,10 @@ export default function HomePage() {
             </div>
           </div>
           <div className="next-marketing-reporting__copy">
-            <h2 id="reporting-title">Farklı sınavları ortak bir başarı metriğiyle karşılaştırın.</h2>
+            <h2 id="reporting-title">Soru sayıları farklı sınavları başarı yüzdesiyle karşılaştırın.</h2>
             <p>
-              Başarı yüzdesini ana gösterge olarak izleyin; net ve soru sayısını bağlam olarak koruyun.
-              Öğrenci, sınıf ve sınav görünümünden karne detayına ilerleyin.
+              Başarı yüzdesi ana karşılaştırmayı verir. Net ve soru sayısı sonucu açıklayan ek bilgiler
+              olarak kalır. Öğrenci, sınıf ve sınav sonuçlarından karne ayrıntısına ilerleyin.
             </p>
             <ul>
               <li>
@@ -405,8 +333,8 @@ export default function HomePage() {
 
         <section id="roller" className="next-marketing-section" aria-labelledby="roles-title">
           <div className="next-marketing-section__header">
-            <h2 id="roles-title">Kurum için tek merkez, her kullanıcı için doğru görünüm.</h2>
-            <p>Ortak veri, role göre sadeleşen çalışma alanlarıyla doğru kişiye doğru kapsamda ulaşır.</p>
+            <h2 id="roles-title">Kurum için tek yönetim alanı, herkes için kendi ekranı.</h2>
+            <p>Kurum yöneticisi bütünü yönetir; diğer kullanıcılar yalnızca kendilerine açık bilgileri görür.</p>
           </div>
           <div className="next-marketing-role-grid">
             {roleExperiences.map((role, index) => {
@@ -427,10 +355,10 @@ export default function HomePage() {
 
         <section id="guven" className="next-marketing-trust" aria-labelledby="trust-title">
           <div className="next-marketing-trust__intro">
-            <h2 id="trust-title">Erişimi rol ve kurum kapsamıyla sınırlandıran yapı.</h2>
+            <h2 id="trust-title">Kimin hangi bilgileri görebileceğini göreve göre belirleyin.</h2>
             <p>
-              Eğitim verisi tek yerde toplanırken herkesin her şeyi görmesi gerekmez. Yetki sınırları ve
-              izlenebilirlik ürün akışının temelinde yer alır.
+              Eğitim verileri bir arada tutulurken öğretmen, öğrenci ve veli yalnızca kendi görevleri ve
+              ilişkileri için gerekli bilgilere ulaşır.
             </p>
           </div>
           <div className="next-marketing-trust__list">
@@ -449,33 +377,17 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="next-marketing-section" aria-labelledby="steps-title">
-          <div className="next-marketing-section__header">
-            <h2 id="steps-title">Kurulumdan rapora dört net adım.</h2>
-          </div>
-          <div className="next-marketing-steps">
-            {steps.map((step) => (
-              <article key={step.number}>
-                <span>{step.number}</span>
-                <h3>{step.title}</h3>
-                <p>{step.description}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
         <section className="next-marketing-cta" aria-labelledby="demo-title">
           <div>
-            <h2 id="demo-title">Sınav, takip ve raporlama akışınızı birlikte değerlendirelim.</h2>
+            <h2 id="demo-title">Kurumunuzun işleyişine uygunluğu birlikte değerlendirelim.</h2>
             <p>
-              Demo görüşmesinde kurum yapınızı dinleyip kurulumdan optik sınava, rapordan rol bazlı
-              portallara kadar ilgili akışı kurum senaryonuz üzerinden gösterelim. Production readiness kapılarıyla
-              kontrollü ilerleyen yayın yaklaşımını da birlikte değerlendirelim.
+              Kurum türünüzü, şube yapınızı ve kullandığınız optik formatı konuşalım. Demo görüşmesinde
+              öğrenci takibi, sınav, rapor ve kullanıcı ekranlarından ihtiyacınıza uygun olanları gösterelim.
             </p>
           </div>
           <div className="next-marketing-cta__actions">
-            <a className="uh-button uh-button--primary uh-button--lg" href={demoRequestHref} title="Demo iste">
-              <span>Demo talep edin</span>
+            <a className="uh-button uh-button--primary uh-button--lg" href={demoRequestHref} title="E-posta ile demo iste">
+              <span>Demo görüşmesi isteyin</span>
               <ArrowRight size={18} aria-hidden="true" />
             </a>
             <Link className="next-marketing-text-link" href="/login">
@@ -508,13 +420,13 @@ export default function HomePage() {
             <span className="next-brand-mark">{appBrand.mark}</span>
             <span>{appBrand.name}</span>
           </Link>
-          <p>Dershaneler ve özel öğretim kurumları için eğitim operasyon platformu.</p>
+          <p>Dershaneler ve özel öğretim kurumları için öğrenci, sınav, karne ve ödeme planı yönetimi.</p>
         </div>
         <nav aria-label="Alt navigasyon">
-          <a href="#platform">Platform</a>
+          <a href="#platform">Kurum yönetimi</a>
           <a href="#raporlama">Sınav ve rapor</a>
-          <a href="#roller">Portallar</a>
-          <a href="#guven">Güven</a>
+          <a href="#roller">Kullanıcı ekranları</a>
+          <a href="#guven">Yetki ve kayıtlar</a>
           <Link href="/login">Giriş</Link>
         </nav>
         <p className="next-marketing-footer__copyright">© 2026 {appBrand.name}</p>

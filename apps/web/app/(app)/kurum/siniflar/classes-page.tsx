@@ -189,12 +189,12 @@ export function ClassesPage() {
       sticky: "right",
       render: (record) => (
         <span className="next-row-actions">
-          <button type="button" onClick={() => openEditForm(record)} aria-label={`${record.name} düzenle`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(record)} aria-label={`${record.name} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => void handleDelete(record)} aria-label={`${record.name} sil`}>
+          </Button>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(record)} aria-label={`${record.name} sil`}>
             <Trash2 size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </span>
       ),
     },

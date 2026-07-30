@@ -224,13 +224,13 @@ export function HomeworkMaterialsPage() {
       priority: "primary",
       render: (homework) => (
         <span className="next-row-actions">
-          <button
+          <Button size="icon" variant="ghost"
             type="button"
             onClick={() => void updateCheckStatus(homework)}
             aria-label={`${homework.title} kontrol et`}
           >
             <CheckCircle2 size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </span>
       ),
       sticky: "right",
@@ -277,15 +277,15 @@ export function HomeworkMaterialsPage() {
       priority: "primary",
       render: (material) => (
         <span className="next-row-actions">
-          <button type="button" onClick={() => selectMaterial(material.id)} aria-label={`${material.title} detayını aç`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => selectMaterial(material.id)} aria-label={`${material.title} detayını aç`}>
             <Eye size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => openEditForm(material)} aria-label={`${material.title} düzenle`}>
+          </Button>
+          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(material)} aria-label={`${material.title} düzenle`}>
             <Pencil size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => void deleteMaterial(material)} aria-label={`${material.title} sil`}>
+          </Button>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void deleteMaterial(material)} aria-label={`${material.title} sil`}>
             <Trash2 size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </span>
       ),
       sticky: "right",

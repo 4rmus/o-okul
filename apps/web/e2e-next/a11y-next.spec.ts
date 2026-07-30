@@ -34,7 +34,7 @@ test.describe("Next erişilebilirlik smoke", () => {
   test("public landing ve login sayfalarında yüksek etkili axe ihlali yok", async ({ page }) => {
     await page.goto("/");
     await expectFirstFocusableElement(page, "İçeriğe geç");
-    await expect(page.getByRole("heading", { name: "Optikten karneye, eğitim operasyonunuz tek akışta." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sınavdan karneye, kurumunuzun günlük işlerini tek yerden yönetin." })).toBeVisible();
     await expectNoHighImpactA11yViolations(page, "landing");
 
     await page.goto("/login");
@@ -68,7 +68,7 @@ test.describe("Next erişilebilirlik smoke", () => {
     for (const viewport of hallmarkResponsiveViewports) {
       await page.setViewportSize(viewport);
       await page.goto("/");
-      await expect(page.getByRole("heading", { name: "Optikten karneye, eğitim operasyonunuz tek akışta." })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Sınavdan karneye, kurumunuzun günlük işlerini tek yerden yönetin." })).toBeVisible();
       await expectNoHorizontalOverflow(page, `landing-${viewport.width}`);
       await expectNoHighImpactA11yViolations(page, `landing-${viewport.width}`);
     }
@@ -123,17 +123,14 @@ test.describe("Next erişilebilirlik smoke", () => {
   test("kurum dashboard gövdesi mobil viewport'ta taşmadan açılır", async ({ page }) => {
     await page.setViewportSize({ height: 812, width: 320 });
     await openInstitutionDashboard(page, { expectNavigationVisible: false });
-    const overviewRegion = page.getByRole("region", { exact: true, name: "Kurum özeti" });
-    await expect(overviewRegion).toBeVisible();
-    await expect(overviewRegion).toHaveClass(/uh-metric-grid/);
-    await expect(overviewRegion.locator(".uh-metric-card")).toHaveCount(4);
-    const dashboardSummary = page.getByRole("region", { exact: true, name: "Kurum dashboard operasyon özeti" });
+    await expect(page.getByRole("region", { exact: true, name: "Kurum özeti" })).toHaveCount(0);
+    const dashboardSummary = page.getByRole("region", { exact: true, name: "Kurum günlük durum özeti" });
     await expect(dashboardSummary).toBeVisible();
-    const dashboardSummaryMetrics = dashboardSummary.getByRole("group", { name: "Kurum dashboard operasyon özeti metrikleri" });
+    const dashboardSummaryMetrics = dashboardSummary.getByRole("group", { name: "Kurum günlük durum özeti metrikleri" });
     await expect(dashboardSummaryMetrics).toHaveClass(/uh-metric-grid/);
     await expect(dashboardSummaryMetrics.locator(".uh-metric-card")).toHaveCount(4);
-    await expect(page.getByRole("region", { exact: true, name: "Operasyon özeti" })).toBeVisible();
-    await expect(page.getByRole("region", { exact: true, name: "Karar sinyalleri" })).toBeVisible();
+    await expect(page.getByRole("region", { exact: true, name: "Günlük özet" })).toBeVisible();
+    await expect(page.getByRole("region", { exact: true, name: "İlgilenilecek işler" })).toBeVisible();
     await expectNoHorizontalOverflow(page, "kurum-dashboard-mobile-body");
     await expectNoHighImpactA11yViolations(page, "kurum-dashboard-mobile-body");
   });

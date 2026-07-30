@@ -15,44 +15,44 @@ export function ReferenceSystemPage({
     <PageFrame actions={<ReferenceBadge />} title={title} subtitle={subtitle}>
       <EvidenceTrustPanel
         ariaLabel={`${title} güven durumu`}
-        title="Sistem Referans Kanıtı"
-        description="Bu ekran sistem admin için modül kapsamını gösterir; staging/prod/live evidence yerine geçmez."
+        title="Sistem Kontrol Listesi"
+        description="Bu ekran sistem yöneticisine kontrol edilecek başlıkları gösterir. Canlı durum, ilgili doğrulama ekranından ayrıca incelenir."
         items={[
           {
             label: "Ekran türü",
-            value: "Referans",
+            value: "Kontrol listesi",
             tone: "info",
             scope: "ui-safe",
-            detail: "Operasyonel kontrol listesi sunar, gizli sistem verisi veya PII göstermez.",
+            detail: "Gizli sistem bilgisi veya kişisel veri göstermeden kontrol başlıklarını listeler.",
           },
           {
-            label: "Kanıt seviyesi",
-            value: "Statik",
+            label: "Bilgi düzeyi",
+            value: "Ön kontrol",
             tone: "warning",
             scope: "local-static",
-            detail: "Canlı durum için ilgili smoke ve evidence dosyaları ayrıca çalıştırılır.",
+            detail: "Canlı durum için ilgili doğrulama adımları ayrıca çalıştırılır.",
           },
           {
-            label: "Aksiyon",
-            value: "Salt-okuma",
+            label: "İşlem",
+            value: "Yalnızca görüntüleme",
             tone: "success",
             scope: "server-audit",
-            detail: "Bu yüzeyden production işlemi veya destructive aksiyon tetiklenmez.",
+            detail: "Bu ekrandan canlı sistemi değiştiren veya veri silen bir işlem başlatılmaz.",
           },
         ]}
       />
       <Panel
         aria-label={`${title} referans kontrol listesi`}
         className="next-system-reference"
-        description={`${items.length} salt-okuma kontrol başlığı`}
-        title="Operasyon referansı"
+        description={`${items.length} kontrol başlığı`}
+        title="Kontrol Başlıkları"
       >
         <ol className="next-system-reference__list">
           {items.map((item, index) => (
             <li key={item}>
               <span aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
               <strong>{item}</strong>
-              <StatusBadge tone="warning">Statik kanıt</StatusBadge>
+              <StatusBadge tone="warning">Ön kontrol</StatusBadge>
             </li>
           ))}
         </ol>

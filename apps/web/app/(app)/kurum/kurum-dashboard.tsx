@@ -5,10 +5,9 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
   ActionCard,
+  Button,
   DataTable,
   LoadingState,
-  MetricCard,
-  MetricGrid,
   Panel,
   StatusBadge,
   type DataTableColumn,
@@ -41,13 +40,6 @@ interface DashboardLinkCard {
   description: string;
   href: string;
   title: string;
-  value: number | string;
-}
-
-interface DashboardOverviewMetric {
-  description: string;
-  label: string;
-  tone?: "default" | "success" | "warning" | "danger" | "info";
   value: number | string;
 }
 
@@ -119,7 +111,6 @@ export function KurumDashboard() {
   const visibleSummaryCards = buildSummaryCards(latestExam?.title, latestSnapshot, announcements, systemHealth).filter((card) =>
     canAccessHref(auth?.session.roles ?? [], card.href),
   );
-  const overviewMetrics = buildOverviewMetrics(overview);
   const summaryRows = toSummaryRows(visibleSummaryCards);
   const decisionRows = toDecisionRows(visibleDecisionCards);
   const dashboardSummaryItems = buildDashboardSummaryItems(overview, latestExam?.title, latestSnapshot, systemHealth, visibleDecisionCards);
@@ -175,21 +166,9 @@ export function KurumDashboard() {
           <p className="next-attention-empty">Açık kritik iş görünmüyor.</p>
         )}
       </Panel>
-      <MetricGrid aria-label="Kurum özeti" className="next-dashboard-overview-grid" role="region">
-        {overviewMetrics.map((metric) => (
-          <MetricCard
-            className="next-dashboard-overview-card"
-            description={metric.description}
-            key={metric.label}
-            label={metric.label}
-            tone={metric.tone}
-            value={metric.value}
-          />
-        ))}
-      </MetricGrid>
       <OperationSummary
         actions={dashboardSummaryActions}
-        ariaLabel="Kurum dashboard operasyon özeti"
+        ariaLabel="Kurum günlük durum özeti"
         badges={dashboardSummaryBadges}
         items={dashboardSummaryItems}
       />
@@ -200,31 +179,31 @@ export function KurumDashboard() {
               <Link className="uh-button uh-button--primary uh-button--md" href="/kurum/kurulum">
                 Kuruluma git
               </Link>
-              <button className="uh-button uh-button--secondary uh-button--md" type="button" onClick={dismissSetupCard}>
+              <Button variant="secondary" type="button" onClick={dismissSetupCard}>
                 Daha sonra
-              </button>
+              </Button>
             </div>
           }
           aria-label="Kurum kurulum başlangıcı"
           className="next-dashboard-onboarding"
-          description="Beş adımlı kurulum sihirbazı genel bilgilerden kişi yönetimine kadar ilk düzeni toplar."
-          title="Kurumunu kurmaya başla"
+          description="Genel bilgilerden öğrenci ve öğretmen kayıtlarına kadar ilk kurulumu beş adımda tamamlayın."
+          title="Kurumunuzu kurmaya başlayın"
           tone="muted"
         />
       ) : null}
       {visibleSummaryCards.length > 0 ? (
         <Panel
-          aria-label="Operasyon özeti"
+          aria-label="Günlük özet"
           className="next-dashboard-summary-panel"
           description="Rapor, duyuru ve sistem sağlığı bağlantıları rol yetkisine göre listelenir."
-          title="Operasyon özeti"
+          title="Günlük özet"
         >
           <DataTable
-            caption="Operasyon özeti"
+            caption="Günlük özet"
             columns={dashboardSummaryColumns}
             density="compact"
             description="Son rapor durumu, kurum duyurusu ve sistem sağlığı görevleri."
-            emptyText="Görüntülenebilir operasyon kaydı yok."
+            emptyText="Görüntülenebilir kayıt yok."
             getRowKey={(row) => `${row.href}-${row.title}`}
             rows={summaryRows}
           />
@@ -232,24 +211,24 @@ export function KurumDashboard() {
       ) : null}
       {visibleDecisionCards.length > 0 ? (
         <Panel
-          aria-label="Karar sinyalleri"
+          aria-label="İlgilenilecek işler"
           className="next-dashboard-decision-panel"
-          description="Destek, finans, devamsızlık ve optik işaretleri tek tablo içinde takip edilir."
-          title="Karar sinyalleri"
+          description="Destek, ödeme, devamsızlık ve optik kontrollerini tek tabloda izleyin."
+          title="İlgilenilecek işler"
         >
           <DataTable
-            caption="Karar sinyalleri"
+            caption="İlgilenilecek işler"
             columns={dashboardDecisionColumns}
             density="compact"
-            description="Aksiyon gerektiren kurum sinyalleri ve modül bağlantıları."
-            emptyText="Açık karar sinyali yok."
+            description="Kontrol edilmesi gereken kurum işleri ve ilgili sayfalar."
+            emptyText="Kontrol bekleyen iş yok."
             getRowKey={(row) => row.href}
             rows={decisionRows}
           />
         </Panel>
       ) : null}
       <Panel aria-label="Oturum özeti" className="next-session-panel" title="Oturum özeti" tone="muted">
-        <StatusBadge tone="success">Kurum kapsamı doğrulandı</StatusBadge>
+        <StatusBadge tone="success">Kurum erişimi doğrulandı</StatusBadge>
         <StatusBadge tone="success">Kullanıcı oturumu aktif</StatusBadge>
         <StatusBadge tone="info">{formatRoleSummary(auth?.session.roles ?? [])}</StatusBadge>
       </Panel>
@@ -270,7 +249,7 @@ export function KurumDashboard() {
           <TopicRadarChart branches={topicRadar} />
         </ReportChartPanel>
       </div>
-      {dashboardQuery.isError ? <p className="next-form-error">Dashboard verisi alınamadı.</p> : null}
+      {dashboardQuery.isError ? <p className="next-form-error">Kurum özeti alınamadı.</p> : null}
       {progressQuery.isError ? <p className="next-form-error">Öğrenci gelişimi alınamadı.</p> : null}
     </PageFrame>
   );
@@ -365,32 +344,6 @@ function institutionTypeLabel(value: string | undefined) {
   return "Kurs merkezi";
 }
 
-function buildOverviewMetrics(overview: { classCount: number; guardianCount: number; teacherCount: number; studentCount: number }): DashboardOverviewMetric[] {
-  return [
-    {
-      description: "Aktif sınıf yapısı",
-      label: "Sınıf",
-      value: overview.classCount,
-    },
-    {
-      description: "Eğitim kadrosu",
-      label: "Öğretmen",
-      value: overview.teacherCount,
-    },
-    {
-      description: "Kayıtlı öğrenci",
-      label: "Öğrenci",
-      tone: overview.studentCount > 0 ? "success" : "default",
-      value: overview.studentCount,
-    },
-    {
-      description: "Veli ilişkisi",
-      label: "Veli",
-      value: overview.guardianCount,
-    },
-  ];
-}
-
 function buildDashboardSummaryItems(
   overview: { classCount: number; guardianCount: number; teacherCount: number; studentCount: number },
   examTitle: string | undefined,
@@ -404,7 +357,7 @@ function buildDashboardSummaryItems(
     {
       description: `${overview.classCount} sınıf · ${overview.teacherCount} öğretmen`,
       key: "institution",
-      label: "Kurum kapsamı",
+      label: "Kurumdaki kişiler",
       tone: overview.studentCount > 0 ? "success" : "default",
       value: `${overview.studentCount} öğrenci`,
     },
@@ -416,9 +369,9 @@ function buildDashboardSummaryItems(
       value: reportStatusLabel(examTitle, snapshot),
     },
     {
-      description: "Rol yetkisine göre görünen iş kuyruğu",
+      description: "Görevinize göre görünen işler",
       key: "decisions",
-      label: "Karar sinyali",
+      label: "İlgilenilecek iş",
       tone: decisionTotal > 0 ? "warning" : "success",
       value: decisionTotal,
     },
@@ -444,7 +397,7 @@ function buildDashboardSummaryBadges(
     },
     {
       key: "report-ready",
-      label: snapshot?.status === "READY" ? "READY rapor" : "Rapor bekliyor",
+      label: snapshot?.status === "READY" ? "Rapor hazır" : "Rapor bekliyor",
       tone: snapshot?.status === "READY" ? "success" : "warning",
     },
     {
@@ -454,7 +407,7 @@ function buildDashboardSummaryBadges(
     },
     {
       key: "tenant-scope",
-      label: "Tenant scope doğrulandı",
+      label: "Kurum erişimi doğrulandı",
       tone: "success",
     },
   ];
@@ -468,26 +421,26 @@ function buildDashboardSummaryActions(
 ): OperationSummaryAction[] {
   return [
     {
-      detail: "Destek, finans, devamsızlık ve optik izleri",
+      detail: "Destek, ödeme, devamsızlık ve optik kontrolleri",
       key: "attention",
-      label: "Dikkat kuyruğu",
-      status: attentionItems.length > 0 ? "İzle" : "Sakin",
+      label: "İlgilenilecek işler",
+      status: attentionItems.length > 0 ? "Kontrol et" : "Bekleyen iş yok",
       tone: attentionItems.length > 0 ? "warning" : "success",
-      value: attentionItems.length > 0 ? `${attentionItems.length} başlık` : "Temiz",
+      value: attentionItems.length > 0 ? `${attentionItems.length} iş` : "Yok",
     },
     {
-      detail: examTitle ?? "Sınav bağlamı yok",
+      detail: examTitle ?? "Seçili sınav yok",
       key: "report",
-      label: "Rapor üretimi",
+      label: "Rapor durumu",
       status: snapshot?.status === "READY" ? "Hazır" : "Kontrol",
       tone: reportStatusBadgeTone(examTitle, snapshot),
       value: reportStatusLabel(examTitle, snapshot),
     },
     {
-      detail: "İlk veri girişi ve kişi ağacı",
+      detail: "İlk bilgiler, öğrenci ve öğretmen kayıtları",
       key: "setup",
       label: "Kurulum",
-      status: isEmptyInstitution ? "Sihirbaz" : "Tamam",
+      status: isEmptyInstitution ? "Devam et" : "Tamam",
       tone: isEmptyInstitution ? "info" : "success",
       value: isEmptyInstitution ? "Başlangıç" : "Aktif",
     },

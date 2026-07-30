@@ -591,7 +591,11 @@ sözleşmesinden üretilir. Gerçek değerlerle doldurulan özel env dosyası Gi
 
 UI/UX redesign için `UI_UX_REDESIGN_RELEASE_CANDIDATE` ve GitHub run referansları staging workflow'un
 ürettiği `GITHUB_REPOSITORY` slug'ıyla aynı olmalıdır; bu deploy hattında repo slug `4rmus/o-okul`
-olduğunda image prefix `ghcr.io/4rmus/o-okul` olur.
+olduğunda image prefix `ghcr.io/4rmus/o-okul` olur. `UI_UX_REDESIGN_ALLOWED_EVIDENCE_HOSTS`
+virgülle ayrılmış yalnız staging artifact hostlarını içerir; localhost/private IP, allowlist dışı
+host ve redirect hedefi kabul edilmez. Generator `GITHUB_CI_EVIDENCE_TARGET` dosyasındaki exact SHA,
+CI workflow, run ve başarılı job bağını schema v2 artifact digest/viewport manifestiyle birlikte
+doğrular.
 
 ```sh
 node scripts/check-staging-evidence-env.mjs --env-file /path/to/staging-evidence.env

@@ -282,7 +282,7 @@ export function SupportTicketsPage() {
       priority: "primary",
       render: (ticket) => (
         <span className="next-row-actions">
-          <button
+          <Button size="icon" variant="ghost"
             type="button"
             onClick={() => {
               selectSupportTicket(ticket.id);
@@ -291,8 +291,8 @@ export function SupportTicketsPage() {
             aria-label={`${ticket.subject} işleme al`}
           >
             <CirclePlay size={17} aria-hidden="true" />
-          </button>
-          <button
+          </Button>
+          <Button size="icon" variant="ghost"
             type="button"
             onClick={() => {
               selectSupportTicket(ticket.id);
@@ -301,14 +301,14 @@ export function SupportTicketsPage() {
             aria-label={`${ticket.subject} çözüldü`}
           >
             <CheckCircle2 size={17} aria-hidden="true" />
-          </button>
-          <button
+          </Button>
+          <Button size="icon" variant="ghost"
             type="button"
             onClick={() => selectSupportTicket(ticket.id)}
             aria-label={`${ticket.subject} detayını aç`}
           >
             <Eye size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </span>
       ),
       sticky: "right",
@@ -670,14 +670,14 @@ export function SupportTicketsPage() {
                   selectedTicketAttachments.map((attachment) => (
                     <p key={attachment.id}>
                       Ek: {attachment.fileName}
-                      <button
+                      <Button size="icon" variant="ghost"
                         type="button"
                         onClick={() => void handleAttachmentDownload(selectedTicket.id, attachment)}
                         disabled={downloadingAttachmentId === attachment.id}
                         aria-label={`${attachment.fileName} indir`}
                       >
                         <Download size={16} aria-hidden="true" />
-                      </button>
+                      </Button>
                     </p>
                   ))
                 ) : (

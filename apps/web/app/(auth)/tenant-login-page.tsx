@@ -129,12 +129,12 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
             className="next-auth-link"
             href={lockedTenantSlug ? `/parolami-unuttum?tenant=${encodeURIComponent(lockedTenantSlug)}` : "/parolami-unuttum"}
           >
-            Parolamı unuttum
+            Şifremi unuttum
           </Link>
         ) : null}
         {pendingTenantSelection ? (
           <div className="next-form-section">
-            <Field label="Okul">
+            <Field label="Kurum">
               <Select value={selectedTenantId} onChange={(event) => setSelectedTenantId(event.target.value)} required>
                 {pendingTenantSelection.tenants.map((tenant) => (
                   <option key={tenant.tenantId} value={tenant.tenantId}>
@@ -156,14 +156,14 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
                 aria-pressed={mfaMethod === "totp"}
                 onClick={() => setMfaMethod("totp")}
               >
-                TOTP
+                Doğrulama uygulaması
               </button>
               <button
                 type="button"
                 aria-pressed={mfaMethod === "recovery_code"}
                 onClick={() => setMfaMethod("recovery_code")}
               >
-                Kurtarma
+                Kurtarma kodu
               </button>
             </SegmentedControl>
             <Field label={mfaMethod === "totp" ? "Doğrulama kodu" : "Kurtarma kodu"}>
@@ -209,19 +209,19 @@ export function TenantLoginPage({ tenantSlug: initialTenantSlug }: TenantLoginPa
       <aside className="next-auth-context" aria-label="Güvenli giriş bilgisi">
         <p className="next-section-eyebrow">{lockedTenantSlug ? "Kurum girişi" : "Güvenli oturum"}</p>
         <h2>Görevinize ait çalışma alanına ilerleyin.</h2>
-        <p>Kurum ve rol kapsamınız girişten sonra doğrulanır; yalnız yetkili olduğunuz kayıtlar gösterilir.</p>
+        <p>Kurumunuz ve kullanıcı göreviniz girişten sonra doğrulanır; yalnız görmeye yetkili olduğunuz bilgiler gösterilir.</p>
         <ul>
           <li>
             <LockKeyhole size={17} aria-hidden="true" />
-            Kurum bazlı veri ayrımı
+            Her kurumun verisi ayrı tutulur
           </li>
           <li>
             <CheckCircle2 size={17} aria-hidden="true" />
-            Rol ve ilişki kapsamı
+            Her kullanıcı yalnız yetkili olduğu bilgileri görür
           </li>
           <li>
             <ScanLine size={17} aria-hidden="true" />
-            Optikten rapora bağlı süreç
+            Sınav sonuçları ilgili öğrenci ve velilere açılır
           </li>
         </ul>
       </aside>

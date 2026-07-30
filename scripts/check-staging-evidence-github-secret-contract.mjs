@@ -226,6 +226,7 @@ function buildValidEnvFile() {
   const replacements = new Map([
     ["https://__SET_STAGING_WEB_HOST__", "https://staging.o-okul.com"],
     ["https://__SET_STAGING_API_HOST__", "https://api.staging.o-okul.com"],
+    ["__SET_STAGING_WEB_HOST__", "staging.o-okul.com"],
     ["__SET_APP_DB_PASSWORD__", "contractAppDbPasswordValue001"],
     ["__SET_MIGRATION_DB_PASSWORD__", "contractMigrationDbPasswordValue001"],
     ["__SET_STAGING_DB_HOST__", "db.staging.o-okul.internal"],

@@ -27,7 +27,7 @@ import type {
   TeacherRecord,
 } from "@o-okul/shared-types";
 import { ArrowLeft, BarChart3, ChevronRight, LayoutDashboard } from "lucide-react";
-import { ActionCard, Alert, DataTable, Field, InfoGrid, InfoItem, Panel, Select, StatusBadge, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
+import { ActionCard, Alert, DataTable, Field, InfoGrid, InfoItem, Panel, Select, StatusBadge, TabButton, Tabs, type DataTableColumn, type StatusBadgeProps } from "@o-okul/ui";
 import { useAuth } from "../../../providers.js";
 import { ApiRequestError, apiBaseUrl, apiRequest } from "../../../../src/api-client.js";
 import { isSmsEnabled } from "../../../../src/sms-feature.js";
@@ -310,6 +310,7 @@ function StudentDashboard({
   teacherNameById: ReadonlyMap<string, string>;
   termNameById: ReadonlyMap<string, string>;
 }) {
+  const [activeSection, setActiveSection] = useState<"overview" | "records">("records");
   const currentClass = formatCurrentClass(detail.profile.classId, classNameById);
   const guardianLink = detail.guardianLinks[0];
   const guardianLinkName = guardianLink ? guardianNameById.get(guardianLink.guardianId) ?? "Veli kaydı" : "Veli bağı yok";
@@ -366,10 +367,18 @@ function StudentDashboard({
         </InfoGrid>
       </Panel>
 
-      <ReportChartPanel description="Hazır raporu olan tüm sınavlardaki başarı yüzdesi, net ve standart puan gelişimi" title="Öğrenci Gelişim Grafiği">
-        <ProgressLineChart caption="Tüm sınav başarı gelişimi" points={progressPoints} />
-      </ReportChartPanel>
+      <Tabs label="Öğrenci detay bölümleri">
+        <TabButton aria-controls="student-detail-panel-overview" id="student-detail-tab-overview" selected={activeSection === "overview"} onClick={() => setActiveSection("overview")}>Genel</TabButton>
+        <TabButton aria-controls="student-detail-panel-records" id="student-detail-tab-records" selected={activeSection === "records"} onClick={() => setActiveSection("records")}>İlişkiler ve kayıtlar</TabButton>
+      </Tabs>
 
+      {activeSection === "overview" ? <div aria-labelledby="student-detail-tab-overview" id="student-detail-panel-overview" role="tabpanel" tabIndex={0}>
+        <ReportChartPanel description="Hazır raporu olan tüm sınavlardaki başarı yüzdesi, net ve standart puan gelişimi" title="Öğrenci Gelişim Grafiği">
+          <ProgressLineChart caption="Tüm sınav başarı gelişimi" points={progressPoints} />
+        </ReportChartPanel>
+      </div> : null}
+
+      {activeSection === "records" ? <div aria-labelledby="student-detail-tab-records" id="student-detail-panel-records" role="tabpanel" tabIndex={0}>
       <Panel
         aria-label="Öğrenci ilişki haritası"
         className="next-student-relationship-section"
@@ -524,6 +533,7 @@ function StudentDashboard({
           />
         </Panel>
       </div>
+      </div> : null}
     </section>
   );
 }

@@ -4,8 +4,8 @@ export default function SistemSagligiPage() {
   return (
     <ReferenceSystemPage
       title="Sistem Sağlığı"
-      subtitle="Global sağlık görünümü canlı metriklere bağlanana kadar sistem-admin referans ekranı."
-      items={["API health", "Readiness", "Queue", "Postgres", "Redis"]}
+      subtitle="Tüm kurumları etkileyen uygulama ve bağlantı durumları için kontrol listesi."
+      items={["Uygulama", "Bağlantı durumu", "Arka plan işleri", "Veritabanı", "Hızlı erişim hizmeti"]}
     />
   );
 }

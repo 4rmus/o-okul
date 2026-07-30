@@ -3,9 +3,14 @@ import { dirname, parse, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { getTenantScopedTables } from "../packages/db/scripts/tenant-models.mjs";
 import { validateSmokeEvidencePayload } from "./smoke-evidence.mjs";
+import { validateUiUxRedesignBindings } from "./ui-ux-redesign-evidence-bindings.mjs";
 
 const target = process.env.PRODUCTION_EVIDENCE_SUMMARY_TARGET ?? process.argv[2];
 const allowExampleEvidence = process.env.PRODUCTION_EVIDENCE_SUMMARY_ALLOW_EXAMPLE_EVIDENCE === "1";
+const trustedUiUxEvidenceHosts = (process.env.UI_UX_REDESIGN_ALLOWED_EVIDENCE_HOSTS ?? "")
+  .split(",")
+  .map((host) => host.trim())
+  .filter(Boolean);
 
 const requiredSummaryKeys = ["result", "generatedAt", "nodeEnv", "appUrl", "apiUrl", "webUrl", "checks", "smokeEvidence", "reports"];
 const requiredCheckItemKeys = ["label", "script", "status"];
@@ -149,16 +154,20 @@ const requiredReports = {
     "gaps",
   ],
   uiUxRedesign: [
+    "schemaVersion",
     "result",
     "environment",
     "checkedAt",
     "releaseCandidate",
     "sourceCommitSha",
+    "githubCi",
+    "allowedEvidenceHosts",
     "redesignPlanPath",
     "localStaticEvidence",
     "stagingProductionEvidence",
     "phaseEvidence",
     "viewportCoverage",
+    "artifacts",
     "privacy",
     "approvals",
     "openRisks",
@@ -879,6 +888,7 @@ function requireLiveUiWorkerResultReport(scope, failures) {
 }
 
 function requireUiUxRedesignReport(scope, deploymentRollback, githubCi, failures) {
+  requireObjectEqual(scope, failures, "reports.uiUxRedesign.schemaVersion", "schemaVersion", 2);
   requireObjectEqual(scope, failures, "reports.uiUxRedesign.result", "result", "PASS");
   requireObjectEqual(scope, failures, "reports.uiUxRedesign.redesignPlanPath", "redesignPlanPath", "docs/ui-ux-professionalization-contract.md");
   requireMatchingString(
@@ -904,6 +914,12 @@ function requireUiUxRedesignReport(scope, deploymentRollback, githubCi, failures
   ) {
     failures.push("reports.uiUxRedesign releaseCandidate tag'i, sourceCommitSha ve reports.githubCi.commitSha aynı 40 karakter SHA olmalı.");
   }
+  failures.push(...validateUiUxRedesignBindings(scope, {
+    allowExampleEvidence,
+    expectedGithubCi: githubCi,
+    label: "reports.uiUxRedesign",
+    trustedEvidenceHosts: trustedUiUxEvidenceHosts,
+  }));
 
   const localStaticEvidence = requireObject(scope, failures, "reports.uiUxRedesign.localStaticEvidence", "localStaticEvidence");
   if (localStaticEvidence) {

@@ -1,5 +1,21 @@
 import type { ComponentProps } from "react";
-import { ActionCard, InfoGrid, InfoItem, MetricCard, MetricGrid, Panel } from "../src/index.js";
+import {
+  ActionCard,
+  Button,
+  Checkbox,
+  Dialog,
+  Field,
+  FormModal,
+  InfoGrid,
+  InfoItem,
+  Input,
+  MetricCard,
+  MetricGrid,
+  Panel,
+  Select,
+  Textarea,
+  Tooltip,
+} from "../src/index.js";
 
 type MetricTone = NonNullable<ComponentProps<typeof MetricCard>["tone"]>;
 type MetricSpan = NonNullable<ComponentProps<typeof MetricCard>["span"]>;
@@ -71,6 +87,53 @@ export const actionCardContract = (
       tone="success"
       value="4 görev"
     />
+  </>
+);
+
+export const fieldStateContract = (
+  <>
+    <Field description="Mevcut açıklama" error="Hata önceliklidir" label="Ad Soyad" success="Kaydedildi">
+      <Input aria-describedby="mevcut-aciklama" id="korunan-kimlik" invalid />
+    </Field>
+    <Field label="Sınıf" success="Seçim uygun">
+      <Select loading>
+        <option>8-A</option>
+      </Select>
+    </Field>
+    <Field label="Not">
+      <Textarea disabled />
+      <span>Birden fazla çocuk geriye uyumludur.</span>
+    </Field>
+    <Checkbox description="Kurum kapsamında uygulanır." invalid label="Aktif" loading />
+  </>
+);
+
+export const modalStateContract = (
+  <FormModal
+    onCancel={() => undefined}
+    onSubmit={(event) => event.preventDefault()}
+    open
+    submitDisabled
+    submitError="Kayıt tamamlanamadı."
+    submitting
+    title="Öğrenciyi düzenle"
+  >
+    <Input aria-label="Ad Soyad" />
+  </FormModal>
+);
+
+export const interactionContract = (
+  <>
+    <Button loading loadingLabel="Kaydediliyor">
+      Kaydet
+    </Button>
+    <Dialog onClose={() => undefined} open title="Odak sözleşmesi">
+      <button type="button">İlk kontrol</button>
+      <button type="button">Son kontrol</button>
+    </Dialog>
+    <Tooltip label="Kaydı aç">
+      <button type="button">Detay</button>
+    </Tooltip>
   </>
 );
 

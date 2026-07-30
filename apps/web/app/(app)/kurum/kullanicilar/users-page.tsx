@@ -100,7 +100,7 @@ export function UsersPage() {
       header: "E-posta",
       mobilePriority: "secondary",
       priority: "secondary",
-      render: (user) => user.email ?? "-",
+      render: (user) => maskEmail(user.email),
     },
     {
       key: "roles",
@@ -121,9 +121,9 @@ export function UsersPage() {
           {hasRoleDraftChanges(user) ? (
             <span className="next-role-draft-status" id={`role-draft-status-${user.id}`}>
               <StatusBadge tone="warning">Kaydedilmemiş rol değişikliği</StatusBadge>
-              <button type="button" onClick={() => resetRoleDraft(user.id)} aria-label={`${user.name} rol taslağını sıfırla`}>
+              <Button size="icon" variant="ghost" type="button" onClick={() => resetRoleDraft(user.id)} aria-label={`${user.name} rol taslağını sıfırla`}>
                 <RotateCcw size={15} aria-hidden="true" />
-              </button>
+              </Button>
             </span>
           ) : null}
         </div>
@@ -138,15 +138,15 @@ export function UsersPage() {
       priority: "primary",
       render: (user) => (
         <span className="next-row-actions">
-          <button
+          <Button size="icon" variant="ghost"
             type="button"
             disabled={!hasRoleDraftChanges(user)}
             onClick={() => void saveRoles(user)}
             aria-label={`${user.name} rollerini kaydet`}
           >
             <Save size={17} aria-hidden="true" />
-          </button>
-          <button
+          </Button>
+          <Button size="icon" variant="ghost"
             type="button"
             disabled={resettingUserId === user.id}
             onClick={() => void resetUserPassword(user)}
@@ -154,7 +154,7 @@ export function UsersPage() {
             title="Şifreyi telefona sıfırla"
           >
             <KeyRound size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </span>
       ),
       sticky: "right",
@@ -419,6 +419,13 @@ function toggleRoleSelection(roles: ManagementRole[], role: ManagementRole) {
 
 function formatCount(value: number) {
   return new Intl.NumberFormat("tr-TR").format(value);
+}
+
+function maskEmail(value: string | undefined) {
+  if (!value) return "-";
+  const [localPart = "", domain = ""] = value.split("@");
+  if (!domain) return "E-posta kayıtlı";
+  return `${localPart.slice(0, 2) || "••"}••@${domain.replace(/^[^.]*/, "•••")}`;
 }
 
 const tenantUserSortOptions = [

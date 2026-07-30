@@ -70,6 +70,8 @@ try {
   const liveReport = JSON.parse(readFileSync("docs/evidence-templates/ui-ux-redesign.example.json", "utf8"));
   liveReport.sourceCommitSha = "2222222222222222222222222222222222222222";
   liveReport.releaseCandidate = "ghcr.io/4rmus/o-okul/api:2222222222222222222222222222222222222222";
+  liveReport.githubCi.commitSha = "2222222222222222222222222222222222222222";
+  liveReport.artifacts = [];
   replaceArtifactReferences(liveReport);
   const liveArtifactPath = join(artifactDir, "ui-ux-redesign.json");
   writeFileSync(liveArtifactPath, `${JSON.stringify(liveReport, null, 2)}\n`);

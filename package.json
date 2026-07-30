@@ -143,7 +143,7 @@
     "ui-ux-redesign:release-readiness:summary": "node scripts/print-ui-ux-redesign-release-readiness-summary.mjs",
     "ui-ux-redesign:release-preflight": "node scripts/run-ui-ux-redesign-release-preflight.mjs",
     "ui-ux-redesign:release-preflight:contract": "node scripts/check-ui-ux-redesign-release-preflight-contract.mjs",
-    "ui-ux-redesign:visual-qa": "UI_VISUAL_ARTIFACT_DIR=artifacts/ui-ux-redesign/local pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts --workers=1 e2e-next/ui-visual-qa-next.spec.ts",
+    "ui-ux-redesign:visual-qa": "UI_VISUAL_ARTIFACT_DIR=artifacts/ui-ux-redesign/local pnpm --filter @o-okul/web exec playwright test -c playwright.next.config.ts --workers=1 --update-snapshots=none e2e-next/ui-visual-qa-next.spec.ts",
     "upload-av:check": "node scripts/check-upload-av-evidence.mjs",
     "upload-av:generate": "node scripts/generate-upload-av-evidence.mjs",
     "upload-retention:check": "node scripts/check-upload-retention-contract.mjs",

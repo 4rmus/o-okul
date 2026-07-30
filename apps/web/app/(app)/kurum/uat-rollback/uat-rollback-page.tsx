@@ -7,41 +7,41 @@ import { OperationSummary, type OperationSummaryAction, type OperationSummaryBad
 
 const uatGates = [
   {
-    title: "UAT kanıtı",
+    title: "Kullanıcı kabulü",
     command: "UAT_EVIDENCE_TARGET=file://$PWD/docs/evidence-templates/uat.example.json pnpm uat:check",
-    status: "Kanıt raporu gerekir",
-    detail: "Staging veya production UAT raporu PASS dönmeli ve defect içermemeli.",
+    status: "Onay raporu gerekir",
+    detail: "Deneme ortamındaki kabul raporu başarılı olmalı ve açık sorun içermemeli.",
   },
   {
-    title: "CI ve prod env",
+    title: "Sürüm ve canlı ortam ayarları",
     command: "pnpm run ci && pnpm prod:env:check",
-    status: "Repo + env gerekir",
-    detail: "Release adayı ve üretim env kapıları doğrulanır.",
+    status: "İki kontrol gerekir",
+    detail: "Yayınlanacak sürüm ve canlı ortam ayarları doğrulanır.",
   },
   {
-    title: "Canlı smoke zinciri",
+    title: "Canlı ortam denemeleri",
     command: "pnpm raw-import:smoke && pnpm report-generation:smoke && pnpm queue:smoke",
     status: "Canlı servis gerekir",
-    detail: "Import, rapor üretimi ve queue akışı staging/prod ortamında çalışır.",
+    detail: "Dosya aktarımı, rapor üretimi ve arka plan işleri canlıya benzer ortamda denenir.",
   },
   {
-    title: "Rollback referansı",
+    title: "Önceki sürüme dönüş bilgisi",
     command: "rollbackImageTag + restoreBackupReference",
     status: "Kanıt raporunda zorunlu",
-    detail: "Son başarılı image tag'i ve restore edilebilir backup referansı yazılır.",
+    detail: "Son çalışan sürüm ve geri yüklenebilir yedek bilgisi kaydedilir.",
   },
 ] as const;
 
 const uatFlows = [
-  "tenant admin login",
-  "teacher workflow",
-  "guardian workflow",
-  "raw import smoke",
-  "report generation smoke",
-  "live exam cycle evidence",
-  "sms batch smoke",
-  "notification provider smoke",
-  "privacy purge",
+  "kurum yöneticisi girişi",
+  "öğretmen işlemleri",
+  "veli işlemleri",
+  "optik dosya aktarımı",
+  "rapor oluşturma",
+  "canlı sınav süreci",
+  "toplu SMS gönderimi",
+  "bildirim gönderimi",
+  "kişisel veri silme",
 ] as const;
 
 const requiredCommands = [
@@ -107,7 +107,7 @@ export function UatRollbackPage() {
     value: gate.status,
   }));
   const flowRows = buildUatRollbackRows(uatFlows, (flow) => ({
-    detail: "UAT raporunda persona akışı PASS ve defects boş olacak şekilde kanıtlanır.",
+    detail: "Kabul raporunda bu akışın başarıyla tamamlandığı ve açık sorun kalmadığı gösterilir.",
     key: flow,
     label: flow,
     scope: personaScope(flow),
@@ -115,15 +115,15 @@ export function UatRollbackPage() {
     value: "Kanıt gerekir",
   }));
   const scenarioRows = buildUatRollbackRows(journeyScenarios, (scenario) => ({
-    detail: "Ürün yolculuğu senaryosu staging/prod UAT raporunda izlenir.",
+    detail: "Bu kullanıcı yolculuğu kabul raporunda adım adım doğrulanır.",
     key: scenario,
     label: scenario,
     scope: personaScope(scenario),
     tone: "warning",
-    value: "UAT kapsamı",
+    value: "Kabul kapsamı",
   }));
   const commandRows = buildUatRollbackRows(requiredCommands, (command) => ({
-    detail: command.includes(":live") || command.includes("traefik") ? "Canlı veya staging/prod ortam kanıtı gerekir." : "Release adayı için komut çıktısı evidence dosyasına bağlanır.",
+    detail: command.includes(":live") || command.includes("traefik") ? "Canlı veya deneme ortamı sonucu gerekir." : "Yayınlanacak sürüm için komut sonucu rapora eklenir.",
     key: command,
     label: command,
     scope: commandScope(command),
@@ -134,7 +134,7 @@ export function UatRollbackPage() {
     detail: rollbackFieldDetail(field),
     key: field,
     label: field,
-    scope: field === "defects boş" ? "UAT sonucu" : "Rollback packet",
+    scope: field === "defects boş" ? "Kabul sonucu" : "Geri dönüş paketi",
     tone: "warning",
     value: "Zorunlu",
   }));
@@ -142,55 +142,55 @@ export function UatRollbackPage() {
   return (
     <PageFrame
       actions={<ReferenceBadge />}
-      title="UAT / Rollback"
-      subtitle="Staging/prod UAT, rollback image ve restore backup kanıtlarını izle."
+      title="Kullanıcı Kabulü ve Geri Dönüş"
+      subtitle="Yeni sürümü kullanıcı akışlarıyla doğrulayın; gerektiğinde önceki sürüme nasıl dönüleceğini hazır tutun."
     >
       <OperationSummary
         actions={summaryActions}
-        ariaLabel="UAT rollback operasyon özeti"
+        ariaLabel="Kullanıcı kabulü ve geri dönüş özeti"
         badges={summaryBadges}
         items={summaryItems}
       />
       <EvidenceTrustPanel
-        ariaLabel="UAT rollback güven durumu"
-        title="UAT ve Geri Dönüş Kanıt Gücü"
-        description="Panel UAT kapsamını ve zorunlu alanları görünür kılar; canlı geri dönüş aksiyonu kanıt, onay ve audit zinciri olmadan açılmaz."
+        ariaLabel="Kullanıcı kabulü ve geri dönüş durumu"
+        title="Yayın Öncesi Güvence"
+        description="Kabul sonuçlarını ve geri dönüş için gerekli bilgileri gösterir. Canlı sürüm, gerekli onaylar tamamlanmadan değiştirilmez."
         items={[
           {
-            label: "UAT sonucu",
-            value: "PASS gerekir",
+            label: "Kabul sonucu",
+            value: "Başarılı olmalı",
             tone: "warning",
             scope: "staging-prod",
-            detail: "Staging veya production UAT raporu defects boş olacak şekilde bağlanır.",
+            detail: "Kabul raporu açık sorun kalmayacak şekilde tamamlanır.",
           },
           {
-            label: "Rollback",
+            label: "Geri dönüş",
             value: "Referans gerekir",
             tone: "warning",
             scope: "live-required",
-            detail: "Image tag ve restore edilebilir backup referansı evidence içinde tutulur.",
+            detail: "Son çalışan sürüm ve geri yüklenebilir yedek bilgisi raporda tutulur.",
           },
           {
-            label: "Panel aksiyonu",
+            label: "Ekrandan geri dönüş",
             value: "Kapalı",
             tone: "danger",
             scope: "server-audit",
-            detail: "Çift onay ve audit modeli tamamlanmadan canlı rollback tetiklenmez.",
+            detail: "İki yetkilinin onayı ve işlem kaydı olmadan canlı sürüm değiştirilmez.",
           },
         ]}
       />
       <OperationDecisionNotice
-        decision="Karar: panel şu an CLI-only rehberdir."
-        reason="Rollback canlı sürümü ve veri bütünlüğünü etkiler; onay zinciri, audit log ve restore referansı olmadan panelden tetiklenmez."
-        nextStep="Panel aksiyonu için release job, çift onay ve geri dönüş kanıtı C1 sonrası gerekir."
+        decision="Bu ekran yalnızca hazırlık ve kontrol içindir."
+        reason="Önceki sürüme dönüş, canlı sistemi ve verileri etkiler. Gerekli onaylar ve yedek bilgisi olmadan buradan başlatılamaz."
+        nextStep="Ekrandan geri dönüş özelliği ancak iki yetkilinin onayı ve işlem kaydı tamamlandığında açılabilir."
       />
       <Panel
-        aria-label="UAT rollback kapıları"
-        description="Release kararı için staging/prod UAT, ortam, smoke ve rollback referans kapıları."
-        title="Kanıt Kapıları"
+        aria-label="Yayın öncesi kontroller"
+        description="Yayın kararı için kabul, ortam denemeleri ve geri dönüş bilgileri."
+        title="Yayın Öncesi Kontroller"
       >
         <DataTable
-          caption="UAT rollback kanıt kapıları"
+          caption="Yayın öncesi kabul ve geri dönüş kontrolleri"
           columns={uatRollbackTableColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -198,12 +198,12 @@ export function UatRollbackPage() {
         />
       </Panel>
       <Panel
-        aria-label="UAT akışları"
-        description="Kritik persona ve operasyon akışları PASS raporu olmadan release kararı sayılmaz."
-        title="UAT Akışları"
+        aria-label="Kullanıcı kabul akışları"
+        description="Kurum yöneticisi, öğretmen, veli ve günlük işlemler başarıyla tamamlanmadan yayın kararı verilmez."
+        title="Kullanıcı Kabul Akışları"
       >
         <DataTable
-          caption="UAT akışları"
+          caption="Kullanıcı kabul akışları"
           columns={uatRollbackTableColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -211,12 +211,12 @@ export function UatRollbackPage() {
         />
       </Panel>
       <Panel
-        aria-label="Persona UAT senaryoları"
-        description="Sistem, kurum, öğretmen, öğrenci ve veli yolculuklarının UAT kapsamı."
-        title="Persona Senaryoları"
+        aria-label="Kullanıcı yolculuğu senaryoları"
+        description="Sistem yöneticisi, kurum, öğretmen, öğrenci ve veli yolculuklarının kontrol listesi."
+        title="Kullanıcı Yolculukları"
       >
         <DataTable
-          caption="UAT persona senaryoları"
+          caption="Kullanıcı yolculuğu senaryoları"
           columns={uatRollbackTableColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -225,11 +225,11 @@ export function UatRollbackPage() {
       </Panel>
       <Panel
         aria-label="Zorunlu komutlar"
-        description="Release adayı ve staging/prod ortam için zorunlu komut kanıtları."
+        description="Yayınlanacak sürüm ve canlıya benzer ortam için çalıştırılması gereken teknik kontroller."
         title="Zorunlu Komutlar"
       >
         <DataTable
-          caption="UAT zorunlu komutları"
+          caption="Yayın öncesi zorunlu komutlar"
           columns={uatRollbackTableColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -237,12 +237,12 @@ export function UatRollbackPage() {
         />
       </Panel>
       <Panel
-        aria-label="Rollback alanları"
-        description="Geri dönüş paketi için release image, restore edilebilir backup ve defects durumu."
-        title="Rollback Alanları"
+        aria-label="Geri dönüş bilgileri"
+        description="Önceki sürüme güvenle dönebilmek için gereken sürüm, yedek ve açık sorun bilgileri."
+        title="Geri Dönüş Bilgileri"
       >
         <DataTable
-          caption="Rollback zorunlu alanları"
+          caption="Geri dönüş için zorunlu bilgiler"
           columns={uatRollbackTableColumns}
           density="compact"
           getRowKey={(row) => row.key}
@@ -271,14 +271,14 @@ const uatRollbackTableColumns: Array<DataTableColumn<UatRollbackTableRow>> = [
   },
   {
     key: "scope",
-    header: "Kapsam",
+    header: "Alan",
     mobilePriority: "secondary",
     priority: "secondary",
     render: (row) => row.scope,
   },
   {
     key: "detail",
-    header: "Bağlam",
+    header: "Açıklama",
     mobilePriority: "secondary",
     priority: "secondary",
     render: (row) => row.detail,
@@ -288,32 +288,32 @@ const uatRollbackTableColumns: Array<DataTableColumn<UatRollbackTableRow>> = [
 function buildUatRollbackSummaryItems(): OperationSummaryItem[] {
   return [
     {
-      description: "Staging/prod UAT raporu",
+      description: "Kullanıcı kabul raporu",
       key: "uat-result",
-      label: "UAT sonucu",
+      label: "Kabul sonucu",
       tone: "warning",
-      value: "PASS gerekir",
+      value: "Başarılı olmalı",
     },
     {
-      description: "Evidence ortamı",
+      description: "Kontrolün yapıldığı ortam",
       key: "environment",
-      label: "Kanıt ortamı",
+      label: "Kontrol ortamı",
       tone: "warning",
-      value: "Staging/prod",
+      value: "Deneme/canlı",
     },
     {
-      description: "Image tag ve restore backup referansı",
+      description: "Son çalışan sürüm ve geri yüklenebilir yedek",
       key: "rollback",
-      label: "Rollback",
+      label: "Geri dönüş",
       tone: "danger",
       value: "Referans gerekir",
     },
     {
       description: "Canlı aksiyon tetikleme",
       key: "panel-action",
-      label: "Panel aksiyonu",
+      label: "Ekrandan işlem",
       tone: "info",
-      value: "CLI-only",
+      value: "Kapalı",
     },
   ];
 }
@@ -322,12 +322,12 @@ function buildUatRollbackSummaryBadges(): OperationSummaryBadge[] {
   return [
     {
       key: "cli-only",
-      label: "CLI-only",
+      label: "Yalnızca kontrol",
       tone: "info",
     },
     {
       key: "release-evidence",
-      label: "Release kanıtı ayrı",
+      label: "Yayın raporu ayrı",
       tone: "warning",
     },
     {
@@ -337,7 +337,7 @@ function buildUatRollbackSummaryBadges(): OperationSummaryBadge[] {
     },
     {
       key: "server-audit",
-      label: "Server/audit zorunlu",
+      label: "Onay ve işlem kaydı zorunlu",
       tone: "danger",
     },
   ];
@@ -346,36 +346,36 @@ function buildUatRollbackSummaryBadges(): OperationSummaryBadge[] {
 function buildUatRollbackSummaryActions(): OperationSummaryAction[] {
   return [
     {
-      detail: "UAT_EVIDENCE_TARGET ile staging/prod rapor kontrol edilir",
+      detail: "Kabul raporu deneme veya canlıya benzer ortam için kontrol edilir",
       key: "uat-evidence",
-      label: "UAT evidence check",
+      label: "Kabul raporu",
       status: "Kanıt raporu",
       tone: "warning",
-      value: "PASS + defects boş",
+      value: "Başarılı + açık sorun yok",
     },
     {
-      detail: "Import, rapor üretimi, queue ve SMS smoke zinciri",
+      detail: "Dosya aktarımı, rapor üretimi, arka plan işleri ve SMS gönderimi",
       key: "live-smoke",
-      label: "Canlı smoke zinciri",
+      label: "Canlı ortam denemeleri",
       status: "Canlı ortam",
       tone: "warning",
       value: "Servis gerekir",
     },
     {
-      detail: "rollbackImageTag ve restoreBackupReference birlikte tutulur",
+      detail: "Son çalışan sürüm ve geri yüklenebilir yedek birlikte tutulur",
       key: "rollback-packet",
-      label: "Rollback packet",
+      label: "Geri dönüş paketi",
       status: "Referans gerekir",
       tone: "danger",
-      value: "Image + backup",
+      value: "Sürüm + yedek",
     },
     {
-      detail: "Çift onay ve audit modeli tamamlanmadan panelden tetiklenmez",
+      detail: "İki yetkilinin onayı ve işlem kaydı tamamlanmadan buradan başlatılmaz",
       key: "panel-action",
-      label: "Panel aksiyonu",
+      label: "Ekrandan geri dönüş",
       status: "Kapalı",
       tone: "danger",
-      value: "CLI-only",
+      value: "Kapalı",
     },
   ];
 }
@@ -388,24 +388,25 @@ function buildUatRollbackRows<TItem>(
 }
 
 function personaScope(value: string) {
-  if (value.includes("SYS")) return "Sistem";
-  if (value.includes("KURUM") || value.includes("tenant")) return "Kurum";
-  if (value.includes("TEACHER") || value.includes("teacher")) return "Öğretmen";
-  if (value.includes("STUDENT") || value.includes("student")) return "Öğrenci";
-  if (value.includes("GUARDIAN") || value.includes("guardian")) return "Veli";
-  return "Operasyon";
+  const normalizedValue = value.toLocaleLowerCase("tr-TR");
+  if (normalizedValue.includes("sys")) return "Sistem";
+  if (normalizedValue.includes("kurum")) return "Kurum";
+  if (normalizedValue.includes("teacher") || normalizedValue.includes("öğretmen")) return "Öğretmen";
+  if (normalizedValue.includes("student") || normalizedValue.includes("öğrenci")) return "Öğrenci";
+  if (normalizedValue.includes("guardian") || normalizedValue.includes("veli")) return "Veli";
+  return "Günlük işlem";
 }
 
 function commandScope(command: string) {
-  if (command.includes(":live") || command.includes("traefik")) return "Staging/prod";
-  if (command.includes("prod:env")) return "Prod env";
-  if (command.includes("ci")) return "Release adayı";
-  return "Canlı smoke";
+  if (command.includes(":live") || command.includes("traefik")) return "Deneme/canlı ortam";
+  if (command.includes("prod:env")) return "Canlı ortam ayarları";
+  if (command.includes("ci")) return "Yayınlanacak sürüm";
+  return "Canlı ortam denemesi";
 }
 
 function rollbackFieldDetail(field: string) {
-  if (field === "releaseCandidate") return "Dağıtılan release adayı ve image kaynağı izlenir.";
-  if (field === "rollbackImageTag") return "Geri dönülebilir son başarılı image tag'i zorunludur.";
-  if (field === "restoreBackupReference") return "Restore edilebilir backup referansı olmadan rollback paketi tamamlanmaz.";
-  return "UAT raporunda açık defect kalmadığını kanıtlar.";
+  if (field === "releaseCandidate") return "Yayınlanan sürüm ve kaynak bilgisi izlenir.";
+  if (field === "rollbackImageTag") return "Geri dönülebilecek son çalışan sürüm bilgisi zorunludur.";
+  if (field === "restoreBackupReference") return "Geri yüklenebilir yedek bilgisi olmadan geri dönüş paketi tamamlanmaz.";
+  return "Kabul raporunda açık sorun kalmadığını gösterir.";
 }

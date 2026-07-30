@@ -40,7 +40,7 @@ export function AnnouncementsPanel({
         announcement.readAt ? (
           `Okundu ${formatDateTime(announcement.readAt)}`
         ) : readOnly ? (
-          "Salt-okuma"
+          "Yalnızca görüntüleme"
         ) : (
           <Button onClick={() => void onMarkRead?.(announcement)} disabled={!onMarkRead}>
             Okundu işaretle

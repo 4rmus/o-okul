@@ -8,6 +8,7 @@ import { appBrand } from "../../../src/brand.js";
 
 export default function ResetPasswordPage() {
   const [token, setToken] = useState("");
+  const [tenantSlug, setTenantSlug] = useState("");
   const [password, setPassword] = useState("");
   const [passwordAgain, setPasswordAgain] = useState("");
   const [error, setError] = useState("");
@@ -15,22 +16,34 @@ export default function ResetPasswordPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    setToken(new URLSearchParams(window.location.search).get("token")?.trim() ?? "");
+    const searchParams = new URLSearchParams(window.location.search);
+    setToken(searchParams.get("token")?.trim() ?? "");
+    setTenantSlug(searchParams.get("tenant")?.trim() ?? "");
+    if (searchParams.has("token")) {
+      searchParams.delete("token");
+      const query = searchParams.toString();
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+      );
+    }
   }, []);
+  const loginHref = tenantSlug ? `/k/${encodeURIComponent(tenantSlug)}/giris` : "/login";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     if (!token) {
-      setError("Parola yenileme bağlantısı geçersiz.");
+      setError("Şifre yenileme bağlantısı geçersiz.");
       return;
     }
     if (password.length < 8) {
-      setError("Yeni parola en az 8 karakter olmalıdır.");
+      setError("Yeni şifre en az 8 karakter olmalıdır.");
       return;
     }
     if (password !== passwordAgain) {
-      setError("Parolalar eşleşmiyor.");
+      setError("Şifreler eşleşmiyor.");
       return;
     }
 
@@ -52,15 +65,15 @@ export default function ResetPasswordPage() {
         <span>{appBrand.name}</span>
       </div>
       <form className="next-form" onSubmit={(event) => void handleSubmit(event)}>
-        <h1 id="reset-password-title">Yeni parola</h1>
+        <h1 id="reset-password-title">Yeni şifre</h1>
         {isComplete ? (
           <>
-            <p className="next-status-note" role="status">Parolanız yenilendi. Diğer cihazlardaki oturumlar kapatıldı.</p>
-            <Link className="uh-button uh-button--primary uh-button--md" href="/login">Giriş yap</Link>
+            <p className="next-status-note" role="status">Şifreniz yenilendi. Diğer cihazlardaki oturumlar kapatıldı.</p>
+            <Link className="uh-button uh-button--primary uh-button--md" href={loginHref}>Giriş yap</Link>
           </>
         ) : (
           <>
-            <Field label="Yeni parola">
+            <Field label="Yeni şifre">
               <Input
                 name="password"
                 type="password"
@@ -71,7 +84,7 @@ export default function ResetPasswordPage() {
                 required
               />
             </Field>
-            <Field label="Yeni parola tekrar">
+            <Field label="Yeni şifre tekrar">
               <Input
                 name="passwordAgain"
                 type="password"
@@ -83,12 +96,18 @@ export default function ResetPasswordPage() {
               />
             </Field>
             {error ? <p className="next-form-error" role="alert">{error}</p> : null}
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Yenileniyor" : "Parolayı yenile"}
+            <Button type="submit" disabled={isSubmitting} loading={isSubmitting} loadingLabel="Yenileniyor">
+              Şifreyi yenile
             </Button>
           </>
         )}
       </form>
+      <aside className="next-auth-context" aria-label="Yeni şifre güven bilgisi">
+        <p className="next-section-eyebrow">{tenantSlug ? "Kurum hesabı" : "Güvenli şifre yenileme"}</p>
+        <h2>Tek kullanımlık bağlantıyı yalnız bu ekranda kullanın.</h2>
+        <p>Şifre yenilendiğinde diğer oturumlar kapatılır. Bağlantı geçersizse giriş ekranına dönüp yeniden istek oluşturun.</p>
+        <Link className="next-auth-link" href={loginHref}>Girişe dön</Link>
+      </aside>
     </section>
   );
 }

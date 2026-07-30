@@ -37,7 +37,7 @@ export function SupportTicketsPanel({
   tickets,
   onCreate,
   readOnly = false,
-  readOnlyMessage = "Salt-okuma önizlemede destek talebi açılamaz.",
+  readOnlyMessage = "Yalnızca görüntüleme sırasında destek talebi açılamaz.",
 }: {
   tickets: SupportTicketRecord[];
   onCreate?: (input: SupportTicketFormPayload) => void | Promise<unknown>;

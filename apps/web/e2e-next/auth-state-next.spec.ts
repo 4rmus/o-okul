@@ -28,11 +28,11 @@ test.describe("auth state görsel sözleşmesi", () => {
     await submitCredentials(page);
 
     await expect(page.getByRole("group", { name: "Doğrulama yöntemi" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "TOTP" })).toHaveAttribute("aria-pressed", "true");
-    await page.getByRole("button", { name: "Kurtarma" }).click();
-    await expect(page.getByRole("button", { name: "Kurtarma" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Doğrulama uygulaması" })).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "Kurtarma kodu" }).click();
+    await expect(page.getByRole("button", { name: "Kurtarma kodu" })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByLabel("Kurtarma kodu")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Doğrula" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Doğrula", exact: true })).toBeVisible();
     await expect(page.getByLabel("Kullanıcı Adı")).toBeDisabled();
     await expect(page.getByLabel("Şifre", { exact: true })).toBeDisabled();
     await expectNoHorizontalOverflow(page, "mfa-challenge-320");
@@ -94,7 +94,7 @@ test.describe("auth state görsel sözleşmesi", () => {
 
     await submitCredentials(page);
     await page.getByLabel("Doğrulama kodu").fill("123456");
-    await page.getByRole("button", { name: "Doğrula" }).click();
+    await page.getByRole("button", { name: "Doğrula", exact: true }).click();
 
     await expect(page).toHaveURL(/\/kurum$/, { timeout: 15_000 });
     expect(loginBody).toEqual({ nationalId: "10000000146", password: "password", tenantSlug: "dna-egitim" });
@@ -120,7 +120,7 @@ test.describe("auth state görsel sözleşmesi", () => {
 
     await submitCredentials(page);
     await page.getByLabel("Doğrulama kodu").fill("000000");
-    await page.getByRole("button", { name: "Doğrula" }).click();
+    await page.getByRole("button", { name: "Doğrula", exact: true }).click();
 
     await expect(page.getByRole("form", { name: "Giriş formu" }).getByRole("alert")).toHaveText(
       "Doğrulama kodu geçersiz.",

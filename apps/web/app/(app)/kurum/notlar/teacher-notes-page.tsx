@@ -148,12 +148,12 @@ export function TeacherNotesPage() {
       priority: "primary",
       render: (record) => (
         <span className="next-row-actions">
-          <button type="button" onClick={() => openEditForm(record)} aria-label={`${studentLabel(record.studentId, studentNames)} notunu düzenle`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(record)} aria-label={`${studentLabel(record.studentId, studentNames)} notunu düzenle`}>
             <Pencil size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => void handleDelete(record)} aria-label={`${studentLabel(record.studentId, studentNames)} notunu sil`}>
+          </Button>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void handleDelete(record)} aria-label={`${studentLabel(record.studentId, studentNames)} notunu sil`}>
             <Trash2 size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </span>
       ),
       sticky: "right",

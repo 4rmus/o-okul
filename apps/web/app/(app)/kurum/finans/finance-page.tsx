@@ -217,24 +217,24 @@ export function FinancePage() {
       priority: "primary",
       render: (row) => (
         <span className="next-row-actions">
-          <button type="button" onClick={() => openTransactionForm(row)} aria-label={`${row.plan.title} ${row.installment.installmentNo}. taksit tahsilat kaydet`}>
+          <Button size="icon" variant="ghost" type="button" onClick={() => openTransactionForm(row)} aria-label={`${row.plan.title} ${row.installment.installmentNo}. taksit tahsilat kaydet`}>
             <Banknote size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => setReceiptRow(row)} aria-label={`${row.plan.title} makbuzları görüntüle`}>
+          </Button>
+          <Button size="icon" variant="ghost" type="button" onClick={() => setReceiptRow(row)} aria-label={`${row.plan.title} tahsilat kayıtlarını görüntüle`}>
             <Receipt size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => openEditForm(row)} aria-label={`${row.plan.title} ${row.installment.installmentNo}. taksit düzenle`}>
+          </Button>
+          <Button size="icon" variant="ghost" type="button" onClick={() => openEditForm(row)} aria-label={`${row.plan.title} ${row.installment.installmentNo}. taksit düzenle`}>
             <Pencil size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => void updateInstallmentStatus(row, "PAID")} aria-label={`${row.plan.title} ${row.installment.installmentNo}. taksit ödendi işaretle`}>
+          </Button>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void updateInstallmentStatus(row, "PAID")} aria-label={`${row.plan.title} ${row.installment.installmentNo}. taksit ödendi işaretle`}>
             <CheckCircle2 size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => void updateInstallmentStatus(row, "OVERDUE")} aria-label={`${row.plan.title} ${row.installment.installmentNo}. taksit gecikmiş işaretle`}>
+          </Button>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void updateInstallmentStatus(row, "OVERDUE")} aria-label={`${row.plan.title} ${row.installment.installmentNo}. taksit gecikmiş işaretle`}>
             <TriangleAlert size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => void updateInstallmentStatus(row, "PENDING")} aria-label={`${row.plan.title} ${row.installment.installmentNo}. taksit beklemede işaretle`}>
+          </Button>
+          <Button size="icon" variant="ghost" type="button" onClick={() => void updateInstallmentStatus(row, "PENDING")} aria-label={`${row.plan.title} ${row.installment.installmentNo}. taksit beklemede işaretle`}>
             <RotateCcw size={17} aria-hidden="true" />
-          </button>
+          </Button>
         </span>
       ),
       sticky: "right",
@@ -595,7 +595,7 @@ function ReceiptDialog({
     : transactions;
   const columns: Array<DataTableColumn<PaymentTransactionRecord>> = [
     {
-      header: "Makbuz",
+      header: "Kayıt no",
       key: "receipt",
       priority: "primary",
       render: (transaction) => transaction.receiptNo,
@@ -634,7 +634,7 @@ function ReceiptDialog({
 
   return (
     <Dialog
-      description="Tahsilat işlemleri ve yazdırılabilir makbuz kayıtları."
+      description="Tahsilat işlemleri ve yazdırılabilir tahsilat kayıtları."
       footer={
         <div className="uh-form-modal__footer">
           <Button type="button" variant="secondary" onClick={onClose}>
@@ -647,21 +647,21 @@ function ReceiptDialog({
       }
       onClose={onClose}
       open={open}
-      title="Makbuzlar"
+      title="Tahsilat kayıtları"
     >
-      {loading ? <p>Makbuzlar yükleniyor.</p> : null}
+      {loading ? <p>Tahsilat kayıtları yükleniyor.</p> : null}
       <DataTable
-        caption="Tahsilat makbuzları"
+        caption="Tahsilat kayıtları"
         columns={columns}
         description="Seçili ödeme planına ait tahsilat işlemleri."
-        emptyText="Makbuz yok."
+        emptyText="Tahsilat kaydı yok."
         getRowKey={(transaction) => transaction.id}
         rows={relatedTransactions}
       />
-      <div className="next-receipt-print-list" aria-label="Yazdırılabilir makbuzlar">
+      <div className="next-receipt-print-list" aria-label="Yazdırılabilir tahsilat kayıtları">
         {relatedTransactions.map((transaction) => (
           <article className="next-receipt-print-card" key={transaction.id}>
-            <h3>Makbuz {transaction.receiptNo}</h3>
+            <h3>Tahsilat kaydı {transaction.receiptNo}</h3>
             <p>{studentName}</p>
             <p>{plan?.title ?? "-"}</p>
             <dl>
