@@ -144,6 +144,29 @@ test.describe("Next erişilebilirlik smoke", () => {
     }
   });
 
+  test("kurum dashboard API hatasını boş başarı görünümü gibi göstermez", async ({ page }) => {
+    await installInstitutionApiMocks(page);
+    await page.route("**/api/v1/me/institution-dashboard", async (route) => {
+      await route.fulfill({
+        body: JSON.stringify({ error: { message: "DASHBOARD_UNAVAILABLE" } }),
+        headers: { ...corsHeadersFor(route), "content-type": "application/json" },
+        status: 503,
+      });
+    });
+    await page.addInitScript(() => {
+      document.cookie = "csrfToken=csrf-token; path=/; SameSite=Lax";
+    });
+    await page.context().addCookies([{ name: "csrfToken", url: appOrigin, value: "csrf-token" }]);
+
+    await page.goto("/kurum");
+
+    await expect(page.getByRole("heading", { level: 1, name: "Kurum Paneli" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Kurum başarı görünümü alınamadı" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Tekrar dene" })).toBeVisible();
+    await expect(page.getByText("Bugün için açık destek sinyali görünmüyor.")).toHaveCount(0);
+    await expect(page.getByRole("region", { exact: true, name: "Kurum başarı görünümü" })).toHaveCount(0);
+  });
+
   test("shell komut paleti yüksek etkili axe ihlali olmadan klavye akışını korur", async ({ page }) => {
     await openInstitutionDashboard(page);
 

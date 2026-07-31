@@ -467,6 +467,7 @@ describe("ReportGenerationController", () => {
   });
 
   it("TEACHER hazır snapshot geçmişinden öğrenci gelişim raporu okuyabilir", async () => {
+    snapshotStore.studentInputs.length = 0;
     const issued = await login("teacher-a@example.test");
 
     const response = await request(server)
@@ -474,7 +475,11 @@ describe("ReportGenerationController", () => {
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .expect(200);
 
-    expect(snapshotStore.inputs).toContainEqual({ tenantId: "tenant-a", examId: "exam-a" });
+    expect(snapshotStore.studentInputs).toEqual([{
+      tenantId: "tenant-a",
+      studentId: "student-a",
+      examId: "exam-a",
+    }]);
     expect(response.body).toEqual({
       tenantId: "tenant-a",
       examId: "exam-a",
@@ -542,6 +547,7 @@ describe("ReportGenerationController", () => {
   });
 
   it("TEACHER öğrenci gelişim raporunu tüm sınav snapshotlarıyla okuyabilir", async () => {
+    snapshotStore.studentInputs.length = 0;
     const issued = await login("teacher-a@example.test");
 
     const response = await request(server)
@@ -549,7 +555,7 @@ describe("ReportGenerationController", () => {
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .expect(200);
 
-    expect(snapshotStore.studentInputs).toContainEqual({ tenantId: "tenant-a", studentId: "student-a" });
+    expect(snapshotStore.studentInputs).toEqual([{ tenantId: "tenant-a", studentId: "student-a" }]);
     expect(response.body.points.map((point: { snapshotId: string }) => point.snapshotId)).toEqual([
       "snapshot-previous",
       "snapshot-a",

@@ -62,6 +62,34 @@ export function KurumDashboard() {
     writeCookie(setupDismissedCookieName, "true");
   }
 
+  if (dashboardQuery.isPending && !dashboardQuery.data) {
+    return (
+      <PageFrame
+        title="Kurum Paneli"
+        subtitle="Öğrenci gelişimini, son sınav katılımını ve destek bekleyen işleri tek yerde izleyin."
+      >
+        <LoadingState label="Kurum başarı görünümü yükleniyor…" />
+      </PageFrame>
+    );
+  }
+
+  if (dashboardQuery.isError && !dashboardQuery.data) {
+    return (
+      <PageFrame
+        title="Kurum Paneli"
+        subtitle="Öğrenci gelişimini, son sınav katılımını ve destek bekleyen işleri tek yerde izleyin."
+      >
+        <Panel
+          actions={<Button onClick={() => void dashboardQuery.refetch()}>Tekrar dene</Button>}
+          aria-label="Kurum başarı görünümü alınamadı"
+          description="Öğrenci ve kurum verileri yüklenemedi. Eksik veriyi sıfır veya tamamlanmış iş olarak göstermiyoruz."
+          title="Kurum başarı görünümü alınamadı"
+          tone="warning"
+        />
+      </PageFrame>
+    );
+  }
+
   return (
     <PageFrame
       title={dashboard.institution.name}
@@ -194,7 +222,7 @@ export function KurumDashboard() {
         </nav>
       </Panel>
 
-      {dashboardQuery.isError ? <p className="next-form-error">Kurum başarı görünümü alınamadı.</p> : null}
+      {dashboardQuery.isError ? <p className="next-form-error">Kurum başarı görünümü güncellenemedi; son alınan bilgiler gösteriliyor.</p> : null}
     </PageFrame>
   );
 }
