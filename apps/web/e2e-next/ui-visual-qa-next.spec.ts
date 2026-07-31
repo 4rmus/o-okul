@@ -105,7 +105,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
       await expect(page.getByRole("heading", { level: 1, name: /Her öğrencinin gelişimini/ })).toBeVisible();
       await expect(page.getByRole("region", { name: "Örnek öğrenci gelişimi akışı" })).toBeVisible();
       await expect(page.locator(".next-marketing-product")).toHaveCount(0);
-      await expectUiStable(page, `grafit-mercan-landing-${viewport.width}`, consoleErrors);
+      await expectUiStable(page, `aurora-ops-landing-${viewport.width}`, consoleErrors);
       if (viewport.width === 1280) {
         await expect(page.getByRole("heading", { level: 1, name: /Her öğrencinin gelişimini/ })).toBeInViewport();
         await expect(page.getByRole("link", { name: /Kurumunuz için demo isteyin/ }).first()).toBeInViewport();
@@ -116,7 +116,7 @@ test.describe("Faz 9 UI görsel smoke", () => {
           "route-family-landing-1280.png",
         );
       }
-      await saveScreenshot(page, `grafit-mercan-landing-${viewport.width}.png`);
+      await saveScreenshot(page, `aurora-ops-landing-${viewport.width}.png`);
     }
   });
 

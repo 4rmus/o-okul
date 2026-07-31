@@ -9380,9 +9380,10 @@ a {
 
 /* Hallmark redesign layer · BEGIN */
 @media screen {
-  /* Hallmark · pre-emit critique: P4 H4 E4 S5 R5 V4 */
-  /* Hallmark · genre: modern-minimal · landing: Narrative Workflow · app: component-scope · theme: custom (Grafit + Mercan) */
+  /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4 */
+  /* Hallmark · genre: atmospheric · landing: Narrative Workflow · app: Workbench · theme: Aurora Ops · designed-as-app */
   :root {
+    color-scheme: dark;
     --color-text: var(--color-ink);
     --color-text-secondary: var(--color-ink-secondary);
     --color-text-muted: var(--color-ink-muted);
@@ -9416,11 +9417,12 @@ a {
     --shadow-card: none;
     --shadow-card-hover: none;
     --shadow-modal: 0 24px 58px var(--color-shadow-strong);
-    --focus-ring: 0 0 0 3px color-mix(in oklch, var(--color-focus) 22%, transparent);
+    --focus-ring: 0 0 0 2px var(--color-paper), 0 0 0 4px var(--color-focus);
     --transition-ui: var(--dur-short) var(--ease-out);
     --chart-success: var(--color-success-token);
-    --chart-primary: var(--color-ink-secondary);
-    --chart-primary-soft: var(--color-ink-chart-soft);
+    --chart-accent: var(--color-accent-secondary);
+    --chart-primary: var(--color-accent);
+    --chart-primary-soft: var(--color-accent-chart-soft);
     --chart-warning: var(--color-warning-token);
     --chart-danger: var(--color-danger-token);
     --chart-neutral: var(--color-ink-muted);
@@ -9519,10 +9521,15 @@ a {
     color: var(--color-accent-ink);
   }
 
-  .uh-button--primary:hover:not(:disabled),
-  .uh-button--primary:focus-visible:not(:disabled) {
+  .uh-button--primary:hover:not(:disabled) {
     border-color: color-mix(in oklch, var(--color-accent-strong) 88%, var(--color-ink));
     background: color-mix(in oklch, var(--color-accent-strong) 88%, var(--color-ink));
+  }
+
+  .uh-button--primary:focus-visible:not(:disabled) {
+    outline: 2px solid var(--color-paper);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px var(--color-focus);
   }
 
   .uh-button--secondary,
@@ -9933,6 +9940,168 @@ a {
     background: color-mix(in oklch, var(--color-warning-soft-token) 46%, var(--color-paper-raised));
   }
 
+  /* Aurora student growth surfaces · design-system: design.md · designed-as-app */
+  .next-institution-growth-layout,
+  .next-institution-growth-primary,
+  .next-student-growth-tabpanel {
+    display: grid;
+    gap: var(--space-sm);
+    min-width: 0;
+  }
+
+  .next-institution-growth-layout {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .next-institution-growth-layout > *,
+  .next-institution-growth-primary > * {
+    min-width: 0;
+  }
+
+  .next-institution-growth-side .next-dashboard-compact-links,
+  .next-portal-progress-panel .uh-metric-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .next-dashboard-exam-panel,
+  .next-student-growth-chart,
+  .next-portal-progress-panel,
+  .next-portal-development-panel {
+    border-color: color-mix(in oklch, var(--color-accent) 26%, var(--color-rule));
+  }
+
+  .next-dashboard-exam-summary dl div:last-child {
+    border-top-color: var(--color-accent);
+  }
+
+  .next-dashboard-exam-summary dl div:last-child dt,
+  .next-development-assessment__header strong {
+    color: var(--color-accent-hover);
+  }
+
+  .next-student-growth-chart > .uh-panel__header,
+  .next-portal-progress-panel > .uh-panel__header,
+  .next-portal-development-panel > .uh-panel__header {
+    border-bottom: 1px solid var(--color-rule-faint);
+    padding-bottom: var(--space-xs);
+  }
+
+  .next-student-growth-primary-metric,
+  .next-student-growth-brief .next-student-360-summary .uh-info-item:nth-child(6) {
+    border-color: color-mix(in oklch, var(--color-accent) 38%, var(--color-rule));
+    background: var(--color-accent-soft);
+    color: var(--color-ink);
+  }
+
+  .next-student-growth-primary-metric .uh-metric-card__label,
+  .next-student-growth-primary-metric .uh-info-item__label,
+  .next-student-growth-brief .next-student-360-summary .uh-info-item:nth-child(6) .uh-info-item__label {
+    color: var(--color-accent-hover);
+  }
+
+  .next-student-growth-primary-metric .uh-metric-card__value,
+  .next-student-growth-primary-metric .uh-info-item__value,
+  .next-student-growth-brief .next-student-360-summary .uh-info-item:nth-child(6) .uh-info-item__value {
+    font-family: var(--font-display);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .next-student-growth-list > .uh-crud-page__summary {
+    border-bottom: 1px solid var(--color-rule-faint);
+    padding-bottom: var(--space-sm);
+  }
+
+  .next-student-growth-list > .uh-crud-page__table-shell {
+    min-width: 0;
+  }
+
+  .next-student-growth-workspace > .next-operation-summary .next-operation-summary__item:nth-child(2) {
+    border-color: color-mix(in oklch, var(--color-accent) 38%, var(--color-rule));
+    background: var(--color-accent-soft);
+  }
+
+  .next-student-growth-tabpanel:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  .next-portal-progress-panel .uh-metric-grid {
+    display: grid;
+    gap: var(--space-xs);
+  }
+
+  .next-portal-development-panel .next-note-list {
+    gap: var(--space-sm);
+  }
+
+  .next-portal-development-panel .next-development-assessment {
+    display: grid;
+    gap: var(--space-xs);
+    border: 0;
+    border-top: 1px solid var(--color-rule-faint);
+    border-radius: 0;
+    padding: var(--space-sm) 0 0;
+  }
+
+  .next-portal-development-panel .next-development-assessment:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .next-development-assessment__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2xs) var(--space-sm);
+    min-width: 0;
+  }
+
+  .next-development-assessment__header strong,
+  .next-development-assessment__header span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .next-development-assessment > p {
+    max-width: 65ch;
+  }
+
+  .next-development-score-table {
+    border-color: var(--color-rule-faint);
+  }
+
+  @media (min-width: 40rem) {
+    .next-institution-growth-side .next-dashboard-compact-links,
+    .next-portal-progress-panel .uh-metric-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .next-student-growth-brief .next-student-360-summary .uh-info-item:nth-child(6) {
+      grid-column: span 2;
+    }
+  }
+
+  @media (min-width: 68.75rem) {
+    .next-institution-growth-layout {
+      grid-template-columns: minmax(0, 1.55fr) minmax(240px, 0.45fr);
+    }
+
+    .next-institution-growth-side {
+      position: sticky;
+      top: calc(64px + var(--space-sm));
+    }
+
+    .next-institution-growth-side .next-dashboard-compact-links {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .next-portal-progress-panel .uh-metric-grid {
+      grid-template-columns: minmax(180px, 1.35fr) repeat(3, minmax(0, 1fr));
+    }
+  }
+
   .next-exam-next-step,
   .next-optical-next-step {
     display: flex;
@@ -10050,6 +10219,7 @@ a {
   }
 
   .next-karne-sheet {
+    color-scheme: light;
     --color-text: var(--karne-app-text);
     --color-text-secondary: var(--karne-app-text-secondary);
     --color-text-muted: var(--karne-app-text-muted);
@@ -10097,7 +10267,7 @@ a {
   }
 
   .next-report-status-surface .uh-status-badge {
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
   }
 
   .next-marketing {
@@ -10105,7 +10275,7 @@ a {
     --marketing-muted: var(--color-ink-muted);
     --marketing-blue: var(--color-accent);
     --marketing-blue-dark: var(--color-accent-hover);
-    --marketing-teal: var(--color-success-token);
+    --marketing-teal: var(--color-accent-secondary);
     --marketing-bg: var(--color-paper);
     --marketing-line: var(--color-rule);
     max-width: 100%;

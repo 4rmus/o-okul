@@ -31,7 +31,11 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html className={`${bodyFont.variable} ${displayFont.variable}`} lang="tr">
+    <html
+      className={`${bodyFont.variable} ${displayFont.variable}`}
+      data-theme="aurora"
+      lang="tr"
+    >
       <body>
         <Providers>{children}</Providers>
       </body>

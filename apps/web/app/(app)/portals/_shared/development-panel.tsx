@@ -32,6 +32,7 @@ export function DevelopmentTrendPanel({ assessments }: { assessments: Developmen
   return (
     <Panel
       aria-label="Gelişim trendi"
+      className="next-portal-development-panel"
       description="Mentorluk değerlendirmeleri, dönem notları ve kriter puanları."
       title="Gelişim ve Mentorluk"
     >
@@ -40,12 +41,15 @@ export function DevelopmentTrendPanel({ assessments }: { assessments: Developmen
       ) : (
         <div className="next-note-list">
           {assessments.map((assessment) => (
-            <article key={assessment.id}>
-              <strong>{assessment.periodLabel}</strong>
-              <span className="next-field-hint">{assessment.createdAt ? formatDate(assessment.createdAt) : "Tarih yok"}</span>
+            <article className="next-development-assessment" key={assessment.id}>
+              <header className="next-development-assessment__header">
+                <strong>{assessment.periodLabel}</strong>
+                <span className="next-field-hint">{assessment.createdAt ? formatDate(assessment.createdAt) : "Tarih yok"}</span>
+              </header>
               {assessment.mentorNote ? <p>{assessment.mentorNote}</p> : null}
               <DataTable
                 caption={`${assessment.periodLabel} gelişim puanları`}
+                className="next-development-score-table"
                 columns={scoreColumns}
                 description="Mentorluk değerlendirmesindeki kriter puanları ve kullanılan ölçek."
                 density="compact"

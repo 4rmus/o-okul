@@ -1,5 +1,14 @@
 [
   {
+    "date": "2026-07-31",
+    "scope": "app",
+    "macrostructure": "Narrative Workflow",
+    "theme": "Aurora",
+    "enrichment": "none",
+    "brief": "O-Okul operasyonel SaaS arayüzünü Aurora Ops sistemiyle bütün rollerde yenileme",
+    "theme_axes": "dark / grotesk-sans / cyan-teal"
+  },
+  {
     "date": "2026-07-29",
     "scope": "app",
     "macrostructure": "Narrative Workflow",

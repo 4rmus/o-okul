@@ -339,7 +339,7 @@ function StudentDashboard({
   });
 
   return (
-    <section className="next-detail-workspace" aria-label="Öğrenci dashboard">
+    <section className="next-detail-workspace next-student-growth-workspace" aria-label="Öğrenci dashboard">
       <OperationSummary
         actions={studentDashboardSummaryActions}
         ariaLabel="Öğrenci detay operasyon özeti"
@@ -373,8 +373,9 @@ function StudentDashboard({
         <TabButton aria-controls="student-detail-panel-records" id="student-detail-tab-records" selected={activeSection === "records"} onClick={() => setActiveSection("records")}>İlişkiler ve kayıtlar</TabButton>
       </Tabs>
 
-      {activeSection === "overview" ? <div aria-labelledby="student-detail-tab-overview" id="student-detail-panel-overview" role="tabpanel" tabIndex={0}>
+      {activeSection === "overview" ? <div className="next-student-growth-tabpanel" aria-labelledby="student-detail-tab-overview" id="student-detail-panel-overview" role="tabpanel" tabIndex={0}>
         <ReportChartPanel
+          className="next-student-growth-chart next-student-growth-chart--student"
           description={progressIsComparable
             ? "Aynı ders bağlamındaki sınavlarda Başarı % değişimi; Net/Soru açıklayıcı bağlamdır."
             : "Farklı kapsamdaki sınav sonuçları tarih sırasıyla gösterilir; yönlü gelişim yorumu yapılmaz."}
@@ -984,6 +985,7 @@ function StudentExamDetails({
               <OutcomeNetTable caption="Öğrenci kazanım başarıları" rows={outcomeRows} />
             </ReportChartPanel>
             <ReportChartPanel
+              className="next-student-growth-chart next-student-growth-chart--student"
               description={progressIsComparable
                 ? "Aynı ders bağlamındaki sınavlarda Başarı % değişimi; Net/Soru açıklayıcı bağlamdır."
                 : "Farklı kapsamdaki sınav sonuçları tarih sırasıyla gösterilir; yönlü gelişim yorumu yapılmaz."}
