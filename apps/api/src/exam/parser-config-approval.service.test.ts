@@ -162,6 +162,10 @@ class FakeReportSnapshotStore implements ReportSnapshotStore {
     return [];
   }
 
+  async listReadyByStudent() {
+    return [];
+  }
+
   async findById() {
     return undefined;
   }

@@ -36,7 +36,7 @@ import {
 } from "../../../../src/form-validation.js";
 import { buildListUrl, initialListQuery, ListControls, type ListQueryState } from "../../../../src/list-controls.js";
 import { hasCapabilityForRoles } from "../../_shared/access.js";
-import { formatPercentDelta, formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
+import { formatPercentNumber, formatStudentProgressSummary, isComparableStudentProgress, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { readReportExamId } from "../../_shared/report-exam-selection.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 import { RevealablePhone } from "../_shared/revealable-phone.js";
@@ -639,146 +639,156 @@ export function StudentsPage() {
               sortOptions={studentSortOptions}
               state={listQuery}
             />
-            <div className="next-list-controls" aria-label="Öğrenci filtreleri">
-              <Field label="Sınıf">
-                <Select
-                  value={filters.classId}
-                  onChange={(event) => updateFilters({ ...filters, classId: event.target.value })}
-                >
-                  <option value="">Tümü</option>
-                  {classes.map((klass) => (
-                    <option key={klass.id} value={klass.id}>
-                      {klass.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Seviye">
-                <Select
-                  value={filters.level}
-                  onChange={(event) => updateFilters({ ...filters, level: event.target.value })}
-                >
-                  <option value="">Tümü</option>
-                  {levelOptions.map((level) => (
-                    <option key={level.id} value={level.id}>
-                      {level.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Sorumlu">
-                <Select
-                  value={filters.responsibleTeacherId}
-                  onChange={(event) => updateFilters({ ...filters, responsibleTeacherId: event.target.value })}
-                >
-                  <option value="">Tümü</option>
-                  {teachers.map((teacher) => (
-                    <option key={teacher.id} value={teacher.id}>
-                      {teacher.firstName} {teacher.lastName}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Durum">
-                <Select
-                  value={filters.status}
-                  onChange={(event) => updateFilters({
-                    ...filters,
-                    status: event.target.value as StudentListFilters["status"],
-                  })}
-                >
-                  <option value="">Tümü</option>
-                  <option value="ACTIVE">Aktif</option>
-                  <option value="PASSIVE">Pasif</option>
-                  <option value="GRADUATED">Mezun</option>
-                  <option value="TRANSFERRED">Nakil</option>
-                </Select>
-              </Field>
-              <Field label="Veli">
-                <Select
-                  value={filters.guardianLinked}
-                  onChange={(event) => updateFilters({
-                    ...filters,
-                    guardianLinked: event.target.value as StudentListFilters["guardianLinked"],
-                  })}
-                >
-                  <option value="">Tümü</option>
-                  <option value="true">Bağlı</option>
-                  <option value="false">Bağlı değil</option>
-                </Select>
-              </Field>
-            </div>
-            <div className="next-list-controls" aria-label="Öğrenci tablo görünümü">
-              <fieldset className="next-column-picker">
-                <legend>Kolonlar</legend>
-                {studentColumnOptions.map((option) => (
+            <details className="next-list-disclosure">
+              <summary>Filtreler ve görünüm</summary>
+              <div className="next-list-disclosure__content">
+                <div className="next-list-controls" aria-label="Öğrenci filtreleri">
+                  <Field label="Sınıf">
+                    <Select
+                      value={filters.classId}
+                      onChange={(event) => updateFilters({ ...filters, classId: event.target.value })}
+                    >
+                      <option value="">Tümü</option>
+                      {classes.map((klass) => (
+                        <option key={klass.id} value={klass.id}>
+                          {klass.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Seviye">
+                    <Select
+                      value={filters.level}
+                      onChange={(event) => updateFilters({ ...filters, level: event.target.value })}
+                    >
+                      <option value="">Tümü</option>
+                      {levelOptions.map((level) => (
+                        <option key={level.id} value={level.id}>
+                          {level.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Sorumlu">
+                    <Select
+                      value={filters.responsibleTeacherId}
+                      onChange={(event) => updateFilters({ ...filters, responsibleTeacherId: event.target.value })}
+                    >
+                      <option value="">Tümü</option>
+                      {teachers.map((teacher) => (
+                        <option key={teacher.id} value={teacher.id}>
+                          {teacher.firstName} {teacher.lastName}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Durum">
+                    <Select
+                      value={filters.status}
+                      onChange={(event) => updateFilters({
+                        ...filters,
+                        status: event.target.value as StudentListFilters["status"],
+                      })}
+                    >
+                      <option value="">Tümü</option>
+                      <option value="ACTIVE">Aktif</option>
+                      <option value="PASSIVE">Pasif</option>
+                      <option value="GRADUATED">Mezun</option>
+                      <option value="TRANSFERRED">Nakil</option>
+                    </Select>
+                  </Field>
+                  <Field label="Veli">
+                    <Select
+                      value={filters.guardianLinked}
+                      onChange={(event) => updateFilters({
+                        ...filters,
+                        guardianLinked: event.target.value as StudentListFilters["guardianLinked"],
+                      })}
+                    >
+                      <option value="">Tümü</option>
+                      <option value="true">Bağlı</option>
+                      <option value="false">Bağlı değil</option>
+                    </Select>
+                  </Field>
+                </div>
+                <div className="next-list-controls" aria-label="Öğrenci tablo görünümü">
+                  <fieldset className="next-column-picker">
+                    <legend>Kolonlar</legend>
+                    {studentColumnOptions.map((option) => (
+                      <Checkbox
+                        checked={visibleColumnKeys.includes(option.key)}
+                        disabled={requiredStudentColumnKeys.has(option.key)}
+                        key={option.key}
+                        label={option.label}
+                        onChange={(event) => toggleColumn(option.key, event.target.checked)}
+                      />
+                    ))}
+                  </fieldset>
+                  <Field label="Görünüm">
+                    <Select value={tableDensity} onChange={(event) => setTableDensity(event.target.value as StudentTableDensity)}>
+                      <option value="comfortable">Rahat</option>
+                      <option value="compact">Yoğun</option>
+                    </Select>
+                  </Field>
+                </div>
+              </div>
+            </details>
+            <details className="next-list-disclosure">
+              <summary>Toplu işlemler</summary>
+              <div className="next-list-disclosure__content">
+                <div className="next-list-controls" aria-label="Toplu dönem geçişi">
+                  <Field label="Geçiş tarihi">
+                    <Input
+                      type="date"
+                      value={bulkEnrollmentAction.startsAt}
+                      onChange={(event) => setBulkEnrollmentAction((current) => ({ ...current, startsAt: event.target.value }))}
+                    />
+                  </Field>
+                  <Field label="Hedef sınıf">
+                    <Select
+                      value={bulkEnrollmentAction.classId}
+                      onChange={(event) => setBulkEnrollmentAction((current) => ({ ...current, classId: event.target.value }))}
+                    >
+                      <option value="">Sınıfsız</option>
+                      {classes.map((klass) => (
+                        <option key={klass.id} value={klass.id}>
+                          {klass.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
                   <Checkbox
-                    checked={visibleColumnKeys.includes(option.key)}
-                    disabled={requiredStudentColumnKeys.has(option.key)}
-                    key={option.key}
-                    label={option.label}
-                    onChange={(event) => toggleColumn(option.key, event.target.checked)}
+                    checked={bulkEnrollmentAction.useAutomaticClassMapping}
+                    label="Otomatik seviye yükselt"
+                    onChange={(event) => setBulkEnrollmentAction((current) => ({ ...current, useAutomaticClassMapping: event.target.checked }))}
                   />
-                ))}
-              </fieldset>
-              <Field label="Görünüm">
-                <Select value={tableDensity} onChange={(event) => setTableDensity(event.target.value as StudentTableDensity)}>
-                  <option value="comfortable">Rahat</option>
-                  <option value="compact">Yoğun</option>
-                </Select>
-              </Field>
-            </div>
-            <div className="next-list-controls" aria-label="Toplu dönem geçişi">
-              <Field label="Geçiş tarihi">
-                <Input
-                  type="date"
-                  value={bulkEnrollmentAction.startsAt}
-                  onChange={(event) => setBulkEnrollmentAction((current) => ({ ...current, startsAt: event.target.value }))}
-                />
-              </Field>
-              <Field label="Hedef sınıf">
-                <Select
-                  value={bulkEnrollmentAction.classId}
-                  onChange={(event) => setBulkEnrollmentAction((current) => ({ ...current, classId: event.target.value }))}
-                >
-                  <option value="">Sınıfsız</option>
-                  {classes.map((klass) => (
-                    <option key={klass.id} value={klass.id}>
-                      {klass.name}
-                    </option>
+                  {sourceClassIds.map((sourceClassId) => (
+                    <Field key={sourceClassId} label={`${classNameById.get(sourceClassId) ?? "Sınıf eşleşmedi"} hedefi`}>
+                      <Select
+                        value={bulkEnrollmentAction.classIdBySourceClassId[sourceClassId] ?? ""}
+                        onChange={(event) => setBulkEnrollmentAction((current) => ({
+                          ...current,
+                          classIdBySourceClassId: {
+                            ...current.classIdBySourceClassId,
+                            [sourceClassId]: event.target.value,
+                          },
+                        }))}
+                      >
+                        <option value="">Varsayılan</option>
+                        {classes.map((klass) => (
+                          <option key={klass.id} value={klass.id}>
+                            {klass.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
                   ))}
-                </Select>
-              </Field>
-              <Checkbox
-                checked={bulkEnrollmentAction.useAutomaticClassMapping}
-                label="Otomatik seviye yükselt"
-                onChange={(event) => setBulkEnrollmentAction((current) => ({ ...current, useAutomaticClassMapping: event.target.checked }))}
-              />
-              {sourceClassIds.map((sourceClassId) => (
-                <Field key={sourceClassId} label={`${classNameById.get(sourceClassId) ?? "Sınıf eşleşmedi"} hedefi`}>
-                  <Select
-                    value={bulkEnrollmentAction.classIdBySourceClassId[sourceClassId] ?? ""}
-                    onChange={(event) => setBulkEnrollmentAction((current) => ({
-                      ...current,
-                      classIdBySourceClassId: {
-                        ...current.classIdBySourceClassId,
-                        [sourceClassId]: event.target.value,
-                      },
-                    }))}
-                  >
-                    <option value="">Varsayılan</option>
-                    {classes.map((klass) => (
-                      <option key={klass.id} value={klass.id}>
-                      {klass.name}
-                    </option>
-                  ))}
-                  </Select>
-                </Field>
-              ))}
-              <Button type="button" variant="secondary" onClick={() => void handleBulkRenewEnrollment()} disabled={isBulkEnrollmentSaving || rows.length === 0}>
-                Listelenenleri geçir
-              </Button>
-            </div>
+                  <Button type="button" variant="secondary" onClick={() => void handleBulkRenewEnrollment()} disabled={isBulkEnrollmentSaving || rows.length === 0}>
+                    Listelenenleri geçir
+                  </Button>
+                </div>
+              </div>
+            </details>
             <Button type="button" variant="secondary" onClick={openImportModal}>
               <Upload size={17} aria-hidden="true" />
               Toplu aktar
@@ -816,7 +826,7 @@ export function StudentsPage() {
           />
         }
         tableCaption="Öğrenci listesi"
-        tableDescription="Filtreler, kolon görünürlüğü ve yoğunluk seçimi URL durumuyla korunur."
+        tableDescription="Sınıf ve kayıt durumu."
       />
       <FormModal
         description="CSV veya XLSX dosyası seçildiğinde önce dry-run yapılır; hata yoksa aktarım tamamlanır."
@@ -1146,7 +1156,10 @@ function StudentDetailPanel({
         <InfoItem label={scoreView ? scoreViewLabel(scoreView) : isModernReport ? "Puan hesaplanamadı" : "Eski hesaplama"} value={formatNumber(score)} />
         <InfoItem label="Son net" value={formatNumber(detail?.report?.total?.net)} />
         <InfoItem label="Hata kitapçığı" value={detail?.errorBooklet?.items ? `${detail.errorBooklet.items.length} soru` : "-"} />
-        <InfoItem label="Başarı gelişimi" value={formatPercentDelta(detail?.progress?.successRateDelta)} />
+        <InfoItem
+          label={isComparableStudentProgress(detail?.progress) ? "Başarı değişimi" : "Sınav geçmişi"}
+          value={formatStudentProgressSummary(detail?.progress)}
+        />
       </InfoGrid>
       {isModernReport ? <p className="next-karne-score-warning">Standart sapma kullanılmadan hesaplanan deneme puanıdır. Resmî MEB/ÖSYM sınav puanı değildir.</p> : null}
       {detail && detail.teacherNotes.length > 0 ? (

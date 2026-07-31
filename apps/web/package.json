@@ -6,7 +6,7 @@
   "scripts": {
     "build": "next build",
     "a11y": "playwright test -c playwright.next.config.ts e2e-next/a11y-next.spec.ts",
-    "auth-contract": "playwright test -c playwright.next.config.ts --workers=1 e2e-next/auth-state-next.spec.ts e2e-next/login-next.spec.ts e2e-next/login-selection-next.spec.ts e2e-next/password-reset-next.spec.ts --grep \"auth state|genel login|parola yenileme|tek kullanımlık|ilk girişte zorunlu\"",
+    "auth-contract": "playwright test -c playwright.next.config.ts --workers=1 e2e-next/auth-state-next.spec.ts e2e-next/login-next.spec.ts e2e-next/login-selection-next.spec.ts e2e-next/password-reset-next.spec.ts e2e-next/single-flight-refresh-next.spec.ts --grep \"auth state|genel login|parola yenileme|tek kullanımlık|ilk girişte zorunlu|csrf cookie|eşzamanlı 401\"",
     "backup-restore-panel": "playwright test -c playwright.next.config.ts e2e-next/backup-restore-next.spec.ts",
     "dev": "next dev --hostname 0.0.0.0 --port 3001",
     "lint": "rm -rf .next && tsc -p tsconfig.json --noEmit",

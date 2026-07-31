@@ -24,17 +24,10 @@
   --color-danger: var(--color-danger-token);
   --color-danger-subtle: var(--color-danger-soft-token);
   --color-overlay: var(--color-overlay-token);
-  --space-1: 4px;
-  --space-2: 6px;
-  --space-3: 8px;
-  --space-4: 10px;
-  --space-5: 12px;
-  --space-6: 16px;
-  --space-7: 20px;
-  --space-8: 24px;
-  --space-9: 32px;
-  --radius: 7px;
-  --radius-lg: 8px;
+  --space-2: var(--space-2xs);
+  --space-3: var(--space-2xs);
+  --radius: var(--radius-control);
+  --radius-lg: var(--radius-panel);
   --shell-sidebar-width: 16rem;
   --workspace-max-width: 1360px;
   --shadow-soft: 0 10px 28px var(--color-shadow-soft);
@@ -42,7 +35,7 @@
   --shadow-card-hover: 0 2px 4px var(--color-shadow-medium), 0 16px 30px var(--color-shadow-medium);
   --shadow-modal: 0 24px 58px var(--color-shadow-strong);
   --focus-ring: 0 0 0 3px color-mix(in oklch, var(--color-focus) 18%, transparent);
-  --transition-ui: 180ms ease;
+  --transition-ui: var(--dur-short) var(--ease-out);
   --chart-success: var(--color-success-token);
   --chart-primary: var(--color-accent);
   --chart-warning: var(--color-warning-token);
@@ -51,9 +44,7 @@
 
   color: var(--color-text);
   background: var(--color-bg);
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  font-family: var(--font-body);
 }
 
 * {
@@ -2250,132 +2241,6 @@ a {
   font-size: 30px;
 }
 
-.next-session-panel {
-  gap: 8px;
-  margin-top: 16px;
-  padding: 8px 10px;
-}
-
-.next-session-panel .uh-panel__header {
-  display: none;
-}
-
-.next-session-panel .uh-panel__body {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.next-session-panel .uh-status-badge {
-  min-height: 34px;
-  border-radius: var(--radius);
-  white-space: normal;
-}
-
-.next-dashboard-summary-panel .uh-panel__body,
-.next-dashboard-decision-panel .uh-panel__body {
-  min-width: 0;
-  overflow-x: auto;
-}
-
-.next-dashboard-summary-panel .uh-data-table,
-.next-dashboard-decision-panel .uh-data-table {
-  box-shadow: none;
-}
-
-.next-dashboard-link-cell.uh-action-card {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 4px;
-  border-color: transparent;
-  border-left-color: var(--color-border-strong);
-  background: transparent;
-  padding: 0 0 0 10px;
-  box-shadow: none;
-}
-
-.next-dashboard-link-cell.uh-action-card[href]:hover {
-  border-color: transparent;
-  border-left-color: var(--color-primary);
-  background: transparent;
-  box-shadow: none;
-}
-
-.next-dashboard-link-cell .uh-action-card__copy {
-  gap: 4px;
-}
-
-.next-dashboard-link-cell .uh-action-card__value {
-  font-size: 16px;
-}
-
-.next-tenant-profile {
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 14px;
-  border-radius: var(--radius);
-  padding: 14px;
-}
-
-.next-tenant-profile .uh-panel__header {
-  grid-column: 2 / -1;
-  grid-row: 1;
-  align-items: center;
-}
-
-.next-tenant-profile .uh-panel__header > div {
-  min-width: 0;
-}
-
-.next-tenant-profile .uh-panel__actions {
-  justify-content: flex-end;
-  min-width: 0;
-}
-
-.next-tenant-profile .uh-panel__body {
-  grid-column: 1;
-  grid-row: 1;
-}
-
-.next-tenant-profile img,
-.next-tenant-profile__placeholder {
-  width: 56px;
-  height: 56px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  object-fit: contain;
-  background: var(--color-surface-muted);
-}
-
-.next-tenant-profile__placeholder {
-  display: grid;
-  place-items: center;
-  color: var(--color-text-secondary);
-  font-weight: 900;
-}
-
-.next-tenant-profile h2,
-.next-tenant-profile p {
-  margin: 0;
-}
-
-.next-tenant-profile .uh-panel__header h2 {
-  overflow-wrap: anywhere;
-  font-size: 20px;
-}
-
-.next-tenant-profile .uh-panel__header p,
-.next-tenant-profile a {
-  color: var(--color-text-muted);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.next-tenant-profile a {
-  overflow-wrap: anywhere;
-  text-decoration: none;
-}
-
 .next-portal-stack {
   display: grid;
   gap: 14px;
@@ -2387,11 +2252,9 @@ a {
   gap: 10px 14px;
   align-items: center;
   border: 1px solid var(--color-border-faint);
-  border-left: 4px solid var(--color-primary);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   padding: 10px 12px;
-  box-shadow: var(--shadow-card);
 }
 
 .next-portal-context-strip p,
@@ -2497,7 +2360,6 @@ a {
   align-items: center;
   min-width: 0;
   border: 1px solid var(--color-border-faint);
-  border-left: 3px solid var(--color-primary);
   border-radius: var(--radius);
   background: var(--color-surface);
   padding: 10px 12px;
@@ -2533,21 +2395,20 @@ a {
 .next-portal-brief__item.uh-metric-card {
   min-height: 100%;
   border: 1px solid var(--color-border-faint);
-  border-left: 3px solid var(--color-border-strong);
   background: var(--color-surface);
   padding: 12px;
 }
 
 .next-portal-brief__item.uh-metric-card--warning {
-  border-left-color: var(--color-warning);
+  border-color: color-mix(in oklch, var(--color-warning) 30%, var(--color-border-faint));
 }
 
 .next-portal-brief__item.uh-metric-card--success {
-  border-left-color: var(--color-success);
+  border-color: color-mix(in oklch, var(--color-success) 30%, var(--color-border-faint));
 }
 
 .next-portal-brief__item.uh-metric-card--info {
-  border-left-color: var(--color-info);
+  border-color: color-mix(in oklch, var(--color-info) 30%, var(--color-border-faint));
 }
 
 .next-portal-brief__item .uh-metric-card__value {
@@ -2556,11 +2417,7 @@ a {
 
 .next-portal-summary-grid {
   grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  padding: 12px;
-  box-shadow: var(--shadow-card);
+  gap: var(--space-xs);
 }
 
 .next-portal-summary-card {
@@ -2641,6 +2498,56 @@ a {
   max-width: 100%;
   white-space: normal;
   text-align: center;
+}
+
+.next-portal-action-strip__secondary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--space-2xs);
+  margin-top: var(--space-xs);
+}
+
+.next-portal-action-strip__secondary-item {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-xs);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+
+.next-portal-action-strip__secondary-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.next-portal-action-strip__secondary-item:hover {
+  color: var(--color-primary);
+}
+
+.next-list-disclosure {
+  min-width: min(100%, 320px);
+  border-top: 1px solid var(--color-border);
+}
+
+.next-list-disclosure > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.next-list-disclosure__content {
+  display: grid;
+  gap: var(--space-xs);
+  padding-block: 0 var(--space-xs);
 }
 
 .next-portal-stack .uh-panel__body,
@@ -4152,6 +4059,101 @@ a {
 
 .next-attention-item .uh-action-card__detail {
   line-height: 1.35;
+}
+
+.next-dashboard-exam-panel .uh-panel__body {
+  min-width: 0;
+}
+
+.next-dashboard-exam-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-sm);
+}
+
+.next-dashboard-exam-summary > div:first-child {
+  display: grid;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+
+.next-dashboard-exam-summary > div:first-child strong,
+.next-dashboard-exam-summary > div:first-child span {
+  overflow-wrap: anywhere;
+}
+
+.next-dashboard-exam-summary > div:first-child span {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.next-dashboard-exam-summary dl {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-xs);
+  margin: 0;
+}
+
+.next-dashboard-exam-summary dl div {
+  display: grid;
+  gap: var(--space-3xs);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-xs);
+}
+
+.next-dashboard-exam-summary dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.next-dashboard-exam-summary dd {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-lg);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.next-dashboard-compact-links {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-xs);
+}
+
+.next-dashboard-compact-links a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.next-dashboard-compact-links a:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+@media (max-width: 768px) {
+  .next-dashboard-exam-summary dl,
+  .next-dashboard-compact-links {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 375px) {
+  .next-dashboard-exam-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .next-dashboard-exam-summary dl,
+  .next-dashboard-compact-links {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .next-onboarding-hero {
@@ -10616,6 +10618,19 @@ a {
     .next-marketing-text-link {
       width: 100%;
     }
+
+    .next-marketing-actions .uh-button,
+    .next-marketing-cta .uh-button {
+      height: auto;
+      padding-block: var(--space-2xs);
+      white-space: normal;
+    }
+
+    .next-marketing-actions .uh-button__content,
+    .next-marketing-cta .uh-button__content {
+      white-space: normal;
+      text-align: center;
+    }
   }
 
   @media (max-width: 414px) {
@@ -10811,6 +10826,15 @@ a {
       padding: var(--space-sm);
     }
 
+    .next-marketing-cta {
+      padding-inline: var(--space-sm);
+    }
+
+    .next-marketing-cta .uh-button {
+      padding-inline: var(--space-xs);
+      white-space: nowrap;
+    }
+
     .next-marketing-workflow header {
       align-items: flex-start;
       flex-direction: column;
@@ -10884,8 +10908,6 @@ a {
   }
 
   .uh-crud-page__table-shell,
-  .next-dashboard-summary-panel .uh-panel__body,
-  .next-dashboard-decision-panel .uh-panel__body,
   .next-portal-stack .uh-panel__body,
   .next-student-detail-panel .uh-panel__body,
   .next-grid-scroll {
@@ -10909,10 +10931,6 @@ a {
   .uh-segmented-control button[aria-pressed="true"] {
     border-color: var(--color-accent-strong);
     color: var(--color-accent-strong);
-  }
-
-  .next-dashboard-link-cell .uh-action-card__detail {
-    white-space: nowrap;
   }
 
   @media (max-width: 414px) {

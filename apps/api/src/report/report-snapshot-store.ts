@@ -6,6 +6,7 @@ import type { ReportSnapshotRecord } from "./report-generation.service.js";
 export interface ReportSnapshotStore {
   listByExam(tenantId: string, examId: string): Promise<ReportSnapshotRecord[]>;
   listByTenant(tenantId: string): Promise<ReportSnapshotRecord[]>;
+  listReadyByStudent(tenantId: string, studentId: string, examId?: string): Promise<ReportSnapshotRecord[]>;
   listIndexByTenant?(tenantId: string): Promise<ReportSnapshotRecord[]>;
   findById(tenantId: string, examId: string, snapshotId: string): Promise<ReportSnapshotRecord | undefined>;
   markStaleByExam(tenantId: string, examId: string, reason: string): Promise<number>;
@@ -114,6 +115,17 @@ export class InMemoryReportSnapshotStore implements ReportSnapshotStore {
 
   async listByTenant(tenantId: string): Promise<ReportSnapshotRecord[]> {
     return this.snapshots.filter((snapshot) => snapshot.tenantId === tenantId && !snapshot.deletedAt);
+  }
+
+  async listReadyByStudent(tenantId: string, studentId: string, examId?: string): Promise<ReportSnapshotRecord[]> {
+    return this.snapshots
+      .filter((snapshot) =>
+        snapshot.tenantId === tenantId
+        && snapshot.status === "READY"
+        && !snapshot.deletedAt
+        && (!examId || snapshot.examId === examId)
+        && snapshotStudents(snapshot).some((student) => student.studentId === studentId))
+      .map((snapshot) => toStudentProgressRecord(snapshot, studentId));
   }
 
   async listIndexByTenant(tenantId: string): Promise<ReportSnapshotRecord[]> {
@@ -251,6 +263,53 @@ export class PostgresReportSnapshotStore implements ReportSnapshotStore {
            AND "deletedAt" IS NULL
          ORDER BY "generatedAt" DESC NULLS LAST, "createdAt" DESC`,
         [tenantId],
+      );
+      return result.rows.map(toReportSnapshotRecord);
+    });
+  }
+
+  async listReadyByStudent(tenantId: string, studentId: string, examId?: string): Promise<ReportSnapshotRecord[]> {
+    return withTenantQuery(this.pool, async (client) => {
+      const result = await client.query<ReportSnapshotRow>(
+        `SELECT
+           snapshot."id",
+           snapshot."tenantId",
+           snapshot."examId",
+           snapshot."campusId",
+           snapshot."gradeLevelId",
+           snapshot."classId",
+           snapshot."courseId",
+           snapshot."termId",
+           snapshot."reportType",
+           snapshot."status",
+           '{}'::jsonb AS "inputRefs",
+           jsonb_build_object(
+             'generatedAt', snapshot."snapshotData"->'generatedAt',
+             'students', (
+               SELECT jsonb_agg(student ORDER BY ordinality)
+               FROM jsonb_array_elements(snapshot."snapshotData"->'students')
+                 WITH ORDINALITY AS entries(student, ordinality)
+               WHERE student->>'studentId' = $2
+             )
+           ) AS "snapshotData",
+           snapshot."generatedAt",
+           snapshot."staleAt",
+           snapshot."deletedAt",
+           snapshot."createdAt",
+           snapshot."updatedAt"
+         FROM "ReportSnapshot" AS snapshot
+         WHERE snapshot."tenantId" = $1
+           AND snapshot."status" = 'READY'
+           AND snapshot."deletedAt" IS NULL
+           AND ($3::text IS NULL OR snapshot."examId" = $3)
+           AND jsonb_typeof(snapshot."snapshotData"->'students') = 'array'
+           AND EXISTS (
+             SELECT 1
+             FROM jsonb_array_elements(snapshot."snapshotData"->'students') AS entries(student)
+             WHERE student->>'studentId' = $2
+           )
+         ORDER BY snapshot."generatedAt" DESC NULLS LAST, snapshot."createdAt" DESC`,
+        [tenantId, studentId, examId ?? null],
       );
       return result.rows.map(toReportSnapshotRecord);
     });
@@ -473,6 +532,28 @@ function toReportIndexRecord(snapshot: ReportSnapshotRecord): ReportSnapshotReco
       }
       : undefined,
   };
+}
+
+function toStudentProgressRecord(snapshot: ReportSnapshotRecord, studentId: string): ReportSnapshotRecord {
+  return {
+    ...snapshot,
+    inputRefs: {},
+    snapshotData: {
+      ...(typeof snapshot.snapshotData?.generatedAt === "string"
+        ? { generatedAt: snapshot.snapshotData.generatedAt }
+        : {}),
+      students: snapshotStudents(snapshot).filter((student) => student.studentId === studentId),
+    },
+  };
+}
+
+function snapshotStudents(snapshot: ReportSnapshotRecord): Array<Record<string, unknown>> {
+  return Array.isArray(snapshot.snapshotData?.students)
+    ? snapshot.snapshotData.students.filter(
+      (student): student is Record<string, unknown> =>
+        Boolean(student) && typeof student === "object" && !Array.isArray(student),
+    )
+    : [];
 }
 
 function parseJsonObject(value: unknown): Record<string, unknown> {

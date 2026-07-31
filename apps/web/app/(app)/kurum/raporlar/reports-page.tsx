@@ -49,7 +49,7 @@ import { ClassCompareBar, PracticeScoreBar, TopicRadarChart } from "../../_share
 import { formatNetNumber, OutcomeNetTable } from "../../_shared/outcome-net-table.js";
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
 import { buildReportAnalysisRows, type ReportAnalysisRow } from "../../_shared/report-analysis.js";
-import { formatPercentDelta, formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
+import { formatPercentDelta, formatPercentNumber, isComparableStudentProgress, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 
 interface ReportData {
   errorBooklet: ReportErrorBooklet | null;
@@ -994,6 +994,17 @@ function formatSnapshotGeneratedAt(snapshot: ReportSnapshotRecord | null) {
 
 function formatTrend(progress: ReportStudentProgress | null | undefined) {
   if (!progress) return "-";
+  if (!isComparableStudentProgress(progress)) {
+    return progress.points.length > 0 ? `${progress.points.length} sınav sonucu` : "-";
+  }
+  const successRate = progress.successRateDelta === undefined
+    ? "-"
+    : `${formatPercentDelta(progress.successRateDelta)} başarı`;
+  return successRate;
+}
+
+function formatKarneTrend(progress: ReportStudentProgress | null | undefined) {
+  if (!progress) return "-";
   const successRate = progress.successRateDelta === undefined
     ? "-"
     : `${formatPercentDelta(progress.successRateDelta)} başarı`;
@@ -1452,7 +1463,7 @@ function StudentReportCard({
       sheetClassName="next-report-karne-sheet next-karne-sheet next-karne-sheet--workspace"
       showEmptyOutcomes
       showProgressHistory
-      summaryExtra={`Gelişim ${formatTrend(progress)}`}
+      summaryExtra={`Gelişim ${formatKarneTrend(progress)}`}
       titleLevel="h3"
     />
   );

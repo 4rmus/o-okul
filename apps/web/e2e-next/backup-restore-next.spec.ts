@@ -83,6 +83,31 @@ test("yedek restore paneli hedef sözleşmesini API çağrısından önce doğru
 
     expect(request.headers().authorization).toBe("Bearer next-access-token");
 
+    if (path === "/me/tenant" && request.method() === "GET") {
+      await route.fulfill({
+        body: JSON.stringify(envelope({ id: "tenant-a", name: "DNA Eğitim", plan: "TRIAL", slug: "dna-egitim", status: "ACTIVE" })),
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+      });
+      return;
+    }
+
+    if (path === "/me/institution-dashboard" && request.method() === "GET") {
+      await route.fulfill({
+        body: JSON.stringify(envelope({
+          activeStudentCount: 0,
+          attention: { attendanceAlertCount: 0, openImportQuarantineCount: 0, openSupportTicketCount: 0 },
+          generatedAt: "2026-06-14T10:00:00.000Z",
+          institution: { name: "DNA Eğitim" },
+        })),
+        contentType: "application/json",
+        headers: corsHeaders,
+        status: 200,
+      });
+      return;
+    }
+
     if (path === "/me/notification-devices" && request.method() === "GET") {
       await route.fulfill({
         body: JSON.stringify(envelope([])),

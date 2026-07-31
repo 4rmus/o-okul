@@ -40,6 +40,18 @@ export function formatPercentDelta(value: number | undefined): string {
   return `${sign}%${magnitude}`;
 }
 
+export function isComparableStudentProgress(progress: ReportStudentProgress | null | undefined): boolean {
+  if (!progress || progress.points.length < 2) return false;
+  const courseId = progress.points[0]?.courseId;
+  return Boolean(courseId) && progress.points.every((point) => point.courseId === courseId);
+}
+
+export function formatStudentProgressSummary(progress: ReportStudentProgress | null | undefined): string {
+  if (!progress || progress.points.length === 0) return "Veri yok";
+  if (!isComparableStudentProgress(progress)) return `${progress.points.length} sınav sonucu`;
+  return `Başarı değişimi ${formatPercentDelta(progress.successRateDelta)}`;
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -47,3 +59,4 @@ function isFiniteNumber(value: unknown): value is number {
 function roundReportMetric(value: number): number {
   return Number(value.toFixed(4));
 }
+import type { ReportStudentProgress } from "@o-okul/shared-types";

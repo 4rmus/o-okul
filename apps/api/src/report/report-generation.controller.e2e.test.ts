@@ -467,6 +467,7 @@ describe("ReportGenerationController", () => {
   });
 
   it("TEACHER hazır snapshot geçmişinden öğrenci gelişim raporu okuyabilir", async () => {
+    snapshotStore.studentInputs.length = 0;
     const issued = await login("teacher-a@example.test");
 
     const response = await request(server)
@@ -474,7 +475,11 @@ describe("ReportGenerationController", () => {
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .expect(200);
 
-    expect(snapshotStore.inputs).toContainEqual({ tenantId: "tenant-a", examId: "exam-a" });
+    expect(snapshotStore.studentInputs).toEqual([{
+      tenantId: "tenant-a",
+      studentId: "student-a",
+      examId: "exam-a",
+    }]);
     expect(response.body).toEqual({
       tenantId: "tenant-a",
       examId: "exam-a",
@@ -542,6 +547,7 @@ describe("ReportGenerationController", () => {
   });
 
   it("TEACHER öğrenci gelişim raporunu tüm sınav snapshotlarıyla okuyabilir", async () => {
+    snapshotStore.studentInputs.length = 0;
     const issued = await login("teacher-a@example.test");
 
     const response = await request(server)
@@ -549,7 +555,7 @@ describe("ReportGenerationController", () => {
       .set("Authorization", `Bearer ${issued.accessToken}`)
       .expect(200);
 
-    expect(snapshotStore.tenantInputs).toContain("tenant-a");
+    expect(snapshotStore.studentInputs).toEqual([{ tenantId: "tenant-a", studentId: "student-a" }]);
     expect(response.body.points.map((point: { snapshotId: string }) => point.snapshotId)).toEqual([
       "snapshot-previous",
       "snapshot-a",
@@ -889,6 +895,7 @@ function createMixedStudentSnapshot(): ReportSnapshotRecord {
 class FakeReportSnapshotStore implements ReportSnapshotStore {
   readonly inputs: Array<{ tenantId: string; examId: string }> = [];
   readonly tenantInputs: string[] = [];
+  readonly studentInputs: Array<{ tenantId: string; studentId: string; examId?: string }> = [];
   readonly findInputs: Array<{ tenantId: string; examId: string; snapshotId: string }> = [];
   private records = [fakeSnapshot, fakePreviousSnapshot, fakeOtherExamSnapshot];
 
@@ -908,6 +915,19 @@ class FakeReportSnapshotStore implements ReportSnapshotStore {
   async listByTenant(tenantId: string): Promise<ReportSnapshotRecord[]> {
     this.tenantInputs.push(tenantId);
     return this.records.filter((snapshot) => snapshot.tenantId === tenantId);
+  }
+
+  async listReadyByStudent(tenantId: string, studentId: string, examId?: string): Promise<ReportSnapshotRecord[]> {
+    this.studentInputs.push({ tenantId, studentId, ...(examId ? { examId } : {}) });
+    return this.records.filter((snapshot) =>
+      snapshot.tenantId === tenantId
+      && snapshot.status === "READY"
+      && !snapshot.deletedAt
+      && (!examId || snapshot.examId === examId)
+      && Array.isArray(snapshot.snapshotData?.students)
+      && snapshot.snapshotData.students.some(
+        (student) => Boolean(student) && typeof student === "object" && !Array.isArray(student) && student.studentId === studentId,
+      ));
   }
 
   async findById(tenantId: string, examId: string, snapshotId: string): Promise<ReportSnapshotRecord | undefined> {

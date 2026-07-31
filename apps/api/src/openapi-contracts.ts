@@ -80,6 +80,60 @@ const tenantRecordSchema = objectSchema({
   status: stringSchema(),
 }, ["id", "name", "slug", "plan", "status"]);
 
+const institutionDashboardClassSchema = objectSchema({
+  classId: stringSchema(),
+  className: stringSchema(),
+  resultCount: integerSchema({ minimum: 0 }),
+  successRate: numberSchema({ minimum: 0, maximum: 100 }),
+  net: numberSchema(),
+  questionCount: numberSchema({ minimum: 0 }),
+}, ["resultCount"]);
+
+const institutionDashboardReportSchema = objectSchema({
+  snapshotId: stringSchema(),
+  generatedAt: stringSchema({ format: "date-time" }),
+  resultCount: integerSchema({ minimum: 0 }),
+  successRate: numberSchema({ minimum: 0, maximum: 100 }),
+  net: numberSchema(),
+  questionCount: numberSchema({ minimum: 0 }),
+  classes: arraySchema(institutionDashboardClassSchema),
+}, ["snapshotId", "resultCount", "classes"]);
+
+const institutionDashboardExamSchema = objectSchema({
+  examId: stringSchema(),
+  title: stringSchema(),
+  startsAt: stringSchema({ format: "date-time" }),
+  registeredParticipantCount: integerSchema({ minimum: 0 }),
+  attendedParticipantCount: integerSchema({ minimum: 0 }),
+  absentParticipantCount: integerSchema({ minimum: 0 }),
+  reportStatus: { type: "string", enum: ["READY", "MISSING"] },
+  report: institutionDashboardReportSchema,
+}, [
+  "examId",
+  "title",
+  "registeredParticipantCount",
+  "attendedParticipantCount",
+  "absentParticipantCount",
+  "reportStatus",
+]);
+
+const institutionDashboardSummarySchema = objectSchema({
+  generatedAt: stringSchema({ format: "date-time" }),
+  institution: objectSchema({
+    name: stringSchema(),
+    institutionType: stringSchema(),
+    contactEmail: stringSchema({ format: "email" }),
+    logoUrl: stringSchema(),
+  }, ["name"]),
+  activeStudentCount: integerSchema({ minimum: 0 }),
+  attention: objectSchema({
+    attendanceAlertCount: integerSchema({ minimum: 0 }),
+    openImportQuarantineCount: integerSchema({ minimum: 0 }),
+    openSupportTicketCount: integerSchema({ minimum: 0 }),
+  }, ["attendanceAlertCount", "openImportQuarantineCount", "openSupportTicketCount"]),
+  latestExam: institutionDashboardExamSchema,
+}, ["generatedAt", "institution", "activeStudentCount", "attention"]);
+
 const tenantFirstAdminCreateRequestSchema = objectSchema({
   email: stringSchema({ format: "email" }),
   name: stringSchema({ minLength: 1 }),
@@ -2658,6 +2712,9 @@ const operationContracts: Record<string, OperationContract> = {
   },
   "get /api/v1/me/tenant": {
     responseBody: tenantRecordSchema,
+  },
+  "get /api/v1/me/institution-dashboard": {
+    responseBody: institutionDashboardSummarySchema,
   },
   "patch /api/v1/me/tenant": {
     requestBody: tenantCurrentProfileUpdateRequestSchema,

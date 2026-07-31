@@ -624,7 +624,7 @@ export function ExamsPage() {
           <Field label="Cevap anahtarı dosyası" description="Excel dosyası; soru cevapları, branş, kazanım ve B kitapçık karşılığı içermelidir.">
             <Input
               accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              required
+              required={!answerKeyFileBase64}
               type="file"
               onChange={(event) => void changeAnswerKeyFile(event.target.files?.[0])}
             />

@@ -268,6 +268,7 @@ async function installRolePreviewApiMocks(page: Page, unexpectedMutations: strin
 function mockRolePreviewApiResponse(pathName: string, route: Route, options: RolePreviewMockOptions = {}): { data: unknown } {
   if (pathName === "/auth/refresh") return { data: createAuthResponse(options.roles) };
   if (pathName === "/me/tenant") return { data: createTenantResponse() };
+  if (pathName === "/me/institution-dashboard") return { data: createInstitutionDashboardResponse() };
   if (pathName === "/me/notification-devices") return { data: [] };
   if (pathName === "/teachers") {
     return {
@@ -347,6 +348,15 @@ function createTenantResponse() {
     id: "tenant-role-preview",
     institutionType: "Dershane",
     name: "Rol Önizleme Akademi",
+  };
+}
+
+function createInstitutionDashboardResponse() {
+  return {
+    activeStudentCount: 0,
+    attention: { attendanceAlertCount: 0, openImportQuarantineCount: 0, openSupportTicketCount: 0 },
+    generatedAt: "2026-06-18T09:00:00.000Z",
+    institution: { name: "Rol Önizleme Akademi" },
   };
 }
 

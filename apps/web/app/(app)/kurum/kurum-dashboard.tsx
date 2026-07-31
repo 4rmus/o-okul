@@ -2,153 +2,111 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import {
-  ActionCard,
-  Button,
-  DataTable,
-  LoadingState,
-  Panel,
-  StatusBadge,
-  type DataTableColumn,
-  type StatusBadgeProps,
-} from "@o-okul/ui";
-import type { ReportSnapshotRecord } from "@o-okul/shared-types";
+import { ActionCard, Button, LoadingState, Panel, StatusBadge } from "@o-okul/ui";
+import type { InstitutionDashboardSummary } from "@o-okul/shared-types";
 import { useAuth } from "../../providers.js";
-import { apiBaseUrl, apiRequest } from "../../../src/api-client.js";
-import {
-  type KurumAnnouncementSummary,
-  type KurumDecisionSignals,
-  type KurumSystemHealthSummary,
-  useKurumDashboardDataQuery,
-  useKurumStudentProgressQuery,
-} from "./kurum-dashboard-data.js";
-import { PageFrame } from "./_shared/page-frame.js";
-import {
-  OperationSummary,
-  type OperationSummaryAction,
-  type OperationSummaryBadge,
-  type OperationSummaryItem,
-} from "./_shared/operation-summary.js";
 import { canAccessHref } from "../_shared/access.js";
-import { formatCourseName, shortCourseName } from "../_shared/academic-labels.js";
-import { ClassCompareBar, ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../_shared/lazy-report-charts.js";
+import { ClassCompareBar } from "../_shared/lazy-report-charts.js";
 import { ReportChartPanel } from "../_shared/report-chart-panel.js";
-import { reportQuestionCount, reportSuccessRate } from "../_shared/report-metrics.js";
+import { PageFrame } from "./_shared/page-frame.js";
+import { OperationSummary, type OperationSummaryItem } from "./_shared/operation-summary.js";
+import { useKurumDashboardDataQuery } from "./kurum-dashboard-data.js";
 
-interface DashboardLinkCard {
+interface DashboardAttentionItem {
   description: string;
   href: string;
   title: string;
   value: number | string;
 }
 
-interface DashboardSummaryRow extends DashboardLinkCard {
-  badge: string;
-  tone: StatusBadgeProps["tone"];
-}
-
-interface DashboardDecisionRow extends DashboardLinkCard {
-  status: string;
-  tone: StatusBadgeProps["tone"];
-}
-
-interface TenantProfileRecord {
-  contactEmail?: string;
-  id: string;
-  institutionType?: string;
-  logoUrl?: string;
-  name?: string;
-}
+const emptyDashboard: InstitutionDashboardSummary = {
+  generatedAt: "",
+  institution: { name: "Kurum Paneli" },
+  activeStudentCount: 0,
+  attention: {
+    attendanceAlertCount: 0,
+    openImportQuarantineCount: 0,
+    openSupportTicketCount: 0,
+  },
+};
 
 export function KurumDashboard() {
   const { auth } = useAuth();
   const accessToken = auth?.accessToken ?? "";
   const tenantId = auth?.session.tenantId ?? "anonymous";
   const dashboardQuery = useKurumDashboardDataQuery(accessToken, tenantId, Boolean(auth));
-  const tenantProfileQuery = useQuery({
-    queryKey: ["next-current-tenant", tenantId],
-    queryFn: () => loadCurrentTenant(accessToken),
-    enabled: Boolean(auth),
-  });
-  const tenantProfile = tenantProfileQuery.data ?? null;
-  const tenantDisplayName = tenantProfile ? tenantNameOrFallback(tenantProfile) : "Kurum Paneli";
-  const latestExam = dashboardQuery.data?.report.exam ?? null;
-  const latestSnapshot = dashboardQuery.data?.report.snapshot ?? null;
-  const firstStudentId = latestSnapshot?.snapshotData?.students?.[0]?.studentId;
-  const progressQuery = useKurumStudentProgressQuery(accessToken, tenantId, latestSnapshot?.examId ?? "", firstStudentId, Boolean(auth));
-  const overview = dashboardQuery.data?.overview ?? { classCount: 0, guardianCount: 0, teacherCount: 0, studentCount: 0 };
-  const decisionSignals = dashboardQuery.data?.decisionSignals ?? {
-    attendanceAlerts: 0,
-    openImportQuarantines: 0,
-    openSupportTickets: 0,
-    overdueInstallments: 0,
-  };
-  const announcements = dashboardQuery.data?.announcements ?? { publishedCount: 0 };
-  const systemHealth = dashboardQuery.data?.systemHealth ?? {
-    apiOk: false,
-    postgresOk: false,
-    readyOk: false,
-    redisOk: false,
-  };
-  const examResult = toExamResult(latestSnapshot);
-  const classCompare = toClassCompare(latestSnapshot);
-  const topicRadar = toTopicRadar(latestSnapshot);
-  const progressPoints = progressQuery.data?.points ?? [];
-  const reportDescription = resolveReportDescription(dashboardQuery.isPending, latestExam?.title, latestSnapshot);
-  const isEmptyInstitution =
-    !dashboardQuery.isPending &&
-    overview.classCount === 0 &&
-    overview.guardianCount === 0 &&
-    overview.teacherCount === 0 &&
-    overview.studentCount === 0;
-  const visibleDecisionCards = buildDecisionCards(decisionSignals).filter((card) =>
-    canAccessHref(auth?.session.roles ?? [], card.href),
-  );
-  const visibleAttentionItems = buildAttentionItems(decisionSignals, latestExam?.title, latestSnapshot).filter((item) =>
-    canAccessHref(auth?.session.roles ?? [], item.href),
-  );
-  const visibleSummaryCards = buildSummaryCards(latestExam?.title, latestSnapshot, announcements, systemHealth).filter((card) =>
-    canAccessHref(auth?.session.roles ?? [], card.href),
-  );
-  const summaryRows = toSummaryRows(visibleSummaryCards);
-  const decisionRows = toDecisionRows(visibleDecisionCards);
-  const dashboardSummaryItems = buildDashboardSummaryItems(overview, latestExam?.title, latestSnapshot, systemHealth, visibleDecisionCards);
-  const dashboardSummaryBadges = buildDashboardSummaryBadges(latestSnapshot, systemHealth);
-  const dashboardSummaryActions = buildDashboardSummaryActions(visibleAttentionItems, latestExam?.title, latestSnapshot, isEmptyInstitution);
+  const dashboard = dashboardQuery.data ?? emptyDashboard;
+  const latestExam = dashboard.latestExam;
+  const latestReport = latestExam?.report;
+  const attentionItems = buildAttentionItems(dashboard)
+    .filter((item) => canAccessHref(auth?.session.roles ?? [], item.href))
+    .slice(0, 3);
+  const attentionTotal = totalAttention(dashboard);
   const [isSetupDismissed, setIsSetupDismissed] = useState(false);
-  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState(false);
   const setupDismissedCookieName = `uh_setup_${encodeURIComponent(tenantId)}_dismissed`;
-  const onboardingCompletedCookieName = `uh_onboarding_${encodeURIComponent(tenantId)}_completed`;
+  const classCompare = (latestReport?.classes ?? []).map((record) => ({
+    ...(record.classId ? { classId: record.classId } : {}),
+    ...(record.className ? { className: record.className } : {}),
+    ...(record.net !== undefined ? { net: record.net } : {}),
+    ...(record.questionCount !== undefined ? { questionCount: record.questionCount } : {}),
+    ...(record.successRate !== undefined ? { successRate: record.successRate } : {}),
+  }));
 
   useEffect(() => {
     if (!auth) return;
-    setIsSetupDismissed(readSetupDismissed(setupDismissedCookieName));
-    setIsOnboardingCompleted(readSetupDismissed(onboardingCompletedCookieName));
-  }, [auth, onboardingCompletedCookieName, setupDismissedCookieName]);
+    setIsSetupDismissed(readCookie(setupDismissedCookieName) === "true");
+  }, [auth, setupDismissedCookieName]);
 
   function dismissSetupCard() {
     setIsSetupDismissed(true);
-    writeSetupDismissed(setupDismissedCookieName);
+    writeCookie(setupDismissedCookieName, "true");
+  }
+
+  if (dashboardQuery.isPending && !dashboardQuery.data) {
+    return (
+      <PageFrame
+        title="Kurum Paneli"
+        subtitle="Öğrenci gelişimini, son sınav katılımını ve destek bekleyen işleri tek yerde izleyin."
+      >
+        <LoadingState label="Kurum başarı görünümü yükleniyor…" />
+      </PageFrame>
+    );
+  }
+
+  if (dashboardQuery.isError && !dashboardQuery.data) {
+    return (
+      <PageFrame
+        title="Kurum Paneli"
+        subtitle="Öğrenci gelişimini, son sınav katılımını ve destek bekleyen işleri tek yerde izleyin."
+      >
+        <Panel
+          actions={<Button onClick={() => void dashboardQuery.refetch()}>Tekrar dene</Button>}
+          aria-label="Kurum başarı görünümü alınamadı"
+          description="Öğrenci ve kurum verileri yüklenemedi. Eksik veriyi sıfır veya tamamlanmış iş olarak göstermiyoruz."
+          title="Kurum başarı görünümü alınamadı"
+          tone="warning"
+        />
+      </PageFrame>
+    );
   }
 
   return (
     <PageFrame
-      title={tenantDisplayName}
-      subtitle="Kurumsal özetin ve son sınav analizlerinin tek ekranda görünümü."
+      title={dashboard.institution.name}
+      subtitle="Öğrenci gelişimini, son sınav katılımını ve destek bekleyen işleri tek yerde izleyin."
     >
-      {dashboardQuery.isPending ? <LoadingState label="Kurum özeti yükleniyor…" /> : null}
-      {tenantProfile ? <TenantProfileSummary tenant={tenantProfile} /> : null}
+      {dashboardQuery.isPending ? <LoadingState label="Kurum başarı görünümü yükleniyor…" /> : null}
+
       <Panel
-        aria-label="Bugün dikkat gerektirenler"
+        aria-label="Bugün ilgilenmeniz gerekenler"
         className="next-attention-panel"
-        description="Destek, ödeme, devamsızlık ve optik sinyallerinin kısa listesi."
-        title="Bugün dikkat gerektirenler"
-        tone={visibleAttentionItems.length > 0 ? "warning" : "default"}
+        description="Önce takip edilmesi gereken en fazla üç kurum işi."
+        title="Bugün ilgilenmeniz gerekenler"
+        tone={attentionItems.length > 0 ? "warning" : "default"}
       >
-        {visibleAttentionItems.length > 0 ? (
+        {attentionItems.length > 0 ? (
           <div className="next-attention-list">
-            {visibleAttentionItems.map((item) => (
+            {attentionItems.map((item) => (
               <ActionCard
                 as="a"
                 aria-label={`${item.title} ${item.value}: ${item.description}`}
@@ -157,337 +115,184 @@ export function KurumDashboard() {
                 href={item.href}
                 key={item.href}
                 label={item.title}
-                tone={attentionCardTone(item)}
+                tone="warning"
                 value={item.value}
               />
             ))}
           </div>
         ) : (
-          <p className="next-attention-empty">Açık kritik iş görünmüyor.</p>
+          <p className="next-attention-empty">Bugün için açık destek sinyali görünmüyor.</p>
         )}
       </Panel>
+
       <OperationSummary
-        actions={dashboardSummaryActions}
-        ariaLabel="Kurum günlük durum özeti"
-        badges={dashboardSummaryBadges}
-        items={dashboardSummaryItems}
+        ariaLabel="Kurum başarı görünümü"
+        items={buildMetrics(dashboard, attentionTotal)}
       />
-      {isEmptyInstitution && !isSetupDismissed && !isOnboardingCompleted ? (
+
+      {dashboard.activeStudentCount === 0 && !isSetupDismissed ? (
         <Panel
           actions={
             <div className="next-dashboard-onboarding__actions">
               <Link className="uh-button uh-button--primary uh-button--md" href="/kurum/kurulum">
                 Kuruluma git
               </Link>
-              <Button variant="secondary" type="button" onClick={dismissSetupCard}>
+              <Button onClick={dismissSetupCard} type="button" variant="secondary">
                 Daha sonra
               </Button>
             </div>
           }
           aria-label="Kurum kurulum başlangıcı"
           className="next-dashboard-onboarding"
-          description="Genel bilgilerden öğrenci ve öğretmen kayıtlarına kadar ilk kurulumu beş adımda tamamlayın."
+          description="Öğrenci ve öğretmen kayıtlarını tamamlayarak başarı takibini başlatın."
           title="Kurumunuzu kurmaya başlayın"
           tone="muted"
         />
       ) : null}
-      {visibleSummaryCards.length > 0 ? (
-        <Panel
-          aria-label="Günlük özet"
-          className="next-dashboard-summary-panel"
-          description="Rapor, duyuru ve sistem sağlığı bağlantıları rol yetkisine göre listelenir."
-          title="Günlük özet"
-        >
-          <DataTable
-            caption="Günlük özet"
-            columns={dashboardSummaryColumns}
-            density="compact"
-            description="Son rapor durumu, kurum duyurusu ve sistem sağlığı görevleri."
-            emptyText="Görüntülenebilir kayıt yok."
-            getRowKey={(row) => `${row.href}-${row.title}`}
-            rows={summaryRows}
-          />
-        </Panel>
-      ) : null}
-      {visibleDecisionCards.length > 0 ? (
-        <Panel
-          aria-label="İlgilenilecek işler"
-          className="next-dashboard-decision-panel"
-          description="Destek, ödeme, devamsızlık ve optik kontrollerini tek tabloda izleyin."
-          title="İlgilenilecek işler"
-        >
-          <DataTable
-            caption="İlgilenilecek işler"
-            columns={dashboardDecisionColumns}
-            density="compact"
-            description="Kontrol edilmesi gereken kurum işleri ve ilgili sayfalar."
-            emptyText="Kontrol bekleyen iş yok."
-            getRowKey={(row) => row.href}
-            rows={decisionRows}
-          />
-        </Panel>
-      ) : null}
-      <Panel aria-label="Oturum özeti" className="next-session-panel" title="Oturum özeti" tone="muted">
-        <StatusBadge tone="success">Kurum erişimi doğrulandı</StatusBadge>
-        <StatusBadge tone="success">Kullanıcı oturumu aktif</StatusBadge>
-        <StatusBadge tone="info">{formatRoleSummary(auth?.session.roles ?? [])}</StatusBadge>
+
+      <Panel
+        actions={
+          <Link href="/kurum/raporlar">
+            Raporları aç
+          </Link>
+        }
+        aria-label="Son sınav ve rapor durumu"
+        className="next-dashboard-exam-panel"
+        description={latestExam ? "Katılım ve başarı özetinin karşılaştırılabilir son görünümü." : "Henüz yayınlanmış sınav yok."}
+        title="Son sınav ve rapor durumu"
+      >
+        {latestExam ? (
+          <div className="next-dashboard-exam-summary">
+            <div>
+              <strong>{latestExam.title}</strong>
+              <span>{latestExam.startsAt ? formatDate(latestExam.startsAt) : "Sınav tarihi belirtilmemiş"}</span>
+            </div>
+            <StatusBadge tone={latestExam.reportStatus === "READY" ? "success" : "warning"}>
+              {latestExam.reportStatus === "READY" ? "Rapor hazır" : "Rapor bekliyor"}
+            </StatusBadge>
+            <dl>
+              <div>
+                <dt>Katılım</dt>
+                <dd>{latestExam.attendedParticipantCount}/{latestExam.registeredParticipantCount}</dd>
+              </div>
+              <div>
+                <dt>Devamsız</dt>
+                <dd>{latestExam.absentParticipantCount}</dd>
+              </div>
+              <div>
+                <dt>Sonuç</dt>
+                <dd>{latestReport?.resultCount ?? 0}</dd>
+              </div>
+              <div>
+                <dt>Başarı</dt>
+                <dd>{formatPercent(latestReport?.successRate)}</dd>
+              </div>
+            </dl>
+          </div>
+        ) : (
+          <p className="next-attention-empty">İlk yayınlanan sınavdan sonra katılım ve rapor durumu burada görünecek.</p>
+        )}
       </Panel>
-      <div className="next-report-visual-grid">
-        <ReportChartPanel
-          description={reportDescription}
-          title="Sınav Sonuç Özeti"
-        >
-          <ExamResultDonut result={examResult} />
-        </ReportChartPanel>
-        <ReportChartPanel description={classCompare.length > 0 ? "Sınıf başarı yüzdeleri" : "Sınıf raporu bekleniyor"} title="Sınıf Karşılaştırması">
-          <ClassCompareBar classes={classCompare} />
-        </ReportChartPanel>
-        <ReportChartPanel description={progressPoints.length > 0 ? "İlk öğrencinin başarı gelişimi" : "Gelişim verisi bekleniyor"} title="Öğrenci Gelişimi">
-          <ProgressLineChart points={progressPoints} />
-        </ReportChartPanel>
-        <ReportChartPanel description={topicRadar.length > 0 ? "Branş başarı dağılımı" : "Branş raporu bekleniyor"} title="Branş Analizi">
-          <TopicRadarChart branches={topicRadar} />
-        </ReportChartPanel>
-      </div>
-      {dashboardQuery.isError ? <p className="next-form-error">Kurum özeti alınamadı.</p> : null}
-      {progressQuery.isError ? <p className="next-form-error">Öğrenci gelişimi alınamadı.</p> : null}
+
+      <ReportChartPanel
+        description={classCompare.length > 0
+          ? `${latestExam?.title ?? "Son sınav"} · Başarı % ana, Net/Soru bağlamsal metriktir.`
+          : "Karşılaştırılabilir sınıf sonucu bekleniyor."}
+        title="Sınıf karşılaştırması"
+      >
+        <ClassCompareBar
+          caption="Son sınav sınıf başarı karşılaştırması"
+          classes={classCompare}
+          emptyLabel="Karşılaştırılabilir sınıf sonucu yok"
+        />
+      </ReportChartPanel>
+
+      <Panel
+        aria-label="Diğer kurum işlemleri"
+        className="next-dashboard-links-panel"
+        description="Günlük özetin dışında kalan operasyon ekranları."
+        title="Diğer kurum işlemleri"
+        tone="muted"
+      >
+        <nav aria-label="Kurum operasyon bağlantıları" className="next-dashboard-compact-links">
+          <Link href="/kurum/ogrenciler">Öğrenciler</Link>
+          <Link href="/kurum/raporlar">Başarı raporları</Link>
+          <Link href="/kurum/devamsizlik">Devamsızlık takibi</Link>
+          <Link href="/kurum/optik">Sonuç hazırlama</Link>
+        </nav>
+      </Panel>
+
+      {dashboardQuery.isError ? <p className="next-form-error">Kurum başarı görünümü güncellenemedi; son alınan bilgiler gösteriliyor.</p> : null}
     </PageFrame>
   );
 }
 
-function TenantProfileSummary({ tenant }: { tenant: TenantProfileRecord }) {
-  const tenantDisplayName = tenantNameOrFallback(tenant);
-
-  return (
-    <Panel
-      actions={tenant.contactEmail ? <a href={`mailto:${tenant.contactEmail}`}>{tenant.contactEmail}</a> : null}
-      aria-label="Kurum bilgileri"
-      className="next-tenant-profile"
-      description={institutionTypeLabel(tenant.institutionType)}
-      title={tenantDisplayName}
-    >
-      {tenant.logoUrl ? (
-        <img src={tenant.logoUrl} alt={`${tenantDisplayName} logosu`} />
-      ) : (
-        <span className="next-tenant-profile__placeholder" aria-hidden="true">
-          {tenantDisplayName.slice(0, 1).toLocaleUpperCase("tr-TR")}
-        </span>
-      )}
-    </Panel>
-  );
-}
-
-const dashboardSummaryColumns: Array<DataTableColumn<DashboardSummaryRow>> = [
-  {
-    header: "Başlık",
-    key: "title",
-    mobilePriority: "primary",
-    priority: "primary",
-    render: (row) => <DashboardTableLink row={row} />,
-    sticky: "left",
-  },
-  {
-    header: "Durum",
-    key: "status",
-    mobileLabel: "Durum",
-    mobilePriority: "secondary",
-    priority: "secondary",
-    render: (row) => <StatusBadge tone={row.tone}>{row.badge}</StatusBadge>,
-  },
-];
-
-const dashboardDecisionColumns: Array<DataTableColumn<DashboardDecisionRow>> = [
-  {
-    header: "Sinyal",
-    key: "signal",
-    mobilePriority: "primary",
-    priority: "primary",
-    render: (row) => <DashboardTableLink row={row} />,
-    sticky: "left",
-  },
-  {
-    header: "Durum",
-    key: "status",
-    mobileLabel: "Durum",
-    mobilePriority: "secondary",
-    priority: "secondary",
-    render: (row) => <StatusBadge tone={row.tone}>{row.status}</StatusBadge>,
-  },
-];
-
-function DashboardTableLink({ row }: { row: DashboardLinkCard & { tone?: StatusBadgeProps["tone"] } }) {
-  return (
-    <ActionCard
-      as="a"
-      aria-label={`${row.title} ${row.value}: ${row.description}`}
-      className="next-dashboard-link-cell"
-      detail={row.description}
-      href={row.href}
-      label={row.title}
-      tone={row.tone ?? "neutral"}
-      value={row.value}
-    />
-  );
-}
-
-function loadCurrentTenant(accessToken: string) {
-  return apiRequest<TenantProfileRecord>(accessToken, `${apiBaseUrl}/me/tenant`);
-}
-
-function tenantNameOrFallback(tenant: TenantProfileRecord) {
-  return tenant.name?.trim() || "Kurum Paneli";
-}
-
-function institutionTypeLabel(value: string | undefined) {
-  if (value === "school") return "Okul";
-  if (value === "study-center") return "Etüt merkezi";
-  return "Kurs merkezi";
-}
-
-function buildDashboardSummaryItems(
-  overview: { classCount: number; guardianCount: number; teacherCount: number; studentCount: number },
-  examTitle: string | undefined,
-  snapshot: ReportSnapshotRecord | null | undefined,
-  systemHealth: KurumSystemHealthSummary,
-  decisionCards: DashboardLinkCard[],
-): OperationSummaryItem[] {
-  const decisionTotal = decisionCards.reduce((total, card) => total + Number(card.value || 0), 0);
-
+function buildMetrics(dashboard: InstitutionDashboardSummary, attentionTotal: number): OperationSummaryItem[] {
+  const latestExam = dashboard.latestExam;
+  const report = latestExam?.report;
   return [
     {
-      description: `${overview.classCount} sınıf · ${overview.teacherCount} öğretmen`,
-      key: "institution",
-      label: "Kurumdaki kişiler",
-      tone: overview.studentCount > 0 ? "success" : "default",
-      value: `${overview.studentCount} öğrenci`,
+      key: "students",
+      label: "Aktif öğrenci",
+      value: dashboard.activeStudentCount,
+      description: "Başarı takibine dahil",
+      tone: dashboard.activeStudentCount > 0 ? "success" : "default",
     },
     {
-      description: examTitle ?? "Yayınlanmış sınav yok",
-      key: "report",
-      label: "Rapor durumu",
-      tone: reportStatusTone(examTitle, snapshot),
-      value: reportStatusLabel(examTitle, snapshot),
+      key: "attendance",
+      label: "Son sınav katılımı",
+      value: latestExam
+        ? `${latestExam.attendedParticipantCount}/${latestExam.registeredParticipantCount}`
+        : "Veri yok",
+      description: latestExam ? `${latestExam.absentParticipantCount} devamsız` : "Yayınlanmış sınav bekleniyor",
+      tone: latestExam ? "info" : "default",
     },
     {
-      description: "Görevinize göre görünen işler",
-      key: "decisions",
-      label: "İlgilenilecek iş",
-      tone: decisionTotal > 0 ? "warning" : "success",
-      value: decisionTotal,
+      key: "success",
+      label: "Son sınav başarı yüzdesi",
+      value: formatPercent(report?.successRate),
+      description: report?.questionCount !== undefined && report.net !== undefined
+        ? `${formatNumber(report.net)} net / ${formatNumber(report.questionCount)} soru`
+        : "Karşılaştırılabilir rapor bekleniyor",
+      tone: report?.successRate !== undefined ? "success" : "default",
     },
     {
-      description: systemHealthDescription(systemHealth),
-      key: "health",
-      label: "Sistem sağlığı",
-      tone: systemHealthOperationTone(systemHealth),
-      value: systemHealthStatusLabel(systemHealth),
-    },
-  ];
-}
-
-function buildDashboardSummaryBadges(
-  snapshot: ReportSnapshotRecord | null | undefined,
-  systemHealth: KurumSystemHealthSummary,
-): OperationSummaryBadge[] {
-  return [
-    {
-      key: "success-rate",
-      label: "Başarı % ana metrik",
-      tone: "info",
-    },
-    {
-      key: "report-ready",
-      label: snapshot?.status === "READY" ? "Rapor hazır" : "Rapor bekliyor",
-      tone: snapshot?.status === "READY" ? "success" : "warning",
-    },
-    {
-      key: "health",
-      label: systemHealthStatusLabel(systemHealth),
-      tone: systemHealthBadgeTone(systemHealth),
-    },
-    {
-      key: "tenant-scope",
-      label: "Kurum erişimi doğrulandı",
-      tone: "success",
-    },
-  ];
-}
-
-function buildDashboardSummaryActions(
-  attentionItems: DashboardLinkCard[],
-  examTitle: string | undefined,
-  snapshot: ReportSnapshotRecord | null | undefined,
-  isEmptyInstitution: boolean,
-): OperationSummaryAction[] {
-  return [
-    {
-      detail: "Destek, ödeme, devamsızlık ve optik kontrolleri",
       key: "attention",
-      label: "İlgilenilecek işler",
-      status: attentionItems.length > 0 ? "Kontrol et" : "Bekleyen iş yok",
-      tone: attentionItems.length > 0 ? "warning" : "success",
-      value: attentionItems.length > 0 ? `${attentionItems.length} iş` : "Yok",
-    },
-    {
-      detail: examTitle ?? "Seçili sınav yok",
-      key: "report",
-      label: "Rapor durumu",
-      status: snapshot?.status === "READY" ? "Hazır" : "Kontrol",
-      tone: reportStatusBadgeTone(examTitle, snapshot),
-      value: reportStatusLabel(examTitle, snapshot),
-    },
-    {
-      detail: "İlk bilgiler, öğrenci ve öğretmen kayıtları",
-      key: "setup",
-      label: "Kurulum",
-      status: isEmptyInstitution ? "Devam et" : "Tamam",
-      tone: isEmptyInstitution ? "info" : "success",
-      value: isEmptyInstitution ? "Başlangıç" : "Aktif",
+      label: "Destek bekleyen iş",
+      value: attentionTotal,
+      description: attentionTotal > 0 ? "Önceliklendirme gerekiyor" : "Açık sinyal yok",
+      tone: attentionTotal > 0 ? "warning" : "success",
     },
   ];
 }
 
-function buildDecisionCards(decisionSignals: KurumDecisionSignals): DashboardLinkCard[] {
-  return [
+function buildAttentionItems(dashboard: InstitutionDashboardSummary): DashboardAttentionItem[] {
+  const items: DashboardAttentionItem[] = [
     {
-      title: "Bekleyen destek",
-      value: decisionSignals.openSupportTickets,
-      description: decisionSignals.openSupportTickets > 0 ? "Yanıt bekleyen talep var" : "Açık talep yok",
+      title: "Öğrenci destek talepleri",
+      value: dashboard.attention.openSupportTicketCount,
+      description: "Yanıt veya yönlendirme bekleyen talepler",
       href: "/kurum/destek",
     },
     {
-      title: "Geciken ödeme",
-      value: decisionSignals.overdueInstallments,
-      description: decisionSignals.overdueInstallments > 0 ? "Tahsilat kontrolü gerekiyor" : "Geciken taksit yok",
-      href: "/kurum/finans",
-    },
-    {
-      title: "Devamsızlık",
-      value: decisionSignals.attendanceAlerts,
-      description: decisionSignals.attendanceAlerts > 0 ? "Yoklama takibi gerekiyor" : "Kritik kayıt yok",
+      title: "Devamsızlık takibi",
+      value: dashboard.attention.attendanceAlertCount,
+      description: "Bugün devamsız veya geç kalan öğrenciler",
       href: "/kurum/devamsizlik",
     },
     {
-      title: "Optik kontrol",
-      value: decisionSignals.openImportQuarantines,
-      description: decisionSignals.openImportQuarantines > 0 ? "Karantina çözümü gerekiyor" : "Açık karantina yok",
+      title: "Sonuç kontrolü",
+      value: dashboard.attention.openImportQuarantineCount,
+      description: "Eşleştirme veya kontrol bekleyen kayıtlar",
       href: "/kurum/optik",
     },
-  ];
-}
+  ].filter((item) => Number(item.value) > 0);
 
-function buildAttentionItems(
-  decisionSignals: KurumDecisionSignals,
-  examTitle: string | undefined,
-  snapshot: ReportSnapshotRecord | null | undefined,
-) {
-  const items = buildDecisionCards(decisionSignals).filter((item) => Number(item.value) > 0);
-
-  if (examTitle && !snapshot) {
+  if (dashboard.latestExam?.reportStatus === "MISSING") {
     items.push({
-      title: "Rapor üretimi",
+      title: "Rapor durumu",
       value: "Bekliyor",
-      description: `${examTitle} için hazır rapor bulunamadı`,
+      description: `${dashboard.latestExam.title} sonuçlarının raporu henüz hazır değil`,
       href: "/kurum/raporlar",
     });
   }
@@ -495,208 +300,34 @@ function buildAttentionItems(
   return items;
 }
 
-function buildSummaryCards(
-  examTitle: string | undefined,
-  snapshot: ReportSnapshotRecord | null | undefined,
-  announcements: KurumAnnouncementSummary,
-  systemHealth: KurumSystemHealthSummary,
-) {
-  return [
-    {
-      title: "Son sınav / rapor",
-      value: reportStatusLabel(examTitle, snapshot),
-      description: snapshot?.snapshotData?.resultCount
-        ? `${snapshot.snapshotData.resultCount} öğrenci sonucu raporda`
-        : "Rapor ekranından üretim durumunu takip et",
-      href: "/kurum/raporlar",
-    },
-    {
-      title: "Son duyuru",
-      value: announcements.latestTitle ?? "Duyuru yok",
-      description: announcements.latestPublishedAt
-        ? `${formatDate(announcements.latestPublishedAt)} · toplam ${announcements.publishedCount} duyuru`
-        : "Henüz yayınlanmış duyuru yok",
-      href: "/kurum/duyurular",
-    },
-    {
-      title: "Sistem sağlığı",
-      value: systemHealthStatusLabel(systemHealth),
-      description: systemHealthDescription(systemHealth),
-      href: "/kurum/sistem-sagligi",
-    },
-  ];
+function totalAttention(dashboard: InstitutionDashboardSummary): number {
+  const reportAttention = dashboard.latestExam?.reportStatus === "MISSING" ? 1 : 0;
+  return dashboard.attention.attendanceAlertCount
+    + dashboard.attention.openImportQuarantineCount
+    + dashboard.attention.openSupportTicketCount
+    + reportAttention;
 }
 
-function toSummaryRows(cards: DashboardLinkCard[]): DashboardSummaryRow[] {
-  return cards.map((card) => ({
-    ...card,
-    badge: summaryCardBadge(card),
-    tone: summaryCardTone(card),
-  }));
+function formatPercent(value: number | undefined): string {
+  return value === undefined ? "Veri yok" : `%${formatNumber(value)}`;
 }
 
-function toDecisionRows(cards: DashboardLinkCard[]): DashboardDecisionRow[] {
-  return cards.map((card) => ({
-    ...card,
-    status: Number(card.value) > 0 ? "İşlem bekliyor" : "Sakin",
-    tone: Number(card.value) > 0 ? "warning" : "success",
-  }));
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }).format(value);
 }
 
-function summaryCardBadge(card: DashboardLinkCard) {
-  if (card.title === "Son sınav / rapor") return String(card.value);
-  if (card.title === "Sistem sağlığı") return String(card.value);
-  if (card.title === "Son duyuru") return card.value === "Duyuru yok" ? "Bekliyor" : "Yayında";
-  return "İzle";
-}
-
-function summaryCardTone(card: DashboardLinkCard): StatusBadgeProps["tone"] {
-  if (card.title === "Son sınav / rapor") {
-    if (card.value === "Rapor hazır") return "success";
-    if (card.value === "Rapor bekliyor") return "warning";
-    return "neutral";
-  }
-  if (card.title === "Sistem sağlığı") {
-    if (card.value === "Hazır") return "success";
-    if (card.value === "Kısıtlı") return "warning";
-    return "danger";
-  }
-  if (card.title === "Son duyuru") return card.value === "Duyuru yok" ? "neutral" : "info";
-  return "neutral";
-}
-
-function attentionCardTone(card: DashboardLinkCard): StatusBadgeProps["tone"] {
-  if (Number(card.value) > 0 || card.value === "Bekliyor") return "warning";
-  return "success";
-}
-
-function systemHealthStatusLabel(systemHealth: KurumSystemHealthSummary) {
-  if (systemHealth.apiOk && systemHealth.readyOk && systemHealth.postgresOk && systemHealth.redisOk) return "Hazır";
-  if (systemHealth.apiOk || systemHealth.readyOk) return "Kısıtlı";
-  return "Sorunlu";
-}
-
-function systemHealthDescription(systemHealth: KurumSystemHealthSummary) {
-  const dependencies = [
-    systemHealth.postgresOk ? "Postgres hazır" : "Postgres kontrol",
-    systemHealth.redisOk ? "Redis hazır" : "Redis kontrol",
-  ];
-  return `${systemHealth.apiOk ? "API çalışıyor" : "API kontrol"} · ${dependencies.join(" · ")}`;
-}
-
-function reportStatusLabel(examTitle: string | undefined, snapshot: ReportSnapshotRecord | null | undefined) {
-  if (!examTitle) return "Sınav yok";
-  if (!snapshot) return "Rapor bekliyor";
-  if (snapshot.status === "READY") return "Rapor hazır";
-  return snapshot.status;
-}
-
-function reportStatusTone(
-  examTitle: string | undefined,
-  snapshot: ReportSnapshotRecord | null | undefined,
-): OperationSummaryItem["tone"] {
-  if (!examTitle) return "default";
-  if (!snapshot) return "warning";
-  if (snapshot.status === "READY") return "success";
-  return "info";
-}
-
-function reportStatusBadgeTone(
-  examTitle: string | undefined,
-  snapshot: ReportSnapshotRecord | null | undefined,
-): StatusBadgeProps["tone"] {
-  if (!examTitle) return "neutral";
-  if (!snapshot) return "warning";
-  if (snapshot.status === "READY") return "success";
-  return "info";
-}
-
-function systemHealthOperationTone(systemHealth: KurumSystemHealthSummary): OperationSummaryItem["tone"] {
-  if (systemHealth.apiOk && systemHealth.readyOk && systemHealth.postgresOk && systemHealth.redisOk) return "success";
-  if (systemHealth.apiOk || systemHealth.readyOk) return "warning";
-  return "danger";
-}
-
-function systemHealthBadgeTone(systemHealth: KurumSystemHealthSummary): StatusBadgeProps["tone"] {
-  if (systemHealth.apiOk && systemHealth.readyOk && systemHealth.postgresOk && systemHealth.redisOk) return "success";
-  if (systemHealth.apiOk || systemHealth.readyOk) return "warning";
-  return "danger";
-}
-
-function formatRoleSummary(roles: string[]) {
-  if (roles.length === 0) return "Rol bilgisi yok";
-  if (roles.length === 1) return "1 rol doğrulandı";
-  return `${roles.length} rol doğrulandı`;
-}
-
-function formatDate(value: string) {
+function formatDate(value: string): string {
   return new Date(value).toLocaleDateString("tr-TR");
 }
 
-function resolveReportDescription(isPending: boolean, examTitle: string | undefined, snapshot: ReportSnapshotRecord | null) {
-  if (isPending) return "Rapor aranıyor";
-  if (!examTitle) return "Henüz yayınlanmış sınav yok";
-  if (!snapshot) return "Hazır rapor yok";
-  return `${examTitle} raporu`;
-}
-
-function readSetupDismissed(name: string) {
-  if (typeof window === "undefined") return false;
-  return readCookie(name) === "true";
-}
-
-function writeSetupDismissed(name: string) {
-  if (typeof window === "undefined") return;
-  writeCookie(name, "true");
-}
-
-function readCookie(name: string) {
+function readCookie(name: string): string {
+  if (typeof document === "undefined") return "";
   const prefix = `${name}=`;
-  const match = document.cookie
-    .split("; ")
-    .find((cookie) => cookie.startsWith(prefix));
+  const match = document.cookie.split("; ").find((cookie) => cookie.startsWith(prefix));
   return match ? decodeURIComponent(match.slice(prefix.length)) : "";
 }
 
 function writeCookie(name: string, value: string): void {
+  if (typeof document === "undefined") return;
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=31536000; samesite=lax`;
-}
-
-function toExamResult(snapshot: ReportSnapshotRecord | null | undefined) {
-  const averages = snapshot?.snapshotData?.averages;
-  const studentTotal = snapshot?.snapshotData?.students?.[0]?.total;
-
-  return {
-    correct: averages?.correct ?? studentTotal?.correct,
-    wrong: averages?.wrong ?? studentTotal?.wrong,
-    blank: averages?.blank ?? studentTotal?.blank,
-    net: averages?.net ?? studentTotal?.net,
-    questionCount: averages?.questionCount ?? studentTotal?.questionCount ?? reportQuestionCount(averages ?? studentTotal),
-    successRate: averages?.successRate ?? studentTotal?.successRate ?? reportSuccessRate(averages ?? studentTotal),
-  };
-}
-
-function toClassCompare(snapshot: ReportSnapshotRecord | null | undefined) {
-  return (snapshot?.snapshotData?.classes ?? []).map((record) => ({
-    classId: record.classId,
-    className: record.className,
-    net: record.averages.net,
-    questionCount: record.averages.questionCount ?? reportQuestionCount(record.averages),
-    standardScore: record.averages.standardScore,
-    successRate: record.averages.successRate ?? reportSuccessRate(record.averages),
-  }));
-}
-
-function toTopicRadar(snapshot: ReportSnapshotRecord | null | undefined) {
-  return (snapshot?.snapshotData?.branches ?? []).map((record) => ({
-    branch: formatCourseName(record.branch),
-    chartLabel: shortCourseName(record.branch),
-    blank: record.blank,
-    correct: record.correct,
-    net: record.net,
-    questionCount: record.questionCount ?? reportQuestionCount(record),
-    resultCount: record.resultCount,
-    successRate: record.successRate ?? reportSuccessRate(record),
-    wrong: record.wrong,
-  }));
 }

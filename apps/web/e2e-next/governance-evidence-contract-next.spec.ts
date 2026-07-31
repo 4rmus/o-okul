@@ -581,6 +581,7 @@ async function installSystemEndpointMocks(page: Page, mode: "partial-metrics-fai
 function mockGovernanceApiResponse(pathName: string, options: GovernanceMockOptions = {}): { data: unknown; meta?: ListMeta; status?: number } {
   if (pathName === "/auth/refresh") return { data: createAuthResponse(options.roles) };
   if (pathName === "/me/tenant") return { data: createTenantResponse() };
+  if (pathName === "/me/institution-dashboard") return { data: createInstitutionDashboardResponse() };
   if (pathName === "/me/notification-devices") return { data: [] };
   if (pathName === "/students") return { data: createStudents() };
   if (pathName === "/students/student-a/purge-pii") return { data: createPurgedStudent() };
@@ -633,6 +634,15 @@ function createTenantResponse() {
     id: "tenant-governance",
     institutionType: "Dershane",
     name: "Governance Akademi",
+  };
+}
+
+function createInstitutionDashboardResponse() {
+  return {
+    activeStudentCount: 0,
+    attention: { attendanceAlertCount: 0, openImportQuarantineCount: 0, openSupportTicketCount: 0 },
+    generatedAt: "2026-06-17T10:00:00.000Z",
+    institution: { name: "Governance Akademi" },
   };
 }
 

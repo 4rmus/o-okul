@@ -23,7 +23,7 @@ export const metadata = {
   applicationName: appBrand.name,
   metadataBase: new URL(appBrand.siteUrl),
   description:
-    "Dershane ve özel öğretim kurumlarında öğrenci, sınıf, günlük yoklama, optik sınav, karne, ödeme planı ve duyuru yönetimi.",
+    "Dershane ve özel öğretim kurumları için öğrenci gelişimi, sınav başarı takibi ve rol bazlı eğitim yönetimi.",
   icons: {
     icon: "/icon.svg",
   },

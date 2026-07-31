@@ -17,6 +17,11 @@ import { TeacherModule } from "../teacher/teacher.module.js";
 import { TeacherNoteModule } from "../teacher-note/teacher-note.module.js";
 import { TenantModule } from "../tenant/tenant.module.js";
 import { MeController } from "./me.controller.js";
+import { MeInstitutionDashboardService } from "./me-institution-dashboard.service.js";
+import {
+  createInstitutionDashboardStore,
+  institutionDashboardStoreToken,
+} from "./me-institution-dashboard.store.js";
 import { MeReportIndexService } from "./me-report-index.service.js";
 
 @Module({
@@ -40,6 +45,13 @@ import { MeReportIndexService } from "./me-report-index.service.js";
     TenantModule,
   ],
   controllers: [MeController],
-  providers: [MeReportIndexService],
+  providers: [
+    MeInstitutionDashboardService,
+    MeReportIndexService,
+    {
+      provide: institutionDashboardStoreToken,
+      useFactory: createInstitutionDashboardStore,
+    },
+  ],
 })
 export class MeModule {}

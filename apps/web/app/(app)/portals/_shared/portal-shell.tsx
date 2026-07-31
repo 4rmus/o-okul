@@ -235,16 +235,17 @@ export function PortalActionStrip({
     ...preferredItems,
     ...items.filter((item) => !preferredKeys.has(item.key)),
   ];
-  const visibleItems = candidates;
-  const attentionCount = visibleItems.filter((item) => item.tone === "warning" || item.tone === "danger").length;
+  const primaryItems = candidates.slice(0, 3);
+  const secondaryItems = candidates.slice(3);
+  const attentionCount = candidates.filter((item) => item.tone === "warning" || item.tone === "danger").length;
   return (
     <Panel
       actions={
         <div
           className="next-portal-action-strip__summary"
-          aria-label={`${visibleItems.length} iş, ${attentionCount} öncelikli`}
+          aria-label={`${candidates.length} iş, ${attentionCount} öncelikli`}
         >
-          <span>{visibleItems.length} iş</span>
+          <span>{candidates.length} iş</span>
           <strong>{attentionCount > 0 ? `${attentionCount} öncelikli` : "Planlı işler"}</strong>
         </div>
       }
@@ -254,7 +255,7 @@ export function PortalActionStrip({
       title={title}
     >
       <div className="next-portal-action-strip__grid">
-        {visibleItems.map((item) => (
+        {primaryItems.map((item) => (
           <ActionCard
             as="a"
             aria-label={portalActionAriaLabel(item)}
@@ -273,6 +274,21 @@ export function PortalActionStrip({
           />
         ))}
       </div>
+      {secondaryItems.length > 0 ? (
+        <nav className="next-portal-action-strip__secondary" aria-label={`${ariaLabel} diğer işler`}>
+          {secondaryItems.map((item) => (
+            <a
+              aria-label={portalActionAriaLabel(item)}
+              className="next-portal-action-strip__secondary-item"
+              href={item.href}
+              key={item.key}
+              onClick={(event) => focusPortalActionTarget(event, item.href)}
+            >
+              <span>{item.label}</span>
+            </a>
+          ))}
+        </nav>
+      ) : null}
     </Panel>
   );
 }
