@@ -2036,6 +2036,53 @@ export interface ReportStudentProgress {
   standardScoreDelta?: number;
 }
 
+export interface InstitutionDashboardClassSummary {
+  classId?: string;
+  className?: string;
+  resultCount: number;
+  successRate?: number;
+  net?: number;
+  questionCount?: number;
+}
+
+export interface InstitutionDashboardReportSummary {
+  snapshotId: string;
+  generatedAt?: string;
+  resultCount: number;
+  successRate?: number;
+  net?: number;
+  questionCount?: number;
+  classes: InstitutionDashboardClassSummary[];
+}
+
+export interface InstitutionDashboardExamSummary {
+  examId: string;
+  title: string;
+  startsAt?: string;
+  registeredParticipantCount: number;
+  attendedParticipantCount: number;
+  absentParticipantCount: number;
+  reportStatus: "READY" | "MISSING";
+  report?: InstitutionDashboardReportSummary;
+}
+
+export interface InstitutionDashboardSummary {
+  generatedAt: string;
+  institution: {
+    name: string;
+    institutionType?: string;
+    contactEmail?: string;
+    logoUrl?: string;
+  };
+  activeStudentCount: number;
+  attention: {
+    attendanceAlertCount: number;
+    openImportQuarantineCount: number;
+    openSupportTicketCount: number;
+  };
+  latestExam?: InstitutionDashboardExamSummary;
+}
+
 export interface ReportErrorBooklet {
   tenantId: string;
   examId: string;

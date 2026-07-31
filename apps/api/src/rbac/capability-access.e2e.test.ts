@@ -141,6 +141,33 @@ describe("Capability access matrix", () => {
       });
   });
 
+  it("kurum başarı özetini yalnız kurum yöneticilerine açar", async () => {
+    await request(server)
+      .get("/me/institution-dashboard")
+      .set("Authorization", `Bearer ${tenantAdminToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          activeStudentCount: 0,
+          attention: {
+            attendanceAlertCount: 0,
+            openImportQuarantineCount: 0,
+            openSupportTicketCount: 0,
+          },
+        });
+      });
+
+    await request(server)
+      .get("/me/institution-dashboard")
+      .set("Authorization", `Bearer ${assistantToken}`)
+      .expect(200);
+
+    await request(server)
+      .get("/me/institution-dashboard")
+      .set("Authorization", `Bearer ${teacherToken}`)
+      .expect(403);
+  });
+
   it("ASSISTANT_ADMIN menüde görünen akademik ve destek işlemlerini yapar", async () => {
     await request(server)
       .post("/schedule-lessons")

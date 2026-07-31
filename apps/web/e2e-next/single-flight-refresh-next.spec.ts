@@ -30,7 +30,7 @@ test("Next eşzamanlı 401 yanıtlarında tek refresh çağrısı yapar", async 
   let didLogin = false;
   let refreshCount = 0;
   const expiredOnce = new Set<string>();
-  const expiringPaths = new Set(["/classes", "/teachers", "/students"]);
+  const expiringPaths = new Set(["/me/institution-dashboard"]);
 
   await page.route("**/*", async (route) => {
     if (route.request().method() === "OPTIONS") {
@@ -99,8 +99,8 @@ test("Next eşzamanlı 401 yanıtlarında tek refresh çağrısı yapar", async 
   await page.getByRole("button", { name: "Giriş yap" }).click();
 
   await expect(page).toHaveURL(/\/kurum$/);
-  await expect(page.getByRole("heading", { name: "Kurum Paneli" })).toBeVisible();
-  await expect(page.getByLabel("Kurum özeti").getByRole("strong")).toHaveText(["1", "1", "1"]);
+  await expect(page.getByRole("heading", { name: "Tek Uç Akademi" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Kurum başarı görünümü" })).toContainText("1");
   expect(refreshCount).toBe(1);
   expect(expiredOnce).toEqual(expiringPaths);
 });
@@ -120,6 +120,19 @@ function createAuthResponse(accessToken: string) {
 }
 
 function readFixture(path: string) {
+  if (path === "/me/institution-dashboard") {
+    return {
+      generatedAt: "2026-06-17T08:00:00.000Z",
+      institution: { name: "Tek Uç Akademi" },
+      activeStudentCount: 1,
+      attention: {
+        attendanceAlertCount: 0,
+        openImportQuarantineCount: 0,
+        openSupportTicketCount: 0,
+      },
+    };
+  }
+
   if (path === "/classes") {
     return [{ id: "class-a", tenantId: "tenant-a", name: "8-A" }];
   }

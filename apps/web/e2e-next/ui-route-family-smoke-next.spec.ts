@@ -31,7 +31,7 @@ interface PrimaryTask {
 }
 
 const routeCases = [
-  route("/", "Sınavdan karneye, kurumunuzun günlük işlerini tek yerden yönetin.", "anonymous", { role: "link", name: "E-posta ile demo isteyin" }),
+  route("/", "Her öğrencinin gelişimini sınavdan sınava görün.", "anonymous", { role: "region", name: "Her öğrencinin gelişimini sınavdan sınava görün." }),
   route("/k/[tenantSlug]/giris", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
   route("/login", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
   route("/parola-sifirla", "Yeni şifre", "anonymous", { role: "button", name: "Şifreyi yenile" }, { query: "token=reset-token" }),
@@ -39,7 +39,7 @@ const routeCases = [
   route("/sifre-degistir", "Şifre değiştir", "studentMustChangePassword", { role: "form", name: "Şifre değiştirme formu" }),
   route("/sistem/giris", "Giriş", "anonymous", { role: "form", name: "Giriş formu" }),
 
-  route("/kurum", "Route Smoke Akademi", "assistantAdmin", { role: "region", name: "Kurum günlük durum özeti" }),
+  route("/kurum", "Route Smoke Akademi", "assistantAdmin", { role: "region", name: "Kurum başarı görünümü" }),
   route("/kurum/akademik-takvim", "Akademik Takvim", "assistantAdmin", { role: "region", name: "Akademik yıl yönetimi" }),
   route("/kurum/canli-yayin", "Yayın Hazırlığı", "tenantAdmin", { role: "region", name: "Yayın öncesi kontroller" }),
   route("/kurum/denetim", "Denetim", "tenantAdmin", { role: "region", name: "Denetim kayıtları" }),
@@ -140,7 +140,7 @@ test.describe("UI route family smoke", () => {
         await expect(page, contractLabel(routeCase, viewport, "document title")).toHaveTitle(/\S/);
         const expectedHeading = featureRedirected ? "Route Smoke Akademi" : routeCase.heading;
         const expectedTask = featureRedirected
-          ? { role: "region" as const, name: "Kurum günlük durum özeti" }
+          ? { role: "region" as const, name: "Kurum başarı görünümü" }
           : routeCase.primaryTask;
         const main = page.locator("main:visible");
 
@@ -255,6 +255,20 @@ async function installRouteApiMocks(page: Page, persona: Persona, unknownApiRequ
 
 function responseForApi(pathName: string, searchParams: URLSearchParams): ApiFixtureResponse | undefined {
   if (pathName === "/me/tenant") return { data: tenantFixture };
+  if (pathName === "/me/institution-dashboard") {
+    return {
+      data: {
+        generatedAt: "2026-07-30T09:00:00.000Z",
+        institution: { name: tenantFixture.name, institutionType: tenantFixture.institutionType },
+        activeStudentCount: 1,
+        attention: {
+          attendanceAlertCount: 0,
+          openImportQuarantineCount: 0,
+          openSupportTicketCount: 0,
+        },
+      },
+    };
+  }
   if (pathName === "/me/notification-devices") return { data: [] };
   if (pathName === "/import-quarantines/summary") return { data: { openCount: 0 } };
   if (pathName === "/attendance/summary" || pathName === "/me/student/attendance/summary" || pathName === "/me/guardian/students/student-a/attendance/summary") {

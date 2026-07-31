@@ -153,6 +153,7 @@ test.describe("Liste URL state", () => {
     const studentSummary = studentsRegion.getByRole("region", { exact: true, name: "Öğrenci operasyon özeti" });
     const filters = page.getByLabel("Öğrenci filtreleri");
     const tableView = page.getByLabel("Öğrenci tablo görünümü");
+    await page.getByText("Filtreler ve görünüm", { exact: true }).click();
     await expect(studentSummary).toContainText("Öğrenci toplamı");
     await expect(studentSummary).toContainText("Yoğun");
     await expect(studentSummary).toContainText("Veli: Bağlı");
@@ -402,6 +403,11 @@ test.describe("Liste URL state", () => {
     const filters = page.getByLabel("Öğrenci filtreleri");
     const tableView = page.getByLabel("Öğrenci tablo görünümü");
     const bulkTransition = page.getByLabel("Toplu dönem geçişi");
+    await expect(studentsRegion.getByRole("table", { name: "Öğrenci listesi" })).toBeVisible();
+    await expect(page.getByText("Filtreler ve görünüm", { exact: true })).toBeVisible();
+    await expect(page.getByText("Toplu işlemler", { exact: true })).toBeVisible();
+    await page.getByText("Filtreler ve görünüm", { exact: true }).click();
+    await page.getByText("Toplu işlemler", { exact: true }).click();
     await expect(studentSummary).toContainText("Öğrenci toplamı");
     await expect(studentSummary).toContainText("Sınıf kapsamı");
     await expect(studentSummary).toContainText("Veli: Bağlı");

@@ -1056,7 +1056,7 @@ describe("ReportGenerationService", () => {
       "student-a",
     );
 
-    expect(store.inputs).toEqual([{ tenantId: "tenant-a", examId: "exam-a" }]);
+    expect(store.studentInputs).toEqual([{ tenantId: "tenant-a", studentId: "student-a", examId: "exam-a" }]);
     expect(result).toEqual({
       tenantId: "tenant-a",
       examId: "exam-a",
@@ -1142,7 +1142,8 @@ describe("ReportGenerationService", () => {
     );
 
     expect(store.inputs).toEqual([]);
-    expect(store.tenantInputs).toEqual(["tenant-a"]);
+    expect(store.tenantInputs).toEqual([]);
+    expect(store.studentInputs).toEqual([{ tenantId: "tenant-a", studentId: "student-a" }]);
     expect(result.examId).toBe("exam-a");
     expect(result.points.map((point) => point.snapshotId)).toEqual(["snapshot-previous", "snapshot-a", "snapshot-other-exam"]);
     expect(result.points.map((point) => point.total.net)).toEqual([14, 17.5, 20]);
@@ -1167,7 +1168,7 @@ describe("ReportGenerationService", () => {
       "student-c",
     );
 
-    expect(store.inputs).toEqual([{ tenantId: "tenant-a", examId: "exam-a" }]);
+    expect(store.studentInputs).toEqual([{ tenantId: "tenant-a", studentId: "student-c", examId: "exam-a" }]);
     expect(result).toEqual({
       tenantId: "tenant-a",
       examId: "exam-a",
@@ -1577,6 +1578,7 @@ function createMixedStudentSnapshot(): ReportSnapshotRecord {
 class FakeReportSnapshotStore implements ReportSnapshotStore {
   readonly inputs: Array<{ tenantId: string; examId: string }> = [];
   readonly tenantInputs: string[] = [];
+  readonly studentInputs: Array<{ tenantId: string; studentId: string; examId?: string }> = [];
   readonly findInputs: Array<{ tenantId: string; examId: string; snapshotId: string }> = [];
 
   constructor(private readonly records: ReportSnapshotRecord[] = [fakeSnapshot, fakePreviousSnapshot]) {}
@@ -1589,6 +1591,19 @@ class FakeReportSnapshotStore implements ReportSnapshotStore {
   async listByTenant(tenantId: string): Promise<ReportSnapshotRecord[]> {
     this.tenantInputs.push(tenantId);
     return this.records.filter((snapshot) => snapshot.tenantId === tenantId);
+  }
+
+  async listReadyByStudent(tenantId: string, studentId: string, examId?: string): Promise<ReportSnapshotRecord[]> {
+    this.studentInputs.push({ tenantId, studentId, ...(examId ? { examId } : {}) });
+    return this.records.filter((snapshot) =>
+      snapshot.tenantId === tenantId
+      && snapshot.status === "READY"
+      && !snapshot.deletedAt
+      && (!examId || snapshot.examId === examId)
+      && Array.isArray(snapshot.snapshotData?.students)
+      && snapshot.snapshotData.students.some(
+        (student) => Boolean(student) && typeof student === "object" && !Array.isArray(student) && student.studentId === studentId,
+      ));
   }
 
   async findById(tenantId: string, examId: string, snapshotId: string): Promise<ReportSnapshotRecord | undefined> {

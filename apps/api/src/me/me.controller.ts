@@ -6,6 +6,7 @@ import type {
   HomeworkMaterialRecord,
   HomeworkRecord,
   GuardianRecord,
+  InstitutionDashboardSummary,
   MeProfileResponse,
   MePasswordChangeRequest,
   MePasswordChangeResponse,
@@ -69,6 +70,7 @@ import { TeacherNoteService } from "../teacher-note/teacher-note.service.js";
 import { TenantService } from "../tenant/tenant.service.js";
 import type { TenantRecord } from "../tenant/tenant-store.js";
 import { tenantCurrentProfileBodySchema, type TenantCurrentProfileBody } from "../tenant/tenant-validation.js";
+import { MeInstitutionDashboardService } from "./me-institution-dashboard.service.js";
 import { MeReportIndexService } from "./me-report-index.service.js";
 
 const mePasswordChangeBodySchema = z.object({
@@ -87,6 +89,7 @@ export class MeController {
     private readonly homework: HomeworkService,
     private readonly notificationDevices: NotificationDeviceService,
     private readonly payments: PaymentService,
+    private readonly institutionDashboard: MeInstitutionDashboardService,
     private readonly reportIndex: MeReportIndexService,
     private readonly reports: ReportGenerationService,
     private readonly guardians: GuardianService,
@@ -124,6 +127,12 @@ export class MeController {
   @Roles("TENANT_ADMIN", "ASSISTANT_ADMIN")
   tenant(): Promise<TenantRecord> {
     return this.tenants.findCurrent(getRequestContext());
+  }
+
+  @Get("institution-dashboard")
+  @Roles("TENANT_ADMIN", "ASSISTANT_ADMIN")
+  institutionDashboardSummary(): Promise<InstitutionDashboardSummary> {
+    return this.institutionDashboard.get(getRequestContext());
   }
 
   @Patch("tenant")

@@ -598,9 +598,11 @@ export class ReportGenerationService implements OnModuleDestroy {
 
     const resolvedExamId = required(examId, "REPORT_EXAM_REQUIRED");
     const resolvedStudentId = required(studentId, "REPORT_STUDENT_REQUIRED");
-    const snapshots = options.scope === "all"
-      ? await this.snapshots.listByTenant(context.tenantId)
-      : await this.snapshots.listByExam(context.tenantId, resolvedExamId);
+    const snapshots = await this.snapshots.listReadyByStudent(
+      context.tenantId,
+      resolvedStudentId,
+      options.scope === "all" ? undefined : resolvedExamId,
+    );
     const points: ReportStudentProgressPoint[] = [];
     let teacherAuthorizedSnapshot = false;
 

@@ -34,7 +34,7 @@ test.describe("Next erişilebilirlik smoke", () => {
   test("public landing ve login sayfalarında yüksek etkili axe ihlali yok", async ({ page }) => {
     await page.goto("/");
     await expectFirstFocusableElement(page, "İçeriğe geç");
-    await expect(page.getByRole("heading", { name: "Sınavdan karneye, kurumunuzun günlük işlerini tek yerden yönetin." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Her öğrencinin gelişimini sınavdan sınava görün." })).toBeVisible();
     await expectNoHighImpactA11yViolations(page, "landing");
 
     await page.goto("/login");
@@ -68,7 +68,7 @@ test.describe("Next erişilebilirlik smoke", () => {
     for (const viewport of hallmarkResponsiveViewports) {
       await page.setViewportSize(viewport);
       await page.goto("/");
-      await expect(page.getByRole("heading", { name: "Sınavdan karneye, kurumunuzun günlük işlerini tek yerden yönetin." })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Her öğrencinin gelişimini sınavdan sınava görün." })).toBeVisible();
       await expectNoHorizontalOverflow(page, `landing-${viewport.width}`);
       await expectNoHighImpactA11yViolations(page, `landing-${viewport.width}`);
     }
@@ -124,13 +124,13 @@ test.describe("Next erişilebilirlik smoke", () => {
     await page.setViewportSize({ height: 812, width: 320 });
     await openInstitutionDashboard(page, { expectNavigationVisible: false });
     await expect(page.getByRole("region", { exact: true, name: "Kurum özeti" })).toHaveCount(0);
-    const dashboardSummary = page.getByRole("region", { exact: true, name: "Kurum günlük durum özeti" });
+    const dashboardSummary = page.getByRole("region", { exact: true, name: "Kurum başarı görünümü" });
     await expect(dashboardSummary).toBeVisible();
-    const dashboardSummaryMetrics = dashboardSummary.getByRole("group", { name: "Kurum günlük durum özeti metrikleri" });
+    const dashboardSummaryMetrics = dashboardSummary.getByRole("group", { name: "Kurum başarı görünümü metrikleri" });
     await expect(dashboardSummaryMetrics).toHaveClass(/uh-metric-grid/);
     await expect(dashboardSummaryMetrics.locator(".uh-metric-card")).toHaveCount(4);
-    await expect(page.getByRole("region", { exact: true, name: "Günlük özet" })).toBeVisible();
-    await expect(page.getByRole("region", { exact: true, name: "İlgilenilecek işler" })).toBeVisible();
+    await expect(page.getByRole("region", { exact: true, name: "Bugün ilgilenmeniz gerekenler" })).toBeVisible();
+    await expect(page.getByRole("region", { exact: true, name: "Son sınav ve rapor durumu" })).toBeVisible();
     await expectNoHorizontalOverflow(page, "kurum-dashboard-mobile-body");
     await expectNoHighImpactA11yViolations(page, "kurum-dashboard-mobile-body");
   });
@@ -264,6 +264,21 @@ function mockApiResponse(path: string): { data: unknown; meta?: { limit: number;
         id: "tenant-a11y",
         institutionType: "Dershane",
         name: "A11y Akademi",
+      },
+    };
+  }
+
+  if (path === "/me/institution-dashboard") {
+    return {
+      data: {
+        generatedAt: "2026-06-17T08:00:00.000Z",
+        institution: { name: "A11y Akademi", institutionType: "Dershane" },
+        activeStudentCount: 0,
+        attention: {
+          attendanceAlertCount: 0,
+          openImportQuarantineCount: 0,
+          openSupportTicketCount: 0,
+        },
       },
     };
   }

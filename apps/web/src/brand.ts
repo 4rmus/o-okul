@@ -6,7 +6,7 @@ export const appBrand = {
   demoEmail: "demo@o-okul.com",
 } as const;
 
-export const appBrandTitle = `${appBrand.name} | Dershane ve Özel Öğretim Kurumu Yönetimi`;
+export const appBrandTitle = `${appBrand.name} | Öğrenci Gelişimi ve Sınav Başarı Takibi`;
 export const appBrandHomeAriaLabel = `${appBrand.name} ana sayfa`;
 
 export const demoRequestHref = `mailto:${appBrand.demoEmail}?subject=${encodeURIComponent(
@@ -18,7 +18,7 @@ ${appBrand.name} için demo talep ediyoruz.
 Kurum türü:
 Şube sayısı:
 Yaklaşık öğrenci sayısı:
-Kullandığımız optik format:
-Öncelikli ihtiyacımız:
+Öncelikli gelişim veya başarı takip ihtiyacımız:
+Demo görüşmesinde görmek istediğimiz kullanıcı ekranları:
 
 Not: İlk talepte öğrenci bilgisi veya dosya göndermeyin.`)}`;

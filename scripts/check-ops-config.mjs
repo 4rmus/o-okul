@@ -1826,12 +1826,12 @@ const expectations = {
   ],
   "apps/web/app/page.tsx": [
     "next-marketing-workflow",
-    "Sınavdan karneye",
-    "Sınavı hazırlayın",
-    "Optik dosyayı aktarın",
-    "Sonuçları kontrol edin",
-    "Karne ve raporları paylaşın",
-    "E-posta ile demo isteyin",
+    "Her öğrencinin gelişimini",
+    "Sınavı sonuçlandırın",
+    "Gelişimi karşılaştırın",
+    "Desteği belirleyin",
+    "Birlikte takip edin",
+    "Kurumunuz için demo isteyin",
     "İlk e-postada öğrenci bilgisi veya dosya göndermeniz gerekmez",
   ],
   "apps/web/package.json": [

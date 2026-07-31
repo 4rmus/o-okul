@@ -37,7 +37,7 @@ import { formatCourseName, formatOutcomeCode, shortCourseName } from "../../_sha
 import { ExamResultDonut, ProgressLineChart, TopicRadarChart } from "../../_shared/lazy-report-charts.js";
 import { formatNetNumber, OutcomeNetTable } from "../../_shared/outcome-net-table.js";
 import { ReportChartPanel } from "../../_shared/report-chart-panel.js";
-import { formatPercentDelta, formatPercentNumber, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
+import { formatPercentNumber, formatStudentProgressSummary, isComparableStudentProgress, reportQuestionCount, reportSuccessRate } from "../../_shared/report-metrics.js";
 import { readReportExamId } from "../../_shared/report-exam-selection.js";
 import { OperationSummary, type OperationSummaryAction, type OperationSummaryBadge, type OperationSummaryItem } from "../_shared/operation-summary.js";
 import { RevealablePhone } from "../_shared/revealable-phone.js";
@@ -311,6 +311,7 @@ function StudentDashboard({
   termNameById: ReadonlyMap<string, string>;
 }) {
   const [activeSection, setActiveSection] = useState<"overview" | "records">("records");
+  const progressIsComparable = isComparableStudentProgress(progress);
   const currentClass = formatCurrentClass(detail.profile.classId, classNameById);
   const guardianLink = detail.guardianLinks[0];
   const guardianLinkName = guardianLink ? guardianNameById.get(guardianLink.guardianId) ?? "Veli kaydı" : "Veli bağı yok";
@@ -373,8 +374,13 @@ function StudentDashboard({
       </Tabs>
 
       {activeSection === "overview" ? <div aria-labelledby="student-detail-tab-overview" id="student-detail-panel-overview" role="tabpanel" tabIndex={0}>
-        <ReportChartPanel description="Hazır raporu olan tüm sınavlardaki başarı yüzdesi, net ve standart puan gelişimi" title="Öğrenci Gelişim Grafiği">
-          <ProgressLineChart caption="Tüm sınav başarı gelişimi" points={progressPoints} />
+        <ReportChartPanel
+          description={progressIsComparable
+            ? "Aynı ders bağlamındaki sınavlarda Başarı % değişimi; Net/Soru açıklayıcı bağlamdır."
+            : "Farklı kapsamdaki sınav sonuçları tarih sırasıyla gösterilir; yönlü gelişim yorumu yapılmaz."}
+          title={progressIsComparable ? "Öğrenci gelişimi" : "Sınav geçmişi"}
+        >
+          <ProgressLineChart caption={progressIsComparable ? "Öğrenci başarı gelişimi" : "Öğrenci sınav geçmişi"} points={progressPoints} />
         </ReportChartPanel>
       </div> : null}
 
@@ -729,7 +735,7 @@ function buildStudentDashboardSummaryItems(
       value: formatCount(detail.guardianLinks.length),
     },
     {
-      description: `Başarı gelişimi ${formatPercentDelta(progress?.successRateDelta)}`,
+      description: formatStudentProgressSummary(progress),
       key: "follow-up",
       label: "Takip odağı",
       tone: detail.teacherNotes.length > 0 ? "info" : "default",
@@ -808,8 +814,8 @@ function buildStudentDashboardSummaryActions({
     },
     {
       detail: canViewFinance
-        ? `${formatPendingPayment(detail.paymentPlans)} bekleyen ödeme; başarı gelişimi ${formatPercentDelta(progress?.successRateDelta)}`
-        : `Finans bilgisi yetkiye bağlı; başarı gelişimi ${formatPercentDelta(progress?.successRateDelta)}`,
+        ? `${formatPendingPayment(detail.paymentPlans)} bekleyen ödeme; ${formatStudentProgressSummary(progress)}`
+        : `Finans bilgisi yetkiye bağlı; ${formatStudentProgressSummary(progress)}`,
       key: "finance-and-follow-up",
       label: canViewFinance ? "Finans ve takip" : "Takip yetkisi",
       status: errorBooklet ? "Takip" : "Normal",
@@ -901,6 +907,7 @@ function StudentExamDetails({
   onExamChange: (examId: string) => void;
   onSnapshotChange: (snapshotId: string) => void;
 }) {
+  const progressIsComparable = isComparableStudentProgress(progress);
   const examSummaryItems = buildStudentExamSummaryItems(report, errorBooklet, progress);
   const examSummaryBadges = buildStudentExamSummaryBadges(report, selectedSnapshot, snapshots);
   const examSummaryActions = buildStudentExamSummaryActions(report, errorBooklet, progress, outcomeRows);
@@ -976,8 +983,13 @@ function StudentExamDetails({
             <ReportChartPanel description="Kazanım bazlı başarı ve net karşılaştırması" title="Kazanım Başarıları">
               <OutcomeNetTable caption="Öğrenci kazanım başarıları" rows={outcomeRows} />
             </ReportChartPanel>
-            <ReportChartPanel description="Başarı yüzdesi, net ve standart puan gelişimi" title="Öğrenci Gelişim">
-              <ProgressLineChart caption="Öğrenci başarı gelişimi" points={progressPoints} />
+            <ReportChartPanel
+              description={progressIsComparable
+                ? "Aynı ders bağlamındaki sınavlarda Başarı % değişimi; Net/Soru açıklayıcı bağlamdır."
+                : "Farklı kapsamdaki sınav sonuçları tarih sırasıyla gösterilir; yönlü gelişim yorumu yapılmaz."}
+              title={progressIsComparable ? "Öğrenci gelişimi" : "Sınav geçmişi"}
+            >
+              <ProgressLineChart caption={progressIsComparable ? "Öğrenci başarı gelişimi" : "Öğrenci sınav geçmişi"} points={progressPoints} />
             </ReportChartPanel>
           </div>
 
@@ -1023,7 +1035,7 @@ function buildStudentExamSummaryItems(
       value: formatNetNumber(report?.total?.net),
     },
     {
-      description: `Başarı gelişimi ${formatPercentDelta(progress?.successRateDelta)}`,
+      description: formatStudentProgressSummary(progress),
       key: "question-count",
       label: "Soru",
       value: formatNumber(reportQuestionCount(report?.total)),
@@ -1084,7 +1096,7 @@ function buildStudentExamSummaryActions(
       value: formatPercentNumber(reportSuccessRate(report?.total)),
     },
     {
-      detail: `Başarı gelişimi ${formatPercentDelta(progress?.successRateDelta)}`,
+      detail: formatStudentProgressSummary(progress),
       key: "progress",
       label: "Gelişim",
       status: progress ? "İzleniyor" : "Veri yok",
