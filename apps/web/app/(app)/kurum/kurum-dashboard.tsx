@@ -150,77 +150,82 @@ export function KurumDashboard() {
         />
       ) : null}
 
-      <Panel
-        actions={
-          <Link href="/kurum/raporlar">
-            Raporları aç
-          </Link>
-        }
-        aria-label="Son sınav ve rapor durumu"
-        className="next-dashboard-exam-panel"
-        description={latestExam ? "Katılım ve başarı özetinin karşılaştırılabilir son görünümü." : "Henüz yayınlanmış sınav yok."}
-        title="Son sınav ve rapor durumu"
-      >
-        {latestExam ? (
-          <div className="next-dashboard-exam-summary">
-            <div>
-              <strong>{latestExam.title}</strong>
-              <span>{latestExam.startsAt ? formatDate(latestExam.startsAt) : "Sınav tarihi belirtilmemiş"}</span>
-            </div>
-            <StatusBadge tone={latestExam.reportStatus === "READY" ? "success" : "warning"}>
-              {latestExam.reportStatus === "READY" ? "Rapor hazır" : "Rapor bekliyor"}
-            </StatusBadge>
-            <dl>
-              <div>
-                <dt>Katılım</dt>
-                <dd>{latestExam.attendedParticipantCount}/{latestExam.registeredParticipantCount}</dd>
+      <div className="next-institution-growth-layout">
+        <div className="next-institution-growth-primary">
+          <Panel
+            actions={
+              <Link href="/kurum/raporlar">
+                Raporları aç
+              </Link>
+            }
+            aria-label="Son sınav ve rapor durumu"
+            className="next-dashboard-exam-panel"
+            description={latestExam ? "Katılım ve başarı özetinin karşılaştırılabilir son görünümü." : "Henüz yayınlanmış sınav yok."}
+            title="Son sınav ve rapor durumu"
+          >
+            {latestExam ? (
+              <div className="next-dashboard-exam-summary">
+                <div>
+                  <strong>{latestExam.title}</strong>
+                  <span>{latestExam.startsAt ? formatDate(latestExam.startsAt) : "Sınav tarihi belirtilmemiş"}</span>
+                </div>
+                <StatusBadge tone={latestExam.reportStatus === "READY" ? "success" : "warning"}>
+                  {latestExam.reportStatus === "READY" ? "Rapor hazır" : "Rapor bekliyor"}
+                </StatusBadge>
+                <dl>
+                  <div>
+                    <dt>Katılım</dt>
+                    <dd>{latestExam.attendedParticipantCount}/{latestExam.registeredParticipantCount}</dd>
+                  </div>
+                  <div>
+                    <dt>Devamsız</dt>
+                    <dd>{latestExam.absentParticipantCount}</dd>
+                  </div>
+                  <div>
+                    <dt>Sonuç</dt>
+                    <dd>{latestReport?.resultCount ?? 0}</dd>
+                  </div>
+                  <div>
+                    <dt>Başarı %</dt>
+                    <dd>{formatPercent(latestReport?.successRate)}</dd>
+                  </div>
+                </dl>
               </div>
-              <div>
-                <dt>Devamsız</dt>
-                <dd>{latestExam.absentParticipantCount}</dd>
-              </div>
-              <div>
-                <dt>Sonuç</dt>
-                <dd>{latestReport?.resultCount ?? 0}</dd>
-              </div>
-              <div>
-                <dt>Başarı</dt>
-                <dd>{formatPercent(latestReport?.successRate)}</dd>
-              </div>
-            </dl>
-          </div>
-        ) : (
-          <p className="next-attention-empty">İlk yayınlanan sınavdan sonra katılım ve rapor durumu burada görünecek.</p>
-        )}
-      </Panel>
+            ) : (
+              <p className="next-attention-empty">İlk yayınlanan sınavdan sonra katılım ve rapor durumu burada görünecek.</p>
+            )}
+          </Panel>
 
-      <ReportChartPanel
-        description={classCompare.length > 0
-          ? `${latestExam?.title ?? "Son sınav"} · Başarı % ana, Net/Soru bağlamsal metriktir.`
-          : "Karşılaştırılabilir sınıf sonucu bekleniyor."}
-        title="Sınıf karşılaştırması"
-      >
-        <ClassCompareBar
-          caption="Son sınav sınıf başarı karşılaştırması"
-          classes={classCompare}
-          emptyLabel="Karşılaştırılabilir sınıf sonucu yok"
-        />
-      </ReportChartPanel>
+          <ReportChartPanel
+            className="next-student-growth-chart next-student-growth-chart--institution"
+            description={classCompare.length > 0
+              ? `${latestExam?.title ?? "Son sınav"} · Başarı % ana, Net/Soru bağlamsal metriktir.`
+              : "Karşılaştırılabilir sınıf sonucu bekleniyor."}
+            title="Sınıf karşılaştırması"
+          >
+            <ClassCompareBar
+              caption="Son sınav sınıf başarı karşılaştırması"
+              classes={classCompare}
+              emptyLabel="Karşılaştırılabilir sınıf sonucu yok"
+            />
+          </ReportChartPanel>
+        </div>
 
-      <Panel
-        aria-label="Diğer kurum işlemleri"
-        className="next-dashboard-links-panel"
-        description="Günlük özetin dışında kalan operasyon ekranları."
-        title="Diğer kurum işlemleri"
-        tone="muted"
-      >
-        <nav aria-label="Kurum operasyon bağlantıları" className="next-dashboard-compact-links">
-          <Link href="/kurum/ogrenciler">Öğrenciler</Link>
-          <Link href="/kurum/raporlar">Başarı raporları</Link>
-          <Link href="/kurum/devamsizlik">Devamsızlık takibi</Link>
-          <Link href="/kurum/optik">Sonuç hazırlama</Link>
-        </nav>
-      </Panel>
+        <Panel
+          aria-label="Diğer kurum işlemleri"
+          className="next-dashboard-links-panel next-institution-growth-side"
+          description="Günlük özetin dışında kalan operasyon ekranları."
+          title="Diğer kurum işlemleri"
+          tone="muted"
+        >
+          <nav aria-label="Kurum operasyon bağlantıları" className="next-dashboard-compact-links">
+            <Link href="/kurum/ogrenciler">Öğrenciler</Link>
+            <Link href="/kurum/raporlar">Başarı raporları</Link>
+            <Link href="/kurum/devamsizlik">Devamsızlık takibi</Link>
+            <Link href="/kurum/optik">Sonuç hazırlama</Link>
+          </nav>
+        </Panel>
+      </div>
 
       {dashboardQuery.isError ? <p className="next-form-error">Kurum başarı görünümü güncellenemedi; son alınan bilgiler gösteriliyor.</p> : null}
     </PageFrame>

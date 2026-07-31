@@ -70,7 +70,7 @@ export function ReportPanel({
     return (
       <Panel
         aria-label="Portal rapor özeti"
-        className="next-portal-report-summary"
+        className="next-portal-report-summary next-portal-progress-panel"
         title="Sınav Raporu"
         description={reportContext === "-" ? "Son sınav raporu bekleniyor." : reportContext}
         tone="warning"
@@ -92,7 +92,7 @@ export function ReportPanel({
     <>
       <Panel
         aria-label="Portal rapor özeti"
-        className="next-portal-report-summary"
+        className="next-portal-report-summary next-portal-progress-panel"
         title="Sınav Raporu"
         description={buildReportSummary(report, reportContext)}
         actions={
@@ -111,7 +111,7 @@ export function ReportPanel({
         }
       >
         <MetricGrid aria-label="Portal rapor metrikleri" role="region">
-          <MetricCard label="Başarı %" value={formatPercentNumber(totalSuccessRate)} description="Ana karşılaştırma metriği" tone={successTone(totalSuccessRate)} />
+          <MetricCard className="next-student-growth-primary-metric" label="Başarı %" value={formatPercentNumber(totalSuccessRate)} description="Ana karşılaştırma metriği" tone={successTone(totalSuccessRate)} />
           <MetricCard label="Net" value={formatNetNumber(report.total.net)} description="Soru sayısı bağlamıyla okunur" />
           <MetricCard label="Soru" value={formatNumber(totalQuestionCount)} description="Sınav kapsamı" />
           <MetricCard label={scoreView ? scoreViewLabel(scoreView) : isModernReport ? "Puan hesaplanamadı" : "Eski hesaplama"} value={formatNumber(score)} description={formatGeneratedAt(report.generatedAt)} tone="info" />

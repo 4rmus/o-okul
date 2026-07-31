@@ -18,7 +18,7 @@ requireTokens("design.md", files.design, [
   "# Design — O-Okul",
   "## Genre",
   "## Macrostructure family",
-  "## Theme — Grafit + Mercan",
+  "## Theme — Aurora Ops",
   "## Typography",
   "## Motion",
   "## CTA voice",
@@ -26,6 +26,7 @@ requireTokens("design.md", files.design, [
   "Tüm route envanteri 320 / 375 / 414 / 768 px'te doğrulanır.",
   "Aile\n  temsilcileri ve mevcut geniş ekran sözleşmeleri 1024 / 1440 px'i",
   "## Exports",
+  "Slop test: `58 / 58 ✓`.",
   "### tokens.css",
   "### Tailwind v4 `@theme`",
   "### DTCG `tokens.json`",
@@ -49,6 +50,7 @@ requireTokens("design.md Tailwind ihracı", tailwindExport, [
   "--spacing-2xl:",
   "--text-display:",
   "--radius-dialog:",
+  "--radius-pill:",
   "--duration-long:",
   "--ease-standard:",
 ]);
@@ -62,6 +64,7 @@ requireTokens("design.md DTCG ihracı", dtcgExport, [
   '"2xl":',
   '"display":',
   '"dialog":',
+  '"pill":',
   '"long":',
   '"standard":',
 ]);
@@ -74,30 +77,35 @@ requireTokens("design.md shadcn ihracı", shadcnExport, [
   "--o-okul-space-2xl:",
   "--o-okul-text-display:",
   "--o-okul-radius-dialog:",
+  "--o-okul-radius-pill:",
   "--o-okul-duration-long:",
   "--o-okul-ease-standard:",
 ]);
 
 requireTokens("tokens.css", files.tokens, [
+  "Hallmark · macrostructure: Narrative Workflow / Workbench · tone: calm-operational · anchor hue: cyan 200",
   "Hallmark · pre-emit critique:",
-  "--color-paper: oklch(95.5% 0.012 70);",
-  "--color-paper-raised: oklch(99% 0.004 70);",
-  "--color-ink: oklch(21% 0.018 260);",
-  "--color-ink-muted: oklch(43% 0.02 260);",
-  "--color-rule: oklch(84% 0.015 70);",
-  "--color-accent: oklch(56% 0.17 35);",
-  "--color-accent-hover: oklch(50% 0.17 35);",
-  "--color-accent-soft: oklch(94% 0.035 35);",
-  "--color-focus: oklch(56% 0.17 35);",
+  "--color-paper: oklch(11% 0.025 200);",
+  "--color-paper-raised: oklch(15% 0.028 200);",
+  "--color-paper-muted: oklch(18% 0.030 200);",
+  "--color-ink: oklch(96% 0.010 200);",
+  "--color-ink-muted: oklch(60% 0.020 200);",
+  "--color-rule: oklch(28% 0.028 200);",
+  "--color-accent: oklch(72% 0.170 200);",
+  "--color-accent-hover: oklch(78% 0.160 200);",
+  "--color-accent-soft: oklch(18% 0.035 200);",
+  "--color-accent-secondary: oklch(64% 0.150 175);",
+  "--color-focus: oklch(72% 0.170 200);",
   "--font-display: var(--font-space-grotesk)",
   "--font-body: var(--font-ibm-plex-sans)",
   "--space-3xs: 0.25rem;",
   "--space-2xl: 4rem;",
   "--text-base: 1rem;",
   "--text-display: clamp(2.25rem, 4vw, 3rem);",
-  "--radius-control: 6px;",
-  "--radius-panel: 10px;",
+  "--radius-control: 10px;",
+  "--radius-panel: 12px;",
   "--radius-dialog: 14px;",
+  "--radius-pill: 999px;",
   "--dur-instant: 120ms;",
   "--dur-short: 220ms;",
   "--dur-long: 420ms;",
@@ -113,8 +121,8 @@ requireTokens("tokens.css", files.tokens, [
 ]);
 requireTokens("Hallmark yönü", `${files.design}\n${files.tokens}`, [
   "landing: Narrative Workflow",
-  "app: component-scope",
-  "theme: custom (Grafit + Mercan)",
+  "app: Workbench",
+  "theme: Aurora Ops",
 ]);
 forbidRegex(
   "Hallmark damgaları",
@@ -139,6 +147,7 @@ requireTokens("apps/web/app/layout.tsx", files.layout, [
   'subsets: ["latin", "latin-ext"]',
   "bodyFont.variable",
   "displayFont.variable",
+  'data-theme="aurora"',
 ]);
 
 if (!files.globals.startsWith('@import "../../../tokens.css";')) {
@@ -155,6 +164,7 @@ if (!hallmarkLayer.endsWith("}\n/* Hallmark redesign layer · END */")) {
 forbidRegex("apps/web/app/globals.css Hallmark katmanı", hallmarkLayer, /@media\s+print\b/gi, "print kuralı");
 requireTokens("apps/web/app/globals.css Hallmark katmanı", hallmarkLayer, [
   "html,\n  body {\n    overflow-x: clip;",
+  "color-scheme: dark;",
   ".uh-button {\n    position: relative;\n    min-height: 44px;",
   "white-space: nowrap;",
   ".uh-action-card,\n  .uh-action-card[data-tone] {\n    border: 1px solid var(--color-rule);",
@@ -164,7 +174,8 @@ requireTokens("apps/web/app/globals.css Hallmark katmanı", hallmarkLayer, [
   ".next-karne-sheet table {\n    font-variant-numeric: normal;",
   ".next-karne-sheet .uh-metric-card__value {\n    font-variant-numeric: normal;",
   ".next-karne-sheet .next-karne-block {\n    box-shadow: 0 1px 2px var(--karne-block-shadow);",
-  ".next-report-status-surface .uh-status-badge {\n    border-radius: 999px;",
+  ".next-report-status-surface .uh-status-badge {\n    border-radius: var(--radius-pill);",
+  "color-scheme: light;",
   "--color-text: var(--karne-app-text);",
   "--color-border-input: var(--karne-outline);",
 ]);
@@ -450,9 +461,9 @@ function validateHallmarkLog(source) {
   const expectedValues = {
     scope: "app",
     macrostructure: "Narrative Workflow",
-    theme: "custom",
+    theme: "Aurora",
     enrichment: "none",
-    theme_axes: "light / grotesk-sans / warm",
+    theme_axes: "dark / grotesk-sans / cyan-teal",
   };
   for (const [key, value] of Object.entries(expectedValues)) {
     if (entry?.[key] !== value) failures.push(`.hallmark/log.json ilk kayıt ${key} değeri ${value} olmalı.`);

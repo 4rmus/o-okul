@@ -275,7 +275,9 @@ export function StudentsPage() {
     },
   ];
   const visibleColumns = columns.filter((column) => visibleColumnKeys.includes(column.key));
-  const pageClassName = tableDensity === "compact" ? "next-students-page next-students-page--compact" : "next-students-page";
+  const pageClassName = tableDensity === "compact"
+    ? "next-students-page next-students-page--compact next-student-growth-list"
+    : "next-students-page next-student-growth-list";
   const activeRowCount = rows.filter((student) => student.status === "ACTIVE").length;
   const classCoverageCount = new Set(rows.map((student) => student.classId).filter(Boolean)).size;
   const studentSummaryItems: OperationSummaryItem[] = [
@@ -1135,7 +1137,7 @@ function StudentDetailPanel({
 
   if (loading) {
     return (
-      <section className="next-form-section" aria-label="Öğrenci 360">
+      <section className="next-form-section next-student-growth-brief" aria-label="Öğrenci 360">
         <p className="next-form-section-title">Öğrenci 360</p>
         <span className="next-field-hint">Yükleniyor…</span>
       </section>
@@ -1143,7 +1145,7 @@ function StudentDetailPanel({
   }
 
   return (
-    <section className="next-form-section" aria-label="Öğrenci 360">
+    <section className="next-form-section next-student-growth-brief" aria-label="Öğrenci 360">
       <p className="next-form-section-title">Öğrenci 360</p>
       <InfoGrid className="next-student-360-summary" aria-label="Öğrenci 360 özeti" role="region">
         <InfoItem label="Kayıt durumu" value={detail?.profile.status ? formatStudentStatus(detail.profile.status) : "-"} />
