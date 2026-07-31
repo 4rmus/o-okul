@@ -18,7 +18,7 @@ requireTokens("design.md", files.design, [
   "# Design — O-Okul",
   "## Genre",
   "## Macrostructure family",
-  "## Theme — Aurora Ops",
+  "## Theme — Almanac",
   "## Typography",
   "## Motion",
   "## CTA voice",
@@ -83,32 +83,32 @@ requireTokens("design.md shadcn ihracı", shadcnExport, [
 ]);
 
 requireTokens("tokens.css", files.tokens, [
-  "Hallmark · macrostructure: Narrative Workflow / Workbench · tone: calm-operational · anchor hue: cyan 200",
+  "Hallmark · macrostructure: Narrative Workflow / Workbench · tone: technical-austere · anchor hue: ink-blue 230",
   "Hallmark · pre-emit critique:",
-  "--color-paper: oklch(11% 0.025 200);",
-  "--color-paper-raised: oklch(15% 0.028 200);",
-  "--color-paper-muted: oklch(18% 0.030 200);",
-  "--color-ink: oklch(96% 0.010 200);",
-  "--color-ink-muted: oklch(60% 0.020 200);",
-  "--color-rule: oklch(28% 0.028 200);",
-  "--color-accent: oklch(72% 0.170 200);",
-  "--color-accent-hover: oklch(78% 0.160 200);",
-  "--color-accent-soft: oklch(18% 0.035 200);",
-  "--color-accent-secondary: oklch(64% 0.150 175);",
-  "--color-focus: oklch(72% 0.170 200);",
-  "--font-display: var(--font-space-grotesk)",
+  "--color-paper: oklch(96.5% 0.012 220);",
+  "--color-paper-raised: oklch(98.5% 0.007 220);",
+  "--color-paper-muted: oklch(93% 0.018 220);",
+  "--color-ink: oklch(20% 0.025 235);",
+  "--color-ink-muted: oklch(42% 0.025 235);",
+  "--color-rule: oklch(80% 0.020 225);",
+  "--color-accent: oklch(42% 0.150 230);",
+  "--color-accent-hover: oklch(36% 0.135 230);",
+  "--color-accent-soft: oklch(92% 0.035 230);",
+  "--color-accent-secondary: oklch(44% 0.100 175);",
+  "--color-focus: oklch(48% 0.180 245);",
+  "--font-display: var(--font-source-serif-4)",
   "--font-body: var(--font-ibm-plex-sans)",
   "--space-3xs: 0.25rem;",
   "--space-2xl: 4rem;",
   "--text-base: 1rem;",
   "--text-display: clamp(2.25rem, 4vw, 3rem);",
-  "--radius-control: 10px;",
-  "--radius-panel: 12px;",
-  "--radius-dialog: 14px;",
+  "--radius-control: 4px;",
+  "--radius-panel: 2px;",
+  "--radius-dialog: 6px;",
   "--radius-pill: 999px;",
-  "--dur-instant: 120ms;",
-  "--dur-short: 220ms;",
-  "--dur-long: 420ms;",
+  "--dur-instant: 100ms;",
+  "--dur-short: 180ms;",
+  "--dur-long: 320ms;",
   "--ease-out: cubic-bezier(0.16, 1, 0.3, 1);",
   "--chart-primary:",
   "--chart-accent:",
@@ -122,7 +122,7 @@ requireTokens("tokens.css", files.tokens, [
 requireTokens("Hallmark yönü", `${files.design}\n${files.tokens}`, [
   "landing: Narrative Workflow",
   "app: Workbench",
-  "theme: Aurora Ops",
+  "theme: Almanac",
 ]);
 forbidRegex(
   "Hallmark damgaları",
@@ -141,13 +141,13 @@ forbidRegex(
 forbidRegex("tokens.css", files.tokens, /oklch\((?:0|100)%\s+0(?:\s|%)/gi, "saf siyah/beyaz uç değer");
 
 requireTokens("apps/web/app/layout.tsx", files.layout, [
-  'import { IBM_Plex_Sans, Space_Grotesk } from "next/font/google";',
+  'import { IBM_Plex_Sans, Source_Serif_4 } from "next/font/google";',
   'variable: "--font-ibm-plex-sans"',
-  'variable: "--font-space-grotesk"',
+  'variable: "--font-source-serif-4"',
   'subsets: ["latin", "latin-ext"]',
   "bodyFont.variable",
   "displayFont.variable",
-  'data-theme="aurora"',
+  'data-theme="almanac"',
 ]);
 
 if (!files.globals.startsWith('@import "../../../tokens.css";')) {
@@ -164,7 +164,7 @@ if (!hallmarkLayer.endsWith("}\n/* Hallmark redesign layer · END */")) {
 forbidRegex("apps/web/app/globals.css Hallmark katmanı", hallmarkLayer, /@media\s+print\b/gi, "print kuralı");
 requireTokens("apps/web/app/globals.css Hallmark katmanı", hallmarkLayer, [
   "html,\n  body {\n    overflow-x: clip;",
-  "color-scheme: dark;",
+  "color-scheme: light;",
   ".uh-button {\n    position: relative;\n    min-height: 44px;",
   "white-space: nowrap;",
   ".uh-action-card,\n  .uh-action-card[data-tone] {\n    border: 1px solid var(--color-rule);",
@@ -460,10 +460,10 @@ function validateHallmarkLog(source) {
   const entry = log[0];
   const expectedValues = {
     scope: "app",
-    macrostructure: "Narrative Workflow",
-    theme: "Aurora",
+    macrostructure: "Narrative Workflow / Workbench / Index-First",
+    theme: "Almanac",
     enrichment: "none",
-    theme_axes: "dark / grotesk-sans / cyan-teal",
+    theme_axes: "light / roman-serif / cool",
   };
   for (const [key, value] of Object.entries(expectedValues)) {
     if (entry?.[key] !== value) failures.push(`.hallmark/log.json ilk kayıt ${key} değeri ${value} olmalı.`);
@@ -515,7 +515,7 @@ function readMarkedBlock(source, label) {
 function validateCustomPropertyGraph(source) {
   const definitions = new Set([...source.matchAll(/(--[\w-]+)\s*:/g)].map((match) => match[1]));
   const references = new Set([...source.matchAll(/var\((--[\w-]+)/g)].map((match) => match[1]));
-  const runtimeFontVariables = new Set(["--font-ibm-plex-sans", "--font-space-grotesk"]);
+  const runtimeFontVariables = new Set(["--font-ibm-plex-sans", "--font-source-serif-4"]);
   const missing = [...references].filter((name) => !definitions.has(name) && !runtimeFontVariables.has(name)).sort();
   if (missing.length > 0) failures.push(`Tanımsız CSS custom property referansları: ${missing.join(", ")}`);
 }

@@ -1,8 +1,8 @@
 {
-  "scannedAt": "2026-07-29",
+  "scannedAt": "2026-07-31",
   "framework": "Next.js app router",
-  "fontStackBefore": "Inter declaration without a loaded font",
-  "paletteBefore": "hex custom properties in apps/web/app/globals.css",
+  "fontStackBefore": "Source Serif 4 display + IBM Plex Sans body through next/font",
+  "paletteBefore": "Almanac OKLCH custom properties in root tokens.css",
   "motion": "motion-cut; no motion library",
   "spacingBefore": "mixed 4/6/8/10/12/16/20/24/32 pixel scale",
   "designSystem": "design.md and tokens.css",

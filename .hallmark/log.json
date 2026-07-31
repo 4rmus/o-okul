@@ -2,6 +2,15 @@
   {
     "date": "2026-07-31",
     "scope": "app",
+    "macrostructure": "Narrative Workflow / Workbench / Index-First",
+    "theme": "Almanac",
+    "enrichment": "none",
+    "brief": "O-Okul operasyonel eğitim arayüzünü açık ve indeks-odaklı Almanac sistemiyle yenileme",
+    "theme_axes": "light / roman-serif / cool"
+  },
+  {
+    "date": "2026-07-31",
+    "scope": "app",
     "macrostructure": "Narrative Workflow",
     "theme": "Aurora",
     "enrichment": "none",

@@ -9381,9 +9381,9 @@ a {
 /* Hallmark redesign layer · BEGIN */
 @media screen {
   /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4 */
-  /* Hallmark · genre: atmospheric · landing: Narrative Workflow · app: Workbench · theme: Aurora Ops · designed-as-app */
+  /* Hallmark · genre: editorial · landing: Narrative Workflow · app: Workbench · theme: Almanac · designed-as-app */
   :root {
-    color-scheme: dark;
+    color-scheme: light;
     --color-text: var(--color-ink);
     --color-text-secondary: var(--color-ink-secondary);
     --color-text-muted: var(--color-ink-muted);
@@ -9455,7 +9455,7 @@ a {
     overflow-wrap: anywhere;
     font-family: var(--font-display);
     font-style: normal;
-    letter-spacing: -0.025em;
+    letter-spacing: -0.018em;
   }
 
   button,
@@ -9639,11 +9639,28 @@ a {
     box-shadow: none;
   }
 
+  .next-sidebar-header {
+    border-bottom: 1px solid var(--color-rule);
+    padding-bottom: var(--space-sm);
+  }
+
+  .next-sidebar-nav {
+    font-size: var(--text-sm);
+  }
+
+  .next-sidebar-group-toggle {
+    font-size: var(--text-xs);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
   .next-brand-mark {
-    border-radius: var(--radius-control);
-    background: var(--color-accent-hover);
-    color: var(--color-accent-ink);
+    border: 1px solid var(--color-rule-strong);
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-accent-strong);
     box-shadow: none;
+    letter-spacing: -0.04em;
   }
 
   .next-command-open,
@@ -9698,8 +9715,8 @@ a {
   }
 
   .next-desktop-topbar {
-    border-color: var(--color-rule-faint);
-    background: color-mix(in oklch, var(--color-paper-raised) 94%, transparent);
+    border-color: var(--color-rule);
+    background: color-mix(in oklch, var(--color-paper-raised) 96%, transparent);
     box-shadow: none;
   }
 
@@ -9710,8 +9727,10 @@ a {
 
   .next-breadcrumb {
     border: 0;
+    border-bottom: 1px solid var(--color-rule-faint);
     background: transparent;
-    padding-inline: 0;
+    padding: 0 0 var(--space-2xs);
+    font-size: var(--text-xs);
   }
 
   .next-page-frame__header h1,
@@ -9792,6 +9811,10 @@ a {
 
   .uh-data-table th {
     background: var(--color-paper);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: 0.03em;
   }
 
   .uh-data-table tr:nth-child(odd) td {
@@ -9940,7 +9963,7 @@ a {
     background: color-mix(in oklch, var(--color-warning-soft-token) 46%, var(--color-paper-raised));
   }
 
-  /* Aurora student growth surfaces · design-system: design.md · designed-as-app */
+  /* Almanac student growth surfaces · design-system: design.md · designed-as-app */
   .next-institution-growth-layout,
   .next-institution-growth-primary,
   .next-student-growth-tabpanel {
@@ -10290,8 +10313,9 @@ a {
 
   .next-marketing-nav {
     grid-template-columns: auto minmax(0, 1fr) auto;
-    min-height: 72px;
-    border-bottom: 0;
+    min-height: 76px;
+    border-top: 1px solid var(--color-rule);
+    border-bottom: 3px double var(--color-rule-strong);
   }
 
   .next-marketing-nav .next-brand,
@@ -10398,6 +10422,7 @@ a {
   .next-marketing-workflow li > span {
     color: var(--color-ink-muted);
     font-size: var(--text-xs);
+    font-family: var(--font-mono);
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -10460,7 +10485,7 @@ a {
 
   .next-marketing-proof {
     border-color: var(--color-rule);
-    border-radius: var(--radius-panel);
+    border-radius: 0;
     background: var(--color-paper-raised);
     color: var(--color-ink-secondary);
   }
