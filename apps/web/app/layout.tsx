@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { IBM_Plex_Sans, Space_Grotesk } from "next/font/google";
+import { IBM_Plex_Sans, Source_Serif_4 } from "next/font/google";
 import { appBrand, appBrandTitle } from "../src/brand.js";
 import { Providers } from "./providers.js";
 import "./globals.css";
@@ -11,11 +11,11 @@ const bodyFont = IBM_Plex_Sans({
   weight: ["400", "500", "600", "700"],
 });
 
-const displayFont = Space_Grotesk({
+const displayFont = Source_Serif_4({
   display: "swap",
   subsets: ["latin", "latin-ext"],
-  variable: "--font-space-grotesk",
-  weight: ["500", "600", "700"],
+  variable: "--font-source-serif-4",
+  weight: ["600", "700"],
 });
 
 export const metadata = {
@@ -33,7 +33,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       className={`${bodyFont.variable} ${displayFont.variable}`}
-      data-theme="aurora"
+      data-theme="almanac"
       lang="tr"
     >
       <body>

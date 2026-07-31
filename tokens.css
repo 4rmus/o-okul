@@ -1,36 +1,36 @@
-/* Hallmark · macrostructure: Narrative Workflow / Workbench · tone: calm-operational · anchor hue: cyan 200 */
+/* Hallmark · macrostructure: Narrative Workflow / Workbench · tone: technical-austere · anchor hue: ink-blue 230 */
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4 */
-/* Hallmark · genre: atmospheric · landing: Narrative Workflow · app: Workbench · theme: Aurora Ops */
+/* Hallmark · genre: editorial · landing: Narrative Workflow · app: Workbench · theme: Almanac */
 :root {
-  --color-paper: oklch(11% 0.025 200);
-  --color-paper-raised: oklch(15% 0.028 200);
-  --color-paper-muted: oklch(18% 0.030 200);
-  --color-ink: oklch(96% 0.010 200);
-  --color-ink-secondary: oklch(82% 0.018 200);
-  --color-ink-chart-soft: oklch(82% 0.018 200 / 16%);
-  --color-ink-muted: oklch(60% 0.020 200);
-  --color-rule: oklch(28% 0.028 200);
-  --color-rule-strong: oklch(38% 0.030 200);
-  --color-rule-faint: oklch(22% 0.025 200);
-  --color-accent: oklch(72% 0.170 200);
-  --color-accent-hover: oklch(78% 0.160 200);
-  --color-accent-strong: oklch(64% 0.150 200);
-  --color-accent-soft: oklch(18% 0.035 200);
-  --color-accent-secondary: oklch(64% 0.150 175);
-  --color-accent-chart-soft: oklch(72% 0.170 200 / 18%);
-  --color-accent-ink: oklch(11% 0.025 200);
-  --color-focus: oklch(72% 0.170 200);
-  --color-success-token: oklch(72% 0.130 155);
-  --color-success-soft-token: oklch(18% 0.030 155);
-  --color-warning-token: oklch(80% 0.130 85);
-  --color-warning-soft-token: oklch(18% 0.030 85);
-  --color-danger-token: oklch(70% 0.180 25);
-  --color-danger-soft-token: oklch(18% 0.040 25);
-  --color-overlay-token: oklch(5% 0.020 200 / 72%);
-  --color-shadow-soft: oklch(4% 0.015 200 / 20%);
-  --color-shadow-medium: oklch(4% 0.015 200 / 30%);
-  --color-shadow-strong: oklch(4% 0.015 200 / 50%);
-  --color-chart-grid: oklch(96% 0.010 200 / 10%);
+  --color-paper: oklch(96.5% 0.012 220);
+  --color-paper-raised: oklch(98.5% 0.007 220);
+  --color-paper-muted: oklch(93% 0.018 220);
+  --color-ink: oklch(20% 0.025 235);
+  --color-ink-secondary: oklch(30% 0.025 235);
+  --color-ink-chart-soft: oklch(30% 0.025 235 / 18%);
+  --color-ink-muted: oklch(42% 0.025 235);
+  --color-rule: oklch(80% 0.020 225);
+  --color-rule-strong: oklch(66% 0.025 225);
+  --color-rule-faint: oklch(89% 0.014 225);
+  --color-accent: oklch(42% 0.150 230);
+  --color-accent-hover: oklch(36% 0.135 230);
+  --color-accent-strong: oklch(32% 0.120 230);
+  --color-accent-soft: oklch(92% 0.035 230);
+  --color-accent-secondary: oklch(44% 0.100 175);
+  --color-accent-chart-soft: oklch(42% 0.150 230 / 18%);
+  --color-accent-ink: oklch(98% 0.006 220);
+  --color-focus: oklch(48% 0.180 245);
+  --color-success-token: oklch(42% 0.120 155);
+  --color-success-soft-token: oklch(93% 0.025 155);
+  --color-warning-token: oklch(52% 0.120 80);
+  --color-warning-soft-token: oklch(94% 0.025 85);
+  --color-danger-token: oklch(48% 0.165 25);
+  --color-danger-soft-token: oklch(94% 0.030 25);
+  --color-overlay-token: oklch(18% 0.020 235 / 72%);
+  --color-shadow-soft: oklch(18% 0.020 235 / 10%);
+  --color-shadow-medium: oklch(18% 0.020 235 / 16%);
+  --color-shadow-strong: oklch(18% 0.020 235 / 28%);
+  --color-chart-grid: oklch(20% 0.025 235 / 12%);
 
   --chart-accent: var(--color-accent-secondary);
   --chart-primary: var(--color-accent);
@@ -42,7 +42,7 @@
   --chart-text: var(--color-ink-muted);
   --chart-surface: var(--color-paper-raised);
 
-  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-source-serif-4), ui-serif, Georgia, serif;
   --font-body: var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
 
@@ -62,13 +62,13 @@
   --text-xl: 1.75rem;
   --text-display: clamp(2.25rem, 4vw, 3rem);
 
-  --radius-control: 10px;
-  --radius-panel: 12px;
-  --radius-dialog: 14px;
+  --radius-control: 4px;
+  --radius-panel: 2px;
+  --radius-dialog: 6px;
   --radius-pill: 999px;
-  --dur-instant: 120ms;
-  --dur-short: 220ms;
-  --dur-long: 420ms;
+  --dur-instant: 100ms;
+  --dur-short: 180ms;
+  --dur-long: 320ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
