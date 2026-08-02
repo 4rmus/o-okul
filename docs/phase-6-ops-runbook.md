@@ -383,6 +383,8 @@ pnpm account-management:preflight:generate
 - Generator repeatable-read/read-only transaction kullanır ve yalnız sayısal envanter yazar.
 - Tenant içi case-insensitive e-posta çakışması, birden çok açık enrollment, geçersiz rol
   kombinasyonu, orphan profil/membership veya doğrulanmamış guardian verisi `BLOCKED` üretir.
+- `system` tenant'ındaki yalnız `SYSTEM_ADMIN` üyeliği control-plane backfill kaynağıdır;
+  başka tenant'taki veya başka rolle birleşmiş `SYSTEM_ADMIN` üyeliği `BLOCKED` üretir.
 - Öğretmen→Employee eksikleri backfill kapsamını sayar; additive migration'ı tek başına bloklamaz.
 - Guardian kaydı varsa `FIXTURE_ONLY` sınıflandırması ve gerçek veri sahibi/onay referansı zorunludur.
 - Artifact ham e-posta, telefon, T.C., ad, kullanıcı veya tenant ID içermez.

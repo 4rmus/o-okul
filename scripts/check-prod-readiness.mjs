@@ -2531,6 +2531,7 @@ const expectations = {
     "set_config('app.bypass_rls', 'true', true)",
     "ACCOUNT_MANAGEMENT_GUARDIAN_CLASSIFICATION",
     "ACCOUNT_MANAGEMENT_GUARDIAN_EVIDENCE_REFERENCE",
+    `(has_system AND ("tenantId" <> 'system' OR role_count > 1))`,
     "TENANT_EMAIL_COLLISIONS",
     "MULTIPLE_OPEN_ENROLLMENTS",
     "INVALID_ROLE_COMBINATIONS",

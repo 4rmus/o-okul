@@ -136,7 +136,7 @@ async function collectChecks(client) {
     ), invalid AS (
       SELECT "tenantId", "userId"
       FROM role_sets
-      WHERE has_system
+      WHERE (has_system AND ("tenantId" <> 'system' OR role_count > 1))
          OR staff_role_count > 1
          OR (has_student AND role_count > 1)
          OR (has_guardian AND role_count > 1)
