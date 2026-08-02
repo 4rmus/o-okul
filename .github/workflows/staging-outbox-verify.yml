@@ -7,6 +7,8 @@ on:
         description: "Staging Deploy run ID whose cutover artifact will be verified."
         required: true
         type: string
+  pull_request:
+    types: [labeled]
 
 permissions:
   contents: read
@@ -15,11 +17,14 @@ permissions:
 
 jobs:
   verify:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.label.name == 'staging-outbox-verify'
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 30
     concurrency:
-      group: staging-outbox-verify-${{ inputs.deploy_run_id }}
+      group: staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +32,7 @@ jobs:
       - name: Validate deploy run input
         shell: bash
         env:
-          DEPLOY_RUN_ID: ${{ inputs.deploy_run_id }}
+          DEPLOY_RUN_ID: ${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}
         run: |
           set -euo pipefail
           [[ "$DEPLOY_RUN_ID" =~ ^[0-9]+$ ]]
@@ -35,7 +40,7 @@ jobs:
       - name: Validate selected deployment run metadata
         shell: bash
         env:
-          DEPLOY_RUN_ID: ${{ inputs.deploy_run_id }}
+          DEPLOY_RUN_ID: ${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -60,15 +65,15 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: staging-deployment-cutover-${{ inputs.deploy_run_id }}
-          run-id: ${{ inputs.deploy_run_id }}
+          name: staging-deployment-cutover-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}
+          run-id: ${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}
           github-token: ${{ github.token }}
           path: artifacts/cutover
 
       - name: Validate selected deployment cutover
         shell: bash
         env:
-          DEPLOY_RUN_ID: ${{ inputs.deploy_run_id }}
+          DEPLOY_RUN_ID: ${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}
         run: |
           DEPLOYMENT_CUTOVER_EVIDENCE_TARGET="file://$PWD/artifacts/cutover/deployment-cutover.json" DEPLOYMENT_CUTOVER_EXPECTED_RUN_ID="$DEPLOY_RUN_ID" DEPLOYMENT_CUTOVER_EXPECTED_REPOSITORY="$GITHUB_REPOSITORY" \
             node scripts/check-deployment-cutover-evidence.mjs
@@ -112,7 +117,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: staging-github-ci-evidence-${{ env.CUTOVER_SOURCE_SHA }}
-          run-id: ${{ inputs.deploy_run_id }}
+          run-id: ${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}
           github-token: ${{ github.token }}
           path: artifacts/staging/reports
 
@@ -329,7 +334,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: ${{ success() }}
         with:
-          name: staging-outbox-verify-${{ inputs.deploy_run_id }}-${{ github.run_id }}
+          name: staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}
           path: artifacts/staging
           if-no-files-found: error
 

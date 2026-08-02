@@ -325,8 +325,11 @@ function checkOutboxVerifyWorkflowContract(output) {
   for (const token of [
     "name: Staging Outbox Verify",
     "deploy_run_id:",
-    "name: staging-deployment-cutover-${{ inputs.deploy_run_id }}",
-    "run-id: ${{ inputs.deploy_run_id }}",
+    "types: [labeled]",
+    "github.event.label.name == 'staging-outbox-verify'",
+    "vars.STAGING_OUTBOX_DEPLOY_RUN_ID",
+    "name: staging-deployment-cutover-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}",
+    "run-id: ${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}",
     "scripts/check-deployment-cutover-evidence.mjs",
     "Validate selected deployment run metadata",
     ".github/workflows/staging-deploy.yml",
@@ -352,7 +355,7 @@ function checkOutboxVerifyWorkflowContract(output) {
     "STAGING_SSH_KEY_PATH=$RUNNER_TEMP/staging_deploy_key",
     "trap 'rm -f -- .staging-evidence.env' EXIT",
     "Recheck exact images before publishing verification",
-    "staging-outbox-verify-${{ inputs.deploy_run_id }}-${{ github.run_id }}",
+    "staging-outbox-verify-${{ inputs.deploy_run_id || vars.STAGING_OUTBOX_DEPLOY_RUN_ID }}-${{ github.run_id }}",
     "scripts/smoke-secret-delivery-outbox-staging.mjs",
     "scripts/check-secret-delivery-outbox-evidence.mjs",
   ]) {

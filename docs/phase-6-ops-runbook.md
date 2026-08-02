@@ -483,6 +483,11 @@ cutover artifact'inden `notBefore` ve image tag'ini alır; source dosyası worke
 ile okunur.
 ```
 
+Workflow default branch'e alınmadan önce aynı-repo draft PR doğrulaması gerekiyorsa staging environment
+`STAGING_OUTBOX_DEPLOY_RUN_ID` değişkeni başarılı deploy run ID'sine ayarlanır ve PR'a
+`staging-outbox-verify` etiketi eklenir. `pull_request:labeled` yolu da run metadata ve cutover artifact
+bağını aynı kontrollerle doğrular; fork PR'larda staging secret'ları kullanılmaz.
+
 Artifact yalnız `outboxRecordHash`, `purpose`, retry sayısı, teslim/güncelleme zamanı, terminal durum,
 `payloadCleared`, PII-safe `releaseImageTag`/`notBefore` ve `secret_delivery_worker` minimum yetki sonucunu içerir. User `SELECT`, public schema
 `CREATE`/owner ve yükseltilmiş rol yetkileri false olmalıdır. Recipient, token, URL, source ID ve encrypted
