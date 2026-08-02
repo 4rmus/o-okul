@@ -5539,6 +5539,9 @@ function runGoLiveLinkedLiveStatusSymlinkParentTargetNegativeCheck() {
 
 function runStagingEvidenceEnvNegativeCheck() {
   const path = "docs/evidence-templates/staging-evidence.empty-required.tmp.env";
+  const activationPath = "docs/evidence-templates/staging-evidence.activation.tmp.env";
+  const activationLegacySourcePath = "docs/evidence-templates/staging-evidence.activation-legacy-source.tmp.env";
+  const activationOriginMismatchPath = "docs/evidence-templates/staging-evidence.activation-origin-mismatch.tmp.env";
   const workflowPath = "docs/evidence-templates/staging-deploy.bad-order.tmp.yml";
   const contents = readFileSync("docs/evidence-templates/staging-evidence.env.example", "utf8").replace(
     /^S3_ACCESS_KEY_ID=.*$/m,
@@ -5547,6 +5550,73 @@ function runStagingEvidenceEnvNegativeCheck() {
   writeFileSync(path, contents);
 
   try {
+    const activationContents = [
+      "NODE_ENV=production",
+      "SENTRY_ENVIRONMENT=staging",
+      "WEB_URL=https://staging.o-okul.com",
+      "TRAEFIK_HTTPS_SMOKE_URL=https://staging.o-okul.com/health",
+      "ALERT_WEBHOOK_URL=https://alerts.o-okul.com/staging",
+      "ALERT_WEBHOOK_TOKEN=activation-alert-token-12345678901234567890",
+      "",
+    ].join("\n");
+    writeFileSync(activationPath, activationContents);
+
+    const activationResult = spawnSync(
+      process.execPath,
+      ["scripts/check-staging-evidence-env.mjs", "--mode", "activation", "--env-file", activationPath],
+      { encoding: "utf8" },
+    );
+    const activationOutput = `${activationResult.stdout ?? ""}${activationResult.stderr ?? ""}`;
+    if (activationResult.status !== 0 || !activationOutput.includes("Staging activation env değer kontrolü geçti.")) {
+      console.error("Production evidence template kontrolü başarısız: activation env minimal sözleşmesi geçmedi.");
+      console.error(activationOutput);
+      process.exit(1);
+    }
+
+    writeFileSync(activationOriginMismatchPath, activationContents.replace("WEB_URL=https://staging.o-okul.com", "WEB_URL=https://other.o-okul.com"));
+    const activationOriginMismatchResult = spawnSync(
+      process.execPath,
+      ["scripts/check-staging-evidence-env.mjs", "--mode", "activation", "--env-file", activationOriginMismatchPath],
+      { encoding: "utf8" },
+    );
+    const activationOriginMismatchOutput = `${activationOriginMismatchResult.stdout ?? ""}${activationOriginMismatchResult.stderr ?? ""}`;
+    if (
+      activationOriginMismatchResult.status === 0 ||
+      !activationOriginMismatchOutput.includes("TRAEFIK_HTTPS_SMOKE_URL activation için WEB_URL origin'iyle eşleşmeli.")
+    ) {
+      console.error("Production evidence template kontrolü başarısız: activation env Traefik/Web origin negative kırılmadı.");
+      console.error(activationOriginMismatchOutput);
+      process.exit(1);
+    }
+
+    const activationFullResult = spawnSync(
+      process.execPath,
+      ["scripts/check-staging-evidence-env.mjs", "--mode", "full", "--env-file", activationPath],
+      { encoding: "utf8" },
+    );
+    const activationFullOutput = `${activationFullResult.stdout ?? ""}${activationFullResult.stderr ?? ""}`;
+    if (activationFullResult.status === 0 || !activationFullOutput.includes("SECRET_DELIVERY_OUTBOX_DATABASE_URL")) {
+      console.error("Production evidence template kontrolü başarısız: full env sözleşmesi activation anahtarlarına düşürüldü.");
+      console.error(activationFullOutput);
+      process.exit(1);
+    }
+
+    writeFileSync(activationLegacySourcePath, `${activationContents}SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID=legacy-source-id\n`);
+    const activationLegacySourceResult = spawnSync(
+      process.execPath,
+      ["scripts/check-staging-evidence-env.mjs", "--mode", "activation", "--env-file", activationLegacySourcePath],
+      { encoding: "utf8" },
+    );
+    const activationLegacySourceOutput = `${activationLegacySourceResult.stdout ?? ""}${activationLegacySourceResult.stderr ?? ""}`;
+    if (
+      activationLegacySourceResult.status === 0 ||
+      !activationLegacySourceOutput.includes("SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_ID içermemeli")
+    ) {
+      console.error("Production evidence template kontrolü başarısız: activation env legacy outbox source negative kırılmadı.");
+      console.error(activationLegacySourceOutput);
+      process.exit(1);
+    }
+
     const result = spawnSync(process.execPath, ["scripts/check-staging-evidence-env.mjs", "--env-file", path], {
       encoding: "utf8",
     });
@@ -5690,6 +5760,9 @@ function runStagingEvidenceEnvNegativeCheck() {
   } finally {
     for (const cleanupPath of [
       path,
+      activationPath,
+      activationLegacySourcePath,
+      activationOriginMismatchPath,
       "docs/evidence-templates/staging-evidence.missing-audit-null-tenant.tmp.env",
       "docs/evidence-templates/staging-evidence.missing-ui-worker-result.tmp.env",
       "docs/evidence-templates/staging-evidence.defaulted-smoke.tmp.env",

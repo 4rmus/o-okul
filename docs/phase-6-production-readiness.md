@@ -182,9 +182,11 @@ pnpm backup:restore:smoke
   artifacts/local/remote-staging-snapshot --remote-gap-report-file artifacts/local/remote-staging-gap-report.json
   --max-age-minutes 30` çalıştırılır; komut taze summary üretmeden `--require-ready` kabul etmez.
 - Staging production evidence secret sözleşmesi `docs/evidence-templates/staging-evidence.env.example`
-  ve `pnpm staging:evidence-env:check` ile deploy başlamadan önce decode edilip doğrulanır; zorunlu
-  env anahtarları eksik veya boş değerli olamaz ve decode edilen `.staging-evidence.env` dosyası
-  preflight exit trap'i ile, evidence job'da da `if: always()` cleanup adımıyla silinir. Workflow `SENTRY_RELEASE`,
+  ve varsayılan `pnpm staging:evidence-env:check` ile tam olarak doğrulanır. Normal cutover deploy'u
+  yalnız `--mode activation` ile ilk-gates için gereken `NODE_ENV`, staging ortamı, web-originine bağlı HTTPS smoke ve alert
+  webhook girdilerini decode edip doğrular; tam DB/proxy/outbox sözleşmesi **Staging Outbox Verify** içinde
+  `--mode full` ile yeniden zorunludur. Decode edilen `.staging-evidence.env` dosyası preflight exit trap'i
+  ile, evidence/verify job'larında da `if: always()` cleanup adımıyla silinir. Workflow `SENTRY_RELEASE`,
   `ROLLBACK_IMAGE_TAG`, deploy öncesi üretilip `actions/download-artifact@v4` ile evidence job'una indirilen
   `GITHUB_CI_EVIDENCE_TARGET` ve `--summary-file` ile aynı `release-summary-<tag>.json` dosyasını gösteren
   `PRODUCTION_EVIDENCE_SUMMARY_TARGET` değerlerini sonradan ekler, smoke evidence dosyalarını `--summary-file`
@@ -937,9 +939,9 @@ pnpm backup:restore:smoke
   `corepack pnpm staging:release-artifacts:archive-unexpected -- --artifacts-dir artifacts/staging --gap-report-file artifacts/local/staging-release-gap-report.json --archive-dir artifacts/local/staging-release-unexpected-<tag> --apply`.
   Komut önce gap raporunu taze üretir, yalnız `unexpectedFiles[]` girdilerini arşivler,
   `manifest.json` yazar ve varsayılan olarak dry-run çalışır; `--apply` olmadan dosya taşımaz.
-- `pnpm staging:evidence-env:check`, GitHub CI artifact üretimi/download, env decode/check,
-  metadata append, first-gates, production evidence, release bundle check, cleanup ve upload adım
-  sırasını statik olarak korur.
+- `pnpm staging:evidence-env:check`, normal deploy'da GitHub CI artifact üretimi/download, activation env
+  decode/check, metadata append, first-gates, cutover, cleanup ve upload sırasını; verify-only workflow'unda
+  ise full env, production evidence ve release bundle kontrol sırasını statik olarak korur.
 - Staging/prod UAT raporu `pnpm uat:check` ile doğrulanır. Staging artifact'i
   `STAGING_ENVIRONMENT=staging UAT_OUTPUT=artifacts/staging/reports/uat.json UAT_TESTER=... UAT_RELEASE_CANDIDATE=... UAT_ROLLBACK_IMAGE_TAG=... UAT_RESTORE_BACKUP_REFERENCE=s3://... UAT_COMMAND_EVIDENCE_TARGET=file:///.../uat-command-evidence.json UAT_SCENARIOS_TARGET=file:///.../uat-scenarios.json pnpm uat:generate`
   ile üretilir; generator gerçek komut kanıtı ve 21 senaryoluk UAT kaynak artifact'i olmadan JSON yazmaz.

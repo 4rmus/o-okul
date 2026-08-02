@@ -9,9 +9,14 @@ const outboxVerifyWorkflowPath = ".github/workflows/staging-outbox-verify.yml";
 
 const args = process.argv.slice(2);
 const envFile = readArgValue("--env-file");
+const validationMode = readArgValue("--mode") ?? "full";
 const targetPath = envFile ?? templatePath;
 const target = parseEnvFile(targetPath);
 const failures = [];
+
+if (!new Set(["activation", "full"]).has(validationMode)) {
+  fail(["--mode yalnız activation veya full olabilir."]);
+}
 
 const summaryDefaultedSmokeKeys = new Map([
   ["TRAEFIK_HTTPS_SMOKE_EVIDENCE_FILE", "traefik-https.json"],
@@ -68,13 +73,22 @@ const proxyNetworkKeys = [
 ];
 const smsEnabled = target.values.get("SMS_ENABLED") === "true";
 const prodEnvContractKeys = extractProdEnvContractKeys().filter((key) => smsEnabled || !smsSmokeKeys.includes(key));
-const requiredKeys = unique([
+const fullRequiredKeys = unique([
   ...prodEnvContractKeys,
   ...runtimeRequiredKeys,
   ...proxyNetworkKeys,
   ...(smsEnabled ? smsProviderRuntimeKeys : []),
   ...uiUxRedesignGeneratorKeys,
 ]);
+const activationRequiredKeys = [
+  "NODE_ENV",
+  "SENTRY_ENVIRONMENT",
+  "WEB_URL",
+  "TRAEFIK_HTTPS_SMOKE_URL",
+  "ALERT_WEBHOOK_URL",
+  "ALERT_WEBHOOK_TOKEN",
+];
+const requiredKeys = validationMode === "activation" ? activationRequiredKeys : fullRequiredKeys;
 const keysRequiredInSecret = requiredKeys.filter(
   (key) => !summaryDefaultedSmokeKeys.has(key) && !workflowInjectedKeys.has(key) && !optionalRuntimeKeys.has(key),
 );
@@ -117,17 +131,26 @@ checkTemplateRepositorySlugContract(failures);
 
 if (envFile) {
   checkNoPlaceholders(target, failures);
+  if (validationMode === "activation") {
+    checkActivationEnv(target.values, failures);
+  }
 }
 
 if (failures.length > 0) {
   fail(failures);
 }
 
-if (envFile) {
+if (envFile && validationMode === "full") {
   checkResolvedProductionEnv(target);
 }
 
-console.log(envFile ? "Staging evidence env değer kontrolü geçti." : "Staging evidence env sözleşme kontrolü geçti.");
+console.log(
+  envFile
+    ? validationMode === "activation"
+      ? "Staging activation env değer kontrolü geçti."
+      : "Staging evidence env değer kontrolü geçti."
+    : "Staging evidence env sözleşme kontrolü geçti.",
+);
 
 function readArgValue(name) {
   const index = args.indexOf(name);
@@ -194,7 +217,7 @@ function checkWorkflowContract(output) {
     "STAGING_EVIDENCE_ENV_B64",
     "pnpm install --frozen-lockfile",
     "trap 'rm -f .staging-evidence.env' EXIT",
-    "pnpm staging:evidence-env:check -- --env-file .staging-evidence.env",
+    "pnpm staging:evidence-env:check -- --mode activation --env-file .staging-evidence.env",
     "base64 -d > .staging-evidence.env",
     "test -s .staging-evidence.env",
     "pnpm staging:evidence-env:check",
@@ -253,12 +276,19 @@ function checkWorkflowContract(output) {
     output.push(`${workflowPath} Playwright bağımlılığı kurmamalı; bu sorumluluk CI workflow'unda kalmalı.`);
   }
 
+  const evidenceJob = workflow.slice(workflow.indexOf("\n  evidence:"));
+  for (const token of ["Configure SSH for evidence tunnels", "Open staging data tunnels", "append-staging-evidence-tunnel-env.mjs"]) {
+    if (evidenceJob.includes(token)) {
+      output.push(`${workflowPath} normal activation evidence job'ında DB tunnel açmamalı: ${token}`);
+    }
+  }
+
   requireWorkflowOrder(output, workflow, "preflight staging env check order", [
     "Check staging evidence env before deploy",
     "trap 'rm -f .staging-evidence.env' EXIT",
     "base64 -d > .staging-evidence.env",
     "test -s .staging-evidence.env",
-    "pnpm staging:evidence-env:check -- --env-file .staging-evidence.env",
+    "pnpm staging:evidence-env:check -- --mode activation --env-file .staging-evidence.env",
   ]);
   requireWorkflowOrder(output, workflow, "GitHub CI evidence artifact order", [
     "Generate GitHub CI evidence before deploy",
@@ -274,7 +304,7 @@ function checkWorkflowContract(output) {
     "Decode staging evidence env",
     "base64 -d > .staging-evidence.env",
     "Check staging evidence env",
-    "pnpm staging:evidence-env:check -- --env-file .staging-evidence.env",
+    "pnpm staging:evidence-env:check -- --mode activation --env-file .staging-evidence.env",
     "Check pre-deploy GitHub CI evidence",
     "Bind local UI/UX completion to verified source",
     "pnpm ui-ux-professionalization:completion:check -- --local-proof-only",
@@ -310,7 +340,7 @@ function checkOutboxVerifyWorkflowContract(output) {
     "o-okul-private/secret-delivery-outbox",
     "SECRET_DELIVERY_OUTBOX_SMOKE_SOURCE_FILE=/run/outbox-source/source-id",
     "PRODUCTION_EVIDENCE_ALLOW_STAGING_OUTBOX=1",
-    "pnpm staging:evidence-env:check -- --env-file .staging-evidence.env",
+    "pnpm staging:evidence-env:check -- --mode full --env-file .staging-evidence.env",
     "Bind verified UI/UX completion to full evidence",
     "UI_UX_PROFESSIONALIZATION_FULL_EVIDENCE: \"1\"",
     "run: pnpm ui-ux-professionalization:completion:check",
@@ -405,6 +435,70 @@ function checkResolvedProductionEnv(target) {
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
+}
+
+function checkActivationEnv(env, output) {
+  if (env.get("NODE_ENV") !== "production") {
+    output.push("NODE_ENV activation için production olmalı.");
+  }
+  if (env.get("SENTRY_ENVIRONMENT") !== "staging") {
+    output.push("SENTRY_ENVIRONMENT activation için staging olmalı.");
+  }
+
+  const webUrl = checkActivationUrl(env.get("WEB_URL"), output, "WEB_URL");
+  const traefikUrl = checkActivationUrl(env.get("TRAEFIK_HTTPS_SMOKE_URL"), output, "TRAEFIK_HTTPS_SMOKE_URL");
+  checkActivationUrl(env.get("ALERT_WEBHOOK_URL"), output, "ALERT_WEBHOOK_URL");
+
+  if (webUrl && traefikUrl && webUrl.origin !== traefikUrl.origin) {
+    output.push("TRAEFIK_HTTPS_SMOKE_URL activation için WEB_URL origin'iyle eşleşmeli.");
+  }
+
+  const alertToken = String(env.get("ALERT_WEBHOOK_TOKEN") ?? "");
+  if (alertToken.length < 32) {
+    output.push("ALERT_WEBHOOK_TOKEN activation için en az 32 karakterlik gerçek bearer secret olmalı.");
+  }
+}
+
+function checkActivationUrl(value, output, key) {
+  let url;
+  try {
+    url = new URL(String(value ?? ""));
+  } catch {
+    output.push(`${key} activation için geçerli URL olmalı.`);
+    return undefined;
+  }
+
+  let valid = true;
+  if (url.protocol !== "https:") {
+    output.push(`${key} activation için https olmalı.`);
+    valid = false;
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    output.push(`${key} activation için userinfo, query veya fragment içeremez.`);
+    valid = false;
+  }
+  if (isPlaceholderOrLocalHost(url.hostname)) {
+    output.push(`${key} activation için gerçek bir host kullanmalı.`);
+    valid = false;
+  }
+  return valid ? url : undefined;
+}
+
+function isPlaceholderOrLocalHost(hostname) {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized.endsWith(".localhost") ||
+    normalized === "127.0.0.1" ||
+    normalized.startsWith("127.") ||
+    normalized === "::1" ||
+    normalized === "0.0.0.0" ||
+    normalized.endsWith(".test") ||
+    normalized.endsWith(".example") ||
+    normalized.endsWith(".invalid") ||
+    normalized.includes("example") ||
+    normalized.includes("__set")
+  );
 }
 
 function unique(values) {

@@ -873,10 +873,11 @@ Beklenen akış:
   bittiğinde otomatik çalışır.
 - Workflow önce dispatch input'larını, Docker tag biçimini, `STAGING_NEXT_PUBLIC_API_URL=https://...`
   değerini, `STAGING_EDGE_MODE=domain|ip` değerini ve gerekli staging secret/var varlığını doğrular.
-- Workflow `STAGING_EVIDENCE_ENV_B64` içeriğini decode eder, boş dosyayı reddeder ve
-  `pnpm staging:evidence-env:check -- --env-file .staging-evidence.env` ile gerçek env içeriğini
-  deploy başlamadan önce doğrular; zorunlu anahtarlar eksik veya boş değerli olamaz. Preflight
-  shell'i `.staging-evidence.env` dosyasını exit trap'i ile siler. Bu secret env dosyası
+- Workflow `STAGING_EVIDENCE_ENV_B64` içeriğini decode eder, boş dosyayı reddeder ve normal cutover için
+  `pnpm staging:evidence-env:check -- --mode activation --env-file .staging-evidence.env` ile yalnız
+  first-gates girdilerini (web origin'iyle bağlı HTTPS smoke dahil) doğrular. Tam DB/proxy/outbox production-evidence sözleşmesi, deploydan sonra
+  **Staging Outbox Verify** içindeki `--mode full` kontrolünde zorunludur; eksik anahtarlar full kanıtı
+  fail-closed durdurur. Preflight shell'i `.staging-evidence.env` dosyasını exit trap'i ile siler. Bu secret env dosyası
   `REPORT_GENERATION_SMOKE_EVIDENCE_FILE` veya diğer raw smoke evidence path'lerini içermez;
   `prod:evidence:check --summary-file` bunları `artifacts/staging/smoke/*.json` altında üretir.
 - Workflow aynı commit'in başarılı `.github/workflows/ci.yml` run'ını GitHub API'dan okuyup
@@ -908,8 +909,9 @@ Beklenen akış:
   `IMAGE_TAG` değeriyle birebir karşılaştırılır; container eksikse, running değilse veya healthcheck
   `healthy` değilse deploy kırmızıya düşer. `evidence` servisi `artifacts/staging/reports` altındaki doğrulanmış JSON kanıtlarını
   `/evidence/*.json` olarak salt-okunur sunar; eksik kanıt dosyası bilinçli olarak 404 döner.
-- GitHub runner, `STAGING_EVIDENCE_ENV_B64` içeriğini evidence job'da yeniden decode edip
-  `pnpm staging:evidence-env:check` ile tekrar doğrular.
+- GitHub runner, `STAGING_EVIDENCE_ENV_B64` içeriğini normal evidence job'da yeniden decode edip
+  `pnpm staging:evidence-env:check -- --mode activation` ile tekrar doğrular; verify-only job aynı
+  dosyayı `--mode full` ile doğrular.
 - Evidence job, deployment-region artifact üretmez; v1 go-live zinciri region evidence target'ı
   beklemez.
 - GitHub runner, deploy öncesi üretilmiş `staging-github-ci-evidence-<sha>` artifact'ini
@@ -1044,9 +1046,10 @@ Beklenen akış:
   `releaseEvidence=false` ve `canPromote=false` taşır; `staging:release-artifacts:check`
   yine non-zero kalır. Gap raporu production summary, live-status, pilot veya go-live kanıtı
   değildir ve bundle dizininin içine yazılamaz.
-- `pnpm staging:evidence-env:check`, workflow içindeki kritik evidence sırasını da korur:
-  GitHub CI artifact üretimi/download, env decode/check, metadata append, first-gates, production
-  evidence, release bundle check, cleanup ve upload adımları bu sırada kalmalıdır.
+- `pnpm staging:evidence-env:check`, workflow içindeki kritik evidence sırasını da korur: normal deploy'da
+  GitHub CI artifact üretimi/download, activation env decode/check, metadata append, first-gates, cutover,
+  cleanup ve upload; verify-only workflow'unda full env, production evidence ve release bundle check adımları
+  bu sırada kalmalıdır.
 - Release summary artifact'i ayrıca
   `PRODUCTION_EVIDENCE_SUMMARY_TARGET=file:///path/to/release-summary.json pnpm prod:evidence:summary:check`
   ile tek başına doğrulanır; bu target yalnız `file://` artifact yolu veya `https://` URL olabilir,
